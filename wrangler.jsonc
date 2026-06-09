@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "logolab",
+  "compatibility_date": "2026-06-09",
+  // Assets-only Worker: no server script, just serve the Vite build output.
+  "assets": {
+    "directory": "./dist",
+    // Serve index.html for any unknown path (SPA fallback).
+    "not_found_handling": "single-page-application"
+  }
+}
