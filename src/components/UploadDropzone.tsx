@@ -1,0 +1,115 @@
+import { useCallback, useRef, useState } from 'react'
+import { ImageUp, Loader2, X } from 'lucide-react'
+import { useLogo, useStore } from '../store'
+import { loadLogoFile } from '../lib/image'
+
+export function UploadDropzone() {
+  const logo = useLogo()
+  const setLogo = useStore((s) => s.setLogo)
+  const clearLogo = useStore((s) => s.clearLogo)
+  const [dragging, setDragging] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = useCallback(
+    async (file: File | undefined | null) => {
+      if (!file) return
+      if (!/^image\//.test(file.type) && !/\.svg$/i.test(file.name)) {
+        setError('Please drop an image file (PNG, SVG, JPG, WebP…).')
+        return
+      }
+      setError(null)
+      setLoading(true)
+      try {
+        clearLogo()
+        const patch = await loadLogoFile(file)
+        setLogo(patch)
+      } catch {
+        setError('Could not read that file.')
+      } finally {
+        setLoading(false)
+      }
+    },
+    [clearLogo, setLogo],
+  )
+
+  if (logo.src) {
+    return (
+      <div className="panel flex items-center gap-3 p-3">
+        <div className="checkerboard flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line">
+          <img src={logo.src} alt="" className="h-full w-full object-contain p-1" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-ink">{logo.fileName}</p>
+          <p className="text-xs text-muted">
+            {logo.isSvg ? 'SVG' : `${logo.naturalWidth}×${logo.naturalHeight}`}
+            {logo.isSvg ? '' : ' px'}
+          </p>
+        </div>
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="btn btn-ghost h-8 px-2 text-xs"
+        >
+          Replace
+        </button>
+        <button
+          onClick={clearLogo}
+          className="btn btn-ghost h-8 w-8 px-0"
+          title="Remove logo"
+        >
+          <X size={15} />
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*,.svg"
+          className="hidden"
+          onChange={(e) => handleFile(e.target.files?.[0])}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragging(true)
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragging(false)
+          handleFile(e.dataTransfer.files?.[0])
+        }}
+        className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-7 text-center transition-colors ${
+          dragging
+            ? 'border-accent bg-accent-soft'
+            : 'border-line-strong bg-surface-2 hover:border-faint hover:bg-surface-3'
+        }`}
+      >
+        {loading ? (
+          <Loader2 size={22} className="animate-spin text-accent" />
+        ) : (
+          <ImageUp size={22} className={dragging ? 'text-accent' : 'text-muted'} />
+        )}
+        <div>
+          <p className="text-sm font-medium text-ink">Drop a logo here</p>
+          <p className="text-xs text-muted">or click to browse · PNG, SVG, JPG, WebP</p>
+        </div>
+      </button>
+      {error && <p className="text-xs text-bad">{error}</p>}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*,.svg"
+        className="hidden"
+        onChange={(e) => handleFile(e.target.files?.[0])}
+      />
+    </div>
+  )
+}

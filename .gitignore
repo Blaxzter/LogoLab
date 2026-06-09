@@ -1,0 +1,25 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# build output
+dist
+dist-ssr
+*.local
+
+# editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# test / automation artifacts (Playwright writes screenshots here)
+.playwright-mcp/
+
+# raw dropped-in source images (the deployed copies live in public/mockups/)
+/assets/
