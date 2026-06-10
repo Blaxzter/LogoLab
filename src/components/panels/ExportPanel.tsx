@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Download, ImageOff, Package, Sparkles, Layers } from 'lucide-react'
-import { useAppearance, useEnv, useLogo } from '../../store'
+import { useAppearance, useCheckerClass, useEnv, useLogo } from '../../store'
 import type { ExportTarget, RenderIconOptions } from '../../types'
 import { Toggle } from '../ui/controls'
 import { Button } from '../ui/Button'
+import { CheckerToggle } from '../ui/CheckerToggle'
 import { downloadBlob } from '../../lib/download'
 import { loadRenderSource } from '../../lib/image'
 import type { RenderSource } from '../../lib/image'
 import { DEFAULT_TARGETS, buildExportZip, renderIcon } from '../../lib/pwaExport'
+import { PanelEmptyState } from '../PanelEmptyState'
 
 /* ----------------------------------------------------------------- constants */
 
@@ -61,6 +63,14 @@ function presetIds(preset: PresetKey): Set<string> {
   )
 }
 
+const PRESET_KEYS: PresetKey[] = ['web', 'pwa', 'all']
+
+function sameSet(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false
+  for (const id of a) if (!b.has(id)) return false
+  return true
+}
+
 /* ----------------------------------------------------------------- component */
 
 export default function ExportPanel(): ReactNode {
@@ -75,6 +85,14 @@ export default function ExportPanel(): ReactNode {
   const [error, setError] = useState<string | null>(null)
 
   const selectedCount = useMemo(() => targets.filter((t) => t.enabled).length, [targets])
+
+  // Which preset (if any) the current selection exactly equals, so its button
+  // can render as selected. The preset sets are mutually distinct, so at most
+  // one matches. (The default selection equals "web".)
+  const activePreset = useMemo<PresetKey | null>(() => {
+    const enabled = new Set(targets.filter((t) => t.enabled).map((t) => t.id))
+    return PRESET_KEYS.find((p) => sameSet(enabled, presetIds(p))) ?? null
+  }, [targets])
 
   const baseOpts = useMemo<Omit<RenderIconOptions, 'size'>>(
     () => ({
@@ -123,16 +141,11 @@ export default function ExportPanel(): ReactNode {
   if (!logo.src) {
     return (
       <div className="mx-auto max-w-5xl p-6">
-        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-line-strong bg-surface-2 px-6 py-20 text-center animate-in-fade">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-3 text-muted">
-            <ImageOff size={22} />
-          </div>
-          <h2 className="text-base font-semibold text-ink">No logo yet</h2>
-          <p className="max-w-sm text-sm text-muted">
-            Drop a logo into LogoLab to generate a full favicon &amp; PWA icon set — every size, a real{' '}
-            <span className="font-mono text-ink-2">favicon.ico</span>, and a webmanifest, all in one zip.
-          </p>
-        </div>
+        <PanelEmptyState
+          icon={<ImageOff size={26} />}
+          title="No logo yet"
+          subtitle="Drop a logo here to generate a full favicon & PWA icon set — every size, a real favicon.ico, and a webmanifest, all in one zip."
+        />
       </div>
     )
   }
@@ -161,13 +174,28 @@ export default function ExportPanel(): ReactNode {
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" icon={<Sparkles size={15} />} onClick={() => applyPreset('web')}>
+              <Button
+                variant="secondary"
+                active={activePreset === 'web'}
+                icon={<Sparkles size={15} />}
+                onClick={() => applyPreset('web')}
+              >
                 Web essentials
               </Button>
-              <Button variant="secondary" icon={<Package size={15} />} onClick={() => applyPreset('pwa')}>
+              <Button
+                variant="secondary"
+                active={activePreset === 'pwa'}
+                icon={<Package size={15} />}
+                onClick={() => applyPreset('pwa')}
+              >
                 Full PWA
               </Button>
-              <Button variant="secondary" icon={<Layers size={15} />} onClick={() => applyPreset('all')}>
+              <Button
+                variant="secondary"
+                active={activePreset === 'all'}
+                icon={<Layers size={15} />}
+                onClick={() => applyPreset('all')}
+              >
                 Everything
               </Button>
             </div>
@@ -227,9 +255,12 @@ export default function ExportPanel(): ReactNode {
         {/* ----------------------------------------------------- right column */}
         <div className="lg:sticky lg:top-6 lg:self-start">
           <section className="panel flex flex-col gap-4 p-4">
-            <div>
-              <h2 className="text-sm font-semibold text-ink">Live preview</h2>
-              <p className="mt-0.5 text-xs text-muted">Rendered with your current appearance.</p>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-ink">Live preview</h2>
+                <p className="mt-0.5 text-xs text-muted">Rendered with your current appearance.</p>
+              </div>
+              <CheckerToggle />
             </div>
 
             <PreviewGrid
@@ -287,7 +318,11 @@ function PreviewGrid({
   }, [src, svgText])
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    // Flex-wrap (not a fixed 3-col grid) so each tile keeps its true pixel size
+    // and flows to the next row instead of overflowing the narrow 320px panel.
+    // Natural packing groups the tiny favicons, then the app icons, then the
+    // 512 + maskable pair.
+    <div className="flex flex-wrap content-center justify-center gap-3">
       {PREVIEW_TILES.map((tile, i) => (
         <PreviewTile
           key={`${tile.size}-${tile.maskable}-${i}`}
@@ -329,12 +364,13 @@ function PreviewTile({
     ctx.drawImage(rendered, 0, 0)
   }, [render, size, maskable, baseOpts])
 
+  const checkerClass = useCheckerClass()
   const display = Math.min(cap, size)
 
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className="flex shrink-0 flex-col items-center gap-1.5">
       <div
-        className="checkerboard relative flex items-center justify-center rounded-md border border-line"
+        className={`${checkerClass} relative flex shrink-0 items-center justify-center rounded-md border border-line`}
         style={{ width: cap + 16, height: cap + 16 }}
       >
         <canvas

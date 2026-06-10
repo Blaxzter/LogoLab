@@ -4,6 +4,8 @@ import type { LogoAsset } from '../types'
 
 export interface LoadedImage extends Partial<LogoAsset> {
   src: string
+  /** Heuristic: the mark reads as light/white, so previews want a dark checker. */
+  isLight?: boolean
 }
 
 /** Read an uploaded File into a LogoAsset patch (object URL + metadata). */
@@ -24,6 +26,7 @@ export async function loadLogoFile(file: File): Promise<LoadedImage> {
       svgText,
       naturalWidth: width,
       naturalHeight: height,
+      isLight: await detectIsLight(src, svgText),
     }
   }
 
@@ -38,6 +41,72 @@ export async function loadLogoFile(file: File): Promise<LoadedImage> {
     svgText: null,
     naturalWidth: img.naturalWidth,
     naturalHeight: img.naturalHeight,
+    isLight: await detectIsLight(src, null),
+  }
+}
+
+/** Rasterize a logo small and decide whether it reads as light (best-effort). */
+async function detectIsLight(src: string, svgText: string | null): Promise<boolean> {
+  try {
+    return isLightImage(await getImageData(src, 64, svgText))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * True when the opaque pixels of an image are, on average, light — e.g. a white
+ * line-art mark. Alpha-weighted, so transparent areas (the common case for a
+ * logo) don't drag the mean toward black. Used to pick a contrasting checker.
+ */
+export function isLightImage(imageData: ImageData, threshold = 0.62): boolean {
+  const { data } = imageData
+  let lumSum = 0
+  let alphaSum = 0
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3]
+    if (a === 0) continue
+    lumSum += ((0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255) * a
+    alphaSum += a
+  }
+  if (alphaSum === 0) return false
+  return lumSum / alphaSum > threshold
+}
+
+/**
+ * Decide whether a logo wants a *dark* checker behind it: true only for a
+ * light/white mark that sits on transparency — i.e. white line-art, which a
+ * light checker would wash out. A light but fully-opaque image (e.g. a white
+ * card) doesn't qualify: the checker barely shows through it anyway. Samples a
+ * loaded same-origin <img> small; returns false on any failure.
+ */
+export function prefersDarkChecker(img: HTMLImageElement, sample = 48): boolean {
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = sample
+    canvas.height = sample
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return false
+    ctx.drawImage(img, 0, 0, sample, sample)
+    const { data } = ctx.getImageData(0, 0, sample, sample)
+    let lumSum = 0
+    let alphaSum = 0
+    let transparent = 0
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3]
+      if (a < 16) {
+        transparent++
+        continue
+      }
+      lumSum += ((0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255) * a
+      alphaSum += a
+    }
+    if (alphaSum === 0) return false
+    const isLight = lumSum / alphaSum > 0.62
+    const transparentFraction = transparent / (data.length / 4)
+    return isLight && transparentFraction > 0.25
+  } catch {
+    return false
   }
 }
 

@@ -185,3 +185,110 @@ export function defringe(img: ImageData, key: RGB, amount = 1): void {
 export function cloneImageData(img: ImageData): ImageData {
   return new ImageData(new Uint8ClampedArray(img.data), img.width, img.height)
 }
+
+/* ------------------------------------------------------------ manual brush */
+
+export type BrushMode = 'erase' | 'restore'
+
+/**
+ * Paint a single soft circular brush stamp centered at (cx, cy).
+ *
+ * - `erase`   — fades alpha toward 0 (rub out background the auto/flood tools
+ *   miss, e.g. enclosed holes the corner flood can't reach).
+ * - `restore` — blends RGBA back from `source` (the pristine upload) to undo
+ *   over-erasing locally without losing the rest of your edits.
+ *
+ * `hardness` (0–1) is the fraction of the radius that paints at full strength
+ * before the edge feathers out to 0, so strokes have soft, anti-aliased edges.
+ * Mutates `img`. Callers stamp repeatedly along a drag to form a stroke.
+ * Returns the number of pixels actually changed (0 when the stamp is a no-op,
+ * e.g. erasing already-transparent pixels), so callers can skip dead history.
+ */
+export function brushStamp(
+  img: ImageData,
+  cx: number,
+  cy: number,
+  radius: number,
+  hardness: number,
+  mode: BrushMode,
+  source?: ImageData | null,
+): number {
+  const { width: w, height: h, data } = img
+  const r = Math.max(0.5, radius)
+  const minX = Math.max(0, Math.floor(cx - r))
+  const maxX = Math.min(w - 1, Math.ceil(cx + r))
+  const minY = Math.max(0, Math.floor(cy - r))
+  const maxY = Math.min(h - 1, Math.ceil(cy + r))
+  const inner = r * Math.max(0, Math.min(1, hardness))
+  const src = mode === 'restore' ? source?.data : undefined
+  if (mode === 'restore' && !src) return 0 // nothing to restore from
+  let affected = 0
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const dx = x - cx
+      const dy = y - cy
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist > r) continue
+      // Falloff: full strength inside `inner`, linearly fading to 0 at the edge.
+      let t = 1
+      if (dist > inner) t = r <= inner ? 0 : 1 - (dist - inner) / (r - inner)
+      if (t <= 0) continue
+      const o = (y * w + x) * 4
+      if (mode === 'erase') {
+        const a = data[o + 3]
+        const newA = Math.round(a * (1 - t))
+        if (newA < a) {
+          data[o + 3] = newA
+          affected++
+        }
+      } else if (src) {
+        // Blend each channel toward the original; `t` weights the stamp center.
+        const r0 = data[o]
+        const g0 = data[o + 1]
+        const b0 = data[o + 2]
+        const a0 = data[o + 3]
+        data[o] = Math.round(r0 + (src[o] - r0) * t)
+        data[o + 1] = Math.round(g0 + (src[o + 1] - g0) * t)
+        data[o + 2] = Math.round(b0 + (src[o + 2] - b0) * t)
+        data[o + 3] = Math.round(a0 + (src[o + 3] - a0) * t)
+        if (data[o] !== r0 || data[o + 1] !== g0 || data[o + 2] !== b0 || data[o + 3] !== a0)
+          affected++
+      }
+    }
+  }
+  return affected
+}
+
+/**
+ * Stamp the brush along the segment from (x0,y0) to (x1,y1), spacing the stamps
+ * densely enough (¼ radius) that a fast drag leaves a continuous stroke instead
+ * of a dotted trail. Mutates `img`. Returns total pixels changed.
+ *
+ * The loop starts at i=1 (not 0): the start point was already stamped by the
+ * previous stamp/stroke (caller advances its "last point" to each endpoint), so
+ * re-stamping it would double-apply the feather at every segment seam.
+ */
+export function brushStroke(
+  img: ImageData,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  radius: number,
+  hardness: number,
+  mode: BrushMode,
+  source?: ImageData | null,
+): number {
+  const dx = x1 - x0
+  const dy = y1 - y0
+  const len = Math.sqrt(dx * dx + dy * dy)
+  const step = Math.max(1, radius * 0.25)
+  const n = Math.max(1, Math.ceil(len / step))
+  let affected = 0
+  for (let i = 1; i <= n; i++) {
+    const f = i / n
+    affected += brushStamp(img, x0 + dx * f, y0 + dy * f, radius, hardness, mode, source)
+  }
+  return affected
+}

@@ -23,18 +23,29 @@ type OriginalMeta = Pick<
 >;
 
 interface AppState {
-    tab: Tab;
     logo: LogoAsset;
     /** Snapshot of the original asset metadata (set on upload, used by Reset). */
     originalMeta: OriginalMeta | null;
     appearance: Appearance;
     env: Environment;
 
-    setTab: (tab: Tab) => void;
-    setLogo: (logo: Partial<LogoAsset>) => void;
+    /**
+     * Transparency-checkerboard backdrop shared by every preview (cleanup,
+     * vectorize, export…). `true` = the dark checker. Global and session-lived so
+     * a flip in one view sticks everywhere.
+     */
+    checkerDark: boolean;
+    /** True once the user flipped it by hand, so auto-detect stops overriding. */
+    checkerUserSet: boolean;
+    /** User flip — sets the backdrop and pins it for the rest of the session. */
+    toggleChecker: () => void;
+
+    setLogo: (logo: Partial<LogoAsset> & { isLight?: boolean }) => void;
     clearLogo: () => void;
     /** Replace the working image (e.g. after background removal) with a PNG data URL. */
     setProcessedLogo: (dataUrl: string, width: number, height: number) => void;
+    /** Replace the working image with a traced SVG. */
+    setProcessedSvg: (svgText: string, width: number, height: number) => void;
     /** Restore the working image back to the pristine upload. */
     restoreOriginal: () => void;
     setAppearance: (patch: Partial<Appearance>) => void;
@@ -83,14 +94,17 @@ export const defaultMockups: Record<DeviceId, MockPlacement> = {
 };
 
 export const useStore = create<AppState>((set) => ({
-    tab: "preview",
     logo: emptyLogo,
     originalMeta: null,
     appearance: defaultAppearance,
     env: defaultEnv,
+    checkerDark: false,
+    checkerUserSet: false,
 
-    setTab: (tab) => set({ tab }),
-    setLogo: (patch) =>
+    toggleChecker: () =>
+        set((s) => ({ checkerDark: !s.checkerDark, checkerUserSet: true })),
+
+    setLogo: ({ isLight, ...patch }) =>
         set((s) => {
             const logo = { ...s.logo, ...patch };
             // A fresh upload carries originalSrc — snapshot its metadata for Reset.
@@ -104,7 +118,14 @@ export const useStore = create<AppState>((set) => ({
                       fileName: logo.fileName,
                   }
                 : s.originalMeta;
-            return { logo, originalMeta };
+            // On a fresh upload, default the checker to whatever keeps the mark
+            // visible (dark behind a light/white logo) — unless the user has
+            // already chosen a side this session.
+            const autoChecker =
+                patch.originalSrc && !s.checkerUserSet && isLight !== undefined
+                    ? { checkerDark: isLight }
+                    : null;
+            return { logo, originalMeta, ...autoChecker };
         }),
     clearLogo: () =>
         set((s) => {
@@ -136,6 +157,30 @@ export const useStore = create<AppState>((set) => ({
                     mime: "image/png",
                     isSvg: false,
                     svgText: null,
+                    naturalWidth: width,
+                    naturalHeight: height,
+                },
+            };
+        }),
+    setProcessedSvg: (svgText, width, height) =>
+        set((s) => {
+            // Revoke a previous *processed* blob (never the pristine original).
+            if (
+                s.logo.src &&
+                s.logo.src !== s.logo.originalSrc &&
+                s.logo.src.startsWith("blob:")
+            ) {
+                URL.revokeObjectURL(s.logo.src);
+            }
+            const blob = new Blob([svgText], { type: "image/svg+xml" });
+            const src = URL.createObjectURL(blob);
+            return {
+                logo: {
+                    ...s.logo,
+                    src,
+                    mime: "image/svg+xml",
+                    isSvg: true,
+                    svgText,
                     naturalWidth: width,
                     naturalHeight: height,
                 },
@@ -200,3 +245,7 @@ export const useStore = create<AppState>((set) => ({
 export const useLogo = () => useStore((s) => s.logo);
 export const useAppearance = () => useStore((s) => s.appearance);
 export const useEnv = () => useStore((s) => s.env);
+
+/** The Tailwind class for the current global checkerboard backdrop. */
+export const useCheckerClass = () =>
+    useStore((s) => (s.checkerDark ? "checkerboard-dark" : "checkerboard"));

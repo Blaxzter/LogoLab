@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Full-bleed solid background (the kind of "baked" backdrop Cleanup removes).
+       The ring traps background between it and the centre dot — a perfect test of
+       the AI cutout / By-color tools, which reach the holes a corner flood can't. -->
+  <rect width="512" height="512" fill="#0e7490"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#ffffff" stroke-width="30"/>
+  <circle cx="256" cy="256" r="50" fill="#ffffff"/>
+  <circle cx="256" cy="106" r="28" fill="#ffffff"/>
+</svg>

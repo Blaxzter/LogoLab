@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- White line-art on transparency: invisible on a light page until you give it
+       a Background card. -->
+  <path d="M436 256 L346 100 L166 100 L76 256 L166 412 L346 412 Z"
+        fill="none" stroke="#ffffff" stroke-width="22" stroke-linejoin="round"/>
+  <path d="M196 264 L242 314 L330 196"
+        fill="none" stroke="#ffffff" stroke-width="22"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Overlapping translucent shapes → several colors and blended regions, a good
+       workout for the Vectorize tracer (color mode, path & color counts). -->
+  <circle cx="256" cy="172" r="104" fill="#6366f1" opacity="0.85"/>
+  <circle cx="166" cy="330" r="104" fill="#ec4899" opacity="0.85"/>
+  <circle cx="346" cy="330" r="104" fill="#0ea5e9" opacity="0.85"/>
+</svg>

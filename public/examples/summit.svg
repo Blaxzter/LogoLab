@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Single-color mark on transparency — drop in a brand color with Recolor, or
+       flip it for dark backgrounds with Invert. -->
+  <circle cx="356" cy="150" r="36" fill="#14161c"/>
+  <path d="M84 400 L212 176 L300 320 L356 236 L428 400 Z" fill="#14161c"/>
+</svg>

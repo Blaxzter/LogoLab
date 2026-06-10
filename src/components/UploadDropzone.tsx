@@ -1,43 +1,20 @@
-import { useCallback, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { ImageUp, Loader2, X } from 'lucide-react'
-import { useLogo, useStore } from '../store'
-import { loadLogoFile } from '../lib/image'
+import { useCheckerClass, useLogo, useStore } from '../store'
+import { useLogoUpload } from '../hooks/useLogoUpload'
 
 export function UploadDropzone() {
   const logo = useLogo()
-  const setLogo = useStore((s) => s.setLogo)
   const clearLogo = useStore((s) => s.clearLogo)
+  const checkerClass = useCheckerClass()
+  const { handleFile, loading, error } = useLogoUpload()
   const [dragging, setDragging] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  const handleFile = useCallback(
-    async (file: File | undefined | null) => {
-      if (!file) return
-      if (!/^image\//.test(file.type) && !/\.svg$/i.test(file.name)) {
-        setError('Please drop an image file (PNG, SVG, JPG, WebP…).')
-        return
-      }
-      setError(null)
-      setLoading(true)
-      try {
-        clearLogo()
-        const patch = await loadLogoFile(file)
-        setLogo(patch)
-      } catch {
-        setError('Could not read that file.')
-      } finally {
-        setLoading(false)
-      }
-    },
-    [clearLogo, setLogo],
-  )
 
   if (logo.src) {
     return (
       <div className="panel flex items-center gap-3 p-3">
-        <div className="checkerboard flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line">
+        <div className={`${checkerClass} flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line`}>
           <img src={logo.src} alt="" className="h-full w-full object-contain p-1" />
         </div>
         <div className="min-w-0 flex-1">

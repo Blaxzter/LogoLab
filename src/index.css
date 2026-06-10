@@ -167,6 +167,16 @@
   .btn-secondary:hover:not(:disabled) {
     background-color: var(--color-surface-3);
   }
+  /* Selected/active secondary (e.g. the matching export preset). The compound
+     selectors out-specify the :hover rule above so the accent fill sticks. */
+  .btn-secondary.is-active {
+    background-color: var(--color-accent-soft);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+  .btn-secondary.is-active:hover:not(:disabled) {
+    background-color: color-mix(in oklab, var(--color-accent-soft) 82%, var(--color-accent));
+  }
   .btn-ghost {
     background-color: transparent;
     color: var(--color-ink-2);

@@ -335,7 +335,14 @@ export async function buildExportZip(
   // with only a viewBox would render blank/150px); raster sources pass through.
   const { source, width, height } = await loadRenderSource(src, 1024, meta.svgText ?? null)
   const zip = new JSZip()
-  const iconsDir = zip.folder('icons')
+  // Deployable assets live under public/ so the bundle drops straight into a
+  // Vite / Next / CRA / SvelteKit project's public folder (or any web root) and
+  // resolves at /favicon.ico, /manifest.webmanifest, /icons/... — the exact
+  // paths the manifest and <head> snippet reference. Docs (README, snippet)
+  // stay at the zip root, outside the deployable tree.
+  const publicDir = zip.folder('public')
+  if (!publicDir) throw new Error('Failed to create public folder')
+  const iconsDir = publicDir.folder('icons')
   if (!iconsDir) throw new Error('Failed to create icons folder')
 
   const enabled = targets.filter((t) => t.enabled)
@@ -361,16 +368,18 @@ export async function buildExportZip(
     }
   }
 
-  // Real favicon.ico at the zip root, built from the enabled favicon sizes.
+  // Real favicon.ico beside the icons, built from the enabled favicon sizes.
   if (faviconPngs.length) {
     faviconPngs.sort((a, b) => a.size - b.size)
     const ico = encodeIco(faviconPngs)
-    zip.file('favicon.ico', await ico.arrayBuffer())
+    publicDir.file('favicon.ico', await ico.arrayBuffer())
   }
 
   if (meta.includeManifest) {
-    zip.file('manifest.webmanifest', buildManifest(meta.brandName, targets))
+    publicDir.file('manifest.webmanifest', buildManifest(meta.brandName, targets))
   }
+  // The <head> snippet and README are reference docs, not deployable assets, so
+  // they sit at the zip root rather than inside public/.
   if (meta.includeHtml) {
     zip.file('head-snippet.html', buildHtmlSnippet(targets))
   }
@@ -391,18 +400,19 @@ function buildReadme(
   lines.push('')
   lines.push('Contents')
   lines.push('--------')
-  if (hasIco) lines.push('  favicon.ico            Multi-size classic favicon (place at site root).')
-  lines.push('  icons/                 PNG icons in every selected size.')
-  if (meta.includeManifest) lines.push('  manifest.webmanifest   PWA manifest (place at site root).')
-  if (meta.includeHtml) lines.push('  head-snippet.html      Copy these tags into your <head>.')
+  lines.push('  public/                    Deployable assets — drop into your web root.')
+  if (hasIco) lines.push('    favicon.ico              Multi-size classic favicon.')
+  if (meta.includeManifest) lines.push('    manifest.webmanifest     PWA manifest.')
+  lines.push('    icons/                   PNG icons in every selected size.')
+  if (meta.includeHtml) lines.push('  head-snippet.html          Copy these tags into your <head>.')
   lines.push('')
   lines.push(`  ${enabled.length} icon${enabled.length === 1 ? '' : 's'} exported.`)
   lines.push('')
   lines.push('Setup')
   lines.push('-----')
-  lines.push('1. Copy favicon.ico, manifest.webmanifest and the icons/ folder to your')
-  lines.push('   site root (so they resolve at /favicon.ico, /manifest.webmanifest,')
-  lines.push('   /icons/...).')
+  lines.push("1. Copy the contents of public/ into your project's public/ folder")
+  lines.push('   (Vite, Next.js, CRA, SvelteKit…) — or your web root — so they resolve')
+  lines.push('   at /favicon.ico, /manifest.webmanifest and /icons/...')
   lines.push('2. Paste the contents of head-snippet.html into your page <head>.')
   lines.push('')
   lines.push('Maskable icons')

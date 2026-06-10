@@ -4,6 +4,14 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Drop in a logo, preview it in real-world contexts, vectorize to clean SVG, and export PWA-ready icons.",
+  "homepage": "https://github.com/Blaxzter/LogoLab",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Blaxzter/LogoLab.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Blaxzter/LogoLab/issues"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -11,11 +19,13 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
-    "imagetracerjs": "^1.2.6",
+    "@huggingface/transformers": "^4.2.0",
+    "esm-potrace-wasm": "^0.4.1",
     "jszip": "^3.10.1",
     "lucide-react": "^1.17.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-router-dom": "^7.17.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

@@ -93,17 +93,17 @@ export interface RenderIconOptions {
   invert?: boolean
 }
 
-/** Vectorization configuration for the raster → SVG pipeline. */
+/** Vectorization configuration for the raster → SVG tracing pipeline. */
 export interface VectorizeOptions {
   mode: 'color' | 'mono'
-  /** Number of colors to quantize to (color mode). */
+  /** Max number of fill colors to quantize to (color mode), 2–24. */
   colors: number
-  /** 0 (faithful) → 100 (heavily simplified). Maps to tracer ltres/qtres/pathomit. */
-  simplify: number
+  /** 0 (crisp corners, node-dense) → 100 (very smooth, sparse). Drives potrace curve fitting. */
+  smoothing: number
+  /** 0 (keep every speck) → 100 (aggressive noise suppression). Drives speckle & color cleanup. */
+  despeckle: number
   /** Mono threshold 0–255 (mono mode). */
   threshold: number
-  /** Drop the dominant background color path (transparent output). */
+  /** Drop the detected background layer for transparent output. */
   removeBackground: boolean
-  /** Override every path fill with a single color. */
-  forceColor: string | null
 }
