@@ -30,7 +30,7 @@ import { docStats, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from "../../lib/trace";
 import type { VectorizeOptions } from "../../types";
-import type { DocItem, EditableDoc, NodeRef } from "../../lib/path/types";
+import type { DocItem, EditableDoc, NodeRef, PathItem } from "../../lib/path/types";
 import { TraceControls } from "./TraceControls";
 import { EditorCanvas, useFitBox } from "./EditorCanvas";
 import { PathsPanel } from "./PathsPanel";
@@ -141,21 +141,24 @@ export function VectorizeStudio() {
     );
 
     // The canvas renders (and edits) the force-colored derived doc, but only
-    // ever changes geometry/structure — restore the base fills before storing,
-    // so toggling force color off never reveals baked-in overrides.
+    // ever changes geometry/structure — restore the base fills (and gradients)
+    // before storing, so toggling force color off never reveals baked-in
+    // overrides or drops a fitted gradient.
     const mergeFills = useCallback(
         (edited: EditableDoc): EditableDoc => {
             if (!forceColorOn || !doc) return edited;
-            const fills = new Map<string, string>();
+            const base = new Map<string, PathItem>();
             for (const it of doc.items)
-                if (it.kind === "path") fills.set(it.id, it.fill);
+                if (it.kind === "path") base.set(it.id, it);
             return {
                 ...edited,
-                items: edited.items.map((it) =>
-                    it.kind === "path" && fills.has(it.id)
-                        ? { ...it, fill: fills.get(it.id)! }
-                        : it,
-                ),
+                items: edited.items.map((it) => {
+                    if (it.kind !== "path") return it;
+                    const b = base.get(it.id);
+                    return b
+                        ? { ...it, fill: b.fill, gradient: b.gradient }
+                        : it;
+                }),
             };
         },
         [doc, forceColorOn],
@@ -272,7 +275,9 @@ export function VectorizeStudio() {
         return {
             ...doc,
             items: doc.items.map((it) =>
-                it.kind === "path" ? { ...it, fill: forceColor } : it,
+                it.kind === "path"
+                    ? { ...it, fill: forceColor, gradient: undefined }
+                    : it,
             ),
         };
     }, [doc, forceColorOn, forceColor]);
@@ -416,10 +421,13 @@ export function VectorizeStudio() {
     const handleRecolor = useCallback(
         (id: string, fill: string, commit: boolean) => {
             if (!doc) return;
+            // Picking a solid swatch color drops any fitted gradient.
             const next = {
                 ...doc,
                 items: doc.items.map((it) =>
-                    it.id === id && it.kind === "path" ? { ...it, fill } : it,
+                    it.id === id && it.kind === "path"
+                        ? { ...it, fill, gradient: undefined }
+                        : it,
                 ),
             };
             if (commit) commitDoc(next);

@@ -106,4 +106,17 @@ export interface VectorizeOptions {
   threshold: number
   /** Drop the detected background layer for transparent output. */
   removeBackground: boolean
+  /**
+   * Fit smooth color gradients (color mode): regions whose source pixels follow
+   * a linear/radial ramp export as a real SVG gradient instead of a flat fill.
+   * Defaults to on when omitted.
+   */
+  gradients?: boolean
+  /**
+   * Tracer backend. 'potrace' = the classic bilevel WASM tracer (default;
+   * seamless on stacked multi-color gradients). 'crisp' = sub-pixel
+   * marching-squares + Schneider Bézier fitting — cleaner, lower-node curves,
+   * best for line-art / solid-shape logos.
+   */
+  engine?: 'potrace' | 'crisp'
 }

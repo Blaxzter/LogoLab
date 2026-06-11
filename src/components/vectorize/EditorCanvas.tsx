@@ -16,6 +16,7 @@ import type { PanZoom } from "../../hooks/usePanZoom";
 import type {
     EditableDoc,
     DocItem,
+    GradientFill,
     NodeRef,
     PathItem,
     RawItem,
@@ -143,6 +144,45 @@ interface DragState {
     pointerId: number;
 }
 
+/** SVG paint-server element for a gradient fill (userSpaceOnUse). */
+function GradientDef({ id, gradient }: { id: string; gradient: GradientFill }) {
+    const stops = gradient.stops.map((s, i) => (
+        <stop
+            key={i}
+            offset={s.offset}
+            stopColor={s.color}
+            stopOpacity={s.opacity ?? 1}
+        />
+    ));
+    if (gradient.type === "linear") {
+        return (
+            <linearGradient
+                id={id}
+                gradientUnits="userSpaceOnUse"
+                x1={gradient.x1}
+                y1={gradient.y1}
+                x2={gradient.x2}
+                y2={gradient.y2}
+            >
+                {stops}
+            </linearGradient>
+        );
+    }
+    return (
+        <radialGradient
+            id={id}
+            gradientUnits="userSpaceOnUse"
+            cx={gradient.cx}
+            cy={gradient.cy}
+            r={gradient.r}
+            fx={gradient.fx}
+            fy={gradient.fy}
+        >
+            {stops}
+        </radialGradient>
+    );
+}
+
 /** Memoized static fill — re-renders only when the item identity changes. */
 const PathView = memo(function PathView({
     item,
@@ -151,19 +191,27 @@ const PathView = memo(function PathView({
     item: PathItem;
     interactive: boolean;
 }) {
+    const gid = item.gradient ? `grad-${item.id}` : null;
     return (
-        <path
-            data-id={item.id}
-            d={dOf(item)}
-            fill={item.fill}
-            fillOpacity={item.fillOpacity}
-            fillRule={item.fillRule}
-            style={
-                interactive
-                    ? { pointerEvents: "visiblePainted", cursor: "move" }
-                    : undefined
-            }
-        />
+        <>
+            {item.gradient && (
+                <defs>
+                    <GradientDef id={gid!} gradient={item.gradient} />
+                </defs>
+            )}
+            <path
+                data-id={item.id}
+                d={dOf(item)}
+                fill={gid ? `url(#${gid})` : item.fill}
+                fillOpacity={item.fillOpacity}
+                fillRule={item.fillRule}
+                style={
+                    interactive
+                        ? { pointerEvents: "visiblePainted", cursor: "move" }
+                        : undefined
+                }
+            />
+        </>
     );
 });
 

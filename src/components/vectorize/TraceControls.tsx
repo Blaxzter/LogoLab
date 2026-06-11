@@ -92,6 +92,20 @@ export function TraceControls({
             </Field>
           )}
 
+          <Field
+            label="Engine"
+            hint="Potrace = classic tracer (seamless gradients). Crisp = sub-pixel Bézier fitting — cleaner, lower-node curves, best for line-art / solid shapes."
+          >
+            <Segmented<'crisp' | 'potrace'>
+              value={opts.engine ?? 'potrace'}
+              onChange={(v) => onPatch({ engine: v })}
+              options={[
+                { value: 'potrace', label: 'Potrace' },
+                { value: 'crisp', label: 'Crisp' },
+              ]}
+            />
+          </Field>
+
           <Field label="Smoothing" hint="Curve fitting — higher melts detail into smooth curves.">
             <Slider value={opts.smoothing} min={0} max={100} onChange={(v) => onPatch({ smoothing: v })} />
           </Field>
@@ -99,6 +113,19 @@ export function TraceControls({
           <Field label="Despeckle" hint="Suppresses anti-aliasing slivers and speckles.">
             <Slider value={opts.despeckle} min={0} max={100} onChange={(v) => onPatch({ despeckle: v })} />
           </Field>
+
+          {opts.mode === 'color' && (
+            <Field
+              label="Gradients"
+              hint="Detect smooth color ramps and export them as real SVG gradients instead of flat bands."
+            >
+              <Toggle
+                checked={opts.gradients !== false}
+                onChange={(v) => onPatch({ gradients: v })}
+                label="Fit smooth gradients"
+              />
+            </Field>
+          )}
         </>
       )}
 

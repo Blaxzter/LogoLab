@@ -14,6 +14,44 @@ export interface Vec {
 /** How a node joins its two segments: free corner, or collinear handles. */
 export type NodeKind = 'corner' | 'smooth'
 
+/** One color stop of a gradient fill. */
+export interface GradientStop {
+  /** Position along the gradient axis, 0–1. */
+  offset: number
+  /** Stop color as #rrggbb. */
+  color: string
+  /** 0–1; omitted means 1. */
+  opacity?: number
+}
+
+/**
+ * A linear gradient fill. Endpoints are in absolute viewBox units (SVG
+ * `gradientUnits="userSpaceOnUse"`), so the gradient transforms in lockstep
+ * with the path nodes during edit / zoom — no bounding-box recomputation.
+ */
+export interface LinearGradient {
+  type: 'linear'
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  stops: GradientStop[]
+}
+
+/** A radial gradient fill, in absolute viewBox units (userSpaceOnUse). */
+export interface RadialGradient {
+  type: 'radial'
+  cx: number
+  cy: number
+  r: number
+  /** Optional focal point; defaults to (cx, cy) when omitted. */
+  fx?: number
+  fy?: number
+  stops: GradientStop[]
+}
+
+export type GradientFill = LinearGradient | RadialGradient
+
 export interface PathNode {
   /** Anchor point. */
   x: number
@@ -34,7 +72,18 @@ export interface SubPath {
 export interface PathItem {
   kind: 'path'
   id: string
+  /**
+   * Representative solid fill (#rrggbb). Always present, even when `gradient`
+   * is set — it is the swatch color, the force-color / recolor base, and the
+   * fallback for renderers that ignore gradients. Recoloring drops `gradient`.
+   */
   fill: string
+  /**
+   * Optional gradient paint. When set, it takes precedence over `fill` for
+   * rendering and export (emitted as an SVG paint server). Purely additive:
+   * code paths that only read `fill` keep working unchanged.
+   */
+  gradient?: GradientFill
   /** 0–1; omitted means 1. */
   fillOpacity?: number
   /** Only 'evenodd' is ever serialized; nonzero is the SVG default. */

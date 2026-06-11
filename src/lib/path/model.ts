@@ -6,7 +6,17 @@
 // parsePathD / subPathsToD are pure string work and run anywhere; parseSvg /
 // serializeDoc use DOMParser / XMLSerializer and are browser-only.
 
-import type { Affine, DocItem, EditableDoc, PathItem, PathNode, RawItem, SubPath, Vec } from './types'
+import type {
+  Affine,
+  DocItem,
+  EditableDoc,
+  GradientFill,
+  PathItem,
+  PathNode,
+  RawItem,
+  SubPath,
+  Vec,
+} from './types'
 import {
   affineToString,
   composeAffine,
@@ -15,6 +25,10 @@ import {
   segmentCount,
   transformSubPaths,
 } from './geometry'
+import { gradientToSvgDef } from '../trace/gradient'
+
+/** Stable <defs> id for a path's gradient paint server. */
+const gradientId = (itemId: string): string => 'grad-' + itemId
 
 const EPS = 1e-6
 
@@ -730,10 +744,25 @@ export function serializeDoc(doc: EditableDoc, precision = 2): string {
   const fmt = (v: number) => String(Number(v.toFixed(precision)))
   const [x, y, w, h] = doc.viewBox
   let out = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x)} ${fmt(y)} ${fmt(w)} ${fmt(h)}">`
+
+  // Gradient paint servers for visible paths that carry one. Shared gradient
+  // objects (merged bands) are emitted once and referenced by every path.
+  const gradIds = new Map<GradientFill, string>()
+  let defs = ''
+  for (const item of doc.items) {
+    if (item.visible && item.kind === 'path' && item.gradient && !gradIds.has(item.gradient)) {
+      const id = gradientId(item.id)
+      gradIds.set(item.gradient, id)
+      defs += gradientToSvgDef(item.gradient, id, precision)
+    }
+  }
+  if (defs) out += `<defs>${defs}</defs>`
+
   for (const item of doc.items) {
     if (!item.visible) continue
     if (item.kind === 'path') {
-      out += `<path fill="${escapeAttr(item.fill)}"`
+      const fill = item.gradient ? `url(#${gradIds.get(item.gradient)})` : escapeAttr(item.fill)
+      out += `<path fill="${fill}"`
       if (item.fillOpacity !== undefined && item.fillOpacity < 1) {
         out += ` fill-opacity="${Number(item.fillOpacity.toFixed(4))}"`
       }
