@@ -9,10 +9,10 @@
 import type { VectorizeOptions } from '../../types'
 import type { EditableDoc, LinearGradient, PathItem, SubPath } from '../path/types'
 import type { TraceProgress } from './types'
-import { traceMask, type TraceMaskOptions } from './potrace'
-import { traceMaskCrisp, type CrispOptions } from './subpixel'
-import { dropMinorColors, modeFilter, quantize } from './quantize'
-import { concatSamples, fitRegionFill, type RegionSamples } from './gradient'
+import { traceMask, type TraceMaskOptions } from './potrace.ts'
+import { traceMaskCrisp, type CrispOptions } from './subpixel.ts'
+import { dropMinorColors, modeFilter, quantize } from './quantize.ts'
+import { concatSamples, fitRegionFill, type RegionSamples } from './gradient.ts'
 
 export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   mode: 'color',

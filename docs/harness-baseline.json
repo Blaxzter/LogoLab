@@ -1,0 +1,38 @@
+[
+  {
+    "name": "nebula",
+    "engine": "crisp",
+    "width": 512,
+    "height": 512,
+    "l1Lab": 5.638251002249729,
+    "meanDeltaE": 3.519083994430679,
+    "p95DeltaE": 8.88636389422076,
+    "ssim": 0.9599844030140483,
+    "seamMax": 116.86926779499854,
+    "seamP995": 94.4942442381728,
+    "paths": 7,
+    "nodes": 410,
+    "gradients": 4,
+    "runtimeMs": 223.945,
+    "hash": "138b347f",
+    "determinism": "pass"
+  },
+  {
+    "name": "petals",
+    "engine": "crisp",
+    "width": 512,
+    "height": 512,
+    "l1Lab": 1.2133234951167366,
+    "meanDeltaE": 0.8997703836668528,
+    "p95DeltaE": 1.5345831146100204,
+    "ssim": 0.9831021943390894,
+    "seamMax": 79.41790004981934,
+    "seamP995": 63.84944395453836,
+    "paths": 7,
+    "nodes": 83,
+    "gradients": 0,
+    "runtimeMs": 157.82410000000004,
+    "hash": "03e5afc1",
+    "determinism": "pass"
+  }
+]

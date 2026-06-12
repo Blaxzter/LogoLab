@@ -24,8 +24,8 @@ import {
   parseTransformAttr,
   segmentCount,
   transformSubPaths,
-} from './geometry'
-import { gradientToSvgDef } from '../trace/gradient'
+} from './geometry.ts'
+import { gradientToSvgDef } from '../trace/gradient.ts'
 
 /** Stable <defs> id for a path's gradient paint server. */
 const gradientId = (itemId: string): string => 'grad-' + itemId

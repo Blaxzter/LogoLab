@@ -10,8 +10,8 @@
 // flattened subpaths in mask pixel space.
 
 import type { Affine, SubPath } from '../path/types'
-import { parsePathD } from '../path/model'
-import { composeAffine, parseTransformAttr, transformSubPaths } from '../path/geometry'
+import { parsePathD } from '../path/model.ts'
+import { composeAffine, parseTransformAttr, transformSubPaths } from '../path/geometry.ts'
 
 /** Per-mask potrace tuning knobs (see traceImage for the user-dial mapping). */
 export interface TraceMaskOptions {
