@@ -1,0 +1,563 @@
+// Structure-first smoothness segmentation (Stage 1 of the V2 vectorizer — plan
+// §3.1 / §4.1–4.2, blueprint paper §3.1–3.2 + Supplement Algorithms 1–2).
+//
+// Replaces the V1 posterize-then-mend path (k-means bands → union-refit). Order:
+//
+//   1. Mumford–Shah smoothing  → smoothed u + discontinuity map 𝒟  (mumfordShah.ts)
+//   2. Colour-difference merge  → fine segments S₀ of the SMOOTH pixels (𝒟̄), by
+//      agglomerative CIELAB merging with τ_s = 10 (Supplement Alg 1).
+//   3. Discontinuity-aware merge → macro-regions: a GLOBAL greedy union-fit merge
+//      (two segments merge iff one gradient explains their union in Oklab) gated by
+//      two vetoes —
+//        • edge veto 𝒜 (eq 3): pairs facing each other across 𝒟 (opposite sides
+//          within σ = 5 px, facing density > τ_a = 0.25) are must-stay-separate —
+//          this is the principled fix for V1's latent flat-colour bridging across a
+//          true edge;
+//        • profile-gap veto: a union whose colour profile is bimodal (a wide empty
+//          span along the fitted axis) is two distinct flats, not one field — so a
+//          blue and a red shape never fuse into a fake ramp even when non-adjacent.
+//      The global (non-adjacent) merge is what reunites a background that 𝒟 has
+//      split — e.g. nebula's field outside the ring and in the ring's hole — into
+//      ONE gradient region, while the edge veto keeps the ring itself separate.
+//   4. Anti-aliased 𝒟 pixels  → flooded into the neighbouring macro-region whose
+//      mean colour best matches (the §3.4 convex-combination test, approximated by
+//      nearest fill), so the output label map is complete.
+//
+// Output is QuantizeResult-shaped (labels / palette / counts, largest region
+// first) so the existing stacked-mask tracer consumes it unchanged. Pure and
+// deterministic (no PRNG, fixed scan orders): runs under `node --test`.
+
+import type { PaletteColor, QuantizeResult } from './types'
+import { solveMumfordShah, DEFAULT_MS_OPTIONS, type MumfordShahOptions, type MumfordShahResult } from './mumfordShah.ts'
+import { srgbToLab, deltaE76 } from './lab.ts'
+import { fitBestGradient, concatSamples, type RegionSamples } from './gradient.ts'
+import type { GradientFill } from '../path/types'
+
+export interface SegmentOptions {
+  ms: MumfordShahOptions
+  /** CIELAB ΔE below which adjacent smooth segments merge (color-diff, τ_s). */
+  tauS: number
+  /** Discontinuity facing-scan radius (px), σ. */
+  sigma: number
+  /** Facing density above which a segment pair is must-stay-separate, τ_a. */
+  tauA: number
+  /** Min facing observations before a pair can enter 𝒜 (noise floor). */
+  minFacing: number
+  /** Oklab ΔE under which a single gradient is judged to explain a union. */
+  mergeTol: number
+  /** Reject a union whose colour profile has an empty axis span wider than this
+   *  fraction of [0,1] (bimodal ⇒ two distinct flats, not one smooth field). */
+  maxProfileGap: number
+  /** Cap on samples per segment fed to a union fit (perf; deterministic stride). */
+  sampleCap: number
+}
+
+export const DEFAULT_SEGMENT_OPTIONS: SegmentOptions = {
+  ms: DEFAULT_MS_OPTIONS,
+  tauS: 10,
+  sigma: 5,
+  tauA: 0.25,
+  minFacing: 4,
+  mergeTol: 0.06,
+  maxProfileGap: 0.34,
+  sampleCap: 3000,
+}
+
+export interface SegmentResult extends QuantizeResult {
+  /** Mumford–Shah by-products (diagnostics; not required downstream). */
+  ms: MumfordShahResult
+  /** Number of fine segments S₀ before discontinuity-aware merging. */
+  fineSegments: number
+  /**
+   * Per macro-region (parallel to `palette`/`counts`), the SMOOTH-pixel samples
+   * used for the merge — anti-aliased 𝒟 pixels excluded — so Stage 2 fits its
+   * paint model on clean colours (this is what makes the §3.3 boundary-distance
+   * weighting unnecessary: the boundary AA pixels were never sampled).
+   */
+  regionSamples: RegionSamples[]
+}
+
+const clamp255 = (n: number): number => Math.max(0, Math.min(255, Math.round(n)))
+const clamp01 = (t: number): number => (t < 0 ? 0 : t > 1 ? 1 : t)
+
+/** Segment an image into smooth macro-regions. See module header. */
+export function segmentImage(
+  img: { width: number; height: number; data: Uint8ClampedArray },
+  opts: SegmentOptions = DEFAULT_SEGMENT_OPTIONS,
+): SegmentResult {
+  const { width: w, height: h } = img
+  const n = w * h
+  const data = img.data
+  const ms = solveMumfordShah(img, opts.ms)
+  const { discontinuity: disc, opaque, cutH, cutV } = ms
+
+  // Per-pixel CIELAB of the SMOOTHED image (segmentation colour) — eq uses the
+  // smooth solution so AA/noise doesn't fragment a region.
+  const labL = new Float64Array(n)
+  const labA = new Float64Array(n)
+  const labB = new Float64Array(n)
+  for (let i = 0; i < n; i++) {
+    if (!opaque[i]) continue
+    const lab = srgbToLab(ms.r[i] * 255, ms.g[i] * 255, ms.b[i] * 255)
+    labL[i] = lab[0]
+    labA[i] = lab[1]
+    labB[i] = lab[2]
+  }
+
+  // --- Step 2: colour-difference agglomerative merge over smooth pixels --------
+  // Union-find; each smooth pixel starts as its own segment with fill = its Lab.
+  // Repeatedly merge 4-neighbour smooth pairs whose current segment-mean ΔE ≤ τ_s,
+  // to a fixpoint. Means are maintained per root and read through find(), so the
+  // decision always uses up-to-date fills (Supplement Alg 1).
+  const parent = new Int32Array(n).fill(-1)
+  const sumL = new Float64Array(n)
+  const sumA = new Float64Array(n)
+  const sumB = new Float64Array(n)
+  const cnt = new Float64Array(n)
+  const smooth = new Uint8Array(n)
+  for (let i = 0; i < n; i++) {
+    if (opaque[i] && !disc[i]) {
+      smooth[i] = 1
+      parent[i] = i
+      sumL[i] = labL[i]
+      sumA[i] = labA[i]
+      sumB[i] = labB[i]
+      cnt[i] = 1
+    }
+  }
+
+  const find = (x: number): number => {
+    let r = x
+    while (parent[r] !== r) r = parent[r]
+    // Path compression (deterministic).
+    let c = x
+    while (parent[c] !== r) {
+      const next = parent[c]
+      parent[c] = r
+      c = next
+    }
+    return r
+  }
+  const meanDelta = (ra: number, rb: number): number => {
+    const ml = [sumL[ra] / cnt[ra], sumA[ra] / cnt[ra], sumB[ra] / cnt[ra]] as [number, number, number]
+    const nl = [sumL[rb] / cnt[rb], sumA[rb] / cnt[rb], sumB[rb] / cnt[rb]] as [number, number, number]
+    return deltaE76(ml, nl)
+  }
+  const unite = (ra: number, rb: number): void => {
+    // Smaller index becomes root (deterministic).
+    const lo = ra < rb ? ra : rb
+    const hi = ra < rb ? rb : ra
+    parent[hi] = lo
+    sumL[lo] += sumL[hi]
+    sumA[lo] += sumA[hi]
+    sumB[lo] += sumB[hi]
+    cnt[lo] += cnt[hi]
+  }
+
+  for (let pass = 0; pass < 64; pass++) {
+    let changed = false
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x
+        if (!smooth[i]) continue
+        // right
+        if (x + 1 < w && smooth[i + 1] && !cutH[i]) {
+          const ra = find(i)
+          const rb = find(i + 1)
+          if (ra !== rb && meanDelta(ra, rb) <= opts.tauS) {
+            unite(ra, rb)
+            changed = true
+          }
+        }
+        // down
+        if (y + 1 < h && smooth[i + w] && !cutV[i]) {
+          const ra = find(i)
+          const rb = find(i + w)
+          if (ra !== rb && meanDelta(ra, rb) <= opts.tauS) {
+            unite(ra, rb)
+            changed = true
+          }
+        }
+      }
+    }
+    if (!changed) break
+  }
+
+  // Compact S₀ roots → segment ids 0..S-1; segOf[pixel] = id, −1 for 𝒟/transparent.
+  const segOf = new Int32Array(n).fill(-1)
+  const rootToSeg = new Map<number, number>()
+  let S = 0
+  for (let i = 0; i < n; i++) {
+    if (!smooth[i]) continue
+    const r = find(i)
+    let id = rootToSeg.get(r)
+    if (id === undefined) {
+      id = S++
+      rootToSeg.set(r, id)
+    }
+    segOf[i] = id
+  }
+  if (S === 0) {
+    // Degenerate (e.g. fully transparent / everything an edge): one flat region.
+    return fallbackSingleRegion(img, ms)
+  }
+
+  // --- Step 3a: discontinuity relation 𝒜 (eq 3) -------------------------------
+  // For each 𝒟 pixel and each of 3 axes (→, ↓, ↘), find the nearest smooth
+  // segment within σ on each side. A pair seen on OPPOSITE sides is a "facing"
+  // observation; any pair seen near the same 𝒟 pixel is a "touch". A pair whose
+  // facing/touch density exceeds τ_a is must-stay-separate.
+  const facing = new Map<number, number>()
+  const touch = new Map<number, number>()
+  const pairKey = (a: number, b: number): number => (a < b ? a * S + b : b * S + a)
+  const dirs: [number, number][] = [
+    [1, 0],
+    [0, 1],
+    [1, 1],
+  ]
+  const nearestSeg = (x: number, y: number, dx: number, dy: number): number => {
+    for (let s = 1; s <= opts.sigma; s++) {
+      const nx = x + dx * s
+      const ny = y + dy * s
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) return -1
+      const id = segOf[ny * w + nx]
+      if (id >= 0) return id
+    }
+    return -1
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x
+      if (!opaque[i] || !disc[i]) continue
+      // Collect nearby segments across all 6 half-directions for the touch tally.
+      const near = new Set<number>()
+      for (const [dx, dy] of dirs) {
+        const pos = nearestSeg(x, y, dx, dy)
+        const neg = nearestSeg(x, y, -dx, -dy)
+        if (pos >= 0) near.add(pos)
+        if (neg >= 0) near.add(neg)
+        if (pos >= 0 && neg >= 0 && pos !== neg) {
+          const k = pairKey(pos, neg)
+          facing.set(k, (facing.get(k) ?? 0) + 1)
+        }
+      }
+      const arr = [...near].sort((a, b) => a - b)
+      for (let a = 0; a < arr.length; a++) {
+        for (let b = a + 1; b < arr.length; b++) {
+          const k = pairKey(arr[a], arr[b])
+          touch.set(k, (touch.get(k) ?? 0) + 1)
+        }
+      }
+    }
+  }
+  const vetoed = new Set<number>()
+  for (const [k, f] of facing) {
+    const t = touch.get(k) ?? f
+    if (f >= opts.minFacing && f > opts.tauA * t) vetoed.add(k)
+  }
+
+  // --- Step 3b: gather per-segment samples (ORIGINAL colours) ------------------
+  const segSamples: RegionSamples[] = []
+  {
+    const xsA: number[][] = Array.from({ length: S }, () => [])
+    const ysA: number[][] = Array.from({ length: S }, () => [])
+    const rsA: number[][] = Array.from({ length: S }, () => [])
+    const gsA: number[][] = Array.from({ length: S }, () => [])
+    const bsA: number[][] = Array.from({ length: S }, () => [])
+    for (let i = 0; i < n; i++) {
+      const id = segOf[i]
+      if (id < 0) continue
+      const o = i * 4
+      xsA[id].push(i % w)
+      ysA[id].push((i / w) | 0)
+      rsA[id].push(data[o])
+      gsA[id].push(data[o + 1])
+      bsA[id].push(data[o + 2])
+    }
+    for (let id = 0; id < S; id++) {
+      segSamples.push(strideSamples(xsA[id], ysA[id], rsA[id], gsA[id], bsA[id], opts.sampleCap))
+    }
+  }
+
+  // --- Step 3c: global greedy union-fit merge with both vetoes -----------------
+  // Groups carry STABLE ids (never reused) so a pairwise candidate cache survives
+  // across merges: only the merged group's row is recomputed, making the whole
+  // merge O(S²) fits instead of O(S³). Merge the globally-cheapest qualifying
+  // (non-vetoed, low-residual, unimodal) pair until none qualifies.
+  const members = new Map<number, number[]>()
+  const samples = new Map<number, RegionSamples>()
+  const alive: number[] = []
+  for (let id = 0; id < S; id++) {
+    members.set(id, [id])
+    samples.set(id, segSamples[id])
+    alive.push(id)
+  }
+  let nextId = S
+  const cache = new Map<number, { res: number; samples: RegionSamples } | null>()
+  const ckey = (a: number, b: number): number => (a < b ? a * 1e7 + b : b * 1e7 + a)
+
+  const pairVetoed = (gi: number, gj: number): boolean => {
+    const mi = members.get(gi)!
+    const mj = members.get(gj)!
+    for (const a of mi) for (const b of mj) if (vetoed.has(pairKey(a, b))) return true
+    return false
+  }
+  const evalPair = (gi: number, gj: number): { res: number; samples: RegionSamples } | null => {
+    const k = ckey(gi, gj)
+    if (cache.has(k)) return cache.get(k)!
+    let result: { res: number; samples: RegionSamples } | null = null
+    if (!pairVetoed(gi, gj)) {
+      const union = strideConcat([samples.get(gi)!, samples.get(gj)!], opts.sampleCap)
+      const fit = fitBestGradient(union)
+      if (fit && fit.oklabResidual <= opts.mergeTol && profileGap(fit.gradient, union) <= opts.maxProfileGap) {
+        result = { res: fit.oklabResidual, samples: union }
+      }
+    }
+    cache.set(k, result)
+    return result
+  }
+
+  for (;;) {
+    let best: { i: number; j: number; samples: RegionSamples; res: number } | null = null
+    for (let a = 0; a < alive.length; a++) {
+      for (let b = a + 1; b < alive.length; b++) {
+        const cand = evalPair(alive[a], alive[b])
+        if (cand && (!best || cand.res < best.res)) {
+          best = { i: alive[a], j: alive[b], samples: cand.samples, res: cand.res }
+        }
+      }
+    }
+    if (!best) break
+    const c = nextId++
+    members.set(c, members.get(best.i)!.concat(members.get(best.j)!))
+    samples.set(c, best.samples)
+    // Retire the two merged groups and their cache rows; add the new group.
+    alive.splice(alive.indexOf(best.j), 1)
+    alive.splice(alive.indexOf(best.i), 1)
+    for (const k of [...cache.keys()]) {
+      const hi = k % 1e7
+      const lo = (k - hi) / 1e7
+      if (lo === best.i || lo === best.j || hi === best.i || hi === best.j) cache.delete(k)
+    }
+    members.delete(best.i)
+    members.delete(best.j)
+    samples.delete(best.i)
+    samples.delete(best.j)
+    alive.push(c)
+  }
+
+  const G = alive.length
+  const segToGroup = new Int32Array(S)
+  const groupSampleList: RegionSamples[] = alive.map((gid) => samples.get(gid)!)
+  alive.forEach((gid, gi) => {
+    for (const sId of members.get(gid)!) segToGroup[sId] = gi
+  })
+
+  // --- Step 4: flood 𝒟 (anti-aliased) pixels into the best-matching neighbour ---
+  // groupId per pixel: smooth pixels inherit their segment's group; 𝒟 pixels are
+  // assigned by repeated nearest-neighbour passes, choosing the adjacent group
+  // whose mean ORIGINAL colour best matches the pixel (the §3.4 convex-combo test,
+  // approximated by nearest fill). Means are accumulated as pixels are assigned.
+  const groupId = new Int32Array(n).fill(-1)
+  const gSumR = new Float64Array(G)
+  const gSumG = new Float64Array(G)
+  const gSumB = new Float64Array(G)
+  const gCnt = new Float64Array(G)
+  for (let i = 0; i < n; i++) {
+    const sId = segOf[i]
+    if (sId < 0) continue
+    const gi = segToGroup[sId]
+    groupId[i] = gi
+    const o = i * 4
+    gSumR[gi] += data[o]
+    gSumG[gi] += data[o + 1]
+    gSumB[gi] += data[o + 2]
+    gCnt[gi]++
+  }
+
+  const groupLab = (gi: number): [number, number, number] =>
+    srgbToLab(gSumR[gi] / gCnt[gi], gSumG[gi] / gCnt[gi], gSumB[gi] / gCnt[gi])
+
+  // Flood unassigned opaque (𝒟) pixels until none remain.
+  let remaining = 0
+  for (let i = 0; i < n; i++) if (opaque[i] && groupId[i] < 0) remaining++
+  const neigh = [-1, 1, -w, w]
+  for (let guard = 0; remaining > 0 && guard < n; guard++) {
+    let assignedThisPass = 0
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x
+        if (!opaque[i] || groupId[i] >= 0) continue
+        const o = i * 4
+        const px = srgbToLab(data[o], data[o + 1], data[o + 2])
+        let bestG = -1
+        let bestD = Infinity
+        for (let d = 0; d < 4; d++) {
+          if (d === 0 && x === 0) continue
+          if (d === 1 && x === w - 1) continue
+          if (d === 2 && y === 0) continue
+          if (d === 3 && y === h - 1) continue
+          const ni = i + neigh[d]
+          const gj = groupId[ni]
+          if (gj < 0) continue
+          const dd = deltaE76(px, groupLab(gj))
+          if (dd < bestD) {
+            bestD = dd
+            bestG = gj
+          }
+        }
+        if (bestG >= 0) {
+          groupId[i] = bestG
+          gSumR[bestG] += data[o]
+          gSumG[bestG] += data[o + 1]
+          gSumB[bestG] += data[o + 2]
+          gCnt[bestG]++
+          assignedThisPass++
+        }
+      }
+    }
+    remaining -= assignedThisPass
+    if (assignedThisPass === 0) break // no opaque pixel borders an assigned one
+  }
+
+  // --- Assemble QuantizeResult: sort groups by pixel count desc (bottom first) --
+  const order = Array.from({ length: G }, (_, gi) => gi).sort((a, b) => gCnt[b] - gCnt[a])
+  const rank = new Int32Array(G)
+  order.forEach((gi, pos) => {
+    rank[gi] = pos
+  })
+  const palette: PaletteColor[] = order.map((gi) => ({
+    r: clamp255(gSumR[gi] / (gCnt[gi] || 1)),
+    g: clamp255(gSumG[gi] / (gCnt[gi] || 1)),
+    b: clamp255(gSumB[gi] / (gCnt[gi] || 1)),
+  }))
+  const counts = order.map((gi) => gCnt[gi])
+  const regionSamples = order.map((gi) => groupSampleList[gi])
+  const labels = new Int32Array(n)
+  for (let i = 0; i < n; i++) {
+    const gi = groupId[i]
+    labels[i] = gi < 0 ? -1 : rank[gi]
+  }
+
+  return { palette, labels, counts, ms, fineSegments: S, regionSamples }
+}
+
+/** Longest run of empty interior bins (as a fraction of [0,1]) of a gradient's
+ *  per-sample parameter t — high ⇒ a bimodal profile (two distinct flats). */
+function profileGap(g: GradientFill, s: RegionSamples, bins = 24): number {
+  const filled = new Uint8Array(bins)
+  for (let i = 0; i < s.n; i++) {
+    const t = gradientT(g, s.xs[i], s.ys[i])
+    let bi = Math.floor(t * bins)
+    if (bi < 0) bi = 0
+    else if (bi >= bins) bi = bins - 1
+    filled[bi] = 1
+  }
+  // Trim leading/trailing empties (profile only spans where samples exist).
+  let lo = 0
+  while (lo < bins && !filled[lo]) lo++
+  let hi = bins - 1
+  while (hi >= 0 && !filled[hi]) hi--
+  if (hi <= lo) return 0
+  let maxRun = 0
+  let run = 0
+  for (let b = lo; b <= hi; b++) {
+    if (filled[b]) run = 0
+    else {
+      run++
+      if (run > maxRun) maxRun = run
+    }
+  }
+  return maxRun / bins
+}
+
+/** A gradient's scalar parameter t∈[0,1] at (x,y) — matches sampleGradient. */
+function gradientT(g: GradientFill, x: number, y: number): number {
+  if (g.type === 'linear') {
+    const dx = g.x2 - g.x1
+    const dy = g.y2 - g.y1
+    const len2 = dx * dx + dy * dy || 1
+    return clamp01(((x - g.x1) * dx + (y - g.y1) * dy) / len2)
+  }
+  return clamp01(Math.hypot(x - g.cx, y - g.cy) / (g.r || 1))
+}
+
+/** Build a RegionSamples from JS arrays, strided down to at most `cap` points. */
+function strideSamples(
+  xs: number[],
+  ys: number[],
+  rs: number[],
+  gs: number[],
+  bs: number[],
+  cap: number,
+): RegionSamples {
+  const total = xs.length
+  const stride = total > cap ? Math.ceil(total / cap) : 1
+  const m = Math.ceil(total / stride)
+  const X = new Float64Array(m)
+  const Y = new Float64Array(m)
+  const R = new Float64Array(m)
+  const Gc = new Float64Array(m)
+  const B = new Float64Array(m)
+  let k = 0
+  for (let i = 0; i < total && k < m; i += stride) {
+    X[k] = xs[i]
+    Y[k] = ys[i]
+    R[k] = rs[i]
+    Gc[k] = gs[i]
+    B[k] = bs[i]
+    k++
+  }
+  return { xs: X, ys: Y, rs: R, gs: Gc, bs: B, n: k }
+}
+
+/** Concatenate sample sets then stride to `cap` (deterministic). */
+function strideConcat(list: RegionSamples[], cap: number): RegionSamples {
+  const all = concatSamples(list)
+  if (all.n <= cap) return all
+  const stride = Math.ceil(all.n / cap)
+  const m = Math.ceil(all.n / stride)
+  const X = new Float64Array(m)
+  const Y = new Float64Array(m)
+  const R = new Float64Array(m)
+  const Gc = new Float64Array(m)
+  const B = new Float64Array(m)
+  let k = 0
+  for (let i = 0; i < all.n && k < m; i += stride) {
+    X[k] = all.xs[i]
+    Y[k] = all.ys[i]
+    R[k] = all.rs[i]
+    Gc[k] = all.gs[i]
+    B[k] = all.bs[i]
+    k++
+  }
+  return { xs: X, ys: Y, rs: R, gs: Gc, bs: B, n: k }
+}
+
+/** Everything-one-region fallback (degenerate inputs). */
+function fallbackSingleRegion(
+  img: { width: number; height: number; data: Uint8ClampedArray },
+  ms: MumfordShahResult,
+): SegmentResult {
+  const { width: w, height: h, data } = img
+  const n = w * h
+  const labels = new Int32Array(n)
+  let r = 0
+  let g = 0
+  let b = 0
+  let c = 0
+  for (let i = 0; i < n; i++) {
+    if (data[i * 4 + 3] < 128) {
+      labels[i] = -1
+      continue
+    }
+    labels[i] = 0
+    r += data[i * 4]
+    g += data[i * 4 + 1]
+    b += data[i * 4 + 2]
+    c++
+  }
+  const palette: PaletteColor[] = [{ r: clamp255(r / (c || 1)), g: clamp255(g / (c || 1)), b: clamp255(b / (c || 1)) }]
+  const empty: RegionSamples = { xs: new Float64Array(0), ys: new Float64Array(0), rs: new Float64Array(0), gs: new Float64Array(0), bs: new Float64Array(0), n: 0 }
+  return { palette, labels, counts: [c], ms, fineSegments: 1, regionSamples: [empty] }
+}

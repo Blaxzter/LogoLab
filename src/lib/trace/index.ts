@@ -1,18 +1,22 @@
-// Raster → vector tracing engine: alpha-aware quantization → anti-alias
-// cleanup → stacked per-color binary masks → potrace per mask → EditableDoc.
+// Raster → vector tracing engine (V2, structure-first — plan §3): Mumford–Shah
+// smoothness segmentation → per-macro-region paint-model ladder → stacked per-
+// region binary masks → tracer per mask → EditableDoc.
 //
-// The same conceptual pipeline as Affinity/Illustrator image trace. Masks are
-// STACKED (each layer also covers everything painted above it), so adjacent
-// regions overlap instead of abutting — that is what kills the hairline gaps
-// a naive per-color trace leaves between regions.
+// The order is INVERTED from the old posterize-then-mend pipeline: regions are
+// found by smoothness FIRST (segment.ts), each region's paint (solid / linear /
+// radial gradient) is fitted SECOND (gradient.ts fitPaintLadder), and geometry is
+// traced LAST — once per region. Masks are still STACKED (each layer also covers
+// everything painted above it) so adjacent regions overlap instead of abutting,
+// which kills the hairline gaps a naive per-region trace leaves between regions.
+// k-means quantization (quantize.ts) survives only as a fallback / UI palette.
 
 import type { VectorizeOptions } from '../../types'
 import type { EditableDoc, GradientFill, PathItem, SubPath } from '../path/types'
-import type { TraceProgress, QuantizeResult, PaletteColor } from './types'
+import type { TraceProgress, QuantizeResult } from './types'
 import { traceMask, type TraceMaskOptions } from './potrace.ts'
 import { traceMaskCrisp, type CrispOptions } from './subpixel.ts'
-import { dropMinorColors, modeFilter, quantize } from './quantize.ts'
-import { concatSamples, fitRegionFill, fitBestGradient, type RegionSamples } from './gradient.ts'
+import { segmentImage, DEFAULT_SEGMENT_OPTIONS, type SegmentOptions } from './segment.ts'
+import { fitPaintLadder } from './gradient.ts'
 
 export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   mode: 'color',
@@ -37,19 +41,16 @@ function crispOptionsFor(smoothing: number, turdsize: number): CrispOptions {
   }
 }
 
-/** Max pixels sampled per region when fitting a gradient (perf vs. accuracy). */
-const GRADIENT_SAMPLE_TARGET = 4000
-
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n))
 
 const rgbToHex = (r: number, g: number, b: number): string =>
   '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)
 
 /**
- * Trace an ImageData into an editable vector document. Color mode quantizes,
- * cleans up anti-aliasing, and traces one stacked mask per palette color
- * (bottom-first paint order); mono mode thresholds to a single black shape.
- * Aborts (via `signal`) throw a DOMException named 'AbortError'.
+ * Trace an ImageData into an editable vector document. Color mode segments by
+ * smoothness (Mumford–Shah), fits a paint model per macro-region, and traces one
+ * stacked mask per region (bottom-first paint order); mono mode thresholds to a
+ * single black shape. Aborts (via `signal`) throw a DOMException named 'AbortError'.
  */
 export async function traceImage(
   imageData: ImageData,
@@ -94,31 +95,26 @@ export async function traceImage(
     return { viewBox: [0, 0, width, height], items }
   }
 
+  // Stage 1 — smoothness segmentation: Mumford–Shah smoothing splits the image
+  // into macro-regions (one smooth field each), reuniting a background that an
+  // edge spatially split and keeping true edges separate (segment.ts). This
+  // replaces quantize → mode-filter → drop-minor → union-refit entirely.
   onProgress?.({ phase: 'quantize' })
-  let q = quantize(imageData, clamp(Math.round(options.colors), 2, 24))
-  const passes = despeckle === 0 ? 0 : 1 + Math.floor(despeckle / 40)
-  q = { ...q, labels: modeFilter(q.labels, width, height, passes) }
-  q = dropMinorColors(q, (despeckle / 100) ** 1.5 * 0.02)
+  const seg = segmentImage(
+    imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
+    segmentOptionsFor(options),
+  )
+  const q: QuantizeResult = { palette: seg.palette, labels: seg.labels, counts: seg.counts }
 
   const gradientsOn = options.gradients !== false
 
-  // Gradient grouping happens BEFORE tracing. Sample each quantized region from
-  // the ORIGINAL pixels, greedily union-refit the regions (two merge iff a single
-  // gradient explains their combined samples — the plan's "merge iff one model
-  // fits the union"), then MERGE the labels of each group into one region. A
-  // posterized smooth field thus collapses back into a single full-bleed region
-  // painted with one gradient: there are no band layers left to leave seams, and
-  // a foreground mark (which never merges into the field) simply sits on top
-  // instead of being sandwiched under a tiny band and showing through its cracks.
+  // Stage 2 — paint-model ladder per macro-region: pick the cheapest of
+  // solid / linear-multistop / radial under an MDL score, fitting on the region's
+  // smooth (anti-alias-free) samples. A flat region stays solid (flat-logo
+  // parity); a smooth field becomes one coherent gradient.
   let labelGradient: (GradientFill | null)[] = q.palette.map(() => null)
   if (gradientsOn) {
-    const samples = q.palette.map((_, label) =>
-      sampleRegion(imageData, q.labels, width, height, label, q.counts[label] ?? 0),
-    )
-    const groups = groupRegions(samples)
-    const merged = mergeLabels(q, groups)
-    q = merged.q
-    labelGradient = merged.gradients
+    labelGradient = seg.regionSamples.map((s) => fitPaintLadder(s).gradient)
   }
 
   // Paint order: largest region at the bottom (palette is sorted by count).
@@ -163,190 +159,15 @@ export async function traceImage(
 }
 
 /**
- * Oklab ΔE below which a SINGLE gradient is judged to explain the combined
- * samples of two region groups — the union-refit merge predicate. Generous:
- * biased toward unifying co-field bands into one paint (the plan tolerates loose
- * colour error but zero seams), so a posterized smooth field collapses back into
- * one shared gradient instead of several disagreeing ones.
+ * Map the user-facing VectorizeOptions onto the structure-first segmenter's
+ * tunables. V2 starts every parameter at the blueprint paper's fixed value
+ * (τ_s = 10, σ = 5, τ_a = 0.25, MS α = 1.0, and the calibrated edge threshold);
+ * the `colors`/`despeckle` dials no longer drive a k-means count — segmentation
+ * is structural — so they are intentionally left at the defaults here (the dials
+ * still tune the tracer's smoothing/turdsize downstream).
  */
-const MERGE_OKLAB_TOL = 0.06
-
-/** Cap on samples fed to a single union-refit fit (perf; subsampled if larger). */
-const UNION_FIT_CAP = 3000
-
-interface Group {
-  members: number[]
-  samples: RegionSamples
-  gradient: GradientFill | null
-  residual: number
-}
-
-/** One union-refit group: the labels it covers and the gradient it paints. */
-interface RegionGroup {
-  members: number[]
-  gradient: GradientFill | null
-}
-
-const clamp255 = (n: number): number => Math.max(0, Math.min(255, Math.round(n)))
-
-/**
- * Greedy union-refit over the quantized regions, replacing the old posterize-
- * then-mend heuristics (axis clustering + a raw-RGB absorb tolerance, both of
- * which split a smooth field into disagreeing patches). Start one group per
- * label, then repeatedly merge the globally-best pair whose COMBINED samples are
- * still fit by a single gradient within MERGE_OKLAB_TOL, to a fixpoint. A
- * multi-member group paints its shared union gradient (and naturally absorbs flat
- * sub-bands whose colour lies on the ramp); a lone region keeps its own
- * per-region fit (a genuine single-region gradient, or solid). This is the V1
- * interim of the structure-first plan (§6); V2 replaces it with smoothness-first
- * segmentation.
- */
-function groupRegions(samples: RegionSamples[]): RegionGroup[] {
-  const groups: Group[] = samples.map((s, label) => {
-    const fit = s.n >= 2 ? fitBestGradient(s) : null
-    return { members: [label], samples: s, gradient: fit?.gradient ?? null, residual: fit?.oklabResidual ?? Infinity }
-  })
-
-  // Merge the globally-best mergeable pair until none fits under tol.
-  for (;;) {
-    let best: { i: number; j: number; samples: RegionSamples; gradient: GradientFill } | null = null
-    let bestRes = MERGE_OKLAB_TOL
-    for (let i = 0; i < groups.length; i++) {
-      for (let j = i + 1; j < groups.length; j++) {
-        const union = subsample(concatSamples([groups[i].samples, groups[j].samples]), UNION_FIT_CAP)
-        const fit = fitBestGradient(union)
-        if (fit && fit.oklabResidual <= bestRes) {
-          bestRes = fit.oklabResidual
-          best = { i, j, samples: union, gradient: fit.gradient }
-        }
-      }
-    }
-    if (!best) break
-    const merged: Group = {
-      members: groups[best.i].members.concat(groups[best.j].members),
-      samples: best.samples,
-      gradient: best.gradient,
-      residual: bestRes,
-    }
-    groups.splice(best.j, 1)
-    groups.splice(best.i, 1, merged)
-  }
-
-  return groups.map((g) => {
-    if (g.members.length >= 2 && g.gradient) return { members: g.members, gradient: g.gradient }
-    const fit = g.samples.n >= 2 ? fitRegionFill(g.samples) : null
-    return { members: g.members, gradient: fit?.gradient ?? null }
-  })
-}
-
-/**
- * Collapse each region group into ONE label: remap every member label to a single
- * merged entry (count-weighted mean colour, summed count), re-sort the merged
- * palette by count descending, and return the merged quantization plus the
- * gradient to paint for each merged label. Merging the bands of a smooth field
- * into one full-bleed region is what removes the band seams (and the under-layer
- * slivers a sandwiched foreground mark used to show through).
- */
-function mergeLabels(q: QuantizeResult, groups: RegionGroup[]): { q: QuantizeResult; gradients: (GradientFill | null)[] } {
-  const groupOf = new Int32Array(q.palette.length)
-  groups.forEach((g, gi) => {
-    for (const label of g.members) groupOf[label] = gi
-  })
-
-  const gr = new Float64Array(groups.length)
-  const gg = new Float64Array(groups.length)
-  const gb = new Float64Array(groups.length)
-  const gc = new Float64Array(groups.length)
-  for (let label = 0; label < q.palette.length; label++) {
-    const gi = groupOf[label]
-    const w = q.counts[label] ?? 0
-    gr[gi] += q.palette[label].r * w
-    gg[gi] += q.palette[label].g * w
-    gb[gi] += q.palette[label].b * w
-    gc[gi] += w
-  }
-
-  // Largest merged region paints at the bottom (full-bleed background).
-  const order = groups.map((_, gi) => gi).sort((a, b) => gc[b] - gc[a])
-  const mergedRank = new Int32Array(groups.length)
-  order.forEach((gi, pos) => {
-    mergedRank[gi] = pos
-  })
-
-  const palette: PaletteColor[] = order.map((gi) => {
-    const w = gc[gi] || 1
-    return { r: clamp255(gr[gi] / w), g: clamp255(gg[gi] / w), b: clamp255(gb[gi] / w) }
-  })
-  const counts = order.map((gi) => gc[gi])
-  const gradients = order.map((gi) => groups[gi].gradient)
-
-  const labels = new Int32Array(q.labels.length)
-  for (let i = 0; i < q.labels.length; i++) {
-    const l = q.labels[i]
-    labels[i] = l < 0 ? -1 : mergedRank[groupOf[l]]
-  }
-  return { q: { palette, labels, counts }, gradients }
-}
-
-/** Evenly stride a sample set down to at most `cap` points (deterministic). */
-function subsample(s: RegionSamples, cap: number): RegionSamples {
-  if (s.n <= cap) return s
-  const stride = Math.ceil(s.n / cap)
-  const m = Math.ceil(s.n / stride)
-  const xs = new Float64Array(m)
-  const ys = new Float64Array(m)
-  const rs = new Float64Array(m)
-  const gs = new Float64Array(m)
-  const bs = new Float64Array(m)
-  let k = 0
-  for (let i = 0; i < s.n && k < m; i += stride) {
-    xs[k] = s.xs[i]
-    ys[k] = s.ys[i]
-    rs[k] = s.rs[i]
-    gs[k] = s.gs[i]
-    bs[k] = s.bs[i]
-    k++
-  }
-  return { xs, ys, rs, gs, bs, n: k }
-}
-
-/**
- * Gather a region's original-color pixels (label == `label`) into flat sample
- * arrays for gradient fitting, evenly strided down to ~GRADIENT_SAMPLE_TARGET.
- * Colors come from the untouched source `img`; positions are in pixel == viewBox
- * space. `count` is the approximate region size (from quantization) used only to
- * pick the stride.
- */
-function sampleRegion(
-  img: ImageData,
-  labels: Int32Array,
-  width: number,
-  height: number,
-  label: number,
-  count: number,
-): RegionSamples {
-  const stride = count > GRADIENT_SAMPLE_TARGET ? Math.floor(count / GRADIENT_SAMPLE_TARGET) : 1
-  const cap = Math.min(count || labels.length, GRADIENT_SAMPLE_TARGET + 16)
-  const xs = new Float64Array(cap)
-  const ys = new Float64Array(cap)
-  const rs = new Float64Array(cap)
-  const gs = new Float64Array(cap)
-  const bs = new Float64Array(cap)
-  const data = img.data
-  let k = 0
-  let matched = 0
-  for (let i = 0; i < labels.length && k < cap; i++) {
-    if (labels[i] !== label) continue
-    if (matched++ % stride !== 0) continue
-    const o = i * 4
-    xs[k] = i % width
-    ys[k] = (i / width) | 0
-    rs[k] = data[o]
-    gs[k] = data[o + 1]
-    bs[k] = data[o + 2]
-    k++
-  }
-  return { xs, ys, rs, gs, bs, n: k }
+function segmentOptionsFor(_options: VectorizeOptions): SegmentOptions {
+  return DEFAULT_SEGMENT_OPTIONS
 }
 
 /**

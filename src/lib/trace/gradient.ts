@@ -390,6 +390,124 @@ export function fitBestGradient(s: RegionSamples): { gradient: GradientFill; okl
   return best
 }
 
+// ---------------------------------------------------------------------------
+// Stage 2 — paint-model ladder (plan §3.2 / paper §3.3): per macro-region, pick
+// the cheapest model under an MDL score (Oklab error + λ·complexity) from
+// solid → linear-multistop → radial-multistop, with the §3.2.2 rank-2 early-out.
+// Fits run on the segmenter's SMOOTH (AA-free) samples, so a plain mean already
+// approximates the paper's boundary-distance-weighted constant.
+// ---------------------------------------------------------------------------
+
+export interface PaintLadderOptions {
+  /** Below this many samples a region is always solid (too little to fit). */
+  minSamples: number
+  /** Solid Oklab residual below this ⇒ flat; never graduate to a gradient. */
+  flatResidual: number
+  /** A gradient must fit under this Oklab residual to be chosen (else solid). */
+  maxModelResidual: number
+  /** MDL complexity weight λ: cost = residual + λ·(#params). */
+  mdlLambda: number
+  /** Structure-tensor anisotropy λ₂/λ₁ above which linear is doomed → prefer radial. */
+  anisotropy2D: number
+}
+
+export const DEFAULT_PAINT_LADDER: PaintLadderOptions = {
+  minSamples: 48,
+  flatResidual: 0.02,
+  maxModelResidual: 0.14,
+  // λ is in Oklab-ΔE units per parameter: ~0.0015 ≈ 0.15 CIE76 ΔE per stop, enough
+  // to prefer the simpler model on a near-tie but never to overrule a real fit.
+  mdlLambda: 0.0015,
+  anisotropy2D: 0.12,
+}
+
+export interface PaintLadderResult {
+  model: 'solid' | 'linear' | 'radial'
+  /** The chosen gradient, or null when the region is solid. */
+  gradient: GradientFill | null
+  /** Mean colour (the solid representative / swatch). */
+  solid: [number, number, number]
+  /** Oklab RMS residual of the chosen model. */
+  residualOklab: number
+  /** Diagnostics (per-model Oklab residuals + 2-D-ness) for tuning/tests. */
+  debug?: { solidRes: number; linearRes: number; radialRes: number; anisotropy: number }
+}
+
+/** RMS Oklab ΔE of a constant colour over the samples. */
+function solidResidualOklab(s: RegionSamples, mr: number, mg: number, mb: number): number {
+  const mean = srgbToOklab(mr, mg, mb)
+  let sq = 0
+  for (let i = 0; i < s.n; i++) {
+    const d = oklabDeltaE(srgbToOklab(s.rs[i], s.gs[i], s.bs[i]), mean)
+    sq += d * d
+  }
+  return Math.sqrt(sq / s.n)
+}
+
+/**
+ * Fit the cheapest adequate paint model for a macro-region's samples (Stage 2).
+ * Selection is MDL: cost = Oklab residual + λ·#params, minimised over
+ * {solid, linear, radial}; linear is excluded when the structure tensor says the
+ * field is genuinely 2-D (the rank-2 early-out) so a deceptively-low 1-D fit can't
+ * win over the radial a glow actually needs. A gradient is taken only if it fits
+ * under `maxModelResidual`; otherwise the region stays solid (the §3.4 fallback).
+ */
+export function fitPaintLadder(s: RegionSamples, opts: PaintLadderOptions = DEFAULT_PAINT_LADDER): PaintLadderResult {
+  const { rs, gs, bs, xs, ys, n } = s
+  let mr = 0
+  let mg = 0
+  let mb = 0
+  let mx = 0
+  let my = 0
+  for (let i = 0; i < n; i++) {
+    mr += rs[i]; mg += gs[i]; mb += bs[i]; mx += xs[i]; my += ys[i]
+  }
+  if (n > 0) { mr /= n; mg /= n; mb /= n; mx /= n; my /= n }
+  const solid: [number, number, number] = [mr, mg, mb]
+  const solidRes = n > 0 ? solidResidualOklab(s, mr, mg, mb) : 0
+
+  if (n < opts.minSamples || solidRes < opts.flatResidual) {
+    return { model: 'solid', gradient: null, solid, residualOklab: solidRes, debug: { solidRes, linearRes: Infinity, radialRes: Infinity, anisotropy: 0 } }
+  }
+
+  const linear = fitLinear(s, mx, my, mr, mg, mb)
+  const radial = fitRadial(s, mx, my)
+  const anisotropy = linear ? linear.anisotropy : 0
+  const linRes = linear ? modelResidualOklab(linear.gradient, s) : Infinity
+  const radRes = radial ? modelResidualOklab(radial.gradient, s) : Infinity
+  const debug = { solidRes, linearRes: linRes, radialRes: radRes, anisotropy }
+
+  type Cand = { model: 'solid' | 'linear' | 'radial'; gradient: GradientFill | null; res: number; complexity: number }
+  const cands: Cand[] = [{ model: 'solid', gradient: null, res: solidRes, complexity: 1 }]
+
+  if (linear && linRes <= opts.maxModelResidual) {
+    cands.push({ model: 'linear', gradient: linear.gradient, res: linRes, complexity: linear.gradient.stops.length })
+  }
+  if (radial && radRes <= opts.maxModelResidual) {
+    // §3.2.2 rank-2 signal: on a genuinely 2-D field (high anisotropy) the radial
+    // is the structurally-right model, so waive its extra centre-parameter cost so
+    // it wins a near-tie over linear. This is a SOFT preference — it never discards
+    // a markedly-better-fitting linear (a hard linear-drop was measured to force a
+    // worse SOLID on a linearly-shaded petal). On a 1-D field the radial pays the
+    // +1 and the lower-residual linear wins on merit.
+    const twoD = anisotropy > opts.anisotropy2D
+    cands.push({ model: 'radial', gradient: radial.gradient, res: radRes, complexity: radial.gradient.stops.length + (twoD ? 0 : 1) })
+  }
+
+  // MDL: cost = Oklab residual + λ·#params, with λ sized so complexity only breaks
+  // near-ties (it must never let a flat colour beat a markedly-better gradient).
+  let best = cands[0]
+  let bestCost = best.res + opts.mdlLambda * best.complexity
+  for (let i = 1; i < cands.length; i++) {
+    const cost = cands[i].res + opts.mdlLambda * cands[i].complexity
+    if (cost < bestCost) {
+      best = cands[i]
+      bestCost = cost
+    }
+  }
+  return { model: best.model, gradient: best.gradient, solid, residualOklab: best.res, debug }
+}
+
 /** Solve the symmetric 2×2 system [[a,b],[b,c]]·x = (u,v); null if singular. */
 function solveSym2(a: number, b: number, c: number, u: number, v: number): [number, number] | null {
   const det = a * c - b * b
@@ -400,6 +518,13 @@ function solveSym2(a: number, b: number, c: number, u: number, v: number): [numb
 interface LinearFit {
   gradient: LinearGradient
   residual: number
+  /**
+   * Structure-tensor anisotropy λ₂/λ₁ ∈ [0,1]: 0 = a perfectly 1-D ramp (the
+   * three channel gradients share one direction), →1 = a genuinely 2-D colour
+   * field (channels ramp in different directions — nebula's glow). The §3.2.2
+   * rank-2 early-out reads this to skip a doomed linear fit and prefer radial.
+   */
+  anisotropy: number
 }
 
 /**
@@ -454,6 +579,13 @@ function fitLinear(
   const Tyy = br * br + bg * bg + bb * bb
   if (Txx + Tyy < 1e-12) return null
   const [ux, uy] = dominantEigenvector(Txx, Txy, Tyy)
+  // Eigenvalues of T = squared singular values of the 3×2 channel Jacobian; their
+  // ratio is the field's 2-D-ness (rank-2 early-out, §3.2.2).
+  const half = (Txx + Tyy) / 2
+  const disc = Math.hypot((Txx - Tyy) / 2, Txy)
+  const lam1 = half + disc
+  const lam2 = half - disc
+  const anisotropy = lam1 > 1e-12 ? Math.max(0, lam2) / lam1 : 0
 
   // Project pixels onto the axis to find the ramp extent.
   let tmin = Infinity
@@ -483,7 +615,7 @@ function fitLinear(
     y2: my + uy * tmax,
     stops,
   }
-  return { gradient, residual: modelResidualRgb(gradient, s) }
+  return { gradient, residual: modelResidualRgb(gradient, s), anisotropy }
 }
 
 /** Unit dominant eigenvector of the symmetric 2×2 [[a,b],[b,c]]. */
