@@ -119,4 +119,12 @@ export interface VectorizeOptions {
    * best for line-art / solid-shape logos.
    */
   engine?: 'potrace' | 'crisp'
+  /**
+   * Shape-beautification fidelity tolerance (px): how far a traced contour may
+   * drift from the source when snapping it to a perfect circle/ellipse/line or
+   * aligning concentric/equal shapes. A snap is accepted only if its max
+   * deviation stays under this. 0 disables beautification entirely. Defaults to
+   * ~1.5 when omitted. Higher = more regular geometry, less PNG-faithful.
+   */
+  fidelity?: number
 }

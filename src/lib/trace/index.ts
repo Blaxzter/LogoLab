@@ -17,6 +17,7 @@ import { traceMask, type TraceMaskOptions } from './potrace.ts'
 import { traceMaskCrisp, type CrispOptions } from './subpixel.ts'
 import { segmentImage, DEFAULT_SEGMENT_OPTIONS, type SegmentOptions } from './segment.ts'
 import { fitPaintLadder } from './gradient.ts'
+import { beautify, DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
 
 export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   mode: 'color',
@@ -27,6 +28,7 @@ export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   removeBackground: false,
   gradients: true,
   engine: 'potrace',
+  fidelity: DEFAULT_BEAUTIFY_OPTIONS.fidelity,
 }
 
 /** Map the user smoothing dial (0–100) onto the crisp tracer's tunables. */
@@ -42,6 +44,14 @@ function crispOptionsFor(smoothing: number, turdsize: number): CrispOptions {
 }
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n))
+
+/** Map the user fidelity dial onto the beautify pass (plan §3.3 / V3). */
+function beautifyOptionsFor(options: VectorizeOptions): BeautifyOptions {
+  return {
+    ...DEFAULT_BEAUTIFY_OPTIONS,
+    fidelity: Math.max(0, options.fidelity ?? DEFAULT_BEAUTIFY_OPTIONS.fidelity),
+  }
+}
 
 const rgbToHex = (r: number, g: number, b: number): string =>
   '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)
@@ -79,8 +89,15 @@ export async function traceImage(
   const traceOne = (mask: ImageData): Promise<SubPath[]> =>
     engine === 'crisp' ? Promise.resolve(traceMaskCrisp(mask, crispOpts)) : traceMask(mask, maskOpts)
 
+  // Stage 3 beautify (plan §3.3): a pure post-pass that snaps traced contours to
+  // perfect circles/ellipses/lines and reconciles concentric/equal shapes, gated
+  // by the user fidelity tolerance. Runs for BOTH engines, on the traced subpaths
+  // before items are assembled. fidelity ≤ 0 makes it a no-op (raw trace).
+  const beautifyOpts = beautifyOptionsFor(options)
+
   if (options.mode === 'mono') {
-    const subPaths = await traceOne(thresholdToMask(imageData, options.threshold))
+    const traced = await traceOne(thresholdToMask(imageData, options.threshold))
+    const [subPaths] = beautify([traced], beautifyOpts)
     const items: PathItem[] = []
     if (subPaths.length > 0) {
       items.push({
@@ -131,7 +148,16 @@ export async function traceImage(
   })
 
   const total = paintOrder.length
-  const items: PathItem[] = []
+  // Trace every layer first, collecting its raw subpaths + paint metadata, so the
+  // beautify pass can run its cross-shape relation solver (concentric centres,
+  // equal radii, …) over ALL loops at once rather than one layer in isolation.
+  interface Layer {
+    id: string
+    subPaths: SubPath[]
+    fill: string
+    gradient?: GradientFill
+  }
+  const layers: Layer[] = []
   for (let i = 0; i < total; i++) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     onProgress?.({ phase: 'trace', layer: i + 1, total })
@@ -139,21 +165,31 @@ export async function traceImage(
     if (subPaths.length > 0) {
       const label = paintOrder[i]
       const { r, g, b } = q.palette[label]
-      const item: PathItem = {
-        kind: 'path',
-        id: 'trace-' + i,
-        fill: rgbToHex(r, g, b),
-        fillRule,
-        subPaths,
-        visible: true,
-      }
+      const layer: Layer = { id: 'trace-' + i, subPaths, fill: rgbToHex(r, g, b) }
       const grad = labelGradient[label]
-      if (grad) item.gradient = grad
-      items.push(item)
+      if (grad) layer.gradient = grad
+      layers.push(layer)
     }
     // Yield to the event loop so the progress UI can actually paint.
     await new Promise((r) => setTimeout(r))
   }
+
+  const beautified = beautify(
+    layers.map((l) => l.subPaths),
+    beautifyOpts,
+  )
+  const items: PathItem[] = layers.map((layer, i) => {
+    const item: PathItem = {
+      kind: 'path',
+      id: layer.id,
+      fill: layer.fill,
+      fillRule,
+      subPaths: beautified[i],
+      visible: true,
+    }
+    if (layer.gradient) item.gradient = layer.gradient
+    return item
+  })
 
   return { viewBox: [0, 0, width, height], items }
 }

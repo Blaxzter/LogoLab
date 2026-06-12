@@ -683,7 +683,7 @@ function rectSubPaths(el: Element): SubPath[] | null {
   ]
 }
 
-function ellipseSubPaths(cx: number, cy: number, rx: number, ry: number): SubPath[] | null {
+export function ellipseSubPaths(cx: number, cy: number, rx: number, ry: number): SubPath[] | null {
   if (rx <= 0 || ry <= 0) return null
   const ox = rx * KAPPA
   const oy = ry * KAPPA

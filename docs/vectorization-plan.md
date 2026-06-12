@@ -693,3 +693,105 @@ dimensions raised nothing. Three segmentation findings were confirmed and fixed:
 focal point while `raster.ts`/`gradientToSvgDef` honour it; dormant in V2 because no
 emitted gradient sets `fx`/`fy`, but a focal-radial fitter (V3) must keep the three in
 sync or the harness will mismeasure its residual.
+
+### V3 — beautify — 2026-06-12 — ✅ shipped (machinery + knob + zero-regression default; exit criterion partially met, with a measured structural reason)
+
+**What shipped** — a PURE post-processing beautify pass (plan §3.3), run AFTER the
+tracer and BEFORE the `EditableDoc` is assembled, so it serves BOTH engines and does
+NOT re-segment:
+- `src/lib/trace/beautify.ts` — `beautify(groups, opts)` over one `SubPath[]` per item:
+  - **Circle snap** — centred algebraic (Kåsa/Coope) circle fit per closed loop;
+    replace with a 4-node kappa-Bézier circle (reusing `model.ellipseSubPaths`, now
+    exported) when its max radial deviation ≤ the fidelity knob and `r > 2·fidelity`.
+  - **Axis-aligned ellipse snap** — linear conic fit under an `A+C=2` normalisation
+    (rotated ellipses deferred), gated the same way.
+  - **Line polish** — straighten near-flat cubics to true lines (fixed `STRAIGHTEN_EPS`
+    = 0.3 px, see deviations), merge collinear vertices, snap near-axis edges to exact
+    H/V (both fidelity-gated).
+  - **Relation solver** — single-linkage clusters of concentric centres (within
+    `relationFrac` = 1/10 of the doc bbox long side) and equal radii; reconcile each
+    cluster to its (radius-weighted) mean, accepting a move per circle only when the
+    re-centred/re-sized circle still fits its RAW flattened trace within the knob — so
+    snaps never fight each other or exceed the tolerance.
+  - Winding is preserved per loop (snapped primitives match the source loop's signed-area
+    sign) so nonzero/evenodd holes still render as holes.
+- `src/lib/trace/index.ts` — colour mode rewired to **collect every layer's trace →
+  beautify all loops at once (so the relation solver sees across items) → assemble**;
+  mono mode beautifies its single shape too. `fidelity` plumbed through.
+- `src/types.ts` + `TraceControls.tsx` — additive `fidelity?: number` (px; default 1.5,
+  `DEFAULT_BEAUTIFY_OPTIONS.fidelity`) + a "Fidelity" slider (0 = off … 6 px). 0 makes
+  beautify a no-op (raw trace).
+- **No doc-model / rasterizer change**: every snapped shape is a plain 4-node Bézier
+  subpath, so `parseSvg`/`serializeDoc`, the node editor, and `raster.ts` are all
+  untouched (the plan's permitted `primitive?` hint was deliberately NOT added — unused).
+
+**Harness numbers vs the V2 baseline** (headless crisp, default fidelity 1.5 px):
+
+| image  | paths | nodes (V2→V3) | SSIM (V2→V3)       | meanΔE (V2→V3) | seam max (V2→V3) | seam P99.5 |
+|--------|------:|---------------|--------------------|----------------|------------------|------------|
+| nebula | 2     | 34→**33**     | 0.9756→**0.9762**  | 4.00→**3.99**  | 13.3→**11.6**    | 11.4 (=)   |
+| petals | 4     | 44→**44**     | 0.9890 (=)         | 1.85 (=)       | 6.8 (=)          | 3.3 (=)    |
+
+`npm test` 62→**77** (15 new `beautify` unit tests: circle/ellipse fit + fidelity gate,
+line/collinear/H-V, concentric & equal-radius solver, winding, determinism, no-mutate).
+Determinism `pass`, typecheck + build green.
+
+- **nebula**: the centre **dot snaps to a mathematically perfect circle** (centre
+  ≈ image-centre, 5→4 nodes) and every metric holds or improves — a clean,
+  zero-regression default.
+- **petals**: organic shapes, nothing snaps → **exact V2 parity** at every fidelity
+  level (the line polish no longer touches its curves — see deviations).
+
+**Exit criterion (plan §6 V3) — partially met, with a measured structural reason.**
+- *"nebula = ~5 perfect circles + a rect, concentric centres detected"* — NOT reachable
+  at a faithful tolerance. The white **ring and the small node bump at 12 o'clock are the
+  same colour and touch, so segmentation fuses them into ONE connected component**; the
+  node dents BOTH ring circles by ~10–11 px (measured: ring-outer max radial dev 10.4,
+  ring-inner 11.4, vs dot 0.5). Snapping the rings therefore needs `fidelity ≥ ~12 px`,
+  which **erases the node and drops SSIM to 0.954 — a regression** the no-regression rule
+  forbids, so the knob correctly rejects it at the default. Completing the rings means
+  *separating* the node — i.e. the §3.3 shared-boundary curve network / shape completion,
+  which the plan scopes to **V3+/beyond** — and re-segmentation is forbidden (§7). So V3
+  ships the honest best: dot = perfect circle, rings kept faithful (node preserved).
+- *"node counts ≤ Affinity's export"* — Affinity nebula = 30 anchors / 5 paths; V3 = 33 /
+  2 paths (1 below V2, but the un-snappable rings keep it ~3 above Affinity, for the same
+  node-fusion reason; V3 nonetheless uses fewer paths and one coherent gradient vs
+  Affinity's flat purple in 5 paths).
+- *"the fidelity knob visibly trades regularity for PNG-faithfulness end to end"* — **MET
+  and demonstrated**: raising the knob to ≥12 px snaps the rings → nebula becomes
+  bg-rect + **3 circles** (ring-outer + ring-inner + dot), with the **relation solver
+  centre-aligning ring-outer and the dot** to an identical centre (ring-inner stays put,
+  its tight residual budget correctly blocking the move), 19 nodes, SSIM 0.954 — regularity
+  bought with faithfulness, exactly the knob's purpose. The default (1.5 px) stays faithful;
+  `fidelity = 0` reproduces the raw V2 trace byte-for-byte.
+
+**Deviations from the plan (each with a measured reason)**
+- **Single fidelity gate, not the plan's separate 0.5 px circle-mean threshold.** A snap
+  is accepted iff its max deviation from the raw trace ≤ `fidelity`. Reason: item 4 makes
+  the knob *the* acceptance rule, and a fixed 0.5 px circle gate would stop the knob from
+  ever loosening circle-snapping — defeating the required "trades regularity for
+  faithfulness" demonstration. Not a relaxation: clean circles (the dot) sit far under the
+  1.5 px default anyway.
+- **Line polish (straighten) uses a fixed `STRAIGHTEN_EPS = 0.3 px`, NOT the fidelity
+  budget.** Measured: straightening near-flat cubics with the full 1.5 px budget nudged
+  petals' organic edges enough to push seamMax 6.8→9.9 for **zero** node benefit
+  (straighten only nulls handles, never drops a node). Capping it keeps petals at exact
+  parity. Collinear-merge and H-V snap (which DO reduce nodes / regularise) keep the full
+  fidelity budget.
+- **Axis-aligned ellipse only** (rotated ellipse via a full conic eigen-fit deferred): no
+  corpus contour is a rotated ellipse, so there is no measured target to validate it
+  against (and an unvalidated fit risks de-syncing the rasterizer — the V2 caution).
+- **Symmetry pass deferred** (plan marks it "optional, last"): the circle snaps + relation
+  solver already regularise the symmetric cases; no measured need yet.
+- **`despeckle`/`colors` still don't gate beautify**; the new `fidelity` dial is the only
+  beautify control (the others remain tracer dials, as in V2).
+
+**Known latent** — unchanged from V2: `sampleGradient`/`segment.gradientT` ignore a
+radial's focal point while `raster.ts`/`gradientToSvgDef` honour it. V3 emits no radial
+focal (the relation solver only adjusts circle/ellipse geometry), so it stays dormant; a
+future focal-radial fitter must still keep the three in sync.
+
+**Not done (V3+, explicitly out of scope)** — the shared-boundary curve network and the
+supplement's soft-corner + DP curve selection (§4.2). The crisp tracer's corners are NOT
+the nebula bottleneck (node fusion is), so the geometry extension would not move the
+exit numbers; deferred per the plan's "only if snapping is fully demonstrated first".

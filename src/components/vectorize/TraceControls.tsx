@@ -114,6 +114,20 @@ export function TraceControls({
             <Slider value={opts.despeckle} min={0} max={100} onChange={(v) => onPatch({ despeckle: v })} />
           </Field>
 
+          <Field
+            label="Fidelity"
+            hint="Snap traced shapes to perfect circles, lines and shared centers. Lower stays faithful to the pixels; higher allows more drift for cleaner geometry. 0 disables snapping."
+          >
+            <Slider
+              value={opts.fidelity ?? 1.5}
+              min={0}
+              max={6}
+              step={0.5}
+              onChange={(v) => onPatch({ fidelity: v })}
+              format={(v) => (v === 0 ? 'off' : `${v}px`)}
+            />
+          </Field>
+
           {opts.mode === 'color' && (
             <Field
               label="Gradients"
