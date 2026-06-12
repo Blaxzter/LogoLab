@@ -15,6 +15,7 @@
 // it runs unchanged in the browser and under `node --test`.
 
 import type { GradientFill, GradientStop, LinearGradient, RadialGradient } from '../path/types'
+import { srgbToOklab, oklabDeltaE } from './oklab.ts'
 
 /** Tunables for the solid-vs-gradient decision. */
 export interface GradientFitOptions {
@@ -97,6 +98,179 @@ export function channelsToHex(r: number, g: number, b: number): string {
 
 const luma = (r: number, g: number, b: number): number => 0.2126 * r + 0.7152 * g + 0.0722 * b
 
+const clamp01 = (t: number): number => (t < 0 ? 0 : t > 1 ? 1 : t)
+
+// ---------------------------------------------------------------------------
+// Multi-stop emission: build the 1-D colour profile along a gradient parameter
+// and place stops at the knots of its piecewise-linear approximation.
+//
+// The old fitter emitted exactly two stops (the colours at the axis extremes),
+// so an eased or hue-rotating ramp — where the colour does NOT vary linearly
+// along the axis — was reproduced as a straight 2-stop ramp and read wrong. Here
+// we bin the actual colours along the parameter t∈[0,1], then RDP-simplify that
+// profile with an Oklab-ΔE tolerance: a pure linear ramp collapses back to two
+// stops, while a curved profile keeps the intermediate knots it needs. The doc
+// model already supports N stops; only the fitter was the bottleneck.
+// ---------------------------------------------------------------------------
+
+/** Bin count for the 1-D colour profile sampled along a gradient parameter. */
+const PROFILE_BINS = 24
+/** Oklab ΔE below which a profile knot is redundant (multi-stop RDP tolerance). */
+const STOP_OKLAB_TOL = 0.012
+
+interface ProfilePt {
+  t: number
+  r: number
+  g: number
+  b: number
+}
+
+/** Mean colour per non-empty bin of t∈[0,1]; endpoints pinned to 0 and 1. */
+function binnedProfile(param: Float64Array, rs: Float64Array, gs: Float64Array, bs: Float64Array, n: number): ProfilePt[] {
+  const sr = new Float64Array(PROFILE_BINS)
+  const sg = new Float64Array(PROFILE_BINS)
+  const sb = new Float64Array(PROFILE_BINS)
+  const cnt = new Float64Array(PROFILE_BINS)
+  for (let i = 0; i < n; i++) {
+    let bin = Math.floor(param[i] * PROFILE_BINS)
+    if (bin < 0) bin = 0
+    else if (bin >= PROFILE_BINS) bin = PROFILE_BINS - 1
+    sr[bin] += rs[i]
+    sg[bin] += gs[i]
+    sb[bin] += bs[i]
+    cnt[bin]++
+  }
+  const pts: ProfilePt[] = []
+  for (let bi = 0; bi < PROFILE_BINS; bi++) {
+    if (cnt[bi] === 0) continue
+    pts.push({ t: (bi + 0.5) / PROFILE_BINS, r: sr[bi] / cnt[bi], g: sg[bi] / cnt[bi], b: sb[bi] / cnt[bi] })
+  }
+  if (pts.length > 0) {
+    pts[0].t = 0
+    pts[pts.length - 1].t = 1
+  }
+  return pts
+}
+
+/** Oklab ΔE of a profile point from the sRGB-interpolated chord a→b at its t. */
+function profileDeviation(p: ProfilePt, a: ProfilePt, b: ProfilePt): number {
+  const span = b.t - a.t || 1
+  const k = (p.t - a.t) / span
+  const ir = a.r + (b.r - a.r) * k
+  const ig = a.g + (b.g - a.g) * k
+  const ib = a.b + (b.b - a.b) * k
+  return oklabDeltaE(srgbToOklab(p.r, p.g, p.b), srgbToOklab(ir, ig, ib))
+}
+
+/** RDP-simplify a colour profile (deviation measured in Oklab ΔE). */
+function rdpProfile(pts: ProfilePt[], tol: number): ProfilePt[] {
+  if (pts.length <= 2) return pts
+  const keep = new Uint8Array(pts.length)
+  keep[0] = 1
+  keep[pts.length - 1] = 1
+  const stack: [number, number][] = [[0, pts.length - 1]]
+  while (stack.length) {
+    const [lo, hi] = stack.pop()!
+    let maxD = -1
+    let idx = -1
+    for (let i = lo + 1; i < hi; i++) {
+      const d = profileDeviation(pts[i], pts[lo], pts[hi])
+      if (d > maxD) {
+        maxD = d
+        idx = i
+      }
+    }
+    if (maxD > tol && idx >= 0) {
+      keep[idx] = 1
+      stack.push([lo, idx], [idx, hi])
+    }
+  }
+  const out: ProfilePt[] = []
+  for (let i = 0; i < pts.length; i++) if (keep[i]) out.push(pts[i])
+  return out
+}
+
+/** Stops from a per-sample parameter array (binned profile → Oklab RDP). */
+function stopsAlong(param: Float64Array, rs: Float64Array, gs: Float64Array, bs: Float64Array, n: number): GradientStop[] {
+  const profile = rdpProfile(binnedProfile(param, rs, gs, bs, n), STOP_OKLAB_TOL)
+  if (profile.length < 2) {
+    const c = profile[0] ?? { r: 0, g: 0, b: 0 }
+    return [
+      { offset: 0, color: channelsToHex(c.r, c.g, c.b) },
+      { offset: 1, color: channelsToHex(c.r, c.g, c.b) },
+    ]
+  }
+  return profile.map((p) => ({ offset: clamp01(p.t), color: channelsToHex(p.r, p.g, p.b) }))
+}
+
+/** Interpolate a stop list at parameter t∈[0,1] (sRGB, SVG-pad behaviour). */
+function interpStops(stops: GradientStop[], t: number): [number, number, number] {
+  let a = stops[0]
+  let b = stops[stops.length - 1]
+  if (t <= a.offset) return hexToRgb3(a.color)
+  if (t >= b.offset) return hexToRgb3(b.color)
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (t >= stops[i].offset && t <= stops[i + 1].offset) {
+      a = stops[i]
+      b = stops[i + 1]
+      break
+    }
+  }
+  const span = b.offset - a.offset || 1
+  const k = (t - a.offset) / span
+  const ca = hexToRgb3(a.color)
+  const cb = hexToRgb3(b.color)
+  return [ca[0] + (cb[0] - ca[0]) * k, ca[1] + (cb[1] - ca[1]) * k, ca[2] + (cb[2] - ca[2]) * k]
+}
+
+const hexToRgb3 = (hex: string): [number, number, number] => [
+  parseInt(hex.slice(1, 3), 16),
+  parseInt(hex.slice(3, 5), 16),
+  parseInt(hex.slice(5, 7), 16),
+]
+
+/** Evaluate any fitted gradient's colour at point (x, y), in pixel space. */
+export function sampleGradient(g: GradientFill, x: number, y: number): [number, number, number] {
+  if (g.type === 'linear') {
+    const dx = g.x2 - g.x1
+    const dy = g.y2 - g.y1
+    const len2 = dx * dx + dy * dy || 1
+    const t = clamp01(((x - g.x1) * dx + (y - g.y1) * dy) / len2)
+    return interpStops(g.stops, t)
+  }
+  const fx = g.fx ?? g.cx
+  const fy = g.fy ?? g.cy
+  // Plain distance parameterization (centred); focal handled by the renderer.
+  void fx
+  void fy
+  const t = clamp01(Math.hypot(x - g.cx, y - g.cy) / (g.r || 1))
+  return interpStops(g.stops, t)
+}
+
+/** RMS RGB error of a gradient model over the samples. */
+function modelResidualRgb(g: GradientFill, s: RegionSamples): number {
+  let sq = 0
+  for (let i = 0; i < s.n; i++) {
+    const [pr, pg, pb] = sampleGradient(g, s.xs[i], s.ys[i])
+    const dr = s.rs[i] - pr
+    const dg = s.gs[i] - pg
+    const db = s.bs[i] - pb
+    sq += dr * dr + dg * dg + db * db
+  }
+  return Math.sqrt(sq / s.n)
+}
+
+/** RMS Oklab ΔE of a gradient model over the samples (perceptual fit quality). */
+export function modelResidualOklab(g: GradientFill, s: RegionSamples): number {
+  let sq = 0
+  for (let i = 0; i < s.n; i++) {
+    const [pr, pg, pb] = sampleGradient(g, s.xs[i], s.ys[i])
+    const d = oklabDeltaE(srgbToOklab(s.rs[i], s.gs[i], s.bs[i]), srgbToOklab(pr, pg, pb))
+    sq += d * d
+  }
+  return Math.sqrt(sq / s.n)
+}
+
 /**
  * Fit the best paint for a region's sampled pixels. Coordinates of the returned
  * gradient are in the SAME space as the input `xs`/`ys` (the tracing pipeline
@@ -176,6 +350,46 @@ export function fitRegionFill(
   return result
 }
 
+/**
+ * Fit the best gradient model (linear or radial, multi-stop) to a region's
+ * samples, ranked by Oklab ΔE. Used by the union-refit merge to decide whether a
+ * SINGLE gradient explains the combined samples of several regions. Unlike
+ * fitRegionFill it does NOT gate on solid-vs-gradient improvement — it returns the
+ * best gradient and how well it fits perceptually, and the caller applies the ΔE
+ * threshold.
+ */
+export function fitBestGradient(s: RegionSamples): { gradient: GradientFill; oklabResidual: number } | null {
+  const { xs, ys, rs, gs, bs, n } = s
+  if (n < 2) return null
+  let mr = 0
+  let mg = 0
+  let mb = 0
+  let mx = 0
+  let my = 0
+  for (let i = 0; i < n; i++) {
+    mr += rs[i]
+    mg += gs[i]
+    mb += bs[i]
+    mx += xs[i]
+    my += ys[i]
+  }
+  mr /= n
+  mg /= n
+  mb /= n
+  mx /= n
+  my /= n
+
+  let best: { gradient: GradientFill; oklabResidual: number } | null = null
+  const lin = fitLinear(s, mx, my, mr, mg, mb)
+  if (lin) best = { gradient: lin.gradient, oklabResidual: modelResidualOklab(lin.gradient, s) }
+  const rad = fitRadial(s, mx, my)
+  if (rad) {
+    const o = modelResidualOklab(rad.gradient, s)
+    if (!best || o < best.oklabResidual) best = { gradient: rad.gradient, oklabResidual: o }
+  }
+  return best
+}
+
 /** Solve the symmetric 2×2 system [[a,b],[b,c]]·x = (u,v); null if singular. */
 function solveSym2(a: number, b: number, c: number, u: number, v: number): [number, number] | null {
   const det = a * c - b * b
@@ -241,36 +455,25 @@ function fitLinear(
   if (Txx + Tyy < 1e-12) return null
   const [ux, uy] = dominantEigenvector(Txx, Txy, Tyy)
 
-  // Project pixels onto the axis to find the ramp extent and the RMS residual.
+  // Project pixels onto the axis to find the ramp extent.
   let tmin = Infinity
   let tmax = -Infinity
-  let sq = 0
   for (let i = 0; i < n; i++) {
-    const x = xs[i] - mx
-    const y = ys[i] - my
-    const t = x * ux + y * uy
+    const t = (xs[i] - mx) * ux + (ys[i] - my) * uy
     if (t < tmin) tmin = t
     if (t > tmax) tmax = t
-    const er = rs[i] - (mr + ar * x + br * y)
-    const eg = gs[i] - (mg + ag * x + bg * y)
-    const eb = bs[i] - (mb + ab * x + bb * y)
-    sq += er * er + eg * eg + eb * eb
   }
   if (!(tmax - tmin > 1e-6)) return null
-  const residual = Math.sqrt(sq / n)
 
-  // Channel rate along the axis, and the stop colors at each extreme.
-  const slopeR = ar * ux + br * uy
-  const slopeG = ag * ux + bg * uy
-  const slopeB = ab * ux + bb * uy
-  const stop0: GradientStop = {
-    offset: 0,
-    color: channelsToHex(mr + slopeR * tmin, mg + slopeG * tmin, mb + slopeB * tmin),
+  // Per-sample normalized position along the axis, then multi-stop emission from
+  // the binned colour profile (captures eased / hue-rotating ramps a 2-stop fit
+  // flattens). The RMS residual is measured against the emitted stop model.
+  const span = tmax - tmin
+  const param = new Float64Array(n)
+  for (let i = 0; i < n; i++) {
+    param[i] = ((xs[i] - mx) * ux + (ys[i] - my) * uy - tmin) / span
   }
-  const stop1: GradientStop = {
-    offset: 1,
-    color: channelsToHex(mr + slopeR * tmax, mg + slopeG * tmax, mb + slopeB * tmax),
-  }
+  const stops = stopsAlong(param, rs, gs, bs, n)
 
   const gradient: LinearGradient = {
     type: 'linear',
@@ -278,9 +481,9 @@ function fitLinear(
     y1: my + uy * tmin,
     x2: mx + ux * tmax,
     y2: my + uy * tmax,
-    stops: [stop0, stop1],
+    stops,
   }
-  return { gradient, residual }
+  return { gradient, residual: modelResidualRgb(gradient, s) }
 }
 
 /** Unit dominant eigenvector of the symmetric 2×2 [[a,b],[b,c]]. */
@@ -352,59 +555,22 @@ function fitRadial(s: RegionSamples, mx: number, my: number): RadialFit | null {
   return best
 
   function fitRadialAt(samples: RegionSamples, cx: number, cy: number): RadialFit | null {
-    let Sd = 0
-    let Sdd = 0
     let maxD = 0
-    let Sr = 0
-    let Sg = 0
-    let Sb = 0
-    let Sdr = 0
-    let Sdg = 0
-    let Sdb = 0
     for (let i = 0; i < n; i++) {
       const d = Math.hypot(samples.xs[i] - cx, samples.ys[i] - cy)
       if (d > maxD) maxD = d
-      Sd += d
-      Sdd += d * d
-      Sr += rs[i]
-      Sg += gs[i]
-      Sb += bs[i]
-      Sdr += d * rs[i]
-      Sdg += d * gs[i]
-      Sdb += d * bs[i]
     }
     if (maxD < 1e-6) return null
-    const denom = n * Sdd - Sd * Sd
-    if (Math.abs(denom) < 1e-9) return null
-    const fitChannel = (Sc: number, Sdc: number): [number, number] => {
-      const m = (n * Sdc - Sd * Sc) / denom
-      const k = (Sc - m * Sd) / n
-      return [k, m] // intercept (at d=0), slope per unit distance
-    }
-    const [kr, mr_] = fitChannel(Sr, Sdr)
-    const [kg, mg_] = fitChannel(Sg, Sdg)
-    const [kb, mb_] = fitChannel(Sb, Sdb)
 
-    let sq = 0
+    // Multi-stop emission along the radius profile (captures non-linear radial
+    // ramps the old intercept+slope fit flattened). Residual vs the stop model.
+    const param = new Float64Array(n)
     for (let i = 0; i < n; i++) {
-      const d = Math.hypot(samples.xs[i] - cx, samples.ys[i] - cy)
-      const er = rs[i] - (kr + mr_ * d)
-      const eg = gs[i] - (kg + mg_ * d)
-      const eb = bs[i] - (kb + mb_ * d)
-      sq += er * er + eg * eg + eb * eb
+      param[i] = clamp01(Math.hypot(samples.xs[i] - cx, samples.ys[i] - cy) / maxD)
     }
-    const residual = Math.sqrt(sq / n)
-    const gradient: RadialGradient = {
-      type: 'radial',
-      cx,
-      cy,
-      r: maxD,
-      stops: [
-        { offset: 0, color: channelsToHex(kr, kg, kb) },
-        { offset: 1, color: channelsToHex(kr + mr_ * maxD, kg + mg_ * maxD, kb + mb_ * maxD) },
-      ],
-    }
-    return { gradient, residual }
+    const stops = stopsAlong(param, rs, gs, bs, n)
+    const gradient: RadialGradient = { type: 'radial', cx, cy, r: maxD, stops }
+    return { gradient, residual: modelResidualRgb(gradient, samples) }
   }
 }
 

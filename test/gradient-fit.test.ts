@@ -10,6 +10,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   fitRegionFill,
+  fitBestGradient,
   channelsToHex,
   gradientToSvgDef,
   type RegionSamples,
@@ -138,6 +139,29 @@ test('radial ramp → radial gradient centered in the middle', () => {
   assertColorNear(g.stops[0].color, '#ffffff', 16, 'inner stop')
   assertColorNear(g.stops[g.stops.length - 1].color, '#0000ff', 24, 'outer stop')
   assert.ok(r.radialResidual < r.linearResidual + 1e-6, 'radial should fit at least as well as linear')
+})
+
+test('eased (non-linear) ramp emits intermediate stops', () => {
+  // Quadratic ease black→white along x: a 2-stop linear fit reads wrong, so the
+  // multi-stop emission must add at least one interior knot.
+  const W = 96
+  const r = fitRegionFill(
+    grid(W, 40, (x) => {
+      const t = x / (W - 1)
+      const v = Math.round(255 * t * t)
+      return [v, v, v]
+    }),
+  )
+  assert.notEqual(r.kind, 'solid')
+  assert.ok(r.gradient, 'eased ramp fits a gradient')
+  assert.ok(r.gradient!.stops.length >= 3, `eased ramp should add stops, got ${r.gradient!.stops.length}`)
+})
+
+test('fitBestGradient fits a linear ramp with low Oklab residual', () => {
+  const W = 64
+  const fit = fitBestGradient(grid(W, 40, (x) => [Math.round(lerp(0, 255, x / (W - 1))), 0, 0]))
+  assert.ok(fit, 'returns a gradient')
+  assert.ok(fit!.oklabResidual < 0.03, `clean ramp should fit well, oklabResidual ${fit!.oklabResidual}`)
 })
 
 test('too few samples → solid (never gradient)', () => {

@@ -51,7 +51,140 @@ export function traceMaskCrisp(mask: ImageData, opts: CrispOptions): SubPath[] {
     const sp = fitLoop(simplified, opts)
     if (sp) subPaths.push(sp)
   }
+  // Bleed boundaries that all-but-touch the image edge out to it. Marching
+  // squares puts a full-bleed region's right/bottom boundary at ~w-0.5 / h-0.5
+  // (out-of-bounds reads as outside), so the outer half of the last pixel row/
+  // column goes uncovered and the page shows through as an edge seam. Snapping
+  // near-border vertices to the exact edge makes the bottom layer truly full-bleed.
+  for (const sp of subPaths) snapToImageEdge(sp, width, height)
+
+  // Marching-squares walks adjacency in an arbitrary direction, so loop winding
+  // is uncontrolled — fine for even-odd, but the pipeline now fills crisp output
+  // with `nonzero` (it doesn't XOR near-coincident contours into hairline seams
+  // the way even-odd does). Make winding consistent so holes still render as
+  // holes: nested loops must alternate orientation.
+  orientForNonzero(subPaths)
   return subPaths
+}
+
+/** Snap an anchor within EDGE_SNAP px of an image edge onto that exact edge. */
+const EDGE_SNAP = 1.5
+function snapToImageEdge(sp: SubPath, w: number, h: number): void {
+  // Skip a subpath that lives entirely inside the snap band on an axis — snapping
+  // it would collapse that dimension to zero and degenerate the shape. Only a
+  // boundary the region actually spans across should be bled to the edge.
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const n of sp.nodes) {
+    if (n.x < minX) minX = n.x
+    if (n.x > maxX) maxX = n.x
+    if (n.y < minY) minY = n.y
+    if (n.y > maxY) maxY = n.y
+  }
+  const spanX = maxX - minX > 2 * EDGE_SNAP
+  const spanY = maxY - minY > 2 * EDGE_SNAP
+
+  for (const node of sp.nodes) {
+    // Snap the anchor, then carry its handles by the same delta so the tangent
+    // geometry is preserved (handles can sit farther than EDGE_SNAP from the
+    // anchor; snapping them independently would bend the curve).
+    let nx = node.x
+    let ny = node.y
+    if (spanX) {
+      if (node.x < EDGE_SNAP) nx = 0
+      else if (node.x > w - EDGE_SNAP) nx = w
+    }
+    if (spanY) {
+      if (node.y < EDGE_SNAP) ny = 0
+      else if (node.y > h - EDGE_SNAP) ny = h
+    }
+    const dx = nx - node.x
+    const dy = ny - node.y
+    if (dx === 0 && dy === 0) continue
+    node.x = nx
+    node.y = ny
+    if (node.hIn) {
+      node.hIn.x += dx
+      node.hIn.y += dy
+    }
+    if (node.hOut) {
+      node.hOut.x += dx
+      node.hOut.y += dy
+    }
+  }
+}
+
+/**
+ * Force nonzero-consistent winding: a loop nested inside an even number of other
+ * loops (an outer boundary) is oriented one way, one nested inside an odd number
+ * (a hole) the opposite way. Under the nonzero rule this paints outers and
+ * subtracts holes, matching the even-odd intent without relying on traversal
+ * order. O(loops²), and loop counts are tiny.
+ */
+function orientForNonzero(subPaths: SubPath[]): void {
+  if (subPaths.length < 2) {
+    // A single loop: orient positive for a stable, canonical winding.
+    if (subPaths.length === 1 && anchorSignedArea(subPaths[0]) < 0) reverseSubPath(subPaths[0])
+    return
+  }
+  const polys = subPaths.map((sp) => sp.nodes.map((n) => ({ x: n.x, y: n.y })))
+  for (let i = 0; i < subPaths.length; i++) {
+    let depth = 0
+    for (let j = 0; j < subPaths.length; j++) {
+      if (j !== i && loopInside(polys[i], polys[j])) depth++
+    }
+    const wantPositive = depth % 2 === 0
+    if (anchorSignedArea(subPaths[i]) > 0 !== wantPositive) reverseSubPath(subPaths[i])
+  }
+}
+
+/**
+ * Whether loop `inner` is nested inside loop `outer`, by a majority vote over a
+ * few sample anchors of `inner`. A single test point can sit right on `outer`'s
+ * (anchor-polygon) boundary and misclassify; the majority makes it robust.
+ */
+function loopInside(inner: Vec[], outer: Vec[]): boolean {
+  const idxs = [0, (inner.length / 3) | 0, ((2 * inner.length) / 3) | 0]
+  let inside = 0
+  for (const k of idxs) if (pointInPolygon(inner[k], outer)) inside++
+  return inside * 2 > idxs.length
+}
+
+/** Signed area of a subpath's anchor polygon (sign is what matters here). */
+function anchorSignedArea(sp: SubPath): number {
+  let a = 0
+  const n = sp.nodes.length
+  for (let i = 0; i < n; i++) {
+    const p = sp.nodes[i]
+    const q = sp.nodes[(i + 1) % n]
+    a += p.x * q.y - q.x * p.y
+  }
+  return a / 2
+}
+
+/** Reverse a closed subpath's direction in place (swap each node's handles). */
+function reverseSubPath(sp: SubPath): void {
+  sp.nodes.reverse()
+  for (const node of sp.nodes) {
+    const h = node.hIn
+    node.hIn = node.hOut
+    node.hOut = h
+  }
+}
+
+/** Even-odd ray-cast point-in-polygon test. */
+function pointInPolygon(p: Vec, poly: Vec[]): boolean {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]
+    const b = poly[j]
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+      inside = !inside
+    }
+  }
+  return inside
 }
 
 // ---------------------------------------------------------------------------

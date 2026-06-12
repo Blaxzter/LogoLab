@@ -13,7 +13,7 @@
 
 import type { EditableDoc, GradientFill } from '../lib/path/types.ts'
 import { serializeDoc, docStats } from '../lib/path/model.ts'
-import { srgbToLab, deltaE76, l1Lab, luma709, type Lab } from './color.ts'
+import { srgbToLab, luma709 } from './color.ts'
 
 export interface FidelityMetrics {
   /** Mean over pixels of |ΔL|+|Δa|+|Δb| in CIELAB units. */
@@ -24,11 +24,28 @@ export interface FidelityMetrics {
   p95DeltaE: number
   /** Mean SSIM (11×11 Gaussian windows) over the luma images. */
   ssim: number
-  /** Max CIE76 ΔE over pixels on/near a traced boundary (seam/crack detector). */
+  /**
+   * Seam score: max render-vs-source CIE76 ΔE over boundary pixels that lie in a
+   * SMOOTH part of the source (low local source gradient). A genuine high-contrast
+   * edge has a high source gradient and is excluded — so its unavoidable ~1px AA
+   * placement error does not count. What remains are cracks (page bleeding through
+   * a smooth field) and mismatched gradient patches (a rendered discontinuity where
+   * the source is continuous) — exactly the artifacts mean error averages away.
+   */
   seamMax: number
-  /** 99.5th-percentile ΔE over boundary pixels (robust seam score). */
+  /** 99.5th-percentile of that smooth-field boundary ΔE (robust seam score). */
   seamP995: number
 }
+
+/** Source is "smooth" at a pixel when its max neighbour ΔE is below this — a
+ *  true edge sits well above it, a ramp well below. */
+const SMOOTH_GRAD = 8
+
+/** Neighbourhood (px) within which a source edge and a render edge are treated as
+ *  the SAME edge — i.e. the tracer reproduced it, give or take sub-pixel
+ *  placement. Kept to 1px so the exclusion forgives only unavoidable placement,
+ *  never a real artifact sitting near an edge. */
+const EDGE_NEIGHBORHOOD = 1
 
 export interface UsefulnessMetrics {
   paths: number
@@ -48,21 +65,57 @@ export function fidelity(
   boundary?: Uint8Array,
 ): FidelityMetrics {
   const n = width * height
+  // Composite both images over the SAME opaque white background before any
+  // comparison. The render is already opaque-over-white; the source may carry
+  // alpha (e.g. white line-art on transparency), and scoring its raw RGB would
+  // treat transparent pixels as black and wildly inflate the error.
+  const sOpaque = overWhite(source, n)
+  const rOpaque = overWhite(render, n)
+
+  // Pack both images to Lab once (also used for the source-smoothness map).
+  const sLab = new Float32Array(n * 3)
+  const rLab = new Float32Array(n * 3)
+  for (let i = 0; i < n; i++) {
+    const o = i * 4
+    const s = srgbToLab(sOpaque[o], sOpaque[o + 1], sOpaque[o + 2])
+    const r = srgbToLab(rOpaque[o], rOpaque[o + 1], rOpaque[o + 2])
+    sLab[i * 3] = s[0]
+    sLab[i * 3 + 1] = s[1]
+    sLab[i * 3 + 2] = s[2]
+    rLab[i * 3] = r[0]
+    rLab[i * 3 + 1] = r[1]
+    rLab[i * 3 + 2] = r[2]
+  }
+
   let l1Sum = 0
   let deSum = 0
   const de = new Float64Array(n)
+  for (let i = 0; i < n; i++) {
+    const k = i * 3
+    const dl = sLab[k] - rLab[k]
+    const da = sLab[k + 1] - rLab[k + 1]
+    const db = sLab[k + 2] - rLab[k + 2]
+    de[i] = Math.sqrt(dl * dl + da * da + db * db)
+    deSum += de[i]
+    l1Sum += Math.abs(dl) + Math.abs(da) + Math.abs(db)
+  }
+
+  // Seam score over boundary pixels that are NOT a correctly-reproduced edge.
+  // A genuine high-contrast edge is excluded ONLY where both the source AND the
+  // render have an edge within 1px — meaning the tracer placed the same edge, and
+  // the residual is unavoidable sub-pixel placement, not an artifact. A crack
+  // (page through a smooth field), a mismatched gradient patch, or a boundary
+  // OVERSHOOT into a smooth region has an edge in one image but not the other (or
+  // neither), so it is kept. This is what stops the exclusion from hiding the very
+  // artifacts the seam metric exists to catch when they sit near an edge.
   let seamMax = 0
   const seamVals: number[] = []
-
-  for (let i = 0; i < n; i++) {
-    const o = i * 4
-    const s: Lab = srgbToLab(source[o], source[o + 1], source[o + 2])
-    const r: Lab = srgbToLab(render[o], render[o + 1], render[o + 2])
-    const d = deltaE76(s, r)
-    de[i] = d
-    deSum += d
-    l1Sum += l1Lab(s, r)
-    if (boundary && boundary[i]) {
+  if (boundary) {
+    const sZone = dilate(edgeMask(sLab, width, height), width, height, EDGE_NEIGHBORHOOD)
+    const rZone = dilate(edgeMask(rLab, width, height), width, height, EDGE_NEIGHBORHOOD)
+    for (let i = 0; i < n; i++) {
+      if (!boundary[i] || (sZone[i] && rZone[i])) continue
+      const d = de[i]
       if (d > seamMax) seamMax = d
       seamVals.push(d)
     }
@@ -72,10 +125,77 @@ export function fidelity(
     l1Lab: l1Sum / n,
     meanDeltaE: deSum / n,
     p95DeltaE: percentile(de, 0.95),
-    ssim: meanSSIM(source, render, width, height),
+    ssim: meanSSIM(sOpaque, rOpaque, width, height),
     seamMax,
     seamP995: seamVals.length ? percentileArr(seamVals, 0.995) : 0,
   }
+}
+
+/** Grow a 0/1 mask by `radius` pixels (3×3 dilation, `radius` passes). */
+function dilate(mask: Uint8Array, width: number, height: number, radius: number): Uint8Array {
+  let cur = mask
+  for (let pass = 0; pass < radius; pass++) {
+    const next = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (!cur[y * width + x]) continue
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx
+            const ny = y + dy
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) next[ny * width + nx] = 1
+          }
+        }
+      }
+    }
+    cur = next
+  }
+  return cur
+}
+
+/** 0/1 mask of pixels whose local Lab gradient marks a true (high-contrast) edge. */
+function edgeMask(lab: Float32Array, width: number, height: number): Uint8Array {
+  const m = new Uint8Array(width * height)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (sourceGradient(lab, width, height, x, y) >= SMOOTH_GRAD) m[y * width + x] = 1
+    }
+  }
+  return m
+}
+
+/** Max CIE76 ΔE between a pixel and its 4-neighbours in a Lab buffer (local gradient). */
+function sourceGradient(lab: Float32Array, width: number, height: number, x: number, y: number): number {
+  const k = (y * width + x) * 3
+  let g = 0
+  const probe = (nx: number, ny: number) => {
+    if (nx < 0 || ny < 0 || nx >= width || ny >= height) return
+    const j = (ny * width + nx) * 3
+    const dl = lab[k] - lab[j]
+    const da = lab[k + 1] - lab[j + 1]
+    const db = lab[k + 2] - lab[j + 2]
+    const d = Math.sqrt(dl * dl + da * da + db * db)
+    if (d > g) g = d
+  }
+  probe(x - 1, y)
+  probe(x + 1, y)
+  probe(x, y - 1)
+  probe(x, y + 1)
+  return g
+}
+
+/** Composite an RGBA buffer over opaque white, returning an opaque RGBA buffer. */
+function overWhite(px: Uint8ClampedArray | Uint8Array, n: number): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(n * 4)
+  for (let i = 0; i < n; i++) {
+    const o = i * 4
+    const a = px[o + 3] / 255
+    out[o] = px[o] * a + 255 * (1 - a)
+    out[o + 1] = px[o + 1] * a + 255 * (1 - a)
+    out[o + 2] = px[o + 2] * a + 255 * (1 - a)
+    out[o + 3] = 255
+  }
+  return out
 }
 
 function percentile(values: Float64Array, p: number): number {

@@ -521,3 +521,78 @@ single-digit (7–8). petals near-parity.
   pipeline produces a different (and unmeasurable, run-to-run-varying) result every
   time, so a deterministic baseline is the only one a later diff can be measured
   against. The pre-fix non-determinism is itself recorded as the motivation.
+
+### V1 — quick wins on the current pipeline — 2026-06-12 — ✅ shipped (exit met)
+
+**What shipped**
+- `src/lib/trace/oklab.ts` — sRGB→Oklab + ΔE, for perceptually-consistent merge/
+  stop-placement thresholds.
+- **Multi-stop emission** (`gradient.ts`): `fitLinear`/`fitRadial` now bin the 1-D
+  colour profile along the axis/radius and place stops at the knots of its Oklab-RDP
+  approximation (a linear ramp collapses to 2 stops; an eased/hue-rotating ramp keeps
+  interior knots). Residual is measured against the emitted stop model. Added
+  `fitBestGradient` (Oklab-ranked) and `sampleGradient`.
+- **Union-refit merge** (`index.ts`): replaced `assignGradients`' axis-clustering +
+  raw-RGB absorb with a greedy union-refit — two regions merge iff one gradient fits
+  their combined samples within `MERGE_OKLAB_TOL` (0.06). Grouping runs BEFORE tracing
+  and each group's labels are MERGED into one region (`mergeLabels`), so a posterized
+  smooth field collapses into a single full-bleed region painted with one gradient.
+- **Crisp seam fix** (`subpixel.ts`): switched crisp output to `nonzero` fill with
+  loop winding oriented by nesting parity (`orientForNonzero`), and edge-snapping of
+  near-border vertices so the bottom layer is truly full-bleed (was leaving a half-
+  covered last pixel row/column → page bled through as an edge seam).
+- Seeded PRNG (from V0) makes all of the above byte-deterministic.
+
+**Harness numbers vs baseline** (headless crisp, refined metric):
+
+| image  | paths   | nodes      | grad    | SSIM (b→V1)        | seam max (b→V1) | seam P99.5 (b→V1) |
+|--------|--------:|-----------:|--------:|--------------------|-----------------|-------------------|
+| nebula | 7→**2** | 410→**35** | 4→**2** | 0.9600→**0.9685**  | 116.9→**83.2**  | 101.4→**40.9**    |
+| petals | 7→**3** | 83→**38**  | 0→**2** | 0.9831→**0.9894**  | 12.6→21.7       | 5.9→9.7           |
+
+(Both rows under the *final* seam metric; the V0 figures were re-measured against the
+eff497d pipeline in a worktree so the diff is one instrument.) nebula's crack/patch/
+border seam collapses (P99.5 101.4→40.9) with 7→2 paths and one coherent background
+gradient. petals' seam max ticks up on a handful of curved-edge pixels (gradients now
+capture its shading) but SSIM rises and paths drop 7→3 — net improvement, ≥ parity.
+
+Browser (both engines): nebula potrace 2 paths, SSIM 0.979, seam ~19.7, no visible
+crack; petals/orbit/outline/summit clean-to-perfect (orbit SSIM 0.996; outline &
+summit ~1.0, grad 0 — no wrong merges). aurora SSIM 0.990 (potrace) with a residual
+seam at its semi-transparent chevron strokes. nebula L1/meanΔE rose (5.64→8.21 /
+3.52→4.97): the deliberate trade of one-linear-over-a-2-D-glow colour accuracy for
+ZERO band seams — the plan's "generous ΔE, zero seams".
+
+**Exit criterion — met.** nebula (both engines): no cracks, **2 paths** (single-
+digit), background = **one gradient** — visually beats the flat-purple Affinity
+reference. petals & every flat/line case ≥ parity (all improved or perfect).
+
+**Deviations from the plan**
+- Went beyond "assign a shared gradient" to **label-merging** each union-refit group
+  into one region. Reason: the old per-band layers, with the count-based paint order,
+  sandwiched the white ring UNDER two tiny pink bands, whose receding traces leaked
+  the white underlayer as a diagonal "crack". Collapsing the field to one region
+  removes the sandwich entirely (and cuts path count). Still "merge iff one model fits
+  the union".
+- The plan's crisp **overlap dilation** was implemented then **reverted**: dilating
+  upper masks roughened boundaries and, given the paint order, painted pink bands over
+  the white ring (purple-on-white overshoot, SSIM 0.917). Label-merge + edge-snap fix
+  the seams more cleanly with nothing to overlap.
+- **Oklab scope**: applied to the merge predicate and stop placement (the cross-region
+  threshold consistency the plan targets). The per-region solid-vs-gradient SELECTION
+  residual stays in RGB to avoid retuning the validated single-region fitter and its
+  tests — slated for V2's rebuild.
+- **Seam metric finalized during V1** (after an adversarial review caught an earlier
+  over-exclusion that could hide near-edge cracks): a boundary pixel is excluded only
+  where BOTH source and render have an edge within 1px — a correctly-reproduced edge,
+  ± sub-pixel placement — so a crack/patch/overshoot near an edge is still scored. Also
+  composites the source over white before scoring (a harness bug: transparent source,
+  e.g. white line-art, was scored as black, which had crater-ed `outline`/`aurora`).
+  Opaque nebula/petals numbers are unaffected by the alpha fix; V0 was re-measured
+  under the final metric (worktree) so `harness-baseline.md`'s V0↔V1 diff is one
+  instrument.
+- **Edge-veto NOT added** (deferred to V2 per plan): union-refit can in principle
+  bridge two distinct flat colours across a true edge into a near-step gradient. The
+  corpus shows no such bridging (flat cases stay grad-0 / perfect), so the V2 multicut
+  edge-veto is left as the principled fix; this is a known latent risk.
+- aurora's translucent-stroke seam and any stroke/line-art class remain V2/beyond.

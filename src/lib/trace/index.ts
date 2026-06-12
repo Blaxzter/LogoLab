@@ -7,12 +7,12 @@
 // a naive per-color trace leaves between regions.
 
 import type { VectorizeOptions } from '../../types'
-import type { EditableDoc, LinearGradient, PathItem, SubPath } from '../path/types'
-import type { TraceProgress } from './types'
+import type { EditableDoc, GradientFill, PathItem, SubPath } from '../path/types'
+import type { TraceProgress, QuantizeResult, PaletteColor } from './types'
 import { traceMask, type TraceMaskOptions } from './potrace.ts'
 import { traceMaskCrisp, type CrispOptions } from './subpixel.ts'
 import { dropMinorColors, modeFilter, quantize } from './quantize.ts'
-import { concatSamples, fitRegionFill, type RegionSamples } from './gradient.ts'
+import { concatSamples, fitRegionFill, fitBestGradient, type RegionSamples } from './gradient.ts'
 
 export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   mode: 'color',
@@ -39,65 +39,6 @@ function crispOptionsFor(smoothing: number, turdsize: number): CrispOptions {
 
 /** Max pixels sampled per region when fitting a gradient (perf vs. accuracy). */
 const GRADIENT_SAMPLE_TARGET = 4000
-
-/** Min |dot| of two canonical axes to treat their linear ramps as one gradient. */
-const AXIS_PARALLEL_DOT = 0.9
-
-/** Unit ramp axis of a linear gradient, flipped into a canonical half-plane. */
-function canonicalAxis(g: LinearGradient): [number, number] {
-  let ux = g.x2 - g.x1
-  let uy = g.y2 - g.y1
-  const len = Math.hypot(ux, uy) || 1
-  ux /= len
-  uy /= len
-  if (ux < -1e-9 || (Math.abs(ux) < 1e-9 && uy < 0)) {
-    ux = -ux
-    uy = -uy
-  }
-  return [ux, uy]
-}
-
-const hexToRgb = (hex: string): [number, number, number] => [
-  parseInt(hex.slice(1, 3), 16),
-  parseInt(hex.slice(3, 5), 16),
-  parseInt(hex.slice(5, 7), 16),
-]
-
-/** Mean (x, y) of a region's samples. */
-function centroid(s: RegionSamples): [number, number] {
-  let cx = 0
-  let cy = 0
-  for (let i = 0; i < s.n; i++) {
-    cx += s.xs[i]
-    cy += s.ys[i]
-  }
-  return [cx / s.n, cy / s.n]
-}
-
-/** Evaluate a linear gradient's color at point (x, y), clamped to its extent. */
-function sampleLinearAt(g: LinearGradient, x: number, y: number): [number, number, number] {
-  const dx = g.x2 - g.x1
-  const dy = g.y2 - g.y1
-  const len2 = dx * dx + dy * dy || 1
-  let t = ((x - g.x1) * dx + (y - g.y1) * dy) / len2
-  if (t < 0) t = 0
-  else if (t > 1) t = 1
-  const stops = g.stops
-  let a = stops[0]
-  let b = stops[stops.length - 1]
-  for (let i = 0; i < stops.length - 1; i++) {
-    if (t >= stops[i].offset && t <= stops[i + 1].offset) {
-      a = stops[i]
-      b = stops[i + 1]
-      break
-    }
-  }
-  const span = b.offset - a.offset || 1
-  const lt = (t - a.offset) / span
-  const ca = hexToRgb(a.color)
-  const cb = hexToRgb(b.color)
-  return [ca[0] + (cb[0] - ca[0]) * lt, ca[1] + (cb[1] - ca[1]) * lt, ca[2] + (cb[2] - ca[2]) * lt]
-}
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n))
 
@@ -129,7 +70,11 @@ export async function traceImage(
   // nonzero). Both consume the same black-on-white masks.
   const engine = options.engine ?? 'potrace'
   const crispOpts = crispOptionsFor(smoothing, maskOpts.turdsize)
-  const fillRule: 'nonzero' | 'evenodd' = engine === 'crisp' ? 'evenodd' : 'nonzero'
+  // Both engines now fill nonzero. The crisp tracer used to fill even-odd, which
+  // XORs two near-coincident simplified contours into hairline background slivers
+  // (the "cracks"); its loops are now oriented for nonzero (orientForNonzero), so
+  // holes still render correctly without the seam mechanism.
+  const fillRule: 'nonzero' | 'evenodd' = 'nonzero'
   const traceOne = (mask: ImageData): Promise<SubPath[]> =>
     engine === 'crisp' ? Promise.resolve(traceMaskCrisp(mask, crispOpts)) : traceMask(mask, maskOpts)
 
@@ -155,6 +100,27 @@ export async function traceImage(
   q = { ...q, labels: modeFilter(q.labels, width, height, passes) }
   q = dropMinorColors(q, (despeckle / 100) ** 1.5 * 0.02)
 
+  const gradientsOn = options.gradients !== false
+
+  // Gradient grouping happens BEFORE tracing. Sample each quantized region from
+  // the ORIGINAL pixels, greedily union-refit the regions (two merge iff a single
+  // gradient explains their combined samples — the plan's "merge iff one model
+  // fits the union"), then MERGE the labels of each group into one region. A
+  // posterized smooth field thus collapses back into a single full-bleed region
+  // painted with one gradient: there are no band layers left to leave seams, and
+  // a foreground mark (which never merges into the field) simply sits on top
+  // instead of being sandwiched under a tiny band and showing through its cracks.
+  let labelGradient: (GradientFill | null)[] = q.palette.map(() => null)
+  if (gradientsOn) {
+    const samples = q.palette.map((_, label) =>
+      sampleRegion(imageData, q.labels, width, height, label, q.counts[label] ?? 0),
+    )
+    const groups = groupRegions(samples)
+    const merged = mergeLabels(q, groups)
+    q = merged.q
+    labelGradient = merged.gradients
+  }
+
   // Paint order: largest region at the bottom (palette is sorted by count).
   let paintOrder = q.palette.map((_, i) => i)
   if (options.removeBackground) {
@@ -168,9 +134,8 @@ export async function traceImage(
     rank[label] = i
   })
 
-  const gradientsOn = options.gradients !== false
   const total = paintOrder.length
-  const layers: { item: PathItem; samples: RegionSamples | null }[] = []
+  const items: PathItem[] = []
   for (let i = 0; i < total; i++) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     onProgress?.({ phase: 'trace', layer: i + 1, total })
@@ -186,105 +151,163 @@ export async function traceImage(
         subPaths,
         visible: true,
       }
-      const samples = gradientsOn
-        ? sampleRegion(imageData, q.labels, width, height, label, q.counts[label] ?? 0)
-        : null
-      layers.push({ item, samples })
+      const grad = labelGradient[label]
+      if (grad) item.gradient = grad
+      items.push(item)
     }
     // Yield to the event loop so the progress UI can actually paint.
     await new Promise((r) => setTimeout(r))
   }
 
-  // Look back at each region's ORIGINAL pixels: regions whose colors follow a
-  // smooth ramp get a fitted SVG gradient instead of a flat fill. Co-linear
-  // bands (a single gradient quantization split into several flat layers) are
-  // merged onto ONE shared gradient so no seams show between them.
-  if (gradientsOn) assignGradients(layers)
-
-  return { viewBox: [0, 0, width, height], items: layers.map((l) => l.item) }
+  return { viewBox: [0, 0, width, height], items }
 }
 
 /**
- * Max RGB distance for a flat band to be absorbed into a shared gradient. Set
- * generously: a background band that quantization split off but didn't fit as
- * linear should still join the ramp (else it paints a flat seam over it). Real
- * foreground elements (e.g. a white mark on a colored ground) sit far further
- * than this from the gradient, so they are never wrongly absorbed.
+ * Oklab ΔE below which a SINGLE gradient is judged to explain the combined
+ * samples of two region groups — the union-refit merge predicate. Generous:
+ * biased toward unifying co-field bands into one paint (the plan tolerates loose
+ * colour error but zero seams), so a posterized smooth field collapses back into
+ * one shared gradient instead of several disagreeing ones.
  */
-const ABSORB_COLOR_TOL = 70
+const MERGE_OKLAB_TOL = 0.06
+
+/** Cap on samples fed to a single union-refit fit (perf; subsampled if larger). */
+const UNION_FIT_CAP = 3000
+
+interface Group {
+  members: number[]
+  samples: RegionSamples
+  gradient: GradientFill | null
+  residual: number
+}
+
+/** One union-refit group: the labels it covers and the gradient it paints. */
+interface RegionGroup {
+  members: number[]
+  gradient: GradientFill | null
+}
+
+const clamp255 = (n: number): number => Math.max(0, Math.min(255, Math.round(n)))
 
 /**
- * Fit gradients across the traced layers. Each region is fit individually;
- * neighbouring layers whose linear ramps share an axis and a color line are
- * then refit as one group and assigned a single shared gradient (the cure for
- * the visible seams a per-band fit leaves on a quantized gradient). Finally,
- * flat sub-bands that fall on a shared gradient are absorbed into it, so a
- * narrow "solid" slice can't paint a patch over the smooth ramp.
+ * Greedy union-refit over the quantized regions, replacing the old posterize-
+ * then-mend heuristics (axis clustering + a raw-RGB absorb tolerance, both of
+ * which split a smooth field into disagreeing patches). Start one group per
+ * label, then repeatedly merge the globally-best pair whose COMBINED samples are
+ * still fit by a single gradient within MERGE_OKLAB_TOL, to a fixpoint. A
+ * multi-member group paints its shared union gradient (and naturally absorbs flat
+ * sub-bands whose colour lies on the ramp); a lone region keeps its own
+ * per-region fit (a genuine single-region gradient, or solid). This is the V1
+ * interim of the structure-first plan (§6); V2 replaces it with smoothness-first
+ * segmentation.
  */
-function assignGradients(layers: { item: PathItem; samples: RegionSamples | null }[]): void {
-  const fits = layers.map((l) => (l.samples ? fitRegionFill(l.samples) : null))
-  const merged = new Set<number>()
+function groupRegions(samples: RegionSamples[]): RegionGroup[] {
+  const groups: Group[] = samples.map((s, label) => {
+    const fit = s.n >= 2 ? fitBestGradient(s) : null
+    return { members: [label], samples: s, gradient: fit?.gradient ?? null, residual: fit?.oklabResidual ?? Infinity }
+  })
 
-  // Cluster linear-fit layers by canonical axis direction (parallel ⇒ same
-  // gradient candidate). Solid / radial layers are handled on their own.
-  const clusters: { axis: [number, number]; members: number[] }[] = []
-  for (let i = 0; i < layers.length; i++) {
-    const fit = fits[i]
-    if (!fit || fit.kind !== 'linear' || fit.gradient?.type !== 'linear') continue
-    const axis = canonicalAxis(fit.gradient)
-    let placed = false
-    for (const c of clusters) {
-      if (Math.abs(axis[0] * c.axis[0] + axis[1] * c.axis[1]) >= AXIS_PARALLEL_DOT) {
-        c.members.push(i)
-        placed = true
-        break
+  // Merge the globally-best mergeable pair until none fits under tol.
+  for (;;) {
+    let best: { i: number; j: number; samples: RegionSamples; gradient: GradientFill } | null = null
+    let bestRes = MERGE_OKLAB_TOL
+    for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const union = subsample(concatSamples([groups[i].samples, groups[j].samples]), UNION_FIT_CAP)
+        const fit = fitBestGradient(union)
+        if (fit && fit.oklabResidual <= bestRes) {
+          bestRes = fit.oklabResidual
+          best = { i, j, samples: union, gradient: fit.gradient }
+        }
       }
     }
-    if (!placed) clusters.push({ axis, members: [i] })
-  }
-
-  // Refit each multi-member cluster as one region → a single shared gradient.
-  const shared: LinearGradient[] = []
-  for (const c of clusters) {
-    if (c.members.length < 2) continue
-    const samples = c.members.map((i) => layers[i].samples).filter(Boolean) as RegionSamples[]
-    const fit = fitRegionFill(concatSamples(samples))
-    if (fit.gradient?.type === 'linear') {
-      shared.push(fit.gradient)
-      for (const i of c.members) {
-        layers[i].item.gradient = fit.gradient
-        merged.add(i)
-      }
+    if (!best) break
+    const merged: Group = {
+      members: groups[best.i].members.concat(groups[best.j].members),
+      samples: best.samples,
+      gradient: best.gradient,
+      residual: bestRes,
     }
+    groups.splice(best.j, 1)
+    groups.splice(best.i, 1, merged)
   }
 
-  // Absorb still-unmerged layers (typically flat sub-bands) whose region color
-  // matches a shared gradient where it sits — they'd otherwise paint a patch.
-  for (let i = 0; i < layers.length; i++) {
-    if (merged.has(i)) continue
-    const s = layers[i].samples
-    const fit = fits[i]
-    if (!s || !fit) continue
-    const [cx, cy] = centroid(s)
-    for (const g of shared) {
-      const [pr, pg, pb] = sampleLinearAt(g, cx, cy)
-      const dr = fit.solid[0] - pr
-      const dg = fit.solid[1] - pg
-      const db = fit.solid[2] - pb
-      if (Math.sqrt(dr * dr + dg * dg + db * db) <= ABSORB_COLOR_TOL) {
-        layers[i].item.gradient = g
-        merged.add(i)
-        break
-      }
-    }
+  return groups.map((g) => {
+    if (g.members.length >= 2 && g.gradient) return { members: g.members, gradient: g.gradient }
+    const fit = g.samples.n >= 2 ? fitRegionFill(g.samples) : null
+    return { members: g.members, gradient: fit?.gradient ?? null }
+  })
+}
+
+/**
+ * Collapse each region group into ONE label: remap every member label to a single
+ * merged entry (count-weighted mean colour, summed count), re-sort the merged
+ * palette by count descending, and return the merged quantization plus the
+ * gradient to paint for each merged label. Merging the bands of a smooth field
+ * into one full-bleed region is what removes the band seams (and the under-layer
+ * slivers a sandwiched foreground mark used to show through).
+ */
+function mergeLabels(q: QuantizeResult, groups: RegionGroup[]): { q: QuantizeResult; gradients: (GradientFill | null)[] } {
+  const groupOf = new Int32Array(q.palette.length)
+  groups.forEach((g, gi) => {
+    for (const label of g.members) groupOf[label] = gi
+  })
+
+  const gr = new Float64Array(groups.length)
+  const gg = new Float64Array(groups.length)
+  const gb = new Float64Array(groups.length)
+  const gc = new Float64Array(groups.length)
+  for (let label = 0; label < q.palette.length; label++) {
+    const gi = groupOf[label]
+    const w = q.counts[label] ?? 0
+    gr[gi] += q.palette[label].r * w
+    gg[gi] += q.palette[label].g * w
+    gb[gi] += q.palette[label].b * w
+    gc[gi] += w
   }
 
-  // Anything still unmerged keeps its own per-region fit (incl. radials).
-  for (let i = 0; i < layers.length; i++) {
-    if (merged.has(i)) continue
-    const g = fits[i]?.gradient
-    if (g) layers[i].item.gradient = g
+  // Largest merged region paints at the bottom (full-bleed background).
+  const order = groups.map((_, gi) => gi).sort((a, b) => gc[b] - gc[a])
+  const mergedRank = new Int32Array(groups.length)
+  order.forEach((gi, pos) => {
+    mergedRank[gi] = pos
+  })
+
+  const palette: PaletteColor[] = order.map((gi) => {
+    const w = gc[gi] || 1
+    return { r: clamp255(gr[gi] / w), g: clamp255(gg[gi] / w), b: clamp255(gb[gi] / w) }
+  })
+  const counts = order.map((gi) => gc[gi])
+  const gradients = order.map((gi) => groups[gi].gradient)
+
+  const labels = new Int32Array(q.labels.length)
+  for (let i = 0; i < q.labels.length; i++) {
+    const l = q.labels[i]
+    labels[i] = l < 0 ? -1 : mergedRank[groupOf[l]]
   }
+  return { q: { palette, labels, counts }, gradients }
+}
+
+/** Evenly stride a sample set down to at most `cap` points (deterministic). */
+function subsample(s: RegionSamples, cap: number): RegionSamples {
+  if (s.n <= cap) return s
+  const stride = Math.ceil(s.n / cap)
+  const m = Math.ceil(s.n / stride)
+  const xs = new Float64Array(m)
+  const ys = new Float64Array(m)
+  const rs = new Float64Array(m)
+  const gs = new Float64Array(m)
+  const bs = new Float64Array(m)
+  let k = 0
+  for (let i = 0; i < s.n && k < m; i += stride) {
+    xs[k] = s.xs[i]
+    ys[k] = s.ys[i]
+    rs[k] = s.rs[i]
+    gs[k] = s.gs[i]
+    bs[k] = s.bs[i]
+    k++
+  }
+  return { xs, ys, rs, gs, bs, n: k }
 }
 
 /**
