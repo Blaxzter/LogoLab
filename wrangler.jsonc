@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "logolab",
+  "name": "logo-lab",
   "compatibility_date": "2026-06-09",
   // Assets-only Worker: no server script, just serve the Vite build output.
   "assets": {
