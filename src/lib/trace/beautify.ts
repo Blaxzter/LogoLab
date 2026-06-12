@@ -47,16 +47,18 @@ export const DEFAULT_BEAUTIFY_OPTIONS: BeautifyOptions = {
 const FLATTEN_PER_SEG = 16
 
 /**
- * Straighten tolerance (px): a cubic segment is collapsed to a true line only
- * when its curve sits within this of its chord. Deliberately a small FIXED value,
- * NOT scaled by the fidelity knob: straightening just removes curvature that is
- * already negligible (and never reduces the node count — it only nulls handles),
- * so widening it with `fidelity` would erase genuine gentle curves on organic
- * shapes (e.g. petals) and nudge their high-contrast edges enough to read as a
- * seam. The knob's drift budget belongs to whole-shape snaps, not to flattening
- * one segment the tracer deliberately kept curved.
+ * Drift ceiling (px) for the LINE cleanups — straighten, collinear-merge, H-V
+ * snap. Deliberately a small value (well under 1 px) and NOT scaled up by the
+ * fidelity knob. Each line cleanup repositions a single boundary vertex, so any
+ * drift over ~1 px reads as a seam (the harness flags boundary moves the source
+ * edge cannot account for) and second-guesses the tracer's own fit — measured to
+ * regress petals' organic edges and aurora's translucent strokes when run at the
+ * full 1.5 px budget. The knob's larger drift budget belongs to WHOLE-SHAPE
+ * primitive snaps (circles/ellipses): there the deviation is distributed smoothly
+ * around a perfect shape and the perceptual payoff justifies it, whereas nudging
+ * one vertex never does. (`min(fidelity, …)` still lets a user tighten below it.)
  */
-const STRAIGHTEN_EPS = 0.3
+const LINE_POLISH_CAP = 0.3
 
 // ---------------------------------------------------------------------------
 // Public entry
@@ -368,30 +370,33 @@ function orient(sp: SubPath, positive: boolean): SubPath {
  * genuine curves (handles far off the chord) are untouched.
  */
 function polishLines(sp: SubPath, opts: BeautifyOptions): SubPath {
-  const fid = opts.fidelity
+  // All three line cleanups share the sub-fidelity drift cap (see LINE_POLISH_CAP)
+  // so they only tidy near-exact cases and never move a true edge into a seam.
+  const cap = Math.min(opts.fidelity, LINE_POLISH_CAP)
   let nodes = sp.nodes.map(cloneNode)
 
-  // 1. Straighten: a cubic segment whose curve already sits within STRAIGHTEN_EPS
-  //    of its chord becomes a true line (both incident handles dropped).
+  // 1. Straighten: a cubic segment whose curve already sits within `cap` of its
+  //    chord becomes a true line (both incident handles dropped).
   const count = sp.closed ? nodes.length : nodes.length - 1
   for (let seg = 0; seg < count; seg++) {
     const a = nodes[seg]
     const b = nodes[(seg + 1) % nodes.length]
     if (!a.hOut && !b.hIn) continue // already a line
-    if (cubicChordDev(a, b) <= STRAIGHTEN_EPS) {
+    if (cubicChordDev(a, b) <= cap) {
       a.hOut = null
       b.hIn = null
     }
   }
 
-  // 2. Merge collinear vertices: drop an anchor sitting (within `fid`) on the
-  //    straight chord between its line-neighbours — a genuine node-count win on
-  //    rectilinear shapes, gated by the fidelity knob.
-  nodes = mergeCollinear(nodes, sp.closed, fid)
+  // 2. Merge collinear vertices: drop an anchor sitting (within `cap`) on the
+  //    straight chord between its line-neighbours — a node-count win on
+  //    rectilinear / pixel-staircase contours.
+  nodes = mergeCollinear(nodes, sp.closed, cap)
 
-  // 3. Snap near-axis-aligned straight edges to exact H/V (fidelity-gated; only
-  //    short or barely-tilted edges fit the budget at the default tolerance).
-  snapAxisAligned(nodes, sp.closed, opts, fid)
+  // 3. Snap near-axis-aligned straight edges to exact H/V (within `cap`; only
+  //    near-exact axis edges fit the budget — aggressive angle-snapping would
+  //    move long edges far enough to seam).
+  snapAxisAligned(nodes, sp.closed, opts, cap)
 
   return { nodes, closed: sp.closed }
 }

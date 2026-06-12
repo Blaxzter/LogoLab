@@ -137,10 +137,11 @@ test('a redundant collinear vertex on a straight edge is merged away', () => {
   assert.equal(out.nodes.length, 4, 'the collinear midpoint should be dropped')
 })
 
-test('a near-axis edge snaps to exact horizontal within the fidelity budget', () => {
-  // A short top edge tilted < 10° and within ~1px of horizontal.
+test('a near-axis edge snaps to exact horizontal within the line-polish budget', () => {
+  // A top edge barely tilted (< 10°) and within the sub-fidelity line cap of
+  // horizontal: each endpoint moves only ~0.2px to the shared midpoint.
   const rect: SubPath = {
-    nodes: [corner(10, 10.8), corner(30, 9.2), corner(30, 60), corner(10, 60)],
+    nodes: [corner(10, 10.2), corner(30, 9.8), corner(30, 60), corner(10, 60)],
     closed: true,
   }
   const out = one(rect, { ...OPTS, fidelity: 1.5 })

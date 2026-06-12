@@ -705,9 +705,9 @@ NOT re-segment:
     exported) when its max radial deviation ≤ the fidelity knob and `r > 2·fidelity`.
   - **Axis-aligned ellipse snap** — linear conic fit under an `A+C=2` normalisation
     (rotated ellipses deferred), gated the same way.
-  - **Line polish** — straighten near-flat cubics to true lines (fixed `STRAIGHTEN_EPS`
-    = 0.3 px, see deviations), merge collinear vertices, snap near-axis edges to exact
-    H/V (both fidelity-gated).
+  - **Line polish** — straighten near-flat cubics to true lines, merge collinear
+    vertices, snap near-axis edges to exact H/V (all sharing a fixed `LINE_POLISH_CAP`
+    = 0.3 px drift ceiling, see deviations).
   - **Relation solver** — single-linkage clusters of concentric centres (within
     `relationFrac` = 1/10 of the doc bbox long side) and equal radii; reconcile each
     cluster to its (radius-weighted) mean, accepting a move per circle only when the
@@ -742,6 +742,25 @@ Determinism `pass`, typecheck + build green.
 - **petals**: organic shapes, nothing snaps → **exact V2 parity** at every fidelity
   level (the line polish no longer touches its curves — see deviations).
 
+**Browser corpus** (`vectorize-test.html`, potrace + crisp over the 7-image set,
+fidelity 0 ⇒ V2 vs 1.5 ⇒ V3) — beautify runs on BOTH engines, so the **potrace product
+default** sheds nodes across the board with no fidelity regression:
+
+| image   | potrace nodes (V2→V3) | potrace SSIM      | potrace seam max | note |
+|---------|-----------------------|-------------------|------------------|------|
+| nebula  | 48→**36**             | 0.9796→**0.9800** | 11.6 (=)         | dot circle + collinear cleanup |
+| petals  | 59→**53**             | 0.9938 (=)        | 2.4 (=)          | parity |
+| aurora  | 64→**60**             | 0.9938→0.9934     | 66 (=)           | translucent strokes held |
+| orbit   | 40→**32**             | 0.9934→**0.9937** | 0.5 (=)          | concentric rings snap |
+| outline | 45→**38**             | 1.0000 (=)        | 0 (=)            | line-art, perfect held |
+| summit  | 27→**12**             | 0.9972→0.9960     | 0 (=)            | straight edges de-staircased |
+| bloom   | 41 (=)                | 0.9876 (=)        | 8.1 (=)          | unchanged |
+
+crisp matches its headless numbers (nebula & orbit improve, the rest parity). seam and
+meanΔE hold or improve on every row of both engines; the only sub-parity figure anywhere
+is **summit-potrace SSIM −0.0012** (4th-decimal noise, seam still a perfect 0) — the cost
+of halving a straight-edged mark's node count, well inside the knob.
+
 **Exit criterion (plan §6 V3) — partially met, with a measured structural reason.**
 - *"nebula = ~5 perfect circles + a rect, concentric centres detected"* — NOT reachable
   at a faithful tolerance. The white **ring and the small node bump at 12 o'clock are the
@@ -772,12 +791,16 @@ Determinism `pass`, typecheck + build green.
   ever loosening circle-snapping — defeating the required "trades regularity for
   faithfulness" demonstration. Not a relaxation: clean circles (the dot) sit far under the
   1.5 px default anyway.
-- **Line polish (straighten) uses a fixed `STRAIGHTEN_EPS = 0.3 px`, NOT the fidelity
-  budget.** Measured: straightening near-flat cubics with the full 1.5 px budget nudged
-  petals' organic edges enough to push seamMax 6.8→9.9 for **zero** node benefit
-  (straighten only nulls handles, never drops a node). Capping it keeps petals at exact
-  parity. Collinear-merge and H-V snap (which DO reduce nodes / regularise) keep the full
-  fidelity budget.
+- **All line cleanups (straighten, collinear-merge, H-V snap) share a fixed
+  `LINE_POLISH_CAP = 0.3 px` drift ceiling, NOT the fidelity budget.** Measured on the
+  browser corpus (potrace, the product default): running them at the full 1.5 px budget
+  regressed aurora's translucent-stroke seam 66→97 and meanΔE 1.18→1.57, and petals'
+  crisp seamMax 6.8→9.9 — in each case a single repositioned boundary vertex moving
+  > 1 px past where the source edge can still account for it. Capping at 0.3 px restores
+  parity everywhere while still merging pixel-staircase vertices (the potrace node drops
+  above). The full fidelity budget is reserved for whole-shape circle/ellipse snaps,
+  where the drift is distributed smoothly around a perfect shape rather than concentrated
+  at one nudged vertex — so a circle can use the whole knob without seaming.
 - **Axis-aligned ellipse only** (rotated ellipse via a full conic eigen-fit deferred): no
   corpus contour is a rotated ellipse, so there is no measured target to validate it
   against (and an unvalidated fit risks de-syncing the rasterizer — the V2 caution).
