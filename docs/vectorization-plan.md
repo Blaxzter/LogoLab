@@ -596,3 +596,100 @@ reference. petals & every flat/line case ≥ parity (all improved or perfect).
   corpus shows no such bridging (flat cases stay grad-0 / perfect), so the V2 multicut
   edge-veto is left as the principled fix; this is a known latent risk.
 - aurora's translucent-stroke seam and any stroke/line-art class remain V2/beyond.
+
+### V2 — structure-first core — 2026-06-12 — ✅ shipped (exit met)
+
+**What shipped** — the quantize→trace→mend pipeline is replaced by segment→fit→trace
+(§3.1–3.2). New pure modules (all `node --test`):
+- `src/lib/trace/mumfordShah.ts` — discrete piecewise-smooth Mumford–Shah solver
+  (truncated-quadratic / binary line process, the [SC14] scheme): each outer pass
+  recomputes per-edge cut state (α‖Δu‖² ≥ λ) then Gauss–Seidel-diffuses the resulting
+  quadratic sub-problem to a fixpoint. Returns the smoothed image u + the
+  discontinuity map 𝒟 (eq 1–2). α = 1.0; the cap λ is expressed as a gradient-
+  magnitude edge threshold T = √(λ/α) = 0.15 in the working RGB[0,1] scale.
+- `src/lib/trace/segment.ts` — Stage 1.2–1.4: CIELAB colour-difference agglomerative
+  merge over smooth pixels (τ_s = 10, Supplement Alg 1) → S₀; discontinuity relation
+  𝒜 (eq 3, σ = 5, τ_a = 0.25); a GLOBAL greedy union-fit merge gated by the 𝒜 edge
+  veto **and** a profile-gap veto; AA (𝒟) pixels flooded into the nearest-matching
+  neighbour. Output is QuantizeResult-shaped, so the existing stacked-mask tracer is
+  untouched.
+- `src/lib/trace/lab.ts` — sRGB→CIELAB + ΔE76 for the segmenter's thresholds.
+- `src/lib/trace/gradient.ts` gains `fitPaintLadder` (Stage 2): MDL selection
+  (Oklab residual + λ·#params, λ = 0.0015) over solid → linear-multistop → radial,
+  with the §3.2.2 rank-2 anisotropy as a soft radial preference. `fitLinear` now
+  returns the structure-tensor anisotropy.
+- `src/lib/trace/index.ts` — colour mode rewired to segment → ladder → trace.
+  **Deleted** `groupRegions`/`mergeLabels`/the union-refit scaffolding/`sampleRegion`
+  (the posterize-then-mend path, plan §7). `quantize.ts` is retained as the
+  fallback/UI palette but no longer on the main path.
+
+**Harness numbers vs the V1 baseline** (headless crisp, same instrument):
+
+| image  | paths   | SSIM (V1→V2)       | meanΔE (V1→V2) | seam max (V1→V2) | seam P99.5 (V1→V2) |
+|--------|--------:|--------------------|----------------|------------------|--------------------|
+| nebula | 2→**2** | 0.9685→**0.9756**  | 4.97→**4.00**  | 83.2→**13.3**    | 40.9→**11.4**      |
+| petals | 3→4     | 0.9894→0.9890      | 1.25→1.85      | 21.7→**6.8**     | 9.7→**3.3**        |
+
+Browser corpus (both engines): nebula potrace SSIM 0.980 / seam 11.6 (V1 ~19.7);
+orbit/outline clean-to-perfect (outline 1.0000, grad 0); bloom 0.988/0.980 grad 0;
+summit **potrace** 0.997; petals renders all three translucent circles in their
+correct colours. determinism `pass` on every row.
+
+**Exit criterion — met.** nebula background = ONE coherent multi-stop gradient region
+(no bands, no cracks — seam P99.5 collapses 40.9→11.4) at **lower** meanΔE than V1's
+single linear (4.97→4.00), with every other headless metric improved. All flat/line
+cases ≥ parity (orbit/outline/bloom/summit-potrace clean, grad 0). Determinism +
+typecheck + build green; 43→62 tests.
+
+**Deviations from the plan (each with a measured reason)**
+- **Edge threshold calibrated to the working colour scale.** The functional FORM is
+  exact (min(α‖∇u‖², λ)), but the paper's fixed λ = 1.5 gives a cut threshold
+  √(λ/α) = 1.22 that is unreachable in normalised RGB (max step √3 ≈ 1.73; real logo
+  edges ≈ 0.3–0.85), so 𝒟 would be empty. T = 0.15 (RGB[0,1] L2) is the equivalent in
+  this scale — a units conversion (documented in `mumfordShah.ts`), not a relaxation.
+  Validated: 𝒟 cleanly isolates nebula's ring/dot from a fully-smooth background.
+- **nebula background is a multi-stop LINEAR, not a radial.** The structure tensor
+  measures the field as 1-D-dominant (anisotropy ≈ 0.005); a 5-stop linear fits it to
+  Oklab 0.020 vs the best radial's 0.025, i.e. linear is genuinely the better single
+  model and already beats V1 on every metric. The plan's own §3.2.4 scopes the true
+  2-D "glow-stack" (base linear + radial overlays) to V4 — a single SVG gradient
+  cannot represent nebula's base-plus-glow field, and forcing a worse radial would
+  raise meanΔE (the plan forbids relaxing a metric). So V2 ships the honest best
+  single model; the radial ladder rung is implemented and unit-tested on a synthetic
+  radial, ready for fields that actually are radial-dominant.
+- **Rank-2 early-out is a SOFT preference, not a hard linear-drop.** Hard-dropping
+  linear on a 2-D field was measured to force a *worse* SOLID on a linearly-shaded
+  petal (the radial barely beat solid on MDL once linear was removed). Instead the
+  anisotropy waives the radial's +1 centre-param penalty so it wins a near-tie, but
+  never discards a markedly-better linear — fidelity-safe and still honours the intent.
+- **Greedy union-fit + edge veto, NOT multicut.** Per plan §6 the multicut is only
+  warranted if the greedy merge transitively bridges a true edge; the corpus shows no
+  bridging (the 𝒜 veto + profile-gap veto keep nebula's ring separate from its
+  background and the three petals distinct), so the multicut (Supplement Alg 2) is left
+  for if a future case needs it.
+- **eq-6 misalignment radial centre + eccentricity/affine T (`gradientTransform`) not
+  built.** No corpus case is radial-dominant (nebula measures 1-D), so there is no
+  measured reason or validation target for the extra machinery, and adding an
+  unvalidated paint feature would risk silently de-syncing the harness rasterizer.
+  Deferred with the glow-stack to V4. The radial model used (candidate-centre search +
+  multi-stop) passes the synthetic-radial unit test.
+- **`colors`/`despeckle` dials no longer drive a k-means count** (segmentation is
+  structural); the options stay in the public API and still tune the tracer's
+  smoothing/turdsize downstream.
+
+**Adversarial review** (10-agent workflow, 6 dimensions, every finding independently
+re-verified): the ms-correctness, paint-ladder, pipeline-integrity and **exit-honesty**
+dimensions raised nothing. Three segmentation findings were confirmed and fixed:
+- (HIGH) a thin all-discontinuity opaque feature isolated on transparency (e.g. a
+  1–2 px stroke) had no smooth seed and was unreachable by the flood, so it was emitted
+  as label −1 and silently dropped. Fixed: leftover opaque components are now seeded as
+  their own macro-regions (regression-tested).
+- (LOW) the colour-difference merge's fixed 64-pass cap could under-merge silently →
+  loop to a true fixpoint (union-find guarantees termination).
+- (LOW) the 𝒜 facing tally is per-axis while touch is per-pixel → documented as an
+  intentional veto bias in the safe (edge-preserving) direction; τ_a kept at 0.25.
+
+**Known latent (for V3)** — `sampleGradient`/`segment.gradientT` ignore a radial's
+focal point while `raster.ts`/`gradientToSvgDef` honour it; dormant in V2 because no
+emitted gradient sets `fx`/`fy`, but a focal-radial fitter (V3) must keep the three in
+sync or the harness will mismeasure its residual.

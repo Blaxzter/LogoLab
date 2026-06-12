@@ -88,6 +88,39 @@ test('deterministic: identical input → identical labels', () => {
   for (let i = 0; i < a.labels.length; i++) assert.equal(a.labels[i], b.labels[i])
 })
 
+test('a thin all-discontinuity mark on transparency is never dropped (labelled -1)', () => {
+  // A filled blob (provides smooth seeds, S>0) PLUS a 1px stroke + 1px dot far
+  // away on transparency. Every pixel of the thin features is a discontinuity
+  // (borders transparency), so they get no smooth seed and the flood can't reach
+  // them — they must instead be seeded as their own macro-region, not emitted as
+  // the transparent sentinel −1 (which the tracer would silently drop).
+  const W = 64
+  const H = 64
+  const seg = segmentImage(img(W, H, (x, y) => {
+    const inBlob = x >= 6 && x < 26 && y >= 6 && y < 26 // 20×20 filled blob
+    const inStroke = x === 50 && y >= 8 && y < 56 // 1px vertical stroke
+    const inDot = x >= 44 && x < 46 && y >= 44 && y < 46 // tiny 2×2 mark
+    if (inBlob) return [200, 40, 40, 255]
+    if (inStroke) return [20, 20, 200, 255]
+    if (inDot) return [20, 160, 60, 255]
+    return [0, 0, 0, 0] // transparent
+  }))
+  let lostOpaque = 0
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const inBlob = x >= 6 && x < 26 && y >= 6 && y < 26
+      const inStroke = x === 50 && y >= 8 && y < 56
+      const inDot = x >= 44 && x < 46 && y >= 44 && y < 46
+      const opaque = inBlob || inStroke || inDot
+      if (opaque && seg.labels[y * W + x] < 0) lostOpaque++
+    }
+  }
+  assert.equal(lostOpaque, 0, `no opaque pixel may be dropped as -1, lost ${lostOpaque}`)
+  // The stroke must survive as a distinct (blue) region somewhere in the palette.
+  const hasBlue = seg.palette.some((p) => p.b > 140 && p.r < 90)
+  assert.ok(hasBlue, 'the isolated blue stroke survives as its own macro-region')
+})
+
 test('respects custom options object (smoke)', () => {
   const seg = segmentImage(img(40, 40, () => [100, 150, 200]), { ...DEFAULT_SEGMENT_OPTIONS })
   assert.ok(seg.palette.length >= 1)

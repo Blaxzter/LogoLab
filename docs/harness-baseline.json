@@ -13,7 +13,7 @@
     "paths": 2,
     "nodes": 34,
     "gradients": 2,
-    "runtimeMs": 1652.3593,
+    "runtimeMs": 1600.8489,
     "hash": "a6cdfe81",
     "determinism": "pass"
   },
@@ -31,7 +31,7 @@
     "paths": 4,
     "nodes": 44,
     "gradients": 1,
-    "runtimeMs": 734.9938000000002,
+    "runtimeMs": 823.3317000000002,
     "hash": "e54efbd7",
     "determinism": "pass"
   }

@@ -154,7 +154,11 @@ export function segmentImage(
     cnt[lo] += cnt[hi]
   }
 
-  for (let pass = 0; pass < 64; pass++) {
+  // Loop to a TRUE fixpoint (Supplement Alg 1). Termination is guaranteed: every
+  // productive pass calls unite() at least once, strictly reducing the live
+  // segment count (bounded by n), so a pass with no merge ends it — no fixed cap
+  // (a cap could silently under-merge a long serpentine ramp and is unnecessary).
+  for (;;) {
     let changed = false
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
@@ -206,7 +210,15 @@ export function segmentImage(
   // For each 𝒟 pixel and each of 3 axes (→, ↓, ↘), find the nearest smooth
   // segment within σ on each side. A pair seen on OPPOSITE sides is a "facing"
   // observation; any pair seen near the same 𝒟 pixel is a "touch". A pair whose
-  // facing/touch density exceeds τ_a is must-stay-separate.
+  // facing/touch ratio exceeds τ_a is must-stay-separate.
+  //
+  // NOTE on calibration: `facing` is tallied per-AXIS (a pixel facing the same
+  // pair across →, ↓ and ↘ counts up to 3×) while `touch` is per-PIXEL, so the
+  // ratio f/t is intentionally NOT the paper's normalized [0,1] density — it is
+  // weighted toward firing the veto. That bias is the SAFE direction: an
+  // over-eager edge veto keeps a true edge separate (the plan's §3.2 failure mode
+  // to avoid is the opposite — greedy merging BRIDGING a real edge). τ_a is held
+  // at the paper's 0.25 but its effective scale differs by this per-axis weighting.
   const facing = new Map<number, number>()
   const touch = new Map<number, number>()
   const pairKey = (a: number, b: number): number => (a < b ? a * S + b : b * S + a)
@@ -420,19 +432,58 @@ export function segmentImage(
     if (assignedThisPass === 0) break // no opaque pixel borders an assigned one
   }
 
-  // --- Assemble QuantizeResult: sort groups by pixel count desc (bottom first) --
-  const order = Array.from({ length: G }, (_, gi) => gi).sort((a, b) => gCnt[b] - gCnt[a])
-  const rank = new Int32Array(G)
+  // Any opaque pixel STILL unassigned is an isolated all-𝒟 component — a thin mark
+  // on transparency whose every pixel is a discontinuity (no smooth seed), which
+  // the flood can never reach. Seed each 4-connected such component as its OWN
+  // macro-region so the feature survives, instead of being emitted as the
+  // transparent sentinel −1 (which the stacked-mask tracer drops as a hole).
+  const extra: { sumR: number; sumG: number; sumB: number; cnt: number; xs: number[]; ys: number[]; rs: number[]; gs: number[]; bs: number[] }[] = []
+  const stack: number[] = []
+  for (let i = 0; i < n; i++) {
+    if (!opaque[i] || groupId[i] >= 0) continue
+    const gid = G + extra.length
+    const grp = { sumR: 0, sumG: 0, sumB: 0, cnt: 0, xs: [] as number[], ys: [] as number[], rs: [] as number[], gs: [] as number[], bs: [] as number[] }
+    groupId[i] = gid
+    stack.length = 0
+    stack.push(i)
+    while (stack.length) {
+      const p = stack.pop()!
+      const o = p * 4
+      grp.sumR += data[o]; grp.sumG += data[o + 1]; grp.sumB += data[o + 2]; grp.cnt++
+      grp.xs.push(p % w); grp.ys.push((p / w) | 0); grp.rs.push(data[o]); grp.gs.push(data[o + 1]); grp.bs.push(data[o + 2])
+      const px = p % w
+      const py = (p / w) | 0
+      if (px > 0 && opaque[p - 1] && groupId[p - 1] < 0) { groupId[p - 1] = gid; stack.push(p - 1) }
+      if (px < w - 1 && opaque[p + 1] && groupId[p + 1] < 0) { groupId[p + 1] = gid; stack.push(p + 1) }
+      if (py > 0 && opaque[p - w] && groupId[p - w] < 0) { groupId[p - w] = gid; stack.push(p - w) }
+      if (py < h - 1 && opaque[p + w] && groupId[p + w] < 0) { groupId[p + w] = gid; stack.push(p + w) }
+    }
+    extra.push(grp)
+  }
+
+  // --- Assemble QuantizeResult over all macro-regions (smooth groups + isolated
+  // 𝒟 components), sorted by pixel count desc (largest = bottom full-bleed layer).
+  const GG = G + extra.length
+  const cntOf = (gi: number): number => (gi < G ? gCnt[gi] : extra[gi - G].cnt)
+  const sumOf = (gi: number): [number, number, number] =>
+    gi < G ? [gSumR[gi], gSumG[gi], gSumB[gi]] : [extra[gi - G].sumR, extra[gi - G].sumG, extra[gi - G].sumB]
+  const samplesOf = (gi: number): RegionSamples =>
+    gi < G
+      ? groupSampleList[gi]
+      : strideSamples(extra[gi - G].xs, extra[gi - G].ys, extra[gi - G].rs, extra[gi - G].gs, extra[gi - G].bs, opts.sampleCap)
+
+  const order = Array.from({ length: GG }, (_, gi) => gi).sort((a, b) => cntOf(b) - cntOf(a))
+  const rank = new Int32Array(GG)
   order.forEach((gi, pos) => {
     rank[gi] = pos
   })
-  const palette: PaletteColor[] = order.map((gi) => ({
-    r: clamp255(gSumR[gi] / (gCnt[gi] || 1)),
-    g: clamp255(gSumG[gi] / (gCnt[gi] || 1)),
-    b: clamp255(gSumB[gi] / (gCnt[gi] || 1)),
-  }))
-  const counts = order.map((gi) => gCnt[gi])
-  const regionSamples = order.map((gi) => groupSampleList[gi])
+  const palette: PaletteColor[] = order.map((gi) => {
+    const c = cntOf(gi) || 1
+    const [sr, sg, sb] = sumOf(gi)
+    return { r: clamp255(sr / c), g: clamp255(sg / c), b: clamp255(sb / c) }
+  })
+  const counts = order.map((gi) => cntOf(gi))
+  const regionSamples = order.map((gi) => samplesOf(gi))
   const labels = new Int32Array(n)
   for (let i = 0; i < n; i++) {
     const gi = groupId[i]
