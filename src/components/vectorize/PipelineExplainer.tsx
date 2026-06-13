@@ -1,42 +1,23 @@
 // "How it works" — a user-facing teaching overlay that runs the CURRENT uploaded
 // image through the structure-first vectorize pipeline WITH THE USER'S CURRENT
-// settings, and shows each stage with a plain-language explanation. Linked from
-// the vectorize view so people can see the approach, not just the result. Reuses
-// the same stage visualizers as the dev scoreboard (lib/trace/stageViz) so the
-// pictures match.
+// settings, and shows each stage with a plain-language explanation. The analysis
+// runs OFF the main thread (the trace worker's 'analyze' job) so opening it never
+// freezes the UI, and its stages honour the same options as the real trace (so the
+// region count matches the output). Linked from the vectorize view.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Loader2, X } from 'lucide-react'
 import { useLogo } from '../../store'
 import { getImageData } from '../../lib/image'
-import { segmentImage, DEFAULT_SEGMENT_OPTIONS, type SegmentResult } from '../../lib/trace/segment'
-import { fitPaintLadder, type PaintLadderResult } from '../../lib/trace/gradient'
-import { traceImage } from '../../lib/trace'
-import { serializeDoc, docStats } from '../../lib/path/model'
+import { analyzeImageOffThread, type OffThreadAnalysis } from '../../lib/trace/traceOffThread'
+import { labelColor } from '../../lib/trace/stageViz'
 import type { VectorizeOptions } from '../../types'
-import {
-  smoothedToRgba,
-  discontinuityToRgba,
-  segmentsToRgba,
-  regionFillsToRgba,
-  labelColor,
-} from '../../lib/trace/stageViz'
 
 const ANALYZE_DIM = 512
 
-interface Analysis {
-  width: number
-  height: number
-  seg: SegmentResult
-  /** null = solid (either a flat region, or gradients turned off). */
-  paints: (PaintLadderResult | null)[]
-  svg: string
-  stats: { paths: number; nodes: number }
-}
-
 export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; onClose: () => void }) {
   const logo = useLogo()
-  const [analysis, setAnalysis] = useState<Analysis | null>(null)
+  const [analysis, setAnalysis] = useState<OffThreadAnalysis | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Close on Escape.
@@ -48,41 +29,27 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Run the pipeline on the current image with the CURRENT settings, off the open
-  // animation. optsKey makes the analysis re-run if settings differ.
+  // Analyse the current image with the current settings, OFF the main thread.
   const optsKey = JSON.stringify(opts)
   useEffect(() => {
-    let cancelled = false
     setAnalysis(null)
     setError(null)
     if (!logo.src) {
       setError('Load an image first.')
       return
     }
+    const controller = new AbortController()
     void (async () => {
       try {
         const image = await getImageData(logo.src!, ANALYZE_DIM, logo.isSvg ? logo.svgText : null)
-        // Let the spinner paint before the synchronous heavy stages. Use a timer,
-        // not requestAnimationFrame — rAF is throttled/paused in background tabs,
-        // which would hang the analysis whenever the tab isn't foregrounded.
-        await new Promise((r) => setTimeout(r, 16))
-        const rgba = image as unknown as { width: number; height: number; data: Uint8ClampedArray }
-        const seg = segmentImage(rgba, DEFAULT_SEGMENT_OPTIONS)
-        // Step-4 paint reflects the Gradients toggle: off ⇒ every region is solid.
-        const gradientsOn = opts.gradients !== false
-        const paints = gradientsOn ? seg.regionSamples.map((s) => fitPaintLadder(s)) : seg.regionSamples.map(() => null)
-        // Final result uses the USER'S settings, so it matches what they'll get.
-        const doc = await traceImage(image, opts)
-        const st = docStats(doc)
-        if (cancelled) return
-        setAnalysis({ width: image.width, height: image.height, seg, paints, svg: serializeDoc(doc, 2), stats: { paths: st.paths, nodes: st.nodes } })
+        const result = await analyzeImageOffThread(image, { ...opts, engine: 'crisp' }, controller.signal)
+        setAnalysis(result)
       } catch (e) {
-        if (!cancelled) setError(String(e))
+        if (e instanceof DOMException && e.name === 'AbortError') return
+        setError(String(e))
       }
     })()
-    return () => {
-      cancelled = true
-    }
+    return () => controller.abort()
   }, [logo.src, logo.isSvg, logo.svgText, optsKey, opts])
 
   return (
@@ -122,9 +89,8 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
 
 // ---------------------------------------------------------------------------
 
-function Steps({ logoSrc, a, opts }: { logoSrc: string; a: Analysis; opts: VectorizeOptions }) {
-  const { seg, paints, width, height } = a
-  const regionCount = seg.palette.length
+function Steps({ logoSrc, a, opts }: { logoSrc: string; a: OffThreadAnalysis; opts: VectorizeOptions }) {
+  const { width, height, regionCount, paints } = a
   const gradientsOn = opts.gradients !== false
   const engineLabel = opts.engine === 'potrace' ? 'Potrace' : 'Crisp'
   const fidelity = opts.fidelity ?? 1.5
@@ -155,10 +121,10 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: Analysis; opts: Vecto
         body="First we denoise the image into smooth colour fields (a Mumford–Shah solver) and, as a by-product, get a map of the strong edges between them — the borders worth keeping. Anti-aliasing fuzz and sensor noise are smoothed away so they don't become jagged shapes. (This stage runs the same way every time — no knob.)"
       >
         <Visual label="Smoothed">
-          <StageCanvas rgba={smoothedToRgba(seg.ms)} width={width} height={height} />
+          <StageCanvas rgba={a.smoothed} width={width} height={height} />
         </Visual>
         <Visual label="Detected edges">
-          <StageCanvas rgba={discontinuityToRgba(seg.ms)} width={width} height={height} />
+          <StageCanvas rgba={a.disc} width={width} height={height} />
         </Visual>
       </Step>
 
@@ -166,10 +132,10 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: Analysis; opts: Vecto
         n={3}
         title="Group pixels into regions"
         controls={[`Region detail: ${(opts.regionDetail ?? 0) === 0 ? 'auto' : opts.regionDetail}`]}
-        body={`Pixels belonging to one smooth field are merged into a handful of macro-regions — each will become one shape. Your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. The Region detail control tunes this merge: at the default, areas similar enough get fused — so subtle differences, like the soft blends where translucent shapes overlap, can merge into a neighbour instead of becoming their own shape. Raise it to keep those finer regions (at the cost of possibly fragmenting smooth gradients into flat bands).`}
+        body={`Pixels belonging to one smooth field are merged into a handful of macro-regions — each will become one shape. With your current settings your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. The Region detail control tunes this merge: at the default, areas similar enough get fused — so subtle differences, like the soft blends where translucent shapes overlap, can merge into a neighbour instead of becoming their own shape. Raise it to keep those finer regions (at the cost of possibly fragmenting smooth gradients into flat bands).`}
       >
         <Visual label={`${regionCount} regions`}>
-          <StageCanvas rgba={segmentsToRgba(seg.labels, width, height)} width={width} height={height} />
+          <StageCanvas rgba={a.segs} width={width} height={height} />
         </Visual>
       </Step>
 
@@ -184,7 +150,7 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: Analysis; opts: Vecto
         }`}
       >
         <Visual label="Region fills">
-          <StageCanvas rgba={regionFillsToRgba(seg.labels, seg.palette, width, height)} width={width} height={height} />
+          <StageCanvas rgba={a.fills} width={width} height={height} />
         </Visual>
         <div className="min-w-0 flex-1">
           <div className="mb-1 text-[11px] text-muted">Paint per region</div>
@@ -217,7 +183,7 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: Analysis; opts: Vecto
 
       <p className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
         Tip: if overlapping or finely-detailed areas don't come through, it's usually step 3 — those areas merged
-        into a neighbouring region before they could become their own shape.
+        into a neighbouring region before they could become their own shape. Raise <b>Region detail</b> to keep them.
       </p>
 
       <References />

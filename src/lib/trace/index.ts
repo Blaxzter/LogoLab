@@ -305,7 +305,7 @@ function cloneSubPaths(subPaths: SubPath[]): SubPath[] {
  * is structural — so they are intentionally left at the defaults here (the dials
  * still tune the tracer's smoothing/turdsize downstream).
  */
-function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
+export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
   // Region detail: 0 ⇒ the balanced default (identical output to before); higher
   // tightens the colour-difference (τ_s) and union-fit (mergeTol) merge so finer
   // regions — e.g. translucent overlaps — survive instead of fusing into a

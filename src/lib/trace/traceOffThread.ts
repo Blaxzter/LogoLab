@@ -59,7 +59,67 @@ export function traceImageOffThread(
     // Copy the pixels so the caller's ImageData stays valid after we transfer.
     const data = new Uint8ClampedArray(imageData.data)
     worker.postMessage(
-      { image: { width: imageData.width, height: imageData.height, data }, options },
+      { type: 'trace', image: { width: imageData.width, height: imageData.height, data }, options },
+      [data.buffer],
+    )
+  })
+}
+
+/** Stage visualisations + result for the "How it works" explainer (off-thread). */
+export interface OffThreadAnalysis {
+  width: number
+  height: number
+  smoothed: Uint8ClampedArray
+  disc: Uint8ClampedArray
+  segs: Uint8ClampedArray
+  fills: Uint8ClampedArray
+  regionCount: number
+  paints: ({ model: string; solid: [number, number, number] } | null)[]
+  svg: string
+  stats: { paths: number; nodes: number }
+}
+
+/**
+ * Run the pipeline + intermediate stages off-thread for the explainer, so it
+ * doesn't freeze the UI. Crisp-only (pure); the explainer always traces crisp.
+ */
+export function analyzeImageOffThread(
+  imageData: ImageData,
+  options: VectorizeOptions,
+  signal?: AbortSignal,
+): Promise<OffThreadAnalysis> {
+  return new Promise<OffThreadAnalysis>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'))
+      return
+    }
+    const worker = new Worker(new URL('./trace.worker.ts', import.meta.url), { type: 'module' })
+    const onAbort = () => {
+      cleanup()
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    function cleanup() {
+      worker.terminate()
+      signal?.removeEventListener('abort', onAbort)
+    }
+    signal?.addEventListener('abort', onAbort)
+    worker.onmessage = (e: MessageEvent) => {
+      const msg = e.data as { type: 'analysis' } & OffThreadAnalysis | { type: 'error'; message: string }
+      if (msg.type === 'analysis') {
+        cleanup()
+        resolve(msg)
+      } else {
+        cleanup()
+        reject(new Error(msg.message))
+      }
+    }
+    worker.onerror = (e) => {
+      cleanup()
+      reject(new Error(e.message || 'Analyze worker failed'))
+    }
+    const data = new Uint8ClampedArray(imageData.data)
+    worker.postMessage(
+      { type: 'analyze', image: { width: imageData.width, height: imageData.height, data }, options },
       [data.buffer],
     )
   })
