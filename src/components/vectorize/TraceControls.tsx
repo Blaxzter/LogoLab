@@ -2,7 +2,7 @@
 // smoothing…), output options (force color, precision) and the Trace button.
 // Pure controlled UI — all state lives in VectorizeStudio.
 
-import { Wand2 } from 'lucide-react'
+import { Wand2, HelpCircle } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { ColorField, Field, Segmented, Slider, Toggle } from '../ui/controls'
 import type { VectorizeOptions } from '../../types'
@@ -24,6 +24,8 @@ export interface TraceControlsProps {
   /** Params changed while the doc carries manual edits — re-trace discards them. */
   staleEdits: boolean
   onTrace: () => void
+  /** Open the "How it works" pipeline explainer. */
+  onShowHelp: () => void
 }
 
 export function TraceControls({
@@ -41,12 +43,24 @@ export function TraceControls({
   busy,
   staleEdits,
   onTrace,
+  onShowHelp,
 }: TraceControlsProps) {
   const tracing = !isVectorSource || source === 'retrace'
 
   return (
     <aside className="flex w-[270px] shrink-0 flex-col gap-5 overflow-y-auto border-r border-line bg-surface p-4">
-      <h2 className="text-sm font-semibold text-ink">Vectorize</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-ink">Vectorize</h2>
+        <button
+          type="button"
+          onClick={onShowHelp}
+          className="btn btn-ghost h-7 gap-1 px-2 text-xs text-ink-2"
+          title="See how vectorize turns your image into shapes"
+        >
+          <HelpCircle size={14} />
+          How it works
+        </button>
+      </div>
 
       {isVectorSource && (
         <>

@@ -18,6 +18,7 @@ import { segmentImage, DEFAULT_SEGMENT_OPTIONS } from '../lib/trace/segment'
 import { fitPaintLadder } from '../lib/trace/gradient'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace'
 import { serializeDoc } from '../lib/path/model'
+import { smoothedToRgba, discontinuityToRgba, segmentsToRgba, regionFillsToRgba } from '../lib/trace/stageViz'
 
 const MAX_DIM = 512
 
@@ -48,113 +49,23 @@ async function sourceFor(c: Case): Promise<ImageData> {
   return getImageData(c.src, MAX_DIM)
 }
 
-/** A fresh canvas element of the given size with the pixels drawn in. */
-function canvasOf(width: number, height: number, draw: (img: ImageData) => void): HTMLCanvasElement {
+/** A fresh canvas of the given size filled with an RGBA buffer. */
+function canvasOf(width: number, height: number, rgba: Uint8ClampedArray): HTMLCanvasElement {
   const cv = document.createElement('canvas')
   cv.width = width
   cv.height = height
   const ctx = cv.getContext('2d')!
-  const img = ctx.createImageData(width, height)
-  draw(img)
-  ctx.putImageData(img, 0, 0)
+  const id = ctx.createImageData(width, height)
+  id.data.set(rgba)
+  ctx.putImageData(id, 0, 0)
   return cv
 }
 
-/** Mumford–Shah smoothed channels → an opaque RGBA canvas. */
-function smoothedCanvas(ms: MumfordShahResult): HTMLCanvasElement {
-  const { width, height, r, g, b, opaque } = ms
-  return canvasOf(width, height, (img) => {
-    for (let i = 0; i < width * height; i++) {
-      const o = i * 4
-      if (opaque[i]) {
-        img.data[o] = Math.round(r[i] * 255)
-        img.data[o + 1] = Math.round(g[i] * 255)
-        img.data[o + 2] = Math.round(b[i] * 255)
-        img.data[o + 3] = 255
-      } else {
-        img.data[o + 3] = 0
-      }
-    }
-  })
-}
-
-/** Discontinuity map 𝒟 → black edges on white. */
-function discontinuityCanvas(ms: MumfordShahResult): HTMLCanvasElement {
-  const { width, height, discontinuity } = ms
-  return canvasOf(width, height, (img) => {
-    for (let i = 0; i < width * height; i++) {
-      const o = i * 4
-      const v = discontinuity[i] ? 0 : 245
-      img.data[o] = v
-      img.data[o + 1] = v
-      img.data[o + 2] = v
-      img.data[o + 3] = 255
-    }
-  })
-}
-
-/** Deterministic vivid colour per label index (golden-ratio hue spin). */
-function labelColor(label: number): [number, number, number] {
-  const h = (label * 0.61803398875) % 1
-  const s = 0.62
-  const v = 0.95
-  const i = Math.floor(h * 6)
-  const f = h * 6 - i
-  const p = v * (1 - s)
-  const q = v * (1 - f * s)
-  const t = v * (1 - (1 - f) * s)
-  const [r, g, b] = [
-    [v, t, p],
-    [q, v, p],
-    [p, v, t],
-    [p, q, v],
-    [t, p, v],
-    [v, p, q],
-  ][i % 6]
-  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)]
-}
-
-/** Segmentation label map → false-coloured regions (one hue per macro-region). */
-function segmentsCanvas(labels: Int32Array, width: number, height: number): HTMLCanvasElement {
-  return canvasOf(width, height, (img) => {
-    for (let i = 0; i < width * height; i++) {
-      const o = i * 4
-      const l = labels[i]
-      if (l < 0) {
-        img.data[o + 3] = 0
-        continue
-      }
-      const [r, g, b] = labelColor(l)
-      img.data[o] = r
-      img.data[o + 1] = g
-      img.data[o + 2] = b
-      img.data[o + 3] = 255
-    }
-  })
-}
-
-/** Segmentation label map → each region painted its ACTUAL fitted fill colour. */
-function regionFillCanvas(
-  labels: Int32Array,
-  palette: { r: number; g: number; b: number }[],
-  width: number,
-  height: number,
-): HTMLCanvasElement {
-  return canvasOf(width, height, (img) => {
-    for (let i = 0; i < width * height; i++) {
-      const o = i * 4
-      const l = labels[i]
-      if (l < 0 || l >= palette.length) {
-        img.data[o + 3] = 0
-        continue
-      }
-      img.data[o] = palette[l].r
-      img.data[o + 1] = palette[l].g
-      img.data[o + 2] = palette[l].b
-      img.data[o + 3] = 255
-    }
-  })
-}
+const smoothedCanvas = (ms: MumfordShahResult) => canvasOf(ms.width, ms.height, smoothedToRgba(ms))
+const discontinuityCanvas = (ms: MumfordShahResult) => canvasOf(ms.width, ms.height, discontinuityToRgba(ms))
+const segmentsCanvas = (labels: Int32Array, w: number, h: number) => canvasOf(w, h, segmentsToRgba(labels, w, h))
+const regionFillCanvas = (labels: Int32Array, palette: { r: number; g: number; b: number }[], w: number, h: number) =>
+  canvasOf(w, h, regionFillsToRgba(labels, palette, w, h))
 
 const hex = (r: number, g: number, b: number) =>
   '#' + [r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')

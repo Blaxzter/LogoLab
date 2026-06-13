@@ -34,6 +34,7 @@ import type { DocItem, EditableDoc, NodeRef, PathItem } from "../../lib/path/typ
 import { TraceControls } from "./TraceControls";
 import { EditorCanvas, useFitBox } from "./EditorCanvas";
 import { PathsPanel } from "./PathsPanel";
+import { PipelineExplainer } from "./PipelineExplainer";
 
 const RASTER_MAX_DIM = 1024;
 const DEBOUNCE_MS = 400;
@@ -73,6 +74,7 @@ export function VectorizeStudio() {
     const [precision, setPrecision] = useState(2);
     const [forceColorOn, setForceColorOn] = useState(false);
     const [forceColor, setForceColor] = useState("#14161c");
+    const [showHelp, setShowHelp] = useState(false);
     const [retraceVector, setRetraceVector] = useState<"clean" | "retrace">(
         "clean",
     );
@@ -521,6 +523,7 @@ export function VectorizeStudio() {
                 busy={busy}
                 staleEdits={staleEdits}
                 onTrace={() => void run()}
+                onShowHelp={() => setShowHelp(true)}
             />
 
             <div className="flex min-w-0 flex-1 flex-col">
@@ -734,6 +737,8 @@ export function VectorizeStudio() {
                     onDelete={handleDeleteItem}
                 />
             )}
+
+            {showHelp && <PipelineExplainer onClose={() => setShowHelp(false)} />}
         </div>
     );
 }
