@@ -16,6 +16,7 @@
 
 import type { GradientFill, GradientStop, LinearGradient, RadialGradient } from '../path/types'
 import { srgbToOklab, oklabDeltaE } from './oklab.ts'
+import { srgbToLab, deltaE76 } from './lab.ts'
 
 /** Tunables for the solid-vs-gradient decision. */
 export interface GradientFitOptions {
@@ -409,6 +410,10 @@ export interface PaintLadderOptions {
   mdlLambda: number
   /** Structure-tensor anisotropy λ₂/λ₁ above which linear is doomed → prefer radial. */
   anisotropy2D: number
+  /** Above this single-model Oklab residual, try a glow stack (plan §3.2.4). */
+  glowTrigger: number
+  /** A glow stack must beat the best single model by this CIE76 ΔE margin to win. */
+  glowMinGain: number
 }
 
 export const DEFAULT_PAINT_LADDER: PaintLadderOptions = {
@@ -419,12 +424,17 @@ export const DEFAULT_PAINT_LADDER: PaintLadderOptions = {
   // to prefer the simpler model on a near-tie but never to overrule a real fit.
   mdlLambda: 0.0015,
   anisotropy2D: 0.12,
+  glowTrigger: 0.012,
+  glowMinGain: 0.5,
 }
 
 export interface PaintLadderResult {
-  model: 'solid' | 'linear' | 'radial'
-  /** The chosen gradient, or null when the region is solid. */
+  model: 'solid' | 'linear' | 'radial' | 'glow'
+  /** The chosen gradient, or null when the region is solid. For a glow stack this
+   *  is the base paint (the glow overlays live in `glow`). */
   gradient: GradientFill | null
+  /** Base + radial overlays when `model === 'glow'`, else undefined. */
+  glow?: GlowStack
   /** Mean colour (the solid representative / swatch). */
   solid: [number, number, number]
   /** Oklab RMS residual of the chosen model. */
@@ -452,7 +462,11 @@ function solidResidualOklab(s: RegionSamples, mr: number, mg: number, mb: number
  * win over the radial a glow actually needs. A gradient is taken only if it fits
  * under `maxModelResidual`; otherwise the region stays solid (the §3.4 fallback).
  */
-export function fitPaintLadder(s: RegionSamples, opts: PaintLadderOptions = DEFAULT_PAINT_LADDER): PaintLadderResult {
+export function fitPaintLadder(
+  s: RegionSamples,
+  opts: PaintLadderOptions = DEFAULT_PAINT_LADDER,
+  glowSamples: RegionSamples = s,
+): PaintLadderResult {
   const { rs, gs, bs, xs, ys, n } = s
   let mr = 0
   let mg = 0
@@ -505,6 +519,23 @@ export function fitPaintLadder(s: RegionSamples, opts: PaintLadderOptions = DEFA
       bestCost = cost
     }
   }
+
+  // §3.2.4 glow stack: when the best single gradient still leaves a sizeable
+  // residual, the field is likely 2-D (a base PLUS radial glows) that no single
+  // SVG gradient can represent. Peel residual blobs into translucent radial
+  // overlays and keep them only if the composite beats the single model clearly
+  // — measured in CIE76 (the harness fidelity metric), not Oklab (see below).
+  if (best.gradient && best.res > opts.glowTrigger) {
+    const glow = fitGlowStack(s, glowSamples, best.gradient)
+    if (glow) {
+      const bestLab = meanLabResidual(glowSamples, (x, y) => sampleGradient(best.gradient!, x, y))
+      const glowLab = meanLabResidual(glowSamples, (x, y) => sampleGlowStack(glow, x, y))
+      if (bestLab - glowLab >= opts.glowMinGain) {
+        return { model: 'glow', gradient: glow.base, glow, solid, residualOklab: best.res, debug }
+      }
+    }
+  }
+
   return { model: best.model, gradient: best.gradient, solid, residualOklab: best.res, debug }
 }
 
@@ -704,6 +735,258 @@ function fitRadial(s: RegionSamples, mx: number, my: number): RadialFit | null {
     const gradient: RadialGradient = { type: 'radial', cx, cy, r: maxD, stops }
     return { gradient, residual: modelResidualRgb(gradient, samples) }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Stage 2.4 — glow stack (plan §3.2.4, the "wow" tier): a 2-D colour field like
+// nebula's background (a diagonal base PLUS lighter radial glows) cannot be
+// represented by ANY single SVG gradient. So decompose it: base = best linear
+// fit, then greedily peel the K≤3 strongest residual "blobs", each fitted as a
+// CENTRED radial overlay whose opacity fades to 0 at its rim (a translucent
+// Gaussian glow layered above the base). SVG composites these natively, and it
+// degrades gracefully — K=0 ⇒ the plain linear we already had.
+//
+// Overlays are centred (no fx/fy), so `sampleGradient` (distance param) and the
+// rasterizer's `makeRadialPaint` agree exactly — the V2 focal-sync latent stays
+// dormant. The composite math below mirrors raster.ts `compositeItem` (straight
+// alpha-over, base opaque first) so the harness measures what is emitted.
+// ---------------------------------------------------------------------------
+
+export interface GlowStack {
+  /** Opaque base paint (the diagonal/linear trend). */
+  base: GradientFill
+  /** Translucent radial glows layered above the base, bottom-to-top. */
+  overlays: RadialGradient[]
+}
+
+export interface GlowStackOptions {
+  /** Most overlays to peel (K). */
+  maxOverlays: number
+  /** A residual blob's peak CIE76 ΔE must reach this to seed an overlay. */
+  minPeakResidual: number
+  /** Each overlay must cut the composited mean CIE76 ΔE by at least this. */
+  minImprove: number
+  /** Samples with overlay-alpha in [aLo, aHi] feed the Gaussian falloff regression. */
+  alphaLo: number
+  alphaHi: number
+}
+
+// Gates are in CIE76 ΔE — the harness's own fidelity metric — NOT Oklab. The glow
+// is the "wow" tier targeting visible fidelity, and a blue-violet glow correction
+// (nebula) is large in CIE76 / SSIM yet compressed in the perceptually-flatter
+// Oklab, so an Oklab gate would silently reject a clearly-beneficial overlay.
+export const DEFAULT_GLOW_STACK: GlowStackOptions = {
+  maxOverlays: 3,
+  minPeakResidual: 2.0,
+  minImprove: 0.3,
+  alphaLo: 0.08,
+  alphaHi: 1.0,
+}
+
+/** A gradient's colour AND alpha at (x, y) — alpha from per-stop opacity. Matches
+ *  the rasterizer's `sampleStops` (centred radial; focal handled by the renderer,
+ *  but glow overlays never set a focal so the two agree). */
+function sampleGradientRGBA(g: GradientFill, x: number, y: number): [number, number, number, number] {
+  let t: number
+  if (g.type === 'linear') {
+    const dx = g.x2 - g.x1
+    const dy = g.y2 - g.y1
+    const len2 = dx * dx + dy * dy || 1
+    t = clamp01(((x - g.x1) * dx + (y - g.y1) * dy) / len2)
+  } else {
+    t = clamp01(Math.hypot(x - g.cx, y - g.cy) / (g.r || 1))
+  }
+  return interpStopsRGBA(g.stops, t)
+}
+
+/** Stop interpolation including opacity (alpha), matching raster.ts sampleStops. */
+function interpStopsRGBA(stops: GradientStop[], t: number): [number, number, number, number] {
+  const sorted = stops.length > 1 ? [...stops].sort((p, q) => p.offset - q.offset) : stops
+  const first = sorted[0]
+  const last = sorted[sorted.length - 1]
+  const at = (s: GradientStop): [number, number, number, number] => {
+    const [r, g, b] = hexToRgb3(s.color)
+    return [r, g, b, s.opacity ?? 1]
+  }
+  if (t <= first.offset) return at(first)
+  if (t >= last.offset) return at(last)
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i]
+    const b = sorted[i + 1]
+    if (t >= a.offset && t <= b.offset) {
+      const span = b.offset - a.offset || 1
+      const k = (t - a.offset) / span
+      const ca = at(a)
+      const cb = at(b)
+      return [
+        ca[0] + (cb[0] - ca[0]) * k,
+        ca[1] + (cb[1] - ca[1]) * k,
+        ca[2] + (cb[2] - ca[2]) * k,
+        ca[3] + (cb[3] - ca[3]) * k,
+      ]
+    }
+  }
+  return at(last)
+}
+
+/** Composite a glow stack at (x, y): opaque base, then each overlay alpha-over. */
+export function sampleGlowStack(stack: GlowStack, x: number, y: number): [number, number, number] {
+  const base = sampleGradient(stack.base, x, y)
+  let R = base[0]
+  let G = base[1]
+  let B = base[2]
+  for (const ov of stack.overlays) {
+    const [or, og, ob, a] = sampleGradientRGBA(ov, x, y)
+    const ia = 1 - a
+    R = or * a + R * ia
+    G = og * a + G * ia
+    B = ob * a + B * ia
+  }
+  return [R, G, B]
+}
+
+/** Mean CIE76 ΔE of a per-sample colour evaluator vs the source samples (the
+ *  harness's fidelity metric — used to gate the glow stack). */
+function meanLabResidual(s: RegionSamples, evalFn: (x: number, y: number) => [number, number, number]): number {
+  let sum = 0
+  for (let i = 0; i < s.n; i++) {
+    const [pr, pg, pb] = evalFn(s.xs[i], s.ys[i])
+    sum += deltaE76(srgbToLab(s.rs[i], s.gs[i], s.bs[i]), srgbToLab(pr, pg, pb))
+  }
+  return sum / s.n
+}
+
+/**
+ * Decompose a region into the given opaque `base` paint + up to K radial glow
+ * overlays. Returns null when no overlay clears the acceptance gates (then the
+ * caller keeps the plain single model). Greedy: each round finds the sample where
+ * the current composite is most wrong, fits a centred Gaussian glow toward that
+ * colour, and keeps it only if it meaningfully cuts the composited residual.
+ *
+ * Two sample sets, deliberately distinct:
+ *  - `fit`  — the SMOOTH (AA-free) samples: peak location + the Gaussian falloff
+ *             are fit here, so the blob is seeded at the clean glow centre, not on
+ *             a high-error anti-aliased boundary pixel.
+ *  - `gate` — the FULL region (all pixels, AA included): the accept/improvement
+ *             gates are measured here, because the smooth subset omits the
+ *             high-error AA pixels a glow most improves and so under-reports its
+ *             benefit by ~20× (measured on nebula). This makes the fit-time gate
+ *             match what the rasterizer actually renders.
+ */
+export function fitGlowStack(
+  fit: RegionSamples,
+  gate: RegionSamples,
+  base: GradientFill,
+  opts: GlowStackOptions = DEFAULT_GLOW_STACK,
+): GlowStack | null {
+  if (fit.n < 1 || gate.n < 1) return null
+
+  // Region extent caps a glow's sigma (a "blob" wider than the region is just the
+  // base trend, not a localized glow).
+  let bbMinX = Infinity, bbMinY = Infinity, bbMaxX = -Infinity, bbMaxY = -Infinity
+  for (let i = 0; i < fit.n; i++) {
+    if (fit.xs[i] < bbMinX) bbMinX = fit.xs[i]
+    if (fit.xs[i] > bbMaxX) bbMaxX = fit.xs[i]
+    if (fit.ys[i] < bbMinY) bbMinY = fit.ys[i]
+    if (fit.ys[i] > bbMaxY) bbMaxY = fit.ys[i]
+  }
+  const extent = Math.max(bbMaxX - bbMinX, bbMaxY - bbMinY)
+
+  const overlays: RadialGradient[] = []
+  let curResidual = meanLabResidual(gate, (x, y) => sampleGlowStack({ base, overlays }, x, y))
+
+  for (let k = 0; k < opts.maxOverlays; k++) {
+    // Peak = SMOOTH sample whose current composite is most wrong (clean glow
+    // centre, deterministic argmax) — never a noisy AA boundary pixel.
+    let peak = -1
+    let peakDE = 0
+    for (let i = 0; i < fit.n; i++) {
+      const [cr, cg, cb] = sampleGlowStack({ base, overlays }, fit.xs[i], fit.ys[i])
+      const d = deltaE76(srgbToLab(fit.rs[i], fit.gs[i], fit.bs[i]), srgbToLab(cr, cg, cb))
+      if (d > peakDE) {
+        peakDE = d
+        peak = i
+      }
+    }
+    if (peak < 0 || peakDE < opts.minPeakResidual) break
+
+    const overlay = fitOverlayAt(fit, base, overlays, peak, extent, opts)
+    if (!overlay) break
+    const trial = [...overlays, overlay]
+    const newResidual = meanLabResidual(gate, (x, y) => sampleGlowStack({ base, overlays: trial }, x, y))
+    if (curResidual - newResidual < opts.minImprove) break
+    overlays.push(overlay)
+    curResidual = newResidual
+  }
+
+  return overlays.length > 0 ? { base, overlays } : null
+}
+
+/**
+ * Fit one centred Gaussian radial glow seeded at sample `peak`. The overlay's
+ * colour C is the peak's original colour; its alpha at sample i is the
+ * least-squares fraction of (C − currentComposite) that explains the remaining
+ * error there. Those alphas vs distance² are regressed in log-space to recover a
+ * Gaussian falloff α(d) = α₀·exp(−d²/2σ²), emitted as opacity-fading radial stops
+ * out to r = 3σ. Returns null when there is no clean decaying blob.
+ */
+function fitOverlayAt(
+  s: RegionSamples,
+  base: GradientFill,
+  overlays: RadialGradient[],
+  peak: number,
+  extent: number,
+  opts: GlowStackOptions,
+): RadialGradient | null {
+  const { xs, ys, rs, gs, bs, n } = s
+  const cx = xs[peak]
+  const cy = ys[peak]
+  const C: [number, number, number] = [rs[peak], gs[peak], bs[peak]]
+
+  // Per-sample alpha + distance² for the falloff regression.
+  let sw = 0, sX = 0, sY = 0, sXX = 0, sXY = 0 // weighted sums for ln(α) ~ a + b·d²
+  let strong = 0
+  for (let i = 0; i < n; i++) {
+    const [cr, cg, cb] = sampleGlowStack({ base, overlays }, xs[i], ys[i])
+    // remaining error and the available "glow direction" (C − composite).
+    const er = rs[i] - cr, eg = gs[i] - cg, eb = bs[i] - cb
+    const dr = C[0] - cr, dg = C[1] - cg, db = C[2] - cb
+    const denom = dr * dr + dg * dg + db * db
+    if (denom < 1e-6) continue
+    let a = (er * dr + eg * dg + eb * db) / denom
+    if (a > 0.2) strong++
+    if (a < opts.alphaLo || a > opts.alphaHi) continue
+    const d2 = (xs[i] - cx) ** 2 + (ys[i] - cy) ** 2
+    const w = a // weight by alpha so the bright core drives the fit
+    const ln = Math.log(a)
+    sw += w; sX += w * d2; sY += w * ln; sXX += w * d2 * d2; sXY += w * d2 * ln
+  }
+  if (strong < 16) return null // not a real blob, just noise
+  const det = sw * sXX - sX * sX
+  if (Math.abs(det) < 1e-9) return null
+  const b = (sw * sXY - sX * sY) / det // slope: −1/(2σ²)
+  const aIntercept = (sY - b * sX) / sw
+  if (b >= -1e-9) return null // no decay ⇒ not a localized glow
+  const sigma2 = -1 / (2 * b)
+  const sigma = Math.sqrt(sigma2)
+  let alpha0 = Math.exp(aIntercept)
+  if (!(alpha0 > 0)) return null
+  if (alpha0 > 1) alpha0 = 1
+  if (alpha0 < 0.05) return null
+  // A blob whose sigma rivals the region is just the base trend, not a glow.
+  if (sigma > 0.6 * extent || !(sigma > 1)) return null
+
+  const r = 3 * sigma
+  const color = channelsToHex(C[0], C[1], C[2])
+  // Sample the truncated Gaussian opacity at fixed offsets; rim forced to 0.
+  const offsets = [0, 0.25, 0.5, 0.75, 1]
+  const k = (r * r) / (2 * sigma2) // = 4.5 for r = 3σ
+  const stops: GradientStop[] = offsets.map((t) => ({
+    offset: t,
+    color,
+    opacity: t >= 1 ? 0 : clamp01(alpha0 * Math.exp(-k * t * t)),
+  }))
+  return { type: 'radial', cx, cy, r, stops }
 }
 
 // ---------------------------------------------------------------------------

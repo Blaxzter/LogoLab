@@ -818,3 +818,75 @@ future focal-radial fitter must still keep the three in sync.
 supplement's soft-corner + DP curve selection (§4.2). The crisp tracer's corners are NOT
 the nebula bottleneck (node fusion is), so the geometry extension would not move the
 exit numbers; deferred per the plan's "only if snapping is fully demonstrated first".
+
+### V4 — glow-stack background — 2026-06-13 — ✅ shipped (exit met)
+
+**What shipped** — Stage 2.4 (plan §3.2.4, the "wow" tier). nebula's background is a
+diagonal base PLUS lighter radial glows — a genuinely 2-D field NO single SVG gradient
+can represent (V2/V3 ship the honest best single linear, meanΔE ≈ 4.0). It is now
+decomposed into a base + translucent radial overlays:
+- `src/lib/trace/gradient.ts`:
+  - `fitGlowStack(fit, gate, base)` — greedy residual-blob peeling (K ≤ 3). Each round
+    finds the SMOOTH-sample peak (cleanest glow centre), fits a CENTRED Gaussian glow
+    toward that colour — alpha = the least-squares fraction of `(C − composite)` that
+    explains the remaining error, regressed in log-space vs distance² to recover
+    `α(d) = α₀·exp(−d²/2σ²)`, emitted as opacity-fading radial stops out to r = 3σ — and
+    keeps it only if it cuts the composited residual. Overlays are centred (no fx/fy), so
+    `sampleGradient` and the rasterizer agree and the V2 focal latent stays dormant.
+  - `sampleGlowStack` + `meanLabResidual`; `PaintLadderResult` gains `model: 'glow'` +
+    `glow?: GlowStack`. `fitPaintLadder` attempts a glow when the best single model's
+    residual exceeds `glowTrigger`, and keeps it only when it beats that model by
+    `glowMinGain`.
+- `src/lib/trace/index.ts`: a glow region emits its opaque base item then one translucent
+  overlay item per radial (sharing the region's beautified geometry, deep-cloned), all
+  before the next region — so the glow paints over the base, under the marks. New
+  `fullRegionSamples` builds the glow GATE set (see deviations).
+- **No rasterizer / doc-model change**: `raster.ts` already composites radial gradients
+  with per-stop opacity (straight alpha-over), which is exactly what the overlays need.
+
+**Harness numbers vs V3** (default options):
+
+| image  | engine  | meanΔE (V3→V4) | SSIM (V3→V4)      | P95 ΔE (V3→V4) | seam P99.5 | paths | grads |
+|--------|---------|----------------|-------------------|----------------|------------|-------|-------|
+| nebula | potrace | 3.99→**2.87**  | 0.9764→**0.9821** | 11.5→**8.2**   | 11.4→12.0  | 2→3   | 2→3   |
+| nebula | crisp   | 3.99→**2.95**  | 0.9762→**0.9782** | 11.6→**8.2**   | 11.4→12.0  | 2→3   | 2→3   |
+| petals | both    | 1.77/1.85 (=)  | 0.9938/0.9890 (=) | (=)            | (=)        | (=)   | (=)   |
+
+`npm test` 77→**81** (4 new glow-stack unit tests). Determinism `pass`; typecheck + build
+green. **The glow fires on nebula ONLY** — every other corpus image (petals/aurora/orbit/
+outline/summit/bloom, both engines) is byte-for-byte unchanged: no spurious glow anywhere.
+
+**Exit criterion (plan §6 V4) — met.** "nebula bg visually indistinguishable at arm's
+length": the single 2-D-glow overlay cuts background meanΔE from 4.49 to 3.25 (full
+region), full-image meanΔE 3.99→2.87/2.95, SSIM up, and **P95 ΔE 11.5→8.2** — the worst-case
+colour error drops by a third. The one metric that ticks up is nebula's seam P99.5
+(11.4→12.0): the glow shifts background colours at the already-high ring-boundary AA — a
+smooth recolour, NOT a crack — and is dwarfed by the meanΔE / SSIM / P95 gains.
+
+**Deviations from the plan (each with a measured reason)**
+- **The glow is gated in CIE76 ΔE, not Oklab.** The rest of the ladder selects models in
+  Oklab (V1/V2 consistency), but a blue-violet glow correction is ~20× larger in CIE76 (the
+  harness's own fidelity metric) than in the perceptually-flatter Oklab — an Oklab gate
+  silently rejected a clearly-beneficial overlay (measured: 0.0009 Oklab RMS "improvement"
+  for a 1.0 CIE76 / +0.002 SSIM render win). Gating on CIE76 ties the decision to what the
+  arbiter measures.
+- **Two sample sets: fit on SMOOTH, gate on FULL region.** The overlay shape (peak +
+  Gaussian) is fit on the segmenter's smooth (AA-free) samples so the blob seeds at the
+  clean glow centre, but acceptance is measured on the FULL region (every labelled pixel,
+  AA included, `fullRegionSamples`). The smooth subset omits the high-error anti-aliased
+  pixels a glow most improves and under-reports its benefit ~20× (sample meanΔE improvement
+  0.045 vs full-region 1.235) — so a smooth-only gate never fired. The full-region gate
+  makes the fit-time metric match the render.
+- **One overlay for nebula, not K = 3.** Measured: the 2nd blob does not clear even a 0.05
+  CIE76 gate, so a single Gaussian is the honest fit. K ≤ 3 remains the cap for fields with
+  more blobs.
+- **Symmetry detection (the other half of the V4 row) NOT built.** The glow stack was the
+  requested/headline piece; symmetry is deferred (the circle snaps + relation solver from
+  V3 already regularise the symmetric cases, so there is no measured need yet).
+- **Glow base = the chosen single model** (nebula: the multi-stop linear), per §3.2.4
+  ("base = best linear fit").
+
+**Known latent** — STILL unchanged: `sampleGradient`/`segment.gradientT` ignore a radial's
+focal point while `raster.ts`/`gradientToSvgDef` honour it. V4's glow overlays are
+deliberately CENTRED (no fx/fy), so the three agree and the latent stays dormant; a future
+eccentric/focal-radial fitter must keep them in sync (per the V2 note).

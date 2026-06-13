@@ -11,12 +11,12 @@
 // k-means quantization (quantize.ts) survives only as a fallback / UI palette.
 
 import type { VectorizeOptions } from '../../types'
-import type { EditableDoc, GradientFill, PathItem, SubPath } from '../path/types'
+import type { EditableDoc, GradientFill, PathItem, RadialGradient, SubPath } from '../path/types'
 import type { TraceProgress, QuantizeResult } from './types'
 import { traceMask, type TraceMaskOptions } from './potrace.ts'
 import { traceMaskCrisp, type CrispOptions } from './subpixel.ts'
 import { segmentImage, DEFAULT_SEGMENT_OPTIONS, type SegmentOptions } from './segment.ts'
-import { fitPaintLadder } from './gradient.ts'
+import { fitPaintLadder, type PaintLadderResult, type RegionSamples } from './gradient.ts'
 import { beautify, DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
 
 export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
@@ -128,10 +128,16 @@ export async function traceImage(
   // Stage 2 — paint-model ladder per macro-region: pick the cheapest of
   // solid / linear-multistop / radial under an MDL score, fitting on the region's
   // smooth (anti-alias-free) samples. A flat region stays solid (flat-logo
-  // parity); a smooth field becomes one coherent gradient.
-  let labelGradient: (GradientFill | null)[] = q.palette.map(() => null)
+  // parity); a smooth field becomes one coherent gradient; a 2-D glow field
+  // (model 'glow') becomes a base linear + radial overlays (Stage 2.4, §3.2.4).
+  let labelPaint: (PaintLadderResult | null)[] = q.palette.map(() => null)
   if (gradientsOn) {
-    labelGradient = seg.regionSamples.map((s) => fitPaintLadder(s).gradient)
+    // The paint model is fit on the segmenter's SMOOTH (AA-free) samples, but the
+    // glow stack is GATED on the FULL region (every labelled pixel, AA included):
+    // the smooth subset omits the high-error anti-aliased pixels where a glow
+    // helps most and so under-reports its benefit (see fitGlowStack).
+    const fullSamples = fullRegionSamples(q.labels, imageData.data, width, q.palette.length)
+    labelPaint = seg.regionSamples.map((s, label) => fitPaintLadder(s, undefined, fullSamples[label]))
   }
 
   // Paint order: largest region at the bottom (palette is sorted by count).
@@ -156,6 +162,8 @@ export async function traceImage(
     subPaths: SubPath[]
     fill: string
     gradient?: GradientFill
+    /** Glow overlays painted above this region's base (model 'glow', §3.2.4). */
+    overlays?: RadialGradient[]
   }
   const layers: Layer[] = []
   for (let i = 0; i < total; i++) {
@@ -166,8 +174,15 @@ export async function traceImage(
       const label = paintOrder[i]
       const { r, g, b } = q.palette[label]
       const layer: Layer = { id: 'trace-' + i, subPaths, fill: rgbToHex(r, g, b) }
-      const grad = labelGradient[label]
-      if (grad) layer.gradient = grad
+      const paint = labelPaint[label]
+      if (paint) {
+        if (paint.model === 'glow' && paint.glow) {
+          layer.gradient = paint.glow.base
+          layer.overlays = paint.glow.overlays
+        } else if (paint.gradient) {
+          layer.gradient = paint.gradient
+        }
+      }
       layers.push(layer)
     }
     // Yield to the event loop so the progress UI can actually paint.
@@ -178,8 +193,12 @@ export async function traceImage(
     layers.map((l) => l.subPaths),
     beautifyOpts,
   )
-  const items: PathItem[] = layers.map((layer, i) => {
-    const item: PathItem = {
+  // Assemble bottom-up. A glow region emits its opaque base, then one translucent
+  // overlay item per radial glow (sharing the region's beautified geometry), all
+  // before the next region — so the glow paints over the base but under the marks.
+  const items: PathItem[] = []
+  layers.forEach((layer, i) => {
+    const base: PathItem = {
       kind: 'path',
       id: layer.id,
       fill: layer.fill,
@@ -187,11 +206,92 @@ export async function traceImage(
       subPaths: beautified[i],
       visible: true,
     }
-    if (layer.gradient) item.gradient = layer.gradient
-    return item
+    if (layer.gradient) base.gradient = layer.gradient
+    items.push(base)
+    if (layer.overlays) {
+      layer.overlays.forEach((ov, k) => {
+        items.push({
+          kind: 'path',
+          id: `${layer.id}-glow-${k}`,
+          fill: layer.fill,
+          fillRule,
+          subPaths: cloneSubPaths(beautified[i]),
+          gradient: ov,
+          visible: true,
+        })
+      })
+    }
   })
 
   return { viewBox: [0, 0, width, height], items }
+}
+
+/**
+ * Per-region FULL sample sets (every labelled pixel of each region, AA included),
+ * strided down to a cap — the gate set for the glow stack. Distinct from the
+ * segmenter's smooth `regionSamples`, which the paint model is FIT on but which
+ * omit the anti-aliased pixels a glow most improves.
+ */
+function fullRegionSamples(
+  labels: Int32Array,
+  data: Uint8ClampedArray,
+  width: number,
+  paletteSize: number,
+  cap = 6000,
+): RegionSamples[] {
+  const xs: number[][] = Array.from({ length: paletteSize }, () => [])
+  const ys: number[][] = Array.from({ length: paletteSize }, () => [])
+  const rs: number[][] = Array.from({ length: paletteSize }, () => [])
+  const gs: number[][] = Array.from({ length: paletteSize }, () => [])
+  const bs: number[][] = Array.from({ length: paletteSize }, () => [])
+  for (let i = 0; i < labels.length; i++) {
+    const l = labels[i]
+    if (l < 0 || l >= paletteSize) continue
+    const o = i * 4
+    xs[l].push(i % width)
+    ys[l].push((i / width) | 0)
+    rs[l].push(data[o])
+    gs[l].push(data[o + 1])
+    bs[l].push(data[o + 2])
+  }
+  return xs.map((_, l) => stride(xs[l], ys[l], rs[l], gs[l], bs[l], cap))
+}
+
+/** Stride parallel JS arrays down to at most `cap` points → a RegionSamples. */
+function stride(xs: number[], ys: number[], rs: number[], gs: number[], bs: number[], cap: number): RegionSamples {
+  const total = xs.length
+  const step = total > cap ? Math.ceil(total / cap) : 1
+  const m = Math.ceil(total / step)
+  const X = new Float64Array(m)
+  const Y = new Float64Array(m)
+  const R = new Float64Array(m)
+  const G = new Float64Array(m)
+  const B = new Float64Array(m)
+  let k = 0
+  for (let i = 0; i < total && k < m; i += step) {
+    X[k] = xs[i]
+    Y[k] = ys[i]
+    R[k] = rs[i]
+    G[k] = gs[i]
+    B[k] = bs[i]
+    k++
+  }
+  return { xs: X, ys: Y, rs: R, gs: G, bs: B, n: k }
+}
+
+/** Deep-clone a subpath list so a glow overlay's geometry is independent of the
+ *  base item's (no shared-reference aliasing when either is later edited). */
+function cloneSubPaths(subPaths: SubPath[]): SubPath[] {
+  return subPaths.map((sp) => ({
+    closed: sp.closed,
+    nodes: sp.nodes.map((n) => ({
+      x: n.x,
+      y: n.y,
+      hIn: n.hIn ? { x: n.hIn.x, y: n.hIn.y } : null,
+      hOut: n.hOut ? { x: n.hOut.x, y: n.hOut.y } : null,
+      kind: n.kind,
+    })),
+  }))
 }
 
 /**
