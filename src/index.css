@@ -245,6 +245,22 @@
   .animate-in-fade {
     animation: fade-in 220ms ease both;
   }
+  /* A soft accent band that sweeps across the stage while a trace runs. Pure
+     transform animation ⇒ runs on the compositor, so it stays smooth even when
+     the main thread is busy (e.g. a potrace trace). */
+  .trace-sweep {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 38%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-accent) 16%, transparent),
+      transparent
+    );
+    animation: trace-sweep 1.25s ease-in-out infinite;
+    will-change: transform;
+  }
 }
 
 @keyframes fade-in {
@@ -255,5 +271,14 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes trace-sweep {
+  from {
+    transform: translateX(-60%);
+  }
+  to {
+    transform: translateX(230%);
   }
 }

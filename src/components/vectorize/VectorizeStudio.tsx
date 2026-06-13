@@ -29,6 +29,7 @@ import { cleanSvg } from "../../lib/svgClean";
 import { docStats, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from "../../lib/trace";
+import { traceImageOffThread, canTraceOffThread } from "../../lib/trace/traceOffThread";
 import type { VectorizeOptions } from "../../types";
 import type { DocItem, EditableDoc, NodeRef, PathItem } from "../../lib/path/types";
 import { TraceControls } from "./TraceControls";
@@ -214,14 +215,17 @@ export function VectorizeStudio() {
                     logo.isSvg ? logo.svgText : null,
                 );
                 if (runId !== runIdRef.current) return;
-                next = await traceImage(
+                // Crisp runs in a Web Worker (pure JS) so the UI stays responsive;
+                // potrace stays on the main thread (its WASM wrapper needs DOMParser).
+                const runTrace = canTraceOffThread(opts) ? traceImageOffThread : traceImage;
+                next = await runTrace(
                     imageData,
                     opts,
                     (p) => {
                         if (runId !== runIdRef.current) return;
                         setProgress(
                             p.phase === "quantize"
-                                ? "Quantizing colors…"
+                                ? "Analyzing colors…"
                                 : `Tracing layer ${p.layer}/${p.total}…`,
                         );
                     },
@@ -701,6 +705,21 @@ export function VectorizeStudio() {
                         ) : (
                             <StagePlaceholder busy={busy} />
                         ))}
+
+                    {/* Trace-in-progress overlay: a sweeping band + a status pill.
+                        pointer-events-none so panning/zooming stays live (the crisp
+                        trace runs off-thread) and the CSS sweep stays smooth. */}
+                    {busy && (
+                        <div className="animate-in-fade pointer-events-none absolute inset-0 overflow-hidden">
+                            <div className="trace-sweep" />
+                            <div className="absolute left-1/2 top-3 -translate-x-1/2">
+                                <span className="flex items-center gap-2 rounded-full border border-line bg-surface/90 px-3 py-1 text-xs font-medium text-accent shadow-sm backdrop-blur">
+                                    <Loader2 size={13} className="animate-spin" />
+                                    {progress || "Tracing…"}
+                                </span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* --------------------------------------------------- status bar */}
