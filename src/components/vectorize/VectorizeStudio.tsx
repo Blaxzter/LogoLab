@@ -739,7 +739,7 @@ export function VectorizeStudio() {
                 />
             )}
 
-            {showHelp && <PipelineExplainer onClose={() => setShowHelp(false)} />}
+            {showHelp && <PipelineExplainer opts={opts} onClose={() => setShowHelp(false)} />}
         </div>
     );
 }

@@ -1,8 +1,9 @@
 // "How it works" — a user-facing teaching overlay that runs the CURRENT uploaded
-// image through the structure-first vectorize pipeline and shows each stage with a
-// plain-language explanation. Linked from the vectorize view so people can see the
-// approach, not just the result. Reuses the same stage visualizers as the dev
-// scoreboard (lib/trace/stageViz) so the pictures match.
+// image through the structure-first vectorize pipeline WITH THE USER'S CURRENT
+// settings, and shows each stage with a plain-language explanation. Linked from
+// the vectorize view so people can see the approach, not just the result. Reuses
+// the same stage visualizers as the dev scoreboard (lib/trace/stageViz) so the
+// pictures match.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Loader2, X } from 'lucide-react'
@@ -10,8 +11,9 @@ import { useLogo } from '../../store'
 import { getImageData } from '../../lib/image'
 import { segmentImage, DEFAULT_SEGMENT_OPTIONS, type SegmentResult } from '../../lib/trace/segment'
 import { fitPaintLadder, type PaintLadderResult } from '../../lib/trace/gradient'
-import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
+import { traceImage } from '../../lib/trace'
 import { serializeDoc, docStats } from '../../lib/path/model'
+import type { VectorizeOptions } from '../../types'
 import {
   smoothedToRgba,
   discontinuityToRgba,
@@ -26,12 +28,13 @@ interface Analysis {
   width: number
   height: number
   seg: SegmentResult
-  paints: PaintLadderResult[]
+  /** null = solid (either a flat region, or gradients turned off). */
+  paints: (PaintLadderResult | null)[]
   svg: string
   stats: { paths: number; nodes: number }
 }
 
-export function PipelineExplainer({ onClose }: { onClose: () => void }) {
+export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; onClose: () => void }) {
   const logo = useLogo()
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -45,7 +48,9 @@ export function PipelineExplainer({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Run the pipeline on the current image once, off the open animation.
+  // Run the pipeline on the current image with the CURRENT settings, off the open
+  // animation. optsKey makes the analysis re-run if settings differ.
+  const optsKey = JSON.stringify(opts)
   useEffect(() => {
     let cancelled = false
     setAnalysis(null)
@@ -63,8 +68,11 @@ export function PipelineExplainer({ onClose }: { onClose: () => void }) {
         await new Promise((r) => setTimeout(r, 16))
         const rgba = image as unknown as { width: number; height: number; data: Uint8ClampedArray }
         const seg = segmentImage(rgba, DEFAULT_SEGMENT_OPTIONS)
-        const paints = seg.regionSamples.map((s) => fitPaintLadder(s))
-        const doc = await traceImage(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'crisp', gradients: true })
+        // Step-4 paint reflects the Gradients toggle: off ⇒ every region is solid.
+        const gradientsOn = opts.gradients !== false
+        const paints = gradientsOn ? seg.regionSamples.map((s) => fitPaintLadder(s)) : seg.regionSamples.map(() => null)
+        // Final result uses the USER'S settings, so it matches what they'll get.
+        const doc = await traceImage(image, opts)
         const st = docStats(doc)
         if (cancelled) return
         setAnalysis({ width: image.width, height: image.height, seg, paints, svg: serializeDoc(doc, 2), stats: { paths: st.paths, nodes: st.nodes } })
@@ -75,7 +83,7 @@ export function PipelineExplainer({ onClose }: { onClose: () => void }) {
     return () => {
       cancelled = true
     }
-  }, [logo.src, logo.isSvg, logo.svgText])
+  }, [logo.src, logo.isSvg, logo.svgText, optsKey, opts])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="How vectorize works">
@@ -86,7 +94,8 @@ export function PipelineExplainer({ onClose }: { onClose: () => void }) {
           <div>
             <h2 className="text-base font-semibold text-ink">How vectorize works</h2>
             <p className="mt-1 text-sm text-muted">
-              Your image, walked through the five stages that turn pixels into clean, editable vector shapes.
+              Your image, walked through the five stages — with your current settings — that turn pixels into clean,
+              editable vector shapes.
             </p>
           </div>
           <button type="button" onClick={onClose} className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0" title="Close">
@@ -103,7 +112,7 @@ export function PipelineExplainer({ onClose }: { onClose: () => void }) {
               Analyzing your image…
             </div>
           ) : (
-            <Steps logoSrc={logo.src!} a={analysis} />
+            <Steps logoSrc={logo.src!} a={analysis} opts={opts} />
           )}
         </div>
       </div>
@@ -113,15 +122,22 @@ export function PipelineExplainer({ onClose }: { onClose: () => void }) {
 
 // ---------------------------------------------------------------------------
 
-function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
+function Steps({ logoSrc, a, opts }: { logoSrc: string; a: Analysis; opts: VectorizeOptions }) {
   const { seg, paints, width, height } = a
   const regionCount = seg.palette.length
-  // Distinct paint models actually used, for the step-4 wording.
-  const models = paints.map((p) => p?.model ?? 'solid')
-  const hasGrad = models.some((m) => m === 'linear' || m === 'radial' || m === 'glow')
+  const gradientsOn = opts.gradients !== false
+  const engineLabel = opts.engine === 'potrace' ? 'Potrace' : 'Crisp'
+  const fidelity = opts.fidelity ?? 1.5
 
   return (
     <div className="flex flex-col gap-6">
+      {opts.mode === 'mono' && (
+        <p className="rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-xs leading-snug text-ink-2">
+          You're in <b>Mono</b> mode — it simply thresholds the image to one black shape. The colour-grouping stages
+          below show how <b>Color</b> mode works; your actual result in step 5 is the mono shape.
+        </p>
+      )}
+
       <Step
         n={1}
         title="Start from pixels"
@@ -135,8 +151,8 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
       <Step
         n={2}
         title="Smooth, and find the real edges"
-        control="Smoothing"
-        body="First we denoise the image into smooth colour fields (a Mumford–Shah solver) and, as a by-product, get a map of the strong edges between them — the borders worth keeping. Anti-aliasing fuzz and sensor noise are smoothed away so they don't become jagged shapes."
+        controls={['automatic']}
+        body="First we denoise the image into smooth colour fields (a Mumford–Shah solver) and, as a by-product, get a map of the strong edges between them — the borders worth keeping. Anti-aliasing fuzz and sensor noise are smoothed away so they don't become jagged shapes. (This stage runs the same way every time — no knob.)"
       >
         <Visual label="Smoothed">
           <StageCanvas rgba={smoothedToRgba(seg.ms)} width={width} height={height} />
@@ -149,8 +165,8 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
       <Step
         n={3}
         title="Group pixels into regions"
-        control="Despeckle"
-        body={`Pixels belonging to one smooth field are merged into a handful of macro-regions — each will become one shape. Your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. This grouping is the key step: areas that are similar enough get fused, so very subtle differences (like the soft blends where translucent shapes overlap) can merge into a neighbour rather than become their own shape.`}
+        controls={['automatic']}
+        body={`Pixels belonging to one smooth field are merged into a handful of macro-regions — each will become one shape. Your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. This grouping is automatic (there's no granularity knob yet): areas similar enough get fused, so very subtle differences — like the soft blends where translucent shapes overlap — can merge into a neighbour instead of becoming their own shape.`}
       >
         <Visual label={`${regionCount} regions`}>
           <StageCanvas rgba={segmentsToRgba(seg.labels, width, height)} width={width} height={height} />
@@ -160,8 +176,12 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
       <Step
         n={4}
         title="Fit the simplest paint that matches"
-        control="Gradients"
-        body={`Each region gets the cheapest paint that still fits it well: a flat colour, a smooth gradient, or a layered “glow” stack — whichever reproduces the region with the fewest knobs.${hasGrad ? ' Some of your regions matched a gradient (coloured tags below).' : ' Every region here matched a single flat colour.'}`}
+        controls={[`Gradients: ${gradientsOn ? 'on' : 'off'}`]}
+        body={`Each region gets the cheapest paint that still fits it well: a flat colour, a smooth gradient, or a layered “glow” stack — whichever reproduces the region with the fewest knobs.${
+          gradientsOn
+            ? ' (Coloured tags below show what each region matched.)'
+            : ' Gradients are off, so every region here is a single flat colour.'
+        }`}
       >
         <Visual label="Region fills">
           <StageCanvas rgba={regionFillsToRgba(seg.labels, seg.palette, width, height)} width={width} height={height} />
@@ -187,8 +207,8 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
       <Step
         n={5}
         title="Trace clean outlines, then tidy them"
-        control="Engine · Fidelity"
-        body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass (Fidelity) snaps near-circles, near-lines and shared centres to perfect shapes. The Engine control chooses how the outline is drawn: Crisp (the default, shown here) gives the fewest, cleanest nodes; Potrace sticks closest to the original pixels. Result: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
+        controls={[`Engine: ${engineLabel}`, `Smoothing ${opts.smoothing}`, `Despeckle ${opts.despeckle}`, `Fidelity ${fidelity}px`]}
+        body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass (Fidelity) snaps near-circles, near-lines and shared centres to perfect shapes. The Engine control chooses how the outline is drawn: Crisp (the default) gives the fewest, cleanest nodes; Potrace sticks closest to the original pixels. Result with your settings: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
       >
         <Visual label="Vector result">
           <div className="h-full w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: a.svg }} />
@@ -197,10 +217,41 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
 
       <p className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
         Tip: if overlapping or finely-detailed areas don't come through, it's usually step 3 — those areas merged
-        into a neighbouring region before they could become their own shape. The <b>Crisp</b> engine gives the fewest,
-        cleanest nodes; <b>Potrace</b> stays closest to the pixels.
+        into a neighbouring region before they could become their own shape.
       </p>
+
+      <References />
     </div>
+  )
+}
+
+/** Links to the algorithms the two engines are built on. */
+function References() {
+  return (
+    <div className="border-t border-line pt-4 text-xs leading-relaxed text-ink-2">
+      <div className="mb-1 font-semibold text-ink">The research behind it</div>
+      <ul className="flex flex-col gap-1">
+        <li>
+          The structure-first pipeline and the <b>Crisp</b> engine follow Adobe's{' '}
+          <ResearchLink href="https://research.adobe.com/publication/image-vectorization-via-gradient-reconstruction/">
+            Image Vectorization via Gradient Reconstruction
+          </ResearchLink>{' '}
+          (Eurographics 2025), with Schneider's classic Bézier curve fitting (Graphics Gems) at its core.
+        </li>
+        <li>
+          The <b>Potrace</b> engine is Peter Selinger's{' '}
+          <ResearchLink href="https://potrace.sourceforge.net/">Potrace</ResearchLink> polygon-tracing algorithm.
+        </li>
+      </ul>
+    </div>
+  )
+}
+
+function ResearchLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-2 hover:text-accent-hover">
+      {children}
+    </a>
   )
 }
 
@@ -208,14 +259,14 @@ function Step({
   n,
   title,
   body,
-  control,
+  controls,
   children,
 }: {
   n: number
   title: string
   body: string
-  /** The trace control that drives this stage, shown as a chip. */
-  control?: string
+  /** Trace controls that drive this stage, shown as chips ('automatic' = no knob). */
+  controls?: string[]
   children: ReactNode
 }) {
   return (
@@ -226,10 +277,14 @@ function Step({
         </span>
         <div>
           <h3 className="text-sm font-semibold text-ink">{title}</h3>
-          {control && (
-            <span className="mt-1 inline-block rounded bg-surface-3 px-1.5 py-0.5 text-[10px] text-ink-2">
-              control: {control}
-            </span>
+          {controls && controls.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {controls.map((c) => (
+                <span key={c} className="inline-block rounded bg-surface-3 px-1.5 py-0.5 text-[10px] text-ink-2">
+                  {c}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       </div>
