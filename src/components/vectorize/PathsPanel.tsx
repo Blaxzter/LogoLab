@@ -4,7 +4,7 @@
 
 import type { CSSProperties } from 'react'
 import { useEffect, useRef } from 'react'
-import { Eye, EyeOff, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, Trash2, X } from 'lucide-react'
 import type { EditableDoc, PathItem, RawItem } from '../../lib/path/types'
 import { normalizeHex } from '../../lib/colorUtils'
 
@@ -78,7 +78,7 @@ export function PathsPanel({
                 if (el) rowRefs.current.set(item.id, el)
                 else rowRefs.current.delete(item.id)
               }}
-              onSelect={() => onSelectPath(item.id)}
+              onSelect={() => onSelectPath(item.id === selectedPathId ? null : item.id)}
               onRecolor={(fill, commit) => onRecolor(item.id, fill, commit)}
               onToggleVisible={() => onToggleVisible(item.id)}
               onDelete={() => onDelete(item.id)}
@@ -86,6 +86,17 @@ export function PathsPanel({
           ) : (
             <RawRow key={item.id} item={item} onToggleVisible={() => onToggleVisible(item.id)} />
           ),
+        )}
+
+        {selectedPathId && (
+          <button
+            type="button"
+            onClick={() => onSelectPath(null)}
+            className="mt-1 flex items-center justify-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+          >
+            <X size={13} />
+            Clear selection
+          </button>
         )}
       </div>
     </aside>

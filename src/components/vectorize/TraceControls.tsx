@@ -2,7 +2,7 @@
 // smoothing…), output options (force color) and the Trace button.
 // Pure controlled UI — all state lives in VectorizeStudio.
 
-import { Wand2, HelpCircle } from 'lucide-react'
+import { Wand2, HelpCircle, AlertTriangle } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { ColorField, Field, Segmented, Slider, Toggle } from '../ui/controls'
 import type { VectorizeOptions } from '../../types'
@@ -44,7 +44,9 @@ export function TraceControls({
   const tracing = !isVectorSource || source === 'retrace'
 
   return (
-    <aside className="flex w-[270px] shrink-0 flex-col gap-5 overflow-y-auto border-r border-line bg-surface p-4">
+    <aside className="flex w-[270px] shrink-0 flex-col border-r border-line bg-surface">
+      {/* Scrollable settings — the action below stays pinned so it can't scroll away. */}
+      <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink">Vectorize</h2>
         <button
@@ -181,26 +183,41 @@ export function TraceControls({
         )}
       </Field>
 
-      {staleEdits && (
-        <p className="text-xs leading-snug text-warn">
-          Settings changed — Re-trace discards your path edits.
-        </p>
-      )}
+        <div className="mt-auto border-t border-line pt-4">
+          <p className="text-[0.7rem] leading-relaxed text-faint">
+            V pan · A edit nodes · ⌫ delete · double-click a segment to add a node.
+          </p>
+        </div>
+      </div>
 
-      <Button variant="primary" block icon={<Wand2 size={15} />} onClick={onTrace} disabled={busy}>
-        {busy
-          ? 'Tracing…'
-          : staleEdits
-            ? 'Re-trace (discard edits)'
-            : tracing
-              ? 'Trace'
-              : 'Clean SVG'}
-      </Button>
+      {/* Pinned action footer — always visible no matter how far the settings scroll. */}
+      <div className="flex shrink-0 flex-col gap-3 border-t border-line bg-surface p-4">
+        {staleEdits && (
+          <div className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-snug text-warn">
+            <AlertTriangle size={14} className="mt-px shrink-0" />
+            <span>
+              Settings changed since the last trace. Re-trace to apply them — this discards your
+              path edits.
+            </span>
+          </div>
+        )}
 
-      <div className="mt-auto border-t border-line pt-4">
-        <p className="text-[0.7rem] leading-relaxed text-faint">
-          V pan · A edit nodes · ⌫ delete · double-click a segment to add a node.
-        </p>
+        <Button
+          variant="primary"
+          block
+          icon={<Wand2 size={16} />}
+          onClick={onTrace}
+          disabled={busy}
+          className="h-11 text-[0.95rem] font-semibold shadow-sm"
+        >
+          {busy
+            ? 'Tracing…'
+            : staleEdits
+              ? 'Re-trace (discard edits)'
+              : tracing
+                ? 'Trace'
+                : 'Clean SVG'}
+        </Button>
       </div>
     </aside>
   )

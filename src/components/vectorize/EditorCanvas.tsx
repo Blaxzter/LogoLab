@@ -33,6 +33,10 @@ import {
 } from "../../lib/path/geometry";
 
 const ACCENT = "#5b5bd6";
+/** Selected anchor fill — warm hue that contrasts the indigo outline/stroke. */
+const ACCENT_SEL = "#f25f2e";
+/** White halo/ring colour, keeps the overlay legible over any artwork. */
+const HALO = "#ffffff";
 /** Screen-px movement before a pointerdown counts as a drag (not a click). */
 const DRAG_THRESHOLD_PX = 3;
 /** Max screen-px distance from a segment for double-click node insertion. */
@@ -275,6 +279,9 @@ export function EditorCanvas({
     const boxRef = useRef<HTMLDivElement | null>(null);
     const svgRef = useRef<SVGSVGElement | null>(null);
     const dragRef = useRef<DragState | null>(null);
+    // Key of the anchor/handle currently under the cursor ('sub:idx' or
+    // 'sub:idx:in|out'), for hover feedback in node mode.
+    const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
     // --- marquee (rubber-band) selection state ---
     interface MarqueeState {
@@ -315,6 +322,12 @@ export function EditorCanvas({
 
     const sel = doc.items.find((it) => it.id === selectedPathId);
     const selectedItem = sel && sel.kind === "path" ? sel : null;
+
+    // The grab targets unmount on selection / mode change without firing
+    // pointerout, so drop any stale hover highlight explicitly.
+    useEffect(() => {
+        setHoveredKey(null);
+    }, [selectedPathId, interactive]);
 
     /** Map client coords to viewBox coords via the fitted box's live rect. */
     const toVb = (clientX: number, clientY: number): Vec | null => {
@@ -828,20 +841,50 @@ export function EditorCanvas({
                                 )}
                         </g>
 
-                        {/* Selection overlay: outline + handle spokes/dots + anchors. */}
+                        {/* Selection overlay: outline + handle spokes/dots + anchors.
+                            All widths/radii go through r() so they stay a constant
+                            screen size at every zoom (the markers' convention) — the
+                            CSS zoom transform would otherwise fatten a plain stroke. */}
                         {selectedItem && fit.width > 0 && (
                             <g style={{ pointerEvents: "none" }}>
+                                {/* White halo under the accent line keeps the outline
+                                    legible even when the path's own colour is the accent. */}
+                                <path
+                                    d={dOf(selectedItem)}
+                                    fill="none"
+                                    stroke={HALO}
+                                    strokeOpacity={0.85}
+                                    strokeWidth={r(3.5)}
+                                    strokeLinejoin="round"
+                                />
                                 <path
                                     d={dOf(selectedItem)}
                                     fill="none"
                                     stroke={ACCENT}
-                                    strokeWidth={1.25}
-                                    vectorEffect="non-scaling-stroke"
+                                    strokeWidth={r(1.5)}
+                                    strokeLinejoin="round"
                                 />
                                 {selectedItem.subPaths.map((sp, sub) =>
                                     sp.nodes.map((node, idx) => {
                                         const key = `${sub}:${idx}`;
                                         const isSel = selectedNodes.has(key);
+                                        const isHover = hoveredKey === key;
+                                        const hoverIn =
+                                            hoveredKey === `${sub}:${idx}:in`;
+                                        const hoverOut =
+                                            hoveredKey === `${sub}:${idx}:out`;
+                                        // Selected anchors use a warm fill (not the
+                                        // accent) so they stay visible sitting on the
+                                        // accent-coloured outline.
+                                        const anchorFill = isSel
+                                            ? ACCENT_SEL
+                                            : HALO;
+                                        const anchorStroke = isSel
+                                            ? HALO
+                                            : isHover
+                                              ? ACCENT_SEL
+                                              : ACCENT;
+                                        const anchorW = r(isHover ? 1.6 : 1.2);
                                         return (
                                             <g key={key}>
                                                 {node.hIn && (
@@ -852,8 +895,7 @@ export function EditorCanvas({
                                                         y2={node.hIn.y}
                                                         stroke={ACCENT}
                                                         strokeOpacity={0.55}
-                                                        strokeWidth={1}
-                                                        vectorEffect="non-scaling-stroke"
+                                                        strokeWidth={r(1)}
                                                     />
                                                 )}
                                                 {node.hOut && (
@@ -864,16 +906,19 @@ export function EditorCanvas({
                                                         y2={node.hOut.y}
                                                         stroke={ACCENT}
                                                         strokeOpacity={0.55}
-                                                        strokeWidth={1}
-                                                        vectorEffect="non-scaling-stroke"
+                                                        strokeWidth={r(1)}
                                                     />
                                                 )}
                                                 {node.hIn && (
                                                     <circle
                                                         cx={node.hIn.x}
                                                         cy={node.hIn.y}
-                                                        r={r(3.25)}
-                                                        fill="#ffffff"
+                                                        r={r(hoverIn ? 4.25 : 3.25)}
+                                                        fill={
+                                                            hoverIn
+                                                                ? ACCENT_SEL
+                                                                : HALO
+                                                        }
                                                         stroke={ACCENT}
                                                         strokeWidth={r(1.2)}
                                                     />
@@ -882,8 +927,12 @@ export function EditorCanvas({
                                                     <circle
                                                         cx={node.hOut.x}
                                                         cy={node.hOut.y}
-                                                        r={r(3.25)}
-                                                        fill="#ffffff"
+                                                        r={r(hoverOut ? 4.25 : 3.25)}
+                                                        fill={
+                                                            hoverOut
+                                                                ? ACCENT_SEL
+                                                                : HALO
+                                                        }
                                                         stroke={ACCENT}
                                                         strokeWidth={r(1.2)}
                                                     />
@@ -892,28 +941,28 @@ export function EditorCanvas({
                                                     <circle
                                                         cx={node.x}
                                                         cy={node.y}
-                                                        r={r(3.75)}
-                                                        fill={
-                                                            isSel
-                                                                ? ACCENT
-                                                                : "#ffffff"
-                                                        }
-                                                        stroke={ACCENT}
-                                                        strokeWidth={r(1.2)}
+                                                        r={r(
+                                                            isHover ? 4.75 : 3.75,
+                                                        )}
+                                                        fill={anchorFill}
+                                                        stroke={anchorStroke}
+                                                        strokeWidth={anchorW}
                                                     />
                                                 ) : (
                                                     <rect
-                                                        x={node.x - r(3.5)}
-                                                        y={node.y - r(3.5)}
-                                                        width={r(7)}
-                                                        height={r(7)}
-                                                        fill={
-                                                            isSel
-                                                                ? ACCENT
-                                                                : "#ffffff"
+                                                        x={
+                                                            node.x -
+                                                            r(isHover ? 4.5 : 3.5)
                                                         }
-                                                        stroke={ACCENT}
-                                                        strokeWidth={r(1.2)}
+                                                        y={
+                                                            node.y -
+                                                            r(isHover ? 4.5 : 3.5)
+                                                        }
+                                                        width={r(isHover ? 9 : 7)}
+                                                        height={r(isHover ? 9 : 7)}
+                                                        fill={anchorFill}
+                                                        stroke={anchorStroke}
+                                                        strokeWidth={anchorW}
                                                     />
                                                 )}
                                             </g>
@@ -925,7 +974,17 @@ export function EditorCanvas({
 
                         {/* Invisible grab targets over anchors & handle dots (node tool). */}
                         {interactive && selectedItem && fit.width > 0 && (
-                            <g onPointerDown={handleGrabPointerDown}>
+                            <g
+                                onPointerDown={handleGrabPointerDown}
+                                onPointerOver={(e) => {
+                                    const t = e.target as Element;
+                                    const k =
+                                        t.getAttribute("data-node") ??
+                                        t.getAttribute("data-handle");
+                                    if (k) setHoveredKey(k);
+                                }}
+                                onPointerOut={() => setHoveredKey(null)}
+                            >
                                 {selectedItem.subPaths.map((sp, sub) =>
                                     sp.nodes.map((node, idx) => (
                                         <g key={`${sub}:${idx}`}>
@@ -981,9 +1040,8 @@ export function EditorCanvas({
                                 height={marqueeRect.h}
                                 fill="rgba(91, 91, 214, 0.08)"
                                 stroke={ACCENT}
-                                strokeWidth={1}
-                                vectorEffect="non-scaling-stroke"
-                                strokeDasharray="4 2"
+                                strokeWidth={r(1)}
+                                strokeDasharray={`${r(4)} ${r(2)}`}
                                 style={{ pointerEvents: "none" }}
                             />
                         )}
