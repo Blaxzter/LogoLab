@@ -50,6 +50,17 @@ export interface SegmentOptions {
   maxProfileGap: number
   /** Cap on samples per segment fed to a union fit (perf; deterministic stride). */
   sampleCap: number
+  /**
+   * User-placed region markers in NORMALIZED [0,1] image coordinates (converted
+   * to pixels here against the image's own width/height, so they are correct at
+   * any raster resolution). Marker-watershed constraint: each marker seeds a
+   * distinct region; two segments carrying DIFFERENT markers must never merge
+   * (vetoed in BOTH merge steps — the colour-difference seeded growth and the
+   * global union-fit), and a marked segment is exempt from being absorbed away.
+   * Omitted / empty ⇒ no behaviour change (byte-identical output). Processed in
+   * fixed input order so the veto is deterministic.
+   */
+  markers?: { x: number; y: number }[]
 }
 
 export const DEFAULT_SEGMENT_OPTIONS: SegmentOptions = {
@@ -79,6 +90,35 @@ export interface SegmentResult extends QuantizeResult {
 
 const clamp255 = (n: number): number => Math.max(0, Math.min(255, Math.round(n)))
 const clamp01 = (t: number): number => (t < 0 ? 0 : t > 1 ? 1 : t)
+
+/**
+ * Nearest SMOOTH pixel to (px,py) by an expanding Chebyshev-ring scan (fixed
+ * order ⇒ deterministic). Returns its index, or −1 if the image has none within
+ * range. A marker dropped on a discontinuity / transparent pixel snaps to the
+ * closest real segment instead of being lost; rings are scanned out to a bound
+ * so a wildly-misplaced marker degrades to a no-op rather than a full sweep.
+ */
+function nearestSmoothPixel(smooth: Uint8Array, w: number, h: number, px: number, py: number): number {
+  if (smooth[py * w + px]) return py * w + px
+  const maxR = Math.min(Math.max(w, h), 64)
+  for (let r = 1; r <= maxR; r++) {
+    const x0 = px - r
+    const x1 = px + r
+    const y0 = py - r
+    const y1 = py + r
+    for (let x = x0; x <= x1; x++) {
+      if (x < 0 || x >= w) continue
+      if (y0 >= 0 && smooth[y0 * w + x]) return y0 * w + x
+      if (y1 < h && smooth[y1 * w + x]) return y1 * w + x
+    }
+    for (let y = y0 + 1; y <= y1 - 1; y++) {
+      if (y < 0 || y >= h) continue
+      if (x0 >= 0 && smooth[y * w + x0]) return y * w + x0
+      if (x1 < w && smooth[y * w + x1]) return y * w + x1
+    }
+  }
+  return -1
+}
 
 /** Segment an image into smooth macro-regions. See module header. */
 export function segmentImage(
@@ -126,6 +166,28 @@ export function segmentImage(
     }
   }
 
+  // --- User markers → seeded pixels (marker-watershed constraint) -------------
+  // Each marker (normalised [0,1], in fixed input order) claims the nearest
+  // SMOOTH pixel to round(x·w), round(y·h) and gets a distinct id. `rootMarker`
+  // tracks, per live union-find root, which marker id it carries (−1 = none).
+  // Two roots carrying different markers are never united (in this step's merge
+  // and again in the global union-fit); a root can carry at most one marker
+  // because that veto is the only thing that would ever bring two together. With
+  // no markers every entry stays −1 and the veto never fires ⇒ output unchanged.
+  const rootMarker = new Int32Array(n).fill(-1)
+  const markers = opts.markers ?? []
+  let markerCount = 0
+  for (let m = 0; m < markers.length; m++) {
+    const px = Math.max(0, Math.min(w - 1, Math.round(markers[m].x * w)))
+    const py = Math.max(0, Math.min(h - 1, Math.round(markers[m].y * h)))
+    const seed = nearestSmoothPixel(smooth, w, h, px, py)
+    // Skip a marker with no reachable smooth pixel (fully transparent / all-edge
+    // area) or one colliding with an already-seeded pixel — keeps ids unique and
+    // the result deterministic regardless of duplicate placements.
+    if (seed >= 0 && rootMarker[seed] === -1) rootMarker[seed] = markerCount++
+  }
+  const hasMarkers = markerCount > 0
+
   const find = (x: number): number => {
     let r = x
     while (parent[r] !== r) r = parent[r]
@@ -152,6 +214,17 @@ export function segmentImage(
     sumA[lo] += sumA[hi]
     sumB[lo] += sumB[hi]
     cnt[lo] += cnt[hi]
+    // Carry the (at most one) marker onto the surviving root. Only ever reached
+    // after the caller's veto, so lo/hi never hold two different markers.
+    if (rootMarker[lo] === -1) rootMarker[lo] = rootMarker[hi]
+  }
+  // True when uniting ra,rb would put two DIFFERENT user markers in one segment
+  // — the watershed must-stay-separate constraint. Cheap no-op without markers.
+  const markerConflict = (ra: number, rb: number): boolean => {
+    if (!hasMarkers) return false
+    const ma = rootMarker[ra]
+    const mb = rootMarker[rb]
+    return ma !== -1 && mb !== -1 && ma !== mb
   }
 
   // Loop to a TRUE fixpoint (Supplement Alg 1). Termination is guaranteed: every
@@ -168,7 +241,7 @@ export function segmentImage(
         if (x + 1 < w && smooth[i + 1] && !cutH[i]) {
           const ra = find(i)
           const rb = find(i + 1)
-          if (ra !== rb && meanDelta(ra, rb) <= opts.tauS) {
+          if (ra !== rb && !markerConflict(ra, rb) && meanDelta(ra, rb) <= opts.tauS) {
             unite(ra, rb)
             changed = true
           }
@@ -177,7 +250,7 @@ export function segmentImage(
         if (y + 1 < h && smooth[i + w] && !cutV[i]) {
           const ra = find(i)
           const rb = find(i + w)
-          if (ra !== rb && meanDelta(ra, rb) <= opts.tauS) {
+          if (ra !== rb && !markerConflict(ra, rb) && meanDelta(ra, rb) <= opts.tauS) {
             unite(ra, rb)
             changed = true
           }
@@ -190,6 +263,9 @@ export function segmentImage(
   // Compact S₀ roots → segment ids 0..S-1; segOf[pixel] = id, −1 for 𝒟/transparent.
   const segOf = new Int32Array(n).fill(-1)
   const rootToSeg = new Map<number, number>()
+  // segMarker[id] = the marker id carried by fine segment `id` (−1 = none),
+  // captured from its root at compaction time (fixed scan order, deterministic).
+  const segMarkerArr: number[] = []
   let S = 0
   for (let i = 0; i < n; i++) {
     if (!smooth[i]) continue
@@ -198,6 +274,7 @@ export function segmentImage(
     if (id === undefined) {
       id = S++
       rootToSeg.set(r, id)
+      segMarkerArr.push(rootMarker[r])
     }
     segOf[i] = id
   }
@@ -298,10 +375,15 @@ export function segmentImage(
   // (non-vetoed, low-residual, unimodal) pair until none qualifies.
   const members = new Map<number, number[]>()
   const samples = new Map<number, RegionSamples>()
+  // groupMarker[stable group id] = the marker the group carries (−1 = none). A
+  // group never holds two markers (the veto below blocks that), so one value per
+  // group suffices. Mirrors the step-2 watershed constraint at the macro level.
+  const groupMarker = new Map<number, number>()
   const alive: number[] = []
   for (let id = 0; id < S; id++) {
     members.set(id, [id])
     samples.set(id, segSamples[id])
+    groupMarker.set(id, segMarkerArr[id])
     alive.push(id)
   }
   let nextId = S
@@ -309,6 +391,13 @@ export function segmentImage(
   const ckey = (a: number, b: number): number => (a < b ? a * 1e7 + b : b * 1e7 + a)
 
   const pairVetoed = (gi: number, gj: number): boolean => {
+    // User-marker veto: two groups carrying different markers must stay separate
+    // (same must-not-merge mechanism as the discontinuity set 𝒜, user-driven).
+    if (hasMarkers) {
+      const ki = groupMarker.get(gi)!
+      const kj = groupMarker.get(gj)!
+      if (ki !== -1 && kj !== -1 && ki !== kj) return true
+    }
     const mi = members.get(gi)!
     const mj = members.get(gj)!
     for (const a of mi) for (const b of mj) if (vetoed.has(pairKey(a, b))) return true
@@ -343,6 +432,12 @@ export function segmentImage(
     const c = nextId++
     members.set(c, members.get(best.i)!.concat(members.get(best.j)!))
     samples.set(c, best.samples)
+    // The merged group inherits the (single) marker of whichever side carried
+    // one — never both, since pairVetoed blocks two-marker unions.
+    const mi = groupMarker.get(best.i)!
+    groupMarker.set(c, mi !== -1 ? mi : groupMarker.get(best.j)!)
+    groupMarker.delete(best.i)
+    groupMarker.delete(best.j)
     // Retire the two merged groups and their cache rows; add the new group.
     alive.splice(alive.indexOf(best.j), 1)
     alive.splice(alive.indexOf(best.i), 1)

@@ -312,12 +312,21 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
   // neighbour. Measured: the overlaps return only once τ_s drops to ≈2–3, which
   // also risks fragmenting smooth gradients, so this is opt-in, not the default.
   const d = clamp(options.regionDetail ?? 0, 0, 100) / 100
-  if (d === 0) return DEFAULT_SEGMENT_OPTIONS
-  return {
-    ...DEFAULT_SEGMENT_OPTIONS,
-    tauS: DEFAULT_SEGMENT_OPTIONS.tauS - d * 7.5, // 10 → 2.5
-    mergeTol: DEFAULT_SEGMENT_OPTIONS.mergeTol - d * 0.048, // 0.06 → 0.012
-  }
+  // User markers (normalized [0,1]) are a surgical alternative to regionDetail:
+  // they protect only the marked spots from merging (segment.ts), leaving smooth
+  // gradients elsewhere intact. Threaded through whether or not regionDetail is
+  // raised. No markers + regionDetail 0 ⇒ the exact default object (byte-identical
+  // output to before).
+  const markers = options.markers && options.markers.length > 0 ? options.markers : undefined
+  const base: SegmentOptions =
+    d === 0
+      ? DEFAULT_SEGMENT_OPTIONS
+      : {
+          ...DEFAULT_SEGMENT_OPTIONS,
+          tauS: DEFAULT_SEGMENT_OPTIONS.tauS - d * 7.5, // 10 → 2.5
+          mergeTol: DEFAULT_SEGMENT_OPTIONS.mergeTol - d * 0.048, // 0.06 → 0.012
+        }
+  return markers ? { ...base, markers } : base
 }
 
 /**

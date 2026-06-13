@@ -133,4 +133,14 @@ export interface VectorizeOptions {
    * ~1.5 when omitted. Higher = more regular geometry, less PNG-faithful.
    */
   fidelity?: number
+  /**
+   * User-placed region markers ("seeds") for segmentation, in NORMALIZED [0,1]
+   * image coordinates (resolution-independent: correct at any raster size).
+   * Marker-watershed semantics — a marker means "keep a distinct region here":
+   * two regions that contain different markers never merge, and a marked region
+   * is never absorbed away. Unmarked areas merge exactly as without markers. To
+   * split a translucent overlap from a neighbouring shape, mark BOTH. Omitted /
+   * empty ⇒ byte-identical to no markers.
+   */
+  markers?: { x: number; y: number }[]
 }
