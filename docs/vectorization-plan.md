@@ -966,11 +966,26 @@ out of reach by geometry changes alone.
   vertices for anti-aliased slivers. All preserve the corpus numbers exactly (the fixes are
   behaviour-neutral on clean loops) and bring a 6 s pathological loop to <100 ms.
 
-**Stage B — NOT built (decision recorded).** The harness DOES show the abutting-residue
-trigger (petals/bloom crisp seam > potrace), so Stage B (shared-boundary curve network) is
-the indicated fix for weakness (A). It was deferred because (a) it is a genuine
-re-architecture of the crisp path (planar boundary graph + junction stitching + shared-curve
-fit + network-for-geometry/stacking-for-paint) — high effort/risk, and (b) it cannot enable
-the motivating goal (retire potrace): crisp's SSIM is below potrace on every row from the
-node-economy tradeoff, which shared geometry does not lift. Its payoff is bounded to the
-petals/bloom seam (a few pixels). Left as a documented, user-gated next step.
+**Stage B — NOT built (the premise was measured and refuted).** Stage B (shared-boundary
+curve network) fixes weakness (A) = abutting-boundary *cracks* (a render discontinuity where
+the source is smooth — the page/underlayer bleeding through a gap). Before building it, the
+petals/bloom seam pixels were located and inspected (the top-12 ΔE boundary pixels of each):
+**there are no cracks.** Every seam pixel has render-gradient ≈ 0 — the render is *smooth*
+there, just the wrong COLOUR (e.g. bloom: source `rgb(50,178,236)` vs render
+`rgb(48,156,223)`, ΔE 10.9; petals: source `rgb(44,172,231)` vs render `rgb(45,161,225)`,
+ΔE 5.7, both gradients 0). The seam is the V2 segmenter / paint-ladder discretising a
+translucent overlap blend into a region whose fitted fill is a few ΔE off — a PAINT error
+sampled near a boundary, NOT a geometry divergence. (V1's stacking already eliminated the
+abutting cracks, which is why render-gradient is 0.)
+
+Shared boundary geometry cannot change a region's fill colour, and there is no crack to
+close — so Stage B would not move the petals/bloom seam. Worse, the network traces the
+INTEGER pixel grid (the supplement's "pixel poly-lines"), which is less sub-pixel-accurate
+than Stage A's coverage-field contouring, so it would push boundaries *off* the true edge —
+regressing petals/bloom placement AND summit/outline's currently-perfect (seam 0) sub-pixel
+corners. Per the plan's own gate ("ONLY build Stage B if the harness shows abutting-boundary
+residue is the remaining gap"), the gate is not satisfied. The real fix for the petals/bloom
+seam is paint-colour accuracy on translucent overlaps — V2/V4 paint/segmentation, explicitly
+out of scope for V5 (which is additive geometry). Stage B abandoned (not deferred): it is the
+wrong tool for the measured gap. The crisp/potrace SSIM gap is likewise inherent (crisp's
+node-economy tradeoff), so potrace stays as the fidelity engine regardless.
