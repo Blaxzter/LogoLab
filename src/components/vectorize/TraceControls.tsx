@@ -185,7 +185,7 @@ export function TraceControls({
 
         <div className="mt-auto border-t border-line pt-4">
           <p className="text-[0.7rem] leading-relaxed text-faint">
-            V pan · A edit nodes · ⌫ delete · double-click a segment to add a node.
+            V pan · A edit nodes · M mark regions · ⌫ delete · double-click a segment to add a node.
           </p>
         </div>
       </div>

@@ -11,9 +11,11 @@ import {
     Download,
     Hand,
     Loader2,
+    MapPin,
     MousePointer2,
     Redo2,
     Undo2,
+    X,
 } from "lucide-react";
 import { useCheckerClass, useLogo, useStore } from "../../store";
 import { usePanZoom, type PanZoom } from "../../hooks/usePanZoom";
@@ -41,7 +43,7 @@ const RASTER_MAX_DIM = 1024;
 const DEBOUNCE_MS = 400;
 
 type ViewMode = "split" | "traced" | "original" | "overlay";
-type Tool = "pan" | "node";
+type Tool = "pan" | "node" | "mark";
 
 /** Human-readable byte size ('842 B' / '12.4 KB' / '1.20 MB'). */
 function formatBytes(bytes: number): string {
@@ -169,6 +171,27 @@ export function VectorizeStudio() {
         },
         [doc, forceColorOn],
     );
+
+    /* ------------------------------------------------------- region markers */
+
+    // Markers (segmentation seeds) live in `opts.markers` so they flow straight
+    // into the trace and the explainer, survive a re-trace (run() only resets the
+    // doc, never opts), and serialize through the worker unchanged. Normalized
+    // [0,1] coords ⇒ resolution-independent.
+    const markers = useMemo(() => opts.markers ?? [], [opts.markers]);
+
+    const addMarker = useCallback((x: number, y: number) => {
+        setOpts((o) => ({ ...o, markers: [...(o.markers ?? []), { x, y }] }));
+    }, []);
+    const removeMarker = useCallback((index: number) => {
+        setOpts((o) => ({
+            ...o,
+            markers: (o.markers ?? []).filter((_, i) => i !== index),
+        }));
+    }, []);
+    const clearMarkers = useCallback(() => {
+        setOpts((o) => (o.markers && o.markers.length ? { ...o, markers: [] } : o));
+    }, []);
 
     const handleCanvasChange = useCallback(
         (d: EditableDoc) => historySet(mergeFills(d)),
@@ -345,6 +368,10 @@ export function VectorizeStudio() {
                 setTool("node");
                 return;
             }
+            if (!e.altKey && k === "m") {
+                setTool("mark");
+                return;
+            }
             if (k === "Escape") {
                 // A drag-cancel Escape is consumed by the canvas before reaching here.
                 if (selectedNodes.size > 0) setSelectedNodes(new Set());
@@ -507,10 +534,13 @@ export function VectorizeStudio() {
         editable: !busy,
         selectedPathId,
         selectedNodes,
+        markers,
         onSelectPath: handleSelectPath,
         onSelectNodes: handleSelectNodes,
         onDocChange: handleCanvasChange,
         onDocCommit: handleCanvasCommit,
+        onAddMarker: addMarker,
+        onRemoveMarker: removeMarker,
     };
 
     return (
@@ -573,9 +603,36 @@ export function VectorizeStudio() {
                                         </>
                                     ),
                                 },
+                                {
+                                    value: "mark",
+                                    title: "Mark regions to keep (M)",
+                                    label: (
+                                        <>
+                                            <MapPin size={13} /> Mark
+                                        </>
+                                    ),
+                                },
                             ]}
                         />
                     </div>
+                    {(tool === "mark" || markers.length > 0) && (
+                        <div className="flex items-center gap-2 text-xs text-muted">
+                            <span className="tabular-nums">
+                                {markers.length} marker
+                                {markers.length === 1 ? "" : "s"}
+                            </span>
+                            {markers.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={clearMarkers}
+                                    title="Remove all region markers"
+                                    className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+                                >
+                                    <X size={12} /> Clear
+                                </button>
+                            )}
+                        </div>
+                    )}
                     <ToolButton
                         title="Undo (Ctrl+Z)"
                         onClick={undo}
@@ -742,7 +799,9 @@ export function VectorizeStudio() {
                     <span className="ml-auto hidden truncate sm:block">
                         {tool === "node"
                             ? "Drag anchors · double-click segment to add a node · Del removes"
-                            : "Scroll to zoom · drag to pan"}
+                            : tool === "mark"
+                              ? "Click to keep a region as its own shape · click a marker to remove · mark both sides of an overlap"
+                              : "Scroll to zoom · drag to pan"}
                     </span>
                 </footer>
             </div>

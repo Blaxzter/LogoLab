@@ -1044,3 +1044,95 @@ this app's lightweight client-side budget yet — hence deferred:
   completion of the occluded parts of each layer.
 - ARDECO (Lecot & Lévy, EGSR 2006) is the variational ancestor;
   our V4 glow-stack (§3.2.4) is the restricted, logo-scale special case already shipped.
+
+### V5+ — user-placed region markers (seeded segmentation) — 2026-06-13 — ✅ shipped (exit met)
+
+**Why.** The `Region detail` knob (above) recovers translucent overlaps only by
+tightening the merge thresholds GLOBALLY, which also fragments smooth gradients
+everywhere (measured there: nebula 3→9 paths / 29→1414 nodes). Markers are the
+surgical alternative — the classic marker-controlled-segmentation technique
+(marker watershed / seeded region growing): the user clicks the spots to keep as
+their own regions; ONLY those are protected, so gradients elsewhere stay intact.
+
+**Marker-watershed semantics.** A marker = "keep a distinct region here." Two
+segments that carry DIFFERENT markers must never merge; an unmarked region merges
+exactly as before. So to split a translucent overlap from a neighbouring shape the
+user marks BOTH (the overlap centre AND each circle). No foreground/background
+scribble groups (deferred) — one flat marker class, v1.
+
+**What shipped** (additive; no markers ⇒ byte-identical output):
+- `src/types.ts` — `VectorizeOptions.markers?: {x,y}[]` in NORMALIZED [0,1] image
+  coords (resolution-independent: correct at studio 1024 and explainer 512 alike).
+- `src/lib/trace/segment.ts` — `SegmentOptions.markers`; each marker (fixed input
+  order) claims the nearest SMOOTH pixel (`nearestSmoothPixel`, expanding
+  Chebyshev-ring scan capped at 64 px ⇒ a stray marker degrades to a no-op, not a
+  full sweep) and gets a distinct id. The must-not-merge constraint reuses the
+  existing 𝒜 veto mechanism at **both** merge steps (see deviation 1):
+  - step 2 (colour-difference seeded growth): a per-root `rootMarker` array; a
+    union that would bring two different markers together is vetoed, so the two
+    marked seeds grow into a watershed instead of fusing.
+  - step 3c (global union-fit): a per-group `groupMarker`; `pairVetoed` rejects a
+    merge of two differently-marked groups. A group holds ≤1 marker by induction.
+- `src/lib/trace/index.ts` — `segmentOptionsFor` threads `markers` through (whether
+  or not `regionDetail` is raised); no markers + detail 0 returns the exact default
+  object ⇒ byte-identical. `traceImage` already passes the full options, so the
+  worker (`trace.worker.ts`) and off-thread clients (`traceOffThread.ts`) carry
+  markers through `postMessage` UNCHANGED — no worker/plumbing changes needed.
+- UI: a **"Mark"** tool (3rd toolbar segment, key **M**) in `VectorizeStudio` +
+  `EditorCanvas` (reusing its exact pan/zoom↔image transform — no parallel one):
+  click adds a marker, click a pin removes it, a toolbar "N markers · Clear"
+  affordance clears all. Pins are emerald target glyphs rendered in every tool
+  (so protected spots stay visible), `r()`-scaled to constant screen size under
+  zoom, `pointer-events:none` (removal hit-tested geometrically by the svg).
+  Markers live in `opts.markers` ⇒ flow into the (debounced) trace AND the "How it
+  works" explainer (step 3 reflects the marker count), and SURVIVE a re-trace
+  (`run()` resets only the doc, never opts). Crisp stays off-thread.
+- Tests: `test/markers.test.ts` (5, pure `node --test`) — two markers split one
+  adjacent same-colour region (step-2 watershed), a marker in each of two merging
+  blobs keeps them separate (step-3c veto), empty/undefined markers ⇒ byte-identical
+  labels, determinism-with-markers, and an edge-placed marker snapping to the
+  nearest region. `npm test` 98→**103**.
+
+**Harness numbers.**
+- *No-marker parity — byte-identical.* `runBaseline` hashes UNCHANGED on every row
+  (nebula 27d9bc0a, petals bad1db5a, summit 4a1e726b, orbit a14e2458, bloom
+  bf83b801); every metric identical, only `runtimeMs` (timing noise) differs.
+  Determinism `pass`; typecheck + build green.
+- *petals (the target case), headless segmenter region counts:* default **4**
+  (bg + 3 circles, overlaps fused). Mark the blue∩pink overlap + both circles (3
+  markers) → **5** (the overlap returns as its own ~4.5k-px cyan region). Mark all
+  3 circles + 3 pairwise overlaps + triple (7 markers) → **7**. Browser studio:
+  6 markers → **4→6 paths / 31→52 nodes**, with `Region detail` left at **auto** —
+  overlaps recovered with NO global fragmentation.
+- *nebula (the must-not-regress case):* a marker placed IN the smooth gradient →
+  **2→2** regions, byte-identical centroids/counts. A marker on a region that is
+  already its own region is a no-op for that field — the gradient is NOT fragmented
+  (contrast the `Region detail` knob, which shatters it). Exit criterion met.
+
+**Browser verification.** Mark tool exercised end-to-end on petals: add (pins
+render + debounced re-trace fires + overlaps appear), remove (click a pin: 2→1),
+clear (8→0, reverts to the 4-path baseline), pins stay anchored + constant-size at
+157 % zoom, and **screenshots succeeded mid-crisp-trace** (the "Tracing layer N/N…"
+overlay while the UI stayed interactive — proof the worker path stayed off-thread).
+
+**Deviations from the brief (each with a measured reason).**
+- **Markers veto at BOTH merge steps, not only the step-3c 𝒜 veto the brief named
+  as the integration point.** Measured earlier (the `Region detail` entry): the
+  petals overlap fuses into a circle at **step 2** (the τ_s colour-difference merge)
+  — `τ_s = 4` alone leaves petals at 4 regions; only `τ_s ≈ 2` recovers it. So a
+  step-3c-only veto could never separate two markers that step 2 had already merged
+  into ONE fine segment. Extending the SAME veto down to step 2 (seeded growth) is
+  what makes the petals case work; it is the established watershed move, not a
+  parallel mechanism.
+- **A marker off a smooth pixel snaps to the nearest one** (rather than being
+  dropped) so a click on an anti-aliased edge / 𝒟 pixel still anchors to a real
+  segment; unreachable (fully transparent) ⇒ silently ignored.
+- **The "exempt marked segments from despeckle/AA-absorption" step is satisfied
+  structurally, not as new code:** `segment.ts` has no region-despeckle pass (V2
+  deleted drop-minor), and step 4 only floods UNassigned 𝒟 pixels — it never
+  absorbs a whole region — so the two vetoes alone guarantee a marked region
+  survives. (A sub-turdsize marked speck can still be dropped by the tracer
+  downstream; out of scope.)
+- **Marker UI lives in `EditorCanvas`** (now that the parallel edit-view rework had
+  landed) to reuse its measured client↔viewBox transform verbatim, rather than a
+  standalone overlay with a duplicated transform.

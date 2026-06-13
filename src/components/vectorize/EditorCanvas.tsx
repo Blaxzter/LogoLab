@@ -37,6 +37,8 @@ const ACCENT = "#5b5bd6";
 const ACCENT_SEL = "#f25f2e";
 /** White halo/ring colour, keeps the overlay legible over any artwork. */
 const HALO = "#ffffff";
+/** Region-marker pin colour (emerald) — distinct from the indigo/orange edit accents. */
+const MARKER = "#10b981";
 /** Screen-px movement before a pointerdown counts as a drag (not a click). */
 const DRAG_THRESHOLD_PX = 3;
 /** Max screen-px distance from a segment for double-click node insertion. */
@@ -45,11 +47,13 @@ const INSERT_MAX_PX = 12;
 const ANCHOR_HIT_PX = 8;
 /** Screen-px radius treated as "on a handle dot" (dblclick no-op). */
 const HANDLE_HIT_PX = 7;
+/** Screen-px radius for clicking an existing region marker to remove it. */
+const MARKER_HIT_PX = 11;
 
 export interface EditorCanvasProps {
     doc: EditableDoc;
     pz: PanZoom;
-    tool: "pan" | "node";
+    tool: "pan" | "node" | "mark";
     /** False while tracing — render only, no editing. */
     editable: boolean;
     selectedPathId: string | null;
@@ -57,12 +61,18 @@ export interface EditorCanvasProps {
     selectedNodes: ReadonlySet<string>;
     /** Original-image ghost rendered under the SVG (overlay view mode). */
     underlay?: { src: string; opacity: number } | null;
+    /** Region markers (segmentation seeds) in NORMALIZED [0,1] image coords. */
+    markers?: { x: number; y: number }[];
     onSelectPath: (id: string | null) => void;
     onSelectNodes: (keys: Set<string>) => void;
     /** Live preview during drags (no history commit). */
     onDocChange: (doc: EditableDoc) => void;
     /** History-committing final state (pointerup, double-click edits). */
     onDocCommit: (doc: EditableDoc) => void;
+    /** Add a marker at normalized [0,1] coords (mark tool). */
+    onAddMarker?: (x: number, y: number) => void;
+    /** Remove the marker at the given index (mark tool). */
+    onRemoveMarker?: (index: number) => void;
     /** Forwarded to ZoomSurface — registers the box the +/- buttons zoom around. */
     primary?: boolean;
 }
@@ -268,10 +278,13 @@ export function EditorCanvas({
     selectedPathId,
     selectedNodes,
     underlay,
+    markers,
     onSelectPath,
     onSelectNodes,
     onDocChange,
     onDocCommit,
+    onAddMarker,
+    onRemoveMarker,
     primary = false,
 }: EditorCanvasProps) {
     const [vbX, vbY, vbW, vbH] = doc.viewBox;
@@ -316,6 +329,9 @@ export function EditorCanvas({
     }, []);
 
     const interactive = tool === "node" && editable;
+    // Mark tool: click the stage to add a region marker, click a marker to remove
+    // it. Independent of node editing (no selection/marquee machinery).
+    const marking = tool === "mark" && editable;
     // px per viewBox unit at the current zoom (fit.width is the layout size; the
     // pan/zoom transform multiplies it on screen). Guard the pre-measure frame.
     const screenScale = fit.width > 0 ? (fit.width * pz.scale) / vbW : 1;
@@ -395,6 +411,9 @@ export function EditorCanvas({
 
     const handlePathPointerDown = (e: React.PointerEvent<SVGGElement>) => {
         if (e.button !== 0 || !e.isPrimary) return;
+        // Mark tool: don't select/drag the path — let the event bubble to the svg
+        // root, which places/removes a marker at the click point.
+        if (marking) return;
         const id = (e.target as Element)
             .closest("[data-id]")
             ?.getAttribute("data-id");
@@ -456,6 +475,12 @@ export function EditorCanvas({
     // handle dot (swallow) → segment (insert node) → painted fill (swallow) →
     // background (fall through to ZoomSurface's zoom reset).
     const handleSvgDoubleClick = (e: React.MouseEvent<SVGSVGElement>) => {
+        // In mark mode the svg receives events, so swallow the dblclick to stop
+        // ZoomSurface from resetting the zoom while the user is placing markers.
+        if (marking) {
+            e.stopPropagation();
+            return;
+        }
         if (!interactive) return;
         const pt = toVb(e.clientX, e.clientY);
         if (!pt) return;
@@ -758,6 +783,35 @@ export function EditorCanvas({
      *  If it's a plain click (no movement) we clear selection on pointerup. */
     const handleSvgPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
         if (e.button !== 0) return; // middle-drag pans without touching selection
+        if (marking) {
+            const pt = toVb(e.clientX, e.clientY);
+            if (!pt) return;
+            e.stopPropagation(); // prevent ZoomSurface from panning
+            // Click an existing marker (within tolerance) → remove it; else add a
+            // new one. Hit-test geometrically so it works under any pan/zoom.
+            const scale = liveScale();
+            const all = markers ?? [];
+            let hit = -1;
+            let bestD = MARKER_HIT_PX / scale;
+            for (let i = 0; i < all.length; i++) {
+                const mx = vbX + all[i].x * vbW;
+                const my = vbY + all[i].y * vbH;
+                const d = Math.hypot(mx - pt.x, my - pt.y);
+                if (d <= bestD) {
+                    bestD = d;
+                    hit = i;
+                }
+            }
+            if (hit >= 0) {
+                onRemoveMarker?.(hit);
+            } else {
+                const nx = (pt.x - vbX) / vbW;
+                const ny = (pt.y - vbY) / vbH;
+                if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1)
+                    onAddMarker?.(nx, ny);
+            }
+            return;
+        }
         if (interactive) {
             const pt = toVb(e.clientX, e.clientY);
             if (!pt) return;
@@ -802,12 +856,13 @@ export function EditorCanvas({
                         viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
                         width="100%"
                         height="100%"
-                        className={interactive ? "cursor-crosshair" : ""}
+                        className={interactive || marking ? "cursor-crosshair" : ""}
                         style={{
                             display: "block",
                             touchAction: "none",
                             // Pan mode / render-only: the surface beneath pans & zooms freely.
-                            pointerEvents: interactive ? undefined : "none",
+                            // Node + mark modes capture pointer events on the svg.
+                            pointerEvents: interactive || marking ? undefined : "none",
                         }}
                         onPointerDown={handleSvgPointerDown}
                         onPointerMove={handleSvgPointerMove}
@@ -1044,6 +1099,46 @@ export function EditorCanvas({
                                 strokeDasharray={`${r(4)} ${r(2)}`}
                                 style={{ pointerEvents: "none" }}
                             />
+                        )}
+
+                        {/* Region markers (segmentation seeds). Drawn in every tool
+                            so the user always sees what's protected; clicks are
+                            handled geometrically by the svg, so the pins themselves
+                            never intercept (pointerEvents: none). Sized via r() to
+                            stay constant on screen at any zoom. */}
+                        {markers && markers.length > 0 && fit.width > 0 && (
+                            <g style={{ pointerEvents: "none" }}>
+                                {markers.map((m, i) => {
+                                    const cx = vbX + m.x * vbW;
+                                    const cy = vbY + m.y * vbH;
+                                    return (
+                                        <g key={i}>
+                                            <circle
+                                                cx={cx}
+                                                cy={cy}
+                                                r={r(6.5)}
+                                                fill={MARKER}
+                                                fillOpacity={0.22}
+                                                stroke="none"
+                                            />
+                                            <circle
+                                                cx={cx}
+                                                cy={cy}
+                                                r={r(4)}
+                                                fill={MARKER}
+                                                stroke={HALO}
+                                                strokeWidth={r(1.5)}
+                                            />
+                                            <circle
+                                                cx={cx}
+                                                cy={cy}
+                                                r={r(1.4)}
+                                                fill={HALO}
+                                            />
+                                        </g>
+                                    );
+                                })}
+                            </g>
                         )}
                     </svg>
                 </div>

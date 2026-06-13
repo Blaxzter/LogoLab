@@ -94,6 +94,7 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: OffThreadAnalysis; op
   const gradientsOn = opts.gradients !== false
   const engineLabel = opts.engine === 'potrace' ? 'Potrace' : 'Crisp'
   const fidelity = opts.fidelity ?? 1.5
+  const markerCount = opts.markers?.length ?? 0
 
   return (
     <div className="flex flex-col gap-6">
@@ -131,8 +132,15 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: OffThreadAnalysis; op
       <Step
         n={3}
         title="Group pixels into regions"
-        controls={[`Region detail: ${(opts.regionDetail ?? 0) === 0 ? 'auto' : opts.regionDetail}`]}
-        body={`Pixels belonging to one smooth field are merged into a handful of macro-regions — each will become one shape. With your current settings your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. The Region detail control tunes this merge: at the default, areas similar enough get fused — so subtle differences, like the soft blends where translucent shapes overlap, can merge into a neighbour instead of becoming their own shape. Raise it to keep those finer regions (at the cost of possibly fragmenting smooth gradients into flat bands).`}
+        controls={[
+          `Region detail: ${(opts.regionDetail ?? 0) === 0 ? 'auto' : opts.regionDetail}`,
+          ...(markerCount > 0 ? [`Markers: ${markerCount}`] : []),
+        ]}
+        body={`Pixels belonging to one smooth field are merged into a handful of macro-regions — each will become one shape. With your current settings your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. The Region detail control tunes this merge: at the default, areas similar enough get fused — so subtle differences, like the soft blends where translucent shapes overlap, can merge into a neighbour instead of becoming their own shape. Raise it to keep those finer regions (at the cost of possibly fragmenting smooth gradients into flat bands).${
+          markerCount > 0
+            ? ` You've placed ${markerCount} region marker${markerCount === 1 ? '' : 's'} — each one is kept as its own region (two differently-marked spots never merge), a surgical way to protect just those areas without raising Region detail everywhere.`
+            : ''
+        }`}
       >
         <Visual label={`${regionCount} regions`}>
           <StageCanvas rgba={a.segs} width={width} height={height} />
