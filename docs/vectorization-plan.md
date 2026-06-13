@@ -1150,3 +1150,105 @@ centred-parity, t=0 at focal, t=1 on the circle, ray-monotonicity, clamp). This
 removes the trap a future eq-6 focal/eccentric-radial fitter (the one stubbed
 paint-ladder rung) would otherwise hit — it can now emit `fx`/`fy` and be measured
 correctly with no further plumbing.
+
+### V6 — translucent layer decomposition — 2026-06-14 — ✅ shipped (exit met on bloom)
+
+**What this is.** The "real fix" the §9 *Translucent overlaps* / V5-Stage-B-abandoned
+entries pointed at, built as the RESTRICTED, closed-form, logo-scale special case of
+Photo2ClipArt / Du-et-al — **not** their global/MCTS search. petals/bloom are N
+see-through overlapping circles; the structure-first pipeline renders each segmented
+region as an OPAQUE flat band, so the marker-recovered overlaps come out as many
+opaque puzzle-pieces. V6 rebuilds them as a few **stacked translucent shapes** (N
+circles at one opacity over the background) — the source's true form — with the
+fewest, most editable elements. Structurally a sibling of the V4 glow-stack:
+per-region closed-form fit + a gate that only fires when it beats the opaque model;
+otherwise a byte-identical no-op.
+
+**The math (closed form).** Straight alpha-over of a shape (colour Cₛ, opacity α)
+over a colour X is *linear in RGB*: `α·Cₛ + (1−α)·X`. Writing a shape's EXCLUSIVE
+(single-shape-over-background) colour `Eₛ = α·Cₛ + (1−α)·BG`, the composite of a
+covering subset telescopes to a recurrence needing only `Eₛ`, `BG`, α:
+`X ← BG; for each covering shape bottom→top: X ← Eₛ + (1−α)·(X − BG)`. So an
+overlap of {i bottom, j top} reads `Eⱼ + (1−α)(Eᵢ−BG)`, etc. The exclusive colours
+are measured directly (the **atoms**); the only free scalar is the shared α (a 1-D
+line search — a scalar fit, not a global search); shape colours close-form as
+`Cₛ = (Eₛ − (1−α)·BG)/α`. Atoms + global stacking order are discovered by a tiny
+bounded enumeration (atom sets × permutations, N ≤ 3); atom candidates are restricted
+to background-touching regions (excludes interior triple-overlaps) and to colours
+≥ `bgMinDelta` from the background (excludes background fragments). New pure module
+`src/lib/trace/layers.ts` (`decomposeTranslucent`), deterministic, no deps.
+
+**Emission.** `index.ts`: background full-bleed opaque base → any unrelated opaque
+region → the translucent shapes (each the **cleaned UNION mask** of its label set —
+largest connected component + filled holes, so watershed stray pixels don't fragment
+the disk or corrupt beautify's circle snap) as `PathItem`s with `fillOpacity`,
+bottom-to-top. No rasterizer / doc-model change: `raster.ts` already composites
+`fillOpacity` straight-alpha-over (verified — it's the gate's own renderer).
+
+**The gate is on the REAL render — the V4 lesson, sharpened.** The analytic
+per-region residual is *anti-correlated* with reality here: on clean flat overlaps
+the opaque region-mean model fits interiors just as well as the composite (analytic
+gain ≈ 0, even negative), while the opaque bands' real damage is in **tracing the
+thin overlap lenses** — geometry a per-pixel model cannot see. So V6 rasterizes BOTH
+candidate stacks (opaque vs translucent) through the harness rasterizer (moved to
+`src/lib/render/raster.ts`, now shared) and keeps the translucent one only when it
+beats the opaque render on mean CIE76 ΔE by `DECOMP_WIN_MARGIN`. This double-traces
+in the decomposition case — acceptable, as it is opt-in (markers / Region detail).
+
+**Harness numbers** (bloom synthetic, 6 markers + Region detail 95, crisp):
+
+| model            | meanΔE | SSIM   | seam max | seam P99.5 | paths | nodes | grad |
+|------------------|-------:|--------|---------:|-----------:|------:|------:|-----:|
+| opaque bands     | 4.35   | 0.9879 | 81.1     | 81.1       | 7     | 80    | 4    |
+| **translucent**  | **0.47** | **0.9930** | **11.6** | **7.8** | **4** | **16** | 1 |
+
+The decomposition recovers `#6366f1 / #ec4899 / #0ea5e9` at α **0.851** (source
+0.85) — i.e. exactly the three source circles + background, as 4 paths / 16 nodes
+(bg rect + 3 perfect circles). meanΔE drops **9×**, seam **7×**, SSIM up, elements
+nearly halved.
+
+**Exit criterion (the brief's V6) — met on bloom; petals is a measured null.**
+bloom (a TRUE translucent source) is the headline win above. **petals.png is a
+hand-FLATTENED source** — `petals.svg` already ships the opaque-band decomposition
+(7 opaque paths of irregular blobs, not circles), so the PNG's ground truth *is* the
+opaque bands and the opaque pipeline matches it (meanΔE 1.3–1.7); a single-α circle
+composite can only approximate it, so the render gate **correctly declines** (falls
+back to byte-identical opaque) — demonstrating the gate's safety rather than a
+regression. Every non-translucent corpus image is untouched: **runBaseline hashes
+unchanged on every row** (the attempt is skipped without markers/Region detail), the
+glow-stack still fires on nebula only, determinism + typecheck + build green,
+`npm test` 108→**118** (7 `test/layers.test.ts` — 2-/3-circle {colour,α} recovery,
+determinism, and no-ops on flat / non-overlapping / no-background / tight-tolerance;
+3 `test/layers-integration.test.ts` — full-pipeline win + summit-with-markers no-op
+parity).
+
+**Deviations from the brief (each with a measured reason).**
+- **Gate on the rendered docs, not the analytic full-region CIE76 residual the
+  glow-stack uses.** Measured: on clean flat overlaps the analytic opaque residual
+  ≈ the analytic translucent residual (both fit interiors), and is even *lower* for
+  opaque (0.604 vs 0.779 on bloom) — yet the REAL renders are 4.35 vs 0.47, because
+  the opaque bands trace thin overlap lenses badly (a geometry error invisible to a
+  per-pixel region-mean model). An analytic-only gate therefore never fired on the
+  very case it targets. Rendering both candidates through the harness rasterizer ties
+  the decision to what ships (the explicit "verify raster reproduces your stack" gate
+  the brief calls for). A loose analytic pre-filter (`maxResidual`, `maxWorseThanOpaque`)
+  still cheaply rejects garbage before the render gate.
+- **α fit residual is measured over ALL regions, not only the consumed ones.** An
+  exclusive region fits perfectly at ANY α (its atom colour absorbs α), so a
+  consumed-only residual let the 1-D search drift to α→1, dropping the hard overlaps
+  and "winning" on the trivially-fit exclusives. Measuring over all regions makes the
+  α-sensitive overlaps drive the fit to the true α.
+- **`bgMinDelta` guard + cleaned union masks** are additions the brief didn't name,
+  each fixing a measured failure: a Region-detail-fragmented background promoted a
+  bg-coloured fragment to a "shape" (garbage render, petals); and raw union masks
+  carried disconnected watershed strays ~100 px off the disk that pushed beautify's
+  fitted circle's bbox far off (bloom translucent meanΔE 9.43 → 0.47 after cleaning).
+- **Clean overlaps need markers AND raised Region detail, not markers alone.** bloom's
+  overlap colours sit 10–13 CIE76 ΔE from the exclusives — within the default merge
+  τ_s = 10 — so markers alone give a degenerate watershed split; lowering τ_s
+  (Region detail ≈ 95, τ_s ≈ 3) is what lets all three pairwise overlaps survive as
+  their own regions for the decomposition to consume. (No triple region exists for
+  the bloom layout — the three disks share no common point.)
+- **N ≤ 3 shapes** (the verified case); the enumeration is capped and a >12-region
+  scene declines rather than truncating (the opaque output keeps every region, so
+  nothing is silently dropped).
