@@ -21,7 +21,6 @@ import { beautify, DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beau
 
 export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   mode: 'color',
-  colors: 8,
   smoothing: 50,
   despeckle: 25,
   threshold: 128,

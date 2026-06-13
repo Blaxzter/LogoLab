@@ -57,8 +57,10 @@ export function PipelineExplainer({ onClose }: { onClose: () => void }) {
     void (async () => {
       try {
         const image = await getImageData(logo.src!, ANALYZE_DIM, logo.isSvg ? logo.svgText : null)
-        // Let the spinner paint before the synchronous heavy stages.
-        await new Promise((r) => requestAnimationFrame(() => r(null)))
+        // Let the spinner paint before the synchronous heavy stages. Use a timer,
+        // not requestAnimationFrame — rAF is throttled/paused in background tabs,
+        // which would hang the analysis whenever the tab isn't foregrounded.
+        await new Promise((r) => setTimeout(r, 16))
         const rgba = image as unknown as { width: number; height: number; data: Uint8ClampedArray }
         const seg = segmentImage(rgba, DEFAULT_SEGMENT_OPTIONS)
         const paints = seg.regionSamples.map((s) => fitPaintLadder(s))
@@ -133,6 +135,7 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
       <Step
         n={2}
         title="Smooth, and find the real edges"
+        control="Smoothing"
         body="First we denoise the image into smooth colour fields (a Mumford–Shah solver) and, as a by-product, get a map of the strong edges between them — the borders worth keeping. Anti-aliasing fuzz and sensor noise are smoothed away so they don't become jagged shapes."
       >
         <Visual label="Smoothed">
@@ -146,6 +149,7 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
       <Step
         n={3}
         title="Group pixels into regions"
+        control="Despeckle"
         body={`Pixels belonging to one smooth field are merged into a handful of macro-regions — each will become one shape. Your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. This grouping is the key step: areas that are similar enough get fused, so very subtle differences (like the soft blends where translucent shapes overlap) can merge into a neighbour rather than become their own shape.`}
       >
         <Visual label={`${regionCount} regions`}>
@@ -156,6 +160,7 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
       <Step
         n={4}
         title="Fit the simplest paint that matches"
+        control="Gradients"
         body={`Each region gets the cheapest paint that still fits it well: a flat colour, a smooth gradient, or a layered “glow” stack — whichever reproduces the region with the fewest knobs.${hasGrad ? ' Some of your regions matched a gradient (coloured tags below).' : ' Every region here matched a single flat colour.'}`}
       >
         <Visual label="Region fills">
@@ -182,6 +187,7 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
       <Step
         n={5}
         title="Trace clean outlines, then tidy them"
+        control="Engine · Fidelity"
         body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass snaps near-circles, near-lines and shared centres to perfect shapes. Result: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
       >
         <Visual label="Vector result">
@@ -198,7 +204,20 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
   )
 }
 
-function Step({ n, title, body, children }: { n: number; title: string; body: string; children: ReactNode }) {
+function Step({
+  n,
+  title,
+  body,
+  control,
+  children,
+}: {
+  n: number
+  title: string
+  body: string
+  /** The trace control that drives this stage, shown as a chip. */
+  control?: string
+  children: ReactNode
+}) {
   return (
     <section className="flex flex-col gap-3 sm:flex-row sm:gap-4">
       <div className="flex shrink-0 items-start gap-2 sm:w-52">
@@ -207,6 +226,11 @@ function Step({ n, title, body, children }: { n: number; title: string; body: st
         </span>
         <div>
           <h3 className="text-sm font-semibold text-ink">{title}</h3>
+          {control && (
+            <span className="mt-1 inline-block rounded bg-surface-3 px-1.5 py-0.5 text-[10px] text-ink-2">
+              control: {control}
+            </span>
+          )}
         </div>
       </div>
       <div className="min-w-0 flex-1">

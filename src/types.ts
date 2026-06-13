@@ -96,8 +96,6 @@ export interface RenderIconOptions {
 /** Vectorization configuration for the raster → SVG tracing pipeline. */
 export interface VectorizeOptions {
   mode: 'color' | 'mono'
-  /** Max number of fill colors to quantize to (color mode), 2–24. */
-  colors: number
   /** 0 (crisp corners, node-dense) → 100 (very smooth, sparse). Drives potrace curve fitting. */
   smoothing: number
   /** 0 (keep every speck) → 100 (aggressive noise suppression). Drives speckle & color cleanup. */

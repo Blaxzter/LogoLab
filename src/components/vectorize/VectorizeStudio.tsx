@@ -71,7 +71,10 @@ export function VectorizeStudio() {
     const [opts, setOpts] = useState<VectorizeOptions>(
         DEFAULT_VECTORIZE_OPTIONS,
     );
-    const [precision, setPrecision] = useState(2);
+    // Output coordinate precision (decimals). Fixed default — compact files at no
+    // visible cost; no longer a user knob (it was output formatting, not a trace
+    // parameter, and cluttered the panel).
+    const precision = 2;
     const [forceColorOn, setForceColorOn] = useState(false);
     const [forceColor, setForceColor] = useState("#14161c");
     const [showHelp, setShowHelp] = useState(false);
@@ -514,8 +517,6 @@ export function VectorizeStudio() {
                 onSourceChange={setRetraceVector}
                 opts={opts}
                 onPatch={(p) => setOpts((o) => ({ ...o, ...p }))}
-                precision={precision}
-                onPrecision={setPrecision}
                 forceColorOn={forceColorOn}
                 onForceColorOn={setForceColorOn}
                 forceColor={forceColor}

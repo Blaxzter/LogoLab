@@ -1,5 +1,5 @@
 // Left rail of the vectorize studio: trace parameters (mode, colors,
-// smoothing…), output options (force color, precision) and the Trace button.
+// smoothing…), output options (force color) and the Trace button.
 // Pure controlled UI — all state lives in VectorizeStudio.
 
 import { Wand2, HelpCircle } from 'lucide-react'
@@ -14,8 +14,6 @@ export interface TraceControlsProps {
   onSourceChange: (v: 'clean' | 'retrace') => void
   opts: VectorizeOptions
   onPatch: (patch: Partial<VectorizeOptions>) => void
-  precision: number
-  onPrecision: (v: number) => void
   forceColorOn: boolean
   onForceColorOn: (v: boolean) => void
   forceColor: string
@@ -34,8 +32,6 @@ export function TraceControls({
   onSourceChange,
   opts,
   onPatch,
-  precision,
-  onPrecision,
   forceColorOn,
   onForceColorOn,
   forceColor,
@@ -96,11 +92,7 @@ export function TraceControls({
             />
           </Field>
 
-          {opts.mode === 'color' ? (
-            <Field label="Colors" hint="How many fill colors to quantize to.">
-              <Slider value={opts.colors} min={2} max={24} onChange={(v) => onPatch({ colors: v })} />
-            </Field>
-          ) : (
+          {opts.mode === 'mono' && (
             <Field label="Threshold" hint="Pixels darker than this become solid; lighter ones drop out.">
               <Slider value={opts.threshold} min={0} max={255} onChange={(v) => onPatch({ threshold: v })} />
             </Field>
@@ -174,10 +166,6 @@ export function TraceControls({
         ) : (
           <p className="text-xs leading-snug text-muted">Recolor every shape to one fill.</p>
         )}
-      </Field>
-
-      <Field label="Precision" hint="Decimal places kept in path coordinates.">
-        <Slider value={precision} min={0} max={3} onChange={onPrecision} />
       </Field>
 
       {staleEdits && (
