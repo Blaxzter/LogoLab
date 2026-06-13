@@ -1136,3 +1136,17 @@ overlay while the UI stayed interactive — proof the worker path stayed off-thr
 - **Marker UI lives in `EditorCanvas`** (now that the parallel edit-view rework had
   landed) to reuse its measured client↔viewBox transform verbatim, rather than a
   standalone overlay with a duplicated transform.
+
+**Follow-up — radial focal-sync latent DISARMED.** The long-standing latent
+(carried since V2: `sampleGradient` / the segmenter's profile-gap `t` ignored a
+radial's `fx`/`fy` while `raster.ts` / `gradientToSvgDef` honoured them) is fixed.
+A single exported `gradientParamT` (and `radialParamT`) in `gradient.ts` mirrors
+the rasterizer's `focalOffset` EXACTLY and is now the sole source of the scalar
+parameter for `sampleGradient`, `sampleGradientRGBA`, and `segment.ts`'s
+`profileGap`. With the focal at the centre it reduces to `distance/r`, so all
+current (centred-only) output is byte-identical — runBaseline hashes/metrics
+unchanged; `npm test` 103→**108** (5 new `test/radial-focal.test.ts` invariants:
+centred-parity, t=0 at focal, t=1 on the circle, ray-monotonicity, clamp). This
+removes the trap a future eq-6 focal/eccentric-radial fitter (the one stubbed
+paint-ladder rung) would otherwise hit — it can now emit `fx`/`fy` and be measured
+correctly with no further plumbing.

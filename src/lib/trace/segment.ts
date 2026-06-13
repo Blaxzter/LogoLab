@@ -30,7 +30,7 @@
 import type { PaletteColor, QuantizeResult } from './types'
 import { solveMumfordShah, DEFAULT_MS_OPTIONS, type MumfordShahOptions, type MumfordShahResult } from './mumfordShah.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
-import { fitBestGradient, concatSamples, type RegionSamples } from './gradient.ts'
+import { fitBestGradient, concatSamples, gradientParamT, type RegionSamples } from './gradient.ts'
 import type { GradientFill } from '../path/types'
 
 export interface SegmentOptions {
@@ -89,7 +89,6 @@ export interface SegmentResult extends QuantizeResult {
 }
 
 const clamp255 = (n: number): number => Math.max(0, Math.min(255, Math.round(n)))
-const clamp01 = (t: number): number => (t < 0 ? 0 : t > 1 ? 1 : t)
 
 /**
  * Nearest SMOOTH pixel to (px,py) by an expanding Chebyshev-ring scan (fixed
@@ -593,7 +592,7 @@ export function segmentImage(
 function profileGap(g: GradientFill, s: RegionSamples, bins = 24): number {
   const filled = new Uint8Array(bins)
   for (let i = 0; i < s.n; i++) {
-    const t = gradientT(g, s.xs[i], s.ys[i])
+    const t = gradientParamT(g, s.xs[i], s.ys[i])
     let bi = Math.floor(t * bins)
     if (bi < 0) bi = 0
     else if (bi >= bins) bi = bins - 1
@@ -615,17 +614,6 @@ function profileGap(g: GradientFill, s: RegionSamples, bins = 24): number {
     }
   }
   return maxRun / bins
-}
-
-/** A gradient's scalar parameter t∈[0,1] at (x,y) — matches sampleGradient. */
-function gradientT(g: GradientFill, x: number, y: number): number {
-  if (g.type === 'linear') {
-    const dx = g.x2 - g.x1
-    const dy = g.y2 - g.y1
-    const len2 = dx * dx + dy * dy || 1
-    return clamp01(((x - g.x1) * dx + (y - g.y1) * dy) / len2)
-  }
-  return clamp01(Math.hypot(x - g.cx, y - g.cy) / (g.r || 1))
 }
 
 /** Build a RegionSamples from JS arrays, strided down to at most `cap` points. */

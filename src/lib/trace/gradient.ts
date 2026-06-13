@@ -230,22 +230,64 @@ const hexToRgb3 = (hex: string): [number, number, number] => [
   parseInt(hex.slice(5, 7), 16),
 ]
 
-/** Evaluate any fitted gradient's colour at point (x, y), in pixel space. */
-export function sampleGradient(g: GradientFill, x: number, y: number): [number, number, number] {
+/**
+ * SVG radial-gradient offset t∈[0,1] at (x,y) for circle (cx,cy,r) with focal
+ * point (fx,fy). Mirrors the rasterizer's `focalOffset` (raster.ts) EXACTLY, so
+ * a fit's measured residual matches what the SVG renderer actually paints. With
+ * the focal AT the centre it reduces to plain `distance/r` — byte-identical to
+ * the pre-focal behaviour, so every centred radial emitted today is unchanged.
+ */
+export function radialParamT(
+  cx: number,
+  cy: number,
+  r: number,
+  fx: number,
+  fy: number,
+  x: number,
+  y: number,
+): number {
+  const rr = r || 1
+  if (Math.hypot(fx - cx, fy - cy) <= 1e-6) return clamp01(Math.hypot(x - cx, y - cy) / rr)
+  // Largest ω with P on the circle centred F+ω(C−F) of radius ω·r (the SVG focal
+  // construction) — the geometrically valid (largest non-negative) quadratic root.
+  const cfx = cx - fx
+  const cfy = cy - fy
+  const pfx = x - fx
+  const pfy = y - fy
+  const A = cfx * cfx + cfy * cfy - rr * rr
+  const Bc = -2 * (pfx * cfx + pfy * cfy)
+  const C0 = pfx * pfx + pfy * pfy
+  if (Math.abs(A) < 1e-9) {
+    // Focal on the circle (rare): linear ramp along the ray.
+    return clamp01(Math.abs(Bc) < 1e-9 ? 0 : C0 / -Bc)
+  }
+  const disc = Bc * Bc - 4 * A * C0
+  if (disc < 0) return 1
+  const sq = Math.sqrt(disc)
+  const big = Math.max((-Bc + sq) / (2 * A), (-Bc - sq) / (2 * A))
+  const small = Math.min((-Bc + sq) / (2 * A), (-Bc - sq) / (2 * A))
+  return clamp01(big >= 0 ? big : small >= 0 ? small : 1)
+}
+
+/**
+ * Scalar gradient parameter t∈[0,1] at (x,y) for any gradient — focal-aware for
+ * radials. Single source of truth shared by the fit-time samplers here AND the
+ * segmenter's profile-gap test (segment.ts), so all three stay in lock-step with
+ * the rasterizer's `makeRadialPaint`.
+ */
+export function gradientParamT(g: GradientFill, x: number, y: number): number {
   if (g.type === 'linear') {
     const dx = g.x2 - g.x1
     const dy = g.y2 - g.y1
     const len2 = dx * dx + dy * dy || 1
-    const t = clamp01(((x - g.x1) * dx + (y - g.y1) * dy) / len2)
-    return interpStops(g.stops, t)
+    return clamp01(((x - g.x1) * dx + (y - g.y1) * dy) / len2)
   }
-  const fx = g.fx ?? g.cx
-  const fy = g.fy ?? g.cy
-  // Plain distance parameterization (centred); focal handled by the renderer.
-  void fx
-  void fy
-  const t = clamp01(Math.hypot(x - g.cx, y - g.cy) / (g.r || 1))
-  return interpStops(g.stops, t)
+  return radialParamT(g.cx, g.cy, g.r, g.fx ?? g.cx, g.fy ?? g.cy, x, y)
+}
+
+/** Evaluate any fitted gradient's colour at point (x, y), in pixel space. */
+export function sampleGradient(g: GradientFill, x: number, y: number): [number, number, number] {
+  return interpStops(g.stops, gradientParamT(g, x, y))
 }
 
 /** RMS RGB error of a gradient model over the samples. */
@@ -746,10 +788,12 @@ function fitRadial(s: RegionSamples, mx: number, my: number): RadialFit | null {
 // Gaussian glow layered above the base). SVG composites these natively, and it
 // degrades gracefully — K=0 ⇒ the plain linear we already had.
 //
-// Overlays are centred (no fx/fy), so `sampleGradient` (distance param) and the
-// rasterizer's `makeRadialPaint` agree exactly — the V2 focal-sync latent stays
-// dormant. The composite math below mirrors raster.ts `compositeItem` (straight
-// alpha-over, base opaque first) so the harness measures what is emitted.
+// Overlays are centred (no fx/fy). `sampleGradient`/`gradientParamT` are now
+// focal-aware (mirroring the rasterizer's `makeRadialPaint`), so the fit-time
+// samplers agree with the renderer for ANY radial, not just centred ones — the
+// old V2 focal-sync latent is disarmed. The composite math below mirrors
+// raster.ts `compositeItem` (straight alpha-over, base opaque first) so the
+// harness measures what is emitted.
 // ---------------------------------------------------------------------------
 
 export interface GlowStack {
@@ -783,20 +827,11 @@ export const DEFAULT_GLOW_STACK: GlowStackOptions = {
   alphaHi: 1.0,
 }
 
-/** A gradient's colour AND alpha at (x, y) — alpha from per-stop opacity. Matches
- *  the rasterizer's `sampleStops` (centred radial; focal handled by the renderer,
- *  but glow overlays never set a focal so the two agree). */
+/** A gradient's colour AND alpha at (x, y) — alpha from per-stop opacity. Uses the
+ *  shared focal-aware `gradientParamT`, so it matches the rasterizer's `sampleStops`
+ *  for any radial (glow overlays stay centred, but the two now agree generally). */
 function sampleGradientRGBA(g: GradientFill, x: number, y: number): [number, number, number, number] {
-  let t: number
-  if (g.type === 'linear') {
-    const dx = g.x2 - g.x1
-    const dy = g.y2 - g.y1
-    const len2 = dx * dx + dy * dy || 1
-    t = clamp01(((x - g.x1) * dx + (y - g.y1) * dy) / len2)
-  } else {
-    t = clamp01(Math.hypot(x - g.cx, y - g.cy) / (g.r || 1))
-  }
-  return interpStopsRGBA(g.stops, t)
+  return interpStopsRGBA(g.stops, gradientParamT(g, x, y))
 }
 
 /** Stop interpolation including opacity (alpha), matching raster.ts sampleStops. */
