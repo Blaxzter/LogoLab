@@ -98,16 +98,13 @@ export function TraceControls({
             </Field>
           )}
 
-          <Field
-            label="Engine"
-            hint="Crisp = sub-pixel Bézier fitting with evidence-based corners — the lowest node count and sharp corners, best for line-art / solid shapes. Potrace = classic tracer — highest pixel fidelity and the cleanest abutting/translucent edges."
-          >
+          <Field label="Engine" hint="Crisp = cleanest, fewest nodes. Potrace = closest to the pixels.">
             <Segmented<'crisp' | 'potrace'>
-              value={opts.engine ?? 'potrace'}
+              value={opts.engine ?? 'crisp'}
               onChange={(v) => onPatch({ engine: v })}
               options={[
-                { value: 'potrace', label: 'Potrace' },
                 { value: 'crisp', label: 'Crisp' },
+                { value: 'potrace', label: 'Potrace' },
               ]}
             />
           </Field>

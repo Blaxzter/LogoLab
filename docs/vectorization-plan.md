@@ -945,6 +945,15 @@ hint corrected. The residual SSIM gap is the inherent crisp tradeoff (fewest, cl
 vs pixel-faithful), so it would persist even after Stage B — potrace retirement is therefore
 out of reach by geometry changes alone.
 
+**Post-V5 product decision (user, 2026-06-13): crisp is now the DEFAULT engine** (potrace
+still one click away). Retirement remains off (the dep stays), but for a logo tool whose goal
+is designer-like output (§2), crisp's fewest/cleanest nodes + sharp corners are the better
+default; the marginal SSIM/seam gaps favour potrace only on photo-ish / translucent inputs,
+which users can switch to. Also dropped two stale UI knobs: **Colors** (dead since V2 —
+`segmentOptionsFor` ignores it) and **Precision** (output formatting, not a trace stage). A
+user-facing "How it works" explainer (`PipelineExplainer.tsx`) and a dev stage-viewer
+(`vectorize-debug.html`) now visualize the per-stage intermediates from the live image.
+
 **Deviations from the plan (each with a measured reason)**
 - **ε = 1.0 px, not the paper's 1.5.** Measured: at 1.5 the looser cubic fit regressed
   nebula's smooth-gradient region below V4 parity (SSIM 0.9782→0.9758, meanΔE 2.95→3.00);

@@ -26,7 +26,7 @@ export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   threshold: 128,
   removeBackground: false,
   gradients: true,
-  engine: 'potrace',
+  engine: 'crisp',
   fidelity: DEFAULT_BEAUTIFY_OPTIONS.fidelity,
 }
 
@@ -79,9 +79,9 @@ export async function traceImage(
     opttolerance: 0.2 + (smoothing / 100) * 0.6,
   }
 
-  // Tracer backend: 'crisp' (sub-pixel, evenodd) vs 'potrace' (bilevel WASM,
-  // nonzero). Both consume the same black-on-white masks.
-  const engine = options.engine ?? 'potrace'
+  // Tracer backend: 'crisp' (sub-pixel, evidence-based curves; the default) vs
+  // 'potrace' (bilevel WASM). Both consume the same black-on-white masks.
+  const engine = options.engine ?? 'crisp'
   const crispOpts = crispOptionsFor(smoothing, maskOpts.turdsize)
   // Both engines now fill nonzero. The crisp tracer used to fill even-odd, which
   // XORs two near-coincident simplified contours into hairline background slivers

@@ -188,7 +188,7 @@ function Steps({ logoSrc, a }: { logoSrc: string; a: Analysis }) {
         n={5}
         title="Trace clean outlines, then tidy them"
         control="Engine · Fidelity"
-        body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass snaps near-circles, near-lines and shared centres to perfect shapes. Result: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
+        body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass (Fidelity) snaps near-circles, near-lines and shared centres to perfect shapes. The Engine control chooses how the outline is drawn: Crisp (the default, shown here) gives the fewest, cleanest nodes; Potrace sticks closest to the original pixels. Result: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
       >
         <Visual label="Vector result">
           <div className="h-full w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: a.svg }} />
