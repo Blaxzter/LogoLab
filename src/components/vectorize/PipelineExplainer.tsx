@@ -165,8 +165,8 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: Analysis; opts: Vecto
       <Step
         n={3}
         title="Group pixels into regions"
-        controls={['automatic']}
-        body={`Pixels belonging to one smooth field are merged into a handful of macro-regions — each will become one shape. Your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. This grouping is automatic (there's no granularity knob yet): areas similar enough get fused, so very subtle differences — like the soft blends where translucent shapes overlap — can merge into a neighbour instead of becoming their own shape.`}
+        controls={[`Region detail: ${(opts.regionDetail ?? 0) === 0 ? 'auto' : opts.regionDetail}`]}
+        body={`Pixels belonging to one smooth field are merged into a handful of macro-regions — each will become one shape. Your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. The Region detail control tunes this merge: at the default, areas similar enough get fused — so subtle differences, like the soft blends where translucent shapes overlap, can merge into a neighbour instead of becoming their own shape. Raise it to keep those finer regions (at the cost of possibly fragmenting smooth gradients into flat bands).`}
       >
         <Visual label={`${regionCount} regions`}>
           <StageCanvas rgba={segmentsToRgba(seg.labels, width, height)} width={width} height={height} />

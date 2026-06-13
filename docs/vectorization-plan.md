@@ -998,3 +998,49 @@ seam is paint-colour accuracy on translucent overlaps — V2/V4 paint/segmentati
 out of scope for V5 (which is additive geometry). Stage B abandoned (not deferred): it is the
 wrong tool for the measured gap. The crisp/potrace SSIM gap is likewise inherent (crisp's
 node-economy tradeoff), so potrace stays as the fidelity engine regardless.
+
+### Translucent overlaps — `Region detail` knob (stopgap) + layered decomposition (the real fix) — 2026-06-13
+
+**Where overlaps die (measured, not assumed).** For petals/bloom (translucent overlapping
+circles) the overlap-blend zones don't appear in the output. Varying each stage's threshold
+on petals (region count; more = overlaps surviving) vs nebula (smooth gradient; more =
+posterize fragmentation):
+
+| setting | petals | nebula |
+|---|---|---|
+| default (MS edge T 0.15, merge τ_s 10) | 4 | 2 |
+| MS edge T 0.08 / 0.05 (step ② "detected edges") | **4 / 4** (no change) | 2 |
+| merge τ_s 4 (step ③ grouping) | 4 | 2 |
+| merge τ_s 2 + mergeTol 0.01 (step ③) | **13** | (slow; fragments) |
+
+So the loss is at **step ③ (grouping)**, not step ② (edge detection): lowering the MS edge
+threshold to 0.05 does NOT recover the overlaps (the blend boundaries are gentle and, even
+when kept, the colour-difference merge still fuses the similar colours). Only tightening the
+merge thresholds (τ_s ≈ 2) brings them back — but that also shatters smooth gradients and is
+much slower. There is no single safe value, which is exactly why the merge was a fixed
+default ("automatic").
+
+**Shipped: a `Region detail` knob (opt-in stopgap).** `VectorizeOptions.regionDetail` (0–100,
+default 0) drives `segmentOptionsFor`: 0 = the balanced default (byte-identical output —
+nebula/petals baselines unchanged); higher lowers τ_s (10→2.5) and mergeTol (0.06→0.012).
+Measured at the extreme: petals 4→8 paths (overlaps recovered), nebula 3→9 paths / 29→1414
+nodes (the gradient fragments — the documented tradeoff, surfaced in the slider hint and the
+"How it works" step-③ text). It is NOT a clean fix, just a user-controllable tradeoff.
+
+**The real fix — layered/translucent decomposition (NOT done here; future).** The correct
+representation for these images is what the source IS: a few *translucent* shapes stacked,
+the renderer blending them (so 3 circles at opacity 0.85 reproduce exactly, with the fewest
+elements) — rather than splitting the blends into opaque flat bands. This is an established
+research line, but all of it is global/expensive (MCTS or minute-scale solves), so none fits
+this app's lightweight client-side budget yet — hence deferred:
+
+- **Photo2ClipArt** — Favreau, Lafarge, Bousseau, *SIGGRAPH Asia 2017*: stacked
+  semi-transparent gradient layers chosen by a fidelity-vs-simplicity energy via Monte-Carlo
+  tree search. https://www-sop.inria.fr/reves/Basilic/2017/FLB17/
+- **Image Vectorization & Editing via Linear Gradient Layer Decomposition** — Du et al.,
+  *SIGGRAPH 2023*: https://dl.acm.org/doi/10.1145/3592128 — code (unlicensed):
+  https://github.com/Zhengjun-Du/ImageVectorViaLayerDecomposition
+- **Image Vectorization with Depth** — arXiv 2409.06648 (2024): depth ordering + elastica
+  completion of the occluded parts of each layer.
+- ARDECO (Lecot & Lévy, EGSR 2006) is the variational ancestor;
+  our V4 glow-stack (§3.2.4) is the restricted, logo-scale special case already shipped.

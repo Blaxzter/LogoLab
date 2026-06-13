@@ -23,6 +23,7 @@ export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   mode: 'color',
   smoothing: 50,
   despeckle: 25,
+  regionDetail: 0,
   threshold: 128,
   removeBackground: false,
   gradients: true,
@@ -304,8 +305,19 @@ function cloneSubPaths(subPaths: SubPath[]): SubPath[] {
  * is structural — so they are intentionally left at the defaults here (the dials
  * still tune the tracer's smoothing/turdsize downstream).
  */
-function segmentOptionsFor(_options: VectorizeOptions): SegmentOptions {
-  return DEFAULT_SEGMENT_OPTIONS
+function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
+  // Region detail: 0 ⇒ the balanced default (identical output to before); higher
+  // tightens the colour-difference (τ_s) and union-fit (mergeTol) merge so finer
+  // regions — e.g. translucent overlaps — survive instead of fusing into a
+  // neighbour. Measured: the overlaps return only once τ_s drops to ≈2–3, which
+  // also risks fragmenting smooth gradients, so this is opt-in, not the default.
+  const d = clamp(options.regionDetail ?? 0, 0, 100) / 100
+  if (d === 0) return DEFAULT_SEGMENT_OPTIONS
+  return {
+    ...DEFAULT_SEGMENT_OPTIONS,
+    tauS: DEFAULT_SEGMENT_OPTIONS.tauS - d * 7.5, // 10 → 2.5
+    mergeTol: DEFAULT_SEGMENT_OPTIONS.mergeTol - d * 0.048, // 0.06 → 0.012
+  }
 }
 
 /**

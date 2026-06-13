@@ -133,6 +133,22 @@ export function TraceControls({
 
           {opts.mode === 'color' && (
             <Field
+              label="Region detail"
+              hint="How finely the image is split into shapes. Higher recovers subtle regions — like where translucent shapes overlap — but can break smooth gradients into flat bands and is slower. 'auto' is the balanced default."
+            >
+              <Slider
+                value={opts.regionDetail ?? 0}
+                min={0}
+                max={100}
+                step={5}
+                onChange={(v) => onPatch({ regionDetail: v })}
+                format={(v) => (v === 0 ? 'auto' : `${v}`)}
+              />
+            </Field>
+          )}
+
+          {opts.mode === 'color' && (
+            <Field
               label="Gradients"
               hint="Detect smooth color ramps and export them as real SVG gradients instead of flat bands."
             >

@@ -100,6 +100,14 @@ export interface VectorizeOptions {
   smoothing: number
   /** 0 (keep every speck) → 100 (aggressive noise suppression). Drives speckle & color cleanup. */
   despeckle: number
+  /**
+   * Region detail (color mode), 0–100. 0 = balanced (the default) — similar
+   * colours merge into few macro-regions. Higher tightens the segmentation merge
+   * (colour-difference + union-fit thresholds) so finer/subtler regions survive —
+   * e.g. the blends where translucent shapes overlap. The tradeoff: high values
+   * can fragment smooth gradients into flat bands and are slower. Omitted ⇒ 0.
+   */
+  regionDetail?: number
   /** Mono threshold 0–255 (mono mode). */
   threshold: number
   /** Drop the detected background layer for transparent output. */
