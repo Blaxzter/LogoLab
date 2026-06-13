@@ -12,9 +12,7 @@ import type { EditableDoc } from '../src/lib/path/types.ts'
 const OPTS: CrispOptions = {
   smooth: 0,
   turdsize: 8,
-  cornerThreshold: 55,
-  simplifyEpsilon: 0.75,
-  fitTolerance: 0.8,
+  keyEpsilon: 1.5,
 }
 
 function mask(w: number, h: number, inside: (x: number, y: number) => boolean): ImageData {

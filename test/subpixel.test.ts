@@ -13,9 +13,7 @@ import type { SubPath, Vec } from '../src/lib/path/types.ts'
 const OPTS: CrispOptions = {
   smooth: 0,
   turdsize: 8,
-  cornerThreshold: 55,
-  simplifyEpsilon: 0.75,
-  fitTolerance: 0.8,
+  keyEpsilon: 1.5,
 }
 
 /** Build a potrace-style mask (inside = black) from an inside-predicate. */
@@ -123,7 +121,7 @@ test('fitted curve stays close to the source circle (max error bound)', () => {
   const r = 35
   const sps = traceMaskCrisp(
     mask(100, 100, (x, y) => (x - cx) ** 2 + (y - cy) ** 2 <= r * r),
-    { ...OPTS, smooth: 0.8, fitTolerance: 0.6 },
+    { ...OPTS, smooth: 0.8 },
   )
   assert.equal(sps.length, 1)
   // Sample anchors + handles: every anchor should sit ~on the circle.

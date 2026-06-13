@@ -10,6 +10,7 @@ import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { ensureImageData, loadPng, PNG_CORPUS } from './nodeHarness.ts'
+import { SYNTHETIC_CORPUS, syntheticSource } from './lineArtCorpus.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import { score, scoreboardMarkdown, type ScoreRow } from './scoreboard.ts'
 
@@ -22,6 +23,17 @@ for (const c of PNG_CORPUS) {
   const img = loadPng(c.path)
   const row = await score(c.name, engine, img, () =>
     traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine, gradients: true }),
+  )
+  rows.push(row)
+}
+
+// Synthetic line-art corpus (summit, bloom): solid-fill / per-shape-opacity cases
+// the pure rasterizer can rebuild headlessly, so the corner-preservation case
+// (summit) gates `npm test` too. Source pixels = the ground-truth doc rasterized.
+for (const c of SYNTHETIC_CORPUS) {
+  const src = syntheticSource(c)
+  const row = await score(c.name, engine, src, () =>
+    traceImage(src as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine, gradients: true }),
   )
   rows.push(row)
 }

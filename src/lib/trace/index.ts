@@ -37,9 +37,12 @@ function crispOptionsFor(smoothing: number, turdsize: number): CrispOptions {
   return {
     smooth: 0.35 + s * 0.55, // coverage blur: 0.35 → 0.9 px (gentle: keep thin features)
     turdsize,
-    cornerThreshold: 80 - s * 30, // 80° → 50°: more smoothing keeps fewer corners
-    simplifyEpsilon: 0.3 + s * 0.7,
-    fitTolerance: 0.4 + s * 1.2,
+    // Curve-fit tolerance ε. The paper uses 1.5 px uniformly; we run 1.0 px,
+    // the one measured deviation: at 1.5 the looser cubic fit regressed nebula's
+    // smooth-gradient region (SSIM 0.9782→0.9758, meanΔE 2.95→3.00) below V4
+    // parity, while 1.0 holds nebula/petals exactly AND keeps the node-count win.
+    // Corner placement is evidence-based (curveFit), independent of this value.
+    keyEpsilon: 1.0,
   }
 }
 
