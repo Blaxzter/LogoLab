@@ -155,6 +155,10 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: OffThreadAnalysis; op
           gradientsOn
             ? ' (Coloured tags below show what each region matched.)'
             : ' Gradients are off, so every region here is a single flat colour.'
+        }${
+          markerCount > 0
+            ? ' Where you’ve marked overlapping translucent shapes, the recovered exclusive + overlap regions are checked against a stack of see-through shapes (a few circles at one opacity over the background): if that stack reproduces the colours better than the opaque pieces, it replaces them — so 3 overlapping translucent circles come out as 3 editable see-through circles, not 7 opaque puzzle-pieces.'
+            : ''
         }`}
       >
         <Visual label="Region fills">
@@ -191,7 +195,9 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: OffThreadAnalysis; op
 
       <p className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
         Tip: if overlapping or finely-detailed areas don't come through, it's usually step 3 — those areas merged
-        into a neighbouring region before they could become their own shape. Raise <b>Region detail</b> to keep them.
+        into a neighbouring region before they could become their own shape. Raise <b>Region detail</b> or place
+        <b> Mark</b> seeds to keep them; once the overlaps survive, step 4 can rebuild see-through shapes as editable
+        translucent layers.
       </p>
 
       <References />

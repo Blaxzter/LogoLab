@@ -143,4 +143,15 @@ export interface VectorizeOptions {
    * empty ⇒ byte-identical to no markers.
    */
   markers?: { x: number; y: number }[]
+  /**
+   * Translucent layer decomposition (V6, color mode). When the segmentation has
+   * recovered overlap-shaped regions (via markers or Region detail), try to
+   * represent them as a few STACKED TRANSLUCENT shapes (N circles at one opacity
+   * over the background) instead of opaque flat bands — the source's true form,
+   * with the fewest, most editable elements. Purely additive and gated: it is
+   * emitted only when it beats the opaque rendering, and is a NO-OP (byte-
+   * identical output) when there are no overlap regions or no markers/detail.
+   * Defaults to on when omitted; set false to force opaque bands.
+   */
+  layeredDecomposition?: boolean
 }

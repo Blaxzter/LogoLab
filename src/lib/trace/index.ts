@@ -18,6 +18,9 @@ import { traceMaskCrisp, type CrispOptions } from './subpixel.ts'
 import { segmentImage, DEFAULT_SEGMENT_OPTIONS, type SegmentOptions } from './segment.ts'
 import { fitPaintLadder, type PaintLadderResult, type RegionSamples } from './gradient.ts'
 import { beautify, DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
+import { decomposeTranslucent, type Decomposition } from './layers.ts'
+import { rasterizeDoc } from '../render/raster.ts'
+import { srgbToLab, deltaE76 } from './lab.ts'
 
 export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   mode: 'color',
@@ -134,29 +137,33 @@ export async function traceImage(
   // parity); a smooth field becomes one coherent gradient; a 2-D glow field
   // (model 'glow') becomes a base linear + radial overlays (Stage 2.4, §3.2.4).
   let labelPaint: (PaintLadderResult | null)[] = q.palette.map(() => null)
+  let fullSamples: RegionSamples[] | null = null
   if (gradientsOn) {
     // The paint model is fit on the segmenter's SMOOTH (AA-free) samples, but the
     // glow stack is GATED on the FULL region (every labelled pixel, AA included):
     // the smooth subset omits the high-error anti-aliased pixels where a glow
     // helps most and so under-reports its benefit (see fitGlowStack).
-    const fullSamples = fullRegionSamples(q.labels, imageData.data, width, q.palette.length)
-    labelPaint = seg.regionSamples.map((s, label) => fitPaintLadder(s, undefined, fullSamples[label]))
+    fullSamples = fullRegionSamples(q.labels, imageData.data, width, q.palette.length)
+    labelPaint = seg.regionSamples.map((s, label) => fitPaintLadder(s, undefined, fullSamples![label]))
   }
 
-  // Paint order: largest region at the bottom (palette is sorted by count).
-  let paintOrder = q.palette.map((_, i) => i)
-  if (options.removeBackground) {
-    const bg = detectBorderBackground(q.labels, width, height, q.palette.length)
-    if (bg !== -1) paintOrder = paintOrder.filter((i) => i !== bg)
+  // V6 — translucent layer decomposition (plan §9). Only ATTEMPTED when the user
+  // has opted into recovering overlaps (markers or Region detail) and gradients
+  // are on; with neither, the default corpus output is byte-identical (the attempt
+  // is skipped, so nothing downstream can change). When attempted it still no-ops
+  // unless the segmentation actually has overlap-shaped regions AND the translucent
+  // model beats the opaque one (decomposeTranslucent returns null otherwise). Uses
+  // the FULL-region samples as its gate set — the glow-stack methodology.
+  let decomposition: Decomposition | null = null
+  const wantsDecomp =
+    gradientsOn &&
+    options.layeredDecomposition !== false &&
+    !options.removeBackground &&
+    ((options.markers?.length ?? 0) > 0 || (options.regionDetail ?? 0) > 0)
+  if (wantsDecomp && fullSamples) {
+    decomposition = decomposeTranslucent(q.labels, width, height, q.palette, q.counts, fullSamples)
   }
 
-  // rank[label] = layer position; -1 = removed background (treated as a hole).
-  const rank = new Int32Array(q.palette.length).fill(-1)
-  paintOrder.forEach((label, i) => {
-    rank[label] = i
-  })
-
-  const total = paintOrder.length
   // Trace every layer first, collecting its raw subpaths + paint metadata, so the
   // beautify pass can run its cross-shape relation solver (concentric centres,
   // equal radii, …) over ALL loops at once rather than one layer in isolation.
@@ -167,67 +174,169 @@ export async function traceImage(
     gradient?: GradientFill
     /** Glow overlays painted above this region's base (model 'glow', §3.2.4). */
     overlays?: RadialGradient[]
+    /** Translucent fill opacity (V6 decomposition shapes); omitted ⇒ opaque. */
+    fillOpacity?: number
   }
-  const layers: Layer[] = []
-  for (let i = 0; i < total; i++) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    onProgress?.({ phase: 'trace', layer: i + 1, total })
-    const subPaths = await traceOne(stackedMask(q.labels, width, height, rank, i))
-    if (subPaths.length > 0) {
-      const label = paintOrder[i]
-      const { r, g, b } = q.palette[label]
-      const layer: Layer = { id: 'trace-' + i, subPaths, fill: rgbToHex(r, g, b) }
-      const paint = labelPaint[label]
-      if (paint) {
-        if (paint.model === 'glow' && paint.glow) {
-          layer.gradient = paint.glow.base
-          layer.overlays = paint.glow.overlays
-        } else if (paint.gradient) {
-          layer.gradient = paint.gradient
-        }
+  /** Copy a region's fitted paint (solid / gradient / glow base+overlays) onto a layer. */
+  const applyPaint = (layer: { gradient?: GradientFill; overlays?: RadialGradient[] }, paint: PaintLadderResult | null): void => {
+    if (!paint) return
+    if (paint.model === 'glow' && paint.glow) {
+      layer.gradient = paint.glow.base
+      layer.overlays = paint.glow.overlays
+    } else if (paint.gradient) {
+      layer.gradient = paint.gradient
+    }
+  }
+  // Beautify (cross-shape relation solver over ALL loops) + assemble bottom-up.
+  // A glow region emits its opaque base then one translucent overlay item per
+  // radial glow (sharing the beautified geometry); a V6 translucent shape emits a
+  // single fillOpacity item. Pure given `layers`, so both candidate stacks
+  // (opaque / translucent) assemble through the same path.
+  const assemble = (layers: Layer[]): EditableDoc => {
+    const beautified = beautify(
+      layers.map((l) => l.subPaths),
+      beautifyOpts,
+    )
+    const items: PathItem[] = []
+    layers.forEach((layer, i) => {
+      const base: PathItem = {
+        kind: 'path',
+        id: layer.id,
+        fill: layer.fill,
+        fillRule,
+        subPaths: beautified[i],
+        visible: true,
       }
-      layers.push(layer)
-    }
-    // Yield to the event loop so the progress UI can actually paint.
-    await new Promise((r) => setTimeout(r))
+      if (layer.gradient) base.gradient = layer.gradient
+      if (layer.fillOpacity !== undefined && layer.fillOpacity < 1) base.fillOpacity = layer.fillOpacity
+      items.push(base)
+      if (layer.overlays) {
+        layer.overlays.forEach((ov, k) => {
+          items.push({
+            kind: 'path',
+            id: `${layer.id}-glow-${k}`,
+            fill: layer.fill,
+            fillRule,
+            subPaths: cloneSubPaths(beautified[i]),
+            gradient: ov,
+            visible: true,
+          })
+        })
+      }
+    })
+    return { viewBox: [0, 0, width, height], items }
   }
 
-  const beautified = beautify(
-    layers.map((l) => l.subPaths),
-    beautifyOpts,
-  )
-  // Assemble bottom-up. A glow region emits its opaque base, then one translucent
-  // overlay item per radial glow (sharing the region's beautified geometry), all
-  // before the next region — so the glow paints over the base but under the marks.
-  const items: PathItem[] = []
-  layers.forEach((layer, i) => {
-    const base: PathItem = {
-      kind: 'path',
-      id: layer.id,
-      fill: layer.fill,
-      fillRule,
-      subPaths: beautified[i],
-      visible: true,
+  // Default path: largest region at the bottom; each layer's STACKED mask covers
+  // everything painted above it, so adjacent regions overlap (no abutting seams).
+  const buildOpaqueLayers = async (): Promise<Layer[]> => {
+    const layers: Layer[] = []
+    let paintOrder = q.palette.map((_, i) => i)
+    if (options.removeBackground) {
+      const bg = detectBorderBackground(q.labels, width, height, q.palette.length)
+      if (bg !== -1) paintOrder = paintOrder.filter((i) => i !== bg)
     }
-    if (layer.gradient) base.gradient = layer.gradient
-    items.push(base)
-    if (layer.overlays) {
-      layer.overlays.forEach((ov, k) => {
-        items.push({
-          kind: 'path',
-          id: `${layer.id}-glow-${k}`,
-          fill: layer.fill,
-          fillRule,
-          subPaths: cloneSubPaths(beautified[i]),
-          gradient: ov,
-          visible: true,
-        })
-      })
+    const rank = new Int32Array(q.palette.length).fill(-1)
+    paintOrder.forEach((label, i) => {
+      rank[label] = i
+    })
+    const total = paintOrder.length
+    for (let i = 0; i < total; i++) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      onProgress?.({ phase: 'trace', layer: i + 1, total })
+      const subPaths = await traceOne(stackedMask(q.labels, width, height, rank, i))
+      if (subPaths.length > 0) {
+        const label = paintOrder[i]
+        const { r, g, b } = q.palette[label]
+        const layer: Layer = { id: 'trace-' + i, subPaths, fill: rgbToHex(r, g, b) }
+        applyPaint(layer, labelPaint[label])
+        layers.push(layer)
+      }
+      await new Promise((r) => setTimeout(r))
     }
-  })
+    return layers
+  }
 
-  return { viewBox: [0, 0, width, height], items }
+  // V6 path: background full-bleed base, any unrelated opaque region above it, then
+  // the recovered TRANSLUCENT shapes (each the cleaned UNION mask of its label set)
+  // in stacking order — the renderer blends them exactly as the source does.
+  const buildDecompLayers = async (dec: Decomposition): Promise<Layer[]> => {
+    const layers: Layer[] = []
+    const consumed = new Set(dec.consumed)
+    const bgLabel = dec.background
+    const others: number[] = []
+    for (let l = 0; l < q.palette.length; l++) {
+      if (l === bgLabel || consumed.has(l) || (q.counts[l] ?? 0) === 0) continue
+      others.push(l)
+    }
+    const shapesSorted = [...dec.shapes].sort((a, b) => a.order - b.order)
+    const total = 1 + others.length + shapesSorted.length
+    let li = 0
+    const pushTraced = async (layer: Omit<Layer, 'subPaths'>, mask: ImageData): Promise<void> => {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      onProgress?.({ phase: 'trace', layer: li + 1, total })
+      li++
+      const subPaths = await traceOne(mask)
+      if (subPaths.length > 0) layers.push({ ...layer, subPaths })
+      await new Promise((r) => setTimeout(r))
+    }
+    const bgCol = q.palette[bgLabel]
+    const bgLayer: Omit<Layer, 'subPaths'> = { id: 'trace-bg', fill: rgbToHex(bgCol.r, bgCol.g, bgCol.b) }
+    applyPaint(bgLayer, labelPaint[bgLabel])
+    await pushTraced(bgLayer, maskFromLabels(q.labels, width, height, (l) => l >= 0))
+    for (const l of others) {
+      const c = q.palette[l]
+      const opLayer: Omit<Layer, 'subPaths'> = { id: 'trace-op-' + l, fill: rgbToHex(c.r, c.g, c.b) }
+      applyPaint(opLayer, labelPaint[l])
+      await pushTraced(opLayer, maskFromLabels(q.labels, width, height, (x) => x === l))
+    }
+    // The union mask is CLEANED (largest connected component + filled holes) so
+    // watershed stray pixels don't fragment the disk or corrupt beautify's circle
+    // snap.
+    for (const shape of shapesSorted) {
+      const set = new Set(shape.labels)
+      await pushTraced(
+        { id: 'trace-layer-' + shape.order, fill: shape.color, fillOpacity: shape.alpha },
+        maskFromLabels(q.labels, width, height, (l) => set.has(l), true),
+      )
+    }
+    return layers
+  }
+
+  // When a decomposition is proposed, RENDER both candidate docs and keep the
+  // translucent one ONLY if it beats the opaque rendering on mean CIE76 ΔE — the
+  // V4 glow-stack discipline, but measured on the REAL render because the analytic
+  // per-region residual is anti-correlated with reality here (the opaque bands'
+  // damage is in tracing thin overlap lenses, which a per-pixel region-mean model
+  // cannot see). Same rasterizer the harness scores with ⇒ the gate measures what
+  // ships. Falls back to the byte-identical opaque output when it doesn't win.
+  if (decomposition) {
+    const transDoc = assemble(await buildDecompLayers(decomposition))
+    const opaqueDoc = assemble(await buildOpaqueLayers())
+    const transDE = meanRenderDeltaE(transDoc, imageData, width, height)
+    const opaqueDE = meanRenderDeltaE(opaqueDoc, imageData, width, height)
+    if (transDE <= opaqueDE - DECOMP_WIN_MARGIN) return transDoc
+    return opaqueDoc
+  }
+
+  return assemble(await buildOpaqueLayers())
 }
+
+/** Mean full-image CIE76 ΔE of a doc's render vs the source (the V6 render gate). */
+function meanRenderDeltaE(doc: EditableDoc, source: ImageData, width: number, height: number): number {
+  const render = rasterizeDoc(doc, width, height)
+  const src = source.data
+  let sum = 0
+  const n = width * height
+  for (let i = 0; i < n; i++) {
+    const o = i * 4
+    sum += deltaE76(srgbToLab(src[o], src[o + 1], src[o + 2]), srgbToLab(render[o], render[o + 1], render[o + 2]))
+  }
+  return n > 0 ? sum / n : Infinity
+}
+
+/** Translucent decomposition must beat opaque by at least this mean CIE76 ΔE. */
+const DECOMP_WIN_MARGIN = 0.1
 
 /**
  * Per-region FULL sample sets (every labelled pixel of each region, AA included),
@@ -391,6 +500,95 @@ function detectBorderBackground(
     }
   }
   return best
+}
+
+/**
+ * Build a binary trace mask (black = keep) from a label predicate — used by the
+ * V6 decomposition path to trace a translucent shape's UNION mask (all its label
+ * set) or a full-bleed background (`l >= 0`), independent of the stacked-rank
+ * paint order the opaque path uses. When `clean` is set, the mask is reduced to
+ * its largest 4-connected component with internal holes filled — the marker
+ * watershed scatters a few boundary pixels into neighbour territory, and those
+ * disconnected stray islands would otherwise corrupt the circle/ellipse fit in
+ * beautify (measured: they pushed a fitted circle's bbox ~100px off). A
+ * translucent shape is one connected blob, so its true geometry is the largest
+ * component; cleaning lets beautify snap it to a perfect circle.
+ */
+function maskFromLabels(
+  labels: Int32Array,
+  width: number,
+  height: number,
+  keep: (label: number) => boolean,
+  clean = false,
+): ImageData {
+  const out = new ImageData(width, height)
+  const dst = out.data
+  const black = new Uint8Array(labels.length)
+  for (let i = 0; i < labels.length; i++) black[i] = keep(labels[i]) ? 1 : 0
+  const kept = clean ? largestComponentFilled(black, width, height) : black
+  for (let i = 0; i < labels.length; i++) {
+    const v = kept[i] ? 0 : 255
+    const o = i * 4
+    dst[o] = v
+    dst[o + 1] = v
+    dst[o + 2] = v
+    dst[o + 3] = 255
+  }
+  return out
+}
+
+/**
+ * Largest 4-connected component of a binary mask, with internal holes filled.
+ * Drops disconnected stray islands (watershed mislabels) and patches AA gaps
+ * inside the blob, so a translucent shape's union mask becomes one clean region.
+ */
+function largestComponentFilled(black: Uint8Array, width: number, height: number): Uint8Array {
+  const n = black.length
+  const comp = new Int32Array(n).fill(-1)
+  const stack: number[] = []
+  let bestId = -1
+  let bestSize = 0
+  let nextId = 0
+  for (let s = 0; s < n; s++) {
+    if (!black[s] || comp[s] !== -1) continue
+    const id = nextId++
+    let size = 0
+    stack.length = 0
+    stack.push(s)
+    comp[s] = id
+    while (stack.length) {
+      const p = stack.pop()!
+      size++
+      const x = p % width
+      const y = (p / width) | 0
+      if (x > 0 && black[p - 1] && comp[p - 1] === -1) { comp[p - 1] = id; stack.push(p - 1) }
+      if (x + 1 < width && black[p + 1] && comp[p + 1] === -1) { comp[p + 1] = id; stack.push(p + 1) }
+      if (y > 0 && black[p - width] && comp[p - width] === -1) { comp[p - width] = id; stack.push(p - width) }
+      if (y + 1 < height && black[p + width] && comp[p + width] === -1) { comp[p + width] = id; stack.push(p + width) }
+    }
+    if (size > bestSize) { bestSize = size; bestId = id }
+  }
+  const keep = new Uint8Array(n)
+  if (bestId < 0) return keep
+  for (let i = 0; i < n; i++) if (comp[i] === bestId) keep[i] = 1
+  // Fill holes: flood the OUTSIDE (non-kept reachable from the border), then any
+  // non-kept pixel not reached is an interior hole → fill it.
+  const outside = new Uint8Array(n)
+  stack.length = 0
+  const pushOutside = (i: number) => { if (!keep[i] && !outside[i]) { outside[i] = 1; stack.push(i) } }
+  for (let x = 0; x < width; x++) { pushOutside(x); pushOutside((height - 1) * width + x) }
+  for (let y = 0; y < height; y++) { pushOutside(y * width); pushOutside(y * width + width - 1) }
+  while (stack.length) {
+    const p = stack.pop()!
+    const x = p % width
+    const y = (p / width) | 0
+    if (x > 0) pushOutside(p - 1)
+    if (x + 1 < width) pushOutside(p + 1)
+    if (y > 0) pushOutside(p - width)
+    if (y + 1 < height) pushOutside(p + width)
+  }
+  for (let i = 0; i < n; i++) if (!keep[i] && !outside[i]) keep[i] = 1
+  return keep
 }
 
 /**
