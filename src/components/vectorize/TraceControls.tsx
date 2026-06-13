@@ -94,7 +94,7 @@ export function TraceControls({
 
           <Field
             label="Engine"
-            hint="Potrace = classic tracer (seamless gradients). Crisp = sub-pixel Bézier fitting — cleaner, lower-node curves, best for line-art / solid shapes."
+            hint="Crisp = sub-pixel Bézier fitting with evidence-based corners — the lowest node count and sharp corners, best for line-art / solid shapes. Potrace = classic tracer — highest pixel fidelity and the cleanest abutting/translucent edges."
           >
             <Segmented<'crisp' | 'potrace'>
               value={opts.engine ?? 'potrace'}

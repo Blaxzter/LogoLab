@@ -35,6 +35,26 @@ export interface CurveFitOptions {
   cubicCost: number
 }
 
+/**
+ * Max key-vertex span of a single cubic candidate. The paper allows cubics
+ * between ANY key-vertex pair, but on a SMOOTH boundary cubics fit far before the
+ * ε-discard fires, so "any pair" makes candidate building O(N·m²) and a large
+ * smooth loop (e.g. a 512² rounded-rect background) costs seconds. Capping the
+ * span makes it O(N·K²), independent of m. A single cubic cannot accurately span
+ * much more than a semicircle within ε anyway, so K=20 never costs nodes in
+ * practice (verified on the corpus) and a longer smooth arc just uses one more
+ * cubic.
+ */
+const MAX_SPAN = 20
+
+/**
+ * Max key vertices per loop before ε is coarsened (see fitClosedLoop). A real
+ * logo boundary stays well under this; exceeding it signals an anti-aliased
+ * sliver whose jagged edge bloats candidate building, so the loop is traced
+ * coarser instead of costing seconds.
+ */
+const MAX_KEY_VERTICES = 300
+
 export const DEFAULT_CURVE_FIT: CurveFitOptions = {
   epsilon: 1.5,
   lineCost: 3.9,
@@ -55,8 +75,18 @@ export function fitClosedLoop(denseRaw: Vec[], opts: CurveFitOptions = DEFAULT_C
   const N = dense.length
   if (N < 3) return null
 
-  const eps = opts.epsilon
-  const keyIdx = keyVertexIndices(dense, eps)
+  // Coarsen ε for a pathological boundary. A clean logo loop has well under
+  // MAX_KEY_VERTICES key vertices; thousands means a thin anti-aliased sliver
+  // whose jagged boundary RDP can't simplify at ε. Since candidate building is
+  // O(key-vertices), such a loop would cost seconds, so raise ε until the loop
+  // is bounded — coarser geometry is the right answer for an AA-noise sliver.
+  let eps = opts.epsilon
+  let keyIdx = keyVertexIndices(dense, eps)
+  while (keyIdx.length > MAX_KEY_VERTICES && eps < opts.epsilon * 32) {
+    eps *= 1.6
+    keyIdx = keyVertexIndices(dense, eps)
+  }
+  const fitOpts = eps === opts.epsilon ? opts : { ...opts, epsilon: eps }
   const m = keyIdx.length
   if (m < 2) {
     // No corners survive simplification (a near-circle smaller than ε across, or
@@ -70,7 +100,7 @@ export function fitClosedLoop(denseRaw: Vec[], opts: CurveFitOptions = DEFAULT_C
   const junc = scores.map(junctionCosts)
 
   // Over-complete candidate set + min-cost cyclic DP (§3.3.4).
-  const cand = buildCandidates(dense, keyIdx, tangents, junc, opts)
+  const cand = buildCandidates(dense, keyIdx, tangents, junc, fitOpts)
   const tour = solveCyclicDP(m, cand, junc)
   if (!tour) return null
 
@@ -159,10 +189,12 @@ function rdpMark(dense: Vec[], from: number, to: number, eps: number, keep: Uint
  * good line's direction oriented along the loop's forward traversal.
  */
 export function tangentAtIndex(dense: Vec[], i: number, eps: number): Vec {
-  const n = dense.length
   const half = eps / 2
+  // Cap the window like the soft-corner shapes: a longer straight run grows it to
+  // the whole edge (RMS stays ~0) for no extra tangent accuracy, but at O(loop²).
+  const kMax = Math.min(dense.length >> 1, MAX_EVIDENCE_WINDOW)
   let bestDir = forwardDir(dense, i)
-  for (let k = 1; k <= (n >> 1); k++) {
+  for (let k = 1; k <= kMax; k++) {
     const pts = windowPoints(dense, i, k)
     const fit = lineFit(pts)
     if (!fit) break
@@ -211,11 +243,21 @@ function softF(x: number): number {
   return 1 - 1 / (1 + 5 * (x - 1))
 }
 
+/**
+ * Max half-window (points each side) the soft-corner shapes grow to. The paper
+ * grows "until the shape exceeds ε" unbounded, but on a SMOOTH boundary the
+ * circle (and line, on a straight run) never exceed ε, so an unbounded window is
+ * O(loop²) per vertex — fatal on a big smooth loop. A real corner breaks the line
+ * and circle within a few points, far below this cap, so capping the window
+ * preserves the corner-vs-smooth discrimination while making the score O(cap²).
+ */
+const MAX_EVIDENCE_WINDOW = 24
+
 /** Largest line window (point count 2k+1) around i fitting within ε. */
 function lineCoverage(dense: Vec[], i: number, eps: number): number {
-  const n = dense.length
+  const kMax = Math.min(dense.length >> 1, MAX_EVIDENCE_WINDOW)
   let cover = 1
-  for (let k = 1; k <= (n >> 1); k++) {
+  for (let k = 1; k <= kMax; k++) {
     const pts = windowPoints(dense, i, k)
     const fit = lineFit(pts)
     if (!fit) break
@@ -227,9 +269,9 @@ function lineCoverage(dense: Vec[], i: number, eps: number): number {
 
 /** Largest circle window around i fitting within ε (3 points always fit). */
 function circleCoverage(dense: Vec[], i: number, eps: number): number {
-  const n = dense.length
+  const kMax = Math.min(dense.length >> 1, MAX_EVIDENCE_WINDOW)
   let cover = 1
-  for (let k = 1; k <= (n >> 1); k++) {
+  for (let k = 1; k <= kMax; k++) {
     const pts = windowPoints(dense, i, k)
     const dev = circleMaxDev(pts)
     if (dev === null) {
@@ -245,9 +287,9 @@ function circleCoverage(dense: Vec[], i: number, eps: number): number {
 
 /** Largest two-line-wedge window around i fitting within ε. */
 function wedgeCoverage(dense: Vec[], i: number, eps: number): number {
-  const n = dense.length
+  const kMax = Math.min(dense.length >> 1, MAX_EVIDENCE_WINDOW)
   let cover = 1
-  for (let k = 1; k <= (n >> 1); k++) {
+  for (let k = 1; k <= kMax; k++) {
     const left = windowPoints(dense, i, k, -1) // [i-k .. i]
     const right = windowPoints(dense, i, k, 1) // [i .. i+k]
     const lf = lineFit(left)
@@ -345,14 +387,21 @@ function buildCandidates(
     return s
   }
 
+  const N = dense.length
   for (let a = 0; a < m; a++) {
-    const maxLen = m - 1
+    const maxLen = Math.min(m - 1, MAX_SPAN)
+    const fromIdx = keyIdx[a]
     for (let len = 1; len <= maxLen; len++) {
       const b = (a + len) % m
-      const arc = denseArc(dense, keyIdx[a], keyIdx[b])
-      if (arc.length < 2) break
+      const toIdx = keyIdx[b]
+      const total = ((toIdx - fromIdx + N) % N) + 1 // dense points on this arc
+      if (total < 2) break
+      // Bounded sample of the arc (endpoints kept), built directly from indices so
+      // candidate building never walks the full O(arc-length) point list.
+      const arc = sampledArc(dense, fromIdx, toIdx, MAX_FIT_POINTS)
 
-      // Adjacent pair: also offer a straight line (C⁰ both ends).
+      // Adjacent pair: also offer a straight line (C⁰ both ends). RDP at ε keeps
+      // every dense point within ε of this chord, so it is always a valid line.
       if (len === 1) {
         const ld = lineDeviation(arc)
         if (ld.maxDev <= eps) {
@@ -369,9 +418,10 @@ function buildCandidates(
         }
       }
 
-      // Cubics: free start dir, free end dir (into the arc), or the key tangent.
-      const freeStart = unit(sub(arc[1], arc[0]))
-      const freeEnd = unit(sub(arc[arc.length - 2], arc[arc.length - 1]))
+      // Free end tangents from the TRUE dense neighbours of each key vertex (the
+      // subsampled arc's neighbours may be far), pointing into the arc.
+      const freeStart = unit(sub(dense[(fromIdx + 1) % N], dense[fromIdx]))
+      const freeEnd = unit(sub(dense[(toIdx - 1 + N) % N], dense[toIdx]))
       const startDirs: [Cont, Vec][] = [
         [0, freeStart],
         [1, orient(tangents[a], freeStart)],
@@ -417,17 +467,28 @@ interface TourCurve {
   cand: Candidate
 }
 
+/** Loops up to this many key vertices try every seam (exact, cheap). */
+const SEAM_EXACT_CAP = 40
+/** Larger smooth loops (no forced break) try this many evenly-spaced seams. */
+const SMOOTH_SEAMS = 8
+
 /**
- * Min-cost cyclic tour through the candidates. The cycle has at least one break
- * (junction); we try each key vertex as the forced seam and, at that seam, each
- * (end-type, start-type) pairing, running a linear DP around the cycle. O(m³)
- * over precomputed candidate costs.
+ * Min-cost cyclic tour through the candidates. The cycle must break (a curve
+ * endpoint) at every "forced-break" key vertex — one no candidate spans across —
+ * so a single forced break is an exact seam for the cyclic shortest path. We run
+ * the linear DP from a chosen set of seams and take the best:
+ *  • small loops → every seam (exact, and cheap);
+ *  • larger loops with a forced break → that one seam (still exact);
+ *  • larger fully-spannable loops (a big smooth ring) → a few evenly-spaced seams
+ *    (near-optimal; at most one extra node).
+ * This bounds the cost at O(seams · m · candidates) instead of O(m³), which a
+ * heavy-AA boundary with thousands of key vertices would otherwise blow up.
  */
 function solveCyclicDP(m: number, cand: CandidateTable, junc: JunctionCost[]): TourCurve[] | null {
   let bestCost = Infinity
   let bestTour: TourCurve[] | null = null
 
-  for (let seam = 0; seam < m; seam++) {
+  for (const seam of chooseSeams(m, cand)) {
     for (const startCont of [0, 1] as Cont[]) {
       const dp = linearDP(m, seam, startCont, cand, junc)
       for (const endCont of [0, 1] as Cont[]) {
@@ -445,6 +506,24 @@ function solveCyclicDP(m: number, cand: CandidateTable, junc: JunctionCost[]): T
     }
   }
   return bestTour
+}
+
+/** Pick the seam key vertices to run the cyclic DP from (see solveCyclicDP). */
+function chooseSeams(m: number, cand: CandidateTable): number[] {
+  if (m <= SEAM_EXACT_CAP) return Array.from({ length: m }, (_, i) => i)
+  // A vertex is spannable if some cubic passes strictly over it; one that is NOT
+  // is a forced break in every valid tour, so a single such seam is exact.
+  const spannable = new Uint8Array(m)
+  for (let a = 0; a < m; a++) {
+    for (const c of cand.byStart[a]) {
+      for (let p = 1; p < c.len; p++) spannable[(a + p) % m] = 1
+    }
+  }
+  for (let i = 0; i < m; i++) if (!spannable[i]) return [i]
+  // Fully spannable (a big smooth loop): a few evenly-spaced seams suffice.
+  const seams: number[] = []
+  for (let s = 0; s < SMOOTH_SEAMS; s++) seams.push(Math.floor((s * m) / SMOOTH_SEAMS))
+  return seams
 }
 
 interface DPState {
@@ -591,7 +670,13 @@ interface CubicFit {
  * end), using Schneider's least-squares solve + a few Newton reparameterizations.
  * Returns the interior control points and the fit's max/squared deviation.
  */
-export function fitSingleCubic(arc: Vec[], tHat1: Vec, tHat2: Vec): CubicFit {
+export function fitSingleCubic(arcRaw: Vec[], tHat1: Vec, tHat2: Vec): CubicFit {
+  // Subsample long arcs to a bounded point count (endpoints always kept). A cubic
+  // is fully characterised by ~tens of points; without this, fitting a long
+  // smooth arc (a big background boundary) is O(arc-length) per candidate and a
+  // single large loop costs seconds. Jagged arcs stay short (early-break), so
+  // their max deviation is never under-sampled.
+  const arc = subsampleArc(arcRaw, MAX_FIT_POINTS)
   const n = arc.length
   const p0 = arc[0]
   const p3 = arc[n - 1]
@@ -617,6 +702,19 @@ export function fitSingleCubic(arc: Vec[], tHat1: Vec, tHat2: Vec): CubicFit {
     err = e2
   }
   return { c1: bez.c1, c2: bez.c2, maxDev: err.maxDev, sqErr: err.sqErr }
+}
+
+/** Max points used to fit/score one cubic candidate (see fitSingleCubic). */
+const MAX_FIT_POINTS = 64
+
+/** Evenly sample an arc down to ≤ `cap` points, always keeping both endpoints. */
+function subsampleArc(arc: Vec[], cap: number): Vec[] {
+  const n = arc.length
+  if (n <= cap) return arc
+  const out: Vec[] = []
+  for (let i = 0; i < cap - 1; i++) out.push(arc[Math.floor((i * (n - 1)) / (cap - 1))])
+  out.push(arc[n - 1])
+  return out
 }
 
 interface Bezier {
@@ -853,15 +951,20 @@ function dedupLoop(loop: Vec[]): Vec[] {
   return out
 }
 
-/** Dense points from index `from` forward to `to` (inclusive), cyclic. */
-function denseArc(dense: Vec[], from: number, to: number): Vec[] {
+/**
+ * Up to `cap` evenly-spaced dense points on the cyclic arc from index `from`
+ * forward to `to` (both endpoints always included), addressed directly so the
+ * cost is O(cap), never O(arc-length). Used to fit/score one cubic candidate.
+ */
+function sampledArc(dense: Vec[], from: number, to: number, cap: number): Vec[] {
   const n = dense.length
+  const total = ((to - from + n) % n) + 1
+  const picks = Math.min(total, cap)
+  if (picks < 2) return [dense[from], dense[to]]
   const out: Vec[] = []
-  let i = from
-  while (true) {
-    out.push(dense[i])
-    if (i === to) break
-    i = (i + 1) % n
+  for (let i = 0; i < picks; i++) {
+    const off = Math.round((i * (total - 1)) / (picks - 1))
+    out.push(dense[(from + off) % n])
   }
   return out
 }

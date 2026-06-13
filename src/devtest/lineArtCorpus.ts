@@ -49,6 +49,21 @@ function summitDoc(): EditableDoc {
   return { viewBox: [0, 0, 512, 512], items }
 }
 
+/** orbit.svg rebuilt: teal full-bleed bg, white ring (annulus) + two dots. The
+ *  ring is a stroked circle = a filled annulus (outer ⊕ inner hole), which the
+ *  pure rasterizer handles with evenodd — so it exercises the big smooth ring
+ *  loops that stress the curve fitter. */
+function orbitDoc(): EditableDoc {
+  const annulus: SubPath[] = [ellipseSubPaths(256, 256, 165, 165)![0], ellipseSubPaths(256, 256, 135, 135)![0]]
+  const items: PathItem[] = [
+    { kind: 'path', id: 'bg', fill: '#0e7490', fillRule: 'nonzero', subPaths: [polygon([[0, 0], [512, 0], [512, 512], [0, 512]])], visible: true },
+    { kind: 'path', id: 'ring', fill: '#ffffff', fillRule: 'evenodd', subPaths: annulus, visible: true },
+    { kind: 'path', id: 'dot', fill: '#ffffff', fillRule: 'nonzero', subPaths: [ellipseSubPaths(256, 256, 50, 50)![0]], visible: true },
+    { kind: 'path', id: 'node', fill: '#ffffff', fillRule: 'nonzero', subPaths: [ellipseSubPaths(256, 106, 28, 28)![0]], visible: true },
+  ]
+  return { viewBox: [0, 0, 512, 512], items }
+}
+
 /** bloom.svg rebuilt: three overlapping translucent circles (per-shape opacity). */
 function bloomDoc(): EditableDoc {
   const circle = (cx: number, cy: number, fill: string): PathItem => ({
@@ -68,6 +83,7 @@ function bloomDoc(): EditableDoc {
 
 export const SYNTHETIC_CORPUS: SyntheticCase[] = [
   { name: 'summit', width: 512, height: 512, doc: summitDoc() },
+  { name: 'orbit', width: 512, height: 512, doc: orbitDoc() },
   { name: 'bloom', width: 512, height: 512, doc: bloomDoc() },
 ]
 

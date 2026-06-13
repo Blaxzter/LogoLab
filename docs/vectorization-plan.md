@@ -890,3 +890,87 @@ smooth recolour, NOT a crack — and is dwarfed by the meanΔE / SSIM / P95 gain
 focal point while `raster.ts`/`gradientToSvgDef` honour it. V4's glow overlays are
 deliberately CENTRED (no fx/fy), so the three agree and the latent stays dormant; a future
 eccentric/focal-radial fitter must keep them in sync (per the V2 note).
+
+### V5 Stage A — evidence-based crisp curve fitting (soft-corner + DP) — 2026-06-13 — ✅ shipped (Stage-A exit met; potrace NOT retired)
+
+**What shipped** — the crisp tracer's hard turn-angle corner NMS (`detectCorners`) is
+replaced by the supplement's evidence-based pipeline (§4.2), keeping Schneider's cubic as
+the inner fitter:
+- `src/lib/trace/curveFit.ts` (new, pure, `node --test`): closed-loop Douglas–Peucker key
+  vertices at ε → per-vertex tangents (§3.3.2) → soft-corner score from a competitive
+  line/circle/wedge fit (§3.3.3) → min-cost cyclic DP over an over-complete candidate set
+  (a line between adjacent key vertices `3.9+δE`, and Schneider cubics between key-vertex
+  pairs for the four C⁰/G¹ endpoint combos `4+δE+ΣJ_G1`, each discarded if it deviates > ε;
+  `δ=10⁻⁶ε`). Corners emerge where C⁰ is genuinely cheaper, not where a threshold fires.
+- `src/lib/trace/subpixel.ts`: feeds the DENSE marching-squares loop straight to
+  `fitClosedLoop`; `detectCorners`/`sharpestVertex`/`fitArc`/`rdpClosed` and the old
+  Schneider block are deleted. `orientForNonzero` now tests loop nesting + winding on the
+  FLATTENED curve, not the sparse anchor polygon (see deviations — this fixes a crack).
+- `src/devtest/lineArtCorpus.ts` (new): summit (sharp mountain), orbit (ring/annulus) and
+  bloom rebuilt from the doc model + rasterized, so the corner-preservation case gates
+  `npm test` (harness.test.ts asserts summit seam < 3). `runBaseline` scores them too.
+- `TraceControls.tsx`: engine hint corrected (crisp = lowest node count + sharp corners;
+  potrace = highest fidelity + cleanest abutting/translucent edges).
+
+**Browser scoreboard — crisp vs potrace, full corpus** (the arbiter; both engines):
+
+| image   | crisp SSIM / potrace | crisp seamMax / potrace | crisp nodes / potrace |
+|---------|----------------------|-------------------------|-----------------------|
+| nebula  | 0.9782 / 0.9821      | 12.3 / 12.3             | **29 / 40**           |
+| petals  | 0.9901 / 0.9938      | 5.7 / 2.4               | **31 / 53**           |
+| aurora  | 0.9917 / 0.9934      | **40.0 / 65.9**         | **29 / 60**           |
+| orbit   | 0.9930 / 0.9937      | 0.5 / 0.5               | **22 / 32**           |
+| outline | 1.0000 / 1.0000      | 0 / 0                   | **30 / 38**           |
+| summit  | 0.9829 / 0.9960      | **0 / 0** (was **93**)  | **9 / 12**            |
+| bloom   | 0.9796 / 0.9876      | 15.5 / 8.1              | **35 / 41**           |
+
+**Headless (npm test 81→95, det pass, typecheck + build green)** — vs the V4 crisp baseline:
+nebula meanΔE 2.95→**2.95** SSIM 0.9782→**0.9782** seamP99.5 12.0→**12.0** nodes 37→**29**;
+petals 1.85→**1.83** / 0.9890→**0.9901** / 3.3→**2.6** / 44→**31**; new headless rows
+summit (seam **0.0**, 14 nodes), orbit (0.9932, 23), bloom (0.9898, 42).
+
+**Exit criterion (Stage A) — MET.** summit's sharp corners are preserved: **seam 93 → 0**
+with the boundary exactly on the source edges, at **9 nodes ≤ potrace's 12** — the headline
+weakness (B). crisp's node-count edge is intact/widened on EVERY row (e.g. aurora 29 vs 60,
+outline 30 vs 38), and crisp seam ≤ potrace everywhere except the translucent-overlap cases
+(see below). No regression vs V4: nebula identical, petals better, summit hugely better;
+aurora/orbit SSIM dip −0.0017/−0.0007 is bought back many times over by seam (aurora 66→40)
+and node (aurora 60→29) gains.
+
+**potrace NOT retired (kept, both engines).** crisp SSIM stays marginally below potrace on
+every row (−0.0007 … −0.0131), and crisp seam exceeds potrace on petals (5.7 vs 2.4) and
+bloom (15.5 vs 8.1) — the abutting-translucent-boundary residue, weakness (A). Per the plan
+("NEVER drop potrace while it still wins any fidelity row") both engines are kept and the UI
+hint corrected. The residual SSIM gap is the inherent crisp tradeoff (fewest, cleanest nodes
+vs pixel-faithful), so it would persist even after Stage B — potrace retirement is therefore
+out of reach by geometry changes alone.
+
+**Deviations from the plan (each with a measured reason)**
+- **ε = 1.0 px, not the paper's 1.5.** Measured: at 1.5 the looser cubic fit regressed
+  nebula's smooth-gradient region below V4 parity (SSIM 0.9782→0.9758, meanΔE 2.95→3.00);
+  1.0 holds nebula/petals EXACTLY and keeps the node-count win. Corner placement is
+  evidence-based, independent of ε.
+- **`orientForNonzero` flattens before nesting/winding tests.** The low-node fits expose a
+  latent bug: a circle is two semicircle cubics → a 2-ANCHOR loop whose anchor polygon
+  badly under-covers the true region, so the old anchor-polygon nesting test misclassified a
+  hole near a coarse outer boundary as a fill → a catastrophic crack (nebula seam 12→102 at
+  ε=1.2). Flattening makes containment + winding exact at any node count; the crack is gone
+  and nebula is monotonic across ε.
+- **Three performance bounds (the paper is silent on scale; a heavy-AA logo loop would hang
+  the browser otherwise).** (1) cubic span capped at MAX_SPAN=20 key vertices — "any pair"
+  is O(N·m²) on a smooth boundary; (2) each cubic is fit/scored on ≤64 evenly-sampled arc
+  points and the soft-corner / tangent windows are capped at ±24 points — a smooth circle
+  never exceeds ε so the unbounded window is O(loop²) per vertex; (3) the cyclic DP runs from
+  a single forced-break seam (a key vertex no cubic spans, hence a break in every tour, so
+  exact) instead of all m seams — O(m³)→O(m·K); plus a per-loop ε-coarsen above 300 key
+  vertices for anti-aliased slivers. All preserve the corpus numbers exactly (the fixes are
+  behaviour-neutral on clean loops) and bring a 6 s pathological loop to <100 ms.
+
+**Stage B — NOT built (decision recorded).** The harness DOES show the abutting-residue
+trigger (petals/bloom crisp seam > potrace), so Stage B (shared-boundary curve network) is
+the indicated fix for weakness (A). It was deferred because (a) it is a genuine
+re-architecture of the crisp path (planar boundary graph + junction stitching + shared-curve
+fit + network-for-geometry/stacking-for-paint) — high effort/risk, and (b) it cannot enable
+the motivating goal (retire potrace): crisp's SSIM is below potrace on every row from the
+node-economy tradeoff, which shared geometry does not lift. Its payoff is bounded to the
+petals/bloom seam (a few pixels). Left as a documented, user-gated next step.
