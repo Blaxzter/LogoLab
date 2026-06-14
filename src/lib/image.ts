@@ -152,8 +152,9 @@ export async function getImageData(
   src: string,
   maxDim = 512,
   svgText?: string | null,
+  opts?: { upscale?: boolean },
 ): Promise<ImageData> {
-  if (svgText) return rasterizeSvgText(svgText, maxDim)
+  if (svgText) return rasterizeSvgText(svgText, maxDim, opts?.upscale ?? true)
 
   const img = await loadImageElement(src)
   let w = img.naturalWidth || maxDim
@@ -192,14 +193,22 @@ function ensureSvgSize(svgText: string, w: number, h: number): string {
   }
 }
 
-/** Rasterize SVG markup crisply at `maxDim` into a canvas (forces explicit size). */
+/**
+ * Rasterize SVG markup crisply at `maxDim` into a canvas (forces explicit size).
+ * By default the longest side is scaled *to* `maxDim` (small SVGs are upscaled),
+ * which is what the export/vectorize pipelines want. Pass `upscale: false` to only
+ * ever scale *down* — so an SVG smaller than `maxDim` rasterizes at its intrinsic
+ * size (matching the raster branch of getImageData), e.g. a 512px SVG → 512px, not
+ * 1024px. Cleanup uses this so the working buffer matches the source's own size.
+ */
 async function rasterizeSvgToCanvas(
   svgText: string,
   maxDim: number,
+  upscale = true,
 ): Promise<{ canvas: HTMLCanvasElement; width: number; height: number }> {
   const { width, height } = parseSvgSize(svgText)
   const longest = Math.max(width, height) || maxDim
-  const k = maxDim / longest
+  const k = upscale ? maxDim / longest : Math.min(1, maxDim / longest)
   const w = Math.max(1, Math.round(width * k))
   const h = Math.max(1, Math.round(height * k))
   const sized = ensureSvgSize(svgText, w, h)
@@ -218,8 +227,8 @@ async function rasterizeSvgToCanvas(
   }
 }
 
-async function rasterizeSvgText(svgText: string, maxDim: number): Promise<ImageData> {
-  const { canvas, width, height } = await rasterizeSvgToCanvas(svgText, maxDim)
+async function rasterizeSvgText(svgText: string, maxDim: number, upscale = true): Promise<ImageData> {
+  const { canvas, width, height } = await rasterizeSvgToCanvas(svgText, maxDim, upscale)
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) throw new Error('Canvas 2D context unavailable')
   return ctx.getImageData(0, 0, width, height)

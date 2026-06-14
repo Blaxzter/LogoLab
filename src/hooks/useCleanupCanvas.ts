@@ -26,6 +26,7 @@ import {
   floodRemove,
   floodRestore,
   growMatte,
+  recolor,
   removeColor,
   sampleCornerColor,
   shrinkMatte,
@@ -67,8 +68,8 @@ export interface UseCleanupCanvasParams {
   softness: number
   /** Brush diameter in image px (erase/restore). */
   brushSize: number
-  /** Pull edge RGB away from the removed key color after a flood/color remove. */
-  doDefringe: boolean
+  /** Fringe-cleanup strength (0–1) applied after each flood/color/auto remove; 0 = off. */
+  defringeStrength: number
   /** Matte preview is on — bakes a solid background into Apply/Download. */
   matteOn: boolean
   /** Matte color (hex) baked under the cutout when `matteOn`. */
@@ -81,7 +82,7 @@ export interface UseCleanupCanvasParams {
 }
 
 export function useCleanupCanvas(params: UseCleanupCanvasParams) {
-  const { pz, tool, tolerance, softness, brushSize, doDefringe, matteOn, matteColor, onMarkerPlaced } = params
+  const { pz, tool, tolerance, softness, brushSize, defringeStrength, matteOn, matteColor, onMarkerPlaced } = params
 
   const logo = useLogo()
   const setProcessedLogo = useStore((s) => s.setProcessedLogo)
@@ -186,7 +187,10 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       setDims(null)
       return
     }
-    getImageData(logo.src, MAX_DIM, logo.isSvg ? logo.svgText : null)
+    // Rasterize an SVG at its own intrinsic size (capped to MAX_DIM), never
+    // upscaled — so a 512px SVG cleans up at 512px instead of a surprising 1024px.
+    // Matches how raster sources are handled; export/vectorize still upscale.
+    getImageData(logo.src, MAX_DIM, logo.isSvg ? logo.svgText : null, { upscale: false })
       .then((data) => {
         if (cancelled) return
         workingRef.current = data
@@ -434,7 +438,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         const affected =
           tool === 'color' ? removeColor(working, key, opts) : floodRemove(working, ix, iy, opts)
         if (affected > 0) {
-          if (doDefringe) defringe(working, key, 0.9)
+          if (defringeStrength > 0) defringe(working, key, defringeStrength)
           commit(pre)
           redraw()
           if (tool === 'remove') {
@@ -469,7 +473,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       )
       scheduleRedraw()
     },
-    [aiBusy, tool, opts, doDefringe, brushSize, softness, imgCoords, commit, redraw, scheduleRedraw, onMarkerPlaced],
+    [aiBusy, tool, opts, defringeStrength, brushSize, softness, imgCoords, commit, redraw, scheduleRedraw, onMarkerPlaced],
   )
 
   const handlePointerMove = useCallback(
@@ -554,14 +558,14 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     const { color, affected } = autoRemove(working, opts)
     lastKeyRef.current = color
     if (affected > 0) {
-      if (doDefringe) defringe(working, color, 0.9)
+      if (defringeStrength > 0) defringe(working, color, defringeStrength)
       commit(pre)
       redraw()
       setStatus(`Auto-removed corner background — ${affected.toLocaleString()} px`)
     } else {
       setStatus('Nothing to auto-remove — the corners are already clear.')
     }
-  }, [aiBusy, opts, doDefringe, commit, redraw])
+  }, [aiBusy, opts, defringeStrength, commit, redraw])
 
   const handleAi = useCallback(async () => {
     const pristine = pristineRef.current
@@ -588,6 +592,10 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       // Commit the pre-AI state only now that we have a result (a failed run
       // leaves history untouched), then swap in the AI output.
       commit(cloneImageData(workingRef.current))
+      // RMBG leaves the original background color tinting its soft matte (e.g. a
+      // purple halo) — bleed it out, keyed off the original corner color for any
+      // isolated specks. Gated by the same Defringe strength as manual removes.
+      if (defringeStrength > 0) defringe(result, sampleCornerColor(pristine), defringeStrength)
       workingRef.current = result
       redraw()
       setAiDevice(device)
@@ -601,7 +609,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       setAiBusy(false)
       setAiStatus('')
     }
-  }, [aiBusy, commit, redraw])
+  }, [aiBusy, defringeStrength, commit, redraw])
 
   const handleReset = useCallback(() => {
     if (aiBusy) return
@@ -738,6 +746,16 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     [oneShot],
   )
 
+  const recolorAll = useCallback(
+    (hex: string) =>
+      oneShot(
+        (w) => recolor(w, hex),
+        (n) => `Recolored ${n.toLocaleString()} px to ${hex}`,
+        'Nothing to recolor — the cutout is empty.',
+      ),
+    [oneShot],
+  )
+
   /**
    * Auto-trim transparent margins to the alpha bbox, padded by `pad` px. Crops the
    * working buffer to a NEW, smaller ImageData, so it re-fits the view (pz.reset)
@@ -810,6 +828,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     shrinkEdge,
     featherEdge,
     defringeMore,
+    recolorAll,
     autoTrim,
   }
 }

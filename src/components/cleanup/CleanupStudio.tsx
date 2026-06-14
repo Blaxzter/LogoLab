@@ -39,7 +39,9 @@ export function CleanupStudio() {
   const [tolerance, setTolerance] = useState(36)
   const [softness, setSoftness] = useState(0.25)
   const [brushSize, setBrushSize] = useState(40)
-  const [doDefringe, setDoDefringe] = useState(true)
+  // How hard each Magic / By color / Auto removal cleans the colored fringe off
+  // soft edges (0 = off). See defringe() in bgRemove.ts.
+  const [defringeStrength, setDefringeStrength] = useState(0.7)
   const [ghostOpacity, setGhostOpacity] = useState(60)
   const [matteOn, setMatteOn] = useState(false)
   const [matteColor, setMatteColor] = useState('#ffffff')
@@ -48,6 +50,8 @@ export function CleanupStudio() {
   const [feather, setFeather] = useState(2)
   const [defringeAmt, setDefringeAmt] = useState(0.9)
   const [trimPad, setTrimPad] = useState(8)
+  // Flat-recolor target for monochrome logos (Recolor → Apply).
+  const [recolorColor, setRecolorColor] = useState('#ffffff')
   // Guided pins: normalized (0–1), NOT persisted, NOT in undo. Cleared whenever
   // the working buffer changes shape (see the dims/src effects below).
   const [markers, setMarkers] = useState<KeepRemoveMarker[]>([])
@@ -64,7 +68,7 @@ export function CleanupStudio() {
     tolerance,
     softness,
     brushSize,
-    doDefringe,
+    defringeStrength,
     matteOn,
     matteColor,
     onMarkerPlaced,
@@ -100,6 +104,7 @@ export function CleanupStudio() {
     shrinkEdge,
     featherEdge,
     defringeMore,
+    recolorAll,
     autoTrim,
   } = cleanup
 
@@ -146,6 +151,7 @@ export function CleanupStudio() {
   const onApplyDefringe = useCallback(() => {
     if (defringeAmt > 0) defringeMore(defringeAmt)
   }, [defringeAmt, defringeMore])
+  const onRecolor = useCallback(() => recolorAll(recolorColor), [recolorAll, recolorColor])
   const onAutoTrim = useCallback(() => autoTrim(trimPad), [autoTrim, trimPad])
 
   // ----------------------------------------------------------- matte display
@@ -219,8 +225,8 @@ export function CleanupStudio() {
         onSoftness={setSoftness}
         brushSize={brushSize}
         onBrushSize={setBrushSize}
-        doDefringe={doDefringe}
-        onDoDefringe={setDoDefringe}
+        defringeStrength={defringeStrength}
+        onDefringeStrength={setDefringeStrength}
         keepCount={keepCount}
         removeCount={removeCount}
         onClearMarkers={clearMarkers}
@@ -233,6 +239,9 @@ export function CleanupStudio() {
         defringeAmt={defringeAmt}
         onDefringeAmt={setDefringeAmt}
         onApplyDefringe={onApplyDefringe}
+        recolorColor={recolorColor}
+        onRecolorColor={setRecolorColor}
+        onRecolor={onRecolor}
         trimPad={trimPad}
         onTrimPad={setTrimPad}
         onAutoTrim={onAutoTrim}

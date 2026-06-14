@@ -21,6 +21,7 @@ import {
   cropPad,
   compositeOver,
   defringe,
+  recolor,
 } from '../src/lib/bgRemove.ts'
 
 // The crop/composite ops construct `new ImageData(...)`, which Node lacks.
@@ -132,9 +133,41 @@ test('growMatte expands a solid alpha bbox by radius on each side; RGB untouched
     { x: before.x - r, y: before.y - r, w: before.w + 2 * r, h: before.h + 2 * r },
     'bbox grew by r on every side',
   )
-  // RGB plane is never touched by a morphological alpha op.
+  // Grow only recolors the pixels it reveals; a far, still-transparent pixel is
+  // left exactly as it was.
   const o = (0 * W + 0) * 4
   assert.deepEqual([m.data[o], m.data[o + 1], m.data[o + 2]], [50, 60, 70])
+})
+
+test('growMatte carries the foreground color into the pixels it reveals', () => {
+  // A solid white block sitting on dark background residue (color leftover at
+  // alpha 0). Growing must reveal WHITE — the adjacent foreground — not the dark
+  // color physically sitting under the transparent pixels.
+  const W = 12
+  const H = 12
+  const inBlock = (x: number, y: number) => x >= 4 && x <= 8 && y >= 4 && y <= 8
+  const m = img(W, H, (x, y) =>
+    inBlock(x, y) ? [255, 255, 255, 255] : [20, 20, 40, 0],
+  )
+
+  growMatte(m, 1)
+
+  // (3,6) is one pixel left of the block: now opaque AND white, not dark.
+  const grown = (6 * W + 3) * 4
+  assert.equal(m.data[grown + 3], 255, 'revealed pixel is opaque')
+  assert.deepEqual(
+    [m.data[grown], m.data[grown + 1], m.data[grown + 2]],
+    [255, 255, 255],
+    'revealed pixel took the white foreground color, not the dark residue',
+  )
+  // (1,6) is two pixels out — beyond radius 1 — so it stays clear and dark.
+  const outside = (6 * W + 1) * 4
+  assert.equal(m.data[outside + 3], 0, 'pixel beyond the grow radius stays clear')
+  assert.deepEqual(
+    [m.data[outside], m.data[outside + 1], m.data[outside + 2]],
+    [20, 20, 40],
+    'untouched transparent pixel keeps its color',
+  )
 })
 
 test('shrinkMatte contracts a solid alpha bbox by radius on each side', () => {
@@ -314,36 +347,76 @@ test('compositeOver: a fully opaque pixel keeps its RGB', () => {
 
 /* ------------------------------------------------------------------ defringe */
 
-test('defringe with no key shifts semi-transparent edge pixels away from the corner color', () => {
-  // Corners are white (the sampled key). A 50%-alpha edge pixel near the corner
-  // color must be pushed AWAY from white; alpha 0 and 255 pixels stay put.
-  const W = 6
-  const H = 6
-  const edge: [number, number, number] = [200, 200, 200]
-  const m = img(W, H, (x, y) => {
-    const isCorner = (x === 0 || x === W - 1) && (y === 0 || y === H - 1)
-    if (isCorner) return [255, 255, 255, 255] // white key
-    if (x === 3 && y === 3) return [...edge, 128] // semi-transparent edge
-    if (x === 2 && y === 2) return [...edge, 0] // clear: untouched
-    if (x === 4 && y === 4) return [...edge, 255] // opaque: untouched
-    return [...edge, 255]
+test('defringe bleeds the solid foreground color into the soft edge', () => {
+  // Solid white block on the left (opaque), a translucent PURPLE seam at x=4
+  // (the leftover halo), then cleared space. The seam sits beside the white
+  // block, so its color must bleed to white while its alpha — the soft edge — is
+  // preserved. Solid and clear pixels stay put.
+  const W = 8
+  const H = 8
+  const m = img(W, H, (x) => {
+    if (x < 4) return [255, 255, 255, 255] // solid white foreground
+    if (x === 4) return [120, 80, 200, 128] // purple translucent fringe seam
+    return [120, 80, 200, 0] // cleared: color leftover but alpha 0
   })
 
-  const before = (x: number, y: number) => {
-    const o = (y * W + x) * 4
-    return [m.data[o], m.data[o + 1], m.data[o + 2]]
+  defringe(m, undefined, 1) // full strength, keyless
+
+  const seam = (3 * W + 4) * 4 // a seam pixel on row 3
+  // Bled to the surrounding white; alpha (the soft edge) is untouched.
+  assert.ok(m.data[seam] >= 250, `R bled toward white, got ${m.data[seam]}`)
+  assert.ok(m.data[seam + 1] >= 250, `G bled toward white, got ${m.data[seam + 1]}`)
+  assert.ok(m.data[seam + 2] >= 250, `B bled toward white, got ${m.data[seam + 2]}`)
+  assert.equal(m.data[seam + 3], 128, 'seam alpha preserved')
+  // Solid interior pixel and a fully-clear pixel are left exactly as they were.
+  const solid = (3 * W + 1) * 4
+  assert.deepEqual(
+    [m.data[solid], m.data[solid + 1], m.data[solid + 2], m.data[solid + 3]],
+    [255, 255, 255, 255],
+    'solid foreground untouched',
+  )
+  const clear = (3 * W + 7) * 4
+  assert.equal(m.data[clear + 3], 0, 'clear pixel still clear')
+})
+
+test('defringe falls back to pushing isolated specks away from the key color', () => {
+  // A lone translucent pixel with no solid neighbor: nothing to bleed from, so
+  // its RGB is pushed away from the key (white) instead, and alpha is untouched.
+  const W = 8
+  const H = 8
+  const m = img(W, H, (x, y) => (x === 4 && y === 4 ? [120, 80, 200, 128] : [0, 0, 0, 0]))
+  const o = (4 * W + 4) * 4
+
+  defringe(m, { r: 255, g: 255, b: 255 }, 1)
+
+  assert.ok(m.data[o] < 120, `R pushed away from white key, got ${m.data[o]}`)
+  assert.ok(m.data[o + 1] < 80, `G pushed away from white key, got ${m.data[o + 1]}`)
+  assert.ok(m.data[o + 2] < 200, `B pushed away from white key, got ${m.data[o + 2]}`)
+  assert.equal(m.data[o + 3], 128, 'alpha untouched')
+})
+
+/* ------------------------------------------------------------------- recolor */
+
+test('recolor repaints every non-transparent pixel one color, alpha untouched', () => {
+  // A solid dark pixel, a semi-transparent dark pixel (a leftover rim), and a
+  // fully-clear one. Recolor to white must whiten both visible pixels at their
+  // existing alpha — including the opaque rim — and leave the clear pixel alone.
+  const W = 3
+  const H = 1
+  const m = img(W, H, (x) => {
+    if (x === 0) return [20, 20, 40, 255] // solid
+    if (x === 1) return [20, 20, 40, 128] // semi-transparent rim
+    return [20, 20, 40, 0] // fully clear
+  })
+
+  const affected = recolor(m, '#ffffff')
+  assert.equal(affected, 2, 'only the two non-transparent pixels were recolored')
+
+  const px = (x: number) => {
+    const o = x * 4
+    return [m.data[o], m.data[o + 1], m.data[o + 2], m.data[o + 3]]
   }
-  const opaqueBefore = before(4, 4)
-  const clearBefore = before(2, 2)
-
-  defringe(m) // keyless: falls back to sampleCornerColor (white)
-
-  const edgeO = (3 * W + 3) * 4
-  // Edge pixel moved away from white (255) — each channel decreased.
-  assert.ok(m.data[edgeO] < 200, `R pulled below original, got ${m.data[edgeO]}`)
-  assert.ok(m.data[edgeO + 1] < 200, `G pulled below original, got ${m.data[edgeO + 1]}`)
-  assert.ok(m.data[edgeO + 2] < 200, `B pulled below original, got ${m.data[edgeO + 2]}`)
-  // Alpha 0 / 255 pixels are left exactly as they were.
-  assert.deepEqual(before(2, 2), clearBefore, 'clear pixel untouched')
-  assert.deepEqual(before(4, 4), opaqueBefore, 'opaque pixel untouched')
+  assert.deepEqual(px(0), [255, 255, 255, 255], 'solid pixel whitened, alpha kept')
+  assert.deepEqual(px(1), [255, 255, 255, 128], 'semi-transparent pixel whitened, alpha kept')
+  assert.deepEqual(px(2), [20, 20, 40, 0], 'fully-clear pixel left untouched')
 })

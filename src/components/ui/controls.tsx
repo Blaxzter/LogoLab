@@ -180,7 +180,7 @@ export function Segmented<T extends string>({
             type="button"
             title={opt.title}
             onClick={() => onChange(opt.value)}
-            className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] px-2 text-xs font-medium transition-all ${
+            className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[12px] px-2 text-xs font-medium transition-all ${
               active
                 ? 'bg-surface text-ink shadow-xs'
                 : 'text-muted hover:text-ink-2'

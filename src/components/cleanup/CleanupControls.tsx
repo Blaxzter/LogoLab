@@ -11,13 +11,22 @@ import { Button } from '../ui/Button'
 import { ColorField, Collapsible, Field, Segmented, Slider, Toggle } from '../ui/controls'
 import type { CleanupTool } from '../../hooks/useCleanupCanvas'
 
-/** The four manual painting tools (single-click flood + drag brushes). */
+/**
+ * The manual painting tools split into their two families: single-click flood
+ * *removers* (tolerance-driven) and the drag *touch-up brushes* (size-driven).
+ * They live in separate rail sections so neither control is cramped and each
+ * owns a stable parameter slider.
+ */
 type ManualTool = 'magic' | 'color' | 'restore' | 'erase'
-const MANUAL_TOOLS: { value: ManualTool; label: string }[] = [
+type RemoveTool = 'magic' | 'color'
+type BrushTool = 'erase' | 'restore'
+const REMOVE_TOOLS: { value: RemoveTool; label: string }[] = [
   { value: 'magic', label: 'Magic' },
   { value: 'color', label: 'By color' },
-  { value: 'restore', label: 'Restore' },
+]
+const BRUSH_TOOLS: { value: BrushTool; label: string }[] = [
   { value: 'erase', label: 'Erase' },
+  { value: 'restore', label: 'Restore' },
 ]
 
 /** Per-tool teaching copy, carried verbatim from the old CleanupPanel. */
@@ -46,8 +55,9 @@ export interface CleanupControlsProps {
   /** Brush diameter in image px (erase/restore). */
   brushSize: number
   onBrushSize: (v: number) => void
-  doDefringe: boolean
-  onDoDefringe: (v: boolean) => void
+  /** Fringe-cleanup strength 0–1 applied on each remove; 0 = off. */
+  defringeStrength: number
+  onDefringeStrength: (v: number) => void
 
   /** Guided keep/remove marker counts (placed pins) + clear. */
   keepCount: number
@@ -64,6 +74,11 @@ export interface CleanupControlsProps {
   defringeAmt: number
   onDefringeAmt: (v: number) => void
   onApplyDefringe: () => void
+
+  /** Flat-recolor (monochrome logos): target color + Apply. */
+  recolorColor: string
+  onRecolorColor: (v: string) => void
+  onRecolor: () => void
 
   /** Trim & padding. */
   trimPad: number
@@ -97,8 +112,8 @@ export function CleanupControls({
   onSoftness,
   brushSize,
   onBrushSize,
-  doDefringe,
-  onDoDefringe,
+  defringeStrength,
+  onDefringeStrength,
   keepCount,
   removeCount,
   onClearMarkers,
@@ -111,6 +126,9 @@ export function CleanupControls({
   defringeAmt,
   onDefringeAmt,
   onApplyDefringe,
+  recolorColor,
+  onRecolorColor,
+  onRecolor,
   trimPad,
   onTrimPad,
   onAutoTrim,
@@ -126,23 +144,25 @@ export function CleanupControls({
   aiStatus,
   aiDevice,
 }: CleanupControlsProps) {
-  // Tool-hint copy only applies to the manual tools; keep/remove markers carry
-  // their own banner on the stage, so fall back to 'magic' for the rail hint.
-  const manualTool: ManualTool =
-    tool === 'erase' || tool === 'restore' || tool === 'color' ? tool : 'magic'
+  // Which family the active tool belongs to. Each Segmented below is passed the
+  // raw `tool`; when it's out of that group nothing highlights, so only the
+  // active family shows a selection. Hints fall back to each family's first tool
+  // so an opened-but-inactive section still previews sensible copy.
+  const isRemove = tool === 'magic' || tool === 'color'
   const isBrush = tool === 'erase' || tool === 'restore'
   const isMarker = tool === 'keep' || tool === 'remove'
   const markerTotal = keepCount + removeCount
 
-  const manualSummary = isMarker
-    ? 'Markers active'
-    : manualTool === 'erase' || manualTool === 'restore'
-      ? `${manualTool === 'erase' ? 'Erase' : 'Restore'} · ${brushSize}px`
-      : `${manualTool === 'magic' ? 'Magic' : 'By color'} · tolerance ${tolerance}`
+  const removeSummary = isRemove
+    ? `${tool === 'magic' ? 'Magic' : 'By color'} · tolerance ${tolerance}`
+    : `Tolerance ${tolerance}`
+  const brushSummary = isBrush
+    ? `${tool === 'erase' ? 'Erase' : 'Restore'} · ${brushSize}px`
+    : `Brush ${brushSize}px`
   const markerSummary = markerTotal > 0 ? `${keepCount} keep · ${removeCount} remove` : undefined
 
   return (
-    <aside className="flex w-[270px] shrink-0 flex-col border-r border-line bg-surface">
+    <aside className="flex w-[320px] shrink-0 flex-col border-r border-line bg-surface">
       {/* Scrollable settings — the footer below stays pinned so it can't scroll away. */}
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
         <h2 className="text-sm font-semibold text-ink">Remove background</h2>
@@ -178,31 +198,25 @@ export function CleanupControls({
           </div>
         </Collapsible>
 
-        {/* -------------------------------------------------- manual tools */}
-        <Collapsible title="Manual tools" summary={manualSummary} defaultOpen>
+        {/* -------------------------------------------------- manual remove */}
+        <Collapsible title="Manual remove" summary={removeSummary} defaultOpen>
           <Field label="Tool">
-            <Segmented<ManualTool>
-              value={manualTool}
+            {/* `value={tool}` highlights nothing while a brush/marker is active. */}
+            <Segmented<RemoveTool>
+              value={tool as RemoveTool}
               onChange={onToolChange}
-              options={MANUAL_TOOLS}
+              options={REMOVE_TOOLS}
             />
-            <p className="mt-1.5 text-xs leading-snug text-muted">{toolHint(manualTool)}</p>
+            <p className="mt-1.5 text-xs leading-snug text-muted">
+              {toolHint(isRemove ? (tool as ManualTool) : 'magic')}
+            </p>
           </Field>
 
-          {isBrush ? (
-            <Field label="Brush size" hint="Brush diameter, in image pixels.">
-              <Slider value={brushSize} min={4} max={200} unit="px" onChange={onBrushSize} />
-            </Field>
-          ) : (
-            <Field label="Tolerance" hint="How close a color must be to count as background.">
-              <Slider value={tolerance} min={1} max={160} onChange={onTolerance} />
-            </Field>
-          )}
+          <Field label="Tolerance" hint="How close a color must be to count as background.">
+            <Slider value={tolerance} min={1} max={160} onChange={onTolerance} />
+          </Field>
 
-          <Field
-            label="Edge softness"
-            hint={isBrush ? 'Feathers the brush edge.' : 'Feathers the cut edge to avoid jaggies.'}
-          >
+          <Field label="Edge softness" hint="Feathers the cut edge to avoid jaggies.">
             <Slider
               value={Math.round(softness * 100)}
               min={0}
@@ -212,11 +226,18 @@ export function CleanupControls({
             />
           </Field>
 
-          {!isBrush && (
-            <Field label="Defringe">
-              <Toggle checked={doDefringe} onChange={onDoDefringe} label="Defringe edges" />
-            </Field>
-          )}
+          <Field
+            label="Defringe"
+            hint="How hard each removal scrubs the leftover background color out of the soft edge. Higher = cleaner halo but a slightly harder edge; 0 = off."
+          >
+            <Slider
+              value={Math.round(defringeStrength * 100)}
+              min={0}
+              max={100}
+              unit="%"
+              onChange={(v) => onDefringeStrength(v / 100)}
+            />
+          </Field>
         </Collapsible>
 
         {/* ------------------------------------------------ guided markers */}
@@ -254,6 +275,35 @@ export function CleanupControls({
               </button>
             </div>
           )}
+        </Collapsible>
+
+        {/* ------------------------------------------------- touch-up brush */}
+        <Collapsible title="Touch-up brush" summary={brushSummary}>
+          <Field label="Brush">
+            {/* `value={tool}` highlights nothing while a remove/marker tool is active. */}
+            <Segmented<BrushTool>
+              value={tool as BrushTool}
+              onChange={onToolChange}
+              options={BRUSH_TOOLS}
+            />
+            <p className="mt-1.5 text-xs leading-snug text-muted">
+              {toolHint(isBrush ? (tool as ManualTool) : 'erase')}
+            </p>
+          </Field>
+
+          <Field label="Brush size" hint="Brush diameter, in image pixels.">
+            <Slider value={brushSize} min={4} max={200} unit="px" onChange={onBrushSize} />
+          </Field>
+
+          <Field label="Edge softness" hint="Feathers the brush edge.">
+            <Slider
+              value={Math.round(softness * 100)}
+              min={0}
+              max={100}
+              unit="%"
+              onChange={(v) => onSoftness(v / 100)}
+            />
+          </Field>
         </Collapsible>
 
         {/* --------------------------------------------------- edge refine */}
@@ -312,6 +362,25 @@ export function CleanupControls({
               block
             >
               Apply defringe
+            </Button>
+          </Field>
+        </Collapsible>
+
+        {/* ----------------------------------------------------- recolor */}
+        <Collapsible title="Recolor" summary={`To ${recolorColor}`}>
+          <Field
+            label="Flat color"
+            hint="Paints every visible pixel one color (alpha kept), then Apply. Cleans a monochrome logo and wipes any leftover edge rim — for single-color art only, since it flattens real colors."
+          >
+            <ColorField value={recolorColor} onChange={onRecolorColor} />
+            <Button
+              variant="secondary"
+              onClick={onRecolor}
+              disabled={aiBusy || !ready}
+              className="mt-2 h-8 text-xs"
+              block
+            >
+              Recolor to {recolorColor}
             </Button>
           </Field>
         </Collapsible>

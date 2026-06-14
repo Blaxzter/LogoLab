@@ -77,7 +77,7 @@ export function TraceControls({
 
   return (
     <>
-      <aside className="flex w-[270px] shrink-0 flex-col border-r border-line bg-surface">
+      <aside className="flex w-[320px] shrink-0 flex-col border-r border-line bg-surface">
         {/* Scrollable settings — the action below stays pinned so it can't scroll away. */}
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
           <div className="flex items-center justify-between">

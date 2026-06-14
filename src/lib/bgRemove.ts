@@ -231,21 +231,67 @@ export function autoRemove(
 }
 
 /**
- * Optional defringe: for semi-transparent edge pixels, pull their RGB away from
- * the removed key color toward their own hue so a colored halo doesn't remain.
- * Light touch; mutates `img`. When `key` is omitted it falls back to the corner
- * color (the same heuristic auto-remove keys off of).
+ * Suppress the colored "fringe" a removed background leaves on soft edges.
+ *
+ * After a cut, anti-aliased edge pixels keep the RGB of their original blend
+ * with the background, so a white logo lifted off a purple field is left with a
+ * purple halo — and you can't recover white from a pixel that simply *is*
+ * purple (an earlier RGB-nudging version did nothing for exactly that reason).
+ *
+ * So we *bleed the neighboring solid foreground color outward* instead: every
+ * semi-transparent pixel takes on the average color of the opaque (`>= SOLID`
+ * alpha) pixels within `R`, blended by `amount`. Alpha is left untouched, so the
+ * soft edge and the cutout shape are preserved — only the leftover color cast is
+ * overwritten with the real foreground color. Isolated translucent specks with
+ * no solid neighbor fall back to pushing their RGB away from `key` (the removed
+ * background color; corner color when omitted).
+ *
+ * `amount` 0 = off, 1 = full. Mutates `img`.
  */
 export function defringe(img: ImageData, key?: RGB, amount = 1): void {
-  const { data } = img
+  if (amount <= 0) return
+  const { width: w, height: h, data } = img
+  // Sample colors from a stable snapshot so the bleed can't feed on itself.
+  const src = new Uint8ClampedArray(data)
   const k = key ?? sampleCornerColor(img)
-  for (let o = 0; o < data.length; o += 4) {
-    const a = data[o + 3]
-    if (a === 0 || a === 255) continue
-    const t = (1 - a / 255) * amount
-    data[o] = Math.round(data[o] - (k.r - data[o]) * t)
-    data[o + 1] = Math.round(data[o + 1] - (k.g - data[o + 1]) * t)
-    data[o + 2] = Math.round(data[o + 2] - (k.b - data[o + 2]) * t)
+  const SOLID = 250 // alpha at/above which a pixel counts as solid foreground
+  const R = 3 // reach (px) for foreground color to bleed across the soft edge
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4
+      const a = src[o + 3]
+      if (a === 0 || a >= SOLID) continue // clear & solid interior: nothing to fix
+      let sr = 0
+      let sg = 0
+      let sb = 0
+      let n = 0
+      for (let dy = -R; dy <= R; dy++) {
+        const yy = y + dy
+        if (yy < 0 || yy >= h) continue
+        for (let dx = -R; dx <= R; dx++) {
+          const xx = x + dx
+          if (xx < 0 || xx >= w) continue
+          const no = (yy * w + xx) * 4
+          if (src[no + 3] < SOLID) continue
+          sr += src[no]
+          sg += src[no + 1]
+          sb += src[no + 2]
+          n++
+        }
+      }
+      if (n > 0) {
+        // Bleed the surrounding solid foreground color into the edge pixel.
+        data[o] = Math.round(src[o] + (sr / n - src[o]) * amount)
+        data[o + 1] = Math.round(src[o + 1] + (sg / n - src[o + 1]) * amount)
+        data[o + 2] = Math.round(src[o + 2] + (sb / n - src[o + 2]) * amount)
+      } else {
+        // No foreground nearby — push the speck's RGB away from the key color.
+        const t = (1 - a / 255) * amount
+        data[o] = Math.round(src[o] - (k.r - src[o]) * t)
+        data[o + 1] = Math.round(src[o + 1] - (k.g - src[o + 1]) * t)
+        data[o + 2] = Math.round(src[o + 2] - (k.b - src[o + 2]) * t)
+      }
+    }
   }
 }
 
@@ -363,16 +409,74 @@ export function brushStroke(
 /* ----------------------------------------------------------- edge refinement */
 
 /**
- * Morphological dilate of the matte: replace each alpha with the local MAX over a
- * (2*radius+1) square window, growing the opaque region outward by `radius` px.
- * Separable (horizontal then vertical pass) and runs over the ALPHA plane only —
- * RGB is untouched, so growing the edge can't reintroduce a background halo.
- * Soft anti-aliased edges survive because the 8-bit max is order-preserving.
+ * Color-carrying dilate of the matte: grows the opaque region outward by
+ * `radius` px (local MAX over a (2*radius+1) window, separable H then V) — but
+ * each pixel it reveals also inherits the RGBA of the most-opaque pixel it grew
+ * from, so the *foreground* color extends outward instead of exposing the stale
+ * background color still sitting under the transparent pixels. A pure alpha
+ * dilate would leave that background RGB in place and paint a colored ring; this
+ * carries the arg-max pixel's color through both passes so it doesn't. Pixels
+ * that already hold the local-max alpha keep their own color (ties don't steal).
+ * The alpha result is identical to a plain max-dilate, so soft edges survive.
  * Mutates `img`. `radius` is an integer ≥ 0 (a no-op at 0). Returns pixels whose
  * alpha changed.
  */
 export function growMatte(img: ImageData, radius: number): number {
-  return morphMatte(img, radius, true)
+  const r = Math.floor(radius)
+  if (r <= 0) return 0
+  const { width: w, height: h, data } = img
+  const n = w * h
+  // Snapshot the rgba planes so each pass reads settled values, not its own output.
+  const sr = new Uint8ClampedArray(n)
+  const sg = new Uint8ClampedArray(n)
+  const sb = new Uint8ClampedArray(n)
+  const sa = new Uint8ClampedArray(n)
+  for (let i = 0, o = 0; i < n; i++, o += 4) {
+    sr[i] = data[o]
+    sg[i] = data[o + 1]
+    sb[i] = data[o + 2]
+    sa[i] = data[o + 3]
+  }
+  // Horizontal pass: carry the arg-max-alpha pixel's rgba into tmp planes.
+  const tr = new Uint8ClampedArray(n)
+  const tg = new Uint8ClampedArray(n)
+  const tb = new Uint8ClampedArray(n)
+  const ta = new Uint8ClampedArray(n)
+  for (let y = 0; y < h; y++) {
+    const row = y * w
+    for (let x = 0; x < w; x++) {
+      let bi = row + x // best (arg-max) index, defaulting to self so ties keep self
+      const lo = Math.max(0, x - r)
+      const hi = Math.min(w - 1, x + r)
+      for (let k = lo; k <= hi; k++) {
+        if (sa[row + k] > sa[bi]) bi = row + k
+      }
+      const oi = row + x
+      tr[oi] = sr[bi]
+      tg[oi] = sg[bi]
+      tb[oi] = sb[bi]
+      ta[oi] = sa[bi]
+    }
+  }
+  // Vertical pass: same arg-max carry, write back to the image, count alpha changes.
+  let affected = 0
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let bi = y * w + x
+      const lo = Math.max(0, y - r)
+      const hi = Math.min(h - 1, y + r)
+      for (let k = lo; k <= hi; k++) {
+        if (ta[k * w + x] > ta[bi]) bi = k * w + x
+      }
+      const o = (y * w + x) * 4
+      if (data[o + 3] !== ta[bi]) affected++
+      data[o] = tr[bi]
+      data[o + 1] = tg[bi]
+      data[o + 2] = tb[bi]
+      data[o + 3] = ta[bi]
+    }
+  }
+  return affected
 }
 
 /**
@@ -572,4 +676,26 @@ export function compositeOver(img: ImageData, hex: string): ImageData {
     dst[o + 3] = 255
   }
   return out
+}
+
+/**
+ * Flat-recolor the cutout: set every non-transparent pixel's RGB to `hex`,
+ * leaving alpha exactly as-is. Turns monochrome art a single clean color and —
+ * because it ignores alpha entirely — also overwrites any opaque background rim
+ * a cut left behind, which the alpha-aware edge tools (defringe/grow) can't
+ * reach. Flattens all color, so it's only for single-color art. `hex` is parsed
+ * via `hexToRgb` (falls back to white). Mutates `img`; returns pixels changed.
+ */
+export function recolor(img: ImageData, hex: string): number {
+  const { data } = img
+  const c = hexToRgb(hex) ?? { r: 255, g: 255, b: 255 }
+  let affected = 0
+  for (let o = 0; o < data.length; o += 4) {
+    if (data[o + 3] === 0) continue // leave fully-transparent pixels alone
+    if (data[o] !== c.r || data[o + 1] !== c.g || data[o + 2] !== c.b) affected++
+    data[o] = c.r
+    data[o + 1] = c.g
+    data[o + 2] = c.b
+  }
+  return affected
 }
