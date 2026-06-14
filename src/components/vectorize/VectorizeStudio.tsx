@@ -15,7 +15,6 @@ import {
     MousePointer2,
     Redo2,
     Undo2,
-    X,
 } from "lucide-react";
 import { useCheckerClass, useLogo, useStore } from "../../store";
 import { usePanZoom, type PanZoom } from "../../hooks/usePanZoom";
@@ -87,6 +86,11 @@ export function VectorizeStudio() {
     const [viewMode, setViewMode] = useState<ViewMode>("split");
     const [tool, setTool] = useState<Tool>("pan");
     const [overlayOpacity, setOverlayOpacity] = useState(60);
+    // Region markers are a two-step affair: a master switch ("use regions") and a
+    // transient "region mode" (tool === 'mark'). Disabling region mode returns to
+    // pan with the markers kept; turning the master switch off ends the feature
+    // and clears them (keeping the invariant: markers exist ⇒ regions enabled).
+    const [regionsEnabled, setRegionsEnabled] = useState(false);
 
     const history = useHistory<EditableDoc>();
     const doc = history.value;
@@ -192,6 +196,27 @@ export function VectorizeStudio() {
     const clearMarkers = useCallback(() => {
         setOpts((o) => (o.markers && o.markers.length ? { ...o, markers: [] } : o));
     }, []);
+
+    // Master switch: turning the feature off exits region mode and clears markers.
+    const toggleRegionsEnabled = useCallback(
+        (on: boolean) => {
+            setRegionsEnabled(on);
+            if (!on) {
+                setTool("pan");
+                clearMarkers();
+            }
+        },
+        [clearMarkers],
+    );
+
+    // Region markers only apply to colour tracing — leaving that mode exits the
+    // placement tool (the master switch + markers persist for when you return).
+    useEffect(() => {
+        const colorTrace =
+            (!isVectorSource || retraceVector === "retrace") &&
+            opts.mode === "color";
+        if (!colorTrace && tool === "mark") setTool("pan");
+    }, [isVectorSource, retraceVector, opts.mode, tool]);
 
     const handleCanvasChange = useCallback(
         (d: EditableDoc) => historySet(mergeFills(d)),
@@ -369,7 +394,13 @@ export function VectorizeStudio() {
                 return;
             }
             if (!e.altKey && k === "m") {
-                setTool("mark");
+                const colorTrace =
+                    (!isVectorSource || retraceVector === "retrace") &&
+                    opts.mode === "color";
+                if (colorTrace) {
+                    setRegionsEnabled(true);
+                    setTool("mark");
+                }
                 return;
             }
             if (k === "Escape") {
@@ -450,6 +481,9 @@ export function VectorizeStudio() {
         redo,
         commitDoc,
         handleSelectPath,
+        isVectorSource,
+        retraceVector,
+        opts.mode,
     ]);
 
     /* ---------------------------------------------------------- panel edits */
@@ -555,6 +589,12 @@ export function VectorizeStudio() {
                 onForceColorOn={setForceColorOn}
                 forceColor={forceColor}
                 onForceColor={setForceColor}
+                regionsEnabled={regionsEnabled}
+                onRegionsEnabledChange={toggleRegionsEnabled}
+                marking={tool === "mark"}
+                onMarkingChange={(on) => setTool(on ? "mark" : "pan")}
+                markerCount={markers.length}
+                onClearMarkers={clearMarkers}
                 busy={busy}
                 staleEdits={staleEdits}
                 onTrace={() => void run()}
@@ -603,44 +643,18 @@ export function VectorizeStudio() {
                                         </>
                                     ),
                                 },
-                                {
-                                    value: "mark",
-                                    title: "Mark regions to keep (M)",
-                                    label: (
-                                        <>
-                                            <MapPin size={13} /> Mark
-                                        </>
-                                    ),
-                                },
                             ]}
                         />
                     </div>
-                    {(tool === "mark" || markers.length > 0) && (
-                        <div className="flex items-center gap-2 text-xs text-muted">
-                            <span className="tabular-nums">
+                    {opts.mode === "color" &&
+                        (!isVectorSource || retraceVector === "retrace") &&
+                        markers.length > 0 && (
+                            <span className="flex items-center gap-1.5 text-xs text-muted tabular-nums">
+                                <MapPin size={12} className="text-emerald-500" />
                                 {markers.length} marker
                                 {markers.length === 1 ? "" : "s"}
                             </span>
-                            {markers.length > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={clearMarkers}
-                                    title="Remove all region markers"
-                                    className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
-                                >
-                                    <X size={12} /> Clear
-                                </button>
-                            )}
-                            {markers.length > 0 && (opts.regionDetail ?? 0) === 0 && (
-                                <span
-                                    className="hidden text-[11px] text-amber-600 lg:inline dark:text-amber-400"
-                                    title="See-through overlaps share a colour with the shapes under them, so the default merge fuses them. Raise Region detail (in the controls) until each marked spot becomes its own region."
-                                >
-                                    · raise Region detail to split see-through overlaps
-                                </span>
-                            )}
-                        </div>
-                    )}
+                        )}
                     <ToolButton
                         title="Undo (Ctrl+Z)"
                         onClick={undo}
@@ -711,7 +725,13 @@ export function VectorizeStudio() {
                 </div>
 
                 {/* -------------------------------------------------------- stage */}
-                <div className={`relative min-h-0 flex-1 ${checkerClass}`}>
+                <div
+                    className={`relative min-h-0 flex-1 ${checkerClass} ${
+                        tool === "mark"
+                            ? "ring-2 ring-inset ring-emerald-400/70"
+                            : ""
+                    }`}
+                >
                     {viewMode === "split" && (
                         <div className="grid h-full grid-cols-2">
                             <div className="relative h-full min-w-0 border-r border-line">
@@ -791,6 +811,24 @@ export function VectorizeStudio() {
                                     {progress || "Tracing…"}
                                 </span>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Marking-active cue: marking is armed from the sidebar, so this
+                        on-stage banner makes it obvious the canvas is now clickable. */}
+                    {tool === "mark" && !busy && (
+                        <div className="animate-in-fade pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2">
+                            <span className="flex items-center gap-2 rounded-full border border-emerald-400/50 bg-surface/90 px-3 py-1 text-xs font-medium text-emerald-600 shadow-sm backdrop-blur dark:text-emerald-400">
+                                <MapPin size={13} />
+                                Click the image to keep that region as its own shape
+                                <button
+                                    type="button"
+                                    onClick={() => setTool("pan")}
+                                    className="pointer-events-auto -mr-1 ml-1 rounded-full px-2 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+                                >
+                                    Done
+                                </button>
+                            </span>
                         </div>
                     )}
                 </div>

@@ -1295,3 +1295,33 @@ investigated and rejected: markers always seed distinct regions (so "are they di
 the wrong signal — at low detail one is just a degenerate sliver / lands on a bg-flooded
 pixel), the needed detail is the slow regime, and a downscaled search is non-monotonic. The
 seeded split makes detail-raising unnecessary, so it's the better fix.
+
+### Controls UX — declutter + per-knob teaching + two-step markers — 2026-06-14 — ✅ shipped
+
+**Why.** The vectorize rail had grown a flat stack of a dozen sliders/toggles with no
+explanation of what each does to a result, and the "Mark" tool lived in the editor toolbar
+even though it's a trace input, not an edit action.
+
+**What.**
+- **Grouped collapsibles** (`controls.tsx` `Collapsible`): Mode + Trace stay visible; tuning
+  knobs move into *Shape & detail* / *Region markers* / *Color & background* sections, each
+  with a glanceable collapsed summary.
+- **Per-knob info dialogs** (`ControlInfoDialog.tsx`): every knob's label carries an (i) that
+  opens a plain-language explanation plus a before/after spread (None/Medium/High, Off/On…)
+  with node counts, a synced pan/zoom across all cells (reuses `usePanZoom`/`ZoomSurface`),
+  and a "My image" tab that re-runs the variant set live on the upload via the trace worker.
+- **Build-time previews, no drift** (`devtest/genControlPreviews.ts`, `previewScenes.ts`,
+  `components/vectorize/controlDocs.ts` → generated `controlPreviews.generated.ts`): a Node
+  script runs the REAL `traceImage` over bundled examples + purpose-built synthetic scenes,
+  once per variant, and emits the SVGs. Deterministic (seeded scenes), lazy-loaded chunk,
+  wired best-effort into `npm run build` so it regenerates on modern Node and falls back to
+  the committed copy otherwise. Engine is live-only (Potrace can't run headlessly).
+- **Two-step region markers** (sidebar): a master "Use region markers" switch + a transient
+  "Region mode" button. Disabling the mode returns to pan/edit with markers kept; disabling
+  the switch ends the feature and clears them (invariant: markers exist ⇒ regions enabled).
+  An on-stage emerald banner + ring make placement-armed obvious now that the toggle left the
+  toolbar. M still arms it (colour trace only).
+
+**Notes.** Crisp Smoothing is inherently gentle (fixed curve tolerance + a 0.35→0.9px blur)
+and is honestly framed as such — the dramatic lever is Potrace. typecheck + build green;
+`npm test` unchanged (UI-only); preview generation is deterministic (regen → identical hash).
