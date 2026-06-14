@@ -2,6 +2,8 @@
 // tolerance threshold and optional soft (anti-aliased) edges. Operates in
 // place on an ImageData so the caller can keep an undo history of snapshots.
 
+import { hexToRgb } from './colorUtils.ts'
+
 export interface RemoveOptions {
   /** Max color distance (0–255-ish) still considered "background". */
   tolerance: number
@@ -121,6 +123,69 @@ export function floodRemove(img: ImageData, sx: number, sy: number, opts: Remove
 }
 
 /**
+ * Contiguous magic-wand restore: the inverse of `floodRemove`. Floods from
+ * (sx,sy) over the PRISTINE `source` color at the seed, writing `source` RGBA
+ * back into `img` for connected pixels within tolerance (feathering alpha at the
+ * tolerance band via `keepFactor`). Mutates `img`. Returns pixels affected.
+ *
+ * Keying off `source` instead of the working image is what lets the flood bridge
+ * already-transparent working pixels — the mirror of floodRemove's "pass through
+ * transparent" rule — so a previously-erased region can be brought back wholesale.
+ * Returns 0 if `source` dimensions don't match `img`.
+ */
+export function floodRestore(
+  img: ImageData,
+  source: ImageData,
+  sx: number,
+  sy: number,
+  opts: RemoveOptions,
+): number {
+  const { width: w, height: h, data } = img
+  if (source.width !== w || source.height !== h) return 0
+  if (sx < 0 || sy < 0 || sx >= w || sy >= h) return 0
+  const src = source.data
+  const seed = pixelAt(source, sx, sy)
+  const visited = new Uint8Array(w * h)
+  const stack: number[] = [sy * w + sx]
+  let affected = 0
+
+  while (stack.length) {
+    const idx = stack.pop()!
+    if (visited[idx]) continue
+    visited[idx] = 1
+
+    const o = idx * 4
+    const x = idx % w
+    const y = (idx - x) / w
+
+    // Key off the pristine source color so transparent working pixels don't stop
+    // the flood: the boundary is the source's own background, not the matte.
+    const dist = colorDistance(src[o], src[o + 1], src[o + 2], seed.r, seed.g, seed.b)
+    if (dist >= opts.tolerance) continue // boundary: keep, stop spreading here
+
+    // Feather alpha at the band so restored edges stay anti-aliased.
+    const factor = keepFactor(dist, opts.tolerance, opts.softness)
+    const newR = src[o]
+    const newG = src[o + 1]
+    const newB = src[o + 2]
+    const newA = Math.round(src[o + 3] * (1 - factor))
+    if (data[o] !== newR || data[o + 1] !== newG || data[o + 2] !== newB || data[o + 3] !== newA) {
+      data[o] = newR
+      data[o + 1] = newG
+      data[o + 2] = newB
+      data[o + 3] = newA
+      affected++
+    }
+
+    if (x > 0) stack.push(idx - 1)
+    if (x < w - 1) stack.push(idx + 1)
+    if (y > 0) stack.push(idx - w)
+    if (y < h - 1) stack.push(idx + w)
+  }
+  return affected
+}
+
+/**
  * Global color key: clear EVERY pixel within tolerance of `key`, anywhere in
  * the image (not just connected). Mutates `img`. Returns pixels affected.
  */
@@ -168,17 +233,19 @@ export function autoRemove(
 /**
  * Optional defringe: for semi-transparent edge pixels, pull their RGB away from
  * the removed key color toward their own hue so a colored halo doesn't remain.
- * Light touch; mutates `img`.
+ * Light touch; mutates `img`. When `key` is omitted it falls back to the corner
+ * color (the same heuristic auto-remove keys off of).
  */
-export function defringe(img: ImageData, key: RGB, amount = 1): void {
+export function defringe(img: ImageData, key?: RGB, amount = 1): void {
   const { data } = img
+  const k = key ?? sampleCornerColor(img)
   for (let o = 0; o < data.length; o += 4) {
     const a = data[o + 3]
     if (a === 0 || a === 255) continue
     const t = (1 - a / 255) * amount
-    data[o] = Math.round(data[o] - (key.r - data[o]) * t)
-    data[o + 1] = Math.round(data[o + 1] - (key.g - data[o + 1]) * t)
-    data[o + 2] = Math.round(data[o + 2] - (key.b - data[o + 2]) * t)
+    data[o] = Math.round(data[o] - (k.r - data[o]) * t)
+    data[o + 1] = Math.round(data[o + 1] - (k.g - data[o + 1]) * t)
+    data[o + 2] = Math.round(data[o + 2] - (k.b - data[o + 2]) * t)
   }
 }
 
@@ -291,4 +358,218 @@ export function brushStroke(
     affected += brushStamp(img, x0 + dx * f, y0 + dy * f, radius, hardness, mode, source)
   }
   return affected
+}
+
+/* ----------------------------------------------------------- edge refinement */
+
+/**
+ * Morphological dilate of the matte: replace each alpha with the local MAX over a
+ * (2*radius+1) square window, growing the opaque region outward by `radius` px.
+ * Separable (horizontal then vertical pass) and runs over the ALPHA plane only —
+ * RGB is untouched, so growing the edge can't reintroduce a background halo.
+ * Soft anti-aliased edges survive because the 8-bit max is order-preserving.
+ * Mutates `img`. `radius` is an integer ≥ 0 (a no-op at 0). Returns pixels whose
+ * alpha changed.
+ */
+export function growMatte(img: ImageData, radius: number): number {
+  return morphMatte(img, radius, true)
+}
+
+/**
+ * Morphological erode of the matte: replace each alpha with the local MIN over a
+ * (2*radius+1) square window, shrinking the opaque region inward by `radius` px.
+ * Separable and alpha-plane only (see `growMatte`); soft edges are preserved by
+ * the order-preserving 8-bit min. Mutates `img`. `radius` is an integer ≥ 0
+ * (a no-op at 0). Returns pixels whose alpha changed.
+ */
+export function shrinkMatte(img: ImageData, radius: number): number {
+  return morphMatte(img, radius, false)
+}
+
+/** Shared separable max/min over the alpha plane (dilate when `max`, else erode). */
+function morphMatte(img: ImageData, radius: number, max: boolean): number {
+  const r = Math.floor(radius)
+  if (r <= 0) return 0
+  const { width: w, height: h, data } = img
+  // Copy alpha out first so each pass reads the previous (settled) plane rather
+  // than feeding back on itself.
+  const a = new Uint8ClampedArray(w * h)
+  for (let i = 0, o = 3; i < a.length; i++, o += 4) a[i] = data[o]
+  const tmp = new Uint8ClampedArray(w * h)
+  const pick = max ? Math.max : Math.min
+
+  // Horizontal pass: a -> tmp.
+  for (let y = 0; y < h; y++) {
+    const row = y * w
+    for (let x = 0; x < w; x++) {
+      let v = a[row + x]
+      const lo = Math.max(0, x - r)
+      const hi = Math.min(w - 1, x + r)
+      for (let k = lo; k <= hi; k++) v = pick(v, a[row + k])
+      tmp[row + x] = v
+    }
+  }
+  // Vertical pass: tmp -> back into alpha, counting changes.
+  let affected = 0
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let v = tmp[y * w + x]
+      const lo = Math.max(0, y - r)
+      const hi = Math.min(h - 1, y + r)
+      for (let k = lo; k <= hi; k++) v = pick(v, tmp[k * w + x])
+      const o = (y * w + x) * 4 + 3
+      if (data[o] !== v) {
+        data[o] = v
+        affected++
+      }
+    }
+  }
+  return affected
+}
+
+/**
+ * Feather the matte: separable box blur of the ALPHA plane only (RGB untouched),
+ * run three times so the combined kernel approximates a gaussian. Each box pass
+ * sweeps a sliding-window running sum horizontally then vertically over a
+ * (2*radius+1) window. Mutates `img`. `radius` ≥ 0 (a no-op at 0). Returns pixels
+ * whose alpha changed.
+ */
+export function featherAlpha(img: ImageData, radius: number): number {
+  const r = Math.floor(radius)
+  if (r <= 0) return 0
+  const { width: w, height: h, data } = img
+  // Work on a copy of the alpha plane; settle three box passes, then write back.
+  let a = new Float32Array(w * h)
+  for (let i = 0, o = 3; i < a.length; i++, o += 4) a[i] = data[o]
+  let tmp = new Float32Array(w * h)
+  for (let pass = 0; pass < 3; pass++) {
+    boxBlurH(a, tmp, w, h, r)
+    boxBlurV(tmp, a, w, h, r)
+  }
+
+  let affected = 0
+  for (let i = 0, o = 3; i < a.length; i++, o += 4) {
+    const v = Math.round(a[i])
+    if (data[o] !== v) {
+      data[o] = v
+      affected++
+    }
+  }
+  return affected
+}
+
+/** One horizontal box-blur pass over a w×h scalar plane via a running sum. */
+function boxBlurH(src: Float32Array, dst: Float32Array, w: number, h: number, r: number): void {
+  const win = 2 * r + 1
+  for (let y = 0; y < h; y++) {
+    const row = y * w
+    // Seed the window sum for x=0, clamping the out-of-bounds taps to the edge.
+    let sum = 0
+    for (let k = -r; k <= r; k++) sum += src[row + Math.max(0, Math.min(w - 1, k))]
+    for (let x = 0; x < w; x++) {
+      dst[row + x] = sum / win
+      const add = Math.max(0, Math.min(w - 1, x + r + 1))
+      const sub = Math.max(0, Math.min(w - 1, x - r))
+      sum += src[row + add] - src[row + sub]
+    }
+  }
+}
+
+/** One vertical box-blur pass over a w×h scalar plane via a running sum. */
+function boxBlurV(src: Float32Array, dst: Float32Array, w: number, h: number, r: number): void {
+  const win = 2 * r + 1
+  for (let x = 0; x < w; x++) {
+    let sum = 0
+    for (let k = -r; k <= r; k++) sum += src[Math.max(0, Math.min(h - 1, k)) * w + x]
+    for (let y = 0; y < h; y++) {
+      dst[y * w + x] = sum / win
+      const add = Math.max(0, Math.min(h - 1, y + r + 1))
+      const sub = Math.max(0, Math.min(h - 1, y - r))
+      sum += src[add * w + x] - src[sub * w + x]
+    }
+  }
+}
+
+/* --------------------------------------------------------- crop & composite */
+
+/**
+ * Bounding box of the visible cutout: the tightest rect covering every pixel with
+ * alpha ≥ `threshold`. Returns null when the image is fully transparent (nothing
+ * to crop to). Does not mutate `img`.
+ */
+export function alphaBounds(
+  img: ImageData,
+  threshold = 1,
+): { x: number; y: number; w: number; h: number } | null {
+  const { width: w, height: h, data } = img
+  // Clamp to >=1: a 0 threshold makes `alpha >= threshold` match fully-transparent
+  // pixels, which would return the whole frame for an empty cutout and break the
+  // documented "null when fully transparent" contract.
+  const t = Math.max(1, threshold)
+  let minX = w
+  let minY = h
+  let maxX = -1
+  let maxY = -1
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * 4 + 3] >= t) {
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+    }
+  }
+  if (maxX < 0) return null
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 }
+}
+
+/**
+ * Crop `img` to `bounds` and surround it with `pad` px of transparency: returns a
+ * NEW (bounds.w + 2*pad) × (bounds.h + 2*pad) ImageData with the source sub-rect
+ * blitted at offset (pad, pad). `bounds` is clamped to the image first, so an
+ * out-of-range box still yields a valid buffer. Does not mutate `img`.
+ */
+export function cropPad(
+  img: ImageData,
+  bounds: { x: number; y: number; w: number; h: number },
+  pad = 0,
+): ImageData {
+  const { width: iw, height: ih, data } = img
+  // Clamp the requested rect to the image so the blit can't read out of bounds.
+  const bx = Math.max(0, Math.min(iw, bounds.x))
+  const by = Math.max(0, Math.min(ih, bounds.y))
+  const bw = Math.max(0, Math.min(iw - bx, bounds.w))
+  const bh = Math.max(0, Math.min(ih - by, bounds.h))
+  const ow = bw + 2 * pad
+  const oh = bh + 2 * pad
+  const out = new ImageData(ow, oh)
+  const dst = out.data
+  for (let y = 0; y < bh; y++) {
+    const srcRow = ((by + y) * iw + bx) * 4
+    const dstRow = ((y + pad) * ow + pad) * 4
+    dst.set(data.subarray(srcRow, srcRow + bw * 4), dstRow)
+  }
+  return out
+}
+
+/**
+ * Flatten the cutout onto a solid background color: returns a NEW fully-opaque
+ * ImageData where each pixel is `src.rgb * a + bg.rgb * (1 - a)` (a = alpha/255)
+ * and alpha 255. `hex` is parsed via `hexToRgb`, falling back to white on a
+ * malformed value. Does not mutate `img`.
+ */
+export function compositeOver(img: ImageData, hex: string): ImageData {
+  const { width: w, height: h, data } = img
+  const bg = hexToRgb(hex) ?? { r: 255, g: 255, b: 255 }
+  const out = new ImageData(w, h)
+  const dst = out.data
+  for (let o = 0; o < data.length; o += 4) {
+    const a = data[o + 3] / 255
+    dst[o] = Math.round(data[o] * a + bg.r * (1 - a))
+    dst[o + 1] = Math.round(data[o + 1] * a + bg.g * (1 - a))
+    dst[o + 2] = Math.round(data[o + 2] * a + bg.b * (1 - a))
+    dst[o + 3] = 255
+  }
+  return out
 }
