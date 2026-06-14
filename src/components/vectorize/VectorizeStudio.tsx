@@ -631,6 +631,14 @@ export function VectorizeStudio() {
                                     <X size={12} /> Clear
                                 </button>
                             )}
+                            {markers.length > 0 && (opts.regionDetail ?? 0) === 0 && (
+                                <span
+                                    className="hidden text-[11px] text-amber-600 lg:inline dark:text-amber-400"
+                                    title="See-through overlaps share a colour with the shapes under them, so the default merge fuses them. Raise Region detail (in the controls) until each marked spot becomes its own region."
+                                >
+                                    · raise Region detail to split see-through overlaps
+                                </span>
+                            )}
                         </div>
                     )}
                     <ToolButton
@@ -713,6 +721,10 @@ export function VectorizeStudio() {
                                     aspectW={logo.naturalWidth || 1}
                                     aspectH={logo.naturalHeight || 1}
                                     primary
+                                    markers={markers}
+                                    marking={tool === "mark"}
+                                    onAddMarker={addMarker}
+                                    onRemoveMarker={removeMarker}
                                 />
                                 <Chip>Original</Chip>
                             </div>
@@ -746,6 +758,10 @@ export function VectorizeStudio() {
                             aspectW={logo.naturalWidth || 1}
                             aspectH={logo.naturalHeight || 1}
                             primary
+                            markers={markers}
+                            marking={tool === "mark"}
+                            onAddMarker={addMarker}
+                            onRemoveMarker={removeMarker}
                         />
                     )}
                     {viewMode === "overlay" &&
@@ -824,9 +840,20 @@ export function VectorizeStudio() {
 
 /* ------------------------------------------------------------ subcomponents */
 
+/** Region-marker glyph colour (emerald) + halo, matching EditorCanvas. */
+const MARKER_FILL = "#10b981";
+const MARKER_HALO = "#ffffff";
+/** Screen-px radius for clicking an existing marker to remove it. */
+const MARKER_HIT_PX = 11;
+
 /**
  * The original image in the same centered-fit framing as the editor canvas,
- * so split view shows pixel-identical composition on both sides.
+ * so split view shows pixel-identical composition on both sides. With the Mark
+ * tool active it ALSO accepts region markers (you place them where the overlap
+ * is actually visible — on the source — not only on the traced result), mapping
+ * the click to the same NORMALIZED [0,1] image coords the editor canvas uses, so
+ * the two stay in lock-step. Pins counter-scale by the zoom so they stay a
+ * constant screen size, like the editor's.
  */
 function OriginalPane({
     pz,
@@ -834,14 +861,52 @@ function OriginalPane({
     aspectW,
     aspectH,
     primary = false,
+    markers,
+    marking = false,
+    onAddMarker,
+    onRemoveMarker,
 }: {
     pz: PanZoom;
     src: string;
     aspectW: number;
     aspectH: number;
     primary?: boolean;
+    markers?: { x: number; y: number }[];
+    marking?: boolean;
+    onAddMarker?: (x: number, y: number) => void;
+    onRemoveMarker?: (index: number) => void;
 }) {
     const fit = useFitBox(aspectW, aspectH);
+    const boxRef = useRef<HTMLDivElement | null>(null);
+    const all = markers ?? [];
+
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!marking || e.button !== 0) return;
+        const rect = boxRef.current?.getBoundingClientRect();
+        if (!rect || rect.width === 0 || rect.height === 0) return;
+        e.stopPropagation(); // don't let ZoomSurface treat this as a pan
+        // Click an existing pin (within a screen-px tolerance) → remove; else add.
+        let hit = -1;
+        let bestD = MARKER_HIT_PX;
+        for (let i = 0; i < all.length; i++) {
+            const px = rect.left + all[i].x * rect.width;
+            const py = rect.top + all[i].y * rect.height;
+            const d = Math.hypot(px - e.clientX, py - e.clientY);
+            if (d <= bestD) {
+                bestD = d;
+                hit = i;
+            }
+        }
+        if (hit >= 0) {
+            onRemoveMarker?.(hit);
+            return;
+        }
+        const nx = (e.clientX - rect.left) / rect.width;
+        const ny = (e.clientY - rect.top) / rect.height;
+        if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) onAddMarker?.(nx, ny);
+    };
+
+    const inv = pz.scale > 0 ? 1 / pz.scale : 1;
     return (
         <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
             <div
@@ -849,8 +914,10 @@ function OriginalPane({
                 className="flex h-full w-full items-center justify-center p-[6%]"
             >
                 <div
+                    ref={boxRef}
                     className="relative"
-                    style={{ width: fit.width, height: fit.height }}
+                    style={{ width: fit.width, height: fit.height, cursor: marking ? "crosshair" : undefined }}
+                    onPointerDown={handlePointerDown}
                 >
                     <img
                         src={src}
@@ -858,6 +925,24 @@ function OriginalPane({
                         draggable={false}
                         className="pointer-events-none h-full w-full select-none"
                     />
+                    {all.length > 0 &&
+                        all.map((m, i) => (
+                            <div
+                                key={i}
+                                className="pointer-events-none absolute"
+                                style={{
+                                    left: `${m.x * 100}%`,
+                                    top: `${m.y * 100}%`,
+                                    width: 14,
+                                    height: 14,
+                                    borderRadius: "9999px",
+                                    background: MARKER_FILL,
+                                    border: `2px solid ${MARKER_HALO}`,
+                                    boxShadow: "0 0 0 1px rgba(0,0,0,.25)",
+                                    transform: `translate(-50%, -50%) scale(${inv})`,
+                                }}
+                            />
+                        ))}
                 </div>
             </div>
         </ZoomSurface>
