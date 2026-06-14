@@ -1252,3 +1252,46 @@ parity).
 - **N ≤ 3 shapes** (the verified case); the enumeration is capped and a >12-region
   scene declines rather than truncating (the opaque output keeps every region, so
   nothing is silently dropped).
+
+### V6+ — markers do real seeded region growing (not a merge-veto) — 2026-06-14 — ✅ shipped
+
+**Why.** The shipped "Mark" tool (V5+) called itself marker-watershed but implemented a
+VETO on the agglomerative colour-merge: two differently-marked roots were forbidden to
+unite. When a translucent overlap's colour sits within the merge τ_s of the shape beneath
+it (bloom: 10–13 ΔE), the pixels still coalesced by scan order and a marker was left with a
+ragged 70px sliver — "bands forced in from the outside" (user-reported), not a region grown
+from the seed. And it could only separate the overlaps by cranking Region detail to τ_s≈3,
+the slow regime (512² segmentation 10–23s) — and a downscaled detail-search to dodge that
+was measured to be non-monotonic / unreliable across resolutions.
+
+**Fix (segment.ts).** Drop the veto entirely; capture each marker's seed pixel. After the
+normal segmentation, split any macro-region containing ≥2 markers by **Adams–Bischof seeded
+region growing** (`markerControlledSplit`/`growSeeds`): a binary-min-heap priority queue
+keyed by ΔE to each sub-region's running mean grows one sub-region out from each marker,
+confined to the region's pixels, so the boundary settles on the colour RIDGE between them.
+It grows on the **original-colour Lab**, not the MS-smoothed Lab — smoothing erases the
+subtle overlap edges (below its threshold), which would leave the ridge fuzzy and the
+boundary off the true edge (a seam). A `assembleFromGroupId` rebuilds the QuantizeResult
+from the post-split labelling. Deterministic (heap ties break by pixel index then region);
+the no-markers path is byte-identical (the veto only ever fired with markers, and the split
+is gated on `hasMarkers`) — runBaseline hashes unchanged.
+
+**Mark-on-original UI (VectorizeStudio).** Markers were only placeable on the traced canvas;
+the Original/source pane now also accepts the Mark tool (same client→normalized[0,1] mapping,
+zoom-constant pins), so you seed where the overlap is actually visible. Plus a contextual hint.
+
+**Numbers.** Each marker now grows its own clean region with the boundary ON the edge, at the
+DEFAULT detail (no τ_s drop, no fragmentation, milliseconds). bloom at default detail is a
+clean 6-region trace (meanΔE **0.39→0.23**, no slivers); bloom + markers + Region detail
+decomposes to the 3 see-through circles at meanΔE **0.47→0.25**. petals: each of 6 markers
+grows its own region (was degenerate slivers), though its irregular hand-drawn blobs leave a
+residual boundary seam (P99.5 ≈ 19) — the inherent limit for a non-circular flattened source;
+its V6 decomposition still correctly declines (opaque already matches its flattened truth).
+`npm test` 118 (markers.test.ts retargeted to seeded growth + a "boundary on the edge, no
+slivers" test); typecheck + build green.
+
+**Deviation from the brief.** An auto-raise-Region-detail-to-separate-markers idea was
+investigated and rejected: markers always seed distinct regions (so "are they distinct" is
+the wrong signal — at low detail one is just a degenerate sliver / lands on a bg-flooded
+pixel), the needed detail is the slow regime, and a downscaled search is non-monotonic. The
+seeded split makes detail-raising unnecessary, so it's the better fix.
