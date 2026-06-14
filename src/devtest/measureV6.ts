@@ -40,9 +40,9 @@ await measure('bloom', bloom, bloomMarkers, 95)
 await measure('bloom', bloom, bloomMarkers, 0) // partial overlaps ⇒ gate should fall back
 
 const petals = loadPng('public/examples/petals.png') as unknown as Img
+// 3 exclusive + 3 pairwise overlaps (petals has NO triple region — bg + 6 shapes).
 const petalMarkers = [
   { x: 263 / W, y: 140 / W }, { x: 360 / W, y: 300 / W }, { x: 150 / W, y: 330 / W },
-  { x: 256 / W, y: 250 / W }, { x: 230 / W, y: 250 / W }, { x: 290 / W, y: 300 / W }, { x: 256 / W, y: 285 / W },
+  { x: 256 / W, y: 230 / W }, { x: 225 / W, y: 255 / W }, { x: 288 / W, y: 300 / W },
 ]
 await measure('petals', petals, petalMarkers, 0)
-await measure('petals', petals, petalMarkers, 85)

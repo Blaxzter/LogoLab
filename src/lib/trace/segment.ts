@@ -165,27 +165,32 @@ export function segmentImage(
     }
   }
 
-  // --- User markers → seeded pixels (marker-watershed constraint) -------------
-  // Each marker (normalised [0,1], in fixed input order) claims the nearest
-  // SMOOTH pixel to round(x·w), round(y·h) and gets a distinct id. `rootMarker`
-  // tracks, per live union-find root, which marker id it carries (−1 = none).
-  // Two roots carrying different markers are never united (in this step's merge
-  // and again in the global union-fit); a root can carry at most one marker
-  // because that veto is the only thing that would ever bring two together. With
-  // no markers every entry stays −1 and the veto never fires ⇒ output unchanged.
-  const rootMarker = new Int32Array(n).fill(-1)
+  // --- User markers → seed pixels (marker-controlled seeded region growing) ---
+  // Each marker (normalised [0,1], fixed input order) claims the nearest SMOOTH
+  // pixel. Markers no longer veto merging (the old approach left ragged scan-order
+  // slivers and could not separate a translucent overlap whose colour is within
+  // τ_s of the shape beneath it). Instead they drive a SEEDED REGION GROWING split
+  // AFTER the normal segmentation: any macro-region that ends up containing ≥2
+  // markers is partitioned by growing a sub-region out from each marker, the
+  // boundary settling on the colour RIDGE between them (markerControlledSplit
+  // below). So a flat overlap separates cleanly from its neighbour even though
+  // their mean colours merge — and it works at the DEFAULT detail (no global
+  // τ_s drop, no fragmentation). With no markers nothing here changes the output.
   const markers = opts.markers ?? []
-  let markerCount = 0
+  const markerSeeds: number[] = []
+  const usedSeed = new Set<number>()
   for (let m = 0; m < markers.length; m++) {
     const px = Math.max(0, Math.min(w - 1, Math.round(markers[m].x * w)))
     const py = Math.max(0, Math.min(h - 1, Math.round(markers[m].y * h)))
     const seed = nearestSmoothPixel(smooth, w, h, px, py)
-    // Skip a marker with no reachable smooth pixel (fully transparent / all-edge
-    // area) or one colliding with an already-seeded pixel — keeps ids unique and
-    // the result deterministic regardless of duplicate placements.
-    if (seed >= 0 && rootMarker[seed] === -1) rootMarker[seed] = markerCount++
+    // Skip a marker with no reachable smooth pixel, or a duplicate seed pixel —
+    // keeps the seed list unique and deterministic regardless of placement.
+    if (seed >= 0 && !usedSeed.has(seed)) {
+      usedSeed.add(seed)
+      markerSeeds.push(seed)
+    }
   }
-  const hasMarkers = markerCount > 0
+  const hasMarkers = markerSeeds.length > 0
 
   const find = (x: number): number => {
     let r = x
@@ -213,17 +218,6 @@ export function segmentImage(
     sumA[lo] += sumA[hi]
     sumB[lo] += sumB[hi]
     cnt[lo] += cnt[hi]
-    // Carry the (at most one) marker onto the surviving root. Only ever reached
-    // after the caller's veto, so lo/hi never hold two different markers.
-    if (rootMarker[lo] === -1) rootMarker[lo] = rootMarker[hi]
-  }
-  // True when uniting ra,rb would put two DIFFERENT user markers in one segment
-  // — the watershed must-stay-separate constraint. Cheap no-op without markers.
-  const markerConflict = (ra: number, rb: number): boolean => {
-    if (!hasMarkers) return false
-    const ma = rootMarker[ra]
-    const mb = rootMarker[rb]
-    return ma !== -1 && mb !== -1 && ma !== mb
   }
 
   // Loop to a TRUE fixpoint (Supplement Alg 1). Termination is guaranteed: every
@@ -240,7 +234,7 @@ export function segmentImage(
         if (x + 1 < w && smooth[i + 1] && !cutH[i]) {
           const ra = find(i)
           const rb = find(i + 1)
-          if (ra !== rb && !markerConflict(ra, rb) && meanDelta(ra, rb) <= opts.tauS) {
+          if (ra !== rb && meanDelta(ra, rb) <= opts.tauS) {
             unite(ra, rb)
             changed = true
           }
@@ -249,7 +243,7 @@ export function segmentImage(
         if (y + 1 < h && smooth[i + w] && !cutV[i]) {
           const ra = find(i)
           const rb = find(i + w)
-          if (ra !== rb && !markerConflict(ra, rb) && meanDelta(ra, rb) <= opts.tauS) {
+          if (ra !== rb && meanDelta(ra, rb) <= opts.tauS) {
             unite(ra, rb)
             changed = true
           }
@@ -262,9 +256,6 @@ export function segmentImage(
   // Compact S₀ roots → segment ids 0..S-1; segOf[pixel] = id, −1 for 𝒟/transparent.
   const segOf = new Int32Array(n).fill(-1)
   const rootToSeg = new Map<number, number>()
-  // segMarker[id] = the marker id carried by fine segment `id` (−1 = none),
-  // captured from its root at compaction time (fixed scan order, deterministic).
-  const segMarkerArr: number[] = []
   let S = 0
   for (let i = 0; i < n; i++) {
     if (!smooth[i]) continue
@@ -273,7 +264,6 @@ export function segmentImage(
     if (id === undefined) {
       id = S++
       rootToSeg.set(r, id)
-      segMarkerArr.push(rootMarker[r])
     }
     segOf[i] = id
   }
@@ -374,15 +364,10 @@ export function segmentImage(
   // (non-vetoed, low-residual, unimodal) pair until none qualifies.
   const members = new Map<number, number[]>()
   const samples = new Map<number, RegionSamples>()
-  // groupMarker[stable group id] = the marker the group carries (−1 = none). A
-  // group never holds two markers (the veto below blocks that), so one value per
-  // group suffices. Mirrors the step-2 watershed constraint at the macro level.
-  const groupMarker = new Map<number, number>()
   const alive: number[] = []
   for (let id = 0; id < S; id++) {
     members.set(id, [id])
     samples.set(id, segSamples[id])
-    groupMarker.set(id, segMarkerArr[id])
     alive.push(id)
   }
   let nextId = S
@@ -390,13 +375,6 @@ export function segmentImage(
   const ckey = (a: number, b: number): number => (a < b ? a * 1e7 + b : b * 1e7 + a)
 
   const pairVetoed = (gi: number, gj: number): boolean => {
-    // User-marker veto: two groups carrying different markers must stay separate
-    // (same must-not-merge mechanism as the discontinuity set 𝒜, user-driven).
-    if (hasMarkers) {
-      const ki = groupMarker.get(gi)!
-      const kj = groupMarker.get(gj)!
-      if (ki !== -1 && kj !== -1 && ki !== kj) return true
-    }
     const mi = members.get(gi)!
     const mj = members.get(gj)!
     for (const a of mi) for (const b of mj) if (vetoed.has(pairKey(a, b))) return true
@@ -431,12 +409,6 @@ export function segmentImage(
     const c = nextId++
     members.set(c, members.get(best.i)!.concat(members.get(best.j)!))
     samples.set(c, best.samples)
-    // The merged group inherits the (single) marker of whichever side carried
-    // one — never both, since pairVetoed blocks two-marker unions.
-    const mi = groupMarker.get(best.i)!
-    groupMarker.set(c, mi !== -1 ? mi : groupMarker.get(best.j)!)
-    groupMarker.delete(best.i)
-    groupMarker.delete(best.j)
     // Retire the two merged groups and their cache rows; add the new group.
     alive.splice(alive.indexOf(best.j), 1)
     alive.splice(alive.indexOf(best.i), 1)
@@ -555,6 +527,34 @@ export function segmentImage(
     extra.push(grp)
   }
 
+  // --- Marker-controlled split (seeded region growing) ------------------------
+  // Any macro-region that ended up containing ≥2 markers is partitioned by growing
+  // a sub-region out from each marker (Adams–Bischof seeded region growing on the
+  // ORIGINAL-colour Lab, confined to that region's pixels), so the boundary settles
+  // on the colour RIDGE between the marked sub-regions. This recovers a translucent
+  // overlap cleanly from the shape beneath it at the DEFAULT detail, even though
+  // their mean colours merge. No-marker runs skip this entirely and take the exact
+  // existing assembly below (byte-identical output).
+  if (hasMarkers) {
+    // Grow on ORIGINAL-colour Lab, not the MS-smoothed Lab: smoothing erases the
+    // subtle overlap edges (they fall below its threshold), which would leave the
+    // ridge fuzzy and the split boundary off the true edge (a seam). The original
+    // colour keeps the step sharp so the boundary settles exactly on it.
+    const oL = new Float64Array(n)
+    const oA = new Float64Array(n)
+    const oB = new Float64Array(n)
+    for (let i = 0; i < n; i++) {
+      if (!opaque[i]) continue
+      const o = i * 4
+      const lab = srgbToLab(data[o], data[o + 1], data[o + 2])
+      oL[i] = lab[0]
+      oA[i] = lab[1]
+      oB[i] = lab[2]
+    }
+    const groupCount = markerControlledSplit(groupId, G + extra.length, markerSeeds, w, h, oL, oA, oB)
+    return assembleFromGroupId(groupId, groupCount, n, w, data, smooth, ms, S, opts.sampleCap)
+  }
+
   // --- Assemble QuantizeResult over all macro-regions (smooth groups + isolated
   // 𝒟 components), sorted by pixel count desc (largest = bottom full-bleed layer).
   const GG = G + extra.length
@@ -584,6 +584,268 @@ export function segmentImage(
     labels[i] = gi < 0 ? -1 : rank[gi]
   }
 
+  return { palette, labels, counts, ms, fineSegments: S, regionSamples }
+}
+
+// ---------------------------------------------------------------------------
+// Marker-controlled seeded region growing — the split that makes user markers
+// recover translucent overlaps cleanly. Adams & Bischof (1994): grow each seed's
+// region by repeatedly claiming the unassigned boundary pixel most similar to a
+// region's running mean (a priority queue), so the boundary settles on the colour
+// RIDGE between regions — works even when the regions' mean colours are within the
+// global merge threshold and the step is subtle (the translucent-overlap case),
+// and at the default detail (no global τ_s drop, no fragmentation).
+// ---------------------------------------------------------------------------
+
+/**
+ * Split every macro-region holding ≥2 markers, growing one sub-region per marker.
+ * Mutates `groupId` in place (sub-region 0 keeps the group's id, the rest get new
+ * ids ≥ GG0) and returns the new total group count. Deterministic: groups and
+ * seeds are processed in ascending / input order; heap ties break by pixel index.
+ */
+function markerControlledSplit(
+  groupId: Int32Array,
+  GG0: number,
+  markerSeeds: number[],
+  w: number,
+  h: number,
+  labL: Float64Array,
+  labA: Float64Array,
+  labB: Float64Array,
+): number {
+  const byGroup = new Map<number, number[]>()
+  for (const seed of markerSeeds) {
+    const g = groupId[seed]
+    if (g < 0) continue
+    const list = byGroup.get(g)
+    if (list) list.push(seed)
+    else byGroup.set(g, [seed])
+  }
+  const toSplit = [...byGroup.keys()].filter((g) => byGroup.get(g)!.length >= 2).sort((a, b) => a - b)
+  if (toSplit.length === 0) return GG0
+
+  const sub = new Int32Array(groupId.length).fill(-1) // per-pixel sub-region (reused)
+  let nextGroup = GG0
+  for (const g of toSplit) {
+    const seeds = byGroup.get(g)!
+    const subIds = seeds.map((_, i) => (i === 0 ? g : nextGroup++))
+    growSeeds(groupId, g, seeds, subIds, sub, w, h, labL, labA, labB)
+  }
+  return nextGroup
+}
+
+/** Grow `seeds` over the pixels currently labelled `g`, writing their final group
+ *  ids (`subIds`) into `groupId`. `sub` is scratch (size = #px), reset on return. */
+function growSeeds(
+  groupId: Int32Array,
+  g: number,
+  seeds: number[],
+  subIds: number[],
+  sub: Int32Array,
+  w: number,
+  h: number,
+  labL: Float64Array,
+  labA: Float64Array,
+  labB: Float64Array,
+): void {
+  const K = seeds.length
+  const sumL = new Float64Array(K)
+  const sumA = new Float64Array(K)
+  const sumB = new Float64Array(K)
+  const cnt = new Float64Array(K)
+  const heap = new MinHeap()
+  const touched: number[] = []
+
+  const meanDE = (pix: number, k: number): number => {
+    const dl = labL[pix] - sumL[k] / cnt[k]
+    const da = labA[pix] - sumA[k] / cnt[k]
+    const db = labB[pix] - sumB[k] / cnt[k]
+    return Math.sqrt(dl * dl + da * da + db * db)
+  }
+  const pushNbrs = (pix: number, k: number): void => {
+    const x = pix % w
+    const y = (pix / w) | 0
+    if (x > 0 && groupId[pix - 1] === g && sub[pix - 1] === -1) heap.push(meanDE(pix - 1, k), pix - 1, k)
+    if (x < w - 1 && groupId[pix + 1] === g && sub[pix + 1] === -1) heap.push(meanDE(pix + 1, k), pix + 1, k)
+    if (y > 0 && groupId[pix - w] === g && sub[pix - w] === -1) heap.push(meanDE(pix - w, k), pix - w, k)
+    if (y < h - 1 && groupId[pix + w] === g && sub[pix + w] === -1) heap.push(meanDE(pix + w, k), pix + w, k)
+  }
+
+  for (let k = 0; k < K; k++) {
+    const s = seeds[k]
+    sub[s] = k
+    touched.push(s)
+    sumL[k] = labL[s]
+    sumA[k] = labA[s]
+    sumB[k] = labB[s]
+    cnt[k] = 1
+  }
+  for (let k = 0; k < K; k++) pushNbrs(seeds[k], k)
+
+  while (heap.size > 0) {
+    const pix = heap.pop()
+    const k = heap.popReg
+    if (sub[pix] !== -1) continue // already claimed by an earlier (lower-ΔE) pop
+    sub[pix] = k
+    touched.push(pix)
+    sumL[k] += labL[pix]
+    sumA[k] += labA[pix]
+    sumB[k] += labB[pix]
+    cnt[k]++
+    pushNbrs(pix, k)
+  }
+
+  // Write final ids; any pixel of g the growth didn't reach (a component with no
+  // seed) stays in sub-region 0 (= g). Reset the touched scratch for the next group.
+  for (let i = 0; i < groupId.length; i++) {
+    if (groupId[i] !== g) continue
+    const k = sub[i]
+    groupId[i] = subIds[k < 0 ? 0 : k]
+  }
+  for (const p of touched) sub[p] = -1
+}
+
+/** Binary min-heap of (ΔE, pixel, region) entries, ordered by ΔE then pixel index
+ *  then region (a total order ⇒ deterministic region growing). `pop()` returns the
+ *  pixel and exposes its region via `popReg`. */
+class MinHeap {
+  de: number[] = []
+  pix: number[] = []
+  reg: number[] = []
+  size = 0
+  popReg = 0
+  push(de: number, pix: number, reg: number): void {
+    const i = this.size++
+    this.de[i] = de
+    this.pix[i] = pix
+    this.reg[i] = reg
+    this.up(i)
+  }
+  pop(): number {
+    const pix = this.pix[0]
+    this.popReg = this.reg[0]
+    const last = --this.size
+    this.de[0] = this.de[last]
+    this.pix[0] = this.pix[last]
+    this.reg[0] = this.reg[last]
+    if (this.size > 0) this.down(0)
+    return pix
+  }
+  less(i: number, j: number): boolean {
+    if (this.de[i] !== this.de[j]) return this.de[i] < this.de[j]
+    if (this.pix[i] !== this.pix[j]) return this.pix[i] < this.pix[j]
+    return this.reg[i] < this.reg[j]
+  }
+  swap(i: number, j: number): void {
+    const d = this.de[i]; this.de[i] = this.de[j]; this.de[j] = d
+    const p = this.pix[i]; this.pix[i] = this.pix[j]; this.pix[j] = p
+    const r = this.reg[i]; this.reg[i] = this.reg[j]; this.reg[j] = r
+  }
+  up(i: number): void {
+    while (i > 0) {
+      const parent = (i - 1) >> 1
+      if (!this.less(i, parent)) break
+      this.swap(i, parent)
+      i = parent
+    }
+  }
+  down(i: number): void {
+    for (;;) {
+      const l = 2 * i + 1
+      const r = 2 * i + 2
+      let m = i
+      if (l < this.size && this.less(l, m)) m = l
+      if (r < this.size && this.less(r, m)) m = r
+      if (m === i) break
+      this.swap(i, m)
+      i = m
+    }
+  }
+}
+
+/**
+ * Build a SegmentResult straight from a per-pixel `groupId` labelling (used by the
+ * marker-split path). Palette = mean ORIGINAL colour over each group's opaque
+ * pixels; regionSamples = original colours of each group's SMOOTH pixels (or, for a
+ * group with no smooth pixels — an isolated all-𝒟 mark — all its opaque pixels),
+ * strided. Groups are ranked by pixel count desc (largest = bottom layer), matching
+ * the default assembly. Only reached when markers are present (the no-marker path
+ * keeps its exact existing assembly, so its output stays byte-identical).
+ */
+function assembleFromGroupId(
+  groupId: Int32Array,
+  groupCount: number,
+  n: number,
+  w: number,
+  data: Uint8ClampedArray,
+  smooth: Uint8Array,
+  ms: MumfordShahResult,
+  S: number,
+  sampleCap: number,
+): SegmentResult {
+  const G = groupCount
+  const cnt = new Float64Array(G)
+  const sumR = new Float64Array(G)
+  const sumG = new Float64Array(G)
+  const sumB = new Float64Array(G)
+  const xs: number[][] = Array.from({ length: G }, () => [])
+  const ys: number[][] = Array.from({ length: G }, () => [])
+  const rs: number[][] = Array.from({ length: G }, () => [])
+  const gs: number[][] = Array.from({ length: G }, () => [])
+  const bs: number[][] = Array.from({ length: G }, () => [])
+  for (let i = 0; i < n; i++) {
+    const g = groupId[i]
+    if (g < 0) continue
+    const o = i * 4
+    cnt[g]++
+    sumR[g] += data[o]
+    sumG[g] += data[o + 1]
+    sumB[g] += data[o + 2]
+    if (smooth[i]) {
+      xs[g].push(i % w)
+      ys[g].push((i / w) | 0)
+      rs[g].push(data[o])
+      gs[g].push(data[o + 1])
+      bs[g].push(data[o + 2])
+    }
+  }
+  // Groups with no smooth pixels (isolated all-𝒟 marks) → sample all opaque pixels.
+  let anyNeedAll = false
+  const needAll = new Uint8Array(G)
+  for (let g = 0; g < G; g++) {
+    if (cnt[g] > 0 && xs[g].length === 0) {
+      needAll[g] = 1
+      anyNeedAll = true
+    }
+  }
+  if (anyNeedAll) {
+    for (let i = 0; i < n; i++) {
+      const g = groupId[i]
+      if (g < 0 || !needAll[g]) continue
+      const o = i * 4
+      xs[g].push(i % w)
+      ys[g].push((i / w) | 0)
+      rs[g].push(data[o])
+      gs[g].push(data[o + 1])
+      bs[g].push(data[o + 2])
+    }
+  }
+  const order = Array.from({ length: G }, (_, g) => g).sort((a, b) => cnt[b] - cnt[a])
+  const rank = new Int32Array(G)
+  order.forEach((g, pos) => {
+    rank[g] = pos
+  })
+  const palette: PaletteColor[] = order.map((g) => {
+    const c = cnt[g] || 1
+    return { r: clamp255(sumR[g] / c), g: clamp255(sumG[g] / c), b: clamp255(sumB[g] / c) }
+  })
+  const counts = order.map((g) => cnt[g])
+  const regionSamples = order.map((g) => strideSamples(xs[g], ys[g], rs[g], gs[g], bs[g], sampleCap))
+  const labels = new Int32Array(n)
+  for (let i = 0; i < n; i++) {
+    const g = groupId[i]
+    labels[i] = g < 0 ? -1 : rank[g]
+  }
   return { palette, labels, counts, ms, fineSegments: S, regionSamples }
 }
 

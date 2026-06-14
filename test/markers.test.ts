@@ -3,10 +3,13 @@
 //
 //   node --test test/markers.test.ts
 //
-// Marker-watershed semantics: a marker = "keep a distinct region here". Two
-// segments carrying DIFFERENT markers must never merge — enforced in BOTH merge
-// steps (the colour-difference seeded growth and the global union-fit). With no
-// markers the result is byte-identical to before. Markers are normalized [0,1].
+// Marker semantics: a marker = "keep a distinct region here". After the normal
+// segmentation, any macro-region that ends up containing ≥2 markers is split by
+// SEEDED REGION GROWING — each marker grows a sub-region outward, the boundary
+// settling on the colour ridge between them (Adams–Bischof). So markers separate
+// regions even when their colours are within the merge threshold, with the
+// boundary on the true edge (not a ragged scan-order sliver). With no markers the
+// result is byte-identical to before. Markers are normalized [0,1].
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -32,7 +35,7 @@ function img(w: number, h: number, color: ColorFn): { width: number; height: num
 const macroCount = (r: { palette: unknown[] }): number => r.palette.length
 const withMarkers = (markers: { x: number; y: number }[]) => ({ ...DEFAULT_SEGMENT_OPTIONS, markers })
 
-test('two markers split one adjacent same-colour region (step-2 watershed veto)', () => {
+test('two markers split one adjacent same-colour region (seeded region growing)', () => {
   // A single solid rectangle is ONE region by default. Two markers inside it must
   // grow into two regions that meet at a watershed and never merge.
   const W = 64
@@ -46,7 +49,7 @@ test('two markers split one adjacent same-colour region (step-2 watershed veto)'
   assert.equal(macroCount(seg), 2, 'two markers split the solid field into two regions')
 })
 
-test('a marker in each of two merging blobs keeps them separate (step-3c veto)', () => {
+test('a marker in each of two merging blobs keeps them separate (seeded split of a merged region)', () => {
   // White field with two separate same-colour black squares far apart: the global
   // union-fit merges them into ONE region by default. A marker in each blob makes
   // them distinct (the merge is vetoed) without touching the white background.
@@ -63,6 +66,30 @@ test('a marker in each of two merging blobs keeps them separate (step-3c veto)',
     { x: 64 / W, y: 24 / H }, // centre of blob B
   ]))
   assert.equal(macroCount(seg), 3, 'white bg + two distinct marked blobs')
+})
+
+test('seeded split puts the boundary on the colour edge (no ragged slivers)', () => {
+  // Two flat halves whose colours are WITHIN the merge threshold, so they fuse into
+  // ONE region by default. A marker in each must split them along the colour edge at
+  // the middle — each half ≈ its true area (not a degenerate sliver, the old bug).
+  const W = 64
+  const H = 40
+  const left: [number, number, number] = [120, 130, 145]
+  const right: [number, number, number] = [126, 124, 150] // ΔE ≈ 7 < τ_s = 10
+  const scene = img(W, H, (x) => (x < W / 2 ? left : right))
+  assert.equal(macroCount(segmentImage(scene)), 1, 'the two close halves fuse into one region by default')
+  const seg = segmentImage(scene, withMarkers([
+    { x: 0.25, y: 0.5 },
+    { x: 0.75, y: 0.5 },
+  ]))
+  assert.equal(seg.palette.length, 2, 'two markers split the fused region into two')
+  // Both regions are substantial (a clean edge split is ~half each = 1280 px); the
+  // old veto produced a tiny sliver here. Allow generous slack for the edge column.
+  const sorted = [...seg.counts].sort((a, b) => a - b)
+  assert.ok(sorted[0] > 1000, `smaller region is substantial, got ${sorted[0]} px (sliver would be ≪)`)
+  // The boundary is at the colour edge (≈ x=32), not skewed: a left pixel and a
+  // right pixel land in different regions.
+  assert.notEqual(seg.labels[20 * W + 8], seg.labels[20 * W + 56], 'left and right halves are different regions')
 })
 
 test('no markers ⇒ byte-identical labels (additive: empty / undefined are no-ops)', () => {
