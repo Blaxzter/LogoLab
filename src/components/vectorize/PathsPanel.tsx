@@ -2,10 +2,23 @@
 // order (first = bottom). Paths get a recolor swatch, visibility toggle and
 // delete; raw passthrough markup (defs, gradients…) gets visibility only.
 
+import type { CSSProperties } from 'react'
 import { useEffect, useRef } from 'react'
-import { Eye, EyeOff, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, Trash2, X } from 'lucide-react'
 import type { EditableDoc, PathItem, RawItem } from '../../lib/path/types'
 import { normalizeHex } from '../../lib/colorUtils'
+
+/** Swatch background: a CSS preview of the gradient when present, else the flat fill. */
+function swatchStyle(item: PathItem): CSSProperties {
+  const g = item.gradient
+  if (!g) return { backgroundColor: item.fill }
+  const stops = g.stops.map((s) => `${s.color} ${Math.round(s.offset * 100)}%`).join(', ')
+  if (g.type === 'linear') {
+    const angle = Math.round((Math.atan2(g.y2 - g.y1, g.x2 - g.x1) * 180) / Math.PI + 90)
+    return { backgroundImage: `linear-gradient(${angle}deg, ${stops})` }
+  }
+  return { backgroundImage: `radial-gradient(circle, ${stops})` }
+}
 
 export interface PathsPanelProps {
   doc: EditableDoc
@@ -65,7 +78,7 @@ export function PathsPanel({
                 if (el) rowRefs.current.set(item.id, el)
                 else rowRefs.current.delete(item.id)
               }}
-              onSelect={() => onSelectPath(item.id)}
+              onSelect={() => onSelectPath(item.id === selectedPathId ? null : item.id)}
               onRecolor={(fill, commit) => onRecolor(item.id, fill, commit)}
               onToggleVisible={() => onToggleVisible(item.id)}
               onDelete={() => onDelete(item.id)}
@@ -73,6 +86,17 @@ export function PathsPanel({
           ) : (
             <RawRow key={item.id} item={item} onToggleVisible={() => onToggleVisible(item.id)} />
           ),
+        )}
+
+        {selectedPathId && (
+          <button
+            type="button"
+            onClick={() => onSelectPath(null)}
+            className="mt-1 flex items-center justify-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+          >
+            <X size={13} />
+            Clear selection
+          </button>
         )}
       </div>
     </aside>
@@ -122,10 +146,10 @@ function PathRow({
       }`}
     >
       <label
-        title="Recolor"
+        title={item.gradient ? 'Recolor (replaces gradient with a solid)' : 'Recolor'}
         onClick={(e) => e.stopPropagation()}
         className="relative h-[18px] w-[18px] shrink-0 cursor-pointer overflow-hidden rounded border border-line"
-        style={{ backgroundColor: item.fill }}
+        style={swatchStyle(item)}
       >
         <input
           type="color"

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { ChevronDown, Info } from 'lucide-react'
 import { isValidHex, normalizeHex, SWATCHES } from '../../lib/colorUtils'
 
 /* ------------------------------------------------------------------ Field */
@@ -8,21 +9,79 @@ export function Field({
   label,
   hint,
   right,
+  onInfo,
   children,
 }: {
   label: string
   hint?: string
   right?: ReactNode
+  /** When set, renders an (i) button after the label that opens an info dialog. */
+  onInfo?: () => void
   children: ReactNode
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <span className="field-label">{label}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1">
+          <span className="field-label">{label}</span>
+          {onInfo && (
+            <button
+              type="button"
+              onClick={onInfo}
+              title={`What does ${label} do?`}
+              aria-label={`What does ${label} do?`}
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted transition-colors hover:text-accent"
+            >
+              <Info size={13} />
+            </button>
+          )}
+        </span>
         {right}
       </div>
       {children}
       {hint && <p className="text-xs text-muted leading-snug">{hint}</p>}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------- Collapsible */
+
+/**
+ * A titled disclosure section. Collapsed by default; when collapsed it can show
+ * a one-line `summary` of the current values so the panel stays glanceable.
+ */
+export function Collapsible({
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  title: string
+  summary?: ReactNode
+  defaultOpen?: boolean
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="rounded-lg border border-line">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-surface-2"
+      >
+        <span className="flex min-w-0 flex-col">
+          <span className="text-sm font-medium text-ink">{title}</span>
+          {summary && !open && (
+            <span className="truncate text-[11px] text-muted">{summary}</span>
+          )}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-muted transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && <div className="flex flex-col gap-5 border-t border-line px-3 py-4">{children}</div>}
     </div>
   )
 }

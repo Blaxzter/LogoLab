@@ -16,6 +16,7 @@ import type { PanZoom } from "../../hooks/usePanZoom";
 import type {
     EditableDoc,
     DocItem,
+    GradientFill,
     NodeRef,
     PathItem,
     RawItem,
@@ -32,6 +33,12 @@ import {
 } from "../../lib/path/geometry";
 
 const ACCENT = "#5b5bd6";
+/** Selected anchor fill — warm hue that contrasts the indigo outline/stroke. */
+const ACCENT_SEL = "#f25f2e";
+/** White halo/ring colour, keeps the overlay legible over any artwork. */
+const HALO = "#ffffff";
+/** Region-marker pin colour (emerald) — distinct from the indigo/orange edit accents. */
+const MARKER = "#10b981";
 /** Screen-px movement before a pointerdown counts as a drag (not a click). */
 const DRAG_THRESHOLD_PX = 3;
 /** Max screen-px distance from a segment for double-click node insertion. */
@@ -40,11 +47,13 @@ const INSERT_MAX_PX = 12;
 const ANCHOR_HIT_PX = 8;
 /** Screen-px radius treated as "on a handle dot" (dblclick no-op). */
 const HANDLE_HIT_PX = 7;
+/** Screen-px radius for clicking an existing region marker to remove it. */
+const MARKER_HIT_PX = 11;
 
 export interface EditorCanvasProps {
     doc: EditableDoc;
     pz: PanZoom;
-    tool: "pan" | "node";
+    tool: "pan" | "node" | "mark";
     /** False while tracing — render only, no editing. */
     editable: boolean;
     selectedPathId: string | null;
@@ -52,12 +61,18 @@ export interface EditorCanvasProps {
     selectedNodes: ReadonlySet<string>;
     /** Original-image ghost rendered under the SVG (overlay view mode). */
     underlay?: { src: string; opacity: number } | null;
+    /** Region markers (segmentation seeds) in NORMALIZED [0,1] image coords. */
+    markers?: { x: number; y: number }[];
     onSelectPath: (id: string | null) => void;
     onSelectNodes: (keys: Set<string>) => void;
     /** Live preview during drags (no history commit). */
     onDocChange: (doc: EditableDoc) => void;
     /** History-committing final state (pointerup, double-click edits). */
     onDocCommit: (doc: EditableDoc) => void;
+    /** Add a marker at normalized [0,1] coords (mark tool). */
+    onAddMarker?: (x: number, y: number) => void;
+    /** Remove the marker at the given index (mark tool). */
+    onRemoveMarker?: (index: number) => void;
     /** Forwarded to ZoomSurface — registers the box the +/- buttons zoom around. */
     primary?: boolean;
 }
@@ -143,6 +158,45 @@ interface DragState {
     pointerId: number;
 }
 
+/** SVG paint-server element for a gradient fill (userSpaceOnUse). */
+function GradientDef({ id, gradient }: { id: string; gradient: GradientFill }) {
+    const stops = gradient.stops.map((s, i) => (
+        <stop
+            key={i}
+            offset={s.offset}
+            stopColor={s.color}
+            stopOpacity={s.opacity ?? 1}
+        />
+    ));
+    if (gradient.type === "linear") {
+        return (
+            <linearGradient
+                id={id}
+                gradientUnits="userSpaceOnUse"
+                x1={gradient.x1}
+                y1={gradient.y1}
+                x2={gradient.x2}
+                y2={gradient.y2}
+            >
+                {stops}
+            </linearGradient>
+        );
+    }
+    return (
+        <radialGradient
+            id={id}
+            gradientUnits="userSpaceOnUse"
+            cx={gradient.cx}
+            cy={gradient.cy}
+            r={gradient.r}
+            fx={gradient.fx}
+            fy={gradient.fy}
+        >
+            {stops}
+        </radialGradient>
+    );
+}
+
 /** Memoized static fill — re-renders only when the item identity changes. */
 const PathView = memo(function PathView({
     item,
@@ -151,19 +205,27 @@ const PathView = memo(function PathView({
     item: PathItem;
     interactive: boolean;
 }) {
+    const gid = item.gradient ? `grad-${item.id}` : null;
     return (
-        <path
-            data-id={item.id}
-            d={dOf(item)}
-            fill={item.fill}
-            fillOpacity={item.fillOpacity}
-            fillRule={item.fillRule}
-            style={
-                interactive
-                    ? { pointerEvents: "visiblePainted", cursor: "move" }
-                    : undefined
-            }
-        />
+        <>
+            {item.gradient && (
+                <defs>
+                    <GradientDef id={gid!} gradient={item.gradient} />
+                </defs>
+            )}
+            <path
+                data-id={item.id}
+                d={dOf(item)}
+                fill={gid ? `url(#${gid})` : item.fill}
+                fillOpacity={item.fillOpacity}
+                fillRule={item.fillRule}
+                style={
+                    interactive
+                        ? { pointerEvents: "visiblePainted", cursor: "move" }
+                        : undefined
+                }
+            />
+        </>
     );
 });
 
@@ -216,10 +278,13 @@ export function EditorCanvas({
     selectedPathId,
     selectedNodes,
     underlay,
+    markers,
     onSelectPath,
     onSelectNodes,
     onDocChange,
     onDocCommit,
+    onAddMarker,
+    onRemoveMarker,
     primary = false,
 }: EditorCanvasProps) {
     const [vbX, vbY, vbW, vbH] = doc.viewBox;
@@ -227,6 +292,9 @@ export function EditorCanvas({
     const boxRef = useRef<HTMLDivElement | null>(null);
     const svgRef = useRef<SVGSVGElement | null>(null);
     const dragRef = useRef<DragState | null>(null);
+    // Key of the anchor/handle currently under the cursor ('sub:idx' or
+    // 'sub:idx:in|out'), for hover feedback in node mode.
+    const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
     // --- marquee (rubber-band) selection state ---
     interface MarqueeState {
@@ -261,12 +329,21 @@ export function EditorCanvas({
     }, []);
 
     const interactive = tool === "node" && editable;
+    // Mark tool: click the stage to add a region marker, click a marker to remove
+    // it. Independent of node editing (no selection/marquee machinery).
+    const marking = tool === "mark" && editable;
     // px per viewBox unit at the current zoom (fit.width is the layout size; the
     // pan/zoom transform multiplies it on screen). Guard the pre-measure frame.
     const screenScale = fit.width > 0 ? (fit.width * pz.scale) / vbW : 1;
 
     const sel = doc.items.find((it) => it.id === selectedPathId);
     const selectedItem = sel && sel.kind === "path" ? sel : null;
+
+    // The grab targets unmount on selection / mode change without firing
+    // pointerout, so drop any stale hover highlight explicitly.
+    useEffect(() => {
+        setHoveredKey(null);
+    }, [selectedPathId, interactive]);
 
     /** Map client coords to viewBox coords via the fitted box's live rect. */
     const toVb = (clientX: number, clientY: number): Vec | null => {
@@ -334,6 +411,9 @@ export function EditorCanvas({
 
     const handlePathPointerDown = (e: React.PointerEvent<SVGGElement>) => {
         if (e.button !== 0 || !e.isPrimary) return;
+        // Mark tool: don't select/drag the path — let the event bubble to the svg
+        // root, which places/removes a marker at the click point.
+        if (marking) return;
         const id = (e.target as Element)
             .closest("[data-id]")
             ?.getAttribute("data-id");
@@ -395,6 +475,12 @@ export function EditorCanvas({
     // handle dot (swallow) → segment (insert node) → painted fill (swallow) →
     // background (fall through to ZoomSurface's zoom reset).
     const handleSvgDoubleClick = (e: React.MouseEvent<SVGSVGElement>) => {
+        // In mark mode the svg receives events, so swallow the dblclick to stop
+        // ZoomSurface from resetting the zoom while the user is placing markers.
+        if (marking) {
+            e.stopPropagation();
+            return;
+        }
         if (!interactive) return;
         const pt = toVb(e.clientX, e.clientY);
         if (!pt) return;
@@ -697,6 +783,35 @@ export function EditorCanvas({
      *  If it's a plain click (no movement) we clear selection on pointerup. */
     const handleSvgPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
         if (e.button !== 0) return; // middle-drag pans without touching selection
+        if (marking) {
+            const pt = toVb(e.clientX, e.clientY);
+            if (!pt) return;
+            e.stopPropagation(); // prevent ZoomSurface from panning
+            // Click an existing marker (within tolerance) → remove it; else add a
+            // new one. Hit-test geometrically so it works under any pan/zoom.
+            const scale = liveScale();
+            const all = markers ?? [];
+            let hit = -1;
+            let bestD = MARKER_HIT_PX / scale;
+            for (let i = 0; i < all.length; i++) {
+                const mx = vbX + all[i].x * vbW;
+                const my = vbY + all[i].y * vbH;
+                const d = Math.hypot(mx - pt.x, my - pt.y);
+                if (d <= bestD) {
+                    bestD = d;
+                    hit = i;
+                }
+            }
+            if (hit >= 0) {
+                onRemoveMarker?.(hit);
+            } else {
+                const nx = (pt.x - vbX) / vbW;
+                const ny = (pt.y - vbY) / vbH;
+                if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1)
+                    onAddMarker?.(nx, ny);
+            }
+            return;
+        }
         if (interactive) {
             const pt = toVb(e.clientX, e.clientY);
             if (!pt) return;
@@ -741,12 +856,13 @@ export function EditorCanvas({
                         viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
                         width="100%"
                         height="100%"
-                        className={interactive ? "cursor-crosshair" : ""}
+                        className={interactive || marking ? "cursor-crosshair" : ""}
                         style={{
                             display: "block",
                             touchAction: "none",
                             // Pan mode / render-only: the surface beneath pans & zooms freely.
-                            pointerEvents: interactive ? undefined : "none",
+                            // Node + mark modes capture pointer events on the svg.
+                            pointerEvents: interactive || marking ? undefined : "none",
                         }}
                         onPointerDown={handleSvgPointerDown}
                         onPointerMove={handleSvgPointerMove}
@@ -780,20 +896,50 @@ export function EditorCanvas({
                                 )}
                         </g>
 
-                        {/* Selection overlay: outline + handle spokes/dots + anchors. */}
+                        {/* Selection overlay: outline + handle spokes/dots + anchors.
+                            All widths/radii go through r() so they stay a constant
+                            screen size at every zoom (the markers' convention) — the
+                            CSS zoom transform would otherwise fatten a plain stroke. */}
                         {selectedItem && fit.width > 0 && (
                             <g style={{ pointerEvents: "none" }}>
+                                {/* White halo under the accent line keeps the outline
+                                    legible even when the path's own colour is the accent. */}
+                                <path
+                                    d={dOf(selectedItem)}
+                                    fill="none"
+                                    stroke={HALO}
+                                    strokeOpacity={0.85}
+                                    strokeWidth={r(3.5)}
+                                    strokeLinejoin="round"
+                                />
                                 <path
                                     d={dOf(selectedItem)}
                                     fill="none"
                                     stroke={ACCENT}
-                                    strokeWidth={1.25}
-                                    vectorEffect="non-scaling-stroke"
+                                    strokeWidth={r(1.5)}
+                                    strokeLinejoin="round"
                                 />
                                 {selectedItem.subPaths.map((sp, sub) =>
                                     sp.nodes.map((node, idx) => {
                                         const key = `${sub}:${idx}`;
                                         const isSel = selectedNodes.has(key);
+                                        const isHover = hoveredKey === key;
+                                        const hoverIn =
+                                            hoveredKey === `${sub}:${idx}:in`;
+                                        const hoverOut =
+                                            hoveredKey === `${sub}:${idx}:out`;
+                                        // Selected anchors use a warm fill (not the
+                                        // accent) so they stay visible sitting on the
+                                        // accent-coloured outline.
+                                        const anchorFill = isSel
+                                            ? ACCENT_SEL
+                                            : HALO;
+                                        const anchorStroke = isSel
+                                            ? HALO
+                                            : isHover
+                                              ? ACCENT_SEL
+                                              : ACCENT;
+                                        const anchorW = r(isHover ? 1.6 : 1.2);
                                         return (
                                             <g key={key}>
                                                 {node.hIn && (
@@ -804,8 +950,7 @@ export function EditorCanvas({
                                                         y2={node.hIn.y}
                                                         stroke={ACCENT}
                                                         strokeOpacity={0.55}
-                                                        strokeWidth={1}
-                                                        vectorEffect="non-scaling-stroke"
+                                                        strokeWidth={r(1)}
                                                     />
                                                 )}
                                                 {node.hOut && (
@@ -816,16 +961,19 @@ export function EditorCanvas({
                                                         y2={node.hOut.y}
                                                         stroke={ACCENT}
                                                         strokeOpacity={0.55}
-                                                        strokeWidth={1}
-                                                        vectorEffect="non-scaling-stroke"
+                                                        strokeWidth={r(1)}
                                                     />
                                                 )}
                                                 {node.hIn && (
                                                     <circle
                                                         cx={node.hIn.x}
                                                         cy={node.hIn.y}
-                                                        r={r(3.25)}
-                                                        fill="#ffffff"
+                                                        r={r(hoverIn ? 4.25 : 3.25)}
+                                                        fill={
+                                                            hoverIn
+                                                                ? ACCENT_SEL
+                                                                : HALO
+                                                        }
                                                         stroke={ACCENT}
                                                         strokeWidth={r(1.2)}
                                                     />
@@ -834,8 +982,12 @@ export function EditorCanvas({
                                                     <circle
                                                         cx={node.hOut.x}
                                                         cy={node.hOut.y}
-                                                        r={r(3.25)}
-                                                        fill="#ffffff"
+                                                        r={r(hoverOut ? 4.25 : 3.25)}
+                                                        fill={
+                                                            hoverOut
+                                                                ? ACCENT_SEL
+                                                                : HALO
+                                                        }
                                                         stroke={ACCENT}
                                                         strokeWidth={r(1.2)}
                                                     />
@@ -844,28 +996,28 @@ export function EditorCanvas({
                                                     <circle
                                                         cx={node.x}
                                                         cy={node.y}
-                                                        r={r(3.75)}
-                                                        fill={
-                                                            isSel
-                                                                ? ACCENT
-                                                                : "#ffffff"
-                                                        }
-                                                        stroke={ACCENT}
-                                                        strokeWidth={r(1.2)}
+                                                        r={r(
+                                                            isHover ? 4.75 : 3.75,
+                                                        )}
+                                                        fill={anchorFill}
+                                                        stroke={anchorStroke}
+                                                        strokeWidth={anchorW}
                                                     />
                                                 ) : (
                                                     <rect
-                                                        x={node.x - r(3.5)}
-                                                        y={node.y - r(3.5)}
-                                                        width={r(7)}
-                                                        height={r(7)}
-                                                        fill={
-                                                            isSel
-                                                                ? ACCENT
-                                                                : "#ffffff"
+                                                        x={
+                                                            node.x -
+                                                            r(isHover ? 4.5 : 3.5)
                                                         }
-                                                        stroke={ACCENT}
-                                                        strokeWidth={r(1.2)}
+                                                        y={
+                                                            node.y -
+                                                            r(isHover ? 4.5 : 3.5)
+                                                        }
+                                                        width={r(isHover ? 9 : 7)}
+                                                        height={r(isHover ? 9 : 7)}
+                                                        fill={anchorFill}
+                                                        stroke={anchorStroke}
+                                                        strokeWidth={anchorW}
                                                     />
                                                 )}
                                             </g>
@@ -877,7 +1029,17 @@ export function EditorCanvas({
 
                         {/* Invisible grab targets over anchors & handle dots (node tool). */}
                         {interactive && selectedItem && fit.width > 0 && (
-                            <g onPointerDown={handleGrabPointerDown}>
+                            <g
+                                onPointerDown={handleGrabPointerDown}
+                                onPointerOver={(e) => {
+                                    const t = e.target as Element;
+                                    const k =
+                                        t.getAttribute("data-node") ??
+                                        t.getAttribute("data-handle");
+                                    if (k) setHoveredKey(k);
+                                }}
+                                onPointerOut={() => setHoveredKey(null)}
+                            >
                                 {selectedItem.subPaths.map((sp, sub) =>
                                     sp.nodes.map((node, idx) => (
                                         <g key={`${sub}:${idx}`}>
@@ -933,11 +1095,50 @@ export function EditorCanvas({
                                 height={marqueeRect.h}
                                 fill="rgba(91, 91, 214, 0.08)"
                                 stroke={ACCENT}
-                                strokeWidth={1}
-                                vectorEffect="non-scaling-stroke"
-                                strokeDasharray="4 2"
+                                strokeWidth={r(1)}
+                                strokeDasharray={`${r(4)} ${r(2)}`}
                                 style={{ pointerEvents: "none" }}
                             />
+                        )}
+
+                        {/* Region markers (segmentation seeds). Drawn in every tool
+                            so the user always sees what's protected; clicks are
+                            handled geometrically by the svg, so the pins themselves
+                            never intercept (pointerEvents: none). Sized via r() to
+                            stay constant on screen at any zoom. */}
+                        {markers && markers.length > 0 && fit.width > 0 && (
+                            <g style={{ pointerEvents: "none" }}>
+                                {markers.map((m, i) => {
+                                    const cx = vbX + m.x * vbW;
+                                    const cy = vbY + m.y * vbH;
+                                    return (
+                                        <g key={i}>
+                                            <circle
+                                                cx={cx}
+                                                cy={cy}
+                                                r={r(6.5)}
+                                                fill={MARKER}
+                                                fillOpacity={0.22}
+                                                stroke="none"
+                                            />
+                                            <circle
+                                                cx={cx}
+                                                cy={cy}
+                                                r={r(4)}
+                                                fill={MARKER}
+                                                stroke={HALO}
+                                                strokeWidth={r(1.5)}
+                                            />
+                                            <circle
+                                                cx={cx}
+                                                cy={cy}
+                                                r={r(1.4)}
+                                                fill={HALO}
+                                            />
+                                        </g>
+                                    );
+                                })}
+                            </g>
                         )}
                     </svg>
                 </div>

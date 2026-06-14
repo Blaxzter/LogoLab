@@ -11,6 +11,7 @@ import {
     Download,
     Hand,
     Loader2,
+    MapPin,
     MousePointer2,
     Redo2,
     Undo2,
@@ -29,17 +30,19 @@ import { cleanSvg } from "../../lib/svgClean";
 import { docStats, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from "../../lib/trace";
+import { traceImageOffThread, canTraceOffThread } from "../../lib/trace/traceOffThread";
 import type { VectorizeOptions } from "../../types";
-import type { DocItem, EditableDoc, NodeRef } from "../../lib/path/types";
+import type { DocItem, EditableDoc, NodeRef, PathItem } from "../../lib/path/types";
 import { TraceControls } from "./TraceControls";
 import { EditorCanvas, useFitBox } from "./EditorCanvas";
 import { PathsPanel } from "./PathsPanel";
+import { PipelineExplainer } from "./PipelineExplainer";
 
 const RASTER_MAX_DIM = 1024;
 const DEBOUNCE_MS = 400;
 
 type ViewMode = "split" | "traced" | "original" | "overlay";
-type Tool = "pan" | "node";
+type Tool = "pan" | "node" | "mark";
 
 /** Human-readable byte size ('842 B' / '12.4 KB' / '1.20 MB'). */
 function formatBytes(bytes: number): string {
@@ -70,15 +73,24 @@ export function VectorizeStudio() {
     const [opts, setOpts] = useState<VectorizeOptions>(
         DEFAULT_VECTORIZE_OPTIONS,
     );
-    const [precision, setPrecision] = useState(2);
+    // Output coordinate precision (decimals). Fixed default — compact files at no
+    // visible cost; no longer a user knob (it was output formatting, not a trace
+    // parameter, and cluttered the panel).
+    const precision = 2;
     const [forceColorOn, setForceColorOn] = useState(false);
     const [forceColor, setForceColor] = useState("#14161c");
+    const [showHelp, setShowHelp] = useState(false);
     const [retraceVector, setRetraceVector] = useState<"clean" | "retrace">(
         "clean",
     );
     const [viewMode, setViewMode] = useState<ViewMode>("split");
     const [tool, setTool] = useState<Tool>("pan");
     const [overlayOpacity, setOverlayOpacity] = useState(60);
+    // Region markers are a two-step affair: a master switch ("use regions") and a
+    // transient "region mode" (tool === 'mark'). Disabling region mode returns to
+    // pan with the markers kept; turning the master switch off ends the feature
+    // and clears them (keeping the invariant: markers exist ⇒ regions enabled).
+    const [regionsEnabled, setRegionsEnabled] = useState(false);
 
     const history = useHistory<EditableDoc>();
     const doc = history.value;
@@ -141,25 +153,70 @@ export function VectorizeStudio() {
     );
 
     // The canvas renders (and edits) the force-colored derived doc, but only
-    // ever changes geometry/structure — restore the base fills before storing,
-    // so toggling force color off never reveals baked-in overrides.
+    // ever changes geometry/structure — restore the base fills (and gradients)
+    // before storing, so toggling force color off never reveals baked-in
+    // overrides or drops a fitted gradient.
     const mergeFills = useCallback(
         (edited: EditableDoc): EditableDoc => {
             if (!forceColorOn || !doc) return edited;
-            const fills = new Map<string, string>();
+            const base = new Map<string, PathItem>();
             for (const it of doc.items)
-                if (it.kind === "path") fills.set(it.id, it.fill);
+                if (it.kind === "path") base.set(it.id, it);
             return {
                 ...edited,
-                items: edited.items.map((it) =>
-                    it.kind === "path" && fills.has(it.id)
-                        ? { ...it, fill: fills.get(it.id)! }
-                        : it,
-                ),
+                items: edited.items.map((it) => {
+                    if (it.kind !== "path") return it;
+                    const b = base.get(it.id);
+                    return b
+                        ? { ...it, fill: b.fill, gradient: b.gradient }
+                        : it;
+                }),
             };
         },
         [doc, forceColorOn],
     );
+
+    /* ------------------------------------------------------- region markers */
+
+    // Markers (segmentation seeds) live in `opts.markers` so they flow straight
+    // into the trace and the explainer, survive a re-trace (run() only resets the
+    // doc, never opts), and serialize through the worker unchanged. Normalized
+    // [0,1] coords ⇒ resolution-independent.
+    const markers = useMemo(() => opts.markers ?? [], [opts.markers]);
+
+    const addMarker = useCallback((x: number, y: number) => {
+        setOpts((o) => ({ ...o, markers: [...(o.markers ?? []), { x, y }] }));
+    }, []);
+    const removeMarker = useCallback((index: number) => {
+        setOpts((o) => ({
+            ...o,
+            markers: (o.markers ?? []).filter((_, i) => i !== index),
+        }));
+    }, []);
+    const clearMarkers = useCallback(() => {
+        setOpts((o) => (o.markers && o.markers.length ? { ...o, markers: [] } : o));
+    }, []);
+
+    // Master switch: turning the feature off exits region mode and clears markers.
+    const toggleRegionsEnabled = useCallback(
+        (on: boolean) => {
+            setRegionsEnabled(on);
+            if (!on) {
+                setTool("pan");
+                clearMarkers();
+            }
+        },
+        [clearMarkers],
+    );
+
+    // Region markers only apply to colour tracing — leaving that mode exits the
+    // placement tool (the master switch + markers persist for when you return).
+    useEffect(() => {
+        const colorTrace =
+            (!isVectorSource || retraceVector === "retrace") &&
+            opts.mode === "color";
+        if (!colorTrace && tool === "mark") setTool("pan");
+    }, [isVectorSource, retraceVector, opts.mode, tool]);
 
     const handleCanvasChange = useCallback(
         (d: EditableDoc) => historySet(mergeFills(d)),
@@ -206,14 +263,17 @@ export function VectorizeStudio() {
                     logo.isSvg ? logo.svgText : null,
                 );
                 if (runId !== runIdRef.current) return;
-                next = await traceImage(
+                // Crisp runs in a Web Worker (pure JS) so the UI stays responsive;
+                // potrace stays on the main thread (its WASM wrapper needs DOMParser).
+                const runTrace = canTraceOffThread(opts) ? traceImageOffThread : traceImage;
+                next = await runTrace(
                     imageData,
                     opts,
                     (p) => {
                         if (runId !== runIdRef.current) return;
                         setProgress(
                             p.phase === "quantize"
-                                ? "Quantizing colors…"
+                                ? "Analyzing colors…"
                                 : `Tracing layer ${p.layer}/${p.total}…`,
                         );
                     },
@@ -272,7 +332,9 @@ export function VectorizeStudio() {
         return {
             ...doc,
             items: doc.items.map((it) =>
-                it.kind === "path" ? { ...it, fill: forceColor } : it,
+                it.kind === "path"
+                    ? { ...it, fill: forceColor, gradient: undefined }
+                    : it,
             ),
         };
     }, [doc, forceColorOn, forceColor]);
@@ -329,6 +391,16 @@ export function VectorizeStudio() {
             }
             if (!e.altKey && k === "a") {
                 setTool("node");
+                return;
+            }
+            if (!e.altKey && k === "m") {
+                const colorTrace =
+                    (!isVectorSource || retraceVector === "retrace") &&
+                    opts.mode === "color";
+                if (colorTrace) {
+                    setRegionsEnabled(true);
+                    setTool("mark");
+                }
                 return;
             }
             if (k === "Escape") {
@@ -409,6 +481,9 @@ export function VectorizeStudio() {
         redo,
         commitDoc,
         handleSelectPath,
+        isVectorSource,
+        retraceVector,
+        opts.mode,
     ]);
 
     /* ---------------------------------------------------------- panel edits */
@@ -416,10 +491,13 @@ export function VectorizeStudio() {
     const handleRecolor = useCallback(
         (id: string, fill: string, commit: boolean) => {
             if (!doc) return;
+            // Picking a solid swatch color drops any fitted gradient.
             const next = {
                 ...doc,
                 items: doc.items.map((it) =>
-                    it.id === id && it.kind === "path" ? { ...it, fill } : it,
+                    it.id === id && it.kind === "path"
+                        ? { ...it, fill, gradient: undefined }
+                        : it,
                 ),
             };
             if (commit) commitDoc(next);
@@ -490,10 +568,13 @@ export function VectorizeStudio() {
         editable: !busy,
         selectedPathId,
         selectedNodes,
+        markers,
         onSelectPath: handleSelectPath,
         onSelectNodes: handleSelectNodes,
         onDocChange: handleCanvasChange,
         onDocCommit: handleCanvasCommit,
+        onAddMarker: addMarker,
+        onRemoveMarker: removeMarker,
     };
 
     return (
@@ -504,15 +585,20 @@ export function VectorizeStudio() {
                 onSourceChange={setRetraceVector}
                 opts={opts}
                 onPatch={(p) => setOpts((o) => ({ ...o, ...p }))}
-                precision={precision}
-                onPrecision={setPrecision}
                 forceColorOn={forceColorOn}
                 onForceColorOn={setForceColorOn}
                 forceColor={forceColor}
                 onForceColor={setForceColor}
+                regionsEnabled={regionsEnabled}
+                onRegionsEnabledChange={toggleRegionsEnabled}
+                marking={tool === "mark"}
+                onMarkingChange={(on) => setTool(on ? "mark" : "pan")}
+                markerCount={markers.length}
+                onClearMarkers={clearMarkers}
                 busy={busy}
                 staleEdits={staleEdits}
                 onTrace={() => void run()}
+                onShowHelp={() => setShowHelp(true)}
             />
 
             <div className="flex min-w-0 flex-1 flex-col">
@@ -560,6 +646,15 @@ export function VectorizeStudio() {
                             ]}
                         />
                     </div>
+                    {opts.mode === "color" &&
+                        (!isVectorSource || retraceVector === "retrace") &&
+                        markers.length > 0 && (
+                            <span className="flex items-center gap-1.5 text-xs text-muted tabular-nums">
+                                <MapPin size={12} className="text-emerald-500" />
+                                {markers.length} marker
+                                {markers.length === 1 ? "" : "s"}
+                            </span>
+                        )}
                     <ToolButton
                         title="Undo (Ctrl+Z)"
                         onClick={undo}
@@ -630,7 +725,13 @@ export function VectorizeStudio() {
                 </div>
 
                 {/* -------------------------------------------------------- stage */}
-                <div className={`relative min-h-0 flex-1 ${checkerClass}`}>
+                <div
+                    className={`relative min-h-0 flex-1 ${checkerClass} ${
+                        tool === "mark"
+                            ? "ring-2 ring-inset ring-emerald-400/70"
+                            : ""
+                    }`}
+                >
                     {viewMode === "split" && (
                         <div className="grid h-full grid-cols-2">
                             <div className="relative h-full min-w-0 border-r border-line">
@@ -640,6 +741,10 @@ export function VectorizeStudio() {
                                     aspectW={logo.naturalWidth || 1}
                                     aspectH={logo.naturalHeight || 1}
                                     primary
+                                    markers={markers}
+                                    marking={tool === "mark"}
+                                    onAddMarker={addMarker}
+                                    onRemoveMarker={removeMarker}
                                 />
                                 <Chip>Original</Chip>
                             </div>
@@ -673,6 +778,10 @@ export function VectorizeStudio() {
                             aspectW={logo.naturalWidth || 1}
                             aspectH={logo.naturalHeight || 1}
                             primary
+                            markers={markers}
+                            marking={tool === "mark"}
+                            onAddMarker={addMarker}
+                            onRemoveMarker={removeMarker}
                         />
                     )}
                     {viewMode === "overlay" &&
@@ -689,6 +798,39 @@ export function VectorizeStudio() {
                         ) : (
                             <StagePlaceholder busy={busy} />
                         ))}
+
+                    {/* Trace-in-progress overlay: a sweeping band + a status pill.
+                        pointer-events-none so panning/zooming stays live (the crisp
+                        trace runs off-thread) and the CSS sweep stays smooth. */}
+                    {busy && (
+                        <div className="animate-in-fade pointer-events-none absolute inset-0 overflow-hidden">
+                            <div className="trace-sweep" />
+                            <div className="absolute left-1/2 top-3 -translate-x-1/2">
+                                <span className="flex items-center gap-2 rounded-full border border-line bg-surface/90 px-3 py-1 text-xs font-medium text-accent shadow-sm backdrop-blur">
+                                    <Loader2 size={13} className="animate-spin" />
+                                    {progress || "Tracing…"}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Marking-active cue: marking is armed from the sidebar, so this
+                        on-stage banner makes it obvious the canvas is now clickable. */}
+                    {tool === "mark" && !busy && (
+                        <div className="animate-in-fade pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2">
+                            <span className="flex items-center gap-2 rounded-full border border-emerald-400/50 bg-surface/90 px-3 py-1 text-xs font-medium text-emerald-600 shadow-sm backdrop-blur dark:text-emerald-400">
+                                <MapPin size={13} />
+                                Click the image to keep that region as its own shape
+                                <button
+                                    type="button"
+                                    onClick={() => setTool("pan")}
+                                    className="pointer-events-auto -mr-1 ml-1 rounded-full px-2 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+                                >
+                                    Done
+                                </button>
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {/* --------------------------------------------------- status bar */}
@@ -711,7 +853,9 @@ export function VectorizeStudio() {
                     <span className="ml-auto hidden truncate sm:block">
                         {tool === "node"
                             ? "Drag anchors · double-click segment to add a node · Del removes"
-                            : "Scroll to zoom · drag to pan"}
+                            : tool === "mark"
+                              ? "Click to keep a region as its own shape · click a marker to remove · mark both sides of an overlap"
+                              : "Scroll to zoom · drag to pan"}
                     </span>
                 </footer>
             </div>
@@ -726,15 +870,28 @@ export function VectorizeStudio() {
                     onDelete={handleDeleteItem}
                 />
             )}
+
+            {showHelp && <PipelineExplainer opts={opts} onClose={() => setShowHelp(false)} />}
         </div>
     );
 }
 
 /* ------------------------------------------------------------ subcomponents */
 
+/** Region-marker glyph colour (emerald) + halo, matching EditorCanvas. */
+const MARKER_FILL = "#10b981";
+const MARKER_HALO = "#ffffff";
+/** Screen-px radius for clicking an existing marker to remove it. */
+const MARKER_HIT_PX = 11;
+
 /**
  * The original image in the same centered-fit framing as the editor canvas,
- * so split view shows pixel-identical composition on both sides.
+ * so split view shows pixel-identical composition on both sides. With the Mark
+ * tool active it ALSO accepts region markers (you place them where the overlap
+ * is actually visible — on the source — not only on the traced result), mapping
+ * the click to the same NORMALIZED [0,1] image coords the editor canvas uses, so
+ * the two stay in lock-step. Pins counter-scale by the zoom so they stay a
+ * constant screen size, like the editor's.
  */
 function OriginalPane({
     pz,
@@ -742,14 +899,52 @@ function OriginalPane({
     aspectW,
     aspectH,
     primary = false,
+    markers,
+    marking = false,
+    onAddMarker,
+    onRemoveMarker,
 }: {
     pz: PanZoom;
     src: string;
     aspectW: number;
     aspectH: number;
     primary?: boolean;
+    markers?: { x: number; y: number }[];
+    marking?: boolean;
+    onAddMarker?: (x: number, y: number) => void;
+    onRemoveMarker?: (index: number) => void;
 }) {
     const fit = useFitBox(aspectW, aspectH);
+    const boxRef = useRef<HTMLDivElement | null>(null);
+    const all = markers ?? [];
+
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!marking || e.button !== 0) return;
+        const rect = boxRef.current?.getBoundingClientRect();
+        if (!rect || rect.width === 0 || rect.height === 0) return;
+        e.stopPropagation(); // don't let ZoomSurface treat this as a pan
+        // Click an existing pin (within a screen-px tolerance) → remove; else add.
+        let hit = -1;
+        let bestD = MARKER_HIT_PX;
+        for (let i = 0; i < all.length; i++) {
+            const px = rect.left + all[i].x * rect.width;
+            const py = rect.top + all[i].y * rect.height;
+            const d = Math.hypot(px - e.clientX, py - e.clientY);
+            if (d <= bestD) {
+                bestD = d;
+                hit = i;
+            }
+        }
+        if (hit >= 0) {
+            onRemoveMarker?.(hit);
+            return;
+        }
+        const nx = (e.clientX - rect.left) / rect.width;
+        const ny = (e.clientY - rect.top) / rect.height;
+        if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) onAddMarker?.(nx, ny);
+    };
+
+    const inv = pz.scale > 0 ? 1 / pz.scale : 1;
     return (
         <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
             <div
@@ -757,8 +952,10 @@ function OriginalPane({
                 className="flex h-full w-full items-center justify-center p-[6%]"
             >
                 <div
+                    ref={boxRef}
                     className="relative"
-                    style={{ width: fit.width, height: fit.height }}
+                    style={{ width: fit.width, height: fit.height, cursor: marking ? "crosshair" : undefined }}
+                    onPointerDown={handlePointerDown}
                 >
                     <img
                         src={src}
@@ -766,6 +963,24 @@ function OriginalPane({
                         draggable={false}
                         className="pointer-events-none h-full w-full select-none"
                     />
+                    {all.length > 0 &&
+                        all.map((m, i) => (
+                            <div
+                                key={i}
+                                className="pointer-events-none absolute"
+                                style={{
+                                    left: `${m.x * 100}%`,
+                                    top: `${m.y * 100}%`,
+                                    width: 14,
+                                    height: 14,
+                                    borderRadius: "9999px",
+                                    background: MARKER_FILL,
+                                    border: `2px solid ${MARKER_HALO}`,
+                                    boxShadow: "0 0 0 1px rgba(0,0,0,.25)",
+                                    transform: `translate(-50%, -50%) scale(${inv})`,
+                                }}
+                            />
+                        ))}
                 </div>
             </div>
         </ZoomSurface>

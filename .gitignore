@@ -23,3 +23,6 @@ pnpm-debug.log*
 
 # raw dropped-in source images (the deployed copies live in public/mockups/)
 /assets/
+
+# reference papers kept locally, not committed
+/examples/*.pdf

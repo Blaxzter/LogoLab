@@ -96,14 +96,62 @@ export interface RenderIconOptions {
 /** Vectorization configuration for the raster → SVG tracing pipeline. */
 export interface VectorizeOptions {
   mode: 'color' | 'mono'
-  /** Max number of fill colors to quantize to (color mode), 2–24. */
-  colors: number
   /** 0 (crisp corners, node-dense) → 100 (very smooth, sparse). Drives potrace curve fitting. */
   smoothing: number
   /** 0 (keep every speck) → 100 (aggressive noise suppression). Drives speckle & color cleanup. */
   despeckle: number
+  /**
+   * Region detail (color mode), 0–100. 0 = balanced (the default) — similar
+   * colours merge into few macro-regions. Higher tightens the segmentation merge
+   * (colour-difference + union-fit thresholds) so finer/subtler regions survive —
+   * e.g. the blends where translucent shapes overlap. The tradeoff: high values
+   * can fragment smooth gradients into flat bands and are slower. Omitted ⇒ 0.
+   */
+  regionDetail?: number
   /** Mono threshold 0–255 (mono mode). */
   threshold: number
   /** Drop the detected background layer for transparent output. */
   removeBackground: boolean
+  /**
+   * Fit smooth color gradients (color mode): regions whose source pixels follow
+   * a linear/radial ramp export as a real SVG gradient instead of a flat fill.
+   * Defaults to on when omitted.
+   */
+  gradients?: boolean
+  /**
+   * Tracer backend. 'potrace' = the classic bilevel WASM tracer (default;
+   * seamless on stacked multi-color gradients). 'crisp' = sub-pixel
+   * marching-squares + Schneider Bézier fitting — cleaner, lower-node curves,
+   * best for line-art / solid-shape logos.
+   */
+  engine?: 'potrace' | 'crisp'
+  /**
+   * Shape-beautification fidelity tolerance (px): how far a traced contour may
+   * drift from the source when snapping it to a perfect circle/ellipse/line or
+   * aligning concentric/equal shapes. A snap is accepted only if its max
+   * deviation stays under this. 0 disables beautification entirely. Defaults to
+   * ~1.5 when omitted. Higher = more regular geometry, less PNG-faithful.
+   */
+  fidelity?: number
+  /**
+   * User-placed region markers ("seeds") for segmentation, in NORMALIZED [0,1]
+   * image coordinates (resolution-independent: correct at any raster size).
+   * Marker-watershed semantics — a marker means "keep a distinct region here":
+   * two regions that contain different markers never merge, and a marked region
+   * is never absorbed away. Unmarked areas merge exactly as without markers. To
+   * split a translucent overlap from a neighbouring shape, mark BOTH. Omitted /
+   * empty ⇒ byte-identical to no markers.
+   */
+  markers?: { x: number; y: number }[]
+  /**
+   * Translucent layer decomposition (V6, color mode). When the segmentation has
+   * recovered overlap-shaped regions (via markers or Region detail), try to
+   * represent them as a few STACKED TRANSLUCENT shapes (N circles at one opacity
+   * over the background) instead of opaque flat bands — the source's true form,
+   * with the fewest, most editable elements. Purely additive and gated: it is
+   * emitted only when it beats the opaque rendering, and is a NO-OP (byte-
+   * identical output) when there are no overlap regions or no markers/detail.
+   * Defaults to on when omitted; set false to force opaque bands.
+   */
+  layeredDecomposition?: boolean
 }

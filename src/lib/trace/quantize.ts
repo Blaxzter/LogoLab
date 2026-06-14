@@ -22,12 +22,38 @@ const keyToColor = (key: number): PaletteColor => ({
   b: key & 0xff,
 })
 
-/** Pick an index at random, weighted by `weights` (used by k-means++). */
-function weightedPick(weights: Float64Array): number {
+/**
+ * Deterministic 32-bit PRNG (mulberry32). k-means++ seeding used to draw from
+ * Math.random, which made the whole pipeline non-reproducible and impossible to
+ * regression-test; seeding a fixed PRNG from the image content makes the same
+ * input + settings yield byte-identical output every run.
+ */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** FNV-1a hash of an image's bytes — the PRNG seed (so each image is stable). */
+function hashImageData(data: Uint8ClampedArray): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < data.length; i++) {
+    h ^= data[i]
+    h = Math.imul(h, 0x01000193)
+  }
+  return h >>> 0
+}
+
+/** Pick an index, weighted by `weights`, using the supplied PRNG (k-means++). */
+function weightedPick(weights: Float64Array, rand: () => number): number {
   let total = 0
   for (let i = 0; i < weights.length; i++) total += weights[i]
   if (total <= 0) return 0
-  let t = Math.random() * total
+  let t = rand() * total
   for (let i = 0; i < weights.length; i++) {
     t -= weights[i]
     if (t <= 0) return i
@@ -83,6 +109,9 @@ export function quantize(img: ImageData, maxColors: number): QuantizeResult {
     entries.sort((a, b) => b[1] - a[1])
     entries = entries.slice(0, MAX_CLUSTER_ENTRIES)
   }
+  // Deterministic PRNG keyed by image content (replaces Math.random).
+  const rand = mulberry32(hashImageData(data))
+
   const m = entries.length
   const pr = new Float64Array(m)
   const pg = new Float64Array(m)
@@ -100,7 +129,7 @@ export function quantize(img: ImageData, maxColors: number): QuantizeResult {
   const cr = new Float64Array(k)
   const cg = new Float64Array(k)
   const cb = new Float64Array(k)
-  let seed = weightedPick(pw)
+  let seed = weightedPick(pw, rand)
   cr[0] = pr[seed]
   cg[0] = pg[seed]
   cb[0] = pb[seed]
@@ -115,7 +144,7 @@ export function quantize(img: ImageData, maxColors: number): QuantizeResult {
       if (d < d2[i]) d2[i] = d
       seedWeight[i] = pw[i] * d2[i]
     }
-    seed = weightedPick(seedWeight)
+    seed = weightedPick(seedWeight, rand)
     cr[c] = pr[seed]
     cg[c] = pg[seed]
     cb[c] = pb[seed]
