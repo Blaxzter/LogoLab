@@ -2,6 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Don't leak a cross-site Referer: HuggingFace hotlink-protects model files
+         (returns 404 when a third-party Referer is present), which broke the
+         Cleanup view's in-browser AI background removal on the deployed origin. -->
+    <meta name="referrer" content="no-referrer" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
