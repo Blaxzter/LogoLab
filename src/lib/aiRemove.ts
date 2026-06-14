@@ -18,7 +18,11 @@ export interface AiProgress {
   percent?: number
   /** Current file being fetched (download phase only). */
   file?: string
+  /** Backend that actually ran the model — set once a device is confirmed. */
+  device?: Device
 }
+
+type Device = 'webgpu' | 'wasm'
 
 const MODEL_ID = 'briaai/RMBG-1.4'
 
@@ -36,13 +40,49 @@ const PROCESSOR_CONFIG = {
   size: { width: 1024, height: 1024 },
 } as const
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let modelPromise: Promise<{ model: any; processor: any }> | null = null
+/**
+ * Pick the best available backend. Returns 'webgpu' only if the browser can
+ * actually hand us a usable GPU *device* — not merely an adapter. On Apple
+ * Silicon `requestAdapter()` frequently resolves while `requestDevice()` then
+ * fails or the device is unusable, which is the exact case that made
+ * auto-selection blow up with no fallback.
+ *
+ * This up-front probe is the PRIMARY defense, not the cross-device retry in
+ * `aiRemoveBackground`: Transformers.js serializes every web session through a
+ * shared promise chain that stays rejected once a webgpu session fails, so a
+ * wasm retry queued behind a poisoned chain may never run. Proving a real
+ * device here means we never start a doomed webgpu session in the first place.
+ */
+export async function pickDevice(): Promise<Device> {
+  try {
+    // `navigator.gpu` is part of the WebGPU API; we don't pull in @webgpu/types
+    // (it's the only spot we touch it), so reach it through the loose boundary.
+    type Adapter = { requestDevice(): Promise<{ destroy?(): void } | null> }
+    const gpu = (navigator as { gpu?: { requestAdapter(): Promise<Adapter | null> } }).gpu
+    const adapter = await gpu?.requestAdapter()
+    if (!adapter) return 'wasm'
+    // Creating (and immediately discarding) a device proves webgpu is actually
+    // functional, catching the "adapter exists but device fails" Apple-Silicon case.
+    const device = await adapter.requestDevice()
+    device?.destroy?.()
+    return device ? 'webgpu' : 'wasm'
+  } catch {
+    return 'wasm'
+  }
+}
 
-/** Load (and cache for the session) the RMBG model + processor. */
-function loadModel(onProgress?: (p: AiProgress) => void) {
-  if (!modelPromise) {
-    modelPromise = (async () => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type LoadedModel = { model: any; processor: any }
+
+// Cache the load promise per device so a failed webgpu attempt doesn't poison a
+// subsequent wasm one (and vice versa).
+const modelPromises: Partial<Record<Device, Promise<LoadedModel>>> = {}
+
+/** Load (and cache for the session) the RMBG model + processor on `device`. */
+function loadModel(device: Device, onProgress?: (p: AiProgress) => void) {
+  let promise = modelPromises[device]
+  if (!promise) {
+    promise = (async () => {
       const { AutoModel, AutoProcessor, env } = await import('@huggingface/transformers')
       // Browser-only: never look for models on a local filesystem path.
       env.allowLocalModels = false
@@ -75,6 +115,10 @@ function loadModel(onProgress?: (p: AiProgress) => void) {
         AutoModel.from_pretrained(MODEL_ID, {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           config: { model_type: 'custom' } as any,
+          // Pin the backend + precision explicitly: letting Transformers.js
+          // auto-select silently chose a broken WebGPU path on Apple Silicon.
+          device,
+          dtype: 'fp32',
           progress_callback,
         }),
         AutoProcessor.from_pretrained(MODEL_ID, {
@@ -85,25 +129,31 @@ function loadModel(onProgress?: (p: AiProgress) => void) {
       ])
       return { model, processor }
     })()
-    // A failed load shouldn't poison the cache — let the next click retry.
-    modelPromise.catch(() => {
-      modelPromise = null
+    // A failed load shouldn't poison this device's cache — let it retry (and
+    // crucially, don't poison the *other* device's entry).
+    promise.catch(() => {
+      if (modelPromises[device] === promise) delete modelPromises[device]
     })
+    modelPromises[device] = promise
   }
-  return modelPromise
+  return promise
 }
 
 /**
- * Run RMBG-1.4 on `img` and return a copy with the predicted background made
- * transparent (the model's foreground-probability mask multiplies the alpha).
- * The input should be the opaque original for best results.
+ * Run the loaded RMBG model on `img` and return a copy with the predicted
+ * background made transparent (the model's foreground-probability mask
+ * multiplies the alpha). The input should be the opaque original for best
+ * results.
  */
-export async function aiRemoveBackground(
+async function runInference(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  model: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  processor: any,
   img: ImageData,
   onProgress?: (p: AiProgress) => void,
 ): Promise<ImageData> {
   const { RawImage } = await import('@huggingface/transformers')
-  const { model, processor } = await loadModel(onProgress)
   onProgress?.({ phase: 'process' })
 
   // Hand the pixels to the library as a PNG data URL — the most robust input
@@ -134,4 +184,48 @@ export async function aiRemoveBackground(
     out.data[i * 4 + 3] = Math.round((out.data[i * 4 + 3] * m[i]) / 255)
   }
   return out
+}
+
+/**
+ * Run RMBG-1.4 on `img` and return a copy with the predicted background made
+ * transparent.
+ *
+ * Tries the probed device first, then falls back to wasm. The fallback wraps
+ * inference, not just the load: WebGPU on Apple Silicon can load fine and then
+ * produce NaNs / throw during the forward pass, so a device is only trusted
+ * once it has produced a result — at which point `onProgress` reports the
+ * confirmed device so the UI can show e.g. "AI ready (wasm)".
+ */
+export async function aiRemoveBackground(
+  img: ImageData,
+  onProgress?: (p: AiProgress) => void,
+): Promise<ImageData> {
+  const picked = await pickDevice()
+  // Always end on wasm (the correctness fallback); skip the duplicate when the
+  // probe already chose wasm.
+  const devices: Device[] = picked === 'wasm' ? ['wasm'] : [picked, 'wasm']
+
+  let lastErr: unknown
+  for (const device of devices) {
+    try {
+      const { model, processor } = await loadModel(device, onProgress)
+      const out = await runInference(model, processor, img, onProgress)
+      // Only now is the device proven (webgpu can load then NaN mid-forward);
+      // report it last so the UI's device label reflects what actually ran.
+      onProgress?.({ phase: 'process', device })
+      return out
+    } catch (err) {
+      lastErr = err
+      // wasm is the last resort: if it failed there's nowhere left to fall back
+      // to, so surface the real error.
+      if (device === 'wasm') throw err
+      // A webgpu load or forward pass failed — warn, drop its cache entry so a
+      // retry doesn't reuse the broken model, and try the next device.
+      console.warn(`[aiRemove] ${device} failed, falling back to wasm`, err)
+      delete modelPromises[device]
+    }
+  }
+  // Unreachable (the loop always ends on wasm, which rethrows), but keeps TS
+  // happy about the return type.
+  throw lastErr
 }
