@@ -11,15 +11,18 @@
 // shape (source swap, Reset, Apply, and any crop/undo that resizes dims).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Download, Loader2, MapPin, Redo2, Undo2 } from 'lucide-react'
+import { Check, Download, Loader2, MapPin, Redo2, SlidersHorizontal, Undo2 } from 'lucide-react'
 import { useCheckerClass, useLogo } from '../../store'
 import { usePanZoom } from '../../hooks/usePanZoom'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { useCleanupCanvas, type CleanupTool, type KeepRemoveMarker } from '../../hooks/useCleanupCanvas'
 import { ZoomControls } from '../ui/ZoomControls'
 import { CheckerToggle } from '../ui/CheckerToggle'
 import { Segmented } from '../ui/controls'
 import { Button } from '../ui/Button'
-import { CleanupControls } from './CleanupControls'
+import { Sheet } from '../ui/Sheet'
+import { StudioTopBar, StudioActionBar, BarIconButton } from '../studio/StudioBar'
+import { CleanupControls, CleanupControlsBody } from './CleanupControls'
 
 type ViewMode = 'split' | 'result' | 'original' | 'overlay'
 
@@ -32,9 +35,12 @@ export function CleanupStudio() {
   const logo = useLogo()
   const checkerClass = useCheckerClass()
   const pz = usePanZoom({ maxScale: 16 })
+  const isMobile = useIsMobile()
 
   // ----------------------------------------------------------- studio state
   const [viewMode, setViewMode] = useState<ViewMode>('split')
+  // Below md the controls live in a bottom sheet opened from the action bar.
+  const [toolsOpen, setToolsOpen] = useState(false)
   const [tool, setTool] = useState<CleanupTool>('magic')
   const [tolerance, setTolerance] = useState(36)
   const [softness, setSoftness] = useState(0.25)
@@ -169,15 +175,20 @@ export function CleanupStudio() {
 
   const originalSrc = logo.originalSrc ?? logo.src
 
+  // Below md the desktop-only split pane is unusably narrow, so fall back to the
+  // single result pane (the mobile view-mode strip omits "split" entirely).
+  const view: ViewMode = isMobile && viewMode === 'split' ? 'result' : viewMode
+
   // The canvas is hidden (not unmounted) in original view; it must also lose
   // pointer events there so the original image underneath stays interactive.
-  const canvasHidden = viewMode === 'original'
+  const canvasHidden = view === 'original'
 
   const ringDiameter = brushSize * scaleRef.current
 
-  // Brush ring shows only while a result-bearing pane is visible (not original).
+  // Brush ring shows only while a result-bearing pane is visible (not original),
+  // and never while the mobile tool sheet is covering the canvas.
   const showBrushRing =
-    isBrush && brushCursor && ready && !aiBusy && !spacePan && ringDiameter > 0 && !canvasHidden
+    isBrush && brushCursor && ready && !aiBusy && !spacePan && ringDiameter > 0 && !canvasHidden && !toolsOpen
 
   /* -------------------------------------------------------------- subviews */
 
@@ -214,53 +225,57 @@ export function CleanupStudio() {
     />
   )
 
+  // One prop bag feeds both the desktop rail and the mobile tool sheet, so the
+  // two render identical controls and can never drift.
+  const controlProps = {
+    tool,
+    onToolChange: (t: CleanupTool) => setTool(t),
+    tolerance,
+    onTolerance: setTolerance,
+    softness,
+    onSoftness: setSoftness,
+    brushSize,
+    onBrushSize: setBrushSize,
+    defringeStrength,
+    onDefringeStrength: setDefringeStrength,
+    keepCount,
+    removeCount,
+    onClearMarkers: clearMarkers,
+    edgeShift,
+    onEdgeShift: setEdgeShift,
+    onApplyEdgeShift,
+    feather,
+    onFeather: setFeather,
+    onApplyFeather,
+    defringeAmt,
+    onDefringeAmt: setDefringeAmt,
+    onApplyDefringe,
+    recolorColor,
+    onRecolorColor: setRecolorColor,
+    onRecolor,
+    trimPad,
+    onTrimPad: setTrimPad,
+    onAutoTrim,
+    matteOn,
+    onMatteOn: setMatteOn,
+    matteColor,
+    onMatteColor: setMatteColor,
+    onAuto: handleAuto,
+    onAi,
+    onReset,
+    ready,
+    aiBusy,
+    aiStatus,
+    aiDevice,
+  }
+
   return (
     <div className="flex h-full min-h-0 animate-in-fade">
-      <CleanupControls
-        tool={tool}
-        onToolChange={(t) => setTool(t)}
-        tolerance={tolerance}
-        onTolerance={setTolerance}
-        softness={softness}
-        onSoftness={setSoftness}
-        brushSize={brushSize}
-        onBrushSize={setBrushSize}
-        defringeStrength={defringeStrength}
-        onDefringeStrength={setDefringeStrength}
-        keepCount={keepCount}
-        removeCount={removeCount}
-        onClearMarkers={clearMarkers}
-        edgeShift={edgeShift}
-        onEdgeShift={setEdgeShift}
-        onApplyEdgeShift={onApplyEdgeShift}
-        feather={feather}
-        onFeather={setFeather}
-        onApplyFeather={onApplyFeather}
-        defringeAmt={defringeAmt}
-        onDefringeAmt={setDefringeAmt}
-        onApplyDefringe={onApplyDefringe}
-        recolorColor={recolorColor}
-        onRecolorColor={setRecolorColor}
-        onRecolor={onRecolor}
-        trimPad={trimPad}
-        onTrimPad={setTrimPad}
-        onAutoTrim={onAutoTrim}
-        matteOn={matteOn}
-        onMatteOn={setMatteOn}
-        matteColor={matteColor}
-        onMatteColor={setMatteColor}
-        onAuto={handleAuto}
-        onAi={onAi}
-        onReset={onReset}
-        ready={ready}
-        aiBusy={aiBusy}
-        aiStatus={aiStatus}
-        aiDevice={aiDevice}
-      />
+      <CleanupControls {...controlProps} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* ------------------------------------------------------ toolbar */}
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3">
+        {/* ------------------------------------------ toolbar (desktop) */}
+        <div className="hidden h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 md:flex">
           <Segmented<ViewMode>
             value={viewMode}
             onChange={setViewMode}
@@ -319,6 +334,41 @@ export function CleanupStudio() {
           </div>
         </div>
 
+        {/* ------------------------------------------- top strip (mobile) */}
+        <StudioTopBar>
+          <Segmented<ViewMode>
+            value={view}
+            onChange={setViewMode}
+            options={[
+              { value: 'result', label: 'Result' },
+              { value: 'original', label: 'Original' },
+              { value: 'overlay', label: 'Overlay' },
+            ]}
+          />
+          <BarIconButton title="Undo" onClick={handleUndo} disabled={undoLen === 0 || aiBusy}>
+            <Undo2 size={17} />
+          </BarIconButton>
+          <BarIconButton title="Redo" onClick={handleRedo} disabled={redoLen === 0 || aiBusy}>
+            <Redo2 size={17} />
+          </BarIconButton>
+          {view === 'overlay' && (
+            <label className="flex shrink-0 items-center gap-1.5 pl-1 text-xs text-muted">
+              Ghost
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={ghostOpacity}
+                onChange={(e) => setGhostOpacity(Number(e.target.value))}
+                className="h-2 w-20 cursor-pointer appearance-none rounded-full bg-line-strong"
+              />
+            </label>
+          )}
+          <div className="ml-auto shrink-0 pl-1">
+            <ZoomControls pz={pz} />
+          </div>
+        </StudioTopBar>
+
         {/* -------------------------------------------------------- stage */}
         {/* Layered, NOT branched: the source pane(s) sit underneath a single
             always-mounted canvas host. Toggling the host's visibility per view
@@ -333,11 +383,11 @@ export function CleanupStudio() {
           {/* Source pane: the original image fitted into a centered box. Occupies
               the LEFT half in split, the whole stage in original. Hidden in result;
               in overlay it's drawn as a ghost INSIDE the canvas host instead. */}
-          {(viewMode === 'split' || viewMode === 'original') && (
+          {(view === 'split' || view === 'original') && (
             <div
               data-zoom-pane
               className={`absolute inset-y-0 left-0 overflow-hidden ${
-                viewMode === 'split' ? 'right-1/2 border-r border-line' : 'right-0'
+                view === 'split' ? 'right-1/2 border-r border-line' : 'right-0'
               }`}
             >
               <div
@@ -354,12 +404,12 @@ export function CleanupStudio() {
               split, the whole stage otherwise; hidden (kept mounted) in original.
               In overlay it also stacks the ghost source under the canvas. */}
           <CanvasHost
-            half={viewMode === 'split'}
+            half={view === 'split'}
             hidden={canvasHidden}
             ghostOpacity={ghostOpacity}
-            ghostSrc={viewMode === 'overlay' ? originalSrc : null}
+            ghostSrc={view === 'overlay' ? originalSrc : null}
             contentStyle={pz.contentStyle}
-            label={viewMode === 'split' ? 'Result' : null}
+            label={view === 'split' ? 'Result' : null}
             markers={markers}
             scale={pz.scale}
           >
@@ -409,8 +459,8 @@ export function CleanupStudio() {
           )}
         </div>
 
-        {/* --------------------------------------------------- status bar */}
-        <footer className="flex h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted">
+        {/* ------------------------------------------ status bar (desktop) */}
+        <footer className="hidden h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted md:flex">
           <span className="truncate">
             {status || 'Scroll to zoom · Space- or middle-drag to pan · try AI or Auto first.'}
           </span>
@@ -423,7 +473,41 @@ export function CleanupStudio() {
             <span className="hidden sm:inline">{toolStatusHint(tool)}</span>
           </span>
         </footer>
+
+        {/* ----------------------------------------- action bar (mobile) */}
+        <StudioActionBar>
+          <Button
+            variant="secondary"
+            className="h-10"
+            icon={<SlidersHorizontal size={16} />}
+            onClick={() => setToolsOpen(true)}
+          >
+            Tools
+          </Button>
+          <div className="flex-1" />
+          <BarIconButton
+            title="Download PNG"
+            onClick={() => void handleDownload()}
+            disabled={aiBusy || !ready}
+          >
+            <Download size={18} />
+          </BarIconButton>
+          <Button
+            variant="primary"
+            className="h-10"
+            icon={applied ? <Check size={16} /> : undefined}
+            onClick={onApply}
+            disabled={(!modified && !applied) || aiBusy || !ready}
+          >
+            {applied ? 'Applied' : 'Apply'}
+          </Button>
+        </StudioActionBar>
       </div>
+
+      {/* Mobile tool sheet — the full rail, in a bottom sheet. */}
+      <Sheet open={toolsOpen} onClose={() => setToolsOpen(false)} title="Tools" side="bottom">
+        <CleanupControlsBody {...controlProps} />
+      </Sheet>
 
       {/* Brush-size cursor ring (follows the pointer over the canvas). */}
       {showBrushRing && (

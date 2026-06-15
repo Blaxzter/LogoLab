@@ -103,7 +103,17 @@ export interface CleanupControlsProps {
   aiDevice: 'webgpu' | 'wasm' | null
 }
 
-export function CleanupControls({
+/** Desktop rail — the 320px column. Below md it's hidden; the same body renders
+ *  inside the studio's bottom "Tools" sheet instead (see CleanupStudio). */
+export function CleanupControls(props: CleanupControlsProps) {
+  return (
+    <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-surface md:flex">
+      <CleanupControlsBody {...props} />
+    </aside>
+  )
+}
+
+export function CleanupControlsBody({
   tool,
   onToolChange,
   tolerance,
@@ -162,7 +172,7 @@ export function CleanupControls({
   const markerSummary = markerTotal > 0 ? `${keepCount} keep · ${removeCount} remove` : undefined
 
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col border-r border-line bg-surface">
+    <>
       {/* Scrollable settings — the footer below stays pinned so it can't scroll away. */}
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
         <h2 className="text-sm font-semibold text-ink">Remove background</h2>
@@ -442,6 +452,6 @@ export function CleanupControls({
           Reset to original
         </Button>
       </div>
-    </aside>
+    </>
   )
 }

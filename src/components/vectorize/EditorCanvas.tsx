@@ -49,6 +49,12 @@ const ANCHOR_HIT_PX = 8;
 const HANDLE_HIT_PX = 7;
 /** Screen-px radius for clicking an existing region marker to remove it. */
 const MARKER_HIT_PX = 11;
+/** Coarse pointer (touch): enlarge all hit targets so fingers can grab the small
+ *  anchors/handles. 1× on a mouse, so desktop precision is unchanged. */
+const COARSE =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(pointer: coarse)").matches === true;
+const HIT = COARSE ? 1.7 : 1;
 
 export interface EditorCanvasProps {
     doc: EditableDoc;
@@ -489,7 +495,7 @@ export function EditorCanvas({
         if (selectedItem) {
             // 1) Anchor: toggle corner ↔ smooth.
             let bestRef: NodeRef | null = null;
-            let bestDist = ANCHOR_HIT_PX / scale;
+            let bestDist = (ANCHOR_HIT_PX * HIT) / scale;
             let onHandle = false;
             selectedItem.subPaths.forEach((sp, sub) =>
                 sp.nodes.forEach((node, idx) => {
@@ -502,7 +508,7 @@ export function EditorCanvas({
                         if (
                             h &&
                             Math.hypot(h.x - pt.x, h.y - pt.y) <=
-                                HANDLE_HIT_PX / scale
+                                (HANDLE_HIT_PX * HIT) / scale
                         )
                             onHandle = true;
                     }
@@ -533,7 +539,7 @@ export function EditorCanvas({
 
         // 3) Segment: insert a node. Prefer the selected path, else the topmost
         //    visible path whose outline is within tolerance.
-        const tolerance = INSERT_MAX_PX / scale;
+        const tolerance = (INSERT_MAX_PX * HIT) / scale;
         const candidates: PathItem[] = [];
         if (selectedItem) candidates.push(selectedItem);
         for (let i = doc.items.length - 1; i >= 0; i--) {
@@ -792,7 +798,7 @@ export function EditorCanvas({
             const scale = liveScale();
             const all = markers ?? [];
             let hit = -1;
-            let bestD = MARKER_HIT_PX / scale;
+            let bestD = (MARKER_HIT_PX * HIT) / scale;
             for (let i = 0; i < all.length; i++) {
                 const mx = vbX + all[i].x * vbW;
                 const my = vbY + all[i].y * vbH;
@@ -1047,7 +1053,7 @@ export function EditorCanvas({
                                                 <circle
                                                     cx={node.hIn.x}
                                                     cy={node.hIn.y}
-                                                    r={r(8)}
+                                                    r={r(8 * HIT)}
                                                     fill="none"
                                                     data-handle={`${sub}:${idx}:in`}
                                                     style={{
@@ -1060,7 +1066,7 @@ export function EditorCanvas({
                                                 <circle
                                                     cx={node.hOut.x}
                                                     cy={node.hOut.y}
-                                                    r={r(8)}
+                                                    r={r(8 * HIT)}
                                                     fill="none"
                                                     data-handle={`${sub}:${idx}:out`}
                                                     style={{
@@ -1072,7 +1078,7 @@ export function EditorCanvas({
                                             <circle
                                                 cx={node.x}
                                                 cy={node.y}
-                                                r={r(8)}
+                                                r={r(8 * HIT)}
                                                 fill="none"
                                                 data-node={`${sub}:${idx}`}
                                                 style={{

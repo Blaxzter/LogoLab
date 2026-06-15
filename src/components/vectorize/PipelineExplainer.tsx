@@ -6,6 +6,7 @@
 // region count matches the output). Linked from the vectorize view.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Loader2, X } from 'lucide-react'
 import { useLogo } from '../../store'
 import { getImageData } from '../../lib/image'
@@ -52,8 +53,8 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
     return () => controller.abort()
   }, [logo.src, logo.isSvg, logo.svgText, optsKey, opts])
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="How vectorize works">
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="How vectorize works">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm" />
 
       <div className="panel animate-in-fade relative z-10 flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden">
@@ -83,7 +84,8 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

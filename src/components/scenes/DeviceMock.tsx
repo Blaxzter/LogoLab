@@ -231,7 +231,7 @@ export function DeviceMock({ id }: { id: DeviceId }) {
           {/* Screenshot screen (BEHIND the frame) */}
           <div
             ref={screenRef}
-            className="absolute touch-none select-none overflow-hidden"
+            className="absolute select-none overflow-hidden"
             style={{
               left: `${rect.x * 100}%`,
               top: `${rect.y * 100}%`,
@@ -308,14 +308,14 @@ export function DeviceMock({ id }: { id: DeviceId }) {
 
       {/* Controls */}
       <div className="flex items-center gap-2 border-t border-line bg-surface px-3 py-2">
-        <span className="hidden text-xs text-muted sm:inline">Drag the icon ·</span>
+        <span className="shrink-0 text-xs text-muted">Drag the icon ·</span>
         <input
           type="range"
           min={6}
           max={40}
           value={Math.round(mock.size * 100)}
           onChange={(e) => setMock(id, { size: Number(e.target.value) / 100 })}
-          className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-line-strong"
+          className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-line-strong"
           title="Icon size"
           aria-label="Icon size"
         />

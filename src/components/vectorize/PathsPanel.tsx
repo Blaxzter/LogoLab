@@ -30,7 +30,17 @@ export interface PathsPanelProps {
   onDelete: (id: string) => void
 }
 
-export function PathsPanel({
+/** Desktop right rail — the 260px column. Below md it's hidden; the same body
+ *  renders inside the studio's "Paths" bottom sheet instead. */
+export function PathsPanel(props: PathsPanelProps) {
+  return (
+    <aside className="hidden w-[260px] shrink-0 flex-col border-l border-line bg-surface md:flex">
+      <PathsPanelBody {...props} />
+    </aside>
+  )
+}
+
+export function PathsPanelBody({
   doc,
   selectedPathId,
   onSelectPath,
@@ -57,7 +67,7 @@ export function PathsPanel({
 
   let pathIndex = 0
   return (
-    <aside className="flex w-[260px] shrink-0 flex-col border-l border-line bg-surface">
+    <>
       <header className="flex items-center gap-2 border-b border-line px-4 py-3">
         <h2 className="text-sm font-semibold text-ink">Paths</h2>
         <span className="rounded-full bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-ink-2">
@@ -99,7 +109,7 @@ export function PathsPanel({
           </button>
         )}
       </div>
-    </aside>
+    </>
   )
 }
 
