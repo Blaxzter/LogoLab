@@ -37,7 +37,12 @@ import { aiRemoveBackground } from '../lib/aiRemove'
 import { downloadBlob } from '../lib/download'
 import type { PanZoom } from './usePanZoom'
 
-const MAX_DIM = 1024
+// Longest-side cap for the editable working buffer. 2048 because AI logo tools
+// (e.g. Gemini Pro) emit ~2K by default — clamping lower would throw away half
+// the source resolution before any edit. Manual tools (flood/brush/color/defringe)
+// and the RGB pixels run at full buffer res; the AI alpha mask is still computed
+// at the model's 1024 and upscaled to fit (see aiRemove.ts).
+const MAX_DIM = 2048
 const HISTORY_LIMIT = 30
 
 /**
@@ -188,8 +193,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       return
     }
     // Rasterize an SVG at its own intrinsic size (capped to MAX_DIM), never
-    // upscaled — so a 512px SVG cleans up at 512px instead of a surprising 1024px.
-    // Matches how raster sources are handled; export/vectorize still upscale.
+    // upscaled — so a 512px SVG cleans up at 512px instead of being blown up to
+    // MAX_DIM. Matches how raster sources are handled; export/vectorize still upscale.
     getImageData(logo.src, MAX_DIM, logo.isSvg ? logo.svgText : null, { upscale: false })
       .then((data) => {
         if (cancelled) return
