@@ -67,6 +67,9 @@
 
   body {
     margin: 0;
+    /* The mobile appearance drawer parks off-canvas (translated past the right
+       edge); clip it here so it never adds a horizontal scrollbar. */
+    overflow-x: hidden;
     background-color: var(--color-bg);
     color: var(--color-ink);
     font-family: var(--font-sans);
@@ -241,6 +244,14 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+  /* Clear the iOS home indicator for fixed bottom UI (action bars, bottom sheets,
+     FABs). Falls back to a comfortable 1.25rem where there's no safe-area inset. */
+  .pb-safe {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+  .bottom-safe {
+    bottom: max(1.25rem, env(safe-area-inset-bottom));
   }
   .animate-in-fade {
     animation: fade-in 220ms ease both;

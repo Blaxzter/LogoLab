@@ -36,6 +36,7 @@ import {
 import { aiRemoveBackground } from '../lib/aiRemove'
 import { downloadBlob } from '../lib/download'
 import type { PanZoom } from './usePanZoom'
+import { usePinchZoom } from './usePinchZoom'
 
 // Longest-side cap for the editable working buffer. 2048 because AI logo tools
 // (e.g. Gemini Pro) emit ~2K by default — clamping lower would throw away half
@@ -146,6 +147,14 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
 
   const isBrush = tool === 'erase' || tool === 'restore'
   const opts: RemoveOptions = { tolerance, softness }
+
+  // Two-finger pinch-zoom + pan on touch. One finger always drives the active
+  // tool (paint/flood/marker); a second finger turns the gesture into navigation.
+  // Zoom is measured around the canvas's own pane box, like the wheel handler.
+  const pinch = usePinchZoom(pz, () => {
+    const pane = canvasRef.current?.closest('[data-zoom-pane]') as HTMLElement | null
+    return (pane ?? stageRef.current)?.getBoundingClientRect() ?? null
+  })
 
   /** Sync reactive `dims` to the current working buffer (call after any resize). */
   const syncDims = useCallback(() => {
@@ -389,6 +398,20 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
+      // A second touch finger turns the gesture into a pinch-zoom/pan. Abandon any
+      // in-progress brush stroke, reverting its partial dab so it leaves no pixels.
+      if (pinch.down(e)) {
+        if (paintingRef.current && strokePreRef.current) {
+          workingRef.current = strokePreRef.current
+          redraw()
+        }
+        paintingRef.current = false
+        panningViewRef.current = false
+        strokePreRef.current = null
+        strokeAffectedRef.current = 0
+        setBrushCursor(null)
+        return
+      }
       // View-pan gesture: Space-held or middle-button drag moves the stage
       // instead of editing pixels. Takes precedence over every tool.
       if (spaceHeldRef.current || e.button === 1) {
@@ -478,11 +501,13 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       )
       scheduleRedraw()
     },
-    [aiBusy, tool, opts, defringeStrength, brushSize, softness, imgCoords, commit, redraw, scheduleRedraw, onMarkerPlaced],
+    [aiBusy, tool, opts, defringeStrength, brushSize, softness, imgCoords, commit, redraw, scheduleRedraw, onMarkerPlaced, pinch],
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
+      // Two-finger pinch consumes the move (zoom/pan); never paints.
+      if (pinch.move(e)) return
       // Drag-to-pan the view (Space/middle-button) — runs before any brush logic.
       if (panningViewRef.current) {
         // Pan within the canvas's own pane box (the right half in split), not the
@@ -516,11 +541,21 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       lastPtRef.current = p
       scheduleRedraw()
     },
-    [isBrush, aiBusy, tool, brushSize, softness, imgCoords, scheduleRedraw, pz.panBy],
+    [isBrush, aiBusy, tool, brushSize, softness, imgCoords, scheduleRedraw, pz.panBy, pinch],
   )
 
   const endStroke = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
+      // Release this finger from the pinch tracker (no-op for mouse/pen).
+      pinch.up(e)
+      // Always release this pointer's capture (if any). A second finger can turn a
+      // brush stroke into a pinch and clear paintingRef before the original finger
+      // lifts, so the per-branch releases below would otherwise be skipped.
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      } catch {
+        /* not captured */
+      }
       // End a view-pan drag without committing any brush history.
       if (panningViewRef.current) {
         panningViewRef.current = false
@@ -548,7 +583,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       strokePreRef.current = null
       strokeAffectedRef.current = 0
     },
-    [tool, redraw, commit],
+    [tool, redraw, commit, pinch],
   )
 
   /** Drop the brush cursor ring when the pointer leaves the canvas (not mid-stroke). */

@@ -41,7 +41,17 @@ export interface TraceControlsProps {
 
 const d = CONTROL_DOCS_BY_ID
 
-export function TraceControls({
+/** Desktop rail — the 320px column. Below md it's hidden; the same body renders
+ *  inside the studio's "Trace" bottom sheet instead (see VectorizeStudio). */
+export function TraceControls(props: TraceControlsProps) {
+  return (
+    <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-surface md:flex">
+      <TraceControlsBody {...props} />
+    </aside>
+  )
+}
+
+export function TraceControlsBody({
   isVectorSource,
   source,
   onSourceChange,
@@ -77,9 +87,8 @@ export function TraceControls({
 
   return (
     <>
-      <aside className="flex w-[320px] shrink-0 flex-col border-r border-line bg-surface">
-        {/* Scrollable settings — the action below stays pinned so it can't scroll away. */}
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
+      {/* Scrollable settings — the action below stays pinned so it can't scroll away. */}
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink">Vectorize</h2>
             <button
@@ -312,7 +321,6 @@ export function TraceControls({
                   : 'Clean SVG'}
           </Button>
         </div>
-      </aside>
 
       {infoId && <ControlInfoDialog controlId={infoId} onClose={() => setInfoId(null)} />}
     </>

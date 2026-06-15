@@ -9,6 +9,7 @@
 // run headlessly) — it computes both engines in the browser on open.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ImageIcon, Loader2, X } from 'lucide-react'
 import { useLogo } from '../../store'
 import { getImageData } from '../../lib/image'
@@ -50,13 +51,18 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
 
   const panelRef = useRef<HTMLDivElement | null>(null)
 
-  // Close on Escape.
+  // Close on Escape. Capture-phase + stopPropagation so that when this dialog is
+  // open inside an open <Sheet> (e.g. the mobile Trace sheet), Escape closes only
+  // the dialog — not the sheet underneath it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
 
   // Move focus into the dialog on open and restore it to the trigger on close,
@@ -166,7 +172,7 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
       </div>
     )
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       role="dialog"
@@ -230,8 +236,9 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
             </div>
           </div>
 
-          {/* Input → outputs spread (cells flex to fill the width; one synced zoom). */}
-          <div className="flex items-start gap-4">
+          {/* Input → outputs spread (cells flex to fill the width; one synced zoom).
+              Wraps on narrow phones instead of crushing each cell to a sliver. */}
+          <div className="flex flex-wrap items-start gap-4">
             <PreviewCell pz={pz} primary label="Input">
               {inputNode}
             </PreviewCell>
@@ -259,7 +266,8 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -303,7 +311,7 @@ function PreviewCell({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-w-0 flex-1">
+    <div className="min-w-[8.5rem] flex-1">
       <ZoomSurface
         pz={pz}
         primary={primary}

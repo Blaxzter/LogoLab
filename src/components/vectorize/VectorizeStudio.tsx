@@ -10,10 +10,12 @@ import {
     Copy,
     Download,
     Hand,
+    Layers,
     Loader2,
     MapPin,
     MousePointer2,
     Redo2,
+    SlidersHorizontal,
     Undo2,
 } from "lucide-react";
 import { useCheckerClass, useLogo, useStore } from "../../store";
@@ -33,10 +35,14 @@ import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from "../../lib/trace";
 import { traceImageOffThread, canTraceOffThread } from "../../lib/trace/traceOffThread";
 import type { VectorizeOptions } from "../../types";
 import type { DocItem, EditableDoc, NodeRef, PathItem } from "../../lib/path/types";
-import { TraceControls } from "./TraceControls";
+import { TraceControls, TraceControlsBody } from "./TraceControls";
 import { EditorCanvas, useFitBox } from "./EditorCanvas";
-import { PathsPanel } from "./PathsPanel";
+import { PathsPanel, PathsPanelBody } from "./PathsPanel";
 import { PipelineExplainer } from "./PipelineExplainer";
+import { Sheet } from "../ui/Sheet";
+import { PopoverSlider } from "../ui/PopoverSlider";
+import { StudioTopBar, StudioActionBar, BarIconButton } from "../studio/StudioBar";
+import { useIsMobile } from "../../hooks/useIsMobile";
 
 const RASTER_MAX_DIM = 1024;
 const DEBOUNCE_MS = 400;
@@ -69,6 +75,7 @@ export function VectorizeStudio() {
     const checkerClass = useCheckerClass();
     const setProcessedSvg = useStore((s) => s.setProcessedSvg);
     const pz = usePanZoom({ maxScale: 32 });
+    const isMobile = useIsMobile();
 
     const [opts, setOpts] = useState<VectorizeOptions>(
         DEFAULT_VECTORIZE_OPTIONS,
@@ -85,6 +92,9 @@ export function VectorizeStudio() {
     );
     const [viewMode, setViewMode] = useState<ViewMode>("split");
     const [tool, setTool] = useState<Tool>("pan");
+    // Below md the rails live in bottom sheets opened from the action bar.
+    const [traceSheetOpen, setTraceSheetOpen] = useState(false);
+    const [pathsSheetOpen, setPathsSheetOpen] = useState(false);
     const [overlayOpacity, setOverlayOpacity] = useState(60);
     // Region markers are a two-step affair: a master switch ("use regions") and a
     // transient "region mode" (tool === 'mark'). Disabling region mode returns to
@@ -357,6 +367,12 @@ export function VectorizeStudio() {
         setApplied(false);
     }, [svgText]);
 
+    // The Paths sheet is gated on `derivedDoc`; if the doc ever clears, drop the
+    // open flag so the sheet can't silently re-open when a doc returns.
+    useEffect(() => {
+        if (!derivedDoc) setPathsSheetOpen(false);
+    }, [derivedDoc]);
+
     /* ------------------------------------------------------------ keyboard */
 
     useEffect(() => {
@@ -577,33 +593,46 @@ export function VectorizeStudio() {
         onRemoveMarker: removeMarker,
     };
 
+    // Below md the desktop-only split pane is too narrow — default to the single
+    // traced pane (the mobile view-mode strip omits "split").
+    const view: ViewMode = isMobile && viewMode === "split" ? "traced" : viewMode;
+
+    // One prop bag feeds both the desktop rail and the mobile Trace sheet.
+    const traceProps = {
+        isVectorSource,
+        source: retraceVector,
+        onSourceChange: setRetraceVector,
+        opts,
+        onPatch: (p: Partial<VectorizeOptions>) => setOpts((o) => ({ ...o, ...p })),
+        forceColorOn,
+        onForceColorOn: setForceColorOn,
+        forceColor,
+        onForceColor: setForceColor,
+        regionsEnabled,
+        onRegionsEnabledChange: toggleRegionsEnabled,
+        marking: tool === "mark",
+        onMarkingChange: (on: boolean) => setTool(on ? "mark" : "pan"),
+        markerCount: markers.length,
+        onClearMarkers: clearMarkers,
+        busy,
+        staleEdits,
+        onTrace: () => {
+            setTraceSheetOpen(false);
+            void run();
+        },
+        onShowHelp: () => {
+            setTraceSheetOpen(false);
+            setShowHelp(true);
+        },
+    };
+
     return (
         <div className="flex h-full min-h-0 animate-in-fade">
-            <TraceControls
-                isVectorSource={isVectorSource}
-                source={retraceVector}
-                onSourceChange={setRetraceVector}
-                opts={opts}
-                onPatch={(p) => setOpts((o) => ({ ...o, ...p }))}
-                forceColorOn={forceColorOn}
-                onForceColorOn={setForceColorOn}
-                forceColor={forceColor}
-                onForceColor={setForceColor}
-                regionsEnabled={regionsEnabled}
-                onRegionsEnabledChange={toggleRegionsEnabled}
-                marking={tool === "mark"}
-                onMarkingChange={(on) => setTool(on ? "mark" : "pan")}
-                markerCount={markers.length}
-                onClearMarkers={clearMarkers}
-                busy={busy}
-                staleEdits={staleEdits}
-                onTrace={() => void run()}
-                onShowHelp={() => setShowHelp(true)}
-            />
+            <TraceControls {...traceProps} />
 
             <div className="flex min-w-0 flex-1 flex-col">
-                {/* ------------------------------------------------------ toolbar */}
-                <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3">
+                {/* ------------------------------------------ toolbar (desktop) */}
+                <div className="hidden h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 md:flex">
                     <Segmented<ViewMode>
                         value={viewMode}
                         onChange={setViewMode}
@@ -724,6 +753,74 @@ export function VectorizeStudio() {
                     </div>
                 </div>
 
+                {/* ------------------------------------------- top strip (mobile) */}
+                <StudioTopBar>
+                    <Segmented<ViewMode>
+                        value={view}
+                        onChange={setViewMode}
+                        options={[
+                            { value: "traced", label: "Traced" },
+                            { value: "original", label: "Original" },
+                            { value: "overlay", label: "Overlay" },
+                        ]}
+                    />
+                    <div className={view === "original" ? "pointer-events-none opacity-50" : ""}>
+                        <Segmented<Tool>
+                            value={tool === "mark" ? "pan" : tool}
+                            onChange={setTool}
+                            options={[
+                                {
+                                    value: "pan",
+                                    title: "Pan & zoom",
+                                    label: (
+                                        <>
+                                            <Hand size={13} /> Pan
+                                        </>
+                                    ),
+                                },
+                                {
+                                    value: "node",
+                                    title: "Edit nodes",
+                                    label: (
+                                        <>
+                                            <MousePointer2 size={13} /> Edit
+                                        </>
+                                    ),
+                                },
+                            ]}
+                        />
+                    </div>
+                    <BarIconButton title="Undo" onClick={undo} disabled={!canUndo}>
+                        <Undo2 size={17} />
+                    </BarIconButton>
+                    <BarIconButton title="Redo" onClick={redo} disabled={!canRedo}>
+                        <Redo2 size={17} />
+                    </BarIconButton>
+                    {view === "overlay" && (
+                        <PopoverSlider
+                            title="Ghost opacity"
+                            value={overlayOpacity}
+                            min={0}
+                            max={100}
+                            onChange={setOverlayOpacity}
+                            valueText={`${overlayOpacity}%`}
+                            placement="bottom"
+                            className="shrink-0"
+                        >
+                            Ghost
+                        </PopoverSlider>
+                    )}
+                    <div className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">
+                        <ZoomControls pz={pz} />
+                        <BarIconButton title="Copy SVG" onClick={() => void onCopy()} disabled={!svgText}>
+                            {copied ? <Check size={17} /> : <Copy size={17} />}
+                        </BarIconButton>
+                        <BarIconButton title="Download SVG" onClick={onDownload} disabled={!svgText}>
+                            <Download size={17} />
+                        </BarIconButton>
+                    </div>
+                </StudioTopBar>
+
                 {/* -------------------------------------------------------- stage */}
                 <div
                     className={`relative min-h-0 flex-1 ${checkerClass} ${
@@ -732,7 +829,7 @@ export function VectorizeStudio() {
                             : ""
                     }`}
                 >
-                    {viewMode === "split" && (
+                    {view === "split" && (
                         <div className="grid h-full grid-cols-2">
                             <div className="relative h-full min-w-0 border-r border-line">
                                 <OriginalPane
@@ -761,7 +858,7 @@ export function VectorizeStudio() {
                             </div>
                         </div>
                     )}
-                    {viewMode === "traced" &&
+                    {view === "traced" &&
                         (derivedDoc ? (
                             <EditorCanvas
                                 {...canvasShared}
@@ -771,7 +868,7 @@ export function VectorizeStudio() {
                         ) : (
                             <StagePlaceholder busy={busy} />
                         ))}
-                    {viewMode === "original" && (
+                    {view === "original" && (
                         <OriginalPane
                             pz={pz}
                             src={logo.src}
@@ -784,7 +881,7 @@ export function VectorizeStudio() {
                             onRemoveMarker={removeMarker}
                         />
                     )}
-                    {viewMode === "overlay" &&
+                    {view === "overlay" &&
                         (derivedDoc ? (
                             <EditorCanvas
                                 {...canvasShared}
@@ -833,8 +930,8 @@ export function VectorizeStudio() {
                     )}
                 </div>
 
-                {/* --------------------------------------------------- status bar */}
-                <footer className="flex h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted">
+                {/* ------------------------------------------ status bar (desktop) */}
+                <footer className="hidden h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted md:flex">
                     {stats && (
                         <span className="shrink-0">
                             {stats.paths} paths · {stats.nodes} nodes ·{" "}
@@ -858,8 +955,41 @@ export function VectorizeStudio() {
                               : "Scroll to zoom · drag to pan"}
                     </span>
                 </footer>
+
+                {/* ----------------------------------------- action bar (mobile) */}
+                <StudioActionBar>
+                    <Button
+                        variant="secondary"
+                        className="h-10"
+                        icon={<SlidersHorizontal size={16} />}
+                        onClick={() => setTraceSheetOpen(true)}
+                    >
+                        Trace
+                    </Button>
+                    {derivedDoc && (
+                        <Button
+                            variant="secondary"
+                            className="h-10"
+                            icon={<Layers size={16} />}
+                            onClick={() => setPathsSheetOpen(true)}
+                        >
+                            {`Paths${stats ? ` (${stats.paths})` : ""}`}
+                        </Button>
+                    )}
+                    <div className="flex-1" />
+                    <Button
+                        variant="primary"
+                        className="h-10"
+                        icon={applied ? <Check size={16} /> : undefined}
+                        onClick={onApply}
+                        disabled={!svgText}
+                    >
+                        {applied ? "Applied" : "Apply"}
+                    </Button>
+                </StudioActionBar>
             </div>
 
+            {/* Desktop right rail — hidden below md; its body shows in the Paths sheet. */}
             {derivedDoc && (
                 <PathsPanel
                     doc={derivedDoc}
@@ -869,6 +999,33 @@ export function VectorizeStudio() {
                     onToggleVisible={handleToggleVisible}
                     onDelete={handleDeleteItem}
                 />
+            )}
+
+            {/* Mobile control sheets. */}
+            <Sheet
+                open={traceSheetOpen}
+                onClose={() => setTraceSheetOpen(false)}
+                title="Trace settings"
+                side="bottom"
+            >
+                <TraceControlsBody {...traceProps} />
+            </Sheet>
+            {derivedDoc && (
+                <Sheet
+                    open={pathsSheetOpen}
+                    onClose={() => setPathsSheetOpen(false)}
+                    title="Paths"
+                    side="bottom"
+                >
+                    <PathsPanelBody
+                        doc={derivedDoc}
+                        selectedPathId={selectedPathId}
+                        onSelectPath={handleSelectPath}
+                        onRecolor={handleRecolor}
+                        onToggleVisible={handleToggleVisible}
+                        onDelete={handleDeleteItem}
+                    />
+                </Sheet>
             )}
 
             {showHelp && <PipelineExplainer opts={opts} onClose={() => setShowHelp(false)} />}

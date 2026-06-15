@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Loader2, Shapes, X } from 'lucide-react'
 import { useStore } from '../store'
 import { loadLogoFile, prefersDarkChecker } from '../lib/image'
@@ -152,18 +153,23 @@ export function ExampleGrid({
 }
 
 function ExamplesDialog({ onClose }: { onClose: () => void }) {
-  // Close on Escape.
+  // Close on Escape. Capture-phase + stopPropagation so that when this dialog is
+  // open inside an open <Sheet> (e.g. the mobile appearance drawer), Escape closes
+  // only the dialog, not the sheet underneath.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Example logos"
@@ -200,6 +206,7 @@ function ExamplesDialog({ onClose }: { onClose: () => void }) {
           <ExampleGrid onPicked={onClose} />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
