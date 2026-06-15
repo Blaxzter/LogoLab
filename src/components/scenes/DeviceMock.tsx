@@ -315,7 +315,7 @@ export function DeviceMock({ id }: { id: DeviceId }) {
           max={40}
           value={Math.round(mock.size * 100)}
           onChange={(e) => setMock(id, { size: Number(e.target.value) / 100 })}
-          className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-line-strong"
+          className="h-2 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-line-strong"
           title="Icon size"
           aria-label="Icon size"
         />
