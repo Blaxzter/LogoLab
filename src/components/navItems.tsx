@@ -11,6 +11,10 @@ export const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 
 export const REPO_URL = 'https://github.com/Blaxzter/LogoLab'
 
+/** Support links — surfaced together in the header's support popover. */
+export const COFFEE_URL = 'https://www.buymeacoffee.com/fabraham'
+export const SPONSOR_URL = 'https://github.com/sponsors/Blaxzter'
+
 /** Brand-fidelity GitHub glyph (the lucide build here ships no Github icon). */
 export function GithubMark({ size = 18 }: { size?: number }) {
   return (

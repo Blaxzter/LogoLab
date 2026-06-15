@@ -1,8 +1,8 @@
-import { X } from 'lucide-react'
+import { Coffee, Heart, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useLogo, useStore } from '../store'
 import { Sheet } from './ui/Sheet'
-import { TABS, REPO_URL, GithubMark } from './navItems'
+import { TABS, REPO_URL, COFFEE_URL, SPONSOR_URL, GithubMark } from './navItems'
 
 /**
  * The mobile title-bar menu (right slide-over). Below md the header collapses to
@@ -63,6 +63,32 @@ export function AppMenu({ open, onClose }: { open: boolean; onClose: () => void 
             <GithubMark size={16} />
           </span>
           View source on GitHub
+        </a>
+
+        <a
+          href={COFFEE_URL}
+          target="_blank"
+          rel="noreferrer"
+          onClick={onClose}
+          className={`${row} text-ink-2 hover:bg-surface-3`}
+        >
+          <span className="grid h-5 w-5 place-items-center">
+            <Coffee size={16} />
+          </span>
+          Buy me a coffee
+        </a>
+
+        <a
+          href={SPONSOR_URL}
+          target="_blank"
+          rel="noreferrer"
+          onClick={onClose}
+          className={`${row} text-ink-2 hover:bg-surface-3`}
+        >
+          <span className="grid h-5 w-5 place-items-center">
+            <Heart size={16} className="text-pink-500" />
+          </span>
+          Sponsor on GitHub
         </a>
       </nav>
 

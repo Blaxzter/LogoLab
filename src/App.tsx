@@ -6,6 +6,7 @@ import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
 import { AppMenu } from './components/AppMenu'
+import { SupportPopover } from './components/SupportPopover'
 import { TABS, REPO_URL, GithubMark } from './components/navItems'
 import { UploadDropzone } from './components/UploadDropzone'
 import { TryExampleButton } from './components/ExamplesDialog'
@@ -69,16 +70,19 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
           </button>
         )}
         <span className="text-xs text-faint">Runs 100% in your browser</span>
-        <a
-          href={REPO_URL}
-          target="_blank"
-          rel="noreferrer"
-          title="View source on GitHub"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
-        >
-          <GithubMark />
-          <span className="sr-only">GitHub repository</span>
-        </a>
+        <div className="flex items-center gap-1">
+          <SupportPopover />
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            title="View source on GitHub"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+          >
+            <GithubMark />
+            <span className="sr-only">GitHub repository</span>
+          </a>
+        </div>
       </div>
 
       {/* Mobile menu trigger (~44px target). */}
