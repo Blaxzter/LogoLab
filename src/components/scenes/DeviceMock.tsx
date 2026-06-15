@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ImageUp, RotateCcw, Smartphone } from 'lucide-react'
+import { ImageUp, Maximize2, RotateCcw, Smartphone } from 'lucide-react'
 import { LogoMark } from '../LogoMark'
+import { PopoverSlider } from '../ui/PopoverSlider'
 import { useStore } from '../../store'
 import type { DeviceId } from '../../store'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { loadImageElement } from '../../lib/image'
 
 interface DeviceConfig {
@@ -150,6 +152,7 @@ export function DeviceMock({ id }: { id: DeviceId }) {
   const setMock = useStore((s) => s.setMock)
   const resetMock = useStore((s) => s.resetMock)
 
+  const isMobile = useIsMobile()
   const [useFrame, setUseFrame] = useState(true)
   const [frame, setFrame] = useState<ProcessedFrame | null>(null)
   const [screenW, setScreenW] = useState(0)
@@ -308,17 +311,33 @@ export function DeviceMock({ id }: { id: DeviceId }) {
 
       {/* Controls */}
       <div className="flex items-center gap-2 border-t border-line bg-surface px-3 py-2">
-        <span className="shrink-0 text-xs text-muted">Drag the icon ·</span>
-        <input
-          type="range"
-          min={6}
-          max={40}
-          value={Math.round(mock.size * 100)}
-          onChange={(e) => setMock(id, { size: Number(e.target.value) / 100 })}
-          className="h-2 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-line-strong"
-          title="Icon size"
-          aria-label="Icon size"
-        />
+        <span className="shrink-0 text-xs text-muted">Drag the icon{isMobile ? '' : ' ·'}</span>
+        {/* Desktop has room for an inline slider; mobile collapses it into a
+            popover button so the action buttons keep their breathing room. */}
+        {isMobile ? (
+          <PopoverSlider
+            title="Icon size"
+            value={Math.round(mock.size * 100)}
+            min={6}
+            max={40}
+            onChange={(v) => setMock(id, { size: v / 100 })}
+            valueText={`${Math.round(mock.size * 100)}`}
+            className="ml-auto"
+          >
+            <Maximize2 size={14} />
+          </PopoverSlider>
+        ) : (
+          <input
+            type="range"
+            min={6}
+            max={40}
+            value={Math.round(mock.size * 100)}
+            onChange={(e) => setMock(id, { size: Number(e.target.value) / 100 })}
+            className="h-2 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-line-strong"
+            title="Icon size"
+            aria-label="Icon size"
+          />
+        )}
         <button
           type="button"
           onClick={() => setUseFrame((v) => !v)}

@@ -21,6 +21,7 @@ import { CheckerToggle } from '../ui/CheckerToggle'
 import { Segmented } from '../ui/controls'
 import { Button } from '../ui/Button'
 import { Sheet } from '../ui/Sheet'
+import { PopoverSlider } from '../ui/PopoverSlider'
 import { StudioTopBar, StudioActionBar, BarIconButton } from '../studio/StudioBar'
 import { CleanupControls, CleanupControlsBody } from './CleanupControls'
 
@@ -352,17 +353,18 @@ export function CleanupStudio() {
             <Redo2 size={17} />
           </BarIconButton>
           {view === 'overlay' && (
-            <label className="flex shrink-0 items-center gap-1.5 pl-1 text-xs text-muted">
+            <PopoverSlider
+              title="Ghost opacity"
+              value={ghostOpacity}
+              min={0}
+              max={100}
+              onChange={setGhostOpacity}
+              valueText={`${ghostOpacity}%`}
+              placement="bottom"
+              className="shrink-0"
+            >
               Ghost
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={ghostOpacity}
-                onChange={(e) => setGhostOpacity(Number(e.target.value))}
-                className="h-2 w-20 cursor-pointer appearance-none rounded-full bg-line-strong"
-              />
-            </label>
+            </PopoverSlider>
           )}
           <div className="ml-auto shrink-0 pl-1">
             <ZoomControls pz={pz} />
