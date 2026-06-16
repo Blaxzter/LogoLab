@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Menu, SlidersHorizontal, X } from 'lucide-react'
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useLogo, useStore } from './store'
 import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
@@ -16,6 +16,9 @@ import { PreviewGrid } from './components/PreviewGrid'
 import CleanupPanel from './components/panels/CleanupPanel'
 import VectorizePanel from './components/panels/VectorizePanel'
 import ExportPanel from './components/panels/ExportPanel'
+import Impressum from './components/legal/Impressum'
+import Datenschutz from './components/legal/Datenschutz'
+import { LegalFooter } from './components/legal/LegalFooter'
 
 function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
   const logo = useLogo()
@@ -128,6 +131,7 @@ function MobileLogoIntro() {
 
 export function App() {
   useLiveFavicon()
+  const { pathname } = useLocation()
   const tab = useActiveTab()
   const logo = useLogo()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -145,6 +149,17 @@ export function App() {
     setMenuOpen(false)
     if (!showStyling || !hasLogo) setDrawerOpen(false)
   }, [tab, showStyling, hasLogo])
+
+  // Legal pages (Impressum / Datenschutz) render in their own standalone shell —
+  // no studio sidebar or appearance FAB — so the long-form text reads cleanly.
+  if (pathname === '/impressum' || pathname === '/datenschutz') {
+    return (
+      <Routes>
+        <Route path="/impressum" element={<Impressum />} />
+        <Route path="/datenschutz" element={<Datenschutz />} />
+      </Routes>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col overflow-x-hidden">
@@ -170,6 +185,8 @@ export function App() {
           </Routes>
         </main>
       </div>
+
+      <LegalFooter />
 
       {/* Mobile appearance drawer + the button that opens it. Only on the tabs
           that have controls, and only once there's a logo to customize. */}

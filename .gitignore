@@ -7,6 +7,12 @@ dist
 dist-ssr
 *.local
 
+# local env files — operator details (Impressum/Datenschutz) live here; never
+# commit real values. The committed template is .env.example (see below).
+.env
+.env.*
+!.env.example
+
 # editor / OS
 .vscode/*
 !.vscode/extensions.json

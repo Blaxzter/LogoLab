@@ -1,0 +1,5 @@
+# Cloudflare Pages SPA fallback: serve index.html for client-side routes
+# (e.g. /preview, /impressum, /datenschutz) so deep links & shared links
+# don't 404. Real assets (/og.png, /favicon.svg, /assets/*) are served as
+# files because they exist on disk and take precedence over this rule.
+/*    /index.html    200

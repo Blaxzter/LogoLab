@@ -294,6 +294,58 @@
     background-position: 0 0, 0 8px, 8px -8px, -8px 0;
     background-color: #1c1e26;
   }
+
+  /* Legal pages (Impressum / Datenschutz) — readable long-form prose. Built on
+     the semantic tokens, so it flips with the dark theme for free. */
+  .legal {
+    color: var(--color-ink-2);
+    font-size: 0.95rem;
+    line-height: 1.7;
+  }
+  .legal h1 {
+    margin: 0 0 0.4rem;
+    font-size: 1.9rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
+  }
+  .legal h2 {
+    margin: 2rem 0 0.5rem;
+    font-size: 1.18rem;
+    font-weight: 700;
+    color: var(--color-ink);
+  }
+  .legal h3 {
+    margin: 1.3rem 0 0.35rem;
+    font-size: 1rem;
+    font-weight: 650;
+    color: var(--color-ink);
+  }
+  .legal p { margin: 0.6rem 0; }
+  .legal ul { margin: 0.6rem 0; padding-left: 1.3rem; list-style: disc; }
+  .legal li { margin: 0.25rem 0; }
+  .legal a {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .legal a:hover { color: var(--color-accent-hover); }
+  .legal strong { color: var(--color-ink); font-weight: 650; }
+  .legal hr { border: none; border-top: 1px solid var(--color-line); margin: 1.6rem 0; }
+  .legal .lead { font-size: 1.05rem; color: var(--color-ink-2); }
+  .legal .note {
+    margin: 0.6rem 0;
+    padding: 0.75rem 1rem;
+    border-left: 3px solid var(--color-accent);
+    background: var(--color-accent-soft);
+    border-radius: var(--radius-sm);
+    color: var(--color-ink-2);
+    font-size: 0.88rem;
+  }
+  .legal address {
+    font-style: normal;
+    line-height: 1.6;
+  }
 }
 
 @layer utilities {
