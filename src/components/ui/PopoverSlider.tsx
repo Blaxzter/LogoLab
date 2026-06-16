@@ -109,7 +109,10 @@ export function PopoverSlider({
             {/* The native range is laid out horizontally then absolutely centered
                 and rotated to vertical — centering the box explicitly (rather than
                 relying on grid alignment of an over-wide element) keeps the track
-                and thumb dead-centre in the popover. */}
+                and thumb dead-centre in the popover. `touch-none` is essential:
+                without it a touch drag over the rotated slider reads as a vertical
+                pan and the browser steals the gesture, so the thumb never moves on
+                mobile (a tap can set the value, but dragging can't). */}
             <div className="relative h-32 w-9">
               <input
                 type="range"
@@ -119,7 +122,7 @@ export function PopoverSlider({
                 value={value}
                 onChange={(e) => onChange(Number(e.target.value))}
                 aria-label={title}
-                className="absolute left-1/2 top-1/2 h-1.5 w-32 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer appearance-none rounded-full bg-line-strong"
+                className="absolute left-1/2 top-1/2 h-1.5 w-32 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer touch-none appearance-none rounded-full bg-line-strong"
               />
             </div>
           </div>,
