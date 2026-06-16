@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
+import { Tooltip } from './Tooltip'
 
 const POPOVER_W = 56
 const POPOVER_H = 176
@@ -80,17 +81,18 @@ export function PopoverSlider({
 
   return (
     <>
-      <button
-        ref={btnRef}
-        type="button"
-        title={title}
-        aria-label={title}
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className={`btn h-8 gap-1.5 px-2 text-xs ${open ? 'btn-primary' : 'btn-secondary'} ${className}`}
-      >
-        {children}
-      </button>
+      <Tooltip label={title}>
+        <button
+          ref={btnRef}
+          type="button"
+          aria-label={title}
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className={`btn h-8 gap-1.5 px-2 text-xs ${open ? 'btn-primary' : 'btn-secondary'} ${className}`}
+        >
+          {children}
+        </button>
+      </Tooltip>
       {open &&
         pos &&
         createPortal(
@@ -116,7 +118,6 @@ export function PopoverSlider({
                 step={step}
                 value={value}
                 onChange={(e) => onChange(Number(e.target.value))}
-                title={title}
                 aria-label={title}
                 className="absolute left-1/2 top-1/2 h-1.5 w-32 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer appearance-none rounded-full bg-line-strong"
               />

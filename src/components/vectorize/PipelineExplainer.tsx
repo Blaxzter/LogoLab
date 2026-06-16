@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, X } from 'lucide-react'
 import { useLogo } from '../../store'
+import { Tooltip } from '../ui/Tooltip'
 import { getImageData } from '../../lib/image'
 import { analyzeImageOffThread, type OffThreadAnalysis } from '../../lib/trace/traceOffThread'
 import { labelColor } from '../../lib/trace/stageViz'
@@ -55,7 +56,7 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="How vectorize works">
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm" />
+      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm dark:bg-black/55" />
 
       <div className="panel animate-in-fade relative z-10 flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden">
         <div className="flex items-start justify-between border-b border-line p-5">
@@ -66,9 +67,11 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
               editable vector shapes.
             </p>
           </div>
-          <button type="button" onClick={onClose} className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0" title="Close">
-            <X size={16} />
-          </button>
+          <Tooltip label="Close">
+            <button type="button" onClick={onClose} aria-label="Close" className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0">
+              <X size={16} />
+            </button>
+          </Tooltip>
         </div>
 
         <div className="overflow-y-auto p-5">

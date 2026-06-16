@@ -60,7 +60,6 @@ export function SupportPopover() {
       <button
         ref={btnRef}
         type="button"
-        title="Support LogoLab"
         aria-label="Support LogoLab"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}

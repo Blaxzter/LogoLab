@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { ImageUp, Loader2, X } from 'lucide-react'
 import { useCheckerClass, useLogo, useStore } from '../store'
 import { useLogoUpload } from '../hooks/useLogoUpload'
+import { Tooltip } from './ui/Tooltip'
 
 export function UploadDropzone() {
   const logo = useLogo()
@@ -30,13 +31,15 @@ export function UploadDropzone() {
         >
           Replace
         </button>
-        <button
-          onClick={clearLogo}
-          className="btn btn-ghost h-8 w-8 px-0"
-          title="Remove logo"
-        >
-          <X size={15} />
-        </button>
+        <Tooltip label="Remove logo">
+          <button
+            onClick={clearLogo}
+            aria-label="Remove logo"
+            className="btn btn-ghost h-8 w-8 px-0"
+          >
+            <X size={15} />
+          </button>
+        </Tooltip>
         <input
           ref={inputRef}
           type="file"

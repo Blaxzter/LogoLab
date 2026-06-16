@@ -1,5 +1,6 @@
 import { Contrast } from 'lucide-react'
 import { useStore } from '../../store'
+import { Tooltip } from './Tooltip'
 
 /**
  * Flips the global transparency-checkerboard backdrop (light ⇄ dark). The state
@@ -10,18 +11,19 @@ export function CheckerToggle({ className = '' }: { className?: string }) {
   const dark = useStore((s) => s.checkerDark)
   const toggle = useStore((s) => s.toggleChecker)
   return (
-    <button
-      type="button"
-      onClick={toggle}
-      title={`Flip preview background (currently ${dark ? 'dark' : 'light'}) — see white logos better`}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg border shadow-xs transition-colors ${
-        dark
-          ? 'border-white/20 bg-black/40 text-white hover:bg-black/60'
-          : 'border-line-strong bg-surface/80 text-ink-2 hover:bg-surface'
-      } ${className}`}
-    >
-      <Contrast size={15} />
-      <span className="sr-only">Flip preview background</span>
-    </button>
+    <Tooltip label={`Flip preview background (currently ${dark ? 'dark' : 'light'}) — see white logos better`}>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label="Flip preview background"
+        className={`flex h-8 w-8 items-center justify-center rounded-lg border shadow-xs transition-colors ${
+          dark
+            ? 'border-white/20 bg-black/40 text-white hover:bg-black/60'
+            : 'border-line-strong bg-surface/80 text-ink-2 hover:bg-surface'
+        } ${className}`}
+      >
+        <Contrast size={15} />
+      </button>
+    </Tooltip>
   )
 }

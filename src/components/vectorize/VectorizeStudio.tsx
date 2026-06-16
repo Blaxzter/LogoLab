@@ -42,6 +42,7 @@ import { PipelineExplainer } from "./PipelineExplainer";
 import { Sheet } from "../ui/Sheet";
 import { PopoverSlider } from "../ui/PopoverSlider";
 import { StudioTopBar, StudioActionBar, BarIconButton } from "../studio/StudioBar";
+import { Tooltip } from "../ui/Tooltip";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
 const RASTER_MAX_DIM = 1024;
@@ -1176,14 +1177,16 @@ function ToolButton({
     children: React.ReactNode;
 }) {
     return (
-        <button
-            type="button"
-            title={title}
-            onClick={onClick}
-            disabled={disabled}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-        >
-            {children}
-        </button>
+        <Tooltip label={title}>
+            <button
+                type="button"
+                aria-label={title}
+                onClick={onClick}
+                disabled={disabled}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+                {children}
+            </button>
+        </Tooltip>
     );
 }

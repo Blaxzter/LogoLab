@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { Wand2, HelpCircle, AlertTriangle, MapPin, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { ColorField, Collapsible, Field, Segmented, Slider, Toggle } from '../ui/controls'
+import { Tooltip } from '../ui/Tooltip'
 import type { VectorizeOptions } from '../../types'
 import { CONTROL_DOCS_BY_ID } from './controlDocs'
 import { ControlInfoDialog } from './ControlInfoDialog'
@@ -91,15 +92,16 @@ export function TraceControlsBody({
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink">Vectorize</h2>
-            <button
-              type="button"
-              onClick={onShowHelp}
-              className="btn btn-ghost h-7 gap-1 px-2 text-xs text-ink-2"
-              title="See how vectorize turns your image into shapes"
-            >
-              <HelpCircle size={14} />
-              How it works
-            </button>
+            <Tooltip label="See how vectorize turns your image into shapes">
+              <button
+                type="button"
+                onClick={onShowHelp}
+                className="btn btn-ghost h-7 gap-1 px-2 text-xs text-ink-2"
+              >
+                <HelpCircle size={14} />
+                How it works
+              </button>
+            </Tooltip>
           </div>
 
           {isVectorSource && (

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Loader2, Shapes, X } from 'lucide-react'
 import { useStore } from '../store'
 import { loadLogoFile, prefersDarkChecker } from '../lib/image'
+import { Tooltip } from './ui/Tooltip'
 
 interface Example {
   /** File under public/examples/. */
@@ -179,7 +180,7 @@ function ExamplesDialog({ onClose }: { onClose: () => void }) {
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 bg-ink/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-ink/40 backdrop-blur-sm dark:bg-black/55"
       />
 
       {/* Panel */}
@@ -192,14 +193,16 @@ function ExamplesDialog({ onClose }: { onClose: () => void }) {
               icon set.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0"
-            title="Close"
-          >
-            <X size={16} />
-          </button>
+          <Tooltip label="Close">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0"
+            >
+              <X size={16} />
+            </button>
+          </Tooltip>
         </div>
 
         <div className="overflow-y-auto p-5">

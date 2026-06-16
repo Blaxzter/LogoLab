@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock'
+import { Tooltip } from './Tooltip'
 
 /**
  * The single mobile overlay grammar for the whole app — a slide-over (`right`)
@@ -75,7 +76,7 @@ export function Sheet({
       <div
         onClick={onClose}
         aria-hidden
-        className={`fixed inset-0 z-40 bg-ink/40 transition-opacity duration-300 md:hidden ${
+        className={`fixed inset-0 z-40 bg-ink/40 transition-opacity duration-300 md:hidden dark:bg-black/55 ${
           open ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
       />
@@ -97,9 +98,11 @@ export function Sheet({
           className={`flex h-12 shrink-0 items-center justify-between border-b border-line px-4 ${isBottom ? 'touch-none' : ''}`}
         >
           <span className="text-sm font-semibold text-ink">{title}</span>
-          <button onClick={onClose} title="Close" aria-label="Close" className="btn btn-ghost h-9 w-9 px-0">
-            <X size={18} />
-          </button>
+          <Tooltip label="Close">
+            <button onClick={onClose} aria-label="Close" className="btn btn-ghost h-9 w-9 px-0">
+              <X size={18} />
+            </button>
+          </Tooltip>
         </div>
         {children}
       </div>

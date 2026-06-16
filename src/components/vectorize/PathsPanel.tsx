@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react'
 import { Eye, EyeOff, Trash2, X } from 'lucide-react'
 import type { EditableDoc, PathItem, RawItem } from '../../lib/path/types'
 import { normalizeHex } from '../../lib/colorUtils'
+import { Tooltip } from '../ui/Tooltip'
 
 /** Swatch background: a CSS preview of the gradient when present, else the flat fill. */
 function swatchStyle(item: PathItem): CSSProperties {
@@ -155,21 +156,22 @@ function PathRow({
         selected ? 'bg-accent-soft' : 'hover:bg-surface-3'
       }`}
     >
-      <label
-        title={item.gradient ? 'Recolor (replaces gradient with a solid)' : 'Recolor'}
-        onClick={(e) => e.stopPropagation()}
-        className="relative h-[18px] w-[18px] shrink-0 cursor-pointer overflow-hidden rounded border border-line"
-        style={swatchStyle(item)}
-      >
-        <input
-          type="color"
-          value={normalizeHex(item.fill) ?? '#000000'}
-          onChange={(e) => onRecolor(e.target.value, false)}
-          onBlur={(e) => onRecolor(e.target.value, true)}
-          className="absolute inset-0 cursor-pointer opacity-0"
-          aria-label={`Path ${index} fill color`}
-        />
-      </label>
+      <Tooltip label={item.gradient ? 'Recolor (replaces gradient with a solid)' : 'Recolor'}>
+        <label
+          onClick={(e) => e.stopPropagation()}
+          className="relative h-[18px] w-[18px] shrink-0 cursor-pointer overflow-hidden rounded border border-line"
+          style={swatchStyle(item)}
+        >
+          <input
+            type="color"
+            value={normalizeHex(item.fill) ?? '#000000'}
+            onChange={(e) => onRecolor(e.target.value, false)}
+            onBlur={(e) => onRecolor(e.target.value, true)}
+            className="absolute inset-0 cursor-pointer opacity-0"
+            aria-label={`Path ${index} fill color`}
+          />
+        </label>
+      </Tooltip>
 
       <span className={`truncate text-xs ${item.visible ? 'text-ink' : 'text-faint'}`}>
         Path {index}
@@ -222,16 +224,18 @@ function RowIconBtn({
   children: React.ReactNode
 }) {
   return (
-    <button
-      type="button"
-      title={title}
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick()
-      }}
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-3 hover:text-ink"
-    >
-      {children}
-    </button>
+    <Tooltip label={title}>
+      <button
+        type="button"
+        aria-label={title}
+        onClick={(e) => {
+          e.stopPropagation()
+          onClick()
+        }}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-3 hover:text-ink"
+      >
+        {children}
+      </button>
+    </Tooltip>
   )
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ImageUp, Maximize2, RotateCcw, Smartphone } from 'lucide-react'
 import { LogoMark } from '../LogoMark'
 import { PopoverSlider } from '../ui/PopoverSlider'
+import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '../../store'
 import type { DeviceId } from '../../store'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -334,34 +335,39 @@ export function DeviceMock({ id }: { id: DeviceId }) {
             value={Math.round(mock.size * 100)}
             onChange={(e) => setMock(id, { size: Number(e.target.value) / 100 })}
             className="h-2 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-line-strong"
-            title="Icon size"
             aria-label="Icon size"
           />
         )}
-        <button
-          type="button"
-          onClick={() => setUseFrame((v) => !v)}
-          title="Toggle device frame"
-          className={`btn h-8 px-2 ${useFrame ? 'btn-primary' : 'btn-secondary'}`}
-        >
-          <Smartphone size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          title="Replace screenshot"
-          className="btn btn-secondary h-8 px-2"
-        >
-          <ImageUp size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => resetMock(id)}
-          title="Reset placement & screenshot"
-          className="btn btn-ghost h-8 px-2"
-        >
-          <RotateCcw size={14} />
-        </button>
+        <Tooltip label="Toggle device frame">
+          <button
+            type="button"
+            onClick={() => setUseFrame((v) => !v)}
+            aria-label="Toggle device frame"
+            className={`btn h-8 px-2 ${useFrame ? 'btn-primary' : 'btn-secondary'}`}
+          >
+            <Smartphone size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Replace screenshot">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            aria-label="Replace screenshot"
+            className="btn btn-secondary h-8 px-2"
+          >
+            <ImageUp size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Reset placement & screenshot">
+          <button
+            type="button"
+            onClick={() => resetMock(id)}
+            aria-label="Reset placement & screenshot"
+            className="btn btn-ghost h-8 px-2"
+          >
+            <RotateCcw size={14} />
+          </button>
+        </Tooltip>
         <input
           ref={fileRef}
           type="file"

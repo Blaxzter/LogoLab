@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Tooltip } from '../ui/Tooltip'
 
 /**
  * Mobile-only chrome shared by the Cleanup & Vectorize studios so the two stay
@@ -42,17 +43,18 @@ export function BarIconButton({
   children: ReactNode
 }) {
   return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
-        active ? 'bg-accent-soft text-accent' : 'text-ink-2 hover:bg-surface-3 hover:text-ink'
-      }`}
-    >
-      {children}
-    </button>
+    <Tooltip label={title}>
+      <button
+        type="button"
+        aria-label={title}
+        onClick={onClick}
+        disabled={disabled}
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
+          active ? 'bg-accent-soft text-accent' : 'text-ink-2 hover:bg-surface-3 hover:text-ink'
+        }`}
+      >
+        {children}
+      </button>
+    </Tooltip>
   )
 }

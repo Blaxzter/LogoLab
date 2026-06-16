@@ -19,6 +19,7 @@ import { docStats, serializeDoc } from '../../lib/path/model'
 import { usePanZoom, type PanZoom } from '../../hooks/usePanZoom'
 import { ZoomSurface } from '../ui/ZoomSurface'
 import { ZoomControls } from '../ui/ZoomControls'
+import { Tooltip } from '../ui/Tooltip'
 import { CONTROL_DOCS_BY_ID } from './controlDocs'
 import type { ControlPreview, PreviewVariant } from './controlPreviews.generated'
 
@@ -179,7 +180,7 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
       aria-modal="true"
       aria-label={`About ${doc.label}`}
     >
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm" />
+      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm dark:bg-black/55" />
 
       <div
         ref={panelRef}
@@ -191,14 +192,16 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
             <h2 className="text-base font-semibold text-ink">{doc.label}</h2>
             <p className="mt-1 text-sm leading-snug text-muted">{doc.hint}</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0"
-            title="Close"
-          >
-            <X size={16} />
-          </button>
+          <Tooltip label="Close">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0"
+            >
+              <X size={16} />
+            </button>
+          </Tooltip>
         </div>
 
         <div className="flex flex-col gap-5 overflow-y-auto p-5">
@@ -287,7 +290,7 @@ function SourceTab({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`h-7 rounded-[7px] px-3 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`h-7 rounded-[12px] px-3 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
         active ? 'bg-surface text-ink shadow-xs' : 'text-muted hover:text-ink-2'
       }`}
     >

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ChevronDown, Info } from 'lucide-react'
 import { isValidHex, normalizeHex, SWATCHES } from '../../lib/colorUtils'
+import { Tooltip } from './Tooltip'
 
 /* ------------------------------------------------------------------ Field */
 
@@ -25,15 +26,16 @@ export function Field({
         <span className="flex items-center gap-1">
           <span className="field-label">{label}</span>
           {onInfo && (
-            <button
-              type="button"
-              onClick={onInfo}
-              title={`What does ${label} do?`}
-              aria-label={`What does ${label} do?`}
-              className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted transition-colors hover:text-accent"
-            >
-              <Info size={13} />
-            </button>
+            <Tooltip label={`What does ${label} do?`}>
+              <button
+                type="button"
+                onClick={onInfo}
+                aria-label={`What does ${label} do?`}
+                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted transition-colors hover:text-accent"
+              >
+                <Info size={13} />
+              </button>
+            </Tooltip>
           )}
         </span>
         {right}
@@ -175,19 +177,19 @@ export function Segmented<T extends string>({
       {options.map((opt) => {
         const active = opt.value === value
         return (
-          <button
-            key={opt.value}
-            type="button"
-            title={opt.title}
-            onClick={() => onChange(opt.value)}
-            className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[12px] px-2 text-xs font-medium transition-all ${
-              active
-                ? 'bg-surface text-ink shadow-xs'
-                : 'text-muted hover:text-ink-2'
-            }`}
-          >
-            {opt.label}
-          </button>
+          <Tooltip key={opt.value} label={opt.title ?? ''}>
+            <button
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[12px] px-2 text-xs font-medium transition-all ${
+                active
+                  ? 'bg-surface text-ink shadow-xs'
+                  : 'text-muted hover:text-ink-2'
+              }`}
+            >
+              {opt.label}
+            </button>
+          </Tooltip>
         )
       })}
     </div>
@@ -245,28 +247,31 @@ export function ColorField({
           spellCheck={false}
         />
         {allowTransparent && (
-          <button
-            type="button"
-            title="Transparent"
-            onClick={() => onChange(transparent ? '#ffffff' : 'transparent')}
-            className={`btn ${transparent ? 'btn-primary' : 'btn-secondary'} h-9 px-2.5`}
-          >
-            <span className="text-xs">∅</span>
-          </button>
+          <Tooltip label="Transparent">
+            <button
+              type="button"
+              aria-label="Transparent"
+              onClick={() => onChange(transparent ? '#ffffff' : 'transparent')}
+              className={`btn ${transparent ? 'btn-primary' : 'btn-secondary'} h-9 px-2.5`}
+            >
+              <span className="text-xs">∅</span>
+            </button>
+          </Tooltip>
         )}
       </div>
       <div className="flex flex-wrap gap-1">
         {SWATCHES.map((c) => (
-          <button
-            key={c}
-            type="button"
-            title={c}
-            onClick={() => onChange(c)}
-            className={`h-5 w-5 rounded-md border transition-transform hover:scale-110 ${
-              normalizeHex(value) === c ? 'border-accent ring-2 ring-accent-soft' : 'border-line'
-            }`}
-            style={{ backgroundColor: c }}
-          />
+          <Tooltip key={c} label={c}>
+            <button
+              type="button"
+              aria-label={c}
+              onClick={() => onChange(c)}
+              className={`h-5 w-5 rounded-md border transition-transform hover:scale-110 ${
+                normalizeHex(value) === c ? 'border-accent ring-2 ring-accent-soft' : 'border-line'
+              }`}
+              style={{ backgroundColor: c }}
+            />
+          </Tooltip>
         ))}
       </div>
     </div>
