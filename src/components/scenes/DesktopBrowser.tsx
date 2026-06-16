@@ -36,8 +36,10 @@ export default function DesktopBrowser() {
 
   const domain = env.brandName.toLowerCase().replace(/\s+/g, '') + '.com'
 
+  // Neutral stage mat — pinned (not a shell token) so the scene reads
+  // identically in app-light and app-dark.
   return (
-    <div className="w-full bg-surface-3 p-4">
+    <div className="w-full p-4" style={{ backgroundColor: '#f2f3f5' }}>
       {/* Browser window */}
       <div
         className="overflow-hidden rounded-xl"

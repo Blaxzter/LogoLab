@@ -23,8 +23,13 @@ export default function SplashScreen() {
   const track = dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)'
   const bar = textColor === '#ffffff' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.55)'
 
+  // Neutral stage mat — pinned (not a shell token) so the scene reads
+  // identically in app-light and app-dark.
   return (
-    <div className="flex w-full items-center justify-center bg-surface-3 py-7" style={{ height: 420 }}>
+    <div
+      className="flex w-full items-center justify-center py-7"
+      style={{ height: 420, backgroundColor: '#f2f3f5' }}
+    >
       {/* Phone frame */}
       <div
         className="relative overflow-hidden"

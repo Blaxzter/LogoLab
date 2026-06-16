@@ -6,7 +6,7 @@
 
 **100% in your browser. No uploads, no backend, no sign-up.**
 
-[**GitHub repo**](https://github.com/Blaxzter/LogoLab) · [Report an issue](https://github.com/Blaxzter/LogoLab/issues)
+[**▶ Try it live**](https://logolab.fabraham.dev) · [GitHub repo](https://github.com/Blaxzter/LogoLab) · [Report an issue](https://github.com/Blaxzter/LogoLab/issues)
 
 ![LogoLab preview](docs/hero.png)
 

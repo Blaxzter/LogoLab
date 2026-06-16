@@ -2,6 +2,7 @@ import { Coffee, Heart, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useLogo, useStore } from '../store'
 import { Sheet } from './ui/Sheet'
+import { ThemeToggleSegmented } from './ThemeToggle'
 import { TABS, REPO_URL, COFFEE_URL, SPONSOR_URL, GithubMark } from './navItems'
 
 /**
@@ -33,6 +34,10 @@ export function AppMenu({ open, onClose }: { open: boolean; onClose: () => void 
             {t.label}
           </NavLink>
         ))}
+
+        <div className="my-2 h-px bg-line" />
+
+        <ThemeToggleSegmented />
 
         <div className="my-2 h-px bg-line" />
 

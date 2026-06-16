@@ -1,9 +1,15 @@
 @import 'tailwindcss';
 
+/* Class-based dark mode: `.dark` on <html> flips the semantic tokens below.
+   `.dark *` so portaled overlays (Sheet, popovers rendered into <body>) inherit
+   it too. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ---------------------------------------------------------------------------
    LogoLab design system — "Studio neutral light"
    Calm, airy, neutral chrome with a refined indigo accent. The preview scenes
-   carry their own light/dark environments; the app chrome stays light.
+   carry their own light/dark environments; the app chrome follows the app theme
+   (light by default; a calm neutral dark via the `.dark` overrides further down).
 --------------------------------------------------------------------------- */
 
 @theme {
@@ -27,6 +33,10 @@
   --color-accent-hover: #4f4fce;
   --color-accent-soft: #ececfb;
   --color-accent-fg: #ffffff;
+
+  /* BrandMark chip backplate — a near-black tile in light; relit in dark so the
+     mark doesn't vanish into a dark header (see the `.dark` override below). */
+  --color-brand-chip: #14161c;
 
   /* Status */
   --color-good: #21946b;
@@ -57,6 +67,55 @@
 @layer base {
   :root {
     color-scheme: light;
+  }
+
+  /* ---------------------------------------------------------------------------
+     Dark theme — "Studio neutral dark"
+     Same neutral family as the light theme: cool near-black surfaces with a hair
+     of blue, soft off-white ink, the indigo accent preserved. Overriding the
+     semantic tokens here cascades to every `bg-surface` / `text-ink` / etc.
+     utility for free, so the whole shell flips without per-component `dark:`.
+     The preview scenes pin their own colors, so they are unaffected. The
+     transparency checkerboard is a separate, user-controlled system — untouched.
+  --------------------------------------------------------------------------- */
+  .dark {
+    color-scheme: dark;
+
+    /* Neutral surfaces — dark bg, progressively lighter elevations */
+    --color-bg: #0f1116;
+    --color-bg-2: #0b0d11;
+    --color-surface: #15171d;
+    --color-surface-2: #1a1d24;
+    --color-surface-3: #21242d;
+    --color-line: #262932;
+    --color-line-strong: #363b47;
+
+    /* Ink — soft off-white, not pure white */
+    --color-ink: #e8eaf0;
+    --color-ink-2: #b3bac7;
+    --color-muted: #828b9c;
+    --color-faint: #5c6473;
+
+    /* Accent — indigo preserved, nudged brighter so it carries on dark */
+    --color-accent: #6e6ef0;
+    --color-accent-hover: #8181f4;
+    --color-accent-soft: #292a4d;
+    --color-accent-fg: #ffffff;
+
+    /* Status — brightened so they read on dark surfaces */
+    --color-good: #34c98a;
+    --color-warn: #e0a13a;
+    --color-bad: #f06560;
+
+    /* BrandMark chip — relit so the tile separates from the dark header */
+    --color-brand-chip: #2a2e3a;
+
+    /* Shadows — deeper and near-black; soft light-theme shadows disappear here */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 1px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.55), 0 2px 4px -2px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.62), 0 4px 8px -4px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 24px 60px -12px rgba(0, 0, 0, 0.72), 0 8px 16px -8px rgba(0, 0, 0, 0.55);
   }
 
   html,

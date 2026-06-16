@@ -7,8 +7,10 @@ import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
 import { AppMenu } from './components/AppMenu'
 import { SupportPopover } from './components/SupportPopover'
+import { ThemeToggleButton } from './components/ThemeToggle'
 import { TABS, REPO_URL, GithubMark } from './components/navItems'
 import { UploadDropzone } from './components/UploadDropzone'
+import { Tooltip } from './components/ui/Tooltip'
 import { TryExampleButton } from './components/ExamplesDialog'
 import { PreviewGrid } from './components/PreviewGrid'
 import CleanupPanel from './components/panels/CleanupPanel'
@@ -44,9 +46,8 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
           <NavLink
             key={t.id}
             to={`/${t.id}`}
-            title={t.label}
             className={({ isActive }) =>
-              `flex h-8 items-center gap-1.5 rounded-[7px] px-3 text-sm font-medium transition-all ${
+              `flex h-8 items-center gap-1.5 rounded-[12px] px-3 text-sm font-medium transition-all ${
                 isActive ? 'bg-surface text-ink shadow-xs' : 'text-muted hover:text-ink-2'
               }`
             }
@@ -60,23 +61,19 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
       {/* Desktop right cluster — its contents move into AppMenu below md. */}
       <div className="hidden shrink-0 items-center gap-3 md:flex">
         {logo.src && (
-          <button
-            onClick={clearLogo}
-            title="Clear the loaded logo"
-            className="btn btn-ghost h-8 gap-1.5 px-2.5 text-xs"
-          >
+          <button onClick={clearLogo} className="btn btn-ghost h-8 gap-1.5 px-2.5 text-xs">
             <X size={14} />
             Clear
           </button>
         )}
         <span className="text-xs text-faint">Runs 100% in your browser</span>
         <div className="flex items-center gap-1">
+          <ThemeToggleButton />
           <SupportPopover />
           <a
             href={REPO_URL}
             target="_blank"
             rel="noreferrer"
-            title="View source on GitHub"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
           >
             <GithubMark />
@@ -89,7 +86,6 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
       <button
         type="button"
         onClick={onOpenMenu}
-        title="Menu"
         aria-label="Open menu"
         className="btn btn-ghost h-10 w-10 shrink-0 px-0 md:hidden"
       >
@@ -102,7 +98,8 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
 function BrandMark() {
   return (
     <svg width="30" height="30" viewBox="0 0 64 64" fill="none" aria-hidden>
-      <rect x="2" y="2" width="60" height="60" rx="16" fill="#14161c" />
+      {/* Chip relit per theme so it doesn't merge into the dark header. */}
+      <rect x="2" y="2" width="60" height="60" rx="16" style={{ fill: 'var(--color-brand-chip)' }} />
       <circle cx="32" cy="32" r="15" stroke="#fff" strokeWidth="3.2" />
       <circle cx="32" cy="32" r="6" fill="#6366f1" />
     </svg>
@@ -180,14 +177,15 @@ export function App() {
         <MobileSidebarDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       )}
       {showStyling && hasLogo && (
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="btn btn-primary bottom-safe fixed right-5 z-30 h-12 gap-2 rounded-full px-5 shadow-lg md:hidden"
-          title="Customize appearance"
-        >
-          <SlidersHorizontal size={18} />
-          Customize
-        </button>
+        <Tooltip label="Customize appearance">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="btn btn-primary bottom-safe fixed right-5 z-30 h-12 gap-2 rounded-full px-5 shadow-lg md:hidden"
+          >
+            <SlidersHorizontal size={18} />
+            Customize
+          </button>
+        </Tooltip>
       )}
     </div>
   )
