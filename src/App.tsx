@@ -143,6 +143,12 @@ export function App() {
   const showStyling = tab === 'preview' || tab === 'export'
   const hasLogo = Boolean(logo.src)
 
+  // The full-height studios (Cleanup/Vectorize) carry the legal links in their
+  // own desktop status bar, so on desktop we drop the bottom footer there — it
+  // would otherwise add a second scroll past an already full-height tool. On
+  // mobile those studios have no status bar, so the footer stays (scrolls in).
+  const isStudio = tab === 'cleanup' || tab === 'vectorize'
+
   // Close any open overlay on navigation (covers the back button, not just the
   // in-menu links), and drop the appearance drawer when its trigger disappears.
   useEffect(() => {
@@ -188,7 +194,7 @@ export function App() {
             <Route path="/" element={<Navigate to="/preview" replace />} />
             <Route path="*" element={<Navigate to="/preview" replace />} />
           </Routes>
-          <LegalFooter className="mt-auto" />
+          <LegalFooter className={`mt-auto ${isStudio ? 'md:hidden' : ''}`} />
         </main>
       </div>
 

@@ -23,6 +23,7 @@ import { Button } from '../ui/Button'
 import { Sheet } from '../ui/Sheet'
 import { PopoverSlider } from '../ui/PopoverSlider'
 import { StudioTopBar, StudioActionBar, BarIconButton } from '../studio/StudioBar'
+import { LegalLinksInline } from '../legal/LegalFooter'
 import { Tooltip } from '../ui/Tooltip'
 import { CleanupControls, CleanupControlsBody } from './CleanupControls'
 
@@ -467,7 +468,8 @@ export function CleanupStudio() {
           <span className="truncate">
             {status || 'Scroll to zoom · Space- or middle-drag to pan · try AI or Auto first.'}
           </span>
-          <span className="ml-auto flex shrink-0 items-center gap-3">
+          <LegalLinksInline className="mx-auto shrink-0" />
+          <span className="flex shrink-0 items-center gap-3">
             {dims && (
               <span>
                 {dims.w}×{dims.h}

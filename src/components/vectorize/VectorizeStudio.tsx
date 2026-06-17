@@ -42,6 +42,7 @@ import { PipelineExplainer } from "./PipelineExplainer";
 import { Sheet } from "../ui/Sheet";
 import { PopoverSlider } from "../ui/PopoverSlider";
 import { StudioTopBar, StudioActionBar, BarIconButton } from "../studio/StudioBar";
+import { LegalLinksInline } from "../legal/LegalFooter";
 import { Tooltip } from "../ui/Tooltip";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
@@ -948,7 +949,8 @@ export function VectorizeStudio() {
                     {error && (
                         <span className="truncate text-bad">{error}</span>
                     )}
-                    <span className="ml-auto hidden truncate sm:block">
+                    <LegalLinksInline className="mx-auto shrink-0" />
+                    <span className="hidden truncate sm:block">
                         {tool === "node"
                             ? "Drag anchors · double-click segment to add a node · Del removes"
                             : tool === "mark"
