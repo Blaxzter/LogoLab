@@ -43,6 +43,22 @@ export function PopoverSlider({
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
+  const dragging = useRef(false)
+
+  // Drive the value from the pointer's Y ourselves. A CSS-rotated native range
+  // hit-tests the initial tap but doesn't track a touch *drag* back through the
+  // transform (WebKit/Blink), so the thumb sticks on mobile. The track box is the
+  // full vertical travel — top = max, bottom = min — so map clientY → value.
+  const setValueFromClientY = (clientY: number) => {
+    const rect = trackRef.current?.getBoundingClientRect()
+    if (!rect || rect.height === 0) return
+    const frac = Math.min(1, Math.max(0, (rect.bottom - clientY) / rect.height))
+    const raw = min + frac * (max - min)
+    const next = step > 0 ? Math.round((raw - min) / step) * step + min : raw
+    const clamped = Math.min(max, Math.max(min, next))
+    if (clamped !== value) onChange(clamped)
+  }
 
   useLayoutEffect(() => {
     if (!open) return
@@ -109,11 +125,12 @@ export function PopoverSlider({
             {/* The native range is laid out horizontally then absolutely centered
                 and rotated to vertical — centering the box explicitly (rather than
                 relying on grid alignment of an over-wide element) keeps the track
-                and thumb dead-centre in the popover. `touch-none` is essential:
-                without it a touch drag over the rotated slider reads as a vertical
-                pan and the browser steals the gesture, so the thumb never moves on
-                mobile (a tap can set the value, but dragging can't). */}
-            <div className="relative h-32 w-9">
+                and thumb dead-centre in the popover. The native input stays for
+                mouse + keyboard, but on touch its rotated drag is broken (tap sets
+                the value, drag won't track), so pointer handlers drive the value
+                from the finger's Y instead. `touch-none` keeps the browser from
+                hijacking that vertical drag as a page pan. */}
+            <div ref={trackRef} className="relative h-32 w-9">
               <input
                 type="range"
                 min={min}
@@ -121,6 +138,20 @@ export function PopoverSlider({
                 step={step}
                 value={value}
                 onChange={(e) => onChange(Number(e.target.value))}
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId)
+                  dragging.current = true
+                  setValueFromClientY(e.clientY)
+                }}
+                onPointerMove={(e) => {
+                  if (dragging.current) setValueFromClientY(e.clientY)
+                }}
+                onPointerUp={() => {
+                  dragging.current = false
+                }}
+                onPointerCancel={() => {
+                  dragging.current = false
+                }}
                 aria-label={title}
                 className="absolute left-1/2 top-1/2 h-1.5 w-32 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer touch-none appearance-none rounded-full bg-line-strong"
               />

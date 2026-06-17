@@ -168,8 +168,13 @@ export function App() {
       <div className="flex min-h-0 flex-1">
         {/* Inline column on desktop; a drawer (below) replaces it on mobile. */}
         <Sidebar className="hidden md:block" />
+        {/* flex column + footer with mt-auto = the footer rides below the
+            content instead of being a bar pinned to the viewport: it rests at
+            the bottom on short pages and scrolls out of view under tall ones
+            (incl. the full-height studio tabs, whose shrink-0 root keeps the
+            whole area and pushes the footer just past the fold). */}
         <main
-          className={`min-w-0 flex-1 overflow-y-auto bg-bg ${
+          className={`flex min-w-0 flex-1 flex-col overflow-y-auto bg-bg ${
             showStyling && hasLogo ? 'max-md:pb-24' : ''
           }`}
         >
@@ -183,10 +188,9 @@ export function App() {
             <Route path="/" element={<Navigate to="/preview" replace />} />
             <Route path="*" element={<Navigate to="/preview" replace />} />
           </Routes>
+          <LegalFooter className="mt-auto" />
         </main>
       </div>
-
-      <LegalFooter />
 
       {/* Mobile appearance drawer + the button that opens it. Only on the tabs
           that have controls, and only once there's a logo to customize. */}

@@ -628,7 +628,7 @@ export function VectorizeStudio() {
     };
 
     return (
-        <div className="flex h-full min-h-0 animate-in-fade">
+        <div className="flex h-full min-h-0 shrink-0 animate-in-fade">
             <TraceControls {...traceProps} />
 
             <div className="flex min-w-0 flex-1 flex-col">

@@ -6,19 +6,21 @@ import { REPO_URL } from '../navItems'
  * Datenschutz must be reachable from every page). Used by both the studio
  * shell and the standalone legal pages.
  */
-export function LegalFooter() {
+export function LegalFooter({ className = '' }: { className?: string }) {
   return (
-    <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-line bg-surface px-4 py-3 text-xs text-muted">
+    <footer
+      className={`flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-line/60 px-4 py-5 text-[0.7rem] text-faint ${className}`}
+    >
       <span>© 2026 LogoLab</span>
-      <span aria-hidden className="text-faint">·</span>
+      <span aria-hidden className="opacity-50">·</span>
       <NavLink to="/impressum" className="transition-colors hover:text-ink">
         Impressum
       </NavLink>
-      <span aria-hidden className="text-faint">·</span>
+      <span aria-hidden className="opacity-50">·</span>
       <NavLink to="/datenschutz" className="transition-colors hover:text-ink">
         Datenschutz
       </NavLink>
-      <span aria-hidden className="text-faint">·</span>
+      <span aria-hidden className="opacity-50">·</span>
       <a
         href={REPO_URL}
         target="_blank"
