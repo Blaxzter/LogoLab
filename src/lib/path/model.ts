@@ -23,9 +23,16 @@ import {
   isIdentityAffine,
   parseTransformAttr,
   segmentCount,
+  subPathsTightBounds,
   transformSubPaths,
 } from './geometry.ts'
 import { gradientToSvgDef } from '../trace/gradient.ts'
+import {
+  collectGradientElements,
+  gradientRefId,
+  representativeStopColor,
+  resolveGradientFill,
+} from './gradientImport.ts'
 
 /** Stable <defs> id for a path's gradient paint server. */
 const gradientId = (itemId: string): string => 'grad-' + itemId
@@ -469,8 +476,17 @@ export function parseSvg(svg: string): EditableDoc | null {
   }
 
   const items: DocItem[] = []
+  // Paint servers indexed by id, so a shape's url(#id) fill can be lifted back
+  // into an editable gradient instead of being dumped as raw markup.
+  const gradients = collectGradientElements(dom)
+  const consumedGradients = new Set<string>()
+  // <defs> blocks and stand-alone gradient elements are finalized after the
+  // walk: gradients we lifted into paths are stripped so they don't survive as
+  // dead markup (and get re-emitted with fresh ids on serialize).
+  const deferredDefs: { item: RawItem; el: Element }[] = []
   let counter = 0
   const nextId = () => `p${++counter}`
+  const ctx: WalkContext = { items, nextId, gradients, consumedGradients, deferredDefs }
   const rootCtx = childContext(root, {
     transform: [1, 0, 0, 1, 0, 0],
     fill: null,
@@ -479,22 +495,60 @@ export function parseSvg(svg: string): EditableDoc | null {
     stroke: null,
     opacity: 1,
   })
-  walkChildren(root, rootCtx, items, nextId)
+  walkChildren(root, rootCtx, ctx)
+
+  // Strip consumed gradients from the defs they lived in, unless a surviving raw
+  // item still references them (e.g. a stroked shape sharing the same paint).
+  if (consumedGradients.size > 0) {
+    const stillReferenced = new Set<string>()
+    for (const it of items) {
+      if (it.kind === 'raw') for (const id of referencedIds(it.markup)) stillReferenced.add(id)
+    }
+    const removable = new Set([...consumedGradients].filter((id) => !stillReferenced.has(id)))
+    if (removable.size > 0) {
+      const dropped = new Set<string>()
+      for (const { item, el } of deferredDefs) {
+        const next = stripGradients(el, removable)
+        if (next === null) dropped.add(item.id)
+        else item.markup = next
+      }
+      if (dropped.size > 0) return { viewBox, items: items.filter((it) => !dropped.has(it.id)) }
+    }
+  }
   return { viewBox, items }
 }
 
-function walkChildren(parent: Element, ctx: PaintContext, items: DocItem[], nextId: () => string): void {
+/** Shared mutable state threaded through the recursive SVG walk. */
+interface WalkContext {
+  items: DocItem[]
+  nextId: () => string
+  gradients: Map<string, Element>
+  consumedGradients: Set<string>
+  deferredDefs: { item: RawItem; el: Element }[]
+}
+
+function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void {
   for (const el of Array.from(parent.children)) {
     const tag = el.tagName.toLowerCase()
     if (tag === 'title' || tag === 'desc' || tag === 'metadata') continue
     if (tag === 'defs' || tag === 'style') {
       // Preserved wholesale; defs/style don't render, so no context needed.
-      items.push({ kind: 'raw', id: nextId(), markup: serializeElement(el), visible: true })
+      const item: RawItem = { kind: 'raw', id: w.nextId(), markup: serializeElement(el), visible: true }
+      w.items.push(item)
+      if (tag === 'defs') w.deferredDefs.push({ item, el })
+      continue
+    }
+    if (tag === 'lineargradient' || tag === 'radialgradient') {
+      // Stand-alone paint server (not under <defs>): round-trips as raw unless a
+      // fill consumes it, in which case the finalize pass drops it.
+      const item: RawItem = { kind: 'raw', id: w.nextId(), markup: serializeElement(el), visible: true }
+      w.items.push(item)
+      w.deferredDefs.push({ item, el })
       continue
     }
     if (tag === 'g') {
       if (el.children.length === 0) continue
-      walkChildren(el, childContext(el, ctx), items, nextId)
+      walkChildren(el, childContext(el, ctx), w)
       continue
     }
     if (SHAPE_TAGS.has(tag)) {
@@ -503,12 +557,62 @@ function walkChildren(parent: Element, ctx: PaintContext, items: DocItem[], next
         const subPaths = shapeToSubPaths(el, tag)
         // Degenerate shapes (zero size, too few points) render nothing.
         if (!subPaths || subPaths.length === 0) continue
-        items.push(makePathItem(nextId(), subPaths, shapeCtx))
+        w.items.push(makePathItem(w.nextId(), subPaths, shapeCtx))
         continue
       }
+      // Gradient fill + no stroke: lift into an editable path when the paint
+      // server resolves to a gradient the model can represent.
+      const gradId = !hasStroke(shapeCtx) ? gradientRefId(shapeCtx.fill) : null
+      const gradEl = gradId ? w.gradients.get(gradId) : null
+      if (gradId && gradEl) {
+        const subPaths = shapeToSubPaths(el, tag)
+        if (!subPaths || subPaths.length === 0) continue
+        const gradient = resolveGradientFill(gradEl, w.gradients, subPathsTightBounds(subPaths), shapeCtx.transform)
+        if (gradient) {
+          const item = makePathItem(w.nextId(), subPaths, { ...shapeCtx, fill: representativeStopColor(gradient.stops) })
+          item.gradient = gradient
+          w.items.push(item)
+          w.consumedGradients.add(gradId)
+          continue
+        }
+      }
     }
-    items.push(makeRawItem(nextId(), el, ctx))
+    w.items.push(makeRawItem(w.nextId(), el, ctx))
   }
+}
+
+/** Ids referenced by markup via url(#id) or (xlink:)href="#id". */
+function referencedIds(markup: string): string[] {
+  const ids: string[] = []
+  const url = /url\(\s*['"]?#([^)'"]+)/gi
+  const href = /\bhref\s*=\s*['"]#([^'"]+)/gi
+  let m: RegExpExecArray | null
+  while ((m = url.exec(markup))) ids.push(m[1])
+  while ((m = href.exec(markup))) ids.push(m[1])
+  return ids
+}
+
+/**
+ * Remove the given gradient ids from a defs/paint-server element and reserialize.
+ * Returns null when nothing renderable is left (the caller drops the item).
+ */
+function stripGradients(el: Element, remove: Set<string>): string | null {
+  const tag = el.tagName.toLowerCase()
+  if (tag === 'lineargradient' || tag === 'radialgradient') {
+    const id = el.getAttribute('id')
+    return id && remove.has(id) ? null : serializeElement(el)
+  }
+  const clone = el.cloneNode(true) as Element
+  for (const g of Array.from(clone.querySelectorAll('linearGradient, radialGradient'))) {
+    const id = g.getAttribute('id')
+    if (id && remove.has(id)) g.parentNode?.removeChild(g)
+  }
+  return clone.children.length === 0 ? null : serializeElement(clone)
+}
+
+/** A paint stroke that isn't `none`. */
+function hasStroke(ctx: PaintContext): boolean {
+  return ctx.stroke !== null && ctx.stroke.toLowerCase() !== 'none'
 }
 
 /** Compose an element's transform + presentation props onto its parent context. */

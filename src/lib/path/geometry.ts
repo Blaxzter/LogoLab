@@ -445,6 +445,66 @@ export function itemBounds(item: PathItem): { x: number; y: number; w: number; h
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
 }
 
+/**
+ * Tight bounding box over the actual drawn curve — cubic extrema, not the
+ * control hull — in the subpaths' own coordinate space. Used to resolve
+ * `objectBoundingBox` gradient coordinates on import, where the box must match
+ * the geometry SVG renderers use. Null when there are no drawable segments.
+ */
+export function subPathsTightBounds(subPaths: SubPath[]): { x: number; y: number; w: number; h: number } | null {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  const consider = (p: Vec) => {
+    if (p.x < minX) minX = p.x
+    if (p.x > maxX) maxX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.y > maxY) maxY = p.y
+  }
+  for (const sp of subPaths) {
+    const count = segmentCount(sp)
+    for (let seg = 0; seg < count; seg++) {
+      const { p0, c1, c2, p3 } = segmentControls(sp, seg)
+      consider(p0)
+      consider(p3)
+      for (const t of cubicExtremaTs(p0.x, c1.x, c2.x, p3.x)) consider(cubicAt(p0, c1, c2, p3, t))
+      for (const t of cubicExtremaTs(p0.y, c1.y, c2.y, p3.y)) consider(cubicAt(p0, c1, c2, p3, t))
+    }
+  }
+  if (minX === Infinity) return null
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+}
+
+/** Parameters t ∈ (0,1) where a 1-D cubic Bézier's derivative is zero. */
+function cubicExtremaTs(p0: number, c1: number, c2: number, p3: number): number[] {
+  // B'(t)=0 ⇒ a·t² + b·t + c = 0 with the coefficients below (derived from the
+  // standard cubic, divided through by the common factor of 3).
+  const d0 = c1 - p0
+  const d1 = c2 - c1
+  const d2 = p3 - c2
+  const a = d0 - 2 * d1 + d2
+  const b = 2 * (d1 - d0)
+  const c = d0
+  const ts: number[] = []
+  const inRange = (t: number) => t > EPS && t < 1 - EPS
+  if (Math.abs(a) < EPS) {
+    if (Math.abs(b) > EPS) {
+      const t = -c / b
+      if (inRange(t)) ts.push(t)
+    }
+    return ts
+  }
+  const disc = b * b - 4 * a * c
+  if (disc < 0) return ts
+  const s = Math.sqrt(disc)
+  const t1 = (-b + s) / (2 * a)
+  const t2 = (-b - s) / (2 * a)
+  if (inRange(t1)) ts.push(t1)
+  if (inRange(t2)) ts.push(t2)
+  return ts
+}
+
 function normalize(x: number, y: number): Vec | null {
   const len = Math.hypot(x, y)
   if (len < EPS) return null

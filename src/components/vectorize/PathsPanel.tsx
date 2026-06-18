@@ -4,8 +4,8 @@
 
 import type { CSSProperties } from 'react'
 import { useEffect, useRef } from 'react'
-import { Eye, EyeOff, Trash2, X } from 'lucide-react'
-import type { EditableDoc, PathItem, RawItem } from '../../lib/path/types'
+import { AlertTriangle, Eye, EyeOff, Info, Trash2, X } from 'lucide-react'
+import type { DocItem, EditableDoc, PathItem, RawItem } from '../../lib/path/types'
 import { normalizeHex } from '../../lib/colorUtils'
 import { Tooltip } from '../ui/Tooltip'
 
@@ -19,6 +19,82 @@ function swatchStyle(item: PathItem): CSSProperties {
     return { backgroundImage: `linear-gradient(${angle}deg, ${stops})` }
   }
   return { backgroundImage: `radial-gradient(circle, ${stops})` }
+}
+
+/* ------------------------------------------------------- raw-item classifier */
+
+// What a non-editable RawItem actually is, so the panel can label it and warn
+// instead of showing an opaque "raw markup" row.
+type RawCategory = 'defs' | 'style' | 'text' | 'image' | 'use' | 'stroke' | 'gradient' | 'markup'
+
+function classifyRaw(item: RawItem): { category: RawCategory; label: string } {
+  const head = item.markup.slice(0, 240)
+  const tag = /^<\s*([a-z0-9:-]+)/i.exec(head)?.[1]?.toLowerCase() ?? ''
+  if (tag === 'defs') return { category: 'defs', label: '<defs>' }
+  if (tag === 'style') return { category: 'style', label: '<style>' }
+  if (tag === 'text' || tag === 'tspan') return { category: 'text', label: 'text' }
+  if (tag === 'image') return { category: 'image', label: 'image' }
+  if (tag === 'use') return { category: 'use', label: '<use>' }
+  if (tag === 'lineargradient' || tag === 'radialgradient') return { category: 'gradient', label: 'gradient' }
+  if (tag === 'pattern') return { category: 'gradient', label: 'pattern' }
+  const inheritedStroke = item.inherited?.stroke
+  const strokes =
+    (inheritedStroke != null && inheritedStroke.toLowerCase() !== 'none') ||
+    /\bstroke\s*[:=]\s*["']?(?!none\b)[^"';\s>]+/i.test(head)
+  if (strokes) return { category: 'stroke', label: `${tag || 'shape'} · stroke` }
+  if (/\bfill\s*[:=]\s*["']?url\(/i.test(head) || item.inherited?.fill?.startsWith('url(')) {
+    return { category: 'gradient', label: `${tag || 'shape'} · gradient` }
+  }
+  return { category: 'markup', label: tag ? `<${tag}>` : 'raw markup' }
+}
+
+/** Per-category notices shown above the list when raw (non-editable) items exist. */
+function RawNotices({ items, pathCount }: { items: DocItem[]; pathCount: number }) {
+  const cats = new Set<RawCategory>()
+  for (const it of items) {
+    if (it.kind !== 'raw') continue
+    const c = classifyRaw(it).category
+    if (c !== 'defs' && c !== 'style') cats.add(c)
+  }
+  const notices: { warn: boolean; text: string }[] = []
+  if (cats.has('text'))
+    notices.push({
+      warn: true,
+      text: 'Text isn’t node-editable and renders with the viewer’s fonts — convert it to outlines before exporting to preserve the look.',
+    })
+  if (cats.has('stroke'))
+    notices.push({ warn: false, text: 'Stroked shapes render and export, but aren’t node-editable yet.' })
+  if (cats.has('gradient'))
+    notices.push({ warn: false, text: 'A gradient or pattern fill couldn’t be modeled, so it’s kept as-is.' })
+  if (cats.has('image'))
+    notices.push({ warn: false, text: 'Embedded bitmap — switch SOURCE to Re-trace to vectorize it.' })
+  if (cats.has('use')) notices.push({ warn: false, text: '<use> references render but aren’t editable.' })
+  if (notices.length === 0) return null
+
+  return (
+    <div className="flex flex-col gap-1.5 border-b border-line px-3 py-2.5">
+      {pathCount === 0 && (
+        <p className="text-[11px] text-muted">Nothing here is node-editable — the SVG is preserved as-is below.</p>
+      )}
+      {notices.map((n, i) => (
+        <div
+          key={i}
+          className={`flex items-start gap-1.5 rounded-md border px-2 py-1.5 text-[11px] leading-snug ${
+            n.warn
+              ? 'border-amber-400/40 bg-amber-400/10 text-amber-700 dark:text-amber-300'
+              : 'border-line bg-surface-3 text-ink-2'
+          }`}
+        >
+          {n.warn ? (
+            <AlertTriangle size={13} className="mt-px shrink-0" />
+          ) : (
+            <Info size={13} className="mt-px shrink-0" />
+          )}
+          <span>{n.text}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export interface PathsPanelProps {
@@ -77,6 +153,8 @@ export function PathsPanelBody({
         <span className="ml-auto text-xs text-muted">{nodeCount} nodes</span>
       </header>
 
+      <RawNotices items={doc.items} pathCount={pathCount} />
+
       <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {doc.items.map((item) =>
           item.kind === 'path' ? (
@@ -95,7 +173,12 @@ export function PathsPanelBody({
               onDelete={() => onDelete(item.id)}
             />
           ) : (
-            <RawRow key={item.id} item={item} onToggleVisible={() => onToggleVisible(item.id)} />
+            <RawRow
+              key={item.id}
+              item={item}
+              onToggleVisible={() => onToggleVisible(item.id)}
+              onDelete={() => onDelete(item.id)}
+            />
           ),
         )}
 
@@ -191,14 +274,18 @@ function PathRow({
   )
 }
 
-function RawRow({ item, onToggleVisible }: { item: RawItem; onToggleVisible: () => void }) {
-  const label = item.markup.startsWith('<defs')
-    ? '<defs>'
-    : item.markup.startsWith('<style')
-      ? '<style>'
-      : 'raw markup'
+function RawRow({
+  item,
+  onToggleVisible,
+  onDelete,
+}: {
+  item: RawItem
+  onToggleVisible: () => void
+  onDelete: () => void
+}) {
+  const { label } = classifyRaw(item)
   return (
-    <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-3">
       <span className="h-[18px] w-[18px] shrink-0 rounded border border-dashed border-line-strong" />
       <span className={`truncate font-mono text-[11px] ${item.visible ? 'text-muted' : 'text-faint'}`}>
         {label}
@@ -209,6 +296,9 @@ function RawRow({ item, onToggleVisible }: { item: RawItem; onToggleVisible: () 
         onClick={onToggleVisible}
       >
         {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+      </RowIconBtn>
+      <RowIconBtn title="Delete" onClick={onDelete}>
+        <Trash2 size={13} />
       </RowIconBtn>
     </div>
   )
