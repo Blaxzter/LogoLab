@@ -48,6 +48,14 @@ export interface SegmentOptions {
   /** Reject a union whose colour profile has an empty axis span wider than this
    *  fraction of [0,1] (bimodal ⇒ two distinct flats, not one smooth field). */
   maxProfileGap: number
+  /**
+   * Run Step 3c, the global gradient-explained union-fit merge. Its job is to fuse
+   * the colour-difference bands of a smooth ramp back into ONE gradient region so
+   * Stage 2 can paint it as a single gradient. When the user has gradients OFF that
+   * region would instead be flattened to its MEAN colour (a wide ramp → muddy
+   * average), so we skip the merge: the Step-2 bands survive and posterize into
+   * several flat regions. Default true (byte-identical to before). */
+  mergeGradients: boolean
   /** Cap on samples per segment fed to a union fit (perf; deterministic stride). */
   sampleCap: number
   /**
@@ -71,6 +79,7 @@ export const DEFAULT_SEGMENT_OPTIONS: SegmentOptions = {
   minFacing: 4,
   mergeTol: 0.06,
   maxProfileGap: 0.34,
+  mergeGradients: true,
   sampleCap: 3000,
 }
 
@@ -395,7 +404,10 @@ export function segmentImage(
     return result
   }
 
-  for (;;) {
+  // Gradients OFF ⇒ skip the merge entirely: leave the Step-2 colour-difference
+  // bands as the macro-regions so a smooth ramp posterizes into flats instead of
+  // fusing into one region that Stage 2 would then average to a muddy mean colour.
+  for (; opts.mergeGradients; ) {
     let best: { i: number; j: number; samples: RegionSamples; res: number } | null = null
     for (let a = 0; a < alive.length; a++) {
       for (let b = a + 1; b < alive.length; b++) {

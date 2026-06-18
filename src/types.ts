@@ -119,12 +119,13 @@ export interface VectorizeOptions {
    */
   gradients?: boolean
   /**
-   * Tracer backend. 'potrace' = the classic bilevel WASM tracer (default;
-   * seamless on stacked multi-color gradients). 'crisp' = sub-pixel
-   * marching-squares + Schneider Bézier fitting — cleaner, lower-node curves,
-   * best for line-art / solid-shape logos.
+   * Tracer backend. 'planar' = the shared-edge planar subdivision (default for
+   * color): adjacent regions share one boundary curve, so there is no overlap
+   * and no hairline seam, and shared boundaries are jointly editable. 'crisp' =
+   * sub-pixel marching-squares + Schneider Bézier fitting per region (overlapping
+   * stacked masks). 'potrace' = the classic bilevel WASM tracer.
    */
-  engine?: 'potrace' | 'crisp'
+  engine?: 'potrace' | 'crisp' | 'planar'
   /**
    * Shape-beautification fidelity tolerance (px): how far a traced contour may
    * drift from the source when snapping it to a perfect circle/ellipse/line or

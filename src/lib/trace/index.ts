@@ -21,6 +21,9 @@ import { beautify, DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beau
 import { decomposeTranslucent, type Decomposition } from './layers.ts'
 import { rasterizeDoc } from '../render/raster.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
+import { tracePlanar } from './planarAssemble.ts'
+import { type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import { materializeRegion, edgeMap } from '../path/topology.ts'
 
 export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   mode: 'color',
@@ -30,7 +33,7 @@ export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   threshold: 128,
   removeBackground: false,
   gradients: true,
-  engine: 'crisp',
+  engine: 'planar',
   fidelity: DEFAULT_BEAUTIFY_OPTIONS.fidelity,
 }
 
@@ -62,6 +65,13 @@ function beautifyOptionsFor(options: VectorizeOptions): BeautifyOptions {
 const rgbToHex = (r: number, g: number, b: number): string =>
   '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)
 
+/** Map the user dials onto the planar tracer's edge-fit tunables. More smoothing
+ *  ⇒ more staircase pre-smoothing passes; ε stays at the crisp tracer's 1.0 px. */
+function planarFitOptionsFor(options: VectorizeOptions): PlanarFitOptions {
+  const s = clamp(options.smoothing, 0, 100) / 100
+  return { ...DEFAULT_PLANAR_FIT, smoothPasses: Math.max(1, Math.round(s * 4)) }
+}
+
 /**
  * Trace an ImageData into an editable vector document. Color mode segments by
  * smoothness (Mumford–Shah), fits a paint model per macro-region, and traces one
@@ -83,17 +93,21 @@ export async function traceImage(
     opttolerance: 0.2 + (smoothing / 100) * 0.6,
   }
 
-  // Tracer backend: 'crisp' (sub-pixel, evidence-based curves; the default) vs
-  // 'potrace' (bilevel WASM). Both consume the same black-on-white masks.
-  const engine = options.engine ?? 'crisp'
+  // Tracer backend: 'planar' (shared-edge subdivision; the default for color) /
+  // 'crisp' (sub-pixel per-region curves) / 'potrace' (bilevel WASM). The latter
+  // two consume the same black-on-white masks; planar has its own geometry path.
+  const engine = options.engine ?? 'planar'
   const crispOpts = crispOptionsFor(smoothing, maskOpts.turdsize)
   // Both engines now fill nonzero. The crisp tracer used to fill even-odd, which
   // XORs two near-coincident simplified contours into hairline background slivers
   // (the "cracks"); its loops are now oriented for nonzero (orientForNonzero), so
   // holes still render correctly without the seam mechanism.
   const fillRule: 'nonzero' | 'evenodd' = 'nonzero'
+  // Mask tracing (mono mode + the crisp/potrace color path). 'planar' has its own
+  // geometry path below and never reaches here for color; for mono it falls back
+  // to the crisp mask tracer.
   const traceOne = (mask: ImageData): Promise<SubPath[]> =>
-    engine === 'crisp' ? Promise.resolve(traceMaskCrisp(mask, crispOpts)) : traceMask(mask, maskOpts)
+    engine === 'potrace' ? traceMask(mask, maskOpts) : Promise.resolve(traceMaskCrisp(mask, crispOpts))
 
   // Stage 3 beautify (plan §3.3): a pure post-pass that snaps traced contours to
   // perfect circles/ellipses/lines and reconciles concentric/equal shapes, gated
@@ -156,6 +170,7 @@ export async function traceImage(
   // the FULL-region samples as its gate set — the glow-stack methodology.
   let decomposition: Decomposition | null = null
   const wantsDecomp =
+    engine !== 'planar' &&
     gradientsOn &&
     options.layeredDecomposition !== false &&
     !options.removeBackground &&
@@ -187,6 +202,44 @@ export async function traceImage(
       layer.gradient = paint.gradient
     }
   }
+
+  // --- Planar subdivision path (default for color) -------------------------
+  // Trace the label map as a shared-edge planar graph: every boundary is ONE
+  // fitted curve referenced (forward/reversed) by both adjacent regions, so the
+  // regions tile with no overlap and no hairline seam, and shared boundaries are
+  // jointly editable (the doc carries the edge graph as `topology`; each region's
+  // `subPaths` is the derived render/hit cache). No loop-beautify (it moves loops
+  // independently and would desync shared edges); per-region paint is reused.
+  if (engine === 'planar') {
+    onProgress?.({ phase: 'trace', layer: 1, total: 1 })
+    const trace = tracePlanar(q.labels, width, height, planarFitOptionsFor(options))
+    const edges = edgeMap({ vertices: trace.vertices, edges: trace.edges })
+    let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
+    if (options.removeBackground) {
+      const bg = detectBorderBackground(q.labels, width, height, q.palette.length)
+      if (bg !== -1) order = order.filter((l) => l !== bg)
+    }
+    const items: PathItem[] = []
+    for (const label of order) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      const loops = trace.loopsByLabel.get(label)!
+      const subPaths = materializeRegion(loops, edges)
+      if (subPaths.length === 0) continue
+      const c = q.palette[label]
+      const paint: { gradient?: GradientFill; overlays?: RadialGradient[] } = {}
+      applyPaint(paint, labelPaint[label])
+      const base: PathItem = { kind: 'path', id: 'trace-' + label, fill: rgbToHex(c.r, c.g, c.b), fillRule, loops, subPaths, visible: true }
+      if (paint.gradient) base.gradient = paint.gradient
+      items.push(base)
+      if (paint.overlays) {
+        paint.overlays.forEach((ov, k) => {
+          items.push({ kind: 'path', id: `trace-${label}-glow-${k}`, fill: rgbToHex(c.r, c.g, c.b), fillRule, subPaths: cloneSubPaths(subPaths), gradient: ov, visible: true })
+        })
+      }
+    }
+    return { viewBox: [0, 0, width, height], items, topology: { vertices: trace.vertices, edges: trace.edges } }
+  }
+
   // Beautify (cross-shape relation solver over ALL loops) + assemble bottom-up.
   // A glow region emits its opaque base then one translucent overlay item per
   // radial glow (sharing the beautified geometry); a V6 translucent shape emits a
@@ -227,8 +280,10 @@ export async function traceImage(
     return { viewBox: [0, 0, width, height], items }
   }
 
-  // Default path: largest region at the bottom; each layer's STACKED mask covers
-  // everything painted above it, so adjacent regions overlap (no abutting seams).
+  // Default path: largest region at the bottom; each layer's mask is its own
+  // region flooded through CONNECTED higher-rank pixels, so it overlaps only the
+  // shapes stacked directly against it (the overlap that seals anti-alias seams)
+  // without re-tracing spatially-disjoint shapes as hidden islands.
   const buildOpaqueLayers = async (): Promise<Layer[]> => {
     const layers: Layer[] = []
     let paintOrder = q.palette.map((_, i) => i)
@@ -427,14 +482,20 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
   // raised. No markers + regionDetail 0 ⇒ the exact default object (byte-identical
   // output to before).
   const markers = options.markers && options.markers.length > 0 ? options.markers : undefined
-  const base: SegmentOptions =
-    d === 0
-      ? DEFAULT_SEGMENT_OPTIONS
-      : {
-          ...DEFAULT_SEGMENT_OPTIONS,
-          tauS: DEFAULT_SEGMENT_OPTIONS.tauS - d * 7.5, // 10 → 2.5
-          mergeTol: DEFAULT_SEGMENT_OPTIONS.mergeTol - d * 0.048, // 0.06 → 0.012
-        }
+  // Gradients OFF disables the gradient-explained union-fit merge (segment.ts Step
+  // 3c) so smooth ramps posterize into flat bands rather than fusing into one
+  // region that Stage 2 then averages to a muddy mean colour. On (the default) is
+  // byte-identical to before.
+  const mergeGradients = options.gradients !== false
+  const needsOverride = d !== 0 || !mergeGradients
+  const base: SegmentOptions = needsOverride
+    ? {
+        ...DEFAULT_SEGMENT_OPTIONS,
+        tauS: DEFAULT_SEGMENT_OPTIONS.tauS - d * 7.5, // 10 → 2.5
+        mergeTol: DEFAULT_SEGMENT_OPTIONS.mergeTol - d * 0.048, // 0.06 → 0.012
+        mergeGradients,
+      }
+    : DEFAULT_SEGMENT_OPTIONS
   return markers ? { ...base, markers } : base
 }
 
@@ -592,10 +653,17 @@ function largestComponentFilled(black: Uint8Array, width: number, height: number
 }
 
 /**
- * Build the stacked binary mask for one layer: every pixel whose label ranks
- * at or above `layer` in the paint order is black, all else white. The bottom
- * layer therefore covers the whole opaque area and each smaller layer paints
- * on top — adjacent regions overlap instead of meeting at a hairline seam.
+ * Build the stacked binary mask for one layer. The seed is this layer's own
+ * region (rank === layer); from there we flood through CONNECTED higher-rank
+ * pixels (rank > layer), so the mask absorbs only the shapes stacked directly
+ * against this region — the overlap that keeps adjacent regions from meeting at
+ * a hairline seam. Higher-rank shapes that are spatially DISJOINT from this
+ * region (e.g. a document's corner fold floating inside an unrelated rim layer)
+ * are left out: the old "every pixel of rank ≥ layer" rule re-traced them as
+ * hidden islands in every layer beneath them — invisible in the render (painted
+ * over) but real geometry that cluttered the node editor and bloated the export.
+ * Dropping them is render-safe: every point under a disjoint island is already
+ * fully covered by the lower-rank layers painted before this one.
  */
 function stackedMask(
   labels: Int32Array,
@@ -604,11 +672,36 @@ function stackedMask(
   rank: Int32Array,
   layer: number,
 ): ImageData {
+  const n = labels.length
+  const keep = new Uint8Array(n)
+  const stack: number[] = []
+  for (let i = 0; i < n; i++) {
+    const l = labels[i]
+    if (l >= 0 && rank[l] === layer) {
+      keep[i] = 1
+      stack.push(i)
+    }
+  }
+  const visit = (q: number): void => {
+    const l = labels[q]
+    if (!keep[q] && l >= 0 && rank[l] >= layer) {
+      keep[q] = 1
+      stack.push(q)
+    }
+  }
+  while (stack.length) {
+    const p = stack.pop()!
+    const x = p % width
+    const y = (p / width) | 0
+    if (x > 0) visit(p - 1)
+    if (x + 1 < width) visit(p + 1)
+    if (y > 0) visit(p - width)
+    if (y + 1 < height) visit(p + width)
+  }
   const out = new ImageData(width, height)
   const dst = out.data
-  for (let i = 0; i < labels.length; i++) {
-    const l = labels[i]
-    const v = l >= 0 && rank[l] >= layer ? 0 : 255
+  for (let i = 0; i < n; i++) {
+    const v = keep[i] ? 0 : 255
     const o = i * 4
     dst[o] = v
     dst[o + 1] = v

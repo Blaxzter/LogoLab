@@ -132,7 +132,7 @@ function snapToImageEdge(sp: SubPath, w: number, h: number): void {
  * subtracts holes, matching the even-odd intent without relying on traversal
  * order. O(loops²), and loop counts are tiny.
  */
-function orientForNonzero(subPaths: SubPath[]): void {
+export function orientForNonzero(subPaths: SubPath[]): void {
   // Nest-test and wind on the FLATTENED curve, not the anchor polygon: the
   // evidence-based fitter emits very low-node loops (a circle can be two
   // semicircle cubics → a 2-anchor loop), whose anchor polygon badly under-covers

@@ -1,7 +1,8 @@
 // Web Worker that runs vectorize work OFF the main thread, so the UI stays
 // responsive (and animations stay smooth) while computing.
 //
-// Two jobs, both crisp-engine / pure-JS (no DOM/WASM, so worker-safe):
+// Two jobs, both pure-JS (no DOM/WASM, so worker-safe) — the planar and crisp
+// engines run here:
 //   - 'trace':   run the full pipeline, return the EditableDoc (the studio result).
 //   - 'analyze': run the pipeline AND the intermediate stages, returning the
 //                stage visualisations (smoothed / discontinuity / regions / region
@@ -9,7 +10,7 @@
 //                user-facing "How it works" explainer, so it no longer freezes.
 //
 // Potrace stays on the main thread (esm-potrace-wasm needs DOMParser); the caller
-// only dispatches the crisp engine here.
+// dispatches the pure-JS engines (planar, crisp) here.
 
 import { traceImage, segmentOptionsFor } from './index.ts'
 import { segmentImage } from './segment.ts'

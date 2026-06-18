@@ -172,12 +172,13 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'engine',
     label: 'Engine',
-    hint: 'Crisp = cleanest, fewest nodes. Potrace = closest to the pixels.',
+    hint: 'Planar = clean shared edges, no overlap. Crisp = fewest nodes. Potrace = closest to the pixels.',
     blurb:
-      'How the outline is drawn. Crisp (the default) uses sub-pixel marching-squares plus Schneider Bézier fitting: the fewest, cleanest nodes — best for line-art and solid shapes. Potrace is Peter Selinger’s classic bilevel tracer: it sticks closest to the original pixels and is seamless on stacked gradients, at the cost of more nodes. Potrace runs only in the browser, so load a logo and compare them on your own artwork.',
+      'How the outline is drawn. Planar traces the colour regions as one shared boundary curve between each pair of neighbours, so the shapes tile with no overlap and no hairline colour bleed — the cleanest, most editable result. Crisp uses sub-pixel marching-squares plus Schneider Bézier fitting per region (overlapping stacked shapes): the fewest nodes, great for line-art. Potrace is Peter Selinger’s classic bilevel tracer — closest to the pixels, more nodes. Potrace runs only in the browser, so load a logo and compare on your own artwork.',
     example: bundled('petals', 'petals.png'),
     liveOnly: true,
     variants: [
+      { label: 'Planar', patch: { engine: 'planar' } },
       { label: 'Crisp', patch: { engine: 'crisp' } },
       { label: 'Potrace', patch: { engine: 'potrace' } },
     ],
