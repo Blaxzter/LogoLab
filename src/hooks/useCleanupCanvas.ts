@@ -18,7 +18,9 @@ import {
   brushStamp,
   brushStroke,
   cloneImageData,
+  closeSeams,
   colorAt,
+  despeckle,
   compositeOver,
   cropPad,
   defringe,
@@ -466,6 +468,13 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         const affected =
           tool === 'color' ? removeColor(working, key, opts) : floodRemove(working, ix, iy, opts)
         if (affected > 0) {
+          // Close the anti-aliasing seam left where this cut meets an
+          // already-removed region, then wipe small noise specks the flood left
+          // stranded in a noisy background. Both run before defringe so they
+          // sample the raw background colors. (No-ops until pixels are removed
+          // around them, so the first click is clean and later clicks tidy up.)
+          closeSeams(working)
+          despeckle(working)
           if (defringeStrength > 0) defringe(working, key, defringeStrength)
           commit(pre)
           redraw()
@@ -598,6 +607,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     const { color, affected } = autoRemove(working, opts)
     lastKeyRef.current = color
     if (affected > 0) {
+      closeSeams(working)
+      despeckle(working)
       if (defringeStrength > 0) defringe(working, color, defringeStrength)
       commit(pre)
       redraw()

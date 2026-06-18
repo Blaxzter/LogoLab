@@ -295,6 +295,253 @@ export function defringe(img: ImageData, key?: RGB, amount = 1): void {
   }
 }
 
+/**
+ * Suppress the thin anti-aliasing "seam" left where two separately-removed
+ * background regions meet.
+ *
+ * A flood/color remove keys off ONE color and hard-stops at `tolerance`, so the
+ * blended transition pixels between, say, a removed white field and a removed
+ * black field land beyond tolerance of BOTH keys and survive as a 1–2px opaque
+ * ridge. No tolerance setting captures them: raise it enough to swallow the
+ * mid-tones and the contiguous flood bleeds straight across the edge into the
+ * logo. So we close them structurally instead.
+ *
+ * A pixel is a seam iff it is (near-)opaque AND sits in an opaque run no wider
+ * than `maxWidth` px along some axis whose two flanking pixels are BOTH already
+ * removed (non-opaque) — a thin sliver bridging two cut regions — AND its color
+ * is a near-linear blend of those two flanking pixels' (retained) RGB. That last
+ * test is the safety net: a genuine thin foreground line is its own color, not a
+ * blend of the backgrounds on either side, so it is spared; and an edge against
+ * KEPT foreground has a solid flank on one side, so it never qualifies at all.
+ * Matching slivers fade toward transparent in proportion to how cleanly they
+ * blend.
+ *
+ * Meant to run after each flood/color/auto remove (like `defringe`), BEFORE
+ * defringe so the flank colors it samples are still the raw background. It only
+ * acts once both neighbouring regions are gone, so the first click is a no-op
+ * and the second closes the seam. Mutates `img`; returns pixels changed.
+ *
+ * The four axes (H, V, and both diagonals) cover any seam orientation — a ╲ seam
+ * is the one crossed by the ╱ diagonal, etc.
+ */
+export function closeSeams(img: ImageData, maxWidth = 3, seamTol = 48): number {
+  const { width: w, height: h, data } = img
+  const SOLID = 200 // alpha at/above which a pixel is sliver material (vs. removed)
+  // Snapshot alpha so the scan is order-independent: fading one sliver can't
+  // shrink a run mid-pass and hide an adjacent one.
+  const sa = new Uint8ClampedArray(w * h)
+  for (let i = 0, o = 3; i < sa.length; i++, o += 4) sa[i] = data[o]
+  const axes: [number, number][] = [
+    [1, 0],
+    [0, 1],
+    [1, 1],
+    [1, -1],
+  ]
+  let affected = 0
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x
+      if (sa[idx] < SOLID) continue // only solid pixels can be a leftover seam
+
+      // Thinnest opaque run through this pixel that ends in a removed (non-solid)
+      // flank on BOTH sides within maxWidth. Record those two flanks as the
+      // candidate background colors A (neg end) and B (pos end).
+      let best = Infinity
+      let aIdx = -1
+      let bIdx = -1
+      for (const [dx, dy] of axes) {
+        // Walk + until a non-solid flank (else OOB / run wider than maxWidth).
+        let pos = 0
+        let pe = -1
+        for (let s = 1; s <= maxWidth; s++) {
+          const xx = x + dx * s
+          const yy = y + dy * s
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) break // OOB: no valid flank
+          const j = yy * w + xx
+          if (sa[j] < SOLID) {
+            pe = j
+            break
+          }
+          pos = s
+        }
+        if (pe < 0) continue
+        let neg = 0
+        let ne = -1
+        for (let s = 1; s <= maxWidth; s++) {
+          const xx = x - dx * s
+          const yy = y - dy * s
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) break
+          const j = yy * w + xx
+          if (sa[j] < SOLID) {
+            ne = j
+            break
+          }
+          neg = s
+        }
+        if (ne < 0) continue
+        const thick = pos + neg + 1
+        if (thick <= maxWidth && thick < best) {
+          best = thick
+          aIdx = ne
+          bIdx = pe
+        }
+      }
+      if (aIdx < 0) continue // not a thin sliver bridging two removed regions
+
+      // Collinearity gate: is this pixel's color a linear blend of A and B?
+      const o = idx * 4
+      const ao = aIdx * 4
+      const bo = bIdx * 4
+      const ex = data[bo] - data[ao]
+      const ey = data[bo + 1] - data[ao + 1]
+      const ez = data[bo + 2] - data[ao + 2]
+      const len2 = ex * ex + ey * ey + ez * ez
+      let t = 0
+      if (len2 > 0)
+        t = ((data[o] - data[ao]) * ex + (data[o + 1] - data[ao + 1]) * ey + (data[o + 2] - data[ao + 2]) * ez) / len2
+      t = t < 0 ? 0 : t > 1 ? 1 : t
+      const residual = colorDistance(
+        data[o],
+        data[o + 1],
+        data[o + 2],
+        data[ao] + ex * t,
+        data[ao + 1] + ey * t,
+        data[ao + 2] + ez * t,
+      )
+      if (residual >= seamTol) continue // a real (non-blend) color → keep it
+
+      // Fade: a clean blend (residual≈0) goes fully transparent; a marginal one
+      // keeps proportionally more alpha so the cut stays smooth.
+      const newA = Math.round(sa[idx] * (residual / seamTol))
+      if (newA < data[o + 3]) {
+        data[o + 3] = newA
+        affected++
+      }
+    }
+  }
+  return affected
+}
+
+/**
+ * Remove small "islands" of leftover pixels stranded in already-removed
+ * territory — the specks and hairline crumbs a flood drops when the background
+ * is noisy or softly anti-aliased.
+ *
+ * A single global tolerance can't be both tight enough to spare the logo and
+ * loose enough to catch every pixel of a noisy near-solid field (an AI icon's
+ * "black" backdrop is really black-plus-noise), so the flood leaves scattered
+ * dots — and a soft cut leaves faint, partly-transparent crumbs. All of it sits
+ * fully surrounded by removed pixels: background residue, not logo. We label
+ * connected VISIBLE components (8-connected; alpha >= `visible`, so a half-faded
+ * speck still counts) and clear one when ANY of:
+ *   • size <= `hardIsland` — a blob that tiny, fully marooned, is never logo;
+ *   • size <= `maxIsland` AND its average color is within `keyTol` of the removed
+ *     background touching it — a near-background noise dot;
+ *   • it's a hairline (bbox min dimension <= 2) up to `hairMax` px — a stranded
+ *     1–2px streak, which a real foreground line never is (those connect to the
+ *     body, making the component far larger than any of these caps).
+ *
+ * The size caps are the safety net: the logo body and anything attached to it is
+ * one big component and is never touched, whatever its color. Mutates `img`;
+ * returns pixels cleared.
+ */
+export function despeckle(
+  img: ImageData,
+  maxIsland = 24,
+  keyTol = 110,
+  hardIsland = 4,
+  hairMax = 64,
+): number {
+  const { width: w, height: h, data } = img
+  const visible = 16 // alpha at/above which a pixel is part of an island
+  const cap = Math.max(maxIsland, hairMax) // largest component we still track to clear
+  const n = w * h
+  const seen = new Uint8Array(n)
+  const stack: number[] = []
+  let affected = 0
+
+  for (let start = 0; start < n; start++) {
+    if (seen[start] || data[start * 4 + 3] < visible) continue
+    // Flood this connected visible component (8-connected). Keep the cell list
+    // only while it's still small enough to clear; past `cap` we just finish
+    // labelling so the component isn't rescanned, then bail.
+    let cells: number[] | null = []
+    let size = 0
+    let sr = 0
+    let sg = 0
+    let sb = 0
+    // Bounding box, for the hairline (thin-streak) test.
+    let minX = w
+    let maxX = -1
+    let minY = h
+    let maxY = -1
+    // Border = the removed pixels touching the component (the local background).
+    let br = 0
+    let bg = 0
+    let bb = 0
+    let bn = 0
+    seen[start] = 1
+    stack.length = 0
+    stack.push(start)
+    while (stack.length) {
+      const idx = stack.pop()!
+      const o = idx * 4
+      size++
+      sr += data[o]
+      sg += data[o + 1]
+      sb += data[o + 2]
+      if (cells) {
+        if (size > cap) cells = null // too big to be residue — stop tracking
+        else cells.push(idx)
+      }
+      const x = idx % w
+      const y = (idx - x) / w
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+      if (y > maxY) maxY = y
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy
+        if (yy < 0 || yy >= h) continue
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue
+          const xx = x + dx
+          if (xx < 0 || xx >= w) continue
+          const j = yy * w + xx
+          const jo = j * 4
+          if (data[jo + 3] >= visible) {
+            if (!seen[j]) {
+              seen[j] = 1
+              stack.push(j)
+            }
+          } else {
+            br += data[jo]
+            bg += data[jo + 1]
+            bb += data[jo + 2]
+            bn++
+          }
+        }
+      }
+    }
+    // bn === 0 means the component touches nothing removed (it's the whole image
+    // or an interior hole) — never a stranded speck.
+    if (!cells || bn === 0) continue
+    const minDim = Math.min(maxX - minX + 1, maxY - minY + 1)
+    const nearBg =
+      size <= maxIsland &&
+      colorDistance(sr / size, sg / size, sb / size, br / bn, bg / bn, bb / bn) <= keyTol
+    const isHairline = minDim <= 2 && size <= hairMax
+    if (size > hardIsland && !nearBg && !isHairline) continue
+    for (const idx of cells) {
+      if (data[idx * 4 + 3] !== 0) {
+        data[idx * 4 + 3] = 0
+        affected++
+      }
+    }
+  }
+  return affected
+}
+
 export function cloneImageData(img: ImageData): ImageData {
   return new ImageData(new Uint8ClampedArray(img.data), img.width, img.height)
 }

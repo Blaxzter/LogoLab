@@ -22,6 +22,8 @@ import {
   compositeOver,
   defringe,
   recolor,
+  closeSeams,
+  despeckle,
 } from '../src/lib/bgRemove.ts'
 
 // The crop/composite ops construct `new ImageData(...)`, which Node lacks.
@@ -393,6 +395,161 @@ test('defringe falls back to pushing isolated specks away from the key color', (
   assert.ok(m.data[o + 1] < 80, `G pushed away from white key, got ${m.data[o + 1]}`)
   assert.ok(m.data[o + 2] < 200, `B pushed away from white key, got ${m.data[o + 2]}`)
   assert.equal(m.data[o + 3], 128, 'alpha untouched')
+})
+
+/* ----------------------------------------------------------------- closeSeams */
+
+test('closeSeams fades the gray sliver trapped between two removed regions', () => {
+  // After flooding white (cols 0–3) and black (cols 5–8) the 1px anti-aliased
+  // ramp at col 4 is beyond tolerance of both seeds, so it survives as an opaque
+  // mid-gray ridge. closeSeams must recognize it as a blend of its (removed)
+  // white/black flanks and fade it out.
+  const W = 9
+  const H = 3
+  const m = img(W, H, (x) => {
+    if (x < 4) return [255, 255, 255, 0] // removed white (RGB retained, alpha 0)
+    if (x === 4) return [128, 128, 128, 255] // surviving gray seam
+    return [0, 0, 0, 0] // removed black
+  })
+
+  const affected = closeSeams(m)
+  assert.ok(affected >= H, 'every seam pixel in the column was touched')
+  for (let y = 0; y < H; y++) {
+    const a = m.data[(y * W + 4) * 4 + 3]
+    assert.ok(a < 8, `seam pixel (4,${y}) faded to ~transparent, got ${a}`)
+  }
+})
+
+test('closeSeams spares a thin foreground line that is not a blend of its flanks', () => {
+  // A red 1px line between two removed WHITE regions. Its color is nowhere on the
+  // white→white "segment" (a point), so the collinearity gate keeps it.
+  const W = 9
+  const H = 3
+  const m = img(W, H, (x) => {
+    if (x === 4) return [220, 20, 20, 255] // red foreground sliver
+    return [255, 255, 255, 0] // removed white on both sides
+  })
+
+  closeSeams(m)
+  for (let y = 0; y < H; y++) {
+    assert.equal(m.data[(y * W + 4) * 4 + 3], 255, `red sliver at (4,${y}) kept fully opaque`)
+  }
+})
+
+test('closeSeams never touches an edge against KEPT foreground', () => {
+  // Solid white block (cols 0–4, opaque) beside a removed black field (cols 5–8).
+  // The block's own edge has a solid flank on one side, so no column qualifies as
+  // a trapped sliver — the cutout edge must be left intact.
+  const W = 9
+  const H = 5
+  const m = img(W, H, (x) => (x <= 4 ? [255, 255, 255, 255] : [0, 0, 0, 0]))
+
+  const affected = closeSeams(m)
+  assert.equal(affected, 0, 'nothing flagged: the block edge is real foreground')
+  for (let y = 0; y < H; y++) {
+    assert.equal(m.data[(y * W + 4) * 4 + 3], 255, `block edge (4,${y}) stays opaque`)
+  }
+})
+
+test('closeSeams closes a 1px diagonal seam', () => {
+  // White removed above the ╲ diagonal, black removed below, gray seam on it. The
+  // seam is crossed by the ╱ axis, whose two flanks are the removed regions.
+  const N = 7
+  const m = img(N, N, (x, y) => {
+    if (x === y) return [128, 128, 128, 255] // diagonal seam
+    if (x > y) return [255, 255, 255, 0] // removed white (upper-right)
+    return [0, 0, 0, 0] // removed black (lower-left)
+  })
+
+  closeSeams(m)
+  // Interior diagonal pixels (with both ╱-flanks present) fade out.
+  for (let d = 1; d < N - 1; d++) {
+    const a = m.data[(d * N + d) * 4 + 3]
+    assert.ok(a < 8, `diagonal seam (${d},${d}) faded, got ${a}`)
+  }
+})
+
+/* ----------------------------------------------------------------- despeckle */
+
+test('despeckle wipes a small near-background island but keeps a bright accent', () => {
+  // A removed black field (alpha 0, RGB ~black). Two stranded 3×3 islands: a dark
+  // gray speck (noise — close to black) and a bright red dot (a real accent — far
+  // from black). Only the gray noise speck should be cleared.
+  const W = 24
+  const H = 12
+  const inGray = (x: number, y: number) => x >= 3 && x < 6 && y >= 3 && y < 6
+  const inRed = (x: number, y: number) => x >= 15 && x < 18 && y >= 3 && y < 6
+  const m = img(W, H, (x, y) => {
+    if (inGray(x, y)) return [80, 80, 80, 255] // noise speck near the black field
+    if (inRed(x, y)) return [220, 20, 20, 255] // deliberate bright accent
+    return [6, 6, 6, 0] // removed near-black background
+  })
+
+  const affected = despeckle(m)
+  assert.equal(affected, 9, 'cleared exactly the 3×3 gray speck')
+  for (let y = 3; y < 6; y++)
+    for (let x = 3; x < 6; x++)
+      assert.equal(m.data[(y * W + x) * 4 + 3], 0, `gray speck (${x},${y}) wiped`)
+  for (let y = 3; y < 6; y++)
+    for (let x = 15; x < 18; x++)
+      assert.equal(m.data[(y * W + x) * 4 + 3], 255, `red accent (${x},${y}) kept`)
+})
+
+test('despeckle clears a half-transparent stranded speck (alpha < 200)', () => {
+  // The bug the user hit: a faint speck at partial alpha was invisible to the old
+  // alpha>=200 gate and survived. Any VISIBLE marooned pixel must now be cleared.
+  const W = 12
+  const H = 12
+  const m = img(W, H, (x, y) => (x === 5 && y === 5 ? [90, 90, 90, 120] : [6, 6, 6, 0]))
+  const affected = despeckle(m)
+  assert.equal(affected, 1, 'the lone faint speck was cleared')
+  assert.equal(m.data[(5 * W + 5) * 4 + 3], 0, 'speck is now transparent')
+})
+
+test('despeckle clears a thin stranded hairline regardless of color', () => {
+  // A 1px-wide, 20px-tall mid-gray line marooned in a near-black field. Mid-gray
+  // vs. near-black is too far for the color gate, so only the hairline rule
+  // catches it — but a stranded 1px line is always residue.
+  const W = 16
+  const H = 40
+  const col = 7
+  const y0 = 10
+  const y1 = 30
+  const m = img(W, H, (x, y) =>
+    x === col && y >= y0 && y < y1 ? [128, 128, 128, 255] : [4, 4, 4, 0],
+  )
+  const affected = despeckle(m)
+  assert.equal(affected, y1 - y0, 'the whole hairline was cleared')
+  assert.equal(m.data[((y0 + 5) * W + col) * 4 + 3], 0, 'a mid-hairline pixel is gone')
+})
+
+test('despeckle keeps a thin feature attached to the logo body', () => {
+  // A 1px spike poking out of a big block: it's part of the block's (large)
+  // component, so the hairline rule never sees it as stranded. Real thin logo
+  // detail connected to the body must survive.
+  const W = 30
+  const H = 30
+  const inBlock = (x: number, y: number) => x >= 4 && x < 20 && y >= 4 && y < 20
+  const onSpike = (x: number, y: number) => x >= 20 && x < 28 && y === 11
+  const m = img(W, H, (x, y) =>
+    inBlock(x, y) || onSpike(x, y) ? [200, 200, 200, 255] : [4, 4, 4, 0],
+  )
+  const affected = despeckle(m)
+  assert.equal(affected, 0, 'nothing cleared — the spike is attached to the big body')
+  assert.equal(m.data[(11 * W + 25) * 4 + 3], 255, 'spike tip still opaque')
+})
+
+test('despeckle keeps a large solid component even if it matches the background', () => {
+  // A big gray block (> maxIsland) over a removed near-black field: the size gate
+  // must protect it, so a grayish logo body is never eaten.
+  const W = 20
+  const H = 20
+  const inBlock = (x: number, y: number) => x >= 4 && x < 16 && y >= 4 && y < 16 // 144 px
+  const m = img(W, H, (x, y) => (inBlock(x, y) ? [80, 80, 80, 255] : [6, 6, 6, 0]))
+
+  const affected = despeckle(m)
+  assert.equal(affected, 0, 'large component is left intact')
+  assert.equal(m.data[(10 * W + 10) * 4 + 3], 255, 'block interior still opaque')
 })
 
 /* ------------------------------------------------------------------- recolor */
