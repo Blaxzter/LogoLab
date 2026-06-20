@@ -31,6 +31,8 @@ import { downloadText } from "../../lib/download";
 import { cleanSvg } from "../../lib/svgClean";
 import { docStats, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
+import { regionProvenance } from "../../lib/path/topology";
+import { deleteRegionNodes, translateRegionNodes } from "../../lib/path/topologyEdit";
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from "../../lib/trace";
 import { traceImageOffThread, canTraceOffThread } from "../../lib/trace/traceOffThread";
 import type { VectorizeOptions } from "../../types";
@@ -434,10 +436,19 @@ export function VectorizeStudio() {
                 if (!item) return;
                 e.preventDefault();
                 if (item.kind === "path" && selectedNodes.size > 0) {
-                    const next = deleteNodes(
-                        item,
-                        [...selectedNodes].map(parseNodeKey),
-                    );
+                    const refs = [...selectedNodes].map(parseNodeKey);
+                    // Planar region: delete the underlying shared-edge nodes so the
+                    // neighbour region loses them too (junctions are kept).
+                    if (item.loops) {
+                        const prov = regionProvenance(doc, item);
+                        if (prov) {
+                            const next = deleteRegionNodes(doc, prov, refs);
+                            if (next !== doc) commitDoc(next);
+                            setSelectedNodes(new Set());
+                            return;
+                        }
+                    }
+                    const next = deleteNodes(item, refs);
                     if (next) {
                         commitDoc(withItem(doc, next));
                         setSelectedNodes(new Set());
@@ -476,17 +487,17 @@ export function VectorizeStudio() {
                     k === "ArrowLeft" ? -step : k === "ArrowRight" ? step : 0;
                 const dy =
                     k === "ArrowUp" ? -step : k === "ArrowDown" ? step : 0;
-                commitDoc(
-                    withItem(
-                        doc,
-                        moveNodes(
-                            item,
-                            [...selectedNodes].map(parseNodeKey),
-                            dx,
-                            dy,
-                        ),
-                    ),
-                );
+                const refs = [...selectedNodes].map(parseNodeKey);
+                // Planar region: nudge through the graph so junctions drag every
+                // incident spoke and shared edges keep the neighbour coincident.
+                if (item.loops) {
+                    const prov = regionProvenance(doc, item);
+                    if (prov) {
+                        commitDoc(translateRegionNodes(doc, prov, refs, dx, dy));
+                        return;
+                    }
+                }
+                commitDoc(withItem(doc, moveNodes(item, refs, dx, dy)));
             }
         };
         window.addEventListener("keydown", onKey);

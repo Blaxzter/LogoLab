@@ -1,7 +1,7 @@
 # Planar subdivision tracer
 
-Status: **Phases 1–4 shipped** on branch `feat/planar-tracer` (default engine for
-color). Phases 5–6 outstanding. This doc records what the work does and what's
+Status: **Phases 1–5 shipped** on branch `feat/planar-tracer` (default engine for
+color). Phase 6 outstanding. This doc records what the work does and what's
 left, with enough detail to execute the rest.
 
 ---
@@ -95,8 +95,10 @@ separate from this branch.
 
 ## 3. Known limitations (current planar output)
 
-1. **Shared-edge editing is not wired yet** → see Phase 5. Dragging a node on a
-   shared boundary currently moves one region and leaves the neighbour behind.
+1. ~~**Shared-edge editing is not wired yet.**~~ **Done (Phase 5).** Dragging a node
+   on a shared boundary now moves the one edge and both regions follow; junction
+   drags move every incident spoke. (Minor known gap: double-clicking the *closing*
+   segment of a pure closed-loop disc edge is a no-op — insert elsewhere on it.)
 2. **Anti-alias transition slivers.** At a colour boundary the segmenter assigns the
    in-between AA colour its own thin region, which planar faithfully traces → many
    tiny unnecessary regions. Fix belongs in **segmentation** (absorb AA slivers into
@@ -108,10 +110,43 @@ separate from this branch.
 
 ---
 
-## 4. Phase 5 — shared-edge joint editing (OUTSTANDING)
+## 4. Phase 5 — shared-edge joint editing (SHIPPED)
 
 **Goal:** dragging an interior node on a shared boundary moves the one edge → **both**
 regions follow; dragging a junction moves **every** incident edge.
+
+**What shipped** (the plan below was followed; key landing points):
+- [topology.ts](../src/lib/path/topology.ts): `NodeProvenance`/`HandleSite`,
+  `materializeRegionWithProvenance`, and `regionProvenance`. `materializeRegion`
+  was refactored to delegate to a single shared `materializeLoop` walk so the
+  derived `subPaths` and the provenance map can never drift. Provenance bridges a
+  materialized `NodeRef{sub,idx}` back to the graph: a junction anchor → `vertexId`;
+  an interior node → `edgeId`+`edgeNodeIdx` (canonical, with the reversed in/out swap
+  baked into `inHandle`/`outHandle`).
+- [topologyEdit.ts](../src/lib/path/topologyEdit.ts) (new): `moveEdgeNode`,
+  `moveVertex` (updates the `Vertex` + every incident edge endpoint), `moveEdgeHandle`,
+  `insertNodeOnEdge`, `setEdgeNodeKind`, `deleteEdgeNode` (guards <2 nodes & open-edge
+  junction endpoints), `translateRegion`, plus provenance routers
+  `translateRegionNodes`/`deleteRegionNodes` and `resolveEdgeSegment`. Each op mutates
+  `doc.topology` immutably then `rematerializeRegions` only the touched regions, so both
+  adjacent regions stay byte-coincident. Pure cubic/tangent/mirror math is shared with
+  [geometry.ts](../src/lib/path/geometry.ts) (`splitSegmentAt`/`setNodeKindNode`/
+  `moveHandleNode`/`translateNode`) so the open-edge ops and the closed-subpath editor
+  cannot diverge.
+- [EditorCanvas.tsx](../src/components/vectorize/EditorCanvas.tsx) /
+  [VectorizeStudio.tsx](../src/components/vectorize/VectorizeStudio.tsx): drags,
+  double-click insert/kind-toggle, arrow-nudge and Delete route through the topology ops
+  when `item.loops` is present; items **without** `loops` keep the exact old per-item
+  `geometry.ts` + `withItem` path byte-for-byte. Live preview, undo/redo (whole-doc
+  snapshots incl. `topology`), serialize/export, and the rasterizer are unchanged.
+- [test/planar-edit.test.ts](../test/planar-edit.test.ts) (new): a hand-built
+  2-region shared-edge doc + real `tracePlanar` topology (degree-4 centre junction,
+  island hole edge). Adversarial coincidence (stored `subPaths` must equal a fresh
+  materialization — fails if a neighbour is left un-rematerialized), both-regions-change,
+  insert/delete/vertex/handle, chained multi-node drag, and determinism. Full suite
+  **167 pass**, typecheck clean.
+
+**Original plan (followed):**
 
 **Current gap:** [EditorCanvas.tsx](../src/components/vectorize/EditorCanvas.tsx) edits
 each `PathItem` via [geometry.ts](../src/lib/path/geometry.ts) (`moveNodes`,

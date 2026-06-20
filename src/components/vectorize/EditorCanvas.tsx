@@ -31,6 +31,19 @@ import {
     setNodeKind,
     translateItem,
 } from "../../lib/path/geometry";
+import {
+    regionProvenance,
+    type HandleSite,
+    type NodeProvenance,
+} from "../../lib/path/topology";
+import {
+    insertNodeOnEdge,
+    moveEdgeHandle,
+    resolveEdgeSegment,
+    setEdgeNodeKind,
+    translateRegion,
+    translateRegionNodes,
+} from "../../lib/path/topologyEdit";
 
 const ACCENT = "#5b5bd6";
 /** Selected anchor fill — warm hue that contrasts the indigo outline/stroke. */
@@ -162,6 +175,12 @@ interface DragState {
     moved: boolean;
     lastDoc: EditableDoc | null;
     pointerId: number;
+    /** Planar (topological) selected item: route edits through doc.topology so
+     *  the neighbour region follows. Captured at pointerdown and valid for the
+     *  whole drag (moves never change node counts). Absent ⇒ legacy per-item path. */
+    provenance?: NodeProvenance[][];
+    /** Handle drag on a planar item: the canonical edge handle to drag. */
+    handleSite?: HandleSite;
 }
 
 /** SVG paint-server element for a gradient fill (userSpaceOnUse). */
@@ -518,16 +537,20 @@ export function EditorCanvas({
                 e.stopPropagation();
                 const ref: NodeRef = bestRef;
                 const node = selectedItem.subPaths[ref.sub].nodes[ref.idx];
-                onDocCommit(
-                    withItem(
-                        doc,
-                        setNodeKind(
-                            selectedItem,
-                            ref,
-                            node.kind === "smooth" ? "corner" : "smooth",
-                        ),
-                    ),
-                );
+                const kind = node.kind === "smooth" ? "corner" : "smooth";
+                // Planar: toggle the shared edge node's kind so both regions update.
+                if (selectedItem.loops) {
+                    const pv = regionProvenance(doc, selectedItem)?.[ref.sub]?.[
+                        ref.idx
+                    ];
+                    if (pv) {
+                        onDocCommit(
+                            setEdgeNodeKind(doc, pv.edgeId, pv.edgeNodeIdx, kind),
+                        );
+                        return;
+                    }
+                }
+                onDocCommit(withItem(doc, setNodeKind(selectedItem, ref, kind)));
                 return;
             }
             // 2) Handle dot: dblclick is a no-op, but never a zoom reset.
@@ -551,6 +574,21 @@ export function EditorCanvas({
             const hit = nearestPointOnItem(item, pt);
             if (!hit || hit.dist > tolerance) continue;
             e.stopPropagation();
+            // Planar: split the underlying shared edge so both regions gain the node.
+            if (item.loops) {
+                const prov = regionProvenance(doc, item);
+                const subLen = item.subPaths[hit.sub]?.nodes.length ?? 0;
+                const seg = prov
+                    ? resolveEdgeSegment(prov, hit.sub, hit.seg, subLen, hit.t)
+                    : null;
+                if (!seg) return;
+                const next = insertNodeOnEdge(doc, seg.edgeId, seg.segIdx, seg.t);
+                if (next === doc) return;
+                onSelectPath(item.id);
+                onSelectNodes(new Set([`${hit.sub}:${hit.seg + 1}`]));
+                onDocCommit(next);
+                return;
+            }
             const next = insertNode(item, hit.sub, hit.seg, hit.t);
             if (next === item) return;
             onSelectPath(item.id);
@@ -576,6 +614,11 @@ export function EditorCanvas({
         const pt = toVb(e.clientX, e.clientY);
         if (!pt) return;
         const startClient = { x: e.clientX, y: e.clientY };
+        // Planar region: provenance bridges a materialized NodeRef back to the
+        // shared-edge graph so the neighbour region follows. null ⇒ legacy item.
+        const topoProv = selectedItem.loops
+            ? regionProvenance(doc, selectedItem) ?? undefined
+            : undefined;
 
         if (nodeKey) {
             let next: Set<string>;
@@ -596,6 +639,7 @@ export function EditorCanvas({
                 preDoc: doc,
                 origItem: selectedItem,
                 refs: [...next].map(parseNodeKey),
+                provenance: topoProv,
                 startClient,
                 startVb: pt,
                 moved: false,
@@ -609,14 +653,31 @@ export function EditorCanvas({
         const ref: NodeRef = { sub: Number(subS), idx: Number(idxS) };
         const node = selectedItem.subPaths[ref.sub]?.nodes[ref.idx];
         if (!node) return;
+        const whichSide: "in" | "out" = which === "in" ? "in" : "out";
+        // For a planar item, resolve the canonical edge handle this materialized
+        // handle maps to (in/out swap under a reversed traversal is baked in).
+        const pv = topoProv?.[ref.sub]?.[ref.idx];
+        const handleSite = pv
+            ? whichSide === "in"
+                ? pv.inHandle
+                : pv.outHandle
+            : null;
+        if (selectedItem.loops && !handleSite) return; // planar handle with no graph site
         // Alt breaks symmetry: the node becomes a corner before the (unmirrored)
         // handle drag, so smooth-mirroring stops following this handle.
         let baseDoc = doc;
         let baseItem = selectedItem;
         if (e.altKey && node.kind !== "corner") {
-            baseItem = setNodeKind(selectedItem, ref, "corner");
-            baseDoc = withItem(doc, baseItem);
-            onDocChange(baseDoc);
+            if (handleSite) {
+                // Corner the edge node THIS handle belongs to (at a junction the
+                // out-handle lives on a different edge than the anchor owner).
+                baseDoc = setEdgeNodeKind(doc, handleSite.edgeId, handleSite.edgeNodeIdx, "corner");
+                onDocChange(baseDoc);
+            } else {
+                baseItem = setNodeKind(selectedItem, ref, "corner");
+                baseDoc = withItem(doc, baseItem);
+                onDocChange(baseDoc);
+            }
         }
         beginDrag(e, {
             type: "handle",
@@ -624,7 +685,8 @@ export function EditorCanvas({
             preDoc: doc,
             origItem: baseItem,
             handleRef: ref,
-            which: which === "in" ? "in" : "out",
+            which: whichSide,
+            handleSite: handleSite ?? undefined,
             mirror: !e.altKey,
             startClient,
             startVb: pt,
@@ -682,21 +744,32 @@ export function EditorCanvas({
         if (!pt) return;
         const dx = pt.x - drag.startVb.x;
         const dy = pt.y - drag.startVb.y;
-        let item: PathItem;
+        // Planar items route every gesture through doc.topology (so the shared
+        // edge's neighbour region follows live); legacy items edit subPaths.
+        let next: EditableDoc;
         if (drag.type === "path") {
-            item = translateItem(drag.origItem, dx, dy);
+            next = drag.origItem.loops
+                ? translateRegion(drag.origDoc, drag.origItem, dx, dy)
+                : withItem(drag.origDoc, translateItem(drag.origItem, dx, dy));
         } else if (drag.type === "nodes") {
-            item = moveNodes(drag.origItem, drag.refs!, dx, dy);
-        } else {
-            item = moveHandle(
-                drag.origItem,
-                drag.handleRef!,
-                drag.which!,
+            next = drag.provenance
+                ? translateRegionNodes(drag.origDoc, drag.provenance, drag.refs!, dx, dy)
+                : withItem(drag.origDoc, moveNodes(drag.origItem, drag.refs!, dx, dy));
+        } else if (drag.handleSite) {
+            next = moveEdgeHandle(
+                drag.origDoc,
+                drag.handleSite.edgeId,
+                drag.handleSite.edgeNodeIdx,
+                drag.handleSite.which,
                 pt,
                 drag.mirror!,
             );
+        } else {
+            next = withItem(
+                drag.origDoc,
+                moveHandle(drag.origItem, drag.handleRef!, drag.which!, pt, drag.mirror!),
+            );
         }
-        const next = withItem(drag.origDoc, item);
         drag.lastDoc = next;
         onDocChange(next);
     };

@@ -232,6 +232,52 @@ export function nearestPointOnItem(
   return { sub: bestSub, seg: bestSeg, t, point, dist: Math.hypot(point.x - pt.x, point.y - pt.y) }
 }
 
+/** The result of a de Casteljau split: handle updates for the two endpoints
+ *  (unchanged on a straight segment) plus the inserted midpoint node. */
+export interface SegmentSplit {
+  /** New hOut for the segment's start node (only when `straight` is false). */
+  aHOut: Vec | null
+  /** New hIn for the segment's end node (only when `straight` is false). */
+  bHIn: Vec | null
+  /** The inserted split point. */
+  mid: PathNode
+  /** True when the segment was a straight line (endpoints left untouched). */
+  straight: boolean
+}
+
+/**
+ * de Casteljau split of the cubic between anchors `a` and `b` at parameter `t`.
+ * A straight segment (both effective controls collapsed onto their anchors)
+ * stays straight: the midpoint gets null handles and `straight` is set so the
+ * caller leaves the endpoints alone. Pure — returns fresh objects, mutates
+ * nothing. The single source of truth for both subpath and shared-edge splits.
+ */
+export function splitSegmentAt(a: PathNode, b: PathNode, t: number): SegmentSplit {
+  const p0 = { x: a.x, y: a.y }
+  const p3 = { x: b.x, y: b.y }
+  const c1 = a.hOut ? { x: a.hOut.x, y: a.hOut.y } : p0
+  const c2 = b.hIn ? { x: b.hIn.x, y: b.hIn.y } : p3
+  // "Effective controls on the anchors" also catches degenerate non-null handles.
+  const isLine =
+    Math.hypot(c1.x - p0.x, c1.y - p0.y) < EPS && Math.hypot(c2.x - p3.x, c2.y - p3.y) < EPS
+  if (isLine) {
+    return {
+      aHOut: a.hOut,
+      bHIn: b.hIn,
+      mid: { x: p0.x + (p3.x - p0.x) * t, y: p0.y + (p3.y - p0.y) * t, hIn: null, hOut: null, kind: 'corner' },
+      straight: true,
+    }
+  }
+  const lerp = (u: Vec, v: Vec): Vec => ({ x: u.x + (v.x - u.x) * t, y: u.y + (v.y - u.y) * t })
+  const p01 = lerp(p0, c1)
+  const p12 = lerp(c1, c2)
+  const p23 = lerp(c2, p3)
+  const p012 = lerp(p01, p12)
+  const p123 = lerp(p12, p23)
+  const mid = lerp(p012, p123)
+  return { aHOut: p01, bHIn: p23, mid: { x: mid.x, y: mid.y, hIn: p012, hOut: p123, kind: 'smooth' }, straight: false }
+}
+
 /**
  * Split segment `seg` of subpath `sub` at parameter `t` (de Casteljau) and
  * insert the split point as a new node. Straight segments stay straight: the
@@ -242,36 +288,16 @@ export function insertNode(item: PathItem, sub: number, seg: number, t: number):
   if (!sp || sp.nodes.length < 2 || seg < 0 || seg >= segmentCount(sp)) return item
   const iA = seg
   const iB = (seg + 1) % sp.nodes.length
-  const a = sp.nodes[iA]
-  const b = sp.nodes[iB]
-  const { p0, c1, c2, p3 } = segmentControls(sp, seg)
+  const split = splitSegmentAt(sp.nodes[iA], sp.nodes[iB], t)
 
   const nodes = sp.nodes.slice()
-  // "Effective controls on the anchors" also catches degenerate non-null handles.
-  const isLine =
-    Math.hypot(c1.x - p0.x, c1.y - p0.y) < EPS && Math.hypot(c2.x - p3.x, c2.y - p3.y) < EPS
-  if (isLine) {
-    nodes.splice(seg + 1, 0, {
-      x: p0.x + (p3.x - p0.x) * t,
-      y: p0.y + (p3.y - p0.y) * t,
-      hIn: null,
-      hOut: null,
-      kind: 'corner',
-    })
-  } else {
-    const lerp = (u: Vec, v: Vec): Vec => ({ x: u.x + (v.x - u.x) * t, y: u.y + (v.y - u.y) * t })
-    const p01 = lerp(p0, c1)
-    const p12 = lerp(c1, c2)
-    const p23 = lerp(c2, p3)
-    const p012 = lerp(p01, p12)
-    const p123 = lerp(p12, p23)
-    const mid = lerp(p012, p123)
-    nodes[iA] = { ...a, hOut: p01 }
-    nodes[iB] = { ...b, hIn: p23 }
-    // Splice after updating iB: when the segment wraps (iB === 0) the insert
-    // index is nodes.length, which leaves index 0 untouched.
-    nodes.splice(seg + 1, 0, { x: mid.x, y: mid.y, hIn: p012, hOut: p123, kind: 'smooth' })
+  if (!split.straight) {
+    nodes[iA] = { ...sp.nodes[iA], hOut: split.aHOut }
+    nodes[iB] = { ...sp.nodes[iB], hIn: split.bHIn }
   }
+  // Splice after updating iB: when the segment wraps (iB === 0) the insert
+  // index is nodes.length, which leaves index 0 untouched.
+  nodes.splice(seg + 1, 0, split.mid)
   return replaceSubPath(item, sub, { ...sp, nodes })
 }
 
@@ -323,22 +349,13 @@ export function moveNodes(item: PathItem, refs: NodeRef[], dx: number, dy: numbe
 }
 
 /**
- * Drag one handle to `to`. With `mirror` on a smooth node, the opposite
- * handle is re-aimed to stay collinear (opposite side of the anchor) while
- * keeping its own length; a degenerate drag (|to − anchor| < ε) leaves the
- * opposite handle untouched.
+ * Drag one handle of a single node to `to`. With `mirror` on a smooth node,
+ * the opposite handle is re-aimed to stay collinear (opposite side of the
+ * anchor) while keeping its own length; a degenerate drag (|to − anchor| < ε)
+ * leaves the opposite handle untouched. Pure node-level core shared by the
+ * subpath editor and the shared-edge ops.
  */
-export function moveHandle(
-  item: PathItem,
-  ref: NodeRef,
-  which: 'in' | 'out',
-  to: Vec,
-  mirror: boolean,
-): PathItem {
-  const sp = item.subPaths[ref.sub]
-  const node = sp?.nodes[ref.idx]
-  if (!sp || !node) return item
-
+export function moveHandleNode(node: PathNode, which: 'in' | 'out', to: Vec, mirror: boolean): PathNode {
   const next: PathNode = { ...node }
   const handle = { x: to.x, y: to.y }
   if (which === 'in') next.hIn = handle
@@ -356,24 +373,40 @@ export function moveHandle(
       else next.hIn = mirrored
     }
   }
-  return replaceNode(item, ref, next)
+  return next
 }
 
 /**
- * Change how a node joins its segments. 'corner' only flips the flag;
- * 'smooth' aligns both handles onto one averaged tangent, preserving each
- * existing handle's length and creating any missing handle at 1/3 of the
- * distance to the neighboring anchor.
+ * Drag one handle to `to`. Thin subpath wrapper over {@link moveHandleNode}.
  */
-export function setNodeKind(item: PathItem, ref: NodeRef, kind: NodeKind): PathItem {
+export function moveHandle(
+  item: PathItem,
+  ref: NodeRef,
+  which: 'in' | 'out',
+  to: Vec,
+  mirror: boolean,
+): PathItem {
   const sp = item.subPaths[ref.sub]
   const node = sp?.nodes[ref.idx]
   if (!sp || !node) return item
-  if (kind === 'corner') return replaceNode(item, ref, { ...node, kind: 'corner' })
+  return replaceNode(item, ref, moveHandleNode(node, which, to, mirror))
+}
 
-  const count = sp.nodes.length
-  const nextAnchor = ref.idx < count - 1 ? sp.nodes[ref.idx + 1] : sp.closed && count > 1 ? sp.nodes[0] : null
-  const prevAnchor = ref.idx > 0 ? sp.nodes[ref.idx - 1] : sp.closed && count > 1 ? sp.nodes[count - 1] : null
+/**
+ * Change how a single node joins its segments, given its neighbouring anchors
+ * (either may be null at an open end). 'corner' only flips the flag; 'smooth'
+ * aligns both handles onto one averaged tangent, preserving each existing
+ * handle's length and creating any missing handle at 1/3 of the distance to the
+ * neighbouring anchor. Pure node-level core: the subpath wrapper supplies the
+ * wrap-aware neighbours; the shared-edge op supplies open-list (no-wrap) ones.
+ */
+export function setNodeKindNode(
+  node: PathNode,
+  prevAnchor: PathNode | null,
+  nextAnchor: PathNode | null,
+  kind: NodeKind,
+): PathNode {
+  if (kind === 'corner') return { ...node, kind: 'corner' }
 
   // Near-zero handles carry no direction; treat them as missing.
   const lenOf = (h: Vec | null) => (h ? Math.hypot(h.x - node.x, h.y - node.y) : 0)
@@ -395,16 +428,30 @@ export function setNodeKind(item: PathItem, ref: NodeRef, kind: NodeKind): PathI
   } else if (prevAnchor) {
     tangent = normalize(node.x - prevAnchor.x, node.y - prevAnchor.y)
   }
-  if (!tangent) return replaceNode(item, ref, { ...node, kind: 'smooth' })
+  if (!tangent) return { ...node, kind: 'smooth' }
 
   const outLen = hOut ? lenOf(hOut) : nextAnchor ? Math.hypot(nextAnchor.x - node.x, nextAnchor.y - node.y) / 3 : 0
   const inLen = hIn ? lenOf(hIn) : prevAnchor ? Math.hypot(prevAnchor.x - node.x, prevAnchor.y - node.y) / 3 : 0
-  return replaceNode(item, ref, {
+  return {
     ...node,
     kind: 'smooth',
     hOut: outLen >= EPS ? { x: node.x + tangent.x * outLen, y: node.y + tangent.y * outLen } : node.hOut,
     hIn: inLen >= EPS ? { x: node.x - tangent.x * inLen, y: node.y - tangent.y * inLen } : node.hIn,
-  })
+  }
+}
+
+/**
+ * Change how a node joins its segments. Thin subpath wrapper over
+ * {@link setNodeKindNode} that resolves the wrap-aware neighbouring anchors.
+ */
+export function setNodeKind(item: PathItem, ref: NodeRef, kind: NodeKind): PathItem {
+  const sp = item.subPaths[ref.sub]
+  const node = sp?.nodes[ref.idx]
+  if (!sp || !node) return item
+  const count = sp.nodes.length
+  const nextAnchor = ref.idx < count - 1 ? sp.nodes[ref.idx + 1] : sp.closed && count > 1 ? sp.nodes[0] : null
+  const prevAnchor = ref.idx > 0 ? sp.nodes[ref.idx - 1] : sp.closed && count > 1 ? sp.nodes[count - 1] : null
+  return replaceNode(item, ref, setNodeKindNode(node, prevAnchor, nextAnchor, kind))
 }
 
 /** Translate the whole item (every anchor and handle). */
@@ -451,7 +498,8 @@ function normalize(x: number, y: number): Vec | null {
   return { x: x / len, y: y / len }
 }
 
-function translateNode(node: PathNode, dx: number, dy: number): PathNode {
+/** Translate one node's anchor and both handles by (dx, dy). Pure. */
+export function translateNode(node: PathNode, dx: number, dy: number): PathNode {
   return {
     x: node.x + dx,
     y: node.y + dy,
