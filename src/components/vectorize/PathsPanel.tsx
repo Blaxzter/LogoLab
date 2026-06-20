@@ -4,15 +4,16 @@
 
 import type { CSSProperties } from 'react'
 import { useEffect, useRef } from 'react'
-import { Eye, EyeOff, Trash2, X } from 'lucide-react'
+import { Blend, Eye, EyeOff, Square, Trash2, X } from 'lucide-react'
 import type { EditableDoc, PathItem, RawItem } from '../../lib/path/types'
 import { normalizeHex } from '../../lib/colorUtils'
 import { Tooltip } from '../ui/Tooltip'
 
-/** Swatch background: a CSS preview of the gradient when present, else the flat fill. */
+/** Swatch background: a CSS preview of the gradient when present (and not flattened),
+ *  else the flat fill. */
 function swatchStyle(item: PathItem): CSSProperties {
   const g = item.gradient
-  if (!g) return { backgroundColor: item.fill }
+  if (!g || item.gradientHidden) return { backgroundColor: item.fill }
   const stops = g.stops.map((s) => `${s.color} ${Math.round(s.offset * 100)}%`).join(', ')
   if (g.type === 'linear') {
     const angle = Math.round((Math.atan2(g.y2 - g.y1, g.x2 - g.x1) * 180) / Math.PI + 90)
@@ -28,6 +29,8 @@ export interface PathsPanelProps {
   /** Recolor a path; `commit` pushes a history entry (live preview otherwise). */
   onRecolor: (id: string, fill: string, commit: boolean) => void
   onToggleVisible: (id: string) => void
+  /** Flatten a region's fitted gradient to its solid fill (and back) — reversible. */
+  onToggleGradientFlat: (id: string) => void
   onDelete: (id: string) => void
 }
 
@@ -47,6 +50,7 @@ export function PathsPanelBody({
   onSelectPath,
   onRecolor,
   onToggleVisible,
+  onToggleGradientFlat,
   onDelete,
 }: PathsPanelProps) {
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
@@ -92,6 +96,7 @@ export function PathsPanelBody({
               onSelect={() => onSelectPath(item.id === selectedPathId ? null : item.id)}
               onRecolor={(fill, commit) => onRecolor(item.id, fill, commit)}
               onToggleVisible={() => onToggleVisible(item.id)}
+              onToggleGradientFlat={() => onToggleGradientFlat(item.id)}
               onDelete={() => onDelete(item.id)}
             />
           ) : (
@@ -126,6 +131,7 @@ function PathRow({
   onSelect,
   onRecolor,
   onToggleVisible,
+  onToggleGradientFlat,
   onDelete,
 }: {
   item: PathItem
@@ -135,6 +141,7 @@ function PathRow({
   onSelect: () => void
   onRecolor: (fill: string, commit: boolean) => void
   onToggleVisible: () => void
+  onToggleGradientFlat: () => void
   onDelete: () => void
 }) {
   let nodes = 0
@@ -178,6 +185,14 @@ function PathRow({
       </span>
       <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted">{nodes}</span>
 
+      {item.gradient && (
+        <RowIconBtn
+          title={item.gradientHidden ? 'Gradient flattened — click to restore' : 'Flatten to solid colour'}
+          onClick={onToggleGradientFlat}
+        >
+          {item.gradientHidden ? <Square size={13} /> : <Blend size={13} />}
+        </RowIconBtn>
+      )}
       <RowIconBtn
         title={item.visible ? 'Hide (excluded from export)' : 'Show'}
         onClick={onToggleVisible}

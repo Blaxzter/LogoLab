@@ -548,6 +548,23 @@ export function VectorizeStudio() {
         [doc, commitDoc],
     );
 
+    // Flatten a region's fitted gradient to its solid fill (or restore it). The
+    // gradient is kept on the item, so the toggle is reversible and undoable.
+    const handleToggleGradientFlat = useCallback(
+        (id: string) => {
+            if (!doc) return;
+            commitDoc({
+                ...doc,
+                items: doc.items.map((it) =>
+                    it.id === id && it.kind === "path" && it.gradient
+                        ? { ...it, gradientHidden: !it.gradientHidden }
+                        : it,
+                ),
+            });
+        },
+        [doc, commitDoc],
+    );
+
     const handleDeleteItem = useCallback(
         (id: string) => {
             if (!doc) return;
@@ -1011,6 +1028,7 @@ export function VectorizeStudio() {
                     onSelectPath={handleSelectPath}
                     onRecolor={handleRecolor}
                     onToggleVisible={handleToggleVisible}
+                    onToggleGradientFlat={handleToggleGradientFlat}
                     onDelete={handleDeleteItem}
                 />
             )}
@@ -1037,6 +1055,7 @@ export function VectorizeStudio() {
                         onSelectPath={handleSelectPath}
                         onRecolor={handleRecolor}
                         onToggleVisible={handleToggleVisible}
+                        onToggleGradientFlat={handleToggleGradientFlat}
                         onDelete={handleDeleteItem}
                     />
                 </Sheet>

@@ -123,6 +123,14 @@ export interface PathItem {
    * code paths that only read `fill` keep working unchanged.
    */
   gradient?: GradientFill
+  /**
+   * Editor flag: render and export this region FLAT (its solid `fill`) even
+   * though a `gradient` was fitted. The gradient is RETAINED (not discarded), so
+   * the Paths-panel gradient↔flat toggle is reversible. Omitted ⇒ the gradient
+   * paints normally. Like `visible`, it is an editor decision honoured by the
+   * rasterizer and the SVG serializer; it never affects items without a gradient.
+   */
+  gradientHidden?: boolean
   /** 0–1; omitted means 1. */
   fillOpacity?: number
   /** Only 'evenodd' is ever serialized; nonzero is the SVG default. */
