@@ -1,8 +1,8 @@
 # Planar subdivision tracer
 
-Status: **Phases 1–5 shipped** on branch `feat/planar-tracer` (default engine for
-color). Phase 6 outstanding. This doc records what the work does and what's
-left, with enough detail to execute the rest.
+Status: **Phases 1–6 shipped** on branch `feat/planar-tracer` (default engine for
+color). This doc records what the work does and what's left, with enough detail
+to execute the rest.
 
 ---
 
@@ -103,7 +103,8 @@ separate from this branch.
    in-between AA colour its own thin region, which planar faithfully traces → many
    tiny unnecessary regions. Fix belongs in **segmentation** (absorb AA slivers into
    a neighbour) or a small-region cull in the planar path. *(User-reported.)*
-3. **No circle/line snapping** (beautify) → see Phase 6.
+3. ~~**No circle/line snapping** (beautify).~~ **Done (Phase 6).** Shared edges
+   now snap to circles / ellipses / straight lines at trace time (§5).
 4. **Sub-pixel edge placement** on smooth high-contrast boundaries is slightly behind
    crisp (it fits the integer crack staircase, not the AA coverage field) — visible
    only as a marginally higher seam metric on gradient images like nebula.
@@ -201,25 +202,74 @@ is untouched → desync.
 
 ---
 
-## 5. Phase 6 — edge-level beautify (OUTSTANDING)
+## 5. Phase 6 — edge-level beautify (SHIPPED)
 
-**Goal:** restore the circle/ellipse/line snapping that planar v1 dropped (the
-existing [beautify.ts](../src/lib/trace/beautify.ts) moves each loop's vertices
-independently, which would break shared-edge coincidence).
+**Goal:** restore the circle/ellipse/line snapping that planar v1 dropped. The
+loop-level [beautify.ts](../src/lib/trace/beautify.ts) moves each loop's vertices
+independently, which would desync the byte-coincident geometry two regions share
+on a boundary — so it stays SKIPPED for planar. Snapping at the **edge** level is
+*easier* because a boundary is ONE shared edge by construction: snap the canonical
+`SharedEdge.nodes` once and **both** adjacent regions re-materialize from it,
+coincident, with zero desync risk.
 
-**Plan:** a new `planarBeautify.ts` that snaps at the **edge** level, where snapping is
-*easier* than in the loop model because an edge is shared by construction:
-- Snap a whole edge's arc to a straight **line** or circular **arc** once (reuse
-  `lineFit` from [curveFit.ts](../src/lib/trace/curveFit.ts) and the circle fit /
-  kappa-Bézier emit from [beautify.ts](../src/lib/trace/beautify.ts)) — the change
-  propagates to both adjacent regions automatically.
-- A region whose loop is a **single closed edge** (a disc) can be circle-snapped
-  wholesale.
-- Re-add the **concentric-centre / equal-radius relation solver** over closed-loop
-  edges (it already operates on circles, which now live on edges).
-- Gate every snap on the same `fidelity` tolerance against the raw fitted arc.
-- Run it inside the `engine==='planar'` branch in [index.ts](../src/lib/trace/index.ts)
-  after `tracePlanar`, mutating `topology.edges` before materializing.
+**What shipped:**
+
+- **[circleFit.ts](../src/lib/trace/circleFit.ts) (new).** The pure primitive-fit
+  math beautify.ts had kept private — `fitCircle`/`maxRadialDev`,
+  `fitEllipse`/`maxEllipseDev`, the kappa-Bézier emit (`makeCircleSubPath`/
+  `makeEllipseSubPath`), `flatten`, `anchorSignedArea`, single-linkage `clusterBy`,
+  and the concentric / equal-radius `relationSolveCircles` — was **lifted here
+  verbatim** so both beautifiers share ONE copy (no fork). `relationSolveCircles`
+  is the generic core: it mutates each circle's `cx/cy/r` in place (gating every
+  adjustment against that circle's RAW trace) and returns which moved, so each
+  caller regenerates only its own geometry. beautify.ts now imports these; its
+  `relationSolve` is a thin wrapper. The crisp/potrace corpus is **byte-identical**
+  (verified by hashing crisp output on nebula/petals before and after the move).
+
+- **[planarBeautify.ts](../src/lib/trace/planarBeautify.ts) (new).**
+  `planarBeautify(topo, loopsByLabel, opts)` returns a new `Topology` (vertices
+  unchanged); `fidelity ≤ 0` returns the input topology unchanged (pure no-op):
+  - **1a — disc edges → circle / ellipse.** Each CLOSED edge is flattened, fit
+    with `fitCircle`/`fitEllipse`, and (if `maxRadialDev`/`maxEllipseDev ≤ fidelity`
+    and the radius clears `2·fidelity`) replaced by the 4-node kappa primitive,
+    **oriented to the edge's existing winding** so the `EdgeRef.reversed` flags the
+    assembler baked for BOTH regions stay valid.
+  - **1b — open edges → straight line.** An OPEN edge whose flattened arc lies
+    within `fidelity` of the chord between its two endpoints is replaced by exactly
+    two corner nodes at the **unchanged junction endpoints** (pinned byte-exact,
+    handles dropped) — so every other edge meeting at those junctions stays welded.
+  - **1c — relation solver** over the disc circles from 1a
+    (`relationSolveCircles`), each adjustment re-gated against the circle's raw arc.
+  - Wired into the `engine==='planar'` branch of [index.ts](../src/lib/trace/index.ts):
+    runs after `tracePlanar`, before the per-region `materializeRegion` loop, and
+    its beautified edges become the doc's `topology`. Phase-5 editing then operates
+    on the already-beautified graph (a drag on a snapped circle still moves both
+    regions — covered by [test/planar-beautify.test.ts](../test/planar-beautify.test.ts)).
+
+- **Validation.** [test/planar-beautify.test.ts](../test/planar-beautify.test.ts):
+  disc→4-node circle with both regions byte-coincident (adversarial: reverse of one
+  region's run equals the other's), open-edge→2 pinned nodes with a curved neighbour
+  untouched, concentric relation solve, `fidelity=0` no-op, determinism, and a
+  Phase-5 drag on the beautified edge. Full suite **173 pass**, typecheck clean.
+
+- **Measured** ([planarBeautifyScore.ts](../src/devtest/planarBeautifyScore.ts),
+  planar at fidelity 0 vs 1.5): on geometric shapes the win is **regularity +
+  fidelity**, not node count. The planar fitter is already node-economical (it fits
+  a disc to a 2-cubic closed loop), so snapping to the canonical 4-node kappa circle
+  costs ~+2 nodes/circle but yields a *perfect* primitive the relation solver can
+  reconcile, and **lowers** error: geom (disc+ring+square) meanΔE 1.49→**1.40**,
+  SSIM 0.932→**0.938**; nebula meanΔE 3.01→**2.99**, SSIM 0.9769→**0.9780**; seamMax
+  unchanged on all; petals untouched (no primitives). Nodes: geom 34→38, nebula
+  74→80, petals 38→38. Deterministic throughout.
+
+**Deferred (stretch 1d — open-edge circular ARC snap):** an open junction→junction
+edge that follows a circular arc could collapse to cubic arc(s) pinned at its two
+junctions. It needs a *partial*-arc-to-Bézier emit (the kappa builder only emits a
+full ellipse) and only earns its keep where the fitter leaves a wobbly multi-cubic
+arc — not seen on the current corpus (the open-arc DP fit is already economical), so
+it is deferred. The line snap (1b) covers the high-value straight-boundary case;
+H/V axis-snapping is intentionally NOT done (it would move junction endpoints and
+unweld the graph).
 
 ---
 

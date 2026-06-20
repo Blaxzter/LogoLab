@@ -23,6 +23,7 @@ import { rasterizeDoc } from '../render/raster.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
 import { tracePlanar } from './planarAssemble.ts'
 import { type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import { planarBeautify } from './planarBeautify.ts'
 import { materializeRegion, edgeMap } from '../path/topology.ts'
 
 export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
@@ -213,7 +214,11 @@ export async function traceImage(
   if (engine === 'planar') {
     onProgress?.({ phase: 'trace', layer: 1, total: 1 })
     const trace = tracePlanar(q.labels, width, height, planarFitOptionsFor(options))
-    const edges = edgeMap({ vertices: trace.vertices, edges: trace.edges })
+    // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
+    // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a
+    // no-op, so the unbeautified planar output is byte-identical.
+    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts)
+    const edges = edgeMap(topology)
     let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
     if (options.removeBackground) {
       const bg = detectBorderBackground(q.labels, width, height, q.palette.length)
@@ -237,7 +242,7 @@ export async function traceImage(
         })
       }
     }
-    return { viewBox: [0, 0, width, height], items, topology: { vertices: trace.vertices, edges: trace.edges } }
+    return { viewBox: [0, 0, width, height], items, topology }
   }
 
   // Beautify (cross-shape relation solver over ALL loops) + assemble bottom-up.
