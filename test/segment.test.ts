@@ -125,3 +125,47 @@ test('respects custom options object (smoke)', () => {
   const seg = segmentImage(img(40, 40, () => [100, 150, 200]), { ...DEFAULT_SEGMENT_OPTIONS })
   assert.ok(seg.palette.length >= 1)
 })
+
+// --- small-region merge (Despeckle → minRegionArea), the sliver fix -----------
+
+// Three vertical bands — big blue | mid green sliver | big red — with gradients OFF
+// so the bands posterize instead of fusing. Areas: blue/red ≈ 2400px², green ≈
+// 1200px². This is the "miniature region at a colour transition" the merge targets.
+const slivers = (minRegionArea: number) =>
+  segmentImage(
+    img(100, 60, (x) => (x < 40 ? [0, 0, 255] : x < 60 ? [0, 220, 0] : [255, 0, 0])),
+    { ...DEFAULT_SEGMENT_OPTIONS, mergeGradients: false, minRegionArea },
+  )
+
+test('minRegionArea absorbs a sub-threshold sliver into its nearest-colour neighbour', () => {
+  // A 1800px² threshold absorbs the green sliver (≈1200) but not blue/red (≈2400).
+  const merged = slivers(1800)
+  assert.equal(macroCount(merged), 2, 'the green sliver is absorbed; blue + red remain')
+
+  // Exact tiling preserved: every pixel keeps a valid label, exactly 2 distinct ids.
+  const ids = new Set<number>()
+  for (const l of merged.labels) {
+    assert.ok(l >= 0, 'no pixel may be dropped by the merge')
+    ids.add(l)
+  }
+  assert.equal(ids.size, 2)
+
+  // The sliver colour no longer owns a region (its pixels were recoloured).
+  const hasGreen = merged.palette.some((p) => p.g > 150 && p.r < 90 && p.b < 90)
+  assert.ok(!hasGreen, 'the green sliver colour no longer has its own region')
+})
+
+test('minRegionArea below every region is a no-op (sliver survives, labels unchanged)', () => {
+  const off = slivers(0)
+  const sub = slivers(600) // below the green sliver's ≈1200px²
+  assert.equal(macroCount(off), 3, 'all three bands survive with no merge')
+  assert.equal(macroCount(sub), 3, 'a sub-everything threshold merges nothing')
+  for (let i = 0; i < off.labels.length; i++) assert.equal(sub.labels[i], off.labels[i])
+})
+
+test('minRegionArea merge is deterministic', () => {
+  const a = slivers(1800)
+  const b = slivers(1800)
+  assert.equal(a.palette.length, b.palette.length)
+  for (let i = 0; i < a.labels.length; i++) assert.equal(a.labels[i], b.labels[i])
+})

@@ -99,10 +99,19 @@ separate from this branch.
    on a shared boundary now moves the one edge and both regions follow; junction
    drags move every incident spoke. (Minor known gap: double-clicking the *closing*
    segment of a pure closed-loop disc edge is a no-op — insert elsewhere on it.)
-2. **Anti-alias transition slivers.** At a colour boundary the segmenter assigns the
-   in-between AA colour its own thin region, which planar faithfully traces → many
-   tiny unnecessary regions. Fix belongs in **segmentation** (absorb AA slivers into
-   a neighbour) or a small-region cull in the planar path. *(User-reported.)*
+2. ~~**Anti-alias transition slivers.**~~ **Addressed (segmentation merge).** At a
+   colour boundary — especially with gradients OFF, where a ramp posterizes into flat
+   bands — the segmenter gave the in-between colours their own thin regions, which
+   planar faithfully traced → many tiny unnecessary regions *(user-reported)*. Fixed
+   in **segmentation** ([segment.ts](../src/lib/trace/segment.ts) `mergeSmallRegions`,
+   Step 5): any macro-region below `minRegionArea` opaque px is absorbed into its
+   nearest-colour neighbour before tracing, so the sliver is recoloured (render-safe)
+   rather than emitted as its own shape. Engine-agnostic (crisp/potrace/planar all
+   benefit) and **driven by the Despeckle dial** (`minRegionAreaFor` in
+   [index.ts](../src/lib/trace/index.ts); 0 ⇒ off, byte-identical; default 25 ⇒ 50px²,
+   despeckle² · 800). Measured (gradients off): nebula planar **19 → 12 regions** at
+   the default with identical ΔE/SSIM; the gradients-on corpus is byte-identical
+   (ramps fuse, so no sub-threshold regions exist). User-marked regions are protected.
 3. ~~**No circle/line snapping** (beautify).~~ **Done (Phase 6).** Shared edges
    now snap to circles / ellipses / straight lines at trace time (§5).
 4. **Sub-pixel edge placement** on smooth high-contrast boundaries is slightly behind
@@ -275,8 +284,9 @@ unweld the graph).
 
 ## 6. Other backlog
 
-- **AA transition slivers** (§3.2) — the most user-visible next win; segmentation-side
-  merge of AA-only regions, or an area-threshold region cull in the planar emit loop.
+- ~~**AA transition slivers** (§3.2)~~ — **done**: segmentation-side small-region
+  merge (`mergeSmallRegions`), driven by the Despeckle dial (§3.2). Possible follow-up:
+  a thinness metric (absorb long-but-thin AA bands a pure area threshold misses).
 - **Sub-pixel edge placement** — optionally place crack vertices at AA-weighted
   sub-pixel positions to close the small nebula seam gap with crisp.
 - `src/devtest/planarScore.ts` is the harness for tuning all of the above.

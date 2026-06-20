@@ -474,6 +474,21 @@ function cloneSubPaths(subPaths: SubPath[]): SubPath[] {
  * is structural — so they are intentionally left at the defaults here (the dials
  * still tune the tracer's smoothing/turdsize downstream).
  */
+/**
+ * Map the Despeckle dial onto the segmenter's minimum-region area (opaque px²) —
+ * the engine-agnostic small-region merge that absorbs anti-alias / colour-ramp
+ * TRANSITION SLIVERS into their nearest-colour neighbour. 0 at despeckle 0 (so a
+ * despeckle-0 trace is byte-identical to before), growing quadratically so the
+ * dial's low end stays gentle and the high end aggressively cleans slivers. The
+ * merge is render-safe (a sliver is recoloured to its closest neighbour), so this
+ * scales faster than the crisp/potrace `turdsize` loop-drop. Absolute px², like
+ * turdsize, so it reads the same across engines.
+ */
+function minRegionAreaFor(despeckle: number): number {
+  const d = clamp(despeckle, 0, 100) / 100
+  return Math.round(d * d * 800)
+}
+
 export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
   // Region detail: 0 ⇒ the balanced default (identical output to before); higher
   // tightens the colour-difference (τ_s) and union-fit (mergeTol) merge so finer
@@ -492,13 +507,17 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
   // region that Stage 2 then averages to a muddy mean colour. On (the default) is
   // byte-identical to before.
   const mergeGradients = options.gradients !== false
-  const needsOverride = d !== 0 || !mergeGradients
+  // Despeckle → minimum-region area: absorbs anti-alias / colour-ramp slivers into
+  // a neighbour (segment.ts mergeSmallRegions). 0 ⇒ no merge (byte-identical).
+  const minRegionArea = minRegionAreaFor(options.despeckle ?? 0)
+  const needsOverride = d !== 0 || !mergeGradients || minRegionArea !== DEFAULT_SEGMENT_OPTIONS.minRegionArea
   const base: SegmentOptions = needsOverride
     ? {
         ...DEFAULT_SEGMENT_OPTIONS,
         tauS: DEFAULT_SEGMENT_OPTIONS.tauS - d * 7.5, // 10 → 2.5
         mergeTol: DEFAULT_SEGMENT_OPTIONS.mergeTol - d * 0.048, // 0.06 → 0.012
         mergeGradients,
+        minRegionArea,
       }
     : DEFAULT_SEGMENT_OPTIONS
   return markers ? { ...base, markers } : base

@@ -22,6 +22,11 @@
 //   4. Anti-aliased 𝒟 pixels  → flooded into the neighbouring macro-region whose
 //      mean colour best matches (the §3.4 convex-combination test, approximated by
 //      nearest fill), so the output label map is complete.
+//   5. Small-region merge (opt-in, `minRegionArea` from the Despeckle dial) →
+//      absorb every macro-region below the area threshold into its nearest-colour
+//      neighbour, so anti-alias / colour-ramp TRANSITION SLIVERS don't survive as
+//      their own tiny shapes. Engine-agnostic (runs here, before tracing); 0 ⇒ off
+//      (byte-identical). User-marked regions are protected from being absorbed.
 //
 // Output is QuantizeResult-shaped (labels / palette / counts, largest region
 // first) so the existing stacked-mask tracer consumes it unchanged. Pure and
@@ -59,6 +64,15 @@ export interface SegmentOptions {
   /** Cap on samples per segment fed to a union fit (perf; deterministic stride). */
   sampleCap: number
   /**
+   * Minimum macro-region area (opaque px). After segmentation, any region smaller
+   * than this is absorbed into the adjacent region whose mean colour is closest —
+   * so anti-alias / colour-ramp TRANSITION SLIVERS don't survive as their own tiny
+   * shapes (the user-reported "miniature regions in colour transitions"). Engine-
+   * agnostic: it runs in segmentation, so crisp / potrace / planar all benefit.
+   * 0 ⇒ disabled (byte-identical to before). Driven by the Despeckle dial.
+   */
+  minRegionArea: number
+  /**
    * User-placed region markers in NORMALIZED [0,1] image coordinates (converted
    * to pixels here against the image's own width/height, so they are correct at
    * any raster resolution). Marker-watershed constraint: each marker seeds a
@@ -81,7 +95,11 @@ export const DEFAULT_SEGMENT_OPTIONS: SegmentOptions = {
   maxProfileGap: 0.34,
   mergeGradients: true,
   sampleCap: 3000,
+  minRegionArea: 0,
 }
+
+/** Reusable empty protected-group set (the no-marker merge protects nothing). */
+const NO_PROTECTED: ReadonlySet<number> = new Set<number>()
 
 export interface SegmentResult extends QuantizeResult {
   /** Mumford–Shah by-products (diagnostics; not required downstream). */
@@ -563,8 +581,25 @@ export function segmentImage(
       oA[i] = lab[1]
       oB[i] = lab[2]
     }
-    const groupCount = markerControlledSplit(groupId, G + extra.length, markerSeeds, w, h, oL, oA, oB)
+    let groupCount = markerControlledSplit(groupId, G + extra.length, markerSeeds, w, h, oL, oA, oB)
+    if (opts.minRegionArea > 0) {
+      // Absorb sub-threshold slivers, but never the user-marked regions.
+      const protectedGroups = new Set<number>()
+      for (const seed of markerSeeds) {
+        const g = groupId[seed]
+        if (g >= 0) protectedGroups.add(g)
+      }
+      groupCount = mergeSmallRegions(groupId, groupCount, n, w, h, data, opts.minRegionArea, protectedGroups).count
+    }
     return assembleFromGroupId(groupId, groupCount, n, w, data, smooth, ms, S, opts.sampleCap)
+  }
+
+  // --- Small-region merge (despeckle): absorb sub-threshold slivers into their
+  // nearest-colour neighbour. Only diverges from the exact existing assembly when
+  // a merge actually fires; otherwise the no-marker path stays byte-identical. ---
+  if (opts.minRegionArea > 0) {
+    const merged = mergeSmallRegions(groupId, G + extra.length, n, w, h, data, opts.minRegionArea, NO_PROTECTED)
+    if (merged.changed) return assembleFromGroupId(groupId, merged.count, n, w, data, smooth, ms, S, opts.sampleCap)
   }
 
   // --- Assemble QuantizeResult over all macro-regions (smooth groups + isolated
@@ -773,6 +808,161 @@ class MinHeap {
       i = m
     }
   }
+}
+
+/** Iteration cap for the small-region merge (a fixpoint is reached well before). */
+const MAX_MERGE_PASSES = 64
+
+/**
+ * Absorb every macro-region smaller than `minArea` opaque pixels into an adjacent
+ * region, so anti-alias / colour-ramp transition SLIVERS don't survive as their
+ * own tiny shapes. Each small region is merged into the neighbour whose mean
+ * ORIGINAL colour is closest — preferring a neighbour that is itself ≥ minArea, so
+ * slivers collapse into real shapes rather than chaining through each other — which
+ * minimises the recolour error the merge introduces. `protected` groups (user
+ * markers) are never absorbed, though they may absorb. Mutates `groupId` in place
+ * (relabelled then COMPACTED to 0..count-1) and returns the new group count +
+ * whether anything changed. Deterministic: small groups scanned in ascending id,
+ * target ties broken by shared-boundary length then id; iterates to a fixpoint.
+ */
+function mergeSmallRegions(
+  groupId: Int32Array,
+  groupCount: number,
+  n: number,
+  w: number,
+  h: number,
+  data: Uint8ClampedArray,
+  minArea: number,
+  protectedGroups: ReadonlySet<number>,
+): { count: number; changed: boolean } {
+  if (!(minArea > 0)) return { count: groupCount, changed: false }
+  const G = groupCount
+  let changed = false
+
+  for (let pass = 0; pass < MAX_MERGE_PASSES; pass++) {
+    // Per-group opaque count + mean original colour.
+    const cnt = new Float64Array(G)
+    const sumR = new Float64Array(G)
+    const sumG = new Float64Array(G)
+    const sumB = new Float64Array(G)
+    for (let i = 0; i < n; i++) {
+      const g = groupId[i]
+      if (g < 0) continue
+      const o = i * 4
+      cnt[g]++
+      sumR[g] += data[o]
+      sumG[g] += data[o + 1]
+      sumB[g] += data[o + 2]
+    }
+    // Region adjacency with shared-boundary length (4-connectivity).
+    const adj = new Map<number, Map<number, number>>()
+    const bump = (a: number, b: number): void => {
+      let m = adj.get(a)
+      if (!m) adj.set(a, (m = new Map()))
+      m.set(b, (m.get(b) ?? 0) + 1)
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x
+        const g = groupId[i]
+        if (g < 0) continue
+        if (x + 1 < w) {
+          const r = groupId[i + 1]
+          if (r >= 0 && r !== g) { bump(g, r); bump(r, g) }
+        }
+        if (y + 1 < h) {
+          const d = groupId[i + w]
+          if (d >= 0 && d !== g) { bump(g, d); bump(d, g) }
+        }
+      }
+    }
+
+    // Qualifying small groups (ascending id ⇒ deterministic).
+    const small: number[] = []
+    for (let g = 0; g < G; g++) {
+      if (cnt[g] > 0 && cnt[g] < minArea && !protectedGroups.has(g) && (adj.get(g)?.size ?? 0) > 0) small.push(g)
+    }
+    if (small.length === 0) break
+
+    const labCache = new Map<number, [number, number, number]>()
+    const labOf = (g: number): [number, number, number] => {
+      let l = labCache.get(g)
+      if (!l) labCache.set(g, (l = srgbToLab(sumR[g] / cnt[g], sumG[g] / cnt[g], sumB[g] / cnt[g])))
+      return l
+    }
+
+    // Union-find over group ids; the more "keepable" group wins the root.
+    const parent = Array.from({ length: G }, (_, i) => i)
+    const find = (x: number): number => {
+      while (parent[x] !== x) {
+        parent[x] = parent[parent[x]]
+        x = parent[x]
+      }
+      return x
+    }
+    const keepScore = (g: number): number => (protectedGroups.has(g) ? 2 : cnt[g] >= minArea ? 1 : 0)
+    const union = (a: number, b: number): void => {
+      const ra = find(a)
+      const rb = find(b)
+      if (ra === rb) return
+      const sa = keepScore(ra)
+      const sb = keepScore(rb)
+      const bWins = sb > sa || (sb === sa && (cnt[rb] > cnt[ra] || (cnt[rb] === cnt[ra] && rb < ra)))
+      if (bWins) parent[ra] = rb
+      else parent[rb] = ra
+    }
+
+    for (const g of small) {
+      const nbrs = adj.get(g)!
+      let bestT = -1
+      let bestDE = Infinity
+      let bestBoundary = -1
+      const consider = (preferReal: boolean): void => {
+        for (const [t, boundary] of nbrs) {
+          if (preferReal && cnt[t] < minArea && !protectedGroups.has(t)) continue
+          const de = deltaE76(labOf(g), labOf(t))
+          if (de < bestDE || (de === bestDE && (boundary > bestBoundary || (boundary === bestBoundary && t < bestT)))) {
+            bestDE = de
+            bestT = t
+            bestBoundary = boundary
+          }
+        }
+      }
+      consider(true) // prefer a real (≥ minArea) neighbour
+      if (bestT < 0) consider(false) // else any neighbour
+      if (bestT >= 0) union(g, bestT)
+    }
+
+    // Apply the relabel.
+    let any = false
+    for (let i = 0; i < n; i++) {
+      const g = groupId[i]
+      if (g < 0) continue
+      const r = find(g)
+      if (r !== g) {
+        groupId[i] = r
+        any = true
+      }
+    }
+    if (!any) break
+    changed = true
+  }
+
+  if (!changed) return { count: G, changed: false }
+
+  // Compact surviving ids → 0..count-1 (ascending original id ⇒ deterministic).
+  const remap = new Map<number, number>()
+  for (let i = 0; i < n; i++) {
+    const g = groupId[i]
+    if (g >= 0 && !remap.has(g)) remap.set(g, 0)
+  }
+  const roots = [...remap.keys()].sort((a, b) => a - b)
+  roots.forEach((g, idx) => remap.set(g, idx))
+  for (let i = 0; i < n; i++) {
+    const g = groupId[i]
+    if (g >= 0) groupId[i] = remap.get(g)!
+  }
+  return { count: roots.length, changed: true }
 }
 
 /**
