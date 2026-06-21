@@ -253,6 +253,24 @@ export function TraceControlsBody({
                       </button>
                     </div>
                   )}
+
+                  {/* Marked regions → flat paint. Only meaningful with gradients on
+                      (off ⇒ everything is flat already). Pair with markers' keep-
+                      separate role: mark BOTH sides of a fused pair for clean flats. */}
+                  {markerCount > 0 && opts.gradients !== false && (
+                    <Field label="Flatten marked regions">
+                      <Toggle
+                        checked={opts.flattenMarked === true}
+                        onChange={(v) => onPatch({ flattenMarked: v })}
+                        label="Paint each marked region one flat colour"
+                      />
+                      <p className="mt-1 text-xs leading-snug text-muted">
+                        Stops the tracer fitting a gradient over a region you want flat — and
+                        keeps two flats that were fused under a "weird gradient" as separate
+                        solid colours.
+                      </p>
+                    </Field>
+                  )}
                 </>
               )}
             </Collapsible>

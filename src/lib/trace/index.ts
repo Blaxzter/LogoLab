@@ -55,6 +55,29 @@ function crispOptionsFor(smoothing: number, turdsize: number): CrispOptions {
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n))
 
+/**
+ * Labels the user pinned as flat: every region containing a marker, when
+ * `flattenMarked` is on. The marker's normalized [0,1] point maps to a pixel and
+ * reads its final label (markers seed a distinct split sub-region, so this hits
+ * exactly that sub-region). Empty when off / no markers ⇒ no behaviour change.
+ */
+function flattenMarkedLabels(
+  options: VectorizeOptions,
+  labels: Int32Array,
+  width: number,
+  height: number,
+): Set<number> {
+  const out = new Set<number>()
+  if (!options.flattenMarked || !options.markers?.length) return out
+  for (const m of options.markers) {
+    const px = clamp(Math.round(m.x * width), 0, width - 1)
+    const py = clamp(Math.round(m.y * height), 0, height - 1)
+    const label = labels[py * width + px]
+    if (label >= 0) out.add(label)
+  }
+  return out
+}
+
 /** Map the user fidelity dial onto the beautify pass (plan §3.3 / V3). */
 function beautifyOptionsFor(options: VectorizeOptions): BeautifyOptions {
   return {
@@ -159,7 +182,15 @@ export async function traceImage(
     // the smooth subset omits the high-error anti-aliased pixels where a glow
     // helps most and so under-reports its benefit (see fitGlowStack).
     fullSamples = fullRegionSamples(q.labels, imageData.data, width, q.palette.length)
-    labelPaint = seg.regionSamples.map((s, label) => fitPaintLadder(s, undefined, fullSamples![label]))
+    // Regions the user pinned as "flat" (a marker inside them + flattenMarked) are
+    // painted SOLID — fitPaintLadder is skipped so they keep their representative
+    // flat colour instead of a fitted gradient (the user's "this region should be
+    // flat, and the merger should respect it"). Markers already keep such regions
+    // separate, so marking both sides of a fused pair yields two clean flats.
+    const flatLabels = flattenMarkedLabels(options, q.labels, width, height)
+    labelPaint = seg.regionSamples.map((s, label) =>
+      flatLabels.has(label) ? null : fitPaintLadder(s, undefined, fullSamples![label]),
+    )
   }
 
   // V6 — translucent layer decomposition (plan §9). Only ATTEMPTED when the user
