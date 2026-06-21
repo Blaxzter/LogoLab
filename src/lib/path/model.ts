@@ -750,7 +750,7 @@ export function serializeDoc(doc: EditableDoc, precision = 2): string {
   const gradIds = new Map<GradientFill, string>()
   let defs = ''
   for (const item of doc.items) {
-    if (item.visible && item.kind === 'path' && item.gradient && !item.gradientHidden && !gradIds.has(item.gradient)) {
+    if (item.visible && item.kind === 'path' && item.gradient && !gradIds.has(item.gradient)) {
       const id = gradientId(item.id)
       gradIds.set(item.gradient, id)
       defs += gradientToSvgDef(item.gradient, id, precision)
@@ -761,7 +761,7 @@ export function serializeDoc(doc: EditableDoc, precision = 2): string {
   for (const item of doc.items) {
     if (!item.visible) continue
     if (item.kind === 'path') {
-      const fill = item.gradient && !item.gradientHidden ? `url(#${gradIds.get(item.gradient)})` : escapeAttr(item.fill)
+      const fill = item.gradient ? `url(#${gradIds.get(item.gradient)})` : escapeAttr(item.fill)
       out += `<path fill="${fill}"`
       if (item.fillOpacity !== undefined && item.fillOpacity < 1) {
         out += ` fill-opacity="${Number(item.fillOpacity.toFixed(4))}"`

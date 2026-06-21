@@ -250,9 +250,7 @@ function compositeItem(
   B: Float64Array,
 ): void {
   const fillOpacity = item.fillOpacity ?? 1
-  // `gradientHidden` (editor flat toggle) paints the solid fill while keeping the
-  // fitted gradient on the item for a reversible toggle.
-  const paint = item.gradient && !item.gradientHidden ? makeGradientPaint(item.gradient, vbx, vby) : makeSolidPaint(item.fill)
+  const paint = item.gradient ? makeGradientPaint(item.gradient, vbx, vby) : makeSolidPaint(item.fill)
 
   for (let py = 0; py < height; py++) {
     for (let px = 0; px < width; px++) {
