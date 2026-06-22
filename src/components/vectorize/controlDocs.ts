@@ -118,9 +118,9 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'markers',
     label: 'Mark regions',
-    hint: 'Pin a spot to keep it as its own shape.',
+    hint: 'Pin a spot to keep it separate — or flat.',
     blurb:
-      'Region markers are seeds for the segmentation: a marker means “keep a distinct shape here.” Two regions that contain different markers never merge, and a marked region is never absorbed by a neighbour — so they’re the surgical way to recover something the automatic merge would otherwise swallow, most often the soft blend where translucent shapes overlap. Turn on Place markers, then click the image (either pane) to drop a seed; click a seed to remove it. To split an overlap from the shapes around it, mark BOTH the overlap and its neighbours. Unmarked areas merge exactly as before.',
+      'Region markers are seeds for the segmentation, in two kinds. “Keep separate” means “keep a distinct shape here”: two regions with different markers never merge and a marked region is never absorbed — the surgical way to recover something the automatic merge would swallow, like the soft blend where translucent shapes overlap. “Flat colour” does that AND paints the region one solid colour instead of a fitted gradient — so when the tracer fuses two flat sections under a “weird gradient”, mark each side as Flat to get two clean, distinct solids. Turn on Place markers, pick the kind, then click the image (either pane) to drop a marker; click a marker to remove it. To split a region from its neighbour, mark BOTH sides. Unmarked areas trace exactly as before.',
     example: synthetic('overlaps'),
     baseOpts: { mode: 'color' },
     exampleOnly: true,

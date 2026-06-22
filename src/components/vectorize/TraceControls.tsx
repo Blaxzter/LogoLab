@@ -220,8 +220,9 @@ export function TraceControlsBody({
                 right={<Toggle checked={regionsEnabled} onChange={onRegionsEnabledChange} />}
               >
                 <p className="text-xs leading-snug text-muted">
-                  Seed the segmentation to keep chosen spots as their own shapes — ideal for
-                  translucent overlaps the auto-merge would otherwise fuse.
+                  Seed the segmentation per spot: keep a region <em>separate</em> from its
+                  neighbour, or paint it one <em>flat</em> colour instead of a gradient. Hovering
+                  the image highlights the region you'd mark.
                 </p>
               </Field>
 

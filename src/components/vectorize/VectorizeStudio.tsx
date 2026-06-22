@@ -947,9 +947,17 @@ export function VectorizeStudio() {
                         on-stage banner makes it obvious the canvas is now clickable. */}
                     {tool === "mark" && !busy && (
                         <div className="animate-in-fade pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2">
-                            <span className="flex items-center gap-2 rounded-full border border-emerald-400/50 bg-surface/90 px-3 py-1 text-xs font-medium text-emerald-600 shadow-sm backdrop-blur dark:text-emerald-400">
+                            <span
+                                className={`flex items-center gap-2 rounded-full border bg-surface/90 px-3 py-1 text-xs font-medium shadow-sm backdrop-blur ${
+                                    markMode === "flat"
+                                        ? "border-amber-400/50 text-amber-600 dark:text-amber-400"
+                                        : "border-emerald-400/50 text-emerald-600 dark:text-emerald-400"
+                                }`}
+                            >
                                 <MapPin size={13} />
-                                Click the image to keep that region as its own shape
+                                {markMode === "flat"
+                                    ? "Click a region to paint it one flat colour"
+                                    : "Click a region to keep it as its own shape"}
                                 <button
                                     type="button"
                                     onClick={() => setTool("pan")}
