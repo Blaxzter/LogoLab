@@ -73,6 +73,14 @@ export interface SegmentOptions {
    */
   minRegionArea: number
   /**
+   * "Flat" region markers in NORMALIZED [0,1] coords — DISTINCT from `markers`
+   * (which keep regions separate). Each flat marker's PRE-merge fine segment is
+   * excluded from the Step-3c gradient field-merge, so it stays in its pre-merge
+   * flat form (its own region, painted solid) instead of being fused into a
+   * gradient. Omitted / empty ⇒ no effect. Processed in fixed order.
+   */
+  flatMarkers?: { x: number; y: number }[]
+  /**
    * User-placed region markers in NORMALIZED [0,1] image coordinates (converted
    * to pixels here against the image's own width/height, so they are correct at
    * any raster resolution). Marker-watershed constraint: each marker seeds a
@@ -106,6 +114,14 @@ export interface SegmentResult extends QuantizeResult {
   ms: MumfordShahResult
   /** Number of fine segments S₀ before discontinuity-aware merging. */
   fineSegments: number
+  /**
+   * Per-pixel PRE-merge region id — the fine segments (S₀) as they stand BEFORE
+   * the Step-3c gradient field-merge fuses them into macro-regions. −1 for
+   * anti-aliased / transparent pixels. This is the "region detection before the
+   * macro field merging": the editor highlights these on hover, and the user
+   * picks one to keep flat. (`labels` is the final, post-merge map.)
+   */
+  preMergeLabels: Int32Array
   /**
    * Per macro-region (parallel to `palette`/`counts`), the SMOOTH-pixel samples
    * used for the merge — anti-aliased 𝒟 pixels excluded — so Stage 2 fits its
@@ -203,7 +219,12 @@ export function segmentImage(
   // below). So a flat overlap separates cleanly from its neighbour even though
   // their mean colours merge — and it works at the DEFAULT detail (no global
   // τ_s drop, no fragmentation). With no markers nothing here changes the output.
-  const markers = opts.markers ?? []
+  // Both keep-separate `markers` and `flatMarkers` seed the split — both want their
+  // region to stand apart (the seeded growth settles the boundary on the colour
+  // ridge, which cleanly assigns a transition band to the nearest side). They
+  // differ only in PAINT: flat markers additionally force their region solid
+  // (index.ts), keep-separate markers leave the paint model alone.
+  const markers = [...(opts.markers ?? []), ...(opts.flatMarkers ?? [])]
   const markerSeeds: number[] = []
   const usedSeed = new Set<number>()
   for (let m = 0; m < markers.length; m++) {
@@ -591,7 +612,7 @@ export function segmentImage(
       }
       groupCount = mergeSmallRegions(groupId, groupCount, n, w, h, data, opts.minRegionArea, protectedGroups).count
     }
-    return assembleFromGroupId(groupId, groupCount, n, w, data, smooth, ms, S, opts.sampleCap)
+    return { ...assembleFromGroupId(groupId, groupCount, n, w, data, smooth, ms, S, opts.sampleCap), preMergeLabels: segOf }
   }
 
   // --- Small-region merge (despeckle): absorb sub-threshold slivers into their
@@ -599,7 +620,7 @@ export function segmentImage(
   // a merge actually fires; otherwise the no-marker path stays byte-identical. ---
   if (opts.minRegionArea > 0) {
     const merged = mergeSmallRegions(groupId, G + extra.length, n, w, h, data, opts.minRegionArea, NO_PROTECTED)
-    if (merged.changed) return assembleFromGroupId(groupId, merged.count, n, w, data, smooth, ms, S, opts.sampleCap)
+    if (merged.changed) return { ...assembleFromGroupId(groupId, merged.count, n, w, data, smooth, ms, S, opts.sampleCap), preMergeLabels: segOf }
   }
 
   // --- Assemble QuantizeResult over all macro-regions (smooth groups + isolated
@@ -631,7 +652,7 @@ export function segmentImage(
     labels[i] = gi < 0 ? -1 : rank[gi]
   }
 
-  return { palette, labels, counts, ms, fineSegments: S, regionSamples }
+  return { palette, labels, counts, ms, fineSegments: S, regionSamples, preMergeLabels: segOf }
 }
 
 // ---------------------------------------------------------------------------
@@ -984,7 +1005,7 @@ function assembleFromGroupId(
   ms: MumfordShahResult,
   S: number,
   sampleCap: number,
-): SegmentResult {
+): Omit<SegmentResult, 'preMergeLabels'> {
   const G = groupCount
   const cnt = new Float64Array(G)
   const sumR = new Float64Array(G)
@@ -1157,5 +1178,5 @@ function fallbackSingleRegion(
   }
   const palette: PaletteColor[] = [{ r: clamp255(r / (c || 1)), g: clamp255(g / (c || 1)), b: clamp255(b / (c || 1)) }]
   const empty: RegionSamples = { xs: new Float64Array(0), ys: new Float64Array(0), rs: new Float64Array(0), gs: new Float64Array(0), bs: new Float64Array(0), n: 0 }
-  return { palette, labels, counts: [c], ms, fineSegments: 1, regionSamples: [empty] }
+  return { palette, labels, counts: [c], ms, fineSegments: 1, regionSamples: [empty], preMergeLabels: labels }
 }

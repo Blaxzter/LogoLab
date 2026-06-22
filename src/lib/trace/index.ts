@@ -56,20 +56,21 @@ function crispOptionsFor(smoothing: number, turdsize: number): CrispOptions {
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n))
 
 /**
- * Labels the user pinned as flat: every region containing a marker, when
- * `flattenMarked` is on. The marker's normalized [0,1] point maps to a pixel and
- * reads its final label (markers seed a distinct split sub-region, so this hits
- * exactly that sub-region). Empty when off / no markers ⇒ no behaviour change.
+ * Final labels pinned FLAT by a flat marker — painted one solid colour. Each flat
+ * marker's normalized point maps to a pixel → its final label. (Segmentation also
+ * keeps these regions in their pre-merge form via `flatMarkers`; forcing solid
+ * paint here guarantees the region is flat, not a subtle gradient.) Empty without
+ * flat markers ⇒ no behaviour change.
  */
-function flattenMarkedLabels(
+function flatMarkerLabels(
   options: VectorizeOptions,
   labels: Int32Array,
   width: number,
   height: number,
 ): Set<number> {
   const out = new Set<number>()
-  if (!options.flattenMarked || !options.markers?.length) return out
-  for (const m of options.markers) {
+  for (const m of options.markers ?? []) {
+    if (!m.flat) continue
     const px = clamp(Math.round(m.x * width), 0, width - 1)
     const py = clamp(Math.round(m.y * height), 0, height - 1)
     const label = labels[py * width + px]
@@ -182,12 +183,12 @@ export async function traceImage(
     // the smooth subset omits the high-error anti-aliased pixels where a glow
     // helps most and so under-reports its benefit (see fitGlowStack).
     fullSamples = fullRegionSamples(q.labels, imageData.data, width, q.palette.length)
-    // Regions the user pinned as "flat" (a marker inside them + flattenMarked) are
-    // painted SOLID — fitPaintLadder is skipped so they keep their representative
-    // flat colour instead of a fitted gradient (the user's "this region should be
-    // flat, and the merger should respect it"). Markers already keep such regions
-    // separate, so marking both sides of a fused pair yields two clean flats.
-    const flatLabels = flattenMarkedLabels(options, q.labels, width, height)
+    // Regions pinned by a FLAT marker are painted SOLID — fitPaintLadder is
+    // skipped so they keep their representative flat colour, not a fitted gradient
+    // (the user's "this region should be flat"). Segmentation already kept them in
+    // their pre-merge form (excluded from the field merge via `flatMarkers`), so
+    // they're also their own distinct regions.
+    const flatLabels = flatMarkerLabels(options, q.labels, width, height)
     labelPaint = seg.regionSamples.map((s, label) =>
       flatLabels.has(label) ? null : fitPaintLadder(s, undefined, fullSamples![label]),
     )
@@ -532,7 +533,14 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
   // gradients elsewhere intact. Threaded through whether or not regionDetail is
   // raised. No markers + regionDetail 0 ⇒ the exact default object (byte-identical
   // output to before).
-  const markers = options.markers && options.markers.length > 0 ? options.markers : undefined
+  // The UI marker list is tagged (`flat?`); split it into the segmenter's two
+  // seed lists. Both drive the seeded split (keep regions distinct); flat ones
+  // additionally pin their region to its pre-merge flat form (+ solid paint).
+  const allMarkers = options.markers ?? []
+  const keepMarkers = allMarkers.filter((m) => !m.flat).map((m) => ({ x: m.x, y: m.y }))
+  const flatMarkerList = allMarkers.filter((m) => m.flat).map((m) => ({ x: m.x, y: m.y }))
+  const markers = keepMarkers.length > 0 ? keepMarkers : undefined
+  const flatMarkers = flatMarkerList.length > 0 ? flatMarkerList : undefined
   // Gradients OFF disables the gradient-explained union-fit merge (segment.ts Step
   // 3c) so smooth ramps posterize into flat bands rather than fusing into one
   // region that Stage 2 then averages to a muddy mean colour. On (the default) is
@@ -541,7 +549,8 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
   // Despeckle → minimum-region area: absorbs anti-alias / colour-ramp slivers into
   // a neighbour (segment.ts mergeSmallRegions). 0 ⇒ no merge (byte-identical).
   const minRegionArea = minRegionAreaFor(options.despeckle ?? 0)
-  const needsOverride = d !== 0 || !mergeGradients || minRegionArea !== DEFAULT_SEGMENT_OPTIONS.minRegionArea
+  const needsOverride =
+    d !== 0 || !mergeGradients || minRegionArea !== DEFAULT_SEGMENT_OPTIONS.minRegionArea
   const base: SegmentOptions = needsOverride
     ? {
         ...DEFAULT_SEGMENT_OPTIONS,
@@ -551,7 +560,8 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
         minRegionArea,
       }
     : DEFAULT_SEGMENT_OPTIONS
-  return markers ? { ...base, markers } : base
+  if (!markers && !flatMarkers) return base
+  return { ...base, ...(markers ? { markers } : {}), ...(flatMarkers ? { flatMarkers } : {}) }
 }
 
 /**

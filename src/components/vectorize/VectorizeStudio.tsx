@@ -198,9 +198,17 @@ export function VectorizeStudio() {
     // [0,1] coords ⇒ resolution-independent.
     const markers = useMemo(() => opts.markers ?? [], [opts.markers]);
 
-    const addMarker = useCallback((x: number, y: number) => {
-        setOpts((o) => ({ ...o, markers: [...(o.markers ?? []), { x, y }] }));
-    }, []);
+    // Which kind of marker a click drops: "separate" (keep the region distinct, its
+    // paint untouched) or "flat" (also pin it to its pre-merge flat form + solid).
+    const [markMode, setMarkMode] = useState<"separate" | "flat">("separate");
+
+    const addMarker = useCallback(
+        (x: number, y: number) => {
+            const m = markMode === "flat" ? { x, y, flat: true } : { x, y };
+            setOpts((o) => ({ ...o, markers: [...(o.markers ?? []), m] }));
+        },
+        [markMode],
+    );
     const removeMarker = useCallback((index: number) => {
         setOpts((o) => ({
             ...o,
@@ -626,6 +634,9 @@ export function VectorizeStudio() {
         marking: tool === "mark",
         onMarkingChange: (on: boolean) => setTool(on ? "mark" : "pan"),
         markerCount: markers.length,
+        flatCount: markers.filter((m) => m.flat).length,
+        markMode,
+        onMarkModeChange: setMarkMode,
         onClearMarkers: clearMarkers,
         busy,
         staleEdits,
@@ -1051,6 +1062,7 @@ export function VectorizeStudio() {
 
 /** Region-marker glyph colour (emerald) + halo, matching EditorCanvas. */
 const MARKER_FILL = "#10b981";
+const FLAT_MARKER_FILL = "#f59e0b"; // amber — "flat colour" markers
 const MARKER_HALO = "#ffffff";
 /** Screen-px radius for clicking an existing marker to remove it. */
 const MARKER_HIT_PX = 11;
@@ -1080,7 +1092,7 @@ function OriginalPane({
     aspectW: number;
     aspectH: number;
     primary?: boolean;
-    markers?: { x: number; y: number }[];
+    markers?: { x: number; y: number; flat?: boolean }[];
     marking?: boolean;
     onAddMarker?: (x: number, y: number) => void;
     onRemoveMarker?: (index: number) => void;
@@ -1144,8 +1156,8 @@ function OriginalPane({
                                     top: `${m.y * 100}%`,
                                     width: 14,
                                     height: 14,
-                                    borderRadius: "9999px",
-                                    background: MARKER_FILL,
+                                    borderRadius: m.flat ? "3px" : "9999px",
+                                    background: m.flat ? FLAT_MARKER_FILL : MARKER_FILL,
                                     border: `2px solid ${MARKER_HALO}`,
                                     boxShadow: "0 0 0 1px rgba(0,0,0,.25)",
                                     transform: `translate(-50%, -50%) scale(${inv})`,

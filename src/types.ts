@@ -143,17 +143,16 @@ export interface VectorizeOptions {
    * split a translucent overlap from a neighbouring shape, mark BOTH. Omitted /
    * empty ⇒ byte-identical to no markers.
    */
-  markers?: { x: number; y: number }[]
   /**
-   * Flatten marked regions (color mode). When on, any region that contains a
-   * marker is painted a single FLAT colour instead of a fitted gradient — so the
-   * user can pin the sections that should stay flat and let the merger respect
-   * that, rather than getting a "weird gradient" bridging two flats. Combined
-   * with markers' keep-separate semantics (mark BOTH sides of a fused pair), this
-   * yields clean, distinct flat regions. No effect without markers, or with
-   * gradients already off. Omitted ⇒ off.
+   * User-placed region markers (segmentation seeds), NORMALIZED [0,1] coords. Each
+   * marker keeps its region distinct (a seeded split settles the boundary on the
+   * colour ridge). A marker tagged `flat: true` ADDITIONALLY pins its region to its
+   * pre-merge flat form — excluded from the gradient field-merge and painted one
+   * solid colour ("this section is flat, kept its own thing"). The two tags are
+   * split into the segmenter's `markers` / `flatMarkers` by `segmentOptionsFor`.
+   * Omitted / empty ⇒ no markers.
    */
-  flattenMarked?: boolean
+  markers?: { x: number; y: number; flat?: boolean }[]
   /**
    * Translucent layer decomposition (V6, color mode). When the segmentation has
    * recovered overlap-shaped regions (via markers or Region detail), try to

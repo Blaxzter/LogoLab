@@ -52,6 +52,7 @@ const ACCENT_SEL = "#f25f2e";
 const HALO = "#ffffff";
 /** Region-marker pin colour (emerald) — distinct from the indigo/orange edit accents. */
 const MARKER = "#10b981";
+const FLAT_MARKER = "#f59e0b"; // amber — "flat colour" markers
 /** Screen-px movement before a pointerdown counts as a drag (not a click). */
 const DRAG_THRESHOLD_PX = 3;
 /** Max screen-px distance from a segment for double-click node insertion. */
@@ -81,7 +82,7 @@ export interface EditorCanvasProps {
     /** Original-image ghost rendered under the SVG (overlay view mode). */
     underlay?: { src: string; opacity: number } | null;
     /** Region markers (segmentation seeds) in NORMALIZED [0,1] image coords. */
-    markers?: { x: number; y: number }[];
+    markers?: { x: number; y: number; flat?: boolean }[];
     onSelectPath: (id: string | null) => void;
     onSelectNodes: (keys: Set<string>) => void;
     /** Live preview during drags (no history commit). */
@@ -1190,13 +1191,14 @@ export function EditorCanvas({
                                 {markers.map((m, i) => {
                                     const cx = vbX + m.x * vbW;
                                     const cy = vbY + m.y * vbH;
+                                    const col = m.flat ? FLAT_MARKER : MARKER;
                                     return (
                                         <g key={i}>
                                             <circle
                                                 cx={cx}
                                                 cy={cy}
                                                 r={r(6.5)}
-                                                fill={MARKER}
+                                                fill={col}
                                                 fillOpacity={0.22}
                                                 stroke="none"
                                             />
@@ -1204,7 +1206,7 @@ export function EditorCanvas({
                                                 cx={cx}
                                                 cy={cy}
                                                 r={r(4)}
-                                                fill={MARKER}
+                                                fill={col}
                                                 stroke={HALO}
                                                 strokeWidth={r(1.5)}
                                             />

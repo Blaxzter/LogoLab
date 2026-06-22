@@ -31,6 +31,11 @@ export interface TraceControlsProps {
   marking: boolean
   onMarkingChange: (on: boolean) => void
   markerCount: number
+  /** How many of the markers are tagged "flat". */
+  flatCount: number
+  /** Which kind of marker a click drops. */
+  markMode: 'separate' | 'flat'
+  onMarkModeChange: (m: 'separate' | 'flat') => void
   onClearMarkers: () => void
   busy: boolean
   /** Params changed while the doc carries manual edits — re-trace discards them. */
@@ -67,6 +72,9 @@ export function TraceControlsBody({
   marking,
   onMarkingChange,
   markerCount,
+  flatCount,
+  markMode,
+  onMarkModeChange,
   onClearMarkers,
   busy,
   staleEdits,
@@ -235,14 +243,49 @@ export function TraceControlsBody({
                   </button>
                   <p className="text-xs leading-snug text-muted">
                     {marking
-                      ? 'Click either pane to drop a seed; click a seed to remove it. Turn off to pan and edit — markers stay active.'
+                      ? 'Click either pane to drop a marker; click a marker to remove it. Turn off to pan and edit — markers stay active.'
                       : 'Markers stay active while you pan, zoom and edit. Turn on to place more.'}
                   </p>
+
+                  {/* Marker kind: a click drops this type. "Separate" keeps the
+                      region distinct (paint untouched); "Flat" also pins it to one
+                      solid colour (its pre-merge form), not a fitted gradient. */}
+                  <div className="grid grid-cols-2 gap-1 rounded-lg border border-line p-1">
+                    {(
+                      [
+                        ['separate', 'Keep separate', 'text-emerald-600 dark:text-emerald-400'],
+                        ['flat', 'Flat colour', 'text-amber-600 dark:text-amber-400'],
+                      ] as const
+                    ).map(([mode, label, active]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        aria-pressed={markMode === mode}
+                        onClick={() => onMarkModeChange(mode)}
+                        className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                          markMode === mode ? `bg-surface-3 ${active}` : 'text-ink-2 hover:bg-surface-2'
+                        }`}
+                      >
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ background: mode === 'flat' ? '#f59e0b' : '#10b981' }}
+                        />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs leading-snug text-muted">
+                    {markMode === 'flat'
+                      ? 'Flat: this region paints one solid colour instead of a gradient, and stays its own shape. Mark both sides of a pair the tracer fused under a gradient.'
+                      : 'Separate: keep this region from merging into its neighbour; its gradient/flat paint is left as fitted.'}
+                  </p>
+
                   {markerCount > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5 text-xs text-ink-2">
                         <MapPin size={12} className="text-emerald-500" />
-                        {markerCount} marker{markerCount === 1 ? '' : 's'} placed
+                        {markerCount} marker{markerCount === 1 ? '' : 's'}
+                        {flatCount > 0 ? ` · ${flatCount} flat` : ''}
                       </span>
                       <button
                         type="button"
@@ -252,24 +295,6 @@ export function TraceControlsBody({
                         <X size={12} /> Clear all
                       </button>
                     </div>
-                  )}
-
-                  {/* Marked regions → flat paint. Only meaningful with gradients on
-                      (off ⇒ everything is flat already). Pair with markers' keep-
-                      separate role: mark BOTH sides of a fused pair for clean flats. */}
-                  {markerCount > 0 && opts.gradients !== false && (
-                    <Field label="Flatten marked regions">
-                      <Toggle
-                        checked={opts.flattenMarked === true}
-                        onChange={(v) => onPatch({ flattenMarked: v })}
-                        label="Paint each marked region one flat colour"
-                      />
-                      <p className="mt-1 text-xs leading-snug text-muted">
-                        Stops the tracer fitting a gradient over a region you want flat — and
-                        keeps two flats that were fused under a "weird gradient" as separate
-                        solid colours.
-                      </p>
-                    </Field>
                   )}
                 </>
               )}
