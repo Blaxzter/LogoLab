@@ -221,8 +221,8 @@ export function TraceControlsBody({
               >
                 <p className="text-xs leading-snug text-muted">
                   Seed the segmentation per spot: keep a region <em>separate</em> from its
-                  neighbour, or paint it one <em>flat</em> colour instead of a gradient. Hovering
-                  the image highlights the region you'd mark.
+                  neighbour, or paint it one <em>flat</em> colour instead of a gradient. In
+                  flat mode, hovering the result highlights the section you'd carve out.
                 </p>
               </Field>
 
@@ -277,8 +277,8 @@ export function TraceControlsBody({
                   </div>
                   <p className="text-xs leading-snug text-muted">
                     {markMode === 'flat'
-                      ? 'Flat: this region paints one solid colour instead of a gradient, and stays its own shape. Mark both sides of a pair the tracer fused under a gradient.'
-                      : 'Separate: keep this region from merging into its neighbour; its gradient/flat paint is left as fitted.'}
+                      ? 'Flat: paints the section one solid colour. If it was fused with a different colour into a fake gradient, one marker splits it off along the colour edge.'
+                      : 'Separate: keep this region distinct; its gradient/flat paint is left as fitted. Mark both sides of an over-merge to set the boundary on the colour ridge.'}
                   </p>
 
                   {markerCount > 0 && (

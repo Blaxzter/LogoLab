@@ -73,11 +73,13 @@ export interface SegmentOptions {
    */
   minRegionArea: number
   /**
-   * "Flat" region markers in NORMALIZED [0,1] coords — DISTINCT from `markers`
-   * (which keep regions separate). Each flat marker's PRE-merge fine segment is
-   * excluded from the Step-3c gradient field-merge, so it stays in its pre-merge
-   * flat form (its own region, painted solid) instead of being fused into a
-   * gradient. Omitted / empty ⇒ no effect. Processed in fixed order.
+   * "Flat" region markers in NORMALIZED [0,1] coords — DISTINCT from `markers`. Each
+   * flat marker's PRE-merge fine segment is EXCLUDED from the Step-3c gradient field
+   * merge, so it survives as its own region instead of being fused into a (often
+   * nonsensical) gradient with its neighbours. The exclusion happens before the Step-4
+   * anti-alias flood, so the flood settles the region's boundary on the true colour
+   * edge — clean geometry, and a SINGLE marker suffices. Painted solid downstream
+   * (index.ts). Omitted / empty ⇒ no effect. Fixed input order.
    */
   flatMarkers?: { x: number; y: number }[]
   /**
@@ -208,37 +210,43 @@ export function segmentImage(
     }
   }
 
-  // --- User markers → seed pixels (marker-controlled seeded region growing) ---
+  // --- User markers → seed pixels ---------------------------------------------
   // Each marker (normalised [0,1], fixed input order) claims the nearest SMOOTH
-  // pixel. Markers no longer veto merging (the old approach left ragged scan-order
-  // slivers and could not separate a translucent overlap whose colour is within
-  // τ_s of the shape beneath it). Instead they drive a SEEDED REGION GROWING split
-  // AFTER the normal segmentation: any macro-region that ends up containing ≥2
-  // markers is partitioned by growing a sub-region out from each marker, the
-  // boundary settling on the colour RIDGE between them (markerControlledSplit
-  // below). So a flat overlap separates cleanly from its neighbour even though
-  // their mean colours merge — and it works at the DEFAULT detail (no global
-  // τ_s drop, no fragmentation). With no markers nothing here changes the output.
-  // Both keep-separate `markers` and `flatMarkers` seed the split — both want their
-  // region to stand apart (the seeded growth settles the boundary on the colour
-  // ridge, which cleanly assigns a transition band to the nearest side). They
-  // differ only in PAINT: flat markers additionally force their region solid
-  // (index.ts), keep-separate markers leave the paint model alone.
-  const markers = [...(opts.markers ?? []), ...(opts.flatMarkers ?? [])]
-  const markerSeeds: number[] = []
+  // pixel; duplicate / unreachable seeds are dropped so the set is deterministic.
+  // The two kinds act DIFFERENTLY:
+  //
+  //   • keep-separate `markers` → SEEDED REGION GROWING split (markerControlledSplit
+  //     below): a macro-region holding ≥2 of them is partitioned by growing a sub-
+  //     region from each, the boundary settling on the colour RIDGE between them.
+  //     This recovers a translucent overlap whose colour is within τ_s of the shape
+  //     beneath it (their means merge, so an exclusion can't tell them apart, but the
+  //     seeded growth still finds the step). Needs ≥2 — one front has nothing to
+  //     grow against.
+  //
+  //   • `flatMarkers` → EXCLUSION from the Step-3c field merge (flatPinned, below):
+  //     the marker's fine segment is forbidden from fusing into a macro-region, so it
+  //     survives as its own region. Because this happens BEFORE the Step-4 anti-alias
+  //     flood, the flood then assigns the boundary AA to the nearest colour and the
+  //     region's edge lands on the true colour edge — clean geometry, and a SINGLE
+  //     marker is enough. This is the fix for "the merger fused a red sliver into the
+  //     white and fit a nonsense ring gradient": the sliver becomes its own flat red.
+  //
+  // With no markers nothing here changes the output (byte-identical).
+  const splitSeeds: number[] = []
+  const flatSeeds: number[] = []
   const usedSeed = new Set<number>()
-  for (let m = 0; m < markers.length; m++) {
-    const px = Math.max(0, Math.min(w - 1, Math.round(markers[m].x * w)))
-    const py = Math.max(0, Math.min(h - 1, Math.round(markers[m].y * h)))
+  const claimSeed = (mx: number, my: number, into: number[]): void => {
+    const px = Math.max(0, Math.min(w - 1, Math.round(mx * w)))
+    const py = Math.max(0, Math.min(h - 1, Math.round(my * h)))
     const seed = nearestSmoothPixel(smooth, w, h, px, py)
-    // Skip a marker with no reachable smooth pixel, or a duplicate seed pixel —
-    // keeps the seed list unique and deterministic regardless of placement.
     if (seed >= 0 && !usedSeed.has(seed)) {
       usedSeed.add(seed)
-      markerSeeds.push(seed)
+      into.push(seed)
     }
   }
-  const hasMarkers = markerSeeds.length > 0
+  for (const m of opts.markers ?? []) claimSeed(m.x, m.y, splitSeeds)
+  for (const m of opts.flatMarkers ?? []) claimSeed(m.x, m.y, flatSeeds)
+  const hasMarkers = splitSeeds.length > 0 || flatSeeds.length > 0
 
   const find = (x: number): number => {
     let r = x
@@ -318,6 +326,16 @@ export function segmentImage(
   if (S === 0) {
     // Degenerate (e.g. fully transparent / everything an edge): one flat region.
     return fallbackSingleRegion(img, ms)
+  }
+
+  // Flat-marker pins: the fine segment id under each flat marker. These are excluded
+  // from the Step-3c field merge (evalPair, below), so each stays its own region in
+  // its pre-merge flat form. Held out BEFORE the Step-4 flood so the AA settles on
+  // the true colour edge. Empty without flat markers ⇒ the merge proceeds unchanged.
+  const flatPinned = new Set<number>()
+  for (const seed of flatSeeds) {
+    const s = segOf[seed]
+    if (s >= 0) flatPinned.add(s)
   }
 
   // --- Step 3a: discontinuity relation 𝒜 (eq 3) -------------------------------
@@ -428,11 +446,14 @@ export function segmentImage(
     for (const a of mi) for (const b of mj) if (vetoed.has(pairKey(a, b))) return true
     return false
   }
+  // A flat-pinned segment never merges (it stays its own region). Its group id equals
+  // the segment id and is never retired — a vetoed group is never the merge target —
+  // so the singleton check stays valid; freshly-merged groups get ids ≥ S, never pinned.
   const evalPair = (gi: number, gj: number): { res: number; samples: RegionSamples } | null => {
     const k = ckey(gi, gj)
     if (cache.has(k)) return cache.get(k)!
     let result: { res: number; samples: RegionSamples } | null = null
-    if (!pairVetoed(gi, gj)) {
+    if (!flatPinned.has(gi) && !flatPinned.has(gj) && !pairVetoed(gi, gj)) {
       const union = strideConcat([samples.get(gi)!, samples.get(gj)!], opts.sampleCap)
       const fit = fitBestGradient(union)
       if (fit && fit.oklabResidual <= opts.mergeTol && profileGap(fit.gradient, union) <= opts.maxProfileGap) {
@@ -587,26 +608,36 @@ export function segmentImage(
   // their mean colours merge. No-marker runs skip this entirely and take the exact
   // existing assembly below (byte-identical output).
   if (hasMarkers) {
-    // Grow on ORIGINAL-colour Lab, not the MS-smoothed Lab: smoothing erases the
-    // subtle overlap edges (they fall below its threshold), which would leave the
-    // ridge fuzzy and the split boundary off the true edge (a seam). The original
-    // colour keeps the step sharp so the boundary settles exactly on it.
-    const oL = new Float64Array(n)
-    const oA = new Float64Array(n)
-    const oB = new Float64Array(n)
-    for (let i = 0; i < n; i++) {
-      if (!opaque[i]) continue
-      const o = i * 4
-      const lab = srgbToLab(data[o], data[o + 1], data[o + 2])
-      oL[i] = lab[0]
-      oA[i] = lab[1]
-      oB[i] = lab[2]
+    // Flat markers already separated their regions by exclusion above; keep-separate
+    // markers split here. Only build the original-colour Lab + run the split when
+    // there are keep-separate seeds.
+    let groupCount = G + extra.length
+    if (splitSeeds.length > 0) {
+      // Grow on ORIGINAL-colour Lab, not the MS-smoothed Lab: smoothing erases the
+      // subtle overlap edges (they fall below its threshold), which would leave the
+      // ridge fuzzy and the split boundary off the true edge (a seam). The original
+      // colour keeps the step sharp so the boundary settles exactly on it.
+      const oL = new Float64Array(n)
+      const oA = new Float64Array(n)
+      const oB = new Float64Array(n)
+      for (let i = 0; i < n; i++) {
+        if (!opaque[i]) continue
+        const o = i * 4
+        const lab = srgbToLab(data[o], data[o + 1], data[o + 2])
+        oL[i] = lab[0]
+        oA[i] = lab[1]
+        oB[i] = lab[2]
+      }
+      groupCount = markerControlledSplit(groupId, groupCount, splitSeeds, w, h, oL, oA, oB)
     }
-    let groupCount = markerControlledSplit(groupId, G + extra.length, markerSeeds, w, h, oL, oA, oB)
     if (opts.minRegionArea > 0) {
-      // Absorb sub-threshold slivers, but never the user-marked regions.
+      // Absorb sub-threshold slivers, but never a user-marked region (split or flat).
       const protectedGroups = new Set<number>()
-      for (const seed of markerSeeds) {
+      for (const seed of splitSeeds) {
+        const g = groupId[seed]
+        if (g >= 0) protectedGroups.add(g)
+      }
+      for (const seed of flatSeeds) {
         const g = groupId[seed]
         if (g >= 0) protectedGroups.add(g)
       }

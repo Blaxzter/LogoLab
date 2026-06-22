@@ -57,10 +57,10 @@ const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.m
 
 /**
  * Final labels pinned FLAT by a flat marker — painted one solid colour. Each flat
- * marker's normalized point maps to a pixel → its final label. (Segmentation also
- * keeps these regions in their pre-merge form via `flatMarkers`; forcing solid
- * paint here guarantees the region is flat, not a subtle gradient.) Empty without
- * flat markers ⇒ no behaviour change.
+ * marker's normalized point maps to a pixel → its final label. (Segmentation already
+ * excludes a flat-marked section from the field merge via `flatMarkers`, so the label
+ * is the marked section's own region; forcing solid paint here guarantees it stays
+ * flat, not a subtle gradient.) Empty ⇒ no change.
  */
 function flatMarkerLabels(
   options: VectorizeOptions,
@@ -193,9 +193,8 @@ export async function traceImage(
     fullSamples = fullRegionSamples(q.labels, imageData.data, width, q.palette.length)
     // Regions pinned by a FLAT marker are painted SOLID — fitPaintLadder is
     // skipped so they keep their representative flat colour, not a fitted gradient
-    // (the user's "this region should be flat"). Segmentation already kept them in
-    // their pre-merge form (excluded from the field merge via `flatMarkers`), so
-    // they're also their own distinct regions.
+    // (the user's "this region should be flat"). Segmentation already excluded them
+    // from the field merge (`flatMarkers`), so they're their own distinct regions.
     const flatLabels = flatMarkerLabels(options, q.labels, width, height)
     labelPaint = seg.regionSamples.map((s, label) =>
       flatLabels.has(label) ? null : fitPaintLadder(s, undefined, fullSamples![label]),

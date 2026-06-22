@@ -372,10 +372,10 @@ export function EditorCanvas({
     // pan/zoom transform multiplies it on screen). Guard the pre-measure frame.
     const screenScale = fit.width > 0 ? (fit.width * pz.scale) / vbW : 1;
 
-    // Region hover-highlight overlay (mark tool): rasterize the pre-merge region
-    // under the cursor to a tinted mask, as a data-URL <image> over the viewBox.
-    // Recomputed only when the hovered label (or mark mode) changes — O(w·h) once
-    // per region entered, not per mouse-move. Tinted to match the marker kind.
+    // Region hover-highlight overlay (mark tool, flat mode only): rasterize the
+    // pre-merge region under the cursor to a tinted mask, as a data-URL <image> over
+    // the viewBox. Recomputed only when the hovered label changes — O(w·h) once per
+    // region entered, not per mouse-move. Amber to match the "flat colour" marker.
     const hoverOverlay = useMemo(() => {
         if (hoverLabel === null || hoverLabel < 0 || !preMerge) return null;
         if (typeof document === "undefined") return null;
@@ -387,7 +387,7 @@ export function EditorCanvas({
         if (!ctx) return null;
         const img = ctx.createImageData(width, height);
         const d = img.data;
-        const [tr, tg, tb] = markMode === "flat" ? [245, 158, 11] : [16, 185, 129];
+        const [tr, tg, tb] = [245, 158, 11]; // amber (FLAT_MARKER)
         for (let i = 0; i < labels.length; i++) {
             if (labels[i] === hoverLabel) {
                 const o = i * 4;
@@ -399,7 +399,7 @@ export function EditorCanvas({
         }
         ctx.putImageData(img, 0, 0);
         return cnv.toDataURL();
-    }, [preMerge, hoverLabel, markMode]);
+    }, [preMerge, hoverLabel]);
 
     const sel = doc.items.find((it) => it.id === selectedPathId);
     const selectedItem = sel && sel.kind === "path" ? sel : null;
@@ -739,9 +739,15 @@ export function EditorCanvas({
     // --- drag tracking on the svg root (pointer capture retargets here) ----------
 
     const handleSvgPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-        // --- region hover-highlight (mark tool) ---
+        // --- region hover-highlight (mark tool, flat mode only) ---
         if (marking) {
-            if (!preMerge) return;
+            // Flat markers carve the hovered section out as its own region, so the
+            // preview maps to what the click does. "Keep separate" acts by a ridge
+            // split the pre-merge map doesn't predict, so no preview there.
+            if (markMode !== "flat" || !preMerge) {
+                setHoverLabel((prev) => (prev === null ? prev : null));
+                return;
+            }
             const pt = toVb(e.clientX, e.clientY);
             let lab: number | null = null;
             if (pt) {
@@ -1240,10 +1246,11 @@ export function EditorCanvas({
                             />
                         )}
 
-                        {/* Region hover-highlight (mark tool): tint the pre-merge
-                            region under the cursor so the user sees the section a
-                            marker will affect. Above the paths, below the pins. */}
-                        {marking && hoverOverlay && (
+                        {/* Region hover-highlight (mark tool, flat mode): tint the
+                            pre-merge region under the cursor so the user sees the
+                            section a flat marker will carve out. Above the paths,
+                            below the pins. */}
+                        {marking && markMode === "flat" && hoverOverlay && (
                             <image
                                 href={hoverOverlay}
                                 x={vbX}
