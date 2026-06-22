@@ -20,6 +20,7 @@ export function traceImageOffThread(
   options: VectorizeOptions,
   onProgress?: (p: TraceProgress) => void,
   signal?: AbortSignal,
+  onPreMerge?: (pm: { labels: Int32Array; width: number; height: number }) => void,
 ): Promise<EditableDoc> {
   return new Promise<EditableDoc>((resolve, reject) => {
     if (signal?.aborted) {
@@ -41,11 +42,14 @@ export function traceImageOffThread(
     worker.onmessage = (e: MessageEvent) => {
       const msg = e.data as
         | { type: 'progress'; progress: TraceProgress }
-        | { type: 'result'; doc: EditableDoc }
+        | { type: 'result'; doc: EditableDoc; preMergeLabels?: Int32Array; preMergeWidth?: number; preMergeHeight?: number }
         | { type: 'error'; message: string }
       if (msg.type === 'progress') onProgress?.(msg.progress)
       else if (msg.type === 'result') {
         cleanup()
+        if (msg.preMergeLabels && msg.preMergeWidth && msg.preMergeHeight) {
+          onPreMerge?.({ labels: msg.preMergeLabels, width: msg.preMergeWidth, height: msg.preMergeHeight })
+        }
         resolve(msg.doc)
       } else {
         cleanup()

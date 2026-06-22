@@ -63,8 +63,22 @@ self.onmessage = async (e: MessageEvent<Req>) => {
       })
       return
     }
-    const doc = await traceImage(imageData, options, (progress) => self.postMessage({ type: 'progress', progress }))
-    self.postMessage({ type: 'result', doc })
+    let preMerge: { labels: Int32Array; width: number; height: number } | null = null
+    const doc = await traceImage(
+      imageData,
+      options,
+      (progress) => self.postMessage({ type: 'progress', progress }),
+      undefined,
+      (pm) => {
+        preMerge = pm
+      },
+    )
+    if (preMerge) {
+      const pm = preMerge as { labels: Int32Array; width: number; height: number }
+      self.postMessage({ type: 'result', doc, preMergeLabels: pm.labels, preMergeWidth: pm.width, preMergeHeight: pm.height })
+    } else {
+      self.postMessage({ type: 'result', doc })
+    }
   } catch (err) {
     self.postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) })
   }

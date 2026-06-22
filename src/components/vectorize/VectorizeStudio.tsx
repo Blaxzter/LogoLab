@@ -128,6 +128,9 @@ export function VectorizeStudio() {
 
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState("");
+    // Pre-merge region map (fine regions before the gradient field-merge) from the
+    // last trace — drives the region hover-highlight while placing markers.
+    const [preMerge, setPreMerge] = useState<{ labels: Int32Array; width: number; height: number } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [applied, setApplied] = useState(false);
@@ -300,6 +303,9 @@ export function VectorizeStudio() {
                         );
                     },
                     controller.signal,
+                    (pm) => {
+                        if (runId === runIdRef.current) setPreMerge(pm);
+                    },
                 );
             }
             if (runId !== runIdRef.current) return;
@@ -606,6 +612,8 @@ export function VectorizeStudio() {
         selectedPathId,
         selectedNodes,
         markers,
+        markMode,
+        preMerge,
         onSelectPath: handleSelectPath,
         onSelectNodes: handleSelectNodes,
         onDocChange: handleCanvasChange,

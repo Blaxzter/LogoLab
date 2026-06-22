@@ -10,7 +10,7 @@
 // is already baked into that rect). All gestures compute from a pointerdown
 // snapshot with cumulative deltas, so previews never accumulate drift.
 
-import { memo, useEffect, useRef, useState, useCallback } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ZoomSurface } from "../ui/ZoomSurface";
 import type { PanZoom } from "../../hooks/usePanZoom";
 import type {
@@ -83,6 +83,11 @@ export interface EditorCanvasProps {
     underlay?: { src: string; opacity: number } | null;
     /** Region markers (segmentation seeds) in NORMALIZED [0,1] image coords. */
     markers?: { x: number; y: number; flat?: boolean }[];
+    /** Which marker kind the mark tool drops — tints the hover-highlight to match. */
+    markMode?: "separate" | "flat";
+    /** Pre-merge region map (fine regions before the field-merge) from the last
+     *  trace; the mark tool highlights the region under the cursor from it. */
+    preMerge?: { labels: Int32Array; width: number; height: number } | null;
     onSelectPath: (id: string | null) => void;
     onSelectNodes: (keys: Set<string>) => void;
     /** Live preview during drags (no history commit). */
@@ -305,6 +310,8 @@ export function EditorCanvas({
     selectedNodes,
     underlay,
     markers,
+    markMode = "separate",
+    preMerge,
     onSelectPath,
     onSelectNodes,
     onDocChange,
@@ -321,6 +328,9 @@ export function EditorCanvas({
     // Key of the anchor/handle currently under the cursor ('sub:idx' or
     // 'sub:idx:in|out'), for hover feedback in node mode.
     const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+    // Mark tool: the PRE-merge region label under the cursor, highlighted so the
+    // user sees the section a marker will affect.
+    const [hoverLabel, setHoverLabel] = useState<number | null>(null);
 
     // --- marquee (rubber-band) selection state ---
     interface MarqueeState {
@@ -361,6 +371,35 @@ export function EditorCanvas({
     // px per viewBox unit at the current zoom (fit.width is the layout size; the
     // pan/zoom transform multiplies it on screen). Guard the pre-measure frame.
     const screenScale = fit.width > 0 ? (fit.width * pz.scale) / vbW : 1;
+
+    // Region hover-highlight overlay (mark tool): rasterize the pre-merge region
+    // under the cursor to a tinted mask, as a data-URL <image> over the viewBox.
+    // Recomputed only when the hovered label (or mark mode) changes — O(w·h) once
+    // per region entered, not per mouse-move. Tinted to match the marker kind.
+    const hoverOverlay = useMemo(() => {
+        if (hoverLabel === null || hoverLabel < 0 || !preMerge) return null;
+        if (typeof document === "undefined") return null;
+        const { labels, width, height } = preMerge;
+        const cnv = document.createElement("canvas");
+        cnv.width = width;
+        cnv.height = height;
+        const ctx = cnv.getContext("2d");
+        if (!ctx) return null;
+        const img = ctx.createImageData(width, height);
+        const d = img.data;
+        const [tr, tg, tb] = markMode === "flat" ? [245, 158, 11] : [16, 185, 129];
+        for (let i = 0; i < labels.length; i++) {
+            if (labels[i] === hoverLabel) {
+                const o = i * 4;
+                d[o] = tr;
+                d[o + 1] = tg;
+                d[o + 2] = tb;
+                d[o + 3] = 255;
+            }
+        }
+        ctx.putImageData(img, 0, 0);
+        return cnv.toDataURL();
+    }, [preMerge, hoverLabel, markMode]);
 
     const sel = doc.items.find((it) => it.id === selectedPathId);
     const selectedItem = sel && sel.kind === "path" ? sel : null;
@@ -700,6 +739,23 @@ export function EditorCanvas({
     // --- drag tracking on the svg root (pointer capture retargets here) ----------
 
     const handleSvgPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+        // --- region hover-highlight (mark tool) ---
+        if (marking) {
+            if (!preMerge) return;
+            const pt = toVb(e.clientX, e.clientY);
+            let lab: number | null = null;
+            if (pt) {
+                const px = Math.floor(((pt.x - vbX) / vbW) * preMerge.width);
+                const py = Math.floor(((pt.y - vbY) / vbH) * preMerge.height);
+                if (px >= 0 && py >= 0 && px < preMerge.width && py < preMerge.height) {
+                    const v = preMerge.labels[py * preMerge.width + px];
+                    if (v >= 0) lab = v;
+                }
+            }
+            setHoverLabel((prev) => (prev === lab ? prev : lab));
+            return;
+        }
+
         // --- marquee tracking ---
         const m = marqueeRef.current;
         if (m) {
@@ -948,6 +1004,9 @@ export function EditorCanvas({
                         onPointerMove={handleSvgPointerMove}
                         onPointerUp={handleSvgPointerUp}
                         onPointerCancel={handleSvgPointerCancel}
+                        onPointerLeave={() => {
+                            if (hoverLabel !== null) setHoverLabel(null);
+                        }}
                         onDoubleClick={handleSvgDoubleClick}
                     >
                         <g onPointerDown={handlePathPointerDown}>
@@ -1177,6 +1236,22 @@ export function EditorCanvas({
                                 stroke={ACCENT}
                                 strokeWidth={r(1)}
                                 strokeDasharray={`${r(4)} ${r(2)}`}
+                                style={{ pointerEvents: "none" }}
+                            />
+                        )}
+
+                        {/* Region hover-highlight (mark tool): tint the pre-merge
+                            region under the cursor so the user sees the section a
+                            marker will affect. Above the paths, below the pins. */}
+                        {marking && hoverOverlay && (
+                            <image
+                                href={hoverOverlay}
+                                x={vbX}
+                                y={vbY}
+                                width={vbW}
+                                height={vbH}
+                                preserveAspectRatio="none"
+                                opacity={0.4}
                                 style={{ pointerEvents: "none" }}
                             />
                         )}

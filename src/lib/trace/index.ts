@@ -108,6 +108,10 @@ export async function traceImage(
   options: VectorizeOptions,
   onProgress?: (p: TraceProgress) => void,
   signal?: AbortSignal,
+  /** Optional sink for the PRE-merge region map (the fine regions before the
+   *  gradient field-merge) — used by the editor's region hover-highlight. Called
+   *  once per color trace; never in mono mode. */
+  onPreMerge?: (pm: { labels: Int32Array; width: number; height: number }) => void,
 ): Promise<EditableDoc> {
   const { width, height } = imageData
   const smoothing = clamp(options.smoothing, 0, 100)
@@ -167,6 +171,10 @@ export async function traceImage(
     segmentOptionsFor(options),
   )
   const q: QuantizeResult = { palette: seg.palette, labels: seg.labels, counts: seg.counts }
+
+  // Surface the pre-merge region map (fine regions before the field-merge) for the
+  // editor's hover-highlight. Independent of engine; skipped in mono (no markers).
+  onPreMerge?.({ labels: seg.preMergeLabels, width, height })
 
   const gradientsOn = options.gradients !== false
 
