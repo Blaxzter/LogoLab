@@ -26,16 +26,16 @@ export interface TraceControlsProps {
   forceColor: string
   onForceColor: (v: string) => void
   /** Region-marker (segmentation seed) state, lifted from VectorizeStudio. */
-  regionsEnabled: boolean
-  onRegionsEnabledChange: (on: boolean) => void
   marking: boolean
   onMarkingChange: (on: boolean) => void
   markerCount: number
   /** How many of the markers are tagged "flat". */
   flatCount: number
+  /** How many of the markers are tagged "remove". */
+  removeCount: number
   /** Which kind of marker a click drops. */
-  markMode: 'separate' | 'flat'
-  onMarkModeChange: (m: 'separate' | 'flat') => void
+  markMode: 'separate' | 'flat' | 'remove'
+  onMarkModeChange: (m: 'separate' | 'flat' | 'remove') => void
   onClearMarkers: () => void
   busy: boolean
   /** Params changed while the doc carries manual edits — re-trace discards them. */
@@ -67,12 +67,11 @@ export function TraceControlsBody({
   onForceColorOn,
   forceColor,
   onForceColor,
-  regionsEnabled,
-  onRegionsEnabledChange,
   marking,
   onMarkingChange,
   markerCount,
   flatCount,
+  removeCount,
   markMode,
   onMarkModeChange,
   onClearMarkers,
@@ -205,99 +204,91 @@ export function TraceControlsBody({
             <Collapsible
               title="Region markers"
               summary={
-                !regionsEnabled
-                  ? undefined
-                  : marking
-                    ? `Placing · ${markerCount} marker${markerCount === 1 ? '' : 's'}`
-                    : `On · ${markerCount} marker${markerCount === 1 ? '' : 's'}`
+                marking
+                  ? `Placing · ${markerCount} marker${markerCount === 1 ? '' : 's'}`
+                  : markerCount > 0
+                    ? `${markerCount} marker${markerCount === 1 ? '' : 's'}`
+                    : undefined
               }
             >
-              {/* Step 1 — master switch: are we using region markers at all? */}
-              <Field
-                label="Use region markers"
-                hint={d.markers.hint}
-                onInfo={info('markers')}
-                right={<Toggle checked={regionsEnabled} onChange={onRegionsEnabledChange} />}
-              >
-                <p className="text-xs leading-snug text-muted">
-                  Seed the segmentation per spot: keep a region <em>separate</em> from its
-                  neighbour, or paint it one <em>flat</em> colour instead of a gradient. In
-                  flat mode, hovering the result highlights the section you'd carve out.
-                </p>
-              </Field>
+              {/* No master switch — the markers ARE the feature: with none placed the
+                  trace is byte-identical, and placing one turns it on. */}
+              <p className="text-xs leading-snug text-muted">
+                Seed the segmentation per spot: keep a region <em>separate</em> from its
+                neighbour, paint it one <em>flat</em> colour, or <em>remove</em> it and heal
+                the neighbours into the gap. No markers ⇒ output unchanged.
+              </p>
 
-              {/* Step 2 — region mode: placement on (click to seed) vs off (pan freely). */}
-              {regionsEnabled && (
-                <>
+              {/* Placement mode: click to seed (on) vs pan freely (off). */}
+              <button
+                type="button"
+                aria-pressed={marking}
+                onClick={() => onMarkingChange(!marking)}
+                className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                  marking
+                    ? 'border-emerald-400/70 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : 'border-line text-ink-2 hover:bg-surface-2'
+                }`}
+              >
+                <MapPin size={14} />
+                {marking ? 'Placing — click the image' : 'Place markers'}
+              </button>
+              <p className="text-xs leading-snug text-muted">
+                {marking
+                  ? 'Click either pane to drop a marker; click a marker to remove it. Turn off to pan and edit — markers stay active.'
+                  : 'Markers stay active while you pan, zoom and edit. Turn on to place more.'}
+              </p>
+
+              {/* Marker kind: a click drops this type. "Separate" keeps the
+                  region distinct (paint untouched); "Flat" also pins it to one
+                  solid colour (its pre-merge form), not a fitted gradient;
+                  "Remove" dissolves the section and heals the neighbours in. */}
+              <div className="grid grid-cols-3 gap-1 rounded-lg border border-line p-1">
+                {(
+                  [
+                    ['separate', 'Separate', 'text-emerald-600 dark:text-emerald-400', '#10b981'],
+                    ['flat', 'Flat', 'text-amber-600 dark:text-amber-400', '#f59e0b'],
+                    ['remove', 'Remove', 'text-rose-600 dark:text-rose-400', '#f43f5e'],
+                  ] as const
+                ).map(([mode, label, active, dot]) => (
                   <button
+                    key={mode}
                     type="button"
-                    aria-pressed={marking}
-                    onClick={() => onMarkingChange(!marking)}
-                    className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                      marking
-                        ? 'border-emerald-400/70 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                        : 'border-line text-ink-2 hover:bg-surface-2'
+                    aria-pressed={markMode === mode}
+                    onClick={() => onMarkModeChange(mode)}
+                    className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                      markMode === mode ? `bg-surface-3 ${active}` : 'text-ink-2 hover:bg-surface-2'
                     }`}
                   >
-                    <MapPin size={14} />
-                    {marking ? 'Placing — click the image' : 'Place markers'}
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: dot }} />
+                    {label}
                   </button>
-                  <p className="text-xs leading-snug text-muted">
-                    {marking
-                      ? 'Click either pane to drop a marker; click a marker to remove it. Turn off to pan and edit — markers stay active.'
-                      : 'Markers stay active while you pan, zoom and edit. Turn on to place more.'}
-                  </p>
+                ))}
+              </div>
+              <p className="text-xs leading-snug text-muted">
+                {markMode === 'flat'
+                  ? 'Flat: paints the section one solid colour. If it was fused with a different colour into a fake gradient, one marker splits it off along the colour edge.'
+                  : markMode === 'remove'
+                    ? 'Remove: dissolves the clicked section and grows its bordering colours into the gap (split along the middle) — heals instead of leaving a hole. Re-traces on next run.'
+                    : 'Separate: keep this region distinct; its gradient/flat paint is left as fitted. Mark both sides of an over-merge to set the boundary on the colour ridge.'}
+              </p>
 
-                  {/* Marker kind: a click drops this type. "Separate" keeps the
-                      region distinct (paint untouched); "Flat" also pins it to one
-                      solid colour (its pre-merge form), not a fitted gradient. */}
-                  <div className="grid grid-cols-2 gap-1 rounded-lg border border-line p-1">
-                    {(
-                      [
-                        ['separate', 'Keep separate', 'text-emerald-600 dark:text-emerald-400'],
-                        ['flat', 'Flat colour', 'text-amber-600 dark:text-amber-400'],
-                      ] as const
-                    ).map(([mode, label, active]) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        aria-pressed={markMode === mode}
-                        onClick={() => onMarkModeChange(mode)}
-                        className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-                          markMode === mode ? `bg-surface-3 ${active}` : 'text-ink-2 hover:bg-surface-2'
-                        }`}
-                      >
-                        <span
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ background: mode === 'flat' ? '#f59e0b' : '#10b981' }}
-                        />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-xs leading-snug text-muted">
-                    {markMode === 'flat'
-                      ? 'Flat: paints the section one solid colour. If it was fused with a different colour into a fake gradient, one marker splits it off along the colour edge.'
-                      : 'Separate: keep this region distinct; its gradient/flat paint is left as fitted. Mark both sides of an over-merge to set the boundary on the colour ridge.'}
-                  </p>
-
-                  {markerCount > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 text-xs text-ink-2">
-                        <MapPin size={12} className="text-emerald-500" />
-                        {markerCount} marker{markerCount === 1 ? '' : 's'}
-                        {flatCount > 0 ? ` · ${flatCount} flat` : ''}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={onClearMarkers}
-                        className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
-                      >
-                        <X size={12} /> Clear all
-                      </button>
-                    </div>
-                  )}
-                </>
+              {markerCount > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs text-ink-2">
+                    <MapPin size={12} className="text-emerald-500" />
+                    {markerCount} marker{markerCount === 1 ? '' : 's'}
+                    {flatCount > 0 ? ` · ${flatCount} flat` : ''}
+                    {removeCount > 0 ? ` · ${removeCount} remove` : ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onClearMarkers}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+                  >
+                    <X size={12} /> Clear all
+                  </button>
+                </div>
               )}
             </Collapsible>
           )}

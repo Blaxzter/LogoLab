@@ -100,11 +100,9 @@ export function VectorizeStudio() {
     const [traceSheetOpen, setTraceSheetOpen] = useState(false);
     const [pathsSheetOpen, setPathsSheetOpen] = useState(false);
     const [overlayOpacity, setOverlayOpacity] = useState(60);
-    // Region markers are a two-step affair: a master switch ("use regions") and a
-    // transient "region mode" (tool === 'mark'). Disabling region mode returns to
-    // pan with the markers kept; turning the master switch off ends the feature
-    // and clears them (keeping the invariant: markers exist ⇒ regions enabled).
-    const [regionsEnabled, setRegionsEnabled] = useState(false);
+    // Region markers have no separate "enable" switch: the markers ARE the feature.
+    // With none placed the trace is byte-identical; placing one turns it on. The only
+    // transient state is "region mode" (tool === 'mark') — click-to-place vs pan.
 
     const history = useHistory<EditableDoc>();
     const doc = history.value;
@@ -202,12 +200,20 @@ export function VectorizeStudio() {
     const markers = useMemo(() => opts.markers ?? [], [opts.markers]);
 
     // Which kind of marker a click drops: "separate" (keep the region distinct, its
-    // paint untouched) or "flat" (also pin it to its pre-merge flat form + solid).
-    const [markMode, setMarkMode] = useState<"separate" | "flat">("separate");
+    // paint untouched), "flat" (also pin it to its pre-merge flat form + solid), or
+    // "remove" (dissolve the section and heal its neighbours into the gap).
+    const [markMode, setMarkMode] = useState<"separate" | "flat" | "remove">(
+        "separate",
+    );
 
     const addMarker = useCallback(
         (x: number, y: number) => {
-            const m = markMode === "flat" ? { x, y, flat: true } : { x, y };
+            const m =
+                markMode === "flat"
+                    ? { x, y, flat: true }
+                    : markMode === "remove"
+                      ? { x, y, remove: true }
+                      : { x, y };
             setOpts((o) => ({ ...o, markers: [...(o.markers ?? []), m] }));
         },
         [markMode],
@@ -219,20 +225,9 @@ export function VectorizeStudio() {
         }));
     }, []);
     const clearMarkers = useCallback(() => {
+        setTool("pan");
         setOpts((o) => (o.markers && o.markers.length ? { ...o, markers: [] } : o));
     }, []);
-
-    // Master switch: turning the feature off exits region mode and clears markers.
-    const toggleRegionsEnabled = useCallback(
-        (on: boolean) => {
-            setRegionsEnabled(on);
-            if (!on) {
-                setTool("pan");
-                clearMarkers();
-            }
-        },
-        [clearMarkers],
-    );
 
     // Region markers only apply to colour tracing — leaving that mode exits the
     // placement tool (the master switch + markers persist for when you return).
@@ -431,10 +426,7 @@ export function VectorizeStudio() {
                 const colorTrace =
                     (!isVectorSource || retraceVector === "retrace") &&
                     opts.mode === "color";
-                if (colorTrace) {
-                    setRegionsEnabled(true);
-                    setTool("mark");
-                }
+                if (colorTrace) setTool("mark");
                 return;
             }
             if (k === "Escape") {
@@ -637,12 +629,11 @@ export function VectorizeStudio() {
         onForceColorOn: setForceColorOn,
         forceColor,
         onForceColor: setForceColor,
-        regionsEnabled,
-        onRegionsEnabledChange: toggleRegionsEnabled,
         marking: tool === "mark",
         onMarkingChange: (on: boolean) => setTool(on ? "mark" : "pan"),
         markerCount: markers.length,
         flatCount: markers.filter((m) => m.flat).length,
+        removeCount: markers.filter((m) => m.remove).length,
         markMode,
         onMarkModeChange: setMarkMode,
         onClearMarkers: clearMarkers,
@@ -951,13 +942,17 @@ export function VectorizeStudio() {
                                 className={`flex items-center gap-2 rounded-full border bg-surface/90 px-3 py-1 text-xs font-medium shadow-sm backdrop-blur ${
                                     markMode === "flat"
                                         ? "border-amber-400/50 text-amber-600 dark:text-amber-400"
-                                        : "border-emerald-400/50 text-emerald-600 dark:text-emerald-400"
+                                        : markMode === "remove"
+                                          ? "border-rose-400/50 text-rose-600 dark:text-rose-400"
+                                          : "border-emerald-400/50 text-emerald-600 dark:text-emerald-400"
                                 }`}
                             >
                                 <MapPin size={13} />
                                 {markMode === "flat"
                                     ? "Click a region to paint it one flat colour"
-                                    : "Click a region to keep it as its own shape"}
+                                    : markMode === "remove"
+                                      ? "Click a section to remove it and heal the neighbours in"
+                                      : "Click a region to keep it as its own shape"}
                                 <button
                                     type="button"
                                     onClick={() => setTool("pan")}
@@ -1079,6 +1074,7 @@ export function VectorizeStudio() {
 /** Region-marker glyph colour (emerald) + halo, matching EditorCanvas. */
 const MARKER_FILL = "#10b981";
 const FLAT_MARKER_FILL = "#f59e0b"; // amber — "flat colour" markers
+const REMOVE_MARKER_FILL = "#f43f5e"; // rose — "remove & heal" markers
 const MARKER_HALO = "#ffffff";
 /** Screen-px radius for clicking an existing marker to remove it. */
 const MARKER_HIT_PX = 11;
@@ -1108,7 +1104,7 @@ function OriginalPane({
     aspectW: number;
     aspectH: number;
     primary?: boolean;
-    markers?: { x: number; y: number; flat?: boolean }[];
+    markers?: { x: number; y: number; flat?: boolean; remove?: boolean }[];
     marking?: boolean;
     onAddMarker?: (x: number, y: number) => void;
     onRemoveMarker?: (index: number) => void;
@@ -1173,7 +1169,11 @@ function OriginalPane({
                                     width: 14,
                                     height: 14,
                                     borderRadius: m.flat ? "3px" : "9999px",
-                                    background: m.flat ? FLAT_MARKER_FILL : MARKER_FILL,
+                                    background: m.remove
+                                        ? REMOVE_MARKER_FILL
+                                        : m.flat
+                                          ? FLAT_MARKER_FILL
+                                          : MARKER_FILL,
                                     border: `2px solid ${MARKER_HALO}`,
                                     boxShadow: "0 0 0 1px rgba(0,0,0,.25)",
                                     transform: `translate(-50%, -50%) scale(${inv})`,

@@ -150,9 +150,12 @@ export interface VectorizeOptions {
    * pre-merge flat form — excluded from the gradient field-merge and painted one
    * solid colour ("this section is flat, kept its own thing"). The two tags are
    * split into the segmenter's `markers` / `flatMarkers` by `segmentOptionsFor`.
-   * Omitted / empty ⇒ no markers.
+   * A marker tagged `remove: true` instead DISSOLVES the section under it: at trace
+   * time (planar engine) its connected region is removed and its bordering colours
+   * grow into the freed area (nearest-neighbour split — `applyRemoveMarkers`), so
+   * the gap heals instead of leaving a hole. Omitted / empty ⇒ no markers.
    */
-  markers?: { x: number; y: number; flat?: boolean }[]
+  markers?: { x: number; y: number; flat?: boolean; remove?: boolean }[]
   /**
    * Translucent layer decomposition (V6, color mode). When the segmentation has
    * recovered overlap-shaped regions (via markers or Region detail), try to

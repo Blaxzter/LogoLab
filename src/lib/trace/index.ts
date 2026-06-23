@@ -79,6 +79,93 @@ function flatMarkerLabels(
   return out
 }
 
+/**
+ * "Remove & heal" markers (planar engine). For each marker tagged `remove`, dissolve
+ * the 4-connected region under it and let its bordering colours grow into the freed
+ * area: every removed pixel is reassigned to the NEAREST bordering opaque region by a
+ * multi-source grassfire (a discrete medial-axis split between the neighbours), so the
+ * gap closes instead of leaving a hole. Transparent (-1) and the detected background
+ * `bg` are excluded as fill sources, so the area goes to real colours; a section that
+ * borders ONLY those dissolves to transparent (a plain delete). Returns a relabeled
+ * COPY, or the input unchanged when there are no remove markers (byte-identical).
+ */
+export function applyRemoveMarkers(
+  options: VectorizeOptions,
+  labels: Int32Array,
+  width: number,
+  height: number,
+  bg: number,
+): Int32Array {
+  const seeds = (options.markers ?? []).filter((m) => m.remove)
+  if (seeds.length === 0) return labels
+  const out = labels.slice()
+  const n = width * height
+  const isFill = (lab: number): boolean => lab >= 0 && lab !== bg
+  for (const m of seeds) {
+    // floor, NOT round: the seed must be the pixel that CONTAINS the click point.
+    // round() snaps to the nearest grid line — an up-to-1px bias toward the next
+    // region, which for a 1–2px unmerged sliver means flooding the big neighbour
+    // instead of the sliver the user clicked.
+    const sx = clamp(Math.floor(m.x * width), 0, width - 1)
+    const sy = clamp(Math.floor(m.y * height), 0, height - 1)
+    const start = sy * width + sx
+    const target = out[start]
+    if (target < 0) continue
+    // The 4-connected in-bounds neighbours of p (off-grid sides omitted). Shared by
+    // both passes so the flood and the grassfire walk the same adjacency.
+    const forEachNeighbour = (p: number, fn: (q: number) => void): void => {
+      const x = p % width
+      const y = (p / width) | 0
+      if (x > 0) fn(p - 1)
+      if (x < width - 1) fn(p + 1)
+      if (y > 0) fn(p - width)
+      if (y < height - 1) fn(p + width)
+    }
+    // 1) Flood the connected component of `target` containing the seed (this one
+    //    section only — other same-colour blobs are untouched).
+    const comp: number[] = []
+    const inComp = new Uint8Array(n)
+    const stack = [start]
+    inComp[start] = 1
+    while (stack.length) {
+      const p = stack.pop()!
+      comp.push(p)
+      forEachNeighbour(p, (q) => {
+        if (!inComp[q] && out[q] === target) {
+          inComp[q] = 1
+          stack.push(q)
+        }
+      })
+    }
+    // 2) Multi-source grassfire: seed every component pixel that touches an opaque
+    //    neighbour with that neighbour's label, then expand inward at equal speed —
+    //    each neighbour claims the pixels nearest to it (the medial split).
+    const assigned = new Int32Array(n).fill(-1)
+    const queue: number[] = []
+    for (const p of comp) {
+      forEachNeighbour(p, (q) => {
+        if (assigned[p] < 0 && !inComp[q] && isFill(out[q])) {
+          assigned[p] = out[q]
+          queue.push(p)
+        }
+      })
+    }
+    for (let head = 0; head < queue.length; head++) {
+      const p = queue[head]
+      const lab = assigned[p]
+      forEachNeighbour(p, (q) => {
+        if (inComp[q] && assigned[q] < 0) {
+          assigned[q] = lab
+          queue.push(q)
+        }
+      })
+    }
+    // 3) Commit: a neighbour's claim where one reached, else dissolve to transparent.
+    for (const p of comp) out[p] = assigned[p] >= 0 ? assigned[p] : -1
+  }
+  return out
+}
+
 /** Map the user fidelity dial onto the beautify pass (plan §3.3 / V3). */
 function beautifyOptionsFor(options: VectorizeOptions): BeautifyOptions {
   return {
@@ -252,17 +339,19 @@ export async function traceImage(
   // independently and would desync shared edges); per-region paint is reused.
   if (engine === 'planar') {
     onProgress?.({ phase: 'trace', layer: 1, total: 1 })
-    const trace = tracePlanar(q.labels, width, height, planarFitOptionsFor(options))
+    // "Remove & heal" markers dissolve a marked section and grow its neighbours into
+    // the gap. Background is detected first (from the ORIGINAL labels) so it can be
+    // both excluded as a fill source and dropped from the paint order below.
+    const bg = options.removeBackground ? detectBorderBackground(q.labels, width, height, q.palette.length) : -1
+    const labels = applyRemoveMarkers(options, q.labels, width, height, bg)
+    const trace = tracePlanar(labels, width, height, planarFitOptionsFor(options))
     // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
     // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a
     // no-op, so the unbeautified planar output is byte-identical.
     const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts)
     const edges = edgeMap(topology)
     let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
-    if (options.removeBackground) {
-      const bg = detectBorderBackground(q.labels, width, height, q.palette.length)
-      if (bg !== -1) order = order.filter((l) => l !== bg)
-    }
+    if (bg !== -1) order = order.filter((l) => l !== bg)
     const items: PathItem[] = []
     for (const label of order) {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
