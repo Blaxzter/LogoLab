@@ -12,6 +12,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ZoomSurface } from "../ui/ZoomSurface";
+import { useFitBox } from "./useFitBox";
 import type { PanZoom } from "../../hooks/usePanZoom";
 import type {
     EditableDoc,
@@ -95,6 +96,9 @@ export interface EditorCanvasProps {
     preMerge?: { labels: Int32Array; width: number; height: number } | null;
     onSelectPath: (id: string | null) => void;
     onSelectNodes: (keys: Set<string>) => void;
+    /** Records the in-region click point that selected a path — the seed for a
+     *  "remove & heal" delete (which blob of a multi-blob region to dissolve). */
+    onRegionSeed?: (id: string, pt: Vec) => void;
     /** Live preview during drags (no history commit). */
     onDocChange: (doc: EditableDoc) => void;
     /** History-committing final state (pointerup, double-click edits). */
@@ -105,37 +109,6 @@ export interface EditorCanvasProps {
     onRemoveMarker?: (index: number) => void;
     /** Forwarded to ZoomSurface — registers the box the +/- buttons zoom around. */
     primary?: boolean;
-}
-
-/**
- * Fit an aspect ratio into the observed size of a container ("contain"),
- * returning explicit pixel dimensions for the fitted box. ResizeObserver-based
- * so it tracks layout (untransformed) size — the pan/zoom CSS transform scales
- * the box visually without re-measuring.
- */
-export function useFitBox(aspectW: number, aspectH: number) {
-    const parentRef = useRef<HTMLDivElement | null>(null);
-    const [avail, setAvail] = useState({ w: 0, h: 0 });
-
-    useEffect(() => {
-        const el = parentRef.current;
-        if (!el) return;
-        const ro = new ResizeObserver((entries) => {
-            const r = entries[0]?.contentRect;
-            if (r) setAvail({ w: r.width, h: r.height });
-        });
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, []);
-
-    const ratio = aspectW > 0 && aspectH > 0 ? aspectW / aspectH : 1;
-    let width = avail.w;
-    let height = width / ratio;
-    if (height > avail.h) {
-        height = avail.h;
-        width = height * ratio;
-    }
-    return { parentRef, width, height };
 }
 
 /** Replace one item (matched by id) in a doc, sharing everything else. */
@@ -382,6 +355,7 @@ export function EditorCanvas({
     preMerge,
     onSelectPath,
     onSelectNodes,
+    onRegionSeed,
     onDocChange,
     onDocCommit,
     onAddMarker,
@@ -570,6 +544,11 @@ export function EditorCanvas({
 
         const pt = toVb(e.clientX, e.clientY);
         if (!pt) return;
+
+        // Remember the in-region click as the "remove & heal" seed: which blob the
+        // user is pointing at, so a later ⌫ dissolves that section (not the whole
+        // colour). Updated on every pointerdown on a path so it tracks the cursor.
+        onRegionSeed?.(item.id, pt);
 
         if (interactive) {
             // Dragging on the SELECTED path → move that path (existing behavior).

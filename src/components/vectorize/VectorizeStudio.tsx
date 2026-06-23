@@ -32,13 +32,14 @@ import { cleanSvg } from "../../lib/svgClean";
 import { docStats, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
 import { regionProvenance } from "../../lib/path/topology";
-import { deleteRegionNodes, translateRegionNodes } from "../../lib/path/topologyEdit";
+import { deleteRegionNodes, removeRegionAndHeal, removeRegionSection, translateRegionNodes } from "../../lib/path/topologyEdit";
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from "../../lib/trace";
 import { traceImageOffThread, canTraceOffThread } from "../../lib/trace/traceOffThread";
 import type { VectorizeOptions } from "../../types";
-import type { DocItem, EditableDoc, NodeRef, PathItem } from "../../lib/path/types";
+import type { DocItem, EditableDoc, NodeRef, PathItem, Vec } from "../../lib/path/types";
 import { TraceControls, TraceControlsBody } from "./TraceControls";
-import { EditorCanvas, useFitBox } from "./EditorCanvas";
+import { EditorCanvas } from "./EditorCanvas";
+import { useFitBox } from "./useFitBox";
 import { PathsPanel, PathsPanelBody } from "./PathsPanel";
 import { PipelineExplainer } from "./PipelineExplainer";
 import { Sheet } from "../ui/Sheet";
@@ -145,6 +146,10 @@ export function VectorizeStudio() {
 
     // Mirror of selectedPathId so selection callbacks stay referentially stable.
     const selectedPathRef = useRef<string | null>(null);
+    // Last in-region click that selected a path: the seed for a "remove & heal"
+    // delete (which blob of a multi-blob colour to dissolve). Tied to an item id so
+    // a stale seed from a previously-selected path is ignored.
+    const seedRef = useRef<{ id: string; pt: Vec } | null>(null);
 
     const handleSelectPath = useCallback((id: string | null) => {
         if (selectedPathRef.current !== id) setSelectedNodes(new Set());
@@ -156,6 +161,10 @@ export function VectorizeStudio() {
         (keys: Set<string>) => setSelectedNodes(keys),
         [],
     );
+
+    const handleRegionSeed = useCallback((id: string, pt: Vec) => {
+        seedRef.current = { id, pt };
+    }, []);
 
     /* ------------------------------------------------------------ doc flow */
 
@@ -441,6 +450,17 @@ export function VectorizeStudio() {
                 const item = doc.items.find((it) => it.id === selectedPathId);
                 if (!item) return;
                 e.preventDefault();
+                // Commit a "remove & heal" result and clear selection; drop the path
+                // selection too when the whole item went away. Returns whether it
+                // actually changed the doc (false ⇒ caller falls back).
+                const applyHeal = (next: EditableDoc): boolean => {
+                    if (next === doc) return false;
+                    commitDoc(next);
+                    setSelectedNodes(new Set());
+                    if (!next.items.some((it) => it.id === item.id))
+                        handleSelectPath(null);
+                    return true;
+                };
                 if (item.kind === "path" && selectedNodes.size > 0) {
                     const refs = [...selectedNodes].map(parseNodeKey);
                     // Planar region: delete the underlying shared-edge nodes so the
@@ -449,7 +469,19 @@ export function VectorizeStudio() {
                         const prov = regionProvenance(doc, item);
                         if (prov) {
                             const next = deleteRegionNodes(doc, prov, refs);
-                            if (next !== doc) commitDoc(next);
+                            if (next !== doc) {
+                                commitDoc(next);
+                                setSelectedNodes(new Set());
+                                return;
+                            }
+                            // Nothing was thinnable (the selection is a whole blob's
+                            // junctions, which can't be deleted without unwelding the
+                            // graph) → dissolve that blob and heal it instead of doing
+                            // nothing. The selected nodes' subpath index IS the loop.
+                            const sub = refs[0]?.sub ?? 0;
+                            if (applyHeal(removeRegionSection(doc, item.id, sub)))
+                                return;
+                            // Still nothing actionable — leave the doc untouched.
                             setSelectedNodes(new Set());
                             return;
                         }
@@ -468,6 +500,23 @@ export function VectorizeStudio() {
                         handleSelectPath(null);
                     }
                 } else {
+                    // Planar region, no nodes selected: dissolve the ONE section the
+                    // user clicked to select it and heal the gap into the neighbour
+                    // (live graph edit, undoable) — instead of tearing a transparent
+                    // hole by dropping every blob of the colour. Needs the in-region
+                    // seed from that selecting click; falls back to the whole-item
+                    // delete when the region is non-planar or the seed is stale.
+                    const seed =
+                        seedRef.current?.id === item.id
+                            ? seedRef.current.pt
+                            : null;
+                    if (
+                        item.kind === "path" &&
+                        item.loops &&
+                        seed &&
+                        applyHeal(removeRegionAndHeal(doc, item.id, seed))
+                    )
+                        return;
                     commitDoc({
                         ...doc,
                         items: doc.items.filter((it) => it.id !== item.id),
@@ -608,6 +657,7 @@ export function VectorizeStudio() {
         preMerge,
         onSelectPath: handleSelectPath,
         onSelectNodes: handleSelectNodes,
+        onRegionSeed: handleRegionSeed,
         onDocChange: handleCanvasChange,
         onDocCommit: handleCanvasCommit,
         onAddMarker: addMarker,
