@@ -35,6 +35,7 @@
 import type { PaletteColor, QuantizeResult } from './types'
 import { solveMumfordShah, DEFAULT_MS_OPTIONS, type MumfordShahOptions, type MumfordShahResult } from './mumfordShah.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
+import { srgbToOklab, oklabDeltaE, type Oklab } from './oklab.ts'
 import { fitBestGradient, concatSamples, gradientParamT, type RegionSamples } from './gradient.ts'
 import type { GradientFill } from '../path/types'
 
@@ -63,6 +64,22 @@ export interface SegmentOptions {
   mergeGradients: boolean
   /** Cap on samples per segment fed to a union fit (perf; deterministic stride). */
   sampleCap: number
+  /**
+   * Step-3c candidate gate, in Oklab ΔE — the fix for complex photos freezing on
+   * "analyzing colors". It engages ONLY once the fine-segment count exceeds
+   * GATE_MIN_SEGMENTS (small gradient art stays fully un-gated, byte-identical, so its
+   * non-adjacent field reunites are untouched). When engaged, a segment pair reaches
+   * the expensive gradient fit only if the groups are ADJACENT, OR (when meanGate > 0)
+   * their mean colours are within meanGate. Adjacency alone fuses every contiguous
+   * ramp; the optional mean clause additionally re-joins NON-adjacent same-mean pieces
+   * (a background a discontinuity split) — but measured on real photos that clause both
+   * SLOWS the merge ~10–80× (clusters of similar-mean but distinct objects each pay a
+   * fit) and slightly WORSENS fidelity (distant pieces forced into one stretched
+   * gradient), so it defaults OFF (0 ⇒ adjacency-only). Raise it to trade speed for
+   * recovering non-adjacent reunites on large smooth art. Only consulted when
+   * `mergeGradients` is on.
+   */
+  meanGate: number
   /**
    * Minimum macro-region area (opaque px). After segmentation, any region smaller
    * than this is absorbed into the adjacent region whose mean colour is closest —
@@ -106,10 +123,19 @@ export const DEFAULT_SEGMENT_OPTIONS: SegmentOptions = {
   mergeGradients: true,
   sampleCap: 3000,
   minRegionArea: 0,
+  meanGate: 0,
 }
 
 /** Reusable empty protected-group set (the no-marker merge protects nothing). */
 const NO_PROTECTED: ReadonlySet<number> = new Set<number>()
+
+/**
+ * Fine-segment count above which the Step-3c candidate gate switches on. Below it the
+ * un-gated all-pairs merge is already fast (a handful of segments), and skipping the
+ * gate keeps simple art byte-identical to before — only complex images (the photos
+ * that froze on "analyzing colors") pay the O(S²) fit burst the gate removes.
+ */
+const GATE_MIN_SEGMENTS = 64
 
 export interface SegmentResult extends QuantizeResult {
   /** Mumford–Shah by-products (diagnostics; not required downstream). */
@@ -164,14 +190,23 @@ function nearestSmoothPixel(smooth: Uint8Array, w: number, h: number, px: number
   return -1
 }
 
-/** Segment an image into smooth macro-regions. See module header. */
+/**
+ * Segment an image into smooth macro-regions. See module header. `onProgress` (if
+ * given) reports a fraction in [0,1] of the segmentation work plus a short label —
+ * the Step-3c gradient merge is the long pole on complex images, so it reports per-
+ * batch there so the studio's bar keeps moving. Pure-progress only: it never changes
+ * the result, so determinism holds.
+ */
 export function segmentImage(
   img: { width: number; height: number; data: Uint8ClampedArray },
   opts: SegmentOptions = DEFAULT_SEGMENT_OPTIONS,
+  onProgress?: (fraction: number, label: string) => void,
 ): SegmentResult {
   const { width: w, height: h } = img
   const n = w * h
   const data = img.data
+  const report = (f: number, label: string): void => onProgress?.(f, label)
+  report(0.02, 'Smoothing image')
   const ms = solveMumfordShah(img, opts.ms)
   const { discontinuity: disc, opaque, cutH, cutV } = ms
 
@@ -276,6 +311,7 @@ export function segmentImage(
     cnt[lo] += cnt[hi]
   }
 
+  report(0.2, 'Finding regions')
   // Loop to a TRUE fixpoint (Supplement Alg 1). Termination is guaranteed: every
   // productive pass calls unite() at least once, strictly reducing the live
   // segment count (bounded by n), so a pass with no merge ends it — no fixed cap
@@ -338,6 +374,7 @@ export function segmentImage(
     if (s >= 0) flatPinned.add(s)
   }
 
+  report(0.35, 'Detecting edges')
   // --- Step 3a: discontinuity relation 𝒜 (eq 3) -------------------------------
   // For each 𝒟 pixel and each of 3 axes (→, ↓, ↘), find the nearest smooth
   // segment within σ on each side. A pair seen on OPPOSITE sides is a "facing"
@@ -400,8 +437,15 @@ export function segmentImage(
     if (f >= opts.minFacing && f > opts.tauA * t) vetoed.add(k)
   }
 
+  report(0.42, 'Sampling colours')
   // --- Step 3b: gather per-segment samples (ORIGINAL colours) ------------------
+  // Also accumulate each segment's exact colour SUM (every pixel, not the strided
+  // sample) so Step-3c's candidate gate compares true region means.
   const segSamples: RegionSamples[] = []
+  const segSumR = new Float64Array(S)
+  const segSumG = new Float64Array(S)
+  const segSumB = new Float64Array(S)
+  const segCnt = new Float64Array(S)
   {
     const xsA: number[][] = Array.from({ length: S }, () => [])
     const ysA: number[][] = Array.from({ length: S }, () => [])
@@ -417,6 +461,10 @@ export function segmentImage(
       rsA[id].push(data[o])
       gsA[id].push(data[o + 1])
       bsA[id].push(data[o + 2])
+      segSumR[id] += data[o]
+      segSumG[id] += data[o + 1]
+      segSumB[id] += data[o + 2]
+      segCnt[id]++
     }
     for (let id = 0; id < S; id++) {
       segSamples.push(strideSamples(xsA[id], ysA[id], rsA[id], gsA[id], bsA[id], opts.sampleCap))
@@ -424,10 +472,20 @@ export function segmentImage(
   }
 
   // --- Step 3c: global greedy union-fit merge with both vetoes -----------------
-  // Groups carry STABLE ids (never reused) so a pairwise candidate cache survives
-  // across merges: only the merged group's row is recomputed, making the whole
-  // merge O(S²) fits instead of O(S³). Merge the globally-cheapest qualifying
-  // (non-vetoed, low-residual, unimodal) pair until none qualifies.
+  // Merge the globally-cheapest qualifying (non-vetoed, low-residual, unimodal) pair
+  // until none qualifies. Groups carry STABLE ids (never reused) so a pairwise
+  // candidate cache survives across merges: only the merged group's row is recomputed.
+  // The SELECTION — global-min residual, ties broken by scan position — is byte-for-
+  // byte the original, so corpus output is stable. The additions are pure cost cuts:
+  //   • CANDIDATE GATE (`meanGate`, only once S exceeds GATE_MIN_SEGMENTS — i.e. the
+  //     complex images that froze) — a pair reaches the expensive gradient fit only
+  //     when the groups are ADJACENT or their mean colours are within meanGate. This
+  //     is a provable SUPERSET of the pairs the global-min scan can ever select
+  //     (adjacent ramp bands; non-adjacent SAME-mean field pieces), so the merges
+  //     chosen are unchanged while the ~S²/2 fit burst collapses to the eligible few.
+  //   • INDEXED cache invalidation — each merge drops only the two retired groups'
+  //     cache rows via a per-group key index, instead of sweeping the whole cache
+  //     (the old `[...cache.keys()]` spread was itself O(S²) per merge).
   const members = new Map<number, number[]>()
   const samples = new Map<number, RegionSamples>()
   const alive: number[] = []
@@ -437,63 +495,158 @@ export function segmentImage(
     alive.push(id)
   }
   let nextId = S
-  const cache = new Map<number, { res: number; samples: RegionSamples } | null>()
-  const ckey = (a: number, b: number): number => (a < b ? a * 1e7 + b : b * 1e7 + a)
-
-  const pairVetoed = (gi: number, gj: number): boolean => {
-    const mi = members.get(gi)!
-    const mj = members.get(gj)!
-    for (const a of mi) for (const b of mj) if (vetoed.has(pairKey(a, b))) return true
-    return false
-  }
-  // A flat-pinned segment never merges (it stays its own region). Its group id equals
-  // the segment id and is never retired — a vetoed group is never the merge target —
-  // so the singleton check stays valid; freshly-merged groups get ids ≥ S, never pinned.
-  const evalPair = (gi: number, gj: number): { res: number; samples: RegionSamples } | null => {
-    const k = ckey(gi, gj)
-    if (cache.has(k)) return cache.get(k)!
-    let result: { res: number; samples: RegionSamples } | null = null
-    if (!flatPinned.has(gi) && !flatPinned.has(gj) && !pairVetoed(gi, gj)) {
-      const union = strideConcat([samples.get(gi)!, samples.get(gj)!], opts.sampleCap)
-      const fit = fitBestGradient(union)
-      if (fit && fit.oklabResidual <= opts.mergeTol && profileGap(fit.gradient, union) <= opts.maxProfileGap) {
-        result = { res: fit.oklabResidual, samples: union }
-      }
-    }
-    cache.set(k, result)
-    return result
-  }
 
   // Gradients OFF ⇒ skip the merge entirely: leave the Step-2 colour-difference
   // bands as the macro-regions so a smooth ramp posterizes into flats instead of
   // fusing into one region that Stage 2 would then average to a muddy mean colour.
-  for (; opts.mergeGradients; ) {
-    let best: { i: number; j: number; samples: RegionSamples; res: number } | null = null
-    for (let a = 0; a < alive.length; a++) {
-      for (let b = a + 1; b < alive.length; b++) {
-        const cand = evalPair(alive[a], alive[b])
-        if (cand && (!best || cand.res < best.res)) {
-          best = { i: alive[a], j: alive[b], samples: cand.samples, res: cand.res }
+  if (opts.mergeGradients) {
+    const gated = S > GATE_MIN_SEGMENTS
+    const useMean = gated && opts.meanGate > 0 && Number.isFinite(opts.meanGate)
+
+    // Per-group adjacency (always, when gated) + running colour means (only for the
+    // optional mean clause). Built lazily so the common adjacency-only path pays
+    // nothing for the means it never reads.
+    const groupAdj = new Map<number, Set<number>>()
+    const gSumR = new Map<number, number>()
+    const gSumG = new Map<number, number>()
+    const gSumB = new Map<number, number>()
+    const gCnt = new Map<number, number>()
+    const meanCache = new Map<number, Oklab>()
+    if (gated) {
+      // Fine-segment adjacency (4-neighbour touch). One raster scan, both directions
+      // recorded; fixed order ⇒ deterministic.
+      const fineAdj: Set<number>[] = Array.from({ length: S }, () => new Set<number>())
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x
+          const a = segOf[i]
+          if (a < 0) continue
+          if (x + 1 < w) { const b = segOf[i + 1]; if (b >= 0 && b !== a) { fineAdj[a].add(b); fineAdj[b].add(a) } }
+          if (y + 1 < h) { const b = segOf[i + w]; if (b >= 0 && b !== a) { fineAdj[a].add(b); fineAdj[b].add(a) } }
         }
       }
+      for (let id = 0; id < S; id++) {
+        groupAdj.set(id, new Set(fineAdj[id]))
+        if (useMean) { gSumR.set(id, segSumR[id]); gSumG.set(id, segSumG[id]); gSumB.set(id, segSumB[id]); gCnt.set(id, segCnt[id]) }
+      }
     }
-    if (!best) break
-    const c = nextId++
-    members.set(c, members.get(best.i)!.concat(members.get(best.j)!))
-    samples.set(c, best.samples)
-    // Retire the two merged groups and their cache rows; add the new group.
-    alive.splice(alive.indexOf(best.j), 1)
-    alive.splice(alive.indexOf(best.i), 1)
-    for (const k of [...cache.keys()]) {
-      const hi = k % 1e7
-      const lo = (k - hi) / 1e7
-      if (lo === best.i || lo === best.j || hi === best.i || hi === best.j) cache.delete(k)
+    const meanOk = (gid: number): Oklab => {
+      let m = meanCache.get(gid)
+      if (m) return m
+      const c = gCnt.get(gid)! || 1
+      m = srgbToOklab(gSumR.get(gid)! / c, gSumG.get(gid)! / c, gSumB.get(gid)! / c)
+      meanCache.set(gid, m)
+      return m
     }
-    members.delete(best.i)
-    members.delete(best.j)
-    samples.delete(best.i)
-    samples.delete(best.j)
-    alive.push(c)
+    // Gate: adjacent OR (optionally) mean-near. Un-gated (small S) ⇒ every pair is
+    // eligible, exactly the original all-pairs search. The mean clause is evaluated
+    // only when enabled, so adjacency-only never pays for an Oklab distance.
+    const gateEligible = (gi: number, gj: number): boolean =>
+      !gated || groupAdj.get(gi)!.has(gj) || (useMean && oklabDeltaE(meanOk(gi), meanOk(gj)) <= opts.meanGate)
+
+    const cache = new Map<number, { res: number; samples: RegionSamples } | null>()
+    const cacheRows = new Map<number, number[]>() // groupId → cache keys naming it
+    const ckey = (a: number, b: number): number => (a < b ? a * 1e7 + b : b * 1e7 + a)
+    const noteRow = (g: number, k: number): void => {
+      const arr = cacheRows.get(g)
+      if (arr) arr.push(k)
+      else cacheRows.set(g, [k])
+    }
+    const pairVetoed = (gi: number, gj: number): boolean => {
+      const mi = members.get(gi)!
+      const mj = members.get(gj)!
+      for (const a of mi) for (const b of mj) if (vetoed.has(pairKey(a, b))) return true
+      return false
+    }
+    // A flat-pinned segment never merges (it stays its own region). Its group id equals
+    // the segment id and is never retired — a vetoed group is never the merge target —
+    // so the singleton check stays valid; freshly-merged groups get ids ≥ S, never pinned.
+    const evalPair = (gi: number, gj: number): { res: number; samples: RegionSamples } | null => {
+      const k = ckey(gi, gj)
+      if (cache.has(k)) return cache.get(k)!
+      let result: { res: number; samples: RegionSamples } | null = null
+      if (!flatPinned.has(gi) && !flatPinned.has(gj) && gateEligible(gi, gj) && !pairVetoed(gi, gj)) {
+        const union = strideConcat([samples.get(gi)!, samples.get(gj)!], opts.sampleCap)
+        const fit = fitBestGradient(union)
+        if (fit && fit.oklabResidual <= opts.mergeTol && profileGap(fit.gradient, union) <= opts.maxProfileGap) {
+          result = { res: fit.oklabResidual, samples: union }
+        }
+      }
+      cache.set(k, result)
+      noteRow(gi, k)
+      noteRow(gj, k)
+      return result
+    }
+
+    report(0.45, 'Merging regions')
+    const A0 = alive.length // group count when the merge starts (for progress)
+    let lastPct = -1
+    let seedEvals = 0
+    let seeding = true // true only during the first (cold, all-pairs) scan
+    for (;;) {
+      let best: { i: number; j: number; samples: RegionSamples; res: number } | null = null
+      for (let a = 0; a < alive.length; a++) {
+        for (let b = a + 1; b < alive.length; b++) {
+          const cand = evalPair(alive[a], alive[b])
+          if (cand && (!best || cand.res < best.res)) {
+            best = { i: alive[a], j: alive[b], samples: cand.samples, res: cand.res }
+          }
+          // Creep the bar through the cold first scan (the long pole) so it never
+          // freezes; the `seeding` guard makes this zero-overhead once cached.
+          if (seeding && (++seedEvals & 8191) === 0) {
+            report(0.45 + 0.1 * Math.min(1, (2 * seedEvals) / (A0 * A0)), 'Merging regions')
+          }
+        }
+      }
+      seeding = false
+      if (!best) break
+      const c = nextId++
+      members.set(c, members.get(best.i)!.concat(members.get(best.j)!))
+      samples.set(c, best.samples)
+      if (gated) {
+        // c's neighbours are the union of the merged pair's, minus the two merged
+        // ids, and every neighbour repoints i/j → c.
+        const adjC = new Set<number>()
+        for (const nb of groupAdj.get(best.i)!) if (nb !== best.j) adjC.add(nb)
+        for (const nb of groupAdj.get(best.j)!) if (nb !== best.i) adjC.add(nb)
+        for (const nb of adjC) {
+          const s = groupAdj.get(nb)
+          if (s) { s.delete(best.i); s.delete(best.j); s.add(c) }
+        }
+        groupAdj.set(c, adjC)
+        groupAdj.delete(best.i); groupAdj.delete(best.j)
+      }
+      if (useMean) {
+        // c's running colour sums add; drop the retired groups' means.
+        gSumR.set(c, gSumR.get(best.i)! + gSumR.get(best.j)!)
+        gSumG.set(c, gSumG.get(best.i)! + gSumG.get(best.j)!)
+        gSumB.set(c, gSumB.get(best.i)! + gSumB.get(best.j)!)
+        gCnt.set(c, gCnt.get(best.i)! + gCnt.get(best.j)!)
+        gSumR.delete(best.i); gSumG.delete(best.i); gSumB.delete(best.i); gCnt.delete(best.i); meanCache.delete(best.i)
+        gSumR.delete(best.j); gSumG.delete(best.j); gSumB.delete(best.j); gCnt.delete(best.j); meanCache.delete(best.j)
+      }
+      // Retire the two merged groups: drop them from `alive`, invalidate ONLY their
+      // cache rows (same keys the old whole-cache sweep removed ⇒ identical state).
+      alive.splice(alive.indexOf(best.j), 1)
+      alive.splice(alive.indexOf(best.i), 1)
+      for (const g of [best.i, best.j]) {
+        const rows = cacheRows.get(g)
+        if (rows) for (const k of rows) cache.delete(k)
+        cacheRows.delete(g)
+      }
+      members.delete(best.i)
+      members.delete(best.j)
+      samples.delete(best.i)
+      samples.delete(best.j)
+      alive.push(c)
+      // Advance the bar as groups merge away (throttled to whole-percent steps).
+      const done = A0 - alive.length
+      const pct = Math.floor((done / A0) * 100)
+      if (pct > lastPct) {
+        lastPct = pct
+        report(0.55 + 0.37 * (done / A0), `Merging regions (${alive.length} left)`)
+      }
+    }
   }
 
   const G = alive.length
@@ -503,6 +656,7 @@ export function segmentImage(
     for (const sId of members.get(gid)!) segToGroup[sId] = gi
   })
 
+  report(0.92, 'Filling edges')
   // --- Step 4: flood 𝒟 (anti-aliased) pixels into the best-matching neighbour ---
   // groupId per pixel: smooth pixels inherit their segment's group; 𝒟 pixels are
   // assigned by repeated nearest-neighbour passes, choosing the adjacent group

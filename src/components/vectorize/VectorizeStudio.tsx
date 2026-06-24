@@ -17,6 +17,7 @@ import {
     Redo2,
     SlidersHorizontal,
     Undo2,
+    X,
 } from "lucide-react";
 import { useCheckerClass, useLogo, useStore } from "../../store";
 import { usePanZoom, type PanZoom } from "../../hooks/usePanZoom";
@@ -128,9 +129,14 @@ export function VectorizeStudio() {
     // arm the "re-trace discards edits" notice instead of re-tracing.
     const dirtyRef = useRef(false);
     const [staleEdits, setStaleEdits] = useState(false);
+    // Settings changed since the last COMPLETED trace but not yet applied — armed when
+    // a trace is Stopped mid-flight (the shown result then lags the controls).
+    const [staleOpts, setStaleOpts] = useState(false);
 
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState("");
+    // Determinate progress in [0,1] from the tracer; 0 ⇒ indeterminate (show the sweep).
+    const [progressFraction, setProgressFraction] = useState(0);
     // Pre-merge region map (fine regions before the gradient field-merge) from the
     // last trace — drives the region hover-highlight while placing markers.
     const [preMerge, setPreMerge] = useState<{ labels: Int32Array; width: number; height: number } | null>(null);
@@ -139,6 +145,9 @@ export function VectorizeStudio() {
     const [applied, setApplied] = useState(false);
     const runIdRef = useRef(0);
     const abortRef = useRef<AbortController | null>(null);
+    // Pending debounced auto-run timer, shared so Stop can cancel it (otherwise a
+    // re-trace armed just before Stop fires ~DEBOUNCE_MS later and clobbers the doc).
+    const autoRunTimerRef = useRef<number | null>(null);
     // Auto-default for the "fit smooth gradients" toggle, derived from image
     // content (flat art ⇒ off, real ramps ⇒ on). `gradientsTouchedRef` flips once
     // the user changes the toggle by hand so the probe never overrides them;
@@ -280,7 +289,9 @@ export function VectorizeStudio() {
         abortRef.current = controller;
         setBusy(true);
         setError(null);
+        setStaleOpts(false); // we're applying the current settings now
         setProgress(cleanFromExisting ? "Cleaning SVG…" : "Tracing…");
+        setProgressFraction(0);
         try {
             let next: EditableDoc | null;
             if (cleanFromExisting && logo.svgText) {
@@ -311,11 +322,8 @@ export function VectorizeStudio() {
                     opts,
                     (p) => {
                         if (runId !== runIdRef.current) return;
-                        setProgress(
-                            p.phase === "quantize"
-                                ? "Analyzing colors…"
-                                : `Tracing layer ${p.layer}/${p.total}…`,
-                        );
+                        setProgress(p.label);
+                        setProgressFraction(p.fraction);
                     },
                     controller.signal,
                     (pm) => {
@@ -341,6 +349,7 @@ export function VectorizeStudio() {
             if (runId === runIdRef.current) {
                 setBusy(false);
                 setProgress("");
+                setProgressFraction(0);
             }
         }
     }, [
@@ -353,6 +362,30 @@ export function VectorizeStudio() {
         historyReset,
         handleSelectPath,
     ]);
+
+    // User-initiated cancel of an in-flight trace. Cancel any debounced auto-run armed
+    // before this click (else it would fire ~DEBOUNCE_MS later and replace the doc the
+    // user wanted to keep); bump the run id so any late progress / result from the
+    // aborted run is ignored; abort the controller (which terminates the worker —
+    // off-thread planar/crisp traces stop instantly, even mid-segmentation; potrace and
+    // the clean-existing-SVG path run synchronously on the main thread and stop after
+    // their current step); and clear the busy UI. The previous document in history is
+    // left intact — stopping means "never mind, keep what I had" — and `staleOpts` flags
+    // that the shown result now lags the settings, so the controls offer a re-trace.
+    // A new run starts only from a fresh opts/source change or the manual Trace button.
+    const stop = useCallback(() => {
+        if (autoRunTimerRef.current !== null) {
+            window.clearTimeout(autoRunTimerRef.current);
+            autoRunTimerRef.current = null;
+        }
+        runIdRef.current++;
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setBusy(false);
+        setProgress("");
+        setProgressFraction(0);
+        setStaleOpts(true);
+    }, []);
 
     // Auto-default the "fit smooth gradients" toggle from image content: flat
     // colour art turns it OFF (nothing to fit, and it sidesteps the gradient
@@ -405,8 +438,15 @@ export function VectorizeStudio() {
             setStaleEdits(true);
             return;
         }
-        const id = window.setTimeout(() => void run(), DEBOUNCE_MS);
-        return () => window.clearTimeout(id);
+        const id = window.setTimeout(() => {
+            autoRunTimerRef.current = null;
+            void run();
+        }, DEBOUNCE_MS);
+        autoRunTimerRef.current = id;
+        return () => {
+            window.clearTimeout(id);
+            autoRunTimerRef.current = null;
+        };
     }, [run]);
 
     useEffect(() => () => abortRef.current?.abort(), []);
@@ -749,6 +789,7 @@ export function VectorizeStudio() {
         onClearMarkers: clearMarkers,
         busy,
         staleEdits,
+        staleOpts,
         onTrace: () => {
             setTraceSheetOpen(false);
             void run();
@@ -1034,12 +1075,34 @@ export function VectorizeStudio() {
                         trace runs off-thread) and the CSS sweep stays smooth. */}
                     {busy && (
                         <div className="animate-in-fade pointer-events-none absolute inset-0 overflow-hidden">
-                            <div className="trace-sweep" />
-                            <div className="absolute left-1/2 top-3 -translate-x-1/2">
-                                <span className="flex items-center gap-2 rounded-full border border-line bg-surface/90 px-3 py-1 text-xs font-medium text-accent shadow-sm backdrop-blur">
-                                    <Loader2 size={13} className="animate-spin" />
-                                    {progress || "Tracing…"}
-                                </span>
+                            {progressFraction <= 0 && <div className="trace-sweep" />}
+                            <div className="absolute left-1/2 top-3 w-64 max-w-[80%] -translate-x-1/2">
+                                <div className="pointer-events-auto rounded-xl border border-line bg-surface/90 px-3 py-2 shadow-sm backdrop-blur">
+                                    <div className="flex items-center gap-2 text-xs font-medium text-accent">
+                                        <Loader2 size={13} className="shrink-0 animate-spin" />
+                                        <span className="min-w-0 flex-1 truncate">{progress || "Tracing…"}</span>
+                                        {progressFraction > 0 && (
+                                            <span className="shrink-0 tabular-nums text-ink-2">
+                                                {Math.round(progressFraction * 100)}%
+                                            </span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={stop}
+                                            className="-mr-1 flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-ink-2 transition-colors hover:bg-surface-3 hover:text-bad"
+                                            title="Stop tracing (keeps the current result)"
+                                        >
+                                            <X size={12} />
+                                            Stop
+                                        </button>
+                                    </div>
+                                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-3">
+                                        <div
+                                            className={`h-full rounded-full bg-accent ${progressFraction > 0 ? "transition-[width] duration-200 ease-out" : "animate-pulse"}`}
+                                            style={{ width: `${Math.max(5, Math.round(progressFraction * 100))}%` }}
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -1087,6 +1150,15 @@ export function VectorizeStudio() {
                         <span className="flex shrink-0 items-center gap-1.5 text-accent">
                             <Loader2 size={12} className="animate-spin" />
                             {progress || "Tracing…"}
+                            <button
+                                type="button"
+                                onClick={stop}
+                                className="ml-0.5 flex items-center gap-0.5 rounded px-1 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-bad"
+                                title="Stop tracing (keeps the current result)"
+                            >
+                                <X size={11} />
+                                Stop
+                            </button>
                         </span>
                     )}
                     {error && (

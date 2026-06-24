@@ -40,6 +40,8 @@ export interface TraceControlsProps {
   busy: boolean
   /** Params changed while the doc carries manual edits — re-trace discards them. */
   staleEdits: boolean
+  /** A trace was Stopped, so the shown result lags the current settings (no edits at risk). */
+  staleOpts?: boolean
   onTrace: () => void
   /** Open the "How it works" pipeline explainer. */
   onShowHelp: () => void
@@ -77,6 +79,7 @@ export function TraceControlsBody({
   onClearMarkers,
   busy,
   staleEdits,
+  staleOpts = false,
   onTrace,
   onShowHelp,
 }: TraceControlsProps) {
@@ -333,12 +336,13 @@ export function TraceControlsBody({
 
         {/* Pinned action footer — always visible no matter how far the settings scroll. */}
         <div className="flex shrink-0 flex-col gap-3 border-t border-line bg-surface p-4">
-          {staleEdits && (
+          {(staleEdits || staleOpts) && (
             <div className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-snug text-warn">
               <AlertTriangle size={14} className="mt-px shrink-0" />
               <span>
-                Settings changed since the last trace. Re-trace to apply them — this discards your
-                path edits.
+                {staleEdits
+                  ? "Settings changed since the last trace. Re-trace to apply them — this discards your path edits."
+                  : "Tracing was stopped, so this result may not match the current settings. Re-trace to apply them."}
               </span>
             </div>
           )}
@@ -355,9 +359,11 @@ export function TraceControlsBody({
               ? 'Tracing…'
               : staleEdits
                 ? 'Re-trace (discard edits)'
-                : tracing
-                  ? 'Trace'
-                  : 'Clean SVG'}
+                : staleOpts
+                  ? 'Re-trace'
+                  : tracing
+                    ? 'Trace'
+                    : 'Clean SVG'}
           </Button>
         </div>
 

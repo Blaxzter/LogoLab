@@ -47,6 +47,11 @@ export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   fidelity: DEFAULT_BEAUTIFY_OPTIONS.fidelity,
 }
 
+// Progress-bar span split (overall [0,1]): segmentation is the bulk and the long
+// pole (the Step-3c merge), so it owns most of the bar; paint + trace are quick.
+const PROGRESS_SEGMENT_END = 0.8
+const PROGRESS_PAINT_END = 0.88
+
 /** Map the user smoothing dial (0–100) onto the crisp tracer's tunables. */
 function crispOptionsFor(smoothing: number, turdsize: number): CrispOptions {
   const s = smoothing / 100
@@ -321,6 +326,7 @@ export async function traceImage(
 
   if (options.mode === 'mono') {
     const traced = await traceOne(thresholdToMask(imageData, options.threshold))
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError') // parity with the colour path's checkpoints
     const [subPaths] = beautify([traced], beautifyOpts)
     const items: PathItem[] = []
     if (subPaths.length > 0) {
@@ -340,10 +346,10 @@ export async function traceImage(
   // into macro-regions (one smooth field each), reuniting a background that an
   // edge spatially split and keeping true edges separate (segment.ts). This
   // replaces quantize → mode-filter → drop-minor → union-refit entirely.
-  onProgress?.({ phase: 'quantize' })
   const seg = segmentImage(
     imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
     segmentOptionsFor(options),
+    onProgress ? (f, label) => onProgress({ phase: 'segment', fraction: f * PROGRESS_SEGMENT_END, label }) : undefined,
   )
   const q: QuantizeResult = { palette: seg.palette, labels: seg.labels, counts: seg.counts }
 
@@ -375,6 +381,7 @@ export async function traceImage(
       flatLabels.has(label) ? null : fitPaintLadder(s, undefined, fullSamples![label]),
     )
   }
+  onProgress?.({ phase: 'paint', fraction: PROGRESS_SEGMENT_END, label: gradientsOn ? 'Fitting colours' : 'Preparing shapes' })
 
   // V6 — translucent layer decomposition (plan §9). Only ATTEMPTED when the user
   // has opted into recovering overlaps (markers or Region detail) and gradients
@@ -426,7 +433,7 @@ export async function traceImage(
   // `subPaths` is the derived render/hit cache). No loop-beautify (it moves loops
   // independently and would desync shared edges); per-region paint is reused.
   if (engine === 'planar') {
-    onProgress?.({ phase: 'trace', layer: 1, total: 1 })
+    onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END, label: 'Tracing shapes' })
     // "Remove & heal" markers dissolve a marked section and grow its neighbours into
     // the gap. Background is detected first (from the ORIGINAL labels) so it can be
     // both excluded as a fill source and dropped from the paint order below.
@@ -447,8 +454,15 @@ export async function traceImage(
     let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
     if (bg !== -1) order = order.filter((l) => l !== bg)
     const items: PathItem[] = []
+    let traced = 0
+    let lastTracePct = -1
     for (const label of order) {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      const pct = Math.floor((++traced / order.length) * 100)
+      if (pct > lastTracePct) {
+        lastTracePct = pct
+        onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * (traced / order.length), label: 'Tracing shapes' })
+      }
       const loops = trace.loopsByLabel.get(label)!
       const subPaths = materializeRegion(loops, edges)
       if (subPaths.length === 0) continue
@@ -525,7 +539,7 @@ export async function traceImage(
     const total = paintOrder.length
     for (let i = 0; i < total; i++) {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-      onProgress?.({ phase: 'trace', layer: i + 1, total })
+      onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * ((i + 1) / total), label: `Tracing layer ${i + 1}/${total}` })
       const subPaths = await traceOne(stackedMask(q.labels, width, height, rank, i))
       if (subPaths.length > 0) {
         const label = paintOrder[i]
@@ -556,7 +570,7 @@ export async function traceImage(
     let li = 0
     const pushTraced = async (layer: Omit<Layer, 'subPaths'>, mask: ImageData): Promise<void> => {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-      onProgress?.({ phase: 'trace', layer: li + 1, total })
+      onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * ((li + 1) / total), label: `Tracing layer ${li + 1}/${total}` })
       li++
       const subPaths = await traceOne(mask)
       if (subPaths.length > 0) layers.push({ ...layer, subPaths })
