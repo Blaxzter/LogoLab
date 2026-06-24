@@ -13,6 +13,7 @@ import { Tooltip } from '../ui/Tooltip'
 import { getImageData } from '../../lib/image'
 import { analyzeImageOffThread, type OffThreadAnalysis } from '../../lib/trace/traceOffThread'
 import { labelColor } from '../../lib/trace/stageViz'
+import { analyzeRampiness, type RampinessReport } from '../../lib/trace'
 import type { VectorizeOptions } from '../../types'
 
 const ANALYZE_DIM = 512
@@ -20,6 +21,9 @@ const ANALYZE_DIM = 512
 export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; onClose: () => void }) {
   const logo = useLogo()
   const [analysis, setAnalysis] = useState<OffThreadAnalysis | null>(null)
+  // Gradient-detection probe (rampiness + colour histogram), computed on the main
+  // thread from the same decoded image — it's what auto-defaults the toggle.
+  const [detect, setDetect] = useState<{ ramp: RampinessReport; hist: ColorHistogram } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Close on Escape.
@@ -35,6 +39,7 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
   const optsKey = JSON.stringify(opts)
   useEffect(() => {
     setAnalysis(null)
+    setDetect(null)
     setError(null)
     if (!logo.src) {
       setError('Load an image first.')
@@ -44,6 +49,8 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
     void (async () => {
       try {
         const image = await getImageData(logo.src!, ANALYZE_DIM, logo.isSvg ? logo.svgText : null)
+        // Cheap + pure — the same probe that seeds the gradients toggle on load.
+        setDetect({ ramp: analyzeRampiness(image), hist: colorHistogram(image) })
         const result = await analyzeImageOffThread(image, { ...opts, engine: 'crisp' }, controller.signal)
         setAnalysis(result)
       } catch (e) {
@@ -63,7 +70,7 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
           <div>
             <h2 className="text-base font-semibold text-ink">How vectorize works</h2>
             <p className="mt-1 text-sm text-muted">
-              Your image, walked through the five stages — with your current settings — that turn pixels into clean,
+              Your image, walked through the stages — with your current settings — that turn pixels into clean,
               editable vector shapes.
             </p>
           </div>
@@ -83,7 +90,7 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
               Analyzing your image…
             </div>
           ) : (
-            <Steps logoSrc={logo.src!} a={analysis} opts={opts} />
+            <Steps logoSrc={logo.src!} a={analysis} opts={opts} detect={detect} />
           )}
         </div>
       </div>
@@ -94,7 +101,17 @@ export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; o
 
 // ---------------------------------------------------------------------------
 
-function Steps({ logoSrc, a, opts }: { logoSrc: string; a: OffThreadAnalysis; opts: VectorizeOptions }) {
+function Steps({
+  logoSrc,
+  a,
+  opts,
+  detect,
+}: {
+  logoSrc: string
+  a: OffThreadAnalysis
+  opts: VectorizeOptions
+  detect: { ramp: RampinessReport; hist: ColorHistogram } | null
+}) {
   const { width, height, regionCount, paints } = a
   const gradientsOn = opts.gradients !== false
   const engineLabel = opts.engine === 'potrace' ? 'Potrace' : 'Crisp'
@@ -166,6 +183,7 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: OffThreadAnalysis; op
             : ''
         }`}
       >
+        {detect && <GradientDetection ramp={detect.ramp} hist={detect.hist} gradientsOn={gradientsOn} />}
         <Visual label="Region fills">
           <StageCanvas rgba={a.fills} width={width} height={height} />
         </Visual>
@@ -195,6 +213,20 @@ function Steps({ logoSrc, a, opts }: { logoSrc: string; a: OffThreadAnalysis; op
       >
         <Visual label="Vector result">
           <div className="h-full w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: a.svg }} />
+        </Visual>
+      </Step>
+
+      <Step
+        n={6}
+        title="Keep peaks sharp, heal the seams"
+        controls={['Planar engine', 'automatic']}
+        body="The default Planar engine traces every shared boundary once — so neighbouring shapes meet exactly, with no seam or overlap — then does two finishing touches. Sharp features (a mountain's peak, a V-valley, a frame corner) are found on the raw outline and snapped to their exact sub-pixel point, so they stay crisp instead of being rounded into a soft bevel. And where two colours meet through a soft, blurry edge, stray boundary pixels whose colour clearly belongs to one side are healed back to it — so a continuous stroke doesn't pick up a thin background notch at the junction. Both run automatically (no knob)."
+      >
+        <Visual label="Before">
+          <CornerIllustration variant="before" />
+        </Visual>
+        <Visual label="After (peaks healed)">
+          <CornerIllustration variant="after" />
         </Visual>
       </Step>
 
@@ -240,6 +272,139 @@ function ResearchLink({ href, children }: { href: string; children: ReactNode })
   )
 }
 
+// --- gradient detection (rampiness + colour histogram) ----------------------
+
+interface ColorHistogram {
+  /** Per-channel counts over `bins` value buckets (0–255 split into `bins`). */
+  r: number[]
+  g: number[]
+  b: number[]
+  bins: number
+  /** Tallest bucket across all channels (for normalising the chart). */
+  max: number
+}
+
+/** Per-channel RGB histogram over the opaque pixels (the chart only; the palette
+ *  stats that feed the decision come from `analyzeRampiness`). */
+function colorHistogram(img: ImageData, bins = 64): ColorHistogram {
+  const { data } = img
+  const r = new Array<number>(bins).fill(0)
+  const g = new Array<number>(bins).fill(0)
+  const b = new Array<number>(bins).fill(0)
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 128) continue
+    r[(data[i] * bins) >> 8]++
+    g[(data[i + 1] * bins) >> 8]++
+    b[(data[i + 2] * bins) >> 8]++
+  }
+  let max = 1
+  for (let k = 0; k < bins; k++) max = Math.max(max, r[k], g[k], b[k])
+  return { r, g, b, bins, max }
+}
+
+/** The auto-gradients decision, made visible. Gradients turn ON only when BOTH a
+ *  gentle slope is present AND the palette is spread — so a flat logo with soft
+ *  (anti-aliased) edges, which reads "rampy" but is a few dominant colours, stays
+ *  OFF. Both signals are shown with their verdicts so a surprising call is legible. */
+function GradientDetection({
+  ramp,
+  hist,
+  gradientsOn,
+}: {
+  ramp: RampinessReport
+  hist: ColorHistogram
+  gradientsOn: boolean
+}) {
+  const pct = ramp.rampiness * 100
+  const thrPct = ramp.threshold * 100
+  const coverPct = Math.round(ramp.topCoverage * 100)
+  const coverMaxPct = Math.round(ramp.coverageMax * 100)
+  const verdict = ramp.suggestion ? 'gradients ON' : 'flat → gradients OFF'
+  const overridden = gradientsOn !== ramp.suggestion
+  return (
+    <div className="w-full rounded-lg border border-line bg-surface-2 p-3">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold text-ink">Smooth-gradient detection</span>
+        <span
+          className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
+            ramp.suggestion ? 'bg-accent-soft text-accent' : 'bg-surface-3 text-ink-2'
+          }`}
+        >
+          {verdict}
+        </span>
+      </div>
+      <p className="mb-2 text-[10px] leading-snug text-muted">
+        On only if the colours change gradually <b className="text-ink-2">and</b> the palette is genuinely spread — so
+        flat art with soft edges (rampy, but few colours) stays off.
+      </p>
+      <div className="flex flex-wrap gap-x-5 gap-y-3">
+        <div className="min-w-[180px] flex-1">
+          <HistogramChart hist={hist} />
+          <div className="mt-1 text-[10px] leading-snug text-muted">
+            Colour histogram (R/G/B, log scale). <Signal ok={ramp.paletteSpread} />{' '}
+            <b className="text-ink-2">{ramp.distinctColors}</b> main colour{ramp.distinctColors === 1 ? '' : 's'}, top 8
+            cover <b className="text-ink-2">{coverPct}%</b> ({ramp.paletteSpread ? `spread, ≤${coverMaxPct}%` : `concentrated, >${coverMaxPct}% ⇒ flat`}).
+          </div>
+        </div>
+        <div className="min-w-[180px] flex-1">
+          <div className="relative h-3 w-full overflow-hidden rounded bg-surface-3" title="ramp fraction vs threshold">
+            <div
+              className={`h-full rounded ${ramp.slopePresent ? 'bg-accent' : 'bg-ink/30'}`}
+              style={{ width: `${Math.min(100, Math.max(pct, pct > 0 ? 1 : 0))}%` }}
+            />
+            <div className="absolute inset-y-0 w-0.5 bg-ink/70" style={{ left: `${thrPct}%` }} title={`threshold ${thrPct}%`} />
+          </div>
+          <div className="mt-1 text-[10px] leading-snug text-muted">
+            <Signal ok={ramp.slopePresent} /> <b className="text-ink-2">Rampiness {pct.toFixed(1)}%</b> of the interior
+            shows a gentle slope ({ramp.slopePresent ? `≥${thrPct}%` : `below ${thrPct}%`}).{' '}
+            {ramp.ramp.toLocaleString()} ramp vs {ramp.flat.toLocaleString()} flat px; {ramp.edge.toLocaleString()}{' '}
+            hard-edge px excluded.
+          </div>
+          {overridden && (
+            <div className="mt-1 text-[10px] leading-snug text-warn">
+              Active: gradients {gradientsOn ? 'on' : 'off'} — detection suggested {ramp.suggestion ? 'on' : 'off'} (set
+              by hand, or the default for an SVG you’re cleaning rather than tracing).
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Tiny ✓ / ✗ chip telling whether one signal points at "gradient". */
+function Signal({ ok }: { ok: boolean }) {
+  return (
+    <span className={ok ? 'font-semibold text-accent' : 'font-semibold text-muted'}>{ok ? '✓' : '✗'}</span>
+  )
+}
+
+/** Three overlaid per-channel area plots — the classic RGB colour histogram, on a
+ *  LOG scale so a dominant colour (e.g. a black background) doesn't flatten every
+ *  other peak into the baseline. */
+function HistogramChart({ hist }: { hist: ColorHistogram }) {
+  const { r, g, b, bins, max } = hist
+  const W = 200
+  const H = 56
+  const norm = Math.log1p(max)
+  const area = (arr: number[]): string => {
+    const step = W / (bins - 1)
+    let d = `M0 ${H}`
+    for (let k = 0; k < bins; k++) {
+      const y = H - (Math.log1p(arr[k]) / norm) * H
+      d += ` L${(k * step).toFixed(1)} ${y.toFixed(1)}`
+    }
+    return `${d} L${W} ${H} Z`
+  }
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-14 w-full rounded border border-line bg-surface" preserveAspectRatio="none">
+      <path d={area(r)} fill="rgb(239,68,68)" fillOpacity="0.45" />
+      <path d={area(g)} fill="rgb(34,197,94)" fillOpacity="0.45" />
+      <path d={area(b)} fill="rgb(59,130,246)" fillOpacity="0.45" />
+    </svg>
+  )
+}
+
 function Step({
   n,
   title,
@@ -278,6 +443,24 @@ function Step({
         <div className="flex flex-wrap items-start gap-3">{children}</div>
       </div>
     </section>
+  )
+}
+
+/** A static before/after of the Planar engine's finishing pass: rounded peaks + a
+ *  thin background notch at a seam (before) vs sharp peaks + a clean seam (after). */
+function CornerIllustration({ variant }: { variant: 'before' | 'after' }) {
+  return (
+    <svg viewBox="0 0 144 144" className="h-full w-full">
+      {variant === 'after' ? (
+        <path d="M18 122 L52 42 L80 90 L102 54 L126 122 Z" fill="#f59e0b" />
+      ) : (
+        <path
+          fillRule="evenodd"
+          d="M18 122 L42 56 Q52 38 62 56 L74 80 Q80 96 86 80 L93 66 Q102 48 111 66 L126 122 Z M96 122 L104 98 L112 122 Z"
+          fill="#f59e0b"
+        />
+      )}
+    </svg>
   )
 }
 

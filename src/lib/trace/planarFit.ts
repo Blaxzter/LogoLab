@@ -21,6 +21,14 @@ export interface PlanarFitOptions {
   smoothPasses: number
   lineCost: number
   cubicCost: number
+  /**
+   * Macro-turn angle (deg) above which an interior staircase vertex is a CORNER and
+   * is PINNED through pre-smoothing — so a sharp valley/point isn't melted into a
+   * curve before the fitter sees it. 70° catches the genuinely sharp features yet
+   * leaves smooth shapes (even tiny circles) untouched. ≥180 disables (pre-smoothing
+   * pins only endpoints, the legacy behaviour — used to assert byte-identity).
+   */
+  cornerTurnDeg: number
 }
 
 export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
@@ -28,11 +36,14 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   smoothPasses: 2,
   lineCost: 3.9,
   cubicCost: 4,
+  cornerTurnDeg: 70,
 }
 
 const MAX_SPAN = 20
 const MAX_FIT_POINTS = 64
 const MAX_EVIDENCE_WINDOW = 24
+/** ±px window the macro-turn corner test looks across (spans the unit staircase). */
+const CORNER_WINDOW = 4
 
 // --- vector helpers ---------------------------------------------------------
 const sub = (a: Vec, b: Vec): Vec => ({ x: a.x - b.x, y: a.y - b.y })
@@ -63,10 +74,12 @@ function dedup(pts: Vec[]): Vec[] {
 
 /**
  * Pre-smooth a polyline to melt the unit staircase. `pinEnds` keeps the first &
- * last point fixed (junction anchors); a closed loop smooths cyclically. A few
- * fixed passes of a [0.25, 0.5, 0.25] window — deterministic, endpoint-preserving.
+ * last point fixed (junction anchors); a closed loop smooths cyclically. `pinned`
+ * holds extra indices that must NOT move — the detected sharp corners, so they
+ * survive the melt. A few fixed passes of a [0.25, 0.5, 0.25] window —
+ * deterministic, endpoint-preserving.
  */
-export function presmooth(pts: Vec[], passes: number, pinEnds: boolean): Vec[] {
+export function presmooth(pts: Vec[], passes: number, pinEnds: boolean, pinned?: ReadonlySet<number>): Vec[] {
   if (pts.length < 3 || passes <= 0) return pts.map((p) => ({ x: p.x, y: p.y }))
   let cur = pts.map((p) => ({ x: p.x, y: p.y }))
   const n = cur.length
@@ -75,6 +88,7 @@ export function presmooth(pts: Vec[], passes: number, pinEnds: boolean): Vec[] {
     const lo = pinEnds ? 1 : 0
     const hi = pinEnds ? n - 1 : n
     for (let i = lo; i < hi; i++) {
+      if (pinned && pinned.has(i)) continue
       const a = cur[(i - 1 + n) % n]
       const b = cur[i]
       const c = cur[(i + 1) % n]
@@ -83,6 +97,54 @@ export function presmooth(pts: Vec[], passes: number, pinEnds: boolean): Vec[] {
     cur = next
   }
   return cur
+}
+
+/**
+ * Indices of MACRO corners on a lattice staircase: vertices where the path
+ * direction turns by more than `turnDeg`, measured over a ±`win` px window so the
+ * unit stair-steps of a straight diagonal (constant macro direction) are NOT
+ * corners but a genuine sharp valley/point IS. Non-max-suppressed within the
+ * window. `closed` wraps the windows; otherwise the endpoint region (already
+ * pinned by `presmooth`) is skipped. A smooth shape — even a tiny circle — returns
+ * ∅ at the default threshold, so its pre-smoothing is unchanged. `turnDeg ≥ 180`
+ * ⇒ ∅ (corner pinning disabled).
+ */
+export function detectCorners(
+  pts: Vec[],
+  turnDeg: number,
+  closed: boolean,
+  win = CORNER_WINDOW,
+): Set<number> {
+  const out = new Set<number>()
+  const n = pts.length
+  if (turnDeg >= 180 || n < 2 * win + 1) return out
+  const wrap = (i: number): number => ((i % n) + n) % n
+  const before = (i: number): Vec => (closed ? pts[wrap(i - win)] : pts[Math.max(0, i - win)])
+  const after = (i: number): Vec => (closed ? pts[wrap(i + win)] : pts[Math.min(n - 1, i + win)])
+  const thr = Math.cos((turnDeg * Math.PI) / 180)
+  const cos = new Float64Array(n)
+  cos.fill(1)
+  const lo = closed ? 0 : win
+  const hi = closed ? n : n - win
+  for (let i = lo; i < hi; i++) {
+    const inDir = unit(sub(pts[i], before(i)))
+    const outDir = unit(sub(after(i), pts[i]))
+    cos[i] = inDir.x * outDir.x + inDir.y * outDir.y
+  }
+  for (let i = lo; i < hi; i++) {
+    if (cos[i] >= thr) continue // not sharp enough
+    let isLocalMin = true
+    for (let j = i - win; j <= i + win; j++) {
+      const k = closed ? wrap(j) : j
+      if (k === i || (!closed && (k < lo || k >= hi))) continue
+      if (cos[k] < cos[i]) {
+        isLocalMin = false
+        break
+      }
+    }
+    if (isLocalMin) out.add(wrap(i))
+  }
+  return out
 }
 
 // --- open Ramer–Douglas–Peucker (endpoints always kept) ---------------------
@@ -417,6 +479,200 @@ export function fitOpenArc(densePts: Vec[], opts: PlanarFitOptions): PathNode[] 
 /** Fallback: straight polyline through the key vertices, all corners. */
 function polylineNodes(keyIdx: number[], dense: Vec[]): PathNode[] {
   return keyIdx.map((i) => ({ x: dense[i].x, y: dense[i].y, hIn: null, hOut: null, kind: 'corner' as const }))
+}
+
+// --- sharp-corner CLOSED-loop fitting (anti-bevel) --------------------------
+// `detectCorners` + corner-pinned presmooth keep a sharp apex from being MELTED,
+// but the closed-loop fitter (fitClosedLoop) still places its key vertices on the
+// rounded staircase AROUND a tip — two nodes straddling the apex with a short
+// segment cutting across it (a visible bevel; the apex itself is never a node).
+// For a loop that has ≥2 genuine sharp corners we instead localize each corner to
+// its sub-pixel APEX (the intersection of its two arms), split the loop there, and
+// fit each arc as an OPEN arc pinned at the snapped corners — so every corner is
+// one exact sharp node. Smooth loops (circles, gradient blobs) have <2 corners and
+// never take this path, so their fit is unchanged.
+
+const SNAP_GAP = 3 // skip this many px nearest the tip (the rounded part) per arm
+const SNAP_SPAN = 14 // …and fit the arm line over up to this many px beyond the gap
+
+/** Least-squares line through `pts` → a point on it (`c`) and a unit direction (`d`). */
+function armLine(pts: Vec[]): { c: Vec; d: Vec } {
+  let mx = 0
+  let my = 0
+  for (const p of pts) {
+    mx += p.x
+    my += p.y
+  }
+  mx /= pts.length
+  my /= pts.length
+  let sxx = 0
+  let sxy = 0
+  let syy = 0
+  for (const p of pts) {
+    const dx = p.x - mx
+    const dy = p.y - my
+    sxx += dx * dx
+    sxy += dx * dy
+    syy += dy * dy
+  }
+  const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy)
+  return { c: { x: mx, y: my }, d: { x: Math.cos(theta), y: Math.sin(theta) } }
+}
+
+/**
+ * Sub-pixel position of the corner at cyclic index `c`: intersect the two lines
+ * fit to the arms flanking it (each sampled [gap..span] px away so the rounded tip
+ * is excluded). `inSpan`/`outSpan` are capped by the caller so a short arc between
+ * two close corners doesn't bleed past the neighbour. Returns the raw lattice
+ * corner when the arms are near-parallel or the intersection runs away (a curved
+ * arm), so a bad fit can never push the apex off into space.
+ */
+function snapCornerToArms(pts: Vec[], c: number, gap: number, inSpan: number, outSpan: number): Vec {
+  const n = pts.length
+  const wrap = (i: number): number => ((i % n) + n) % n
+  const inPts: Vec[] = []
+  const outPts: Vec[] = []
+  for (let o = gap; o <= inSpan; o++) inPts.push(pts[wrap(c - o)])
+  for (let o = gap; o <= outSpan; o++) outPts.push(pts[wrap(c + o)])
+  if (inPts.length < 2 || outPts.length < 2) return { x: pts[c].x, y: pts[c].y }
+  const a = armLine(inPts)
+  const b = armLine(outPts)
+  const det = a.d.x * -b.d.y - a.d.y * -b.d.x
+  if (Math.abs(det) < 1e-6) return { x: pts[c].x, y: pts[c].y }
+  const rx = b.c.x - a.c.x
+  const ry = b.c.y - a.c.y
+  const t = (rx * -b.d.y - ry * -b.d.x) / det
+  const ix = a.c.x + t * a.d.x
+  const iy = a.c.y + t * a.d.y
+  if (dist({ x: ix, y: iy }, pts[c]) > Math.max(inSpan, outSpan)) return { x: pts[c].x, y: pts[c].y }
+  return { x: ix, y: iy }
+}
+
+/**
+ * Indices of the sharp corners on a CLOSED staircase loop — ONE per corner. The
+ * same ±`win` macro-turn test as `detectCorners`, but each cluster of sub-threshold
+ * vertices is collapsed to its geometric APEX (the vertex farthest from its window
+ * chord), and apexes within `mergeDist` px fuse (a rasterized tip is often a 1-px
+ * plateau = two "shoulder" vertices, possibly split across the loop seam). Sorted
+ * ascending. `turnDeg ≥ 180` ⇒ ∅ (disabled).
+ */
+export function detectLoopCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = 5): number[] {
+  const n = pts.length
+  if (turnDeg >= 180 || n < 2 * win + 1) return []
+  const wrap = (i: number): number => ((i % n) + n) % n
+  const thr = Math.cos((turnDeg * Math.PI) / 180)
+  const cos = new Float64Array(n)
+  cos.fill(1)
+  for (let i = 0; i < n; i++) {
+    const inDir = unit(sub(pts[i], pts[wrap(i - win)]))
+    const outDir = unit(sub(pts[wrap(i + win)], pts[i]))
+    cos[i] = inDir.x * outDir.x + inDir.y * outDir.y
+  }
+  // Cluster consecutive sub-threshold (sharp) vertices; apex = max perp-to-chord.
+  const used = new Uint8Array(n)
+  const apexes: number[] = []
+  for (let s = 0; s < n; s++) {
+    if (cos[s] >= thr || used[s]) continue
+    let best = s
+    let bestDev = -1
+    let i = s
+    while (cos[wrap(i)] < thr && !used[wrap(i)]) {
+      const k = wrap(i)
+      used[k] = 1
+      const dev = perpDistance(pts[k], pts[wrap(k - win)], pts[wrap(k + win)])
+      if (dev > bestDev) {
+        bestDev = dev
+        best = k
+      }
+      i++
+    }
+    apexes.push(best)
+  }
+  apexes.sort((a, b) => a - b)
+  if (apexes.length < 2) return apexes
+  // Fuse near-coincident apexes (consecutive, plus the cyclic first/last pair).
+  const merged: number[] = []
+  for (const a of apexes) {
+    const last = merged[merged.length - 1]
+    if (last !== undefined && dist(pts[a], pts[last]) <= mergeDist) continue
+    merged.push(a)
+  }
+  if (merged.length >= 2 && dist(pts[merged[0]], pts[merged[merged.length - 1]]) <= mergeDist) merged.pop()
+  return merged
+}
+
+/**
+ * Fit a closed loop that has sharp corners without beveling them: snap each corner
+ * to its sub-pixel arm intersection, split the raw staircase at the corners, and
+ * fit each arc as an open arc pinned at the snapped corners (so the arm staircase
+ * still melts but the corners stay exact). Stitch the arcs into one closed node
+ * list, each corner a single hard node. Falls back to `fitLoopEdge` if the corners
+ * collapse to fewer than two distinct points.
+ */
+export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOptions): PathNode[] {
+  const n = pts.length
+  const wrap = (i: number): number => ((i % n) + n) % n
+  const C = corners.slice().sort((a, b) => a - b)
+  // Snap each corner, capping arm samples to the gap to its neighbour corners.
+  const snappedAll: Vec[] = C.map((c, k) => {
+    const prev = C[(k - 1 + C.length) % C.length]
+    const next = C[(k + 1) % C.length]
+    const toPrev = wrap(c - prev)
+    const toNext = wrap(next - c)
+    const inSpan = Math.min(SNAP_SPAN, Math.max(SNAP_GAP + 1, toPrev - 1))
+    const outSpan = Math.min(SNAP_SPAN, Math.max(SNAP_GAP + 1, toNext - 1))
+    return snapCornerToArms(pts, c, SNAP_GAP, inSpan, outSpan)
+  })
+  // Drop corners whose snapped point coincides with the previous (a shoulder pair
+  // that both resolved onto the same apex) — incl. the cyclic first/last pair.
+  const idx: number[] = []
+  const snap: Vec[] = []
+  for (let k = 0; k < C.length; k++) {
+    const last = snap[snap.length - 1]
+    if (last && dist(last, snappedAll[k]) < 1) continue
+    idx.push(C[k])
+    snap.push(snappedAll[k])
+  }
+  if (snap.length >= 2 && dist(snap[0], snap[snap.length - 1]) < 1) {
+    idx.pop()
+    snap.pop()
+  }
+  if (idx.length < 2) return fitLoopEdge(presmooth(pts, opts.smoothPasses, false), opts)
+
+  // Fit each arc between consecutive corners (snapped endpoints pinned & sharp).
+  const arcs = idx.length
+  const fitted: PathNode[][] = []
+  for (let k = 0; k < arcs; k++) {
+    const a = idx[k]
+    const b = idx[(k + 1) % arcs]
+    const arc: Vec[] = []
+    let i = a
+    while (true) {
+      arc.push({ x: pts[i].x, y: pts[i].y })
+      if (i === b) break
+      i = wrap(i + 1)
+    }
+    arc[0] = { x: snap[k].x, y: snap[k].y }
+    arc[arc.length - 1] = { x: snap[(k + 1) % arcs].x, y: snap[(k + 1) % arcs].y }
+    fitted.push(fitOpenArc(presmooth(arc, opts.smoothPasses, true), opts))
+  }
+
+  // Stitch into a closed node list: each shared corner is one node carrying the
+  // arriving arc's hIn and the leaving arc's hOut, tagged corner.
+  const out: PathNode[] = []
+  for (let k = 0; k < arcs; k++) {
+    const cur = fitted[k]
+    if (cur.length < 2) continue
+    const start = cur[0]
+    const prev = out[out.length - 1]
+    if (prev) prev.hOut = start.hOut ? { x: start.hOut.x, y: start.hOut.y } : null
+    else out.push({ x: start.x, y: start.y, hIn: null, hOut: start.hOut ? { x: start.hOut.x, y: start.hOut.y } : null, kind: 'corner' })
+    for (let j = 1; j < cur.length - 1; j++) out.push(cur[j])
+    const last = cur[cur.length - 1]
+    if (k === arcs - 1) out[0].hIn = last.hIn ? { x: last.hIn.x, y: last.hIn.y } : null
+    else out.push({ x: last.x, y: last.y, hIn: last.hIn ? { x: last.hIn.x, y: last.hIn.y } : null, hOut: null, kind: 'corner' })
+  }
+  return out.length >= 2 ? out : fitLoopEdge(presmooth(pts, opts.smoothPasses, false), opts)
 }
 
 /**

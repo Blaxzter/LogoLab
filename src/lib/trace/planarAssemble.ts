@@ -8,7 +8,7 @@
 import type { EdgeRef, PathNode, SharedEdge, Vec, Vertex } from '../path/types'
 import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
 import { buildPlanarNetwork, EXT, type PlanarNetwork } from './planarNetwork.ts'
-import { fitLoopEdge, fitOpenArc, presmooth, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import { detectCorners, detectLoopCorners, fitCorneredLoop, fitLoopEdge, fitOpenArc, presmooth, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
 
 export interface PlanarTrace {
@@ -58,10 +58,21 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): Plan
   const meta: EdgeMeta[] = []
   for (const e of net.edges) {
     let nodes: PathNode[]
+    // Sharp corners are found on the RAW staircase and pinned through pre-smoothing
+    // so a valley/point isn't melted into a curve before the fitter detects it.
+    const corners = detectCorners(e.pts, opts.cornerTurnDeg, e.closed)
     if (e.closed) {
-      nodes = fitLoopEdge(presmooth(e.pts, opts.smoothPasses, false), opts)
+      // A closed loop with ≥2 genuine sharp corners is fitted corner-first (snap
+      // each corner to its sub-pixel arm intersection, then fit the arcs between
+      // them) so the apex is an exact node, not a beveled pair. Smooth loops have
+      // <2 corners and fall through to the unchanged closed-loop fitter.
+      const loopCorners = detectLoopCorners(e.pts, opts.cornerTurnDeg)
+      nodes =
+        loopCorners.length >= 2
+          ? fitCorneredLoop(e.pts, loopCorners, opts)
+          : fitLoopEdge(presmooth(e.pts, opts.smoothPasses, false, corners), opts)
     } else {
-      nodes = fitOpenArc(presmooth(e.pts, opts.smoothPasses, true), opts)
+      nodes = fitOpenArc(presmooth(e.pts, opts.smoothPasses, true, corners), opts)
     }
     const startV = e.startV >= 0 ? vidByCorner.get(e.startV)! : -1
     const endV = e.endV >= 0 ? vidByCorner.get(e.endV)! : -1

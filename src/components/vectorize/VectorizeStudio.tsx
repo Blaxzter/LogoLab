@@ -33,7 +33,11 @@ import { docStats, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
 import { regionProvenance } from "../../lib/path/topology";
 import { deleteRegionNodes, removeRegionAndHeal, removeRegionSection, translateRegionNodes } from "../../lib/path/topologyEdit";
-import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from "../../lib/trace";
+import {
+    DEFAULT_VECTORIZE_OPTIONS,
+    suggestGradients,
+    traceImage,
+} from "../../lib/trace";
 import { traceImageOffThread, canTraceOffThread } from "../../lib/trace/traceOffThread";
 import type { VectorizeOptions } from "../../types";
 import type { DocItem, EditableDoc, NodeRef, PathItem, Vec } from "../../lib/path/types";
@@ -135,6 +139,13 @@ export function VectorizeStudio() {
     const [applied, setApplied] = useState(false);
     const runIdRef = useRef(0);
     const abortRef = useRef<AbortController | null>(null);
+    // Auto-default for the "fit smooth gradients" toggle, derived from image
+    // content (flat art ⇒ off, real ramps ⇒ on). `gradientsTouchedRef` flips once
+    // the user changes the toggle by hand so the probe never overrides them;
+    // `autoGradientsSrcRef` records the image we've already decided for so we probe
+    // each new image exactly once.
+    const gradientsTouchedRef = useRef(false);
+    const autoGradientsSrcRef = useRef<string | null>(null);
 
     const isVectorSource = logo.isSvg && Boolean(logo.svgText);
     const cleanFromExisting = isVectorSource && retraceVector === "clean";
@@ -342,6 +353,50 @@ export function VectorizeStudio() {
         historyReset,
         handleSelectPath,
     ]);
+
+    // Auto-default the "fit smooth gradients" toggle from image content: flat
+    // colour art turns it OFF (nothing to fit, and it sidesteps the gradient
+    // field-merge), real ramps leave it ON. A SUGGESTION only — a manual flip
+    // (gradientsTouchedRef) is never overridden, and each image is probed once.
+    useEffect(() => {
+        const src = logo.src;
+        if (!src) return;
+        // Cleaned vector sources don't run the tracer, so the toggle is moot.
+        if (isVectorSource && retraceVector === "clean") return;
+        if (autoGradientsSrcRef.current === src) return;
+        // Fresh image: re-enable the auto-decision (a previous image's manual flip
+        // shouldn't carry over).
+        gradientsTouchedRef.current = false;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const img = await getImageData(
+                    src,
+                    512,
+                    logo.isSvg ? logo.svgText : null,
+                );
+                // Claim AFTER the decode, not before — under StrictMode the effect
+                // runs twice; claiming before the await would let the cancelled first
+                // run mark the image "done" so the second (live) run bails and nothing
+                // applies. Here the cancelled run never claims, the live one does.
+                if (cancelled || gradientsTouchedRef.current) return;
+                autoGradientsSrcRef.current = src; // probe once per image
+                const on = suggestGradients(img);
+                setOpts((o) => {
+                    // Skip if the user beat the probe, or it matches the effective
+                    // state already (avoid a spurious re-trace).
+                    if (gradientsTouchedRef.current) return o;
+                    const currentlyOn = o.gradients !== false;
+                    return currentlyOn === on ? o : { ...o, gradients: on };
+                });
+            } catch {
+                // Best-effort: on decode failure leave the default in place.
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [logo.src, logo.isSvg, logo.svgText, isVectorSource, retraceVector]);
 
     // Auto-run (debounced) whenever the source or parameters change — unless
     // the user has hand-edited paths, in which case their edits win.
@@ -674,7 +729,12 @@ export function VectorizeStudio() {
         source: retraceVector,
         onSourceChange: setRetraceVector,
         opts,
-        onPatch: (p: Partial<VectorizeOptions>) => setOpts((o) => ({ ...o, ...p })),
+        onPatch: (p: Partial<VectorizeOptions>) => {
+            // A hand-flip of the gradients toggle pins it: the content probe must
+            // not override a deliberate user choice for this image.
+            if ("gradients" in p) gradientsTouchedRef.current = true;
+            setOpts((o) => ({ ...o, ...p }));
+        },
         forceColorOn,
         onForceColorOn: setForceColorOn,
         forceColor,

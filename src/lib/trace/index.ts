@@ -26,6 +26,15 @@ import { type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
 import { planarBeautify } from './planarBeautify.ts'
 import { materializeRegion, edgeMap } from '../path/topology.ts'
 
+export {
+  suggestGradients,
+  measureRampiness,
+  colorSpread,
+  analyzeRampiness,
+  RAMPINESS_GRADIENT_THRESHOLD,
+  type RampinessReport,
+} from './rampiness.ts'
+
 export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   mode: 'color',
   smoothing: 50,
@@ -164,6 +173,85 @@ export function applyRemoveMarkers(
     for (const p of comp) out[p] = assigned[p] >= 0 ? assigned[p] : -1
   }
   return out
+}
+
+/**
+ * Heal mislabeled boundary pixels in FLAT-art segmentation. A pixel grouped into
+ * region L but whose OWN colour clearly matches an ADJACENT region B (within a tight
+ * RGB tolerance, and closer to B than to L) was mis-grouped — typically at a soft
+ * multi-colour junction, where the segmenter lets one region (often the dark
+ * background) wedge a thin spike into a continuous two-colour stroke (the schild
+ * shield's amber↔teal tip). Reassigning those pixels to the region their colour
+ * actually belongs to closes the wedge.
+ *
+ * Deliberately conservative: only a pixel that is UNAMBIGUOUSLY another region's
+ * colour moves. An anti-aliased edge pixel sits BETWEEN two colours — close to
+ * neither within the tolerance — so it is left alone and true edges don't shift; a
+ * genuinely background-coloured gap pixel stays background (its colour matches its
+ * own region). Neighbours are 8-connected so a stroke pixel that an OVERLAPPING
+ * region (the opaque amber cap sitting on the teal) has orphaned from its own
+ * region — leaving it diagonally adjacent — is still reached. Iterates so a 2–3px
+ * spike is peeled inward, pass-synchronous for determinism; returns the INPUT
+ * unchanged when nothing is mislabeled (so the output is byte-identical). Pure.
+ *
+ * The caller gates this to flat art (gradients off): a gradient region's pixels
+ * stray from the region mean by design, so the colour-match test must not run there.
+ */
+export function healColorSpikes(
+  labels: Int32Array,
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  palette: { r: number; g: number; b: number }[],
+): Int32Array {
+  const TIGHT = 30 // RGB distance below which a pixel IS that region's flat colour
+  const T2 = TIGHT * TIGHT
+  const dist2 = (o: number, c: { r: number; g: number; b: number }): number => {
+    const dr = data[o] - c.r
+    const dg = data[o + 1] - c.g
+    const db = data[o + 2] - c.b
+    return dr * dr + dg * dg + db * db
+  }
+  let out: Int32Array | null = null // allocated lazily on the first reassignment
+  let cur = labels
+  for (let pass = 0; pass < 6; pass++) {
+    let changed = 0
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x
+        const L = cur[i]
+        if (L < 0) continue
+        const o = i * 4
+        if (dist2(o, palette[L]) <= T2) continue // matches its own region — keep
+        let bestB = -1
+        let bestD = T2
+        for (let dy = -1; dy <= 1; dy++) {
+          const ny = y + dy
+          if (ny < 0 || ny >= height) continue
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue
+            const nx = x + dx
+            if (nx < 0 || nx >= width) continue
+            const B = cur[ny * width + nx]
+            if (B < 0 || B === L) continue
+            const d = dist2(o, palette[B])
+            if (d < bestD) {
+              bestD = d
+              bestB = B
+            }
+          }
+        }
+        if (bestB >= 0) {
+          if (!out) out = labels.slice()
+          out[i] = bestB
+          changed++
+        }
+      }
+    }
+    if (changed === 0) break
+    cur = out as Int32Array // next pass reads the updated labels (pass-synchronous)
+  }
+  return out ?? labels
 }
 
 /** Map the user fidelity dial onto the beautify pass (plan §3.3 / V3). */
@@ -343,7 +431,13 @@ export async function traceImage(
     // the gap. Background is detected first (from the ORIGINAL labels) so it can be
     // both excluded as a fill source and dropped from the paint order below.
     const bg = options.removeBackground ? detectBorderBackground(q.labels, width, height, q.palette.length) : -1
-    const labels = applyRemoveMarkers(options, q.labels, width, height, bg)
+    const removed = applyRemoveMarkers(options, q.labels, width, height, bg)
+    // Flat-art only: heal pixels grouped into the wrong region at a soft multi-colour
+    // junction — e.g. a dark-background wedge poking into a continuous two-colour
+    // stroke (the schild shield tip). Skipped when gradients are on (a gradient
+    // region's pixels legitimately stray from the region mean, so the colour test
+    // doesn't apply). No mislabeled pixels ⇒ returns the input ⇒ byte-identical.
+    const labels = gradientsOn ? removed : healColorSpikes(removed, imageData.data, width, height, q.palette)
     const trace = tracePlanar(labels, width, height, planarFitOptionsFor(options))
     // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
     // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a
