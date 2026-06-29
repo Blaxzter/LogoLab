@@ -32,3 +32,6 @@ pnpm-debug.log*
 
 # reference papers kept locally, not committed
 /examples/*.pdf
+
+# generated dev-harness artifacts (crispnessStudy/facetSweep/paletteCompare output)
+/crispness-study/
