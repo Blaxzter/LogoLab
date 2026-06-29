@@ -170,6 +170,10 @@ export async function getImageData(
   canvas.height = h
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) throw new Error('Canvas 2D context unavailable')
+  // High-quality (box-like) resampling, not the default 'low' bilinear — matters
+  // for non-2× downscales where 'low' undersamples and aliases thin strokes.
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(img, 0, 0, w, h)
   return ctx.getImageData(0, 0, w, h)
 }
@@ -220,6 +224,8 @@ async function rasterizeSvgToCanvas(
     canvas.height = h
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
     if (!ctx) throw new Error('Canvas 2D context unavailable')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(img, 0, 0, w, h)
     return { canvas, width: w, height: h }
   } finally {

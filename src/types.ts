@@ -127,6 +127,22 @@ export interface VectorizeOptions {
    */
   engine?: 'potrace' | 'crisp' | 'planar'
   /**
+   * Trace detail / resolution preset. 'balanced' (default) uses the adaptive cap
+   * (flat art 2048, gradient/photo 1024). 'high' raises the FLAT cap to 4096 for
+   * crisper edges on large sources, at ~the square of the cost; gradient/photo is
+   * unchanged (keeps the Step-3c freeze guard). No effect when the source is
+   * already ≤ the balanced cap — rasters are never upscaled. Omitted ⇒ 'balanced'.
+   */
+  traceDetail?: 'balanced' | 'high'
+  /**
+   * Flat-art segmentation strategy. When gradients are OFF, the default is
+   * PALETTE-FIRST (paletteSegment.ts): pick the dominant colours, snap every pixel
+   * to the nearest, so anti-alias transitions never become their own blend region.
+   * Set false to fall back to the Mumford–Shah smoothness segmenter for flat art.
+   * Ignored when gradients are on (MS always owns gradient art). Omitted ⇒ palette.
+   */
+  flatPalette?: boolean
+  /**
    * Shape-beautification fidelity tolerance (px): how far a traced contour may
    * drift from the source when snapping it to a perfect circle/ellipse/line or
    * aligning concentric/equal shapes. A snap is accepted only if its max
@@ -167,4 +183,10 @@ export interface VectorizeOptions {
    * Defaults to on when omitted; set false to force opaque bands.
    */
   layeredDecomposition?: boolean
+  /**
+   * Advanced override of the planar curve-fit tunables (epsilon / line vs cubic
+   * cost / corner angle / pre-smoothing). Merged over the smoothing-derived
+   * defaults. Used by the crispness study to A/B faceting; omitted ⇒ defaults.
+   */
+  planarFit?: Partial<import('./lib/trace/planarFit').PlanarFitOptions>
 }

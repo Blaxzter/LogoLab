@@ -16,13 +16,14 @@ import type { TraceProgress, QuantizeResult } from './types'
 import { traceMask, type TraceMaskOptions } from './potrace.ts'
 import { traceMaskCrisp, type CrispOptions } from './subpixel.ts'
 import { segmentImage, DEFAULT_SEGMENT_OPTIONS, type SegmentOptions } from './segment.ts'
+import { segmentFlatPalette, type PaletteSegmentOptions } from './paletteSegment.ts'
 import { fitPaintLadder, type PaintLadderResult, type RegionSamples } from './gradient.ts'
 import { beautify, DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
 import { decomposeTranslucent, type Decomposition } from './layers.ts'
 import { rasterizeDoc } from '../render/raster.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
 import { tracePlanar } from './planarAssemble.ts'
-import { type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import { type PlanarFitOptions, DEFAULT_PLANAR_FIT, FLAT_LINE_COST } from './planarFit.ts'
 import { planarBeautify } from './planarBeautify.ts'
 import { materializeRegion, edgeMap } from '../path/topology.ts'
 
@@ -51,6 +52,14 @@ export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
 // pole (the Step-3c merge), so it owns most of the bar; paint + trace are quick.
 const PROGRESS_SEGMENT_END = 0.8
 const PROGRESS_PAINT_END = 0.88
+
+/** Palette-first is KEPT over the smoothness segmenter only for genuinely simple
+ *  flat art: high flat-coverage (not continuous-tone) AND few dominant colours.
+ *  A rich flat illustration (many colours / fine detail — coverage can still be ~1)
+ *  is better served by MS, which captures its structure without exploding the node
+ *  count or over-posterizing. Schild ≈ 7 colours; the Headphones illustration ≥ 16. */
+const FLAT_PALETTE_MIN_COVERAGE = 0.7
+const FLAT_PALETTE_MAX_COLORS = 14
 
 /** Map the user smoothing dial (0–100) onto the crisp tracer's tunables. */
 function crispOptionsFor(smoothing: number, turdsize: number): CrispOptions {
@@ -274,7 +283,19 @@ const rgbToHex = (r: number, g: number, b: number): string =>
  *  ⇒ more staircase pre-smoothing passes; ε stays at the crisp tracer's 1.0 px. */
 function planarFitOptionsFor(options: VectorizeOptions): PlanarFitOptions {
   const s = clamp(options.smoothing, 0, 100) / 100
-  return { ...DEFAULT_PLANAR_FIT, smoothPasses: Math.max(1, Math.round(s * 4)) }
+  // smoothing=0 now means ZERO pre-smoothing (was clamped to 1, so a fully crisp
+  // staircase trace was unreachable). Note: the crispness-study showed 0 passes
+  // does NOT improve fidelity on flat logos (slightly more faceting) — this just
+  // makes the floor reachable; the 50 default stays best for most art.
+  // Flat (gradients-off) art prefers cubics over chords to de-facet curves; gradient
+  // art keeps the conservative lineCost (the bump worsened the headphones-grad seam).
+  // `options.planarFit` (advanced) overrides any tunable for A/B experiments.
+  return {
+    ...DEFAULT_PLANAR_FIT,
+    lineCost: options.gradients === false ? FLAT_LINE_COST : DEFAULT_PLANAR_FIT.lineCost,
+    smoothPasses: s === 0 ? 0 : Math.max(1, Math.round(s * 4)),
+    ...(options.planarFit ?? {}),
+  }
 }
 
 /**
@@ -342,20 +363,47 @@ export async function traceImage(
     return { viewBox: [0, 0, width, height], items }
   }
 
-  // Stage 1 — smoothness segmentation: Mumford–Shah smoothing splits the image
-  // into macro-regions (one smooth field each), reuniting a background that an
-  // edge spatially split and keeping true edges separate (segment.ts). This
-  // replaces quantize → mode-filter → drop-minor → union-refit entirely.
-  const seg = segmentImage(
-    imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
-    segmentOptionsFor(options),
-    onProgress ? (f, label) => onProgress({ phase: 'segment', fraction: f * PROGRESS_SEGMENT_END, label }) : undefined,
-  )
-  const q: QuantizeResult = { palette: seg.palette, labels: seg.labels, counts: seg.counts }
+  // Stage 1 — segmentation. Two paths:
+  //  • FLAT art (gradients off) → PALETTE-FIRST (paletteSegment.ts): pick the
+  //    dominant colours, assign every pixel (AA included) to the nearest one. No
+  //    blend region can form, so anti-alias transitions are a single clean edge
+  //    between two flats (the olive/brown sliver fix). Opt out with flatPalette:false.
+  //  • everything else → Mumford–Shah smoothness segmentation (segment.ts): groups
+  //    by smooth field, reunites a split background, fits gradients downstream.
+  const wantFlatPalette = options.gradients === false && options.flatPalette !== false
+  let q: QuantizeResult
+  let preMergeLabels: Int32Array
+  let regionSamples: RegionSamples[] = []
+  // Try palette-first for flat art, but only KEEP it if the image is actually flat
+  // (high flatCoverage). A continuous-tone image (a photo traced with gradients off)
+  // would over-posterize, so it falls through to the smoothness segmenter below.
+  let fp: ReturnType<typeof segmentFlatPalette> | null = null
+  if (wantFlatPalette) {
+    onProgress?.({ phase: 'segment', fraction: 0, label: 'Reading colours' })
+    fp = segmentFlatPalette(
+      imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
+      paletteOptionsFor(options),
+    )
+    // Photo-like (low coverage) OR rich flat art (many colours) ⇒ use MS instead.
+    if (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.palette.length > FLAT_PALETTE_MAX_COLORS) fp = null
+  }
+  if (fp) {
+    q = { palette: fp.palette, labels: fp.labels, counts: fp.counts }
+    preMergeLabels = fp.labels
+  } else {
+    const seg = segmentImage(
+      imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
+      segmentOptionsFor(options),
+      onProgress ? (f, label) => onProgress({ phase: 'segment', fraction: f * PROGRESS_SEGMENT_END, label }) : undefined,
+    )
+    q = { palette: seg.palette, labels: seg.labels, counts: seg.counts }
+    preMergeLabels = seg.preMergeLabels
+    regionSamples = seg.regionSamples
+  }
 
   // Surface the pre-merge region map (fine regions before the field-merge) for the
   // editor's hover-highlight. Independent of engine; skipped in mono (no markers).
-  onPreMerge?.({ labels: seg.preMergeLabels, width, height })
+  onPreMerge?.({ labels: preMergeLabels, width, height })
 
   const gradientsOn = options.gradients !== false
 
@@ -377,7 +425,7 @@ export async function traceImage(
     // (the user's "this region should be flat"). Segmentation already excluded them
     // from the field merge (`flatMarkers`), so they're their own distinct regions.
     const flatLabels = flatMarkerLabels(options, q.labels, width, height)
-    labelPaint = seg.regionSamples.map((s, label) =>
+    labelPaint = regionSamples.map((s, label) =>
       flatLabels.has(label) ? null : fitPaintLadder(s, undefined, fullSamples![label]),
     )
   }
@@ -766,6 +814,26 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
     : DEFAULT_SEGMENT_OPTIONS
   if (!markers && !flatMarkers) return base
   return { ...base, ...(markers ? { markers } : {}), ...(flatMarkers ? { flatMarkers } : {}) }
+}
+
+/**
+ * Map the user dials onto the palette-first flat segmenter (paletteSegment.ts).
+ * Region detail keeps MORE colours (more clusters + a lower drop threshold, so
+ * subtler flats survive); despeckle sheds more (a higher drop threshold). The
+ * default (detail 0) lands on the dominant flats only — the fewest, cleanest
+ * colours, which is the point for flat logos.
+ */
+function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
+  const detail = clamp(options.regionDetail ?? 0, 0, 100) / 100
+  const despeckle = clamp(options.despeckle ?? 0, 0, 100) / 100
+  return {
+    maxColors: Math.round(16 + detail * 24), // 16 → 40
+    minShare: Math.max(0.0006, 0.006 - detail * 0.0052 + despeckle * 0.004),
+    modePasses: 2,
+    // Reuse the despeckle→area curve, with a small floor so source noise never
+    // litters the trace with single-pixel loops even at despeckle 0.
+    minRegionArea: Math.max(24, minRegionAreaFor(options.despeckle ?? 0)),
+  }
 }
 
 /**

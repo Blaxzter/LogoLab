@@ -58,7 +58,7 @@ self.onmessage = async (e: MessageEvent<Req>) => {
         fills: regionFillsToRgba(seg.labels, seg.palette, w, h),
         regionCount: seg.palette.length,
         paints: paints.map((p) => (p ? { model: p.model, solid: p.solid } : null)),
-        svg: serializeDoc(doc, 2),
+        svg: serializeDoc(doc, 3),
         stats: { paths: st.paths, nodes: st.nodes },
       })
       return

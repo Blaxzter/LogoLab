@@ -34,10 +34,19 @@ export interface PlanarFitOptions {
 export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   epsilon: 1.0,
   smoothPasses: 2,
+  // Conservative line/cubic balance (line marginally cheaper). The FLAT path bumps
+  // lineCost above cubicCost in planarFitOptionsFor to de-facet curves; gradient
+  // art keeps this value (the bump worsened the headphones-grad seam past tol).
   lineCost: 3.9,
   cubicCost: 4,
   cornerTurnDeg: 70,
 }
+
+/** Flat-art line cost: > cubicCost so the DP prefers a CUBIC on any span where a
+ *  cubic fits within ε — borderline-curved spans become smooth cubics instead of
+ *  kinked chords (Affinity ~14 lines vs our old ~67). ε-bounded ⇒ fidelity-safe;
+ *  measured −24 chords on Schild at identical ΔE/SSIM/node-count. ≥4.5 saturates. */
+export const FLAT_LINE_COST = 4.5
 
 const MAX_SPAN = 20
 const MAX_FIT_POINTS = 64

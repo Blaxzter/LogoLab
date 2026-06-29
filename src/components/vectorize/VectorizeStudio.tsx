@@ -54,7 +54,17 @@ import { LegalLinksInline } from "../legal/LegalFooter";
 import { Tooltip } from "../ui/Tooltip";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
+// Long-side cap for the raster the tracer sees. Flat art (mono, or colour with
+// gradients OFF) traces at full 2048 for crisp corners / sub-pixel edges; colour
+// art WITH gradients stays at 1024 to bound the O(S²) Step-3c field-merge (which
+// froze on complex photos — see memory + crispness-study). Measured on Schild.png:
+// 1024→2048 cut meanΔE 0.96→0.78 and lifted SSIM +0.024, at ~4× trace time.
 const RASTER_MAX_DIM = 1024;
+const RASTER_MAX_DIM_FLAT = 2048;
+// "High" detail cap for flat art (gradients-off / mono). Bounded — not native —
+// so a huge upload can't blow up trace time/memory. Rasters are never upscaled,
+// so this only bites when the source's longest side exceeds RASTER_MAX_DIM_FLAT.
+const RASTER_MAX_DIM_HIGH = 4096;
 const DEBOUNCE_MS = 400;
 
 type ViewMode = "split" | "traced" | "original" | "overlay";
@@ -90,10 +100,11 @@ export function VectorizeStudio() {
     const [opts, setOpts] = useState<VectorizeOptions>(
         DEFAULT_VECTORIZE_OPTIONS,
     );
-    // Output coordinate precision (decimals). Fixed default — compact files at no
-    // visible cost; no longer a user knob (it was output formatting, not a trace
-    // parameter, and cluttered the panel).
-    const precision = 2;
+    // Output coordinate precision (decimals). 3dp matches what desktop tracers
+    // (Affinity/Canva) emit and preserves sub-pixel geometry when the SVG is
+    // scaled past its trace resolution; the file-size cost is ~10–15% and there
+    // is no visible cost at or below trace res. Not a user knob.
+    const precision = 3;
     const [forceColorOn, setForceColorOn] = useState(false);
     const [forceColor, setForceColor] = useState("#14161c");
     const [showHelp, setShowHelp] = useState(false);
@@ -308,9 +319,17 @@ export function VectorizeStudio() {
                 next = parseSvg(cleaned.svg);
                 if (!next) throw new Error("SVG could not be parsed");
             } else {
+                // Gradient/photo colour art keeps the 1024 cap (Step-3c cost);
+                // everything else (mono, or flat colour with gradients OFF) traces
+                // at full res for Affinity-grade crispness. The user "Detail" preset
+                // lifts the flat cap to 4096 ("High"); gradient/photo is unaffected.
+                const isFlat = opts.mode === "mono" || opts.gradients === false;
+                const flatCap =
+                    opts.traceDetail === "high" ? RASTER_MAX_DIM_HIGH : RASTER_MAX_DIM_FLAT;
+                const rasterMaxDim = isFlat ? flatCap : RASTER_MAX_DIM;
                 const imageData = await getImageData(
                     logo.src,
-                    RASTER_MAX_DIM,
+                    rasterMaxDim,
                     logo.isSvg ? logo.svgText : null,
                 );
                 if (runId !== runIdRef.current) return;
@@ -769,6 +788,8 @@ export function VectorizeStudio() {
         source: retraceVector,
         onSourceChange: setRetraceVector,
         opts,
+        sourceMaxDim:
+            Math.max(logo.naturalWidth ?? 0, logo.naturalHeight ?? 0) || undefined,
         onPatch: (p: Partial<VectorizeOptions>) => {
             // A hand-flip of the gradients toggle pins it: the content probe must
             // not override a deliberate user choice for this image.

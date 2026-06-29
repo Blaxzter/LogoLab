@@ -21,6 +21,8 @@ export interface TraceControlsProps {
   onSourceChange: (v: 'clean' | 'retrace') => void
   opts: VectorizeOptions
   onPatch: (patch: Partial<VectorizeOptions>) => void
+  /** Longest side of the source image (px), for the Detail preset's effect hint. */
+  sourceMaxDim?: number
   forceColorOn: boolean
   onForceColorOn: (v: boolean) => void
   forceColor: string
@@ -65,6 +67,7 @@ export function TraceControlsBody({
   onSourceChange,
   opts,
   onPatch,
+  sourceMaxDim,
   forceColorOn,
   onForceColorOn,
   forceColor,
@@ -159,6 +162,26 @@ export function TraceControlsBody({
                     { value: 'planar', label: 'Planar' },
                     { value: 'crisp', label: 'Crisp' },
                     { value: 'potrace', label: 'Potrace' },
+                  ]}
+                />
+              </Field>
+
+              <Field
+                label="Detail"
+                hint={
+                  !(opts.mode === 'mono' || opts.gradients === false)
+                    ? 'Applies to flat art; gradient/photo stays capped at 1024px for speed.'
+                    : (sourceMaxDim ?? 0) > 2048
+                      ? 'High traces large sources up to 4096px — crisper edges, slower trace.'
+                      : `Source${sourceMaxDim ? ` (${sourceMaxDim}px)` : ''} is already at full detail; High has no effect.`
+                }
+              >
+                <Segmented<'balanced' | 'high'>
+                  value={opts.traceDetail ?? 'balanced'}
+                  onChange={(v) => onPatch({ traceDetail: v })}
+                  options={[
+                    { value: 'balanced', label: 'Balanced' },
+                    { value: 'high', label: 'High' },
                   ]}
                 />
               </Field>
