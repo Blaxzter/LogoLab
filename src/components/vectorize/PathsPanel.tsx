@@ -8,6 +8,9 @@ import { Eye, EyeOff, Trash2, X } from 'lucide-react'
 import type { EditableDoc, PathItem, RawItem } from '../../lib/path/types'
 import { normalizeHex } from '../../lib/colorUtils'
 import { Tooltip } from '../ui/Tooltip'
+import { PaletteEditor } from './PaletteEditor'
+
+type RGB = { r: number; g: number; b: number; a?: number }
 
 /** Swatch background: a CSS preview of the gradient when present, else the flat fill. */
 function swatchStyle(item: PathItem): CSSProperties {
@@ -29,6 +32,18 @@ export interface PathsPanelProps {
   onRecolor: (id: string, fill: string, commit: boolean) => void
   onToggleVisible: (id: string) => void
   onDelete: (id: string) => void
+  /** Flat-palette editor (color mode + gradients off): the dominant colours the art
+   *  reduces to, pinned below the list and always visible. Hidden for gradient art. */
+  showPalette?: boolean
+  /** Auto-extracted palette (distinct solid fills + alpha) seeding the editor. */
+  autoPalette?: RGB[]
+  /** User-locked palette (opts.palette) or null when automatic. */
+  lockedPalette?: RGB[] | null
+  /** Patch opts.palette: an array locks it; null reverts to automatic. */
+  onPaletteChange?: (palette: RGB[] | null) => void
+  /** Hovering a path row / palette swatch passes its fill so the canvas lights up
+   *  every region of that colour; null on leave. */
+  onHighlight?: (fill: string | null) => void
 }
 
 /** Desktop right rail — the 260px column. Below md it's hidden; the same body
@@ -48,6 +63,11 @@ export function PathsPanelBody({
   onRecolor,
   onToggleVisible,
   onDelete,
+  showPalette = false,
+  autoPalette,
+  lockedPalette,
+  onPaletteChange,
+  onHighlight,
 }: PathsPanelProps) {
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
 
@@ -93,6 +113,7 @@ export function PathsPanelBody({
               onRecolor={(fill, commit) => onRecolor(item.id, fill, commit)}
               onToggleVisible={() => onToggleVisible(item.id)}
               onDelete={() => onDelete(item.id)}
+              onHighlight={onHighlight}
             />
           ) : (
             <RawRow key={item.id} item={item} onToggleVisible={() => onToggleVisible(item.id)} />
@@ -110,6 +131,23 @@ export function PathsPanelBody({
           </button>
         )}
       </div>
+
+      {showPalette && onPaletteChange && (
+        // Cap on the SECTION (its parent — the rail — has a definite height, so the
+        // percentage resolves); the body scrolls within it. shrink-0 so it isn't
+        // crushed by the path list, max-h so it can't crush the list either.
+        <div className="flex max-h-[55%] shrink-0 flex-col border-t border-line">
+          <h3 className="shrink-0 px-4 pb-1 pt-2.5 text-xs font-semibold text-ink">Palette</h3>
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3">
+            <PaletteEditor
+              autoPalette={autoPalette ?? []}
+              locked={lockedPalette ?? null}
+              onChange={onPaletteChange}
+              onHighlight={onHighlight}
+            />
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -127,6 +165,7 @@ function PathRow({
   onRecolor,
   onToggleVisible,
   onDelete,
+  onHighlight,
 }: {
   item: PathItem
   index: number
@@ -136,6 +175,7 @@ function PathRow({
   onRecolor: (fill: string, commit: boolean) => void
   onToggleVisible: () => void
   onDelete: () => void
+  onHighlight?: (fill: string | null) => void
 }) {
   let nodes = 0
   for (const sp of item.subPaths) nodes += sp.nodes.length
@@ -146,6 +186,9 @@ function PathRow({
       role="button"
       tabIndex={0}
       onClick={onSelect}
+      // Hovering the row locates its region(s) on the canvas (and clears on leave).
+      onPointerEnter={() => onHighlight?.(item.fill)}
+      onPointerLeave={() => onHighlight?.(null)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
@@ -156,22 +199,40 @@ function PathRow({
         selected ? 'bg-accent-soft' : 'hover:bg-surface-3'
       }`}
     >
-      <Tooltip label={item.gradient ? 'Recolor (replaces gradient with a solid)' : 'Recolor'}>
-        <label
-          onClick={(e) => e.stopPropagation()}
-          className="relative h-[18px] w-[18px] shrink-0 cursor-pointer overflow-hidden rounded border border-line"
-          style={swatchStyle(item)}
-        >
-          <input
-            type="color"
-            value={normalizeHex(item.fill) ?? '#000000'}
-            onChange={(e) => onRecolor(e.target.value, false)}
-            onBlur={(e) => onRecolor(e.target.value, true)}
-            className="absolute inset-0 cursor-pointer opacity-0"
-            aria-label={`Path ${index} fill color`}
-          />
-        </label>
-      </Tooltip>
+      {/* Translucent flat fills (fill-opacity < 1) show their colour over a checker
+          so the opacity is visible; opaque fills / gradients keep the solid swatch. */}
+      {(() => {
+        const translucent = !item.gradient && item.fillOpacity !== undefined && item.fillOpacity < 1
+        return (
+          <Tooltip
+            label={
+              item.gradient
+                ? 'Recolor (replaces gradient with a solid)'
+                : translucent
+                  ? `Recolor · ${Math.round((item.fillOpacity ?? 1) * 100)}% opacity`
+                  : 'Recolor'
+            }
+          >
+            <label
+              onClick={(e) => e.stopPropagation()}
+              className={`relative h-[18px] w-[18px] shrink-0 cursor-pointer overflow-hidden rounded border border-line ${translucent ? 'checkerboard' : ''}`}
+              style={translucent ? undefined : swatchStyle(item)}
+            >
+              {translucent && (
+                <span className="absolute inset-0" style={{ backgroundColor: item.fill, opacity: item.fillOpacity }} />
+              )}
+              <input
+                type="color"
+                value={normalizeHex(item.fill) ?? '#000000'}
+                onChange={(e) => onRecolor(e.target.value, false)}
+                onBlur={(e) => onRecolor(e.target.value, true)}
+                className="absolute inset-0 cursor-pointer opacity-0"
+                aria-label={`Path ${index} fill color`}
+              />
+            </label>
+          </Tooltip>
+        )
+      })()}
 
       <span className={`truncate text-xs ${item.visible ? 'text-ink' : 'text-faint'}`}>
         Path {index}

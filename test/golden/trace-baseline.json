@@ -37,11 +37,11 @@
     "paths": 7,
     "nodes": 180,
     "gradientCount": 0,
-    "meanDeltaE": 0.939,
-    "p95DeltaE": 1.27,
-    "ssim": 0.9512,
-    "seamMax": 68.73,
-    "hash": "ada182ac",
+    "meanDeltaE": 0.954,
+    "p95DeltaE": 1.37,
+    "ssim": 0.9557,
+    "seamMax": 68.54,
+    "hash": "2f2e1bab",
     "geomSig": "998fcb81"
   },
   "headphones-flat": {

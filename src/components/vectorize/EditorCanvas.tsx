@@ -94,6 +94,9 @@ export interface EditorCanvasProps {
     /** Pre-merge region map (fine regions before the field-merge) from the last
      *  trace; the mark tool highlights the region under the cursor from it. */
     preMerge?: { labels: Int32Array; width: number; height: number } | null;
+    /** Hovering a palette swatch / path row sets this fill; every visible path with
+     *  it lights up, so the user sees which regions ARE that colour. null ⇒ none. */
+    highlightFill?: string | null;
     onSelectPath: (id: string | null) => void;
     onSelectNodes: (keys: Set<string>) => void;
     /** Records the in-region click point that selected a path — the seed for a
@@ -353,6 +356,7 @@ export function EditorCanvas({
     markers,
     markMode = "separate",
     preMerge,
+    highlightFill,
     onSelectPath,
     onSelectNodes,
     onRegionSeed,
@@ -451,6 +455,14 @@ export function EditorCanvas({
 
     const sel = doc.items.find((it) => it.id === selectedPathId);
     const selectedItem = sel && sel.kind === "path" ? sel : null;
+
+    // Colour-locator highlight: every visible path painted exactly `highlightFill`
+    // (set while hovering its palette swatch / path row).
+    const highlightItems = highlightFill
+        ? (doc.items.filter(
+              (it) => it.kind === "path" && it.visible && it.fill === highlightFill,
+          ) as PathItem[])
+        : [];
 
     // The grab targets unmount on selection / mode change without firing
     // pointerout, so drop any stale hover highlight explicitly.
@@ -1135,6 +1147,36 @@ export function EditorCanvas({
                                     ) : null,
                                 )}
                         </g>
+
+                        {/* Colour-locator highlight: light up every region painted the
+                            hovered palette colour — a translucent flash + a halo/accent
+                            outline (legible over any fill), so the user sees exactly which
+                            regions are that colour before recolouring or deleting it.
+                            pointerEvents none so it never blocks editing. */}
+                        {highlightItems.length > 0 && fit.width > 0 && (
+                            <g style={{ pointerEvents: "none" }}>
+                                {highlightItems.map((it) => (
+                                    <g key={it.id}>
+                                        <path d={dOf(it)} fill={HALO} fillOpacity={0.35} fillRule={it.fillRule} />
+                                        <path
+                                            d={dOf(it)}
+                                            fill="none"
+                                            stroke={HALO}
+                                            strokeOpacity={0.9}
+                                            strokeWidth={r(3.5)}
+                                            strokeLinejoin="round"
+                                        />
+                                        <path
+                                            d={dOf(it)}
+                                            fill="none"
+                                            stroke={ACCENT}
+                                            strokeWidth={r(1.75)}
+                                            strokeLinejoin="round"
+                                        />
+                                    </g>
+                                ))}
+                            </g>
+                        )}
 
                         {/* Selection overlay: outline + handle spokes/dots + anchors.
                             All widths/radii go through r() so they stay a constant

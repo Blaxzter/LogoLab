@@ -378,14 +378,21 @@ export async function traceImage(
   // (high flatCoverage). A continuous-tone image (a photo traced with gradients off)
   // would over-posterize, so it falls through to the smoothness segmenter below.
   let fp: ReturnType<typeof segmentFlatPalette> | null = null
+  let usedLockedPalette = false
   if (wantFlatPalette) {
     onProgress?.({ phase: 'segment', fraction: 0, label: 'Reading colours' })
+    // A user-LOCKED palette overrides automatic extraction: the segmenter snaps
+    // every pixel to the nearest of these colours (emitted verbatim).
+    const locked = options.palette && options.palette.length > 0 ? options.palette : undefined
     fp = segmentFlatPalette(
       imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
       paletteOptionsFor(options),
+      locked,
     )
-    // Photo-like (low coverage) OR rich flat art (many colours) ⇒ use MS instead.
-    if (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.palette.length > FLAT_PALETTE_MAX_COLORS) fp = null
+    // Photo-like (low coverage) OR rich flat art (many colours) ⇒ use MS instead —
+    // but a locked palette bypasses both gates (the user owns the colours + count).
+    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.palette.length > FLAT_PALETTE_MAX_COLORS)) fp = null
+    usedLockedPalette = fp != null && locked != null
   }
   if (fp) {
     q = { palette: fp.palette, labels: fp.labels, counts: fp.counts }
@@ -491,8 +498,14 @@ export async function traceImage(
     // junction — e.g. a dark-background wedge poking into a continuous two-colour
     // stroke (the schild shield tip). Skipped when gradients are on (a gradient
     // region's pixels legitimately stray from the region mean, so the colour test
-    // doesn't apply). No mislabeled pixels ⇒ returns the input ⇒ byte-identical.
-    const labels = gradientsOn ? removed : healColorSpikes(removed, imageData.data, width, height, q.palette)
+    // doesn't apply) AND when the user LOCKED a palette: there is no mis-grouping to
+    // heal — every pixel is already its nearest locked colour by construction, so the
+    // contract is exactly "snap to nearest given colour", nothing more. No mislabeled
+    // pixels ⇒ returns the input ⇒ byte-identical.
+    const labels =
+      gradientsOn || usedLockedPalette
+        ? removed
+        : healColorSpikes(removed, imageData.data, width, height, q.palette)
     const trace = tracePlanar(labels, width, height, planarFitOptionsFor(options))
     // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
     // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a
@@ -519,6 +532,11 @@ export async function traceImage(
       applyPaint(paint, labelPaint[label])
       const base: PathItem = { kind: 'path', id: 'trace-' + label, fill: rgbToHex(c.r, c.g, c.b), fillRule, loops, subPaths, visible: true }
       if (paint.gradient) base.gradient = paint.gradient
+      // Flat palette path may tag a region with an alpha (its alpha mode, or a locked
+      // RGBA swatch) — paint it translucent. Planar regions tile without overlap, so a
+      // single fill-opacity composites correctly against the background. Opaque (a≥255
+      // / undefined) ⇒ no fill-opacity ⇒ byte-identical to before.
+      if (c.a !== undefined && c.a < 255) base.fillOpacity = c.a / 255
       items.push(base)
       if (paint.overlays) {
         paint.overlays.forEach((ov, k) => {

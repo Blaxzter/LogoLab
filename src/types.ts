@@ -143,6 +143,21 @@ export interface VectorizeOptions {
    */
   flatPalette?: boolean
   /**
+   * User-LOCKED flat palette (color mode, gradients OFF). When set, the
+   * palette-first segmenter skips automatic colour extraction and snaps every pixel
+   * to the nearest of THESE colours — the user owns both the colours (emitted as
+   * exact hex) and the count. A locked palette also bypasses the automatic
+   * coverage / ≤14-colour gates (the user has decided this art is flat). Omitted ⇒
+   * the palette is extracted automatically and snapped to each region's true design
+   * hex. Ignored when gradients are on. Seed it from the auto palette and edit.
+   *
+   * Each entry may carry an optional alpha 0–255 (undefined ⇒ opaque): pixels snap
+   * to the nearest colour in RGBA space, and a translucent entry paints its region
+   * with that `fill-opacity` (planar engine). The auto path fills `a` from each
+   * region's alpha mode, so a flat semi-transparent region round-trips its opacity.
+   */
+  palette?: { r: number; g: number; b: number; a?: number }[]
+  /**
    * Shape-beautification fidelity tolerance (px): how far a traced contour may
    * drift from the source when snapping it to a perfect circle/ellipse/line or
    * aligning concentric/equal shapes. A snap is accepted only if its max

@@ -28,6 +28,7 @@ import { CheckerToggle } from "../ui/CheckerToggle";
 import { Segmented } from "../ui/controls";
 import { Button } from "../ui/Button";
 import { getImageData } from "../../lib/image";
+import { hexToRgb, normalizeHex, rgbToHex } from "../../lib/colorUtils";
 import { downloadText } from "../../lib/download";
 import { cleanSvg } from "../../lib/svgClean";
 import { docStats, parseSvg, serializeDoc } from "../../lib/path/model";
@@ -151,6 +152,9 @@ export function VectorizeStudio() {
     // Pre-merge region map (fine regions before the gradient field-merge) from the
     // last trace — drives the region hover-highlight while placing markers.
     const [preMerge, setPreMerge] = useState<{ labels: Int32Array; width: number; height: number } | null>(null);
+    // Fill currently hovered in the palette / paths list — the canvas lights up every
+    // region painted exactly this colour so the user can locate (and then delete) it.
+    const [highlightFill, setHighlightFill] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [applied, setApplied] = useState(false);
@@ -268,6 +272,61 @@ export function VectorizeStudio() {
         setTool("pan");
         setOpts((o) => (o.markers && o.markers.length ? { ...o, markers: [] } : o));
     }, []);
+
+    // Latest opts / doc, read inside handlePaletteChange without re-creating it.
+    const optsRef = useRef(opts);
+    optsRef.current = opts;
+    const docRef = useRef(doc);
+    docRef.current = doc;
+    // Set just before an opacity-only palette edit so the auto-run effect skips the
+    // (now-redundant) re-trace — the canvas was already recoloured live.
+    const skipRetraceRef = useRef(false);
+
+    // Lock / edit / clear the flat-art palette (right rail). An array locks it (every
+    // pixel snaps to the nearest of these colours, with each one's opacity); null
+    // reverts to fully automatic extraction.
+    //
+    // A change that ONLY moves swatch OPACITIES (same colours + count) can never move
+    // a region boundary, so we recolour the matching paths' fill-opacity LIVE and skip
+    // the re-trace — dragging an opacity slider updates the canvas instantly with no
+    // trace lag. Hue / add / remove change the pixel assignment, so they fall through
+    // to the debounced re-trace.
+    const handlePaletteChange = useCallback(
+        (palette: { r: number; g: number; b: number; a?: number }[] | null) => {
+            const old = optsRef.current.palette ?? null;
+            const cur = docRef.current;
+            const rgbKey = (c: { r: number; g: number; b: number }) => `${c.r},${c.g},${c.b}`;
+            const fo = (c: { a?: number }) =>
+                c.a !== undefined && c.a < 255 ? c.a / 255 : undefined;
+            const alphaOnly =
+                !!palette &&
+                !!old &&
+                !!cur &&
+                palette.length === old.length &&
+                palette.every((c, i) => rgbKey(c) === rgbKey(old[i]));
+            if (alphaOnly) {
+                // Map each colour whose opacity changed → its new fill-opacity (RGB is
+                // unchanged, so the swatch hex IS the path's fill).
+                const remap = new Map<string, number | undefined>();
+                for (let i = 0; i < palette!.length; i++) {
+                    if (fo(palette![i]) !== fo(old![i])) remap.set(rgbToHex(palette![i]), fo(palette![i]));
+                }
+                if (remap.size > 0) {
+                    historySet({
+                        ...cur!,
+                        items: cur!.items.map((it) => {
+                            if (it.kind !== "path") return it;
+                            const hex = normalizeHex(it.fill);
+                            return hex && remap.has(hex) ? { ...it, fillOpacity: remap.get(hex) } : it;
+                        }),
+                    });
+                    skipRetraceRef.current = true; // canvas already updated; no re-trace needed
+                }
+            }
+            setOpts((o) => ({ ...o, palette: palette ?? undefined }));
+        },
+        [historySet],
+    );
 
     // Region markers only apply to colour tracing — leaving that mode exits the
     // placement tool (the master switch + markers persist for when you return).
@@ -453,6 +512,12 @@ export function VectorizeStudio() {
     // Auto-run (debounced) whenever the source or parameters change — unless
     // the user has hand-edited paths, in which case their edits win.
     useEffect(() => {
+        // An opacity-only palette edit already recoloured the canvas live (geometry
+        // is unchanged), so the trace would be wasted work — skip this one run.
+        if (skipRetraceRef.current) {
+            skipRetraceRef.current = false;
+            return;
+        }
         if (dirtyRef.current) {
             setStaleEdits(true);
             return;
@@ -484,6 +549,40 @@ export function VectorizeStudio() {
             ),
         };
     }, [doc, forceColorOn, forceColor]);
+
+    // Auto-extracted flat palette: the distinct SOLID fills of the current trace, in
+    // paint order, carrying each region's alpha (from fill-opacity). Seeds + previews
+    // the editable palette (flat path). Derived from the BASE doc (not the force-colored
+    // one), and skips gradient items.
+    const autoPalette = useMemo(() => {
+        if (!doc) return [];
+        const seen = new Set<string>();
+        const out: { r: number; g: number; b: number; a?: number }[] = [];
+        for (const it of doc.items) {
+            if (it.kind !== "path" || it.gradient) continue;
+            const hex = normalizeHex(it.fill);
+            if (!hex) continue;
+            const a =
+                it.fillOpacity !== undefined && it.fillOpacity < 1
+                    ? Math.round(it.fillOpacity * 255)
+                    : 255;
+            const key = `${hex}-${a}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const rgb = hexToRgb(hex);
+            if (rgb) out.push(a < 255 ? { ...rgb, a } : rgb);
+        }
+        return out;
+    }, [doc]);
+
+    // The flat-palette editor (right rail) only applies to color tracing with
+    // gradients off — the path the palette-first segmenter owns. Hidden otherwise.
+    const flatPaletteActive =
+        (!isVectorSource || retraceVector === "retrace") &&
+        opts.mode === "color" &&
+        opts.gradients === false;
+    const lockedPalette =
+        opts.palette && opts.palette.length > 0 ? opts.palette : null;
 
     const svgText = useMemo(
         () => (derivedDoc ? serializeDoc(derivedDoc, precision) : null),
@@ -769,6 +868,7 @@ export function VectorizeStudio() {
         markers,
         markMode,
         preMerge,
+        highlightFill,
         onSelectPath: handleSelectPath,
         onSelectNodes: handleSelectNodes,
         onRegionSeed: handleRegionSeed,
@@ -1237,6 +1337,11 @@ export function VectorizeStudio() {
                     onRecolor={handleRecolor}
                     onToggleVisible={handleToggleVisible}
                     onDelete={handleDeleteItem}
+                    showPalette={flatPaletteActive}
+                    autoPalette={autoPalette}
+                    lockedPalette={lockedPalette}
+                    onPaletteChange={handlePaletteChange}
+                    onHighlight={setHighlightFill}
                 />
             )}
 
@@ -1263,6 +1368,11 @@ export function VectorizeStudio() {
                         onRecolor={handleRecolor}
                         onToggleVisible={handleToggleVisible}
                         onDelete={handleDeleteItem}
+                        showPalette={flatPaletteActive}
+                        autoPalette={autoPalette}
+                        lockedPalette={lockedPalette}
+                        onPaletteChange={handlePaletteChange}
+                        onHighlight={setHighlightFill}
                     />
                 </Sheet>
             )}
