@@ -9,6 +9,7 @@ import type { EdgeRef, PathNode, SharedEdge, Vec, Vertex } from '../path/types'
 import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
 import { buildPlanarNetwork, EXT, type PlanarNetwork } from './planarNetwork.ts'
 import { detectCorners, detectLoopCorners, fitCorneredLoop, fitLoopEdge, fitOpenArc, presmooth, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
 
 export interface PlanarTrace {
@@ -35,13 +36,18 @@ export function tracePlanar(
 
 export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): PlanarTrace {
   // --- vertices: one per junction corner ---
+  // With refineJunctions (experimental, off by default) each junction is placed at
+  // the sub-pixel arm intersection and every incident edge endpoint is pinned to it
+  // below; otherwise it stays the raw integer lattice corner (the shipped path).
+  const cw = net.width + 1
+  const juncPos = opts.refineJunctions ? subpixelJunctions(net, cw) : null
   const vidByCorner = new Map<number, number>()
   const vertices: Vertex[] = []
-  const cw = net.width + 1
   for (const c of net.junctions) {
     const id = vertices.length
     vidByCorner.set(c, id)
-    vertices.push({ id, x: c % cw, y: (c / cw) | 0 })
+    const p = juncPos?.get(c)
+    vertices.push({ id, x: p ? p.x : c % cw, y: p ? p.y : (c / cw) | 0 })
   }
 
   // --- fit every edge once ---
@@ -58,21 +64,34 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): Plan
   const meta: EdgeMeta[] = []
   for (const e of net.edges) {
     let nodes: PathNode[]
+    // refineJunctions: pin open-edge endpoints to the sub-pixel junction positions
+    // so the fitted arc ends exactly on the shared vertex (both regions stay
+    // byte-coincident). No-op / e.pts unchanged when refinement is off or closed.
+    let pts = e.pts
+    if (juncPos && !e.closed) {
+      const sp0 = e.startV >= 0 ? juncPos.get(e.startV) : undefined
+      const sp1 = e.endV >= 0 ? juncPos.get(e.endV) : undefined
+      if (sp0 || sp1) {
+        pts = e.pts.map((p) => ({ x: p.x, y: p.y }))
+        if (sp0) pts[0] = { x: sp0.x, y: sp0.y }
+        if (sp1) pts[pts.length - 1] = { x: sp1.x, y: sp1.y }
+      }
+    }
     // Sharp corners are found on the RAW staircase and pinned through pre-smoothing
     // so a valley/point isn't melted into a curve before the fitter detects it.
-    const corners = detectCorners(e.pts, opts.cornerTurnDeg, e.closed)
+    const corners = detectCorners(pts, opts.cornerTurnDeg, e.closed)
     if (e.closed) {
       // A closed loop with ≥2 genuine sharp corners is fitted corner-first (snap
       // each corner to its sub-pixel arm intersection, then fit the arcs between
       // them) so the apex is an exact node, not a beveled pair. Smooth loops have
       // <2 corners and fall through to the unchanged closed-loop fitter.
-      const loopCorners = detectLoopCorners(e.pts, opts.cornerTurnDeg)
+      const loopCorners = detectLoopCorners(pts, opts.cornerTurnDeg)
       nodes =
         loopCorners.length >= 2
-          ? fitCorneredLoop(e.pts, loopCorners, opts)
-          : fitLoopEdge(presmooth(e.pts, opts.smoothPasses, false, corners), opts)
+          ? fitCorneredLoop(pts, loopCorners, opts)
+          : fitLoopEdge(presmooth(pts, opts.smoothPasses, false, corners), opts)
     } else {
-      nodes = fitOpenArc(presmooth(e.pts, opts.smoothPasses, true, corners), opts)
+      nodes = fitOpenArc(presmooth(pts, opts.smoothPasses, true, corners), opts)
     }
     const startV = e.startV >= 0 ? vidByCorner.get(e.startV)! : -1
     const endV = e.endV >= 0 ? vidByCorner.get(e.endV)! : -1
@@ -162,6 +181,9 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): Plan
   const edgeById = new Map<number, SharedEdge>()
   for (const e of edges) edgeById.set(e.id, e)
   for (const loops of loopsByLabel.values()) orientLoops(loops, edgeById)
+
+  // refineJunctions: weld straight-through junctions to a shared G¹ tangent.
+  if (opts.refineJunctions) smoothThroughJunctions(edges, loopsByLabel)
 
   return { vertices, edges, loopsByLabel }
 }

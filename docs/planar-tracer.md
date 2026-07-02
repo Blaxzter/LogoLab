@@ -271,14 +271,45 @@ coincident, with zero desync risk.
   unchanged on all; petals untouched (no primitives). Nodes: geom 34→38, nebula
   74→80, petals 38→38. Deterministic throughout.
 
-**Deferred (stretch 1d — open-edge circular ARC snap):** an open junction→junction
-edge that follows a circular arc could collapse to cubic arc(s) pinned at its two
-junctions. It needs a *partial*-arc-to-Bézier emit (the kappa builder only emits a
-full ellipse) and only earns its keep where the fitter leaves a wobbly multi-cubic
-arc — not seen on the current corpus (the open-arc DP fit is already economical), so
-it is deferred. The line snap (1b) covers the high-value straight-boundary case;
-H/V axis-snapping is intentionally NOT done (it would move junction endpoints and
-unweld the graph).
+**1d — co-circular open-arc loop snap (SHIPPED).** The high-value case the deferred
+stretch was aimed at: a RING (a white outline / annulus) that sits over colour bands.
+Every band boundary that meets the ring is a degree-≥3 junction, so the ring is split
+into open arcs, each fitted independently with FORCED-CORNER endpoints and no shared
+tangent — so the two arcs meet at an unconstrained angle on the integer lattice
+corner. That is the user-reported **"pull"/kink where the bands meet the ring**
+(measured ~26–44° of kink at each junction on a synthetic ring; a per-junction
+tangent/sub-pixel fix can't tell that apart from a genuine flat-art corner, so it
+either misses the ring or distorts flat art — both were tried and measured worse).
+
+The fix keys on **co-circularity**, which uniquely identifies a ring:
+`snapCoCircularLoops` in [planarBeautify.ts](../src/lib/trace/planarBeautify.ts) fits
+ONE circle to each region loop that has ≥1 open edge (a ring's outer/inner boundary is
+a full circle split into arcs). Gated exactly like the disc snap 1a (`fitCircle` +
+`maxRadialDev ≤ fidelity`, radius > 2·fidelity). For each circular loop it:
+1. **radial-snaps the loop's junction vertices onto the circle**, moving every incident
+   edge endpoint with the vertex — the ring arcs AND the T-ing spokes — so the graph
+   stays welded and the two regions on each edge stay byte-coincident; then
+2. **re-emits each arc as a circular slice** (`arcSlice` in
+   [circleFit.ts](../src/lib/trace/circleFit.ts): a ≤90°-split kappa-Bézier partial arc
+   pinned byte-exact at the two junctions). Because both arcs at a junction carry the
+   circle's tangent there, they join **G¹** — the kink is gone by construction.
+
+Runs first (on the raw fitted arcs); its edges skip the per-edge 1a/1b passes.
+Measured on a synthetic ring split by N bands: **kink 26–44° → 0–4°**, max radial dev
+**~1.2px → ~0.7–0.9px**, and fewer nodes. Corpus: nebula/schild byte-identical (no
+circular loops), **petals improves** (round petals snap to circles: seam 2.4→2.1, SSIM
++0.0001, nodes 38→32), headphones ear-cups snap cleanly (within tolerance). Validated
+by [test/planar-arc-snap.test.ts](../test/planar-arc-snap.test.ts) (kink collapse,
+byte-coincidence, welded junctions, determinism, `fidelity=0` no-op). `fidelity=0`
+stays a pure no-op, so this rides the existing fidelity dial (on by default at 1.5px).
+
+*Not yet addressed — bloom-style straight X-crossings.* A pinwheel's wedge crossings
+are straight LINES meeting at a point (no co-circularity), so 1d does not touch them;
+the line snap (1b) straightens each arm but the crossing point stays lattice-snapped.
+Cleaning those needs sub-pixel junction placement, which measured worse on gradient
+art (petals seam) at the displacement a crossing needs — deferred as a separate,
+carefully-gated pass. H/V axis-snapping is still intentionally NOT done (it would move
+junction endpoints and unweld the graph).
 
 ---
 

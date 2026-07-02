@@ -18,10 +18,13 @@
 // Date): `fidelity ≤ 0` is a pure no-op (the input topology is returned
 // unchanged), so planar output stays byte-identical to the unbeautified trace.
 
-import type { EdgeRef, PathNode, SharedEdge, Topology, Vec } from '../path/types'
+import type { EdgeRef, PathNode, SharedEdge, Topology, Vec, Vertex } from '../path/types'
 import type { BeautifyOptions } from './beautify.ts'
+import { reverseEdgeNodes } from '../path/topology.ts'
 import {
   anchorSignedArea,
+  arcSlice,
+  type Circle,
   fitCircle,
   fitEllipse,
   flatten,
@@ -66,21 +69,31 @@ export function planarBeautify(
   topo: Topology,
   loopsByLabel: Map<number, EdgeRef[][]>,
   opts: BeautifyOptions,
+  arcSnap = true,
 ): Topology {
-  void loopsByLabel
   const fid = opts.fidelity
   if (!(fid > 0)) return topo
 
-  // Work on an immutable copy so the input topology is never mutated.
+  // Work on immutable copies so the input topology is never mutated.
   const edges = topo.edges.map(cloneEdge)
+  const vertices = topo.vertices.map((v) => ({ ...v }))
   // Relation-solver detection window scales with the document bbox long side.
   const longSide = bboxLongSide(topo.edges)
+
+  // 1d — co-circular OPEN-arc loops (a ring split into arcs by band junctions) →
+  // fit the whole loop to ONE circle, radial-snap its junction vertices onto that
+  // circle, and re-emit each arc as a true circular slice. This is what removes the
+  // "pull"/kink the user sees where colour bands meet a white ring: the arcs share
+  // the circle's tangent at every junction (G¹) instead of meeting as forced,
+  // independently-fitted corners. Runs FIRST on the raw fitted arcs; the edges it
+  // snaps skip the per-edge 1a/1b passes below.
+  const arcSnapped = arcSnap ? snapCoCircularLoops(edges, vertices, loopsByLabel, fid) : new Set<number>()
 
   const discCircles: DiscCircle[] = []
 
   for (let i = 0; i < edges.length; i++) {
     const e = edges[i]
-    if (e.nodes.length < 2) continue
+    if (e.nodes.length < 2 || arcSnapped.has(e.id)) continue
 
     if (e.closed) {
       // --- 1a. Disc edge → circle / ellipse --------------------------------
@@ -132,10 +145,109 @@ export function planarBeautify(
     }
   }
 
-  // Vertices are never moved by this pass, but copy them so the returned
-  // topology is fully independent of the input (honours the "new topology"
+  // Vertices moved by 1d's radial snap (if any) are carried in `vertices`; every
+  // other vertex is an independent copy of the input (honours the "new topology"
   // contract: a later mutation of the input cannot leak into the output).
-  return { vertices: topo.vertices.map((v) => ({ ...v })), edges }
+  return { vertices, edges }
+}
+
+// ---------------------------------------------------------------------------
+// 1d — co-circular open-arc loop snap
+// ---------------------------------------------------------------------------
+
+/** Move a node's anchor to (x, y), carrying its handles by the same delta. */
+function shiftNodeTo(n: PathNode, x: number, y: number): void {
+  const dx = x - n.x
+  const dy = y - n.y
+  n.x = x
+  n.y = y
+  if (n.hIn) { n.hIn.x += dx; n.hIn.y += dy }
+  if (n.hOut) { n.hOut.x += dx; n.hOut.y += dy }
+}
+
+/**
+ * Snap every region loop that is a full circle (a ring's outer/inner boundary split
+ * into open arcs by the junctions where other regions meet it) to ONE fitted circle.
+ * For each such loop: radial-snap its junction vertices onto the circle (moving every
+ * incident edge endpoint — ring arcs AND the T-ing spokes — so the graph stays welded
+ * and byte-coincident), then re-emit each of its open edges as a circular-arc slice
+ * pinned at those junctions. Both regions on each edge inherit the slice. Returns the
+ * set of edge ids it re-emitted, so the per-edge passes leave them alone. Gated on
+ * `fid`: the loop must fit a circle within fidelity (radius > 2·fid), exactly as the
+ * disc snap (1a) gates. Mutates `edges` / `vertices` in place.
+ */
+function snapCoCircularLoops(
+  edges: SharedEdge[],
+  vertices: Vertex[],
+  loopsByLabel: Map<number, EdgeRef[][]>,
+  fid: number,
+): Set<number> {
+  const snapped = new Set<number>()
+  const byId = new Map<number, SharedEdge>()
+  for (const e of edges) byId.set(e.id, e)
+  const vById = new Map<number, Vertex>()
+  for (const v of vertices) vById.set(v.id, v)
+
+  // Assign each open ring edge + its endpoint vertices to the circle of the first
+  // circular loop that claims them (a vertex/edge lies on at most one such circle).
+  const edgeCircle = new Map<number, Circle>()
+  const vertCircle = new Map<number, Circle>()
+  for (const loops of loopsByLabel.values()) {
+    for (const loop of loops) {
+      if (loop.length < 2) continue // a single closed-loop edge is a disc — 1a's job
+      let ok = true
+      let hasOpen = false
+      const raw: Vec[] = []
+      for (const ref of loop) {
+        const e = byId.get(ref.edge)
+        if (!e || e.nodes.length < 2) { ok = false; break }
+        if (!e.closed) hasOpen = true
+        const arc = ref.reversed ? reverseEdgeNodes(e.nodes) : e.nodes
+        for (const p of flatten({ nodes: arc, closed: e.closed })) raw.push(p)
+      }
+      if (!ok || !hasOpen || raw.length < 8) continue
+      const c = fitCircle(raw)
+      if (!c || c.r <= 2 * fid || maxRadialDev(raw, c) > fid) continue
+      for (const ref of loop) {
+        const e = byId.get(ref.edge)!
+        if (e.closed) continue
+        if (!edgeCircle.has(e.id)) edgeCircle.set(e.id, c)
+        if (e.startVertex != null && e.startVertex >= 0 && !vertCircle.has(e.startVertex)) vertCircle.set(e.startVertex, c)
+        if (e.endVertex != null && e.endVertex >= 0 && !vertCircle.has(e.endVertex)) vertCircle.set(e.endVertex, c)
+      }
+    }
+  }
+  if (edgeCircle.size === 0) return snapped
+
+  // Radial-snap each claimed vertex onto its circle, moving EVERY incident edge
+  // endpoint with it (ring arcs get overwritten below; spokes keep this, so no seam).
+  for (const [vid, c] of vertCircle) {
+    const v = vById.get(vid)
+    if (!v) continue
+    const dx = v.x - c.cx
+    const dy = v.y - c.cy
+    const d = Math.hypot(dx, dy) || 1
+    const nx = c.cx + (c.r * dx) / d
+    const ny = c.cy + (c.r * dy) / d
+    v.x = nx
+    v.y = ny
+    for (const e of edges) {
+      if (e.startVertex === vid) shiftNodeTo(e.nodes[0], nx, ny)
+      if (e.endVertex === vid) shiftNodeTo(e.nodes[e.nodes.length - 1], nx, ny)
+    }
+  }
+
+  // Re-emit each ring arc as a circular slice between its (snapped) junction endpoints.
+  for (const [eid, c] of edgeCircle) {
+    const e = byId.get(eid)!
+    const from = { x: e.nodes[0].x, y: e.nodes[0].y }
+    const to = { x: e.nodes[e.nodes.length - 1].x, y: e.nodes[e.nodes.length - 1].y }
+    const fl = flatten({ nodes: e.nodes, closed: false })
+    const mid = fl[Math.floor(fl.length / 2)] ?? { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+    e.nodes = arcSlice(c.cx, c.cy, c.r, from, to, mid)
+    snapped.add(eid)
+  }
+  return snapped
 }
 
 /** Long side of the bbox over every edge node anchor (the relation-solver scale). */

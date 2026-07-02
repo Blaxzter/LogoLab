@@ -506,11 +506,13 @@ export async function traceImage(
       gradientsOn || usedLockedPalette
         ? removed
         : healColorSpikes(removed, imageData.data, width, height, q.palette)
-    const trace = tracePlanar(labels, width, height, planarFitOptionsFor(options))
+    const fitOpts = planarFitOptionsFor(options)
+    const trace = tracePlanar(labels, width, height, fitOpts)
     // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
     // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a
-    // no-op, so the unbeautified planar output is byte-identical.
-    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts)
+    // no-op, so the unbeautified planar output is byte-identical. The co-circular
+    // arc snap (§1d) can be turned off via planarFit.arcSnap (Test view baseline).
+    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, fitOpts.arcSnap)
     const edges = edgeMap(topology)
     let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
     if (bg !== -1) order = order.filter((l) => l !== bg)

@@ -222,6 +222,45 @@ export function orient(sp: SubPath, positive: boolean): SubPath {
   return sp
 }
 
+/**
+ * Emit an OPEN circular-arc slice as PathNodes from `from` to `to` along the circle
+ * (cx,cy,r), taking the rotational direction that passes the `mid` hint (so the arc
+ * bulges the same way the raw edge did). Endpoints are pinned byte-exact to `from`/
+ * `to` (they stay welded to their junction vertices) and forced `corner`; interior
+ * nodes sit on the circle and are `smooth`. Two arcs that meet at a junction both
+ * carry the circle's tangent there, so they join G¹ — the ring stops kinking. Split
+ * into ≤90° kappa-Bézier pieces. Pure & deterministic.
+ */
+export function arcSlice(cx: number, cy: number, r: number, from: Vec, to: Vec, mid: Vec): PathNode[] {
+  const TWO_PI = Math.PI * 2
+  const norm = (a: number): number => ((a % TWO_PI) + TWO_PI) % TWO_PI
+  const ang = (p: Vec): number => Math.atan2(p.y - cy, p.x - cx)
+  const af = ang(from)
+  const at = ang(to)
+  const am = ang(mid)
+  const ccwSpan = norm(at - af) || TWO_PI // (0, 2π]
+  const midOff = norm(am - af)
+  const ccw = midOff <= ccwSpan // does the CCW sweep pass the mid hint?
+  const total = ccw ? ccwSpan : TWO_PI - ccwSpan
+  const nSeg = Math.max(1, Math.ceil(total / (Math.PI / 2)))
+  const dir = ccw ? 1 : -1
+  const step = (total / nSeg) * dir
+  const kappa = (4 / 3) * Math.tan(Math.abs(step) / 4)
+  const hLen = kappa * r
+  // travel tangent at circle angle θ, oriented along the sweep
+  const tan = (t: number): Vec => ({ x: -Math.sin(t) * dir, y: Math.cos(t) * dir })
+  const nodes: PathNode[] = []
+  for (let i = 0; i <= nSeg; i++) {
+    const t = af + step * i
+    const p: Vec = i === 0 ? from : i === nSeg ? to : { x: cx + r * Math.cos(t), y: cy + r * Math.sin(t) }
+    const td = tan(t)
+    const hIn = i === 0 ? null : { x: p.x - hLen * td.x, y: p.y - hLen * td.y }
+    const hOut = i === nSeg ? null : { x: p.x + hLen * td.x, y: p.y + hLen * td.y }
+    nodes.push({ x: p.x, y: p.y, hIn, hOut, kind: i === 0 || i === nSeg ? 'corner' : 'smooth' })
+  }
+  return nodes
+}
+
 // ---------------------------------------------------------------------------
 // Single-linkage clustering
 // ---------------------------------------------------------------------------

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LogoLab · Junction / feature A/B</title>
+    <style>
+      :root { color-scheme: light; --box: 300px; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 13px/1.4 ui-sans-serif, system-ui, sans-serif; background: #f4f4f6; color: #1a1a22; }
+      header { padding: 14px 20px; border-bottom: 1px solid #e2e2e8; background: #fff; position: sticky; top: 0; z-index: 5; }
+      header h1 { margin: 0 0 4px; font-size: 15px; }
+      header p { margin: 0 0 10px; color: #6a6a76; max-width: 78ch; }
+      .controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+      .controls label { display: inline-flex; gap: 6px; align-items: center; }
+      button, .drop { font: inherit; padding: 4px 10px; border: 1px solid #cfcfd8; border-radius: 6px; background: #fafafc; cursor: pointer; }
+      button:hover, .drop:hover { background: #f0f0f4; }
+      .drop { border-style: dashed; color: #6a6a76; }
+      .drop.over { background: #eef2ff; border-color: #6366f1; color: #4338ca; }
+      #zoom { font: 11px ui-monospace, monospace; color: #4338ca; min-width: 3.2em; }
+      .row { padding: 14px 20px; border-bottom: 1px solid #e8e8ee; }
+      .row h2 { margin: 0 0 10px; font-size: 14px; display: flex; gap: 10px; align-items: baseline; }
+      .row h2 .rm { font-size: 11px; color: #b0b0ba; cursor: pointer; }
+      .cells { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+      .cell { width: var(--box); }
+      .cell .label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; font-size: 11px; color: #6a6a76; }
+      .cell .label b { color: #1a1a22; font-weight: 600; }
+      .box {
+        width: var(--box); height: var(--box); border: 1px solid #d8d8e0; border-radius: 8px;
+        overflow: hidden; background-color: #fff; touch-action: none; cursor: grab;
+        background-image:
+          linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
+        background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      }
+      .box:active { cursor: grabbing; }
+      .box svg { width: 100%; height: 100%; display: block; }
+      .cell.base .label b { color: #6a6a76; }
+      .cell.shipped .label b { color: #1a7f37; }
+      .cell.refine .label b { color: #b45309; }
+      #status { padding: 8px 20px; color: #6a6a76; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Junction / feature A/B</h1>
+      <p>
+        Planar engine. Each row: the source, then the trace under each feature variant. Drag any box to <b>pan</b>,
+        wheel to <b>zoom</b> — every box moves together, so you compare the same spot across variants. Drop your own
+        image to add a row. Settings persist. Variants &amp; cases are defined at the top of
+        <code>src/devtest/junctionTest.ts</code>.
+      </p>
+      <div class="controls">
+        <label>Box <input id="size" type="range" min="180" max="900" value="300" /></label>
+        <label><input id="grad" type="checkbox" /> gradients on</label>
+        <button id="reset">Reset view</button>
+        <span id="zoom">1.0×</span>
+        <label class="drop" id="drop">+ Add image<input id="file" type="file" accept="image/*" hidden /></label>
+        <span id="count"></span>
+      </div>
+    </header>
+    <div id="status">Running…</div>
+    <main id="out"></main>
+    <script type="module" src="/src/devtest/junctionTest.ts"></script>
+  </body>
+</html>

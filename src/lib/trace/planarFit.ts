@@ -29,6 +29,21 @@ export interface PlanarFitOptions {
    * pins only endpoints, the legacy behaviour — used to assert byte-identity).
    */
   cornerTurnDeg: number
+  /**
+   * EXPERIMENTAL (off by default). Place each junction VERTEX at the sub-pixel
+   * intersection of its incident edge arms instead of the integer lattice corner,
+   * and weld two edges a region runs straight THROUGH a junction to a shared G¹
+   * tangent (planarJunction.ts). An alternative to the co-circular arc snap (§1d)
+   * for the ring "pull"; measured weaker + corpus-moving, kept behind this flag for
+   * the Test view A/B. `false` ⇒ raw integer-lattice junctions (the shipped path).
+   */
+  refineJunctions: boolean
+  /**
+   * Co-circular open-arc snap (planarBeautify §1d): a ring split into arcs by band
+   * junctions snaps to ONE circle so it stops kinking. On by default (it rides the
+   * fidelity dial). `false` disables it — the pre-1d baseline, for the Test view A/B.
+   */
+  arcSnap: boolean
 }
 
 export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
@@ -40,6 +55,8 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   lineCost: 3.9,
   cubicCost: 4,
   cornerTurnDeg: 70,
+  refineJunctions: false,
+  arcSnap: true,
 }
 
 /** Flat-art line cost: > cubicCost so the DP prefers a CUBIC on any span where a
@@ -505,7 +522,7 @@ const SNAP_GAP = 3 // skip this many px nearest the tip (the rounded part) per a
 const SNAP_SPAN = 14 // …and fit the arm line over up to this many px beyond the gap
 
 /** Least-squares line through `pts` → a point on it (`c`) and a unit direction (`d`). */
-function armLine(pts: Vec[]): { c: Vec; d: Vec } {
+export function armLine(pts: Vec[]): { c: Vec; d: Vec } {
   let mx = 0
   let my = 0
   for (const p of pts) {
