@@ -73,6 +73,13 @@ export const GOLDEN_CORPUS: GoldenCase[] = [
   { name: 'schild-flat', path: 'examples/test-files/schild.png', maxDim: 512, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false } },
   { name: 'headphones-flat', path: 'examples/test-files/Headphones.png', maxDim: 1024, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false } },
   { name: 'headphones-grad', path: 'examples/test-files/Headphones.png', maxDim: 512, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true }, slow: true },
+  // Junction-quality guards (gradients OFF — the flat/posterized regime): bloom's
+  // translucent-circle crossings are the degree-4 cluster case, aurora's posterized
+  // diagonal ramp is the jagged band-boundary case. Fixtures are the example SVGs
+  // pre-rasterized to 512px (test/fixtures/) since the node harness has no SVG
+  // rasterizer.
+  { name: 'bloom-flat', path: 'test/fixtures/bloom-512.png', maxDim: 0, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false } },
+  { name: 'aurora-flat', path: 'test/fixtures/aurora-512.png', maxDim: 0, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false } },
 ]
 
 /** Compact, comparable record for one traced case. */
@@ -88,6 +95,14 @@ export interface GoldenRecord {
   p95DeltaE: number
   ssim: number
   seamMax: number
+  /** Junction vertices in the shared-edge graph (structural simplicity signal). */
+  junctions?: number
+  /** Unresolved junction clusters (≥2 vertices within 3px) — should never grow. */
+  junctionClusters?: number
+  /** Largest span (px) inside any junction cluster. */
+  clusterSpanMax?: number
+  /** Mean |turn| per px (deg/px) over boundary curves — staircase wobble scores high. */
+  jaggedness?: number
   /** Exact canonical-doc fingerprint (precision 6) — the determinism / "did anything
    *  change" signal. */
   hash: string
@@ -165,6 +180,10 @@ export async function recordCase(c: GoldenCase): Promise<GoldenRecord> {
     p95DeltaE: round(s.p95DeltaE, 2),
     ssim: round(s.ssim, 4),
     seamMax: round(s.seamMax, 2),
+    junctions: s.junctions,
+    junctionClusters: s.junctionClusters,
+    clusterSpanMax: round(s.clusterSpanMax, 2),
+    jaggedness: round(s.jaggedness, 3),
     hash: hashDoc(doc),
     geomSig: geomSignature(doc),
   }

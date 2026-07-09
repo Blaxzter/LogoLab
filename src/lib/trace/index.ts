@@ -20,6 +20,7 @@ import { segmentFlatPalette, type PaletteSegmentOptions } from './paletteSegment
 import { fitPaintLadder, type PaintLadderResult, type RegionSamples } from './gradient.ts'
 import { beautify, DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
 import { decomposeTranslucent, type Decomposition } from './layers.ts'
+import { uniteBackgroundGradient, type BackgroundUnion } from './backgroundLayer.ts'
 import { rasterizeDoc } from '../render/raster.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
 import { tracePlanar } from './planarAssemble.ts'
@@ -502,10 +503,37 @@ export async function traceImage(
     // heal — every pixel is already its nearest locked colour by construction, so the
     // contract is exactly "snap to nearest given colour", nothing more. No mislabeled
     // pixels ⇒ returns the input ⇒ byte-identical.
-    const labels =
+    const healed =
       gradientsOn || usedLockedPalette
         ? removed
         : healColorSpikes(removed, imageData.data, width, height, q.palette)
+    // EXPERIMENTAL background layer separation (backgroundGradient, gradients OFF):
+    // the border-seeded band-set that ONE gradient explains is relabeled into a
+    // single region painted with that fitted gradient — the background becomes one
+    // uninterrupted layer, so band↔band boundaries and the band junctions that
+    // split a foreground outline (the ring "pull") never reach the tracer.
+    // Null / flag off ⇒ byte-identical passthrough.
+    //
+    // COMPOSES with removeBackground: the union is the better background DETECTOR (a
+    // posterized ramp is one background, not N bands), so with both flags on we delete
+    // the whole united set rather than the single border-majority band. The label to
+    // drop is therefore computed on the FINAL map (`dropped`, below) — not from `bg`,
+    // which was detected on `q.labels` before the union relabeled its members to a seed
+    // re-detected on `healed`.
+    let bgUnion: BackgroundUnion | null = null
+    if (!gradientsOn && options.backgroundGradient) {
+      const bgSeed = detectBorderBackground(healed, width, height, q.palette.length)
+      if (bgSeed >= 0) {
+        // Remove-markers relabel pixels but the raster keeps the DISSOLVED object's
+        // colours, so sampling them feeds a ghost tint into the union's gradient fit and
+        // its render gate. Exclude exactly the pixels the markers moved. No remove
+        // markers ⇒ `removed` IS `q.labels` ⇒ no mask ⇒ byte-identical.
+        const dissolved = removed === q.labels ? undefined : changedMask(q.labels, removed)
+        const unionSamples = fullRegionSamples(healed, imageData.data, width, q.palette.length, 6000, dissolved)
+        bgUnion = uniteBackgroundGradient(healed, width, height, bgSeed, unionSamples, q.palette)
+      }
+    }
+    const labels = bgUnion ? bgUnion.labels : healed
     const fitOpts = planarFitOptionsFor(options)
     const trace = tracePlanar(labels, width, height, fitOpts)
     // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
@@ -515,7 +543,15 @@ export async function traceImage(
     const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, fitOpts.arcSnap)
     const edges = edgeMap(topology)
     let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
-    if (bg !== -1) order = order.filter((l) => l !== bg)
+    // Background removal drops the pre-union `bg` (byte-identical to before when no union
+    // ran) AND, when the union ran, every label it swallowed — of which only `seed` still
+    // exists in the map. Covering both makes the drop correct whether or not the union's
+    // seed (re-detected on `healed`) agrees with `bg` (detected on `q.labels`).
+    if (options.removeBackground) {
+      const dropped = new Set<number>(bg !== -1 ? [bg] : [])
+      if (bgUnion) for (const l of bgUnion.set) dropped.add(l)
+      order = order.filter((l) => !dropped.has(l))
+    }
     const items: PathItem[] = []
     let traced = 0
     let lastTracePct = -1
@@ -534,6 +570,10 @@ export async function traceImage(
       applyPaint(paint, labelPaint[label])
       const base: PathItem = { kind: 'path', id: 'trace-' + label, fill: rgbToHex(c.r, c.g, c.b), fillRule, loops, subPaths, visible: true }
       if (paint.gradient) base.gradient = paint.gradient
+      // Background layer separation: the united band-set renders as ONE region
+      // carrying the gradient fitted over the union (its palette hex stays as the
+      // fallback fill/swatch).
+      if (bgUnion && label === bgUnion.seed) base.gradient = bgUnion.gradient
       // Flat palette path may tag a region with an alpha (its alpha mode, or a locked
       // RGBA swatch) — paint it translucent. Planar regions tile without overlap, so a
       // single fill-opacity composites correctly against the background. Opaque (a≥255
@@ -702,11 +742,23 @@ function meanRenderDeltaE(doc: EditableDoc, source: ImageData, width: number, he
 /** Translucent decomposition must beat opaque by at least this mean CIE76 ΔE. */
 const DECOMP_WIN_MARGIN = 0.1
 
+/** 1 wherever `after` moved a pixel to a different label than `before` — i.e. the
+ *  pixels a remove-marker dissolve reassigned, whose raster RGB still belongs to the
+ *  deleted object and must not be sampled as its new region's colour. */
+function changedMask(before: Int32Array, after: Int32Array): Uint8Array {
+  const m = new Uint8Array(before.length)
+  for (let i = 0; i < before.length; i++) if (before[i] !== after[i]) m[i] = 1
+  return m
+}
+
 /**
  * Per-region FULL sample sets (every labelled pixel of each region, AA included),
  * strided down to a cap — the gate set for the glow stack. Distinct from the
  * segmenter's smooth `regionSamples`, which the paint model is FIT on but which
  * omit the anti-aliased pixels a glow most improves.
+ *
+ * `skip` (optional, 1 per pixel) drops pixels whose raster colour does not belong to
+ * the label they now carry; omitted ⇒ every labelled pixel is sampled.
  */
 function fullRegionSamples(
   labels: Int32Array,
@@ -714,6 +766,7 @@ function fullRegionSamples(
   width: number,
   paletteSize: number,
   cap = 6000,
+  skip?: Uint8Array,
 ): RegionSamples[] {
   const xs: number[][] = Array.from({ length: paletteSize }, () => [])
   const ys: number[][] = Array.from({ length: paletteSize }, () => [])
@@ -723,6 +776,7 @@ function fullRegionSamples(
   for (let i = 0; i < labels.length; i++) {
     const l = labels[i]
     if (l < 0 || l >= paletteSize) continue
+    if (skip !== undefined && skip[i] !== 0) continue
     const o = i * 4
     xs[l].push(i % width)
     ys[l].push((i / width) | 0)

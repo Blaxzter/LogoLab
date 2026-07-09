@@ -41,6 +41,7 @@ const TOL = {
   ssim: 0.012, // SSIM the render may drop by
   seamMax: 2.0, // ΔE the worst smooth-field seam may worsen by
   countRatio: 0.12, // ±12% drift allowed in path / node counts
+  jaggedness: 0.15, // relative worsening allowed in boundary turn-per-px
 }
 
 for (const c of GOLDEN_CORPUS) {
@@ -72,6 +73,23 @@ for (const c of GOLDEN_CORPUS) {
     // Structure (node / path counts) must not drift wildly.
     within(c.name, 'paths', rec.paths, g.paths)
     within(c.name, 'nodes', rec.nodes, g.nodes)
+
+    // Junction quality (fields exist once the golden is re-blessed; skip until then).
+    // Unresolved junction clusters must never grow; boundary jaggedness may worsen
+    // only within tolerance (one-sided — improvements always pass).
+    if (g.junctionClusters !== undefined && rec.junctionClusters !== undefined) {
+      assert.ok(
+        rec.junctionClusters <= g.junctionClusters,
+        `${c.name}: junctionClusters ${rec.junctionClusters} > golden ${g.junctionClusters}`,
+      )
+    }
+    if (g.jaggedness !== undefined && rec.jaggedness !== undefined) {
+      const cap = g.jaggedness * (1 + TOL.jaggedness) + 0.2
+      assert.ok(
+        rec.jaggedness <= cap,
+        `${c.name}: jaggedness ${rec.jaggedness} > golden ${g.jaggedness} (+${TOL.jaggedness * 100}% +0.2 = ${cap.toFixed(3)})`,
+      )
+    }
 
     // Geometry / exact-output drift: report, don't fail.
     if (rec.hash !== g.hash || rec.geomSig !== g.geomSig) {

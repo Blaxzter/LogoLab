@@ -12,19 +12,23 @@
 
 import { getImageData } from '../lib/image'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace'
+import type { VectorizeOptions } from '../types'
 import { serializeDoc } from '../lib/path/model'
 import type { EditableDoc } from '../lib/path/types'
 import type { PlanarFitOptions } from '../lib/trace/planarFit'
 
 const MAX_DIM = 512
 
-/** One trace configuration rendered per case. `planarFit` overrides the tunables. */
-interface Variant { name: string; cls?: string; planarFit?: Partial<PlanarFitOptions> }
+/** One trace configuration rendered per case. `planarFit` overrides the fit
+ *  tunables; `opts` overrides any other VectorizeOptions (e.g. backgroundGradient). */
+interface Variant { name: string; cls?: string; planarFit?: Partial<PlanarFitOptions>; opts?: Partial<VectorizeOptions> }
 const VARIANTS: Variant[] = [
   { name: 'Baseline', cls: 'base', planarFit: { arcSnap: false, refineJunctions: false } },
   { name: 'Arc-snap (shipped)', cls: 'shipped', planarFit: { arcSnap: true, refineJunctions: false } },
   { name: 'Sub-pixel + G¹', cls: 'refine', planarFit: { arcSnap: false, refineJunctions: true } },
-  { name: 'Arc-snap + refine', planarFit: { arcSnap: true, refineJunctions: true } },
+  { name: 'Weld ≤3px', cls: 'refine', planarFit: { arcSnap: false, refineJunctions: false, weldJunctions: 3 } },
+  { name: 'Weld + snap + G¹', planarFit: { arcSnap: true, refineJunctions: true, weldJunctions: 3 } },
+  { name: 'BG gradient + weld', cls: 'refine', opts: { backgroundGradient: true }, planarFit: { arcSnap: true, refineJunctions: false, weldJunctions: 3 } },
 ]
 
 interface Case { name: string; src: string; kind: 'png' | 'svg' }
@@ -160,7 +164,7 @@ async function renderRow(name: string, image: ImageData, displaySrc: string, gra
   cells.className = 'cells'
   cells.append(cell(`<b>source</b><span>${W}×${H}</span>`, '', camBox(`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet"><image href="${displaySrc}" x="0" y="0" width="${W}" height="${H}"/></svg>`, W, H)))
   for (const v of VARIANTS) {
-    const doc = await traceImage(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients, planarFit: v.planarFit })
+    const doc = await traceImage(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients, ...v.opts, planarFit: v.planarFit })
     const s = docStats(doc)
     cells.append(cell(`<b>${v.name}</b><span>${s.paths}p · ${s.nodes}n</span>`, v.cls ?? '', camBox(serializeDoc(doc, 2), W, H)))
   }

@@ -311,6 +311,64 @@ art (petals seam) at the displacement a crossing needs — deferred as a separat
 carefully-gated pass. H/V axis-snapping is still intentionally NOT done (it would move
 junction endpoints and unweld the graph).
 
+**1e — junction-cluster weld (EXPERIMENTAL, `planarFit.weldJunctions` px, default 0
+= off).** The real bloom X-crossing fix. *Why a crossing is never one point:* in a
+single shared-edge tiling a boundary must terminate at a vertex wherever ≥3 regions
+meet, and a vertex is any lattice corner with crack degree ≥ 3
+([planarNetwork.ts](../src/lib/trace/planarNetwork.ts) `isJunction`). A rasterized
+degree-4 crossing almost never lands all four wedge tips on ONE corner — AA +
+posterization split it into 2+ near-coincident degree-3 corners joined by 1–3px
+micro-edges (and an occluded crossing is *structurally* a tiny quad of degree-3 Ts).
+Nothing merged them, so the crossing rendered as a tiny jog/notch that pops at zoom,
+and sub-pixel refinement only nudged the vertices closer (its `MAX_DISP` cap and
+per-junction independent solves cannot make them coincide). `weldJunctionClusters`
+([planarWeld.ts](../src/lib/trace/planarWeld.ts), called at the end of
+`assemblePlanar`) contracts every open edge no longer than the weld radius whose
+endpoints are two distinct junctions: the vertices fuse into one (cluster centroid),
+every incident edge re-anchors on the fused vertex (welded, byte-coincident), and
+the micro-edge is dropped from the edge table and excised from every region loop —
+micro-faces (the occlusion quad / a ≤3px EXT pocket) collapse to the point.
+Measured on bloom-512: the 5-vertex centre cluster and the 2-vertex bottom pair each
+fuse to ONE vertex (9→4 vertices, 15→9 edges, 42→33 nodes), and the crossing renders
+as one clean X at any zoom. orbit/outline/summit byte-identical (no clusters).
+[test/planar-weld.test.ts](../test/planar-weld.test.ts). Trade-off (why it's a dial,
+not just a bool): a genuine source feature smaller than the radius — bloom's real
+~3px transparent centre pocket — is collapsed with the noise.
+
+**1f — background layer separation (EXPERIMENTAL,
+`VectorizeOptions.backgroundGradient`, default off; gradients-OFF planar only).**
+The ring-"pull" and jagged-band fix at the root. With gradients off a smooth
+background ramp posterizes into flat bands; every band↔band boundary is a noisy
+nearest-colour frontier (traced faithfully ⇒ SUPER-JAGGED), and every band that
+touches a foreground outline mints a junction that splits it (the "dot"/pull on the
+white ring). Both defects are the bands' *existence*, so
+[backgroundLayer.ts](../src/lib/trace/backgroundLayer.ts) makes the boundary not
+exist: seed with the border-ring background label, grow over adjacent labels while
+ONE fitted gradient still explains the union, relabel the accepted set to a single
+region, and paint it with that gradient (a real SVG gradient bottom layer; the
+foreground keeps flat fills; the ring becomes a junction-free closed loop that
+disc-snaps to a perfect circle). The growth is gated on the RENDER, not an analytic
+veto (the V6 pattern): a candidate joins only if the union gradient's per-pixel
+prediction over the union's own samples is at least as close (mean CIE76, +0.1
+margin) to the source as the flat band colours are — absorbing a genuinely distinct
+shape forces the gradient to paint a transition the source renders crisp, so it
+loses and the shape survives (petals' cyan petal is the guard case; an earlier
+residual-only gate absorbed it into a blurry radial). Measured (gradients OFF,
+512px): nebula 13 paths/606 nodes → **2 paths/40 nodes** (6-stop linear background,
+ring/dot one clean shape), aurora 14/276 → **4/44** (5-stop linear, zero junctions);
+petals/orbit/outline/summit/bloom byte-identical (union rejected or no seed).
+
+*Interactions.* The union is also a strictly better background **detector**, so it
+composes with `removeBackground`: with both flags on, the whole united set is dropped
+instead of the single border-majority band (`detectBorderBackground` alone leaves a
+posterized ramp's other bands on the canvas). The dropped label is therefore computed
+on the FINAL map — the union relabels its members to a seed re-detected *after*
+remove-markers and spike-healing, so filtering on the pre-union `bg` could silently
+no-op and ship the background. Remove-markers themselves relabel pixels while the
+raster keeps the dissolved object's colours, so those pixels are excluded from the
+union's sample build (else a ghost tint drags an endpoint ~100/255 per channel).
+[test/background-layer.test.ts](../test/background-layer.test.ts).
+
 ---
 
 ## 6. Other backlog
@@ -321,3 +379,30 @@ junction endpoints and unweld the graph).
 - **Sub-pixel edge placement** — optionally place crack vertices at AA-weighted
   sub-pixel positions to close the small nebula seam gap with crisp.
 - `src/devtest/planarScore.ts` is the harness for tuning all of the above.
+- **Band-boundary regularization** (if 1f isn't taken): with gradients OFF all of
+  bloom/aurora/nebula take the PALETTE-FIRST path, so band↔band boundaries are
+  perpendicular-bisector iso-planes between k-means centroids evaluated on RAW
+  pixels — source noise/AA flips assignment along the bisector (fingering), and the
+  only smoother in that path is the 2-pass 3×3 `modeFilter`. Options: assign labels
+  on lightly-smoothed channels, raise `modePasses`, or a boundary-belt re-assignment
+  on a smoothed field. `healColorSpikes` can also nibble posterized band boundaries
+  (validated on flat art, not on band stacks) — worth an A/B if jag persists.
+
+## 7. Junction / jaggedness metrics (evaluation)
+
+The golden harness previously measured only render fidelity (meanΔE/SSIM/seam) and
+counts — a junction cluster or a jagged band boundary hid inside every tolerance.
+`topologyMetrics` ([metrics.ts](../src/devtest/metrics.ts)) now scores every traced
+doc (via `scoreDoc`) with:
+
+- `junctions` — vertices in the shared-edge graph;
+- `junctionClusters` / `clusterSpanMax` — clusters of ≥2 junction vertices within
+  3px (an unresolved crossing); **asserted never to grow** per golden case;
+- `jaggedness` — mean |turn| per px (deg/px) over the boundary curves (shared edges
+  counted once); asserted within +15% +0.2 of golden.
+
+Corpus: `bloom-flat` and `aurora-flat` (the two junction-issue images, gradients
+OFF) joined `GOLDEN_CORPUS` via pre-rasterized 512px fixtures in `test/fixtures/`
+(the node harness has no SVG rasterizer). Still unmeasured: junction kink angle
+(tangent continuity at a junction), gradient-axis/stop fidelity, zoom-scale (>1×)
+render comparison.

@@ -44,6 +44,17 @@ export interface PlanarFitOptions {
    * fidelity dial). `false` disables it — the pre-1d baseline, for the Test view A/B.
    */
   arcSnap: boolean
+  /**
+   * EXPERIMENTAL (0 = off, byte-identical). Weld radius (px) for junction CLUSTERS:
+   * a rasterized degree-4 crossing (bloom's X) lands as 2+ near-coincident degree-3
+   * lattice junctions joined by 1–3px micro-edges — nothing downstream merges them,
+   * so the crossing renders as a tiny jog instead of one clean point. When > 0,
+   * `weldJunctionClusters` (planarWeld.ts) contracts open micro-edges no longer than
+   * this radius whose endpoints are two DISTINCT junctions: the vertices fuse into
+   * one (cluster centroid), the micro-edge vanishes from the graph and from every
+   * region loop, and all incident edges re-anchor on the fused vertex.
+   */
+  weldJunctions: number
 }
 
 export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
@@ -57,6 +68,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   cornerTurnDeg: 70,
   refineJunctions: false,
   arcSnap: true,
+  weldJunctions: 0,
 }
 
 /** Flat-art line cost: > cubicCost so the DP prefers a CUBIC on any span where a

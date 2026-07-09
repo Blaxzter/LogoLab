@@ -204,4 +204,17 @@ export interface VectorizeOptions {
    * defaults. Used by the crispness study to A/B faceting; omitted ⇒ defaults.
    */
   planarFit?: Partial<import('./lib/trace/planarFit').PlanarFitOptions>
+  /**
+   * EXPERIMENTAL background layer separation (color mode, gradients OFF, planar).
+   * With gradients off a smooth background ramp posterizes into flat bands; every
+   * band boundary is traced, and each band that touches a foreground outline (a
+   * ring, a chevron) mints a junction that splits the outline — the ring "pull" /
+   * jagged-band defect. When true, the border-seeded background band-set that one
+   * gradient explains (Step-3c's union-fit test, applied only to the background)
+   * is RELABELED into a single region painted with that fitted gradient: the
+   * background becomes one uninterrupted layer (a real SVG gradient), foreground
+   * shapes keep their flat fills, and the outline is a junction-free closed loop.
+   * No-op when nothing merges (flat background, no gradient fit). Omitted ⇒ off.
+   */
+  backgroundGradient?: boolean
 }
