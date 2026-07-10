@@ -135,6 +135,61 @@ test('weld collapses a 1px EXT pocket at a crossing', () => {
   assert.equal(welded.loopsByLabel.size, 4, 'all four regions survive')
 })
 
+test('weld keeps a fused frame crossing ON the image border', () => {
+  // A|B boundary jogging x=6→x=7 at y=2, with a 1px C pocket at the top border — the
+  // crossing junctions are (6,0) and (7,0) ON the frame plus (6,1) just inside. Fusing
+  // them must keep the survivor on the top edge (y=0); the naive centroid (y≈0.33) would
+  // pull the boundary off the frame and open a sliver gap where it should bleed.
+  const w = 12, h = 12
+  const labels = new Int32Array(w * h)
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      let l = y < 2 ? (x < 6 ? 0 : 1) : x < 7 ? 0 : 1
+      if (y === 0 && x === 6) l = 2
+      labels[y * w + x] = l
+    }
+  const base = tracePlanar(labels, w, h, OPTS(0))
+  assert.ok(near(base, 6, 0.5, 1.5).length >= 3, 'baseline: the border crossing splits into ≥3 junctions')
+  const welded = tracePlanar(labels, w, h, OPTS(3))
+  const fused = near(welded, 6, 0.5, 1.5)
+  assert.equal(fused.length, 1, 'the border crossing fuses to one junction')
+  const v = welded.vertices.find((x) => x.id === fused[0])!
+  assert.ok(Math.abs(v.y) < 1e-9, `fused vertex stays on the top border (y=${v.y})`)
+  assertLoopsClosed(welded)
+  assertWelded(welded)
+})
+
+test('weld caps cluster span: a noisy patch is not collapsed, frame vertices stay put', () => {
+  // Per-pixel LCG noise packs the lattice with offset crossings — 260 short candidate
+  // edges. Without a span cap the transitive union-find chains them into a few giant
+  // clusters and collapses the whole patch to a handful of points (dragging border
+  // vertices to the centre). The cap keeps the weld local, so an over-spread noise
+  // cluster is left untouched.
+  const w = 16, h = 16
+  const labels = new Int32Array(w * h)
+  let s = 1
+  for (let i = 0; i < w * h; i++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff
+    labels[i] = s % 3
+  }
+  const base = tracePlanar(labels, w, h, OPTS(0))
+  const welded = tracePlanar(labels, w, h, OPTS(3))
+  // not collapsed: the vast majority of vertices survive (a runaway weld would leave <10)
+  assert.ok(welded.vertices.length >= base.vertices.length * 0.5, `weld collapsed the patch (${base.vertices.length}→${welded.vertices.length})`)
+  // no frame vertex is pulled off the border
+  const onBorder = (vx: number, vy: number) => vx <= 1e-9 || vy <= 1e-9 || vx >= w - 1e-9 || vy >= h - 1e-9
+  const baseById = new Map(base.vertices.map((v) => [v.id, v]))
+  for (const wv of welded.vertices) {
+    const bv = baseById.get(wv.id)
+    if (bv && onBorder(bv.x, bv.y)) assert.ok(onBorder(wv.x, wv.y), `frame vertex ${wv.id} pulled off the border`)
+  }
+  // the weld induces no self-loops (non-closed edge with start===end)
+  const selfLoops = (t: PlanarTrace) => t.edges.filter((e) => !e.closed && e.startVertex != null && e.startVertex === e.endVertex).length
+  assert.ok(selfLoops(welded) <= selfLoops(base), 'weld introduced a self-loop edge')
+  assertLoopsClosed(welded)
+  assertWelded(welded)
+})
+
 test('weld leaves a clean degree-4 crossing and long edges untouched', () => {
   const labels = cleanCross()
   const base = tracePlanar(labels, 12, 12, OPTS(0))

@@ -67,12 +67,16 @@ export interface WeldResult {
 /**
  * Contract micro-edges between near-coincident junction vertices. Mutates
  * `vertices`, `edges` and `loopsByLabel` in place; returns what moved (empty
- * result = graph untouched).
+ * result = graph untouched). `width`/`height` are the image bounds — a fused cluster
+ * that includes a frame junction is kept ON that frame edge so the boundary stays
+ * full-bleed.
  */
 export function weldJunctionClusters(
   vertices: Vertex[],
   edges: SharedEdge[],
   loopsByLabel: Map<number, EdgeRef[][]>,
+  width: number,
+  height: number,
   radius: number,
 ): WeldResult {
   const fused = new Map<number, number>()
@@ -112,10 +116,7 @@ export function weldJunctionClusters(
     parent.set(hi, lo)
     parent.set(lo, lo)
   }
-  for (const e of candidates) {
-    union(e.startVertex!, e.endVertex!)
-    removedEdges.add(e.id)
-  }
+  for (const e of candidates) union(e.startVertex!, e.endVertex!)
 
   // --- clusters → survivor (lowest id) at the members' centroid
   const byId = new Map<number, Vertex>()
@@ -127,23 +128,42 @@ export function weldJunctionClusters(
     if (!arr) clusters.set(r, (arr = []))
     arr.push(v)
   }
+  // Fuse a cluster ONLY when it is a tight local knot (a rasterized crossing). The
+  // union-find is transitive over ≤radius micro-edges, so a noisy/textured patch —
+  // where junctions sit within radius all across it — would otherwise chain into ONE
+  // cluster and collapse a whole region to a point, dragging even border vertices to
+  // the centroid. Bounding the cluster's pairwise SPAN keeps the weld a local crossing
+  // merge; an over-spread cluster is left untouched (its micro-edges survive), the safe
+  // pre-weld fallback.
+  const spanCap = radius * 2
   const target = new Map<number, { x: number; y: number }>() // vertex id → fused position
+  const fusedRoots = new Set<number>()
   for (const [root, members] of [...clusters.entries()].sort((a, b) => a[0] - b[0])) {
     if (members.length < 2) continue
     members.sort((a, b) => a - b)
+    const live = members.map((id) => byId.get(id)).filter((v): v is Vertex => v != null)
+    if (live.length < 2) continue
+    let span = 0
     let sx = 0
     let sy = 0
-    let n = 0
-    for (const id of members) {
-      const v = byId.get(id)
-      if (!v) continue
-      sx += v.x
-      sy += v.y
-      n++
+    for (let i = 0; i < live.length; i++) {
+      sx += live[i].x
+      sy += live[i].y
+      for (let j = i + 1; j < live.length; j++) span = Math.max(span, Math.hypot(live[i].x - live[j].x, live[i].y - live[j].y))
     }
-    if (n === 0) continue
-    const cx = sx / n
-    const cy = sy / n
+    if (span > spanCap) continue // too spread to be a single crossing — leave it
+    let cx = sx / live.length
+    let cy = sy / live.length
+    // A cluster that includes a frame junction stays ON the frame: moving it inward
+    // would pull the region's boundary off the image edge, opening a sliver gap where
+    // it should bleed to the border. Clamp each axis to any frame edge a member sits on.
+    for (const v of live) {
+      if (v.x <= 0) cx = 0
+      else if (v.x >= width) cx = width
+      if (v.y <= 0) cy = 0
+      else if (v.y >= height) cy = height
+    }
+    fusedRoots.add(root)
     for (const id of members) {
       target.set(id, { x: cx, y: cy })
       if (id !== root) fused.set(id, root)
@@ -154,16 +174,29 @@ export function weldJunctionClusters(
       sv.y = cy
     }
   }
-  if (fused.size === 0) {
-    removedEdges.clear()
-    return { fused, removedEdges }
-  }
+  // Contract only the micro-edges inside a FUSED cluster; those in a rejected
+  // (over-spread) cluster stay as real edges, so a noisy patch is left as-is.
+  for (const e of candidates) if (fusedRoots.has(find(e.startVertex!))) removedEdges.add(e.id)
+  if (fused.size === 0) return { fused, removedEdges }
 
   // --- drop the contracted micro-edges, re-anchor every survivor on the fused vertex
+  const survivorOf = (v: number | null | undefined): number | null =>
+    v == null ? null : fused.get(v) ?? v
   let w = 0
   for (const e of edges) {
     if (removedEdges.has(e.id)) continue
     if (!e.closed) {
+      // An edge whose BOTH endpoints fuse into the SAME survivor collapses to a
+      // self-loop (start===end — a zero-length degenerate when it had no interior).
+      // Contract it too, exactly like a micro-edge: leaving a start===end open edge
+      // in the graph would strand snapCoCircularLoops (it keys arcs on the endpoints)
+      // and the node editor. Excised from every loop below.
+      const sFused = e.startVertex != null && fused.has(e.startVertex)
+      const eFused = e.endVertex != null && fused.has(e.endVertex)
+      if ((sFused || eFused) && survivorOf(e.startVertex) === survivorOf(e.endVertex)) {
+        removedEdges.add(e.id)
+        continue
+      }
       const sPos = e.startVertex != null ? target.get(e.startVertex) : undefined
       if (sPos) {
         e.nodes[0] = shiftNode(e.nodes[0], sPos.x, sPos.y)

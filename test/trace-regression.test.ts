@@ -77,6 +77,14 @@ for (const c of GOLDEN_CORPUS) {
     // Junction quality (fields exist once the golden is re-blessed; skip until then).
     // Unresolved junction clusters must never grow; boundary jaggedness may worsen
     // only within tolerance (one-sided — improvements always pass).
+    //
+    // The junctionClusters gate is DELIBERATELY zero-tolerance: for a golden that is 0
+    // (nebula / petals / schild-flat are cluster-free clean art) ANY new cluster fails,
+    // because a cluster appearing on art that had none is a real crossing-resolution
+    // regression. Cases with genuine crossings carry a non-zero golden (headphones-flat
+    // 282, headphones-grad 12, bloom/aurora 3–4) and keep that headroom. If a future
+    // change legitimately trades a cluster for a net win, re-bless the golden (review
+    // the printed diff) rather than loosening this into a ratio.
     if (g.junctionClusters !== undefined && rec.junctionClusters !== undefined) {
       assert.ok(
         rec.junctionClusters <= g.junctionClusters,

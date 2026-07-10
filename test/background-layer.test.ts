@@ -103,6 +103,68 @@ test('bands of a posterized ramp merge; a distinct disc survives', () => {
   assert.ok(labels.some((l) => l > 0 && l < BANDS), 'input labels untouched')
 })
 
+test('a large grown union does not DILUTE-absorb a small distinct candidate', () => {
+  // The gate must judge each candidate on ITS OWN pixels, not the whole grown union.
+  // Here the ramp is posterized into MANY bands, so by the time a small distinct green
+  // patch (adjacent only to the last band) is considered, the accepted background is
+  // large. A union-wide mean would drown the patch's error and absorb it — and with
+  // removeBackground composed in, DELETE it. This is also the palette-path colour-class
+  // risk in miniature: a foreground component whose error a big background hides.
+  const W2 = 128, H2 = 64, N = 8
+  const labels = new Int32Array(W2 * H2)
+  const src = new Float64Array(W2 * H2 * 3)
+  for (let y = 0; y < H2; y++)
+    for (let x = 0; x < W2; x++) {
+      const i = y * W2 + x
+      const t = x / (W2 - 1)
+      src[i * 3] = 40 + t * 170
+      src[i * 3 + 1] = 40
+      src[i * 3 + 2] = 210 - t * 170
+      labels[i] = Math.min(N - 1, Math.floor((x / W2) * N))
+      if (x >= W2 - 12 && x < W2 - 4 && y >= 28 && y < 36) {
+        labels[i] = N // a small saturated green patch next to the last band
+        src[i * 3] = 0
+        src[i * 3 + 1] = 220
+        src[i * 3 + 2] = 0
+      }
+    }
+  const sums = Array.from({ length: N + 1 }, () => ({ r: 0, g: 0, b: 0, n: 0 }))
+  for (let i = 0; i < labels.length; i++) {
+    const s = sums[labels[i]]
+    s.r += src[i * 3]; s.g += src[i * 3 + 1]; s.b += src[i * 3 + 2]; s.n++
+  }
+  const palette = sums.map((s) => ({ r: s.r / s.n, g: s.g / s.n, b: s.b / s.n }))
+  const samples: RegionSamples[] = sums.map((_, l) => {
+    const xs: number[] = [], ys: number[] = [], rs: number[] = [], gs: number[] = [], bs: number[] = []
+    for (let i = 0; i < labels.length; i++) {
+      if (labels[i] !== l) continue
+      xs.push(i % W2); ys.push((i / W2) | 0); rs.push(src[i * 3]); gs.push(src[i * 3 + 1]); bs.push(src[i * 3 + 2])
+    }
+    return { xs: Float64Array.from(xs), ys: Float64Array.from(ys), rs: Float64Array.from(rs), gs: Float64Array.from(gs), bs: Float64Array.from(bs), n: xs.length }
+  })
+  const union = uniteBackgroundGradient(labels, W2, H2, 0, samples, palette)
+  assert.ok(union, 'the ramp bands still merge')
+  assert.ok(!union!.set.includes(N), 'the small green patch is NOT swallowed by the large union')
+  for (let i = 0; i < labels.length; i++) {
+    if (labels[i] === N) assert.equal(union!.labels[i], N, 'the patch keeps its own label (survives)')
+  }
+})
+
+test('a flat-marker-pinned band is never absorbed into the union', () => {
+  // A flat marker says "keep this region flat". Even where the gradient would explain
+  // a band, a pinned label must stay out of the union (user intent overrides). Pin the
+  // last ramp band (3): growth still reaches 0→1→2, but 3 is excluded and survives.
+  const { labels, palette, samples } = rampWithDisc()
+  const union = uniteBackgroundGradient(labels, W, H, 0, samples, palette, new Set([3]))
+  assert.ok(union, 'the other bands still merge')
+  assert.ok(!union!.set.includes(3), 'the pinned band is not absorbed')
+  for (let i = 0; i < labels.length; i++) {
+    if (labels[i] === 3) assert.equal(union!.labels[i], 3, 'the pinned band keeps its label')
+  }
+  // Pinning the seed itself is a hard no-op (the background must stay flat entirely).
+  assert.equal(uniteBackgroundGradient(labels, W, H, 0, samples, palette, new Set([0])), null)
+})
+
 test('nothing to merge ⇒ null (flat background + disc)', () => {
   // ONE flat background colour (label 0) with a green disc (label 1) inside it.
   // The seed's only neighbour is the disc; absorbing it would force the union
@@ -211,13 +273,20 @@ test('removeBackground × backgroundGradient: the whole united background is dro
   // bands still ship. That is the weakness the union fixes as a detector.
   assert.equal(removed.items.length, plain.items.length - 1, 'one band dropped')
 
-  // Together: the union defines the background, removeBackground deletes all of it.
-  // Nothing but the foreground shape survives — and no orphaned union gradient.
-  assert.equal(both.items.length, 1, 'only the foreground shape survives')
-  assert.equal(both.items[0].kind === 'path' && both.items[0].fill, '#00dc00')
+  // Together: the union defines the background, removeBackground deletes it — dropping
+  // FAR more than removeBackground alone (the whole gradient-explained band-set, not one
+  // band), so `both` ships far fewer items than `removed`. The foreground green shape
+  // survives, and there is no orphaned union gradient painted behind.
+  assert.ok(both.items.length < removed.items.length, 'the union drops the whole background, not one band')
+  assert.ok(both.items.some((i) => i.kind === 'path' && i.fill === '#00dc00'), 'the foreground shape survives')
+  // The candidate-only render gate (backgroundLayer.ts) judges each band on ITS OWN
+  // pixels, not the whole grown union — so a band the fitted gradient cannot render
+  // within tolerance is NOT diluted into the large background and silently deleted.
+  // Whatever survives is a FLAT region the gradient could not explain; the dropped
+  // union left nothing gradient-painted behind.
   assert.ok(
-    !both.items.some((i) => i.kind === 'path' && i.gradient),
-    'the united background was dropped, not painted',
+    both.items.every((i) => i.kind === 'path' && !i.gradient),
+    'survivors are flat; the united background was dropped, not painted',
   )
 })
 

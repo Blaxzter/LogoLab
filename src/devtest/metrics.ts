@@ -398,6 +398,14 @@ export function topologyMetrics(doc: EditableDoc): TopologyMetrics {
 
   // jaggedness — over shared edges when the doc carries the graph (each boundary
   // once), otherwise over every visible path item's subpaths.
+  //
+  // NOT directly comparable across the two branches: the subpaths fallback walks each
+  // region's CLOSED loop, so (a) an interior boundary shared by two regions is counted
+  // TWICE and (b) the turn at every junction CORNER between edges is included — whereas
+  // the topology branch flattens each open edge in isolation (shared boundary once, no
+  // junction-corner turn). The double-count roughly cancels in the turn/len RATIO, but
+  // the extra junction turns bias the fallback higher. So compare jaggedness only WITHIN
+  // one engine/branch (the golden corpus is all planar ⇒ topology branch throughout).
   let turn = 0
   let len = 0
   if (doc.topology && doc.topology.edges.length > 0) {

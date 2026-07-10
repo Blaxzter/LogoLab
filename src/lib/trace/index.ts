@@ -530,7 +530,12 @@ export async function traceImage(
         // markers ⇒ `removed` IS `q.labels` ⇒ no mask ⇒ byte-identical.
         const dissolved = removed === q.labels ? undefined : changedMask(q.labels, removed)
         const unionSamples = fullRegionSamples(healed, imageData.data, width, q.palette.length, 6000, dissolved)
-        bgUnion = uniteBackgroundGradient(healed, width, height, bgSeed, unionSamples, q.palette)
+        // A FLAT marker ("keep this region flat") pins its label out of the union, so
+        // an explicitly-flat region is never absorbed into the background gradient —
+        // even where the gradient could explain it. Computed on `healed` (the map the
+        // union runs on) so the label ids line up. No flat markers ⇒ empty ⇒ no-op.
+        const pinned = flatMarkerLabels(options, healed, width, height)
+        bgUnion = uniteBackgroundGradient(healed, width, height, bgSeed, unionSamples, q.palette, pinned)
       }
     }
     const labels = bgUnion ? bgUnion.labels : healed

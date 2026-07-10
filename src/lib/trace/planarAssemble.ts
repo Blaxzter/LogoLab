@@ -187,7 +187,7 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): Plan
   // near-coincident junctions so a rasterized crossing becomes ONE vertex. Runs
   // before the G¹ smooth-through so straight-through pairs across the fused
   // crossing become discoverable.
-  if (opts.weldJunctions > 0) weldJunctionClusters(vertices, edges, loopsByLabel, opts.weldJunctions)
+  if (opts.weldJunctions > 0) weldJunctionClusters(vertices, edges, loopsByLabel, net.width, net.height, opts.weldJunctions)
 
   // refineJunctions: weld straight-through junctions to a shared G¹ tangent.
   if (opts.refineJunctions) smoothThroughJunctions(edges, loopsByLabel)
