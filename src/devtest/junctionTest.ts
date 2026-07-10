@@ -13,7 +13,7 @@
 import { getImageData } from '../lib/image'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace'
 import type { VectorizeOptions } from '../types'
-import { serializeDoc } from '../lib/path/model'
+import { serializeDoc, subPathsToD } from '../lib/path/model'
 import type { EditableDoc } from '../lib/path/types'
 import type { PlanarFitOptions } from '../lib/trace/planarFit'
 
@@ -58,11 +58,11 @@ const CASES: Case[] = [
 
 // --- persisted view state ---------------------------------------------------
 interface Cam { x: number; y: number; w: number; h: number } // normalized [0,1] window
-interface State { box: number; gradients: boolean; raster: number; cam: Cam }
+interface State { box: number; gradients: boolean; raster: number; wire: boolean; cam: Cam }
 /** Rasterization sizes offered by the Input-px switch (SVG cases re-render at each;
  *  raster cases only downscale, so they cap at their native size). */
 const RASTER_SIZES = [128, 256, 512, 768, 1024]
-const DEFAULT_STATE: State = { box: 300, gradients: false, raster: 512, cam: { x: 0, y: 0, w: 1, h: 1 } }
+const DEFAULT_STATE: State = { box: 300, gradients: false, raster: 512, wire: false, cam: { x: 0, y: 0, w: 1, h: 1 } }
 function load(): State {
   try { return { ...DEFAULT_STATE, ...JSON.parse(localStorage.getItem('junctionTest') || '{}') } } catch { return { ...DEFAULT_STATE } }
 }
@@ -75,6 +75,7 @@ const status = $<HTMLElement>('status')
 const sizeEl = $<HTMLInputElement>('size')
 const gradEl = $<HTMLInputElement>('grad')
 const resEl = $<HTMLSelectElement>('res')
+const wireEl = $<HTMLInputElement>('wire')
 const zoomEl = $<HTMLElement>('zoom')
 const countEl = $<HTMLElement>('count')
 const fileEl = $<HTMLInputElement>('file')
@@ -144,6 +145,44 @@ function docStats(doc: EditableDoc): { paths: number; nodes: number } {
   return { paths, nodes }
 }
 
+/**
+ * Nodes/edges wireframe of the planar shared-edge graph, as an SVG `<g class="wire">`
+ * overlaid on the (dimmable) fill. Each shared edge is stroked once; every anchor is a
+ * dot keyed by kind (corner = square, smooth = circle); every junction VERTEX is a
+ * larger ring on top. Toggled by the body `.wires` class, so switching it on/off needs
+ * no re-trace. Empty when the doc carries no topology.
+ */
+function wireGroup(doc: EditableDoc): string {
+  const t = doc.topology
+  if (!t || t.edges.length === 0) return ''
+  const f = (n: number): string => n.toFixed(2)
+  // Each anchor / junction is a ZERO-LENGTH <line> with a round (smooth / junction) or
+  // square (corner) cap and a NON-SCALING stroke, so a dot stays a constant SCREEN size
+  // at any zoom — a scaled <circle> r would balloon when you zoom in. A junction is a
+  // wide green cap under a narrow white one → a ring. The edge stroke is non-scaling too.
+  let edges = '', corners = '', smooths = '', verts = ''
+  for (const e of t.edges) {
+    edges += `<path d="${subPathsToD([{ nodes: e.nodes, closed: e.closed }], 2)}"/>`
+    for (const n of e.nodes) {
+      const dot = `<line x1="${f(n.x)}" y1="${f(n.y)}" x2="${f(n.x)}" y2="${f(n.y)}"/>`
+      if (n.kind === 'corner') corners += dot
+      else smooths += dot
+    }
+  }
+  for (const v of t.vertices) {
+    const at = `x1="${f(v.x)}" y1="${f(v.y)}" x2="${f(v.x)}" y2="${f(v.y)}"`
+    verts += `<line class="v-out" ${at}/><line class="v-in" ${at}/>`
+  }
+  return `<g class="wire"><g class="w-edge">${edges}</g><g class="w-corner">${corners}</g><g class="w-smooth">${smooths}</g><g class="w-vert">${verts}</g></g>`
+}
+
+/** The filled trace wrapped in a dimmable `.fill` group, plus the wireframe overlay —
+ *  one SVG sharing the camera viewBox. Default (wires off) renders identically to fill. */
+function cellSvg(doc: EditableDoc, w: number, h: number): string {
+  const inner = serializeDoc(doc, 2).replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '')
+  return `<svg viewBox="0 0 ${w} ${h}"><g class="fill">${inner}</g>${wireGroup(doc)}</svg>`
+}
+
 /** A camera-driven box: source shown via <image>, a trace via its serialized svg. */
 function camBox(inner: string, w: number, h: number): HTMLElement {
   const box = document.createElement('div')
@@ -185,7 +224,8 @@ async function renderRow(name: string, image: ImageData, displaySrc: string, gra
     const doc = await traceImage(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients, ...v.opts, planarFit: v.planarFit })
     const s = docStats(doc)
     const j = doc.topology?.vertices.length ?? 0 // junction vertices — watch this across the Input-px switch
-    cells.append(cell(`<b>${v.name}</b><span>${s.paths}p · ${s.nodes}n · ${j}j</span>`, v.cls ?? '', camBox(serializeDoc(doc, 2), W, H)))
+    const e = doc.topology?.edges.length ?? 0 // shared edges
+    cells.append(cell(`<b>${v.name}</b><span>${s.paths}p · ${s.nodes}n · ${e}e · ${j}j</span>`, v.cls ?? '', camBox(cellSvg(doc, W, H), W, H)))
   }
   row.append(h2, cells)
   out.append(row)
@@ -233,11 +273,16 @@ async function addImage(file: File): Promise<void> {
 sizeEl.value = String(state.box)
 gradEl.checked = state.gradients
 resEl.innerHTML = RASTER_SIZES.map((s) => `<option value="${s}"${s === state.raster ? ' selected' : ''}>${s}px</option>`).join('')
+wireEl.checked = state.wire
+document.body.classList.toggle('wires', state.wire)
 document.documentElement.style.setProperty('--box', `${state.box}px`)
 sizeEl.addEventListener('input', () => { state.box = +sizeEl.value; document.documentElement.style.setProperty('--box', `${state.box}px`); save() })
 gradEl.addEventListener('change', () => { state.gradients = gradEl.checked; save(); void rebuild() })
 // Input-px switch: SVG cases re-rasterize at the chosen size; watch nodes/junctions move.
 resEl.addEventListener('change', () => { state.raster = +resEl.value; save(); void rebuild() })
+// Nodes/edges overlay: pure display — flip a body class, no re-trace. The wireframe is
+// already in every cell (hidden by default); this just reveals it and dims the fills.
+wireEl.addEventListener('change', () => { state.wire = wireEl.checked; save(); document.body.classList.toggle('wires', state.wire) })
 $('reset').addEventListener('click', () => { state.cam = { x: 0, y: 0, w: 1, h: 1 }; applyCam() })
 fileEl.addEventListener('change', () => { const f = fileEl.files?.[0]; if (f) void addImage(f); fileEl.value = '' })
 ;['dragover', 'dragenter'].forEach((t) => dropEl.addEventListener(t, (e) => { e.preventDefault(); dropEl.classList.add('over') }))
