@@ -1,5 +1,5 @@
 // Dev-only A/B view for planar trace FEATURES (served by Vite at
-// /vectorize-junctions.html). Traces the example corpus — plus any image you drop
+// /vectorize-ab.html). Traces the example corpus — plus any image you drop
 // in — with the planar engine under each VARIANT, side by side, so a change can be
 // JUDGED VISUALLY on real logos, not just corpus metrics.
 //
@@ -16,8 +16,6 @@ import type { VectorizeOptions } from '../types'
 import { serializeDoc } from '../lib/path/model'
 import type { EditableDoc } from '../lib/path/types'
 import type { PlanarFitOptions } from '../lib/trace/planarFit'
-
-const MAX_DIM = 512
 
 /** One trace configuration rendered per case. `planarFit` overrides the fit
  *  tunables; `opts` overrides any other VectorizeOptions (e.g. backgroundGradient). */
@@ -40,12 +38,31 @@ const CASES: Case[] = [
   { name: 'aurora', kind: 'svg', src: '/examples/aurora.svg' },
   { name: 'nebula', kind: 'png', src: '/examples/nebula.png' },
   { name: 'petals', kind: 'png', src: '/examples/petals.png' },
+  // Handcrafted "difficult case" corpus — authored as SVG (src/devtest/genEdgeCases.ts →
+  // regenerate with `node --experimental-strip-types src/devtest/genEdgeCases.ts`), so the
+  // Input-px switch rasterizes each at any size: same vector content, varying resolution.
+  // Each isolates one hard problem; flip "gradients on" and compare Weld / BG-gradient.
+  { name: '⟐ bg-ramp — posterization bands', kind: 'svg', src: '/examples/edge-cases/bg-ramp.svg' },
+  { name: '⟐ bg-ramp-twin — colour-class DELETE risk', kind: 'svg', src: '/examples/edge-cases/bg-ramp-twin.svg' },
+  { name: '⟐ cross-bars — junction cluster (weld)', kind: 'svg', src: '/examples/edge-cases/cross-bars.svg' },
+  { name: '⟐ concentric — circle/concentric snap', kind: 'svg', src: '/examples/edge-cases/concentric.svg' },
+  { name: '⟐ hairlines — sub-pixel strokes', kind: 'svg', src: '/examples/edge-cases/hairlines.svg' },
+  { name: '⟐ aa-seam — nearest-colour crispness', kind: 'svg', src: '/examples/edge-cases/aa-seam.svg' },
+  { name: '⟐ checker — high-frequency aliasing', kind: 'svg', src: '/examples/edge-cases/checker.svg' },
+  { name: '⟐ radial-glow — 2-D gradient field', kind: 'svg', src: '/examples/edge-cases/radial-glow.svg' },
+  { name: '⟐ gradient-flat — render gate', kind: 'svg', src: '/examples/edge-cases/gradient-flat.svg' },
+  { name: '⟐ sharp-star — corner detection', kind: 'svg', src: '/examples/edge-cases/sharp-star.svg' },
+  { name: '⟐ annulus — hole winding + alpha', kind: 'svg', src: '/examples/edge-cases/annulus.svg' },
+  { name: '⟐ overlap — layer decomposition', kind: 'svg', src: '/examples/edge-cases/overlap.svg' },
 ]
 
 // --- persisted view state ---------------------------------------------------
 interface Cam { x: number; y: number; w: number; h: number } // normalized [0,1] window
-interface State { box: number; gradients: boolean; cam: Cam }
-const DEFAULT_STATE: State = { box: 300, gradients: false, cam: { x: 0, y: 0, w: 1, h: 1 } }
+interface State { box: number; gradients: boolean; raster: number; cam: Cam }
+/** Rasterization sizes offered by the Input-px switch (SVG cases re-render at each;
+ *  raster cases only downscale, so they cap at their native size). */
+const RASTER_SIZES = [128, 256, 512, 768, 1024]
+const DEFAULT_STATE: State = { box: 300, gradients: false, raster: 512, cam: { x: 0, y: 0, w: 1, h: 1 } }
 function load(): State {
   try { return { ...DEFAULT_STATE, ...JSON.parse(localStorage.getItem('junctionTest') || '{}') } } catch { return { ...DEFAULT_STATE } }
 }
@@ -57,6 +74,7 @@ const out = $('out')
 const status = $<HTMLElement>('status')
 const sizeEl = $<HTMLInputElement>('size')
 const gradEl = $<HTMLInputElement>('grad')
+const resEl = $<HTMLSelectElement>('res')
 const zoomEl = $<HTMLElement>('zoom')
 const countEl = $<HTMLElement>('count')
 const fileEl = $<HTMLInputElement>('file')
@@ -166,7 +184,8 @@ async function renderRow(name: string, image: ImageData, displaySrc: string, gra
   for (const v of VARIANTS) {
     const doc = await traceImage(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients, ...v.opts, planarFit: v.planarFit })
     const s = docStats(doc)
-    cells.append(cell(`<b>${v.name}</b><span>${s.paths}p · ${s.nodes}n</span>`, v.cls ?? '', camBox(serializeDoc(doc, 2), W, H)))
+    const j = doc.topology?.vertices.length ?? 0 // junction vertices — watch this across the Input-px switch
+    cells.append(cell(`<b>${v.name}</b><span>${s.paths}p · ${s.nodes}n · ${j}j</span>`, v.cls ?? '', camBox(serializeDoc(doc, 2), W, H)))
   }
   row.append(h2, cells)
   out.append(row)
@@ -177,8 +196,8 @@ interface Extra { name: string; image: ImageData; url: string }
 const extras: Extra[] = []
 
 async function imageFor(c: Case): Promise<ImageData> {
-  if (c.kind === 'svg') return getImageData(c.src, MAX_DIM, await (await fetch(c.src)).text())
-  return getImageData(c.src, MAX_DIM)
+  if (c.kind === 'svg') return getImageData(c.src, state.raster, await (await fetch(c.src)).text())
+  return getImageData(c.src, state.raster)
 }
 
 let runToken = 0
@@ -203,7 +222,7 @@ async function rebuild(): Promise<void> {
 async function addImage(file: File): Promise<void> {
   const url = URL.createObjectURL(file)
   const svgText = file.type.includes('svg') ? await file.text() : undefined
-  const image = await getImageData(url, MAX_DIM, svgText)
+  const image = await getImageData(url, state.raster, svgText)
   const e: Extra = { name: file.name, image, url }
   extras.push(e)
   await renderRow(e.name, e.image, e.url, state.gradients, () => { const i = extras.indexOf(e); if (i >= 0) extras.splice(i, 1) })
@@ -213,9 +232,12 @@ async function addImage(file: File): Promise<void> {
 // --- wire controls ----------------------------------------------------------
 sizeEl.value = String(state.box)
 gradEl.checked = state.gradients
+resEl.innerHTML = RASTER_SIZES.map((s) => `<option value="${s}"${s === state.raster ? ' selected' : ''}>${s}px</option>`).join('')
 document.documentElement.style.setProperty('--box', `${state.box}px`)
 sizeEl.addEventListener('input', () => { state.box = +sizeEl.value; document.documentElement.style.setProperty('--box', `${state.box}px`); save() })
 gradEl.addEventListener('change', () => { state.gradients = gradEl.checked; save(); void rebuild() })
+// Input-px switch: SVG cases re-rasterize at the chosen size; watch nodes/junctions move.
+resEl.addEventListener('change', () => { state.raster = +resEl.value; save(); void rebuild() })
 $('reset').addEventListener('click', () => { state.cam = { x: 0, y: 0, w: 1, h: 1 }; applyCam() })
 fileEl.addEventListener('change', () => { const f = fileEl.files?.[0]; if (f) void addImage(f); fileEl.value = '' })
 ;['dragover', 'dragenter'].forEach((t) => dropEl.addEventListener(t, (e) => { e.preventDefault(); dropEl.classList.add('over') }))
