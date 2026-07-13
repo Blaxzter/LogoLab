@@ -40,6 +40,42 @@ function star(cx: number, cy: number, R: number, r: number, n = 5): string {
   return pts.join(' ')
 }
 
+// ---------------------------------------------------------------------------
+// FILLS, NOT STROKES — why these helpers exist
+//
+// These cases used to be authored with `stroke` (`<line stroke-width="44">`, `<circle
+// fill="none" stroke-width="54">`). That renders identically, but it makes the file useless
+// as GROUND TRUTH: a stroked element's visible boundary is the OUTLINE OF THE STROKE (an
+// offset curve with joins and caps), not the path in the `d`/`x1..y2` attributes. A
+// ground-truth reader handed the centerline would either have to reimplement stroke
+// outlining, or — worse — score the centerline and report a confident wrong number.
+//
+// A stroked line IS a rectangle and a stroked circle IS an annulus, so we just author them
+// that way. The pixels are unchanged; the ground truth becomes exact instead of
+// approximate, and svgGround.ts can read it with no offset-curve maths at all.
+// ---------------------------------------------------------------------------
+
+/** The rectangle a butt-capped stroke of width `w` along (x1,y1)→(x2,y2) actually paints. */
+function thickLine(x1: number, y1: number, x2: number, y2: number, w: number): string {
+  const dx = x2 - x1, dy = y2 - y1
+  const len = Math.hypot(dx, dy) || 1
+  const px = (-dy / len) * (w / 2), py = (dx / len) * (w / 2)
+  const p = (x: number, y: number): string => `${x.toFixed(2)},${y.toFixed(2)}`
+  return [p(x1 + px, y1 + py), p(x2 + px, y2 + py), p(x2 - px, y2 - py), p(x1 - px, y1 - py)].join(' ')
+}
+
+/** A circle as an explicit path (two 180° arcs), so it composes into a multi-subpath ring. */
+function circleD(cx: number, cy: number, r: number): string {
+  return `M${(cx - r).toFixed(2)},${cy} A${r},${r} 0 1,0 ${(cx + r).toFixed(2)},${cy} A${r},${r} 0 1,0 ${(cx - r).toFixed(2)},${cy} Z`
+}
+
+/** The annulus a stroked circle actually paints: outer ring + inner hole, even-odd filled.
+ *  A real hole in the winding, which is exactly what the `annulus` case is meant to test. */
+function ring(cx: number, cy: number, rCenter: number, w: number, fill: string): string {
+  const d = `${circleD(cx, cy, rCenter + w / 2)} ${circleD(cx, cy, rCenter - w / 2)}`
+  return `<path d="${d}" fill="${fill}" fill-rule="evenodd"/>`
+}
+
 // --- cases ------------------------------------------------------------------
 const CASES: { name: string; note: string; make: () => string }[] = [
   {
@@ -68,8 +104,8 @@ const CASES: { name: string; note: string; make: () => string }[] = [
     make: () =>
       svg(
         `<rect width="${V}" height="${V}" fill="${WHITE}"/>` +
-          `<line x1="20" y1="20" x2="236" y2="236" stroke="${RED}" stroke-width="44"/>` +
-          `<line x1="236" y1="20" x2="20" y2="236" stroke="${BLUE}" stroke-width="44"/>`,
+          `<polygon points="${thickLine(20, 20, 236, 236, 44)}" fill="${RED}"/>` +
+          `<polygon points="${thickLine(236, 20, 20, 236, 44)}" fill="${BLUE}"/>`,
       ),
   },
   {
@@ -89,7 +125,8 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       const bars = ws
         .map((w, i) => { const cx = V * (0.12 + i * 0.11); return `<rect x="${(cx - w / 2).toFixed(2)}" y="25.6" width="${w}" height="204.8" fill="${INK}"/>` })
         .join('')
-      return svg(`<rect width="${V}" height="${V}" fill="${WHITE}"/>${bars}<line x1="76.8" y1="0" x2="179.2" y2="256" stroke="${rgb(180, 40, 60)}" stroke-width="1"/>`)
+      const diag = `<polygon points="${thickLine(76.8, 0, 179.2, 256, 1)}" fill="${rgb(180, 40, 60)}"/>`
+      return svg(`<rect width="${V}" height="${V}" fill="${WHITE}"/>${bars}${diag}`)
     },
   },
   {
@@ -139,12 +176,8 @@ const CASES: { name: string; note: string; make: () => string }[] = [
   },
   {
     name: 'annulus',
-    note: 'rings with a transparent hole → nonzero winding + alpha',
-    make: () =>
-      svg(
-        `<circle cx="128" cy="128" r="83" fill="none" stroke="${RED}" stroke-width="54"/>` +
-          `<circle cx="128" cy="128" r="27" fill="none" stroke="${rgb(22, 150, 150)}" stroke-width="23"/>`,
-      ),
+    note: 'rings with a transparent hole → even-odd winding + alpha',
+    make: () => svg(ring(128, 128, 83, 54, RED) + ring(128, 128, 27, 23, rgb(22, 150, 150))),
   },
   {
     name: 'overlap',
