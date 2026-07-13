@@ -1,4 +1,4 @@
-// Dev-only pipeline DEBUG view. Served by Vite at /vectorize-debug.html.
+// Dev-only pipeline DEBUG view. Served by Vite at /labs/vectorize-debug.html.
 //
 // Where vectorize-test.html scores the FINAL output, this page exposes the
 // INTERMEDIATE stages of the structure-first pipeline so you can see WHY a trace

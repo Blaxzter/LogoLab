@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LogoLab · Ground-truth review</title>
+    <style>
+      :root { color-scheme: light; --box: 260px; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; background: #f4f4f6; color: #1a1a22; }
+      /* Only the CONTROL BAR is pinned. The explanation lives in a <details> that scrolls
+         away and remembers its state — a fixed wall of prose leaves no room for the data,
+         which is the entire point of the page. */
+      header { border-bottom: 1px solid #e2e2e8; background: #fff; position: sticky; top: 0; z-index: 5; }
+      .topbar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 8px 20px; }
+      .topbar h1 { margin: 0; font-size: 13px; font-weight: 700; white-space: nowrap; }
+      .topbar .sep { width: 1px; height: 18px; background: #e2e2e8; }
+      details.about { border-top: 1px dashed #e2e2e8; }
+      details.about > summary {
+        cursor: pointer; padding: 6px 20px; font-size: 11px; color: #6a6a76; list-style: none;
+        user-select: none;
+      }
+      details.about > summary::-webkit-details-marker { display: none; }
+      details.about > summary::before { content: '▸ '; color: #9a9aa6; }
+      details.about[open] > summary::before { content: '▾ '; }
+      details.about > summary:hover { color: #1a1a22; background: #fafafc; }
+      .about-body { padding: 0 20px 12px; max-height: 46vh; overflow-y: auto; }
+      .about-body p { margin: 0 0 8px; color: #6a6a76; max-width: 96ch; font-size: 12px; }
+      header code { background: #f0f0f4; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+      .controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+      .controls label { display: inline-flex; gap: 6px; align-items: center; }
+      button, select { font: inherit; padding: 4px 10px; border: 1px solid #cfcfd8; border-radius: 6px; background: #fafafc; cursor: pointer; }
+      button:hover, select:hover { background: #f0f0f4; }
+      #zoom { font: 11px ui-monospace, monospace; color: #4338ca; min-width: 3.2em; }
+      #status { padding: 8px 20px; color: #6a6a76; }
+
+      .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 11px; color: #55555f; margin-top: 8px;
+                border-top: 1px dashed #e2e2e8; padding-top: 8px; }
+      .legend div { max-width: 32ch; }
+      .legend b { color: #1a1a22; }
+      tr.na td { color: #9a9aa6; }
+      tr.na td.head.na { color: #9a9aa6; font-weight: 600; }
+      tr.nawhy td { font-size: 10px; color: #9a9aa6; padding-top: 0; padding-bottom: 6px; border-bottom: 1px solid #f4f4f6; }
+      .bar.zero { background: #f8fafc; border: 1px dashed #cbd5e1; }
+      .bar.zero span { position: absolute; inset: 0; font-size: 9px; color: #94a3b8; text-align: center; line-height: 8px; }
+      .ramp { display: inline-block; width: 90px; height: 8px; border-radius: 2px; vertical-align: middle;
+              background: linear-gradient(90deg, #0a0c22, #283cb4, #1ea0aa, #78c850, #fadc3c, #f0781e, #c81414); }
+
+      .row { padding: 16px 20px; border-bottom: 1px solid #e8e8ee; }
+      .row h2 { margin: 0 0 10px; font-size: 14px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+      .dim { color: #9a9aa6; font-weight: 400; font-size: 11px; }
+      .badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: .03em; }
+      .badge.fail { background: #fee2e2; color: #991b1b; }
+      .cells { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+      .cell { width: var(--box); }
+      .cell .label { display: flex; flex-direction: column; margin-bottom: 5px; font-size: 11px; color: #6a6a76; min-height: 3.2em; }
+      .cell .label b { color: #1a1a22; font-weight: 600; }
+      .box {
+        width: var(--box); height: var(--box); border: 1px solid #d8d8e0; border-radius: 8px;
+        overflow: hidden; background-color: #fff; touch-action: none; cursor: grab;
+        background-image:
+          linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
+        background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      }
+      .box:active { cursor: grabbing; }
+      .box svg, .box img { width: 100%; height: 100%; display: block; }
+
+      .panel { margin-top: 12px; background: #fff; border: 1px solid #e2e2e8; border-radius: 8px; padding: 10px 12px; }
+      table.gates { border-collapse: collapse; width: 100%; font-size: 12px; }
+      table.gates th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+                       color: #8a8a96; font-weight: 600; padding: 3px 8px 5px 0; border-bottom: 1px solid #eee; }
+      table.gates td { padding: 4px 8px 4px 0; border-bottom: 1px solid #f4f4f6; vertical-align: middle; }
+      table.gates .num { text-align: right; font: 11px ui-monospace, monospace; }
+      table.gates td.k { font-weight: 600; white-space: nowrap; }
+      table.gates td.rule { color: #8a8a96; font: 11px ui-monospace, monospace; white-space: nowrap; }
+      table.gates td.v { color: #1a1a22; font-weight: 700; }
+      table.gates td.head { font-weight: 700; }
+      table.gates tr.ok td.head { color: #15803d; }
+      table.gates tr.warn td.head { color: #b45309; }
+      table.gates tr.tight td.head { color: #c2410c; }
+      table.gates tr.fail td.head, table.gates tr.fail td.v { color: #b91c1c; }
+      .barcell { width: 34%; }
+      .bar { position: relative; height: 8px; border-radius: 4px; background: #eef0f4; overflow: hidden; }
+      .bar i { position: absolute; left: 0; top: 0; bottom: 0; display: block; border-radius: 4px; }
+      .bar i.ok { background: #22c55e; } .bar i.warn { background: #f59e0b; }
+      .bar i.tight { background: #f97316; } .bar i.fail { background: #ef4444; }
+
+      .ungated, .warnbox, .note { margin-top: 8px; font-size: 11px; border-radius: 6px; padding: 6px 8px; }
+      .ungated { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
+      .warnbox { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+      .note { background: #fffbeb; color: #78350f; border: 1px solid #fde68a; }
+      code { font: 11px ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="topbar">
+        <h1>Ground truth</h1>
+        <span class="sep"></span>
+        <div class="controls">
+          <label>Box <input id="size" type="range" min="180" max="900" value="260" /></label>
+          <label>Raster <select id="res"></select></label>
+          <label>Heat <select id="heat"></select></label>
+          <button id="reset">Reset view</button>
+          <span id="zoom">1.0×</span>
+        </div>
+      </div>
+      <details class="about" id="about">
+        <summary>What this page is, and how to read each panel</summary>
+        <div class="about-body">
+          <p>
+            The sibling page (<a href="/labs/vectorize-golden.html">golden corpus</a>) compares the tracer to its own previous
+            output. That catches drift, but it has no notion of <em>correct</em> — and its ±12% count bands actively
+            forbid big improvements. This page scores against the <b>authored SVG that produced the pixels</b>: each case
+            is rasterized, traced, and the recovered vectors are compared to the art itself. Every gate is an absolute
+            distance from correct (<b>0px boundary error, parsimony 1.0, every region recovered</b>), so improvements
+            move numbers down and nothing ever needs re-blessing. Nothing here reads or writes
+            <code>test/golden/trace-baseline.json</code>.
+          </p>
+          <p>
+            Drag any box to <b>pan</b>, wheel to <b>zoom</b>; all boxes move together, so you can pin one detail across
+            the truth, the trace and the error maps at once.
+          </p>
+          <div class="legend">
+            <div><b>truth</b> — the authored SVG. This is the answer sheet, not another guess.</div>
+            <div><b>raster input</b> — the SVG rasterized at the chosen size; the only thing the tracer sees. Changing
+              the raster size and watching the numbers stay flat is the <b>scale-stability</b> check.</div>
+            <div><b>boundary overlay</b> — authored boundary in <span style="color:#16a34a"><b>green</b></span>, traced
+              in <span style="color:#c026d3"><b>magenta</b></span>. Where the tracer is right they overprint; where it
+              is wrong you see one colour alone.</div>
+            <div><b>miss heat</b> — the authored boundary, coloured by how far the nearest traced boundary is.
+              <span class="ramp"></span> Hot = the tracer <b>missed</b> that arc.</div>
+            <div><b>invented heat</b> — the traced boundary, coloured by distance to the nearest authored boundary. Hot
+              = the tracer <b>invented</b> an edge the art does not have.</div>
+            <div><b>dropped regions</b> — red marks a flat region the composited art contains and the trace does not.
+              This is the failure raster fidelity is blind to: merging a small low-contrast region into its neighbour
+              barely moves ΔE or SSIM while destroying the topology.</div>
+          </div>
+          <div class="note" style="max-width:96ch">
+            <b>Rasterizer note.</b> This page rasterizes the SVG with the <em>browser canvas</em>; the Node runner
+            (<code>src/devtest/groundTruthRun.ts</code>) uses <em>resvg</em>. Anti-aliasing differs slightly between
+            them, so numbers here can differ from the CLI in the last decimal. The corpus, the trace options, the gates
+            and the scoring functions are the same modules in both (<code>truthCorpus.ts</code>,
+            <code>geomScore.ts</code>).
+          </div>
+        </div>
+      </details>
+    </header>
+    <div id="status">Running…</div>
+    <main id="out"></main>
+    <script type="module" src="/src/devtest/truthView.ts"></script>
+  </body>
+</html>

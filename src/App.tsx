@@ -6,6 +6,7 @@ import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
 import { AppMenu } from './components/AppMenu'
+import { LabPopover } from './components/LabPopover'
 import { SupportPopover } from './components/SupportPopover'
 import { ThemeToggleButton } from './components/ThemeToggle'
 import { TABS, REPO_URL, GithubMark } from './components/navItems'
@@ -72,6 +73,7 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
         <span className="text-xs text-faint">Runs 100% in your browser</span>
         <div className="flex items-center gap-1">
           <ThemeToggleButton />
+          <LabPopover />
           <SupportPopover />
           <a
             href={REPO_URL}

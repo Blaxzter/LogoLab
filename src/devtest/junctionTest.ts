@@ -1,5 +1,5 @@
 // Dev-only A/B view for planar trace FEATURES (served by Vite at
-// /vectorize-ab.html). Traces the example corpus — plus any image you drop
+// /labs/vectorize-ab.html). Traces the example corpus — plus any image you drop
 // in — with the planar engine under each VARIANT, side by side, so a change can be
 // JUDGED VISUALLY on real logos, not just corpus metrics.
 //

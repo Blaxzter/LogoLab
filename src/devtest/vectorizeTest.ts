@@ -1,5 +1,5 @@
 // Dev-only evaluation harness, browser side. Served by Vite at
-// /vectorize-test.html. Runs the real trace engine (potrace WASM + crisp) on the
+// /labs/vectorize-test.html. Runs the real trace engine (potrace WASM + crisp) on the
 // corpus and turns the old eyeball viewer into a SCOREBOARD: it renders the
 // traced doc to pixels with the pure rasterizer and reports the plan §5 metrics
 // (L1 CIELAB, SSIM, P95 ΔE, seam score, path/node/gradient counts, runtime,

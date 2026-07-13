@@ -1,4 +1,4 @@
-import { Download, Eraser, Eye, Wand2 } from 'lucide-react'
+import { Columns2, Download, Eraser, Eye, Gauge, Layers, ShieldCheck, Target, Wand2 } from 'lucide-react'
 import type { Tab } from '../store'
 
 /** The four panel tabs — shared by the desktop header nav and the mobile menu. */
@@ -10,6 +10,46 @@ export const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ]
 
 export const REPO_URL = 'https://github.com/Blaxzter/LogoLab'
+
+/**
+ * The vectorizer's dev harnesses — standalone pages (not React routes), each its
+ * own Vite entry in `vite.config.ts`. Ordered as a story: how the pipeline works,
+ * how variants compare, what CI locks in, what the numbers say. Kept here so the
+ * header popover and the mobile menu list the same set. Adding a page means
+ * adding it to `rollupOptions.input` too, or it 404s in the deployed build.
+ */
+export const LAB_VIEWS: { href: string; label: string; blurb: string; icon: React.ReactNode }[] = [
+  {
+    href: '/labs/vectorize-debug.html',
+    label: 'Pipeline debug',
+    blurb: 'Every intermediate stage: smoothing, discontinuity, regions, paints.',
+    icon: <Layers size={15} />,
+  },
+  {
+    href: '/labs/vectorize-ab.html',
+    label: 'Feature A/B',
+    blurb: 'Trace variants side by side, synced pan/zoom, nodes/edges overlay.',
+    icon: <Columns2 size={15} />,
+  },
+  {
+    href: '/labs/vectorize-golden.html',
+    label: 'Golden corpus',
+    blurb: 'The pictures behind the regression gates, and their headroom.',
+    icon: <ShieldCheck size={15} />,
+  },
+  {
+    href: '/labs/vectorize-truth.html',
+    label: 'Ground truth',
+    blurb: 'Scored against the authored SVG: boundary error, node economy, dropped regions.',
+    icon: <Target size={15} />,
+  },
+  {
+    href: '/labs/vectorize-test.html',
+    label: 'Eval harness',
+    blurb: 'Scoreboard: ΔE, SSIM, seam, node counts, runtime, determinism.',
+    icon: <Gauge size={15} />,
+  },
+]
 
 /** Support links — surfaced together in the header's support popover. */
 export const COFFEE_URL = 'https://www.buymeacoffee.com/fabraham'

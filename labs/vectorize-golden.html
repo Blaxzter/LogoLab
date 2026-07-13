@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LogoLab · Golden corpus review</title>
+    <style>
+      :root { color-scheme: light; --box: 260px; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; background: #f4f4f6; color: #1a1a22; }
+      /* Only the CONTROL BAR is pinned; the explanation collapses into a <details> that
+         remembers its state. A fixed wall of prose leaves no room for the pictures, which
+         are the whole point of the page. */
+      header { border-bottom: 1px solid #e2e2e8; background: #fff; position: sticky; top: 0; z-index: 5; }
+      .topbar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 8px 20px; }
+      .topbar h1 { margin: 0; font-size: 13px; font-weight: 700; white-space: nowrap; }
+      .topbar .sep { width: 1px; height: 18px; background: #e2e2e8; }
+      details.about { border-top: 1px dashed #e2e2e8; }
+      details.about > summary { cursor: pointer; padding: 6px 20px; font-size: 11px; color: #6a6a76;
+                                list-style: none; user-select: none; }
+      details.about > summary::-webkit-details-marker { display: none; }
+      details.about > summary::before { content: '▸ '; color: #9a9aa6; }
+      details.about[open] > summary::before { content: '▾ '; }
+      details.about > summary:hover { color: #1a1a22; background: #fafafc; }
+      .about-body { padding: 0 20px 12px; max-height: 46vh; overflow-y: auto; }
+      .about-body p { margin: 0 0 8px; color: #6a6a76; max-width: 92ch; font-size: 12px; }
+      header code { background: #f0f0f4; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+      .controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+      .controls label { display: inline-flex; gap: 6px; align-items: center; }
+      button, select { font: inherit; padding: 4px 10px; border: 1px solid #cfcfd8; border-radius: 6px; background: #fafafc; cursor: pointer; }
+      button:hover, select:hover { background: #f0f0f4; }
+      #zoom { font: 11px ui-monospace, monospace; color: #4338ca; min-width: 3.2em; }
+      #status { padding: 8px 20px; color: #6a6a76; }
+
+      /* legend -------------------------------------------------------------- */
+      .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 11px; color: #55555f; margin-top: 8px;
+                border-top: 1px dashed #e2e2e8; padding-top: 8px; }
+      .legend div { max-width: 30ch; }
+      .legend b { color: #1a1a22; }
+      .ramp { display: inline-block; width: 90px; height: 8px; border-radius: 2px; vertical-align: middle;
+              background: linear-gradient(90deg, #0a0c22, #283cb4, #1ea0aa, #78c850, #fadc3c, #f0781e, #c81414); }
+      .wirelegend i { font-style: normal; }
+      .wirelegend .sq { color: #e11d48; } .wirelegend .ci { color: #2563eb; } .wirelegend .jn { color: #059669; }
+
+      /* rows / cells -------------------------------------------------------- */
+      .row { padding: 16px 20px; border-bottom: 1px solid #e8e8ee; }
+      .row h2 { margin: 0 0 10px; font-size: 14px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+      .dim { color: #9a9aa6; font-weight: 400; font-size: 11px; }
+      .badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: .03em; }
+      .badge.runs { background: #dcfce7; color: #166534; }
+      .badge.skipped { background: #fee2e2; color: #991b1b; }
+      .badge.grad { background: #ede9fe; color: #5b21b6; }
+      .badge.flat { background: #f1f5f9; color: #475569; }
+      .cells { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+      .cell { width: var(--box); }
+      .cell .label { display: flex; flex-direction: column; margin-bottom: 5px; font-size: 11px; color: #6a6a76; min-height: 2.6em; }
+      .cell .label b { color: #1a1a22; font-weight: 600; }
+      .box {
+        width: var(--box); height: var(--box); border: 1px solid #d8d8e0; border-radius: 8px;
+        overflow: hidden; background-color: #fff; touch-action: none; cursor: grab;
+        background-image:
+          linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
+        background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      }
+      .box:active { cursor: grabbing; }
+      .box svg { width: 100%; height: 100%; display: block; }
+
+      /* wireframe overlay (same scheme as vectorize-ab.html) ------------------ */
+      .wire { display: none; }
+      body.wires .wire { display: inline; }
+      body.wires .fill { opacity: 0.3; }
+      .w-edge path { fill: none; stroke: #0f172a; stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .w-corner line { stroke: #e11d48; stroke-width: 5; stroke-linecap: square; vector-effect: non-scaling-stroke; }
+      .w-smooth line { stroke: #2563eb; stroke-width: 5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+      .w-vert .v-out { stroke: #059669; stroke-width: 9; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+      .w-vert .v-in { stroke: #fff; stroke-width: 4; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+
+      /* gate panel ----------------------------------------------------------- */
+      .panel { margin-top: 12px; background: #fff; border: 1px solid #e2e2e8; border-radius: 8px; padding: 10px 12px; }
+      table.gates { border-collapse: collapse; width: 100%; font-size: 12px; }
+      table.gates th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+                       color: #8a8a96; font-weight: 600; padding: 3px 8px 5px 0; border-bottom: 1px solid #eee; }
+      table.gates td { padding: 4px 8px 4px 0; border-bottom: 1px solid #f4f4f6; vertical-align: middle; }
+      table.gates .num { text-align: right; font: 11px ui-monospace, monospace; }
+      table.gates td.k { font-weight: 600; white-space: nowrap; }
+      table.gates td.rule { color: #8a8a96; font: 11px ui-monospace, monospace; white-space: nowrap; }
+      table.gates td.v { color: #1a1a22; font-weight: 700; }
+      table.gates td.g { color: #6a6a76; }
+      table.gates td.l { color: #b91c1c; }
+      table.gates td.head { font-weight: 700; }
+      table.gates tr.ok td.head { color: #15803d; }
+      table.gates tr.warn td.head { color: #b45309; }
+      table.gates tr.tight td.head { color: #c2410c; }
+      table.gates tr.fail td.head, table.gates tr.fail td.v { color: #b91c1c; }
+      .barcell { width: 34%; }
+      .bar { position: relative; height: 8px; border-radius: 4px; background: #eef0f4; overflow: hidden; }
+      .bar i { position: absolute; left: 0; top: 0; bottom: 0; display: block; border-radius: 4px; }
+      .bar i.ok { background: #22c55e; } .bar i.warn { background: #f59e0b; }
+      .bar i.tight { background: #f97316; } .bar i.fail { background: #ef4444; }
+      .bar.zero { background: #f8fafc; border: 1px dashed #cbd5e1; }
+      .bar.zero span { position: absolute; inset: 0; font-size: 9px; color: #94a3b8; text-align: center; line-height: 8px; }
+
+      .note, .ungated, .soft, .warnbox, .okbox { margin-top: 8px; font-size: 11px; border-radius: 6px; padding: 6px 8px; }
+      .note { background: #fffbeb; color: #78350f; border: 1px solid #fde68a; }
+      .ungated { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
+      .soft { background: #f5f3ff; color: #4c1d95; border: 1px solid #ddd6fe; }
+      .warnbox { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+      .okbox { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+      code { font: 11px ui-monospace, monospace; }
+      .moved { color: #b91c1c; font-weight: 700; }
+      pre { font: 11px ui-monospace, monospace; color: #b91c1c; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="topbar">
+        <h1>Golden corpus</h1>
+        <span class="sep"></span>
+        <div class="controls">
+          <label>Box <input id="size" type="range" min="180" max="900" value="260" /></label>
+          <label>Heat <select id="heat"></select></label>
+          <label><input id="wire" type="checkbox" /> nodes/edges</label>
+          <label><input id="slow" type="checkbox" /> slow cases</label>
+          <button id="reset">Reset view</button>
+          <span id="zoom">1.0×</span>
+        </div>
+      </div>
+      <details class="about" id="about">
+        <summary>What this page is, and how to read each panel</summary>
+        <div class="about-body">
+          <p>
+            Every case in <code>GOLDEN_CORPUS</code>, rendered. The regression suite asserts numbers against
+            <code>test/golden/trace-baseline.json</code>; this page shows the pictures behind those numbers, and how
+            much room each gate has left before it fails. The case list and trace options are imported from the same
+            module the Node gate uses (<code>src/devtest/traceCorpus.ts</code>), and the metrics come from the same
+            <code>scoreDoc()</code> the gate calls — so what you see is what CI measures. Drag any box to <b>pan</b>,
+            wheel to <b>zoom</b>; every box moves together, so you can inspect one detail across source, render and
+            error map at the same framing. Read-only: nothing here re-blesses anything.
+          </p>
+          <p>
+            <b>This page measures drift, not correctness.</b> Every number is relative to the tracer's own last-blessed
+            output, so a case can sit at 100% headroom while being wrong — <code>bloom</code> passes every gate here and
+            still drops two of its seven regions. For "is it <em>correct</em>", see
+            <a href="/labs/vectorize-truth.html">ground truth</a>, which scores against the authored SVG instead.
+          </p>
+          <div class="legend">
+            <div><b>source</b> — the pixels the tracer is handed, after the corpus's box-downscale.</div>
+            <div><b>current trace</b> — the live vector output (SVG). Toggle <b>nodes/edges</b> to see the shared-edge
+              graph whose counts are gated: <span class="wirelegend"><i class="sq">▪</i> corner <i class="ci">●</i>
+              smooth <i class="jn">◎</i> junction</span>.</div>
+            <div><b>rasterizeDoc render</b> — the trace rasterized. This, not the SVG, is what every fidelity metric is
+              computed against.</div>
+            <div><b>ΔE error map</b> — per-pixel CIE76 ΔE between source and render. <span class="ramp"></span>
+              0 → scale. ΔE ≈ 2.3 is the just-noticeable threshold, so anything green-and-up is visible.</div>
+            <div><b>seam map</b> — <em>only</em> the pixels the <code>seamMax</code> gate actually scores (a traced
+              boundary that is NOT a correctly-reproduced edge). <b>✚</b> marks the single worst pixel — that one pixel
+              <em>is</em> the gated <code>seamMax</code>.</div>
+            <div><b>headroom</b> — how much of a gate's allowance is still unused. 100% = sitting exactly on the golden;
+              0% = about to fail. A gate that never leaves 100% is not doing any work.</div>
+          </div>
+        </div>
+      </details>
+    </header>
+    <div id="status">Running…</div>
+    <main id="out"></main>
+    <script type="module" src="/src/devtest/goldenView.ts"></script>
+  </body>
+</html>
