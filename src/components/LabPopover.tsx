@@ -1,14 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bug, ExternalLink } from 'lucide-react'
+import { Bug } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { LAB_VIEWS } from './navItems'
 
 const POPOVER_W = 320
 
 /**
- * Header entry to the vectorizer's dev harnesses (see {@link LAB_VIEWS}). They're
- * standalone HTML entries rather than React routes, so every item is a plain link
- * opened in a new tab — the studio keeps its state while you go poke at a trace.
+ * Header entry to the vectorizer's harnesses (see {@link LAB_VIEWS}) — lazily-loaded
+ * routes under /labs, so following one is an in-app navigation, not a new tab.
  * Positioning/dismissal mirror {@link SupportPopover}: portaled to <body> with
  * fixed coords so the header's stacking can't clip it, closing on outside tap,
  * Esc, scroll and resize.
@@ -80,16 +80,15 @@ export function LabPopover() {
             <div className="px-2 pb-1.5 pt-1">
               <div className="text-sm font-semibold text-ink">Under the hood</div>
               <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                The harnesses the vectorizer is built and tested against. Each opens in a new tab.
+                The harnesses the vectorizer is built and tested against — they run the real tracer,
+                right here.
               </p>
             </div>
             <div className="flex flex-col">
               {LAB_VIEWS.map((v) => (
-                <a
-                  key={v.href}
-                  href={v.href}
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  key={v.to}
+                  to={v.to}
                   onClick={() => setOpen(false)}
                   className="group flex gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-surface-3"
                 >
@@ -97,17 +96,21 @@ export function LabPopover() {
                     {v.icon}
                   </span>
                   <span className="min-w-0">
-                    <span className="flex items-center gap-1 text-[0.8rem] font-medium text-ink">
-                      {v.label}
-                      <ExternalLink size={11} className="text-faint" />
-                    </span>
+                    <span className="block text-[0.8rem] font-medium text-ink">{v.label}</span>
                     <span className="mt-0.5 block text-[0.7rem] leading-snug text-muted">
                       {v.blurb}
                     </span>
                   </span>
-                </a>
+                </Link>
               ))}
             </div>
+            <Link
+              to="/labs"
+              onClick={() => setOpen(false)}
+              className="mt-1 block rounded-lg px-2 py-1.5 text-[0.7rem] font-medium text-accent transition-colors hover:bg-surface-3"
+            >
+              All labs →
+            </Link>
           </div>,
           document.body,
         )}

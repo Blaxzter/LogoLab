@@ -78,17 +78,17 @@ export function AppMenu({ open, onClose }: { open: boolean; onClose: () => void 
           Dev views
         </div>
         {LAB_VIEWS.map((v) => (
-          <a
-            key={v.href}
-            href={v.href}
-            target="_blank"
-            rel="noreferrer"
+          <NavLink
+            key={v.to}
+            to={v.to}
             onClick={onClose}
-            className={`${row} text-ink-2 hover:bg-surface-3`}
+            className={({ isActive }) =>
+              `${row} ${isActive ? 'bg-accent-soft text-accent' : 'text-ink-2 hover:bg-surface-3'}`
+            }
           >
             <span className="grid h-5 w-5 place-items-center">{v.icon}</span>
             {v.label}
-          </a>
+          </NavLink>
         ))}
 
         <div className="my-2 h-px bg-line" />

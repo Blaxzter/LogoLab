@@ -19,21 +19,34 @@ import { ensureImageData } from './nodeHarness.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from './svgGround.ts'
 import { scoreGeometry, scoreRegions, type GeomScore, type RegionScore } from './geomScore.ts'
-import { TRUTH_CORPUS, TRUTH_RESOLUTIONS, type TruthCase } from './truthCorpus.ts'
+import { TRUTH_CORPUS, TRUTH_RESOLUTIONS, tierCases, type TruthCase } from './truthCorpus.ts'
 
 ensureImageData()
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 // The corpus, the trace options and the gates live in ./truthCorpus.ts so the browser view
-// (/labs/vectorize-truth.html) scores the SAME cases with the SAME settings. One definition, two
+// (/labs/truth — src/components/labs/TruthLab.tsx) scores the SAME cases with the SAME settings. One definition, two
 // consumers — the view cannot silently drift from what the CLI measures.
-const CASES = TRUTH_CORPUS
 const RESOLUTIONS = TRUTH_RESOLUTIONS
 
-/** Only the named cases, when given as argv (e.g. `… groundTruthRun.ts bloom nebula`). */
-const only = process.argv.slice(2)
-const selected: TruthCase[] = only.length ? CASES.filter((c) => only.includes(c.name)) : CASES
+// Selection. TRUTH_CORPUS is 125 cases across two tiers and each is traced at three
+// resolutions, so running the lot unasked would be a ~10-minute default. Tier 0 — the
+// tracer's own named failure-mode suite — stays the default; tier 1 is opt-in.
+//
+//   groundTruthRun.ts                    tier 0 (16 cases) — the default
+//   groundTruthRun.ts --tier 1           tier 1 (109 Fluent Emoji gradient cases)
+//   groundTruthRun.ts --all              everything
+//   groundTruthRun.ts bloom fluent-olive  just those, by name
+const argv = process.argv.slice(2)
+const names = argv.filter((a) => !a.startsWith('--') && !/^\d+$/.test(a))
+const tierArg = argv.includes('--tier') ? (Number(argv[argv.indexOf('--tier') + 1]) as 0 | 1) : null
+
+const selected: TruthCase[] = names.length
+  ? TRUTH_CORPUS.filter((c) => names.includes(c.name))
+  : argv.includes('--all')
+    ? TRUTH_CORPUS
+    : tierCases(tierArg ?? 0)
 
 /** Render an authored SVG to opaque RGBA at `size` px wide. */
 function rasterize(svgPath: string, size: number): { width: number; height: number; data: Uint8ClampedArray } {

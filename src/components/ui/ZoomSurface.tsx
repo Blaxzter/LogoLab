@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import type { PanZoom } from '../../hooks/usePanZoom'
 import { usePinchZoom } from '../../hooks/usePinchZoom'
 
@@ -17,12 +17,15 @@ export function ZoomSurface({
   pz,
   primary = false,
   className = '',
+  style,
   children,
 }: {
   pz: PanZoom
   /** Register this surface as the box the +/- buttons zoom around. */
   primary?: boolean
   className?: string
+  /** Sizing that can't be a static class — the labs shape each panel to its art's aspect. */
+  style?: CSSProperties
   children: ReactNode
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
@@ -95,6 +98,7 @@ export function ZoomSurface({
       onPointerCancel={endPan}
       onDoubleClick={pz.reset}
       className={`relative touch-none overflow-hidden ${cursor} ${className}`}
+      style={style}
     >
       <div className="absolute inset-0" style={pz.contentStyle}>
         {children}

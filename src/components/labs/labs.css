@@ -1,0 +1,118 @@
+/* Styling the five vectorizer labs share, and that Tailwind utilities can't express:
+   the box-size CSS variable driven by the toolbar slider, the "fill your box" rule for
+   generated <svg>/<img>/<canvas> content, and the nodes/edges wireframe.
+
+   Imported from LabPage, i.e. only from the lazily-loaded lab chunks — it never lands
+   in the main bundle's CSS. */
+
+/* A panel box, sized by --lab-box (the toolbar slider). Panel.tsx overrides width/height
+   inline to the ART's aspect ratio, fitted inside this square — a raster stretched to a
+   square is distorted, and a trace SVG letterboxes itself, so forcing squares drew the two
+   at different scales in the same row. This is the fallback for boxes with no art. */
+.lab-box {
+  width: var(--lab-box, 260px);
+  height: var(--lab-box, 260px);
+  flex: none;
+}
+.lab-cell {
+  width: var(--lab-box, 260px);
+  flex: none;
+}
+
+/* Generated content (serialized traces, canvases, rasters) fills its panel. */
+.lab-art > svg,
+.lab-art > img,
+.lab-art > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Belt-and-braces: the panel is already the art's shape, so this is a no-op — unless a
+     caller forgets to pass `aspect`, in which case the art letterboxes instead of shearing. */
+  object-fit: contain;
+}
+
+/* The art is a PICTURE, not a target: the panel behind it is what pans. Without this,
+   pressing on an <img> and moving starts the browser's native image drag, which steals
+   the pointer capture out from under ZoomSurface — so drag-to-pan silently dies on every
+   raster panel (and, in the A/B lab, even raises the drop-zone ring). `pointer-events:
+   none` means the press never lands on the image at all, so no drag can begin; the
+   user-drag/select rules are belt-and-braces for browsers that hit-test differently. */
+.lab-art,
+.lab-art * {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/* Rasters are for pixel-peeping: don't smooth them away under zoom. */
+.lab-art.pixelated > img,
+.lab-art.pixelated > canvas {
+  image-rendering: pixelated;
+}
+
+/* --- nodes/edges wireframe ------------------------------------------------
+   The wireframe ships inside every trace SVG but stays hidden until the toolbar
+   toggle puts `.wires` on the lab root — so flipping it needs no re-trace.
+   Each dot is a zero-length <line> with a round (smooth / junction) or square
+   (corner) cap and a NON-SCALING stroke, so it keeps a constant SCREEN size at
+   any zoom; a scaled <circle r> would balloon as you zoom in. */
+.lab-wire {
+  display: none;
+}
+.wires .lab-wire {
+  display: inline;
+}
+.wires .lab-fill {
+  opacity: 0.3;
+}
+.lab-wire .w-edge path {
+  fill: none;
+  stroke: #0f172a;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.lab-wire .w-corner line {
+  stroke: #e11d48;
+  stroke-width: 5;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
+}
+.lab-wire .w-smooth line {
+  stroke: #2563eb;
+  stroke-width: 5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.lab-wire .w-vert .v-out {
+  stroke: #059669;
+  stroke-width: 9;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.lab-wire .w-vert .v-in {
+  stroke: #fff;
+  stroke-width: 4;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.dark .lab-wire .w-edge path {
+  stroke: #cbd5e1;
+}
+
+/* The ΔE / distance heat ramp, as a legend swatch. */
+.lab-ramp {
+  display: inline-block;
+  width: 90px;
+  height: 8px;
+  border-radius: 2px;
+  vertical-align: middle;
+  background: linear-gradient(90deg, #0a0c22, #283cb4, #1ea0aa, #78c850, #fadc3c, #f0781e, #c81414);
+}
+
+/* Inline code inside lab prose. */
+.lab-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--color-surface-3);
+  padding: 1px 4px;
+  border-radius: 3px;
+}

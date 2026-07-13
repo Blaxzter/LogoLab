@@ -25,7 +25,7 @@ improvement:
 Worse, raster fidelity is *structurally blind* to a dropped region. `bloom` scores SSIM
 0.9922 / meanΔE 0.11 — near perfect — while silently dropping two of its seven composited
 regions. A small, low-contrast region merged into its neighbour costs almost nothing in
-mean ΔE while destroying the topology. See `docs/handoff-lab-views-react.md` and
+mean ΔE while destroying the topology. See `docs/labs.md` (the `/labs/truth` view) and
 `src/devtest/truthCorpus.ts`.
 
 ---
@@ -183,8 +183,8 @@ NonCommercial *and* ShareAlike. Also: every SVG is resized to 200×200 and rewri
 
 | Tier | Source | Licence | Purpose |
 |---|---|---|---|
-| **0 — the gate** | **our handcrafted cases** (`src/devtest/genEdgeCases.ts` → `TRUTH_CORPUS`) | ours | Each isolates a *named* failure mode of **this** tracer (bg-gradient reunification, colour-class DELETE risk, junction weld). **No public corpus covers these.** |
-| **1 — gradients** | **Fluent Emoji "Color"**, ~100–200 sampled | **MIT** | The only authored gradient GT that exists. Flat variants give a free A/B. |
+| **0 — the gate** ✅ **BUILT** | **our handcrafted cases** (`src/devtest/genEdgeCases.ts` → `TRUTH_CORPUS`) | ours | Each isolates a *named* failure mode of **this** tracer (bg-gradient reunification, colour-class DELETE risk, junction weld). **No public corpus covers these.** |
+| **1 — gradients** ✅ **BUILT — see §8** | **Fluent Emoji "Color"**, **109 vendored** of 1,595 triaged | **MIT** | The only authored gradient GT that exists. Flat variants give a free A/B. |
 | **2 — multi-colour flat** | **Twemoji** (jdecked fork), ~200–300 | **CC-BY 4.0** | Region topology, holes, authored fill ΔE. Needs an `ATTRIBUTION` file. |
 | **3 — silhouettes** | **Material Design Icons**, ~200 | **Apache 2.0** | Boundary/corner/node-economy. Filled, no trademarks. |
 | **4 — canaries** | the real PNGs (nebula, petals, schild, headphones) | ours | Loose "did we catastrophically collapse" gates only. Not a target. |
@@ -213,6 +213,18 @@ CC-BY needs an ATTRIBUTION file — all fine. **Anything `-SA` or `-NC` stays ou
   generated edge cases as **fills** (`thickLine` / `ring` in `genEdgeCases.ts`) — exact GT,
   zero offset maths, pixel-identical output. `public/examples/aurora.svg` is still stroked
   (mitered chevrons) and therefore still unscorable.
+- **Neither can filtered, clipped, masked or pattern-filled SVGs** — same principle, four more
+  ways for the visible boundary to stop being the authored boundary. All are refused by
+  `svgGround.refusals()`; see **§8.1–8.2**, which is where each was found the hard way. Note
+  Figma hangs `filter=`/`clip-path=`/`mask=` on a **`<g>`**, so a reader that parses `<g>` only
+  for its transform walks straight past them into the children.
+- **A gradient `url(#…)` fill is fine; a pattern `url(#…)` fill is not.** The distinction is the
+  whole of tier 1 — a gradient leaves the outline exactly where it was authored, a pattern
+  replaces it with a tiling — so the check must **resolve the referenced id**, not match on
+  `url(`.
+- **Rasterize both consumers onto the same background.** resvg was compositing on white and the
+  browser canvas on transparency, which moved the segmentation and made the lab and the CLI
+  disagree about a real defect (**§8.7**).
 - **Two false-pass traps we already fell into** (see `geomScore.ts` comments):
   1. a case with no interior boundary (`bg-ramp` is one full-canvas rect) yields zero sample
      points → `mean([]) === 0` → a **perfect score for measuring nothing**. Hence
@@ -247,3 +259,130 @@ These came out of the first ground-truth runs and are **not yet fixed**:
   number.
 - **Good news:** `nebula` (0.23px chamfer, parsimony 1.0×), `annulus` (0.09px chamfer — hole
   topology is nailed), `concentric`, `sharp-star`, `aa-seam`, `overlap` all clean.
+
+---
+
+## 8. Tier 1 (Fluent Emoji "Color") — built, and what it found
+
+**Built:** `src/devtest/vendorFluentEmoji.ts` (vendor + triage) → `public/corpus/fluent/`
+(109 Color SVGs + 106 Flat twins + `NOTICE` + `manifest.json`) → `src/devtest/fluentCorpus.ts`
+(generated) → spread into `TRUTH_CORPUS`. Pinned at `microsoft/fluentui-emoji@62ecdc0d`.
+Browse at `/labs/truth` (Set → *Tier 1*); CI gates a 10-case slice (`test/truth-gate.test.ts`).
+
+### 8.1 Only 6.9% of the art is usable as ground truth — and that is the correct answer
+
+Triaging all **1,595** candidate glyphs (skin-tone duplicates excluded) through
+`parseGroundTruth` + `refusals()`:
+
+| Refused because | Glyphs | Why it cannot be ground truth |
+|---|---:|---|
+| `filtered` | **1,417** | see below — **the big one** |
+| `stroked` | 998 | the visible boundary is the stroke *outline*, not the path |
+| `empty` | 312 | every shape in the file was refused, so nothing was left |
+| `clipped` | 115 | the visible boundary is the intersection with the clip |
+| `masked` | 15 | the visible boundary is the mask's alpha |
+| **scorable** | **110** | of which **109** actually carry gradients → the tier-1 corpus |
+
+(Columns sum to more than the total: a glyph is counted under every reason it fails.)
+
+**`svgGround` had to learn to refuse three new things**, and finding that out was most of the
+work. Before this, it checked only for strokes — so it would have handed back confident,
+crisp geometry for **16 of the 24** glyphs it accepted, whose visible boundary it cannot
+actually reproduce. Fluent puts `filter=` / `clip-path=` / `mask=` on a **`<g>`**, and a
+transform-only reader walks straight past it into the children.
+
+Both of Fluent's filter families break ground truth, **for opposite reasons** — which is
+exactly why they are refused rather than approximated:
+- **foreground blur** (`feGaussianBlur` on `SourceGraphic`, σ=0.5 in a 32-unit viewBox)
+  **displaces the silhouette**: the authored path is nowhere near the visible edge;
+- **inner shadow** (`SourceAlpha` → `feOffset` → blur → `feComposite k2=-1 k3=1`) leaves the
+  silhouette intact but paints a **soft edge *inside* it that the authored path list does not
+  contain**. A tracer that correctly reproduces that edge gets scored as having *hallucinated*
+  it. The answer sheet is incomplete, and an incomplete answer sheet marks correct work wrong.
+
+> **Teaching `svgGround` inner shadows is the single highest-value follow-up**: it alone would
+> unlock a large share of those 1,417 glyphs. It needs the shadow's own geometry added to the
+> GT, not just tolerance for the filter.
+
+### 8.2 It also caught a live bug in tier 0: `checker` was never scorable
+
+`checker.svg` is two rects with `fill="url(#pattern)"`. The visible boundary is the pattern's
+**tiling** (~7,000 edges); the authored geometry is **two rectangles**. It was being scored
+against those two rects and "failing" at **chamfer 26.7px, p95 114px, parsimony 32×**, with
+52px of *invented* boundary — i.e. a tracer that correctly recovered the checkerboard was
+being charged with inventing it. That was a bug in the **answer sheet**, not the tracer.
+It now reports *not scorable* (`patterned`), like `aurora` (`stroked`).
+
+### 8.3 The flat↔gradient A/B — the experiment nobody could run
+
+`src/devtest/fluentAbRun.ts`, 106 matched pairs @ 512px. The same glyph, authored flat and
+authored with gradients, same rasterizer, same tracer, same scorer:
+
+| | gradient (Color) | flat | |
+|---|---:|---:|---|
+| boundary error (mean) | 2.44px | 1.07px | 2.3× worse |
+| …authored boundary **MISSED** | 2.63px | 1.93px | 1.4× worse |
+| …boundary **INVENTED** | **2.26px** | **0.21px** | **10.8× worse** |
+
+Gradient art scores worse on **92 of 106** pairs. **The tracer is not failing to find the
+art — it is inventing art that is not there.** It recovers the authored silhouette on gradient
+glyphs about as well as on flat ones (missed is only 1.4× worse; sub-pixel on 45 of 109), and
+then **bands a smooth stack of translucent gradients into regions the art does not contain**.
+
+`black-circle` is the pure case: **one circle**, painted with **five stacked translucent
+gradients**. Its flat twin scores a near-perfect 0.14px. The gradient original scores 15.74px
+— missed **0.18px**, invented **31.30px**, and 3 traced paths for a 1-circle glyph.
+
+*Caveat, stated because it is load-bearing:* Flat is a separately **authored** drawing, not the
+Color art with its gradients deleted (22 shapes vs 6 on average). It is a **matched pair, not
+an ablation** — the direction is solid, the magnitude is an upper bound.
+
+### 8.4 Ruled out: the answer sheet is NOT full of phantom edges
+
+Before trusting any of the above, the obvious alternative explanation was tested: an authored
+path that is **occluded** contributes boundary no tracer can recover, which would show up as a
+fake "missed". Measured (step ±2px along the boundary normal, compare raster colour):
+**only 1.9% of tier-1 authored boundary is invisible**, and excluding it moves the corpus mean
+by 0.1px (5.67 → 5.57px). So `geomScore` needs no change and the failures below are real.
+
+### 8.5 New open findings about the tracer
+
+- **Gradient banding on stacked overlays** (§8.3). The headline. `black-circle`, `olive`,
+  `potato` — invents 9–31px of interior boundary.
+- **Genuinely dropped boundary**, a *distinct* failure: `speaker-low-volume` misses **16.9px**
+  of **verified-visible** authored boundary; `chart-decreasing` / `chart-increasing` ~15px.
+  Not occlusion, not banding — the tracer simply loses those edges.
+- **Parsimony is fine, and the intuition was wrong.** Fluent draws at 32 units, so the guess
+  was that any tracer would look profligate against the artist. The opposite: the tracer spends
+  **fewer** nodes than the artist (mean 151 vs 252) and **97 of 109** cases already pass tier
+  0's strict 3× limit.
+
+### 8.6 Per-tier tolerances (and why tier 0's were not touched)
+
+`TRUTH_TOL` (chamfer 1.0 / p95 2.5 / parsimony 3.0) was calibrated on crisp flat art and only
+**31 of 109** gradient cases pass it. Widening it would have quietly weakened the 16 cases tier
+0 depends on, so the tiers now carry **their own limits** (`TIER_TOL`), each row in the lab
+says which one it was held to, and tier 0's numbers are **unchanged**:
+
+| | chamfer | p95 | parsimony |
+|---|---:|---:|---:|
+| tier 0 (crisp flat) | 1.0px | 2.5px | 3.0× |
+| tier 1 (soft gradient) | 6.0px | 60.0px | 5.0× |
+
+Tier 1's are **measured** (`src/devtest/calibrateTier1.ts` prints the distribution), set just
+above the corpus p90. They are **"do not get worse" numbers, not "this is correct" numbers** —
+a green tier-1 gate does *not* mean the tracer is good at gradient art. Every one of them
+should come **down** as §8.5 is fixed. The limits are px **at 512px**: the same trace scores
+7.8px at 256 and 33.1px at 1024, so the gate pins the resolution.
+
+### 8.7 The two consumers were tracing different pixels
+
+`groundTruthRun.ts` rasterizes with resvg `background: 'white'`; the browser drew the SVG onto
+a **transparent** canvas. Almost no corpus art carries a background rect of its own (bloom does
+not; no Fluent glyph does), so the CLI and `/labs/truth` were handing the tracer **different
+input** and comparing the results as though they were the same experiment.
+
+Not a last-decimal difference — it **moved the segmentation**: the lab reported `bloom` at
+**3 of 7** regions recovered where the CLI said **5 of 7**, and that gap was being read as a
+real (and much worse) tracer defect. The lab now flattens onto white; both report **5/7**.
+*If you see the CLI and the lab disagree, this is the first thing to suspect.*

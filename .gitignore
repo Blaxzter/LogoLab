@@ -35,3 +35,6 @@ pnpm-debug.log*
 
 # generated dev-harness artifacts (crispnessStudy/facetSweep/paletteCompare output)
 /crispness-study/
+
+# vendored-corpus download cache (src/devtest/vendorFluentEmoji.ts)
+/.cache/

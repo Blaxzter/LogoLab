@@ -1,5 +1,5 @@
 // Pure visualizations of the structure-first pipeline's intermediate stages, as
-// RGBA buffers (no DOM). Shared by the dev scoreboard (src/devtest/vectorizeDebug)
+// RGBA buffers (no DOM). Shared by the Pipeline-debug lab (src/components/labs/PipelineLab)
 // and the user-facing "How it works" explainer (components/vectorize), so both
 // render the same pictures. Each function returns a Uint8ClampedArray of
 // width*height*4 a caller can drop into an ImageData / canvas.
