@@ -7,12 +7,35 @@
 // sees clean, contiguous regions.
 
 import type { PaletteColor, QuantizeResult } from './types'
+import { srgbToLab, deltaE76 } from './lab.ts'
 
 /** Largest histogram fed to k-means; rarer colors map to centroids afterward. */
 const MAX_CLUSTER_ENTRIES = 65536
 
 /** Palette entries closer than this (euclidean RGB) merge after clustering. */
 const MERGE_DISTANCE = 10
+
+/**
+ * Two flat-interior ANCHOR colours must be at least this far apart (CIE76 ΔE) for
+ * the merge veto to treat them as two AUTHORED colours. Flat-interior evidence
+ * alone is not enough — two measured counter-examples:
+ *
+ *   • schild: the paper-white background carries large exact-colour runs of
+ *     neighbouring tonal values (#f4f3f1 vs #f5f4f2, ΔE ≈ 0.5, thousands of
+ *     flat-interior px each) — splitting them speckles the background,
+ *     180 → 546 nodes;
+ *   • aurora traced flat: a smooth ramp's 8-bit posterization bands are wide,
+ *     flat and ~ΔE 2.9 apart — vetoing their merges at a perceptual-JND floor
+ *     (2.0) pushed dominantColors past FLAT_PALETTE_MAX_COLORS and flipped the
+ *     whole image out of palette-first into MS (visibly coarser bands).
+ *
+ * The floor is scoreRegions' own MATCH_DELTA_E: a region painted within ΔE 4 of
+ * its truth counts as recovered, so a fusion below 4 is invisible to the region
+ * gate (and, per §9.4, near-invisible to eyes); above it the fusion is a scored
+ * drop (flute's pair: ΔE 4.5). The veto defends exactly the fusions that would
+ * be scored — and cannot invent palette entries the art does not show.
+ */
+const ANCHOR_DISTINCT_DE = 4.0
 
 const clamp255 = (n: number): number => Math.max(0, Math.min(255, Math.round(n)))
 
@@ -65,8 +88,15 @@ function weightedPick(weights: Float64Array, rand: () => number): number {
  * Quantize an image to at most `maxColors` opaque colors. Transparent pixels
  * (alpha < 128) get label -1 and never join a cluster. Palette and counts come
  * back sorted by pixel count, descending (largest region first).
+ *
+ * `keepDistinctMinArea` > 0 arms the evidence-based MERGE veto: two clusters
+ * that are each anchored by a DIFFERENT exact colour with at least that many
+ * flat-interior pixels — and whose anchors are perceptually distinct
+ * (≥ ANCHOR_DISTINCT_DE) — are treated as two authored colours and never fused,
+ * however close their centroids sit (see the veto block below). 0 keeps the
+ * pre-existing distance-only merge.
  */
-export function quantize(img: ImageData, maxColors: number): QuantizeResult {
+export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea = 0): QuantizeResult {
   const { data, width, height } = img
   const n = width * height
   const labels = new Int32Array(n)
@@ -225,11 +255,56 @@ export function quantize(img: ImageData, maxColors: number): QuantizeResult {
     clusterCounts[best] += count
   }
 
+  // ---------------------------------------------------------------------------
+  // Evidence for the merge veto (docs/vectorization-benchmarks.md §0 #5).
+  //
+  // MERGE_DISTANCE exists to re-fuse k-means centroids that SPLIT one colour's
+  // pixel cloud — but two AUTHORED colours can sit closer than it (flute's
+  // #f5a165/#fea069 are 9.9 apart; fusing them paints a 2796px region a colour
+  // the art does not contain — the last tier-2 region drop). Flat-interior
+  // evidence separates the two cases, and area/share cannot (§9.4): every
+  // distinct colour maps to exactly ONE cluster, so a split cloud carries its
+  // 8-neighbour-exact block in one half only, while two authored colours each
+  // anchor their own cluster with such a block. A cluster's anchor is its
+  // highest-flat-interior exact colour at ≥ keepDistinctMinArea px (the same
+  // floor paletteSegment protects real regions with: anything smaller is
+  // despeckled away regardless, so vetoing for it would be pointless).
+  // ---------------------------------------------------------------------------
+  let anchorOf: Int32Array | null = null // per cluster: packed-RGB anchor colour, -1 = none
+  if (keepDistinctMinArea > 0) {
+    const rgbAt = (i: number): number => (data[i * 4] << 16) | (data[i * 4 + 1] << 8) | data[i * 4 + 2]
+    const flatCount = new Map<number, number>()
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const i = y * width + x
+        if (labels[i] === -1) continue
+        const key = rgbAt(i)
+        if (
+          rgbAt(i - width - 1) === key && rgbAt(i - width) === key && rgbAt(i - width + 1) === key &&
+          rgbAt(i - 1) === key && rgbAt(i + 1) === key &&
+          rgbAt(i + width - 1) === key && rgbAt(i + width) === key && rgbAt(i + width + 1) === key
+        ) flatCount.set(key, (flatCount.get(key) ?? 0) + 1)
+      }
+    }
+    anchorOf = new Int32Array(k).fill(-1)
+    const anchorArea = new Float64Array(k)
+    for (const [key, area] of flatCount) {
+      if (area < keepDistinctMinArea) continue
+      const c = colorToCluster.get(key)
+      if (c === undefined) continue
+      if (area > anchorArea[c]) {
+        anchorArea[c] = area
+        anchorOf[c] = key
+      }
+    }
+  }
+
   // Post-merge near-identical clusters into count-weighted averages.
   const mergedR: number[] = []
   const mergedG: number[] = []
   const mergedB: number[] = []
   const mergedCount: number[] = []
+  const mergedAnchor: number[] = []
   const remap = new Int32Array(k)
   for (let c = 0; c < k; c++) {
     if (clusterCounts[c] === 0) {
@@ -237,12 +312,24 @@ export function quantize(img: ImageData, maxColors: number): QuantizeResult {
       continue
     }
     const w = clusterCounts[c]
+    const anchor = anchorOf ? anchorOf[c] : -1
     let target = -1
     for (let j = 0; j < mergedR.length; j++) {
       const dr = cr[c] - mergedR[j]
       const dg = cg[c] - mergedG[j]
       const db = cb[c] - mergedB[j]
       if (Math.sqrt(dr * dr + dg * dg + db * db) < MERGE_DISTANCE) {
+        // Both sides anchored by different authored colours ⇒ two real colours;
+        // keep looking for a compatible target instead of fusing them. The ΔE
+        // floor keeps tonal noise mergeable (see ANCHOR_DISTINCT_DE).
+        if (anchor >= 0 && mergedAnchor[j] >= 0 && mergedAnchor[j] !== anchor) {
+          const other = mergedAnchor[j]
+          const de = deltaE76(
+            srgbToLab((anchor >> 16) & 255, (anchor >> 8) & 255, anchor & 255),
+            srgbToLab((other >> 16) & 255, (other >> 8) & 255, other & 255),
+          )
+          if (de >= ANCHOR_DISTINCT_DE) continue
+        }
         target = j
         break
       }
@@ -253,12 +340,14 @@ export function quantize(img: ImageData, maxColors: number): QuantizeResult {
       mergedG.push(cg[c])
       mergedB.push(cb[c])
       mergedCount.push(w)
+      mergedAnchor.push(anchor)
     } else {
       const tw = mergedCount[target] + w
       mergedR[target] = (mergedR[target] * mergedCount[target] + cr[c] * w) / tw
       mergedG[target] = (mergedG[target] * mergedCount[target] + cg[c] * w) / tw
       mergedB[target] = (mergedB[target] * mergedCount[target] + cb[c] * w) / tw
       mergedCount[target] = tw
+      if (mergedAnchor[target] < 0) mergedAnchor[target] = anchor
       remap[c] = target
     }
   }

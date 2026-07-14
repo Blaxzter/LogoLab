@@ -499,8 +499,13 @@ export function segmentFlatPalette(
     dominantColors = palette.length // the user owns the count; the caller's gates are bypassed anyway
   } else {
     // 1. Over-provisioned palette. quantize maps every DISTINCT colour (AA blends
-    //    included) to its nearest centroid, so no pixel keeps a blend value.
-    let q = quantize(img as ImageData, opts.maxColors)
+    //    included) to its nearest centroid, so no pixel keeps a blend value. The
+    //    third argument arms quantize's evidence-based merge veto: two authored
+    //    colours can sit inside MERGE_DISTANCE of each other (flute's
+    //    #f5a165/#fea069, 9.9 apart — §0 #5), and only flat-interior evidence
+    //    tells that apart from a split pixel cloud. Same floor as the region
+    //    protection below, for the same reason.
+    let q = quantize(img as ImageData, opts.maxColors, opts.minRegionArea)
     // 2. Dissolve the low-share entries (the blend smears) into their nearest real
     //    colour — this is what kills the olive/brown sliver colours. PROTECT any
     //    entry with enough flat-interior evidence to be a real region: share alone

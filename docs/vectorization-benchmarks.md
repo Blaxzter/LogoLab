@@ -30,14 +30,20 @@ guardrails):
 | 2 | **Junction weld** — crossing-bar junction wedges pulled; visible at 1×, sub-tolerance since the scorer counts visible boundary only (like #7) | `cross-bars` (tier 0, gated, **passes**) | chamfer 0.34px, p95 0.54px (was 1.04/9.6 — the difference was the occluded under-bar edge, §9.6) | §7; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
 | 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.22px, p95 0.74px (was 1.44/24.8 — the p95 was the seam occluded under the circle, §9.6) | §7; +0.09 chamfer from the §9.5 fix (label-level endpoint routing sends the whole sliver to one side) |
 | 4 | **Edge pull on flats bordering a gradient bg** | `gradient-flat` (tier 0, gated, in `KNOWN_DEFECTS`) | p95 6.3px | §7 |
-| 5 | **Near-colour palette cluster fusion** — `quantize`'s `MERGE_DISTANCE` 10 (RGB) fuses two authored colours ΔE ≈ 4.5 apart; the last remaining tier-2 region drop | `flute` (tier 2, ungated) | 1 region, ΔE 4.5 | §9.4 |
 | 6 | **Thin features at LOW resolution** — below ~256px the sub-pixel bars still break up (the @512 defect is fixed, §9.5; the gate runs at 512) | `hairlines` @256 (ungated resolution) | chamfer 0.88px, p95 9.77px @256 (was 2.44/27.8 before §9.6 — part of that was bar-crossing occlusion; the remaining 9.77 is real) | §9.5 |
 | 7 | **Checkerboard corner scalloping** — diagonally-touching squares corner-weld into scallops; sub-tolerance but visible at 1× | `checker` (tier 0, gated, **passes**) | all deviations < 2px | §8.2 |
 | 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
+| 11 | **Small-region drop at LOW resolution** — a 176px region @256 falls under both the share floor and the flat-interior evidence floor, so §9.4's protection cannot see it (the gate runs @512, where the same region is 4× larger and survives) | `flute` @256 (ungated resolution) | 8/9 @256: `#974827` 176px painted `#893925`, ΔE 8.0 | found during §9.7 (pre-existing — present at c3c82cb) |
 
-Recently closed (the pattern an exit should follow): **missed boundary on flat art**
+Recently closed (the pattern an exit should follow): **near-colour palette cluster
+fusion** (`flute`, was #5, the last tier-2 region drop) — closed 2026-07-15: k-means
+separates the authored pair `#f5a165`/`#fea069` cleanly and `quantize`'s post-merge fused
+the two centroids at distance 9.98 < `MERGE_DISTANCE` 10; fixed by an evidence-based merge
+veto (flat-interior anchors + ΔE ≥ 4 floor), tier 2 now **437/437 regions (100.0%)** for
+the first time, tier 0 and every golden byte-identical, render paints the exact authored
+hex (ΔE 4.54 → 0.00) — **§9.7** is the record. **Missed boundary on flat art**
 (`taco`/`mate`/`fortune-cookie`, was #1) — closed 2026-07-15 as an **answer-sheet artifact,
 not a tracer defect**: the "missed" boundary is authored outline OCCLUDED by later-painted
 shapes (taco 45.5% of its outline invisible), which the geometry-only GT reader counts as
@@ -787,3 +793,75 @@ What landed:
   real tracer defect, correctly deprioritised as gradient-only.
 - **Suite**: typecheck clean, 267 pass / 0 fail / 2 skipped, unchanged. The tracer itself
   is untouched — renders are the ones verified above (p95 ΔE 0.00 through resvg).
+
+### 9.7 The fix: evidence-based merge veto in `quantize` — the last tier-2 region drop (§0 #5) closes, tier 2 reaches 100.0%
+
+§0 #5, closed 2026-07-15. `flute`'s `#f5a165` (3,148 exact px, 2,796 flat-interior) was
+painted `#fea069` (ΔE 4.5) — the only region drop left in the 106-case tier-2 corpus after
+§9.4. The §0 entry blamed `quantize`'s `MERGE_DISTANCE`; instrumenting the merge confirmed
+it **and pinned the exact event**: k-means separates the pair cleanly (centroid[2]
+rgb(254,160,105) n=20,695 vs centroid[11] rgb(245,161,101) n=3,271 — both authored hexes,
+verbatim), then the post-merge fuses them at centroid distance **9.98 < 10** into
+`#fda069`, a colour the art does not contain. The warning on the §0 entry ("do NOT just
+widen/lower MERGE_DISTANCE") was right: the merge exists to re-fuse k-means centroids that
+split ONE colour's pixel cloud, and the fix has to tell that apart from two authored
+colours that happen to sit 9.9 apart.
+
+**The separating evidence is §9.4's flat-interior criterion, applied per cluster.** Every
+distinct colour maps to exactly one cluster, so a split pixel cloud carries its
+8-neighbour-exact block in ONE of the halves — while two authored colours each anchor
+their own cluster with such a block. `quantize` now takes `keepDistinctMinArea` (the flat
+path passes `minRegionArea`, the same floor §9.4 protects real regions with): each
+cluster's **anchor** is its highest-flat-interior exact colour at ≥ that many px, and two
+clusters with different anchors refuse to fuse. Zero disables — and the flat-palette path
+is the only quantize caller, so the MS/gradient path is untouched by construction.
+
+**Two measured counter-examples shaped the veto** (both would have shipped as regressions
+had the first version landed):
+
+1. **Anchors alone are not enough — schild.** The paper-white background of a real
+   exported logo carries large exact-colour runs of *neighbouring tonal values*
+   (`#f4f3f1` vs `#f5f4f2`, ΔE ≈ 0.5, thousands of flat-interior px EACH). The naive veto
+   split them and speckled the background: golden `schild-flat` **180 → 546 nodes**. Tonal
+   noise has flat-interior evidence; what it does not have is perceptual distance.
+2. **A JND floor (ΔE ≥ 2) is still not enough — aurora.** A smooth ramp traced flat
+   posterizes into wide, flat, genuinely-anchored bands ~ΔE 2.9 apart. Vetoing their
+   merges left 2 extra palette entries, pushed `dominantColors` past
+   `FLAT_PALETTE_MAX_COLORS`, and **flipped the whole image out of palette-first into MS**
+   — visibly coarser banding (render meanΔE 2.11 → 3.58 on the A/B snapshot input). The
+   flip risk is structural: the veto can only ever grow the palette, so any borderline
+   rich-flat image sits one veto away from the path gate.
+
+The landed floor is **`ANCHOR_DISTINCT_DE = 4.0` — `scoreRegions`' own `MATCH_DELTA_E`**:
+a region painted within ΔE 4 of its truth counts as recovered, so a fusion below 4 is
+invisible to the region gate (and, per §9.4, near-invisible to eyes); above it the fusion
+is a scored drop. The veto defends exactly the fusions that would be scored. flute's pair
+(ΔE 4.54) stays protected; aurora (2.9) and schild (0.5) merge exactly as before. The
+honest dead zone: an authored pair in [JND, 4) still fuses — no corpus case sits there,
+and if one ever does, the scorer cannot see it either; the render is within the product's
+own colour tolerance.
+
+Results, before → after (protocol as §9.4/§9.5):
+
+- **tier 2: 436/437 → 437/437 regions (99.8 → 100.0%), 105 → 106 of 106 cases clean** —
+  the corpus's region gate is fully green for the first time. Every boundary
+  distribution number (chamfer/p95/parsimony/missed/spurious, p10 through max) is
+  **identical to the last digit** — the veto touched nothing else.
+- **tier 0: byte-identical** (full three-resolution table diff, all 16 cases — the veto
+  never fires there).
+- **goldens: byte-identical** — 0.00% of pixels assigned a different colour on
+  schild-flat / headphones-flat / bloom-flat / aurora-flat (probe over quantize output;
+  fingerprints show only the pre-existing §9.4/§9.5-era drift that was never re-blessed —
+  hash pairs identical with the fix stashed).
+- **flute across resolutions**: @512 8/9 → **9/9**, @1024 9/10 → **10/10**, @256 7/9 →
+  **8/9** (the `#f5a165` drop is gone everywhere; the remaining @256 drop is a different,
+  pre-existing defect — `#974827` 176px painted ΔE 8.0, now §0 #11: at 256² the region is
+  under both the share floor and the flat-interior floor, so §9.4's protection cannot
+  see it).
+- **render, from the SERIALIZED SVG through resvg** (§9.5-amendment rule): the region's
+  own 3,148 px paint the exact authored hex — ΔE 4.54 → **0.00**, exact-hit 98.8%
+  (the rest is the AA rim); whole-image meanΔE 0.192 → 0.159, p95ΔE 0.00 both sides.
+- **determinism**: two traces serialize byte-identical. **perf**: headphones-flat @1024
+  1.58–1.72s vs 1.55–1.74s baseline (the flat census is one O(8n) pass, armed only in
+  the flat-palette path). **suite**: typecheck clean, 267 / 0 / 2 — no KNOWN_DEFECTS
+  change (flute is tier 2, ungated).
