@@ -1,5 +1,5 @@
 {
-  "rev": "d85fc61",
+  "rev": "a45fad9",
   "date": "2026-07-14",
   "res": 512,
   "cases": [
@@ -153,6 +153,15 @@
       "png": "sharp-star.png",
       "flat": "sharp-star.flat.svg",
       "grad": "sharp-star.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "flute-flat",
+      "name": "flute (flat twin) — near-colour pair ΔE 4.5",
+      "png": "flute-flat.png",
+      "flat": "flute-flat.flat.svg",
+      "grad": "flute-flat.grad.svg",
       "width": 512,
       "height": 512
     },
