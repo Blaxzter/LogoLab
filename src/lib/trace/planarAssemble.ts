@@ -91,6 +91,22 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): Plan
         loopCorners.length >= 2
           ? fitCorneredLoop(pts, loopCorners, opts)
           : fitLoopEdge(presmooth(pts, opts.smoothPasses, false, corners), opts)
+      // AREA GUARD. A fit can keep every boundary sample within ε and still
+      // pinch a thin loop's two walls together — a thin bar's cap shoulder-
+      // corners (1–2px apart) fuse to a single apex in detectLoopCorners, the
+      // wall-arcs pin to the same point, and the region loses its width: bar 7
+      // of hairlines became a ZERO-AREA 2-node line, bar 6 a 3-node triangle
+      // pinched at one end (exactly 50% area — a one-end pinch of a rectangle
+      // is always half). Boundary tolerance cannot see this failure; area can.
+      // If the fit kept < 75% of the raw loop's area, emit the exact staircase
+      // corners instead. For a feature thin enough to trip this, "exact" beats
+      // "smooth" outright (an axis-aligned bar is just its 4 corners); for
+      // normal blobs a real fit's area drift is a small fraction of ε·perimeter
+      // and never approaches 25% (tier 2 measured byte-identical under this).
+      const rawArea = Math.abs(polySignedArea(pts))
+      if (rawArea >= 4 && Math.abs(polySignedArea(flattenNodes(nodes))) < rawArea * 0.75) {
+        nodes = staircaseCorners(pts)
+      }
     } else {
       nodes = fitOpenArc(presmooth(pts, opts.smoothPasses, true, corners), opts)
     }
@@ -238,6 +254,42 @@ function flattenEdgeRefLoop(loop: EdgeRef[], edges: Map<number, SharedEdge>): Ve
     for (let k = 0; k < 6; k++) pts.push(cubicAt(p0, c1, c2, p3, k / 6))
   }
   return pts
+}
+
+/** Flatten a fitted closed node loop to a polygon (6 samples per segment — the
+ *  same density flattenEdgeRefLoop uses; area only needs the coarse shape). */
+function flattenNodes(nodes: PathNode[]): Vec[] {
+  if (nodes.length < 2) return nodes.map((n) => ({ x: n.x, y: n.y }))
+  const sp = { nodes, closed: true }
+  const pts: Vec[] = []
+  const count = segmentCount(sp)
+  for (let seg = 0; seg < count; seg++) {
+    const { p0, c1, c2, p3 } = segmentControls(sp, seg)
+    for (let k = 0; k < 6; k++) pts.push(cubicAt(p0, c1, c2, p3, k / 6))
+  }
+  return pts
+}
+
+/** The exact polygon of a raw crack-lattice ring: direction-change points only
+ *  (collinear runs merged — an axis-aligned bar reduces to its 4 corners). The
+ *  area-guard fallback: zero drift from the label map, at staircase node cost. */
+function staircaseCorners(pts: Vec[]): PathNode[] {
+  // Drop a duplicated closing point so the cyclic direction test is clean.
+  const ring = pts.length > 1 && pts[0].x === pts[pts.length - 1].x && pts[0].y === pts[pts.length - 1].y ? pts.slice(0, -1) : pts.slice()
+  const n = ring.length
+  const out: PathNode[] = []
+  for (let i = 0; i < n; i++) {
+    const a = ring[(i - 1 + n) % n]
+    const b = ring[i]
+    const c = ring[(i + 1) % n]
+    const abx = b.x - a.x, aby = b.y - a.y
+    const bcx = c.x - b.x, bcy = c.y - b.y
+    // Keep b when the direction changes (turn or reversal); skip mid-run points.
+    if (abx * bcy - aby * bcx !== 0 || abx * bcx + aby * bcy <= 0) {
+      out.push({ x: b.x, y: b.y, hIn: null, hOut: null, kind: 'corner' })
+    }
+  }
+  return out.length >= 3 ? out : ring.map((p) => ({ x: p.x, y: p.y, hIn: null, hOut: null, kind: 'corner' as const }))
 }
 
 function polySignedArea(poly: Vec[]): number {

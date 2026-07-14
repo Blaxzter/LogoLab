@@ -183,6 +183,42 @@ export function maxEllipseDev(pts: Vec[], e: Ellipse): number {
   return m
 }
 
+/**
+ * Worst distance (px) from the ELLIPSE to the polygon ring — the reverse
+ * direction of maxEllipseDev, and the acceptance half that function cannot
+ * provide: point→ellipse residuals are blind to anywhere the ellipse goes that
+ * the polygon does not. A 6×408 bar fits an extreme-aspect ellipse (3.8 × 278)
+ * with every polygon point within ~1 "radial" unit, while the ellipse's poles
+ * overshoot the bar caps by 22px of empty space — the polygon simply has no
+ * sample there to complain (hairlines bar 1, traced as a wedge to y=−22).
+ * Sampling the ellipse and measuring to the nearest polygon segment sees
+ * exactly that overshoot. 128 samples resolve a pole to well under a pixel at
+ * any radius the snap would accept.
+ */
+export function maxEllipseToPolyDev(pts: Vec[], e: Ellipse, samples = 128): number {
+  if (pts.length < 2) return Infinity
+  let worst = 0
+  for (let s = 0; s < samples; s++) {
+    const t = (s / samples) * 2 * Math.PI
+    const px = e.cx + e.rx * Math.cos(t)
+    const py = e.cy + e.ry * Math.sin(t)
+    let best = Infinity
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i]
+      const b = pts[(i + 1) % pts.length]
+      const abx = b.x - a.x, aby = b.y - a.y
+      const len2 = abx * abx + aby * aby
+      let u = len2 > 0 ? ((px - a.x) * abx + (py - a.y) * aby) / len2 : 0
+      u = Math.max(0, Math.min(1, u))
+      const dx = px - (a.x + u * abx), dy = py - (a.y + u * aby)
+      const d = dx * dx + dy * dy
+      if (d < best) best = d
+    }
+    if (best > worst) worst = best
+  }
+  return Math.sqrt(worst)
+}
+
 /** Solve a 4×4 linear system by Gaussian elimination with partial pivoting. */
 function solve4(M: number[][], b: number[]): number[] | null {
   const n = b.length

@@ -130,6 +130,203 @@ function flatInteriorCounts(
   return counts
 }
 
+/**
+ * Max RGB distance from the segment between two accepted palette colours at which
+ * an entry counts as their coverage blend. Anti-aliasing interpolates in sRGB, so
+ * a true blend cluster sits essentially ON the segment (hairlines' #88888d is the
+ * exact bg↔bar midpoint; the red↔bg fringe clusters measure ≤ 6 off their line).
+ * Same scale as quantize's MERGE_DISTANCE: colours closer than 10 already count
+ * as "the same colour" there, so within 10 of a blend LINE is plausibly a blend.
+ */
+const BLEND_LINE_EPS = 10
+
+/** Squared RGB distance from colour c to the SEGMENT a—b (not the infinite line —
+ *  clamping means "near an endpoint" reads as "near that colour", which routes
+ *  near-duplicates the same way dropMinorColors would anyway). */
+function segDist2(c: PaletteColor, a: PaletteColor, b: PaletteColor): number {
+  const abr = b.r - a.r, abg = b.g - a.g, abb = b.b - a.b
+  const len2 = abr * abr + abg * abg + abb * abb
+  let t = len2 > 0 ? ((c.r - a.r) * abr + (c.g - a.g) * abg + (c.b - a.b) * abb) / len2 : 0
+  t = Math.max(0, Math.min(1, t))
+  const dr = c.r - (a.r + t * abr), dg = c.g - (a.g + t * abg), db = c.b - (a.b + t * abb)
+  return dr * dr + dg * dg + db * db
+}
+
+/**
+ * Classify each palette entry as an anti-alias COVERAGE BLEND or not. AA blends a
+ * pixel's colour linearly (in sRGB) between the feature and its background, so a
+ * blend cluster's colour lies ON the RGB segment between two real colours — while
+ * an authored colour does not (hairlines' red is ~100 off every such line). That
+ * is the evidence flat-interior area cannot supply for THIN features: a sub-pixel
+ * bar and its blend smear both have zero 3×3-flat interior, but only the smear is
+ * explainable as a mix of two other colours.
+ *
+ * Collinearity alone is NOT sufficient evidence: the middle band of a posterized
+ * ramp is the exact midpoint of its neighbours BY CONSTRUCTION (aurora), and
+ * dissolving it repaints a wide authored stripe. What separates an AA blend from
+ * a mid-ramp band is that a coverage blend is an EDGE phenomenon — a 1–2px
+ * transition zone where essentially every pixel touches another colour class —
+ * so only entries that are also edge-local (`edgy`) are candidates. A wide band
+ * is mostly interior (aurora's dissolved stripe measured ~7% edge contact) and
+ * is accepted no matter how collinear it is.
+ *
+ * Greedy, in palette order (count-descending — quantize guarantees it): an entry
+ * with real-region evidence (`real`) is accepted outright; otherwise it is a blend
+ * iff it is edge-local AND sits within BLEND_LINE_EPS of the segment between two
+ * ALREADY-accepted entries, else accepted too. Processing large-first means a
+ * blend's two source colours are accepted before the blend itself comes up (a
+ * region outweighs its own edge band; a feature's pure core outweighs each of its
+ * fringe clusters).
+ *
+ * `routeTo[i]` is the nearer ENDPOINT of the explaining segment (-1 for accepted
+ * entries). Routing matters as much as dropping: the globally-nearest surviving
+ * colour can be the WRONG side entirely — hairlines' bg↔bar midpoint #88888d is
+ * nearer in raw RGB to the red diagonal (d² 17713) than to either of its own
+ * sources (35649/35864), so nearest-survivor routing floods 4059 grey pixels into
+ * the red entry and the mode-snap then renames red to grey. A blend can only ever
+ * be a mixture of its two endpoints, so it goes to one of THEM.
+ */
+function classifyBlends(
+  palette: PaletteColor[],
+  real: readonly boolean[],
+  edgy: readonly boolean[],
+): { blend: boolean[]; routeTo: Int32Array } {
+  const eps2 = BLEND_LINE_EPS * BLEND_LINE_EPS
+  const accepted: number[] = []
+  const blend = new Array<boolean>(palette.length).fill(false)
+  const routeTo = new Int32Array(palette.length).fill(-1)
+  const d2 = (a: PaletteColor, b: PaletteColor): number => {
+    const dr = a.r - b.r, dg = a.g - b.g, db = a.b - b.b
+    return dr * dr + dg * dg + db * db
+  }
+  for (let i = 0; i < palette.length; i++) {
+    let bestD = Infinity
+    if (!real[i] && edgy[i]) {
+      for (let a = 0; a < accepted.length; a++) {
+        for (let b = a + 1; b < accepted.length; b++) {
+          const d = segDist2(palette[i], palette[accepted[a]], palette[accepted[b]])
+          if (d <= eps2 && d < bestD) {
+            bestD = d
+            const ia = accepted[a], ib = accepted[b]
+            routeTo[i] = d2(palette[i], palette[ia]) <= d2(palette[i], palette[ib]) ? ia : ib
+          }
+        }
+      }
+    }
+    if (routeTo[i] >= 0) blend[i] = true
+    else accepted.push(i)
+  }
+  return { blend, routeTo }
+}
+
+/** An entry is "edge-local" — a candidate AA transition zone — when at least this
+ *  fraction of its pixels have a 4-neighbour in a different colour class. A 1px
+ *  band scores 1.0 and a 2px band close to it (each column touches the far side);
+ *  a 3px band drops to ~⅔ and real bands fall towards 0 with width. */
+const EDGE_LOCAL_MIN = 0.6
+
+/**
+ * Per-label fraction of pixels that touch a DIFFERENT label 4-connexionally
+ * (transparent counts as different — the alpha silhouette is an edge too; the
+ * image border does not). See EDGE_LOCAL_MIN.
+ */
+function edgeFractions(labels: Int32Array, w: number, h: number, paletteLen: number): Float64Array {
+  const total = new Int32Array(paletteLen)
+  const edge = new Int32Array(paletteLen)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x
+      const l = labels[i]
+      if (l < 0) continue
+      total[l]++
+      if (
+        (x > 0 && labels[i - 1] !== l) || (x < w - 1 && labels[i + 1] !== l) ||
+        (y > 0 && labels[i - w] !== l) || (y < h - 1 && labels[i + w] !== l)
+      ) edge[l]++
+    }
+  }
+  const out = new Float64Array(paletteLen)
+  for (let l = 0; l < paletteLen; l++) out[l] = total[l] > 0 ? edge[l] / total[l] : 0
+  return out
+}
+
+/**
+ * Per-label count of the MOST FREQUENT exact source colour among its pixels. This
+ * is the thin-feature analogue of flat-interior area: a sub-pixel feature never
+ * has a 3×3 flat interior, but its fully-covered pixels still repeat the authored
+ * colour EXACTLY, hundreds of times (hairlines' red diagonal: 620 × #b4283c) —
+ * while sensor/JPEG noise almost never repeats one exact RGB value. Used to
+ * protect small non-blend entries from the share threshold.
+ */
+function modalColorCounts(labels: Int32Array, data: Uint8ClampedArray, paletteLen: number): Int32Array {
+  const hist: Map<number, number>[] = Array.from({ length: paletteLen }, () => new Map<number, number>())
+  for (let i = 0; i < labels.length; i++) {
+    const l = labels[i]
+    if (l < 0) continue
+    const o = i * 4
+    const key = (data[o] << 16) | (data[o + 1] << 8) | data[o + 2]
+    const h = hist[l]
+    h.set(key, (h.get(key) ?? 0) + 1)
+  }
+  const out = new Int32Array(paletteLen)
+  for (let l = 0; l < paletteLen; l++) {
+    let best = 0
+    for (const c of hist[l].values()) if (c > best) best = c
+    out[l] = best
+  }
+  return out
+}
+
+/**
+ * Restore connected components that modeFilter erased ENTIRELY. The 3×3 majority
+ * vote exists to melt 1px stair-steps along boundaries, but a straight 1px-wide
+ * feature loses that vote everywhere (3 own vs 6 background) — so a sub-pixel bar
+ * that survived quantization is deleted wholesale (hairlines' 0.5px bar: all 408px
+ * gone in one pass, p95 55.9). A stair-step cleanup can only shift a boundary by
+ * ~1px locally — it can never consume a ≥ minArea component completely — so "the
+ * whole component vanished" is precise evidence the filter ate a thin feature,
+ * and those components (from the PRE-filter labels) are put back verbatim.
+ * Components below minArea stay dead: despeckle would dissolve them regardless.
+ */
+function restoreErasedComponents(
+  pre: Int32Array,
+  post: Int32Array,
+  w: number,
+  h: number,
+  minArea: number,
+): Int32Array {
+  const n = w * h
+  let out = post
+  const comp = new Int32Array(n).fill(-1)
+  const stack: number[] = []
+  let cid = 0
+  for (let start = 0; start < n; start++) {
+    if (comp[start] !== -1 || pre[start] < 0) continue
+    const lab = pre[start]
+    comp[start] = cid
+    stack.length = 0
+    stack.push(start)
+    const pixels: number[] = []
+    let survived = false
+    while (stack.length) {
+      const p = stack.pop()!
+      pixels.push(p)
+      if (post[p] === lab) survived = true
+      const x = p % w, y = (p / w) | 0
+      if (x > 0 && comp[p - 1] === -1 && pre[p - 1] === lab) { comp[p - 1] = cid; stack.push(p - 1) }
+      if (x < w - 1 && comp[p + 1] === -1 && pre[p + 1] === lab) { comp[p + 1] = cid; stack.push(p + 1) }
+      if (y > 0 && comp[p - w] === -1 && pre[p - w] === lab) { comp[p - w] = cid; stack.push(p - w) }
+      if (y < h - 1 && comp[p + w] === -1 && pre[p + w] === lab) { comp[p + w] = cid; stack.push(p + w) }
+    }
+    if (!survived && pixels.length >= minArea) {
+      if (out === post) out = post.slice()
+      for (const p of pixels) out[p] = lab
+    }
+    cid++
+  }
+  return out
+}
+
 export interface FlatPaletteResult extends QuantizeResult {
   /**
    * Fraction of opaque pixels whose ORIGINAL colour sits within a tight Δ of the
@@ -139,6 +336,16 @@ export interface FlatPaletteResult extends QuantizeResult {
    * smoothness segmenter instead.
    */
   flatCoverage: number
+  /**
+   * How many palette entries survive share/real-region evidence alone — BEFORE the
+   * blend-line dissolution. This is what the caller's flat-vs-rich gate must count:
+   * on continuous tone many clusters sit near lines between other clusters (that is
+   * what continuous tone IS), so blend dissolution can shrink a photo's palette
+   * under the MAX_COLORS ceiling and misroute it into palette-first (headphones:
+   * 16 → 11 entries, meanΔE 3.9 → 5.5). The image's richness is a property of the
+   * image, not of how aggressively AA smears were cleaned.
+   */
+  dominantColors: number
 }
 
 /** RGB² distance under which a pixel counts as "is its flat colour" (not AA/tone). */
@@ -282,12 +489,14 @@ export function segmentFlatPalette(
   const locked = lockedPalette && lockedPalette.length > 0 ? lockedPalette : null
   let palette: PaletteColor[]
   let labels: Int32Array
+  let dominantColors: number
   if (locked) {
     // User-locked palette: no clustering — assign every pixel to the nearest of
     // the user's colours (RGBA) and keep them exactly as given. Opaque entries omit
     // `a` so they serialize without a redundant fill-opacity.
     palette = locked.map((c) => (c.a !== undefined && c.a < 255 ? { r: c.r, g: c.g, b: c.b, a: c.a } : { r: c.r, g: c.g, b: c.b }))
     labels = assignNearest(img, palette)
+    dominantColors = palette.length // the user owns the count; the caller's gates are bypassed anyway
   } else {
     // 1. Over-provisioned palette. quantize maps every DISTINCT colour (AA blends
     //    included) to its nearest centroid, so no pixel keeps a blend value.
@@ -301,8 +510,44 @@ export function segmentFlatPalette(
     //    The floor is minRegionArea: anything smaller is dissolved by despeckle
     //    below anyway, so protecting it would be pointless — and the floor scales
     //    with the user's Despeckle dial like the rest of the cleanup.
+    //
+    //    THIN features have no flat interior at all (a sub-pixel bar never contains
+    //    a 3×3 pure block), so for them the share test is corrected from BOTH sides
+    //    with colour-line evidence (classifyBlends): an entry that IS a coverage
+    //    blend of two accepted colours is dissolved into its nearer blend ENDPOINT
+    //    even when parallel thin features pile it over minShare (#88888d, 1.5% of
+    //    hairlines — it would otherwise survive and paint every thin bar grey),
+    //    and an entry that is NOT a blend and repeats one exact authored colour
+    //    ≥ minRegionArea times is kept even under minShare (the red diagonal,
+    //    0.24% share — it would otherwise be dissolved into that surviving grey).
     const flat = flatInteriorCounts(img, q.labels, q.palette.length)
-    q = dropMinorColors(q, opts.minShare, Array.from(flat, (c) => c >= opts.minRegionArea))
+    const real = Array.from(flat, (c) => c >= opts.minRegionArea)
+    const edgy = Array.from(edgeFractions(q.labels, img.width, img.height, q.palette.length), (f) => f >= EDGE_LOCAL_MIN)
+    const { blend, routeTo } = classifyBlends(q.palette, real, edgy)
+    const modal = modalColorCounts(q.labels, img.data, q.palette.length)
+    // Richness for the caller's flat-vs-rich gate: survivors under share/real
+    // evidence alone, UNTOUCHED by blend dissolution (see FlatPaletteResult).
+    const total = q.counts.reduce((a, b) => a + b, 0)
+    dominantColors = q.counts.filter((c, i) => (total > 0 && c / total >= opts.minShare) || real[i]).length
+    if (blend.some(Boolean)) {
+      // Relabel each blend entry into its endpoint BEFORE the share drop — endpoints
+      // are accepted entries (never blends themselves), so no chains can form. The
+      // emptied entries then fall out of dropMinorColors with zero pixels to misroute.
+      const counts = q.counts.slice()
+      for (let i = 0; i < counts.length; i++) {
+        if (!blend[i]) continue
+        counts[routeTo[i]] += counts[i]
+        counts[i] = 0
+      }
+      const labels = q.labels.slice()
+      for (let i = 0; i < labels.length; i++) {
+        const l = labels[i]
+        if (l >= 0 && blend[l]) labels[i] = routeTo[l]
+      }
+      q = { palette: q.palette, labels, counts }
+    }
+    const protect = real.map((r, i) => r || (!blend[i] && modal[i] >= opts.minRegionArea))
+    q = dropMinorColors(q, opts.minShare, protect)
     palette = q.palette
     labels = q.labels
   }
@@ -333,10 +578,15 @@ export function segmentFlatPalette(
     palette = palette.map((c, l) => (alphas[l] < 255 ? { ...c, a: alphas[l] } : c))
   }
 
-  // 3. Melt the residual 1px boundary stair-step into the dominant neighbour.
+  // 3. Melt the residual 1px boundary stair-step into the dominant neighbour —
+  //    then put back any ≥ minRegionArea component the vote consumed WHOLE (a
+  //    straight 1px feature loses 3-vs-6 everywhere; a stair-step never loses a
+  //    whole component). Restore before despeckle so a restored thin feature is
+  //    measured at its full size, not against the hole the filter left.
   const smoothed = modeFilter(labels, img.width, img.height, opts.modePasses)
+  const restored = restoreErasedComponents(labels, smoothed, img.width, img.height, opts.minRegionArea)
   // 4. Dissolve sub-threshold specks/pinholes so they don't each become a loop.
-  const cleaned = despeckleComponents(smoothed, img.width, img.height, opts.minRegionArea)
+  const cleaned = despeckleComponents(restored, img.width, img.height, opts.minRegionArea)
 
   // modeFilter can move pixels between labels → recompute counts so they stay exact
   // (downstream paint/order never depend on them here, but keep the contract honest).
@@ -345,5 +595,5 @@ export function segmentFlatPalette(
     const l = cleaned[i]
     if (l >= 0) counts[l]++
   }
-  return { palette, labels: cleaned, counts, flatCoverage }
+  return { palette, labels: cleaned, counts, flatCoverage, dominantColors }
 }

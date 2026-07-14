@@ -31,6 +31,7 @@ import {
   makeCircleSubPath,
   makeEllipseSubPath,
   maxEllipseDev,
+  maxEllipseToPolyDev,
   maxRadialDev,
   perpDistance,
   relationSolveCircles,
@@ -108,7 +109,13 @@ export function planarBeautify(
       }
 
       const ell = fitEllipse(raw)
-      if (ell && Math.min(ell.rx, ell.ry) > 2 * fid && maxEllipseDev(raw, ell) <= fid) {
+      // BOTH directions must hold: maxEllipseDev (polygon→ellipse) is blind to
+      // the ellipse bulging into space the polygon never visits — see
+      // maxEllipseToPolyDev (a 6px bar "fits" a 3.8×278 ellipse otherwise).
+      if (
+        ell && Math.min(ell.rx, ell.ry) > 2 * fid &&
+        maxEllipseDev(raw, ell) <= fid && maxEllipseToPolyDev(raw, ell) <= fid
+      ) {
         e.nodes = makeEllipseSubPath(ell.cx, ell.cy, ell.rx, ell.ry, positive).nodes
       }
       continue

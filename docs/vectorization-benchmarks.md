@@ -27,20 +27,22 @@ guardrails):
 
 | # | defect | reproducing case | number | details |
 |---|---|---|---|---|
-| 1 | **Thin features**: sub-pixel bars partially lost, and the surviving ones painted **blend-grey** (their pixels never reach the authored colour — the red diagonal traces grey) | `hairlines` (tier 0, gated, in `KNOWN_DEFECTS`) | chamfer 3.73px, p95 55.9px | §7, diagnosis §9.3 |
-| 2 | **Missed boundary on flat art** — not fixed by region recovery; cause unlocated | `taco`, `mate`, `fortune-cookie` (tier 2, ungated) | missed 20.1 / 11.7 / 9.9px; corpus mean 1.89px | §9.2 |
-| 3 | **Junction weld** — crossing-bar junction wedges pulled | `cross-bars` (tier 0, gated, in `KNOWN_DEFECTS`) | chamfer 1.04px, p95 9.6px | §7; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
-| 4 | **AA diagonal sliver** — soft diagonal between two flats | `aa-seam` (tier 0, gated, in `KNOWN_DEFECTS`) | chamfer 1.35px, p95 24.8px | §7 |
-| 5 | **Edge pull on flats bordering a gradient bg** | `gradient-flat` (tier 0, gated, in `KNOWN_DEFECTS`) | p95 6.3px | §7 |
-| 6 | **Near-colour palette cluster fusion** — `quantize`'s `MERGE_DISTANCE` 10 (RGB) fuses two authored colours ΔE ≈ 4.5 apart; the last remaining tier-2 region drop | `flute` (tier 2, ungated) | 1 region, ΔE 4.5 | §9.4 |
+| 1 | **Missed boundary on flat art** — not fixed by region recovery; cause unlocated | `taco`, `mate`, `fortune-cookie` (tier 2, ungated) | missed 20.1 / 11.7 / 9.9px; corpus mean 1.89px | §9.2 |
+| 2 | **Junction weld** — crossing-bar junction wedges pulled | `cross-bars` (tier 0, gated, in `KNOWN_DEFECTS`) | chamfer 1.04px, p95 9.6px | §7; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
+| 3 | **AA diagonal sliver** — soft diagonal between two flats | `aa-seam` (tier 0, gated, in `KNOWN_DEFECTS`) | chamfer 1.44px, p95 24.8px | §7; +0.09 chamfer from the §9.5 fix (label-level endpoint routing sends the whole sliver to one side) |
+| 4 | **Edge pull on flats bordering a gradient bg** | `gradient-flat` (tier 0, gated, in `KNOWN_DEFECTS`) | p95 6.3px | §7 |
+| 5 | **Near-colour palette cluster fusion** — `quantize`'s `MERGE_DISTANCE` 10 (RGB) fuses two authored colours ΔE ≈ 4.5 apart; the last remaining tier-2 region drop | `flute` (tier 2, ungated) | 1 region, ΔE 4.5 | §9.4 |
+| 6 | **Thin features at LOW resolution** — below ~256px the sub-pixel bars still break up (the @512 defect is fixed, §9.5; the gate runs at 512) | `hairlines` @256 (ungated resolution) | chamfer 2.61px, p95 28.8px @256 | §9.5 |
 | 7 | **Checkerboard corner scalloping** — diagonally-touching squares corner-weld into scallops; sub-tolerance but visible at 1× | `checker` (tier 0, gated, **passes**) | all deviations < 2px | §8.2 |
 | 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | ~15–17px missed | §8.5 |
 
-Recently closed (the pattern an exit should follow): **dropped small flat regions** — 22 → 1
-across tier 2, `bloom`/`petals` 5/7 → 7/7, root-caused and measured in **§9.4** (2026-07-15);
-**`checker` unscorable** — re-authored, now green (§8.2, 2026-07-15).
+Recently closed (the pattern an exit should follow): **thin features @512** (`hairlines`) —
+chamfer 3.73 → 0.39px, p95 55.9 → 0.78px, bars recovered in the authored colours, root-caused
+and measured in **§9.5** (2026-07-14); **dropped small flat regions** — 22 → 1 across tier 2,
+`bloom`/`petals` 5/7 → 7/7, root-caused and measured in **§9.4** (2026-07-15); **`checker`
+unscorable** — re-authored, now green (§8.2, 2026-07-15).
 
 Feature verdicts (not defects): the experimental A/B flags (`refineJunctions`,
 `weldJunctions`, `backgroundGradient`) measured **non-mergeable as defaults** — §9.3. The
@@ -547,3 +549,112 @@ Results @ 512px, before → after:
   the corpus paid for itself.
 - Golden gate green without re-blessing; photo trace 4.67 → 4.28s flat / 25.3 → 22.7s gradient
   (no regression; the new pass is one O(8n) scan).
+
+### 9.5 The fix: thin features (`hairlines`) — blend-line palette evidence + two exposed fit bugs
+
+§0 #1, closed 2026-07-14. §9.3 had already proven every fit-stage feature a no-op on this
+case ("the thin bars die at segmentation/paint"); instrumenting the flat-palette stage on
+the 512px raster found **three separate mechanisms**, all in `paletteSegment.ts`'s
+share-based palette cleanup — plus two fit-stage bugs the repaired segmentation then
+exposed:
+
+1. **The 50% blend-grey survives as a palette colour.** Seven parallel bars put the SAME
+   exact coverage-blend value (`#88888d` — the exact sRGB midpoint of bg↔bar) on 1.5% of
+   the raster, sailing over `minShare` 0.6%. The 1px/2px bars were then *assigned* to it —
+   "painted blend-grey". Share cannot catch it; flat-interior evidence (§9.4) cannot
+   either (it has none — but neither do the bars).
+2. **The authored red is dropped and routed to that grey.** `#b4283c` (the diagonal, 620
+   exact-colour pixels, 0.24% share, zero 3×3 flat interior — a 2px diagonal cannot
+   contain one) failed every existing keep-test; `dropMinorColors` routed it to the
+   nearest *surviving* colour — the grey (d² 17713 vs 35649 to its own bar colour). "The
+   red diagonal traces grey."
+3. **`modeFilter` deletes 1px features whole.** The 0.5px bar's single blend column loses
+   the 3×3 majority vote (3 vs 6) at every one of its 408 pixels — the entire bar vanished
+   in pass 1. Nearest surviving boundary: the next bar, 56px away = the p95 55.9.
+
+The fix (all in the flat-palette path; MS/gradient path untouched by construction):
+
+- **Blend-line classification** (`classifyBlends`): AA interpolates in sRGB, so a blend
+  cluster sits ON the RGB segment between its two source colours (measured: ≤ 6.2 off;
+  the authored red is ~100 off every line). An entry with no flat-interior evidence that
+  is **edge-local** (≥ 60% of its pixels touch another class — a coverage blend is an
+  edge phenomenon) and within `BLEND_LINE_EPS` 10 of a segment between two already-
+  accepted entries is a blend — dissolved into its **nearer endpoint** — even when its
+  share passes. An off-line entry that repeats one exact colour ≥ `minRegionArea` times
+  (`modalColorCounts` — noise never repeats an exact RGB; authored thin features do) is
+  kept even when its share fails. Edge-locality is load-bearing: without it, the middle
+  band of a posterized ramp (collinear BY CONSTRUCTION, and wide) is dissolved —
+  aurora-flat's golden caught exactly that on the first attempt.
+- **Endpoint routing, not nearest-survivor routing.** Routing the grey to the globally
+  nearest survivor floods 4059 pixels into the *red* entry, and the palette mode-snap
+  then renames red to grey. A blend can only be a mixture of its two endpoints; it goes
+  to the nearer of THEM.
+- **`restoreErasedComponents`**: a ≥ `minRegionArea` connected component that
+  `modeFilter` consumed WHOLE is a thin feature, not a stair-step (a 3×3 vote can shift
+  a boundary ~1px; it cannot eat a 64px+ blob) — put it back verbatim, before despeckle.
+- **`dominantColors` for the flat-vs-rich gate** (`index.ts`): blend dissolution shrank
+  headphones' palette 16 → 11, *under* `FLAT_PALETTE_MAX_COLORS`, flipping a photo-like
+  illustration from MS into palette-first (golden meanΔE 3.92 → 5.50). Continuous tone is
+  full of colours that lie between other colours, so the richness gate now counts the
+  survivors of share/real evidence alone — path decisions are exactly as before.
+- **Ellipse snap: both Hausdorff directions** (`circleFit.ts maxEllipseToPolyDev`). With
+  clean bars, the 6×408 bar-1 rectangle "fit" a 3.8 × 278 ellipse: every polygon point
+  within ~1 radial unit (`maxEllipseDev` scales by r_min — a 74× underestimate along the
+  long axis), while the ellipse poles overshoot the caps by 22px of EMPTY SPACE where the
+  polygon has no sample to complain. The old grey rims had merely kept the bar ineligible
+  for the snap. Acceptance now also samples the ellipse and measures back to the polygon
+  (both engines).
+
+Results, before → after (same protocol as §9.4):
+
+- **`hairlines` @512 (the gate): chamfer 3.73 → 0.39px, p95 55.94 → 0.78, hausdorff
+  56.61 → 2.80, missed 7.01 → 0.39.** @1024: 7.46 → 0.30 / 112.4 → 0.87. All seven bars
+  survive full-height in the authored `#1a1a22` **and render** (see the amendment below —
+  the first pass of this fix left two of them as pinched zero-/half-area paths that
+  satisfied every gate); the diagonal traces `#b4283c`. Passes every tier-0 gate →
+  deleted from `KNOWN_DEFECTS`.
+- **tier 0, everything else**: `petals` improved (@512 chamfer 0.25 → 0.19), `nebula`
+  improved (@512 0.24 → 0.15), `bloom` ±0.01. **`aa-seam` @512 chamfer 1.35 → 1.44
+  (+0.09), p95 unchanged 24.77** — the sliver's blend entries now dissolve label-level to
+  ONE side; already in `KNOWN_DEFECTS`, still the same defect (§0 #3). Region recovery
+  unchanged everywhere. Node counts drift slightly (petals @512 64 → 76, ratio 1.0 → 1.2×,
+  within the 3× gate).
+- **tier 2 (106 flat twins)**: a wash, as it should be — chamfer p50 0.37 → 0.36, missed
+  p90 5.43 → 5.50 / 1px-candidates 59 → 61, spurious max 0.46 → 0.49, parsimony max
+  4.29 → 4.23; regions 105/106 unchanged (`flute` ΔE 4.5 remains, §0 #5); taco/mate/
+  fortune-cookie unchanged (§0 #1 is a different defect). One case drifted across the
+  informal 1px-chamfer mark (73 → 72 "would pass" — p75 sits at 1.30).
+- **tier 1: untouched by construction.** Golden gate green **without re-blessing**
+  (aurora-flat byte-identical after the edge-locality gate; headphones path-flip fixed by
+  `dominantColors`); full suite 267/0/2. Headphones timing within run-to-run noise
+  (2.2–2.6s both before and after, both configs, same loader).
+
+Still open, honestly: **@256 the case still fails ungated** (chamfer 2.61, p95 28.81 —
+there the bars are 0.25–3px and the thinnest leaves no evidence at all; now §0 #6); bar
+end-caps show ~1px rounding at 1×; and a fully sub-pixel feature with NO pure-colour
+pixel anywhere (e.g. a long 0.5px diagonal) would still trace in its strongest blend
+shade rather than the authored colour — no case in the corpus isolates that yet.
+
+**Amendment (same day, caught by the USER's eyes, not by any gate):** bar 7 was in the
+traced doc but as a **degenerate 2-node loop** — both walls of the 1px-wide region fitted
+onto the same vertical line (zero area → renders as NOTHING) — and bar 6 (2px) was a
+**3-node triangle** pinched to a point at its bottom end (lost the lower ~150 rows of its
+render; a one-end pinch of a rectangle keeps exactly 50% of the area). Mechanism, both: a
+thin cap's two shoulder corners are 1–2px apart, `detectLoopCorners` fuses them to one
+apex (its 5px merge is meant for redundant detections of ONE true corner), the wall-arcs
+pin to the same apex point, and every boundary sample sits within ε of the pinched shape —
+a fit "within tolerance" everywhere while destroying the region's width. **The truth gate
+PASSED throughout**: chamfer/p95 measure distance to the traced *path*, which stayed
+0.1–0.6px from both authored edges; region recovery cannot see it either (a 1–2px blend
+bar has no 3×3 flat interior, so it is not a counted "true region"). A zero-area or
+pinched path is a boundary-metric blind spot — renders are part of the exit protocol for
+exactly this reason. FIX: an **area guard** on closed-edge fits in `planarAssemble` — if
+the fitted loop keeps < 75% of the raw crack-loop's area (raw ≥ 4px²), the fit is replaced
+by the exact staircase corners (direction-change points of the crack ring; an axis-aligned
+bar = its 4 corners). For anything thin enough to trip it, exact beats smooth outright; a
+real fit of a normal blob drifts area by a small fraction of ε·perimeter, nowhere near 25%
+— tier 2 and every golden measured byte-identical under the guard. Verified at the PIXEL
+level this time: all seven bars rasterize from the SERIALIZED SVG via resvg (not just
+`rasterizeDoc`); bar 6's rendered rows exactly match its label map (only the 4
+modeFilter-eroded end rows missing, ~1%); hairlines @512 essentially unchanged (0.39 / 0.78 — the
+metric never saw the difference, which is the point).

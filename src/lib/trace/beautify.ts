@@ -29,6 +29,7 @@ import {
   maxRadialDev,
   fitEllipse,
   maxEllipseDev,
+  maxEllipseToPolyDev,
   makeCircleSubPath,
   makeEllipseSubPath,
   perpDistance,
@@ -148,10 +149,13 @@ function analyseLoop(sp: SubPath, opts: BeautifyOptions): ShapeRecord {
 
   // --- Axis-aligned ellipse -------------------------------------------------
   const ell = fitEllipse(raw)
+  // BOTH directions must hold: maxEllipseDev (polygon→ellipse) is blind to the
+  // ellipse bulging into space the polygon never visits (maxEllipseToPolyDev).
   if (
     ell &&
     Math.min(ell.rx, ell.ry) > 2 * opts.fidelity &&
-    maxEllipseDev(raw, ell) <= opts.fidelity
+    maxEllipseDev(raw, ell) <= opts.fidelity &&
+    maxEllipseToPolyDev(raw, ell) <= opts.fidelity
   ) {
     return { kind: 'poly', subPath: makeEllipseSubPath(ell.cx, ell.cy, ell.rx, ell.ry, positive) }
   }

@@ -74,7 +74,13 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // 2026-07-15: the real cause was dropMinorColors dissolving small-but-real palette entries
   // by share alone; flat-interior protection fixed both (docs/vectorization-benchmarks.md §9.4).
   'cross-bars': 'chamfer 1.04px, p95 9.6px — the junction weld',
-  hairlines: 'chamfer 3.73px, p95 55.9px — the sub-pixel bars are simply gone',
+  // hairlines was here ("chamfer 3.73px, p95 55.9px — the sub-pixel bars are simply gone")
+  // until 2026-07-14: the bars died in the flat-palette stage, not the fit — blend-line
+  // classification + endpoint routing + modeFilter-erasure restore fixed it (0.39/0.78 @512;
+  // docs/vectorization-benchmarks.md §9.5). CAUTION from the exit: the boundary gates were
+  // briefly satisfied by a ZERO-AREA path (bar 7 fitted as a degenerate 2-node loop that
+  // renders as nothing) — a passing gate here does not prove the case RENDERS right; the
+  // area guard in planarAssemble now prevents that collapse, but judge renders too.
 
   // --- tier 1 (Fluent Emoji) ------------------------------------------------------------
   // The gradient-banding defect: Fluent stacks several translucent gradients on ONE path, and

@@ -392,7 +392,11 @@ export async function traceImage(
     )
     // Photo-like (low coverage) OR rich flat art (many colours) ⇒ use MS instead —
     // but a locked palette bypasses both gates (the user owns the colours + count).
-    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.palette.length > FLAT_PALETTE_MAX_COLORS)) fp = null
+    // Richness is fp.dominantColors, NOT fp.palette.length: blend dissolution can
+    // shrink a photo's palette under the ceiling (continuous tone is full of
+    // colours that sit on lines between other colours), and the gate must count
+    // what the image contains, not what the cleanup kept.
+    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.dominantColors > FLAT_PALETTE_MAX_COLORS)) fp = null
     usedLockedPalette = fp != null && locked != null
   }
   if (fp) {
