@@ -17,12 +17,17 @@ one list the header popover, the mobile menu and the labs index all read.
 
 ## The shared kit
 
-Built on the app's own primitives — `ZoomSurface` + `usePanZoom` (one camera per page, shared by
-every panel, with pinch-zoom the hand-rolled cameras never had), `ZoomControls`, Tailwind, the
-design tokens.
+Built on the app's own primitives — `ZoomSurface` + `usePanZoom` (one camera **per row**: the
+panels of a case pan/zoom in lockstep, rows are independent — a page-global camera meant
+inspecting one junction flung every other case off-screen; pinch-zoom included), `ZoomControls`
+(one compact pill per row header), Tailwind, the design tokens.
 
 - **`LabPage`** — the shell: sticky toolbar, collapsible "about" that remembers whether you've
-  read it, status line. It owns the page camera and hands it to panels via context.
+  read it, status line. It owns the page-wide **Dark bg** toggle (persisted per lab; panels read
+  it via context — white-on-transparent art is invisible on the light checkerboard) and a
+  fallback camera for panels rendered outside a `CaseRow`. The first panel mounted under a
+  camera auto-claims itself as the box that camera's +/− buttons zoom around, so no lab threads
+  a `primary` flag row by row.
 - **`Panel`** / **`CaseRow`** / **`Badge`** / **`NoteBox`** / **`PendingRow`** — a labelled
   zoomable box, a corpus row, and the boxes that carry caveats.
 - **`GateTable`** — the headroom bars. Both scoring labs feed it the same row shape.
@@ -68,6 +73,29 @@ design tokens.
    `scoreRegions`, `rasterizeDoc` — plus the canvas rasterization in `getImageData`. Moving
    that off-thread is the next win if the labs ever feel sluggish again; it needs a new worker
    protocol, since the current one only returns a traced document.
+
+## The A/B lab can compare against a frozen revision ("Vs snapshot")
+
+The variants answer "does this FLAG help?" — same code, one option apart. They cannot answer
+"did this CODE CHANGE help?", which is what a tracer fix needs judged. That is what
+`pnpm gen:absnapshot` is for: it traces the A/B corpus with the current working tree and
+freezes the output under `test/ab-snapshots/` (serialized SVG per case × gradients on/off, a
+manifest recording the git rev — `+dirty` when the tracked tree had modifications). The lab's
+**Vs snapshot** toggle then shows *source | snapshot | working tree* per case, one shared
+camera, real vector rendering at any zoom.
+
+The rule that makes the comparison trustworthy: **the snapshot stores the exact pixels it
+traced** (a PNG per case — SVG cases rasterized once by resvg), and the view traces the live
+code **from that stored PNG**, not from its own canvas rasterization of the SVG. One input
+file, two code revisions — a visible delta is the code, never resvg-vs-canvas. (Residual
+caveat: the browser's canvas PNG *decode* can differ from Node's by ±1 on a few
+partial-alpha pixels — the aurora finding below — which is far below anything judged
+visually.) The case list is owned by `src/devtest/abCorpus.ts`, imported by both the writer
+and the view, per rule 1.
+
+Typical flow: `git stash && pnpm gen:absnapshot && git stash pop` freezes the last committed
+revision; the lab then shows exactly what the working tree changed. Re-bless (re-run the
+command) once a change is accepted — same lifecycle as `gen:golden`.
 
 ## The Truth lab is paged, and tiered
 

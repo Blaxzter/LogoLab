@@ -1,8 +1,18 @@
+import { useRef } from 'react'
 import type { ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
+import { usePanZoom } from '../../hooks/usePanZoom'
+import { ZoomControls } from '../ui/ZoomControls'
+import { LabZoomContext } from './LabPage'
 
 /** One corpus case: a heading with badges, a horizontal strip of panels, and whatever
- *  the page hangs underneath (a gate table, a paint-model list, a diagnostic note). */
+ *  the page hangs underneath (a gate table, a paint-model list, a diagnostic note).
+ *
+ *  Each row owns ITS OWN camera: the panels of one case pan and zoom in lockstep (that
+ *  is the whole point of side-by-side judging), but zooming into this case leaves every
+ *  other row framed as it was — a page-global camera meant inspecting one junction
+ *  flung the art of every other case off-screen. The pill in the row header controls
+ *  (and shows) this row's zoom; wheel / drag / pinch / double-click work per row too. */
 export function CaseRow({
   title,
   note,
@@ -18,21 +28,28 @@ export function CaseRow({
   children: ReactNode
   footer?: ReactNode
 }) {
+  const pz = usePanZoom({ maxScale: 40 })
+  const claimed = useRef(false)
   return (
     <section className="border-b border-line px-4 py-4">
-      <div className="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+      <div className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
         <h2 className="text-sm font-semibold text-ink">{title}</h2>
         {note && <span className="text-[0.7rem] text-muted">{note}</span>}
         {badges}
-        {right && <span className="ml-auto text-[0.7rem] text-faint">{right}</span>}
+        <span className="ml-auto flex items-center gap-2">
+          {right && <span className="text-[0.7rem] text-faint">{right}</span>}
+          <ZoomControls pz={pz} />
+        </span>
       </div>
       {/* items-stretch: every cell in a line takes the tallest cell's height. Inside a cell
           (see Panel) the caption then fills whatever is left above the box — so the LABELS
           line up at the top and the BOXES line up at the bottom, however many lines a note
           wraps to. Top-aligning the cells instead would push a box down under a 3-line note;
           bottom-aligning them would ragged the labels. */}
-      <div className="flex flex-wrap items-stretch gap-3">{children}</div>
-      {footer}
+      <LabZoomContext.Provider value={{ pz, claimed }}>
+        <div className="flex flex-wrap items-stretch gap-3">{children}</div>
+        {footer}
+      </LabZoomContext.Provider>
     </section>
   )
 }

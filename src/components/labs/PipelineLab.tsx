@@ -117,7 +117,7 @@ export default function PipelineLab() {
 
   const run = useLabRun(CASES, analyze, {
     label: (c) => `Analysing ${c.name}`,
-    done: (n) => `Done — ${n} cases @ ${MAX_DIM}px. Every panel shares one camera: zoom one, zoom all.`,
+    done: (n) => `Done — ${n} cases @ ${MAX_DIM}px. Each row's panels share a camera; rows zoom independently.`,
     deps: [],
   })
 
@@ -147,7 +147,7 @@ export default function PipelineLab() {
             title={c.name}
             note={`${s.width}×${s.height} · ${s.regions} regions (S₀ ${s.fineSegments} before merge)`}
           >
-            <Panel label="1 · source" note={c.kind} aspect={aspect} primary={i === 0}>
+            <Panel label="1 · source" note={c.kind} aspect={aspect}>
               <img src={c.src} alt="" />
             </Panel>
             <Panel label="2 · MS smoothed" note="denoised u" aspect={aspect} pixelated>

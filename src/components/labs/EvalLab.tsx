@@ -112,7 +112,6 @@ export default function EvalLab() {
               label={`source · ${c.kind}`}
               note={`${r.width}×${r.height}`}
               aspect={r.width / r.height}
-              primary={i === 0}
             >
               <img src={c.src} alt="" />
             </Panel>

@@ -1,15 +1,19 @@
+import { useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { ZoomSurface } from '../ui/ZoomSurface'
-import { useLabZoom } from './LabPage'
+import { useLabZoom, useLabDark } from './LabPage'
 import { HEAT_BG } from './heat'
 
 /**
  * One labelled, zoomable panel — the labs' `.cell` + `.box`.
  *
- * The box is a {@link ZoomSurface} bound to the page's shared camera, so every panel
- * on the page pans and zooms as one: wheel-zoom toward the cursor, drag to pan,
- * double-click to reset, and (new — the hand-rolled cameras never had it) pinch on
- * touch. The three copies of `attachCam`/`clampCam`/`applyCam` are gone.
+ * The box is a {@link ZoomSurface} bound to its ROW's camera (CaseRow provides it), so
+ * the panels of one case pan and zoom as one: wheel-zoom toward the cursor, drag to
+ * pan, double-click to reset, pinch on touch. Rows are independent of each other.
+ *
+ * The first panel to mount under a camera claims itself as the box the row's +/−
+ * buttons zoom around (every box in a row is the same size, so one is enough) — no
+ * `primary` flag to thread through the labs, and it cannot be forgotten on a row.
  *
  * Content is expected to fill the box (`.lab-art` sizes any child svg/img/canvas to
  * 100%); the camera scales the whole surface, so a raster and a vector panel stay in
@@ -22,7 +26,6 @@ export function Panel({
   aspect = 1,
   dark = false,
   pixelated = false,
-  primary = false,
   children,
 }: {
   label: ReactNode
@@ -38,16 +41,27 @@ export function Panel({
    * art makes every panel in the row draw the same pixels at the same size.
    */
   aspect?: number
-  /** Sit the art on the near-black heat backdrop instead of the checkerboard. */
+  /** Sit the art on the near-black heat backdrop instead of the checkerboard — forced on
+   *  (heat maps must stay dark); the page-wide "Dark bg" toggle darkens the rest. */
   dark?: boolean
   /** Keep rasters crisp (nearest-neighbour) under zoom — these panels are for pixel-peeping. */
   pixelated?: boolean
-  /** Registers this panel as the box the +/− buttons zoom around. Set it on the first
-   *  panel of the first row; every box in a row is the same size, so one is enough. */
-  primary?: boolean
   children: ReactNode
 }) {
-  const pz = useLabZoom()
+  const { pz, claimed } = useLabZoom()
+  const pageDark = useLabDark()
+  const isDark = dark || pageDark
+  // Claim the row's primary-viewport slot if nobody has (mount order = DOM order, so
+  // this is the row's first panel). Released on unmount so a rebuilt row re-claims.
+  const [primary, setPrimary] = useState(false)
+  useEffect(() => {
+    if (claimed.current) return undefined
+    claimed.current = true
+    setPrimary(true)
+    return () => {
+      claimed.current = false
+    }
+  }, [claimed])
   const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 1
   // Fit the art's shape inside the box-size square: the long side gets the full box.
   const size: CSSProperties =
@@ -68,13 +82,13 @@ export function Panel({
         pz={pz}
         primary={primary}
         className={`rounded-lg border border-line-strong ${
-          dark ? '' : 'checkerboard dark:checkerboard-dark'
+          isDark ? '' : 'checkerboard dark:checkerboard-dark'
         }`}
         style={size}
       >
         <div
           className={`lab-art h-full w-full ${pixelated ? 'pixelated' : ''}`}
-          style={dark ? { background: HEAT_BG } : undefined}
+          style={isDark ? { background: HEAT_BG } : undefined}
         >
           {children}
         </div>

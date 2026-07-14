@@ -130,7 +130,7 @@ function gateRows(a: GoldenAnalysis): GateBarRow[] {
   })
 }
 
-function GoldenPanels({ a, c, heat, primary }: { a: GoldenAnalysis; c: GoldenCase; heat: number; primary: boolean }) {
+function GoldenPanels({ a, c, heat }: { a: GoldenAnalysis; c: GoldenCase; heat: number }) {
   const heatMap = useMemo(() => heatUrl(a, heat), [a, heat])
   const seamMap = useMemo(() => seamUrl(a, heat), [a, heat])
   const trace = useMemo(() => traceSvg(a.doc, a.width, a.height), [a])
@@ -142,7 +142,6 @@ function GoldenPanels({ a, c, heat, primary }: { a: GoldenAnalysis; c: GoldenCas
         label="source"
         note={`${a.width}×${a.height} — what the tracer is given`}
         aspect={aspect}
-        primary={primary}
         pixelated
       >
         <img src={fixtureUrl(c)} alt="" />
@@ -323,7 +322,7 @@ export default function GoldenLab() {
             right={`${a.width}×${a.height} · ${a.traceMs.toFixed(0)} ms · ${c.path}`}
             footer={<GoldenFooter a={a} g={g} />}
           >
-            <GoldenPanels a={a} c={c} heat={ui.heat} primary={i === 0} />
+            <GoldenPanels a={a} c={c} heat={ui.heat} />
           </CaseRow>
         )
       })}

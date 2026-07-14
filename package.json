@@ -19,7 +19,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "node --test",
-    "gen:golden": "node src/devtest/writeTraceGolden.ts"
+    "gen:golden": "node src/devtest/writeTraceGolden.ts",
+    "gen:absnapshot": "node src/devtest/writeAbSnapshots.ts"
   },
   "engines": {
     "node": ">=22.18.0"

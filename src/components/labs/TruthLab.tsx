@@ -336,12 +336,10 @@ function TruthCasePanels({
   c,
   a,
   heat,
-  primary,
 }: {
   c: TruthCase
   a: Analysis
   heat: number
-  primary: boolean
 }) {
   const side = a.img.width
   const flatArt = !c.gradients
@@ -367,7 +365,6 @@ function TruthCasePanels({
         label="truth"
         note="the authored SVG — the answer sheet"
         aspect={aspect}
-        primary={primary}
       >
         <img src={truthUrl(c)} alt="" />
       </Panel>
@@ -572,7 +569,7 @@ export default function TruthLab() {
               </GatePanel>
             }
           >
-            <TruthCasePanels c={c} a={a} heat={ui.heat} primary={i === 0} />
+            <TruthCasePanels c={c} a={a} heat={ui.heat} />
           </CaseRow>
         )
       })}

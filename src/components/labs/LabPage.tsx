@@ -1,10 +1,9 @@
-import { createContext, useContext, useEffect } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef } from 'react'
+import type { CSSProperties, MutableRefObject, ReactNode } from 'react'
 import { ArrowLeft, ChevronDown, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import type { PanZoom } from '../../hooks/usePanZoom'
-import { ZoomControls } from '../ui/ZoomControls'
 import { useLabState } from './useLabState'
 import './labs.css'
 
@@ -18,15 +17,34 @@ import './labs.css'
  * and worth getting out of the way every time after.
  */
 
-/** Every panel on a lab page shares ONE camera, so a detail stays framed across the
- *  source, the trace and the error maps at once. Panels read it from here. */
-const LabZoomContext = createContext<PanZoom | null>(null)
-
-export function useLabZoom(): PanZoom {
-  const pz = useContext(LabZoomContext)
-  if (!pz) throw new Error('lab panels must be rendered inside a <LabPage>')
-  return pz
+/**
+ * The camera panels bind to. Cameras are PER ROW (CaseRow provides one), so a detail
+ * stays framed across the source, the trace and the error maps of ONE case — while
+ * every other row keeps its own framing (zooming bloom's crossing must not fling
+ * hairlines' bars off-screen). `claimed` is how the first panel under a camera
+ * registers itself as the box the row's +/- buttons zoom around — automatic, so no
+ * lab has to thread a `primary` flag row by row. LabPage still provides a fallback
+ * camera for any panel rendered outside a row.
+ */
+export interface LabZoom {
+  pz: PanZoom
+  claimed: MutableRefObject<boolean>
 }
+
+export const LabZoomContext = createContext<LabZoom | null>(null)
+
+export function useLabZoom(): LabZoom {
+  const z = useContext(LabZoomContext)
+  if (!z) throw new Error('lab panels must be rendered inside a <LabPage>')
+  return z
+}
+
+/** Page-wide "Dark bg" toggle: sit every panel's art on the near-black backdrop
+ *  instead of the transparency checkerboard — white-on-transparent art is
+ *  invisible on the light board. Panels read it from here. */
+export const LabDarkContext = createContext(false)
+
+export const useLabDark = (): boolean => useContext(LabDarkContext)
 
 /** Panel side length, in px — the range the box-size slider offers. */
 export const BOX_RANGE = { min: 180, max: 900 }
@@ -59,15 +77,15 @@ export function LabPage({
   wires?: boolean
   children: ReactNode
 }) {
+  // Fallback camera for panels rendered outside a CaseRow (rows own their real ones).
   const pz = usePanZoom({ maxScale: 40 })
-  const [ui, setUi] = useLabState(`${storageKey}:ui`, { about: false })
+  const claimed = useRef(false)
+  const [ui, setUi] = useLabState(`${storageKey}:ui`, { about: false, dark: false })
 
-  // The camera is page-global, so a rebuild (new resolution, new corpus) should not
-  // leave you zoomed into a corner of art that no longer exists there.
   useEffect(() => pz.reset(), [pz.reset])
 
   return (
-    <LabZoomContext.Provider value={pz}>
+    <LabZoomContext.Provider value={{ pz, claimed }}>
       <div
         className={`min-h-full ${wires ? 'wires' : ''}`}
         style={{ '--lab-box': `${box}px` } as CSSProperties}
@@ -89,6 +107,7 @@ export function LabPage({
             <div className="hidden h-5 w-px shrink-0 bg-line sm:block" />
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
               {controls}
+              <LabCheck label="Dark bg" checked={ui.dark} onChange={(dark) => setUi({ dark })} />
               <LabField label="Box">
                 <input
                   type="range"
@@ -102,7 +121,6 @@ export function LabPage({
                 />
               </LabField>
             </div>
-            <ZoomControls pz={pz} className="ml-auto" />
           </div>
 
           <details
@@ -128,7 +146,9 @@ export function LabPage({
           <span className="min-w-0 truncate">{status}</span>
         </div>
 
-        <main>{children}</main>
+        <main>
+          <LabDarkContext.Provider value={ui.dark}>{children}</LabDarkContext.Provider>
+        </main>
       </div>
     </LabZoomContext.Provider>
   )
