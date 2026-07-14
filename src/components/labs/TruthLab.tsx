@@ -58,9 +58,10 @@ const HEAT_SCALES = [1, 2, 5, 10, 25]
 /**
  * PAGING, and why the page is not just a long list.
  *
- * Tracing is 1–3 seconds per case ON TOP of scoring, and the corpus is now 125 cases (16
- * handcrafted + 109 Fluent Emoji). Rendering them as one flat list would mean a five-minute
- * wall of spinners before the page settled — the old 16-case list already took 1–2 minutes.
+ * Tracing is 1–3 seconds per case ON TOP of scoring, and the corpus is now 231 cases (16
+ * handcrafted + 109 Fluent Emoji Color + 106 Fluent flat twins). Rendering them as one flat
+ * list would mean a wall of spinners before the page settled — the old 16-case list already
+ * took 1–2 minutes.
  *
  * Row-level lazy tracing (trace when the row scrolls into view) was the obvious alternative
  * and is worse here: it makes scrolling itself expensive and unpredictable, and you still pay
@@ -71,10 +72,11 @@ const HEAT_SCALES = [1, 2, 5, 10, 25]
 const PAGE_SIZES = [4, 8, 16, 32]
 
 /** Which slice of the corpus to run. Anything but "all" keeps a page cheap. */
-type Scope = 'tier0' | 'tier1' | 'gated' | 'all'
+type Scope = 'tier0' | 'tier1' | 'tier2' | 'gated' | 'all'
 const SCOPES: { value: Scope; label: string }[] = [
   { value: 'tier0', label: 'Tier 0 — handcrafted' },
   { value: 'tier1', label: 'Tier 1 — Fluent gradients' },
+  { value: 'tier2', label: 'Tier 2 — Fluent flat twins' },
   { value: 'gated', label: 'Gated (what CI runs)' },
   { value: 'all', label: 'All tiers' },
 ]
@@ -82,6 +84,7 @@ const SCOPES: { value: Scope; label: string }[] = [
 const scopeCases = (s: Scope): TruthCase[] =>
   s === 'tier0' ? TRUTH_CORPUS.filter((c) => c.tier === 0)
   : s === 'tier1' ? TRUTH_CORPUS.filter((c) => c.tier === 1)
+  : s === 'tier2' ? TRUTH_CORPUS.filter((c) => c.tier === 2)
   : s === 'gated' ? TRUTH_CORPUS.filter((c) => c.gated ?? c.tier === 0)
   : TRUTH_CORPUS
 
@@ -659,14 +662,19 @@ function TruthAbout() {
         <code>test/golden/trace-baseline.json</code>.
       </p>
       <p className="mb-2 max-w-[96ch]">
-        <b>Two tiers, two sets of limits.</b> <b>Tier 0</b> is our 16 handcrafted cases, each
+        <b>Three tiers, three sets of limits.</b> <b>Tier 0</b> is our 16 handcrafted cases, each
         isolating a named failure mode of this tracer. <b>Tier 1</b> is 109 Microsoft{' '}
         <b>Fluent Emoji "Color"</b> glyphs (MIT) — authored multi-stop gradient art, the only
-        ground truth of its kind that exists. They are <em>not</em> graded at the same thresholds:
-        tier 0's limits (chamfer {TIER_TOL[0].chamfer}px / p95 {TIER_TOL[0].p95}px) were calibrated
-        on crisp flat art, and soft-edged gradient art is not gradeable there, so tier 1 gets its
-        own ({TIER_TOL[1].chamfer}px / {TIER_TOL[1].p95}px). Each row's badge says which limit it
-        was actually held to — a green bar here can never mean "we quietly widened tier 0".
+        ground truth of its kind that exists. <b>Tier 2</b> is the same glyphs' 106 <b>Flat</b>{' '}
+        variants scored in their own right — flat multi-region art is what the product traces, and
+        it is where the zero-tolerance <b>regions recovered</b> gate actually runs (it is
+        inapplicable on every gradient case). The tiers are <em>not</em> graded at the same
+        thresholds: tier 0's limits (chamfer {TIER_TOL[0].chamfer}px / p95 {TIER_TOL[0].p95}px)
+        were calibrated on crisp flat art, soft-edged gradient art is not gradeable there, and each
+        tier's limits are measured on its own population (tier 1: {TIER_TOL[1].chamfer}px /{' '}
+        {TIER_TOL[1].p95}px; tier 2: {TIER_TOL[2].chamfer}px / {TIER_TOL[2].p95}px). Each row's
+        badge says which limit it was actually held to — a green bar here can never mean "we
+        quietly widened tier 0".
       </p>
       <p className="mb-2 max-w-[96ch]">
         Tier 1's limits are <b>"do not get worse" numbers, not "this is correct" numbers</b>. The
@@ -678,7 +686,7 @@ function TruthAbout() {
         only 1.4× more. That is the tier-1 work item.
       </p>
       <p className="mb-2 max-w-[96ch]">
-        The corpus is 125 cases and each takes seconds to trace, so the page runs <b>one page at a
+        The corpus is 231 cases and each takes seconds to trace, so the page runs <b>one page at a
         time</b> — pick the <b>Set</b> and the page size. "Gated" is the subset CI actually runs
         (<code>test/truth-gate.test.ts</code>).
       </p>

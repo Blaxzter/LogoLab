@@ -24,6 +24,10 @@
 //      such ground truth that exists. Generated into ./fluentCorpus.ts by
 //      src/devtest/vendorFluentEmoji.ts, which triages 1,595 candidates and vendors only the
 //      109 whose visible boundary svgGround can actually reproduce.
+//   2  the SAME Fluent glyphs authored FLAT — tier 1's `flatSvg` controls promoted to scored
+//      cases in their own right. This is the tier that matters for the PRODUCT (flat logo
+//      art), and it is where `regions recovered` actually runs: that gate is inapplicable on
+//      all 109 gradient cases, so before this tier it measured 12 cases; now ~118.
 //
 // ONE list, both tiers, both consumers (the Node CLI and /labs/truth). A sibling array would
 // have to be threaded through every filter, every gate and every view separately, and the
@@ -43,12 +47,12 @@ export interface TruthCase {
   /** Trace with gradient fitting on? (Flat art is scored with it off.) */
   gradients: boolean
   /**
-   * 0 = our handcrafted cases; 1 = Fluent Emoji "Color" (MIT). The tier picks the TOLERANCES
-   * (see TIER_TOL) — soft-edged authored gradient art is not gradeable at thresholds
-   * calibrated on crisp flat art, and pretending otherwise would either fail tier 1 for
-   * being itself or quietly weaken tier 0.
+   * 0 = our handcrafted cases; 1 = Fluent Emoji "Color" (MIT); 2 = the same Fluent glyphs
+   * authored FLAT. The tier picks the TOLERANCES (see TIER_TOL) — soft-edged authored
+   * gradient art is not gradeable at thresholds calibrated on crisp flat art, and pretending
+   * otherwise would either fail tier 1 for being itself or quietly weaken tier 0.
    */
-  tier: 0 | 1
+  tier: 0 | 1 | 2
   /**
    * Run in CI? Tracing is seconds per case, so the gate is a small fixed subset and the LAB
    * browses the rest. A truth gate that takes ten minutes gets switched off, and a gate that
@@ -74,11 +78,13 @@ export interface TruthCase {
  * unscorable. (cross-bars, annulus and hairlines were re-authored as fills in genEdgeCases.ts
  * and are now scored.)
  *
- * `checker` is unscorable for the same KIND of reason, found while building tier 1: its two
- * rects are `fill="url(#pattern)"`, so the visible boundary is the pattern's tiling, not the
+ * `checker` was unscorable for the same KIND of reason, found while building tier 1: its two
+ * rects were `fill="url(#pattern)"`, so the visible boundary was the pattern's tiling, not the
  * rects. It used to be scored against those two rects and "failed" at 26.7px chamfer /
  * parsimony 32× — a tracer that correctly recovered the checkerboard was being charged with
- * inventing it. That was a bug in the ANSWER SHEET, not in the tracer.
+ * inventing it. That was a bug in the ANSWER SHEET, not in the tracer. Re-authored 2026-07-15
+ * as 896 explicit filled squares (patterns are to fills what strokes are to fills — see
+ * genEdgeCases.ts), it is scorable and passes every gate (0.38px chamfer @512).
  */
 export const TRUTH_CORPUS: TruthCase[] = [
   // --- the tracer's own hard problems -------------------------------------------------
@@ -109,16 +115,36 @@ export const TRUTH_CORPUS: TruthCase[] = [
 
   // --- TIER 1 — Fluent Emoji "Color" (MIT), generated; see ./fluentCorpus.ts ------------
   ...FLUENT_CORPUS,
+
+  // --- TIER 2 — the same Fluent glyphs authored FLAT, derived (not duplicated) from
+  // FLUENT_CORPUS so the pairing can never drift. Until now these 106 files were only the
+  // `flatSvg` controls of the tier-1 A/B (fluentAbRun.ts) — never scored on their own, which
+  // left `regions recovered` (the dropped-region gate, the failure raster fidelity is
+  // structurally blind to) running on just the 12 flat tier-0 cases. Flat multi-region art is
+  // exactly what the product traces, so the flat twins are scored in their own right:
+  // `gradients: false`, region recovery applicable, boundary limits measured on THIS
+  // population (TIER_TOL[2] — see calibrateTier2.ts).
+  ...FLUENT_CORPUS.filter((c) => c.flatSvg).map(
+    (c): TruthCase => ({
+      name: `${c.name}-flat`,
+      svg: c.flatSvg!,
+      note: `${c.note.split(' — ')[0]} — authored flat twin`,
+      gradients: false,
+      tier: 2,
+      // No flatSvg back-reference: the lab's A/B traces `flatSvg` with gradients OFF, which
+      // would silently mis-trace the gradient original if it were pointed at here.
+    }),
+  ),
 ]
 
 /** Only the cases of one tier. */
-export const tierCases = (tier: 0 | 1): TruthCase[] => TRUTH_CORPUS.filter((c) => c.tier === tier)
+export const tierCases = (tier: 0 | 1 | 2): TruthCase[] => TRUTH_CORPUS.filter((c) => c.tier === tier)
 
 /**
  * What CI runs. Tier 0 in full (16 cases — it is the tracer's own failure-mode suite and
  * every case there is load-bearing), plus a small fixed slice of tier 1. The other ~99
- * gradient cases are browse-only in /labs/truth: a gate slow enough to be annoying gets
- * switched off, and a gate that is off is not a gate.
+ * gradient cases and the 106 tier-2 flat twins are browse-only in /labs/truth: a gate slow
+ * enough to be annoying gets switched off, and a gate that is off is not a gate.
  */
 export const GATED_CORPUS: TruthCase[] = TRUTH_CORPUS.filter((c) => c.gated ?? c.tier === 0)
 
@@ -179,7 +205,7 @@ export interface TruthTol {
  *
  * Every one of these limits should come DOWN as those two defects are fixed.
  */
-export const TIER_TOL: Record<0 | 1, TruthTol> = {
+export const TIER_TOL: Record<0 | 1 | 2, TruthTol> = {
   0: TRUTH_TOL,
   1: {
     // observed p50 1.87 · p75 3.14 · p90 5.65 · max 15.74 (black-circle)
@@ -193,6 +219,30 @@ export const TIER_TOL: Record<0 | 1, TruthTol> = {
     // (97/109 pass) — the tracer spends FEWER nodes than the artist (mean 151 vs 252). The
     // assumption that emoji drawn at 32 units would make any tracer look profligate was wrong.
     parsimony: 5.0,
+  },
+  // MEASURED on the 106 flat twins @ 512px (calibrateTier2.ts, 2026-07-14) with the same
+  // recipe as tier 1: boundary limits just above the corpus p90, parsimony just above the
+  // corpus max. Same caveat too — "do not get worse" numbers, NOT "this is correct" numbers.
+  //
+  // What the calibration found on landing — and what became of it:
+  //   • REGION RECOVERY, the zero-tolerance gate, failed 15 of 106 cases — 22 regions
+  //     dropped, ΔE up to 115.2 (pencil's #402a32 graphite tip painted #f92f60 eraser-pink).
+  //     Root cause was dropMinorColors dissolving small-but-real palette entries by share
+  //     alone; FIXED 2026-07-15 by flat-interior protection (paletteSegment.ts) — now 1
+  //     drop in 106 (flute, ΔE 4.5, a quantize MERGE_DISTANCE artifact). See
+  //     docs/vectorization-benchmarks.md §9.1/§9.4.
+  //   • the tracer INVENTS almost nothing on flat art (spurious p95 0.33px) but MISSES real
+  //     boundary (missed p90 5.43px, max 20.1px — taco). Still open: the worst cases
+  //     (taco/mate/fortune-cookie) did NOT improve with region recovery, so the missed
+  //     boundary is its own defect, not a side effect of the drops.
+  2: {
+    // observed p50 0.42 · p75 1.33 · p90 2.80 · p95 4.10 · max 10.20 (taco)
+    chamfer: 3.0,
+    // observed p50 2.70 · p75 15.86 · p90 31.24 · max 88.12 (taco)
+    p95: 35.0,
+    // observed p50 0.83 · p90 1.37 · max 4.29 (baguette-bread) — the tracer is usually MORE
+    // economical than the artist on these (p50 below 1×).
+    parsimony: 4.5,
   },
 }
 
@@ -236,7 +286,7 @@ export function evaluateTruthGates(s: {
   /** False for gradient cases — see above. */
   flatArt: boolean
   /** Picks the tolerances (TIER_TOL). Defaults to tier 0, whose numbers are unchanged. */
-  tier?: 0 | 1
+  tier?: 0 | 1 | 2
 }): TruthGate[] {
   const tol = TIER_TOL[s.tier ?? 0]
   const hasBoundary = s.samples > 0

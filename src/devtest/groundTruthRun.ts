@@ -36,11 +36,12 @@ const RESOLUTIONS = TRUTH_RESOLUTIONS
 //
 //   groundTruthRun.ts                    tier 0 (16 cases) — the default
 //   groundTruthRun.ts --tier 1           tier 1 (109 Fluent Emoji gradient cases)
+//   groundTruthRun.ts --tier 2           tier 2 (106 Fluent flat twins)
 //   groundTruthRun.ts --all              everything
 //   groundTruthRun.ts bloom fluent-olive  just those, by name
 const argv = process.argv.slice(2)
 const names = argv.filter((a) => !a.startsWith('--') && !/^\d+$/.test(a))
-const tierArg = argv.includes('--tier') ? (Number(argv[argv.indexOf('--tier') + 1]) as 0 | 1) : null
+const tierArg = argv.includes('--tier') ? (Number(argv[argv.indexOf('--tier') + 1]) as 0 | 1 | 2) : null
 
 const selected: TruthCase[] = names.length
   ? TRUTH_CORPUS.filter((c) => names.includes(c.name))

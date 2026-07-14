@@ -9,7 +9,7 @@ the app** — same corpora, same gates, same numbers, wearing the app's design s
 | `/labs/pipeline` | `PipelineLab` | *Why* does the trace look like this? Every intermediate stage. |
 | `/labs/ab` | `AbLab` | Does this feature help? Trace variants side by side. |
 | `/labs/golden` | `GoldenLab` | Did anything **change**? The regression gates and their headroom. |
-| `/labs/truth` | `TruthLab` | Is it **correct**? Scored against the authored SVG. **125 cases, two tiers** — see below. |
+| `/labs/truth` | `TruthLab` | Is it **correct**? Scored against the authored SVG. **231 cases, three tiers** — see below. |
 | `/labs/eval` | `EvalLab` | What do the numbers say? ΔE / SSIM / seam / determinism scoreboard. |
 
 Everything lives in `src/components/labs/`. `LAB_VIEWS` in `src/components/navItems.tsx` is the
@@ -71,10 +71,13 @@ design tokens.
 
 ## The Truth lab is paged, and tiered
 
-`TRUTH_CORPUS` is now **125 cases**: 16 handcrafted (tier 0) + **109 Fluent Emoji "Color"**
-gradient glyphs (tier 1, MIT — `docs/vectorization-benchmarks.md` §8). At 1–3 s per case, a
-flat list would be a five-minute wall of spinners, so the page runs **one page at a time**:
-pick a **Set** (tier 0 / tier 1 / *Gated* — what CI runs / all) and a page size.
+`TRUTH_CORPUS` is now **231 cases**: 16 handcrafted (tier 0) + **109 Fluent Emoji "Color"**
+gradient glyphs (tier 1, MIT — `docs/vectorization-benchmarks.md` §8) + the same glyphs'
+**106 Flat variants** scored in their own right (tier 2 — §9; flat multi-region art is what
+the product traces, and it is the tier where the zero-tolerance *regions recovered* gate
+actually runs). At 1–3 s per case, a flat list would be a wall of spinners, so the page runs
+**one page at a time**: pick a **Set** (tier 0 / tier 1 / tier 2 / *Gated* — what CI runs /
+all) and a page size.
 
 Row-level lazy tracing (trace when the row scrolls into view) was the obvious alternative and
 is worse: it makes *scrolling* expensive and unpredictable, and you still pay for every row you
@@ -83,9 +86,10 @@ rows paint as they land.
 
 - **Per-tier tolerances.** Tier 0's limits (chamfer 1.0px / p95 2.5px) were calibrated on crisp
   flat art; only 31 of 109 gradient cases pass them. Tier 1 has **its own** (6.0px / 60.0px),
-  and each row's badge says **which limit it was actually held to** — a green bar here can
-  never mean "somebody quietly widened tier 0". Tier 1's are *"do not get worse"* numbers, not
-  *"this is correct"* numbers.
+  measured on its population by `calibrateTier1.ts`; tier 2 likewise (3.0px / 35.0px,
+  `calibrateTier2.ts`). Each row's badge says **which limit it was actually held to** — a green
+  bar here can never mean "somebody quietly widened tier 0". Tier 1's and 2's are *"do not get
+  worse"* numbers, not *"this is correct"* numbers.
 - **`flat A/B`** traces the same glyph's **Flat** twin and shows the delta. It is the point of
   tier 1: the tracer invents **10.8×** more boundary on gradient art than on flat art while
   missing only 1.4× more — it finds the art, then hallucinates edges inside the gradient.
