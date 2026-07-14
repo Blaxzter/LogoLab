@@ -23,7 +23,10 @@ export interface PaletteSegmentOptions {
   maxColors: number
   /** Drop palette entries holding less than this share of the opaque pixels into
    *  their nearest survivor. AA blend bands are each a small share, so this is what
-   *  removes the spurious blend colours; real flats are well above it. */
+   *  removes the spurious blend colours. Real flats are NOT always above it — a
+   *  small genuine region (a pencil tip, a backpack) can hold less than a long
+   *  edge's blend band — so entries with flat-interior evidence ≥ minRegionArea are
+   *  exempted (see flatInteriorCounts). */
   minShare: number
   /** 3×3 majority-vote passes to melt the 1px stair-step the nearest-colour
    *  assignment leaves along each boundary (a clean single edge afterwards). */
@@ -90,6 +93,41 @@ function despeckleComponents(labels: Int32Array, w: number, h: number, minArea: 
     cid++
   }
   return out
+}
+
+/**
+ * Per-label count of FLAT-INTERIOR source pixels: a pixel whose 8 neighbours all
+ * carry the exact same source colour. This is the evidence that separates a REAL
+ * small region from an anti-alias blend smear, and area alone cannot: a blend band
+ * runs the whole length of a contact edge (its pixel count clears any share
+ * threshold a small region can clear) but every one of its pixels is a one-off
+ * blend, essentially never surrounded by eight identical pixels — while a genuine
+ * region interior always is. Measured on the tier-2 corpus: every real dropped
+ * region had 300+ flat-interior pixels, every blend-smear entry had 0 (§9.1).
+ * (Same criterion scoreRegions uses to count true regions, for the same reason.)
+ */
+function flatInteriorCounts(
+  img: { width: number; height: number; data: Uint8ClampedArray },
+  labels: Int32Array,
+  paletteLen: number,
+): Int32Array {
+  const { width: w, height: h, data } = img
+  const counts = new Int32Array(paletteLen)
+  const rgbAt = (i: number): number => (data[i * 4] << 16) | (data[i * 4 + 1] << 8) | data[i * 4 + 2]
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x
+      const l = labels[i]
+      if (l < 0) continue
+      const k = rgbAt(i)
+      if (
+        rgbAt(i - w - 1) === k && rgbAt(i - w) === k && rgbAt(i - w + 1) === k &&
+        rgbAt(i - 1) === k && rgbAt(i + 1) === k &&
+        rgbAt(i + w - 1) === k && rgbAt(i + w) === k && rgbAt(i + w + 1) === k
+      ) counts[l]++
+    }
+  }
+  return counts
 }
 
 export interface FlatPaletteResult extends QuantizeResult {
@@ -255,8 +293,16 @@ export function segmentFlatPalette(
     //    included) to its nearest centroid, so no pixel keeps a blend value.
     let q = quantize(img as ImageData, opts.maxColors)
     // 2. Dissolve the low-share entries (the blend smears) into their nearest real
-    //    colour — this is what kills the olive/brown sliver colours.
-    q = dropMinorColors(q, opts.minShare)
+    //    colour — this is what kills the olive/brown sliver colours. PROTECT any
+    //    entry with enough flat-interior evidence to be a real region: share alone
+    //    cannot tell a small region from a blend band, and dropping a real region
+    //    repaints it with the nearest SURVIVING colour — arbitrarily wrong for an
+    //    isolated dark detail (§9.1: pencil's tip painted eraser-pink, ΔE 76).
+    //    The floor is minRegionArea: anything smaller is dissolved by despeckle
+    //    below anyway, so protecting it would be pointless — and the floor scales
+    //    with the user's Despeckle dial like the rest of the cleanup.
+    const flat = flatInteriorCounts(img, q.labels, q.palette.length)
+    q = dropMinorColors(q, opts.minShare, Array.from(flat, (c) => c >= opts.minRegionArea))
     palette = q.palette
     labels = q.labels
   }

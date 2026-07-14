@@ -58,6 +58,10 @@ const RES = 512
  * problem, and not a fault in the answer sheet. Delete an entry the moment its case passes;
  * the test will tell you when that happens.
  *
+ * This list is the machine-checked STATUS; the ranked working list of ALL open defects —
+ * including ones with no gated case, which structurally cannot appear here — is
+ * docs/vectorization-benchmarks.md §0.
+ *
  * Verified NOT to be ground-truth artifacts: only 1.9% of authored boundary in tier 1 is
  * occluded (invisible), and excluding it moves the corpus mean by 0.1px — so these are the
  * tracer, not phantom edges in the SVG.
@@ -66,8 +70,9 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // --- tier 0 (docs/vectorization-benchmarks.md §7) ------------------------------------
   'gradient-flat': 'p95 6.3px — the crisp flats bordering the gradient bg get their edge pulled',
   'aa-seam': 'chamfer 1.35px, p95 24.8px — the anti-aliased diagonal sliver',
-  bloom: 'p95 3.2px + 2 of 7 regions dropped — the low-contrast overlap lenses (ΔE 11.0 / 4.7)',
-  petals: 'chamfer 1.15px, p95 17.8px + 2 of 7 regions dropped — same low-contrast overlap merge',
+  // bloom + petals were here ("2 of 7 regions dropped — low-contrast overlap merge") until
+  // 2026-07-15: the real cause was dropMinorColors dissolving small-but-real palette entries
+  // by share alone; flat-interior protection fixed both (docs/vectorization-benchmarks.md §9.4).
   'cross-bars': 'chamfer 1.04px, p95 9.6px — the junction weld',
   hairlines: 'chamfer 3.73px, p95 55.9px — the sub-pixel bars are simply gone',
 
@@ -86,7 +91,8 @@ for (const c of GATED_CORPUS) {
     if (why) {
       // Not a pass and not a failure — the CASE has no usable ground truth. Saying so is the
       // whole design: a case scored against geometry the renderer never drew is worse than an
-      // unscored one. (aurora is stroked; checker is pattern-filled.)
+      // unscored one. (aurora is stroked; checker was pattern-filled until re-authored as
+      // explicit squares.)
       console.log(`    ${c.name}: not scorable — ${why}`)
       return
     }

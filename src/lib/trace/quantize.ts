@@ -349,14 +349,23 @@ export function modeFilter(labels: Int32Array, width: number, height: number, pa
  * Dissolve palette entries holding less than `minShare` of the opaque pixels
  * into their nearest surviving color (relabel + merge counts). At least one
  * color always survives. Result is re-sorted by count, descending.
+ *
+ * `protect[i]` exempts entry i from the share test. The share threshold exists to
+ * kill anti-alias blend smears, but share alone cannot tell a smear from a REAL
+ * small region — a logo's small dark detail can hold fewer pixels than a long
+ * boundary's blend band. Dropping a real region does not just lose its outline:
+ * every pixel is relabelled to the nearest SURVIVING colour, which for an isolated
+ * dark region can be wildly wrong (a #402a32 pencil tip repainted with the #f92f60
+ * eraser pink, ΔE 76 — docs/vectorization-benchmarks.md §9.1). The caller supplies
+ * the evidence that an entry is a real region (paletteSegment: flat-interior area).
  */
-export function dropMinorColors(q: QuantizeResult, minShare: number): QuantizeResult {
+export function dropMinorColors(q: QuantizeResult, minShare: number, protect?: readonly boolean[]): QuantizeResult {
   const { palette, counts } = q
   if (palette.length <= 1) return q
   const totalOpaque = counts.reduce((a, b) => a + b, 0)
   if (totalOpaque === 0) return q
 
-  const keep = counts.map((c) => c / totalOpaque >= minShare)
+  const keep = counts.map((c, i) => c / totalOpaque >= minShare || protect?.[i] === true)
   if (!keep.some(Boolean)) {
     let maxIdx = 0
     for (let i = 1; i < counts.length; i++) if (counts[i] > counts[maxIdx]) maxIdx = i
