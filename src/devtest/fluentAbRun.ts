@@ -44,7 +44,7 @@ async function run(svgPath: string, gradients: boolean) {
   if (unscorable(gt)) return null
   const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
   const doc = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients })
-  const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height)
+  const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
   return g.samples > 0 ? g : null
 }
 

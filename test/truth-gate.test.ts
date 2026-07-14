@@ -62,18 +62,24 @@ const RES = 512
  * including ones with no gated case, which structurally cannot appear here — is
  * docs/vectorization-benchmarks.md §0.
  *
- * Verified NOT to be ground-truth artifacts: only 1.9% of authored boundary in tier 1 is
- * occluded (invisible), and excluding it moves the corpus mean by 0.1px — so these are the
- * tracer, not phantom edges in the SVG.
+ * Verified NOT to be ground-truth artifacts: since 2026-07-15 the scorer itself excludes
+ * OCCLUDED authored boundary from the missed side (geomScore.makeVisibleAt, §9.6) — the
+ * flat twins carry up to 45% hidden overdraw, and before the exclusion that manufactured
+ * phantom "missed boundary" failures (taco 20px on a pixel-perfect trace). What fails a
+ * gate now is the tracer, not the answer sheet.
  */
 const KNOWN_DEFECTS: Record<string, string> = {
   // --- tier 0 (docs/vectorization-benchmarks.md §7) ------------------------------------
   'gradient-flat': 'p95 6.3px — the crisp flats bordering the gradient bg get their edge pulled',
-  'aa-seam': 'chamfer 1.35px, p95 24.8px — the anti-aliased diagonal sliver',
   // bloom + petals were here ("2 of 7 regions dropped — low-contrast overlap merge") until
   // 2026-07-15: the real cause was dropMinorColors dissolving small-but-real palette entries
   // by share alone; flat-interior protection fixed both (docs/vectorization-benchmarks.md §9.4).
-  'cross-bars': 'chamfer 1.04px, p95 9.6px — the junction weld',
+  // aa-seam ("chamfer 1.35px, p95 24.8px") and cross-bars ("chamfer 1.04px, p95 9.6px") were
+  // here until 2026-07-15: their headline numbers were mostly OCCLUDED authored outline (the
+  // seam under the circle, the red bar under the blue bar) — an answer-sheet artifact, not
+  // tracer error. With the missed side scored on visible boundary only (§9.6) they pass:
+  // aa-seam 0.22/0.74, cross-bars 0.34/0.54. Their REAL residues — the sliver's side-
+  // assignment and the junction weld — are sub-tolerance, visible at 1×, tracked as §0 #2/#3.
   // hairlines was here ("chamfer 3.73px, p95 55.9px — the sub-pixel bars are simply gone")
   // until 2026-07-14: the bars died in the flat-palette stage, not the fit — blend-line
   // classification + endpoint routing + modeFilter-erasure restore fixed it (0.39/0.78 @512;
@@ -109,7 +115,7 @@ for (const c of GATED_CORPUS) {
       engine: 'planar',
       gradients: c.gradients,
     })
-    const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height)
+    const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
     const r = scoreRegions(img, doc)
     const gates = evaluateTruthGates({
       samples: g.samples, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,

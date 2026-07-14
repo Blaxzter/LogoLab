@@ -55,7 +55,7 @@ for (const c of cases) {
   const png = new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng()
   const img = decodePng(png)
   const doc = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false })
-  const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height)
+  const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
   if (g.samples === 0) { console.log(`  · ${c.name} — no interior boundary, skipped`); continue }
 
   rows.push({

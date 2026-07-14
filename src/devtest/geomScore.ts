@@ -30,6 +30,13 @@
 //    So boundary distance leads, and parsimony is expressed as nodes per unit of boundary
 //    LENGTH — scale-free, and blind to both the compositing split and the artist's choice
 //    of how many nodes to spend on a circle.
+//
+// 3. THE MISSED SIDE COUNTS ONLY VISIBLE BOUNDARY.
+//    An authored outline occluded by a later-painted shape made no pixels, so no tracer can
+//    recover it — scoring it invents defects (§0 #1 was exactly that: taco "missed" 20px on
+//    a pixel-perfect trace, because 45.5% of its authored outline is hidden overdraw). GT
+//    query samples are kept only where the truth raster shows a colour change — see
+//    makeVisibleAt below and docs/vectorization-benchmarks.md §9.6.
 // ---------------------------------------------------------------------------
 
 import { segmentCount, segmentControls } from '../lib/path/geometry.ts'
@@ -88,23 +95,29 @@ function polylineLength(pts: Vec[]): number {
   return L
 }
 
+/** A query point plus the unit tangent of the segment it was sampled from — the tangent
+ *  exists so the visibility test can step along the boundary NORMAL. */
+interface QueryPt { x: number; y: number; tx: number; ty: number }
+
 /**
  * Walk a polyline at a FIXED ARC-LENGTH step, emitting query points. This is the step that
  * makes the metric parameterization-invariant: density depends only on curve length, never
  * on node placement or curvature.
  */
-function resampleByArcLength(pts: Vec[], spacing: number, out: Vec[]): void {
+function resampleByArcLength(pts: Vec[], spacing: number, out: QueryPt[]): void {
   if (pts.length < 2) return
-  out.push(pts[0])
+  const l0 = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 1
+  out.push({ x: pts[0].x, y: pts[0].y, tx: (pts[1].x - pts[0].x) / l0, ty: (pts[1].y - pts[0].y) / l0 })
   let carry = 0
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1], b = pts[i]
     const seg = Math.hypot(b.x - a.x, b.y - a.y)
     if (seg <= 0) continue
+    const tx = (b.x - a.x) / seg, ty = (b.y - a.y) / seg
     let t = spacing - carry
     while (t <= seg) {
       const u = t / seg
-      out.push({ x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u })
+      out.push({ x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, tx, ty })
       t += spacing
     }
     carry = (carry + seg) % spacing
@@ -206,8 +219,18 @@ interface Boundary {
  * be dominated by a boundary that has no counterpart by construction. Target segments keep
  * the border so a genuine shape that legitimately touches the edge still has something to
  * match against.
+ *
+ * `visibleAt` (GT side only): drop query points where the truth raster shows no edge —
+ * see the visibility block above scoreGeometry. Only QUERIES are filtered; the target
+ * segments, node counts and lengths stay whole, so parsimony and the spurious side are
+ * untouched by construction.
  */
-function collectBoundary(subPathSets: SubPath[][], w: number, h: number): Boundary {
+function collectBoundary(
+  subPathSets: SubPath[][],
+  w: number,
+  h: number,
+  visibleAt?: (q: QueryPt) => boolean,
+): Boundary {
   const segs: Seg[] = []
   const queries: Vec[] = []
   let length = 0
@@ -228,9 +251,9 @@ function collectBoundary(subPathSets: SubPath[][], w: number, h: number): Bounda
       for (let i = 1; i < pts.length; i++) {
         segs.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
       }
-      const q: Vec[] = []
+      const q: QueryPt[] = []
       resampleByArcLength(pts, SPACING, q)
-      for (const p of q) if (!onBorder(p)) queries.push(p)
+      for (const p of q) if (!onBorder(p) && (!visibleAt || visibleAt(p))) queries.push({ x: p.x, y: p.y })
     }
   }
   return { segs, queries, length, nodes }
@@ -440,21 +463,82 @@ const pct = (a: number[], p: number): number => {
 export interface DistPoint { x: number; y: number; d: number }
 
 export interface GeomDiagnostics {
-  /** Authored boundary, coloured by distance to the nearest traced boundary. Hot ⇒ MISSED. */
+  /** VISIBLE authored boundary (occluded outline excluded — see makeVisibleAt), coloured by
+   *  distance to the nearest traced boundary. Hot ⇒ MISSED. */
   gtPoints: DistPoint[]
   /** Traced boundary, coloured by distance to the nearest authored boundary. Hot ⇒ INVENTED. */
   docPoints: DistPoint[]
 }
 
+/** How far to step along the boundary normal when testing visibility: outside the ~1.25px
+ *  AA band, same probe §8.4 used. */
+const VIS_PROBE = 2
+/** Per-channel RGB tolerance for "these two pixels read the same colour". Flat fills render
+ *  exactly equal; an edge's two sides differ by far more than 2 at ±2px. */
+const VIS_SAME = 2
+
+/**
+ * Is there anything to SEE at this ground-truth boundary point?
+ *
+ * parseGroundTruth reads geometry only — deliberately, it never reimplements painter's-
+ * algorithm occlusion — so every authored outline arrives here whether the composited render
+ * shows it or not. Fluent's Flat twins are authored with heavy overdraw (taco's back shell is
+ * a complete closed path almost entirely BEHIND the front shell — 45.5% of its outline is
+ * invisible), and an edge that made no pixels is not something a tracer can be charged with
+ * missing: scoring it produced the phantom "missed boundary on flat art" defect (§0 #1,
+ * 20px "missed" on a pixel-perfect trace — docs/vectorization-benchmarks.md §9.6).
+ *
+ * So the missed side counts only VISIBLE boundary: a sample is visible when the truth raster
+ * changes colour across it — read at ±VIS_PROBE px along the boundary normal, plus the point
+ * itself (the centre term keeps features thinner than 2·VIS_PROBE visible: their two sides
+ * match but their own pixels are the feature). Off-canvas probes count as visible rather
+ * than guessed at. This is the same standard the refusal lists already enforce (strokes,
+ * patterns, clips: the truth is the VISIBLE boundary) — occlusion is just the one case cheap
+ * enough to resolve per-sample from the raster instead of refusing the whole file.
+ *
+ * Verified before adopting (§9.6): on the 106 tier-2 twins this collapses the missed tail
+ * from mean 1.89px / max 20.10px to mean 0.23px / max 0.63px while leaving every genuinely
+ * traced-wrong case intact (gradient-flat 6.31 → 6.31, hairlines 0.39 → 0.39); real dropped
+ * regions stay caught because THEIR edges are visible in the truth render by definition.
+ */
+function makeVisibleAt(
+  raster: { width: number; height: number; data: Uint8ClampedArray | Uint8Array },
+): (q: { x: number; y: number; tx: number; ty: number }) => boolean {
+  const { width, height, data } = raster
+  const at = (x: number, y: number): number => {
+    const xi = Math.round(x), yi = Math.round(y)
+    if (xi < 0 || yi < 0 || xi >= width || yi >= height) return -1
+    const o = (yi * width + xi) * 4
+    return (data[o] << 16) | (data[o + 1] << 8) | data[o + 2]
+  }
+  const same = (a: number, b: number): boolean =>
+    Math.abs(((a >> 16) & 255) - ((b >> 16) & 255)) <= VIS_SAME &&
+    Math.abs(((a >> 8) & 255) - ((b >> 8) & 255)) <= VIS_SAME &&
+    Math.abs((a & 255) - (b & 255)) <= VIS_SAME
+  return (q) => {
+    // normal = tangent rotated 90°
+    const a = at(q.x - VIS_PROBE * q.ty, q.y + VIS_PROBE * q.tx)
+    const b = at(q.x + VIS_PROBE * q.ty, q.y - VIS_PROBE * q.tx)
+    const c = at(q.x, q.y)
+    if (a < 0 || b < 0 || c < 0) return true
+    return !same(a, b) || !same(c, a) || !same(c, b)
+  }
+}
+
 /**
  * Score a traced doc against ground-truth shapes. Both must already be in the SAME pixel
- * space (see svgGround.toRasterSpace) — `w`/`h` are the raster dimensions.
+ * space (see svgGround.toRasterSpace) — `w`/`h` are the raster dimensions. `truthRaster`
+ * is the rasterized ground truth (the same pixels the tracer was given): the missed side
+ * is scored against its VISIBLE boundary only — see makeVisibleAt above. It is required,
+ * not optional, because a scorer that silently falls back to counting occluded outline
+ * would re-open §0 #1 the first time a caller forgot the argument.
  */
 export function scoreGeometry(
   gt: GroundShape[],
   doc: EditableDoc,
   w: number,
   h: number,
+  truthRaster: { width: number; height: number; data: Uint8ClampedArray | Uint8Array },
 ): GeomScore & { diagnostics: GeomDiagnostics } {
   const docSets: SubPath[][] = []
   let docPaths = 0
@@ -464,7 +548,7 @@ export function scoreGeometry(
     docSets.push(item.subPaths)
   }
 
-  const G = collectBoundary(gt.map((s) => s.subPaths), w, h)
+  const G = collectBoundary(gt.map((s) => s.subPaths), w, h, makeVisibleAt(truthRaster))
   const D = collectBoundary(docSets, w, h)
 
   const gGrid = new SegGrid(G.segs)

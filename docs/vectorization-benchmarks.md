@@ -27,18 +27,25 @@ guardrails):
 
 | # | defect | reproducing case | number | details |
 |---|---|---|---|---|
-| 1 | **Missed boundary on flat art** — not fixed by region recovery; cause unlocated | `taco`, `mate`, `fortune-cookie` (tier 2, ungated) | missed 20.1 / 11.7 / 9.9px; corpus mean 1.89px | §9.2 |
-| 2 | **Junction weld** — crossing-bar junction wedges pulled | `cross-bars` (tier 0, gated, in `KNOWN_DEFECTS`) | chamfer 1.04px, p95 9.6px | §7; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
-| 3 | **AA diagonal sliver** — soft diagonal between two flats | `aa-seam` (tier 0, gated, in `KNOWN_DEFECTS`) | chamfer 1.44px, p95 24.8px | §7; +0.09 chamfer from the §9.5 fix (label-level endpoint routing sends the whole sliver to one side) |
+| 2 | **Junction weld** — crossing-bar junction wedges pulled; visible at 1×, sub-tolerance since the scorer counts visible boundary only (like #7) | `cross-bars` (tier 0, gated, **passes**) | chamfer 0.34px, p95 0.54px (was 1.04/9.6 — the difference was the occluded under-bar edge, §9.6) | §7; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
+| 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.22px, p95 0.74px (was 1.44/24.8 — the p95 was the seam occluded under the circle, §9.6) | §7; +0.09 chamfer from the §9.5 fix (label-level endpoint routing sends the whole sliver to one side) |
 | 4 | **Edge pull on flats bordering a gradient bg** | `gradient-flat` (tier 0, gated, in `KNOWN_DEFECTS`) | p95 6.3px | §7 |
 | 5 | **Near-colour palette cluster fusion** — `quantize`'s `MERGE_DISTANCE` 10 (RGB) fuses two authored colours ΔE ≈ 4.5 apart; the last remaining tier-2 region drop | `flute` (tier 2, ungated) | 1 region, ΔE 4.5 | §9.4 |
-| 6 | **Thin features at LOW resolution** — below ~256px the sub-pixel bars still break up (the @512 defect is fixed, §9.5; the gate runs at 512) | `hairlines` @256 (ungated resolution) | chamfer 2.61px, p95 28.8px @256 | §9.5 |
+| 6 | **Thin features at LOW resolution** — below ~256px the sub-pixel bars still break up (the @512 defect is fixed, §9.5; the gate runs at 512) | `hairlines` @256 (ungated resolution) | chamfer 0.88px, p95 9.77px @256 (was 2.44/27.8 before §9.6 — part of that was bar-crossing occlusion; the remaining 9.77 is real) | §9.5 |
 | 7 | **Checkerboard corner scalloping** — diagonally-touching squares corner-weld into scallops; sub-tolerance but visible at 1× | `checker` (tier 0, gated, **passes**) | all deviations < 2px | §8.2 |
 | 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
-| 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | ~15–17px missed | §8.5 |
+| 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 
-Recently closed (the pattern an exit should follow): **thin features @512** (`hairlines`) —
+Recently closed (the pattern an exit should follow): **missed boundary on flat art**
+(`taco`/`mate`/`fortune-cookie`, was #1) — closed 2026-07-15 as an **answer-sheet artifact,
+not a tracer defect**: the "missed" boundary is authored outline OCCLUDED by later-painted
+shapes (taco 45.5% of its outline invisible), which the geometry-only GT reader counts as
+scorable. Visible-only, missed 20.10 → 0.23px / 11.49 → 0.49 / 9.88 → 0.33, and the whole
+tier-2 corpus is sub-pixel (mean missed 1.89 → 0.23px, max 0.63px); renders via resvg are
+pixel-clean (p95 ΔE 0.00). The scorer fix (exclude invisible GT samples) SHIPPED 2026-07-15
+with user sign-off; TIER_TOL[2] re-calibrated ~6–30× tighter — **§9.6** is the record.
+**Thin features @512** (`hairlines`) —
 chamfer 3.73 → 0.39px, p95 55.9 → 0.78px, bars recovered in the authored colours, root-caused
 and measured in **§9.5** (2026-07-14); **dropped small flat regions** — 22 → 1 across tier 2,
 `bloom`/`petals` 5/7 → 7/7, root-caused and measured in **§9.4** (2026-07-15); **`checker`
@@ -396,6 +403,11 @@ fake "missed". Measured (step ±2px along the boundary normal, compare raster co
 **only 1.9% of tier-1 authored boundary is invisible**, and excluding it moves the corpus mean
 by 0.1px (5.67 → 5.57px). So `geomScore` needs no change and the failures below are real.
 
+*(Superseded 2026-07-15: the conclusion held for tier 1's corpus MEAN but not per-case, and
+not at all for tier 2 — the flat twins carry up to 45% hidden overdraw and the phantom
+"missed boundary" defect §0 #1 was exactly this. The scorer now excludes occluded boundary
+itself: geomScore.makeVisibleAt, §9.6.)*
+
 ### 8.5 New open findings about the tracer
 
 - **Gradient banding on stacked overlays** (§8.3). The headline. `black-circle`, `olive`,
@@ -492,6 +504,10 @@ cases (`fortune-cookie` 9.9 is not), consistent with — but not yet proof of �
 mechanism: a region merged into an *adjacent* class erases the shared edge, so §9.1 and "missed
 boundary on flat art" (§7) overlap substantially. Parsimony is a non-issue (p50 below 1× — more
 economical than the artist).
+
+**Resolved 2026-07-15, and the guess above was wrong: it was neither merging nor tracing —
+the entire missed tail is authored boundary OCCLUDED by later-painted shapes, i.e. the answer
+sheet, not the tracer. See §9.6.**
 
 ### 9.3 The AbLab's experimental features, measured against ground truth: none merges
 
@@ -658,3 +674,116 @@ level this time: all seven bars rasterize from the SERIALIZED SVG via resvg (not
 `rasterizeDoc`); bar 6's rendered rows exactly match its label map (only the 4
 modeFilter-eroded end rows missing, ~1%); hairlines @512 essentially unchanged (0.39 / 0.78 — the
 metric never saw the difference, which is the point).
+
+### 9.6 Not a fix but a verdict: the tier-2 "missed boundary" was OCCLUDED authored outline — §0 #1 closes as an answer-sheet artifact
+
+§0 #1 (`taco` missed 20.1px / `mate` 11.7 / `fortune-cookie` 9.9 @512), investigated
+2026-07-15. **No tracer change came out of this section, and none is warranted: the tracer
+was never missing anything.** The chain of evidence, in the order it was found:
+
+1. **Locate first** (the §9.5 recipe): dump `scoreGeometry`'s worst missed samples
+   (`probeMissed.ts`) and look at the pixels. Every hot blob sits in the INTERIOR of a
+   solid region — taco's worst sample (306, 352) is 128px from any traced boundary, and
+   the source pixel, the traced pixel, and every pixel ±2px around them are the same
+   `#f9c23c`. There is no edge in the raster there. The "missed" boundary is authored
+   outline that the composited render never shows: taco's orange back shell (`#FFB02E`)
+   is a full closed path drawn almost entirely BEHIND the yellow front shell, the brown
+   filling's dome is behind the front shell and the left tomato, and so on.
+   `parseGroundTruth` reads geometry only — by design it "never reimplements painter's-
+   algorithm occlusion" (svgGround.ts) — so every authored outline becomes GT boundary,
+   visible or not. A tracer cannot recover an edge that made no pixels.
+
+2. **Quantify** (`probeOcclusion.ts` — §8.4's audit, which had only ever run on tier 1,
+   rebuilt for tier 2): a GT sample is *invisible* when the truth raster reads the same
+   colour at ±2px along the boundary normal AND at the sample itself (the centre-pixel
+   term keeps features thinner than 4px classified visible). The probe reproduces
+   `scoreGeometry`'s all-sample `missedMean` exactly on all 106 cases, then re-scores on
+   visible samples only:
+
+   | case | invisible boundary | missed all → visible | chamfer | p95 |
+   |---|---:|---:|---:|---:|
+   | taco | **45.5%** | 20.10 → **0.23** | 10.17 → 0.23 | 88.06 → 0.76 |
+   | mate | 21.9% | 11.49 → **0.49** | 5.83 → 0.33 | 84.65 → 2.47 |
+   | fortune-cookie | 20.6% | 9.88 → **0.33** | 5.07 → 0.30 | 80.16 → 0.59 |
+
+   Corpus-wide (106 flat twins @512): **8.7% of tier-2 authored boundary is invisible**
+   (tier 1 measured 1.9% — the Flat style is simply authored with more overdraw: stacked
+   full shapes for flag stripes put rainbow-flag at 37%, transgender-flag at 35%, lotus
+   36%, teapot 30%). Visible-only, the whole corpus is sub-pixel: missed p50/p90/max
+   0.52/5.50/20.10 → **0.22/0.34/0.63**, chamfer max 10.17 → **0.48**, p95 max 88.06 →
+   **2.47**. The worst visible-only case is violin at 0.63px missed. **There is no
+   missed-boundary defect on flat art.** The §9.2 "one-way error" observation (spurious
+   p95 0.33px while missed p90 5.43px) was the artifact's signature all along: occlusion
+   can only ever inflate the GT→trace direction.
+
+3. **Falsify** (the audit must not dissolve real defects): run on tier 0,
+   `gradient-flat` (6.31 → 6.31), `hairlines` (0.39 → 0.39), `bloom`/`petals`/`nebula`
+   (0% invisible, unchanged) all keep their numbers — the audit is not a blanket eraser.
+   But two gated KNOWN_DEFECTS numbers are themselves contaminated:
+   - **`cross-bars`**: the red bar's edges pass UNDER the blue bar (6.2% invisible, up to
+     ~22px deep). Visible-only: chamfer 1.04 → **0.34**, p95 9.58 → **0.54** — under
+     tier-0 limits. The junction weld is still real and visible at 1× (like §0 #7's
+     scalloping) but it is a sub-tolerance defect; its headline number was mostly the
+     occluded under-bar.
+   - **`aa-seam`**: the orange/teal seam passes UNDER the purple circle (r=23; 12.1%
+     invisible, deepest occluded point ≈ 23px from the circle rim — exactly the reported
+     p95 24.77). Visible-only: chamfer 1.44 → **0.22**, p95 24.77 → **0.74**. The
+     blend-sliver side-assignment (§9.5) is real but sub-pixel in geometric terms.
+
+4. **Render-verify** (the §9.5-amendment protocol — serialized SVG through resvg, not
+   `rasterizeDoc`, `probeRenderCheck.ts`): taco meanΔE 0.19 / p95ΔE 0.00 / SSIM 0.9935;
+   mate 0.09 / 0.00 / 0.9969; fortune-cookie 0.10 / 0.00 / 0.9963 against the truth
+   raster; every located hot-spot pixel matches the source exactly; truth|trace
+   side-by-sides are visually indistinguishable. A 10–20px genuinely-missing edge cannot
+   hide under a p95ΔE of 0.00.
+
+**What was NOT done, deliberately.** The fix belongs in the ANSWER SHEET — exclude
+invisible GT samples from the missed side (the target segments, node counts and lengths
+stay whole, so parsimony is untouched). That is a change to `geomScore.ts`, which was
+explicitly fenced off for this session, and it re-defines the metric for every consumer —
+so it is a decision, not a patch: it would tighten the honest tier-2 calibration
+massively (visible-only corpus max chamfer 0.48 vs the current TIER_TOL[2] of 3.0), and
+`cross-bars` + `aa-seam` would start PASSING tier-0 gates, forcing their KNOWN_DEFECTS
+deletions with their real-but-small residuals re-filed as sub-tolerance defects like
+§0 #7. Pending that decision, the scorer, the tolerances, KNOWN_DEFECTS and the tracer
+are all byte-identical to a218d31; the probes (`probeMissed.ts`, `probeOcclusion.ts`,
+`probeRenderCheck.ts`) stay in `src/devtest/` as the measurement record.
+
+One implication worth carrying forward: §0 #10's tier-1 numbers (`speaker-low-volume`
+~17px missed) rest on §8.4's CORPUS-MEAN 1.9% — which does not rule out per-case
+occlusion outliers (the same glyph's FLAT twin is 19.8% occluded and drops to 0.26px
+visible-only). Re-run `probeOcclusion.ts` per-case on tier 1 before spending tracer work
+on #10.
+
+**Amendment (same day): Option A shipped with user sign-off** — after a visual walkthrough
+(truth|trace side-by-sides, the missed heat drawn on the pixels, the authored layers pulled
+apart, visible-vs-hidden classification) the user chose "count only the edges you can see".
+What landed:
+
+- **`geomScore.ts scoreGeometry` now requires the truth raster** and drops GT *query*
+  samples that are invisible in it (`makeVisibleAt`: same colour at ±2px along the boundary
+  normal AND at the point itself; off-canvas probes count visible). Only the missed-side
+  queries are filtered — target segments, node counts and boundary lengths stay whole, so
+  the spurious side and parsimony are untouched *by construction* (verified: tier-2 spurious
+  0.21px, parsimony max 4.23×, regions 105/106 — all byte-identical before/after). The
+  probes' audit logic moved INTO the scorer; the four temporary probe scripts were deleted.
+- **Tier 2 re-calibrated** (same recipe: boundary just above corpus p90, parsimony just
+  above max): `TIER_TOL[2]` chamfer 3.0 → **0.35** (p90 0.31, max 0.48 violin), p95 35 →
+  **1.2** (p90 1.02, max 2.47 mate), parsimony 4.5 unchanged. The tier-2 corpus now sits
+  entirely inside tier 0's own limits — the flat gate finally measures the tracer, not the
+  answer sheet's overdraw.
+- **Tier 0**: `cross-bars` (0.34/0.54) and `aa-seam` (0.22/0.74) pass every gate → deleted
+  from `KNOWN_DEFECTS`; their real, visible-at-1× residues stay tracked as §0 #2/#3
+  (sub-tolerance, like #7). `gradient-flat` unchanged (p95 6.31 — still a real defect,
+  still listed). `hairlines` @512 unchanged (0.39/0.78); @256 the ungated defect §0 #6
+  shrinks 2.44/27.81 → 0.88/9.77 (bar-crossing occlusion was inflating it) but remains
+  real. Every other tier-0 number is byte-identical.
+- **Tier 1** (full 109-case calibration): chamfer p50 1.87 → 1.35 / p90 5.65 → 4.51 —
+  the modest shift §8.4's 1.9% predicted; `TIER_TOL[1]` limits deliberately unchanged.
+  `fluent-olive` still fails (6.73/97.2) — the banding defect is real and stays in
+  `KNOWN_DEFECTS`. And the §0 #10 caution above is now RESOLVED: `speaker-low-volume`
+  still misses **16.9px** and `chart-increasing`/`chart-decreasing` **15.3px** *after*
+  occlusion exclusion — those edges are genuinely visible and genuinely lost; #10 is a
+  real tracer defect, correctly deprioritised as gradient-only.
+- **Suite**: typecheck clean, 267 pass / 0 fail / 2 skipped, unchanged. The tracer itself
+  is untouched — renders are the ones verified above (p95 ΔE 0.00 through resvg).

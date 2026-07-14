@@ -208,9 +208,11 @@ export interface TruthTol {
 export const TIER_TOL: Record<0 | 1 | 2, TruthTol> = {
   0: TRUTH_TOL,
   1: {
-    // observed p50 1.87 · p75 3.14 · p90 5.65 · max 15.74 (black-circle)
+    // observed p50 1.35 · p90 4.51 · max 15.74 (black-circle) — visible-only, 2026-07-15
+    // (pre-§9.6: p50 1.87 · p90 5.65; occlusion exclusion moved tier 1 only modestly, as
+    // §8.4's 1.9% predicted). Limits deliberately kept: catastrophe bounds, not targets.
     chamfer: 6.0,
-    // observed p50 14.44 · p75 30.64 · p90 52.88 · max 160.90 (black-circle). Yes, this is a
+    // observed p50 12.39 · p75 27.16 · p90 42.33 · max 160.90 (black-circle). Yes, this is a
     // terrible-looking limit. It is honest: p95 on gradient art is dominated by the invented
     // interior edges above, and setting it tight would paint the whole corpus red without
     // telling anyone anything they cannot already see in `missed` vs `invented`.
@@ -220,9 +222,9 @@ export const TIER_TOL: Record<0 | 1 | 2, TruthTol> = {
     // assumption that emoji drawn at 32 units would make any tracer look profligate was wrong.
     parsimony: 5.0,
   },
-  // MEASURED on the 106 flat twins @ 512px (calibrateTier2.ts, 2026-07-14) with the same
-  // recipe as tier 1: boundary limits just above the corpus p90, parsimony just above the
-  // corpus max. Same caveat too — "do not get worse" numbers, NOT "this is correct" numbers.
+  // MEASURED on the 106 flat twins @ 512px (calibrateTier2.ts) with the same recipe as
+  // tier 1: boundary limits just above the corpus p90, parsimony just above the corpus max.
+  // Same caveat too — "do not get worse" numbers, NOT "this is correct" numbers.
   //
   // What the calibration found on landing — and what became of it:
   //   • REGION RECOVERY, the zero-tolerance gate, failed 15 of 106 cases — 22 regions
@@ -231,17 +233,22 @@ export const TIER_TOL: Record<0 | 1 | 2, TruthTol> = {
   //     alone; FIXED 2026-07-15 by flat-interior protection (paletteSegment.ts) — now 1
   //     drop in 106 (flute, ΔE 4.5, a quantize MERGE_DISTANCE artifact). See
   //     docs/vectorization-benchmarks.md §9.1/§9.4.
-  //   • the tracer INVENTS almost nothing on flat art (spurious p95 0.33px) but MISSES real
-  //     boundary (missed p90 5.43px, max 20.1px — taco). Still open: the worst cases
-  //     (taco/mate/fortune-cookie) did NOT improve with region recovery, so the missed
-  //     boundary is its own defect, not a side effect of the drops.
+  //   • the tracer INVENTS almost nothing on flat art (spurious p95 0.33px) but appeared to
+  //     MISS real boundary (missed p90 5.43px, max 20.1px — taco). That was the answer
+  //     sheet, not the tracer: the flat twins are authored with heavy overdraw, and the
+  //     missed side was counting authored outline OCCLUDED behind later-painted shapes
+  //     (taco: 45.5% of its outline). Since 2026-07-15 the scorer excludes invisible
+  //     boundary (geomScore.makeVisibleAt, §9.6) and the limits below are RE-CALIBRATED on
+  //     the visible-only distribution — ~6–30× tighter, and for the first time meaningful:
+  //     the whole corpus now sits inside tier 0's own limits.
   2: {
-    // observed p50 0.42 · p75 1.33 · p90 2.80 · p95 4.10 · max 10.20 (taco)
-    chamfer: 3.0,
-    // observed p50 2.70 · p75 15.86 · p90 31.24 · max 88.12 (taco)
-    p95: 35.0,
-    // observed p50 0.83 · p90 1.37 · max 4.29 (baguette-bread) — the tracer is usually MORE
-    // economical than the artist on these (p50 below 1×).
+    // observed (visible-only, 2026-07-15): p50 0.22 · p90 0.31 · p95 0.34 · max 0.48 (violin)
+    chamfer: 0.35,
+    // observed (visible-only, 2026-07-15): p50 0.62 · p90 1.02 · p95 1.22 · max 2.47 (mate)
+    p95: 1.2,
+    // observed p50 0.83 · p90 1.40 · max 4.23 (baguette-bread) — the tracer is usually MORE
+    // economical than the artist on these (p50 below 1×). Untouched by the §9.6 change (the
+    // visibility filter only drops QUERY samples; nodes and lengths stay whole).
     parsimony: 4.5,
   },
 }

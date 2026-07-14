@@ -220,7 +220,7 @@ async function scoreOne(
       img,
       doc,
       shapes,
-      geom: scoreGeometry(shapes, doc, img.width, img.height),
+      geom: scoreGeometry(shapes, doc, img.width, img.height, img),
       regions: scoreRegions(img, doc),
     },
   }
@@ -707,9 +707,10 @@ function TruthAbout() {
           overprint; where it is wrong you see one colour alone.
         </div>
         <div className="max-w-[32ch]">
-          <b className="text-ink">miss heat</b> — the authored boundary, coloured by how far the
-          nearest traced boundary is. <span className="lab-ramp" /> Hot = the tracer <b>missed</b>{' '}
-          that arc.
+          <b className="text-ink">miss heat</b> — the VISIBLE authored boundary, coloured by how
+          far the nearest traced boundary is. <span className="lab-ramp" /> Hot = the tracer{' '}
+          <b>missed</b> that arc. Authored outline occluded behind later-painted shapes is
+          excluded — no tracer can recover an edge that made no pixels (§9.6).
         </div>
         <div className="max-w-[32ch]">
           <b className="text-ink">invented heat</b> — the traced boundary, coloured by distance to
