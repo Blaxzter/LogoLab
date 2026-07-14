@@ -1,5 +1,5 @@
 // Generates the HANDCRAFTED "difficult case" corpus for the tracer A/B view
-// (vectorize-ab.html). Each case is authored as a SELF-CONTAINED SVG so the view can
+// (/labs/ab — AbLab). Each case is authored as a SELF-CONTAINED SVG so the view can
 // rasterize it at any input size (the resolution switch) — same vector content, varying
 // raster resolution, which is the fair way to check whether the tracer's output is
 // scale-stable. Re-run after editing a case:
@@ -142,12 +142,32 @@ const CASES: { name: string; note: string; make: () => string }[] = [
   {
     name: 'checker',
     note: 'fine checkerboard (a 2× finer quadrant) → high-frequency aliasing',
-    make: () =>
-      svg(
-        `<rect width="${V}" height="${V}" fill="url(#c9)"/><rect x="128" y="128" width="128" height="128" fill="url(#c4)"/>`,
-        `<pattern id="c9" width="18" height="18" patternUnits="userSpaceOnUse"><rect width="18" height="18" fill="${rgb(220, 214, 198)}"/><rect width="9" height="9" fill="${INK}"/><rect x="9" y="9" width="9" height="9" fill="${INK}"/></pattern>` +
-          `<pattern id="c4" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="${rgb(220, 214, 198)}"/><rect width="4" height="4" fill="${INK}"/><rect x="4" y="4" width="4" height="4" fill="${INK}"/></pattern>`,
-      ),
+    // AUTHORED AS FILLED RECTS, NOT A <pattern> — the pattern principle is the stroke
+    // principle (see FILLS, NOT STROKES above): a pattern fill's visible boundary is the
+    // TILING, not the host rect's outline, so the <pattern> version was unscorable ground
+    // truth (docs/vectorization-benchmarks.md §8.2 — a tracer that correctly recovered the
+    // checkerboard was charged with inventing 52px of boundary). Tile sizes are 16/8 (was
+    // 18/9) so the coarse grid ALIGNS with the fine quadrant at x=y=128: no square straddles
+    // the quadrant edge, nothing is occluded, and the authored outlines ARE the visible
+    // edges — the two properties an answer sheet needs.
+    make: () => {
+      const BEIGE = rgb(220, 214, 198)
+      const cell = (x: number, y: number, s: number): string =>
+        `<rect x="${x}" y="${y}" width="${s}" height="${s}" fill="${INK}"/>`
+      const parts: string[] = [`<rect width="${V}" height="${V}" fill="${BEIGE}"/>`]
+      for (let ty = 0; ty < 16; ty++) {
+        for (let tx = 0; tx < 16; tx++) {
+          if (tx >= 8 && ty >= 8) continue // the fine quadrant replaces these tiles
+          parts.push(cell(tx * 16, ty * 16, 8), cell(tx * 16 + 8, ty * 16 + 8, 8))
+        }
+      }
+      for (let ty = 0; ty < 16; ty++) {
+        for (let tx = 0; tx < 16; tx++) {
+          parts.push(cell(128 + tx * 8, 128 + ty * 8, 4), cell(128 + tx * 8 + 4, 128 + ty * 8 + 4, 4))
+        }
+      }
+      return svg(parts.join(''))
+    },
   },
   {
     name: 'radial-glow',
