@@ -95,28 +95,23 @@ separate from this branch.
 
 ## 3. Known limitations (current planar output)
 
-1. ~~**Shared-edge editing is not wired yet.**~~ **Done (Phase 5).** Dragging a node
-   on a shared boundary now moves the one edge and both regions follow; junction
-   drags move every incident spoke. (Minor known gap: double-clicking the *closing*
-   segment of a pure closed-loop disc edge is a no-op — insert elsewhere on it.)
-2. ~~**Anti-alias transition slivers.**~~ **Addressed (segmentation merge).** At a
-   colour boundary — especially with gradients OFF, where a ramp posterizes into flat
-   bands — the segmenter gave the in-between colours their own thin regions, which
-   planar faithfully traced → many tiny unnecessary regions *(user-reported)*. Fixed
-   in **segmentation** ([segment.ts](../src/lib/trace/segment.ts) `mergeSmallRegions`,
-   Step 5): any macro-region below `minRegionArea` opaque px is absorbed into its
-   nearest-colour neighbour before tracing, so the sliver is recoloured (render-safe)
-   rather than emitted as its own shape. Engine-agnostic (crisp/potrace/planar all
-   benefit) and **driven by the Despeckle dial** (`minRegionAreaFor` in
-   [index.ts](../src/lib/trace/index.ts); 0 ⇒ off, byte-identical; default 25 ⇒ 50px²,
-   despeckle² · 800). Measured (gradients off): nebula planar **19 → 12 regions** at
-   the default with identical ΔE/SSIM; the gradients-on corpus is byte-identical
-   (ramps fuse, so no sub-threshold regions exist). User-marked regions are protected.
-3. ~~**No circle/line snapping** (beautify).~~ **Done (Phase 6).** Shared edges
-   now snap to circles / ellipses / straight lines at trace time (§5).
-4. **Sub-pixel edge placement** on smooth high-contrast boundaries is slightly behind
-   crisp (it fits the integer crack staircase, not the AA coverage field) — visible
-   only as a marginally higher seam metric on gradient images like nebula.
+**Tracer defects are tracked in ONE place: `docs/vectorization-benchmarks.md` §0** — a
+ranked list where every entry names the corpus case that reproduces it, with
+`KNOWN_DEFECTS` in `test/truth-gate.test.ts` as the machine-checked status. (This section
+used to carry its own list; it rotted — three of its four entries were long fixed.)
+
+What belongs here instead — planar-specific limitations that are not corpus defects:
+
+1. **Editor gap:** double-clicking the *closing* segment of a pure closed-loop disc edge
+   is a no-op (`resolveEdgeSegment` rejects it) — insert elsewhere on the loop.
+2. **Sub-pixel edge placement** on smooth high-contrast boundaries is slightly behind
+   crisp (planar fits the integer crack staircase, not the AA coverage field) — visible
+   only as a marginally higher seam metric on gradient images like nebula (§0 #8).
+3. **Experimental flags stay OFF by default — measured, not forgotten** (benchmarks §9.3):
+   `refineJunctions` (tradeoff: 10 better / 14 worse on the flat corpus), `weldJunctions`
+   (a ≤3px micro-edge is sometimes a real thin feature — beverage-box p95 2→22px),
+   `backgroundGradient` (0 wins on ground truth where it applies). Planned: expose them as
+   opt-in feature flags in the /vectorize studio rather than merging as defaults.
 
 ---
 

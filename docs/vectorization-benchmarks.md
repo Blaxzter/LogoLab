@@ -11,6 +11,43 @@ those are the expensive mistakes.
 
 ---
 
+## 0. Open tracer defects — the ranked working list
+
+**The rules that keep this list trustworthy** (hand-maintained lists rot; these are the
+guardrails):
+- `KNOWN_DEFECTS` in `test/truth-gate.test.ts` is the **authoritative, machine-checked
+  status** for gated cases — CI breaks both when a new case fails and when a listed one
+  starts passing. This section adds ranking and the defects that have **no gated case** and
+  therefore cannot appear there.
+- Every entry must name the **corpus case that reproduces it** and the section that measures
+  it. No case, no entry.
+- An entry leaves the list only with a measured before/after (like §9.4). Numbers are @512px.
+- Ranked by relevance to the product: **flat vector / AI-generated icons** (gradient art is
+  scoring infrastructure, not a goal).
+
+| # | defect | reproducing case | number | details |
+|---|---|---|---|---|
+| 1 | **Thin features**: sub-pixel bars partially lost, and the surviving ones painted **blend-grey** (their pixels never reach the authored colour — the red diagonal traces grey) | `hairlines` (tier 0, gated, in `KNOWN_DEFECTS`) | chamfer 3.73px, p95 55.9px | §7, diagnosis §9.3 |
+| 2 | **Missed boundary on flat art** — not fixed by region recovery; cause unlocated | `taco`, `mate`, `fortune-cookie` (tier 2, ungated) | missed 20.1 / 11.7 / 9.9px; corpus mean 1.89px | §9.2 |
+| 3 | **Junction weld** — crossing-bar junction wedges pulled | `cross-bars` (tier 0, gated, in `KNOWN_DEFECTS`) | chamfer 1.04px, p95 9.6px | §7; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
+| 4 | **AA diagonal sliver** — soft diagonal between two flats | `aa-seam` (tier 0, gated, in `KNOWN_DEFECTS`) | chamfer 1.35px, p95 24.8px | §7 |
+| 5 | **Edge pull on flats bordering a gradient bg** | `gradient-flat` (tier 0, gated, in `KNOWN_DEFECTS`) | p95 6.3px | §7 |
+| 6 | **Near-colour palette cluster fusion** — `quantize`'s `MERGE_DISTANCE` 10 (RGB) fuses two authored colours ΔE ≈ 4.5 apart; the last remaining tier-2 region drop | `flute` (tier 2, ungated) | 1 region, ΔE 4.5 | §9.4 |
+| 7 | **Checkerboard corner scalloping** — diagonally-touching squares corner-weld into scallops; sub-tolerance but visible at 1× | `checker` (tier 0, gated, **passes**) | all deviations < 2px | §8.2 |
+| 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
+| 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
+| 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | ~15–17px missed | §8.5 |
+
+Recently closed (the pattern an exit should follow): **dropped small flat regions** — 22 → 1
+across tier 2, `bloom`/`petals` 5/7 → 7/7, root-caused and measured in **§9.4** (2026-07-15);
+**`checker` unscorable** — re-authored, now green (§8.2, 2026-07-15).
+
+Feature verdicts (not defects): the experimental A/B flags (`refineJunctions`,
+`weldJunctions`, `backgroundGradient`) measured **non-mergeable as defaults** — §9.3. The
+plan is to expose them as opt-in feature flags in the /vectorize studio instead.
+
+---
+
 ## 1. Why we built a ground-truth gate at all
 
 The pre-existing gate (`test/trace-regression.test.ts` + `test/golden/trace-baseline.json`)
@@ -185,9 +222,10 @@ NonCommercial *and* ShareAlike. Also: every SVG is resized to 200×200 and rewri
 |---|---|---|---|
 | **0 — the gate** ✅ **BUILT** | **our handcrafted cases** (`src/devtest/genEdgeCases.ts` → `TRUTH_CORPUS`) | ours | Each isolates a *named* failure mode of **this** tracer (bg-gradient reunification, colour-class DELETE risk, junction weld). **No public corpus covers these.** |
 | **1 — gradients** ✅ **BUILT — see §8** | **Fluent Emoji "Color"**, **109 vendored** of 1,595 triaged | **MIT** | The only authored gradient GT that exists. Flat variants give a free A/B. |
-| **2 — multi-colour flat** | **Twemoji** (jdecked fork), ~200–300 | **CC-BY 4.0** | Region topology, holes, authored fill ΔE. Needs an `ATTRIBUTION` file. |
-| **3 — silhouettes** | **Material Design Icons**, ~200 | **Apache 2.0** | Boundary/corner/node-economy. Filled, no trademarks. |
-| **4 — canaries** | the real PNGs (nebula, petals, schild, headphones) | ours | Loose "did we catastrophically collapse" gates only. Not a target. |
+| **2 — flat twins** ✅ **BUILT — see §9** | **Fluent Emoji "Flat"**, the 106 tier-1 A/B controls promoted to scored cases | **MIT** | Region recovery + boundary on flat multi-region art — the product's actual shape. |
+| **3 — multi-colour flat** | **Twemoji** (jdecked fork), ~200–300 | **CC-BY 4.0** | Region topology, holes, authored fill ΔE. Needs an `ATTRIBUTION` file. |
+| **4 — silhouettes** | **Material Design Icons**, ~200 | **Apache 2.0** | Boundary/corner/node-economy. Filled, no trademarks. |
+| **5 — canaries** | the real PNGs (nebula, petals, schild, headphones) | ours | Loose "did we catastrophically collapse" gates only. Not a target. |
 
 **Licence hygiene for a public repo:** CC0 needs nothing · MIT/Apache/ISC need a NOTICE ·
 CC-BY needs an ATTRIBUTION file — all fine. **Anything `-SA` or `-NC` stays out.**
@@ -240,20 +278,23 @@ CC-BY needs an ATTRIBUTION file — all fine. **Anything `-SA` or `-NC` stays ou
 
 ---
 
-## 7. Open findings about the tracer (not the benchmark)
+## 7. First ground-truth findings about the tracer (2026-07-12) — historical record
 
-These came out of the first ground-truth runs and are **not yet fixed**:
+**The live, ranked defect list is §0** — this section is the original record of what the
+first ground-truth runs surfaced, kept because the *wrong characterisation* below (and how
+the corpus corrected it) is itself a finding:
 
-- **Systematic low-contrast overlap merge.** `bloom` and `petals` independently drop their
-  overlap lenses. Two distinct failure modes, separated by the location-based matcher:
-  - `bloom` `#db50a7` (A∩B) → the trace paints `#ef63a8` there: **absorbed into its
-    neighbour** (ΔE 11.0).
-  - `bloom` `#1e9feb` (A∩C) → the trace paints `#309bdf` there: the region **exists but got
-    the wrong colour**, merged into the spatially-distant B∩C **colour class** (ΔE 4.7).
-  - The merge is **colour-threshold driven, not area driven**: B∩C survives at 821px with a
-    ΔE 75.2 step, while the dropped lenses are 695px with ΔE 11.0/13.5 steps. **The threshold
-    sits above ΔE 13.5.**
-  - **The old golden passes both** (bloom SSIM 0.9922, petals 0.9915).
+- ~~**Systematic low-contrast overlap merge.**~~ **FIXED 2026-07-15 — see §9.4.** `bloom` and
+  `petals` dropped their overlap lenses; both now recover 7/7 at every resolution and pass
+  every tier-0 gate (deleted from `KNOWN_DEFECTS`). The original characterisation below was
+  *wrong in an instructive way*: the merge looked "colour-threshold driven, not area driven"
+  (B∩C survived at 821px with ΔE 75.2 while 695px lenses with ΔE 11.0/13.5 dropped), but the
+  real mechanism was `dropMinorColors`' **share threshold** — pure area, no colour term. The
+  ΔE pattern was a coincidence of which *cluster counts* (region + its AA rim) landed either
+  side of 0.6%. The lesson: a threshold inferred from two data points is a hypothesis, not a
+  characterisation — the tier-2 corpus (22 drops, ΔE 4.5–115.2) broke it immediately.
+  - **The old golden passed both** (bloom SSIM 0.9922, petals 0.9915) — raster-blindness
+    confirmed.
 - **`hairlines`: 56px Hausdorff** — the sub-pixel bars are simply gone.
 - **`cross-bars`: 9.6px worst-case miss**, parsimony 2.7× — the junction-weld case now has a
   number.
@@ -306,12 +347,20 @@ exactly why they are refused rather than approximated:
 
 ### 8.2 It also caught a live bug in tier 0: `checker` was never scorable
 
-`checker.svg` is two rects with `fill="url(#pattern)"`. The visible boundary is the pattern's
+`checker.svg` was two rects with `fill="url(#pattern)"`. The visible boundary is the pattern's
 **tiling** (~7,000 edges); the authored geometry is **two rectangles**. It was being scored
 against those two rects and "failing" at **chamfer 26.7px, p95 114px, parsimony 32×**, with
 52px of *invented* boundary — i.e. a tracer that correctly recovered the checkerboard was
 being charged with inventing it. That was a bug in the **answer sheet**, not the tracer.
-It now reports *not scorable* (`patterned`), like `aurora` (`stroked`).
+It reported *not scorable* (`patterned`), like `aurora` (`stroked`), until **2026-07-15**, when
+it was re-authored as 896 explicit filled squares (patterns are to fills what strokes are to
+fills; tiles resized 18/9 → 16/8 so the coarse grid aligns with the fine quadrant — no square
+straddles it, so nothing is occluded). Scored for the first time, the tracer **passes**:
+chamfer 0.38px / p95 1.87px / parsimony 1.0× / 2/2 regions @512, near-perfect 0.01px @1024.
+One honest nuance the numbers under-sell: in the FINE quadrant the diagonally-touching ink
+squares come out corner-welded into scalloped blobs — every deviation is sub-2px (hence the
+green p95) but the texture visibly differs at 1×. A real defect, correctly sized by the
+metric as small; if it ever matters, it needs a corner-topology fix, not a tolerance change.
 
 ### 8.3 The flat↔gradient A/B — the experiment nobody could run
 
@@ -386,3 +435,115 @@ Not a last-decimal difference — it **moved the segmentation**: the lab reporte
 **3 of 7** regions recovered where the CLI said **5 of 7**, and that gap was being read as a
 real (and much worse) tracer defect. The lab now flattens onto white; both report **5/7**.
 *If you see the CLI and the lab disagree, this is the first thing to suspect.*
+
+---
+
+## 9. Tier 2 (Fluent "Flat" twins) — the flat corpus, and what promoting it found
+
+**Built 2026-07-14.** The 106 Flat variants had only ever been the `flatSvg` controls of the
+tier-1 A/B (§8.3) — never scored in their own right. That left `regions recovered`, the
+zero-tolerance dropped-region gate (the failure raster fidelity is structurally blind to, §1),
+running on **12 cases**: it is `applicable: false` on all 109 gradient cases. Since flat
+multi-region art is exactly what the product traces, the twins are now first-class tier-2
+cases (`gradients: false`, browse at `/labs/truth` → *Tier 2*, not CI-gated). Derived in
+`truthCorpus.ts` from `FLUENT_CORPUS` — not duplicated — so the pairing cannot drift.
+`TIER_TOL[2]` (chamfer 3.0px / p95 35px / parsimony 4.5×) is measured, not guessed:
+`calibrateTier2.ts` prints the distribution, limits sit just above the corpus p90 (parsimony:
+above the max), same recipe as tier 1.
+
+### 9.1 The headline: 22 dropped regions, and the ΔE story §7 told is incomplete
+
+Across the 106 flat twins @ 512px: **91/106 recover every region; 22 regions dropped in the
+other 15 cases** (415/437 = 95.0% overall). The §7 characterisation — a colour-threshold merge
+that "sits above ΔE 13.5" — describes only the *low* end of the distribution. The dropped
+regions' ΔE (truth colour vs what the trace paints at those pixels) is **p50 28.7, p90 70.9,
+max 115.2**:
+
+| case | dropped | painted instead | ΔE |
+|---|---|---|---:|
+| `parachute` | `#433b6b` backpack (661px) | `#00d26a` — the canopy green | **115.2** |
+| `pencil` | `#402a32` graphite tip (412px) | `#f92f60` — the eraser pink | **76.4** |
+| `taco` | `#6d4534` filling (1266px) | `#44911b` — the lettuce green | **70.9** |
+| `flute` | `#f5a165` (2796px) | `#fea069` | 4.5 |
+
+These are visually blatant (a pencil whose tip is eraser-pink) yet nearly invisible to raster
+gates — 661px at ΔE 115 moves a 512² meanΔE by ~0.3. The region **shapes** survive; they are
+assigned to a spatially distant, wildly wrong **colour class**. What looked like two failure
+modes — absorption into a similar neighbour (bloom/petals, ΔE 9–14) and misassignment to a
+distant class (ΔE 28–115) — turned out to be ONE mechanism whose apparent ΔE depends only on
+which colours happened to survive: **§9.4, fixed 2026-07-15**.
+
+### 9.2 Boundary: the tracer invents nothing on flat art, and loses real edges
+
+The split (`calibrateTier2.ts`, mirrors §8.3's A/B means exactly — missed 1.93px / invented
+0.21px):
+
+|  | p50 | p75 | p90 | p95 | max |
+|---|---:|---:|---:|---:|---:|
+| chamfer | 0.42 | 1.33 | 2.80 | 4.10 | 10.20 (`taco`) |
+| **missed** (GT→trace) | 0.72 | 2.41 | 5.43 | 7.93 | 20.17 (`taco`) |
+| **spurious** (trace→GT) | 0.21 | 0.25 | 0.29 | 0.33 | **0.46** |
+| parsimony | 0.83× | 0.96× | 1.37× | 1.60× | 4.29× |
+
+Two of the three worst missed-boundary cases (`taco` 20.2, `mate` 11.7) are also dropped-region
+cases (`fortune-cookie` 9.9 is not), consistent with — but not yet proof of — the obvious
+mechanism: a region merged into an *adjacent* class erases the shared edge, so §9.1 and "missed
+boundary on flat art" (§7) overlap substantially. Parsimony is a non-issue (p50 below 1× — more
+economical than the artist).
+
+### 9.3 The AbLab's experimental features, measured against ground truth: none merges
+
+The `/labs/ab` variants that are not in the default trace (`refineJunctions`, `weldJunctions: 3`,
+`backgroundGradient`) were swept over tier 0, the gated tier 1, and all 106 tier-2 twins
+(512px). Verdict — measured, and the reason each flag **stays off by default**:
+
+| variant | tier 0 (16) | tier 1 gated (10) | tier 2 — the product corpus (106) |
+|---|---|---|---|
+| `refine` | cross-bars −0.22 / gradient-flat p95 −0.75, **but** aa-seam +0.14, bloom/petals worse | olive worse | **10 better / 14 worse** — a tradeoff, not a win |
+| `weld3` | bloom p95 −0.25 (the X-crossing it was built for), nothing worse | neutral | **0 better / 5 worse, +1 dropped region** — `beverage-box-flat` p95 2.0→**22.0px**, 5/7→4/7: a ≤3px micro-edge is sometimes a *real thin feature* |
+| `refine+weld3` | mixed | olive worse | 9 better / **21 worse**, +1 drop |
+| `bgGrad` | overlap slightly worse | neutral | 0 better / 4 worse, +1 drop |
+
+Two conclusions worth keeping:
+- **`refineJunctions`' old verdict ("weaker + corpus-moving") survives contact with ground
+  truth** — it was not an artifact of the self-referential golden gate.
+- **None of the fit-stage features touches the real flat-art defects.** `hairlines` is
+  *identical* under every variant (p95 55.94px each): the thin bars die at
+  segmentation/paint — they survive geometrically but are painted **blend-grey** (the red
+  diagonal is traced grey), because a sub-pixel feature's raster pixels never reach the
+  authored colour. That is a thin-feature coverage/colour-class problem (§7 #3), in the same
+  family as §9.1's misassignments — not a junction-geometry problem.
+
+### 9.4 The fix: flat-interior protection in `dropMinorColors` (22 drops → 1)
+
+§9.1's root cause, located by instrumenting `pencil`: **`dropMinorColors(minShare: 0.006)`**
+in the flat-palette path (`paletteSegment.ts`). 0.6% of a 512² raster is 1,573px — larger
+than every dropped region in the corpus — so each small region's palette entry was dissolved
+into its *nearest surviving* colour, which for an isolated dark detail is arbitrarily wrong
+(`pencil`'s `#402a32` tip → `#f92f60` eraser-pink, ΔE 76). The share threshold exists to kill
+AA blend smears and cannot be simply lowered (a long edge's blend band out-counts a small
+region).
+
+The separating evidence is **flat-interior area** — pixels whose 8 neighbours carry the exact
+same source colour (the criterion `scoreRegions` already used). Measured on the corpus the
+separation is absolute: every real dropped region had **300+** flat-interior pixels, every
+blend smear had **0** (worst real-region false negative seen: an 85px goggle-shine). So
+`segmentFlatPalette` now protects entries with flat-interior ≥ `minRegionArea` (the existing
+"real region" floor, which already scales with the Despeckle dial — anything smaller is
+despeckled away regardless, so protecting it would be pointless).
+
+Results @ 512px, before → after:
+- **tier 2 regions: 22 dropped → 1** (95.0% → 99.8%; 91 → 105 of 106 cases clean). The
+  remaining drop is a *different* mechanism: `flute` `#f5a165` vs `#fea069` sit 9.9 apart in
+  RGB, inside `quantize`'s `MERGE_DISTANCE` 10 cluster-merge — ΔE 4.5, visually negligible.
+- **tier 0: `bloom` 5/7 → 7/7** (chamfer 0.65 → 0.19, p95 3.17 → 0.47), **`petals` 5/7 → 7/7**
+  (chamfer 1.15 → 0.25, p95 17.77 → 0.62) — both now pass every tier-0 gate; deleted from
+  `KNOWN_DEFECTS`. Every other tier-0 case unchanged (aa-seam identical — the AA-sliver kill
+  still works; the protection never fires on smears because they have no flat interior).
+- **tier 1: untouched by construction** (the flat-palette path only runs with gradients off).
+- **boundary means moved only slightly** (tier-2 missed 1.93 → 1.89px): the dropped shapes had
+  mostly been traced with the wrong *fill*, which boundary metrics (colour-blind) and raster
+  metrics (ΔE-diluted) both structurally miss. Region recovery was the only gate that saw it —
+  the corpus paid for itself.
+- Golden gate green without re-blessing; photo trace 4.67 → 4.28s flat / 25.3 → 22.7s gradient
+  (no regression; the new pass is one O(8n) scan).

@@ -1,6 +1,6 @@
 // Shared scoreboard runner (plan §5): trace → rasterize → score, plus a
 // byte-identical re-run determinism check. Pure and environment-agnostic, so the
-// headless `node --test` harness and the browser harness (vectorize-test.html)
+// headless `node --test` harness and the browser harness (/labs/eval — EvalLab)
 // produce directly comparable numbers from the same code.
 
 import type { EditableDoc } from '../lib/path/types.ts'

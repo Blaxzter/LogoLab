@@ -36,6 +36,10 @@ export interface PlanarFitOptions {
    * tangent (planarJunction.ts). An alternative to the co-circular arc snap (§1d)
    * for the ring "pull"; measured weaker + corpus-moving, kept behind this flag for
    * the Test view A/B. `false` ⇒ raw integer-lattice junctions (the shipped path).
+   *
+   * Re-measured against GROUND TRUTH 2026-07-14 (docs/vectorization-benchmarks.md
+   * §9.3): a tradeoff, not a win — helps cross-bars/gradient-flat, hurts
+   * aa-seam/bloom/petals; 10 better vs 14 worse on the 106 flat twins. Stays off.
    */
   refineJunctions: boolean
   /**
@@ -53,6 +57,11 @@ export interface PlanarFitOptions {
    * this radius whose endpoints are two DISTINCT junctions: the vertices fuse into
    * one (cluster centroid), the micro-edge vanishes from the graph and from every
    * region loop, and all incident edges re-anchor on the fused vertex.
+   *
+   * Measured against GROUND TRUTH 2026-07-14 (docs/vectorization-benchmarks.md §9.3):
+   * NOT mergeable as a default at 3px — a micro-edge ≤3px is sometimes a REAL thin
+   * feature, not a rasterization artifact (beverage-box-flat: p95 2.0→22.0px and one
+   * more region dropped). Small bloom win only; stays behind the flag.
    */
   weldJunctions: number
 }

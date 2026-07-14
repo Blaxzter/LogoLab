@@ -742,7 +742,7 @@ Determinism `pass`, typecheck + build green.
 - **petals**: organic shapes, nothing snaps → **exact V2 parity** at every fidelity
   level (the line polish no longer touches its curves — see deviations).
 
-**Browser corpus** (`vectorize-test.html`, potrace + crisp over the 7-image set,
+**Browser corpus** (now `/labs/eval`, potrace + crisp over the 7-image set,
 fidelity 0 ⇒ V2 vs 1.5 ⇒ V3) — beautify runs on BOTH engines, so the **potrace product
 default** sheds nodes across the board with no fidelity regression:
 
