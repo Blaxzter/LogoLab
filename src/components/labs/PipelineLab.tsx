@@ -8,7 +8,7 @@
 //   source → Mumford–Shah smoothed → discontinuity map 𝒟 → segmentation (false-coloured, then
 //   the actual region fills) → per-region paint models → the final crisp & potrace traces.
 
-import { getImageData } from '../../lib/image'
+import { labImageData } from './resvgRaster'
 import { segmentImage, DEFAULT_SEGMENT_OPTIONS } from '../../lib/trace/segment'
 import { fitPaintLadder } from '../../lib/trace/gradient'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
@@ -71,7 +71,7 @@ const hex = (r: number, g: number, b: number): string =>
 
 async function analyze(c: Case): Promise<Stages> {
   const svgText = c.kind === 'svg' ? await (await fetch(c.src)).text() : undefined
-  const image = await getImageData(c.src, MAX_DIM, svgText)
+  const image = await labImageData(c.src, MAX_DIM, svgText)
   const w = image.width
   const h = image.height
   const rgba = image as unknown as { width: number; height: number; data: Uint8ClampedArray }

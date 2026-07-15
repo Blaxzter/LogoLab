@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
+    "@resvg/resvg-wasm": "^2.6.2",
     "esm-potrace-wasm": "^0.4.1",
     "jszip": "^3.10.1",
     "lucide-react": "^1.17.0",

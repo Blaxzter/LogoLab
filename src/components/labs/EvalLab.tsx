@@ -8,7 +8,7 @@
 // The same pure scoreboard code (../../devtest/scoreboard) runs under `node --test` for the crisp
 // engine; potrace needs a browser (WASM + DOMParser), so its numbers can only come from here.
 
-import { getImageData } from '../../lib/image'
+import { labImageData } from './resvgRaster'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import { serializeDoc } from '../../lib/path/model'
 import { score, type ScoreRow, type SourceImage } from '../../devtest/scoreboard'
@@ -51,7 +51,7 @@ interface EvalResult {
 
 async function analyze(c: Case): Promise<EvalResult> {
   const svgText = c.kind === 'svg' ? await (await fetch(c.src)).text() : undefined
-  const image = await getImageData(c.src, MAX_DIM, svgText)
+  const image = await labImageData(c.src, MAX_DIM, svgText)
   const refSvg = c.reference ? await (await fetch(c.reference)).text() : undefined
   const source: SourceImage = image
 

@@ -47,16 +47,23 @@ inspecting one junction flung every other case off-screen; pinch-zoom included),
    boundary error because it has no interior boundary; region recovery is meaningless on
    gradient art. A gate that silently passes because it had nothing to measure is worse than no
    gate. `GateTable`'s `na` tone exists for this.
-3. **Keep the rasterizer caveat visible.** The browser rasterizes SVG with canvas; the Node
-   runner uses resvg. Numbers can differ in the last decimal, and the UI says so.
-   **But make sure "the last decimal" is actually true first.** It was not: resvg composited on
-   **white** while the canvas drew onto **transparency**, and almost no corpus art carries a
-   background rect of its own — so the two consumers were tracing *different pixels*. That moved
-   the segmentation, not the last decimal: the lab reported `bloom` at **3/7** regions where the
-   CLI said **5/7**, and the gap was read as a real tracer defect for a whole session.
-   `TruthLab` now flattens onto white and both say 5/7. A "harmless rasterizer difference" is
-   the perfect hiding place for a real one — when the two disagree, suspect the *input* before
-   the tracer.
+3. **The labs rasterize SVG with the SAME engine as CI.** Both the labs and the Node runner now
+   rasterize SVGs with **resvg** — the labs via `@resvg/resvg-wasm` (the WASM build of the exact
+   Rust engine `@resvg/resvg-js` wraps), through the shared `resvgRaster.ts` helper (`labImageData`),
+   with the same options the gate uses (`fitTo width`, `background: white` for the scored truth
+   raster). Verified byte-identical (0 differing pixels across flat + gradient corpus cases), so
+   "what you see is what CI measures" now holds at the *pixel* level, not just the module level.
+   The WASM (~1 MB) is dynamically imported and initialized once, only when a lab first rasterizes
+   an SVG, so it stays in the lazy lab chunk and never touches the product bundle (rule 4).
+   *History worth keeping, because it is the trap:* the labs used to rasterize with the **browser
+   canvas** (Blink's SVG renderer — a *different* engine), which drew onto **transparency** while
+   resvg composited on **white**. Almost no corpus art carries a background rect, so the two were
+   tracing *different pixels* — that moved the segmentation, not the last decimal: the lab reported
+   `bloom` at **3/7** regions where the CLI said **5/7**, read as a real tracer defect for a whole
+   session. A "harmless rasterizer difference" is the perfect hiding place for a real one; using
+   one engine end-to-end removes the hiding place. (The remaining wobble is **PNG *decode*** —
+   Chrome's canvas vs Node's decoder disagree by ±1 on a few partial-alpha pixels — which only
+   affects the raster-fixture paths, `aurora-flat` in the Golden lab; see that lab's note.)
 4. **Keep them lazy.** Every lab is a `React.lazy` route in `App.tsx`. They pull in the scoring
    modules and (Golden) several MB of corpus fixtures; none of that belongs in the bundle a
    visitor downloads to crop a logo. `pnpm build` should never show lab code in the `index`
@@ -70,9 +77,10 @@ inspecting one junction flung every other case off-screen; pinch-zoom included),
      freezes the tab regardless of workers, because the *scoring* is still on the main thread.
 
    **Still main-thread, and still stalls (~1–2 s per case):** the scoring — `scoreGeometry`,
-   `scoreRegions`, `rasterizeDoc` — plus the canvas rasterization in `getImageData`. Moving
-   that off-thread is the next win if the labs ever feel sluggish again; it needs a new worker
-   protocol, since the current one only returns a traced document.
+   `scoreRegions`, `rasterizeDoc` — plus the SVG rasterization in `labImageData` (resvg-wasm runs
+   synchronously on the calling thread). Moving that off-thread is the next win if the labs ever
+   feel sluggish again; it needs a new worker protocol, since the current one only returns a
+   traced document.
 
 ## The A/B lab can compare against a frozen revision ("Vs snapshot")
 

@@ -18,7 +18,7 @@
 
 import { useMemo, useState } from 'react'
 import { Upload, X } from 'lucide-react'
-import { getImageData } from '../../lib/image'
+import { labImageData } from './resvgRaster'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { VectorizeOptions } from '../../types'
 import type { EditableDoc } from '../../lib/path/types'
@@ -122,7 +122,7 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean): Promise<AbAnalysi
   const snapSvg = SNAP_SVGS[`/test/ab-snapshots/${gradients ? entry.grad : entry.flat}`]
   if (!pngUrl || !snapSvg) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
 
-  const image = await getImageData(pngUrl, Math.max(entry.width, entry.height))
+  const image = await labImageData(pngUrl, Math.max(entry.width, entry.height))
   const doc: EditableDoc = await labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients })
   return {
     width: entry.width,
@@ -137,7 +137,7 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean): Promise<AbAnalysi
 
 async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<AbAnalysis> {
   const svgText = c.kind === 'svg' ? await (c.file ? c.file.text() : (await fetch(c.src)).text()) : undefined
-  const image = await getImageData(c.src, raster, svgText)
+  const image = await labImageData(c.src, raster, svgText)
   const w = image.width
   const h = image.height
 

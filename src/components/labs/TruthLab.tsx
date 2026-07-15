@@ -17,12 +17,14 @@
 //     something else;
 //   • the metrics come from ./geomScore.ts — the SAME functions the Node runner calls.
 //     Nothing is re-implemented here; this file only DRAWS what those modules return.
-//   • the ONE difference is the rasterizer: the browser rasterizes the SVG with canvas, the
-//     Node runner uses resvg. Anti-aliasing differs slightly, so numbers here can differ
-//     from the CLI in the last decimal. It is stated in the header, not hidden.
+//   • the rasterizer is the SAME too: this view rasterizes SVGs with @resvg/resvg-wasm, the
+//     WASM build of the exact Rust engine the Node runner (@resvg/resvg-js) uses. Verified
+//     byte-identical (0 differing pixels), so the numbers here match the CLI — no last-decimal
+//     caveat any more. (PNG-decode of raster fixtures is a separate, smaller path; see the
+//     Golden lab's aurora note.)
 
 import { useMemo } from 'react'
-import { getImageData } from '../../lib/image'
+import { labImageData } from './resvgRaster'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import { serializeDoc } from '../../lib/path/model'
 import type { EditableDoc, SubPath } from '../../lib/path/types'
@@ -170,34 +172,6 @@ interface Scored {
   regions: RegionScore
 }
 
-/**
- * Flatten onto WHITE, in place.
- *
- * The Node runner rasterizes with resvg `background: 'white'`; the browser's canvas draws an
- * SVG onto a TRANSPARENT bitmap. Most corpus art has no background rect of its own (bloom does
- * not; every Fluent Emoji glyph does not), so without this the two consumers hand the tracer
- * genuinely different pixels — transparent-black where the other has white — and then compare
- * the results as if they were the same experiment.
- *
- * It is not a rounding difference. It moves the SEGMENTATION: browser-bloom recovered 3 of its
- * 7 regions where the CLI recovered 5, and that gap was mistaken for a real (and much worse)
- * tracer defect. The lab's whole claim is "what you see is what CI measures", so the raster has
- * to match first.
- */
-function flattenOnWhite(img: ImageData): ImageData {
-  const d = img.data
-  for (let i = 0; i < d.length; i += 4) {
-    const a = d[i + 3]
-    if (a === 255) continue
-    const k = a / 255
-    d[i] = Math.round(d[i] * k + 255 * (1 - k))
-    d[i + 1] = Math.round(d[i + 1] * k + 255 * (1 - k))
-    d[i + 2] = Math.round(d[i + 2] * k + 255 * (1 - k))
-    d[i + 3] = 255
-  }
-  return img
-}
-
 /** Fetch → rasterize → trace → score one authored SVG against itself. */
 async function scoreOne(
   url: string,
@@ -211,7 +185,11 @@ async function scoreOne(
   const why = unscorable(gt)
   if (why) return { ok: false, blocked: why }
 
-  const img = flattenOnWhite(await getImageData(url, res, svgText))
+  // resvg-wasm with background:'white' — byte-identical to the Node gate's
+  // `new Resvg(svg, { fitTo:{mode:'width',value:res}, background:'white' })`, so the
+  // pixels the tracer sees here ARE the pixels CI scores. No post-hoc white flatten:
+  // resvg composites onto white during render, exactly as the gate does.
+  const img = await labImageData(url, res, svgText, { background: 'white' })
   const doc = await labTrace(img, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients })
   const shapes = toRasterSpace(gt, img.width)
   return {
@@ -724,18 +702,20 @@ function TruthAbout() {
           topology.
         </div>
       </div>
-      <div className="mt-2 max-w-[96ch] rounded-md border border-warn/30 bg-warn/8 px-2.5 py-1.5 text-warn">
-        <b>Rasterizer note.</b> This page rasterizes the SVG with the <em>browser canvas</em>; the
-        Node runner (<code>src/devtest/groundTruthRun.ts</code>) uses <em>resvg</em>. Anti-aliasing
-        differs slightly between them, so numbers here can differ from the CLI in the last decimal.
-        The corpus, the trace options, the gates and the scoring functions are the same modules in
-        both (<code>truthCorpus.ts</code>, <code>geomScore.ts</code>).
+      <div className="mt-2 max-w-[96ch] rounded-md border border-ok/30 bg-ok/8 px-2.5 py-1.5 text-ok">
+        <b>Rasterizer.</b> This page rasterizes the SVG with <code>@resvg/resvg-wasm</code> — the
+        WebAssembly build of the <em>same</em> Rust engine the Node runner
+        (<code>src/devtest/groundTruthRun.ts</code>) uses via <code>@resvg/resvg-js</code>, with the
+        same options (<code>fitTo width</code>, <code>background: white</code>). Verified
+        byte-identical, so <b>what you see is exactly what CI measures</b> — no last-decimal caveat.
+        The corpus, trace options, gates and scoring are already the same modules
+        (<code>truthCorpus.ts</code>, <code>geomScore.ts</code>).
         <br />
-        Both now rasterize onto <b>white</b>. They did not always: resvg composited on white while
-        the canvas drew onto transparency, and since most of the corpus carries no background rect
-        of its own (bloom does not; no Fluent glyph does), the two were tracing different pixels.
-        That is not a last-decimal difference — it moved the segmentation, and this page reported
-        bloom at <b>3 of 7</b> regions where the CLI said <b>5 of 7</b>.
+        It was not always so: this page used the <em>browser canvas</em> (Blink's SVG renderer, a
+        different engine), which drew onto transparency while resvg composited on white — and since
+        most of the corpus carries no background rect (bloom does not; no Fluent glyph does), the two
+        traced different pixels and this page reported bloom at <b>3 of 7</b> regions where the CLI
+        said <b>5 of 7</b>. Same engine now, so that class of divergence is gone.
       </div>
     </>
   )
