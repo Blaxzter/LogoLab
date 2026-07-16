@@ -3,6 +3,13 @@ import { useEffect, useRef, useState } from 'react'
 /** One finished case: its analysis, or the error that stopped it. */
 export type LabResult<C, R> = { case: C; value: R; error?: undefined } | { case: C; value?: undefined; error: string }
 
+/** Shallow (by-identity) comparison of two deps arrays. */
+function sameDeps(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (!Object.is(a[i], b[i])) return false
+  return true
+}
+
 export interface LabRun<C, R> {
   /** Finished cases, in corpus order — grows as the run proceeds. */
   results: LabResult<C, R>[]
@@ -38,6 +45,21 @@ export function useLabRun<C, R>(
   // The callbacks are re-created every render; only `deps` should re-trigger a run.
   const latest = useRef({ cases, analyze, opts })
   latest.current = { cases, analyze, opts }
+
+  // Discard the previous run's results SYNCHRONOUSLY the moment `deps` change — one render
+  // before the effect below would. A consumer that swaps HOW it renders each result across runs
+  // (the Workbench renders results through a lens that changes per run) must never paint a stale
+  // result through the new renderer: the old value has different fields, so the new one reads
+  // `undefined.filter` and crashes. Resetting during render (a sanctioned React pattern for
+  // "adjust state when a key changes") means the switch render already sees an empty list.
+  const depsRef = useRef(opts.deps)
+  if (!sameDeps(depsRef.current, opts.deps)) {
+    depsRef.current = opts.deps
+    setResults([])
+    setPending(null)
+    setRunning(true)
+    setStatus('Starting…')
+  }
 
   useEffect(() => {
     let cancelled = false

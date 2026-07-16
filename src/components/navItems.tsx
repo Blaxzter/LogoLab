@@ -1,4 +1,4 @@
-import { Columns2, Download, Eraser, Eye, Gauge, Layers, ShieldCheck, Target, Wand2 } from 'lucide-react'
+import { Columns2, Download, Eraser, Eye, FlaskConical, Gauge, Images, Layers, Wand2 } from 'lucide-react'
 import type { Tab } from '../store'
 
 /** The four panel tabs — shared by the desktop header nav and the mobile menu. */
@@ -14,9 +14,13 @@ export const REPO_URL = 'https://github.com/Blaxzter/LogoLab'
 /**
  * The vectorizer's harnesses — lazily-loaded React routes under `/labs` (see the
  * `<Suspense>` block in App.tsx; the chunks they pull in, tracer + scoring modules
- * included, stay out of the main bundle). Ordered as a story: how the pipeline works,
- * how variants compare, what CI locks in, what the numbers say. Kept here so the
- * header popover, the mobile menu and the labs index list the same set.
+ * included, stay out of the main bundle).
+ *
+ * ONE LAB, ONE QUESTION. The Workbench asks "is the trace correct?" of a switchable corpus
+ * and never changes shape; anything that can't be asked of every corpus is its own lab
+ * instead. (They were briefly a corpus × lens matrix — the available comparisons mutated
+ * when you switched corpus, so the view's meaning changed under you. Don't do that again.)
+ * Kept here so the header popover, the mobile menu and the labs index list the same set.
  */
 export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.ReactNode }[] = [
   {
@@ -32,21 +36,21 @@ export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.
     icon: <Columns2 size={15} />,
   },
   {
-    to: '/labs/golden',
-    label: 'Golden corpus',
-    blurb: 'The pictures behind the regression gates, and their headroom.',
-    icon: <ShieldCheck size={15} />,
+    to: '/labs/workbench',
+    label: 'Workbench',
+    blurb: 'Is it correct? Scored against the authored SVG — boundary error, node economy, dropped regions. Pick the corpus.',
+    icon: <FlaskConical size={15} />,
   },
   {
-    to: '/labs/truth',
-    label: 'Ground truth',
-    blurb: 'Scored against the authored SVG: boundary error, node economy, dropped regions.',
-    icon: <Target size={15} />,
+    to: '/labs/gallery',
+    label: 'Gallery',
+    blurb: 'How the tracer renders art it can’t be scored on: the brand-logo set, and anything you drop in.',
+    icon: <Images size={15} />,
   },
   {
-    to: '/labs/eval',
-    label: 'Eval harness',
-    blurb: 'Scoreboard: ΔE, SSIM, seam, node counts, runtime, determinism.',
+    to: '/labs/scoreboard',
+    label: 'Engine scoreboard',
+    blurb: 'potrace vs crisp: ΔE, SSIM, seam, node counts, runtime, determinism.',
     icon: <Gauge size={15} />,
   },
 ]

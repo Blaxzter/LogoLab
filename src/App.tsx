@@ -31,9 +31,12 @@ import { LegalFooter } from './components/legal/LegalFooter'
 const LabsIndex = lazy(() => import('./components/labs/LabsIndex'))
 const PipelineLab = lazy(() => import('./components/labs/PipelineLab'))
 const AbLab = lazy(() => import('./components/labs/AbLab'))
-const GoldenLab = lazy(() => import('./components/labs/GoldenLab'))
-const TruthLab = lazy(() => import('./components/labs/TruthLab'))
-const EvalLab = lazy(() => import('./components/labs/EvalLab'))
+// The Workbench asks ONE question — "is the trace correct against the art that made the pixels?" —
+// of a switchable corpus. What can't be asked of every corpus lives in its own lab: raster-only art
+// in the Gallery (just look) and Feature A/B (compare revisions), potrace vs crisp in EngineLab.
+const Workbench = lazy(() => import('./components/labs/workbench/Workbench'))
+const GalleryLab = lazy(() => import('./components/labs/GalleryLab'))
+const EngineLab = lazy(() => import('./components/labs/EngineLab'))
 
 function LabLoading() {
   return (
@@ -206,9 +209,16 @@ export function App() {
               <Route path="/labs" element={<LabsIndex />} />
               <Route path="/labs/pipeline" element={<PipelineLab />} />
               <Route path="/labs/ab" element={<AbLab />} />
-              <Route path="/labs/golden" element={<GoldenLab />} />
-              <Route path="/labs/truth" element={<TruthLab />} />
-              <Route path="/labs/eval" element={<EvalLab />} />
+              <Route path="/labs/workbench" element={<Workbench />} />
+              <Route path="/labs/gallery" element={<GalleryLab />} />
+              <Route path="/labs/scoreboard" element={<EngineLab />} />
+              {/* Old routes, kept as deep-links so bookmarks survive. `golden` has no view any
+                  more — the regression gate still runs in CI, but Feature A/B already shows those
+                  exact fixtures, which is where you'd go to look at them. */}
+              <Route path="/labs/truth" element={<Navigate to="/labs/workbench?corpus=tier0" replace />} />
+              <Route path="/labs/logos" element={<Navigate to="/labs/workbench?corpus=logos" replace />} />
+              <Route path="/labs/eval" element={<Navigate to="/labs/scoreboard" replace />} />
+              <Route path="/labs/golden" element={<Navigate to="/labs/ab" replace />} />
               <Route path="*" element={<Navigate to="/labs" replace />} />
             </Routes>
           </Suspense>

@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronDown, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import type { PanZoom } from '../../hooks/usePanZoom'
+import { Tooltip } from '../ui/Tooltip'
 import { useLabState } from './useLabState'
 import './labs.css'
 
@@ -107,8 +108,16 @@ export function LabPage({
             <div className="hidden h-5 w-px shrink-0 bg-line sm:block" />
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
               {controls}
-              <LabCheck label="Dark bg" checked={ui.dark} onChange={(dark) => setUi({ dark })} />
-              <LabField label="Box">
+              <LabCheck
+                label="Dark bg"
+                hint="Sit every panel's art on a near-black backdrop instead of the checkerboard — white-on-transparent art is invisible on the light board."
+                checked={ui.dark}
+                onChange={(dark) => setUi({ dark })}
+              />
+              <LabField
+                label="Box"
+                hint="Panel size. Drag to make every panel — source, trace and error maps — bigger or smaller."
+              >
                 <input
                   type="range"
                   min={BOX_RANGE.min}
@@ -154,13 +163,31 @@ export function LabPage({
   )
 }
 
-/** A toolbar control with its label — the labs' `<label>Box <input/></label>` idiom. */
-export function LabField({ label, children }: { label: string; children: ReactNode }) {
-  return (
+/** A toolbar control with its label — the labs' `<label>Box <input/></label>` idiom.
+ *  Pass `hint` to attach a hover/focus tooltip explaining what the control does. */
+export function LabField({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint?: ReactNode
+  children: ReactNode
+}) {
+  const field = (
     <label className="inline-flex items-center gap-1.5 text-muted">
       <span className="whitespace-nowrap">{label}</span>
       {children}
     </label>
+  )
+  // Drop the bubble BELOW the sticky toolbar, where there's room — a top-side bubble on a
+  // top-of-viewport control just clamps against the edge.
+  return hint ? (
+    <Tooltip label={hint} side="bottom">
+      {field}
+    </Tooltip>
+  ) : (
+    field
   )
 }
 
@@ -171,14 +198,16 @@ export function LabSelect<T extends string | number>({
   options,
   onChange,
   label,
+  hint,
 }: {
   value: T
   options: { value: T; label: string }[]
   onChange: (v: T) => void
   label: string
+  hint?: ReactNode
 }) {
   return (
-    <LabField label={label}>
+    <LabField label={label} hint={hint}>
       <select
         value={String(value)}
         onChange={(e) => {
@@ -198,17 +227,19 @@ export function LabSelect<T extends string | number>({
   )
 }
 
-/** A toolbar checkbox — same idiom, app styling. */
+/** A toolbar checkbox — same idiom, app styling. `hint` attaches an explaining tooltip. */
 export function LabCheck({
   checked,
   onChange,
   label,
+  hint,
 }: {
   checked: boolean
   onChange: (v: boolean) => void
   label: string
+  hint?: ReactNode
 }) {
-  return (
+  const field = (
     <label className="inline-flex cursor-pointer select-none items-center gap-1.5 text-muted">
       <input
         type="checkbox"
@@ -218,5 +249,12 @@ export function LabCheck({
       />
       <span className="whitespace-nowrap">{label}</span>
     </label>
+  )
+  return hint ? (
+    <Tooltip label={hint} side="bottom">
+      {field}
+    </Tooltip>
+  ) : (
+    field
   )
 }

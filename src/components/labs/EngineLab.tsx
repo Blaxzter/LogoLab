@@ -1,23 +1,26 @@
-// Eval harness — the scoreboard.
+// Engine scoreboard — potrace vs crisp.
 //
-// Runs the real trace engines (potrace WASM + crisp) over the corpus and reports the plan §5
-// metrics for BOTH: L1 CIELAB, mean/P95 ΔE, SSIM, seam max & P99.5, path/node/gradient counts,
-// runtime, determinism — alongside the visual previews, so a number and the picture it describes
-// are never more than one glance apart.
+// Runs both real trace engines over the corpus and reports the plan §5 metrics for each: L1
+// CIELAB, mean/P95 ΔE, SSIM, seam max & P99.5, path/node/gradient counts, runtime, determinism —
+// alongside the visual previews, so a number and the picture it describes are never more than one
+// glance apart.
 //
-// The same pure scoreboard code (../../devtest/scoreboard) runs under `node --test` for the crisp
-// engine; potrace needs a browser (WASM + DOMParser), so its numbers can only come from here.
+// Why it's its own lab rather than a Workbench corpus: this scores the render against the SOURCE
+// PIXELS, not against authored geometry, so it answers a different question from the Workbench's
+// one question. And it is the ONLY place potrace is measured at all — the same pure scoreboard code
+// (../../devtest/scoreboard) runs under `node --test` for crisp, but potrace needs a browser (WASM +
+// DOMParser), so its numbers can only come from here.
 
-import { labImageData } from './resvgRaster'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import { serializeDoc } from '../../lib/path/model'
 import { score, type ScoreRow, type SourceImage } from '../../devtest/scoreboard'
-import { labTrace } from './labTrace'
 import { LabPage } from './LabPage'
 import { Panel, RawArt } from './Panel'
 import { CaseRow, NoteBox, PendingRow } from './CaseRow'
 import { useLabState } from './useLabState'
 import { useLabRun } from './useLabRun'
+import { labImageData } from './resvgRaster'
+import { labTrace } from './labTrace'
 
 const MAX_DIM = 512
 const ENGINES: ('potrace' | 'crisp')[] = ['potrace', 'crisp']
@@ -58,10 +61,10 @@ async function analyze(c: Case): Promise<EvalResult> {
   const rows: ScoreRow[] = []
   const svgs: Record<string, string> = {}
   for (const engine of ENGINES) {
-    // score() re-traces internally (twice, for the determinism check) and stays free of the
-    // DOM; the preview is a third, cheap trace so the picture matches the row exactly.
-    // labTrace runs crisp in a worker; potrace needs DOMParser + WASM, so it alone still
-    // blocks the main thread — which is inherent to scoring potrace at all.
+    // score() re-traces internally (twice, for the determinism check) and stays free of the DOM;
+    // the preview is a third, cheap trace so the picture matches the row exactly. labTrace runs
+    // crisp in a worker; potrace needs DOMParser + WASM, so it alone still blocks the main thread —
+    // which is inherent to scoring potrace at all.
     rows.push(
       await score(c.name, engine, source, () =>
         labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine, gradients: true }),
@@ -74,8 +77,8 @@ async function analyze(c: Case): Promise<EvalResult> {
   return { width: image.width, height: image.height, rows, svgs, refSvg }
 }
 
-export default function EvalLab() {
-  const [ui, setUi] = useLabState('lab:eval', { box: 260 })
+export default function EngineLab() {
+  const [ui, setUi] = useLabState('lab:engine', { box: 260 })
 
   const run = useLabRun(CASES, analyze, {
     label: (c) => `Tracing ${c.name} (${ENGINES.join(' + ')})`,
@@ -87,18 +90,18 @@ export default function EvalLab() {
 
   return (
     <LabPage
-      storageKey="lab:eval"
-      title="Eval harness"
-      subtitle="Scoreboard: ΔE, SSIM, seam, node counts, runtime, determinism"
+      storageKey="lab:engine"
+      title="Engine scoreboard"
+      subtitle="potrace vs crisp: ΔE, SSIM, seam, node counts, runtime, determinism"
       status={run.status}
       running={run.running}
       box={ui.box}
       onBox={(box) => setUi({ box })}
-      about={<EvalAbout />}
+      about={<EngineAbout />}
     >
       {all.length > 0 && <Scoreboard rows={all} />}
 
-      {run.results.map(({ case: c, value: r, error }, i) => {
+      {run.results.map(({ case: c, value: r, error }) => {
         if (!r) {
           return (
             <CaseRow key={c.name} title={c.name}>
@@ -108,11 +111,7 @@ export default function EvalLab() {
         }
         return (
           <CaseRow key={c.name} title={c.name} right={`${r.width}×${r.height}`}>
-            <Panel
-              label={`source · ${c.kind}`}
-              note={`${r.width}×${r.height}`}
-              aspect={r.width / r.height}
-            >
+            <Panel label={`source · ${c.kind}`} note={`${r.width}×${r.height}`} aspect={r.width / r.height}>
               <img src={c.src} alt="" />
             </Panel>
             {ENGINES.map((engine) => {
@@ -212,7 +211,7 @@ function Scoreboard({ rows }: { rows: ScoreRow[] }) {
   )
 }
 
-function EvalAbout() {
+function EngineAbout() {
   return (
     <>
       <p className="mb-2 max-w-[96ch]">
@@ -222,9 +221,15 @@ function EvalAbout() {
         look "cut out"), and <b>det</b> says whether tracing the same pixels twice produced the same
         document — a tracer that isn't deterministic can't be regression-gated at all.
       </p>
+      <p className="mb-2 max-w-[96ch]">
+        This scores the render against the <b>source pixels</b>, not against authored geometry — a
+        different question from the <b>Workbench</b>, which is why it lives here. It is also the only
+        place <b>potrace</b> is measured: it needs a browser (WASM + DOMParser), so{' '}
+        <code>node --test</code> can only score crisp.
+      </p>
       <p className="max-w-[96ch]">
-        Where a reference panel is present it's an Affinity Designer export of the same art: the bar
-        a commercial tracer sets, flattened.
+        Where a reference panel is present it's an Affinity Designer export of the same art: the bar a
+        commercial tracer sets, flattened.
       </p>
     </>
   )

@@ -1,19 +1,79 @@
 # The labs (`/labs`)
 
-The five vectorizer harnesses. They used to be standalone HTML pages under `labs/`, each its
-own Vite entry, with hand-rolled CSS and hand-rolled DOM. They are now **React routes inside
-the app** — same corpora, same gates, same numbers, wearing the app's design system.
+The vectorizer harnesses. They used to be standalone HTML pages under `labs/`, each its own Vite
+entry, with hand-rolled CSS and hand-rolled DOM. They are now **React routes inside the app** —
+same corpora, same gates, same numbers, wearing the app's design system.
 
 | Route | Component | Answers |
 |---|---|---|
 | `/labs/pipeline` | `PipelineLab` | *Why* does the trace look like this? Every intermediate stage. |
-| `/labs/ab` | `AbLab` | Does this feature help? Trace variants side by side. |
-| `/labs/golden` | `GoldenLab` | Did anything **change**? The regression gates and their headroom. |
-| `/labs/truth` | `TruthLab` | Is it **correct**? Scored against the authored SVG. **231 cases, three tiers** — see below. |
-| `/labs/eval` | `EvalLab` | What do the numbers say? ΔE / SSIM / seam / determinism scoreboard. |
+| `/labs/ab` | `AbLab` | Does this feature help? Trace variants (or revisions) side by side. |
+| `/labs/workbench` | `workbench/Workbench` | Is it **correct**? Scored against the authored SVG. Pick the corpus. |
+| `/labs/gallery` | `GalleryLab` | How does the tracer render art it can't be scored on? |
+| `/labs/scoreboard` | `EngineLab` | potrace vs crisp: ΔE / SSIM / seam / determinism. |
 
 Everything lives in `src/components/labs/`. `LAB_VIEWS` in `src/components/navItems.tsx` is the
 one list the header popover, the mobile menu and the labs index all read.
+
+## ONE LAB, ONE QUESTION — and the corpus × lens mistake
+
+`golden`, `truth`, `eval` and `logos` were four near-duplicate labs. They were first folded into a
+**corpus × lens matrix**, and that was worse: the available *lenses* changed when you switched
+*corpus*, so the view's meaning changed under you and the gating ("never offer a lens that can't
+run") read as arbitrary. Two dropdowns, four different tools hiding behind them.
+
+The rule now: **a lab asks one question and never changes shape.** The Workbench
+(`src/components/labs/workbench/`) asks *"is the trace correct against the art that made the
+pixels?"* — of every case, in every corpus, with the same panels and the same numbers. The
+**Corpus** selector means exactly one thing: *which images*.
+
+Anything that can't be asked of every corpus is its own lab instead:
+
+- **Raster-only art** (the golden fixtures, the eval PNGs) has no authored vector to score against,
+  so it isn't in the Workbench at all. Those exact images are already in **Feature A/B**, which is
+  where you compare them across revisions.
+- **potrace vs crisp** scores the render against *source pixels*, not authored geometry — a
+  different question → **Engine scoreboard**. It's also the only place potrace is measured (it needs
+  a browser: WASM + DOMParser, so `node --test` can only score crisp).
+- **Unscorable brand art** → **Gallery** (rasterize, flat-trace, look).
+
+### The Workbench corpora
+
+The tier sets are corpus entries in their own right (different art, different calibrated limits) —
+listed flat, rather than as a "Set" sub-selector beside a "Corpus" one, which was two dropdowns for
+one idea. `CorpusSource` (`corpora.tsx`) only PRODUCES cases and has **no options**; paging is the
+view's job.
+
+| Corpus | What |
+|---|---|
+| Tier 0 — handcrafted | The 16 cases, each isolating a named failure mode. Strictest limits. |
+| Tier 1 — Fluent gradients | 109 Fluent Emoji "Color" glyphs (MIT). Carries the flat twins → `flat A/B`. |
+| Tier 2 — Fluent flat twins | The same glyphs authored flat; where `regions recovered` actually runs. |
+| Gated — what CI runs | Exactly what `test/truth-gate.test.ts` enforces. |
+| All tiers | 231 cases. Page through it. |
+| Logo corpus (scorable) | The brand marks `svgGround` can actually read — see below. |
+
+**`tier` is optional, and that's load-bearing.** A tier is a *measured population*
+(`calibrateTier1.ts` / `calibrateTier2.ts`). A case outside every one of them — a brand logo — has
+**no gates**: it gets the geometry numbers and no bars. Borrowing tier 0's limits would print a
+verdict nobody measured. `analysis.tsx` renders the gate table only when `c.tier !== undefined`.
+
+**The Logo corpus is filtered to its scorable subset.** A brand mark is ground truth only if its
+*visible* boundary is the boundary its path data describes; strokes, filters, clips, masks and
+patterns all break that, and `svgGround.unscorable()` refuses them (the same triage
+`vendorFluentEmoji.ts` runs — 109 of 1595 survived it). The subset that passes is scored in the
+Workbench; **all** of them are viewable in the Gallery. It keeps its dev-only semantics —
+git-ignored `examples/logos/*.svg` via `import.meta.glob`, **absent (empty-state, no 404) in a
+clean/CI/production build**, `npm run fetch:logos` rehydrates — surfaced as `available: false`.
+
+### There is no Golden view any more
+
+The regression baseline was never a standard of *correctness* — it's a snapshot of the tracer's own
+past output, and its ±12% count bands actively forbid improvement. The **gate is untouched and still
+runs** (`test/trace-regression.test.ts` + `test/golden/trace-baseline.json` + `npm run gen:golden`);
+it just has no page, because Feature A/B already shows those exact fixtures. `/labs/golden`
+redirects there. (`goldenAnalysis.ts`, the lab-only helper that drew its ΔE/seam maps, went with
+it — git remembers.)
 
 ## The shared kit
 
