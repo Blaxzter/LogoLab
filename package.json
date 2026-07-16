@@ -20,7 +20,8 @@
     "typecheck": "tsc -b --noEmit",
     "test": "node --test",
     "gen:golden": "node src/devtest/writeTraceGolden.ts",
-    "gen:absnapshot": "node src/devtest/writeAbSnapshots.ts"
+    "gen:absnapshot": "node src/devtest/writeAbSnapshots.ts",
+    "fetch:logos": "node scripts/fetch-logos.mjs"
   },
   "engines": {
     "node": ">=22.18.0"

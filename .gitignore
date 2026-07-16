@@ -33,6 +33,11 @@ pnpm-debug.log*
 # reference papers kept locally, not committed
 /examples/*.pdf
 
+# private ground-truth logo corpus — the brand-mark artwork itself is NOT
+# redistributed here (trademark/copyright). Only the manifest + fetcher are
+# tracked; run `npm run fetch:logos` to rehydrate the .svg files on demand.
+/examples/logos/*.svg
+
 # generated dev-harness artifacts (crispnessStudy/facetSweep/paletteCompare output)
 /crispness-study/
 
