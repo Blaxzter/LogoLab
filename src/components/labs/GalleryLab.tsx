@@ -87,6 +87,13 @@ export default function GalleryLab() {
     label: (c) => `Tracing ${c.title}`,
     done: (n) => `Done — ${n} @ ${MAX_DIM}px${pages > 1 ? ` (logos page ${page + 1}/${pages})` : ''}.`,
     deps: [page, dropped],
+    // Cache the logo traces (stable keys) across pages and sessions; skip session-dropped images
+    // (their object URLs die on reload, so a `drop-N` key can't be re-derived). Fixed size, flat.
+    cache: {
+      id: 'gallery',
+      key: (c) => (c.key.startsWith('drop-') ? null : c.key),
+      optionsKey: `flat${MAX_DIM}`,
+    },
   })
 
   const addFile = async (f: File) => {
@@ -126,6 +133,7 @@ export default function GalleryLab() {
         subtitle="How the tracer currently renders these — no score, just look"
         status={run.status}
         running={run.running}
+        progress={run.progress}
         box={ui.box}
         onBox={(box) => setUi({ box })}
         wires={ui.wire}

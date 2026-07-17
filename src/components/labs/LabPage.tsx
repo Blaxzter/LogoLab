@@ -58,6 +58,7 @@ export function LabPage({
   controls,
   status,
   running = false,
+  progress,
   box,
   onBox,
   wires = false,
@@ -72,6 +73,8 @@ export function LabPage({
   controls?: ReactNode
   status: string
   running?: boolean
+  /** Drives the run progress bar (from useLabRun). `cached` of them were served from the store. */
+  progress?: { done: number; total: number; cached: number }
   box: number
   onBox: (v: number) => void
   /** Reveal the nodes/edges wireframe baked into every trace (pure CSS — no re-trace). */
@@ -150,9 +153,29 @@ export function LabPage({
           </details>
         </header>
 
-        <div className="flex items-center gap-2 px-4 py-2 text-xs text-muted">
-          {running && <Loader2 size={13} className="shrink-0 animate-spin text-accent" />}
-          <span className="min-w-0 truncate">{status}</span>
+        <div className="px-4 py-2">
+          <div className="flex items-center gap-2 text-xs text-muted">
+            {running && <Loader2 size={13} className="shrink-0 animate-spin text-accent" />}
+            <span className="min-w-0 truncate">{status}</span>
+            {/* While running: live count. After a run that hit the cache: keep the "N cached"
+                note, so an instant load still shows WHY it was instant. */}
+            {progress && progress.total > 0 && (running || progress.cached > 0) && (
+              <span className="ml-auto shrink-0 whitespace-nowrap tabular-nums text-[0.68rem] text-faint">
+                {progress.done}/{progress.total}
+                {progress.cached > 0 && ` · ${progress.cached} cached`}
+              </span>
+            )}
+          </div>
+          {/* The run fills the corpus one case at a time; the bar tracks it, and a run that is
+              entirely cache hits just blips to full. */}
+          {progress && progress.total > 1 && running && (
+            <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-line-strong">
+              <div
+                className="h-full rounded-full bg-accent transition-[width] duration-200 ease-out"
+                style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+              />
+            </div>
+          )}
         </div>
 
         <main>

@@ -119,6 +119,8 @@ export default function PipelineLab() {
     label: (c) => `Analysing ${c.name}`,
     done: (n) => `Done — ${n} cases @ ${MAX_DIM}px. Each row's panels share a camera; rows zoom independently.`,
     deps: [],
+    // Fixed corpus + options; every stage output is a small deterministic string/data-URL.
+    cache: { id: 'pipeline', key: (c) => c.name, optionsKey: `${MAX_DIM}` },
   })
 
   return (
@@ -128,6 +130,7 @@ export default function PipelineLab() {
       subtitle="Every intermediate stage: smoothing, discontinuity, regions, paint models"
       status={run.status}
       running={run.running}
+      progress={run.progress}
       box={ui.box}
       onBox={(box) => setUi({ box })}
       about={<PipelineAbout />}

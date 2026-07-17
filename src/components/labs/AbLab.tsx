@@ -174,6 +174,16 @@ export default function AbLab() {
           ? `Done — ${n} cases, working tree vs snapshot ${SNAPSHOT!.rev} (${SNAPSHOT!.date}) · gradients ${ui.gradients ? 'on' : 'off'} · input pinned to the snapshot's stored pixels.`
           : `Done — ${n} cases × ${VARIANTS.length} variants · gradients ${ui.gradients ? 'on' : 'off'} @ ${ui.raster}px. Drop an image anywhere to add it.`,
       deps: [ui.raster, ui.gradients, cases, snapMode],
+      // Cache corpus cases (stable `id`); skip session-dropped images (no id). The snapshot rev is
+      // in the key so re-blessing (pnpm gen:absnapshot) invalidates the snapshot-mode results — the
+      // frozen SVGs live outside src/, so ENGINE_HASH alone wouldn't catch a re-bless.
+      cache: {
+        id: 'ab',
+        key: (c) => c.id ?? null,
+        optionsKey: snapMode
+          ? `snap:${SNAPSHOT?.rev ?? '?'}:g${ui.gradients}`
+          : `var:r${ui.raster}:g${ui.gradients}`,
+      },
     },
   )
 
@@ -206,6 +216,7 @@ export default function AbLab() {
         subtitle="Trace variants side by side, one camera per row, nodes/edges overlay"
         status={run.status}
         running={run.running}
+        progress={run.progress}
         box={ui.box}
         onBox={(box) => setUi({ box })}
         wires={ui.wire}

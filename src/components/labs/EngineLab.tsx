@@ -84,6 +84,11 @@ export default function EngineLab() {
     label: (c) => `Tracing ${c.name} (${ENGINES.join(' + ')})`,
     done: (n) => `Done — ${n} cases × ${ENGINES.length} engines @ ${MAX_DIM}px.`,
     deps: [],
+    // Fixed corpus and options — the whole result is deterministic except `runtimeMs`, which a
+    // hit freezes at its first-measured value. Acceptable: it's a single noisy sample either way,
+    // and skipping the double-retrace determinism check + potrace's main-thread block on every
+    // open is the bigger win. A code change (new ENGINE_HASH) re-measures.
+    cache: { id: 'engine', key: (c) => c.name, optionsKey: `${MAX_DIM}` },
   })
 
   const all = run.results.flatMap((r) => r.value?.rows ?? [])
@@ -95,6 +100,7 @@ export default function EngineLab() {
       subtitle="potrace vs crisp: ΔE, SSIM, seam, node counts, runtime, determinism"
       status={run.status}
       running={run.running}
+      progress={run.progress}
       box={ui.box}
       onBox={(box) => setUi({ box })}
       about={<EngineAbout />}

@@ -15,7 +15,7 @@ import { useLabRun } from '../useLabRun'
 import { useLabState } from '../useLabState'
 import { TRUTH_RESOLUTIONS } from '../../../devtest/truthCorpus'
 import { CORPORA, corpusById } from './corpora'
-import { analyze, AnalysisCaseRow } from './analysis'
+import { analyze, AnalysisCaseRow, type AnalysisResult } from './analysis'
 import { DEFAULT_WB_UI } from './types'
 
 const PAGE_SIZES = [4, 8, 16, 32]
@@ -45,6 +45,18 @@ export default function Workbench() {
       `Every number is measured against the authored SVG — nothing here reads or writes trace-baseline.json.`,
     // The heat scale only recolours the diagnostics (no re-trace), so it stays out of the deps.
     deps: [corpus.id, page, ui.pageSize, ui.res, ui.ab],
+    // Cache per case, keyed by corpus + the only two globals that move the numbers (res, ab —
+    // gradients is per-case identity). Also makes paging back instant: `page` in the deps used to
+    // discard the other page's traces, now they're served from the store.
+    cache: {
+      id: 'workbench',
+      key: (c) => `${corpus.id}/${c.key}`,
+      optionsKey: `res=${ui.res}&ab=${ui.ab}`,
+      // Only `img` is heavy (a 512² ImageData), and after analyze nothing reads its pixels — the
+      // shown raster lives in `rasterUrl`/`dropUrl`. Drop it to its dimensions before persisting.
+      serialize: (r: AnalysisResult) =>
+        'blocked' in r ? r : { ...r, img: { width: r.img.width, height: r.img.height } },
+    },
   })
 
   const selectCorpus = (id: string) => {
@@ -59,6 +71,7 @@ export default function Workbench() {
       subtitle={`${corpus.label} · scored against the authored SVG`}
       status={corpus.available ? run.status : `${corpus.label} — not present in this build`}
       running={corpus.available && run.running}
+      progress={run.progress}
       box={ui.box}
       onBox={(box) => setUi({ box })}
       controls={

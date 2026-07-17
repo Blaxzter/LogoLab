@@ -1,7 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
+import { labCacheGet, labCacheKey, labCachePut } from './labCache'
 
 /** One finished case: its analysis, or the error that stopped it. */
 export type LabResult<C, R> = { case: C; value: R; error?: undefined } | { case: C; value?: undefined; error: string }
+
+/**
+ * Opt-in result caching for a run. A case whose key + options were computed before (this
+ * session, or a past one via IndexedDB) is served from the store instead of re-traced — see
+ * labCache.ts. Omit it and the run behaves exactly as before.
+ */
+export interface LabCacheConfig<C, R> {
+  /** Namespaces the keys per lab (its value shape differs, so shapes must not collide). */
+  id: string
+  /** Stable identity of the CASE. Return null to skip caching this one (e.g. a session-dropped
+   *  image whose object URL dies on reload). */
+  key: (c: C) => string | null
+  /** Everything OTHER than the case that changes the result — res, gradients, variant, etc.
+   *  Serialized into the key so a toggle doesn't return a stale value. */
+  optionsKey: string
+  /** Shrink the value before it is persisted to IndexedDB (identity otherwise). Read straight
+   *  back as R, so it must stay structurally usable — the Workbench drops a redundant ImageData
+   *  to its dimensions, the only field a consumer reads after analyze. */
+  serialize?: (r: R) => unknown
+}
 
 /** Shallow (by-identity) comparison of two deps arrays. */
 function sameDeps(a: unknown[], b: unknown[]): boolean {
@@ -17,6 +38,9 @@ export interface LabRun<C, R> {
   pending: C | null
   running: boolean
   status: string
+  /** Feeds the progress bar: how far the run is, and how much of it was served from the cache
+   *  (instant) rather than freshly computed. `cached === done` means nothing was recalculated. */
+  progress: { done: number; total: number; cached: number }
 }
 
 /**
@@ -35,12 +59,13 @@ export interface LabRun<C, R> {
 export function useLabRun<C, R>(
   cases: C[],
   analyze: (c: C) => Promise<R>,
-  opts: { label: (c: C) => string; done: (n: number) => string; deps: unknown[] },
+  opts: { label: (c: C) => string; done: (n: number) => string; deps: unknown[]; cache?: LabCacheConfig<C, R> },
 ): LabRun<C, R> {
   const [results, setResults] = useState<LabResult<C, R>[]>([])
   const [pending, setPending] = useState<C | null>(null)
   const [status, setStatus] = useState('Starting…')
   const [running, setRunning] = useState(true)
+  const [cached, setCached] = useState(0)
 
   // The callbacks are re-created every render; only `deps` should re-trigger a run.
   const latest = useRef({ cases, analyze, opts })
@@ -59,6 +84,7 @@ export function useLabRun<C, R>(
     setPending(null)
     setRunning(true)
     setStatus('Starting…')
+    setCached(0)
   }
 
   useEffect(() => {
@@ -66,6 +92,7 @@ export function useLabRun<C, R>(
     const { cases: cs, analyze: run, opts: o } = latest.current
     setResults([])
     setRunning(true)
+    setCached(0)
 
     void (async () => {
       for (let i = 0; i < cs.length; i++) {
@@ -77,10 +104,20 @@ export function useLabRun<C, R>(
         // trace seizes the main thread.
         await new Promise((r) => setTimeout(r, 0))
         if (cancelled) return
+        // A cached case skips the trace + scoring entirely; only genuinely new work computes.
+        const ckey = o.cache?.key(c) ?? null
+        const fullKey = o.cache && ckey != null ? labCacheKey(o.cache.id, ckey, o.cache.optionsKey) : null
         try {
-          const value = await run(c)
+          let value = fullKey ? await labCacheGet<R>(fullKey) : undefined
           if (cancelled) return
-          setResults((prev) => [...prev, { case: c, value }])
+          if (value === undefined) {
+            value = await run(c)
+            if (cancelled) return
+            if (fullKey) labCachePut(fullKey, value, o.cache!.serialize)
+          } else {
+            setCached((n) => n + 1) // served from the store — no trace/score ran
+          }
+          setResults((prev) => [...prev, { case: c, value: value as R }])
         } catch (err) {
           if (cancelled) return
           console.error(o.label(c), err)
@@ -99,5 +136,5 @@ export function useLabRun<C, R>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, opts.deps)
 
-  return { results, pending, running, status }
+  return { results, pending, running, status, progress: { done: results.length, total: cases.length, cached } }
 }
