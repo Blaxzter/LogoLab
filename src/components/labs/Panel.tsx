@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { ZoomSurface } from '../ui/ZoomSurface'
 import { useLabZoom, useLabDark } from './LabPage'
@@ -97,7 +97,34 @@ export function Panel({
   )
 }
 
-/** Panel content from a generated SVG/HTML string (a serialized trace, an overlay). */
+/**
+ * Prefix every id DEFINED in an SVG fragment (and its `url(#…)` / `href="#…"` references) so
+ * that inlining many generated traces into one page can't collide. Every traced doc numbers its
+ * paths from `trace-0`, so `serializeDoc` gives every gradient case an `id="grad-trace-0"`; with
+ * all of them in one shared DOM the browser resolves `url(#grad-trace-0)` to whichever lands
+ * FIRST — so a radial-glow path renders with an earlier case's linear gradient. A per-instance
+ * prefix makes each panel's ids unique. Only ids the fragment itself defines are touched, so a
+ * hex fill like `#cb462f` is never mistaken for a reference.
+ */
+function namespaceIds(html: string, prefix: string): string {
+  const ids = new Set<string>()
+  const re = /\bid="([^"]+)"/g
+  for (let m = re.exec(html); m; m = re.exec(html)) ids.add(m[1])
+  if (ids.size === 0) return html
+  let out = html
+  for (const id of ids) {
+    const p = `${prefix}-${id}`
+    out = out.replaceAll(`id="${id}"`, `id="${p}"`)
+    out = out.replaceAll(`url(#${id})`, `url(#${p})`)
+    out = out.replaceAll(`href="#${id}"`, `href="#${p}"`) // covers xlink:href too
+  }
+  return out
+}
+
+/** Panel content from a generated SVG/HTML string (a serialized trace, an overlay). Ids are
+ *  namespaced per instance so sibling panels' gradient defs never collide (see namespaceIds). */
 export function RawArt({ html }: { html: string }) {
-  return <div className="contents" dangerouslySetInnerHTML={{ __html: html }} />
+  const prefix = useId().replace(/:/g, '') // useId yields ":r0:" — colons are awkward in refs
+  const scoped = useMemo(() => namespaceIds(html, prefix), [html, prefix])
+  return <div className="contents" dangerouslySetInnerHTML={{ __html: scoped }} />
 }
