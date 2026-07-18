@@ -18,7 +18,9 @@
 
 import { useMemo, useState } from 'react'
 import { Upload, X } from 'lucide-react'
-import { labImageData } from './resvgRaster'
+import { labImageData, rasterizeSvgResvg } from './resvgRaster'
+import { rgbaToUrl } from './raster'
+import { heatColor, HEAT_BG } from './heat'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { VectorizeOptions } from '../../types'
 import type { EditableDoc } from '../../lib/path/types'
@@ -114,7 +116,37 @@ interface AbAnalysis {
   /** Snapshot mode only: did the working tree's trace differ from the frozen one? undefined in
    *  variants mode (no baseline to diff against). Drives the "Changed only" filter. */
   changed?: boolean
+  /** Snapshot mode, changed cases only: a per-pixel heat of WHERE the two traces disagree
+   *  (data URL). Lets a change be located, not just counted. */
+  heatUrl?: string
   variants: { name: string; tone?: string; svg: string; stats?: ReturnType<typeof docStats> }[]
+}
+
+/** Full-scale (RGB euclidean distance) at which the diff heat saturates to its hottest. A
+ *  clean fill swap (ink↔beige, ~250) pins hot; sub-pixel AA jitter stays cool. */
+const HEAT_SCALE = 110
+
+/** Per-pixel diff of two equal-size rasters → a heat RGBA buffer on HEAT_BG: hot where the
+ *  traces disagree, the shared cold→hot ramp (heat.ts) so it reads like every other lab heat.
+ *  Pure — no DOM — so the pixel math is testable headless; rgbaToUrl does the canvas encode. */
+function diffHeatBuffer(a: ImageData, b: ImageData): Uint8ClampedArray {
+  const n = a.width * a.height
+  const out = new Uint8ClampedArray(n * 4)
+  const bg = [10, 12, 22] // ~HEAT_BG, so cold pixels sit on the panel's own backdrop
+  for (let i = 0; i < n; i++) {
+    const o = i * 4
+    const dr = a.data[o] - b.data[o]
+    const dg = a.data[o + 1] - b.data[o + 1]
+    const db = a.data[o + 2] - b.data[o + 2]
+    const t = Math.min(1, Math.sqrt(dr * dr + dg * dg + db * db) / HEAT_SCALE)
+    if (t < 0.02) {
+      out[o] = bg[0]; out[o + 1] = bg[1]; out[o + 2] = bg[2]; out[o + 3] = 255
+      continue
+    }
+    const [hr, hg, hb] = heatColor(t)
+    out[o] = hr; out[o + 1] = hg; out[o + 2] = hb; out[o + 3] = 255
+  }
+  return out
 }
 
 /** Vs-snapshot mode: trace the WORKING TREE's default config from the snapshot's own stored
@@ -131,12 +163,27 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean): Promise<AbAnalysi
   // "Changed" is an exact-serialization diff: the snapshot IS serializeDoc(doc) at the frozen
   // rev (writeAbSnapshots.ts) and gradientId is deterministic, so identical geometry+paint
   // serializes byte-identically — a difference here is a real trace change, nothing cosmetic.
-  const changed = serializeDoc(doc, 2) !== snapSvg
+  const live = serializeDoc(doc, 2)
+  const changed = live !== snapSvg
+  // For changed cases, rasterize BOTH plain-fill traces (no wireframe) on white and heat
+  // their per-pixel delta, so the diff is LOCATED. Only changed cases pay this, and only in
+  // snapshot mode — an unchanged corpus costs nothing.
+  let heatUrl: string | undefined
+  if (changed) {
+    const [snapImg, liveImg] = await Promise.all([
+      rasterizeSvgResvg(snapSvg, entry.width, { background: 'white' }),
+      rasterizeSvgResvg(live, entry.width, { background: 'white' }),
+    ])
+    if (snapImg.width === liveImg.width && snapImg.height === liveImg.height) {
+      heatUrl = rgbaToUrl(diffHeatBuffer(snapImg, liveImg), snapImg.width, snapImg.height)
+    }
+  }
   return {
     width: entry.width,
     height: entry.height,
     srcOverride: pngUrl,
     changed,
+    heatUrl,
     variants: [
       { name: `Snapshot @ ${SNAPSHOT.rev}`, tone: 'base', svg: snapSvg },
       { name: 'Working tree', tone: 'shipped', svg: traceSvg(doc, entry.width, entry.height), stats: docStats(doc) },
@@ -165,7 +212,7 @@ async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<A
 }
 
 export default function AbLab() {
-  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snap: false, changedOnly: false })
+  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snap: false, changedOnly: false, heat: true })
   // Dropped images live for the session only — their object URLs die on reload.
   const [extras, setExtras] = useState<AbCase[]>([])
   const [over, setOver] = useState(false)
@@ -251,6 +298,9 @@ export default function AbLab() {
                 checked={ui.changedOnly}
                 onChange={(changedOnly) => setUi({ changedOnly })}
               />
+            )}
+            {snapMode && (
+              <LabCheck label="Diff heat" checked={ui.heat} onChange={(heat) => setUi({ heat })} />
             )}
             <LabCheck
               label="Gradients"
@@ -355,6 +405,16 @@ export default function AbLab() {
                   <RawArt html={v.svg} />
                 </Panel>
               ))}
+              {snapMode && ui.heat && a.heatUrl && (
+                <Panel
+                  label={<span className="text-warn">diff heat</span>}
+                  note="hot = snapshot ≠ working tree"
+                  aspect={a.width / a.height}
+                  pixelated
+                >
+                  <img src={a.heatUrl} alt="" style={{ background: HEAT_BG }} />
+                </Panel>
+              )}
             </CaseRow>
           )
         })}
@@ -390,7 +450,9 @@ function AbAbout() {
         <b> Changed only</b> then collapses the corpus to just the cases whose trace actually
         moved (an exact serialization diff — the snapshot IS <code>serializeDoc</code> at the
         frozen rev), so a targeted fix reads as the one or two rows it touched instead of a wall
-        of identical panels. Re-run the command to re-bless after a change is accepted. (Residual caveat: the browser&apos;s
+        of identical panels. <b>Diff heat</b> adds a panel per changed case that rasterizes both
+        traces and paints WHERE they disagree (the shared cold→hot ramp) — so a change is located,
+        not just flagged. Re-run the command to re-bless after a change is accepted. (Residual caveat: the browser&apos;s
         canvas PNG decode can differ from Node&apos;s by ±1 on a few partial-alpha pixels — the
         aurora story in docs/labs.md — which is far below anything judged visually here.)
       </p>
