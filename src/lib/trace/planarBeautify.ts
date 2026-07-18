@@ -42,6 +42,51 @@ const cloneVec = (v: Vec | null): Vec | null => (v ? { x: v.x, y: v.y } : null)
 const cloneNode = (n: PathNode): PathNode => ({ x: n.x, y: n.y, hIn: cloneVec(n.hIn), hOut: cloneVec(n.hOut), kind: n.kind })
 const cloneEdge = (e: SharedEdge): SharedEdge => ({ ...e, nodes: e.nodes.map(cloneNode) })
 
+/**
+ * A circle/ellipse snap is accepted on max RADIAL deviation alone, which is a purely
+ * SIZE-relative test: a tiny axis-aligned square deviates from its best-fit circle by
+ * well under a pixel (an 8px checker cell: ~0.83px < the 1.5px fidelity), so the disc
+ * and co-circular snaps would "round" it into a blob — the fine-checkerboard scalloping
+ * (docs/vectorization-benchmarks.md §0 #7, §8.2). Radial deviation cannot see that,
+ * because a square IS radially close to a circle at small scale; its TURNING can — a
+ * circle bends a few degrees per flatten step while a polygon spikes 90° at each corner.
+ * So every circle/ellipse snap is additionally gated on the loop having no corner sharper
+ * than this. A real ring split into arcs meets its junctions near-straight (the "pull" is
+ * a few degrees), far below the threshold, so genuine round art is unaffected.
+ */
+const CORNER_TURN = Math.PI / 3 // 60°: veto the circle/ellipse snap past this turn
+
+/**
+ * Largest turn angle (radians) between consecutive segments of a flattened loop.
+ * Collinear runs (a straight edge's 16 samples) contribute 0; a corner contributes
+ * its exterior angle. Zero-length steps are skipped so coincident junction samples
+ * don't blind the test. `poly` is treated as closed.
+ */
+function maxTurnRad(poly: Vec[]): number {
+  const dirs: Vec[] = []
+  const n = poly.length
+  for (let i = 0; i < n; i++) {
+    const a = poly[i]
+    const b = poly[(i + 1) % n]
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const len = Math.hypot(dx, dy)
+    if (len > 1e-6) dirs.push({ x: dx / len, y: dy / len })
+  }
+  const m = dirs.length
+  if (m < 2) return 0
+  let maxA = 0
+  for (let i = 0; i < m; i++) {
+    const d0 = dirs[i]
+    const d1 = dirs[(i + 1) % m]
+    let dot = d0.x * d1.x + d0.y * d1.y
+    dot = dot > 1 ? 1 : dot < -1 ? -1 : dot
+    const a = Math.acos(dot)
+    if (a > maxA) maxA = a
+  }
+  return maxA
+}
+
 /** A disc-edge circle the relation solver may reconcile; carries its owning edge
  *  index + winding so the snapped 4-node circle can be regenerated after a move. */
 interface DiscCircle extends RelationCircle {
@@ -100,9 +145,12 @@ export function planarBeautify(
       // --- 1a. Disc edge → circle / ellipse --------------------------------
       const raw = flatten({ nodes: e.nodes, closed: true })
       const positive = anchorSignedArea(e.nodes) > 0
+      // A sharp-cornered loop is a polygon, not a disc — never round it (a small
+      // square is radially circle-close but turns 90° at its corners). See CORNER_TURN.
+      const cornered = maxTurnRad(raw) >= CORNER_TURN
 
       const circle = fitCircle(raw)
-      if (circle && circle.r > 2 * fid && maxRadialDev(raw, circle) <= fid) {
+      if (!cornered && circle && circle.r > 2 * fid && maxRadialDev(raw, circle) <= fid) {
         e.nodes = makeCircleSubPath(circle.cx, circle.cy, circle.r, positive).nodes
         discCircles.push({ edgeIdx: i, positive, cx: circle.cx, cy: circle.cy, r: circle.r, raw })
         continue
@@ -113,7 +161,7 @@ export function planarBeautify(
       // the ellipse bulging into space the polygon never visits — see
       // maxEllipseToPolyDev (a 6px bar "fits" a 3.8×278 ellipse otherwise).
       if (
-        ell && Math.min(ell.rx, ell.ry) > 2 * fid &&
+        !cornered && ell && Math.min(ell.rx, ell.ry) > 2 * fid &&
         maxEllipseDev(raw, ell) <= fid && maxEllipseToPolyDev(raw, ell) <= fid
       ) {
         e.nodes = makeEllipseSubPath(ell.cx, ell.cy, ell.rx, ell.ry, positive).nodes
@@ -213,6 +261,11 @@ function snapCoCircularLoops(
         for (const p of flatten({ nodes: arc, closed: e.closed })) raw.push(p)
       }
       if (!ok || !hasOpen || raw.length < 8) continue
+      // A loop that turns a sharp corner is a polygon (a checker cell's 4 right
+      // angles), not a ring split into arcs — snapping it to a circle is the
+      // fine-checkerboard scalloping. Radial deviation is blind to it at small scale;
+      // turning is not. See CORNER_TURN.
+      if (maxTurnRad(raw) >= CORNER_TURN) continue
       const c = fitCircle(raw)
       if (!c || c.r <= 2 * fid || maxRadialDev(raw, c) > fid) continue
       for (const ref of loop) {

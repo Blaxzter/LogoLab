@@ -120,6 +120,7 @@ for (const c of GATED_CORPUS) {
     const gates = evaluateTruthGates({
       samples: g.samples, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
       trueRegions: r.trueRegions, recovered: r.recovered,
+      gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered,
       // Region recovery is meaningless on gradient art — a smooth ramp's 8-bit quantisation
       // bands read as dozens of "flat regions", so a tracer that correctly fits ONE gradient
       // would look like it dropped sixty. evaluateTruthGates returns it applicable:false, and

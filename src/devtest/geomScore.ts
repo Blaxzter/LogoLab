@@ -303,6 +303,109 @@ export interface GeomScore {
 
   gtShapes: number
   docPaths: number
+
+  /** VISIBLE authored sharp corners (turn ≥ CORNER_MIN_TURN, occluded ones excluded). */
+  gtCorners: number
+  /** How many of those the trace reproduces as a sharp corner within CORNER_MATCH_R px.
+   *  The check boundary DISTANCE cannot make: rounding a sharp corner into a smooth arc
+   *  (a checker cell → a blob) barely moves chamfer at small scale but destroys the shape.
+   *  cornersRecovered < gtCorners is exactly that defect (docs/vectorization-benchmarks.md
+   *  §0 #7). Only meaningful when gtCorners is large enough — see evaluateTruthGates. */
+  cornersRecovered: number
+}
+
+/** Turn angle (rad) at/above which a boundary vertex is a "sharp corner". 60°: a circle's
+ *  4-node kappa fit turns ~5.6°/flatten-step, so genuine round art never trips it; a
+ *  polygon corner (a square's 90°) always does. Matches planarBeautify's CORNER_TURN. */
+const CORNER_MIN_TURN = Math.PI / 3
+/** A GT corner counts as reproduced if a traced corner sits within this many px of it.
+ *  Distance-tolerant on purpose: a corner shifted 2px is still a corner (this gate is about
+ *  the corner EXISTING, not its sub-pixel placement — that is chamfer/p95's job). */
+const CORNER_MATCH_R = 2.5
+/** A GT corner is only GRADED when BOTH its incident authored edges are at least this long:
+ *  the gate judges rounding of RESOLVABLE shapes (an 8px checker cell), not the crispness of
+ *  a sub-pixel sliver's cap. hairlines' bars are 0.5–6px wide, so every bar corner has one
+ *  short cap edge and drops out here — thin-feature fidelity is chamfer/p95 + §9.5's job, not
+ *  this gate's. Applied to GT corners only; any traced hard corner is a valid match target. */
+const CORNER_MIN_EDGE = 7
+
+interface Corner { x: number; y: number; itx: number; ity: number; otx: number; oty: number }
+
+/**
+ * HARD corners of a set of subpath lists: a polygonal vertex where two STRAIGHT edges meet
+ * at ≥ CORNER_MIN_TURN. "Hard" = no handles on either side — the node is a true kink between
+ * two lines, not a rounded joint. This is the exact property that distinguishes a sharp
+ * checker cell (four straight edges, null handles) from the same cell rounded to a blob (the
+ * corners survive, but their edges become arcs, so the nodes carry handles). Both the GT and
+ * the trace are read the same way, so a rounded trace loses the corners a rounded GT would
+ * too — the metric only ever demands the tracer reproduce corners the ARTIST drew hard.
+ * Each corner carries its incoming/outgoing unit tangents so GT corners can be visibility-
+ * tested against the truth raster. Open subpaths skip their two endpoints.
+ */
+function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
+  const cosMax = Math.cos(CORNER_MIN_TURN) // turn ≥ MIN_TURN  ⇔  dot ≤ cos(MIN_TURN)
+  const out: Corner[] = []
+  for (const set of sets) {
+    for (const sp of set) {
+      const nodes = sp.nodes
+      const n = nodes.length
+      if (n < 3) continue
+      const closed = sp.closed !== false
+      const lo = closed ? 0 : 1
+      const hi = closed ? n : n - 1
+      for (let i = lo; i < hi; i++) {
+        const cur = nodes[i]
+        // Both incident edges must be straight lines at this node: a rounded corner carries
+        // an arc handle on the in- and/or out-side, and is not a hard polygonal vertex.
+        if (cur.hIn || cur.hOut) continue
+        const prev = nodes[(i - 1 + n) % n]
+        const next = nodes[(i + 1) % n]
+        if (prev.hOut || next.hIn) continue // the segment either side of `cur` is a curve
+        let ix = cur.x - prev.x
+        let iy = cur.y - prev.y
+        let ox = next.x - cur.x
+        let oy = next.y - cur.y
+        const li = Math.hypot(ix, iy)
+        const lo2 = Math.hypot(ox, oy)
+        if (li < 1e-6 || lo2 < 1e-6) continue
+        if (li < minEdge || lo2 < minEdge) continue // corner on too-thin a feature to grade
+        ix /= li; iy /= li; ox /= lo2; oy /= lo2
+        if (ix * ox + iy * oy <= cosMax) out.push({ x: cur.x, y: cur.y, itx: ix, ity: iy, otx: ox, oty: oy })
+      }
+    }
+  }
+  return out
+}
+
+/** Count how many `gt` corners have a `doc` corner within R px (spatial-hash matched). */
+function matchCorners(gt: Corner[], doc: Corner[], R: number): number {
+  if (gt.length === 0) return 0
+  const cell = Math.max(1, R)
+  const grid = new Map<number, Corner[]>()
+  const key = (gx: number, gy: number): number => gx * 73856093 + gy // sparse buckets
+  for (const p of doc) {
+    const k = key(Math.floor(p.x / cell), Math.floor(p.y / cell))
+    const a = grid.get(k)
+    if (a) a.push(p); else grid.set(k, [p])
+  }
+  const R2 = R * R
+  let hit = 0
+  for (const g of gt) {
+    const gx = Math.floor(g.x / cell)
+    const gy = Math.floor(g.y / cell)
+    let found = false
+    for (let dx = -1; dx <= 1 && !found; dx++) {
+      for (let dy = -1; dy <= 1 && !found; dy++) {
+        for (const p of grid.get(key(gx + dx, gy + dy)) ?? []) {
+          const ddx = p.x - g.x
+          const ddy = p.y - g.y
+          if (ddx * ddx + ddy * ddy <= R2) { found = true; break }
+        }
+      }
+    }
+    if (found) hit++
+  }
+  return hit
 }
 
 // ---------------------------------------------------------------------------
@@ -548,8 +651,20 @@ export function scoreGeometry(
     docSets.push(item.subPaths)
   }
 
-  const G = collectBoundary(gt.map((s) => s.subPaths), w, h, makeVisibleAt(truthRaster))
+  const visible = makeVisibleAt(truthRaster)
+  const G = collectBoundary(gt.map((s) => s.subPaths), w, h, visible)
   const D = collectBoundary(docSets, w, h)
+
+  // Corner recovery — a topology check boundary distance is structurally blind to. A GT
+  // corner counts only if VISIBLE (occluded overdraw corners, like an under-bar tip, can't
+  // be traced — same exclusion §9.6 applies to the missed side); it is recovered when the
+  // trace has a sharp corner within CORNER_MATCH_R. A corner is visible if the truth raster
+  // changes colour across EITHER of its two edges.
+  const gtCornerAll = sharpCorners(gt.map((s) => s.subPaths), CORNER_MIN_EDGE)
+  const gtCornerVis = gtCornerAll.filter(
+    (c) => visible({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || visible({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
+  )
+  const cornersRecovered = matchCorners(gtCornerVis, sharpCorners(docSets), CORNER_MATCH_R)
 
   const gGrid = new SegGrid(G.segs)
   const dGrid = new SegGrid(D.segs)
@@ -583,6 +698,8 @@ export function scoreGeometry(
     parsimony: gtDensity > 0 ? docDensity / gtDensity : 0,
     gtShapes: gt.length,
     docPaths,
+    gtCorners: gtCornerVis.length,
+    cornersRecovered,
     diagnostics: { gtPoints, docPoints },
   }
 }

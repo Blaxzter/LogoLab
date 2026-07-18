@@ -27,11 +27,10 @@ guardrails):
 
 | # | defect | reproducing case | number | details |
 |---|---|---|---|---|
-| 2 | **Junction weld** — crossing-bar junction wedges pulled; visible at 1×, sub-tolerance since the scorer counts visible boundary only (like #7) | `cross-bars` (tier 0, gated, **passes**) | chamfer 0.34px, p95 0.54px (was 1.04/9.6 — the difference was the occluded under-bar edge, §9.6) | §7; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
+| 2 | **Junction weld** — crossing-bar junction wedges pulled; visible at 1×, sub-tolerance since the scorer counts visible boundary only (like the closed checker scallop, §9.8) | `cross-bars` (tier 0, gated, **passes**) | chamfer 0.34px, p95 0.54px (was 1.04/9.6 — the difference was the occluded under-bar edge, §9.6) | §7; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
 | 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.22px, p95 0.74px (was 1.44/24.8 — the p95 was the seam occluded under the circle, §9.6) | §7; +0.09 chamfer from the §9.5 fix (label-level endpoint routing sends the whole sliver to one side) |
 | 4 | **Edge pull on flats bordering a gradient bg** | `gradient-flat` (tier 0, gated, in `KNOWN_DEFECTS`) | p95 6.3px | §7 |
 | 6 | **Thin features at LOW resolution** — below ~256px the sub-pixel bars still break up (the @512 defect is fixed, §9.5; the gate runs at 512) | `hairlines` @256 (ungated resolution) | chamfer 0.88px, p95 9.77px @256 (was 2.44/27.8 before §9.6 — part of that was bar-crossing occlusion; the remaining 9.77 is real) | §9.5 |
-| 7 | **Checkerboard corner scalloping** — diagonally-touching squares corner-weld into scallops; sub-tolerance but visible at 1× | `checker` (tier 0, gated, **passes**) | all deviations < 2px | §8.2 |
 | 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
@@ -55,7 +54,13 @@ with user sign-off; TIER_TOL[2] re-calibrated ~6–30× tighter — **§9.6** is
 chamfer 3.73 → 0.39px, p95 55.9 → 0.78px, bars recovered in the authored colours, root-caused
 and measured in **§9.5** (2026-07-14); **dropped small flat regions** — 22 → 1 across tier 2,
 `bloom`/`petals` 5/7 → 7/7, root-caused and measured in **§9.4** (2026-07-15); **`checker`
-unscorable** — re-authored, now green (§8.2, 2026-07-15).
+unscorable** — re-authored, now green (§8.2, 2026-07-15). **Checkerboard corner scalloping**
+(`checker`, was #7) — closed 2026-07-18: NOT the mode filter or the tracer (both emit exact
+8px squares); `planarBeautify`'s circle/ellipse snap rounded each cell to a blob because
+radial-deviation acceptance is size-relative (an 8px square sits < 1px from its best-fit
+circle). Fixed by a corner-turn veto on the snaps (a loop that turns a sharp corner is a
+polygon, not a disc). chamfer 0.38 → **0.000**, p95 1.74 → **0.000**, corner recall 41.9 →
+**97.2%** — **§9.8** is the record, and it shipped with a NEW distance-blind gate (below).
 
 Feature verdicts (not defects): the experimental A/B flags (`refineJunctions`,
 `weldJunctions`, `backgroundGradient`) measured **non-mergeable as defaults** — §9.3. The
@@ -372,10 +377,14 @@ it was re-authored as 896 explicit filled squares (patterns are to fills what st
 fills; tiles resized 18/9 → 16/8 so the coarse grid aligns with the fine quadrant — no square
 straddles it, so nothing is occluded). Scored for the first time, the tracer **passes**:
 chamfer 0.38px / p95 1.87px / parsimony 1.0× / 2/2 regions @512, near-perfect 0.01px @1024.
-One honest nuance the numbers under-sell: in the FINE quadrant the diagonally-touching ink
-squares come out corner-welded into scalloped blobs — every deviation is sub-2px (hence the
-green p95) but the texture visibly differs at 1×. A real defect, correctly sized by the
-metric as small; if it ever matters, it needs a corner-topology fix, not a tolerance change.
+One honest nuance the numbers under-sold, now CLOSED (2026-07-18, §9.8): in the FINE quadrant
+the cells came out rounded into scalloped blobs — every deviation was sub-2px (hence the green
+p95) but the texture visibly differed at 1×. It was NOT a corner-weld and NOT the mode filter:
+`tracePlanar` emits exact 8px squares, but `planarBeautify`'s circle/ellipse snap then rounded
+each cell (radial-deviation acceptance is size-relative — an 8px square is < 1px from its
+best-fit circle). Fixed by a corner-turn veto on the snaps; chamfer 0.38 → 0.000, p95 1.74 →
+0.000. The tell that no existing gate caught it — a shape wrecked while every distance stayed
+sub-pixel — is exactly why §9.8 also added the **corner-recovery gate**.
 
 ### 8.3 The flat↔gradient A/B — the experiment nobody could run
 
@@ -865,3 +874,55 @@ Results, before → after (protocol as §9.4/§9.5):
   1.58–1.72s vs 1.55–1.74s baseline (the flat census is one O(8n) pass, armed only in
   the flat-palette path). **suite**: typecheck clean, 267 / 0 / 2 — no KNOWN_DEFECTS
   change (flute is tier 2, ungated).
+
+---
+
+### 9.8 The fix: corner-turn veto in `planarBeautify` — `checker` scalloping (§0 #7) closes, and the gate that had to exist to prove it
+
+The oldest "sub-tolerance but visibly wrong" entry, closed 2026-07-18 — but the interesting
+part is that finding it meant discarding two wrong root causes in a row, each of which a
+plausible reading of §8.2 ("corner-welded", "high-frequency aliasing") would lead you to.
+
+**Root cause, third guess and correct.** The chain is segment → `tracePlanar` → `planarBeautify`.
+- The label map is a clean checkerboard: `modeFilter` (the 3×3 majority pass) changes **0**
+  pixels on a perfect 8px checkerboard, and only 32 at the coarse↔fine SEAM on the real one
+  (a minor, separate thing). Not the cause.
+- `tracePlanar` emits **exact 8×8 squares**: 4 `corner` nodes, no handles, bbox 8.0×8.0.
+  Verified by dumping the fitted geometry. Not the cause either.
+- `planarBeautify` then **rounds every cell to a blob.** Its disc snap (1a) and co-circular
+  loop snap (1d) accept a circle/ellipse on max RADIAL deviation alone — a purely
+  size-relative test. An 8px square is < 1px from its best-fit circle (dev ≈ 0.83px < the
+  1.5px fidelity), so each cell is "close enough" and gets re-emitted as arcs: bbox
+  8.0×8.0 → 9.5×8.0, 4 straight edges → 4 arcs. The rendered fine quadrant is a field of
+  beige eggs in concave cushions — precisely the reported picture.
+
+**The fix (`src/lib/trace/planarBeautify.ts`).** Radial deviation cannot tell a small square
+from a small circle; TURNING can — a circle's 4-node kappa fit bends ~5.6° per flatten step,
+a polygon spikes 90° at each corner. So both snaps gain a `CORNER_TURN` (60°) veto: a loop
+that turns a sharp corner is a polygon, not a disc/ring, and is never rounded. Genuine round
+art (nebula/annulus/concentric, the ring co-circular arcs) turns far below 60° and is
+untouched — golden and full suite byte-identical.
+
+**Measured (`checker` @512):** chamfer 0.379 → **0.000**, p95 1.738 → **0.000**, hausdorff
+2.08 → 0.50, parsimony 1.02 → 1.05. The trace is now pixel-exact.
+
+**The gate that had to exist.** Every prior gate PASSED the rounded output — chamfer 0.38 and
+p95 1.74 are under tier 0's 1.0 / 2.5, region recovery is 2/2 (colour + topology intact), and
+the blobs don't weld (diagonal cells stay ~1.8px apart), so no component metric catches it
+either. A shape wrecked while every distance stayed sub-pixel is the exact blind spot §1
+warns about, one dimension over. So the fix ships with a new **corner-recovery gate**
+(`geomScore.scoreGeometry` → `evaluateTruthGates`): of the VISIBLE authored HARD corners (a
+polygonal vertex, ≥60° turn between two STRAIGHT edges — occluded ones excluded via
+`makeVisibleAt`, §9.6), what fraction does the trace reproduce as a hard corner within 2.5px.
+Rounding a corner replaces its straight edges with arcs, so the node stops being hard and the
+recall drops. Flat-art only (like region recovery); applicable only with ≥ 12 gradeable
+corners, and a corner is gradeable only when BOTH its authored edges are ≥ 7px — so a
+sub-pixel sliver's cap is exempt (this is what keeps `hairlines`, whose 0.5–6px bars the fit
+legitimately curves, from tripping it — that is chamfer/p95's job, §9.5). Floor: 80% recall.
+- `checker` rounded: **41.9%** (1504 / 3588) → **FAIL**. `checker` fixed: **97.2%** (3488 /
+  3588) → PASS. The gate has teeth and the fix clears it with margin.
+- No other gated case regresses: tier-0 flats pass, `hairlines` reports n/a (8 gradeable
+  corners < 12), gradient tier-1 is n/a (not flat art).
+- **suite**: typecheck clean, **267 / 0 / 2**; golden regression byte-identical (the veto
+  fires only where a snap would have rounded a corner — nothing else in the corpus does).
+  `checker` was never in `KNOWN_DEFECTS` and still is not: it passes, now honestly.

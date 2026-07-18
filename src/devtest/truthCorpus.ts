@@ -268,6 +268,17 @@ export interface TruthGate {
 }
 
 /**
+ * Corner-recovery gate calibration. Only applied to flat art with at least this many VISIBLE
+ * authored corners — below that there is too little corner evidence to grade (a mostly-round
+ * glyph), so the gate reports n/a rather than a noisy pass/fail. The recall floor is a
+ * CATASTROPHE bound like the tier limits: a correct trace reproduces ~all authored corners
+ * (checker: 99%), and only a gross rounding — a checker cell melted to a blob (§0 #7),
+ * dropping the fine quadrant's corners — falls below it.
+ */
+const CORNER_MIN_COUNT = 12
+const CORNER_RECALL_MIN = 0.8
+
+/**
  * Evaluate every gate for one scored case. Pure arithmetic — no assertions.
  *
  * Two gates can be INAPPLICABLE rather than passing, and saying so is the whole point:
@@ -279,6 +290,7 @@ export interface TruthGate {
  *  • region recovery needs FLAT art. On gradient art the flat-region count is an artifact of
  *    8-bit quantisation (bg-ramp "has" 69 regions), so a tracer that correctly fits one
  *    gradient looks like it dropped 60.
+ *  • corner recovery needs FLAT art with enough authored corners — see CORNER_MIN_COUNT.
  *
  * A gate that silently passes because it had nothing to check is worse than no gate at all,
  * so those come back `applicable: false` and callers must render them as n/a — never as ✓.
@@ -290,6 +302,10 @@ export function evaluateTruthGates(s: {
   parsimony: number
   trueRegions: number
   recovered: number
+  /** VISIBLE authored sharp corners and how many the trace reproduced (geomScore). Omitted
+   *  ⇒ the corner gate reports n/a (a caller that has not measured them). */
+  gtCorners?: number
+  cornersRecovered?: number
   /** False for gradient cases — see above. */
   flatArt: boolean
   /** Picks the tolerances (TIER_TOL). Defaults to tier 0, whose numbers are unchanged. */
@@ -297,6 +313,10 @@ export function evaluateTruthGates(s: {
 }): TruthGate[] {
   const tol = TIER_TOL[s.tier ?? 0]
   const hasBoundary = s.samples > 0
+  const gtCorners = s.gtCorners ?? 0
+  const cornersRecovered = s.cornersRecovered ?? 0
+  const cornerApplicable = s.flatArt && gtCorners >= CORNER_MIN_COUNT
+  const cornerRecall = gtCorners > 0 ? cornersRecovered / gtCorners : 1
   const upper = (key: string, label: string, value: number, limit: number, digits: number, applicable = hasBoundary): TruthGate => ({
     key, label, rule: `≤ ${limit}`, value, limit,
     applicable,
@@ -322,6 +342,23 @@ export function evaluateTruthGates(s: {
       applicable: s.flatArt,
       pass: !s.flatArt || s.recovered >= s.trueRegions,
       headroom: !s.flatArt || s.recovered >= s.trueRegions ? 1 : -1,
+      digits: 0,
+    },
+    {
+      // Zero-distance defect: the tracer keeps every region and every boundary within
+      // tolerance yet ROUNDS the shape — a fine checkerboard's cells melt from squares to
+      // blobs (§0 #7). chamfer/p95 cannot see it (a corner rounded at 8px scale moves the
+      // boundary < 1px) and region recovery cannot (the colour and topology are intact). The
+      // authored corners simply stop being corners. This gate catches exactly that: the
+      // fraction of visible authored corners the trace still renders sharp.
+      key: 'corners',
+      label: 'corners recovered',
+      rule: `≥ ${Math.round(CORNER_RECALL_MIN * 100)}%`,
+      value: gtCorners - cornersRecovered,
+      limit: Math.floor(gtCorners * (1 - CORNER_RECALL_MIN)),
+      applicable: cornerApplicable,
+      pass: !cornerApplicable || cornerRecall >= CORNER_RECALL_MIN,
+      headroom: !cornerApplicable ? 1 : (cornerRecall - CORNER_RECALL_MIN) / (1 - CORNER_RECALL_MIN),
       digits: 0,
     },
   ]
