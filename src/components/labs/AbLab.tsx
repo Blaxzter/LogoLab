@@ -31,6 +31,7 @@ import { useLabState } from './useLabState'
 import { useLabRun } from './useLabRun'
 import { labTrace } from './labTrace'
 import { docStats, traceSvg } from './wire'
+import { serializeDoc } from '../../lib/path/model'
 
 // The frozen comparison target, bundled like GoldenLab's fixtures (it lives outside
 // public/, so fetching would 404 in a build). Globs tolerate the directory not
@@ -110,6 +111,9 @@ interface AbAnalysis {
   height: number
   /** In snapshot mode the source panel must show the SNAPSHOT's pixels, not the live case URL. */
   srcOverride?: string
+  /** Snapshot mode only: did the working tree's trace differ from the frozen one? undefined in
+   *  variants mode (no baseline to diff against). Drives the "Changed only" filter. */
+  changed?: boolean
   variants: { name: string; tone?: string; svg: string; stats?: ReturnType<typeof docStats> }[]
 }
 
@@ -124,10 +128,15 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean): Promise<AbAnalysi
 
   const image = await labImageData(pngUrl, Math.max(entry.width, entry.height))
   const doc: EditableDoc = await labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients })
+  // "Changed" is an exact-serialization diff: the snapshot IS serializeDoc(doc) at the frozen
+  // rev (writeAbSnapshots.ts) and gradientId is deterministic, so identical geometry+paint
+  // serializes byte-identically — a difference here is a real trace change, nothing cosmetic.
+  const changed = serializeDoc(doc, 2) !== snapSvg
   return {
     width: entry.width,
     height: entry.height,
     srcOverride: pngUrl,
+    changed,
     variants: [
       { name: `Snapshot @ ${SNAPSHOT.rev}`, tone: 'base', svg: snapSvg },
       { name: 'Working tree', tone: 'shipped', svg: traceSvg(doc, entry.width, entry.height), stats: docStats(doc) },
@@ -156,13 +165,14 @@ async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<A
 }
 
 export default function AbLab() {
-  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snap: false })
+  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snap: false, changedOnly: false })
   // Dropped images live for the session only — their object URLs die on reload.
   const [extras, setExtras] = useState<AbCase[]>([])
   const [over, setOver] = useState(false)
 
   const cases = useMemo(() => [...CASES, ...extras], [extras])
   const snapMode = ui.snap && SNAPSHOT != null
+  const changedOnly = snapMode && ui.changedOnly
 
   const run = useLabRun(
     cases,
@@ -194,6 +204,12 @@ export default function AbLab() {
       { name: f.name, src: URL.createObjectURL(f), kind: f.type.includes('svg') ? 'svg' : 'png', file: f },
     ])
   }
+
+  // "Changed only" hides cases whose working-tree trace serializes identically to the snapshot.
+  // Errors (value null) and still-resolving rows are kept — only a confirmed match is hidden.
+  const shown = changedOnly ? run.results.filter((r) => r.value?.changed !== false) : run.results
+  const changedN = run.results.filter((r) => r.value?.changed === true).length
+  const unchangedN = run.results.filter((r) => r.value?.changed === false).length
 
   return (
     <div
@@ -229,6 +245,13 @@ export default function AbLab() {
                 onChange={(snap) => setUi({ snap })}
               />
             )}
+            {snapMode && (
+              <LabCheck
+                label="Changed only"
+                checked={ui.changedOnly}
+                onChange={(changedOnly) => setUi({ changedOnly })}
+              />
+            )}
             <LabCheck
               label="Gradients"
               checked={ui.gradients}
@@ -261,7 +284,17 @@ export default function AbLab() {
         }
         about={<AbAbout />}
       >
-        {run.results.map(({ case: c, value: a, error }, i) => {
+        {snapMode && (changedN > 0 || unchangedN > 0) && (
+          <div className="mb-2 text-xs text-muted">
+            <b className="text-fg">{changedN}</b> changed · {unchangedN} unchanged vs snapshot{' '}
+            {SNAPSHOT!.rev}
+            {changedOnly && unchangedN > 0 && <span className="text-faint"> · {unchangedN} hidden</span>}
+            {changedOnly && changedN === 0 && (
+              <span className="text-good"> — working tree matches the snapshot</span>
+            )}
+          </div>
+        )}
+        {shown.map(({ case: c, value: a, error }) => {
           if (!a) {
             return (
               <CaseRow key={c.name} title={c.name}>
@@ -274,16 +307,25 @@ export default function AbLab() {
               key={c.name}
               title={c.name}
               badges={
-                c.file && (
-                  <button
-                    type="button"
-                    onClick={() => setExtras((prev) => prev.filter((e) => e !== c))}
-                    className="flex items-center gap-0.5 rounded px-1 py-0.5 text-[0.6rem] text-faint transition-colors hover:bg-surface-3 hover:text-bad"
-                  >
-                    <X size={10} />
-                    remove
-                  </button>
-                )
+                <>
+                  {snapMode && a.changed != null && (
+                    <span
+                      className={`rounded px-1 py-0.5 text-[0.6rem] ${a.changed ? 'bg-warn/20 text-warn' : 'text-faint'}`}
+                    >
+                      {a.changed ? 'changed' : 'unchanged'}
+                    </span>
+                  )}
+                  {c.file && (
+                    <button
+                      type="button"
+                      onClick={() => setExtras((prev) => prev.filter((e) => e !== c))}
+                      className="flex items-center gap-0.5 rounded px-1 py-0.5 text-[0.6rem] text-faint transition-colors hover:bg-surface-3 hover:text-bad"
+                    >
+                      <X size={10} />
+                      remove
+                    </button>
+                  )}
+                </>
               }
               right={`${a.width}×${a.height}`}
             >
@@ -345,7 +387,10 @@ function AbAbout() {
         code, never the rasterizer; the raster switch is hidden because the input is pinned.
         Typical flow: <code>git stash && pnpm gen:absnapshot && git stash pop</code> freezes the
         last committed revision, then this page shows exactly what your working tree changed.
-        Re-run the command to re-bless after a change is accepted. (Residual caveat: the browser&apos;s
+        <b> Changed only</b> then collapses the corpus to just the cases whose trace actually
+        moved (an exact serialization diff — the snapshot IS <code>serializeDoc</code> at the
+        frozen rev), so a targeted fix reads as the one or two rows it touched instead of a wall
+        of identical panels. Re-run the command to re-bless after a change is accepted. (Residual caveat: the browser&apos;s
         canvas PNG decode can differ from Node&apos;s by ±1 on a few partial-alpha pixels — the
         aurora story in docs/labs.md — which is far below anything judged visually here.)
       </p>
