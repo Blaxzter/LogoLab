@@ -35,29 +35,40 @@ import { labTrace } from './labTrace'
 import { docStats, traceSvg } from './wire'
 import { serializeDoc } from '../../lib/path/model'
 
-// The frozen comparison target, bundled like GoldenLab's fixtures (it lives outside
-// public/, so fetching would 404 in a build). Globs tolerate the directory not
-// existing yet — the toggle just stays disabled until `pnpm gen:absnapshot` runs.
-const SNAP_META = import.meta.glob('/test/ab-snapshots/manifest.json', {
+// The frozen comparison targets, bundled like GoldenLab's fixtures (they live outside
+// public/, so fetching would 404 in a build). Each snapshot is a SUBDIR under
+// test/ab-snapshots/; the globs tolerate none existing yet — the dropdown just shows
+// "Live variants" until `pnpm gen:absnapshot` runs.
+const SNAP_META = import.meta.glob('/test/ab-snapshots/*/manifest.json', {
   query: '?raw',
   import: 'default',
   eager: true,
 }) as Record<string, string>
-const SNAP_SVGS = import.meta.glob('/test/ab-snapshots/*.svg', {
+const SNAP_SVGS = import.meta.glob('/test/ab-snapshots/*/*.svg', {
   query: '?raw',
   import: 'default',
   eager: true,
 }) as Record<string, string>
-const SNAP_PNGS = import.meta.glob('/test/ab-snapshots/*.png', {
+const SNAP_PNGS = import.meta.glob('/test/ab-snapshots/*/*.png', {
   query: '?url',
   import: 'default',
   eager: true,
 }) as Record<string, string>
 
-const SNAPSHOT: AbSnapshotManifest | null = (() => {
-  const raw = Object.values(SNAP_META)[0]
-  return raw ? (JSON.parse(raw) as AbSnapshotManifest) : null
-})()
+interface SnapEntry {
+  name: string
+  manifest: AbSnapshotManifest
+}
+
+/** Every snapshot found under test/ab-snapshots/<name>/, newest date first (the dropdown
+ *  order). The subdir name is the identity; the manifest's own `name` mirrors it. */
+const SNAPSHOTS: SnapEntry[] = Object.entries(SNAP_META)
+  .map(([path, raw]) => {
+    // /test/ab-snapshots/<name>/manifest.json → <name>
+    const name = path.split('/').slice(-2, -1)[0]
+    return { name, manifest: JSON.parse(raw) as AbSnapshotManifest }
+  })
+  .sort((a, b) => (a.manifest.date < b.manifest.date ? 1 : a.manifest.date > b.manifest.date ? -1 : a.name.localeCompare(b.name)))
 
 /** One trace configuration rendered per case. `planarFit` overrides the fit tunables;
  *  `opts` overrides any other VectorizeOptions (e.g. backgroundGradient). */
@@ -151,11 +162,12 @@ function diffHeatBuffer(a: ImageData, b: ImageData): Uint8ClampedArray {
 
 /** Vs-snapshot mode: trace the WORKING TREE's default config from the snapshot's own stored
  *  pixels and pair it with the stored trace — same input file, two code revisions. */
-async function analyzeSnapshot(c: AbCase, gradients: boolean): Promise<AbAnalysis> {
-  const entry = SNAPSHOT?.cases.find((s) => s.id === c.id)
-  if (!SNAPSHOT || !entry) throw new Error('no snapshot for this case — rerun pnpm gen:absnapshot')
-  const pngUrl = SNAP_PNGS[`/test/ab-snapshots/${entry.png}`]
-  const snapSvg = SNAP_SVGS[`/test/ab-snapshots/${gradients ? entry.grad : entry.flat}`]
+async function analyzeSnapshot(c: AbCase, gradients: boolean, snap: SnapEntry): Promise<AbAnalysis> {
+  const entry = snap.manifest.cases.find((s) => s.id === c.id)
+  if (!entry) throw new Error(`case not in snapshot ${snap.name} — rerun pnpm gen:absnapshot`)
+  const dir = `/test/ab-snapshots/${snap.name}`
+  const pngUrl = SNAP_PNGS[`${dir}/${entry.png}`]
+  const snapSvg = SNAP_SVGS[`${dir}/${gradients ? entry.grad : entry.flat}`]
   if (!pngUrl || !snapSvg) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
 
   const image = await labImageData(pngUrl, Math.max(entry.width, entry.height))
@@ -185,7 +197,7 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean): Promise<AbAnalysi
     changed,
     heatUrl,
     variants: [
-      { name: `Snapshot @ ${SNAPSHOT.rev}`, tone: 'base', svg: snapSvg },
+      { name: `Snapshot @ ${snap.manifest.rev}`, tone: 'base', svg: snapSvg },
       { name: 'Working tree', tone: 'shipped', svg: traceSvg(doc, entry.width, entry.height), stats: docStats(doc) },
     ],
   }
@@ -212,33 +224,37 @@ async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<A
 }
 
 export default function AbLab() {
-  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snap: false, changedOnly: false, heat: true })
+  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snapName: '', changedOnly: false })
   // Dropped images live for the session only — their object URLs die on reload.
   const [extras, setExtras] = useState<AbCase[]>([])
   const [over, setOver] = useState(false)
 
   const cases = useMemo(() => [...CASES, ...extras], [extras])
-  const snapMode = ui.snap && SNAPSHOT != null
+  // The selected snapshot (or null in variants mode). An unknown name (a snapshot deleted since
+  // it was last chosen) falls back to variants rather than erroring.
+  const selectedSnap = SNAPSHOTS.find((s) => s.name === ui.snapName) ?? null
+  const snapMode = selectedSnap != null
   const changedOnly = snapMode && ui.changedOnly
 
   const run = useLabRun(
     cases,
-    (c) => (snapMode ? analyzeSnapshot(c, ui.gradients) : analyze(c, ui.raster, ui.gradients)),
+    (c) => (selectedSnap ? analyzeSnapshot(c, ui.gradients, selectedSnap) : analyze(c, ui.raster, ui.gradients)),
     {
-      label: (c) => (snapMode ? `Tracing ${c.name} vs snapshot` : `Tracing ${c.name} × ${VARIANTS.length} variants`),
+      label: (c) => (snapMode ? `Tracing ${c.name} vs ${selectedSnap!.name}` : `Tracing ${c.name} × ${VARIANTS.length} variants`),
       done: (n) =>
-        snapMode
-          ? `Done — ${n} cases, working tree vs snapshot ${SNAPSHOT!.rev} (${SNAPSHOT!.date}) · gradients ${ui.gradients ? 'on' : 'off'} · input pinned to the snapshot's stored pixels.`
+        selectedSnap
+          ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · gradients ${ui.gradients ? 'on' : 'off'} · input pinned to the snapshot's stored pixels.`
           : `Done — ${n} cases × ${VARIANTS.length} variants · gradients ${ui.gradients ? 'on' : 'off'} @ ${ui.raster}px. Drop an image anywhere to add it.`,
-      deps: [ui.raster, ui.gradients, cases, snapMode],
-      // Cache corpus cases (stable `id`); skip session-dropped images (no id). The snapshot rev is
-      // in the key so re-blessing (pnpm gen:absnapshot) invalidates the snapshot-mode results — the
-      // frozen SVGs live outside src/, so ENGINE_HASH alone wouldn't catch a re-bless.
+      deps: [ui.raster, ui.gradients, cases, ui.snapName],
+      // Cache corpus cases (stable `id`); skip session-dropped images (no id). The snapshot NAME
+      // is in the key so switching snapshots (or re-blessing one) invalidates results — the frozen
+      // SVGs live outside src/, so ENGINE_HASH alone wouldn't catch a re-bless. `v2` bumps past
+      // caches written before the diff-heat field existed.
       cache: {
         id: 'ab',
         key: (c) => c.id ?? null,
-        optionsKey: snapMode
-          ? `snap:${SNAPSHOT?.rev ?? '?'}:g${ui.gradients}`
+        optionsKey: selectedSnap
+          ? `snap:v2:${selectedSnap.name}:g${ui.gradients}`
           : `var:r${ui.raster}:g${ui.gradients}`,
       },
     },
@@ -285,11 +301,15 @@ export default function AbLab() {
         wires={ui.wire}
         controls={
           <>
-            {SNAPSHOT && (
-              <LabCheck
-                label={`Vs snapshot ${SNAPSHOT.rev}`}
-                checked={ui.snap}
-                onChange={(snap) => setUi({ snap })}
+            {SNAPSHOTS.length > 0 && (
+              <LabSelect
+                label="Vs snapshot"
+                value={ui.snapName}
+                onChange={(snapName) => setUi({ snapName })}
+                options={[
+                  { value: '', label: 'Live variants' },
+                  ...SNAPSHOTS.map((s) => ({ value: s.name, label: `${s.name} · ${s.manifest.date}` })),
+                ]}
               />
             )}
             {snapMode && (
@@ -298,9 +318,6 @@ export default function AbLab() {
                 checked={ui.changedOnly}
                 onChange={(changedOnly) => setUi({ changedOnly })}
               />
-            )}
-            {snapMode && (
-              <LabCheck label="Diff heat" checked={ui.heat} onChange={(heat) => setUi({ heat })} />
             )}
             <LabCheck
               label="Gradients"
@@ -337,7 +354,7 @@ export default function AbLab() {
         {snapMode && (changedN > 0 || unchangedN > 0) && (
           <div className="mb-2 text-xs text-muted">
             <b className="text-fg">{changedN}</b> changed · {unchangedN} unchanged vs snapshot{' '}
-            {SNAPSHOT!.rev}
+            {selectedSnap!.name} @ {selectedSnap!.manifest.rev}
             {changedOnly && unchangedN > 0 && <span className="text-faint"> · {unchangedN} hidden</span>}
             {changedOnly && changedN === 0 && (
               <span className="text-good"> — working tree matches the snapshot</span>
@@ -398,14 +415,14 @@ export default function AbLab() {
                   note={
                     v.stats
                       ? `${v.stats.paths}p · ${v.stats.nodes}n · ${v.stats.edges}e · ${v.stats.junctions}j`
-                      : `frozen ${SNAPSHOT?.date ?? ''}`
+                      : `frozen ${selectedSnap?.manifest.date ?? ''}`
                   }
                   aspect={a.width / a.height}
                 >
                   <RawArt html={v.svg} />
                 </Panel>
               ))}
-              {snapMode && ui.heat && a.heatUrl && (
+              {snapMode && a.heatUrl && (
                 <Panel
                   label={<span className="text-warn">diff heat</span>}
                   note="hot = snapshot ≠ working tree"
@@ -441,20 +458,21 @@ function AbAbout() {
         no re-trace.
       </p>
       <p className="mb-2 max-w-[96ch]">
-        <b>Vs snapshot</b> compares the working tree against the output frozen by{' '}
-        <code>pnpm gen:absnapshot</code> (test/ab-snapshots — the manifest records the git rev).
-        Both panels trace the snapshot&apos;s own stored pixels, so what you see differing is the
-        code, never the rasterizer; the raster switch is hidden because the input is pinned.
-        Typical flow: <code>git stash && pnpm gen:absnapshot && git stash pop</code> freezes the
-        last committed revision, then this page shows exactly what your working tree changed.
-        <b> Changed only</b> then collapses the corpus to just the cases whose trace actually
-        moved (an exact serialization diff — the snapshot IS <code>serializeDoc</code> at the
-        frozen rev), so a targeted fix reads as the one or two rows it touched instead of a wall
-        of identical panels. <b>Diff heat</b> adds a panel per changed case that rasterizes both
-        traces and paints WHERE they disagree (the shared cold→hot ramp) — so a change is located,
-        not just flagged. Re-run the command to re-bless after a change is accepted. (Residual caveat: the browser&apos;s
-        canvas PNG decode can differ from Node&apos;s by ±1 on a few partial-alpha pixels — the
-        aurora story in docs/labs.md — which is far below anything judged visually here.)
+        <b>Vs snapshot</b> (the dropdown) compares the working tree against a baseline frozen by{' '}
+        <code>pnpm gen:absnapshot [name]</code> — each snapshot is its own subdir under
+        test/ab-snapshots, so several coexist and you pick which to diff against (newest first;
+        the manifest records the git rev + date). Both panels trace the snapshot&apos;s own stored
+        pixels, so what differs is the code, never the rasterizer; the raster switch is hidden
+        because the input is pinned. Typical flow: BEFORE a change, freeze a baseline —{' '}
+        <code>pnpm gen:absnapshot before-thing</code> — then this page shows exactly what the
+        working tree changed against it. <b>Changed only</b> collapses the corpus to just the cases
+        whose trace actually moved (an exact serialization diff — a snapshot IS{' '}
+        <code>serializeDoc</code> at its rev), and each changed case gets a <b>diff heat</b> panel
+        that rasterizes both traces and paints WHERE they disagree (the shared cold→hot ramp) — so
+        a change is located, not just flagged. Re-run to re-bless a snapshot after a change is
+        accepted. (Residual caveat: the browser&apos;s canvas PNG decode can differ from
+        Node&apos;s by ±1 on a few partial-alpha pixels — the aurora story in docs/labs.md — which
+        is far below anything judged visually here.)
       </p>
       <p className="max-w-[96ch]">
         Drop an image anywhere on the page (or use <b>Add image</b>) to run your own logo through

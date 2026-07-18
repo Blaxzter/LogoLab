@@ -1,8 +1,12 @@
 // Freeze the tracer's current output for the /labs/ab "Vs snapshot" comparison.
 //
-//   pnpm gen:absnapshot        (node src/devtest/writeAbSnapshots.ts)
+//   pnpm gen:absnapshot [name]   (node src/devtest/writeAbSnapshots.ts [name])
 //
-// Writes, per AB_CORPUS case, into test/ab-snapshots/:
+// `name` is optional and defaults to the git short rev; pass one to keep a labelled
+// baseline (e.g. `before-checker`). Each snapshot is its OWN subdir so several coexist
+// and the A/B view lists them in a dropdown.
+//
+// Writes, per AB_CORPUS case, into test/ab-snapshots/<name>/:
 //   <id>.png        — THE INPUT: the exact pixels this snapshot traced (SVG cases
 //                     rasterized once by resvg at AB_SNAPSHOT_RES; PNG cases copied
 //                     verbatim). The lab traces the LIVE code from this same file,
@@ -10,11 +14,12 @@
 //                     rasterizer (see abCorpus.ts header).
 //   <id>.flat.svg   — serialized trace, gradients OFF (the flat-art default).
 //   <id>.grad.svg   — serialized trace, gradients ON.
-//   manifest.json   — git rev (+dirty), date, resolution, case index.
+//   manifest.json   — name, git rev (+dirty), date, resolution, case index.
 //
-// Intended workflow: generate at the last reviewed-good revision (e.g. `git stash
-// && pnpm gen:absnapshot && git stash pop`), then judge the working tree against
-// it in /labs/ab at any zoom. Regenerate to re-bless after a change is accepted.
+// Intended workflow (also see CLAUDE.md): BEFORE a vectorizer change, freeze a baseline
+// —  `pnpm gen:absnapshot before-<what>`  — then judge the working tree against it in
+// /labs/ab (Changed only + Diff heat show exactly what moved, and where). Regenerate to
+// re-bless after a change is accepted.
 
 import { execSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -26,12 +31,10 @@ import { decodePng } from './png.ts'
 import { ensureImageData } from './nodeHarness.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import { serializeDoc } from '../lib/path/model.ts'
-import { AB_CORPUS, AB_SNAPSHOT_DIR, AB_SNAPSHOT_RES, type AbSnapshotManifest } from './abCorpus.ts'
+import { AB_CORPUS, AB_SNAPSHOT_DIR, AB_SNAPSHOT_RES, snapshotDirName, type AbSnapshotManifest } from './abCorpus.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const outDir = join(root, AB_SNAPSHOT_DIR)
-mkdirSync(outDir, { recursive: true })
 
 const git = (cmd: string): string => execSync(cmd, { cwd: root }).toString().trim()
 const rev = git('git rev-parse --short HEAD')
@@ -42,7 +45,14 @@ try {
   dirty = true
 }
 
+// Snapshot NAME: an optional CLI arg (`pnpm gen:absnapshot before-checker`), else the git rev.
+// It is the subdir name AND the A/B dropdown label, so several baselines can coexist.
+const name = snapshotDirName(process.argv[2] ?? rev)
+const outDir = join(root, AB_SNAPSHOT_DIR, name)
+mkdirSync(outDir, { recursive: true })
+
 const manifest: AbSnapshotManifest = {
+  name,
   rev: dirty ? `${rev}+dirty` : rev,
   date: new Date().toISOString().slice(0, 10),
   res: AB_SNAPSHOT_RES,
@@ -83,4 +93,4 @@ for (const c of AB_CORPUS) {
 }
 
 writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
-console.log(`\n${manifest.cases.length} cases snapshotted at ${manifest.rev} → ${AB_SNAPSHOT_DIR}/`)
+console.log(`\n${manifest.cases.length} cases snapshotted at ${manifest.rev} → ${AB_SNAPSHOT_DIR}/${name}/  (dropdown: "${name}")`)

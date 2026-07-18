@@ -55,8 +55,15 @@ export const AB_CORPUS: AbCorpusCase[] = [
 /** SVG cases are rasterized at this width for the snapshot (the lab's default). */
 export const AB_SNAPSHOT_RES = 512
 
-/** Where `pnpm gen:absnapshot` writes, repo-relative. */
+/** ROOT of the snapshot store, repo-relative. Each snapshot is a NAMED SUBDIR beneath it —
+ *  `test/ab-snapshots/<name>/` — holding that snapshot's manifest.json + per-case files, so
+ *  several baselines can coexist and the A/B view offers them in a dropdown. `pnpm
+ *  gen:absnapshot [name]` writes one (name defaults to the current git short rev). */
 export const AB_SNAPSHOT_DIR = 'test/ab-snapshots'
+
+/** Filesystem-safe snapshot folder name (also the dropdown key). Shared by the writer and any
+ *  reader so a name round-trips identically. */
+export const snapshotDirName = (name: string): string => name.trim().replace(/[^a-zA-Z0-9._-]+/g, '-') || 'snapshot'
 
 export interface AbSnapshotCase {
   id: string
@@ -73,6 +80,9 @@ export interface AbSnapshotCase {
 }
 
 export interface AbSnapshotManifest {
+  /** Folder name under AB_SNAPSHOT_DIR (the dropdown key). Defaults to `rev`, or a label
+   *  the author passed to `pnpm gen:absnapshot <name>` (e.g. "before-checker"). */
+  name: string
   /** `git rev-parse --short HEAD` at generation, "+dirty" when the tracked tree
    *  had modifications — a snapshot of uncommitted code is honest but says so. */
   rev: string
