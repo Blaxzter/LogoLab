@@ -66,6 +66,10 @@ Feature verdicts (not defects): the experimental A/B flags (`refineJunctions`,
 `weldJunctions`, `backgroundGradient`) measured **non-mergeable as defaults** — §9.3. The
 plan is to expose them as opt-in feature flags in the /vectorize studio instead.
 
+Open research direction (not a defect): the fit/snap tolerances are ABSOLUTE px and therefore
+scale-blind — the root shape of the §9.8 checker bug. A scale-relative ε keyed to local feature
+size (medial radius) is written up in **§10**.
+
 ---
 
 ## 1. Why we built a ground-truth gate at all
@@ -926,3 +930,54 @@ legitimately curves, from tripping it — that is chamfer/p95's job, §9.5). Flo
 - **suite**: typecheck clean, **267 / 0 / 2**; golden regression byte-identical (the veto
   fires only where a snap would have rounded a corner — nothing else in the corpus does).
   `checker` was never in `KNOWN_DEFECTS` and still is not: it passes, now honestly.
+
+---
+
+## 10. Open direction: scale-relative fit tolerance (not yet built)
+
+**The observation.** The tracer's fit/beautify tolerances are ABSOLUTE pixels — the curve fit
+runs at ε ≈ 1.0px, the circle/ellipse/line snaps accept within `fidelity` ≈ 1.5px. That is
+scale-BLIND, and §9.8 is the proof it bites: an 8px checker cell sits 0.83px from its best-fit
+circle, so `0.83 < 1.5` and the snap "rounded" it into a blob. The same 1.5px that is generous
+on a 400px shape is loose enough to destroy an 8px one. A single absolute number cannot be
+right at both scales.
+
+**The idea (as raised).** Make the tolerance track LOCAL DETAIL: aggressive simplification
+where the art is sparse/large, conservative where it is dense/small — a "heatmap" of local
+node/feature density modulating how hard the fitter is allowed to push. Where features are
+tiny (a checker's fine quadrant, fine text, a busy junction), tighten ε so nothing is
+over-smoothed; on a big empty expanse, loosen it and spend fewer nodes.
+
+**Refinement — the variable is SCALE, not density per se.** Density is a good proxy (dense ⇒
+small features nearby), but two traps make raw node density the wrong primitive:
+1. *Chicken-and-egg:* node density is an OUTPUT of the fit, so it cannot cleanly be an INPUT to
+   it. Measure the driver from the SOURCE instead — the raw crack-polygon's local turning, or a
+   multi-scale edge/corner response on the raster, computed before fitting.
+2. *A lone small icon on a big canvas* is low global density yet still wants preservation.
+   What you actually want is LOCAL FEATURE SIZE — how big is the thing this boundary bounds —
+   which the planar tracer can get cheaply as the **medial radius** (distance to the nearest
+   opposite boundary) or the region area.
+
+So the concrete form is `ε_local = min(ε_abs, k · localScale)`. For the checker cell,
+`localScale ≈ 8px` ⇒ `k·8 ≈ 0.8px`, which tightens ε below the square's 0.83px circle
+deviation and the snap never fires — automatically, with no special-case.
+
+**Precedent.** This is curvature-adaptive / scale-space simplification (mesh decimation with
+curvature-weighted quadric error; scale-adaptive Douglas–Peucker). Not novel; the novelty here
+would be wiring it to the medial radius the planar graph already exposes.
+
+**Relationship to what shipped.** §9.8's corner-turn veto is a cheap SPECIAL CASE of this
+("never round a polygon"). A full scale-relative ε would subsume it, plus catch the milder
+size-blind cases the veto does not (a small blob rounded *without* a sharp corner). It is
+strictly more work and more calibration risk, which is why the veto shipped first.
+
+**Why it is now measurable.** Before the corner-recovery gate (§9.8) there was no automated way
+to tell "helpfully simplified" from "destroyed the shape" — both stayed sub-pixel on chamfer.
+Now the truth corpus + the corner gate can score a scale-relative-ε prototype and say whether it
+improves small-feature fidelity without regressing the smooth cases. That is the prerequisite
+this idea was waiting on; the prototype is the next step when picked up.
+
+**Where the knobs live today:** `keyEpsilon`/`fidelity` in `src/lib/trace/index.ts`
+(`crispOptionsFor`, `beautifyOptionsFor`), the snap gates in `src/lib/trace/planarBeautify.ts`
+(`fid`), and the fit ε in `src/lib/trace/planarFit.ts`. The medial radius would come from the
+label map / planar network (`src/lib/trace/planarNetwork.ts`).
