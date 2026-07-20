@@ -68,7 +68,11 @@ plan is to expose them as opt-in feature flags in the /vectorize studio instead.
 
 Open research direction (not a defect): the fit/snap tolerances are ABSOLUTE px and therefore
 scale-blind — the root shape of the §9.8 checker bug. A scale-relative ε keyed to local feature
-size (medial radius) is written up in **§10**.
+size (medial radius) is written up in **§10**; the SNAP half is now a measured prototype
+(`PlanarFitOptions.localScaleK`, default OFF) — it SUBSUMES the §9.8 corner-turn veto (checker
+corner recall 97.2% with the veto off, k ∈ [0.10, 0.20]) and regresses no round case, but is
+byte-identical to the shipped veto on today's corpus, so it stays off pending a case that
+distinguishes them (**§10.1**). The fit-ε half is still open.
 
 ---
 
@@ -933,7 +937,7 @@ legitimately curves, from tripping it — that is chamfer/p95's job, §9.5). Flo
 
 ---
 
-## 10. Open direction: scale-relative fit tolerance (not yet built)
+## 10. Scale-relative fit tolerance — prototype landed 2026-07-19 (§10.1)
 
 **The observation.** The tracer's fit/beautify tolerances are ABSOLUTE pixels — the curve fit
 runs at ε ≈ 1.0px, the circle/ellipse/line snaps accept within `fidelity` ≈ 1.5px. That is
@@ -975,9 +979,85 @@ strictly more work and more calibration risk, which is why the veto shipped firs
 to tell "helpfully simplified" from "destroyed the shape" — both stayed sub-pixel on chamfer.
 Now the truth corpus + the corner gate can score a scale-relative-ε prototype and say whether it
 improves small-feature fidelity without regressing the smooth cases. That is the prerequisite
-this idea was waiting on; the prototype is the next step when picked up.
+this idea was waiting on; **§10.1 is that prototype, built and measured 2026-07-19.**
 
 **Where the knobs live today:** `keyEpsilon`/`fidelity` in `src/lib/trace/index.ts`
 (`crispOptionsFor`, `beautifyOptionsFor`), the snap gates in `src/lib/trace/planarBeautify.ts`
-(`fid`), and the fit ε in `src/lib/trace/planarFit.ts`. The medial radius would come from the
-label map / planar network (`src/lib/trace/planarNetwork.ts`).
+(`fid`, now modulated by `localScaleK` — §10.1), and the fit ε in `src/lib/trace/planarFit.ts`.
+The medial radius the SNAP gate uses is the fitted primitive's own radius; the fit-ε half (still
+open) would take it from the label map / planar network (`src/lib/trace/planarNetwork.ts`).
+
+---
+
+### 10.1 Prototype: scale-relative fidelity on the beautify snaps — built & measured (2026-07-19)
+
+**What shipped (default OFF).** The `min(ε_abs, k·localScale)` gate of §10, realized for the
+circle / ellipse / co-circular SNAPS in `planarBeautify` — the exact site of the §9.8 bite
+(`tracePlanar` already emits exact squares; the fit ε was never the problem there). For each
+snap the local scale is the fitted primitive's OWN radius — the disc/ring's medial radius, free
+on hand, no distance transform, no chicken-and-egg. The gate `maxRadialDev ≤ fidelity` becomes
+`maxRadialDev ≤ min(fidelity, k·r)`, so a big disc keeps the full 1.5px budget and a tiny one
+must fit within a fraction of its own size. Behind `PlanarFitOptions.localScaleK` (0 = off =
+byte-identical); the §9.8 corner-turn veto is exposed as `cornerVeto` so the two mechanisms can
+be A/B'd head-to-head. `src/devtest/scaleRelSweep.ts` is the sweep harness;
+`test/planar-scale-fidelity.test.ts` pins the discrimination property.
+
+**Subsumption — §10's central claim, CONFIRMED (`checker` @512, corner-turn veto turned OFF):**
+
+| config (veto OFF)   | chamfer | p95  | corner recall              |
+|---------------------|---------|------|----------------------------|
+| k = 0 (absolute px) | 0.38    | 1.74 | **41.9%** ✗ — the §9.8 bug |
+| k = 0.10 … 0.20     | **0.00**| **0.00** | **97.2%** ✓ — byte-identical to the veto |
+| k = 0.25            | 0.38    | 1.74 | 41.9% ✗ — too loose, rounds again |
+
+With the corner-turn veto removed, a scale-relative ε ALONE reproduces the checker fix exactly
+for k ∈ [0.10, 0.20]. The veto is a special case of the scale gate, as predicted — the checker
+cell (fitted r ≈ 3.7px, 0.83px from its best-fit circle) is caught because `k·r < 0.83` there,
+automatically, with no turn test.
+
+**No regression, and why it is structural.** Every round / corner / thin tier-0 case —
+`concentric` `nebula` `annulus` `bloom` `petals` `sharp-star` `hairlines` `aa-seam` — is
+BYTE-IDENTICAL across the whole k ∈ [0.10, 0.25] sweep, veto on or off. `min(fid, k·r)` tightens
+below the absolute budget only when `k·r < fid`, i.e. radius < `fid/k` ≈ 15px at k=0.1; every
+genuine circle in the corpus is larger, so the scale term never binds on them. The mechanism is
+invisible to everything except sub-15px round-ish shapes — exactly the population §9.8 named.
+
+**Where it GREIFT — two constructed cases (`src/devtest/scaleRelDemo.ts`), one of them viewable:**
+
+- *Substitution (veto OFF).* A field of small SQUARES beside small CIRCLES. With the §9.8 veto
+  turned off the tracer has no guard: **9/9 squares round to blobs**. Scale-relative ε alone puts
+  it back — **0/9 squares round, 9/9 circles stay round** — discriminating by SIZE, no turn test.
+  The square is caught because its ~0.18·r deviation exceeds `k·r`; the circle survives because its
+  ~0.02·r deviation does not (measured: a clean circle stays sub-`k·r` down to 8px diameter, so the
+  control never regresses). `test/planar-scale-fidelity.test.ts` pins the invariant. This is a
+  **viewable edge case** — `scale-blind.svg` (four checkerboard bands, cells 16→6px, so the scale
+  THRESHOLD is visible: veto-off scallops only the small bands, scale-ε re-sharpens exactly those)
+  and the classic `checker`, with the AbLab variants **`Veto off`** vs **`Veto off + scale-ε`**.
+  The cells must be ADJACENT (a checkerboard), not isolated: a lone sub-13px square traces to a
+  concave "pillow" (corner-pinned pre-smoothing bows its sides in) — a pre-existing tiny-loop
+  artifact that muddies the demo, which shared straight edges avoid. NB the SHIPPED default (veto
+  on) is byte-identical with or without scale-ε on these, so the effect shows only in the veto-off
+  pair — the substitution, not an additive win.
+- *The veto's BLIND SPOT (veto ON — the shipped default).* The veto discriminates by TURNING, so a
+  small blob rounded WITHOUT a sharp corner slips past it. A **~10×6px flat ellipse** (ratio 0.55)
+  turns only 49° (< 60°, veto blind) and is a hair too small for the ellipse snap (min-axis <
+  2·fidelity), so the SHIPPED tracer rounds it to a **circle** (r ≈ 3.9) — a flat ellipse becomes a
+  round dot, radial dev 1.41px > `k·r` = 0.59px. Scale-relative ε keeps it elliptical. This is the
+  one place the scale gate does something the veto CANNOT, at the default setting — but it is a
+  narrow population (sub-6px flat ellipses), which is why it does not by itself justify flipping the
+  default.
+
+**Verdict — landed default-OFF, like `refineJunctions` / `weldJunctions`.** Two honest facts
+pull opposite ways: (a) scale-relative ε SUBSUMES the §9.8 veto and generalizes it to the
+non-cornered small-blob case (measured + synthetic), but (b) on today's corpus the veto already
+catches every real case, so additive (veto + scale) is byte-identical to shipped and there is no
+case yet where scale does STRICTLY better. So the veto stays the default and the scale gate ships
+as a measured, tested prototype behind `localScaleK` (nominal k = 0.15, mid of the [0.10, 0.20]
+safe window). Flip it on — or drop the veto for it — the day a corpus case rounds a small blob
+the veto's turn test misses. Suite 271/0/2, golden + truth-gate byte-identical.
+
+**Still open (the bigger half of §10).** This prototype makes the SNAPS scale-aware; the FIT ε
+(`planarFit.ts` RDP + cubic-discard at 1.0px) is still absolute. Making THAT scale-relative needs
+the medial radius as a per-point field over open edges — a distance transform on the label map
+(`planarNetwork.ts`), not just the fitted primitive's radius — which is strictly more work and
+more calibration risk. The fit already emits exact squares, so the snaps were the right first cut.

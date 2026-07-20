@@ -64,6 +64,27 @@ export interface PlanarFitOptions {
    * more region dropped). Small bloom win only; stays behind the flag.
    */
   weldJunctions: number
+  /**
+   * EXPERIMENTAL scale-relative fidelity (§10 prototype; 0 = off = byte-identical).
+   * The circle / ellipse / co-circular SNAP gates in planarBeautify accept a
+   * primitive on RADIAL deviation ≤ `fidelity` — a purely SIZE-relative test, which
+   * is exactly why an 8px checker cell (0.83px from its best-fit circle) rounds into
+   * a blob (§9.8). When > 0, each snap's tolerance becomes
+   * `min(fidelity, localScaleK · localScale)`, where `localScale` is the fitted
+   * primitive's own radius — the disc/ring's medial radius, cheaply on hand. A big
+   * shape keeps the full fidelity budget; a tiny one is held to a fraction of its own
+   * size, so a small square's 0.83px deviation exceeds `k·r` and never snaps. This is
+   * the concrete `ε_local = min(ε_abs, k·localScale)` of §10, realized for the snaps.
+   */
+  localScaleK: number
+  /**
+   * EXPERIMENTAL (default true = the shipped §9.8 behaviour). The corner-turn veto in
+   * planarBeautify that refuses to round a sharp-cornered loop (a checker cell's four
+   * right angles) into a disc. Exposed so the scale-relative-ε prototype
+   * (`localScaleK`) can be A/B'd as a REPLACEMENT for the veto — §10 claims a full
+   * scale-relative ε SUBSUMES it. Leave true in production.
+   */
+  cornerVeto: boolean
 }
 
 export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
@@ -78,6 +99,8 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   refineJunctions: false,
   arcSnap: true,
   weldJunctions: 0,
+  localScaleK: 0,
+  cornerVeto: true,
 }
 
 /** Flat-art line cost: > cubicCost so the DP prefers a CUBIC on any span where a

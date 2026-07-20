@@ -314,8 +314,25 @@ export async function traceImage(
    *  gradient field-merge) — used by the editor's region hover-highlight. Called
    *  once per color trace; never in mono mode. */
   onPreMerge?: (pm: { labels: Int32Array; width: number; height: number }) => void,
+  /** Optional per-stage timing sink (the Profiler lab). Reports the ms spent in each
+   *  major pipeline stage — segment / paint / trace / beautify / materialize. A pure
+   *  side channel: it never touches the returned geometry, so output stays byte-
+   *  identical, and when omitted NOT EVEN `performance.now()` is called (zero cost). */
+  onStage?: (name: string, ms: number) => void,
 ): Promise<EditableDoc> {
   const { width, height } = imageData
+  // Emits the ms since the previous mark under `name`, then re-marks. `mark()` starts a
+  // fresh region (used to exclude setup before the first timed stage).
+  let stageAt = onStage ? performance.now() : 0
+  const stage = (name: string): void => {
+    if (!onStage) return
+    const t = performance.now()
+    onStage(name, t - stageAt)
+    stageAt = t
+  }
+  const mark = (): void => {
+    if (onStage) stageAt = performance.now()
+  }
   const smoothing = clamp(options.smoothing, 0, 100)
   const despeckle = clamp(options.despeckle, 0, 100)
   const maskOpts: TraceMaskOptions = {
@@ -372,6 +389,7 @@ export async function traceImage(
   //  • everything else → Mumford–Shah smoothness segmentation (segment.ts): groups
   //    by smooth field, reunites a split background, fits gradients downstream.
   const wantFlatPalette = options.gradients === false && options.flatPalette !== false
+  mark() // exclude the mask-option setup above from the segment stage
   let q: QuantizeResult
   let preMergeLabels: Int32Array
   let regionSamples: RegionSamples[] = []
@@ -412,6 +430,7 @@ export async function traceImage(
     preMergeLabels = seg.preMergeLabels
     regionSamples = seg.regionSamples
   }
+  stage('segment')
 
   // Surface the pre-merge region map (fine regions before the field-merge) for the
   // editor's hover-highlight. Independent of engine; skipped in mono (no markers).
@@ -441,6 +460,7 @@ export async function traceImage(
       flatLabels.has(label) ? null : fitPaintLadder(s, undefined, fullSamples![label]),
     )
   }
+  stage('paint')
   onProgress?.({ phase: 'paint', fraction: PROGRESS_SEGMENT_END, label: gradientsOn ? 'Fitting colours' : 'Preparing shapes' })
 
   // V6 — translucent layer decomposition (plan §9). Only ATTEMPTED when the user
@@ -545,12 +565,18 @@ export async function traceImage(
     const labels = bgUnion ? bgUnion.labels : healed
     const fitOpts = planarFitOptionsFor(options)
     const trace = tracePlanar(labels, width, height, fitOpts)
+    stage('trace') // includes the flat-art prep above (bg detect / remove-heal / heal-spikes)
     // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
     // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a
     // no-op, so the unbeautified planar output is byte-identical. The co-circular
     // arc snap (§1d) can be turned off via planarFit.arcSnap (Test view baseline).
-    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, fitOpts.arcSnap)
+    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, {
+      arcSnap: fitOpts.arcSnap,
+      localScaleK: fitOpts.localScaleK,
+      cornerVeto: fitOpts.cornerVeto,
+    })
     const edges = edgeMap(topology)
+    stage('beautify')
     let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
     // Background removal drops the pre-union `bg` (byte-identical to before when no union
     // ran) AND, when the union ran, every label it swallowed — of which only `seed` still
@@ -595,6 +621,7 @@ export async function traceImage(
         })
       }
     }
+    stage('materialize')
     return { viewBox: [0, 0, width, height], items, topology }
   }
 

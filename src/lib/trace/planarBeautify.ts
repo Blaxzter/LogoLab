@@ -57,6 +57,31 @@ const cloneEdge = (e: SharedEdge): SharedEdge => ({ ...e, nodes: e.nodes.map(clo
 const CORNER_TURN = Math.PI / 3 // 60°: veto the circle/ellipse snap past this turn
 
 /**
+ * Snap-gate tuning passed down from the planar fit options (§10 prototype).
+ *  • `arcSnap`      — run the co-circular open-arc loop snap (§1d).
+ *  • `localScaleK`  — scale-relative fidelity coefficient. 0 ⇒ off (absolute px,
+ *    the shipped behaviour). > 0 ⇒ each circle/ellipse/ring snap is accepted only
+ *    within `min(fidelity, localScaleK · localScale)`, `localScale` = the fitted
+ *    primitive's radius (its medial radius). See PlanarFitOptions.localScaleK.
+ *  • `cornerVeto`   — apply the §9.8 corner-turn veto (never round a sharp-cornered
+ *    loop). Default on; exposed so the scale-relative gate can be A/B'd without it.
+ */
+export interface SnapOptions {
+  arcSnap?: boolean
+  localScaleK?: number
+  cornerVeto?: boolean
+}
+
+/**
+ * Effective snap tolerance at a given local feature scale (§10). With `localScaleK`
+ * off this is the plain absolute `fid`; on, it tightens to a fraction of the shape's
+ * own size so a small primitive must fit far better — in radial px — than a large one.
+ */
+function effFidelity(fid: number, localScale: number, localScaleK: number): number {
+  return localScaleK > 0 ? Math.min(fid, localScaleK * localScale) : fid
+}
+
+/**
  * Largest turn angle (radians) between consecutive segments of a flattened loop.
  * Collinear runs (a straight edge's 16 samples) contribute 0; a corner contributes
  * its exterior angle. Zero-length steps are skipped so coincident junction samples
@@ -115,10 +140,13 @@ export function planarBeautify(
   topo: Topology,
   loopsByLabel: Map<number, EdgeRef[][]>,
   opts: BeautifyOptions,
-  arcSnap = true,
+  snap: SnapOptions = {},
 ): Topology {
   const fid = opts.fidelity
   if (!(fid > 0)) return topo
+  const arcSnap = snap.arcSnap ?? true
+  const localScaleK = snap.localScaleK ?? 0
+  const cornerVeto = snap.cornerVeto ?? true
 
   // Work on immutable copies so the input topology is never mutated.
   const edges = topo.edges.map(cloneEdge)
@@ -133,7 +161,9 @@ export function planarBeautify(
   // the circle's tangent at every junction (G¹) instead of meeting as forced,
   // independently-fitted corners. Runs FIRST on the raw fitted arcs; the edges it
   // snaps skip the per-edge 1a/1b passes below.
-  const arcSnapped = arcSnap ? snapCoCircularLoops(edges, vertices, loopsByLabel, fid) : new Set<number>()
+  const arcSnapped = arcSnap
+    ? snapCoCircularLoops(edges, vertices, loopsByLabel, fid, localScaleK, cornerVeto)
+    : new Set<number>()
 
   const discCircles: DiscCircle[] = []
 
@@ -147,10 +177,13 @@ export function planarBeautify(
       const positive = anchorSignedArea(e.nodes) > 0
       // A sharp-cornered loop is a polygon, not a disc — never round it (a small
       // square is radially circle-close but turns 90° at its corners). See CORNER_TURN.
-      const cornered = maxTurnRad(raw) >= CORNER_TURN
+      const cornered = cornerVeto && maxTurnRad(raw) >= CORNER_TURN
 
       const circle = fitCircle(raw)
-      if (!cornered && circle && circle.r > 2 * fid && maxRadialDev(raw, circle) <= fid) {
+      // Scale-relative tolerance (§10): a big disc keeps the full fidelity budget, a
+      // tiny one must fit within a fraction of its own radius — so a small square's
+      // radial deviation exceeds it and the round never fires (localScaleK off ⇒ fid).
+      if (!cornered && circle && circle.r > 2 * fid && maxRadialDev(raw, circle) <= effFidelity(fid, circle.r, localScaleK)) {
         e.nodes = makeCircleSubPath(circle.cx, circle.cy, circle.r, positive).nodes
         discCircles.push({ edgeIdx: i, positive, cx: circle.cx, cy: circle.cy, r: circle.r, raw })
         continue
@@ -160,9 +193,10 @@ export function planarBeautify(
       // BOTH directions must hold: maxEllipseDev (polygon→ellipse) is blind to
       // the ellipse bulging into space the polygon never visits — see
       // maxEllipseToPolyDev (a 6px bar "fits" a 3.8×278 ellipse otherwise).
+      const ellFid = ell ? effFidelity(fid, Math.min(ell.rx, ell.ry), localScaleK) : fid
       if (
         !cornered && ell && Math.min(ell.rx, ell.ry) > 2 * fid &&
-        maxEllipseDev(raw, ell) <= fid && maxEllipseToPolyDev(raw, ell) <= fid
+        maxEllipseDev(raw, ell) <= ellFid && maxEllipseToPolyDev(raw, ell) <= ellFid
       ) {
         e.nodes = makeEllipseSubPath(ell.cx, ell.cy, ell.rx, ell.ry, positive).nodes
       }
@@ -236,6 +270,8 @@ function snapCoCircularLoops(
   vertices: Vertex[],
   loopsByLabel: Map<number, EdgeRef[][]>,
   fid: number,
+  localScaleK = 0,
+  cornerVeto = true,
 ): Set<number> {
   const snapped = new Set<number>()
   const byId = new Map<number, SharedEdge>()
@@ -265,9 +301,11 @@ function snapCoCircularLoops(
       // angles), not a ring split into arcs — snapping it to a circle is the
       // fine-checkerboard scalloping. Radial deviation is blind to it at small scale;
       // turning is not. See CORNER_TURN.
-      if (maxTurnRad(raw) >= CORNER_TURN) continue
+      if (cornerVeto && maxTurnRad(raw) >= CORNER_TURN) continue
       const c = fitCircle(raw)
-      if (!c || c.r <= 2 * fid || maxRadialDev(raw, c) > fid) continue
+      // Scale-relative tolerance (§10): the ring's own radius is its local scale, so a
+      // genuine large ring keeps the full budget and a tiny fake one must fit tightly.
+      if (!c || c.r <= 2 * fid || maxRadialDev(raw, c) > effFidelity(fid, c.r, localScaleK)) continue
       for (const ref of loop) {
         const e = byId.get(ref.edge)!
         if (e.closed) continue
