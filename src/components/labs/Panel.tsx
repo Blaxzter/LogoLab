@@ -26,6 +26,7 @@ export function Panel({
   aspect = 1,
   dark = false,
   pixelated = false,
+  grid,
   children,
 }: {
   label: ReactNode
@@ -46,6 +47,9 @@ export function Panel({
   dark?: boolean
   /** Keep rasters crisp (nearest-neighbour) under zoom — these panels are for pixel-peeping. */
   pixelated?: boolean
+  /** Overlay a SOURCE-pixel grid (w×h = the source raster) that fades in under deep zoom —
+   *  a fixed reference for reading sub-pixel position shifts between panels (labs.css). */
+  grid?: { w: number; h: number }
   children: ReactNode
 }) {
   const { pz, claimed } = useLabZoom()
@@ -87,10 +91,16 @@ export function Panel({
         style={size}
       >
         <div
-          className={`lab-art h-full w-full ${pixelated ? 'pixelated' : ''}`}
+          className={`lab-art relative h-full w-full ${pixelated ? 'pixelated' : ''}`}
           style={isDark ? { background: HEAT_BG } : undefined}
         >
           {children}
+          {grid && (
+            <div
+              className="pixel-grid"
+              style={{ '--pg-w': grid.w, '--pg-h': grid.h } as CSSProperties}
+            />
+          )}
         </div>
       </ZoomSurface>
     </div>

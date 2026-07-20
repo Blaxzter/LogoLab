@@ -49,6 +49,39 @@
   image-rendering: pixelated;
 }
 
+/* --- source-pixel grid (Panel `grid` prop) --------------------------------
+   One cell per SOURCE pixel, so "did this edge move half a pixel?" is readable
+   against a fixed reference. Two rules make it work under the row camera:
+   • the hairline counter-scales against the ancestor transform via --pz-scale
+     (the same trick the wireframe uses — see usePanZoom), staying ~1 screen px
+     at any zoom instead of fattening into bars;
+   • it only exists when zoomed far enough for a source pixel to span real
+     screen area — the opacity ramps in from ~10× camera scale and caps low, so
+     at overview zoom the panels look exactly as before. */
+.pixel-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --pg-line: calc(1px / var(--pz-scale, 1));
+  --pg-c: rgba(101, 129, 199, 0.55);
+  opacity: clamp(0, (var(--pz-scale, 1) - 10) / 8, 0.35);
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--pg-c) 0,
+      var(--pg-c) var(--pg-line),
+      transparent var(--pg-line),
+      transparent calc(100% / var(--pg-w, 512))
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--pg-c) 0,
+      var(--pg-c) var(--pg-line),
+      transparent var(--pg-line),
+      transparent calc(100% / var(--pg-h, 512))
+    );
+}
+
 /* --- nodes/edges wireframe ------------------------------------------------
    The wireframe ships inside every trace SVG but stays hidden until the toolbar
    toggle puts `.wires` on the lab root — so flipping it needs no re-trace.

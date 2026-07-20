@@ -421,6 +421,7 @@ export default function AbLab() {
                 // as detail the tracer never saw. In snapshot mode the source is ALWAYS the
                 // stored input PNG — the very pixels both revisions traced.
                 pixelated={a.srcOverride != null || c.kind === 'png'}
+                grid={{ w: a.width, h: a.height }}
               >
                 <img src={a.srcOverride ?? c.src} alt="" />
               </Panel>
@@ -434,6 +435,7 @@ export default function AbLab() {
                       : `frozen ${selectedSnap?.manifest.date ?? ''}`
                   }
                   aspect={a.width / a.height}
+                  grid={{ w: a.width, h: a.height }}
                 >
                   <RawArt html={v.svg} />
                 </Panel>
@@ -444,6 +446,7 @@ export default function AbLab() {
                   note="hot = snapshot ≠ working tree"
                   aspect={a.width / a.height}
                   pixelated
+                  grid={{ w: a.width, h: a.height }}
                 >
                   <img src={a.heatUrl} alt="" style={{ background: HEAT_BG }} />
                 </Panel>
