@@ -1,4 +1,4 @@
-import { Columns2, Download, Eraser, Eye, FlaskConical, Gauge, Images, Layers, Wand2 } from 'lucide-react'
+import { Columns2, Download, Eraser, Eye, FlaskConical, Gauge, Images, Layers, Timer, Wand2 } from 'lucide-react'
 import type { Tab } from '../store'
 
 /** The four panel tabs — shared by the desktop header nav and the mobile menu. */
@@ -52,6 +52,12 @@ export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.
     label: 'Engine scoreboard',
     blurb: 'potrace vs crisp: ΔE, SSIM, seam, node counts, runtime, determinism.',
     icon: <Gauge size={15} />,
+  },
+  {
+    to: '/labs/profiler',
+    label: 'Profiler',
+    blurb: 'Where the trace spends its time, and what each optional feature would cost to enable.',
+    icon: <Timer size={15} />,
   },
 ]
 

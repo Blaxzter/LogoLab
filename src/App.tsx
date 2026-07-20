@@ -37,6 +37,7 @@ const AbLab = lazy(() => import('./components/labs/AbLab'))
 const Workbench = lazy(() => import('./components/labs/workbench/Workbench'))
 const GalleryLab = lazy(() => import('./components/labs/GalleryLab'))
 const EngineLab = lazy(() => import('./components/labs/EngineLab'))
+const ProfilerLab = lazy(() => import('./components/labs/ProfilerLab'))
 
 function LabLoading() {
   return (
@@ -212,6 +213,7 @@ export function App() {
               <Route path="/labs/workbench" element={<Workbench />} />
               <Route path="/labs/gallery" element={<GalleryLab />} />
               <Route path="/labs/scoreboard" element={<EngineLab />} />
+              <Route path="/labs/profiler" element={<ProfilerLab />} />
               {/* Old routes, kept as deep-links so bookmarks survive. `golden` has no view any
                   more — the regression gate still runs in CI, but Feature A/B already shows those
                   exact fixtures, which is where you'd go to look at them. */}
