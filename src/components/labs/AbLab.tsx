@@ -26,6 +26,7 @@ import type { VectorizeOptions } from '../../types'
 import type { EditableDoc } from '../../lib/path/types'
 import type { PlanarFitOptions } from '../../lib/trace/planarFit'
 import { AB_CORPUS, abUrl, type AbSnapshotManifest } from '../../devtest/abCorpus'
+import { fnv1a } from './engineFingerprint'
 import { LabPage, LabCheck, LabSelect } from './LabPage'
 import { Panel, RawArt } from './Panel'
 import { CaseRow, PendingRow, NoteBox } from './CaseRow'
@@ -91,7 +92,22 @@ const VARIANTS: Variant[] = [
     opts: { backgroundGradient: true },
     planarFit: { arcSnap: true, refineJunctions: false, weldJunctions: 3 },
   },
+  // §10.1 scale-relative snap ε. The pair below makes the thesis visible: turn the §9.8
+  // corner-turn veto OFF and small squares round to blobs (`checker`, `scale-blind`); a
+  // scale-relative ε alone puts the corners back, discriminating by SIZE, no turn test.
+  // `Scale-ε (veto on)` is byte-identical to Arc-snap on most cases (its extra bite — a
+  // sub-6px flat blob the veto is blind to — is a narrow population); default is OFF.
+  { name: 'Veto off (§9.8 guard removed)', tone: 'base', planarFit: { arcSnap: true, cornerVeto: false } },
+  { name: 'Veto off + scale-ε', tone: 'shipped', planarFit: { arcSnap: true, cornerVeto: false, localScaleK: 0.15 } },
+  { name: 'Scale-ε (veto on)', tone: 'refine', planarFit: { arcSnap: true, localScaleK: 0.15 } },
 ]
+
+// The variant SET is part of what the cache key must cover: ENGINE_HASH fingerprints the
+// tracer + scoring source (src/lib, src/devtest) but NOT this file, so adding a column or
+// retuning a flag here would otherwise serve a stale cached analysis (missing the new column,
+// or the old localScaleK). Fold a hash of the variant definitions into the options key so any
+// edit above invalidates just the AB variant cache.
+const VARIANTS_HASH = fnv1a(JSON.stringify(VARIANTS))
 
 const TONE: Record<string, string> = {
   base: 'text-muted',
@@ -255,7 +271,7 @@ export default function AbLab() {
         key: (c) => c.id ?? null,
         optionsKey: selectedSnap
           ? `snap:v2:${selectedSnap.name}:g${ui.gradients}`
-          : `var:r${ui.raster}:g${ui.gradients}`,
+          : `var:r${ui.raster}:g${ui.gradients}:v${VARIANTS_HASH}`,
       },
     },
   )

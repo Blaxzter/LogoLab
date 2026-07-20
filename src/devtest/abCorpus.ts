@@ -44,6 +44,7 @@ export const AB_CORPUS: AbCorpusCase[] = [
   { id: 'hairlines', name: '⟐ hairlines — sub-pixel strokes', kind: 'svg', path: 'public/examples/edge-cases/hairlines.svg' },
   { id: 'aa-seam', name: '⟐ aa-seam — nearest-colour crispness', kind: 'svg', path: 'public/examples/edge-cases/aa-seam.svg' },
   { id: 'checker', name: '⟐ checker — high-frequency aliasing', kind: 'svg', path: 'public/examples/edge-cases/checker.svg' },
+  { id: 'scale-blind', name: '⟐ scale-blind — scale-relative snap ε (§10.1)', kind: 'svg', path: 'public/examples/edge-cases/scale-blind.svg' },
   { id: 'radial-glow', name: '⟐ radial-glow — 2-D gradient field', kind: 'svg', path: 'public/examples/edge-cases/radial-glow.svg' },
   { id: 'gradient-flat', name: '⟐ gradient-flat — render gate', kind: 'svg', path: 'public/examples/edge-cases/gradient-flat.svg' },
   { id: 'sharp-star', name: '⟐ sharp-star — corner detection', kind: 'svg', path: 'public/examples/edge-cases/sharp-star.svg' },

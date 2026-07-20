@@ -170,6 +170,41 @@ const CASES: { name: string; note: string; make: () => string }[] = [
     },
   },
   {
+    // The §10.1 companion to `checker`: where checker proves the CORNER-TURN veto, this makes
+    // the SCALE argument visible. Four adjacent checkerboard bands, cell size shrinking left→
+    // right (16 / 12 / 8 / 6px at the 512 default). Cells are ADJACENT — shared straight edges,
+    // so they trace clean and square (an isolated <13px square instead traces to a concave
+    // "pillow", a pre-existing tiny-loop artifact that would only confuse). With the §9.8 veto
+    // OFF the tracer's only guard is gone and you SEE the threshold: the big cells stay sharp
+    // (their deviation from a circle already exceeds 1.5px) while the small cells scallop into
+    // blobs. Scale-relative ε (localScaleK, §10.1) alone re-sharpens exactly the small ones,
+    // by SIZE, no turn test. See the AbLab "Veto off" vs "Veto off + scale-ε" variants.
+    name: 'scale-blind',
+    note: 'graduated checkerboard bands (16→6px cells) → scale-relative snap tolerance subsumes the corner-turn veto (§10.1)',
+    make: () => {
+      const BEIGE = rgb(220, 214, 198)
+      const parts: string[] = [`<rect width="${V}" height="${V}" fill="${BEIGE}"/>`]
+      // Each band is a checkerboard patch of one cell size `s`, viewBox units (×2 at 512px).
+      const bands = [
+        { x0: 10, x1: 66, s: 8 }, // 16px cells — above the snap threshold, stay sharp
+        { x0: 74, x1: 130, s: 6 }, // 12px
+        { x0: 138, x1: 194, s: 4 }, // 8px — the §9.8 scallop size
+        { x0: 202, x1: 250, s: 3 }, // 6px cells — round hardest without the veto
+      ]
+      const y0 = 10
+      const y1 = 246
+      for (const b of bands) {
+        const nx = Math.floor((b.x1 - b.x0) / b.s)
+        const ny = Math.floor((y1 - y0) / b.s)
+        for (let j = 0; j < ny; j++)
+          for (let i = 0; i < nx; i++)
+            if ((i + j) % 2 === 0)
+              parts.push(`<rect x="${(b.x0 + i * b.s).toFixed(1)}" y="${(y0 + j * b.s).toFixed(1)}" width="${b.s}" height="${b.s}" fill="${INK}"/>`)
+      }
+      return svg(parts.join(''))
+    },
+  },
+  {
     name: 'radial-glow',
     note: 'radial vignette → 2-D gradient / glow paint model',
     make: () =>
