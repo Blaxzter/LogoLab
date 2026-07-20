@@ -74,6 +74,7 @@ export default function Workbench() {
       progress={run.progress}
       box={ui.box}
       onBox={(box) => setUi({ box })}
+      wires={ui.wire}
       controls={
         <>
           <LabSelect
@@ -130,6 +131,12 @@ export default function Workbench() {
             value={ui.heat}
             onChange={(heat) => setUi({ heat })}
             options={HEAT_SCALES.map((s) => ({ value: s, label: `0 → ${s}px` }))}
+          />
+          <LabCheck
+            label="Nodes/edges"
+            hint="Overlay the anchor wireframe on the truth + current-trace panels — square dots are corners, round are smooth, green rings are junction vertices (traced graph only). Pure CSS, no re-trace."
+            checked={ui.wire}
+            onChange={(wire) => setUi({ wire })}
           />
           {/* Only tier 1 carries flat twins, so the toggle only exists where it does something. */}
           {corpus.hasFlatTwins && (

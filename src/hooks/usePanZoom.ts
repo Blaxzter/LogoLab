@@ -100,10 +100,16 @@ export function usePanZoom(opts: PanZoomOptions = {}) {
     viewportRef.current = el
   }, [])
 
-  const contentStyle: CSSProperties = {
+  const contentStyle = {
     transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
     transformOrigin: '0 0',
-  }
+    // Live zoom, exposed as a CSS variable so overlays inside the scaled content can
+    // counter-scale to a CONSTANT screen size. `scale()` above magnifies every stroke,
+    // and `vector-effect: non-scaling-stroke` only cancels the SVG's own CTM, not this
+    // ancestor transform — so the labs' node wireframe divides its width by this var
+    // (`stroke-width: calc(N / var(--pz-scale))`) to stay the same size at any zoom.
+    '--pz-scale': transform.scale,
+  } as CSSProperties
 
   return {
     transform,

@@ -32,6 +32,7 @@ import {
 } from '../../../devtest/geomScore'
 import { TIER_TOL, evaluateTruthGates } from '../../../devtest/truthCorpus'
 import { Panel, RawArt } from '../Panel'
+import { traceSvg, subPathsWire } from '../wire'
 import { Badge, CaseRow, NoteBox } from '../CaseRow'
 import { GatePanel, GateTable, type GateBarRow } from '../GateTable'
 import { labImageData } from '../resvgRaster'
@@ -105,8 +106,11 @@ export interface Analysis {
   docPolys: string[]
   /** The authored SVG, as shown in the "truth" panel. */
   truthUrl: string
+  /** The authored ground-truth anchors as a `.lab-wire` group — overlaid on the truth panel. */
+  gtWire: string
   rasterUrl: string
-  traceSvgText: string
+  /** The traced doc as panel art: fill + baked-in nodes wireframe, revealed by `.wires`. */
+  traceArt: string
   dropUrl: string
   /** The SAME glyph authored FLAT, scored the same way — the A/B control. Tier 1 only. */
   flat?: { geom: GeomScore; rasterUrl: string; traceSvgText: string; url: string }
@@ -198,8 +202,9 @@ export async function analyze(c: WbCase, res: number, ab: boolean): Promise<Anal
     gtPolys: polysOf(shapes.map((s) => s.subPaths)),
     docPolys: polysOf(docSubPaths),
     truthUrl: src.displayUrl,
+    gtWire: subPathsWire(shapes.map((s) => s.subPaths)),
     rasterUrl: rgbaToUrl(img.data, img.width, img.height),
-    traceSvgText: serializeDoc(doc),
+    traceArt: traceSvg(doc, img.width, img.height),
     dropUrl: c.gradients ? '' : dropOverlay(img, regions.dropMask),
     flat,
   }
@@ -287,17 +292,30 @@ function CasePanels({ c, a, heat }: { c: WbCase; a: Analysis; heat: number }) {
   )
   const overlay = useMemo(() => overlaySvg(a.gtPolys, a.docPolys, side), [a.gtPolys, a.docPolys, side])
   const aspect = a.img.width / a.img.height
+  const sideH = a.img.height
+  // The truth panel is a raster (an <img>), so its wireframe can't be baked into it the way the
+  // trace's is. Instead compose one SVG that embeds the authored art and lays the `.lab-wire`
+  // group over it — same viewBox, so the anchors sit exactly on the drawing. `.lab-fill` dims the
+  // art (not the wires) under `.wires`, matching the trace panel; with the toggle off it renders
+  // exactly like the plain <img> did.
+  const truthArt = useMemo(
+    () =>
+      `<svg viewBox="0 0 ${side} ${sideH}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">` +
+      `<g class="lab-fill"><image href="${a.truthUrl}" x="0" y="0" width="${side}" height="${sideH}" preserveAspectRatio="xMidYMid meet"/></g>` +
+      `${a.gtWire}</svg>`,
+    [a.truthUrl, a.gtWire, side, sideH],
+  )
 
   return (
     <>
       <Panel label="truth" note="the authored SVG — the answer sheet" aspect={aspect}>
-        <img src={a.truthUrl} alt="" />
+        <RawArt html={truthArt} />
       </Panel>
       <Panel label="raster input" note={`what the tracer is handed @ ${side}px`} aspect={aspect} pixelated>
         <img src={a.rasterUrl} alt="" />
       </Panel>
       <Panel label="current trace" note={`${geom.docPaths} paths · ${geom.docNodes} nodes`} aspect={aspect}>
-        <RawArt html={a.traceSvgText} />
+        <RawArt html={a.traceArt} />
       </Panel>
       <Panel label="boundary overlay" note="green = authored · magenta = traced" aspect={aspect} dark>
         <RawArt html={overlay} />

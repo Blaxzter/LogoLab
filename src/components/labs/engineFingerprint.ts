@@ -11,14 +11,28 @@
 // constant. The raw source lands only in the lazy lab chunk (every lab is a React.lazy route),
 // so the product bundle a visitor downloads is untouched.
 //
-// Scope is a deliberate SUPERSET — all of src/lib + src/devtest, not just src/lib/trace:
-// over-broad invalidation merely recomputes occasionally, but a MISSED invalidation serves a
-// stale number, the one unacceptable outcome. So we err toward hashing too much. (src/devtest
-// carries the scoring — geomScore, scoreboard, truthCorpus — whose output the labs also cache.)
+// Scope is a deliberate SUPERSET — all of src/lib + src/devtest + the lab view layer, not just
+// src/lib/trace: over-broad invalidation merely recomputes occasionally, but a MISSED
+// invalidation serves a stale result, the one unacceptable outcome. So we err toward hashing too
+// much. (src/devtest carries the scoring — geomScore, scoreboard, truthCorpus — whose output the
+// labs also cache.)
+//
+// src/components/labs is in scope because the cached value is not just the raw trace/score: the
+// labs bake PRESENTATION into it too — the panel-art SVG strings (wire.ts's `traceSvg`, the
+// authored-node overlay, the raster/drop data URLs) are computed in `analyze()` and stored in
+// the cache. When that generation changes but this hash does not, a browser holding an older
+// cache entry renders the OLD art shape (e.g. a renamed field → an empty panel, or a
+// non-scaling wireframe after the markers were made zoom-scaled). Clearing the cache hides it;
+// widening the hash fixes it at the source. `.tsx` is included so the view components count.
 
 const SOURCES = {
   ...import.meta.glob('/src/lib/**/*.ts', { query: '?raw', import: 'default', eager: true }),
   ...import.meta.glob('/src/devtest/**/*.ts', { query: '?raw', import: 'default', eager: true }),
+  ...import.meta.glob('/src/components/labs/**/*.{ts,tsx}', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  }),
 } as Record<string, string>
 
 /** FNV-1a over a string → 8 hex chars. The same hash devtest/metrics.ts uses for `hashDoc`. */

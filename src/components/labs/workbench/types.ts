@@ -50,6 +50,8 @@ export interface WbUi {
   res: number
   heat: number
   ab: boolean
+  /** Reveal the nodes wireframe baked into the truth + current-trace panels (pure CSS, no re-trace). */
+  wire: boolean
 }
 
 export const DEFAULT_WB_UI: WbUi = {
@@ -59,6 +61,7 @@ export const DEFAULT_WB_UI: WbUi = {
   res: 512,
   heat: 5,
   ab: false,
+  wire: false,
 }
 
 export type SetUi = (patch: Partial<WbUi>) => void
