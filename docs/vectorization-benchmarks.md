@@ -27,16 +27,27 @@ guardrails):
 
 | # | defect | reproducing case | number | details |
 |---|---|---|---|---|
-| 2 | **Junction weld** — crossing-bar junction wedges pulled; visible at 1×, sub-tolerance since the scorer counts visible boundary only (like the closed checker scallop, §9.8) | `cross-bars` (tier 0, gated, **passes**) | chamfer 0.34px, p95 0.54px (was 1.04/9.6 — the difference was the occluded under-bar edge, §9.6) | §7; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
+| 2 | **Junction weld** — crossing-bar junction wedges pulled; since 2026-07-20 the corner gate MEASURES it (6 corners short) instead of it hiding sub-tolerance | `cross-bars` (tier 0, gated, in `KNOWN_DEFECTS`) | corners 6 short of 80% recall; chamfer 0.34px, p95 0.54px | §7, §10.2; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
+| 2b | **Notch chamfer** — the last sharp-star residue after §10.2 (corner gate PASSES, 9/11): two of five 80° inner notches trace as a 2-node pair ~3.5px apart (a slight chamfer) instead of one sharp corner — `detectLoopCorners`' 70°/±4px window misses them, staircase-phase dependent, so they never enter the snap path | `sharp-star` (tier 0, gated, **passes**) | 2 notches of 10 corners; sub-gate, visible only zoomed | §10.2 follow-up (b) |
 | 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.22px, p95 0.74px (was 1.44/24.8 — the p95 was the seam occluded under the circle, §9.6) | §7; +0.09 chamfer from the §9.5 fix (label-level endpoint routing sends the whole sliver to one side) |
 | 4 | **Edge pull on flats bordering a gradient bg** | `gradient-flat` (tier 0, gated, in `KNOWN_DEFECTS`) | p95 6.3px | §7 |
 | 6 | **Thin features at LOW resolution** — below ~256px the sub-pixel bars still break up (the @512 defect is fixed, §9.5; the gate runs at 512) | `hairlines` @256 (ungated resolution) | chamfer 0.88px, p95 9.77px @256 (was 2.44/27.8 before §9.6 — part of that was bar-crossing occlusion; the remaining 9.77 is real) | §9.5 |
+| 6b | **Bar caps render pointed / domed, not square** (user-reported 2026-07-20, pre-existing). A ≤4px cap + both 90° shoulders fit inside `detectLoopCorners`' ±4px window as ONE sub-threshold cluster → one apex → a pointed end; a wider cap keeps two shoulders but its cap-arm evidence is ~4 AA-ragged points, so the shoulder snaps land slanted (58,49.5 vs 65,51 on the 7px bar) and the cap fits as a shallow dome. Sub-gate (`CORNER_MIN_EDGE` 7 excludes cap corners by design; chamfer passes) — needs a cap/tip discriminator (two ~90° turn peaks inside one cluster ⇒ split, don't fuse) | `hairlines` @512 bar ends | visible at zoom; all boundary gates pass | §10.2 exit note |
 | 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 11 | **Small-region drop at LOW resolution** — a 176px region @256 falls under both the share floor and the flat-interior evidence floor, so §9.4's protection cannot see it (the gate runs @512, where the same region is 4× larger and survives) | `flute` @256 (ungated resolution) | 8/9 @256: `#974827` 176px painted `#893925`, ΔE 8.0 | found during §9.7 (pre-existing — present at c3c82cb) |
 
-Recently closed (the pattern an exit should follow): **near-colour palette cluster
+Recently closed (the pattern an exit should follow): **beveled star tips / heal-pinch
+loop split** (`sharp-star`) — closed 2026-07-20: every tip traced as a flat 2-node cap 4px
+short of the apex because `healColorSpikes`' 8-connected reassignment created 1px diagonal
+pinches that junction-split the outline into OPEN edges (which get no corner snap); fixed
+by restricting heal targets to 4-connected neighbours. Apex now 0.93px from authored; on
+`headphones-flat` the same fix halves nodes (9632 → 5220) and junction clusters (282 → 121)
+at identical meanΔE/SSIM — the old heal was manufacturing thousands of pinch junctions
+there. Shipped with the corner gate made applicable (CORNER_MIN_COUNT 12 → 10) and the
+tangent-based corner reading — **§10.2** is the record; the residue is #2b above.
+**Near-colour palette cluster
 fusion** (`flute`, was #5, the last tier-2 region drop) — closed 2026-07-15: k-means
 separates the authored pair `#f5a165`/`#fea069` cleanly and `quantize`'s post-merge fused
 the two centroids at distance 9.98 < `MERGE_DISTANCE` 10; fixed by an evidence-based merge
@@ -1061,3 +1072,105 @@ the veto's turn test misses. Suite 271/0/2, golden + truth-gate byte-identical.
 the medial radius as a per-point field over open edges — a distance transform on the label map
 (`planarNetwork.ts`), not just the fitted primitive's radius — which is strictly more work and
 more calibration risk. The fit already emits exact squares, so the snaps were the right first cut.
+
+### 10.2 The fix: sharp-star's beveled tips — a 1px heal pixel was splitting the loop (2026-07-20)
+
+**Symptom.** Every one of `sharp-star`'s 10 points traced as a flat 2-node cap ~4px short of
+the authored apex (top tip: authored (256,26), traced cap (255,30)–(257,30), hausdorff 4.0px
+@512). Identical across EVERY AbLab variant — the break was upstream of every `planarFit`
+flag. And no gate was red: boundary mean/p95 passed (tips are a tiny fraction of boundary
+length) and the corner gate — built for exactly this defect class (§9.8) — reported **n/a**,
+because the star has 10 visible authored corners and `CORNER_MIN_COUNT` was 12. The corpus's
+corner-preservation case was exempt from the corner gate.
+
+**Cause chain, measured stage by stage.**
+1. *Raster (inherent, ~2px).* The sub-pixel tip anti-aliases below 50% coverage; the palette
+   segmenter's 50%-isophote cut puts the tip at y=28 (authored 26).
+2. *`modeFilter` erosion (~2px, self-inflicted).* A ≤2px-wide tip row has 4 own vs 5 foreign
+   votes in the 3×3 majority window, so each pass eats one row: modePasses 0/1/2 → tip row
+   28/29/30. (Same family as the §9.5 thin-bar erasure; `restoreErasedComponents` only rescues
+   components erased WHOLE, not eroded tips.)
+3. *The machinery that repairs both already exists — for closed loops.* `detectLoopCorners`
+   finds the tip cluster and `snapCornerToArms` extends the two straight arms to their
+   intersection: on the closed pre-heal loop the apex lands at **(255.92, 25.07)** — 0.93px
+   from authored — and `planarBeautify` preserves it.
+4. *Root cause: `healColorSpikes` split the loop.* At the 4 non-axis-aligned tips one fully-
+   covered navy pixel survives beyond the eroded tip (e.g. (39,185), exact palette colour);
+   heal flipped it back — but not the blend pixels connecting it, and its only navy contact
+   was DIAGONAL. A checkerboard pinch is a junction in the planar network: the star outline
+   went from ONE closed loop (2220 pts) to open edges + 5pt micro-edges.
+5. *Open edges get no corner snap.* `planarAssemble` runs `fitCorneredLoop` only for
+   `e.closed`; `fitOpenArc`'s DP places C⁰ joints at staircase key vertices but never extends
+   arms. Result: every corner beveled, including tips far from any healed pixel.
+
+**Fixes shipped (each one line of mechanism).**
+- *`healColorSpikes` targets 4-connected neighbours only* (`index.ts`). The colour evidence
+  comes from the PALETTE, not the neighbour pixel, so the 8-connected scan added nothing
+  except the diagonal-only reassignments — which create a pinch by construction. A genuine
+  wedge still heals inward edge-by-edge across passes. On sharp-star the heal drops from 4
+  flipped px (all pinches) to 2 (both 4-adjacent, no topology change); the star loop stays
+  closed, 12 nodes (was 17+2+2 across a junction-split graph), apex snapped to 0.93px.
+- *`CORNER_MIN_COUNT` 12 → 10* (`truthCorpus.ts`). A 10-corner star is not "mostly-round
+  art". With the gate applicable, the pre-fix defect measures 0 recovered — it would have
+  been red on day one.
+- *Tangent-based corner reading in `geomScore.sharpCorners`.* The old test only counted
+  handle-free line-line joints. On the flat path `FLAT_LINE_COST` (4.5 > cubicCost 4) makes
+  the DP PREFER a cubic wherever one fits within ε, so a genuinely sharp tip lands as a C⁰
+  kink between two cubics — rendering identically sharp, scored as not-a-corner (the fixed
+  star read 3/11 while all 10 tips were crisp). Tangents are strictly MORE accurate, not
+  looser: a corner melted to a blob (§9.8's checker) is G¹ — tangents agree, turn ~0 — and
+  still never reads as sharp. GT polygons carry no handles, so the GT side is unchanged;
+  `checker` still passes at 97%+ recall.
+- *Arc fits censor the cap remnants (`fitCorneredLoop`).* Found by eye after the heal fix:
+  the RIGHT tip (authored slope −0.073, the shallowest) rendered as an S-hook with an extra
+  node. Its top arm rasterizes to a 6px-long 1px plateau right next to the eroded tip, so
+  the arc's first dense points sit laterally OFF the snapped-apex→arm line and the fit
+  chased them, arriving at the apex from below. Those points are exactly the ones
+  `snapCornerToArms` already skips (`SNAP_GAP` — "the rounded part"); now the ARC fit skips
+  them too (trimmed before pinning the snapped endpoints, guarded to keep ≥ 2 interior
+  points so a small checker cell's edge keeps its evidence). Right tip: one hard corner
+  node, clean taper; sharp-star chamfer 0.30 → 0.19, hausdorff 4.0 → 2.73 @512, and one
+  more notch returns as a hard line-line corner (recall 7 → 8/11).
+- *Adaptive arm span in `snapCornerToArms` — the shallow-tip overshoot closes, and the gate
+  flips green.* The LEFT tip still snapped 2.78px past the authored apex and its arc dove
+  back with a visible kink (user-reported). Root cause is sampling, not fitting: at arm
+  slope 0.073 the 14px `SNAP_SPAN` window contains LESS THAN ONE unit staircase step, so
+  the fitted arm slope is step-phase noise — and at a ~4° tip angle every slope error
+  multiplies ~1/tan(4°) ≈ 14× into AXIAL apex error. The window now grows up to
+  `SNAP_SPAN_MAX` 40px while each next point stays within `SNAP_COLLINEAR` 0.75px of the
+  current fit (and never past the neighbouring corner): straight arms earn 3 steps of
+  evidence, curved arms fail the first extension and keep the old window — ring/blob
+  corners unmoved. All five tips land 0.11–1.23px from authored (top 0.93 → 0.11, left
+  2.78 → 1.23, kink node gone), corner recall 9/11 = 82% — **sharp-star passes the corner
+  gate**, and CI forced the `KNOWN_DEFECTS` deletion (the list-can-only-shrink contract
+  doing its job). Chamfer 0.19, p95 0.52 @512.
+
+**After.** sharp-star corner recall 0 → 7 (heal fix) → 8 (arc trim) → **9/11 = 82%** with
+the adaptive arm span — **the corner gate passes** and its `KNOWN_DEFECTS` entry is deleted.
+The residue is cosmetic and enumerated as §0 #2b: two of five 80° notches trace as a 2-node
+chamfer ~3.5px wide (`detectLoopCorners`' 70°/±4px window misses them — staircase phase
+decides — so they never reach the snap). `cross-bars` became corner-gated for the first
+time and fails (4/10) — that is the §0 #2 junction weld read through the corner lens, not
+a new defect; it stays in `KNOWN_DEFECTS`. The rest of tier 0 + the tier-1 slice stays
+green.
+
+**Corpus effect (golden re-bless, reviewed).** The 8-connected heal was manufacturing pinch
+junctions everywhere, not just on stars. `headphones-flat`: nodes **9632 → 5220 (−46%)**,
+junction clusters **282 → 121 (−57%)** at identical fidelity (meanΔE 3.918 → 3.914, SSIM
+0.7934 → 0.7940) — this is the §1 case whose 9632-node golden the doc itself calls
+pathological. `aurora-flat`: clusters 3 → 0, nodes 193 → 173. `schild-flat` — the art the
+heal was BUILT for — improves slightly (meanΔE 0.954 → 0.948, seam identical 68.54): the
+wedge still heals, edge-by-edge. One number moved the wrong way: headphones-flat `seamMax`
+51.61 → 57.64 — the worst single boundary pixel of the pre-existing thin-dark-ring family at
+(509,717) (the old max, ΔE 51.6, sits 40px away in the same ring); a max-statistic on an
+off-target photo case, accepted with the re-bless. `nebula`/`petals`/`bloom-flat` hashes:
+bloom −2 nodes, the gradient pair untouched (heal is flat-only; the headphones-grad golden
+diff in the same bless was pre-existing staleness — its old record predates a7239b2's
+engine changes, verified by re-recording at HEAD with the fix stashed). The planar unit
+test's 8-connectivity contract ("a diagonally-orphaned pixel must heal") is deliberately
+REVERSED — that contract was the pinch generator.
+
+**Follow-ups named.** (a) Open-edge interior corner snap in `fitOpenArc` — the class fix for
+any outline genuinely junction-split by a third colour (this fix only rescues loops that
+should never have been split); (b) the notch threshold/window (70°/±4px vs a real 80° turn);
+(c) shallow-tip snap bias. All three live under the sharp-star `KNOWN_DEFECTS` entry (§0 #2b).

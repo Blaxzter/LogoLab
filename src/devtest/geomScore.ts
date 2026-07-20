@@ -332,15 +332,22 @@ const CORNER_MIN_EDGE = 7
 interface Corner { x: number; y: number; itx: number; ity: number; otx: number; oty: number }
 
 /**
- * HARD corners of a set of subpath lists: a polygonal vertex where two STRAIGHT edges meet
- * at ≥ CORNER_MIN_TURN. "Hard" = no handles on either side — the node is a true kink between
- * two lines, not a rounded joint. This is the exact property that distinguishes a sharp
- * checker cell (four straight edges, null handles) from the same cell rounded to a blob (the
- * corners survive, but their edges become arcs, so the nodes carry handles). Both the GT and
- * the trace are read the same way, so a rounded trace loses the corners a rounded GT would
- * too — the metric only ever demands the tracer reproduce corners the ARTIST drew hard.
+ * SHARP corners of a set of subpath lists: a vertex where the boundary TANGENT turns by
+ * ≥ CORNER_MIN_TURN — a C⁰ kink. The tangent into the node comes from the incoming curve
+ * handle when the segment is a curve (cur − hIn, else prev.hOut, else the chord) and from
+ * the chord when it is a line; mirrored on the way out. Reading TANGENTS instead of
+ * requiring handle-free line-line joints matters on the flat path: FLAT_LINE_COST tunes the
+ * fit DP to prefer cubics wherever one fits within ε, so a genuinely sharp star tip lands as
+ * a C⁰ kink between two cubics whose handles lie along the straight arms — it renders
+ * exactly as sharp as a line-line corner and must count as one (the old handle-free test
+ * scored the fixed sharp-star 3/11 while all 10 tips were visually crisp, §10.2). The
+ * failure this metric exists to catch is still caught: a corner MELTED into a blob (a
+ * checker cell rounded over) is G¹ — its in/out tangents agree, the turn is ~0 — so it
+ * never reads as sharp. Both the GT and the trace are read the same way, and authored
+ * polygons carry no handles, so the GT side is unchanged for polygonal art.
  * Each corner carries its incoming/outgoing unit tangents so GT corners can be visibility-
- * tested against the truth raster. Open subpaths skip their two endpoints.
+ * tested against the truth raster. Open subpaths skip their two endpoints. `minEdge` gates
+ * on CHORD length (feature size), never handle length.
  */
 function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
   const cosMax = Math.cos(CORNER_MIN_TURN) // turn ≥ MIN_TURN  ⇔  dot ≤ cos(MIN_TURN)
@@ -355,26 +362,42 @@ function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
       const hi = closed ? n : n - 1
       for (let i = lo; i < hi; i++) {
         const cur = nodes[i]
-        // Both incident edges must be straight lines at this node: a rounded corner carries
-        // an arc handle on the in- and/or out-side, and is not a hard polygonal vertex.
-        if (cur.hIn || cur.hOut) continue
         const prev = nodes[(i - 1 + n) % n]
         const next = nodes[(i + 1) % n]
-        if (prev.hOut || next.hIn) continue // the segment either side of `cur` is a curve
-        let ix = cur.x - prev.x
-        let iy = cur.y - prev.y
-        let ox = next.x - cur.x
-        let oy = next.y - cur.y
-        const li = Math.hypot(ix, iy)
-        const lo2 = Math.hypot(ox, oy)
+        // Chord lengths gate feature size (a sub-pixel sliver's cap is not graded) …
+        const li = Math.hypot(cur.x - prev.x, cur.y - prev.y)
+        const lo2 = Math.hypot(next.x - cur.x, next.y - cur.y)
         if (li < 1e-6 || lo2 < 1e-6) continue
         if (li < minEdge || lo2 < minEdge) continue // corner on too-thin a feature to grade
-        ix /= li; iy /= li; ox /= lo2; oy /= lo2
+        // … while the TURN is measured on tangents: the nearest non-degenerate control
+        // point (own handle, far handle, anchor) defines each side's direction.
+        const tin = pickCtrl(cur, cur.hIn, prev.hOut, prev)
+        const tout = pickCtrl(cur, cur.hOut, next.hIn, next)
+        let ix = cur.x - tin.x
+        let iy = cur.y - tin.y
+        let ox = tout.x - cur.x
+        let oy = tout.y - cur.y
+        const ln = Math.hypot(ix, iy)
+        const lt = Math.hypot(ox, oy)
+        if (ln < 1e-6 || lt < 1e-6) continue
+        ix /= ln; iy /= ln; ox /= lt; oy /= lt
         if (ix * ox + iy * oy <= cosMax) out.push({ x: cur.x, y: cur.y, itx: ix, ity: iy, otx: ox, oty: oy })
       }
     }
   }
   return out
+}
+
+/** First control point that is meaningfully apart from `at` (a zero-length handle carries
+ *  no direction), falling back to the far anchor — which always is, per the chord guard. */
+function pickCtrl(
+  at: { x: number; y: number },
+  ...cands: ({ x: number; y: number } | null | undefined)[]
+): { x: number; y: number } {
+  for (const c of cands) {
+    if (c && Math.hypot(c.x - at.x, c.y - at.y) >= 1e-6) return c
+  }
+  return at // unreachable: the last candidate is the far anchor, checked non-degenerate above
 }
 
 /** Count how many `gt` corners have a `doc` corner within R px (spatial-hash matched). */

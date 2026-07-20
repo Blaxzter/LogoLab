@@ -564,6 +564,11 @@ function polylineNodes(keyIdx: number[], dense: Vec[]): PathNode[] {
 
 const SNAP_GAP = 3 // skip this many px nearest the tip (the rounded part) per arm
 const SNAP_SPAN = 14 // …and fit the arm line over up to this many px beyond the gap
+/** A straight arm may extend its sample window this far (see armSamples). */
+const SNAP_SPAN_MAX = 40
+/** Max perp deviation (px) for an extension point to count as "still the same
+ *  straight arm" — just above the ±0.5px staircase quantization. */
+const SNAP_COLLINEAR = 0.75
 
 /** Least-squares line through `pts` → a point on it (`c`) and a unit direction (`d`). */
 export function armLine(pts: Vec[]): { c: Vec; d: Vec } {
@@ -597,13 +602,31 @@ export function armLine(pts: Vec[]): { c: Vec; d: Vec } {
  * corner when the arms are near-parallel or the intersection runs away (a curved
  * arm), so a bad fit can never push the apex off into space.
  */
-function snapCornerToArms(pts: Vec[], c: number, gap: number, inSpan: number, outSpan: number): Vec {
+function snapCornerToArms(pts: Vec[], c: number, gap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0): Vec {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
-  const inPts: Vec[] = []
-  const outPts: Vec[] = []
-  for (let o = gap; o <= inSpan; o++) inPts.push(pts[wrap(c - o)])
-  for (let o = gap; o <= outSpan; o++) outPts.push(pts[wrap(c + o)])
+  // Base window [gap..span], then extend up to `max` while the arm stays COLLINEAR.
+  // A 1-in-14 staircase (a shallow star tip, slope ~0.07) shows less than ONE unit
+  // step inside the base window, so its fitted slope is pure step-phase noise — and
+  // at a ~4° tip angle every slope error multiplies ~1/tan(4°) ≈ 14× into AXIAL apex
+  // error (the 2.78px left-tip overshoot). Straight arms earn the longer window
+  // (3 steps nail the slope); a curved arm fails the collinearity test at its first
+  // extension and keeps the base window, so ring/blob corners are unmoved.
+  const collect = (sign: -1 | 1, span: number, max: number): Vec[] => {
+    const out: Vec[] = []
+    for (let o = gap; o <= span; o++) out.push(pts[wrap(c + sign * o)])
+    let line = out.length >= 2 ? armLine(out) : null
+    for (let o = span + 1; line && o <= max; o++) {
+      const p = pts[wrap(c + sign * o)]
+      const dev = Math.abs((p.x - line.c.x) * line.d.y - (p.y - line.c.y) * line.d.x)
+      if (dev > SNAP_COLLINEAR) break
+      out.push(p)
+      line = armLine(out)
+    }
+    return out
+  }
+  const inPts = collect(-1, inSpan, inMax)
+  const outPts = collect(1, outSpan, outMax)
   if (inPts.length < 2 || outPts.length < 2) return { x: pts[c].x, y: pts[c].y }
   const a = armLine(inPts)
   const b = armLine(outPts)
@@ -691,7 +714,11 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     const toNext = wrap(next - c)
     const inSpan = Math.min(SNAP_SPAN, Math.max(SNAP_GAP + 1, toPrev - 1))
     const outSpan = Math.min(SNAP_SPAN, Math.max(SNAP_GAP + 1, toNext - 1))
-    return snapCornerToArms(pts, c, SNAP_GAP, inSpan, outSpan)
+    // Collinear straight arms may grow their evidence window up to SNAP_SPAN_MAX,
+    // still never past the neighbouring corner.
+    const inMax = Math.min(SNAP_SPAN_MAX, Math.max(SNAP_GAP + 1, toPrev - 1))
+    const outMax = Math.min(SNAP_SPAN_MAX, Math.max(SNAP_GAP + 1, toNext - 1))
+    return snapCornerToArms(pts, c, SNAP_GAP, inSpan, outSpan, inMax, outMax)
   })
   // Drop corners whose snapped point coincides with the previous (a shoulder pair
   // that both resolved onto the same apex) — incl. the cyclic first/last pair.
@@ -722,9 +749,19 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
       if (i === b) break
       i = wrap(i + 1)
     }
-    arc[0] = { x: snap[k].x, y: snap[k].y }
-    arc[arc.length - 1] = { x: snap[(k + 1) % arcs].x, y: snap[(k + 1) % arcs].y }
-    fitted.push(fitOpenArc(presmooth(arc, opts.smoothPasses, true), opts))
+    // Censor the cap remnants before pinning: the SNAP_GAP staircase points nearest
+    // each corner are the rounded/eroded part — the exact points snapCornerToArms
+    // skips when placing the apex. Left in, they sit laterally OFF the apex→arm
+    // line (an eroded shallow tip keeps a 1px plateau there), so the fit chases
+    // them and arrives at the snapped corner from the wrong side — sharp-star's
+    // right tip rendered as an S-hook with an extra node. Trim only while ≥ 2
+    // interior points survive so short arcs (a small checker cell edge) keep
+    // their evidence.
+    const trim = Math.min(SNAP_GAP, Math.max(0, (arc.length - 4) >> 1))
+    const kept = arc.slice(trim, arc.length - trim)
+    kept[0] = { x: snap[k].x, y: snap[k].y }
+    kept[kept.length - 1] = { x: snap[(k + 1) % arcs].x, y: snap[(k + 1) % arcs].y }
+    fitted.push(fitOpenArc(presmooth(kept, opts.smoothPasses, true), opts))
   }
 
   // Stitch into a closed node list: each shared corner is one node carrying the

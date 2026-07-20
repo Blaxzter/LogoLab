@@ -71,6 +71,12 @@ const RES = 512
 const KNOWN_DEFECTS: Record<string, string> = {
   // --- tier 0 (docs/vectorization-benchmarks.md §7) ------------------------------------
   'gradient-flat': 'p95 6.3px — the crisp flats bordering the gradient bg get their edge pulled',
+  // The corner-recovery gate became applicable to these two on 2026-07-20 (CORNER_MIN_COUNT
+  // 12 → 10 + the tangent-based corner reading, §10.2) — the failures below are newly
+  // MEASURED, not newly caused. sharp-star's headline defect (every tip a beveled cap: the
+  // healColorSpikes pinch split its outline into open edges, which get no corner snap) was
+  // fixed the same day; what remains is fit softness on the CLOSED loop.
+  'cross-bars': 'corners 6 short — the junction-weld defect (§0 #3) read through the corner lens: bar-end caps at the crossing are not reproduced sharp',
   // bloom + petals were here ("2 of 7 regions dropped — low-contrast overlap merge") until
   // 2026-07-15: the real cause was dropMinorColors dissolving small-but-real palette entries
   // by share alone; flat-interior protection fixed both (docs/vectorization-benchmarks.md §9.4).

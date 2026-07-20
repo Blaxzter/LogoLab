@@ -274,8 +274,14 @@ export interface TruthGate {
  * CATASTROPHE bound like the tier limits: a correct trace reproduces ~all authored corners
  * (checker: 99%), and only a gross rounding — a checker cell melted to a blob (§0 #7),
  * dropping the fine quadrant's corners — falls below it.
+ *
+ * 10, not 12: sharp-star — the corpus's CORNER-PRESERVATION case — has exactly 10 visible
+ * authored corners (5 tips + 5 notches), and at 12 the one gate built for its failure mode
+ * reported n/a while every tip traced as a beveled cap (§10.2). A 10-corner star is not
+ * "mostly-round art"; the count floor only needs to exclude glyphs whose corner evidence is
+ * genuinely too thin to grade.
  */
-const CORNER_MIN_COUNT = 12
+const CORNER_MIN_COUNT = 10
 const CORNER_RECALL_MIN = 0.8
 
 /**

@@ -308,9 +308,12 @@ test('planar: healColorSpikes fixes a mislabeled stroke pixel, spares AA + real 
   for (let i = 0; i < 9; i++) { const c = palette[clean[i]]; const o = i * 4; cleanData[o] = c.r; cleanData[o + 1] = c.g; cleanData[o + 2] = c.b; cleanData[o + 3] = 255 }
   assert.equal(healColorSpikes(clean, cleanData, 3, 3, palette), clean, 'no mislabeled pixels ⇒ returns the input array (byte-identical)')
 
-  // 8-connectivity: a red pixel orphaned from its region by an overlap, reachable
-  // only DIAGONALLY, must still heal (a 4-connected heal would miss it — this is
-  // the schild teal-under-the-amber-cap sliver in miniature).
+  // 4-connectivity: a pixel whose only contact with its colour's region is DIAGONAL
+  // must NOT heal — the reassignment would join the two at a corner point, and that
+  // checkerboard pinch becomes a junction in the planar network (it split sharp-star's
+  // outline into open edges, which get no corner snap — §10.2). This deliberately
+  // reverses the old 8-connected contract; on the art that motivated it (schild) the
+  // 4-connected heal measures slightly BETTER (meanΔE 0.954 → 0.948, seam identical).
   const dLabels = new Int32Array([1, 0, 0, 0, 0, 0, 0, 0, 0]) // only (0,0) is red-labeled
   const dData = new Uint8ClampedArray(3 * 3 * 4)
   for (let i = 0; i < 9; i++) { const c = palette[0]; const o = i * 4; dData[o] = c.r; dData[o + 1] = c.g; dData[o + 2] = c.b; dData[o + 3] = 255 }
@@ -319,7 +322,11 @@ test('planar: healColorSpikes fixes a mislabeled stroke pixel, spares AA + real 
   setRed(0) // (0,0): the red region pixel
   setRed(4) // (1,1): red-coloured but bg-labeled, only red neighbour is (0,0) diagonally
   const dHealed = healColorSpikes(dLabels, dData, 3, 3, palette)
-  assert.equal(dHealed[4], 1, 'a diagonally-orphaned red pixel heals (8-connected)')
+  assert.equal(dHealed[4], 0, 'a diagonally-orphaned pixel stays put — healing it would create a pinch junction')
+  // …but the same pixel with an EDGE-adjacent region contact heals as before.
+  const eLabels = new Int32Array([1, 1, 0, 0, 0, 0, 0, 0, 0]) // (0,0)+(1,0) red-labeled
+  const eHealed = healColorSpikes(eLabels, dData, 3, 3, palette)
+  assert.equal(eHealed[4], 1, 'a 4-adjacent mislabeled pixel still heals')
 })
 
 test('planar: shared edges are byte-coincident (forward === reversed-of-reverse)', () => {

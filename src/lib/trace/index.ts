@@ -203,11 +203,15 @@ export function applyRemoveMarkers(
  * colour moves. An anti-aliased edge pixel sits BETWEEN two colours — close to
  * neither within the tolerance — so it is left alone and true edges don't shift; a
  * genuinely background-coloured gap pixel stays background (its colour matches its
- * own region). Neighbours are 8-connected so a stroke pixel that an OVERLAPPING
- * region (the opaque amber cap sitting on the teal) has orphaned from its own
- * region — leaving it diagonally adjacent — is still reached. Iterates so a 2–3px
- * spike is peeled inward, pass-synchronous for determinism; returns the INPUT
- * unchanged when nothing is mislabeled (so the output is byte-identical). Pure.
+ * own region). Target regions are the 4-connected neighbours ONLY: reassigning a
+ * pixel to a region it touches just diagonally joins them at a corner point, and
+ * that checkerboard pinch becomes a junction in the planar network — it split
+ * sharp-star's outline into OPEN edges, which get no corner snap, so every tip
+ * traced as a beveled cap (§10.2). The colour evidence comes from the PALETTE, not
+ * the neighbour pixel, so 8-connectivity added nothing except those pinches; a
+ * genuinely mislabeled wedge still heals inward edge-by-edge across passes.
+ * Iterates so a 2–3px spike is peeled inward, pass-synchronous for determinism;
+ * returns the INPUT unchanged when nothing is mislabeled (byte-identical). Pure.
  *
  * The caller gates this to flat art (gradients off): a gradient region's pixels
  * stray from the region mean by design, so the colour-match test must not run there.
@@ -240,20 +244,15 @@ export function healColorSpikes(
         if (dist2(o, palette[L]) <= T2) continue // matches its own region — keep
         let bestB = -1
         let bestD = T2
-        for (let dy = -1; dy <= 1; dy++) {
-          const ny = y + dy
-          if (ny < 0 || ny >= height) continue
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue
-            const nx = x + dx
-            if (nx < 0 || nx >= width) continue
-            const B = cur[ny * width + nx]
-            if (B < 0 || B === L) continue
-            const d = dist2(o, palette[B])
-            if (d < bestD) {
-              bestD = d
-              bestB = B
-            }
+        const nb = [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, y > 0 ? i - width : -1, y < height - 1 ? i + width : -1]
+        for (const q of nb) {
+          if (q < 0) continue
+          const B = cur[q]
+          if (B < 0 || B === L) continue
+          const d = dist2(o, palette[B])
+          if (d < bestD) {
+            bestD = d
+            bestB = B
           }
         }
         if (bestB >= 0) {
