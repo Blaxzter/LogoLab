@@ -84,13 +84,17 @@ const VARIANTS: Variant[] = [
   { name: 'Baseline', tone: 'base', planarFit: { arcSnap: false, refineJunctions: false } },
   { name: 'Arc-snap (shipped)', tone: 'shipped', planarFit: { arcSnap: true, refineJunctions: false } },
   { name: 'Sub-pixel + G¹', tone: 'refine', planarFit: { arcSnap: false, refineJunctions: true } },
-  { name: 'Weld ≤3px', tone: 'refine', planarFit: { arcSnap: false, refineJunctions: false, weldJunctions: 3 } },
-  { name: 'Weld + snap + G¹', planarFit: { arcSnap: true, refineJunctions: true, weldJunctions: 3 } },
+  // The blanket 'Weld ≤3px' variants were REMOVED 2026-07-21: re-measured against
+  // today's tracer they newly cross two tier-2 gates (peanuts, custard) AND degrade
+  // their own target cases (bloom p95 0.41→0.63, overlap 0.41→0.46) — the §10.4
+  // junction re-seat + evidence-gated converged-pair weld runs LATER in the pipeline
+  // and handles crossings better; centroid-fusing first preempts it. §10.4 has the
+  // numbers; planarWeld.ts survives as the §10.4 weld's contraction engine.
   {
-    name: 'BG gradient + weld',
+    name: 'BG gradient',
     tone: 'refine',
     opts: { backgroundGradient: true },
-    planarFit: { arcSnap: true, refineJunctions: false, weldJunctions: 3 },
+    planarFit: { arcSnap: true, refineJunctions: false },
   },
   // §10.1 scale-relative snap ε. The pair below makes the thesis visible: turn the §9.8
   // corner-turn veto OFF and small squares round to blobs (`checker`, `scale-blind`); a

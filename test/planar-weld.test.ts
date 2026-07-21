@@ -1,21 +1,34 @@
-// Junction-cluster weld (`PlanarFitOptions.weldJunctions`). A rasterized degree-4
-// crossing lands as near-coincident degree-3 lattice junctions joined by micro-edges
-// (nothing merges them, so the crossing renders as a tiny jog — the bloom X). The
-// weld contracts those micro-edges: one fused vertex at the cluster centroid, the
-// micro-edge gone from the graph and from every region loop, incident edges
-// re-anchored — so the crossing is ONE clean point.
+// Junction-cluster weld machinery (`weldJunctionClusters`, planarWeld.ts). A
+// rasterized degree-4 crossing lands as near-coincident degree-3 lattice junctions
+// joined by micro-edges (nothing merges them, so the crossing renders as a tiny jog
+// — the bloom X). The weld contracts those micro-edges: one fused vertex at the
+// cluster centroid, the micro-edge gone from the graph and from every region loop,
+// incident edges re-anchored — so the crossing is ONE clean point.
+//
+// Since 2026-07-21 this machinery has exactly one production consumer: the §10.4
+// evidence-gated converged-pair weld (planarReseat.weldConvergedJunctions). The old
+// per-trace blanket flag (`PlanarFitOptions.weldJunctions`) was REMOVED the same
+// day — re-measured, it newly crossed two tier-2 gates and degraded its own target
+// cases by preempting the re-seat (§10.4 has the numbers) — so these tests drive
+// `weldJunctionClusters` directly on the traced graph.
 //
 // Asserts: the split crossing fuses to a single junction, loops stay closed and
 // endpoint-coincident, a 1px EXT pocket collapses cleanly, a clean degree-4 corner
-// and long edges are untouched, weld 0 is a byte-identical no-op, deterministic.
+// and long edges are untouched, radius 0 is a byte-identical no-op, deterministic.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { tracePlanar, type PlanarTrace } from '../src/lib/trace/planarAssemble.ts'
-import { DEFAULT_PLANAR_FIT, type PlanarFitOptions } from '../src/lib/trace/planarFit.ts'
+import { weldJunctionClusters } from '../src/lib/trace/planarWeld.ts'
 import type { EdgeRef, SharedEdge } from '../src/lib/path/types.ts'
 
-const OPTS = (weld: number): PlanarFitOptions => ({ ...DEFAULT_PLANAR_FIT, weldJunctions: weld })
+/** Trace, then contract micro-edges ≤ `radius` px (the function's own guard makes
+ *  radius 0 a no-op — asserted below). */
+function weldedTrace(labels: Int32Array, w: number, h: number, radius: number): PlanarTrace {
+  const t = tracePlanar(labels, w, h)
+  weldJunctionClusters(t.vertices, t.edges, t.loopsByLabel, w, h, radius)
+  return t
+}
 
 /** Offset crossing: A|B boundary at x=6 (top half), C|D boundary at x=7 (bottom) —
  *  two degree-3 junctions at (6,6) and (7,6) joined by a 1-crack micro-edge. */
@@ -104,10 +117,10 @@ function assertWelded(t: PlanarTrace): void {
 
 test('weld fuses an offset crossing into one junction', () => {
   const labels = offsetCross()
-  const base = tracePlanar(labels, 12, 12, OPTS(0))
+  const base = weldedTrace(labels, 12, 12, 0)
   assert.equal(near(base, 6.5, 6).length, 2, 'baseline: the offset crossing splits into two junctions')
 
-  const welded = tracePlanar(labels, 12, 12, OPTS(1.5))
+  const welded = weldedTrace(labels, 12, 12, 1.5)
   const fusedIds = near(welded, 6.5, 6)
   assert.equal(fusedIds.length, 1, 'weld: one fused junction at the crossing')
   const v = welded.vertices.find((x) => x.id === fusedIds[0])!
@@ -125,10 +138,10 @@ test('weld fuses an offset crossing into one junction', () => {
 
 test('weld collapses a 1px EXT pocket at a crossing', () => {
   const labels = pocketCross()
-  const base = tracePlanar(labels, 12, 12, OPTS(0))
+  const base = weldedTrace(labels, 12, 12, 0)
   assert.ok(near(base, 6.5, 6.5).length >= 2, 'baseline: pocket mints a junction cluster')
 
-  const welded = tracePlanar(labels, 12, 12, OPTS(1.5))
+  const welded = weldedTrace(labels, 12, 12, 1.5)
   assert.equal(near(welded, 6.5, 6.5).length, 1, 'pocket cluster fuses to one junction')
   assertLoopsClosed(welded)
   assertWelded(welded)
@@ -148,9 +161,9 @@ test('weld keeps a fused frame crossing ON the image border', () => {
       if (y === 0 && x === 6) l = 2
       labels[y * w + x] = l
     }
-  const base = tracePlanar(labels, w, h, OPTS(0))
+  const base = weldedTrace(labels, w, h, 0)
   assert.ok(near(base, 6, 0.5, 1.5).length >= 3, 'baseline: the border crossing splits into ≥3 junctions')
-  const welded = tracePlanar(labels, w, h, OPTS(3))
+  const welded = weldedTrace(labels, w, h, 3)
   const fused = near(welded, 6, 0.5, 1.5)
   assert.equal(fused.length, 1, 'the border crossing fuses to one junction')
   const v = welded.vertices.find((x) => x.id === fused[0])!
@@ -172,8 +185,8 @@ test('weld caps cluster span: a noisy patch is not collapsed, frame vertices sta
     s = (s * 1103515245 + 12345) & 0x7fffffff
     labels[i] = s % 3
   }
-  const base = tracePlanar(labels, w, h, OPTS(0))
-  const welded = tracePlanar(labels, w, h, OPTS(3))
+  const base = weldedTrace(labels, w, h, 0)
+  const welded = weldedTrace(labels, w, h, 3)
   // not collapsed: the vast majority of vertices survive (a runaway weld would leave <10)
   assert.ok(welded.vertices.length >= base.vertices.length * 0.5, `weld collapsed the patch (${base.vertices.length}→${welded.vertices.length})`)
   // no frame vertex is pulled off the border
@@ -192,21 +205,21 @@ test('weld caps cluster span: a noisy patch is not collapsed, frame vertices sta
 
 test('weld leaves a clean degree-4 crossing and long edges untouched', () => {
   const labels = cleanCross()
-  const base = tracePlanar(labels, 12, 12, OPTS(0))
-  const welded = tracePlanar(labels, 12, 12, OPTS(3))
+  const base = weldedTrace(labels, 12, 12, 0)
+  const welded = weldedTrace(labels, 12, 12, 3)
   assert.deepEqual(JSON.parse(JSON.stringify(welded)), JSON.parse(JSON.stringify(base)), 'no candidates ⇒ untouched')
 })
 
-test('weld 0 is a byte-identical no-op', () => {
+test('weld radius 0 is a byte-identical no-op', () => {
   const labels = offsetCross()
-  const a = tracePlanar(labels, 12, 12, OPTS(0))
-  const b = tracePlanar(labels, 12, 12, { ...DEFAULT_PLANAR_FIT })
+  const a = weldedTrace(labels, 12, 12, 0)
+  const b = tracePlanar(labels, 12, 12)
   assert.deepEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)))
 })
 
 test('weld is deterministic', () => {
   const labels = pocketCross()
-  const a = tracePlanar(labels, 12, 12, OPTS(1.5))
-  const b = tracePlanar(labels, 12, 12, OPTS(1.5))
+  const a = weldedTrace(labels, 12, 12, 1.5)
+  const b = weldedTrace(labels, 12, 12, 1.5)
   assert.deepEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)))
 })

@@ -21,6 +21,7 @@
 import type { EdgeRef, PathNode, SharedEdge, Topology, Vec, Vertex } from '../path/types'
 import type { BeautifyOptions } from './beautify.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
+import { reseatJunctions } from './planarReseat.ts'
 import {
   anchorSignedArea,
   arcSlice,
@@ -65,11 +66,23 @@ const CORNER_TURN = Math.PI / 3 // 60°: veto the circle/ellipse snap past this 
  *    primitive's radius (its medial radius). See PlanarFitOptions.localScaleK.
  *  • `cornerVeto`   — apply the §9.8 corner-turn veto (never round a sharp-cornered
  *    loop). Default on; exposed so the scale-relative gate can be A/B'd without it.
+ *  • `reseat`       — re-seat slid degree-3 junctions on the intersection of their
+ *    incident fitted primitives (§10.4, planarReseat.ts). Default on.
+ *  • `width`/`height` — raster size (px), used only by the re-seat border guard
+ *    (a junction on the canvas frame must stay on the frame). Omitted ⇒ no guard.
+ *  • `onReseat`     — out-sink: receives the ids of the vertices the re-seat
+ *    moved. The converged-pair weld (§10.4, weldConvergedJunctions) keys on
+ *    them, and it must run in the CALLER — contracting a micro-edge rewrites
+ *    the region loops, which this function treats as read-only input.
  */
 export interface SnapOptions {
   arcSnap?: boolean
   localScaleK?: number
   cornerVeto?: boolean
+  reseat?: boolean
+  width?: number
+  height?: number
+  onReseat?: (movedVertexIds: ReadonlySet<number>) => void
 }
 
 /**
@@ -154,6 +167,19 @@ export function planarBeautify(
   // Relation-solver detection window scales with the document bbox long side.
   const longSide = bboxLongSide(topo.edges)
 
+  // §10.4 — junction re-seat, FIRST: a junction that slid along a near-tangent
+  // boundary crossing moves back to the intersection of its incident fitted
+  // primitives (and the mangled terminal caps are repaired), so every snap below
+  // — 1d's radial vertex snap included — works from corrected anchors. Edges it
+  // straightened as occluder CHORDS carry positive evidence of a straight cut
+  // (a disc crossed by a line is a "D"): 1d must not absorb them into a circle.
+  let chordEdges: ReadonlySet<number> = new Set<number>()
+  if (snap.reseat ?? true) {
+    const r = reseatJunctions(edges, vertices, snap.width, snap.height)
+    chordEdges = r.chords
+    snap.onReseat?.(r.moved)
+  }
+
   // 1d — co-circular OPEN-arc loops (a ring split into arcs by band junctions) →
   // fit the whole loop to ONE circle, radial-snap its junction vertices onto that
   // circle, and re-emit each arc as a true circular slice. This is what removes the
@@ -162,7 +188,7 @@ export function planarBeautify(
   // independently-fitted corners. Runs FIRST on the raw fitted arcs; the edges it
   // snaps skip the per-edge 1a/1b passes below.
   const arcSnapped = arcSnap
-    ? snapCoCircularLoops(edges, vertices, loopsByLabel, fid, localScaleK, cornerVeto)
+    ? snapCoCircularLoops(edges, vertices, loopsByLabel, fid, localScaleK, cornerVeto, chordEdges)
     : new Set<number>()
 
   const discCircles: DiscCircle[] = []
@@ -272,6 +298,7 @@ function snapCoCircularLoops(
   fid: number,
   localScaleK = 0,
   cornerVeto = true,
+  chordEdges: ReadonlySet<number> = new Set(),
 ): Set<number> {
   const snapped = new Set<number>()
   const byId = new Map<number, SharedEdge>()
@@ -286,6 +313,9 @@ function snapCoCircularLoops(
   for (const loops of loopsByLabel.values()) {
     for (const loop of loops) {
       if (loop.length < 2) continue // a single closed-loop edge is a disc — 1a's job
+      // A loop carrying a re-seated occluder chord is a disc CUT by a line (a
+      // "D") — snapping it to one circle would absorb the chord into the arc.
+      if (loop.some((ref) => chordEdges.has(ref.edge))) continue
       let ok = true
       let hasOpen = false
       const raw: Vec[] = []

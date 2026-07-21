@@ -108,10 +108,13 @@ What belongs here instead — planar-specific limitations that are not corpus de
    crisp (planar fits the integer crack staircase, not the AA coverage field) — visible
    only as a marginally higher seam metric on gradient images like nebula (§0 #8).
 3. **Experimental flags stay OFF by default — measured, not forgotten** (benchmarks §9.3):
-   `refineJunctions` (tradeoff: 10 better / 14 worse on the flat corpus), `weldJunctions`
-   (a ≤3px micro-edge is sometimes a real thin feature — beverage-box p95 2→22px),
+   `refineJunctions` (tradeoff: 10 better / 14 worse on the flat corpus),
    `backgroundGradient` (0 wins on ground truth where it applies). Planned: expose them as
    opt-in feature flags in the /vectorize studio rather than merging as defaults.
+   (`weldJunctions` was REMOVED 2026-07-21 — re-measured, the blanket weld newly crossed
+   two tier-2 gates and degraded bloom/overlap by preempting the §10.4 junction re-seat;
+   see 1e below. `junctionReseat` — the §10.4 re-seat + evidence-gated converged-pair
+   weld — ships ON, flag exists only as the A/B baseline switch.)
 
 ---
 
@@ -298,37 +301,44 @@ by [test/planar-arc-snap.test.ts](../test/planar-arc-snap.test.ts) (kink collaps
 byte-coincidence, welded junctions, determinism, `fidelity=0` no-op). `fidelity=0`
 stays a pure no-op, so this rides the existing fidelity dial (on by default at 1.5px).
 
-*Not yet addressed — bloom-style straight X-crossings.* A pinwheel's wedge crossings
-are straight LINES meeting at a point (no co-circularity), so 1d does not touch them;
-the line snap (1b) straightens each arm but the crossing point stays lattice-snapped.
-Cleaning those needs sub-pixel junction placement, which measured worse on gradient
-art (petals seam) at the displacement a crossing needs — deferred as a separate,
-carefully-gated pass. H/V axis-snapping is still intentionally NOT done (it would move
-junction endpoints and unweld the graph).
+*Straight X-crossings.* A pinwheel's wedge crossings are straight LINES meeting at a
+point (no co-circularity), so 1d does not touch them; the line snap (1b) straightens
+each arm but the crossing point stays lattice-snapped. Since §10.4 the junction
+RE-SEAT (1e) recovers exactly the crossings whose junctions demonstrably slid — the
+rest stay lattice-snapped by design (sub-pixel nudging of ALL junctions measured
+worse, `refineJunctions`). H/V axis-snapping is still intentionally NOT done (it
+would move junction endpoints and unweld the graph).
 
-**1e — junction-cluster weld (EXPERIMENTAL, `planarFit.weldJunctions` px, default 0
-= off).** The real bloom X-crossing fix. *Why a crossing is never one point:* in a
-single shared-edge tiling a boundary must terminate at a vertex wherever ≥3 regions
-meet, and a vertex is any lattice corner with crack degree ≥ 3
-([planarNetwork.ts](../src/lib/trace/planarNetwork.ts) `isJunction`). A rasterized
-degree-4 crossing almost never lands all four wedge tips on ONE corner — AA +
-posterization split it into 2+ near-coincident degree-3 corners joined by 1–3px
-micro-edges (and an occluded crossing is *structurally* a tiny quad of degree-3 Ts).
-Nothing merged them, so the crossing rendered as a tiny jog/notch that pops at zoom,
-and sub-pixel refinement only nudged the vertices closer (its `MAX_DISP` cap and
-per-junction independent solves cannot make them coincide). `weldJunctionClusters`
-([planarWeld.ts](../src/lib/trace/planarWeld.ts), called at the end of
-`assemblePlanar`) contracts every open edge no longer than the weld radius whose
-endpoints are two distinct junctions: the vertices fuse into one (cluster centroid),
-every incident edge re-anchors on the fused vertex (welded, byte-coincident), and
-the micro-edge is dropped from the edge table and excised from every region loop —
-micro-faces (the occlusion quad / a ≤3px EXT pocket) collapse to the point.
-Measured on bloom-512: the 5-vertex centre cluster and the 2-vertex bottom pair each
-fuse to ONE vertex (9→4 vertices, 15→9 edges, 42→33 nodes), and the crossing renders
-as one clean X at any zoom. orbit/outline/summit byte-identical (no clusters).
-[test/planar-weld.test.ts](../test/planar-weld.test.ts). Trade-off (why it's a dial,
-not just a bool): a genuine source feature smaller than the radius — bloom's real
-~3px transparent centre pocket — is collapsed with the noise.
+**1e — junction re-seat + converged-pair weld (SHIPPED ON, benchmarks §10.4;
+`planarFit.junctionReseat: false` = the pre-§10.4 baseline).** *Why a crossing is
+never one point:* in a single shared-edge tiling a boundary must terminate at a
+vertex wherever ≥3 regions meet, and a vertex is any lattice corner with crack
+degree ≥ 3 ([planarNetwork.ts](../src/lib/trace/planarNetwork.ts) `isJunction`). A
+rasterized degree-4 crossing almost never lands all four wedge tips on ONE corner —
+AA + posterization split it into 2+ near-coincident degree-3 corners joined by
+1–3px micro-edges; worse, at a NEAR-TANGENT crossing the label-map junction SLIDES
+several px along the shared tangent (the colour needle there is
+quantization-invisible), so the fitted boundary bends off its own primitive to
+reach the pinned vertex (gradient-flat's "line pulled into the circle").
+
+Two-step fix ([planarReseat.ts](../src/lib/trace/planarReseat.ts)): (1) RE-SEAT — a
+planarBeautify pre-pass moves a degree-3 junction onto the intersection of its two
+strongest incident FITTED primitives (line/circle arms from the fitted segments;
+mangled short caps skipped) when the vertex lies near both yet their intersection is
+≥1.5px away; terminal caps are repaired from the primitives, and an edge re-seated
+against the SAME line at both ends re-emits as the straight occluder CHORD (1d is
+vetoed off its loop — a "D" is not a disc). (2) WELD — junction pairs the re-seat
+CONVERGED (micro-edge ≤2px, ≥1 endpoint moved) fuse into one degree-4 vertex via
+`weldJunctionClusters` ([planarWeld.ts](../src/lib/trace/planarWeld.ts)): centroid
+fuse, incident edges re-anchored byte-coincident, micro-edge excised from every
+loop. The EVIDENCE gate is the whole point — the old blanket form (contract every
+≤3px micro-edge, `weldJunctions`, off by default) was re-measured 2026-07-21 and
+REMOVED: bare shortness sometimes marks a real thin feature (beverage-box, §9.3),
+and running before the re-seat its blind centroids preempted the exact correction
+that now handles crossings (bloom p95 0.41→0.63 UNDER the blanket weld — worse than
+doing nothing). [test/planar-reseat.test.ts](../test/planar-reseat.test.ts) locks
+the mechanism; [test/planar-weld.test.ts](../test/planar-weld.test.ts) locks the
+contraction machinery.
 
 **1f — background layer separation (EXPERIMENTAL,
 `VectorizeOptions.backgroundGradient`, default off; gradients-OFF planar only).**

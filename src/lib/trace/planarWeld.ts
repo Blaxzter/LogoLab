@@ -1,14 +1,25 @@
-// Junction-cluster weld (experimental, `PlanarFitOptions.weldJunctions` px, 0 = off).
+// Junction-cluster weld machinery — since 2026-07-21 consumed ONLY by the §10.4
+// evidence-gated converged-pair weld (planarReseat.weldConvergedJunctions), via the
+// `eligible` filter. The old per-trace blanket flag (`PlanarFitOptions.weldJunctions`,
+// contract EVERY ≤radius micro-edge, off by default) was REMOVED the same day:
+// re-measured against the §10.4 tracer it newly crossed two tier-2 gates
+// (peanuts/custard boundary) and DEGRADED its own target cases (bloom p95 0.41→0.63,
+// overlap 0.41→0.46) — running before the junction re-seat, its blind centroid
+// fusion preempts the primitive-intersection correction that now handles crossings
+// better. docs/vectorization-benchmarks.md §10.4 has the numbers; §9.3 has the
+// original beverage-box case for why bare shortness was never enough evidence.
 //
-// A degree-4 crossing in the source (bloom's X, two boundaries crossing at a point)
-// almost never rasterizes to ONE degree-4 lattice corner: AA + posterization split it
-// into 2+ near-coincident degree-3 junctions joined by 1–3px micro-edges (and an
-// occluded crossing is *structurally* a tiny quad of degree-3 Ts). The planar graph
-// traces those micro-edges faithfully, so the crossing renders as a tiny jog/notch
-// that pops at zoom, and the vertices that "should" be one point never merge.
+// The physics is unchanged: a degree-4 crossing in the source (bloom's X, two
+// boundaries crossing at a point) almost never rasterizes to ONE degree-4 lattice
+// corner — AA + posterization split it into 2+ near-coincident degree-3 junctions
+// joined by 1–3px micro-edges (and an occluded crossing is *structurally* a tiny
+// quad of degree-3 Ts). The planar graph traces those micro-edges faithfully, so
+// the crossing renders as a tiny jog/notch that pops at zoom, and the vertices that
+// "should" be one point never merge.
 //
 // `weldJunctionClusters` contracts every OPEN edge whose two endpoints are distinct
-// junction vertices and whose fitted arc is no longer than the weld radius:
+// junction vertices and whose fitted arc is no longer than the weld radius (further
+// narrowed by `eligible` when given):
 //  • the endpoint vertices union into a cluster; each cluster fuses into its
 //    lowest-id vertex, placed at the cluster centroid;
 //  • every surviving incident edge re-anchors on the fused vertex (terminal anchor
@@ -20,7 +31,7 @@
 //    last loop. Neighbouring refs then chain endpoint-coincident through the fused
 //    vertex, so materializeLoop merges them into ONE anchor at the crossing.
 //
-// Mutates the trace in place (called from assemblePlanar on freshly-built arrays).
+// Mutates vertices/edges/loops in place (the §10.4 caller owns all three).
 // Deterministic: candidates scan in edge order, clusters fuse to the lowest vertex
 // id, centroid is an unweighted mean over member ids ascending.
 
@@ -69,7 +80,9 @@ export interface WeldResult {
  * `vertices`, `edges` and `loopsByLabel` in place; returns what moved (empty
  * result = graph untouched). `width`/`height` are the image bounds — a fused cluster
  * that includes a frame junction is kept ON that frame edge so the boundary stays
- * full-bleed.
+ * full-bleed. `eligible` optionally narrows the candidate set beyond shortness
+ * (the §10.4 converged-pair weld passes a re-seat-evidence filter); omitted ⇒
+ * every short-enough micro-edge is a candidate (the experimental blanket weld).
  */
 export function weldJunctionClusters(
   vertices: Vertex[],
@@ -78,6 +91,7 @@ export function weldJunctionClusters(
   width: number,
   height: number,
   radius: number,
+  eligible?: (e: SharedEdge) => boolean,
 ): WeldResult {
   const fused = new Map<number, number>()
   const removedEdges = new Set<number>()
@@ -89,6 +103,7 @@ export function weldJunctionClusters(
     if (e.closed || e.startVertex == null || e.endVertex == null) continue
     if (e.startVertex === e.endVertex || e.startVertex < 0 || e.endVertex < 0) continue
     if (e.nodes.length < 2) continue
+    if (eligible && !eligible(e)) continue
     if (edgeLength(e) <= radius) candidates.push(e)
   }
   if (candidates.length === 0) return { fused, removedEdges }

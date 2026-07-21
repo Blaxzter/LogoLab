@@ -49,21 +49,15 @@ export interface PlanarFitOptions {
    */
   arcSnap: boolean
   /**
-   * EXPERIMENTAL (0 = off, byte-identical). Weld radius (px) for junction CLUSTERS:
-   * a rasterized degree-4 crossing (bloom's X) lands as 2+ near-coincident degree-3
-   * lattice junctions joined by 1–3px micro-edges — nothing downstream merges them,
-   * so the crossing renders as a tiny jog instead of one clean point. When > 0,
-   * `weldJunctionClusters` (planarWeld.ts) contracts open micro-edges no longer than
-   * this radius whose endpoints are two DISTINCT junctions: the vertices fuse into
-   * one (cluster centroid), the micro-edge vanishes from the graph and from every
-   * region loop, and all incident edges re-anchor on the fused vertex.
-   *
-   * Measured against GROUND TRUTH 2026-07-14 (docs/vectorization-benchmarks.md §9.3):
-   * NOT mergeable as a default at 3px — a micro-edge ≤3px is sometimes a REAL thin
-   * feature, not a rasterization artifact (beverage-box-flat: p95 2.0→22.0px and one
-   * more region dropped). Small bloom win only; stays behind the flag.
+   * Junction re-seat (planarReseat.ts, §10.4): a degree-3 junction that SLID along
+   * a near-tangent boundary crossing (the label map's colour needle is sub-pixel
+   * thin there, so the lattice junction lands px away from the true crossing) is
+   * moved to the intersection of its two strongest incident fitted primitives, and
+   * the mangled terminal caps are re-emitted from those primitives. On by default
+   * (rides the fidelity dial with the rest of planarBeautify); `false` disables —
+   * the pre-§10.4 baseline, for the Test view A/B.
    */
-  weldJunctions: number
+  junctionReseat: boolean
   /**
    * EXPERIMENTAL scale-relative fidelity (§10 prototype; 0 = off = byte-identical).
    * The circle / ellipse / co-circular SNAP gates in planarBeautify accept a
@@ -98,7 +92,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   cornerTurnDeg: 70,
   refineJunctions: false,
   arcSnap: true,
-  weldJunctions: 0,
+  junctionReseat: true,
   localScaleK: 0,
   cornerVeto: true,
 }

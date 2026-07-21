@@ -66,7 +66,7 @@ interface Feature {
 const FEATURES: Feature[] = [
   { label: 'localScaleK = 0.15', note: '§10.1 scale-relative snap ε', defaultOn: false, planarFit: { localScaleK: 0.15 } },
   { label: 'refineJunctions', note: 'sub-pixel + G¹ junction weld (§9.3)', defaultOn: false, planarFit: { refineJunctions: true } },
-  { label: 'weldJunctions = 3', note: 'contract ≤3px crossing clusters (§9.3)', defaultOn: false, planarFit: { weldJunctions: 3 } },
+  { label: 'junctionReseat', note: '§10.4 junction re-seat + converged-pair weld — ships ON; cost of keeping it', defaultOn: true, planarFit: { junctionReseat: false } },
   { label: 'arcSnap (co-circular)', note: 'ring arc snap — ships ON; cost of keeping it', defaultOn: true, planarFit: { arcSnap: false } },
   { label: 'cornerVeto (§9.8)', note: 'corner-turn veto — ships ON; cost of keeping it', defaultOn: true, planarFit: { cornerVeto: false } },
 ]
@@ -318,8 +318,8 @@ function ProfilerAbout() {
         Two questions. <b>Section 1</b> times the DEFAULT pipeline stage by stage (segment → paint → trace → beautify →
         materialize) via a pure timing hook in <code>traceImage</code> — so you can see the long pole (usually
         segmentation, the Step-3c gradient merge inside it). <b>Section 2</b> times each Feature-A/B flag against the
-        shipped default, so the cost of enabling <code>localScaleK</code>, <code>refineJunctions</code>,{' '}
-        <code>weldJunctions</code> (or of keeping <code>arcSnap</code> / the <code>cornerVeto</code>) is a number, not a guess.
+        shipped default, so the cost of enabling <code>localScaleK</code> / <code>refineJunctions</code> (or of keeping{' '}
+        <code>junctionReseat</code> / <code>arcSnap</code> / the <code>cornerVeto</code>) is a number, not a guess.
       </p>
       <p className="max-w-[96ch]">
         Every figure is the BEST (min) of the chosen number of INTERLEAVED runs after a warm-up, traced on the main thread

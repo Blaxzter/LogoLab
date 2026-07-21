@@ -26,6 +26,7 @@ import { srgbToLab, deltaE76 } from './lab.ts'
 import { tracePlanar } from './planarAssemble.ts'
 import { type PlanarFitOptions, DEFAULT_PLANAR_FIT, FLAT_LINE_COST } from './planarFit.ts'
 import { planarBeautify } from './planarBeautify.ts'
+import { weldConvergedJunctions } from './planarReseat.ts'
 import { materializeRegion, edgeMap } from '../path/topology.ts'
 
 export {
@@ -569,11 +570,23 @@ export async function traceImage(
     // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a
     // no-op, so the unbeautified planar output is byte-identical. The co-circular
     // arc snap (§1d) can be turned off via planarFit.arcSnap (Test view baseline).
+    let reseated: ReadonlySet<number> = new Set<number>()
     const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, {
       arcSnap: fitOpts.arcSnap,
       localScaleK: fitOpts.localScaleK,
       cornerVeto: fitOpts.cornerVeto,
+      reseat: fitOpts.junctionReseat,
+      width,
+      height,
+      onReseat: (m) => { reseated = m },
     })
+    // §10.4 second half — fuse junction pairs the re-seat converged (a rasterized
+    // degree-4 crossing = two degree-3 junctions + a micro-edge; once re-seated
+    // onto the true crossing they are ONE authored point). Runs here, not inside
+    // planarBeautify: contracting the micro-edge rewrites the region loops, and
+    // beautify treats `loopsByLabel` as read-only. Both structures are owned by
+    // this trace pass, and everything below reads them AFTER this line.
+    weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, width, height, reseated)
     const edges = edgeMap(topology)
     stage('beautify')
     let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)

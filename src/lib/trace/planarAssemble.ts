@@ -10,7 +10,6 @@ import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
 import { buildPlanarNetwork, EXT, type PlanarNetwork } from './planarNetwork.ts'
 import { detectCorners, detectLoopCorners, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
 import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
-import { weldJunctionClusters } from './planarWeld.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
 
 export interface PlanarTrace {
@@ -204,12 +203,6 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): Plan
   const edgeById = new Map<number, SharedEdge>()
   for (const e of edges) edgeById.set(e.id, e)
   for (const loops of loopsByLabel.values()) orientLoops(loops, edgeById)
-
-  // weldJunctions (experimental, 0 = off): contract micro-edges between
-  // near-coincident junctions so a rasterized crossing becomes ONE vertex. Runs
-  // before the G¹ smooth-through so straight-through pairs across the fused
-  // crossing become discoverable.
-  if (opts.weldJunctions > 0) weldJunctionClusters(vertices, edges, loopsByLabel, net.width, net.height, opts.weldJunctions)
 
   // refineJunctions: weld straight-through junctions to a shared G¹ tangent.
   if (opts.refineJunctions) smoothThroughJunctions(edges, loopsByLabel)
