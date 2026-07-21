@@ -29,9 +29,12 @@ moves further inside the limits — nothing needs re-blessing.
 node --test test/truth-gate.test.ts
 ```
 
-Gates: boundary chamfer/p95, node parsimony, region recovery, and **corner recovery** (a
+Gates: boundary chamfer/p95, node parsimony, region recovery, **corner recovery** (a
 distance-blind topology check — catches a shape rounded while every px stays sub-tolerance,
-e.g. a checker cell melted to a blob). Open defects + the method are tracked in ONE place:
+e.g. a checker cell melted to a blob), and **paint fidelity** (gradient tier 0 only: the
+trace is RENDERED and scored in ΔE against the source raster — catches a paint-only failure
+like a re-centred glow, which every geometry gate is blind to on gradient art, §10.3).
+Open defects + the method are tracked in ONE place:
 **`docs/vectorization-benchmarks.md` §0**, with `KNOWN_DEFECTS` in the test as the
 machine-checked status. A case not in `KNOWN_DEFECTS` must pass every applicable gate.
 

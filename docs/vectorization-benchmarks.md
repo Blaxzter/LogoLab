@@ -1289,7 +1289,16 @@ A/B snapshots: `before-stepfit-opencorner` (ba62a3b) frozen for the /labs/ab rev
 node where the boundary bends into a junction's AA neighbourhood — pre-existing
 behaviour, now more visible next to snapped corners). (b) ~~flanking-population flatness
 as the next discriminator~~ — RESOLVED same day as the flat-flank condition above, after
-the user's review caught radial-glow. (c) A gate for PAINT on gradient art does not
-exist — radial-glow's regression was invisible to every geometry gate and was caught by
-EYE in /labs/ab; a fitted-paint-vs-source raster ΔE gate on the gradient tier-0 cases
-would have caught it mechanically.
+the user's review caught radial-glow. (c) ~~A gate for PAINT on gradient art does not
+exist~~ — SHIPPED same day: the **paint-fidelity gate** (`PAINT_MEAN_MAX` 3.0 /
+`PAINT_P95_MAX` 8.0 in `truthCorpus.ts`) renders the traced doc (`scoreboard.scoreDoc`,
+the same harness rasterizer the goldens use) and scores mean/p95 CIE76 ΔE against the
+source raster, on the four GRADIENT tier-0 cases — exactly the blind spot: there the
+geometry gates score only boundary, and region/corner recovery are n/a by construction.
+Calibrated healthy values 1.05–1.34 / 1.80–3.47; the regressed radial-glow measures
+**9.14 / 23.95 — the gate goes red on the exact tracer state the user caught by eye**
+(verified by re-running the gate with the flat-flank condition temporarily neutralized).
+Wired into `test/truth-gate.test.ts` AND the Workbench gate table (`analysis.tsx`), same
+`evaluateTruthGates` definition. Tier-1 paint stays ungated (§0 #9/#10 — the soft
+multi-gradient banding family is a known, deprioritised defect; gating it adds red, not
+information). Flat art stays ungated (regions + boundary + palette already pin its paint).

@@ -285,6 +285,29 @@ const CORNER_MIN_COUNT = 10
 const CORNER_RECALL_MIN = 0.8
 
 /**
+ * Paint-fidelity gate calibration (GRADIENT tier 0 only): the traced doc is RENDERED
+ * (scoreboard.scoreDoc → the harness rasterizer) and compared against the source raster,
+ * mean / p95 CIE76 ΔE over all pixels. This is the gate §10.3's radial-glow regression
+ * proved missing: on gradient art every other gate scores boundary GEOMETRY — and
+ * radial-glow's authored geometry is just the canvas frame — so its re-centred,
+ * ring-banded glow (a pure PAINT failure, caused by a merge-ORDER change re-striding the
+ * samples Stage 2 fits on) kept every gate green and was caught only by eye in /labs/ab.
+ *
+ * Calibrated @512 on 2026-07-21 — healthy tracer: bg-ramp 1.05/1.80, bg-ramp-twin
+ * 1.12/2.15, gradient-flat 1.34/3.47, radial-glow 1.12/2.22 (mean/p95). The regressed
+ * tracer (the jump veto without its flat-flank condition, the exact state the user saw):
+ * radial-glow 9.14/23.95. The limits sit ~2× above the healthy maximum and ~3× below the
+ * failure — absolute "this is wrong" bounds, not drift bands.
+ *
+ * Tier 0 only: tier 1's soft multi-gradient paint is a known, deliberately-deprioritised
+ * defect family (§0 #9/#10) whose paint numbers are not yet calibrated; gating it here
+ * would paint the slice red without new information. Flat art is excluded because region
+ * recovery + boundary + palette already pin its paint.
+ */
+const PAINT_MEAN_MAX = 3.0
+const PAINT_P95_MAX = 8.0
+
+/**
  * Evaluate every gate for one scored case. Pure arithmetic — no assertions.
  *
  * Two gates can be INAPPLICABLE rather than passing, and saying so is the whole point:
@@ -312,6 +335,11 @@ export function evaluateTruthGates(s: {
    *  ⇒ the corner gate reports n/a (a caller that has not measured them). */
   gtCorners?: number
   cornersRecovered?: number
+  /** Render-vs-source mean / p95 CIE76 ΔE (scoreboard.scoreDoc: meanDeltaE / p95DeltaE).
+   *  Omitted ⇒ the paint gates report n/a (a caller that has not rendered the trace).
+   *  Only consulted on GRADIENT tier-0 cases — see PAINT_MEAN_MAX. */
+  paintMean?: number
+  paintP95?: number
   /** False for gradient cases — see above. */
   flatArt: boolean
   /** Picks the tolerances (TIER_TOL). Defaults to tier 0, whose numbers are unchanged. */
@@ -323,6 +351,8 @@ export function evaluateTruthGates(s: {
   const cornersRecovered = s.cornersRecovered ?? 0
   const cornerApplicable = s.flatArt && gtCorners >= CORNER_MIN_COUNT
   const cornerRecall = gtCorners > 0 ? cornersRecovered / gtCorners : 1
+  const paintApplicable =
+    !s.flatArt && (s.tier ?? 0) === 0 && s.paintMean !== undefined && s.paintP95 !== undefined
   const upper = (key: string, label: string, value: number, limit: number, digits: number, applicable = hasBoundary): TruthGate => ({
     key, label, rule: `≤ ${limit}`, value, limit,
     applicable,
@@ -335,6 +365,11 @@ export function evaluateTruthGates(s: {
     upper('chamfer', 'boundary mean', s.chamfer, tol.chamfer, 2),
     upper('p95', 'boundary p95', s.p95, tol.p95, 2),
     upper('parsimony', 'node economy', s.parsimony, tol.parsimony, 1),
+    // Render-vs-source paint fidelity — the gate that would have caught radial-glow's
+    // re-centred glow (§10.3): a pure PAINT failure is invisible to every geometry
+    // gate on gradient art, where region/corner recovery are n/a by construction.
+    upper('paintMean', 'paint mean ΔE', s.paintMean ?? 0, PAINT_MEAN_MAX, 2, paintApplicable),
+    upper('paintP95', 'paint p95 ΔE', s.paintP95 ?? 0, PAINT_P95_MAX, 2, paintApplicable),
     {
       // Zero tolerance. A region present in the art and absent from the trace is a bug, and
       // it is the exact failure raster fidelity cannot see: merging a small low-contrast

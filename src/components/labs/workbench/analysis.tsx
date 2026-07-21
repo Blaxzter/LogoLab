@@ -30,6 +30,7 @@ import {
   type RegionScore,
   type DistPoint,
 } from '../../../devtest/geomScore'
+import { scoreDoc } from '../../../devtest/scoreboard'
 import { TIER_TOL, evaluateTruthGates } from '../../../devtest/truthCorpus'
 import { Panel, RawArt } from '../Panel'
 import { traceSvg, subPathsWire } from '../wire'
@@ -102,6 +103,9 @@ export interface Analysis {
   doc: EditableDoc
   geom: GeomScore & { diagnostics: { gtPoints: DistPoint[]; docPoints: DistPoint[] } }
   regions: RegionScore
+  /** Render-vs-source paint fidelity (scoreDoc), computed for gradient cases — the
+   *  input of the paint gates (gradient tier 0; §10.3's radial-glow blind spot). */
+  paint?: { mean: number; p95: number }
   gtPolys: string[]
   docPolys: string[]
   /** The authored SVG, as shown in the "truth" panel. */
@@ -194,11 +198,20 @@ export async function analyze(c: WbCase, res: number, ab: boolean): Promise<Anal
     }
   }
 
+  // Paint fidelity for gradient cases: render the trace and score the pixels. The
+  // SAME scoreDoc the Node gate uses — the lab must show the number CI gates on.
+  let paint: Analysis['paint']
+  if (c.gradients) {
+    const p = scoreDoc(img, doc)
+    paint = { mean: p.meanDeltaE, p95: p.p95DeltaE }
+  }
+
   return {
     img,
     doc,
     geom,
     regions,
+    paint,
     gtPolys: polysOf(shapes.map((s) => s.subPaths)),
     docPolys: polysOf(docSubPaths),
     truthUrl: src.displayUrl,
@@ -212,7 +225,7 @@ export async function analyze(c: WbCase, res: number, ab: boolean): Promise<Anal
 
 /** The gates, as bar rows. `applicable: false` ⇒ tone 'na' — never a pass. Only ever called for a
  *  case with a calibrated tier; an untiered case has no honest limit to draw. */
-function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions: RegionScore): GateBarRow[] {
+function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions: RegionScore, paint?: { mean: number; p95: number }): GateBarRow[] {
   return evaluateTruthGates({
     samples: geom.samples,
     chamfer: geom.chamfer,
@@ -222,6 +235,8 @@ function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions:
     recovered: regions.recovered,
     gtCorners: geom.gtCorners,
     cornersRecovered: geom.cornersRecovered,
+    paintMean: paint?.mean,
+    paintP95: paint?.p95,
     flatArt: !gradients,
     // Per-tier tolerances: tier 1 is soft-edged gradient art and is NOT gradeable at the
     // thresholds tier 0's crisp flat art was calibrated on. The limit shown is whichever one
@@ -242,18 +257,21 @@ function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions:
             ? 'gradient art — a flat-region count here is a quantisation artifact, not a region count'
             : g.key === 'corners'
               ? 'too few authored corners to grade (mostly-round art), or gradient art'
-              : "no interior boundary to compare (the art's whole outline is the canvas border)",
+              : g.key === 'paintMean' || g.key === 'paintP95'
+                ? 'flat art (regions + boundary already pin the paint), or tier-1 paint not yet calibrated'
+                : "no interior boundary to compare (the art's whole outline is the canvas border)",
       }
     }
     const tone = !g.pass ? 'fail' : g.headroom < 0.25 ? 'tight' : g.headroom < 0.5 ? 'warn' : 'ok'
     const left = clamp01(g.headroom)
+    const isPaint = g.key === 'paintMean' || g.key === 'paintP95'
     const shown =
       g.key === 'regions'
         ? `${regions.recovered}/${regions.trueRegions}`
         : g.key === 'corners'
           ? `${geom.cornersRecovered}/${geom.gtCorners}`
-          : g.value.toFixed(g.digits) + (g.key === 'parsimony' ? '×' : 'px')
-    const unit = g.key === 'parsimony' ? '×' : g.key === 'regions' || g.key === 'corners' ? '' : 'px'
+          : g.value.toFixed(g.digits) + (g.key === 'parsimony' ? '×' : isPaint ? 'ΔE' : 'px')
+    const unit = g.key === 'parsimony' ? '×' : g.key === 'regions' || g.key === 'corners' ? '' : isPaint ? 'ΔE' : 'px'
     return {
       key: g.key,
       label: g.label,
@@ -435,7 +453,7 @@ export function AnalysisCaseRow({ c, value, error, ui }: AnalysisRowProps) {
       </CaseRow>
     )
   }
-  const rows = c.tier !== undefined ? gateRows(c.tier, c.gradients, a.geom, a.regions) : null
+  const rows = c.tier !== undefined ? gateRows(c.tier, c.gradients, a.geom, a.regions, a.paint) : null
   const failing = rows?.filter((r) => r.tone === 'fail') ?? []
   return (
     <CaseRow

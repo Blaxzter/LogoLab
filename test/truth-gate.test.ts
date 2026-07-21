@@ -40,6 +40,7 @@ import { decodePng } from '../src/devtest/png.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from '../src/devtest/svgGround.ts'
 import { scoreGeometry, scoreRegions } from '../src/devtest/geomScore.ts'
+import { scoreDoc } from '../src/devtest/scoreboard.ts'
 import { GATED_CORPUS, evaluateTruthGates } from '../src/devtest/truthCorpus.ts'
 
 ensureImageData()
@@ -124,10 +125,17 @@ for (const c of GATED_CORPUS) {
     })
     const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
     const r = scoreRegions(img, doc)
+    // Paint fidelity (gradient tier 0 only): RENDER the trace and score the pixels
+    // against the source. On gradient art the geometry gates are structurally blind
+    // to a paint failure (radial-glow's re-centred glow kept every gate green, §10.3);
+    // this is the gate that sees it. Skipped elsewhere — evaluateTruthGates would
+    // report it n/a anyway, so the render cost is only paid where it can gate.
+    const paint = c.gradients && c.tier === 0 ? scoreDoc(img, doc) : null
     const gates = evaluateTruthGates({
       samples: g.samples, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
       trueRegions: r.trueRegions, recovered: r.recovered,
       gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered,
+      paintMean: paint?.meanDeltaE, paintP95: paint?.p95DeltaE,
       // Region recovery is meaningless on gradient art — a smooth ramp's 8-bit quantisation
       // bands read as dozens of "flat regions", so a tracer that correctly fits ONE gradient
       // would look like it dropped sixty. evaluateTruthGates returns it applicable:false, and
