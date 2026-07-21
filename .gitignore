@@ -38,6 +38,10 @@ pnpm-debug.log*
 # tracked; run `npm run fetch:logos` to rehydrate the .svg files on demand.
 /examples/logos/*.svg
 
+# local real-world repro images (user-supplied, possibly trademarked artwork —
+# same policy as examples/logos: referenced from docs (§0 #13) but not redistributed)
+/examples/test-files/
+
 # generated dev-harness artifacts (crispnessStudy/facetSweep/paletteCompare output)
 /crispness-study/
 

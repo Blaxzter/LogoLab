@@ -71,6 +71,14 @@ const RES = 512
  */
 const KNOWN_DEFECTS: Record<string, string> = {
   // --- tier 0 (docs/vectorization-benchmarks.md §7) ------------------------------------
+  // The §10 driver case, authored deliberately red 2026-07-21 (§10.5): a 14-tooth gear
+  // whose corners sit 7.5–12.5px apart @512 — every chord above the answer sheet's 7px
+  // grading floor, cleanly raster-resolved, yet inside the wash zone of the fit's FIXED
+  // ±4px corner window + 5px apex merge. Boundary stays sub-tolerance (0.22/0.78) while
+  // 39 of 60 corners melt — only the distance-blind corner gate can see it, and neither
+  // the corner-turn veto nor localScaleK moves it (both gate the SNAPS; this loss is in
+  // the FIT). Closing it needs the scale-aware fit ε / detector windows — §10's open half.
+  'gear-teeth': 'corners 21/60 (35% < 80%) — fixed corner window melts well-resolved small teeth',
   // gradient-flat ("p95 6.3px — edge pulled on flats bordering the gradient bg") was here
   // until 2026-07-21: two compounding causes fixed together — the Step-3c step-fit merge
   // handed the gradient's corner band to the WHITE circle's colour class (unwitnessed-jump

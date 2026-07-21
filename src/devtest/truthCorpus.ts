@@ -99,6 +99,13 @@ export const TRUTH_CORPUS: TruthCase[] = [
   { name: 'aa-seam', svg: 'public/examples/edge-cases/aa-seam.svg', note: 'soft diagonal between flats — the AA sliver', gradients: false, tier: 0 },
   { name: 'checker', svg: 'public/examples/edge-cases/checker.svg', note: 'fine checkerboard — high-frequency aliasing', gradients: false, tier: 0 },
   { name: 'overlap', svg: 'public/examples/edge-cases/overlap.svg', note: 'translucent discs — layer decomposition', gradients: false, tier: 0 },
+  // The §10 DRIVER, authored deliberately red (2026-07-21): tooth chords ≥ 7.5px @512 (above
+  // the CORNER_MIN_EDGE grading floor, cleanly resolved) but corner spacing 7.5–12.5px — inside
+  // the wash zone of the fit's fixed ±4px corner window, so most corners melt while boundary
+  // stays sub-tolerance (0.22/0.78). Only the distance-blind corner gate sees it. localScaleK
+  // does not move it (it gates the SNAPS; this loss is in the FIT) — the case exists to demand
+  // the scale-aware fit ε / detector windows of §10's open half.
+  { name: 'gear-teeth', svg: 'public/examples/edge-cases/gear-teeth.svg', note: 'small sharp teeth + large smooth disc — scale-blind fit ε / corner window (§10.5)', gradients: false, tier: 0 },
 
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves

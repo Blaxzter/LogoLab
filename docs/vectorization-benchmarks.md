@@ -35,8 +35,17 @@ guardrails):
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 11 | **Small-region drop at LOW resolution** — a 176px region @256 falls under both the share floor and the flat-interior evidence floor, so §9.4's protection cannot see it (the gate runs @512, where the same region is 4× larger and survives) | `flute` @256 (ungated resolution) | 8/9 @256: `#974827` 176px painted `#893925`, ΔE 8.0 | found during §9.7 (pre-existing — present at c3c82cb) |
+| 12 | **Scale-blind fit ε / corner window melts well-resolved small sharp features** — corners 7.5–12.5px apart sit inside the fit's FIXED ±4px window + 5px apex merge, so most melt while boundary stays sub-tolerance; only the distance-blind corner gate sees it. HIGH product relevance (fine detail on flat icons); neither the corner-turn veto nor `localScaleK` moves it (both gate the SNAPS; this loss is in the FIT). The case was AUTHORED deliberately red as §10's driver | `gear-teeth` (tier 0, gated, in `KNOWN_DEFECTS`) | corners **21/60 = 35%** (< 80%); chamfer/p95 0.22/0.78 pass | §10.5 |
+| 13 | **Soft-alpha feather survives as a translucent sliver layer** — an AI-export PNG with a wide (3–6px) alpha feather around opaque shapes keeps an RGBA palette entry (alpha-mode < 255) that traces as dozens of arc-shaped translucent slivers hugging every letter edge. The feather cluster has the exact blend profile (`edgy=1.00`, `real=false`) but `classifyBlends` cannot explain it: its second endpoint is TRANSPARENCY, and the colour is a 3-way mix (parent hue × under-glow × alpha ramp) sitting 12.6 RGB off the nearest accepted-pair segment (eps 10) — the pairwise RGB segment model has no alpha dimension. With 0.94% share it clears `minShare` (0.7%) and carries modal protection (112 exact repeats), so no dial removes it. HIGH product relevance (soft-alpha is the default AI-generator export). Workaround that fully works: delete the swatch in the palette editor (locked 2-colour palette: 575 → 240 nodes, single clean edge). Candidate fix: an alpha-aware blend endpoint in `classifyBlends` (feather = edge-local + no real evidence + alpha-mode < 255 + RGB explainable as parent×t toward the local composite), evidence-gated against real authored translucent flats (alpha VARIANCE separates a ramping feather from a one-alpha flat) | `100 years tour.png` (examples/test-files, ungated) | sliver layer: 54 subpaths / 208 nodes @2048, alpha-mode 188 | found 2026-07-21 (user-reported); repro + numbers in this row |
 
-Recently closed (the pattern an exit should follow): **Step-3c step-fit merge / gradient
+Recently closed (the pattern an exit should follow): **slid junction at a near-tangent
+crossing** (user-reported: gradient-flat's straight hypotenuse "pulled into the circle"
+where it crosses the disc — an all-gates-green, sub-tolerance defect visible at 5×) —
+closed 2026-07-21, **§10.4** is the record: the label-map junction slides up to 8.4px
+along the shared tangent (the colour needle there is quantization-invisible), and the
+junction re-seat pass (`planarReseat.ts`) moves it back to the intersection of the
+incident FITTED primitives; gradient-flat p95 0.72 → 0.63, parsimony 1.62 → 1.48,
+hairlines also improves. **Step-3c step-fit merge / gradient
 corner sliver joins a flat class** (user-reported: nebula.png + gradient-flat corners
 painted flat mid-gradient) + **no corner snap on OPEN edges** (gradient-flat's triangle
 apex asymmetric, §10.2 follow-up (a)) — both closed 2026-07-21, **§10.3** is the record.
@@ -82,16 +91,22 @@ polygon, not a disc). chamfer 0.38 → **0.000**, p95 1.74 → **0.000**, corner
 **97.2%** — **§9.8** is the record, and it shipped with a NEW distance-blind gate (below).
 
 Feature verdicts (not defects): the experimental A/B flags (`refineJunctions`,
-`weldJunctions`, `backgroundGradient`) measured **non-mergeable as defaults** — §9.3. The
-plan is to expose them as opt-in feature flags in the /vectorize studio instead.
+`backgroundGradient`) measured **non-mergeable as defaults** — §9.3. The plan is to expose
+them as opt-in feature flags in the /vectorize studio instead. (`weldJunctions` was in this
+list until 2026-07-21: re-measured against the §10.4 tracer it newly crossed two tier-2
+gates and degraded its own target cases, so the flag was REMOVED — §10.4; its machinery
+survives as the evidence-gated converged-pair weld's engine.)
 
-Open research direction (not a defect): the fit/snap tolerances are ABSOLUTE px and therefore
+Open research direction — now with a gated driver case (#12): the fit/snap tolerances are
+ABSOLUTE px and therefore
 scale-blind — the root shape of the §9.8 checker bug. A scale-relative ε keyed to local feature
 size (medial radius) is written up in **§10**; the SNAP half is now a measured prototype
 (`PlanarFitOptions.localScaleK`, default OFF) — it SUBSUMES the §9.8 corner-turn veto (checker
 corner recall 97.2% with the veto off, k ∈ [0.10, 0.20]) and regresses no round case, but is
 byte-identical to the shipped veto on today's corpus, so it stays off pending a case that
-distinguishes them (**§10.1**). The fit-ε half is still open.
+distinguishes them (**§10.1**). The fit-ε half is still open — and since 2026-07-21 it has a
+GATED case demanding it: `gear-teeth` (#12, §10.5), authored deliberately red, which
+`localScaleK` provably does not move.
 
 ---
 
@@ -563,6 +578,12 @@ The `/labs/ab` variants that are not in the default trace (`refineJunctions`, `w
 | `weld3` | bloom p95 −0.25 (the X-crossing it was built for), nothing worse | neutral | **0 better / 5 worse, +1 dropped region** — `beverage-box-flat` p95 2.0→**22.0px**, 5/7→4/7: a ≤3px micro-edge is sometimes a *real thin feature* |
 | `refine+weld3` | mixed | olive worse | 9 better / **21 worse**, +1 drop |
 | `bgGrad` | overlap slightly worse | neutral | 0 better / 4 worse, +1 drop |
+
+*(2026-07-21: `weld3` re-measured against the §10.4 tracer and REMOVED — the flag, its
+AbLab/Profiler variants and the assemble-time call are gone; `planarWeld.ts` survives as
+the §10.4 converged-pair weld's contraction engine. See the §10.4 removal note: it newly
+crossed two tier-2 gates and degraded bloom/overlap, its own target cases, by preempting
+the re-seat.)*
 
 Two conclusions worth keeping:
 - **`refineJunctions`' old verdict ("weaker + corpus-moving") survives contact with ground
@@ -1066,7 +1087,8 @@ invisible to everything except sub-15px round-ish shapes — exactly the populat
   narrow population (sub-6px flat ellipses), which is why it does not by itself justify flipping the
   default.
 
-**Verdict — landed default-OFF, like `refineJunctions` / `weldJunctions`.** Two honest facts
+**Verdict — landed default-OFF, like `refineJunctions` / `weldJunctions` (the latter since
+removed entirely, §10.4).** Two honest facts
 pull opposite ways: (a) scale-relative ε SUBSUMES the §9.8 veto and generalizes it to the
 non-cornered small-blob case (measured + synthetic), but (b) on today's corpus the veto already
 catches every real case, so additive (veto + scale) is byte-identical to shipped and there is no
@@ -1302,3 +1324,154 @@ Wired into `test/truth-gate.test.ts` AND the Workbench gate table (`analysis.tsx
 `evaluateTruthGates` definition. Tier-1 paint stays ungated (§0 #9/#10 — the soft
 multi-gradient banding family is a known, deprioritised defect; gating it adds red, not
 information). Flat art stays ungated (regions + boundary + palette already pin its paint).
+
+### 10.4 Junction re-seat on fitted-primitive intersection (2026-07-21)
+
+**Symptom (user-reported, /labs/workbench on `gradient-flat` @521%).** The triangle's
+straight hypotenuse gets "pulled into the circle": near where it crosses the white
+disc, the traced line bends left off its own line, the disc bulges to meet it, and the
+white|dark boundary between the crossings fits neither the line nor the arc — both
+shapes look worse than the raster. Every gate was green (§10.3's exit numbers): the
+whole defect lives inside the 1/2.5px limits, spread across the crossing zone.
+
+**Cause — the lattice junction SLIDES along a near-tangent crossing.** The hypotenuse
+crosses the disc at distance 74.2 from its centre (r = 76): a 12° incidence, sagitta
+1.8px. Near the true crossings, the colour needle between the two boundaries (the bg
+wedge past the exit, the white wedge before it) is sub-pixel thin for several px, so
+AA + quantization hand its pixels to a neighbour class — the three-colour meeting
+point in the LABEL MAP does not exist where the art crosses. Measured @512: the
+lattice junction landed **8.4px past** the authored intersection (on the arc, 2.2px
+off the line) at the exit, 3.1px early at the entry. `fitOpenArc` pins junction
+endpoints, so the straight edge's last segment BENT off the line to reach the slid
+vertex (the "pull"), and the chord edge between the junctions spanned a stretched gap
+as a curve on neither primitive. No lattice-local scheme can find the true point —
+the evidence is destroyed in the raster; `refineJunctions` (±10px raw-arm least
+squares, 2px cap) is structurally blind to it.
+
+**Fix — `planarReseat.ts`, a planarBeautify pre-pass (before §1d).** At each interior
+degree-3 junction: extract each incident edge's terminal primitive from its FITTED
+geometry (arm ≤ 110px, stopping at ≥30° fitted corners; line ≤ 0.8px dev, else circle
+≤ 0.9px radial dev; a terminal segment ≤ 18px that breaks the fit is skipped as a
+mangled cap and the neighbouring run carries the primitive). If the vertex lies
+within 3px of TWO primitives whose intersection sits ≥ 1.5px away (≤ 12px, ≥ 5°
+transversal), move it there: the correction slides ALONG both boundaries, so a
+correct junction (intersection ≈ vertex) never moves — the 1.5px floor keeps generic
+sub-pixel lattice noise untouched (the refineJunctions lesson). Terminal repair:
+line-arm caps are deleted (the run extends straight to the vertex — the bend was the
+defect), circle-arm terminals re-emit as `arcSlice`s, the third edge re-anchors. An
+edge whose two endpoints were both re-seated against the SAME line is that occluder
+continuing through the crossing — it re-emits as the straight CHORD, and §1d is
+vetoed from absorbing its loop into a circle (a disc cut by a chord is a "D"; without
+the veto, 1d's now-valid circle fit re-invents the occluded sliver — observed while
+building this). Border junctions are excluded (the frame must stay). Rides the
+fidelity dial like all of planarBeautify; `planarFit.junctionReseat: false` = the
+pre-§10.4 baseline.
+
+**After @512.** `gradient-flat`: chamfer 0.23 → **0.20**, p95 0.72 → **0.63**,
+parsimony 1.62 → **1.48** (the bent cap node and its breakpoint are gone); both
+junctions land ≤ 0.35px off BOTH primitives (residual is tangential fit noise —
+invisible); hypotenuse straight end-to-end (max 0.33px), chord an exact 2-node
+straight on the line, sagitta-inside the disc as authored. `hairlines`: 0.44/0.89 →
+**0.41/0.86**, parsimony 1.74 → 1.68. `overlap` p95 −0.01, `fluent-flute` −0.01
+chamfer. `nebula`/`petals`/`bg-ramp-twin`/`flute-flat` byte-changed, scores identical
+(sub-tolerance anchor moves). 14/21 A/B cases byte-identical incl. every gradient
+case the §10.3 flat-flank protects (`radial-glow`, `bg-ramp`), `aa-seam` (border
+guard), `checker`, `cross-bars`, `sharp-star`, `concentric`. Suite 277 (4 new:
+`test/planar-reseat.test.ts` — a hand-annexed needle fixture reproducing the slide
+deterministically). A/B snapshot `before-gradient-flat-pull` (e549b29) frozen for the
+/labs/ab review.
+
+**Second half (same day, user-reported from the /labs/ab review): the converged-pair
+weld.** Measuring node spacing on `overlap` after the re-seat showed the smallest gap
+had gone 4.0px → **0.31px**: at a lens tip ALL four regions meet in one authored
+point (a degree-4 crossing), rasterization splits it into two degree-3 junctions +
+a micro-edge, and the re-seat — via the circle×circle intersection — had correctly
+converged both onto the true crossing but left two near-coincident vertices and a
+0.31px edge. Completion: `weldConvergedJunctions` (planarReseat.ts) contracts a
+micro-edge (fitted length ≤ 2px) when at least one endpoint was RE-SEATED — the
+evidence gate that separates it from the blanket ≤3px weld §9.3 measured as a
+corpus regression (a bare-short micro-edge is sometimes a real thin feature;
+beverage-box-flat). Reuses `weldJunctionClusters` (planarWeld.ts, new optional
+`eligible` filter) for the graph work: fuse to centroid, re-anchor incident edges,
+excise from loops. Runs in index.ts after planarBeautify (contracting rewrites the
+region loops, which beautify treats as read-only; `SnapOptions.onReseat` carries the
+moved-vertex ids out). Two enabling tweaks in the arm extraction, both found on
+overlap's bottom tip: `CAP_MAX` 18 → 24 (the cap breakpoint sat 20px out), and the
+corner-stop is bypassed at the first interior node behind a ≤ 8px cap (`CAP_STOP_
+BYPASS`: a 3px cap kinking ≥30° into a long arc IS the mangle — the stop starved the
+arm and the cap-skip never had a candidate; a real short terminal like
+gradient-flat's 24px hypotenuse piece stays protected by the bound). After @512:
+`overlap` lens tips are ONE vertex each — flat 0.33/0.34px from authored, grad
+0.92/0.33px — parsimony 1.99 → **1.75** (p95 0.38 → 0.41, sub-noise), both X
+crossings render as a clean point; the pre-existing 1.4/2.2px band-junction
+clusters are untouched (no re-seat evidence — exactly the gate working). Changed
+A/B set unchanged at 7/21. Suite 279 (6 reseat/weld tests).
+
+**Blanket-weld retirement (same day).** With the converged-pair weld in place, the question
+"is the experimental `weldJunctions: 3` blanket weld now obsolete?" was answered by
+RE-MEASURING it against today's tracer (tier 0 + tier 2, 122 cases @512, default vs
+`weldJunctions: 3`): **10 better / 6 worse / 106 same — including two NEW tier-2 gate
+crossings** (`fluent-peanuts-flat` boundary-mean 0.25→0.46, `fluent-custard-flat` p95
+1.00→1.50) that did not exist in the §9.3 sweep, and — decisive — its own target cases now
+DEGRADE under it: `bloom` p95 0.41→**0.63** (was −0.25 better in §9.3), `overlap`
+0.41→0.46. Cause: the blanket weld ran in `assemblePlanar`, BEFORE the §10.4 re-seat, and
+fused clusters onto blind centroids — destroying the junction pairs whose fitted-primitive
+intersections the re-seat would have recovered exactly. The §9.3 objection (bare shortness
+is not evidence — beverage-box) still stands on top. So the flag was REMOVED 2026-07-21:
+`PlanarFitOptions.weldJunctions`, the assemble-time call, and the AbLab/Profiler variants
+are gone (the Profiler slot now measures `junctionReseat` instead); `planarWeld.ts` remains
+as the machinery behind `weldConvergedJunctions`, and `test/planar-weld.test.ts` drives it
+directly. The §9.3 sweep rows above stay as the historical record.
+
+**Ghost-disc arc lap (same day, user-reported on real logo art).** A soft-alpha PNG
+("100 years tour": AI-export with a 3–6px alpha feather, which survives as a translucent
+sliver layer — §0 #13) rendered with a large translucent CIRCLE floating over the
+letters. Repro @2048: `applyEnd`'s circle-arm re-emit turned a **5.9px** terminal cap
+into a **356° arc** of its r≈81 fitted circle — a ghost disc ballooning out of a sliver
+edge. Cause: the sweep-side hint passed to `arcSlice` is the ORIGINAL cap's sampled
+midpoint, and on a mangled cap that points AWAY from the corrected vertex the hint
+lands on the wrong angular side of the tiny from→to span — which `arcSlice` faithfully
+honours as the near-full-circle way around. Fix: `junctionLocalMid` — a TERMINAL
+re-emit is junction-local by definition, so a hinted sweep > π is itself the mangle;
+the hint is replaced by the minor arc's own midpoint (chord midpoint projected
+radially onto the circle). §1d's arcSlice call is untouched (a ring arc between two
+junctions may legitimately sweep > π, and its hint comes from the full polyline).
+Corpus A/B vs `before-reseat-arc-cap`: **1/21 changed — `nebula.flat`**, where the
+same lap had been silently mangling the white ring into blobby ghost discs (flat is
+nebula's ungated A/B variant, so no gate saw it); it now renders as the clean ring +
+dot. Everything else byte-identical. Suite green (`planar-reseat.test.ts` + 1: a
+synthetic wrong-side-cap fixture that fails on the pre-fix code).
+
+### 10.5 The §10 driver case exists now: `gear-teeth`, authored deliberately red (2026-07-21)
+
+§10.1 ended on "there is no case yet where scale does STRICTLY better", and the fit-ε half
+of §10 stalled on the same missing evidence ("no red case demands it"). The case was
+CONSTRUCTED instead of waited for: `gear-teeth`
+(`public/examples/edge-cases/gear-teeth.svg`, genEdgeCases) — a 14-tooth trapezoid gear
+next to a large smooth navy disc (the control). The geometry is TUNED into the exact
+window that separates "the raster can't resolve it" from "the tracer won't":
+
+- every tooth chord is ≥ 7.5px @512 — above the answer sheet's own `CORNER_MIN_EDGE` 7px
+  grading floor, and comfortably raster-resolved (a commercial tracer keeps these teeth);
+- but the corners sit 7.5–12.5px apart — inside the wash zone of the fit's FIXED ±4px
+  corner window (`CORNER_WINDOW`, spanning 8px) + 5px apex-merge distance, so
+  `detectLoopCorners` fuses/washes most of them and ε=1.0 melts what is left.
+
+**Measured @512 (authoring-time):** chamfer 0.22 / p95 0.78 / parsimony 1.20 — every
+boundary gate GREEN — while corner recall is **21/60 = 35%** (< 80%): the §9.8 lesson
+again, a shape can be destroyed while every px stays sub-tolerance, and only the
+distance-blind corner gate sees it. Sweep across tooth counts (n=24 → gtCorners 4, below
+the grading floor, fails p95 instead 5.08; n=12–18 all fail corner recall 35–62%) — the
+shipped n=14 sits mid-window with margin on both sides. Verified non-movers: the
+corner-turn veto (guards the SNAPS; this loss is in the FIT) and `localScaleK = 0.15`
+(byte-identical scores — same reason). Registered: tier-0 truth corpus + `KNOWN_DEFECTS`
++ §0 #12. NOT added to `AB_CORPUS` yet — AbLab's snapshot compare throws on a case absent
+from a frozen manifest, and re-generating old baselines would falsify them; add it at the
+next natural re-bless.
+
+Closing #12 is the "still open (the bigger half)" §10.1 work item, now with a number to
+beat: scale-aware fit ε and detector windows — the corner window / apex-merge / ε keyed to
+local feature size (medial radius per point, from a distance transform on the label map),
+instead of absolute px. The user's original framing (a detail "heat map" multiplying the
+hard px gates) is exactly this; §10's refinement (measure SCALE from the source, not node
+density) still applies.

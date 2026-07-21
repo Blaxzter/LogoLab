@@ -244,6 +244,43 @@ const CASES: { name: string; note: string; make: () => string }[] = [
           `<circle cx="148" cy="128" r="61" fill="${BLUE}" fill-opacity="0.55"/>`,
       ),
   },
+  {
+    // The §10 "driver" case — small SHARP features on the same canvas as a large smooth
+    // shape, so one absolute fit tolerance cannot serve both. A 14-tooth gear whose tooth
+    // chords are all ≥ 7.5px @512 — above the answer sheet's CORNER_MIN_EDGE grading
+    // floor, cleanly raster-resolved — yet whose corners sit 7.5–12.5px apart, inside
+    // the wash zone of the fit's FIXED ±4px corner window + 5px apex-merge distance: the
+    // detector melts most of them while every boundary px stays sub-tolerance (measured
+    // at authoring: chamfer 0.22 / p95 0.78 GREEN, corner recall 21/60 = 35% RED — the
+    // distance-blind corner gate is the only one that can see this failure). The corner-
+    // turn VETO cannot help (it guards the beautify SNAPS; this loss happens in the FIT),
+    // and localScaleK does not move it (snaps again) — this case gates the "still open"
+    // bigger half of §10: scale-aware fit ε / detector windows. Where `scale-blind`
+    // (ungated, veto-off A/B) argues the snap side, this one GATES the fit side. The big
+    // navy disc is the control: same trace settings, generous scale, must stay clean.
+    name: 'gear-teeth',
+    note: 'small sharp gear teeth + large smooth disc → scale-blind fit ε / corner window (§10.5)',
+    make: () => {
+      // Trapezoid-tooth gear as one polygon: per tooth root→flank→tip→flank, then the
+      // root arc chord to the next tooth. All corners sharp by construction.
+      const gear = (cx: number, cy: number, rRoot: number, rTip: number, n: number): string => {
+        const pts: string[] = []
+        const step = (2 * Math.PI) / n
+        for (let i = 0; i < n; i++) {
+          const a = -Math.PI / 2 + i * step
+          const at = (f: number, r: number): string =>
+            `${(cx + r * Math.cos(a + f * step)).toFixed(2)},${(cy + r * Math.sin(a + f * step)).toFixed(2)}`
+          pts.push(at(0, rRoot), at(0.15, rTip), at(0.45, rTip), at(0.6, rRoot))
+        }
+        return pts.join(' ')
+      }
+      return svg(
+        `<rect width="${V}" height="${V}" fill="${WHITE}"/>` +
+          `<circle cx="168" cy="92" r="62" fill="${NAVY}"/>` +
+          `<polygon points="${gear(78, 172, 22, 28, 14)}" fill="${INK}"/>`,
+      )
+    },
+  },
 ]
 
 // --- emit -------------------------------------------------------------------
