@@ -912,6 +912,15 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
   const minRegionArea = minRegionAreaFor(options.despeckle ?? 0)
   const needsOverride =
     d !== 0 || !mergeGradients || minRegionArea !== DEFAULT_SEGMENT_OPTIONS.minRegionArea
+  // The unwitnessed-jump veto (the step-fit merge fix, segment.ts) applies to the
+  // AUTO path only. User-steered segmentation — Region detail raised or
+  // keep-separate markers — keeps the legacy merge: the marker-controlled split
+  // and the V6 translucent recovery CONSUME the fusion behaviour (an overlap must
+  // fuse into its shape's class for the marker split to carve it out, and the
+  // α-solve is calibrated on those exact classes; bloom's layers-integration test
+  // locks this). FLAT markers keep the veto: they exist to hand-fix fake regions,
+  // and disabling it on their account would resurrect the fakes it already fixed.
+  const userSteered = d !== 0 || markers !== undefined
   const base: SegmentOptions = needsOverride
     ? {
         ...DEFAULT_SEGMENT_OPTIONS,
@@ -921,8 +930,9 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
         minRegionArea,
       }
     : DEFAULT_SEGMENT_OPTIONS
-  if (!markers && !flatMarkers) return base
-  return { ...base, ...(markers ? { markers } : {}), ...(flatMarkers ? { flatMarkers } : {}) }
+  const withVetoScope = userSteered ? { ...base, maxUnwitnessedJump: 1 } : base
+  if (!markers && !flatMarkers) return withVetoScope
+  return { ...withVetoScope, ...(markers ? { markers } : {}), ...(flatMarkers ? { flatMarkers } : {}) }
 }
 
 /**

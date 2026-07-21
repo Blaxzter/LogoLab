@@ -55,6 +55,25 @@ export interface SegmentOptions {
    *  fraction of [0,1] (bimodal ⇒ two distinct flats, not one smooth field). */
   maxProfileGap: number
   /**
+   * Reject a union whose fitted gradient makes an Oklab colour jump larger than
+   * this across a SAMPLE-FREE stretch of its parameter t (an "unwitnessed
+   * jump"). This is the step-fit veto: a multi-stop gradient can explain
+   * {big flat region} ∪ {small far-away flat-ish sliver} almost perfectly as a
+   * step function — flat, jump, flat — with an RMS residual BELOW the honest
+   * adjacent merge's (a real ramp carries curvature; a step of two flats is
+   * exact), so greedy hands e.g. a gradient background's corner band to a WHITE
+   * shape's colour class (the nebula-png / gradient-flat corner sliver, painted
+   * flat mid-gradient). The step's signature is that its entire contrast sits in
+   * a t-run NO sample witnesses; a genuine smooth field is witnessed everywhere
+   * along its own axis (consecutive filled bins abut), and a genuine reunite
+   * (nebula's field outside the ring re-joining the hole) OVERLAPS in t. NOT the
+   * reverted profileCliff veto: that measured contrast at the pair's colour seam
+   * (inverted between real bg-reunite and fake, see §0 history); this measures
+   * contrast across EMPTY parameter space. Calibrated on tier 0+1: honest
+   * unions sit ≈0; the degenerate step-pastes measure 0.29–0.75. ≥1 disables.
+   */
+  maxUnwitnessedJump: number
+  /**
    * Run Step 3c, the global gradient-explained union-fit merge. Its job is to fuse
    * the colour-difference bands of a smooth ramp back into ONE gradient region so
    * Stage 2 can paint it as a single gradient. When the user has gradients OFF that
@@ -120,6 +139,7 @@ export const DEFAULT_SEGMENT_OPTIONS: SegmentOptions = {
   minFacing: 4,
   mergeTol: 0.06,
   maxProfileGap: 0.34,
+  maxUnwitnessedJump: 0.12,
   mergeGradients: true,
   sampleCap: 3000,
   minRegionArea: 0,
@@ -479,10 +499,12 @@ export function segmentImage(
   // byte the original, so corpus output is stable. The additions are pure cost cuts:
   //   • CANDIDATE GATE (`meanGate`, only once S exceeds GATE_MIN_SEGMENTS — i.e. the
   //     complex images that froze) — a pair reaches the expensive gradient fit only
-  //     when the groups are ADJACENT or their mean colours are within meanGate. This
-  //     is a provable SUPERSET of the pairs the global-min scan can ever select
-  //     (adjacent ramp bands; non-adjacent SAME-mean field pieces), so the merges
-  //     chosen are unchanged while the ~S²/2 fit burst collapses to the eligible few.
+  //     when the groups are ADJACENT or their mean colours are within meanGate. It
+  //     covers every DESIRABLE merge (adjacent ramp bands; non-adjacent SAME-mean
+  //     field pieces) while the ~S²/2 fit burst collapses to the eligible few. NOTE
+  //     it is NOT a superset of what un-gated global-min can select: the step-fit
+  //     degeneracy (see maxUnwitnessedJump) let the un-gated scan pick non-adjacent
+  //     DIFFERENT-mean pairs — pairs this gate would rightly refuse (§10.3).
   //   • INDEXED cache invalidation — each merge drops only the two retired groups'
   //     cache rows via a per-group key index, instead of sweeping the whole cache
   //     (the old `[...cache.keys()]` spread was itself O(S²) per merge).
@@ -568,7 +590,12 @@ export function segmentImage(
       if (!flatPinned.has(gi) && !flatPinned.has(gj) && gateEligible(gi, gj) && !pairVetoed(gi, gj)) {
         const union = strideConcat([samples.get(gi)!, samples.get(gj)!], opts.sampleCap)
         const fit = fitBestGradient(union)
-        if (fit && fit.oklabResidual <= opts.mergeTol && profileGap(fit.gradient, union) <= opts.maxProfileGap) {
+        if (
+          fit &&
+          fit.oklabResidual <= opts.mergeTol &&
+          profileGap(fit.gradient, union) <= opts.maxProfileGap &&
+          unwitnessedJump(fit.gradient, union) <= opts.maxUnwitnessedJump
+        ) {
           result = { res: fit.oklabResidual, samples: union }
         }
       }
@@ -1255,6 +1282,59 @@ function assembleFromGroupId(
     labels[i] = g < 0 ? -1 : rank[g]
   }
   return { palette, labels, counts, ms, fineSegments: S, regionSamples }
+}
+
+/**
+ * Largest Oklab ΔE between the sample populations flanking an EMPTY interior
+ * run of the fitted gradient's parameter t — the colour jump the gradient makes
+ * where NO sample witnesses it (see SegmentOptions.maxUnwitnessedJump). Each
+ * side's colour pools up to two filled bins so a single sparse bin can't fake
+ * or hide a jump. 0 when every pair of consecutive filled bins abuts.
+ */
+function unwitnessedJump(g: GradientFill, s: RegionSamples, bins = 24): number {
+  const cnt = new Uint32Array(bins)
+  const sL = new Float64Array(bins)
+  const sA = new Float64Array(bins)
+  const sB = new Float64Array(bins)
+  for (let i = 0; i < s.n; i++) {
+    const t = gradientParamT(g, s.xs[i], s.ys[i])
+    let bi = Math.floor(t * bins)
+    if (bi < 0) bi = 0
+    else if (bi >= bins) bi = bins - 1
+    const o = srgbToOklab(s.rs[i], s.gs[i], s.bs[i])
+    cnt[bi]++
+    sL[bi] += o[0]
+    sA[bi] += o[1]
+    sB[bi] += o[2]
+  }
+  // Pooled mean colour of the filled bin at `b` plus the next filled bin further
+  // away from the gap (direction `dir`), if any.
+  const sideMean = (b: number, dir: -1 | 1): Oklab => {
+    let c = cnt[b]
+    let L = sL[b]
+    let a = sA[b]
+    let bb = sB[b]
+    for (let j = b + dir; j >= 0 && j < bins; j += dir) {
+      if (!cnt[j]) continue
+      c += cnt[j]
+      L += sL[j]
+      a += sA[j]
+      bb += sB[j]
+      break
+    }
+    return [L / c, a / c, bb / c]
+  }
+  let jump = 0
+  let prev = -1
+  for (let b = 0; b < bins; b++) {
+    if (!cnt[b]) continue
+    if (prev >= 0 && b - prev > 1) {
+      const d = oklabDeltaE(sideMean(prev, -1), sideMean(b, 1))
+      if (d > jump) jump = d
+    }
+    prev = b
+  }
+  return jump
 }
 
 /** Longest run of empty interior bins (as a fraction of [0,1]) of a gradient's

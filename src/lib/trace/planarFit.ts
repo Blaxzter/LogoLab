@@ -783,6 +783,177 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
 }
 
 /**
+ * Indices of the sharp corners INTERIOR to an OPEN staircase polyline — ONE per
+ * corner. `detectLoopCorners` with the cyclic wrap replaced by clamped windows:
+ * each cluster of sub-threshold vertices collapses to its geometric apex (max
+ * perp deviation from the window chord) and apexes within `mergeDist` px fuse,
+ * so a vertex's two staircase shoulders never yield two corners. The endpoint
+ * regions (± `win`, junction anchors) are excluded, as in `detectCorners`.
+ */
+export function detectOpenCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = 5): number[] {
+  const n = pts.length
+  if (turnDeg >= 180 || n < 2 * win + 1) return []
+  const thr = Math.cos((turnDeg * Math.PI) / 180)
+  const lo = win
+  const hi = n - win
+  const cos = new Float64Array(n)
+  cos.fill(1)
+  for (let i = lo; i < hi; i++) {
+    const inDir = unit(sub(pts[i], pts[i - win]))
+    const outDir = unit(sub(pts[i + win], pts[i]))
+    cos[i] = inDir.x * outDir.x + inDir.y * outDir.y
+  }
+  const apexes: number[] = []
+  for (let s = lo; s < hi; s++) {
+    if (cos[s] >= thr) continue
+    let best = s
+    let bestDev = -1
+    let i = s
+    while (i < hi && cos[i] < thr) {
+      const dev = perpDistance(pts[i], pts[Math.max(0, i - win)], pts[Math.min(n - 1, i + win)])
+      if (dev > bestDev) {
+        bestDev = dev
+        best = i
+      }
+      i++
+    }
+    apexes.push(best)
+    s = i // resume after the cluster (loop's s++ steps past it)
+  }
+  // Fuse near-coincident apexes (consecutive; keep the first, as the loop does).
+  const merged: number[] = []
+  for (const a of apexes) {
+    const last = merged[merged.length - 1]
+    if (last !== undefined && dist(pts[a], pts[last]) <= mergeDist) continue
+    merged.push(a)
+  }
+  return merged
+}
+
+/**
+ * Open-edge counterpart of `fitCorneredLoop`: sharp corners INTERIOR to a
+ * junction→junction edge get the same sub-pixel arm snap + cap-trim. Without
+ * this, an outline tip that a junction happened to split onto an open edge (the
+ * gradient-flat triangle apex — its left arm crosses the white circle) kept its
+ * raw pinned lattice vertex, and the DP fit around the AA-eroded cap remnants —
+ * arriving from the wrong side as a short hook with an extra smooth node, the
+ * exact pathology the cap-trim note in fitCorneredLoop describes. Differences
+ * from the loop version, both forced by openness:
+ *   • arm windows CLAMP at the endpoints instead of wrapping;
+ *   • the edge's own endpoints are never snapped and never trimmed — they are
+ *     junction anchors that must stay byte-coincident with sibling edges.
+ */
+export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: PlanarFitOptions): PathNode[] {
+  const n = pts.length
+  const fallback = (): PathNode[] => fitOpenArc(presmooth(pts, opts.smoothPasses, true, pinned), opts)
+  // Clustered corners (one per feature, like the loop path) — the raw `pinned`
+  // set has BOTH staircase shoulders of a vertex, which must not become two
+  // breakpoints (a 2-node chamfer where the art has one corner).
+  let C = detectOpenCorners(pts, opts.cornerTurnDeg)
+  if (n < 2 * SNAP_GAP + 3) return fallback()
+
+  // Prune-and-refit loop: a detected corner whose FITTED junction comes out
+  // nearly straight was a local staircase jog (e.g. the boundary bending into a
+  // junction's AA neighbourhood), not a real corner — forcing a hard breakpoint
+  // there asserts geometry the art doesn't have. Detection can't tell (the ±win
+  // raw turn IS above threshold); the fit can. Each pass drops the weak
+  // breakpoints and refits without them; terminates because C strictly shrinks.
+  for (;;) {
+    if (C.length === 0) return fallback()
+
+    const snappedAll: Vec[] = C.map((c, k) => {
+      const toPrev = c - (k > 0 ? C[k - 1] : 0)
+      const toNext = (k < C.length - 1 ? C[k + 1] : n - 1) - c
+      // Same spans as the loop version, additionally clamped so no window index
+      // leaves [0, n-1] (open: there is nothing to wrap onto).
+      const inSpan = Math.min(SNAP_SPAN, Math.max(SNAP_GAP + 1, toPrev - 1), c)
+      const outSpan = Math.min(SNAP_SPAN, Math.max(SNAP_GAP + 1, toNext - 1), n - 1 - c)
+      const inMax = Math.min(SNAP_SPAN_MAX, Math.max(SNAP_GAP + 1, toPrev - 1), c)
+      const outMax = Math.min(SNAP_SPAN_MAX, Math.max(SNAP_GAP + 1, toNext - 1), n - 1 - c)
+      return snapCornerToArms(pts, c, SNAP_GAP, inSpan, outSpan, inMax, outMax)
+    })
+    // Drop corners whose snap collapsed onto the previous breakpoint or an endpoint.
+    const idx: number[] = []
+    const snap: Vec[] = []
+    for (let k = 0; k < C.length; k++) {
+      const prevPin = snap[snap.length - 1] ?? pts[0]
+      if (dist(prevPin, snappedAll[k]) < 1 || dist(pts[n - 1], snappedAll[k]) < 1) continue
+      idx.push(C[k])
+      snap.push(snappedAll[k])
+    }
+    if (idx.length === 0) return fallback()
+
+    // Fit each piece between consecutive breakpoints. Corner ends are cap-trimmed
+    // (censor the SNAP_GAP eroded points, as in fitCorneredLoop) and pinned to the
+    // snapped apex; endpoint ends keep the exact junction anchor untrimmed.
+    const bounds = [0, ...idx, n - 1]
+    const pins: Vec[] = [pts[0], ...snap, pts[n - 1]]
+    const fitted: PathNode[][] = []
+    for (let k = 0; k + 1 < bounds.length; k++) {
+      const piece = pts.slice(bounds[k], bounds[k + 1] + 1)
+      let trimS = k > 0 ? SNAP_GAP : 0
+      let trimE = k + 1 < bounds.length - 1 ? SNAP_GAP : 0
+      // Trim only while ≥ 2 interior points survive (short pieces keep evidence).
+      while (trimS + trimE > Math.max(0, piece.length - 4)) {
+        if (trimE >= trimS && trimE > 0) trimE--
+        else if (trimS > 0) trimS--
+        else break
+      }
+      const kept = piece.slice(trimS, piece.length - trimE).map((p) => ({ x: p.x, y: p.y }))
+      kept[0] = { x: pins[k].x, y: pins[k].y }
+      kept[kept.length - 1] = { x: pins[k + 1].x, y: pins[k + 1].y }
+      fitted.push(fitOpenArc(presmooth(kept, opts.smoothPasses, true), opts))
+    }
+
+    // Stitch: each interior breakpoint is ONE hard node — arriving hIn, leaving
+    // hOut — remembering where each landed for the weak-turn check below.
+    const out: PathNode[] = []
+    const jointAt: number[] = [] // out[] index of breakpoint k (parallel to idx)
+    let ok = true
+    for (const cur of fitted) {
+      if (cur.length < 2) {
+        ok = false
+        break
+      }
+      if (out.length === 0) {
+        for (const nd of cur) out.push({ x: nd.x, y: nd.y, hIn: nd.hIn ? { ...nd.hIn } : null, hOut: nd.hOut ? { ...nd.hOut } : null, kind: nd.kind })
+      } else {
+        const joint = out[out.length - 1]
+        jointAt.push(out.length - 1)
+        joint.hOut = cur[0].hOut ? { x: cur[0].hOut.x, y: cur[0].hOut.y } : null
+        joint.kind = 'corner'
+        for (let j = 1; j < cur.length; j++) {
+          const nd = cur[j]
+          out.push({ x: nd.x, y: nd.y, hIn: nd.hIn ? { ...nd.hIn } : null, hOut: nd.hOut ? { ...nd.hOut } : null, kind: nd.kind })
+        }
+      }
+    }
+    if (!ok || out.length < 2) return fallback()
+
+    // Weak-turn prune: fitted tangents at each breakpoint. A real corner that
+    // detection accepts turns ≥ cornerTurnDeg (70°); a jog fits nearly straight.
+    const weak = new Set<number>()
+    for (let k = 0; k < jointAt.length; k++) {
+      const i = jointAt[k]
+      const nd = out[i]
+      const inFrom = nd.hIn ?? { x: out[i - 1].x, y: out[i - 1].y }
+      const outTo = nd.hOut ?? { x: out[i + 1].x, y: out[i + 1].y }
+      const a = unit(sub(nd, inFrom))
+      const b = unit(sub(outTo, nd))
+      const cosT = a.x * b.x + a.y * b.y
+      if (cosT > COS_WEAK_CORNER) weak.add(idx[k])
+    }
+    if (weak.size === 0) return out
+    C = C.filter((c) => !weak.has(c))
+  }
+}
+
+/** Fitted-turn floor for an open-edge breakpoint (30°): well below any true
+ *  detected corner (the detector's own floor is 70°), well above the ~3° of a
+ *  smoothly absorbed jog. */
+const COS_WEAK_CORNER = Math.cos((30 * Math.PI) / 180)
+
+/**
  * Fit a pure closed-loop edge (no junction) reusing the crisp tracer's
  * `fitClosedLoop`. Returns closed-loop nodes, or a coarse fallback.
  */

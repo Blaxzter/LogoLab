@@ -1,0 +1,197 @@
+{
+  "name": "before-stepfit-opencorner",
+  "rev": "ba62a3b",
+  "date": "2026-07-21",
+  "res": 512,
+  "cases": [
+    {
+      "id": "orbit",
+      "name": "orbit (ring)",
+      "png": "orbit.png",
+      "flat": "orbit.flat.svg",
+      "grad": "orbit.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "bloom",
+      "name": "bloom (crossings)",
+      "png": "bloom.png",
+      "flat": "bloom.flat.svg",
+      "grad": "bloom.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "outline",
+      "name": "outline",
+      "png": "outline.png",
+      "flat": "outline.flat.svg",
+      "grad": "outline.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "summit",
+      "name": "summit",
+      "png": "summit.png",
+      "flat": "summit.flat.svg",
+      "grad": "summit.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "aurora",
+      "name": "aurora",
+      "png": "aurora.png",
+      "flat": "aurora.flat.svg",
+      "grad": "aurora.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "nebula",
+      "name": "nebula",
+      "png": "nebula.png",
+      "flat": "nebula.flat.svg",
+      "grad": "nebula.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "petals",
+      "name": "petals",
+      "png": "petals.png",
+      "flat": "petals.flat.svg",
+      "grad": "petals.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "bg-ramp",
+      "name": "⟐ bg-ramp — posterization bands",
+      "png": "bg-ramp.png",
+      "flat": "bg-ramp.flat.svg",
+      "grad": "bg-ramp.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "bg-ramp-twin",
+      "name": "⟐ bg-ramp-twin — colour-class DELETE risk",
+      "png": "bg-ramp-twin.png",
+      "flat": "bg-ramp-twin.flat.svg",
+      "grad": "bg-ramp-twin.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "cross-bars",
+      "name": "⟐ cross-bars — junction cluster (weld)",
+      "png": "cross-bars.png",
+      "flat": "cross-bars.flat.svg",
+      "grad": "cross-bars.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "concentric",
+      "name": "⟐ concentric — circle/concentric snap",
+      "png": "concentric.png",
+      "flat": "concentric.flat.svg",
+      "grad": "concentric.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "hairlines",
+      "name": "⟐ hairlines — sub-pixel strokes",
+      "png": "hairlines.png",
+      "flat": "hairlines.flat.svg",
+      "grad": "hairlines.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "aa-seam",
+      "name": "⟐ aa-seam — nearest-colour crispness",
+      "png": "aa-seam.png",
+      "flat": "aa-seam.flat.svg",
+      "grad": "aa-seam.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "checker",
+      "name": "⟐ checker — high-frequency aliasing",
+      "png": "checker.png",
+      "flat": "checker.flat.svg",
+      "grad": "checker.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "scale-blind",
+      "name": "⟐ scale-blind — scale-relative snap ε (§10.1)",
+      "png": "scale-blind.png",
+      "flat": "scale-blind.flat.svg",
+      "grad": "scale-blind.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "radial-glow",
+      "name": "⟐ radial-glow — 2-D gradient field",
+      "png": "radial-glow.png",
+      "flat": "radial-glow.flat.svg",
+      "grad": "radial-glow.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "gradient-flat",
+      "name": "⟐ gradient-flat — render gate",
+      "png": "gradient-flat.png",
+      "flat": "gradient-flat.flat.svg",
+      "grad": "gradient-flat.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "sharp-star",
+      "name": "⟐ sharp-star — corner detection",
+      "png": "sharp-star.png",
+      "flat": "sharp-star.flat.svg",
+      "grad": "sharp-star.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "flute-flat",
+      "name": "flute (flat twin) — near-colour pair ΔE 4.5",
+      "png": "flute-flat.png",
+      "flat": "flute-flat.flat.svg",
+      "grad": "flute-flat.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "annulus",
+      "name": "⟐ annulus — hole winding + alpha",
+      "png": "annulus.png",
+      "flat": "annulus.flat.svg",
+      "grad": "annulus.grad.svg",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "overlap",
+      "name": "⟐ overlap — layer decomposition",
+      "png": "overlap.png",
+      "flat": "overlap.flat.svg",
+      "grad": "overlap.grad.svg",
+      "width": 512,
+      "height": 512
+    }
+  ]
+}

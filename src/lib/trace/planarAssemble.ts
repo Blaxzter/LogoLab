@@ -8,7 +8,7 @@
 import type { EdgeRef, PathNode, SharedEdge, Vec, Vertex } from '../path/types'
 import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
 import { buildPlanarNetwork, EXT, type PlanarNetwork } from './planarNetwork.ts'
-import { detectCorners, detectLoopCorners, fitCorneredLoop, fitLoopEdge, fitOpenArc, presmooth, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import { detectCorners, detectLoopCorners, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
 import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
 import { weldJunctionClusters } from './planarWeld.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
@@ -108,7 +108,13 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): Plan
         nodes = staircaseCorners(pts)
       }
     } else {
-      nodes = fitOpenArc(presmooth(pts, opts.smoothPasses, true, corners), opts)
+      // An open edge with genuinely sharp interior corners (a tip that a junction
+      // split onto this edge) gets the same sub-pixel corner snap as closed loops
+      // (fitCorneredOpen); without corners this is the unchanged legacy fit.
+      nodes =
+        corners.size > 0
+          ? fitCorneredOpen(pts, corners, opts)
+          : fitOpenArc(presmooth(pts, opts.smoothPasses, true, corners), opts)
     }
     const startV = e.startV >= 0 ? vidByCorner.get(e.startV)! : -1
     const endV = e.endV >= 0 ? vidByCorner.get(e.endV)! : -1

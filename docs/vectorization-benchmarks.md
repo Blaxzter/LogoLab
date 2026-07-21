@@ -27,10 +27,8 @@ guardrails):
 
 | # | defect | reproducing case | number | details |
 |---|---|---|---|---|
-| 2 | **Junction weld** — crossing-bar junction wedges pulled; since 2026-07-20 the corner gate MEASURES it (6 corners short) instead of it hiding sub-tolerance | `cross-bars` (tier 0, gated, in `KNOWN_DEFECTS`) | corners 6 short of 80% recall; chamfer 0.34px, p95 0.54px | §7, §10.2; `weld3` does NOT fix it, `refine` helps but regresses elsewhere (§9.3) |
 | 2b | **Notch chamfer** — the last sharp-star residue after §10.2 (corner gate PASSES, 9/11): two of five 80° inner notches trace as a 2-node pair ~3.5px apart (a slight chamfer) instead of one sharp corner — `detectLoopCorners`' 70°/±4px window misses them, staircase-phase dependent, so they never enter the snap path | `sharp-star` (tier 0, gated, **passes**) | 2 notches of 10 corners; sub-gate, visible only zoomed | §10.2 follow-up (b) |
 | 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.22px, p95 0.74px (was 1.44/24.8 — the p95 was the seam occluded under the circle, §9.6) | §7; +0.09 chamfer from the §9.5 fix (label-level endpoint routing sends the whole sliver to one side) |
-| 4 | **Edge pull on flats bordering a gradient bg** | `gradient-flat` (tier 0, gated, in `KNOWN_DEFECTS`) | p95 6.3px | §7 |
 | 6 | **Thin features at LOW resolution** — below ~256px the sub-pixel bars still break up (the @512 defect is fixed, §9.5; the gate runs at 512) | `hairlines` @256 (ungated resolution) | chamfer 0.88px, p95 9.77px @256 (was 2.44/27.8 before §9.6 — part of that was bar-crossing occlusion; the remaining 9.77 is real) | §9.5 |
 | 6b | **Bar caps render pointed / domed, not square** (user-reported 2026-07-20, pre-existing). A ≤4px cap + both 90° shoulders fit inside `detectLoopCorners`' ±4px window as ONE sub-threshold cluster → one apex → a pointed end; a wider cap keeps two shoulders but its cap-arm evidence is ~4 AA-ragged points, so the shoulder snaps land slanted (58,49.5 vs 65,51 on the 7px bar) and the cap fits as a shallow dome. Sub-gate (`CORNER_MIN_EDGE` 7 excludes cap corners by design; chamfer passes) — needs a cap/tip discriminator (two ~90° turn peaks inside one cluster ⇒ split, don't fuse) | `hairlines` @512 bar ends | visible at zoom; all boundary gates pass | §10.2 exit note |
 | 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
@@ -38,7 +36,17 @@ guardrails):
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 11 | **Small-region drop at LOW resolution** — a 176px region @256 falls under both the share floor and the flat-interior evidence floor, so §9.4's protection cannot see it (the gate runs @512, where the same region is 4× larger and survives) | `flute` @256 (ungated resolution) | 8/9 @256: `#974827` 176px painted `#893925`, ΔE 8.0 | found during §9.7 (pre-existing — present at c3c82cb) |
 
-Recently closed (the pattern an exit should follow): **beveled star tips / heal-pinch
+Recently closed (the pattern an exit should follow): **Step-3c step-fit merge / gradient
+corner sliver joins a flat class** (user-reported: nebula.png + gradient-flat corners
+painted flat mid-gradient) + **no corner snap on OPEN edges** (gradient-flat's triangle
+apex asymmetric, §10.2 follow-up (a)) — both closed 2026-07-21, **§10.3** is the record.
+They compounded on `gradient-flat`: p95 **6.31 → 0.72px** (was §0 #4, "edge pull on flats
+bordering a gradient bg" — the pull WAS the two of them), chamfer 0.81 → 0.23, corners
+6/6, entry deleted from `KNOWN_DEFECTS`. The same open-edge snap closed **#2 junction
+weld's measured face**: `cross-bars` corner recall 4/10 → **8/10 = 80%, the gate passes**,
+entry deleted (chamfer/p95 unchanged 0.34/0.54 — the sub-tolerance wedge pull at 1× stays
+watched in AbLab, but it no longer has a failing number, so per this list's rules it has
+no row). **beveled star tips / heal-pinch
 loop split** (`sharp-star`) — closed 2026-07-20: every tip traced as a flat 2-node cap 4px
 short of the apex because `healColorSpikes`' 8-connected reassignment created 1px diagonal
 pinches that junction-split the outline into OPEN edges (which get no corner snap); fixed
@@ -1174,3 +1182,92 @@ REVERSED — that contract was the pinch generator.
 any outline genuinely junction-split by a third colour (this fix only rescues loops that
 should never have been split); (b) the notch threshold/window (70°/±4px vs a real 80° turn);
 (c) shallow-tip snap bias. All three live under the sharp-star `KNOWN_DEFECTS` entry (§0 #2b).
+*(a) shipped 2026-07-21 as `fitCorneredOpen` — §10.3.)*
+
+### 10.3 Two fixes: the Step-3c step-fit merge veto + open-edge corner snap (2026-07-21)
+
+**Symptoms (user-reported, same screenshot).** (1) A section of a gradient background
+"graded flat": nebula.png's bottom-left corner and gradient-flat's bottom-right corner
+render as a flat sliver with an invented boundary arc mid-gradient. (2) gradient-flat's
+triangle apex traced asymmetric — one smooth node above the apex plus a corner node
+off-centre with a short curve, where the art has one sharp point.
+
+**Cause 1 — the degenerate step-fit merge (`segment.ts` Step 3c).** `fitBestGradient` is
+multi-stop, so the union {big flat region} ∪ {small far-away flat-ish sliver} fits as a
+STEP function — flat, jump, flat — almost exactly: gradient-flat's white circle ∪ orange
+corner band fit radial `#f6f6f9(t<0.73) → #ea9529(t>0.85)` at RMS residual **0.0012**;
+nebula-png's white blob ∪ purple corner at **0.0022**. Both BEAT the honest adjacent
+bg∪sliver merges (0.0037 / 0.0212 — a real ramp carries curvature; a step of two flats is
+near-exact), so the greedy global-min hands the corner to the white class first, and the
+sliver is then painted with the white region's model. Neither guard fired: `profileGap`
+measured 0.083 / 0.125 (≤ 0.34) because the big host's own spatial extent fills the
+t-profile to within 2–3 bins of the sliver, and the S>64 candidate gate wasn't running
+(S₀ = 13 / 19; its "provable superset" comment is wrong — un-gated global-min DOES select
+non-adjacent different-mean pairs). Calibration over tier 0+1 endpoint groups (409
+multi-fine groups) showed the pattern is EPIDEMIC, not a corner case: nebula-svg's white
+dot lives in the purple bg class as a radial step (res 0.0000 — pixel-perfect and
+structurally wrong), hairlines' two dark bars in the white bg class, watermelon's pupil,
+annulus' teal ∪ red, bg-ramp-twin's blue ∪ green shape pair (the case's designed trap).
+
+**Fix 1 — the unwitnessed-jump veto** (`SegmentOptions.maxUnwitnessedJump`, default
+0.12). A union is rejected when its fitted gradient makes an Oklab ΔE jump larger than
+the threshold across a SAMPLE-FREE stretch of parameter t (flanking-bin pooled means).
+A genuine smooth field is witnessed everywhere along its own axis; a genuine reunite
+(nebula's field outside the ring re-joining the hole) OVERLAPS in t; the step-paste
+concentrates its full contrast in empty bins. This is NOT the reverted `profileCliff`
+(that measured contrast at the pair's colour seam, inverted between real and fake; this
+measures contrast across EMPTY parameter space). Calibration: honest ramp merges measure
+**0.0000** (bg-ramp, bg-ramp-twin bg, radial-glow, aurora ×2; gradient-flat's 10-band bg
+reunite 0.031); the step-pastes measure **0.22–0.75**. On tier-1 soft-gradient art the
+band is continuous (0.05–0.24, no clean gap) — 0.12 passes every gate incl. the tier-1
+slice, and the product target is flat icons. SCOPE: auto path only — Region detail > 0 or
+keep-separate markers disable the veto (`segmentOptionsFor`), because the marker split
+and the V6 translucent recovery CONSUME the fusion behaviour (an overlap must fuse into
+its shape's class for the split to carve out; bloom's layers-integration test locks it,
+and its load-bearing merge-time unions measure > 0.26 — no threshold serves both). FLAT
+markers keep the veto (they exist to hand-fix fake regions; disabling on their account
+would resurrect the fakes).
+
+**Cause 2 — open edges never got the §10.2 corner snap.** `snapCornerToArms` + cap-trim
+lived only in `fitCorneredLoop` (closed loops). gradient-flat's triangle outline is an
+OPEN edge — the white circle overlaps it, junctions at (216,192)/(244,226) split it — so
+the apex stayed a raw pinned lattice vertex at (350,337), 2.2px off authored (348,338),
+and the DP fit around the AA-eroded cap remnants, arriving from the wrong side (the exact
+S-hook pathology the §10.2 cap-trim note describes).
+
+**Fix 2 — `fitCorneredOpen` + `detectOpenCorners`** (`planarFit.ts`, wired in
+`planarAssemble`). detectLoopCorners' clustering (sub-threshold runs → one apex, fuse
+≤5px) mirrored with clamped windows — the raw `detectCorners` set holds BOTH staircase
+shoulders of a vertex and must not become two breakpoints. Each interior corner snaps to
+its arm intersection (windows clamp at the open ends; the edge's endpoints are junction
+anchors — never snapped, never trimmed, byte-coincident with siblings), pieces are
+cap-trimmed at corner ends and fitted open, stitched with the corner as ONE hard node.
+A prune-and-refit pass drops breakpoints whose FITTED turn is < 30° (a staircase jog near
+a junction fires the ±4px 70° detector but fits nearly straight — asserting a hard corner
+there is geometry the art doesn't have).
+
+**After @512.** `gradient-flat`: chamfer 0.81 → **0.23**, p95 **6.31 → 0.72**, parsimony
+2.2 → 1.62, regions 89/89, corners **6/6** — passes every gate, `KNOWN_DEFECTS` entry
+deleted (was §0 #4; the "edge pull" was these two defects compounding). The apex is one
+sharp node 0.4px from authored; all three triangle vertices single corners ≤ 0.55px.
+`cross-bars`: corner recall 4/10 → **8/10 = 80%, the corner gate passes**, entry deleted
+(chamfer/p95 unchanged 0.34/0.54 — §0 #2's measured face closes; the sub-tolerance wedge
+visual stays watched in AbLab). sharp-star 9/11, checker 0.00/0.00 @ 99.1%, aa-seam
+0.22/0.74 — unchanged. Full suite 273 green.
+
+**Corpus effect (golden re-bless, for review).** `nebula` grad: the fake step gradient is
+GONE — gradientCount 3 → 2, junctions 2 → 0, seamMax 26.1 → **12.7**, nodes 74 → 62,
+jaggedness 0.43 → 0.41; meanΔE 2.94 → 3.20 (+0.26 — the step gradient reproduced the
+sliver pixel-exactly; structure wins over raster fidelity here, per the product target).
+`headphones-flat`: nodes 5212 → **5038**, jaggedness 8.77 → **7.47**, meanΔE +0.014.
+`headphones-grad`: nodes 700 → 686, jaggedness 2.29 → 2.01, meanΔE +0.018.
+`schild-flat`: 180 → 178 nodes. `petals`/`bloom-flat`/`aurora-flat`: byte-identical.
+A/B snapshots: `before-stepfit-opencorner` (ba62a3b) frozen for the /labs/ab review.
+
+**Follow-ups.** (a) The DP's own near-straight C⁰ joints on open edges remain (a ~4° kink
+node where the boundary bends into a junction's AA neighbourhood — pre-existing
+behaviour, now more visible next to snapped corners). (b) The veto threshold is
+calibrated on tier 0+1 with gates green at 0.12; if AbLab review surfaces a soft-gradient
+case posterized by a blocked 0.12–0.24 union, the flanking-population flatness (not just
+the jump) is the next discriminator. (c) The S>64 gate comment in segment.ts still
+overclaims; the veto now covers the un-gated regime it left open.
