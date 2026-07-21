@@ -70,7 +70,13 @@ export interface SegmentOptions {
    * reverted profileCliff veto: that measured contrast at the pair's colour seam
    * (inverted between real bg-reunite and fake, see §0 history); this measures
    * contrast across EMPTY parameter space. Calibrated on tier 0+1: honest
-   * unions sit ≈0; the degenerate step-pastes measure 0.29–0.75. ≥1 disables.
+   * unions sit ≈0; the degenerate step-pastes measure 0.29–0.75. The veto fires
+   * only when the FLAT-FLANK condition also holds — one of the two groups is
+   * itself a near-flat colour block (see FLAT_FLANK_RES): pieces of a smooth
+   * field can jump across a gap their own interior trend explains, and blocking
+   * those merely reorders the merge sequence, perturbing the strided sample
+   * stream and thus the fitted paint (radial-glow's re-centred glow, §10.3).
+   * Effectively disabled at ≥ 1.2 (the Oklab ΔE ceiling).
    */
   maxUnwitnessedJump: number
   /**
@@ -594,7 +600,18 @@ export function segmentImage(
           fit &&
           fit.oklabResidual <= opts.mergeTol &&
           profileGap(fit.gradient, union) <= opts.maxProfileGap &&
-          unwitnessedJump(fit.gradient, union) <= opts.maxUnwitnessedJump
+          (unwitnessedJump(fit.gradient, union) <= opts.maxUnwitnessedJump ||
+            // FLAT-FLANK CONDITION: an unwitnessed jump is fatal only when one of
+            // the pair is itself a (near-)flat colour block — a flat block has no
+            // interior colour trend that could ever bridge the gap, so the step is
+            // pure invention (measured flat sides of the true pastes: ≤ 0.0055).
+            // When BOTH sides carry interior spread they are pieces of a smooth
+            // field whose union the samples genuinely trend across (radial-glow /
+            // bg-ramp accepted-merge minima: ≥ 0.0156), and vetoing them would not
+            // even change topology — just reorder the merges, which perturbs the
+            // strided sample stream and thus the FITTED PAINT (radial-glow's glow
+            // re-centred off a different sample subset; user-reported, §10.3).
+            Math.min(solidResidual(samples.get(gi)!), solidResidual(samples.get(gj)!)) > FLAT_FLANK_RES)
         ) {
           result = { res: fit.oklabResidual, samples: union }
         }
@@ -1282,6 +1299,45 @@ function assembleFromGroupId(
     labels[i] = g < 0 ? -1 : rank[g]
   }
   return { palette, labels, counts, ms, fineSegments: S, regionSamples }
+}
+
+/**
+ * A group whose samples sit within this RMS Oklab ΔE of their own mean is a FLAT
+ * colour block for the unwitnessed-jump veto's flat-flank condition. Measured
+ * 2026-07-21 (docs §10.3): the true step-pastes' flat sides are ≤ 0.0055
+ * (gradient-flat's white circle 0.0000 / corner sliver 0.0048, nebula-png white
+ * 0.0000 / sliver 0.0055, hairlines bg + bars 0.0000); the honest smooth-field
+ * pairs' minimum sides are ≥ 0.0156 (radial-glow) / 0.0190 (bg-ramp). 0.008
+ * sits in the ~3× gap between the populations.
+ */
+const FLAT_FLANK_RES = 0.008
+
+/** RMS Oklab ΔE of a sample set from its own mean colour — how far the group is
+ *  from being a single flat colour. */
+function solidResidual(s: RegionSamples): number {
+  if (s.n === 0) return 0
+  let mL = 0
+  let mA = 0
+  let mB = 0
+  const labs: [number, number, number][] = []
+  for (let i = 0; i < s.n; i++) {
+    const o = srgbToOklab(s.rs[i], s.gs[i], s.bs[i])
+    labs.push(o as unknown as [number, number, number])
+    mL += o[0]
+    mA += o[1]
+    mB += o[2]
+  }
+  mL /= s.n
+  mA /= s.n
+  mB /= s.n
+  let sq = 0
+  for (const o of labs) {
+    const dl = o[0] - mL
+    const da = o[1] - mA
+    const db = o[2] - mB
+    sq += dl * dl + da * da + db * db
+  }
+  return Math.sqrt(sq / s.n)
 }
 
 /**

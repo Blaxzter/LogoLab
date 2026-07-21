@@ -1211,7 +1211,9 @@ annulus' teal ∪ red, bg-ramp-twin's blue ∪ green shape pair (the case's desi
 
 **Fix 1 — the unwitnessed-jump veto** (`SegmentOptions.maxUnwitnessedJump`, default
 0.12). A union is rejected when its fitted gradient makes an Oklab ΔE jump larger than
-the threshold across a SAMPLE-FREE stretch of parameter t (flanking-bin pooled means).
+the threshold across a SAMPLE-FREE stretch of parameter t (flanking-bin pooled means)
+**AND one of the two groups is itself a near-flat colour block** (`FLAT_FLANK_RES`
+0.008 — the flat-flank condition, added after the user's /labs/ab review, below).
 A genuine smooth field is witnessed everywhere along its own axis; a genuine reunite
 (nebula's field outside the ring re-joining the hole) OVERLAPS in t; the step-paste
 concentrates its full contrast in empty bins. This is NOT the reverted `profileCliff`
@@ -1227,6 +1229,25 @@ its shape's class for the split to carve out; bloom's layers-integration test lo
 and its load-bearing merge-time unions measure > 0.26 — no threshold serves both). FLAT
 markers keep the veto (they exist to hand-fix fake regions; disabling on their account
 would resurrect the fakes).
+
+**The flat-flank condition (the /labs/ab review's catch).** The first cut vetoed on the
+jump alone, and the user's review caught `radial-glow` REGRESSING: the glow re-centred
+and grew ring artifacts — while every gate stayed green (on gradient art the gates score
+boundary geometry, and radial-glow's authored geometry is just the frame; the PAINT is
+gate-blind). Root cause is subtle: the veto did NOT change radial-glow's topology (one
+region either way, verified) — it changed the greedy merge ORDER. The old sequence
+freely merged far-apart pieces of the smooth field via near-exact step fits (harmless
+there — everything fuses into one region regardless); vetoing them re-routed the
+sequence, and since each merge re-strides the union's samples (`strideConcat`), the
+final region carried a DIFFERENT sample subset — and Stage 2 fitted a different glow off
+it. Instrumenting every res/gap-passing pair of the old sequences gave the separator:
+the true pastes always have a FLAT side (min-side solid residual ≤ 0.0055: gradient-flat
+white 0.0000 / sliver 0.0048, nebula-png 0.0000 / 0.0055, hairlines 0.0000 ×3) while
+the smooth-field pairs never do (min side ≥ 0.0156 radial-glow, ≥ 0.0190 bg-ramp — a
+~3× gap; `FLAT_FLANK_RES` 0.008 sits in it). With the condition, radial-glow @ 0.12 is
+**byte-identical to the pre-fix baseline** and every step-paste veto still fires.
+Physical reading: a flat block has no interior colour trend that could ever bridge the
+gap (the step is pure invention); a ramped piece's own trend explains its side of it.
 
 **Cause 2 — open edges never got the §10.2 corner snap.** `snapCornerToArms` + cap-trim
 lived only in `fitCorneredLoop` (closed loops). gradient-flat's triangle outline is an
@@ -1266,8 +1287,9 @@ A/B snapshots: `before-stepfit-opencorner` (ba62a3b) frozen for the /labs/ab rev
 
 **Follow-ups.** (a) The DP's own near-straight C⁰ joints on open edges remain (a ~4° kink
 node where the boundary bends into a junction's AA neighbourhood — pre-existing
-behaviour, now more visible next to snapped corners). (b) The veto threshold is
-calibrated on tier 0+1 with gates green at 0.12; if AbLab review surfaces a soft-gradient
-case posterized by a blocked 0.12–0.24 union, the flanking-population flatness (not just
-the jump) is the next discriminator. (c) The S>64 gate comment in segment.ts still
-overclaims; the veto now covers the un-gated regime it left open.
+behaviour, now more visible next to snapped corners). (b) ~~flanking-population flatness
+as the next discriminator~~ — RESOLVED same day as the flat-flank condition above, after
+the user's review caught radial-glow. (c) A gate for PAINT on gradient art does not
+exist — radial-glow's regression was invisible to every geometry gate and was caught by
+EYE in /labs/ab; a fitted-paint-vs-source raster ΔE gate on the gradient tier-0 cases
+would have caught it mechanically.
