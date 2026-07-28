@@ -71,14 +71,16 @@ const RES = 512
  */
 const KNOWN_DEFECTS: Record<string, string> = {
   // --- tier 0 (docs/vectorization-benchmarks.md §7) ------------------------------------
-  // The §10 driver case, authored deliberately red 2026-07-21 (§10.5): a 14-tooth gear
-  // whose corners sit 7.5–12.5px apart @512 — every chord above the answer sheet's 7px
-  // grading floor, cleanly raster-resolved, yet inside the wash zone of the fit's FIXED
-  // ±4px corner window + 5px apex merge. Boundary stays sub-tolerance (0.22/0.78) while
-  // 39 of 60 corners melt — only the distance-blind corner gate can see it, and neither
-  // the corner-turn veto nor localScaleK moves it (both gate the SNAPS; this loss is in
-  // the FIT). Closing it needs the scale-aware fit ε / detector windows — §10's open half.
-  'gear-teeth': 'corners 21/60 (35% < 80%) — fixed corner window melts well-resolved small teeth',
+  // gear-teeth (the §10 driver case, authored deliberately red 2026-07-21, "corners 21/60
+  // — fixed corner window melts well-resolved small teeth") was here until 2026-07-28:
+  // the measured root cause was NOT the hypothesized apex-merge/window wash but (a) the
+  // detector's 70° threshold sitting ABOVE the 60° the scorer and beautify define as
+  // sharp — the gear's 67.3° roots were structurally invisible — and (b) the corner
+  // snap's fixed 3px arm gap + unconditional reconstruction misplacing short-armed
+  // corners whose raw lattice apex was already sub-px correct. Aligning the threshold at
+  // 60° and making the snap scale-aware (armGap, short-arm bypass, displacement cap,
+  // arc-scaled presmooth, CORNER_MERGE 3) took corners 21/60 → 51/60 (85%), chamfer
+  // 0.22 → 0.18, p95 0.78 → 0.50 — docs/vectorization-benchmarks.md §10.6.
   // gradient-flat ("p95 6.3px — edge pulled on flats bordering the gradient bg") was here
   // until 2026-07-21: two compounding causes fixed together — the Step-3c step-fit merge
   // handed the gradient's corner band to the WHITE circle's colour class (unwitnessed-jump

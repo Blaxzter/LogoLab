@@ -24,9 +24,14 @@ export interface PlanarFitOptions {
   /**
    * Macro-turn angle (deg) above which an interior staircase vertex is a CORNER and
    * is PINNED through pre-smoothing — so a sharp valley/point isn't melted into a
-   * curve before the fitter sees it. 70° catches the genuinely sharp features yet
-   * leaves smooth shapes (even tiny circles) untouched. ≥180 disables (pre-smoothing
-   * pins only endpoints, the legacy behaviour — used to assert byte-identity).
+   * curve before the fitter sees it. 60° = the ONE definition of "sharp" the whole
+   * pipeline shares (geomScore.sharpCorners and planarBeautify's CORNER_TURN both
+   * call ≥60° a corner; the detector demanding 70° made every 60–70° authored
+   * corner structurally invisible — gear-teeth's 67.3° roots, §10.6). Smooth shapes
+   * stay untouched: even at 60° a clean arc trips the ±4px window only below
+   * ~7.6px local radius, and a tiny closed blob collapses to <2 apexes, which the
+   * cornered path already rejects. ≥180 disables (pre-smoothing pins only
+   * endpoints, the legacy behaviour — used to assert byte-identity).
    */
   cornerTurnDeg: number
   /**
@@ -89,7 +94,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   // art keeps this value (the bump worsened the headphones-grad seam past tol).
   lineCost: 3.9,
   cubicCost: 4,
-  cornerTurnDeg: 70,
+  cornerTurnDeg: 60,
   refineJunctions: false,
   arcSnap: true,
   junctionReseat: true,
@@ -108,6 +113,12 @@ const MAX_FIT_POINTS = 64
 const MAX_EVIDENCE_WINDOW = 24
 /** ±px window the macro-turn corner test looks across (spans the unit staircase). */
 const CORNER_WINDOW = 4
+/** Apex-merge distance for the loop/open corner detectors (§10.6): sits between
+ *  the two scales it must separate — ABOVE a rasterized tip's shoulder pair
+ *  (≤ ~2px), BELOW the smallest corner spacing the corpus asks the tracer to keep
+ *  (gear-teeth's 7.5px chords). At the old 5 it fused real corner pairs 3–5px
+ *  apart; 3 measured +5 recovered corners on gear-teeth, no spurious apexes. */
+const CORNER_MERGE = 3
 
 // --- vector helpers ---------------------------------------------------------
 const sub = (a: Vec, b: Vec): Vec => ({ x: a.x - b.x, y: a.y - b.y })
@@ -558,6 +569,33 @@ function polylineNodes(keyIdx: number[], dense: Vec[]): PathNode[] {
 
 const SNAP_GAP = 3 // skip this many px nearest the tip (the rounded part) per arm
 const SNAP_SPAN = 14 // …and fit the arm line over up to this many px beyond the gap
+
+/**
+ * SCALE-AWARE snap gap (§10.6): the fixed 3px gap is right for a long arm (skip
+ * the AA-rounded tip, plenty of evidence beyond), but on a SHORT inter-corner arc
+ * it discards most of the arm — a gear tooth's ~8-step chord keeps only ~5
+ * phase-noise samples, and the fitted arm line misplaces the apex 2.6–4.4px (past
+ * the scorer's 2.5px radius). The gap scales with the arc so short arms keep their
+ * evidence: ≥13 steps keep the full 3px gap (long-arm behaviour byte-identical);
+ * an 8-step chord drops to gap 1. The erosion risk the gap guards against shrinks
+ * with the same scale — a corner whose arms are that short has sub-px rounding.
+ */
+function armGap(steps: number): number {
+  return Math.min(SNAP_GAP, Math.max(1, ((steps - 1) / 4) | 0))
+}
+
+/**
+ * SCALE-AWARE smoothing for an inter-corner arc (§10.6): presmooth exists to melt
+ * a LONG staircase before fitting; a short arc between two snapped corners has
+ * almost no staircase to melt, and each pass bends its few interior points inward
+ * — the fitted end tangents rotate with them, and a 67° authored joint reads
+ * < 60° (not-a-corner) off geometry the smoothing invented. Full passes from 16
+ * points up (long-arc behaviour unchanged), one pass down to 9, raw below.
+ */
+function arcSmoothPasses(passes: number, arcLen: number): number {
+  return arcLen >= 16 ? passes : arcLen >= 9 ? Math.min(passes, 1) : 0
+}
+
 /** A straight arm may extend its sample window this far (see armSamples). */
 const SNAP_SPAN_MAX = 40
 /** Max perp deviation (px) for an extension point to count as "still the same
@@ -596,7 +634,7 @@ export function armLine(pts: Vec[]): { c: Vec; d: Vec } {
  * corner when the arms are near-parallel or the intersection runs away (a curved
  * arm), so a bad fit can never push the apex off into space.
  */
-function snapCornerToArms(pts: Vec[], c: number, gap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0): Vec {
+function snapCornerToArms(pts: Vec[], c: number, inGap: number, outGap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0): Vec {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
   // Base window [gap..span], then extend up to `max` while the arm stays COLLINEAR.
@@ -606,7 +644,8 @@ function snapCornerToArms(pts: Vec[], c: number, gap: number, inSpan: number, ou
   // error (the 2.78px left-tip overshoot). Straight arms earn the longer window
   // (3 steps nail the slope); a curved arm fails the collinearity test at its first
   // extension and keeps the base window, so ring/blob corners are unmoved.
-  const collect = (sign: -1 | 1, span: number, max: number): Vec[] => {
+  // Gaps are per-side (armGap): a short inter-corner arc keeps its evidence.
+  const collect = (sign: -1 | 1, gap: number, span: number, max: number): Vec[] => {
     const out: Vec[] = []
     for (let o = gap; o <= span; o++) out.push(pts[wrap(c + sign * o)])
     let line = out.length >= 2 ? armLine(out) : null
@@ -619,8 +658,18 @@ function snapCornerToArms(pts: Vec[], c: number, gap: number, inSpan: number, ou
     }
     return out
   }
-  const inPts = collect(-1, inSpan, inMax)
-  const outPts = collect(1, outSpan, outMax)
+  // SHORT-ARM bypass (§10.6): reconstruction (arm-line intersection) exists to
+  // recover an apex the raster ERODED — a shallow tip whose true corner sits px
+  // past the lattice. It needs arm evidence to earn that (slope error divides by
+  // tan(tip angle)). A corner whose neighbours sit < ~8 steps away has arms too
+  // short to fit and erosion too small to matter: its RAW cluster apex is already
+  // sub-px correct (gear-teeth measured median 0.99px), while the reconstruction
+  // from 3–5 phase-noise samples lands 2.6–7.9px off. Keep the lattice apex.
+  // (The threshold was SWEPT: raising it to 11/14 collapses recall to 57–62% —
+  // medium arms genuinely profit from reconstruction; only the shortest do not.)
+  if (Math.min(inSpan, outSpan) < SNAP_GAP + 4) return { x: pts[c].x, y: pts[c].y }
+  const inPts = collect(-1, inGap, inSpan, inMax)
+  const outPts = collect(1, outGap, outSpan, outMax)
   if (inPts.length < 2 || outPts.length < 2) return { x: pts[c].x, y: pts[c].y }
   const a = armLine(inPts)
   const b = armLine(outPts)
@@ -631,7 +680,18 @@ function snapCornerToArms(pts: Vec[], c: number, gap: number, inSpan: number, ou
   const t = (rx * -b.d.y - ry * -b.d.x) / det
   const ix = a.c.x + t * a.d.x
   const iy = a.c.y + t * a.d.y
-  if (dist({ x: ix, y: iy }, pts[c]) > Math.max(inSpan, outSpan)) return { x: pts[c].x, y: pts[c].y }
+  // SCALE-AWARE displacement cap (§10.6): how far the reconstructed apex may move
+  // off the lattice corner is bounded by the EVIDENCE. A long-armed corner (an
+  // eroded shallow star tip) legitimately reconstructs several px past the lattice
+  // vertex and its arm fits have the samples to earn that. A SHORT-armed corner is
+  // the opposite on both counts: its arm lines are phase-noise (the intersection
+  // wanders px off a corner whose raw vertex is already sub-px correct — a gear
+  // tooth's lattice corner beats its own reconstruction), and a corner that small
+  // carries sub-px erosion, so there is nothing to reconstruct. Past the cap we
+  // keep the lattice corner.
+  const shortSpan = Math.min(inSpan, outSpan)
+  const allow = shortSpan >= SNAP_SPAN ? Math.max(inSpan, outSpan) : Math.max(2, 0.5 * shortSpan)
+  if (dist({ x: ix, y: iy }, pts[c]) > allow) return { x: pts[c].x, y: pts[c].y }
   return { x: ix, y: iy }
 }
 
@@ -641,9 +701,13 @@ function snapCornerToArms(pts: Vec[], c: number, gap: number, inSpan: number, ou
  * vertices is collapsed to its geometric APEX (the vertex farthest from its window
  * chord), and apexes within `mergeDist` px fuse (a rasterized tip is often a 1-px
  * plateau = two "shoulder" vertices, possibly split across the loop seam). Sorted
- * ascending. `turnDeg ≥ 180` ⇒ ∅ (disabled).
+ * ascending. `turnDeg ≥ 180` ⇒ ∅ (disabled). See CORNER_MERGE for why the fuse
+ * distance is 3. (Two §10.6 variants were tried and MEASURED WORSE on the real
+ * pipeline: a two-scale win∪win−1 apex union — extra fine apexes poison their
+ * neighbours' fitted tangents — and a ±2px fine-turn apex re-localization — a
+ * staircase reads ~90° at ordinary step vertices too.)
  */
-export function detectLoopCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = 5): number[] {
+export function detectLoopCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = CORNER_MERGE): number[] {
   const n = pts.length
   if (turnDeg >= 180 || n < 2 * win + 1) return []
   const wrap = (i: number): number => ((i % n) + n) % n
@@ -706,13 +770,15 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     const next = C[(k + 1) % C.length]
     const toPrev = wrap(c - prev)
     const toNext = wrap(next - c)
-    const inSpan = Math.min(SNAP_SPAN, Math.max(SNAP_GAP + 1, toPrev - 1))
-    const outSpan = Math.min(SNAP_SPAN, Math.max(SNAP_GAP + 1, toNext - 1))
+    const inGap = armGap(toPrev)
+    const outGap = armGap(toNext)
+    const inSpan = Math.min(SNAP_SPAN, Math.max(inGap + 1, toPrev - 1))
+    const outSpan = Math.min(SNAP_SPAN, Math.max(outGap + 1, toNext - 1))
     // Collinear straight arms may grow their evidence window up to SNAP_SPAN_MAX,
     // still never past the neighbouring corner.
-    const inMax = Math.min(SNAP_SPAN_MAX, Math.max(SNAP_GAP + 1, toPrev - 1))
-    const outMax = Math.min(SNAP_SPAN_MAX, Math.max(SNAP_GAP + 1, toNext - 1))
-    return snapCornerToArms(pts, c, SNAP_GAP, inSpan, outSpan, inMax, outMax)
+    const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1))
+    const outMax = Math.min(SNAP_SPAN_MAX, Math.max(outGap + 1, toNext - 1))
+    return snapCornerToArms(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
   })
   // Drop corners whose snapped point coincides with the previous (a shoulder pair
   // that both resolved onto the same apex) — incl. the cyclic first/last pair.
@@ -743,19 +809,20 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
       if (i === b) break
       i = wrap(i + 1)
     }
-    // Censor the cap remnants before pinning: the SNAP_GAP staircase points nearest
+    // Censor the cap remnants before pinning: the gap staircase points nearest
     // each corner are the rounded/eroded part — the exact points snapCornerToArms
     // skips when placing the apex. Left in, they sit laterally OFF the apex→arm
     // line (an eroded shallow tip keeps a 1px plateau there), so the fit chases
     // them and arrives at the snapped corner from the wrong side — sharp-star's
-    // right tip rendered as an S-hook with an extra node. Trim only while ≥ 2
-    // interior points survive so short arcs (a small checker cell edge) keep
-    // their evidence.
-    const trim = Math.min(SNAP_GAP, Math.max(0, (arc.length - 4) >> 1))
+    // right tip rendered as an S-hook with an extra node. The trim mirrors the
+    // scale-aware armGap (a short arc's snap kept its near-corner evidence, so
+    // the arc fit keeps it too), and only while ≥ 2 interior points survive so
+    // short arcs (a small checker cell edge) keep their evidence.
+    const trim = Math.min(armGap(arc.length - 1), Math.max(0, (arc.length - 4) >> 1))
     const kept = arc.slice(trim, arc.length - trim)
     kept[0] = { x: snap[k].x, y: snap[k].y }
     kept[kept.length - 1] = { x: snap[(k + 1) % arcs].x, y: snap[(k + 1) % arcs].y }
-    fitted.push(fitOpenArc(presmooth(kept, opts.smoothPasses, true), opts))
+    fitted.push(fitOpenArc(presmooth(kept, arcSmoothPasses(opts.smoothPasses, kept.length), true), opts))
   }
 
   // Stitch into a closed node list: each shared corner is one node carrying the
@@ -784,7 +851,7 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
  * so a vertex's two staircase shoulders never yield two corners. The endpoint
  * regions (± `win`, junction anchors) are excluded, as in `detectCorners`.
  */
-export function detectOpenCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = 5): number[] {
+export function detectOpenCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = CORNER_MERGE): number[] {
   const n = pts.length
   if (turnDeg >= 180 || n < 2 * win + 1) return []
   const thr = Math.cos((turnDeg * Math.PI) / 180)
@@ -858,13 +925,15 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
     const snappedAll: Vec[] = C.map((c, k) => {
       const toPrev = c - (k > 0 ? C[k - 1] : 0)
       const toNext = (k < C.length - 1 ? C[k + 1] : n - 1) - c
+      const inGap = armGap(toPrev)
+      const outGap = armGap(toNext)
       // Same spans as the loop version, additionally clamped so no window index
       // leaves [0, n-1] (open: there is nothing to wrap onto).
-      const inSpan = Math.min(SNAP_SPAN, Math.max(SNAP_GAP + 1, toPrev - 1), c)
-      const outSpan = Math.min(SNAP_SPAN, Math.max(SNAP_GAP + 1, toNext - 1), n - 1 - c)
-      const inMax = Math.min(SNAP_SPAN_MAX, Math.max(SNAP_GAP + 1, toPrev - 1), c)
-      const outMax = Math.min(SNAP_SPAN_MAX, Math.max(SNAP_GAP + 1, toNext - 1), n - 1 - c)
-      return snapCornerToArms(pts, c, SNAP_GAP, inSpan, outSpan, inMax, outMax)
+      const inSpan = Math.min(SNAP_SPAN, Math.max(inGap + 1, toPrev - 1), c)
+      const outSpan = Math.min(SNAP_SPAN, Math.max(outGap + 1, toNext - 1), n - 1 - c)
+      const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1), c)
+      const outMax = Math.min(SNAP_SPAN_MAX, Math.max(outGap + 1, toNext - 1), n - 1 - c)
+      return snapCornerToArms(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
     })
     // Drop corners whose snap collapsed onto the previous breakpoint or an endpoint.
     const idx: number[] = []
@@ -885,8 +954,9 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
     const fitted: PathNode[][] = []
     for (let k = 0; k + 1 < bounds.length; k++) {
       const piece = pts.slice(bounds[k], bounds[k + 1] + 1)
-      let trimS = k > 0 ? SNAP_GAP : 0
-      let trimE = k + 1 < bounds.length - 1 ? SNAP_GAP : 0
+      const pieceGap = armGap(piece.length - 1)
+      let trimS = k > 0 ? pieceGap : 0
+      let trimE = k + 1 < bounds.length - 1 ? pieceGap : 0
       // Trim only while ≥ 2 interior points survive (short pieces keep evidence).
       while (trimS + trimE > Math.max(0, piece.length - 4)) {
         if (trimE >= trimS && trimE > 0) trimE--
@@ -896,7 +966,7 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
       const kept = piece.slice(trimS, piece.length - trimE).map((p) => ({ x: p.x, y: p.y }))
       kept[0] = { x: pins[k].x, y: pins[k].y }
       kept[kept.length - 1] = { x: pins[k + 1].x, y: pins[k + 1].y }
-      fitted.push(fitOpenArc(presmooth(kept, opts.smoothPasses, true), opts))
+      fitted.push(fitOpenArc(presmooth(kept, arcSmoothPasses(opts.smoothPasses, kept.length), true), opts))
     }
 
     // Stitch: each interior breakpoint is ONE hard node — arriving hIn, leaving
@@ -943,7 +1013,7 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
 }
 
 /** Fitted-turn floor for an open-edge breakpoint (30°): well below any true
- *  detected corner (the detector's own floor is 70°), well above the ~3° of a
+ *  detected corner (the detector's own floor is 60°), well above the ~3° of a
  *  smoothly absorbed jog. */
 const COS_WEAK_CORNER = Math.cos((30 * Math.PI) / 180)
 

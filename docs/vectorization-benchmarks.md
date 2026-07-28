@@ -27,7 +27,6 @@ guardrails):
 
 | # | defect | reproducing case | number | details |
 |---|---|---|---|---|
-| 2b | **Notch chamfer** — the last sharp-star residue after §10.2 (corner gate PASSES, 9/11): two of five 80° inner notches trace as a 2-node pair ~3.5px apart (a slight chamfer) instead of one sharp corner — `detectLoopCorners`' 70°/±4px window misses them, staircase-phase dependent, so they never enter the snap path | `sharp-star` (tier 0, gated, **passes**) | 2 notches of 10 corners; sub-gate, visible only zoomed | §10.2 follow-up (b) |
 | 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.22px, p95 0.74px (was 1.44/24.8 — the p95 was the seam occluded under the circle, §9.6) | §7; +0.09 chamfer from the §9.5 fix (label-level endpoint routing sends the whole sliver to one side) |
 | 6 | **Thin features at LOW resolution** — below ~256px the sub-pixel bars still break up (the @512 defect is fixed, §9.5; the gate runs at 512) | `hairlines` @256 (ungated resolution) | chamfer 0.88px, p95 9.77px @256 (was 2.44/27.8 before §9.6 — part of that was bar-crossing occlusion; the remaining 9.77 is real) | §9.5 |
 | 6b | **Bar caps render pointed / domed, not square** (user-reported 2026-07-20, pre-existing). A ≤4px cap + both 90° shoulders fit inside `detectLoopCorners`' ±4px window as ONE sub-threshold cluster → one apex → a pointed end; a wider cap keeps two shoulders but its cap-arm evidence is ~4 AA-ragged points, so the shoulder snaps land slanted (58,49.5 vs 65,51 on the 7px bar) and the cap fits as a shallow dome. Sub-gate (`CORNER_MIN_EDGE` 7 excludes cap corners by design; chamfer passes) — needs a cap/tip discriminator (two ~90° turn peaks inside one cluster ⇒ split, don't fuse) | `hairlines` @512 bar ends | visible at zoom; all boundary gates pass | §10.2 exit note |
@@ -35,11 +34,24 @@ guardrails):
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 11 | **Small-region drop at LOW resolution** — a 176px region @256 falls under both the share floor and the flat-interior evidence floor, so §9.4's protection cannot see it (the gate runs @512, where the same region is 4× larger and survives) | `flute` @256 (ungated resolution) | 8/9 @256: `#974827` 176px painted `#893925`, ΔE 8.0 | found during §9.7 (pre-existing — present at c3c82cb) |
-| 12 | **Scale-blind fit ε / corner window melts well-resolved small sharp features** — corners 7.5–12.5px apart sit inside the fit's FIXED ±4px window + 5px apex merge, so most melt while boundary stays sub-tolerance; only the distance-blind corner gate sees it. HIGH product relevance (fine detail on flat icons); neither the corner-turn veto nor `localScaleK` moves it (both gate the SNAPS; this loss is in the FIT). The case was AUTHORED deliberately red as §10's driver | `gear-teeth` (tier 0, gated, in `KNOWN_DEFECTS`) | corners **21/60 = 35%** (< 80%); chamfer/p95 0.22/0.78 pass | §10.5 |
 | 13 | **Soft-alpha feather survives as a translucent sliver layer** — an AI-export PNG with a wide (3–6px) alpha feather around opaque shapes keeps an RGBA palette entry (alpha-mode < 255) that traces as dozens of arc-shaped translucent slivers hugging every letter edge. The feather cluster has the exact blend profile (`edgy=1.00`, `real=false`) but `classifyBlends` cannot explain it: its second endpoint is TRANSPARENCY, and the colour is a 3-way mix (parent hue × under-glow × alpha ramp) sitting 12.6 RGB off the nearest accepted-pair segment (eps 10) — the pairwise RGB segment model has no alpha dimension. With 0.94% share it clears `minShare` (0.7%) and carries modal protection (112 exact repeats), so no dial removes it. HIGH product relevance (soft-alpha is the default AI-generator export). Workaround that fully works: delete the swatch in the palette editor (locked 2-colour palette: 575 → 240 nodes, single clean edge). Candidate fix: an alpha-aware blend endpoint in `classifyBlends` (feather = edge-local + no real evidence + alpha-mode < 255 + RGB explainable as parent×t toward the local composite), evidence-gated against real authored translucent flats (alpha VARIANCE separates a ramping feather from a one-alpha flat) | `100 years tour.png` (examples/test-files, ungated) | sliver layer: 54 subpaths / 208 nodes @2048, alpha-mode 188 | found 2026-07-21 (user-reported); repro + numbers in this row |
 
-Recently closed (the pattern an exit should follow): **slid junction at a near-tangent
-crossing** (user-reported: gradient-flat's straight hypotenuse "pulled into the circle"
+Recently closed (the pattern an exit should follow): **scale-blind corner detection /
+snap melts well-resolved small sharp features** (`gear-teeth`, was #12 — §10's driver
+case, authored deliberately red) — closed 2026-07-28, **§10.6** is the record: the
+measured histogram FALSIFIED the §10.5 window/apex-merge hypothesis (fusion losses: 0;
+ε-melts of a detected corner: 0) and located the loss in (a) the detector's 70° turn
+threshold sitting above the 60° the scorer and planarBeautify both define as sharp —
+the gear's 67.3° roots were structurally invisible — and (b) the corner snap's fixed
+3px arm gap + unconditional arm-intersection reconstruction misplacing short-armed
+corners whose raw lattice apex was already sub-px correct. One definition of sharp
+(60°) + a scale-aware snap (armGap, short-arm bypass, displacement cap, arc-scaled
+presmooth, `CORNER_MERGE` 3): corners **21/60 → 51/60 (85%)**, chamfer 0.22 → 0.18,
+p95 0.78 → 0.50, entry deleted from `KNOWN_DEFECTS` by the CI contract. The same
+change closed **#2b (notch chamfer)** — `sharp-star` corner recall 9/11 → **11/11**,
+the two 80° notches now single sharp corners (their window-diluted 60–70° readings
+clear the aligned threshold) — and lifted `cross-bars` 8/10 → **10/10**.
+**Slid junction at a near-tangent crossing** (user-reported: gradient-flat's straight hypotenuse "pulled into the circle"
 where it crosses the disc — an all-gates-green, sub-tolerance defect visible at 5×) —
 closed 2026-07-21, **§10.4** is the record: the label-map junction slides up to 8.4px
 along the shared tangent (the colour needle there is quantization-invisible), and the
@@ -97,16 +109,18 @@ list until 2026-07-21: re-measured against the §10.4 tracer it newly crossed tw
 gates and degraded its own target cases, so the flag was REMOVED — §10.4; its machinery
 survives as the evidence-gated converged-pair weld's engine.)
 
-Open research direction — now with a gated driver case (#12): the fit/snap tolerances are
-ABSOLUTE px and therefore
+Open research direction: the fit/snap tolerances are ABSOLUTE px and therefore
 scale-blind — the root shape of the §9.8 checker bug. A scale-relative ε keyed to local feature
 size (medial radius) is written up in **§10**; the SNAP half is now a measured prototype
 (`PlanarFitOptions.localScaleK`, default OFF) — it SUBSUMES the §9.8 corner-turn veto (checker
 corner recall 97.2% with the veto off, k ∈ [0.10, 0.20]) and regresses no round case, but is
 byte-identical to the shipped veto on today's corpus, so it stays off pending a case that
-distinguishes them (**§10.1**). The fit-ε half is still open — and since 2026-07-21 it has a
-GATED case demanding it: `gear-teeth` (#12, §10.5), authored deliberately red, which
-`localScaleK` provably does not move.
+distinguishes them (**§10.1**). The driver case for the fit half (`gear-teeth`, was #12,
+§10.5) closed 2026-07-28 WITHOUT a scale-aware fit ε: the measured loss was in the corner
+DETECTOR's threshold and the SNAP's fixed gaps, both now scale-aware/aligned (§10.6). The
+literal fit-ε idea (openRDP / cubic-discard at `min(ε_abs, k·medial)`) remains unbuilt —
+no gated case currently demands it (gear-teeth's remaining 9 lost corners are detection
+tail + fit-tangent noise, not ε-melt; §10.6's histogram measured ε-melts at ZERO).
 
 ---
 
@@ -1474,4 +1488,85 @@ beat: scale-aware fit ε and detector windows — the corner window / apex-merge
 local feature size (medial radius per point, from a distance transform on the label map),
 instead of absolute px. The user's original framing (a detail "heat map" multiplying the
 hard px gates) is exactly this; §10's refinement (measure SCALE from the source, not node
-density) still applies.
+density) still applies. *(Closed 2026-07-28 — §10.6. The measured mechanism was NOT the
+one §10.5 predicted; the histogram below is why the diagnosis pass ran before any design.)*
+
+### 10.6 gear-teeth closes: one definition of sharp + a scale-aware corner snap (2026-07-28)
+
+**The diagnosis falsified §10.5's mechanism.** Instrumenting every stage on the gear loop
+(`src/devtest/gearDiag.ts`, kept as the repro artifact) gave the histogram — of the 39
+lost corners: **32 never detected**, **0 lost to cluster fusion or the 5px apex-merge**
+(mergeDist 2/3/5 byte-identical apex sets at the old threshold), **0 ε-melted after
+detection**, **7 misplaced by the snap** (apex evidence 0.2–1.3px from authored, fitted
+sharp node 2.6–4.4px — just past the scorer's 2.5px radius). The 32 detection losses
+decompose by authored geometry: the roots turn **67.3°** and the detector demanded
+**70°** — while `geomScore.sharpCorners` and planarBeautify's `CORNER_TURN` both define
+sharp as **60°**. The pipeline graded 60° and detected 70°: every 60–70° authored corner
+was structurally invisible, at every scale. The tips (80.1°) clear 70° on paper but the
+±4px window dilutes the measured turn (min 53°, median 72° across staircase phases) —
+phase decides. Shrinking the window ALONE measures WORSE (win ≤ 3 quantizes turns into
+~45°/63° buckets below even 60°).
+
+**What shipped (`planarFit.ts`).**
+- **`cornerTurnDeg` 70 → 60** — the one sharpness definition, aligned with the scorer
+  and beautify. The smooth-disc control (992-pt loop, r=124) emits zero apexes down to
+  55°/win3, so the change is invisible to clean round art.
+- **Scale-aware snap arm gap (`armGap`)** — the fixed `SNAP_GAP` 3 discarded 3 of an
+  ~8-step arm's points, leaving phase noise; the gap now scales with the inter-corner
+  arc (≥13 steps keep the full 3, an 8-step chord drops to 1), and the cap-trim before
+  each arc fit mirrors it.
+- **Short-arm reconstruction bypass** — arm-intersection reconstruction exists to
+  recover ERODED apexes (shallow star tips) and needs long-arm evidence to earn its
+  move; when either arm is shorter than `SNAP_GAP+4` steps the raw cluster apex is kept
+  (measured median error 0.99px — better than its own reconstruction). SWEPT: raising
+  the bypass to 11/14 collapses recall to 57–62% — medium arms genuinely profit from
+  reconstruction; only the shortest do not.
+- **Displacement cap** — an accepted reconstruction may move the apex at most
+  `max(2, 0.5·shortSpan)` px (full-span arms keep the legacy `max(inSpan,outSpan)`), so
+  a noisy intersection can never carry a corner out of tolerance.
+- **Arc-scaled presmooth (`arcSmoothPasses`)** — 2 smoothing passes on a sub-16-step
+  inter-corner arc bend its few interior points inward and rotate the fitted end
+  tangents (a 67° joint reads < 60° = not-a-corner off invented geometry); full passes
+  from 16 steps, one from 9, raw below.
+- **`CORNER_MERGE` 5 → 3** — the apex-fuse distance now sits between the two scales it
+  must separate: above a rasterized tip's shoulder pair (≤ ~2px), below the smallest
+  corner spacing the corpus keeps (7.5px chords). At 5 it fused real 3–5px corner
+  pairs; 3 measured +5 corners on gear-teeth, no spurious apexes.
+
+**Tried and MEASURED WORSE (the full 36-config sweep ran on the real pipeline —
+union × mergeDist × bypass-span × line-preference):** a two-scale win∪(win−1) apex
+UNION (fine-scale extras poison their neighbours' fitted tangents: 85.0% → 81.7%); a
+±2px fine-turn apex re-localization (a staircase reads ~90° at ordinary step vertices
+too: → 68.3%); a short-arc LINE preference undoing `FLAT_LINE_COST` below 16/24px
+(→ 78.3–80.0%). The winning config is the sweep's global optimum, and each rejected
+mechanism is one line of history here so it is not re-invented.
+
+**After @512.** `gear-teeth`: corners **21/60 → 51/60 (85.0%, gate passes, margin 5)**,
+chamfer 0.22 → **0.18**, p95 0.78 → **0.50**, parsimony 1.20 → 1.3 (+30 true corner
+nodes), `KNOWN_DEFECTS` entry deleted by the CI contract. `sharp-star`: corner recall
+9/11 → **11/11** — the two 80° notches of **§0 #2b** now trace as single sharp corners
+(their window-diluted 60–70° readings clear the aligned threshold); the #2b row is
+deleted. `cross-bars`: 8/10 → **10/10**. `hairlines`: chamfer 0.41 → **0.38**.
+`gradient-flat` 6/6 at p95 0.63, `checker` 99.1% at 0.00/0.00 — unchanged. Tier 1
+slice: all green, paint gate incl. `radial-glow` green. Suite 279/0/2.
+
+**Corpus effect (golden re-bless, for review).** The cost lands on the one pathological
+photo case: `headphones-flat` seamMax 57.64 → **79.47** (a max-statistic in the §10.2
+thin-dark-ring family), jaggedness 7.47 → **10.60**, nodes 5038 → 5498 (+9%) — while
+its meanΔE (3.928 → 3.922), SSIM (0.7923 → 0.7940) and junction clusters (121 → 119)
+all IMPROVE: at 60° the detector pins more of its noisy AA boundaries as corners, so
+the trace follows the staircase more faithfully instead of smoothing it. Accepted per
+the §10.2 precedent (off-target case, fidelity metrics improve, max-statistic noted).
+Flat-icon corpus: `nebula` 62 → 59 nodes, `aurora-flat` 171 → 163 nodes and
+meanΔE −0.013, `petals`/`bloom-flat`/`schild-flat` metric-identical. A/B vs the frozen
+`before-scale-eps` snapshot: 20 of 42 variant files changed, dominated by node-count
+SHRINK (cross-bars 1066 → 720 bytes, sharp-star 701 → 545 — single hard corners
+replacing beveled pairs); review in /labs/ab → Vs snapshot → `before-scale-eps`.
+
+**Open residue (not gated red anywhere).** gear-teeth still loses 9 corners: ~5 in the
+detection tail (window dilution at unlucky phases — the two-scale union that would find
+them costs more than it recovers) and ~4 to fit-tangent noise at correctly-placed
+nodes. The literal scale-aware fit-ε (openRDP / cubic-discard at `min(ε_abs,
+k·medial)`) remains unbuilt and currently undemanded — this fix measured ε-melts at
+ZERO. §0 #6b (bar caps) is untouched by design: a cap's two shoulders sit in ONE
+contiguous sub-threshold run, which no mergeDist change splits.
