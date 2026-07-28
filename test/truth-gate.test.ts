@@ -41,7 +41,15 @@ import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts
 import { parseGroundTruth, toRasterSpace, unscorable } from '../src/devtest/svgGround.ts'
 import { scoreGeometry, scoreRegions } from '../src/devtest/geomScore.ts'
 import { scoreDoc } from '../src/devtest/scoreboard.ts'
-import { GATED_CORPUS, evaluateTruthGates } from '../src/devtest/truthCorpus.ts'
+import {
+  GATED_CORPUS,
+  LOWRES_CORPUS,
+  LOWRES_RES,
+  LOWRES_TOL,
+  evaluateTruthGates,
+  type TruthCase,
+  type TruthTol,
+} from '../src/devtest/truthCorpus.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -121,67 +129,110 @@ const KNOWN_DEFECTS: Record<string, string> = {
   'fluent-olive': 'chamfer 7.0px, p95 97px — invents interior edges across a 3-gradient stack',
 }
 
-for (const c of GATED_CORPUS) {
-  test(`truth: ${c.name} (tier ${c.tier})`, async () => {
-    const svg = readFileSync(join(root, c.svg), 'utf8')
-    const gt = parseGroundTruth(svg)
-    const why = unscorable(gt)
-    if (why) {
-      // Not a pass and not a failure — the CASE has no usable ground truth. Saying so is the
-      // whole design: a case scored against geometry the renderer never drew is worse than an
-      // unscored one. (aurora is stroked; checker was pattern-filled until re-authored as
-      // explicit squares.)
-      console.log(`    ${c.name}: not scorable — ${why}`)
-      return
-    }
+/**
+ * Trace + score one case at one resolution and assert its gates against a defect list.
+ * Shared by the @512 loop and the @256 low-res lane — the ONLY differences between the
+ * lanes are the raster size, the tolerance set, the defect list, and whether the corner
+ * gate applies to tier 2 (see LOWRES_CORPUS's comment in truthCorpus.ts).
+ */
+async function runCase(
+  c: TruthCase,
+  res: number,
+  knownDefects: Record<string, string>,
+  defectsName: string,
+  opts: { tol?: TruthTol; skipTier2Corners?: boolean } = {},
+): Promise<void> {
+  const svg = readFileSync(join(root, c.svg), 'utf8')
+  const gt = parseGroundTruth(svg)
+  const why = unscorable(gt)
+  if (why) {
+    // Not a pass and not a failure — the CASE has no usable ground truth. Saying so is the
+    // whole design: a case scored against geometry the renderer never drew is worse than an
+    // unscored one. (aurora is stroked; checker was pattern-filled until re-authored as
+    // explicit squares.)
+    console.log(`    ${c.name}: not scorable — ${why}`)
+    return
+  }
 
-    const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-    const doc = await traceImage(img as unknown as ImageData, {
-      ...DEFAULT_VECTORIZE_OPTIONS,
-      engine: 'planar',
-      gradients: c.gradients,
-    })
-    const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
-    const r = scoreRegions(img, doc)
-    // Paint fidelity (gradient tier 0 only): RENDER the trace and score the pixels
-    // against the source. On gradient art the geometry gates are structurally blind
-    // to a paint failure (radial-glow's re-centred glow kept every gate green, §10.3);
-    // this is the gate that sees it. Skipped elsewhere — evaluateTruthGates would
-    // report it n/a anyway, so the render cost is only paid where it can gate.
-    const paint = c.gradients && c.tier === 0 ? scoreDoc(img, doc) : null
-    const gates = evaluateTruthGates({
-      samples: g.samples, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
-      trueRegions: r.trueRegions, recovered: r.recovered,
-      gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered,
-      paintMean: paint?.meanDeltaE, paintP95: paint?.p95DeltaE,
-      // Region recovery is meaningless on gradient art — a smooth ramp's 8-bit quantisation
-      // bands read as dozens of "flat regions", so a tracer that correctly fits ONE gradient
-      // would look like it dropped sixty. evaluateTruthGates returns it applicable:false, and
-      // an inapplicable gate is never counted as a pass.
-      flatArt: !c.gradients,
-      tier: c.tier,
-    })
-    const failing = gates.filter((x) => x.applicable && !x.pass)
-    const known = KNOWN_DEFECTS[c.name]
-
-    if (known) {
-      assert.ok(
-        failing.length > 0,
-        `${c.name} is listed in KNOWN_DEFECTS ("${known}") but now PASSES every gate.\n` +
-          `      That is good news — the defect is fixed. Delete its entry from KNOWN_DEFECTS\n` +
-          `      in test/truth-gate.test.ts to lock the improvement in.`,
-      )
-      return
-    }
-
-    assert.equal(
-      failing.length,
-      0,
-      `${c.name} (tier ${c.tier}) fails ${failing.length} ground-truth gate(s) @ ${RES}px:\n` +
-        failing.map((x) => `        ✗ ${x.label}: ${x.value.toFixed(2)} exceeds ${x.limit} (${x.rule})`).join('\n') +
-        `\n      This is measured against the AUTHORED SVG, not against a blessed baseline — so this\n` +
-        `      is not drift, it is wrong. Either fix the tracer, or (if the defect is understood and\n` +
-        `      accepted for now) add ${c.name} to KNOWN_DEFECTS with a one-line reason.`,
-    )
+  const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng())
+  const doc = await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: c.gradients,
   })
+  const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
+  const r = scoreRegions(img, doc)
+  // Paint fidelity (gradient tier 0 only): RENDER the trace and score the pixels
+  // against the source. On gradient art the geometry gates are structurally blind
+  // to a paint failure (radial-glow's re-centred glow kept every gate green, §10.3);
+  // this is the gate that sees it. Skipped elsewhere — evaluateTruthGates would
+  // report it n/a anyway, so the render cost is only paid where it can gate.
+  const paint = c.gradients && c.tier === 0 ? scoreDoc(img, doc) : null
+  const corners = opts.skipTier2Corners && c.tier === 2 ? {} : { gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered }
+  const gates = evaluateTruthGates({
+    samples: g.samples, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
+    trueRegions: r.trueRegions, recovered: r.recovered,
+    ...corners,
+    paintMean: paint?.meanDeltaE, paintP95: paint?.p95DeltaE,
+    // Region recovery is meaningless on gradient art — a smooth ramp's 8-bit quantisation
+    // bands read as dozens of "flat regions", so a tracer that correctly fits ONE gradient
+    // would look like it dropped sixty. evaluateTruthGates returns it applicable:false, and
+    // an inapplicable gate is never counted as a pass.
+    flatArt: !c.gradients,
+    tier: c.tier,
+    tol: opts.tol,
+  })
+  const failing = gates.filter((x) => x.applicable && !x.pass)
+  const known = knownDefects[c.name]
+
+  if (known) {
+    assert.ok(
+      failing.length > 0,
+      `${c.name} is listed in ${defectsName} ("${known}") but now PASSES every gate @ ${res}px.\n` +
+        `      That is good news — the defect is fixed. Delete its entry from ${defectsName}\n` +
+        `      in test/truth-gate.test.ts to lock the improvement in.`,
+    )
+    return
+  }
+
+  assert.equal(
+    failing.length,
+    0,
+    `${c.name} (tier ${c.tier}) fails ${failing.length} ground-truth gate(s) @ ${res}px:\n` +
+      failing.map((x) => `        ✗ ${x.label}: ${x.value.toFixed(2)} exceeds ${x.limit} (${x.rule})`).join('\n') +
+      `\n      This is measured against the AUTHORED SVG, not against a blessed baseline — so this\n` +
+      `      is not drift, it is wrong. Either fix the tracer, or (if the defect is understood and\n` +
+      `      accepted for now) add ${c.name} to ${defectsName} with a one-line reason.`,
+  )
+}
+
+for (const c of GATED_CORPUS) {
+  test(`truth: ${c.name} (tier ${c.tier})`, () => runCase(c, RES, KNOWN_DEFECTS, 'KNOWN_DEFECTS'))
+}
+
+/**
+ * The LOW-RESOLUTION lane (§0 #6/#11): the same absolute scoring at LOWRES_RES, against
+ * tolerances calibrated at THAT raster (LOWRES_TOL — truthCorpus.ts documents the
+ * calibration and the case selection). Nothing below 512 was gated before this lane, which
+ * is exactly how the scale-blindness family (absolute segmentation floors eating features
+ * that are 4× smaller @256) stayed open: the defects had no red number to beat.
+ */
+const KNOWN_DEFECTS_LOWRES: Record<string, string> = {
+  // §0 #6 — thin features at LOW resolution. The @512 defect is fixed (§9.5); below
+  // ~256px the sub-pixel bars still break up: the thinnest bars are 0.25–1.5px here.
+  hairlines: 'chamfer 0.93px, p95 9.69px @256 — the sub-256 bars break up (§0 #6)',
+  // §0 #11 — small-region drop at LOW resolution. Each of these three passes @512
+  // (tier 2 is 437/437 there, §9.7); at 256² the same authored region is 4× smaller
+  // and falls under the segmentation machinery's resolution-linked blind spots.
+  'fluent-flute-flat': '8/9 regions @256 — #974827 (176px) painted #893925, ΔE 8.0 (§0 #11)',
+  'fluent-parachute-flat': '9/10 regions @256 — #00a6ed (99px) painted #5092ff, ΔE 28.7 (§0 #11)',
+  'fluent-beverage-box-flat': '6/7 regions @256 — #d3f093 (481px) painted #c3ef3c, ΔE 36.4; p95 8.24 (§0 #11)',
+}
+
+for (const c of LOWRES_CORPUS) {
+  test(`truth @${LOWRES_RES}: ${c.name} (tier ${c.tier})`, () =>
+    runCase(c, LOWRES_RES, KNOWN_DEFECTS_LOWRES, 'KNOWN_DEFECTS_LOWRES', {
+      tol: LOWRES_TOL[c.tier],
+      skipTier2Corners: true,
+    }))
 }

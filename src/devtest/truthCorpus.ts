@@ -267,6 +267,85 @@ export const TIER_TOL: Record<0 | 1 | 2, TruthTol> = {
   },
 }
 
+/*
+ * ---------------------------------------------------------------------------
+ * The LOW-RESOLUTION lane (§0 #6/#11)
+ *
+ * The main gate runs @512 and has to (its limits are in PIXELS, calibrated at that
+ * raster) — which left everything below 512 ungated, and the scale-blindness family
+ * invisible: the segmentation floors are absolute pixel counts, so a region that
+ * survives @512 falls under them @256. This lane runs a fixed case set at LOWRES_RES
+ * with its OWN calibrated tolerances (LOWRES_TOL). The @512 numbers are not shared and
+ * not widened.
+ *
+ * Case selection (calibrateLowres.ts, 2026-07-28 — tier 0 in full + all 106 flat twins
+ * swept @256):
+ *  • all of tier 0 — the failure-mode suite graded at the resolution it was blind at.
+ *    The sweep found exactly one tier-0 failure: `hairlines` (chamfer 0.93 / p95 9.69).
+ *  • the three tier-2 cases the sweep caught dropping regions @256 — every one passes
+ *    @512 (tier 2 is 437/437 there, §9.7), so each is a pure low-res driver:
+ *      fluent-flute-flat        8/9  — #974827 176px painted #893925, ΔE 8.0 (§0 #11)
+ *      fluent-parachute-flat    9/10 — #00a6ed  99px painted #5092ff, ΔE 28.7
+ *      fluent-beverage-box-flat 6/7  — #d3f093 481px painted #c3ef3c, ΔE 36.4 (p95 8.24)
+ *  • four healthy tier-2 CONTROLS pinning the calibrated tail, so a fix for the drivers
+ *    cannot silently push the healthy population out: fluent-pencil-flat (the §9.4
+ *    protected-tip case — its small dark tip must keep surviving @256 too),
+ *    fluent-rugby-football-flat (p95 tail 2.53), fluent-nazar-amulet-flat (chamfer tail
+ *    0.60), fluent-violin-flat.
+ *
+ * No tier-1 cases: gradient art is scoring infrastructure, not the product target, and
+ * no low-res gradient defect is on the books to drive a lane entry.
+ *
+ * The CORNER gate is tier-0-only in this lane (the test passes gtCorners: undefined for
+ * tier 2). Tier-2 corner recall is ungated at EVERY resolution today, and it measures
+ * poorly at both (flute-flat: 3/10 @256, 0/9 @512 — Fluent art is drawn at 32 units, so
+ * its "corners" are tiny rounded features at any raster). Gating it for the first time
+ * inside the low-res lane would misattribute a resolution-INDEPENDENT behaviour to the
+ * low-res family; if tier-2 corners ever get gated, that is its own calibration.
+ */
+export const LOWRES_RES = 256
+
+const LOWRES_TIER2 = [
+  'fluent-flute-flat',
+  'fluent-parachute-flat',
+  'fluent-beverage-box-flat',
+  'fluent-pencil-flat',
+  'fluent-rugby-football-flat',
+  'fluent-nazar-amulet-flat',
+  'fluent-violin-flat',
+]
+
+export const LOWRES_CORPUS: TruthCase[] = [
+  ...TRUTH_CORPUS.filter((c) => c.tier === 0),
+  ...TRUTH_CORPUS.filter((c) => LOWRES_TIER2.includes(c.name)),
+]
+
+/**
+ * Tolerances for the @256 lane — MEASURED (calibrateLowres.ts, 2026-07-28), not copied.
+ *
+ * Tier 0 @256 (16 scorable cases, `hairlines` excluded as the known failure): chamfer
+ * max 0.46 (cross-bars), p95 max 1.10 (gear-teeth), parsimony max 1.77 (cross-bars).
+ * The @512 limits hold with ≥ 2× margin over that healthy population, so the lane keeps
+ * the same absolute numbers — the same strictness in px, arrived at from @256 data, not
+ * inherited. hairlines fails at 9.69 p95 (8.8× the healthy max).
+ *
+ * Tier 2 @256 (106 cases, the three droppers excluded): chamfer max 0.60
+ * (nazar-amulet), p95 max 2.53 (rugby-football), parsimony max 1.43. Limits sit ~1.6×
+ * above the healthy max — beverage-box's 8.24 p95 lands 2× outside. NOT tier 2's @512
+ * numbers (0.35/1.2): at 256 the same authored art carries 2× the relative AA and the
+ * whole population shifts up; holding the lane to @512's limits would fail 11 healthy
+ * twins for being traced at 256.
+ *
+ * The paint gate's constants (PAINT_MEAN_MAX/PAINT_P95_MAX) are shared: measured @256
+ * healthy values 1.06–1.23 mean / 2.11–2.44 p95 (vs limits 3.0/8.0, ≥ 2.4× margin) —
+ * ΔE is the same scale at every raster size.
+ */
+export const LOWRES_TOL: Record<0 | 1 | 2, TruthTol> = {
+  0: { chamfer: 1.0, p95: 2.5, parsimony: 3.0 },
+  1: TIER_TOL[1], // no tier-1 case in the lane; present so the type stays total
+  2: { chamfer: 1.0, p95: 4.0, parsimony: 3.0 },
+}
+
 export interface TruthGate {
   key: string
   label: string
@@ -358,8 +437,11 @@ export function evaluateTruthGates(s: {
   flatArt: boolean
   /** Picks the tolerances (TIER_TOL). Defaults to tier 0, whose numbers are unchanged. */
   tier?: 0 | 1 | 2
+  /** Override the tier's boundary tolerances — the @256 lane passes LOWRES_TOL[tier]
+   *  here (its limits are calibrated at ITS raster; TIER_TOL's are @512-only). */
+  tol?: TruthTol
 }): TruthGate[] {
-  const tol = TIER_TOL[s.tier ?? 0]
+  const tol = s.tol ?? TIER_TOL[s.tier ?? 0]
   const hasBoundary = s.samples > 0
   const gtCorners = s.gtCorners ?? 0
   const cornersRecovered = s.cornersRecovered ?? 0
