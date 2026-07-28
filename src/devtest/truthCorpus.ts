@@ -106,6 +106,13 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // does not move it (it gates the SNAPS; this loss is in the FIT) — the case exists to demand
   // the scale-aware fit ε / detector windows of §10's open half.
   { name: 'gear-teeth', svg: 'public/examples/edge-cases/gear-teeth.svg', note: 'small sharp teeth + large smooth disc — scale-blind fit ε / corner window (§10.5)', gradients: false, tier: 0 },
+  // The §0 #6b driver, authored deliberately red (2026-07-28, the gear-teeth §10.5 pattern):
+  // butt-capped 7px bars at the AA phases where the cap corners bevel/blunt away — measured
+  // 30/43 = 69.8% corner recall at HEAD (< 80%) while every boundary gate stays green. The
+  // regime was located by a real-pipeline sweep (capDiag.ts): 7px = CORNER_MIN_EDGE, the
+  // narrowest gradeable cap; w8+ is phase-robust and the in-case w8/w10 controls must stay
+  // green through any fix. See genEdgeCases.ts for the per-bar (angle, phase) cells.
+  { name: 'bar-caps', svg: 'public/examples/edge-cases/bar-caps.svg', note: 'butt-capped 7px bars at AA-losing phases — cap corner recall (§0 #6b)', gradients: false, tier: 0 },
 
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves

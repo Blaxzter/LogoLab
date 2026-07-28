@@ -245,6 +245,57 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       ),
   },
   {
+    // The §0 #6b driver — BAR-END CAPS, authored deliberately red (the gear-teeth §10.5
+    // pattern: author the missing red number, then fix). The regime was located by a
+    // real-pipeline sweep (angle × width × length × sub-pixel phase): at HEAD the loss
+    // lives EXACTLY at the narrowest gradeable cap width — 7px @512, the CORNER_MIN_EDGE
+    // floor itself — at NON-CRISP AA phases. There the 50%-isophote cap rasterizes
+    // ~1px narrower than authored, the cap's staircase run degenerates, and one (or
+    // both) cap corners bevel away: recall 0–3 of 4 per bar, while the SAME bar at a
+    // crisp integer phase, or 1px wider, traces all 4 corners sub-px. Width 8px+ is
+    // phase-robust green (8/8 phases at 0° and 35°) — so the rack pins w7 at MEASURED
+    // failing (angle, phase) cells and keeps w10-crisp + w8-worst-phase bars as in-case
+    // controls that must stay green through any fix. Phases are authored as center =
+    // integer + phase/2 (both axes), the sweep's exact construction. The two narrow
+    // bars on the right (6px / 4px @512) sit BELOW the grading floor on purpose: they
+    // reproduce the user-visible pointed/nubbed-end regime (hairlines @512) without
+    // adding gradeable corners — including the §10.2 anatomy (a ≤4px cap + both 90°
+    // shoulders as ONE contiguous sub-threshold cluster → one apex).
+    name: 'bar-caps',
+    note: 'butt-capped 7px bars at AA-losing phases + w8/w10 controls → cap corner recall (§0 #6b)',
+    make: () => {
+      const bar = (x1: number, y1: number, x2: number, y2: number, w: number): string =>
+        `<polygon points="${thickLine(x1, y1, x2, y2, w)}" fill="${INK}"/>`
+      const rot = (cx: number, cy: number, deg: number, halfLen: number, w: number): string => {
+        const a = (deg * Math.PI) / 180
+        const dx = Math.cos(a) * halfLen
+        const dy = Math.sin(a) * halfLen
+        return bar(cx - dx, cy - dy, cx + dx, cy + dy, w)
+      }
+      // Rotated bars author w=3.51 (7.02px @512): at exactly 3.5 the GT polygon's
+      // short side computes 6.99…px from float normalization and CORNER_MIN_EDGE 7
+      // silently drops the whole cap from grading — the red bars would grade n/a.
+      return svg(
+        `<rect width="${V}" height="${V}" fill="${WHITE}"/>` +
+          // w7 @512 red rack — measured per-bar recall at HEAD in the comment
+          rot(22.125, 60.125, 90, 15, 3.5) + // vertical, phase .25
+          rot(150.125, 22.125, 0, 15, 3.5) + // horizontal, phase .25
+          rot(75.065, 150.065, 15, 15, 3.51) + // 15°, phase .13 (verified: cap MELTS, 2 lost)
+          rot(75.25, 105.25, 15, 15, 3.51) + // 15°, phase .5 (sweep's worst cell, 0/4)
+          rot(75.44, 195.44, 15, 15, 3.51) + // 15°, phase .88
+          rot(130.25, 105.25, 45, 15, 3.51) + // 45°, phase .5
+          rot(185.315, 105.315, 65, 15, 3.51) + // 65°, phase .63
+          rot(185, 185, 65, 15, 3.51) + // 65°, integer phase (not only AA phases lose)
+          // in-case controls — green at HEAD, must STAY green through any fix
+          rot(58, 60, 90, 25, 5) + // w10, crisp phase
+          rot(130.25, 150.25, 35, 15, 4.01) + // w8 at the worst w7 phase
+          // BELOW the grading floor — visual repro of the pointed-end regime only
+          bar(222, 35, 222, 85, 3) + // 6px @512
+          bar(236, 35, 236, 85, 2), // 4px
+      )
+    },
+  },
+  {
     // The §10 "driver" case — small SHARP features on the same canvas as a large smooth
     // shape, so one absolute fit tolerance cannot serve both. A 14-tooth gear whose tooth
     // chords are all ≥ 7.5px @512 — above the answer sheet's CORNER_MIN_EDGE grading
