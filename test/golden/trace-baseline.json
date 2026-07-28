@@ -56,25 +56,6 @@
     "hash": "992da05f",
     "geomSig": "fa8799a3"
   },
-  "headphones-flat": {
-    "name": "headphones-flat",
-    "width": 582,
-    "height": 1024,
-    "gradients": false,
-    "paths": 139,
-    "nodes": 5498,
-    "gradientCount": 0,
-    "meanDeltaE": 3.922,
-    "p95DeltaE": 11.86,
-    "ssim": 0.794,
-    "seamMax": 79.47,
-    "junctions": 696,
-    "junctionClusters": 119,
-    "clusterSpanMax": 27.73,
-    "jaggedness": 10.602,
-    "hash": "9a7ccf45",
-    "geomSig": "5aa29e16"
-  },
   "headphones-grad": {
     "name": "headphones-grad",
     "width": 291,

@@ -1571,6 +1571,10 @@ its meanΔE (3.928 → 3.922), SSIM (0.7923 → 0.7940) and junction clusters (1
 all IMPROVE: at 60° the detector pins more of its noisy AA boundaries as corners, so
 the trace follows the staircase more faithfully instead of smoothing it. Accepted per
 the §10.2 precedent (off-target case, fidelity metrics improve, max-statistic noted).
+*(Follow-up 2026-07-28: `headphones-flat` was RETIRED from the golden corpus at user
+direction — the photo-derived case is off the product target and kept forcing exactly
+these accept-the-trade re-blesses; `headphones-grad` (same fixture, slow-gated) stays
+as the Step-3c perf + complex-input guard. See the `traceCorpus.ts` corpus comment.)*
 Flat-icon corpus: `nebula` 62 → 59 nodes, `aurora-flat` 171 → 163 nodes and
 meanΔE −0.013, `petals`/`bloom-flat`/`schild-flat` metric-identical. A/B vs the frozen
 `before-scale-eps` snapshot: 20 of 42 variant files changed, dominated by node-count

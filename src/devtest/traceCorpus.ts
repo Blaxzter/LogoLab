@@ -35,15 +35,21 @@ export interface GoldenCase {
  * The validation corpus. Small gradients-ON images (nebula, petals) exercise the
  * Step-3c gradient union-merge — nebula is the purpose-2 guardian (a background the
  * discontinuity map split must reunite into ONE gradient). The flat / gradients-OFF
- * cases (schild, headphones) guard the common flat-art and complex-photo paths. The
- * gradients-ON headphones photo is the perf-sensitive case (Step-3c at scale) and is
- * marked `slow` until the merge is fast enough to run every CI invocation.
+ * case (schild) guards the common flat-art path. The gradients-ON headphones photo
+ * is the perf-sensitive case (Step-3c at scale) and is marked `slow` until the merge
+ * is fast enough to run every CI invocation.
+ *
+ * `headphones-flat` was RETIRED 2026-07-28 (user direction): a photo-derived
+ * illustration is off the product target (flat / AI-generated icons), and as the one
+ * noisy-boundary case in the default suite it repeatedly forced accept-the-trade
+ * re-blesses (§10.2's seamMax 51.6→57.6, §10.6's jaggedness 7.5→10.6) that gated
+ * nothing the product cares about. The photo PATH stays guarded: headphones-grad
+ * (same fixture, slow-gated) still pins Step-3c perf + fidelity on complex input.
  */
 export const GOLDEN_CORPUS: GoldenCase[] = [
   { name: 'nebula', path: 'public/examples/nebula.png', maxDim: 0, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true } },
   { name: 'petals', path: 'public/examples/petals.png', maxDim: 0, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true } },
   { name: 'schild-flat', path: 'examples/test-files/schild.png', maxDim: 512, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false } },
-  { name: 'headphones-flat', path: 'examples/test-files/Headphones.png', maxDim: 1024, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false } },
   { name: 'headphones-grad', path: 'examples/test-files/Headphones.png', maxDim: 512, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true }, slow: true },
   // Junction-quality guards (gradients OFF — the flat/posterized regime): bloom's
   // translucent-circle crossings are the degree-4 cluster case, aurora's posterized
