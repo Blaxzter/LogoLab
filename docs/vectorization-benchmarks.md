@@ -27,14 +27,38 @@ guardrails):
 
 | # | defect | reproducing case | number | details |
 |---|---|---|---|---|
-| 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.22px, p95 0.74px (was 1.44/24.8 — the p95 was the seam occluded under the circle, §9.6) | §7; +0.09 chamfer from the §9.5 fix (label-level endpoint routing sends the whole sliver to one side) |
-| 6 | **Thin features at LOW resolution** — below ~256px the sub-pixel bars still break up (the @512 defect is fixed, §9.5; the gate runs at 512) | `hairlines` @256 (ungated resolution) | chamfer 0.88px, p95 9.77px @256 (was 2.44/27.8 before §9.6 — part of that was bar-crossing occlusion; the remaining 9.77 is real) | §9.5 |
+| 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.12px, p95 0.43px (was 0.22/0.74; §12's classify fixpoint routes the sliver's mid-blends to better endpoints — earlier 1.44/24.8 was the seam occluded under the circle, §9.6) | §7; §12 |
 | 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
-| 11 | **Small-region drop at LOW resolution** — a 176px region @256 falls under both the share floor and the flat-interior evidence floor, so §9.4's protection cannot see it (the gate runs @512, where the same region is 4× larger and survives) | `flute` @256 (ungated resolution) | 8/9 @256: `#974827` 176px painted `#893925`, ΔE 8.0 | found during §9.7 (pre-existing — present at c3c82cb) |
+| 14 | **Small region collapses to a sliver @512** — the doc item EXISTS but its geometry pinches to ~77px² for a 691px label, so the region paints white; a §10.4 REGRESSION (bisect: green at e549b29, red at fc7b7e9 — reseat/chord territory, NOT the weld deletion §12 fixed), unnoticed for five commits because tier 2 is ungated @512 | `fluent-beverage-box-flat` @512 (ungated resolution for tier 2; the case IS gated @256, where it passes) | 6/7 @512: `#990838` (522px) painted `#ffffff`, ΔE 88.6; render shows 88px of the colour | found during §12.4 (2026-07-29); §9.7's "437/437" figure predates it |
 
-Recently closed (the pattern an exit should follow): **bar-end caps render pointed /
+Recently closed (the pattern an exit should follow): **the LOW-RESOLUTION
+scale-blindness family** (`hairlines` @256, was #6; `flute` @256, was #11 — plus two
+UNDISCOVERED members the new lane's calibration sweep caught: `parachute` 9/10 and
+`beverage-box` 6/7 @256) — closed 2026-07-29, **§12** is the record. Phase 0 first:
+nothing below 512 was gated, so the family had no red number to beat — the @256 lane
+(`LOWRES_CORPUS`/`LOWRES_TOL` in truthCorpus.ts, `truth @256:` tests, tolerances
+calibrated at 256 the §9.6/§10.3 way) and the per-stage instrument
+(`src/devtest/lowresDiag.ts`) landed before any fix. The measured histogram then
+FALSIFIED the written hypothesis — the absolute share/area floors were the proximate
+killer for NONE of the four drivers. Four mechanisms, four fixes: (a) k-means starves
+a small colour cloud of a centroid at 256², so two authored colours share ONE cluster
+and §9.7's anchor veto has no merge event to refuse → the anchor-guided cluster SPLIT
+in `quantize` (same evidence, same thresholds — flute 8/9 → **9/9**, parachute 9/10 →
+**10/10**); (b) `classifyBlends`' greedy count-descending order INVERTS at low res
+(the bars' blend cluster outweighs the pure bar colour) → fixpoint iteration + route
+path-compression, plus a mode-snap census exclusion so a routed-in blend cannot
+rename its endpoint's hex; (c) a thin 45° stroke is 4-DISCONNECTED by construction →
+the modeFilter rescue is now 8-connected + erosion-aware (`RESTORE_MAX_SURVIVAL`)
+with a pinch-fill (hairlines 0.93/9.69 → **0.31/0.74**, parsimony 1.3); (d) the §10.4
+converged-junction weld deleted a LOLLIPOP region whole (beverage-box's straw: 129px
+outline sharing its fused vertex pair with the 2.8px neck) → cluster-fuse veto in
+`weldJunctionClusters` (6/7 → **7/7**; the same veto recovered the straw @512, where
+§10.4 had silently broken it — §12.4, whose bisect also surfaced §0 #14). A/B corpus
+0/42 variant files changed; @512 stable except aa-seam IMPROVING to 0.12/0.43; all
+four `KNOWN_DEFECTS_LOWRES` entries deleted by the CI contract.
+**bar-end caps render pointed /
 domed, not square** (`hairlines` @512 bar ends, was #6b, user-reported 2026-07-20) —
 closed 2026-07-28, **§10.7** is the record: the row's stored anatomy was STALE on both
 halves (§10.6's short-arm bypass had already fixed the ≥7px caps the row described, and
@@ -966,6 +990,11 @@ Results, before → after (protocol as §9.4/§9.5):
   the flat-palette path). **suite**: typecheck clean, 267 / 0 / 2 — no KNOWN_DEFECTS
   change (flute is tier 2, ungated).
 
+*(Follow-up 2026-07-29: the 437/437 figure ROTTED unnoticed — §10.4 (fc7b7e9,
+2026-07-21) dropped beverage-box @512 to 5/7, and nobody re-ran this sweep because
+tier 2 is ungated in CI. §12.4 recovered the straw (weld lollipop veto → 6/7); the
+remaining drop is §0 #14. Current @512 figure: 436/437.)*
+
 ---
 
 ### 9.8 The fix: corner-turn veto in `planarBeautify` — `checker` scalloping (§0 #7) closes, and the gate that had to exist to prove it
@@ -1761,3 +1790,162 @@ repro: no second alpha-feather PNG exists in the corpus (Headphones/Schild measu
 fully opaque); the healthy side is calibrated on the synthetic control + the
 categorical opaque-art guarantee. (c) The α≥128 mask clamps measured dispersion; a
 sub-1px feather could dip toward the 16.1 floor — 10 keeps 1.6× margin there.
+
+---
+
+## 12. The low-res lane, and the scale-blindness family closes (§0 #6 + #11, 2026-07-29)
+
+Closed together because they were WRITTEN as one disease — "the segmentation floors are
+absolute pixel counts, blind to resolution" — and the first thing this exit did was gate
+and then MEASURE that claim. The measurement (the §10.5→§10.6 lesson, third time now)
+falsified it: the absolute floors were the proximate killer for NONE of the four driver
+cases. Four distinct mechanisms, all resolution-LINKED but none "just scale the floor".
+
+### 12.1 Phase 0 — the lane: nothing below 512 was gated
+
+Every boundary limit is in pixels and was calibrated @512, so the whole family below 512
+had no red number to beat. `truth-gate.test.ts` now runs a second loop — `truth @256:` —
+over `LOWRES_CORPUS` at `LOWRES_RES` 256 with `LOWRES_TOL`, all defined and documented in
+`truthCorpus.ts`; `calibrateLowres.ts` is the calibration artifact (tier 0 in full + all
+106 flat twins swept @256, the §9.6/§10.3 recipe: read limits off the healthy population,
+let the failures land red).
+
+- **Tier 0 @256** (hairlines excluded): chamfer max 0.46, p95 max 1.10, parsimony max
+  1.77 — the @512 limits (1.0/2.5/3.0) hold with ≥ 2× margin, so the lane keeps the same
+  absolute numbers, derived from @256 data rather than inherited.
+- **Tier 2 @256** (the three droppers excluded): chamfer max 0.60, p95 max 2.53 (rugby-
+  football), parsimony max 1.43 → lane limits 1.0/4.0/3.0. NOT tier 2's @512 numbers
+  (0.35/1.2): at 256 the same art carries 2× the relative AA and the whole population
+  shifts up.
+- The sweep DISCOVERED two unlisted members of the family — `parachute` 9/10
+  (#00a6ed 99px painted #5092ff, ΔE 28.7) and `beverage-box` 6/7 (#d3f093 481px painted
+  #c3ef3c, ΔE 36.4, p95 8.24) — exactly the "there may be undiscovered ones" prediction.
+  Lane = 16 tier-0 cases + 3 drivers + 4 healthy controls (pencil — the §9.4
+  protected-tip case, rugby-football / nazar-amulet / violin — the calibrated tails).
+- The corner gate is tier-0-only in the lane: tier-2 corner recall is ungated at EVERY
+  resolution and measures poorly at both (flute 3/10 @256, 0/9 @512) — a
+  resolution-INDEPENDENT behaviour that a low-res lane would misattribute.
+
+### 12.2 Phase 0 — the instrument, and the histogram that killed the hypothesis
+
+`src/devtest/lowresDiag.ts` (gearDiag's recipe one stage earlier) replays
+`segmentFlatPalette` tap by tap — assign / blends / share / mode / restore / despeckle /
+heal — then the doc build (fit → beautify → weld → materialize), and reports per authored
+colour the fraction of its pixels still labelled within ΔE 4 (the region gate's own
+MATCH_DELTA_E) after each stage. Where each driver ACTUALLY died @256:
+
+| case | written hypothesis | measured mechanism |
+|---|---|---|
+| flute `#974827` | share floor + flat-interior floor | dead at `assign`: k-means starves a 355px cloud of a centroid — both browns land in ONE cluster (`#8c3c26`), so §9.7's anchor VETO has no merge event to refuse. The floors never even saw it (flat-interior 176 ≥ 50 would have protected the entry, had it existed). |
+| parachute `#00a6ed` | (undiscovered) | same: the cyan lands inside `#5092ff`'s cluster (`#4a95fd` centroid) |
+| hairlines bars | floors eat sub-pixel bars | `classifyBlends`' greedy count-descending ORDER inverts: the bars' 25%-grey blend cluster (1,009px) outranks the pure bar colour (816px), is processed first, cannot be explained (its second endpoint is not accepted yet), and survives as a fake palette colour; then the mode-snap census renames the bar entry to that grey (the §9.5 "renames red to grey" failure one stage later); then the 45° diagonal — 4-DISCONNECTED by construction — fragments into ~6px pieces under the restore/despeckle grouping and vanishes |
+| beverage-box `#d3f093` | (undiscovered) | segmentation KEEPS the straw (~700px, entry protected); the §10.4 converged-junction weld deletes the region: the straw is a LOLLIPOP (outline 129px and neck 2.8px between the SAME vertex pair), the neck is contracted, and the "both endpoints fused ⇒ self-loop ⇒ contract too" rule then deletes the 129px outline — the label's only loop — so index.ts silently skips the label |
+
+### 12.3 The fixes (each validated against its histogram row)
+
+**(a) Anchor-guided cluster SPLIT in `quantize` — the dual of §9.7's merge veto.** The
+veto can only refuse a merge event; at low res there is none. Same evidence, same
+thresholds: a cluster holding ≥ 2 flat-interior anchors (≥ `keepDistinctMinArea` px
+each, §9.4's criterion) with pairwise ΔE ≥ `ANCHOR_DISTINCT_DE` (4.0) is two authored
+colours — split it, each member colour to its nearest anchor, centroids rebuilt as
+count-weighted means (the mode-snap picks the final hex regardless). When k-means
+separates properly every cluster holds one anchor and the split is a no-op — schild's
+tonal noise (ΔE 0.5) and aurora's ramp bands (ΔE 2.9) sit under the ΔE floor and merge
+exactly as §9.7 calibrated. flute 8/9 → **9/9**, parachute 9/10 → **10/10** @256.
+
+**(b) `classifyBlends` fixpoint + census guard.** After the unchanged greedy pass, the
+classification iterates to a FIXPOINT (pass-synchronous, the accepted set only
+shrinks): each still-accepted entry is re-tested against segments between two OTHER
+currently-accepted entries — so an entry accepted only because its endpoint came later
+in count order still dissolves. Routes are path-compressed (chains are acyclic — a
+route target always dissolves in a strictly later pass than its source), preserving
+§9.5's endpoint-routing principle transitively: hairlines' mid-grey → 25%-grey → the
+BAR colour. And `snapPaletteToModes` now excludes pixels that arrived via blend
+dissolution from the mode census — a routed-in coverage mixture is not a candidate
+design hex, and at 256 it OUT-COUNTS the entry's own colour (1,006 vs 816). When the
+greedy order was already right, pass 2 finds nothing and the output is byte-identical;
+the §11 feather clause runs in pass 1 only, its calibration untouched.
+
+**(c) Restore for 4-disconnected thin features.** `restoreErasedComponents` now groups
+8-connected (a 45° chain touches itself corner-to-corner only — under 4-connectivity
+the diagonal was ~45 fragments of ~6px, under any floor), measures erasure as an
+EROSION FRACTION (`RESTORE_MAX_SURVIVAL` 0.3 — one surviving pixel would otherwise
+poison a whole chain's rescue; §9.5's own argument quantifies the gap: a majority vote
+melts ~a perimeter's worth of a real blob, survival stays ≥ ~0.7, while a thin feature
+keeps almost nothing — the diagonal keeps ~2%), and 4-CONNECTS what it restores
+(pinch-fill: at each diagonal step, claim the side pixel whose source colour is nearer
+the component's mean — without it the restored chain is a checkerboard-pinch junction
+storm: hairlines parsimony 1.1× → 4.7×). `despeckleComponents` deliberately STAYS
+4-connected — see §12.5. hairlines @256: chamfer 0.93 → **0.31**, p95 9.69 → **0.74**,
+parsimony **1.3**; @512 byte-stable (restored bars are axis-aligned — no diagonal
+steps, the pinch-fill is inert by construction).
+
+**(d) Lollipop veto in `weldJunctionClusters`.** A cluster whose fusion would pinch
+together the endpoints of an edge LONGER than the weld radius is a lollipop neck, not
+a rasterized crossing — the fuse is skipped and its micro-edges stay real edges (the
+same safe fallback the over-spread span rule already uses). A true §10.4 crossing is
+unaffected: its second edge between the fused pair is itself micro (overlap 4/4 at
+both resolutions, cross-bars 10/10). beverage-box 6/7 → **7/7** @256 — and the same
+deletion turned out to exist @512 (§12.4).
+
+### 12.4 Discovered while verifying: §10.4 had already broken beverage-box @512
+
+The @512 watchlist run showed beverage-box 6/7 — and a worktree probe at HEAD showed it
+was **5/7 BEFORE this work**: §9.7's "tier 2 = 437/437" had silently rotted. Bisect:
+green at e549b29 (§10.3c), red at fc7b7e9 (§10.4, 2026-07-21) — the straw (`#d3f093`,
+the weld lollipop deletion, fixed here by (d): 6/7 @512 now) and `#990838` (522px
+painted white: its doc item exists but collapses to a ~77px² sliver, 88px rendered).
+The `#990838` collapse is §10.4 reseat/chord territory, distinct from this family — it
+gets its own §0 row (#14) instead of a drive-by fix. Tier 2 being ungated in CI is how
+a 2-region regression survived five commits unnoticed; the @256 lane now gates
+beverage-box-flat (and would have caught the straw half of this).
+
+A first version of (d) kept the long edge but let the cluster fuse (both endpoints
+dragged onto the fused point) — beverage-box @256 went green and the @512 watchlist
+exposed the flaw before it shipped: a small blob's two ~33px arcs pinched into a
+sliver. The cluster-fuse veto replaced it.
+
+### 12.5 Rejected alternatives (measured, so they are not re-invented)
+
+- **Scale-relative floors** (minShare / minRegionArea ∝ image area) — the WRITTEN fix
+  direction, NOT BUILT: the histogram showed the floors were not the proximate killer
+  for any driver. minShare is a FRACTION (scale-free by construction); minRegionArea
+  feeds the Despeckle dial contract ("absolute px², reads the same across engines"),
+  and scaling it would change every non-512 user trace for zero demonstrated wins. The
+  honest residual: hairlines' diagonal survives the palette by a knife edge (modal
+  count 50 vs floor 50 at despeckle 25) — if a future case lands on that edge, this is
+  where to look, and the scale-relative floor is the first candidate.
+- **8-connected `despeckleComponents`** — kept 8-chained AA shrapnel that survives the
+  mode filter; each 4-fragment still becomes its own planar face: pencil-flat @256
+  shattered into 166 fringe loops, parsimony 1.5× → **10.1×**. Reverted to
+  4-connectivity; restored thin diagonals don't need it (the pinch-fill 4-connects
+  them before despeckle runs).
+- **Keep-as-self-loop lollipop guard** — §12.4; replaced by the cluster-fuse veto.
+
+### 12.6 After (the numbers)
+
+@256 lane (limits in `LOWRES_TOL`): every case green — hairlines **0.31 / 0.74 / 1.3×**
+(was 0.93 / 9.69 / 1.1), flute-flat **9/9**, parachute-flat **10/10**, beverage-box-flat
+**7/7** (0.23 / 1.02), controls byte-stable (pencil at exactly its pre-change
+0.51 / 1.45 / 0.7). All four `KNOWN_DEFECTS_LOWRES` entries deleted by the CI contract —
+the map is EMPTY. @512: the whole lane unchanged except `aa-seam` chamfer 0.22 →
+**0.12**, p95 0.74 → **0.43** (the fixpoint routes the sliver's mid-blends to better
+endpoints — the §0 #3 residue shrinks) and beverage-box 5/7 → 6/7 (§12.4). Corner
+watchlist stable: gear-teeth 51/60, bar-caps 43/43, sharp-star 11/11, cross-bars 10/10,
+checker 99.1%, hairlines @512 0.41/0.86. Paint gates green at both resolutions
+(radial-glow 1.12/2.22 @512, 1.18/2.41 @256). A/B vs `before-lowres`: **0 of 42 variant
+files changed** — the A/B corpus (all ≥ 512 native) is categorically untouched. Full
+suite green (305 pass / 2 skip incl. the 22 new `truth @256:` tests); goldens untouched,
+no re-bless.
+
+### 12.7 Open residue (named, not hidden)
+
+- The **0.25px bar** (hairlines @256) stays untraced: at 25% coverage its pixels are
+  paler than healthy AA fringes — a palette segmenter recovering it as a solid 1px bar
+  would render DARKER than the source does. The truth gate's visibility filter (§9.6)
+  already excludes its boundary as invisible, which is the same verdict from the
+  scorer's side: a fully sub-half-pixel feature is below the information floor of this
+  representation.
+- **flute-flat corners 4/10 @256 / 0/9 @512** — resolution-independent tier-2 corner
+  behaviour, ungated everywhere, out of this family (§12.1).
+- **`#990838` @512** — §0 #14, the remaining §10.4 damage.

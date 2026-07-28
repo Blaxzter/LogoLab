@@ -151,10 +151,32 @@ export function weldJunctionClusters(
   // merge; an over-spread cluster is left untouched (its micro-edges survive), the safe
   // pre-weld fallback.
   const spanCap = radius * 2
+  // A cluster whose fusion would pinch together the two endpoints of a LONG edge is
+  // not a rasterized crossing — it is the NECK of a lollipop: a region attached to
+  // the graph through one narrow gap, whose outline runs junction-to-junction the
+  // long way round (beverage-box-flat's straw: 129px outline over a 2.8px neck @256,
+  // 5.6px @512 — the §10.4 weld deleted the whole region at BOTH resolutions, §12).
+  // Contracting the neck then either deletes the outline from every loop (the old
+  // removal — the region silently vanishes from the doc, since index.ts skips a
+  // label whose loops are gone) or drags both of its ends onto one point (a pinch
+  // that collapses the region to a sliver). Neither is a weld; skip fusing the
+  // cluster and leave its micro-edges as real edges — the same safe fallback the
+  // over-spread rule above uses. A true crossing is unaffected: its second edge
+  // between the fused pair is itself micro (§10.4's lens tips).
+  const rootOf = new Map<number, number>()
+  for (const v of parent.keys()) rootOf.set(v, find(v))
+  const poisoned = new Set<number>()
+  for (const e of edges) {
+    if (e.closed || e.startVertex == null || e.endVertex == null) continue
+    const rs = rootOf.get(e.startVertex)
+    if (rs === undefined || rs !== rootOf.get(e.endVertex)) continue
+    if (edgeLength(e) > radius) poisoned.add(rs)
+  }
   const target = new Map<number, { x: number; y: number }>() // vertex id → fused position
   const fusedRoots = new Set<number>()
   for (const [root, members] of [...clusters.entries()].sort((a, b) => a[0] - b[0])) {
     if (members.length < 2) continue
+    if (poisoned.has(root)) continue // a lollipop neck, not a crossing — leave it
     members.sort((a, b) => a - b)
     const live = members.map((id) => byId.get(id)).filter((v): v is Vertex => v != null)
     if (live.length < 2) continue
@@ -205,7 +227,9 @@ export function weldJunctionClusters(
       // self-loop (start===end — a zero-length degenerate when it had no interior).
       // Contract it too, exactly like a micro-edge: leaving a start===end open edge
       // in the graph would strand snapCoCircularLoops (it keys arcs on the endpoints)
-      // and the node editor. Excised from every loop below.
+      // and the node editor. Excised from every loop below. Only MICRO edges can
+      // reach this branch: a cluster that would pinch a LONG edge's endpoints
+      // together is a lollipop neck and its fuse was vetoed above (`poisoned`).
       const sFused = e.startVertex != null && fused.has(e.startVertex)
       const eFused = e.endVertex != null && fused.has(e.endVertex)
       if ((sFused || eFused) && survivorOf(e.startVertex) === survivorOf(e.endVertex)) {

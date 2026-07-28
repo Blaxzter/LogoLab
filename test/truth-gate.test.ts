@@ -218,15 +218,24 @@ for (const c of GATED_CORPUS) {
  * that are 4× smaller @256) stayed open: the defects had no red number to beat.
  */
 const KNOWN_DEFECTS_LOWRES: Record<string, string> = {
-  // §0 #6 — thin features at LOW resolution. The @512 defect is fixed (§9.5); below
-  // ~256px the sub-pixel bars still break up: the thinnest bars are 0.25–1.5px here.
-  hairlines: 'chamfer 0.93px, p95 9.69px @256 — the sub-256 bars break up (§0 #6)',
-  // §0 #11 — small-region drop at LOW resolution. Each of these three passes @512
-  // (tier 2 is 437/437 there, §9.7); at 256² the same authored region is 4× smaller
-  // and falls under the segmentation machinery's resolution-linked blind spots.
-  'fluent-flute-flat': '8/9 regions @256 — #974827 (176px) painted #893925, ΔE 8.0 (§0 #11)',
-  'fluent-parachute-flat': '9/10 regions @256 — #00a6ed (99px) painted #5092ff, ΔE 28.7 (§0 #11)',
-  'fluent-beverage-box-flat': '6/7 regions @256 — #d3f093 (481px) painted #c3ef3c, ΔE 36.4; p95 8.24 (§0 #11)',
+  // The lane landed with four entries, all closed the same day (2026-07-29, §12) —
+  // each was a distinct low-res mechanism, and NONE was the hypothesized absolute
+  // share/area floor itself:
+  //   hairlines ("chamfer 0.93, p95 9.69 @256", §0 #6) — classifyBlends greedy ORDER
+  //     inversion (the bars' blend cluster out-counts the pure bar colour at 256, so
+  //     the blend was accepted before its endpoint existed), the mode-snap census
+  //     renaming the bar entry to that grey, and the 45° diagonal being 4-DISCONNECTED
+  //     (fragmenting under the restore/despeckle grouping). Fixed by the classify
+  //     fixpoint + census exclusion + the 8-connected erosion-aware restore with
+  //     pinch-fill: 0.31/0.74, parsimony 1.3.
+  //   fluent-flute-flat (8/9) + fluent-parachute-flat (9/10) (§0 #11) — k-means
+  //     starves a small colour cloud of a centroid at 256², so two authored colours
+  //     share ONE cluster and §9.7's anchor veto has no merge event to refuse. Fixed
+  //     by the anchor-guided cluster SPLIT in quantize: 9/9, 10/10.
+  //   fluent-beverage-box-flat (6/7, p95 8.24) — the §10.4 converged-junction weld
+  //     deleted a LOLLIPOP region outright (the straw's whole 129px outline shared its
+  //     fused vertex pair with the 2.8px neck). Fixed by the weld length guard: 7/7,
+  //     0.25/1.02.
 }
 
 for (const c of LOWRES_CORPUS) {

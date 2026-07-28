@@ -49,6 +49,13 @@ export const DEFAULT_PALETTE_SEGMENT: PaletteSegmentOptions = {
  * most. 4-connectivity, iterative scan-flood (deterministic order). A label class
  * can span many components; only the tiny ones are absorbed, so real shapes (text
  * bars, ring strokes — thousands of px) are untouched. Mutates a copy.
+ *
+ * Deliberately 4-connected, unlike restoreErasedComponents' grouping (§0 #6): the
+ * planar tracer reads a 4-disconnected pixel set as separate faces, so 8-chained
+ * AA shrapnel that despeckle "kept" would each still become its own tiny loop —
+ * an 8-connected despeckle was tried here and shattered pencil-flat @256 into 166
+ * fringe loops (parsimony 1.5× → 10.1×). Restored thin diagonals don't need it:
+ * the restore pinch-fill 4-connects them, so they pass this floor as one comp.
  */
 function despeckleComponents(labels: Int32Array, w: number, h: number, minArea: number): Int32Array {
   if (minArea <= 0) return labels
@@ -233,6 +240,22 @@ function regionAlphaStats(
  * region outweighs its own edge band; a feature's pure core outweighs each of its
  * fringe clusters).
  *
+ * …usually. At LOW resolution the order INVERTS (§0 #6): hairlines @256 puts the
+ * bars' 25%-coverage blend cluster (1,009px) ABOVE the pure bar colour (816px), so
+ * the blend is processed first, cannot be explained (its second endpoint is not
+ * accepted yet), and is accepted itself — a fake palette colour that then absorbs
+ * the mid-grey and paints the thin bars. So after the greedy pass the
+ * classification is iterated to a FIXPOINT: each still-accepted entry is re-tested
+ * (same evidence — edge-local, non-real, within eps of a segment between two OTHER
+ * currently-accepted entries), pass-synchronously for determinism, until nothing
+ * changes. When the greedy order was already right (every gated case @512) the
+ * first re-pass finds nothing and the output is byte-identical. Routes are
+ * path-compressed at the end: an entry routed into a colour that a later pass
+ * dissolved follows it to ITS endpoint (grey mid-blend → 25%-grey → the bar
+ * colour), which preserves the endpoint-routing principle transitively — chains
+ * are acyclic because a route target always dissolves in a strictly later pass
+ * than its source.
+ *
  * `routeTo[i]` is the nearer ENDPOINT of the explaining segment (-1 for accepted
  * entries). Routing matters as much as dropping: the globally-nearest surviving
  * colour can be the WRONG side entirely — hairlines' bg↔bar midpoint #88888d is
@@ -291,6 +314,45 @@ function classifyBlends(
     }
     if (routeTo[i] >= 0) blend[i] = true
     else accepted.push(i)
+  }
+
+  // Fixpoint passes (§0 #6): re-test every still-accepted entry against the CURRENT
+  // accepted set. Pass-synchronous — all tests read the pass-start set, dissolutions
+  // commit at pass end — so the result does not depend on palette order within a
+  // pass. Terminates: the accepted set only shrinks. The feather clause does not
+  // re-run (it is not segment evidence; its pass-1 routing stands).
+  for (;;) {
+    const live = accepted.filter((i) => !blend[i])
+    const found: { i: number; route: number }[] = []
+    for (const i of live) {
+      if (real[i] || !edgy[i]) continue
+      let bestD = Infinity
+      let route = -1
+      for (let a = 0; a < live.length; a++) {
+        if (live[a] === i) continue
+        for (let b = a + 1; b < live.length; b++) {
+          if (live[b] === i) continue
+          const d = segDist2(palette[i], palette[live[a]], palette[live[b]])
+          if (d <= eps2 && d < bestD) {
+            bestD = d
+            const ia = live[a], ib = live[b]
+            route = d2(palette[i], palette[ia]) <= d2(palette[i], palette[ib]) ? ia : ib
+          }
+        }
+      }
+      if (route >= 0) found.push({ i, route })
+    }
+    if (found.length === 0) break
+    for (const { i, route } of found) {
+      blend[i] = true
+      routeTo[i] = route
+    }
+  }
+  // Path-compress: a route into an entry a later pass dissolved follows it to its
+  // own endpoint (chains are acyclic — see the doc comment above).
+  for (let i = 0; i < palette.length; i++) {
+    if (!blend[i]) continue
+    while (routeTo[i] >= 0 && blend[routeTo[i]]) routeTo[i] = routeTo[routeTo[i]]
   }
   return { blend, routeTo }
 }
@@ -363,6 +425,21 @@ function modalColorCounts(labels: Int32Array, data: Uint8ClampedArray, paletteLe
  * whole component vanished" is precise evidence the filter ate a thin feature,
  * and those components (from the PRE-filter labels) are put back verbatim.
  * Components below minArea stay dead: despeckle would dissolve them regardless.
+ *
+ * 8-connected like despeckleComponents, and for the same reason (§0 #6): the thin
+ * features this rescue EXISTS FOR are 4-disconnected whenever they run diagonally —
+ * hairlines' 45° stroke @256 fragments into ~6px 4-components that no floor can
+ * pass, while the feature is one ~300px 8-component. (Grouping only — the restored
+ * pixels are the pre-filter labels verbatim, exactly as before.)
+ *
+ * And "erased ENTIRELY" is measured as an EROSION FRACTION, not survived-at-all
+ * (§0 #6): under 8-connected grouping one surviving pixel would poison a whole
+ * chain's rescue — hairlines' @256 diagonal keeps a handful of its ~300px through
+ * the vote and was therefore "eroded, not erased", invisible to the old test. The
+ * §9.5 evidence argument quantifies: a majority vote can only melt ~a perimeter's
+ * worth of a real blob (survival stays near 1), while a thin feature loses almost
+ * everything — so a component that keeps ≤ RESTORE_MAX_SURVIVAL of itself was
+ * destroyed, not smoothed, and comes back whole.
  */
 function restoreErasedComponents(
   pre: Int32Array,
@@ -370,6 +447,7 @@ function restoreErasedComponents(
   w: number,
   h: number,
   minArea: number,
+  data: Uint8ClampedArray,
 ): Int32Array {
   const n = w * h
   let out = post
@@ -383,25 +461,77 @@ function restoreErasedComponents(
     stack.length = 0
     stack.push(start)
     const pixels: number[] = []
-    let survived = false
+    let kept = 0
     while (stack.length) {
       const p = stack.pop()!
       pixels.push(p)
-      if (post[p] === lab) survived = true
+      if (post[p] === lab) kept++
       const x = p % w, y = (p / w) | 0
-      if (x > 0 && comp[p - 1] === -1 && pre[p - 1] === lab) { comp[p - 1] = cid; stack.push(p - 1) }
-      if (x < w - 1 && comp[p + 1] === -1 && pre[p + 1] === lab) { comp[p + 1] = cid; stack.push(p + 1) }
-      if (y > 0 && comp[p - w] === -1 && pre[p - w] === lab) { comp[p - w] = cid; stack.push(p - w) }
-      if (y < h - 1 && comp[p + w] === -1 && pre[p + w] === lab) { comp[p + w] = cid; stack.push(p + w) }
+      const x0 = x > 0, x1 = x < w - 1, y0 = y > 0, y1 = y < h - 1
+      const nb = [
+        x0 ? p - 1 : -1, x1 ? p + 1 : -1, y0 ? p - w : -1, y1 ? p + w : -1,
+        x0 && y0 ? p - w - 1 : -1, x1 && y0 ? p - w + 1 : -1,
+        x0 && y1 ? p + w - 1 : -1, x1 && y1 ? p + w + 1 : -1,
+      ]
+      for (const q of nb) {
+        if (q >= 0 && comp[q] === -1 && pre[q] === lab) { comp[q] = cid; stack.push(q) }
+      }
     }
-    if (!survived && pixels.length >= minArea) {
+    if (kept <= pixels.length * RESTORE_MAX_SURVIVAL && pixels.length >= minArea) {
       if (out === post) out = post.slice()
       for (const p of pixels) out[p] = lab
+      // 4-CONNECT the restored chain. A restored diagonal step (p ↘ q, no shared
+      // 4-neighbour in the label) is a checkerboard PINCH: the planar tracer reads
+      // each one as a junction pair, and a restored 45° stroke becomes a chain of
+      // hundreds of them (hairlines @256 parsimony 1.1× → 4.7× — geometry right,
+      // node economy destroyed). Claim, at each pinch, the side pixel whose SOURCE
+      // colour sits closer to the component's own mean — that pixel is the same
+      // feature's blend shade, so the claim widens the stroke toward its true
+      // footprint rather than inventing area. Restored components only: an
+      // axis-aligned restored bar (all of §9.5's cases @512) has no diagonal
+      // steps, so this is a no-op there by construction.
+      let mr = 0, mg = 0, mb = 0
+      for (const p of pixels) {
+        mr += data[p * 4]
+        mg += data[p * 4 + 1]
+        mb += data[p * 4 + 2]
+      }
+      mr /= pixels.length
+      mg /= pixels.length
+      mb /= pixels.length
+      const d2mean = (p: number): number => {
+        const dr = data[p * 4] - mr, dg = data[p * 4 + 1] - mg, db = data[p * 4 + 2] - mb
+        return dr * dr + dg * dg + db * db
+      }
+      for (const p of pixels) {
+        const x = p % w, y = (p / w) | 0
+        if (y >= h - 1) continue
+        for (const dx of [-1, 1]) {
+          const qx = x + dx
+          if (qx < 0 || qx >= w) continue
+          const q = p + w + dx
+          if (out[q] !== lab) continue
+          const s1 = p + dx // (x+dx, y)
+          const s2 = p + w //  (x,    y+1)
+          if (out[s1] === lab || out[s2] === lab) continue
+          if (out[s1] < 0 && out[s2] < 0) continue
+          const pick = out[s1] < 0 ? s2 : out[s2] < 0 ? s1 : d2mean(s1) <= d2mean(s2) ? s1 : s2
+          out[pick] = lab
+        }
+      }
     }
     cid++
   }
   return out
 }
+
+/** A pre-filter component keeping at most this fraction of itself through the mode
+ *  filter was DESTROYED (thin feature), not boundary-smoothed (real blob keeps
+ *  ≥ ~1 − perimeter/area ≈ 0.7+) — restore it whole. 0 reproduces the old
+ *  erased-whole-only rescue. Sits far from both measured populations: hairlines'
+ *  @256 diagonal keeps ~2% of its 306px; the smallest healthy corpus blobs keep
+ *  ≥ ~70%. */
+const RESTORE_MAX_SURVIVAL = 0.3
 
 export interface FlatPaletteResult extends QuantizeResult {
   /**
@@ -517,16 +647,26 @@ function regionAlphaModes(labels: Int32Array, data: Uint8ClampedArray, paletteLe
  * no two labels can share a modal colour ⇒ the snapped palette has no colliding
  * entries. Ties break to the lower packed-RGB key for determinism. Pure: returns
  * a fresh palette; an empty label (no pixels) keeps its original entry.
+ *
+ * `exclude` masks pixels out of the census: the caller passes the pixels that
+ * belonged to DISSOLVED BLEND clusters. A blend routed into an entry is a
+ * coverage mixture, not a candidate design colour — and at low resolution it can
+ * OUT-COUNT the entry's own colour (hairlines @256: the bars' 25%-coverage grey
+ * columns, 1,006px of one exact value, vs the pure bar colour's 816px — the
+ * census would rename the bar entry to the grey; §9.5's "mode-snap renames red
+ * to grey" failure re-appearing one stage later, §0 #6). An entry whose pixels
+ * are ALL excluded keeps its centroid, exactly like an empty label.
  */
 function snapPaletteToModes(
   palette: PaletteColor[],
   labels: Int32Array,
   data: Uint8ClampedArray,
+  exclude?: Uint8Array,
 ): PaletteColor[] {
   const hist: Map<number, number>[] = palette.map(() => new Map<number, number>())
   for (let i = 0; i < labels.length; i++) {
     const l = labels[i]
-    if (l < 0) continue
+    if (l < 0 || exclude?.[i]) continue
     const o = i * 4
     const key = (data[o] << 16) | (data[o + 1] << 8) | data[o + 2]
     const h = hist[l]
@@ -566,6 +706,9 @@ export function segmentFlatPalette(
   let palette: PaletteColor[]
   let labels: Int32Array
   let dominantColors: number
+  // Pixels that belonged to a dissolved BLEND cluster — excluded from the
+  // mode-snap census below (see snapPaletteToModes). Unset when nothing dissolved.
+  let snapExclude: Uint8Array | undefined
   if (locked) {
     // User-locked palette: no clustering — assign every pixel to the nearest of
     // the user's colours (RGBA) and keep them exactly as given. Opaque entries omit
@@ -614,8 +757,10 @@ export function segmentFlatPalette(
     dominantColors = q.counts.filter((c, i) => (total > 0 && c / total >= opts.minShare) || real[i]).length
     if (blend.some(Boolean)) {
       // Relabel each blend entry into its endpoint BEFORE the share drop — endpoints
-      // are accepted entries (never blends themselves), so no chains can form. The
-      // emptied entries then fall out of dropMinorColors with zero pixels to misroute.
+      // are accepted entries (route chains are path-compressed in classifyBlends), so
+      // the emptied entries then fall out of dropMinorColors with zero pixels to
+      // misroute. The moved pixels are remembered (`snapExclude`) so the mode-snap
+      // census cannot let a routed-in blend colour out-vote the entry's own hex.
       const counts = q.counts.slice()
       for (let i = 0; i < counts.length; i++) {
         if (!blend[i]) continue
@@ -623,9 +768,13 @@ export function segmentFlatPalette(
         counts[i] = 0
       }
       const labels = q.labels.slice()
+      snapExclude = new Uint8Array(labels.length)
       for (let i = 0; i < labels.length; i++) {
         const l = labels[i]
-        if (l >= 0 && blend[l]) labels[i] = routeTo[l]
+        if (l >= 0 && blend[l]) {
+          labels[i] = routeTo[l]
+          snapExclude[i] = 1
+        }
       }
       q = { palette: q.palette, labels, counts }
     }
@@ -656,7 +805,7 @@ export function segmentFlatPalette(
   // (only when < 255 — opaque art stays alpha-free → byte-identical). A locked
   // palette is left verbatim: the user's chosen colours + alphas are authoritative.
   if (!locked) {
-    palette = snapPaletteToModes(palette, labels, img.data)
+    palette = snapPaletteToModes(palette, labels, img.data, snapExclude)
     const alphas = regionAlphaModes(labels, img.data, palette.length)
     palette = palette.map((c, l) => (alphas[l] < 255 ? { ...c, a: alphas[l] } : c))
   }
@@ -667,7 +816,7 @@ export function segmentFlatPalette(
   //    whole component). Restore before despeckle so a restored thin feature is
   //    measured at its full size, not against the hole the filter left.
   const smoothed = modeFilter(labels, img.width, img.height, opts.modePasses)
-  const restored = restoreErasedComponents(labels, smoothed, img.width, img.height, opts.minRegionArea)
+  const restored = restoreErasedComponents(labels, smoothed, img.width, img.height, opts.minRegionArea, img.data)
   // 4. Dissolve sub-threshold specks/pinholes so they don't each become a loop.
   const cleaned = despeckleComponents(restored, img.width, img.height, opts.minRegionArea)
 

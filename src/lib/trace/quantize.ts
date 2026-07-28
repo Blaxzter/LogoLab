@@ -93,8 +93,10 @@ function weightedPick(weights: Float64Array, rand: () => number): number {
  * that are each anchored by a DIFFERENT exact colour with at least that many
  * flat-interior pixels — and whose anchors are perceptually distinct
  * (≥ ANCHOR_DISTINCT_DE) — are treated as two authored colours and never fused,
- * however close their centroids sit (see the veto block below). 0 keeps the
- * pre-existing distance-only merge.
+ * however close their centroids sit (see the veto block below). The same
+ * evidence also SPLITS a single cluster that k-means resolved two authored
+ * colours into (low resolution starves small colour clouds of a centroid —
+ * §0 #11; see the split block). 0 keeps the pre-existing distance-only merge.
  */
 export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea = 0): QuantizeResult {
   const { data, width, height } = img
@@ -270,6 +272,14 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
   // floor paletteSegment protects real regions with: anything smaller is
   // despeckled away regardless, so vetoing for it would be pointless).
   // ---------------------------------------------------------------------------
+  // The split below can ADD clusters, so from here on the cluster set lives in
+  // growable arrays (same doubles as cr/cg/cb/clusterCounts — bit-identical
+  // arithmetic when no split fires).
+  const cR: number[] = Array.from(cr)
+  const cG: number[] = Array.from(cg)
+  const cB: number[] = Array.from(cb)
+  const cCount: number[] = Array.from(clusterCounts)
+
   let anchorOf: Int32Array | null = null // per cluster: packed-RGB anchor colour, -1 = none
   if (keepDistinctMinArea > 0) {
     const rgbAt = (i: number): number => (data[i * 4] << 16) | (data[i * 4 + 1] << 8) | data[i * 4 + 2]
@@ -286,8 +296,95 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
         ) flatCount.set(key, (flatCount.get(key) ?? 0) + 1)
       }
     }
-    anchorOf = new Int32Array(k).fill(-1)
-    const anchorArea = new Float64Array(k)
+
+    // --- anchor-guided cluster SPLIT — the DUAL of the merge veto below (§0 #11).
+    //
+    // The veto can only refuse a MERGE EVENT. At low resolution there is none to
+    // refuse: k-means puts two authored colours in ONE cluster from the start (a
+    // 355px colour cloud does not reliably win a centroid at 256² — flute's
+    // #974827 lands inside #893925's cluster, parachute's #00a6ed inside
+    // #5092ff's), and the region is gone before any floor or protection can see
+    // it. Same evidence, same thresholds as the veto: a cluster holding two or
+    // more flat-interior anchors (≥ keepDistinctMinArea px each, the §9.4
+    // criterion) whose colours are ≥ ANCHOR_DISTINCT_DE apart is two authored
+    // colours — split it, each member colour going to its nearest anchor. When
+    // k-means separates properly every cluster holds one anchor and this is a
+    // no-op, so well-resolved art is untouched by construction. schild's tonal
+    // noise (ΔE 0.5) and aurora's ramp bands (ΔE 2.9) sit under the ΔE floor and
+    // keep merging exactly as §9.7 calibrated.
+    const keyLab = (key: number) => srgbToLab((key >> 16) & 255, (key >> 8) & 255, key & 255)
+    const anchorsBy = new Map<number, { key: number; area: number }[]>()
+    for (const [key, area] of flatCount) {
+      if (area < keepDistinctMinArea) continue
+      const c = colorToCluster.get(key)
+      if (c === undefined) continue
+      let arr = anchorsBy.get(c)
+      if (!arr) anchorsBy.set(c, (arr = []))
+      arr.push({ key, area })
+    }
+    for (const [c, anchors] of [...anchorsBy.entries()].sort((a, b) => a[0] - b[0])) {
+      if (anchors.length < 2) continue
+      anchors.sort((a, b) => b.area - a.area || a.key - b.key)
+      const chosen: number[] = [anchors[0].key]
+      for (let i = 1; i < anchors.length; i++) {
+        const lab = keyLab(anchors[i].key)
+        if (chosen.every((o) => deltaE76(lab, keyLab(o)) >= ANCHOR_DISTINCT_DE)) chosen.push(anchors[i].key)
+      }
+      if (chosen.length < 2) continue
+      const ids = [c]
+      for (let j = 1; j < chosen.length; j++) {
+        ids.push(cR.length)
+        cR.push(0)
+        cG.push(0)
+        cB.push(0)
+        cCount.push(0)
+      }
+      // Reassign every member colour to its nearest anchor, and rebuild the split
+      // clusters' centroids as count-weighted means so the post-merge sees honest
+      // positions (snapPaletteToModes downstream picks the final hex regardless).
+      const sums = ids.map(() => ({ r: 0, g: 0, b: 0, w: 0 }))
+      for (const [key, cl] of colorToCluster) {
+        if (cl !== c) continue
+        const r = (key >> 16) & 255, g = (key >> 8) & 255, b = key & 255
+        let best = 0
+        let bestD = Infinity
+        for (let j = 0; j < chosen.length; j++) {
+          const ak = chosen[j]
+          const dr = r - ((ak >> 16) & 255)
+          const dg = g - ((ak >> 8) & 255)
+          const db = b - (ak & 255)
+          const d = dr * dr + dg * dg + db * db
+          if (d < bestD) {
+            bestD = d
+            best = j
+          }
+        }
+        colorToCluster.set(key, ids[best])
+        const cnt = hist.get(key) ?? 0
+        const s = sums[best]
+        s.r += r * cnt
+        s.g += g * cnt
+        s.b += b * cnt
+        s.w += cnt
+      }
+      ids.forEach((id, j) => {
+        const s = sums[j]
+        if (s.w > 0) {
+          cR[id] = s.r / s.w
+          cG[id] = s.g / s.w
+          cB[id] = s.b / s.w
+        } else {
+          const ak = chosen[j]
+          cR[id] = (ak >> 16) & 255
+          cG[id] = (ak >> 8) & 255
+          cB[id] = ak & 255
+        }
+        cCount[id] = s.w
+      })
+    }
+
+    anchorOf = new Int32Array(cR.length).fill(-1)
+    const anchorArea = new Float64Array(cR.length)
     for (const [key, area] of flatCount) {
       if (area < keepDistinctMinArea) continue
       const c = colorToCluster.get(key)
@@ -300,24 +397,25 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
   }
 
   // Post-merge near-identical clusters into count-weighted averages.
+  const kk = cR.length
   const mergedR: number[] = []
   const mergedG: number[] = []
   const mergedB: number[] = []
   const mergedCount: number[] = []
   const mergedAnchor: number[] = []
-  const remap = new Int32Array(k)
-  for (let c = 0; c < k; c++) {
-    if (clusterCounts[c] === 0) {
+  const remap = new Int32Array(kk)
+  for (let c = 0; c < kk; c++) {
+    if (cCount[c] === 0) {
       remap[c] = 0 // nothing maps here; value is never read
       continue
     }
-    const w = clusterCounts[c]
+    const w = cCount[c]
     const anchor = anchorOf ? anchorOf[c] : -1
     let target = -1
     for (let j = 0; j < mergedR.length; j++) {
-      const dr = cr[c] - mergedR[j]
-      const dg = cg[c] - mergedG[j]
-      const db = cb[c] - mergedB[j]
+      const dr = cR[c] - mergedR[j]
+      const dg = cG[c] - mergedG[j]
+      const db = cB[c] - mergedB[j]
       if (Math.sqrt(dr * dr + dg * dg + db * db) < MERGE_DISTANCE) {
         // Both sides anchored by different authored colours ⇒ two real colours;
         // keep looking for a compatible target instead of fusing them. The ΔE
@@ -336,16 +434,16 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
     }
     if (target === -1) {
       remap[c] = mergedR.length
-      mergedR.push(cr[c])
-      mergedG.push(cg[c])
-      mergedB.push(cb[c])
+      mergedR.push(cR[c])
+      mergedG.push(cG[c])
+      mergedB.push(cB[c])
       mergedCount.push(w)
       mergedAnchor.push(anchor)
     } else {
       const tw = mergedCount[target] + w
-      mergedR[target] = (mergedR[target] * mergedCount[target] + cr[c] * w) / tw
-      mergedG[target] = (mergedG[target] * mergedCount[target] + cg[c] * w) / tw
-      mergedB[target] = (mergedB[target] * mergedCount[target] + cb[c] * w) / tw
+      mergedR[target] = (mergedR[target] * mergedCount[target] + cR[c] * w) / tw
+      mergedG[target] = (mergedG[target] * mergedCount[target] + cG[c] * w) / tw
+      mergedB[target] = (mergedB[target] * mergedCount[target] + cB[c] * w) / tw
       mergedCount[target] = tw
       if (mergedAnchor[target] < 0) mergedAnchor[target] = anchor
       remap[c] = target
