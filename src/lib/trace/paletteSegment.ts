@@ -153,6 +153,61 @@ function segDist2(c: PaletteColor, a: PaletteColor, b: PaletteColor): number {
 }
 
 /**
+ * Alpha-feather evidence thresholds (§0 #13). An AI-export PNG surrounds its
+ * opaque shapes with a 3–6px ALPHA ramp; quantize slices that ramp into
+ * translucent shell clusters whose RGB the pairwise blend model can NEVER explain
+ * (the colour is a 3-way mix — parent hue × under-glow × alpha ramp — measured
+ * 13.5–21.2 RGB off every accepted-pair segment on the repro, eps 10; and a
+ * per-pixel RGB(α) ramp fit extrapolated to α=255 lands 18.8–101 off the parent,
+ * so an RGB-explainability test cannot be the gate either). What separates a
+ * feather from an AUTHORED translucent flat is the alpha DISTRIBUTION: a feather
+ * RAMPS (per-cluster α std ≥ 16.1 on the repro, no plateau — top α mode holds
+ * ≤ 6% of pixels), a genuine translucent flat is ONE alpha (authored controls:
+ * std 0.0–0.3, mode share 1.00; the worst healthy AA fringe measured std 6.6,
+ * share 0.38). The thresholds sit in those gaps with ≥ 1.5× margin on both
+ * sides. Fully-opaque art has α mode 255 everywhere, so the gate is inert on
+ * every gated corpus (truth gate rasterizes on white) — byte-identical.
+ */
+const FEATHER_ALPHA_STD = 10
+const FEATHER_MODE_SHARE = 0.15
+
+/** Per-label alpha statistics over kept pixels: MODE, mode's share of the label's
+ *  pixels, and standard deviation. Empty label → opaque constants (mode 255,
+ *  share 1, std 0), which can never read as a feather. */
+function regionAlphaStats(
+  labels: Int32Array,
+  data: Uint8ClampedArray,
+  paletteLen: number,
+): { mode: number; modeShare: number; std: number }[] {
+  const hist = Array.from({ length: paletteLen }, () => new Uint32Array(256))
+  const total = new Uint32Array(paletteLen)
+  for (let i = 0; i < labels.length; i++) {
+    const l = labels[i]
+    if (l < 0) continue
+    hist[l][data[i * 4 + 3]]++
+    total[l]++
+  }
+  return Array.from({ length: paletteLen }, (_, l) => {
+    const n = total[l]
+    if (n === 0) return { mode: 255, modeShare: 1, std: 0 }
+    const h = hist[l]
+    let mode = 255, modeC = 0, sum = 0, sum2 = 0
+    for (let a = 0; a < 256; a++) {
+      const c = h[a]
+      if (c === 0) continue
+      if (c > modeC || (c === modeC && a < mode)) {
+        modeC = c
+        mode = a
+      }
+      sum += a * c
+      sum2 += a * a * c
+    }
+    const mean = sum / n
+    return { mode, modeShare: modeC / n, std: Math.sqrt(Math.max(0, sum2 / n - mean * mean)) }
+  })
+}
+
+/**
  * Classify each palette entry as an anti-alias COVERAGE BLEND or not. AA blends a
  * pixel's colour linearly (in sRGB) between the feature and its background, so a
  * blend cluster's colour lies ON the RGB segment between two real colours — while
@@ -185,11 +240,21 @@ function segDist2(c: PaletteColor, a: PaletteColor, b: PaletteColor): number {
  * sources (35649/35864), so nearest-survivor routing floods 4059 grey pixels into
  * the red entry and the mode-snap then renames red to grey. A blend can only ever
  * be a mixture of its two endpoints, so it goes to one of THEM.
+ *
+ * ALPHA-FEATHER endpoint (§0 #13): a translucent shell of an alpha feather is a
+ * blend whose second endpoint is TRANSPARENCY, so the pairwise RGB segment test
+ * above can never explain it (see FEATHER_ALPHA_STD). An entry that is edge-local,
+ * has no real-region evidence, and carries the measured feather alpha signature
+ * (`feather[i]`) dissolves into the nearest ACCEPTED entry by RGB — measured 100%
+ * unanimous with per-pixel nearest routing on the repro (count-descending order
+ * guarantees the opaque parents are accepted before their own shells come up).
+ * This reproduces the user-approved delete-the-swatch workaround automatically.
  */
 function classifyBlends(
   palette: PaletteColor[],
   real: readonly boolean[],
   edgy: readonly boolean[],
+  feather: readonly boolean[],
 ): { blend: boolean[]; routeTo: Int32Array } {
   const eps2 = BLEND_LINE_EPS * BLEND_LINE_EPS
   const accepted: number[] = []
@@ -211,6 +276,17 @@ function classifyBlends(
             routeTo[i] = d2(palette[i], palette[ia]) <= d2(palette[i], palette[ib]) ? ia : ib
           }
         }
+      }
+      if (routeTo[i] < 0 && feather[i]) {
+        let best = -1, bd = Infinity
+        for (const a of accepted) {
+          const d = d2(palette[i], palette[a])
+          if (d < bd) {
+            bd = d
+            best = a
+          }
+        }
+        routeTo[i] = best
       }
     }
     if (routeTo[i] >= 0) blend[i] = true
@@ -528,7 +604,9 @@ export function segmentFlatPalette(
     const flat = flatInteriorCounts(img, q.labels, q.palette.length)
     const real = Array.from(flat, (c) => c >= opts.minRegionArea)
     const edgy = Array.from(edgeFractions(q.labels, img.width, img.height, q.palette.length), (f) => f >= EDGE_LOCAL_MIN)
-    const { blend, routeTo } = classifyBlends(q.palette, real, edgy)
+    const alphaStats = regionAlphaStats(q.labels, img.data, q.palette.length)
+    const feather = alphaStats.map((s) => s.mode < 255 && s.std >= FEATHER_ALPHA_STD && s.modeShare <= FEATHER_MODE_SHARE)
+    const { blend, routeTo } = classifyBlends(q.palette, real, edgy, feather)
     const modal = modalColorCounts(q.labels, img.data, q.palette.length)
     // Richness for the caller's flat-vs-rich gate: survivors under share/real
     // evidence alone, UNTOUCHED by blend dissolution (see FlatPaletteResult).

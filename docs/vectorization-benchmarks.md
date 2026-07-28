@@ -34,9 +34,23 @@ guardrails):
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 11 | **Small-region drop at LOW resolution** — a 176px region @256 falls under both the share floor and the flat-interior evidence floor, so §9.4's protection cannot see it (the gate runs @512, where the same region is 4× larger and survives) | `flute` @256 (ungated resolution) | 8/9 @256: `#974827` 176px painted `#893925`, ΔE 8.0 | found during §9.7 (pre-existing — present at c3c82cb) |
-| 13 | **Soft-alpha feather survives as a translucent sliver layer** — an AI-export PNG with a wide (3–6px) alpha feather around opaque shapes keeps an RGBA palette entry (alpha-mode < 255) that traces as dozens of arc-shaped translucent slivers hugging every letter edge. The feather cluster has the exact blend profile (`edgy=1.00`, `real=false`) but `classifyBlends` cannot explain it: its second endpoint is TRANSPARENCY, and the colour is a 3-way mix (parent hue × under-glow × alpha ramp) sitting 12.6 RGB off the nearest accepted-pair segment (eps 10) — the pairwise RGB segment model has no alpha dimension. With 0.94% share it clears `minShare` (0.7%) and carries modal protection (112 exact repeats), so no dial removes it. HIGH product relevance (soft-alpha is the default AI-generator export). Workaround that fully works: delete the swatch in the palette editor (locked 2-colour palette: 575 → 240 nodes, single clean edge). Candidate fix: an alpha-aware blend endpoint in `classifyBlends` (feather = edge-local + no real evidence + alpha-mode < 255 + RGB explainable as parent×t toward the local composite), evidence-gated against real authored translucent flats (alpha VARIANCE separates a ramping feather from a one-alpha flat) | `100 years tour.png` (examples/test-files, ungated) | sliver layer: 54 subpaths / 208 nodes @2048, alpha-mode 188 | found 2026-07-21 (user-reported); repro + numbers in this row |
 
-Recently closed (the pattern an exit should follow): **scale-blind corner detection /
+Recently closed (the pattern an exit should follow): **soft-alpha feather survives as a
+translucent sliver layer** (`100 years tour.png`, was #13, user-reported, HIGH product
+relevance — soft-alpha is the default AI-generator export) — closed 2026-07-28, **§11**
+is the record: the feather is a blend whose second endpoint is TRANSPARENCY, invisible
+to the pairwise RGB segment model; the candidate fix's "RGB explainable as parent×t"
+clause was KILLED by measurement (the 3-way mix extrapolates 18.8–101 RGB off the
+parent — that unexplainability is the defect's own mechanism), and the shipped gate is
+pure alpha-distribution evidence: `classifyBlends` gained a feather endpoint
+(`αmode < 255 && αstd ≥ 10 && αmodeShare ≤ 0.15`, margins ≥ 1.5× both sides against
+authored translucent flats and healthy AA fringes) routing the shells into the nearest
+ACCEPTED colour by RGB — measured 100% unanimous with per-pixel routing. Repro traces
+2 items / 230 nodes (the sliver layer was 66 subpaths / 264 nodes @2048; the
+user-approved delete-the-swatch workaround measured 242) — the fix beats the manual
+workaround. Categorically inert on opaque art (A/B corpus 0/42 files changed,
+suite green); `test/palette-feather.test.ts` pins the discrimination both ways.
+**Scale-blind corner detection /
 snap melts well-resolved small sharp features** (`gear-teeth`, was #12 — §10's driver
 case, authored deliberately red) — closed 2026-07-28, **§10.6** is the record: the
 measured histogram FALSIFIED the §10.5 window/apex-merge hypothesis (fusion losses: 0;
@@ -1570,3 +1584,65 @@ nodes. The literal scale-aware fit-ε (openRDP / cubic-discard at `min(ε_abs,
 k·medial)`) remains unbuilt and currently undemanded — this fix measured ε-melts at
 ZERO. §0 #6b (bar caps) is untouched by design: a cap's two shoulders sit in ONE
 contiguous sub-threshold run, which no mergeDist change splits.
+
+---
+
+## 11. Soft-alpha feather (§0 #13) — the alpha-aware blend endpoint (2026-07-28)
+
+**The defect (user-reported 2026-07-21, §0 #13).** An AI-export PNG ("100 years tour",
+2510×1074) surrounds its opaque letters with a 3–6px alpha feather. quantize slices that
+ramp into a family of translucent shell clusters (10 of 12 clusters on the repro);
+they merge into one surviving RGBA palette entry that traces as a translucent sliver
+layer hugging every letter edge — at HEAD before this fix: **66 subpaths / 264 nodes,
+α-mode 222, share 0.93%** (the §0 row's original 54/208/α188 had drifted with
+§10.3–10.5; same mechanism). No dial removed it: `minShare` cleared, modal protection
+held (75 exact repeats ≥ minRegionArea 50).
+
+**Why classifyBlends could not see it.** The blend model explains an entry as a point
+ON the RGB segment between two accepted colours. A feather's second endpoint is
+TRANSPARENCY — there is no second colour — and its RGB is a 3-way mix (parent hue ×
+under-glow × alpha ramp) measured **13.5–21.2 RGB** off every accepted-pair segment
+(eps 10). The candidate fix's other clause ("RGB explainable as parent×t toward the
+local composite") was killed by the same measurement: a per-pixel RGB(α) ramp fit
+extrapolated to α=255 lands **18.8–101 RGB off the parent**. RGB cannot gate this
+class; it is only good for ROUTING (nearest-RGB sends every feather cluster's pixels
+100% unanimously to one survivor).
+
+**The shipped gate is pure alpha-distribution evidence** (`paletteSegment.ts`):
+`regionAlphaStats` (per-label α mode / mode-share / std over kept pixels) feeds a
+`feather[]` flag — `αmode < 255 && αstd ≥ FEATHER_ALPHA_STD(10) && αmodeShare ≤
+FEATHER_MODE_SHARE(0.15)` — and `classifyBlends` gained a second acceptance path: an
+entry that is edge-local, has no real-region evidence, is NOT pair-explainable, and
+carries the feather signature dissolves into the nearest ACCEPTED entry by RGB
+(count-descending order guarantees the opaque parents are accepted before their own
+shells). The existing pre-drop relabel machinery absorbs the pixels; the modal
+exemption auto-drops with `blend=true`.
+
+**Calibration (the separator, measured with margins).** A feather RAMPS; an authored
+translucent flat is ONE alpha. Repro feather clusters: αstd min 16.1 (survivors
+30.7/25.7), αmodeShare max 0.06. Healthy side (synthetic control: authored flats at
+opacity 0.55 over transparency, plus their AA fringes): authored flats αstd 0.0–0.3 /
+modeShare 1.00, worst healthy fringe αstd 6.6 / modeShare 0.38. The thresholds sit in
+the gaps: **10** is 1.6× below the defect's min and 1.5× above the worst healthy
+fringe; **0.15** has 2.5× margin both sides. Fully-opaque art has αmode 255 everywhere
+⇒ the gate is categorically inert on every gated corpus (truth gate rasterizes on
+white).
+
+**After.** Repro: **2 items / 230 nodes** (`#73dbff` + `#ffffff`, both opaque) — the
+sliver layer is GONE, and the result beats the user-approved delete-the-swatch
+workaround (locked 2-colour palette: 242 nodes). Control: both authored translucent
+flats survive at exactly α140. Corpus: A/B vs `before-feather` **0/42 variant files
+changed**; suite green (281 tests incl. the new `test/palette-feather.test.ts`, which
+pins the discrimination BOTH ways — the feather fixture documents that colour and
+alpha must be decorrelated, and that a constant-colour rim manufactures flat-interior
+`real` evidence from its own sub-α-mask neighbours). `src/devtest/featherDiag.ts` is
+the calibration instrument (per-cluster table + fix simulation on repro & control).
+
+**Open risks (named at ship).** (a) A genuinely AUTHORED soft glow/drop-shadow over
+transparency shares the feather signature and now dissolves into its parent — same
+output as the manual workaround, but a behavioural change for such art; the locked
+palette (PaletteEditor) bypasses `classifyBlends` and remains the override. (b) Single
+repro: no second alpha-feather PNG exists in the corpus (Headphones/Schild measured
+fully opaque); the healthy side is calibrated on the synthetic control + the
+categorical opaque-art guarantee. (c) The α≥128 mask clamps measured dispersion; a
+sub-1px feather could dip toward the 16.1 floor — 10 keeps 1.6× margin there.
