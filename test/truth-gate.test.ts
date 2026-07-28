@@ -71,13 +71,14 @@ const RES = 512
  */
 const KNOWN_DEFECTS: Record<string, string> = {
   // --- tier 0 (docs/vectorization-benchmarks.md §7) ------------------------------------
-  // The §0 #6b driver case, authored deliberately red (the gear-teeth §10.5 pattern):
-  // inside a cap narrower than ~2·CORNER_WINDOW the ±4px turn test cannot separate the
-  // two 90° shoulders — apex count and placement are staircase-phase lottery (1 apex →
-  // the far corner bevels away; 3 apexes → every fitted node blunt at 38–52°; 2 apexes
-  // ~1px off → cubic end-tangent wobble reads 45° at a true corner). w8+ is phase-robust
-  // green; the in-case w8/w10 controls must stay green through any fix.
-  'bar-caps': 'corners 30/43 = 69.8% — 7px cap corners bevel/blunt at AA phases',
+  // bar-caps (the §0 #6b driver case, authored deliberately red 2026-07-28, "corners
+  // 30/43 = 69.8% — 7px cap corners bevel/blunt at AA phases") was here for the span of
+  // one commit: inside a cap narrower than ~2·CORNER_WINDOW the ±4px turn test cannot
+  // separate the two 90° shoulders, so apex count and placement are staircase-phase
+  // lottery (1 apex → far corner bevels; 3 apexes → every fitted node blunt at 38–52°;
+  // 2 misplaced → cubic end-tangent wobble reads 45° at a true corner). Fixed by the
+  // cap resolver in planarFit.ts (resolveLoopCaps + cap-aware snap + cap line pin):
+  // 43/43 — docs/vectorization-benchmarks.md §10.7.
   // gear-teeth (the §10 driver case, authored deliberately red 2026-07-21, "corners 21/60
   // — fixed corner window melts well-resolved small teeth") was here until 2026-07-28:
   // the measured root cause was NOT the hypothesized apex-merge/window wash but (a) the

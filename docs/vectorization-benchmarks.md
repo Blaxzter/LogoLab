@@ -29,13 +29,28 @@ guardrails):
 |---|---|---|---|---|
 | 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.22px, p95 0.74px (was 1.44/24.8 — the p95 was the seam occluded under the circle, §9.6) | §7; +0.09 chamfer from the §9.5 fix (label-level endpoint routing sends the whole sliver to one side) |
 | 6 | **Thin features at LOW resolution** — below ~256px the sub-pixel bars still break up (the @512 defect is fixed, §9.5; the gate runs at 512) | `hairlines` @256 (ungated resolution) | chamfer 0.88px, p95 9.77px @256 (was 2.44/27.8 before §9.6 — part of that was bar-crossing occlusion; the remaining 9.77 is real) | §9.5 |
-| 6b | **Bar caps render pointed / domed, not square** (user-reported 2026-07-20, pre-existing). A ≤4px cap + both 90° shoulders fit inside `detectLoopCorners`' ±4px window as ONE sub-threshold cluster → one apex → a pointed end; a wider cap keeps two shoulders but its cap-arm evidence is ~4 AA-ragged points, so the shoulder snaps land slanted (58,49.5 vs 65,51 on the 7px bar) and the cap fits as a shallow dome. Sub-gate (`CORNER_MIN_EDGE` 7 excludes cap corners by design; chamfer passes) — needs a cap/tip discriminator (two ~90° turn peaks inside one cluster ⇒ split, don't fuse) | `hairlines` @512 bar ends | visible at zoom; all boundary gates pass | §10.2 exit note |
 | 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 11 | **Small-region drop at LOW resolution** — a 176px region @256 falls under both the share floor and the flat-interior evidence floor, so §9.4's protection cannot see it (the gate runs @512, where the same region is 4× larger and survives) | `flute` @256 (ungated resolution) | 8/9 @256: `#974827` 176px painted `#893925`, ΔE 8.0 | found during §9.7 (pre-existing — present at c3c82cb) |
 
-Recently closed (the pattern an exit should follow): **soft-alpha feather survives as a
+Recently closed (the pattern an exit should follow): **bar-end caps render pointed /
+domed, not square** (`hairlines` @512 bar ends, was #6b, user-reported 2026-07-20) —
+closed 2026-07-28, **§10.7** is the record: the row's stored anatomy was STALE on both
+halves (§10.6's short-arm bypass had already fixed the ≥7px caps the row described, and
+the "one fused cluster" mechanism is only one of three failure families), so the driver
+case was authored where the loss actually measures TODAY — `bar-caps`, 7px-wide bars
+(the `CORNER_MIN_EDGE` grading floor itself) at the AA phases a real-pipeline sweep
+showed losing: 30/43 = 69.8% corner recall, red, gear-teeth §10.5 pattern. The measured
+root: inside a cap narrower than ~2·`CORNER_WINDOW` the ±4px turn test reads a MIXTURE
+of both shoulders at every cap vertex, so apex count and placement are phase lottery
+(1 apex → far corner bevels; 3 → every node blunt at 38–52°; 2 misplaced → tangent
+wobble reads 45° at a true corner). The cap resolver (`resolveLoopCaps`) re-reads each
+apex group with arm-anchored evidence and, when the group is a flat ~180° U-turn between
+two long straight arms, emits exactly TWO corners snapped to arm∩cap-line and pins the
+cap as a straight line: **43/43 (100%)**, chamfer 0.22 → 0.14, controls and the whole
+corner watchlist (gear-teeth 51/60, sharp-star 11/11, cross-bars 10/10, checker 99.1%)
+byte-stable. **soft-alpha feather survives as a
 translucent sliver layer** (`100 years tour.png`, was #13, user-reported, HIGH product
 relevance — soft-alpha is the default AI-generator export) — closed 2026-07-28, **§11**
 is the record: the feather is a blend whose second endpoint is TRANSPARENCY, invisible
@@ -1587,7 +1602,103 @@ them costs more than it recovers) and ~4 to fit-tangent noise at correctly-place
 nodes. The literal scale-aware fit-ε (openRDP / cubic-discard at `min(ε_abs,
 k·medial)`) remains unbuilt and currently undemanded — this fix measured ε-melts at
 ZERO. §0 #6b (bar caps) is untouched by design: a cap's two shoulders sit in ONE
-contiguous sub-threshold run, which no mergeDist change splits.
+contiguous sub-threshold run, which no mergeDist change splits. *(Closed same day —
+§10.7. Both halves of that sentence turned out stale on measurement: this fix's own
+short-arm bypass had already healed the ≥7px caps, and the fused-run anatomy is only
+one of the three failure families the cap regime actually exhibits.)*
+
+### 10.7 Bar-end caps close: the cap resolver (§0 #6b, 2026-07-28)
+
+**The re-measurement rewrote the row — twice.** The stored anatomy (§10.2 exit note:
+"≤4px cap + both shoulders in ONE ±4px-window cluster → one apex → pointed; 7px cap →
+slanted shoulder snaps → shallow dome") was measured FALSE at HEAD before any design:
+a probe rack of 7–12px bars traced 36/36 corners sub-px — §10.6's short-arm bypass +
+`CORNER_MERGE` 3 had closed the ≥7px regime as an unnoticed side effect (the same rack
+run against the pre-§10.6 tree in a worktree: 32/36, the only loss being a 45° bar the
+70° threshold never detected). The defect was NOT gone though — a real-pipeline sweep
+(angle × width × length × sub-pixel phase, `traceImage` + the scorer's own corner
+match) located where it lives TODAY: **7px-wide caps — the `CORNER_MIN_EDGE` grading
+floor itself — at non-crisp AA phases**, every angle, most phases (recall 0–3 of 4 per
+bar; the same bar at a crisp integer phase, or 1px wider, traces 4/4 sub-px; w8+ is
+phase-robust at 8/8 phases). At an unlucky phase the 50%-isophote cap rasterizes ~1px
+narrower than authored, into the window-confusion zone.
+
+**The driver case** (`bar-caps`, genEdgeCases, gear-teeth §10.5 pattern): eight w7 bars
+pinned at MEASURED-failing (angle, phase) cells — phases authored as center =
+integer + phase/2, the sweep's exact construction — plus a w10-crisp and a w8-at-worst-
+phase control that must stay green through any fix, plus two below-grading-floor bars
+(6px/4px) that keep the user-visible pointed-end regime in the picture without grading.
+At HEAD: **30/43 = 69.8% corner recall, RED** (gate ≥80%), boundary gates green.
+Registered tier 0 + `KNOWN_DEFECTS` for the span of one commit. (Authoring trap worth
+one line: rotated bars authored at width exactly 3.5 viewBox units compute a 6.99…px GT
+short side from float normalization and `CORNER_MIN_EDGE` 7 silently drops their caps
+from grading — the red bars graded n/a until authored 3.51 = 7.02px.)
+
+**Measured loss anatomy (capDiag.ts, kept as the repro artifact).** Stages A/B are
+nearly clean — apex evidence sits 0.4–1.9px from every authored corner — and the loss
+is three families with ONE root: inside a cap narrower than ~2·`CORNER_WINDOW`, every
+cap vertex sees BOTH shoulders through the ±4px window and reads a diluted 60–90°
+mixture, so the run structure (and with it apex count + placement) is staircase-phase
+lottery. (1) ONE apex — the 45°/fused regime, the row's original mechanism: the far
+corner bevels away. (2) THREE apexes — a spurious mid-cap staircase vertex survives
+`CORNER_MERGE` 3 at 3.6px spacing, the fit pins all three, and the cap's turn splits
+38–52° per node: every corner present, none reads ≥60° sharp (the exact "extra apexes
+poison joints" failure §10.6 measured when it rejected the two-scale union). (3) TWO
+apexes ~1px off the true corners: the cubic fitted over the ≤7-point cap arc bends its
+end tangents and a true 90° corner reads 45°.
+
+**What shipped (`planarFit.ts`: `resolveLoopCaps` + cap-aware snap + cap line pin,
+inside `fitCorneredLoop` — API unchanged).** Sub-threshold runs join across gaps ≤ 6
+into apex GROUPS; each group is re-read with ARM-ANCHORED evidence: seed a 6-vertex
+line fit 10 steps outside the group center on each side (the long edges are the most
+reliable objects in the neighbourhood), reject unless both seeds are collinear within
+`SNAP_COLLINEAR` (a checker cell or gear tooth wraps other corners into the seed
+window and fails HERE — that guard, not a size threshold, is what keeps the resolver
+off working art), then extend each line inward RE-FITTING as vertices join (fixed seed
+slope is step-phase noise on low-angle staircases) until deviation > 1.2px — the stop
+lands at the true corner. Classify as CAP iff the arms are anti-parallel ≥150° (a bar
+end U-turns; a gear root→tip zigzag nets ~13°), the stop-to-stop chord is cap-sized
+(3–10px; a rasterized tip plateau is ≤2px and stays a tip), and the interior is FLAT
+(≤1.3px from the chord — a sharp-star tip V dips far below its shoulder chord; this is
+what makes a cap a cap). A classified cap contributes exactly TWO corners, each
+snapped to the intersection of its long-arm line with the cap-chord line (fitted over
+the whole group interior — both corners' evidence pooled), displacement-capped at
+2.5px, and the cap arc is emitted as a straight LINE (§10.6 swept a blanket short-arc
+line preference and measured it WORSE on gear-teeth; this one is evidence-gated to
+classified caps only). Any classification failure leaves the detector's apexes exactly
+as they were.
+
+**Calibration (swept one-at-a-time on the real pipeline, watchlist in the columns).**
+Every ±1-notch variation of the constants measured IDENTICAL across bar-caps,
+gear-teeth, sharp-star, checker, cross-bars and hairlines — the values sit on a
+plateau — except the arm-extension tolerance, whose sweep bounds are real: 1.0 costs
+bar-caps chamfer (0.14 → 0.16, extension stops early on phase-.5 chatter — an AA edge
+at a half-pixel phase CHATTERS ±1px about its mean line, which is noise, not a
+corner), 1.4 starts eating gear-teeth corners (51 → 49/60). Resolver OFF reverts
+bar-caps to 30/43.
+
+**After @512.** `bar-caps`: corners **30/43 → 43/43 (100%)**, chamfer 0.22 → **0.14**,
+in-case controls 7/7 unchanged; `KNOWN_DEFECTS` entry deleted by the CI contract. The
+watchlist is measurement-identical: gear-teeth 51/60 (85%, margin 5) at chamfer 0.18,
+sharp-star 11/11, cross-bars 10/10 at 0.34/0.54, checker 3556/3588 (99.1%) at
+0.00/0.00, gradient-flat 6/6, radial-glow paint gate green. Suite 282/280/0 (2
+skipped), golden byte-stable — no re-bless. A/B corpus vs the frozen `before-caps`
+snapshot: **2 of 42 variant files changed — hairlines.flat + hairlines.grad, the one
+corpus case with sub-7px caps** (its 6px bar ends now square; chamfer 0.41 vs 0.38
+before, both far inside the 1.0 gate); everything else byte-identical. Review in
+/labs/ab → Vs snapshot → `before-caps`.
+
+**Residue (not gated red anywhere).** (a) `hairlines`' 4px bar at phase .76 still ends
+in a 1px nub: its fused-apex fit pinches, the planarAssemble AREA GUARD (correctly)
+emits the exact staircase, and that staircase faithfully includes a 1px AA notch in
+the raster cap — the resolver declined the 3–4px cap at that phase, and chasing it
+below `chordMin` 3 is the measured guard against splitting eroded star-tip plateaus
+(§10.2's 1–2px shoulder pairs) into false corner pairs. Sub-floor thin bars are the
+§0 #6 family. (b) Caps on OPEN edges (a bar ending at a junction, the
+`fitCorneredOpen` path) never enter the resolver — no case demands it (cross-bars is
+10/10); the class fix would mirror `resolveLoopCaps` there. (c) `bar-caps` is NOT in
+`AB_CORPUS` (same §10.5 reasoning: a case absent from frozen manifests breaks AbLab's
+snapshot compare; add at the next natural re-bless).
 
 ---
 

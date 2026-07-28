@@ -753,23 +753,267 @@ export function detectLoopCorners(pts: Vec[], turnDeg: number, win = CORNER_WIND
 }
 
 /**
+ * BAR-END CAP resolver (§0 #6b). Inside a cap narrower than ~2·CORNER_WINDOW the
+ * ±win turn test cannot separate the two 90° shoulders: every vertex on the cap
+ * sees BOTH shoulders through the window and reads a diluted 60–90° turn, so the
+ * sub-threshold run structure — and with it the apex count and placement — is
+ * staircase-phase lottery. Measured on the bar-caps rack @512 (capDiag.ts): a 7px
+ * cap emits 1 apex (the far corner bevels away), 3 apexes (each fitted node
+ * carries only 38–52° of the cap's turn — present but blunt, the exact failure
+ * §10.6 rejected the two-scale union for), or 2 apexes a px off the corners
+ * (cubic end-tangent wobble on the ≤7px arc reads 45° at a true corner).
+ *
+ * The resolver re-reads each apex GROUP (sub-threshold runs joined across gaps
+ * ≤ joinGap) and classifies it as a CAP on three pieces of evidence:
+ *   • through-turn: travel direction REVERSES across the group (≥ throughDeg —
+ *     a bar end U-turns; a gear root→tip zigzag nets ~13° and never qualifies);
+ *   • chord: the group spans a cap-sized chord (chordMin..chordMax px — a
+ *     rasterized tip plateau is ≤2px and stays a tip; an 8px+ cap or a checker
+ *     cell edge already resolves into two clean shoulder runs and is left alone);
+ *   • flatness: every group vertex sits within `flat` px of the group chord (a
+ *     sharp-star tip V dips several px below its shoulder chord and never
+ *     qualifies — this is what makes a cap a cap and a tip a tip).
+ * A classified cap contributes exactly TWO corners — the group's outermost
+ * sub-threshold vertices — and the arc between them is fitted as a straight
+ * LINE with both endpoints snapped to the intersection of the adjacent LONG arm
+ * with the cap-chord line (the twin corners share one edge, so the whole group
+ * interior is that edge's evidence; displacement is capped at snapMax so a bad
+ * line can never carry a corner out of tolerance). Unclassified groups keep
+ * their detector apexes untouched.
+ */
+// Calibration (swept one-at-a-time on the real pipeline against bar-caps +
+// gear-teeth + sharp-star + checker + cross-bars + hairlines, 2026-07-28):
+// every ±1-notch variation of these is measured IDENTICAL on the whole
+// watchlist — the values sit on a plateau — except CAP_EXTEND_DEV, whose sweep
+// bounds are real: 1.0 costs bar-caps chamfer (0.14 → 0.16), 1.4 starts eating
+// gear-teeth corners (51 → 49/60). Only chordMax 0 (resolver OFF) reverts the
+// bar-caps failure (43/43 → 30/43).
+/** Arms must be ANTI-PARALLEL within this (deg): a butt cap U-turns (~180°). */
+const CAP_ANTIPARALLEL_DEG = 150
+const CAP_CHORD_MIN = 3
+const CAP_CHORD_MAX = 10
+/** Max perp deviation (px) of the A..B interior from the A→B chord — what makes
+ *  a cap a cap and a star-tip V a tip. */
+const CAP_FLAT = 1.3
+const CAP_JOIN_GAP = 6
+const CAP_SNAP_MAX = 2.5
+/** Arm seed starts this many steps OUTSIDE the group center… */
+const CAP_ARM_K = 10
+/** …and spans this many vertices. Both sides must be straight (collinear). */
+const CAP_ARM_SEED = 6
+/** Arm-extension tolerance (px). Looser than SNAP_COLLINEAR: an AA edge at a
+ *  half-pixel phase CHATTERS ±1px around its mean line (the isophote sits
+ *  between two pixel columns), which is noise, not a corner — while the cap
+ *  turn deviates 2px+ and still stops the extension. */
+const CAP_EXTEND_DEV = 1.2
+
+interface ResolvedCaps {
+  /** Revised corner list (raw pts indices, ascending). */
+  corners: number[]
+  /** Corner index c (a pts index) such that the arc c → next corner is a cap. */
+  capStarts: Set<number>
+}
+
+export function resolveLoopCaps(pts: Vec[], corners: number[], turnDeg: number, win = CORNER_WINDOW): ResolvedCaps {
+  const n = pts.length
+  const none = (): ResolvedCaps => ({ corners, capStarts: new Set() })
+  if (corners.length < 1 || turnDeg >= 180 || n < 2 * win + 1) return none()
+  const wrap = (i: number): number => ((i % n) + n) % n
+  const thr = Math.cos((turnDeg * Math.PI) / 180)
+  const sharp = new Uint8Array(n)
+  for (let i = 0; i < n; i++) {
+    const inDir = unit(sub(pts[i], pts[wrap(i - win)]))
+    const outDir = unit(sub(pts[wrap(i + win)], pts[i]))
+    if (inDir.x * outDir.x + inDir.y * outDir.y < thr) sharp[i] = 1
+  }
+  // Maximal cyclic runs of sub-threshold vertices, in loop order.
+  const runs: { s: number; e: number }[] = []
+  const seen = new Uint8Array(n)
+  for (let i = 0; i < n; i++) {
+    if (!sharp[i] || seen[i]) continue
+    let s = i
+    while (sharp[wrap(s - 1)] && wrap(s - 1) !== i) s = wrap(s - 1)
+    let e = s
+    let len = 1
+    seen[s] = 1
+    while (sharp[wrap(e + 1)] && wrap(e + 1) !== s) {
+      e = wrap(e + 1)
+      seen[e] = 1
+      len++
+      if (len >= n) break
+    }
+    runs.push({ s, e })
+  }
+  if (runs.length === 0) return none()
+  runs.sort((a, b) => a.s - b.s)
+  // Join runs across gaps ≤ joinGap into GROUPS (cyclic — the last may wrap onto
+  // the first). A group is one candidate feature: a cap's two shoulder runs, or a
+  // fused cap run, or an ordinary lone corner cluster.
+  const gap = (a: { e: number }, b: { s: number }): number => wrap(b.s - a.e) - 1
+  const groups: { s: number; e: number }[] = []
+  let cur = { ...runs[0] }
+  for (let k = 1; k < runs.length; k++) {
+    if (gap(cur, runs[k]) <= CAP_JOIN_GAP) cur.e = runs[k].e
+    else {
+      groups.push(cur)
+      cur = { ...runs[k] }
+    }
+  }
+  groups.push(cur)
+  if (groups.length >= 2 && gap(groups[groups.length - 1], groups[0]) <= CAP_JOIN_GAP) {
+    groups[0].s = groups[groups.length - 1].s
+    groups.pop()
+  }
+
+  const out: number[] = []
+  const capStarts = new Set<number>()
+  const arcLen = (s: number, e: number): number => wrap(e - s) + 1
+  const inGroup = (g: { s: number; e: number }, i: number): boolean => wrap(i - g.s) <= wrap(g.e - g.s)
+  // One arm of the cap hypothesis: seed a line fit `armK` steps OUTSIDE the group
+  // center (on the long edge, well clear of the confusion zone), then extend it
+  // INWARD while collinear — the extension stops at the true corner. Returns the
+  // stop vertex + the travel-oriented arm direction, or null when the seed itself
+  // is not straight (a checker cell / gear tooth wraps other corners into the
+  // seed window and fails here — exactly the art this resolver must not touch).
+  const findArm = (m: number, sign: -1 | 1): { stop: number; dir: Vec } | null => {
+    const seed: Vec[] = []
+    for (let o = CAP_ARM_K + CAP_ARM_SEED - 1; o >= CAP_ARM_K; o--) seed.push(pts[wrap(m + sign * o)])
+    let line = armLine(seed)
+    for (const p of seed) {
+      const dev = Math.abs((p.x - line.c.x) * line.d.y - (p.y - line.c.y) * line.d.x)
+      if (dev > SNAP_COLLINEAR) return null
+    }
+    // Extend inward RE-FITTING the line as each vertex joins (the snapCornerToArms
+    // collect trick): a fixed seed slope is step-phase noise on a low-angle
+    // staircase and would stop treads early; the refit converges on the true edge
+    // and the stop lands at the corner.
+    let stop = wrap(m + sign * CAP_ARM_K)
+    const acc = seed.slice()
+    for (let o = CAP_ARM_K - 1; o >= 0; o--) {
+      const i = wrap(m + sign * o)
+      const dev = Math.abs((pts[i].x - line.c.x) * line.d.y - (pts[i].y - line.c.y) * line.d.x)
+      if (dev > CAP_EXTEND_DEV) break
+      acc.push(pts[i])
+      line = armLine(acc)
+      stop = i
+    }
+    // Orient the fitted direction ALONG TRAVEL (ascending index order).
+    const a = pts[wrap(m + sign * (CAP_ARM_K + CAP_ARM_SEED - 1))]
+    const b = pts[wrap(m + sign * CAP_ARM_K)]
+    const travel = sign === -1 ? sub(b, a) : sub(a, b)
+    const d = travel.x * line.d.x + travel.y * line.d.y >= 0 ? line.d : neg(line.d)
+    return { stop, dir: d }
+  }
+  for (const g of groups) {
+    const members = corners.filter((c) => inGroup(g, c))
+    const span = arcLen(g.s, g.e)
+    // Classification — see the header comment. All evidence-gated; any failure
+    // leaves the group's detector apexes exactly as they were.
+    let cap: { a: number; b: number } | null = null
+    if (span <= 24 && span < n - 2 * (CAP_ARM_K + CAP_ARM_SEED)) {
+      const m = wrap(g.s + (span >> 1))
+      const armIn = findArm(m, -1)
+      const armOut = findArm(m, 1)
+      if (armIn && armOut && armIn.stop !== armOut.stop) {
+        const A = armIn.stop
+        const B = armOut.stop
+        const chord = dist(pts[A], pts[B])
+        const cosT = armIn.dir.x * armOut.dir.x + armIn.dir.y * armOut.dir.y
+        const uturn = (Math.acos(Math.max(-1, Math.min(1, cosT))) * 180) / Math.PI
+        if (chord >= CAP_CHORD_MIN && chord <= CAP_CHORD_MAX && uturn >= CAP_ANTIPARALLEL_DEG) {
+          let maxDev = 0
+          for (let i = A; i !== B; i = wrap(i + 1)) maxDev = Math.max(maxDev, perpDistance(pts[i], pts[A], pts[B]))
+          if (maxDev <= CAP_FLAT) cap = { a: A, b: B }
+        }
+      }
+    }
+    if (cap) {
+      out.push(cap.a, cap.b)
+      capStarts.add(cap.a)
+    } else out.push(...members)
+  }
+  out.sort((a, b) => a - b)
+  // Dedup (a group end could coincide with a member of a neighbouring group).
+  const dedup: number[] = []
+  for (const c of out) if (dedup[dedup.length - 1] !== c) dedup.push(c)
+  return { corners: dedup, capStarts }
+}
+
+/** Least-squares line through the INTERIOR staircase vertices of a cap arc (its
+ *  two corners excluded — they sit on the shoulder rounding). Falls back to the
+ *  corner-to-corner chord when the interior is too short to fit. */
+function capChordLine(pts: Vec[], cIn: number, cOut: number): { c: Vec; d: Vec } {
+  const n = pts.length
+  const wrap = (i: number): number => ((i % n) + n) % n
+  const interior: Vec[] = []
+  for (let i = wrap(cIn + 1); i !== cOut; i = wrap(i + 1)) interior.push(pts[i])
+  if (interior.length >= 2) return armLine(interior)
+  const d = unit(sub(pts[cOut], pts[cIn]))
+  return { c: { x: pts[cIn].x, y: pts[cIn].y }, d }
+}
+
+/** Snap one cap corner to the intersection of its LONG arm's fitted line with the
+ *  shared cap-chord line. `sign` −1 ⇒ the long arm precedes the corner (an arc
+ *  ENDS at this cap), +1 ⇒ it follows (an arc STARTS here). Falls back to the raw
+ *  lattice vertex when the arm is degenerate or the intersection runs away. */
+function snapCapCorner(pts: Vec[], c: number, sign: -1 | 1, toLong: number, capLine: { c: Vec; d: Vec }, snapMax: number): Vec {
+  const n = pts.length
+  const wrap = (i: number): number => ((i % n) + n) % n
+  const gapN = armGap(toLong)
+  const span = Math.min(SNAP_SPAN, Math.max(gapN + 1, toLong - 1))
+  const arm: Vec[] = []
+  for (let o = gapN; o <= span; o++) arm.push(pts[wrap(c + sign * o)])
+  if (arm.length < 2) return { x: pts[c].x, y: pts[c].y }
+  const a = armLine(arm)
+  const det = a.d.x * -capLine.d.y - a.d.y * -capLine.d.x
+  if (Math.abs(det) < 1e-6) return { x: pts[c].x, y: pts[c].y }
+  const rx = capLine.c.x - a.c.x
+  const ry = capLine.c.y - a.c.y
+  const t = (rx * -capLine.d.y - ry * -capLine.d.x) / det
+  const ix = a.c.x + t * a.d.x
+  const iy = a.c.y + t * a.d.y
+  if (dist({ x: ix, y: iy }, pts[c]) > snapMax) return { x: pts[c].x, y: pts[c].y }
+  return { x: ix, y: iy }
+}
+
+/**
  * Fit a closed loop that has sharp corners without beveling them: snap each corner
  * to its sub-pixel arm intersection, split the raw staircase at the corners, and
  * fit each arc as an open arc pinned at the snapped corners (so the arm staircase
  * still melts but the corners stay exact). Stitch the arcs into one closed node
  * list, each corner a single hard node. Falls back to `fitLoopEdge` if the corners
  * collapse to fewer than two distinct points.
+ *
+ * Cap arcs (resolveLoopCaps) are the exception to arc fitting: a classified cap
+ * is emitted as a straight LINE between its two snapped corners — the evidence
+ * says it IS a line, and a cubic fitted over ≤7 ragged points bends its end
+ * tangents enough to read a true 90° corner as 45° (§0 #6b, capDiag).
  */
 export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOptions): PathNode[] {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
-  const C = corners.slice().sort((a, b) => a - b)
+  const resolved = resolveLoopCaps(pts, corners.slice().sort((a, b) => a - b), opts.cornerTurnDeg)
+  const C = resolved.corners
+  // Cap pairing BEFORE the coincident-drop below: start → its twin (the next
+  // corner). A pair whose members don't both survive the drop reverts to normal.
+  const capPartner = new Map<number, number>()
+  const capLineOf = new Map<number, { c: Vec; d: Vec }>()
+  for (const s of resolved.capStarts) {
+    const k = C.indexOf(s)
+    const partner = C[(k + 1) % C.length]
+    capPartner.set(s, partner)
+    capLineOf.set(s, capChordLine(pts, s, partner))
+  }
   // Snap each corner, capping arm samples to the gap to its neighbour corners.
   const snappedAll: Vec[] = C.map((c, k) => {
     const prev = C[(k - 1 + C.length) % C.length]
     const next = C[(k + 1) % C.length]
     const toPrev = wrap(c - prev)
     const toNext = wrap(next - c)
+    // Cap corners: intersection of the LONG arm with the shared cap-chord line
+    // (snapCapCorner). The long arm is on the non-cap side.
+    if (capPartner.has(c)) return snapCapCorner(pts, c, -1, toPrev, capLineOf.get(c)!, CAP_SNAP_MAX)
+    if (capPartner.get(prev) === c) return snapCapCorner(pts, c, 1, toNext, capLineOf.get(prev)!, CAP_SNAP_MAX)
     const inGap = armGap(toPrev)
     const outGap = armGap(toNext)
     const inSpan = Math.min(SNAP_SPAN, Math.max(inGap + 1, toPrev - 1))
@@ -795,6 +1039,13 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     snap.pop()
   }
   if (idx.length < 2) return fitLoopEdge(presmooth(pts, opts.smoothPasses, false), opts)
+  // A cap arc is line-pinned only while its start and twin are still ADJACENT
+  // survivors — a drop that touched either reverts the pair to a normal arc.
+  const capStarts = new Set<number>()
+  for (const [s, partner] of capPartner) {
+    const k = idx.indexOf(s)
+    if (k >= 0 && idx[(k + 1) % idx.length] === partner) capStarts.add(s)
+  }
 
   // Fit each arc between consecutive corners (snapped endpoints pinned & sharp).
   const arcs = idx.length
@@ -802,6 +1053,18 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
   for (let k = 0; k < arcs; k++) {
     const a = idx[k]
     const b = idx[(k + 1) % arcs]
+    if (capStarts.has(a)) {
+      // Classified cap: a straight line between the two snapped corners. The
+      // group interior IS this line's evidence (capChordLine), and a cubic over
+      // ≤7 ragged points would wobble its end tangents (§0 #6b).
+      const A = snap[k]
+      const B = snap[(k + 1) % arcs]
+      fitted.push([
+        { x: A.x, y: A.y, hIn: null, hOut: null, kind: 'corner' },
+        { x: B.x, y: B.y, hIn: null, hOut: null, kind: 'corner' },
+      ])
+      continue
+    }
     const arc: Vec[] = []
     let i = a
     while (true) {
