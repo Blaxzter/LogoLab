@@ -295,6 +295,73 @@ function intersect(p1: Prim, p2: Prim): Vec[] {
   ]
 }
 
+/**
+ * Re-map a CURVED terminal segment onto a moved endpoint, keeping its own
+ * curvature (§13). The un-paired third edge at a re-seated junction is
+ * anchor-shifted, and a rigid shift keeps handles sized for the OLD span: when
+ * the correction shortens the segment, the cubic balloons outward by the
+ * leftover handle length (bg-ramp-twin: a 41° rim cap whose two ends were
+ * re-seated 7.5px and 5.2px inward bulged 3.26px past its own circle — the
+ * "beak" on a disc that should be round).
+ *
+ * The control polygon is carried by the similarity that maps the old endpoint
+ * onto `H` about the inner anchor, EXCEPT that the component perpendicular to
+ * the chord scales by k² rather than k: a circular arc's sagitta goes as
+ * chord²/radius, so a pure similarity would inflate the radius as the chord
+ * shrinks — it preserves the shape when what must be preserved is the CURVE the
+ * boundary is a piece of. Exact for a straight segment (perp component 0) and
+ * for a circular arc.
+ *
+ * ONLY the SHRINKING case is corrected (k < 1). That is the defect: leftover
+ * handle length the shortened span no longer supports, bulging outward, visible
+ * and gate-poisoning. A LENGTHENED span leaves the handles too short instead —
+ * the segment flattens toward its chord, the conservative direction, and the
+ * near-straight fits depend on it: `hairlines`' diagonal crosses a bar in a 9.9px
+ * edge whose fit carries a sub-pixel wobble, and scaling that by k² put a visible
+ * S-kink in a straight bar (it also stopped 1b from straightening the edge at all,
+ * so the kink survived to the output). Growth keeps the plain shift, unchanged.
+ *
+ * `k` is floored for the perpendicular term so a near-collapsed span does not
+ * quite flatten the segment to its chord.
+ */
+const RESHAPE_K_MIN = 0.25
+
+function reshapeTerminalTo(T: PathNode, inner: PathNode, atEnd: boolean, H: Vec): boolean {
+  const hT = atEnd ? T.hIn : T.hOut
+  const hI = atEnd ? inner.hOut : inner.hIn
+  // A straight terminal segment is already exact under a plain shift — leave it
+  // (and every edge made of straight runs) byte-identical.
+  if (!hT && !hI) return false
+  const ux = T.x - inner.x
+  const uy = T.y - inner.y
+  const L0 = Math.hypot(ux, uy)
+  const vx = H.x - inner.x
+  const vy = H.y - inner.y
+  const L1 = Math.hypot(vx, vy)
+  if (L0 < 1e-6 || L1 < 1e-6) return false
+  const k = L1 / L0
+  if (k >= 1) return false // growth: the plain shift's under-bulge is the safe error
+  const kPerp = k * Math.max(RESHAPE_K_MIN, k)
+  // Orthonormal frames on the old and new chords (both rooted at `inner`).
+  const oax = ux / L0
+  const oay = uy / L0
+  const nax = vx / L1
+  const nay = vy / L1
+  const remap = (h: Vec): void => {
+    const dx = h.x - inner.x
+    const dy = h.y - inner.y
+    const along = (dx * oax + dy * oay) * k
+    const perp = (dx * -oay + dy * oax) * kPerp
+    h.x = inner.x + along * nax + perp * -nay
+    h.y = inner.y + along * nay + perp * nax
+  }
+  if (hT) remap(hT)
+  if (hI) remap(hI)
+  T.x = H.x
+  T.y = H.y
+  return true
+}
+
 /** Move a node's anchor, carrying its handles by the same delta. */
 function shiftNodeTo(n: PathNode, x: number, y: number): void {
   const dx = x - n.x
@@ -357,7 +424,9 @@ function terminalMid(e: SharedEdge, atEnd: boolean): Vec {
  *    and the straight run extends to `H` (the bend was the defect).
  *  • pair member, circle arm: the terminal segment re-emits as an arc slice of
  *    the fitted circle into `H`, so the boundary keeps the circle's tangent.
- *  • third edge (no primitive used): plain anchor shift, handles carried.
+ *  • third edge (no primitive used): the anchor moves to `H`; a curved terminal
+ *    segment is re-mapped onto it curvature-preserving (reshapeTerminalTo), a
+ *    straight one takes the plain shift.
  */
 function applyEnd(end: End, H: Vec, prim: Prim | null): void {
   const { e, atEnd } = end
@@ -365,7 +434,12 @@ function applyEnd(end: End, H: Vec, prim: Prim | null): void {
   let m = nodes.length
   if (m < 2) return
   if (!prim) {
-    shiftNodeTo(atEnd ? nodes[m - 1] : nodes[0], H.x, H.y)
+    // No primitive of its own in the winning pair: the anchor moves, and a CURVED
+    // terminal segment is re-mapped onto it (a rigid shift would leave it holding
+    // handles sized for the old span — the bulging rim cap of §13). A straight
+    // one takes the plain shift, byte-identically.
+    const T = atEnd ? nodes[m - 1] : nodes[0]
+    if (!reshapeTerminalTo(T, atEnd ? nodes[m - 2] : nodes[1], atEnd, H)) shiftNodeTo(T, H.x, H.y)
     return
   }
   if (prim.kind === 'line') {

@@ -1949,3 +1949,118 @@ no re-bless.
 - **flute-flat corners 4/10 @256 / 0/9 @512** — resolution-independent tier-2 corner
   behaviour, ungated everywhere, out of this family (§12.1).
 - **`#990838` @512** — §0 #14, the remaining §10.4 damage.
+
+## 13. The rim-cap bulge — a re-seated third edge kept handles sized for its old span (2026-07-29)
+
+**Symptom (user-reported, /labs/ab on `bg-ramp-twin`, flat variant).** The left disc is
+not round: a pointed "beak" pushes out of its right rim exactly where a posterization
+band boundary crosses. The right disc, same image, same trace, is perfectly round.
+
+**Not a regression.** The flat trace is byte-identical to the `before-lowres` snapshot
+@5143c64 — the A/B row's "unchanged" tag is honest. §12 did not cause it; it had simply
+never been looked at, because **no gate scores it**: `bg-ramp-twin` is registered
+`gradients: true` (a flat trace of ramp art is bands the authored SVG does not contain,
+so boundary agreement against the answer sheet is meaningless there). With gradients ON
+the disc is ONE closed edge and 1a snaps it to a circle (r 52.16 vs authored 52). The
+defect exists only on the path nothing measures.
+
+**Cause — §10.4's third edge is anchor-shifted with frozen handles.** Flat mode
+posterizes the ramp, so two band boundaries plant junctions on the disc's rim and the
+rim becomes four open arcs. `reseatJunctions` correctly re-seats the two junctions
+bounding the right cap onto the line∩circle intersection (both land on the true circle):
+
+```
+v9  (191.00,234.00) → (194.00,240.91)  move 7.53px   line x=194 conf 230 × circle r=52.22 conf 108
+v10 (189.00,282.00) → (192.00,277.71)  move 5.23px   line x=192 conf 230 × circle r=52.72 conf 105
+```
+
+At each junction the pass re-emits only the **two strongest** arms from their primitives.
+The cap edge loses both votes — its own circle arm scores conf 50 at v9 and is too short
+to claim a primitive at all at v10, against the long rim arc's 108 — so it falls to
+`applyEnd`'s third-edge branch: `shiftNodeTo`, anchor moved, handles translated rigidly.
+Its chord shrinks 48px → 37px while the handles keep their old length, and the cubic
+balloons. Measured on the 41° cap, radial error against the authored circle:
+
+| `edge#18` | anchors | fitted curve |
+|---|---|---|
+| baseline | 0.68px | **3.26px** |
+| re-seat off (`planarFit.junctionReseat: false`) | 0.12px | 0.12px |
+
+**Why the repair that exists could not fire — and why only ONE disc is affected.** §1d
+(`snapCoCircularLoops`) is built for exactly this shape: a rim split into arcs, fitted to
+one circle. It gates on max radial deviation of the **flattened fitted** loop, so it eats
+the self-inflicted bulge:
+
+```
+green loop  turn 32.6° ok   circle (144.7,256.1) r=52.35   dev 2.234 > tol 1.500  → VETOED
+blue  loop  turn 50.2° ok   circle (368.0,256.1) r=65.93   dev 1.453 ≤ tol 1.500  → snapped
+```
+
+The blue disc has the identical defect (its own worst arc bulges 1.53px pre-snap) and
+clears the fidelity by 0.05px. Green misses by 0.73px and keeps four independently fitted
+arcs. One image, two discs, opposite outcomes from the same mechanism — the tolerance
+edge is the only difference. With the re-seat off, green's loop deviates 0.682 and 1d
+fits (144.1, 256.1) r=51.97 against the authored (144, 256, 52).
+
+**The fix — `reshapeTerminalTo` in `planarReseat.ts`.** A moved anchor re-maps its
+terminal segment instead of dragging it: the control polygon is carried by the similarity
+taking the old endpoint onto the corrected one about the inner anchor, with the component
+PERPENDICULAR to the chord scaled by k² rather than k. A circular arc's sagitta goes as
+chord²/radius, so a pure similarity preserves the segment's *shape* when what must be
+preserved is the *curve it is a piece of* — it would inflate the radius as the chord
+shrinks. Exact for a straight segment, exact for a circular arc.
+
+Two guards keep the blast radius small, and **both were forced by measurement, not
+foresight**:
+
+- **A terminal segment with no handles takes the plain shift unchanged** — most edges,
+  untouched.
+- **Only the SHRINKING case is corrected (k < 1).** See "Rejected" below: applying k² on
+  GROWTH regressed `hairlines`.
+
+**Rejected — k² on a lengthening span (caught by the user in /labs/ab, not by any gate).**
+The first version scaled the perpendicular component by k² in both directions, clamped to
+k ≤ 2. It put a visible S-kink in `hairlines`' straight diagonal where it crosses a bar:
+the crossing leaves a 9.9px edge whose fit carries a sub-pixel wobble, the correction
+LENGTHENED it, and k² multiplied that wobble by up to 4×. Worse, the bend then failed 1b's
+straightness test, so the edge kept handles it had previously had *dropped* — the kink
+survived to the output:
+
+```
+edge#8  (9.9px, across the bar crossing)
+before      (229.00,184.00) hOut=-               (232.11,193.41) hIn=-           ← straight
+k² on grow  (229.00,184.00) hOut=3.0px@perp0.04  (232.11,193.41) hIn=3.5px@perp-1.50
+```
+
+The asymmetry is the point: a shortened span leaves handles too LONG — the segment bulges
+outward past its own curve, visible and gate-poisoning. A lengthened span leaves them too
+SHORT — the segment flattens toward its chord, the conservative direction, and near-straight
+fits depend on that. Correct the over-long case; leave the under-long case alone. With the
+guard, `hairlines` is byte-identical to the baseline again and the disc fix is unaffected
+(both ends of the rim cap shrink: k = 0.86 and 0.89).
+
+**After.** The cap's curve error drops 3.26px → **0.40px**; the loop then deviates 1.155
+< 1.5, so 1d fires and the whole rim becomes one circle (every arc ≤ 0.40px). Blue
+improves too (1.453 → 1.303), i.e. it stops riding the tolerance edge.
+
+| | cap curve err | 1d loop dev | outcome |
+|---|---|---|---|
+| before | 3.26px | 2.234 (> 1.5) | four fitted arcs, beak |
+| probe (linear handle rescale) | 0.69px | 1.155 | 1d fires |
+| shipped (k² perpendicular) | **0.40px** | **1.155** | 1d fires, rim = one circle |
+
+**Collateral (A/B, 21 cases × flat+grad vs `before-reseat-cap`).** **4 cases moved**
+(6 before the shrink-only guard; `hairlines` and `nebula` returned to byte-identical):
+`bg-ramp-twin` (−6 path commands — the snapped circle is cheaper), `petals`,
+`gradient-flat`, `flute-flat`. No path-count change anywhere; the three collateral ones
+are sub-pixel nudges on smooth arcs, rendered and inspected at 9× (total |Δ| vs the
+baseline render: petals 18, gradient-flat 42, flute-flat **1** px-equivalents). Full suite
+**307 tests, 0 fail**. Tier-0 ground truth: every case byte-identical in score except
+**`gradient-flat` @256 — the case §10.4 itself was built for — which IMPROVES** (width
+0.68 → 0.67, hausdorff 2.09 → 2.08). No `KNOWN_DEFECTS` movement in either direction.
+
+**Open (named, not hidden).** The mechanism has **no gated witness**. `bg-ramp-twin`'s
+flat trace is unscorable against ramp art by construction, so this fix is protected by
+nothing: the driver case that *would* gate it is flat art where a plain disc is crossed
+by a plain bar — authored circle + rect, fully scorable, the §10.5 `gear-teeth` recipe.
+Until that case exists, the regression that produced the beak can return silently.
