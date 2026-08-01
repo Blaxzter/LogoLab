@@ -4,7 +4,7 @@
 //   2. finite, in-range fidelity metrics with at least one emitted path.
 //
 // The full scoreboard (both engines, all numbers) is written by
-// src/devtest/runBaseline.ts and rendered visually in vectorize-test.html; this
+// src/devtest/runBaseline.ts and rendered visually in /labs/eval (EvalLab); this
 // test is the CI guardrail.
 //
 //   node --test test/harness.test.ts

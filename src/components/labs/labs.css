@@ -1,0 +1,162 @@
+/* Styling the five vectorizer labs share, and that Tailwind utilities can't express:
+   the box-size CSS variable driven by the toolbar slider, the "fill your box" rule for
+   generated <svg>/<img>/<canvas> content, and the nodes/edges wireframe.
+
+   Imported from LabPage, i.e. only from the lazily-loaded lab chunks — it never lands
+   in the main bundle's CSS. */
+
+/* A panel box, sized by --lab-box (the toolbar slider). Panel.tsx overrides width/height
+   inline to the ART's aspect ratio, fitted inside this square — a raster stretched to a
+   square is distorted, and a trace SVG letterboxes itself, so forcing squares drew the two
+   at different scales in the same row. This is the fallback for boxes with no art. */
+.lab-box {
+  width: var(--lab-box, 260px);
+  height: var(--lab-box, 260px);
+  flex: none;
+}
+.lab-cell {
+  width: var(--lab-box, 260px);
+  flex: none;
+}
+
+/* Generated content (serialized traces, canvases, rasters) fills its panel. */
+.lab-art > svg,
+.lab-art > img,
+.lab-art > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Belt-and-braces: the panel is already the art's shape, so this is a no-op — unless a
+     caller forgets to pass `aspect`, in which case the art letterboxes instead of shearing. */
+  object-fit: contain;
+}
+
+/* The art is a PICTURE, not a target: the panel behind it is what pans. Without this,
+   pressing on an <img> and moving starts the browser's native image drag, which steals
+   the pointer capture out from under ZoomSurface — so drag-to-pan silently dies on every
+   raster panel (and, in the A/B lab, even raises the drop-zone ring). `pointer-events:
+   none` means the press never lands on the image at all, so no drag can begin; the
+   user-drag/select rules are belt-and-braces for browsers that hit-test differently. */
+.lab-art,
+.lab-art * {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/* Rasters are for pixel-peeping: don't smooth them away under zoom. */
+.lab-art.pixelated > img,
+.lab-art.pixelated > canvas {
+  image-rendering: pixelated;
+}
+
+/* --- source-pixel grid (Panel `grid` prop) --------------------------------
+   One cell per SOURCE pixel, so "did this edge move half a pixel?" is readable
+   against a fixed reference. Two rules make it work under the row camera:
+   • the hairline counter-scales against the ancestor transform via --pz-scale
+     (the same trick the wireframe uses — see usePanZoom), staying ~1 screen px
+     at any zoom instead of fattening into bars;
+   • it only exists when zoomed far enough for a source pixel to span real
+     screen area — the opacity ramps in from ~10× camera scale and caps low, so
+     at overview zoom the panels look exactly as before. */
+.pixel-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --pg-line: calc(1px / var(--pz-scale, 1));
+  --pg-c: rgba(101, 129, 199, 0.55);
+  opacity: clamp(0, (var(--pz-scale, 1) - 10) / 8, 0.35);
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--pg-c) 0,
+      var(--pg-c) var(--pg-line),
+      transparent var(--pg-line),
+      transparent calc(100% / var(--pg-w, 512))
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--pg-c) 0,
+      var(--pg-c) var(--pg-line),
+      transparent var(--pg-line),
+      transparent calc(100% / var(--pg-h, 512))
+    );
+}
+
+/* --- nodes/edges wireframe ------------------------------------------------
+   The wireframe ships inside every trace SVG but stays hidden until the toolbar
+   toggle puts `.wires` on the lab root — so flipping it needs no re-trace.
+   Each dot is a zero-length <line> with a round (smooth / junction) or square
+   (corner) cap.
+
+   CONSTANT SCREEN SIZE AT ANY ZOOM: the ZoomSurface magnifies the whole panel with
+   a CSS `transform: scale()` on an ancestor. `vector-effect: non-scaling-stroke`
+   only cancels the SVG's OWN CTM, not that ancestor transform, so a plain stroke
+   still balloons as you zoom (a 5px dot becomes 200px at 4000%). To keep a marker
+   the same size at 100% and 4000% — so you can see EXACTLY where a node sits when
+   you zoom into a small feature — we divide the width by the live zoom
+   (`--pz-scale`, published by usePanZoom): `stroke-width: calc(N / var(--pz-scale))`
+   shrinks the stroke by 1/zoom, which the ancestor scale then multiplies back to N
+   screen px. Non-scaling-stroke is kept so N stays in screen px, independent of the
+   panel's viewBox→box ratio (raster size, Box slider). `--pz-scale` defaults to 1,
+   so markers render at N px in any non-zoomed context. */
+.lab-wire {
+  display: none;
+}
+.wires .lab-wire {
+  display: inline;
+}
+.wires .lab-fill {
+  opacity: 0.3;
+}
+.lab-wire .w-edge path {
+  fill: none;
+  stroke: #0f172a;
+  stroke-width: calc(1 / var(--pz-scale, 1));
+  vector-effect: non-scaling-stroke;
+}
+.lab-wire .w-corner line {
+  stroke: #e11d48;
+  stroke-width: calc(5 / var(--pz-scale, 1));
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
+}
+.lab-wire .w-smooth line {
+  stroke: #2563eb;
+  stroke-width: calc(5 / var(--pz-scale, 1));
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.lab-wire .w-vert .v-out {
+  stroke: #059669;
+  stroke-width: calc(9 / var(--pz-scale, 1));
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.lab-wire .w-vert .v-in {
+  stroke: #fff;
+  stroke-width: calc(4 / var(--pz-scale, 1));
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.dark .lab-wire .w-edge path {
+  stroke: #cbd5e1;
+}
+
+/* The ΔE / distance heat ramp, as a legend swatch. */
+.lab-ramp {
+  display: inline-block;
+  width: 90px;
+  height: 8px;
+  border-radius: 2px;
+  vertical-align: middle;
+  background: linear-gradient(90deg, #0a0c22, #283cb4, #1ea0aa, #78c850, #fadc3c, #f0781e, #c81414);
+}
+
+/* Inline code inside lab prose. */
+.lab-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--color-surface-3);
+  padding: 1px 4px;
+  border-radius: 3px;
+}

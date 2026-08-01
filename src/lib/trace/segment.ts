@@ -22,6 +22,11 @@
 //   4. Anti-aliased 𝒟 pixels  → flooded into the neighbouring macro-region whose
 //      mean colour best matches (the §3.4 convex-combination test, approximated by
 //      nearest fill), so the output label map is complete.
+//   5. Small-region merge (opt-in, `minRegionArea` from the Despeckle dial) →
+//      absorb every macro-region below the area threshold into its nearest-colour
+//      neighbour, so anti-alias / colour-ramp TRANSITION SLIVERS don't survive as
+//      their own tiny shapes. Engine-agnostic (runs here, before tracing); 0 ⇒ off
+//      (byte-identical). User-marked regions are protected from being absorbed.
 //
 // Output is QuantizeResult-shaped (labels / palette / counts, largest region
 // first) so the existing stacked-mask tracer consumes it unchanged. Pure and
@@ -30,6 +35,7 @@
 import type { PaletteColor, QuantizeResult } from './types'
 import { solveMumfordShah, DEFAULT_MS_OPTIONS, type MumfordShahOptions, type MumfordShahResult } from './mumfordShah.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
+import { srgbToOklab, oklabDeltaE, type Oklab } from './oklab.ts'
 import { fitBestGradient, concatSamples, gradientParamT, type RegionSamples } from './gradient.ts'
 import type { GradientFill } from '../path/types'
 
@@ -48,8 +54,76 @@ export interface SegmentOptions {
   /** Reject a union whose colour profile has an empty axis span wider than this
    *  fraction of [0,1] (bimodal ⇒ two distinct flats, not one smooth field). */
   maxProfileGap: number
+  /**
+   * Reject a union whose fitted gradient makes an Oklab colour jump larger than
+   * this across a SAMPLE-FREE stretch of its parameter t (an "unwitnessed
+   * jump"). This is the step-fit veto: a multi-stop gradient can explain
+   * {big flat region} ∪ {small far-away flat-ish sliver} almost perfectly as a
+   * step function — flat, jump, flat — with an RMS residual BELOW the honest
+   * adjacent merge's (a real ramp carries curvature; a step of two flats is
+   * exact), so greedy hands e.g. a gradient background's corner band to a WHITE
+   * shape's colour class (the nebula-png / gradient-flat corner sliver, painted
+   * flat mid-gradient). The step's signature is that its entire contrast sits in
+   * a t-run NO sample witnesses; a genuine smooth field is witnessed everywhere
+   * along its own axis (consecutive filled bins abut), and a genuine reunite
+   * (nebula's field outside the ring re-joining the hole) OVERLAPS in t. NOT the
+   * reverted profileCliff veto: that measured contrast at the pair's colour seam
+   * (inverted between real bg-reunite and fake, see §0 history); this measures
+   * contrast across EMPTY parameter space. Calibrated on tier 0+1: honest
+   * unions sit ≈0; the degenerate step-pastes measure 0.29–0.75. The veto fires
+   * only when the FLAT-FLANK condition also holds — one of the two groups is
+   * itself a near-flat colour block (see FLAT_FLANK_RES): pieces of a smooth
+   * field can jump across a gap their own interior trend explains, and blocking
+   * those merely reorders the merge sequence, perturbing the strided sample
+   * stream and thus the fitted paint (radial-glow's re-centred glow, §10.3).
+   * Effectively disabled at ≥ 1.2 (the Oklab ΔE ceiling).
+   */
+  maxUnwitnessedJump: number
+  /**
+   * Run Step 3c, the global gradient-explained union-fit merge. Its job is to fuse
+   * the colour-difference bands of a smooth ramp back into ONE gradient region so
+   * Stage 2 can paint it as a single gradient. When the user has gradients OFF that
+   * region would instead be flattened to its MEAN colour (a wide ramp → muddy
+   * average), so we skip the merge: the Step-2 bands survive and posterize into
+   * several flat regions. Default true (byte-identical to before). */
+  mergeGradients: boolean
   /** Cap on samples per segment fed to a union fit (perf; deterministic stride). */
   sampleCap: number
+  /**
+   * Step-3c candidate gate, in Oklab ΔE — the fix for complex photos freezing on
+   * "analyzing colors". It engages ONLY once the fine-segment count exceeds
+   * GATE_MIN_SEGMENTS (small gradient art stays fully un-gated, byte-identical, so its
+   * non-adjacent field reunites are untouched). When engaged, a segment pair reaches
+   * the expensive gradient fit only if the groups are ADJACENT, OR (when meanGate > 0)
+   * their mean colours are within meanGate. Adjacency alone fuses every contiguous
+   * ramp; the optional mean clause additionally re-joins NON-adjacent same-mean pieces
+   * (a background a discontinuity split) — but measured on real photos that clause both
+   * SLOWS the merge ~10–80× (clusters of similar-mean but distinct objects each pay a
+   * fit) and slightly WORSENS fidelity (distant pieces forced into one stretched
+   * gradient), so it defaults OFF (0 ⇒ adjacency-only). Raise it to trade speed for
+   * recovering non-adjacent reunites on large smooth art. Only consulted when
+   * `mergeGradients` is on.
+   */
+  meanGate: number
+  /**
+   * Minimum macro-region area (opaque px). After segmentation, any region smaller
+   * than this is absorbed into the adjacent region whose mean colour is closest —
+   * so anti-alias / colour-ramp TRANSITION SLIVERS don't survive as their own tiny
+   * shapes (the user-reported "miniature regions in colour transitions"). Engine-
+   * agnostic: it runs in segmentation, so crisp / potrace / planar all benefit.
+   * 0 ⇒ disabled (byte-identical to before). Driven by the Despeckle dial.
+   */
+  minRegionArea: number
+  /**
+   * "Flat" region markers in NORMALIZED [0,1] coords — DISTINCT from `markers`. Each
+   * flat marker's PRE-merge fine segment is EXCLUDED from the Step-3c gradient field
+   * merge, so it survives as its own region instead of being fused into a (often
+   * nonsensical) gradient with its neighbours. The exclusion happens before the Step-4
+   * anti-alias flood, so the flood settles the region's boundary on the true colour
+   * edge — clean geometry, and a SINGLE marker suffices. Painted solid downstream
+   * (index.ts). Omitted / empty ⇒ no effect. Fixed input order.
+   */
+  flatMarkers?: { x: number; y: number }[]
   /**
    * User-placed region markers in NORMALIZED [0,1] image coordinates (converted
    * to pixels here against the image's own width/height, so they are correct at
@@ -71,14 +145,37 @@ export const DEFAULT_SEGMENT_OPTIONS: SegmentOptions = {
   minFacing: 4,
   mergeTol: 0.06,
   maxProfileGap: 0.34,
+  maxUnwitnessedJump: 0.12,
+  mergeGradients: true,
   sampleCap: 3000,
+  minRegionArea: 0,
+  meanGate: 0,
 }
+
+/** Reusable empty protected-group set (the no-marker merge protects nothing). */
+const NO_PROTECTED: ReadonlySet<number> = new Set<number>()
+
+/**
+ * Fine-segment count above which the Step-3c candidate gate switches on. Below it the
+ * un-gated all-pairs merge is already fast (a handful of segments), and skipping the
+ * gate keeps simple art byte-identical to before — only complex images (the photos
+ * that froze on "analyzing colors") pay the O(S²) fit burst the gate removes.
+ */
+const GATE_MIN_SEGMENTS = 64
 
 export interface SegmentResult extends QuantizeResult {
   /** Mumford–Shah by-products (diagnostics; not required downstream). */
   ms: MumfordShahResult
   /** Number of fine segments S₀ before discontinuity-aware merging. */
   fineSegments: number
+  /**
+   * Per-pixel PRE-merge region id — the fine segments (S₀) as they stand BEFORE
+   * the Step-3c gradient field-merge fuses them into macro-regions. −1 for
+   * anti-aliased / transparent pixels. This is the "region detection before the
+   * macro field merging": the editor highlights these on hover, and the user
+   * picks one to keep flat. (`labels` is the final, post-merge map.)
+   */
+  preMergeLabels: Int32Array
   /**
    * Per macro-region (parallel to `palette`/`counts`), the SMOOTH-pixel samples
    * used for the merge — anti-aliased 𝒟 pixels excluded — so Stage 2 fits its
@@ -119,14 +216,23 @@ function nearestSmoothPixel(smooth: Uint8Array, w: number, h: number, px: number
   return -1
 }
 
-/** Segment an image into smooth macro-regions. See module header. */
+/**
+ * Segment an image into smooth macro-regions. See module header. `onProgress` (if
+ * given) reports a fraction in [0,1] of the segmentation work plus a short label —
+ * the Step-3c gradient merge is the long pole on complex images, so it reports per-
+ * batch there so the studio's bar keeps moving. Pure-progress only: it never changes
+ * the result, so determinism holds.
+ */
 export function segmentImage(
   img: { width: number; height: number; data: Uint8ClampedArray },
   opts: SegmentOptions = DEFAULT_SEGMENT_OPTIONS,
+  onProgress?: (fraction: number, label: string) => void,
 ): SegmentResult {
   const { width: w, height: h } = img
   const n = w * h
   const data = img.data
+  const report = (f: number, label: string): void => onProgress?.(f, label)
+  report(0.02, 'Smoothing image')
   const ms = solveMumfordShah(img, opts.ms)
   const { discontinuity: disc, opaque, cutH, cutV } = ms
 
@@ -165,32 +271,43 @@ export function segmentImage(
     }
   }
 
-  // --- User markers → seed pixels (marker-controlled seeded region growing) ---
+  // --- User markers → seed pixels ---------------------------------------------
   // Each marker (normalised [0,1], fixed input order) claims the nearest SMOOTH
-  // pixel. Markers no longer veto merging (the old approach left ragged scan-order
-  // slivers and could not separate a translucent overlap whose colour is within
-  // τ_s of the shape beneath it). Instead they drive a SEEDED REGION GROWING split
-  // AFTER the normal segmentation: any macro-region that ends up containing ≥2
-  // markers is partitioned by growing a sub-region out from each marker, the
-  // boundary settling on the colour RIDGE between them (markerControlledSplit
-  // below). So a flat overlap separates cleanly from its neighbour even though
-  // their mean colours merge — and it works at the DEFAULT detail (no global
-  // τ_s drop, no fragmentation). With no markers nothing here changes the output.
-  const markers = opts.markers ?? []
-  const markerSeeds: number[] = []
+  // pixel; duplicate / unreachable seeds are dropped so the set is deterministic.
+  // The two kinds act DIFFERENTLY:
+  //
+  //   • keep-separate `markers` → SEEDED REGION GROWING split (markerControlledSplit
+  //     below): a macro-region holding ≥2 of them is partitioned by growing a sub-
+  //     region from each, the boundary settling on the colour RIDGE between them.
+  //     This recovers a translucent overlap whose colour is within τ_s of the shape
+  //     beneath it (their means merge, so an exclusion can't tell them apart, but the
+  //     seeded growth still finds the step). Needs ≥2 — one front has nothing to
+  //     grow against.
+  //
+  //   • `flatMarkers` → EXCLUSION from the Step-3c field merge (flatPinned, below):
+  //     the marker's fine segment is forbidden from fusing into a macro-region, so it
+  //     survives as its own region. Because this happens BEFORE the Step-4 anti-alias
+  //     flood, the flood then assigns the boundary AA to the nearest colour and the
+  //     region's edge lands on the true colour edge — clean geometry, and a SINGLE
+  //     marker is enough. This is the fix for "the merger fused a red sliver into the
+  //     white and fit a nonsense ring gradient": the sliver becomes its own flat red.
+  //
+  // With no markers nothing here changes the output (byte-identical).
+  const splitSeeds: number[] = []
+  const flatSeeds: number[] = []
   const usedSeed = new Set<number>()
-  for (let m = 0; m < markers.length; m++) {
-    const px = Math.max(0, Math.min(w - 1, Math.round(markers[m].x * w)))
-    const py = Math.max(0, Math.min(h - 1, Math.round(markers[m].y * h)))
+  const claimSeed = (mx: number, my: number, into: number[]): void => {
+    const px = Math.max(0, Math.min(w - 1, Math.round(mx * w)))
+    const py = Math.max(0, Math.min(h - 1, Math.round(my * h)))
     const seed = nearestSmoothPixel(smooth, w, h, px, py)
-    // Skip a marker with no reachable smooth pixel, or a duplicate seed pixel —
-    // keeps the seed list unique and deterministic regardless of placement.
     if (seed >= 0 && !usedSeed.has(seed)) {
       usedSeed.add(seed)
-      markerSeeds.push(seed)
+      into.push(seed)
     }
   }
-  const hasMarkers = markerSeeds.length > 0
+  for (const m of opts.markers ?? []) claimSeed(m.x, m.y, splitSeeds)
+  for (const m of opts.flatMarkers ?? []) claimSeed(m.x, m.y, flatSeeds)
+  const hasMarkers = splitSeeds.length > 0 || flatSeeds.length > 0
 
   const find = (x: number): number => {
     let r = x
@@ -220,6 +337,7 @@ export function segmentImage(
     cnt[lo] += cnt[hi]
   }
 
+  report(0.2, 'Finding regions')
   // Loop to a TRUE fixpoint (Supplement Alg 1). Termination is guaranteed: every
   // productive pass calls unite() at least once, strictly reducing the live
   // segment count (bounded by n), so a pass with no merge ends it — no fixed cap
@@ -272,6 +390,17 @@ export function segmentImage(
     return fallbackSingleRegion(img, ms)
   }
 
+  // Flat-marker pins: the fine segment id under each flat marker. These are excluded
+  // from the Step-3c field merge (evalPair, below), so each stays its own region in
+  // its pre-merge flat form. Held out BEFORE the Step-4 flood so the AA settles on
+  // the true colour edge. Empty without flat markers ⇒ the merge proceeds unchanged.
+  const flatPinned = new Set<number>()
+  for (const seed of flatSeeds) {
+    const s = segOf[seed]
+    if (s >= 0) flatPinned.add(s)
+  }
+
+  report(0.35, 'Detecting edges')
   // --- Step 3a: discontinuity relation 𝒜 (eq 3) -------------------------------
   // For each 𝒟 pixel and each of 3 axes (→, ↓, ↘), find the nearest smooth
   // segment within σ on each side. A pair seen on OPPOSITE sides is a "facing"
@@ -334,8 +463,15 @@ export function segmentImage(
     if (f >= opts.minFacing && f > opts.tauA * t) vetoed.add(k)
   }
 
+  report(0.42, 'Sampling colours')
   // --- Step 3b: gather per-segment samples (ORIGINAL colours) ------------------
+  // Also accumulate each segment's exact colour SUM (every pixel, not the strided
+  // sample) so Step-3c's candidate gate compares true region means.
   const segSamples: RegionSamples[] = []
+  const segSumR = new Float64Array(S)
+  const segSumG = new Float64Array(S)
+  const segSumB = new Float64Array(S)
+  const segCnt = new Float64Array(S)
   {
     const xsA: number[][] = Array.from({ length: S }, () => [])
     const ysA: number[][] = Array.from({ length: S }, () => [])
@@ -351,6 +487,10 @@ export function segmentImage(
       rsA[id].push(data[o])
       gsA[id].push(data[o + 1])
       bsA[id].push(data[o + 2])
+      segSumR[id] += data[o]
+      segSumG[id] += data[o + 1]
+      segSumB[id] += data[o + 2]
+      segCnt[id]++
     }
     for (let id = 0; id < S; id++) {
       segSamples.push(strideSamples(xsA[id], ysA[id], rsA[id], gsA[id], bsA[id], opts.sampleCap))
@@ -358,10 +498,22 @@ export function segmentImage(
   }
 
   // --- Step 3c: global greedy union-fit merge with both vetoes -----------------
-  // Groups carry STABLE ids (never reused) so a pairwise candidate cache survives
-  // across merges: only the merged group's row is recomputed, making the whole
-  // merge O(S²) fits instead of O(S³). Merge the globally-cheapest qualifying
-  // (non-vetoed, low-residual, unimodal) pair until none qualifies.
+  // Merge the globally-cheapest qualifying (non-vetoed, low-residual, unimodal) pair
+  // until none qualifies. Groups carry STABLE ids (never reused) so a pairwise
+  // candidate cache survives across merges: only the merged group's row is recomputed.
+  // The SELECTION — global-min residual, ties broken by scan position — is byte-for-
+  // byte the original, so corpus output is stable. The additions are pure cost cuts:
+  //   • CANDIDATE GATE (`meanGate`, only once S exceeds GATE_MIN_SEGMENTS — i.e. the
+  //     complex images that froze) — a pair reaches the expensive gradient fit only
+  //     when the groups are ADJACENT or their mean colours are within meanGate. It
+  //     covers every DESIRABLE merge (adjacent ramp bands; non-adjacent SAME-mean
+  //     field pieces) while the ~S²/2 fit burst collapses to the eligible few. NOTE
+  //     it is NOT a superset of what un-gated global-min can select: the step-fit
+  //     degeneracy (see maxUnwitnessedJump) let the un-gated scan pick non-adjacent
+  //     DIFFERENT-mean pairs — pairs this gate would rightly refuse (§10.3).
+  //   • INDEXED cache invalidation — each merge drops only the two retired groups'
+  //     cache rows via a per-group key index, instead of sweeping the whole cache
+  //     (the old `[...cache.keys()]` spread was itself O(S²) per merge).
   const members = new Map<number, number[]>()
   const samples = new Map<number, RegionSamples>()
   const alive: number[] = []
@@ -371,57 +523,174 @@ export function segmentImage(
     alive.push(id)
   }
   let nextId = S
-  const cache = new Map<number, { res: number; samples: RegionSamples } | null>()
-  const ckey = (a: number, b: number): number => (a < b ? a * 1e7 + b : b * 1e7 + a)
 
-  const pairVetoed = (gi: number, gj: number): boolean => {
-    const mi = members.get(gi)!
-    const mj = members.get(gj)!
-    for (const a of mi) for (const b of mj) if (vetoed.has(pairKey(a, b))) return true
-    return false
-  }
-  const evalPair = (gi: number, gj: number): { res: number; samples: RegionSamples } | null => {
-    const k = ckey(gi, gj)
-    if (cache.has(k)) return cache.get(k)!
-    let result: { res: number; samples: RegionSamples } | null = null
-    if (!pairVetoed(gi, gj)) {
-      const union = strideConcat([samples.get(gi)!, samples.get(gj)!], opts.sampleCap)
-      const fit = fitBestGradient(union)
-      if (fit && fit.oklabResidual <= opts.mergeTol && profileGap(fit.gradient, union) <= opts.maxProfileGap) {
-        result = { res: fit.oklabResidual, samples: union }
-      }
-    }
-    cache.set(k, result)
-    return result
-  }
+  // Gradients OFF ⇒ skip the merge entirely: leave the Step-2 colour-difference
+  // bands as the macro-regions so a smooth ramp posterizes into flats instead of
+  // fusing into one region that Stage 2 would then average to a muddy mean colour.
+  if (opts.mergeGradients) {
+    const gated = S > GATE_MIN_SEGMENTS
+    const useMean = gated && opts.meanGate > 0 && Number.isFinite(opts.meanGate)
 
-  for (;;) {
-    let best: { i: number; j: number; samples: RegionSamples; res: number } | null = null
-    for (let a = 0; a < alive.length; a++) {
-      for (let b = a + 1; b < alive.length; b++) {
-        const cand = evalPair(alive[a], alive[b])
-        if (cand && (!best || cand.res < best.res)) {
-          best = { i: alive[a], j: alive[b], samples: cand.samples, res: cand.res }
+    // Per-group adjacency (always, when gated) + running colour means (only for the
+    // optional mean clause). Built lazily so the common adjacency-only path pays
+    // nothing for the means it never reads.
+    const groupAdj = new Map<number, Set<number>>()
+    const gSumR = new Map<number, number>()
+    const gSumG = new Map<number, number>()
+    const gSumB = new Map<number, number>()
+    const gCnt = new Map<number, number>()
+    const meanCache = new Map<number, Oklab>()
+    if (gated) {
+      // Fine-segment adjacency (4-neighbour touch). One raster scan, both directions
+      // recorded; fixed order ⇒ deterministic.
+      const fineAdj: Set<number>[] = Array.from({ length: S }, () => new Set<number>())
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x
+          const a = segOf[i]
+          if (a < 0) continue
+          if (x + 1 < w) { const b = segOf[i + 1]; if (b >= 0 && b !== a) { fineAdj[a].add(b); fineAdj[b].add(a) } }
+          if (y + 1 < h) { const b = segOf[i + w]; if (b >= 0 && b !== a) { fineAdj[a].add(b); fineAdj[b].add(a) } }
         }
       }
+      for (let id = 0; id < S; id++) {
+        groupAdj.set(id, new Set(fineAdj[id]))
+        if (useMean) { gSumR.set(id, segSumR[id]); gSumG.set(id, segSumG[id]); gSumB.set(id, segSumB[id]); gCnt.set(id, segCnt[id]) }
+      }
     }
-    if (!best) break
-    const c = nextId++
-    members.set(c, members.get(best.i)!.concat(members.get(best.j)!))
-    samples.set(c, best.samples)
-    // Retire the two merged groups and their cache rows; add the new group.
-    alive.splice(alive.indexOf(best.j), 1)
-    alive.splice(alive.indexOf(best.i), 1)
-    for (const k of [...cache.keys()]) {
-      const hi = k % 1e7
-      const lo = (k - hi) / 1e7
-      if (lo === best.i || lo === best.j || hi === best.i || hi === best.j) cache.delete(k)
+    const meanOk = (gid: number): Oklab => {
+      let m = meanCache.get(gid)
+      if (m) return m
+      const c = gCnt.get(gid)! || 1
+      m = srgbToOklab(gSumR.get(gid)! / c, gSumG.get(gid)! / c, gSumB.get(gid)! / c)
+      meanCache.set(gid, m)
+      return m
     }
-    members.delete(best.i)
-    members.delete(best.j)
-    samples.delete(best.i)
-    samples.delete(best.j)
-    alive.push(c)
+    // Gate: adjacent OR (optionally) mean-near. Un-gated (small S) ⇒ every pair is
+    // eligible, exactly the original all-pairs search. The mean clause is evaluated
+    // only when enabled, so adjacency-only never pays for an Oklab distance.
+    const gateEligible = (gi: number, gj: number): boolean =>
+      !gated || groupAdj.get(gi)!.has(gj) || (useMean && oklabDeltaE(meanOk(gi), meanOk(gj)) <= opts.meanGate)
+
+    const cache = new Map<number, { res: number; samples: RegionSamples } | null>()
+    const cacheRows = new Map<number, number[]>() // groupId → cache keys naming it
+    const ckey = (a: number, b: number): number => (a < b ? a * 1e7 + b : b * 1e7 + a)
+    const noteRow = (g: number, k: number): void => {
+      const arr = cacheRows.get(g)
+      if (arr) arr.push(k)
+      else cacheRows.set(g, [k])
+    }
+    const pairVetoed = (gi: number, gj: number): boolean => {
+      const mi = members.get(gi)!
+      const mj = members.get(gj)!
+      for (const a of mi) for (const b of mj) if (vetoed.has(pairKey(a, b))) return true
+      return false
+    }
+    // A flat-pinned segment never merges (it stays its own region). Its group id equals
+    // the segment id and is never retired — a vetoed group is never the merge target —
+    // so the singleton check stays valid; freshly-merged groups get ids ≥ S, never pinned.
+    const evalPair = (gi: number, gj: number): { res: number; samples: RegionSamples } | null => {
+      const k = ckey(gi, gj)
+      if (cache.has(k)) return cache.get(k)!
+      let result: { res: number; samples: RegionSamples } | null = null
+      if (!flatPinned.has(gi) && !flatPinned.has(gj) && gateEligible(gi, gj) && !pairVetoed(gi, gj)) {
+        const union = strideConcat([samples.get(gi)!, samples.get(gj)!], opts.sampleCap)
+        const fit = fitBestGradient(union)
+        if (
+          fit &&
+          fit.oklabResidual <= opts.mergeTol &&
+          profileGap(fit.gradient, union) <= opts.maxProfileGap &&
+          (unwitnessedJump(fit.gradient, union) <= opts.maxUnwitnessedJump ||
+            // FLAT-FLANK CONDITION: an unwitnessed jump is fatal only when one of
+            // the pair is itself a (near-)flat colour block — a flat block has no
+            // interior colour trend that could ever bridge the gap, so the step is
+            // pure invention (measured flat sides of the true pastes: ≤ 0.0055).
+            // When BOTH sides carry interior spread they are pieces of a smooth
+            // field whose union the samples genuinely trend across (radial-glow /
+            // bg-ramp accepted-merge minima: ≥ 0.0156), and vetoing them would not
+            // even change topology — just reorder the merges, which perturbs the
+            // strided sample stream and thus the FITTED PAINT (radial-glow's glow
+            // re-centred off a different sample subset; user-reported, §10.3).
+            Math.min(solidResidual(samples.get(gi)!), solidResidual(samples.get(gj)!)) > FLAT_FLANK_RES)
+        ) {
+          result = { res: fit.oklabResidual, samples: union }
+        }
+      }
+      cache.set(k, result)
+      noteRow(gi, k)
+      noteRow(gj, k)
+      return result
+    }
+
+    report(0.45, 'Merging regions')
+    const A0 = alive.length // group count when the merge starts (for progress)
+    let lastPct = -1
+    let seedEvals = 0
+    let seeding = true // true only during the first (cold, all-pairs) scan
+    for (;;) {
+      let best: { i: number; j: number; samples: RegionSamples; res: number } | null = null
+      for (let a = 0; a < alive.length; a++) {
+        for (let b = a + 1; b < alive.length; b++) {
+          const cand = evalPair(alive[a], alive[b])
+          if (cand && (!best || cand.res < best.res)) {
+            best = { i: alive[a], j: alive[b], samples: cand.samples, res: cand.res }
+          }
+          // Creep the bar through the cold first scan (the long pole) so it never
+          // freezes; the `seeding` guard makes this zero-overhead once cached.
+          if (seeding && (++seedEvals & 8191) === 0) {
+            report(0.45 + 0.1 * Math.min(1, (2 * seedEvals) / (A0 * A0)), 'Merging regions')
+          }
+        }
+      }
+      seeding = false
+      if (!best) break
+      const c = nextId++
+      members.set(c, members.get(best.i)!.concat(members.get(best.j)!))
+      samples.set(c, best.samples)
+      if (gated) {
+        // c's neighbours are the union of the merged pair's, minus the two merged
+        // ids, and every neighbour repoints i/j → c.
+        const adjC = new Set<number>()
+        for (const nb of groupAdj.get(best.i)!) if (nb !== best.j) adjC.add(nb)
+        for (const nb of groupAdj.get(best.j)!) if (nb !== best.i) adjC.add(nb)
+        for (const nb of adjC) {
+          const s = groupAdj.get(nb)
+          if (s) { s.delete(best.i); s.delete(best.j); s.add(c) }
+        }
+        groupAdj.set(c, adjC)
+        groupAdj.delete(best.i); groupAdj.delete(best.j)
+      }
+      if (useMean) {
+        // c's running colour sums add; drop the retired groups' means.
+        gSumR.set(c, gSumR.get(best.i)! + gSumR.get(best.j)!)
+        gSumG.set(c, gSumG.get(best.i)! + gSumG.get(best.j)!)
+        gSumB.set(c, gSumB.get(best.i)! + gSumB.get(best.j)!)
+        gCnt.set(c, gCnt.get(best.i)! + gCnt.get(best.j)!)
+        gSumR.delete(best.i); gSumG.delete(best.i); gSumB.delete(best.i); gCnt.delete(best.i); meanCache.delete(best.i)
+        gSumR.delete(best.j); gSumG.delete(best.j); gSumB.delete(best.j); gCnt.delete(best.j); meanCache.delete(best.j)
+      }
+      // Retire the two merged groups: drop them from `alive`, invalidate ONLY their
+      // cache rows (same keys the old whole-cache sweep removed ⇒ identical state).
+      alive.splice(alive.indexOf(best.j), 1)
+      alive.splice(alive.indexOf(best.i), 1)
+      for (const g of [best.i, best.j]) {
+        const rows = cacheRows.get(g)
+        if (rows) for (const k of rows) cache.delete(k)
+        cacheRows.delete(g)
+      }
+      members.delete(best.i)
+      members.delete(best.j)
+      samples.delete(best.i)
+      samples.delete(best.j)
+      alive.push(c)
+      // Advance the bar as groups merge away (throttled to whole-percent steps).
+      const done = A0 - alive.length
+      const pct = Math.floor((done / A0) * 100)
+      if (pct > lastPct) {
+        lastPct = pct
+        report(0.55 + 0.37 * (done / A0), `Merging regions (${alive.length} left)`)
+      }
+    }
   }
 
   const G = alive.length
@@ -431,6 +700,7 @@ export function segmentImage(
     for (const sId of members.get(gid)!) segToGroup[sId] = gi
   })
 
+  report(0.92, 'Filling edges')
   // --- Step 4: flood 𝒟 (anti-aliased) pixels into the best-matching neighbour ---
   // groupId per pixel: smooth pixels inherit their segment's group; 𝒟 pixels are
   // assigned by repeated nearest-neighbour passes, choosing the adjacent group
@@ -536,23 +806,50 @@ export function segmentImage(
   // their mean colours merge. No-marker runs skip this entirely and take the exact
   // existing assembly below (byte-identical output).
   if (hasMarkers) {
-    // Grow on ORIGINAL-colour Lab, not the MS-smoothed Lab: smoothing erases the
-    // subtle overlap edges (they fall below its threshold), which would leave the
-    // ridge fuzzy and the split boundary off the true edge (a seam). The original
-    // colour keeps the step sharp so the boundary settles exactly on it.
-    const oL = new Float64Array(n)
-    const oA = new Float64Array(n)
-    const oB = new Float64Array(n)
-    for (let i = 0; i < n; i++) {
-      if (!opaque[i]) continue
-      const o = i * 4
-      const lab = srgbToLab(data[o], data[o + 1], data[o + 2])
-      oL[i] = lab[0]
-      oA[i] = lab[1]
-      oB[i] = lab[2]
+    // Flat markers already separated their regions by exclusion above; keep-separate
+    // markers split here. Only build the original-colour Lab + run the split when
+    // there are keep-separate seeds.
+    let groupCount = G + extra.length
+    if (splitSeeds.length > 0) {
+      // Grow on ORIGINAL-colour Lab, not the MS-smoothed Lab: smoothing erases the
+      // subtle overlap edges (they fall below its threshold), which would leave the
+      // ridge fuzzy and the split boundary off the true edge (a seam). The original
+      // colour keeps the step sharp so the boundary settles exactly on it.
+      const oL = new Float64Array(n)
+      const oA = new Float64Array(n)
+      const oB = new Float64Array(n)
+      for (let i = 0; i < n; i++) {
+        if (!opaque[i]) continue
+        const o = i * 4
+        const lab = srgbToLab(data[o], data[o + 1], data[o + 2])
+        oL[i] = lab[0]
+        oA[i] = lab[1]
+        oB[i] = lab[2]
+      }
+      groupCount = markerControlledSplit(groupId, groupCount, splitSeeds, w, h, oL, oA, oB)
     }
-    const groupCount = markerControlledSplit(groupId, G + extra.length, markerSeeds, w, h, oL, oA, oB)
-    return assembleFromGroupId(groupId, groupCount, n, w, data, smooth, ms, S, opts.sampleCap)
+    if (opts.minRegionArea > 0) {
+      // Absorb sub-threshold slivers, but never a user-marked region (split or flat).
+      const protectedGroups = new Set<number>()
+      for (const seed of splitSeeds) {
+        const g = groupId[seed]
+        if (g >= 0) protectedGroups.add(g)
+      }
+      for (const seed of flatSeeds) {
+        const g = groupId[seed]
+        if (g >= 0) protectedGroups.add(g)
+      }
+      groupCount = mergeSmallRegions(groupId, groupCount, n, w, h, data, opts.minRegionArea, protectedGroups).count
+    }
+    return { ...assembleFromGroupId(groupId, groupCount, n, w, data, smooth, ms, S, opts.sampleCap), preMergeLabels: segOf }
+  }
+
+  // --- Small-region merge (despeckle): absorb sub-threshold slivers into their
+  // nearest-colour neighbour. Only diverges from the exact existing assembly when
+  // a merge actually fires; otherwise the no-marker path stays byte-identical. ---
+  if (opts.minRegionArea > 0) {
+    const merged = mergeSmallRegions(groupId, G + extra.length, n, w, h, data, opts.minRegionArea, NO_PROTECTED)
+    if (merged.changed) return { ...assembleFromGroupId(groupId, merged.count, n, w, data, smooth, ms, S, opts.sampleCap), preMergeLabels: segOf }
   }
 
   // --- Assemble QuantizeResult over all macro-regions (smooth groups + isolated
@@ -584,7 +881,7 @@ export function segmentImage(
     labels[i] = gi < 0 ? -1 : rank[gi]
   }
 
-  return { palette, labels, counts, ms, fineSegments: S, regionSamples }
+  return { palette, labels, counts, ms, fineSegments: S, regionSamples, preMergeLabels: segOf }
 }
 
 // ---------------------------------------------------------------------------
@@ -763,6 +1060,161 @@ class MinHeap {
   }
 }
 
+/** Iteration cap for the small-region merge (a fixpoint is reached well before). */
+const MAX_MERGE_PASSES = 64
+
+/**
+ * Absorb every macro-region smaller than `minArea` opaque pixels into an adjacent
+ * region, so anti-alias / colour-ramp transition SLIVERS don't survive as their
+ * own tiny shapes. Each small region is merged into the neighbour whose mean
+ * ORIGINAL colour is closest — preferring a neighbour that is itself ≥ minArea, so
+ * slivers collapse into real shapes rather than chaining through each other — which
+ * minimises the recolour error the merge introduces. `protected` groups (user
+ * markers) are never absorbed, though they may absorb. Mutates `groupId` in place
+ * (relabelled then COMPACTED to 0..count-1) and returns the new group count +
+ * whether anything changed. Deterministic: small groups scanned in ascending id,
+ * target ties broken by shared-boundary length then id; iterates to a fixpoint.
+ */
+function mergeSmallRegions(
+  groupId: Int32Array,
+  groupCount: number,
+  n: number,
+  w: number,
+  h: number,
+  data: Uint8ClampedArray,
+  minArea: number,
+  protectedGroups: ReadonlySet<number>,
+): { count: number; changed: boolean } {
+  if (!(minArea > 0)) return { count: groupCount, changed: false }
+  const G = groupCount
+  let changed = false
+
+  for (let pass = 0; pass < MAX_MERGE_PASSES; pass++) {
+    // Per-group opaque count + mean original colour.
+    const cnt = new Float64Array(G)
+    const sumR = new Float64Array(G)
+    const sumG = new Float64Array(G)
+    const sumB = new Float64Array(G)
+    for (let i = 0; i < n; i++) {
+      const g = groupId[i]
+      if (g < 0) continue
+      const o = i * 4
+      cnt[g]++
+      sumR[g] += data[o]
+      sumG[g] += data[o + 1]
+      sumB[g] += data[o + 2]
+    }
+    // Region adjacency with shared-boundary length (4-connectivity).
+    const adj = new Map<number, Map<number, number>>()
+    const bump = (a: number, b: number): void => {
+      let m = adj.get(a)
+      if (!m) adj.set(a, (m = new Map()))
+      m.set(b, (m.get(b) ?? 0) + 1)
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x
+        const g = groupId[i]
+        if (g < 0) continue
+        if (x + 1 < w) {
+          const r = groupId[i + 1]
+          if (r >= 0 && r !== g) { bump(g, r); bump(r, g) }
+        }
+        if (y + 1 < h) {
+          const d = groupId[i + w]
+          if (d >= 0 && d !== g) { bump(g, d); bump(d, g) }
+        }
+      }
+    }
+
+    // Qualifying small groups (ascending id ⇒ deterministic).
+    const small: number[] = []
+    for (let g = 0; g < G; g++) {
+      if (cnt[g] > 0 && cnt[g] < minArea && !protectedGroups.has(g) && (adj.get(g)?.size ?? 0) > 0) small.push(g)
+    }
+    if (small.length === 0) break
+
+    const labCache = new Map<number, [number, number, number]>()
+    const labOf = (g: number): [number, number, number] => {
+      let l = labCache.get(g)
+      if (!l) labCache.set(g, (l = srgbToLab(sumR[g] / cnt[g], sumG[g] / cnt[g], sumB[g] / cnt[g])))
+      return l
+    }
+
+    // Union-find over group ids; the more "keepable" group wins the root.
+    const parent = Array.from({ length: G }, (_, i) => i)
+    const find = (x: number): number => {
+      while (parent[x] !== x) {
+        parent[x] = parent[parent[x]]
+        x = parent[x]
+      }
+      return x
+    }
+    const keepScore = (g: number): number => (protectedGroups.has(g) ? 2 : cnt[g] >= minArea ? 1 : 0)
+    const union = (a: number, b: number): void => {
+      const ra = find(a)
+      const rb = find(b)
+      if (ra === rb) return
+      const sa = keepScore(ra)
+      const sb = keepScore(rb)
+      const bWins = sb > sa || (sb === sa && (cnt[rb] > cnt[ra] || (cnt[rb] === cnt[ra] && rb < ra)))
+      if (bWins) parent[ra] = rb
+      else parent[rb] = ra
+    }
+
+    for (const g of small) {
+      const nbrs = adj.get(g)!
+      let bestT = -1
+      let bestDE = Infinity
+      let bestBoundary = -1
+      const consider = (preferReal: boolean): void => {
+        for (const [t, boundary] of nbrs) {
+          if (preferReal && cnt[t] < minArea && !protectedGroups.has(t)) continue
+          const de = deltaE76(labOf(g), labOf(t))
+          if (de < bestDE || (de === bestDE && (boundary > bestBoundary || (boundary === bestBoundary && t < bestT)))) {
+            bestDE = de
+            bestT = t
+            bestBoundary = boundary
+          }
+        }
+      }
+      consider(true) // prefer a real (≥ minArea) neighbour
+      if (bestT < 0) consider(false) // else any neighbour
+      if (bestT >= 0) union(g, bestT)
+    }
+
+    // Apply the relabel.
+    let any = false
+    for (let i = 0; i < n; i++) {
+      const g = groupId[i]
+      if (g < 0) continue
+      const r = find(g)
+      if (r !== g) {
+        groupId[i] = r
+        any = true
+      }
+    }
+    if (!any) break
+    changed = true
+  }
+
+  if (!changed) return { count: G, changed: false }
+
+  // Compact surviving ids → 0..count-1 (ascending original id ⇒ deterministic).
+  const remap = new Map<number, number>()
+  for (let i = 0; i < n; i++) {
+    const g = groupId[i]
+    if (g >= 0 && !remap.has(g)) remap.set(g, 0)
+  }
+  const roots = [...remap.keys()].sort((a, b) => a - b)
+  roots.forEach((g, idx) => remap.set(g, idx))
+  for (let i = 0; i < n; i++) {
+    const g = groupId[i]
+    if (g >= 0) groupId[i] = remap.get(g)!
+  }
+  return { count: roots.length, changed: true }
+}
+
 /**
  * Build a SegmentResult straight from a per-pixel `groupId` labelling (used by the
  * marker-split path). Palette = mean ORIGINAL colour over each group's opaque
@@ -782,7 +1234,7 @@ function assembleFromGroupId(
   ms: MumfordShahResult,
   S: number,
   sampleCap: number,
-): SegmentResult {
+): Omit<SegmentResult, 'preMergeLabels'> {
   const G = groupCount
   const cnt = new Float64Array(G)
   const sumR = new Float64Array(G)
@@ -847,6 +1299,98 @@ function assembleFromGroupId(
     labels[i] = g < 0 ? -1 : rank[g]
   }
   return { palette, labels, counts, ms, fineSegments: S, regionSamples }
+}
+
+/**
+ * A group whose samples sit within this RMS Oklab ΔE of their own mean is a FLAT
+ * colour block for the unwitnessed-jump veto's flat-flank condition. Measured
+ * 2026-07-21 (docs §10.3): the true step-pastes' flat sides are ≤ 0.0055
+ * (gradient-flat's white circle 0.0000 / corner sliver 0.0048, nebula-png white
+ * 0.0000 / sliver 0.0055, hairlines bg + bars 0.0000); the honest smooth-field
+ * pairs' minimum sides are ≥ 0.0156 (radial-glow) / 0.0190 (bg-ramp). 0.008
+ * sits in the ~3× gap between the populations.
+ */
+const FLAT_FLANK_RES = 0.008
+
+/** RMS Oklab ΔE of a sample set from its own mean colour — how far the group is
+ *  from being a single flat colour. */
+function solidResidual(s: RegionSamples): number {
+  if (s.n === 0) return 0
+  let mL = 0
+  let mA = 0
+  let mB = 0
+  const labs: [number, number, number][] = []
+  for (let i = 0; i < s.n; i++) {
+    const o = srgbToOklab(s.rs[i], s.gs[i], s.bs[i])
+    labs.push(o as unknown as [number, number, number])
+    mL += o[0]
+    mA += o[1]
+    mB += o[2]
+  }
+  mL /= s.n
+  mA /= s.n
+  mB /= s.n
+  let sq = 0
+  for (const o of labs) {
+    const dl = o[0] - mL
+    const da = o[1] - mA
+    const db = o[2] - mB
+    sq += dl * dl + da * da + db * db
+  }
+  return Math.sqrt(sq / s.n)
+}
+
+/**
+ * Largest Oklab ΔE between the sample populations flanking an EMPTY interior
+ * run of the fitted gradient's parameter t — the colour jump the gradient makes
+ * where NO sample witnesses it (see SegmentOptions.maxUnwitnessedJump). Each
+ * side's colour pools up to two filled bins so a single sparse bin can't fake
+ * or hide a jump. 0 when every pair of consecutive filled bins abuts.
+ */
+function unwitnessedJump(g: GradientFill, s: RegionSamples, bins = 24): number {
+  const cnt = new Uint32Array(bins)
+  const sL = new Float64Array(bins)
+  const sA = new Float64Array(bins)
+  const sB = new Float64Array(bins)
+  for (let i = 0; i < s.n; i++) {
+    const t = gradientParamT(g, s.xs[i], s.ys[i])
+    let bi = Math.floor(t * bins)
+    if (bi < 0) bi = 0
+    else if (bi >= bins) bi = bins - 1
+    const o = srgbToOklab(s.rs[i], s.gs[i], s.bs[i])
+    cnt[bi]++
+    sL[bi] += o[0]
+    sA[bi] += o[1]
+    sB[bi] += o[2]
+  }
+  // Pooled mean colour of the filled bin at `b` plus the next filled bin further
+  // away from the gap (direction `dir`), if any.
+  const sideMean = (b: number, dir: -1 | 1): Oklab => {
+    let c = cnt[b]
+    let L = sL[b]
+    let a = sA[b]
+    let bb = sB[b]
+    for (let j = b + dir; j >= 0 && j < bins; j += dir) {
+      if (!cnt[j]) continue
+      c += cnt[j]
+      L += sL[j]
+      a += sA[j]
+      bb += sB[j]
+      break
+    }
+    return [L / c, a / c, bb / c]
+  }
+  let jump = 0
+  let prev = -1
+  for (let b = 0; b < bins; b++) {
+    if (!cnt[b]) continue
+    if (prev >= 0 && b - prev > 1) {
+      const d = oklabDeltaE(sideMean(prev, -1), sideMean(b, 1))
+      if (d > jump) jump = d
+    }
+    prev = b
+  }
+  return jump
 }
 
 /** Longest run of empty interior bins (as a fraction of [0,1]) of a gradient's
@@ -955,5 +1499,5 @@ function fallbackSingleRegion(
   }
   const palette: PaletteColor[] = [{ r: clamp255(r / (c || 1)), g: clamp255(g / (c || 1)), b: clamp255(b / (c || 1)) }]
   const empty: RegionSamples = { xs: new Float64Array(0), ys: new Float64Array(0), rs: new Float64Array(0), gs: new Float64Array(0), bs: new Float64Array(0), n: 0 }
-  return { palette, labels, counts: [c], ms, fineSegments: 1, regionSamples: [empty] }
+  return { palette, labels, counts: [c], ms, fineSegments: 1, regionSamples: [empty], preMergeLabels: labels }
 }

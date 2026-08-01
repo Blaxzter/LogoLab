@@ -17,6 +17,7 @@ import {
     Redo2,
     SlidersHorizontal,
     Undo2,
+    X,
 } from "lucide-react";
 import { useCheckerClass, useLogo, useStore } from "../../store";
 import { usePanZoom, type PanZoom } from "../../hooks/usePanZoom";
@@ -27,16 +28,24 @@ import { CheckerToggle } from "../ui/CheckerToggle";
 import { Segmented } from "../ui/controls";
 import { Button } from "../ui/Button";
 import { getImageData } from "../../lib/image";
+import { hexToRgb, normalizeHex, rgbToHex } from "../../lib/colorUtils";
 import { downloadText } from "../../lib/download";
 import { cleanSvg } from "../../lib/svgClean";
 import { docStats, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
-import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from "../../lib/trace";
+import { regionProvenance } from "../../lib/path/topology";
+import { deleteRegionNodes, removeRegionAndHeal, removeRegionSection, translateRegionNodes } from "../../lib/path/topologyEdit";
+import {
+    DEFAULT_VECTORIZE_OPTIONS,
+    suggestGradients,
+    traceImage,
+} from "../../lib/trace";
 import { traceImageOffThread, canTraceOffThread } from "../../lib/trace/traceOffThread";
 import type { VectorizeOptions } from "../../types";
-import type { DocItem, EditableDoc, NodeRef, PathItem } from "../../lib/path/types";
+import type { DocItem, EditableDoc, NodeRef, PathItem, Vec } from "../../lib/path/types";
 import { TraceControls, TraceControlsBody } from "./TraceControls";
-import { EditorCanvas, useFitBox } from "./EditorCanvas";
+import { EditorCanvas } from "./EditorCanvas";
+import { useFitBox } from "./useFitBox";
 import { PathsPanel, PathsPanelBody } from "./PathsPanel";
 import { PipelineExplainer } from "./PipelineExplainer";
 import { Sheet } from "../ui/Sheet";
@@ -46,7 +55,17 @@ import { LegalLinksInline } from "../legal/LegalFooter";
 import { Tooltip } from "../ui/Tooltip";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
+// Long-side cap for the raster the tracer sees. Flat art (mono, or colour with
+// gradients OFF) traces at full 2048 for crisp corners / sub-pixel edges; colour
+// art WITH gradients stays at 1024 to bound the O(S²) Step-3c field-merge (which
+// froze on complex photos — see memory + crispness-study). Measured on Schild.png:
+// 1024→2048 cut meanΔE 0.96→0.78 and lifted SSIM +0.024, at ~4× trace time.
 const RASTER_MAX_DIM = 1024;
+const RASTER_MAX_DIM_FLAT = 2048;
+// "High" detail cap for flat art (gradients-off / mono). Bounded — not native —
+// so a huge upload can't blow up trace time/memory. Rasters are never upscaled,
+// so this only bites when the source's longest side exceeds RASTER_MAX_DIM_FLAT.
+const RASTER_MAX_DIM_HIGH = 4096;
 const DEBOUNCE_MS = 400;
 
 type ViewMode = "split" | "traced" | "original" | "overlay";
@@ -82,10 +101,11 @@ export function VectorizeStudio() {
     const [opts, setOpts] = useState<VectorizeOptions>(
         DEFAULT_VECTORIZE_OPTIONS,
     );
-    // Output coordinate precision (decimals). Fixed default — compact files at no
-    // visible cost; no longer a user knob (it was output formatting, not a trace
-    // parameter, and cluttered the panel).
-    const precision = 2;
+    // Output coordinate precision (decimals). 3dp matches what desktop tracers
+    // (Affinity/Canva) emit and preserves sub-pixel geometry when the SVG is
+    // scaled past its trace resolution; the file-size cost is ~10–15% and there
+    // is no visible cost at or below trace res. Not a user knob.
+    const precision = 3;
     const [forceColorOn, setForceColorOn] = useState(false);
     const [forceColor, setForceColor] = useState("#14161c");
     const [showHelp, setShowHelp] = useState(false);
@@ -98,11 +118,9 @@ export function VectorizeStudio() {
     const [traceSheetOpen, setTraceSheetOpen] = useState(false);
     const [pathsSheetOpen, setPathsSheetOpen] = useState(false);
     const [overlayOpacity, setOverlayOpacity] = useState(60);
-    // Region markers are a two-step affair: a master switch ("use regions") and a
-    // transient "region mode" (tool === 'mark'). Disabling region mode returns to
-    // pan with the markers kept; turning the master switch off ends the feature
-    // and clears them (keeping the invariant: markers exist ⇒ regions enabled).
-    const [regionsEnabled, setRegionsEnabled] = useState(false);
+    // Region markers have no separate "enable" switch: the markers ARE the feature.
+    // With none placed the trace is byte-identical; placing one turns it on. The only
+    // transient state is "region mode" (tool === 'mark') — click-to-place vs pan.
 
     const history = useHistory<EditableDoc>();
     const doc = history.value;
@@ -123,14 +141,35 @@ export function VectorizeStudio() {
     // arm the "re-trace discards edits" notice instead of re-tracing.
     const dirtyRef = useRef(false);
     const [staleEdits, setStaleEdits] = useState(false);
+    // Settings changed since the last COMPLETED trace but not yet applied — armed when
+    // a trace is Stopped mid-flight (the shown result then lags the controls).
+    const [staleOpts, setStaleOpts] = useState(false);
 
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState("");
+    // Determinate progress in [0,1] from the tracer; 0 ⇒ indeterminate (show the sweep).
+    const [progressFraction, setProgressFraction] = useState(0);
+    // Pre-merge region map (fine regions before the gradient field-merge) from the
+    // last trace — drives the region hover-highlight while placing markers.
+    const [preMerge, setPreMerge] = useState<{ labels: Int32Array; width: number; height: number } | null>(null);
+    // Fill currently hovered in the palette / paths list — the canvas lights up every
+    // region painted exactly this colour so the user can locate (and then delete) it.
+    const [highlightFill, setHighlightFill] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [applied, setApplied] = useState(false);
     const runIdRef = useRef(0);
     const abortRef = useRef<AbortController | null>(null);
+    // Pending debounced auto-run timer, shared so Stop can cancel it (otherwise a
+    // re-trace armed just before Stop fires ~DEBOUNCE_MS later and clobbers the doc).
+    const autoRunTimerRef = useRef<number | null>(null);
+    // Auto-default for the "fit smooth gradients" toggle, derived from image
+    // content (flat art ⇒ off, real ramps ⇒ on). `gradientsTouchedRef` flips once
+    // the user changes the toggle by hand so the probe never overrides them;
+    // `autoGradientsSrcRef` records the image we've already decided for so we probe
+    // each new image exactly once.
+    const gradientsTouchedRef = useRef(false);
+    const autoGradientsSrcRef = useRef<string | null>(null);
 
     const isVectorSource = logo.isSvg && Boolean(logo.svgText);
     const cleanFromExisting = isVectorSource && retraceVector === "clean";
@@ -142,6 +181,10 @@ export function VectorizeStudio() {
 
     // Mirror of selectedPathId so selection callbacks stay referentially stable.
     const selectedPathRef = useRef<string | null>(null);
+    // Last in-region click that selected a path: the seed for a "remove & heal"
+    // delete (which blob of a multi-blob colour to dissolve). Tied to an item id so
+    // a stale seed from a previously-selected path is ignored.
+    const seedRef = useRef<{ id: string; pt: Vec } | null>(null);
 
     const handleSelectPath = useCallback((id: string | null) => {
         if (selectedPathRef.current !== id) setSelectedNodes(new Set());
@@ -153,6 +196,10 @@ export function VectorizeStudio() {
         (keys: Set<string>) => setSelectedNodes(keys),
         [],
     );
+
+    const handleRegionSeed = useCallback((id: string, pt: Vec) => {
+        seedRef.current = { id, pt };
+    }, []);
 
     /* ------------------------------------------------------------ doc flow */
 
@@ -196,9 +243,25 @@ export function VectorizeStudio() {
     // [0,1] coords ⇒ resolution-independent.
     const markers = useMemo(() => opts.markers ?? [], [opts.markers]);
 
-    const addMarker = useCallback((x: number, y: number) => {
-        setOpts((o) => ({ ...o, markers: [...(o.markers ?? []), { x, y }] }));
-    }, []);
+    // Which kind of marker a click drops: "separate" (keep the region distinct, its
+    // paint untouched), "flat" (also pin it to its pre-merge flat form + solid), or
+    // "remove" (dissolve the section and heal its neighbours into the gap).
+    const [markMode, setMarkMode] = useState<"separate" | "flat" | "remove">(
+        "separate",
+    );
+
+    const addMarker = useCallback(
+        (x: number, y: number) => {
+            const m =
+                markMode === "flat"
+                    ? { x, y, flat: true }
+                    : markMode === "remove"
+                      ? { x, y, remove: true }
+                      : { x, y };
+            setOpts((o) => ({ ...o, markers: [...(o.markers ?? []), m] }));
+        },
+        [markMode],
+    );
     const removeMarker = useCallback((index: number) => {
         setOpts((o) => ({
             ...o,
@@ -206,19 +269,63 @@ export function VectorizeStudio() {
         }));
     }, []);
     const clearMarkers = useCallback(() => {
+        setTool("pan");
         setOpts((o) => (o.markers && o.markers.length ? { ...o, markers: [] } : o));
     }, []);
 
-    // Master switch: turning the feature off exits region mode and clears markers.
-    const toggleRegionsEnabled = useCallback(
-        (on: boolean) => {
-            setRegionsEnabled(on);
-            if (!on) {
-                setTool("pan");
-                clearMarkers();
+    // Latest opts / doc, read inside handlePaletteChange without re-creating it.
+    const optsRef = useRef(opts);
+    optsRef.current = opts;
+    const docRef = useRef(doc);
+    docRef.current = doc;
+    // Set just before an opacity-only palette edit so the auto-run effect skips the
+    // (now-redundant) re-trace — the canvas was already recoloured live.
+    const skipRetraceRef = useRef(false);
+
+    // Lock / edit / clear the flat-art palette (right rail). An array locks it (every
+    // pixel snaps to the nearest of these colours, with each one's opacity); null
+    // reverts to fully automatic extraction.
+    //
+    // A change that ONLY moves swatch OPACITIES (same colours + count) can never move
+    // a region boundary, so we recolour the matching paths' fill-opacity LIVE and skip
+    // the re-trace — dragging an opacity slider updates the canvas instantly with no
+    // trace lag. Hue / add / remove change the pixel assignment, so they fall through
+    // to the debounced re-trace.
+    const handlePaletteChange = useCallback(
+        (palette: { r: number; g: number; b: number; a?: number }[] | null) => {
+            const old = optsRef.current.palette ?? null;
+            const cur = docRef.current;
+            const rgbKey = (c: { r: number; g: number; b: number }) => `${c.r},${c.g},${c.b}`;
+            const fo = (c: { a?: number }) =>
+                c.a !== undefined && c.a < 255 ? c.a / 255 : undefined;
+            const alphaOnly =
+                !!palette &&
+                !!old &&
+                !!cur &&
+                palette.length === old.length &&
+                palette.every((c, i) => rgbKey(c) === rgbKey(old[i]));
+            if (alphaOnly) {
+                // Map each colour whose opacity changed → its new fill-opacity (RGB is
+                // unchanged, so the swatch hex IS the path's fill).
+                const remap = new Map<string, number | undefined>();
+                for (let i = 0; i < palette!.length; i++) {
+                    if (fo(palette![i]) !== fo(old![i])) remap.set(rgbToHex(palette![i]), fo(palette![i]));
+                }
+                if (remap.size > 0) {
+                    historySet({
+                        ...cur!,
+                        items: cur!.items.map((it) => {
+                            if (it.kind !== "path") return it;
+                            const hex = normalizeHex(it.fill);
+                            return hex && remap.has(hex) ? { ...it, fillOpacity: remap.get(hex) } : it;
+                        }),
+                    });
+                    skipRetraceRef.current = true; // canvas already updated; no re-trace needed
+                }
             }
+            setOpts((o) => ({ ...o, palette: palette ?? undefined }));
         },
-        [clearMarkers],
+        [historySet],
     );
 
     // Region markers only apply to colour tracing — leaving that mode exits the
@@ -252,7 +359,9 @@ export function VectorizeStudio() {
         abortRef.current = controller;
         setBusy(true);
         setError(null);
+        setStaleOpts(false); // we're applying the current settings now
         setProgress(cleanFromExisting ? "Cleaning SVG…" : "Tracing…");
+        setProgressFraction(0);
         try {
             let next: EditableDoc | null;
             if (cleanFromExisting && logo.svgText) {
@@ -269,9 +378,17 @@ export function VectorizeStudio() {
                 next = parseSvg(cleaned.svg);
                 if (!next) throw new Error("SVG could not be parsed");
             } else {
+                // Gradient/photo colour art keeps the 1024 cap (Step-3c cost);
+                // everything else (mono, or flat colour with gradients OFF) traces
+                // at full res for Affinity-grade crispness. The user "Detail" preset
+                // lifts the flat cap to 4096 ("High"); gradient/photo is unaffected.
+                const isFlat = opts.mode === "mono" || opts.gradients === false;
+                const flatCap =
+                    opts.traceDetail === "high" ? RASTER_MAX_DIM_HIGH : RASTER_MAX_DIM_FLAT;
+                const rasterMaxDim = isFlat ? flatCap : RASTER_MAX_DIM;
                 const imageData = await getImageData(
                     logo.src,
-                    RASTER_MAX_DIM,
+                    rasterMaxDim,
                     logo.isSvg ? logo.svgText : null,
                 );
                 if (runId !== runIdRef.current) return;
@@ -283,13 +400,13 @@ export function VectorizeStudio() {
                     opts,
                     (p) => {
                         if (runId !== runIdRef.current) return;
-                        setProgress(
-                            p.phase === "quantize"
-                                ? "Analyzing colors…"
-                                : `Tracing layer ${p.layer}/${p.total}…`,
-                        );
+                        setProgress(p.label);
+                        setProgressFraction(p.fraction);
                     },
                     controller.signal,
+                    (pm) => {
+                        if (runId === runIdRef.current) setPreMerge(pm);
+                    },
                 );
             }
             if (runId !== runIdRef.current) return;
@@ -310,6 +427,7 @@ export function VectorizeStudio() {
             if (runId === runIdRef.current) {
                 setBusy(false);
                 setProgress("");
+                setProgressFraction(0);
             }
         }
     }, [
@@ -323,15 +441,96 @@ export function VectorizeStudio() {
         handleSelectPath,
     ]);
 
+    // User-initiated cancel of an in-flight trace. Cancel any debounced auto-run armed
+    // before this click (else it would fire ~DEBOUNCE_MS later and replace the doc the
+    // user wanted to keep); bump the run id so any late progress / result from the
+    // aborted run is ignored; abort the controller (which terminates the worker —
+    // off-thread planar/crisp traces stop instantly, even mid-segmentation; potrace and
+    // the clean-existing-SVG path run synchronously on the main thread and stop after
+    // their current step); and clear the busy UI. The previous document in history is
+    // left intact — stopping means "never mind, keep what I had" — and `staleOpts` flags
+    // that the shown result now lags the settings, so the controls offer a re-trace.
+    // A new run starts only from a fresh opts/source change or the manual Trace button.
+    const stop = useCallback(() => {
+        if (autoRunTimerRef.current !== null) {
+            window.clearTimeout(autoRunTimerRef.current);
+            autoRunTimerRef.current = null;
+        }
+        runIdRef.current++;
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setBusy(false);
+        setProgress("");
+        setProgressFraction(0);
+        setStaleOpts(true);
+    }, []);
+
+    // Auto-default the "fit smooth gradients" toggle from image content: flat
+    // colour art turns it OFF (nothing to fit, and it sidesteps the gradient
+    // field-merge), real ramps leave it ON. A SUGGESTION only — a manual flip
+    // (gradientsTouchedRef) is never overridden, and each image is probed once.
+    useEffect(() => {
+        const src = logo.src;
+        if (!src) return;
+        // Cleaned vector sources don't run the tracer, so the toggle is moot.
+        if (isVectorSource && retraceVector === "clean") return;
+        if (autoGradientsSrcRef.current === src) return;
+        // Fresh image: re-enable the auto-decision (a previous image's manual flip
+        // shouldn't carry over).
+        gradientsTouchedRef.current = false;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const img = await getImageData(
+                    src,
+                    512,
+                    logo.isSvg ? logo.svgText : null,
+                );
+                // Claim AFTER the decode, not before — under StrictMode the effect
+                // runs twice; claiming before the await would let the cancelled first
+                // run mark the image "done" so the second (live) run bails and nothing
+                // applies. Here the cancelled run never claims, the live one does.
+                if (cancelled || gradientsTouchedRef.current) return;
+                autoGradientsSrcRef.current = src; // probe once per image
+                const on = suggestGradients(img);
+                setOpts((o) => {
+                    // Skip if the user beat the probe, or it matches the effective
+                    // state already (avoid a spurious re-trace).
+                    if (gradientsTouchedRef.current) return o;
+                    const currentlyOn = o.gradients !== false;
+                    return currentlyOn === on ? o : { ...o, gradients: on };
+                });
+            } catch {
+                // Best-effort: on decode failure leave the default in place.
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [logo.src, logo.isSvg, logo.svgText, isVectorSource, retraceVector]);
+
     // Auto-run (debounced) whenever the source or parameters change — unless
     // the user has hand-edited paths, in which case their edits win.
     useEffect(() => {
+        // An opacity-only palette edit already recoloured the canvas live (geometry
+        // is unchanged), so the trace would be wasted work — skip this one run.
+        if (skipRetraceRef.current) {
+            skipRetraceRef.current = false;
+            return;
+        }
         if (dirtyRef.current) {
             setStaleEdits(true);
             return;
         }
-        const id = window.setTimeout(() => void run(), DEBOUNCE_MS);
-        return () => window.clearTimeout(id);
+        const id = window.setTimeout(() => {
+            autoRunTimerRef.current = null;
+            void run();
+        }, DEBOUNCE_MS);
+        autoRunTimerRef.current = id;
+        return () => {
+            window.clearTimeout(id);
+            autoRunTimerRef.current = null;
+        };
     }, [run]);
 
     useEffect(() => () => abortRef.current?.abort(), []);
@@ -350,6 +549,40 @@ export function VectorizeStudio() {
             ),
         };
     }, [doc, forceColorOn, forceColor]);
+
+    // Auto-extracted flat palette: the distinct SOLID fills of the current trace, in
+    // paint order, carrying each region's alpha (from fill-opacity). Seeds + previews
+    // the editable palette (flat path). Derived from the BASE doc (not the force-colored
+    // one), and skips gradient items.
+    const autoPalette = useMemo(() => {
+        if (!doc) return [];
+        const seen = new Set<string>();
+        const out: { r: number; g: number; b: number; a?: number }[] = [];
+        for (const it of doc.items) {
+            if (it.kind !== "path" || it.gradient) continue;
+            const hex = normalizeHex(it.fill);
+            if (!hex) continue;
+            const a =
+                it.fillOpacity !== undefined && it.fillOpacity < 1
+                    ? Math.round(it.fillOpacity * 255)
+                    : 255;
+            const key = `${hex}-${a}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const rgb = hexToRgb(hex);
+            if (rgb) out.push(a < 255 ? { ...rgb, a } : rgb);
+        }
+        return out;
+    }, [doc]);
+
+    // The flat-palette editor (right rail) only applies to color tracing with
+    // gradients off — the path the palette-first segmenter owns. Hidden otherwise.
+    const flatPaletteActive =
+        (!isVectorSource || retraceVector === "retrace") &&
+        opts.mode === "color" &&
+        opts.gradients === false;
+    const lockedPalette =
+        opts.palette && opts.palette.length > 0 ? opts.palette : null;
 
     const svgText = useMemo(
         () => (derivedDoc ? serializeDoc(derivedDoc, precision) : null),
@@ -415,10 +648,7 @@ export function VectorizeStudio() {
                 const colorTrace =
                     (!isVectorSource || retraceVector === "retrace") &&
                     opts.mode === "color";
-                if (colorTrace) {
-                    setRegionsEnabled(true);
-                    setTool("mark");
-                }
+                if (colorTrace) setTool("mark");
                 return;
             }
             if (k === "Escape") {
@@ -433,11 +663,43 @@ export function VectorizeStudio() {
                 const item = doc.items.find((it) => it.id === selectedPathId);
                 if (!item) return;
                 e.preventDefault();
+                // Commit a "remove & heal" result and clear selection; drop the path
+                // selection too when the whole item went away. Returns whether it
+                // actually changed the doc (false ⇒ caller falls back).
+                const applyHeal = (next: EditableDoc): boolean => {
+                    if (next === doc) return false;
+                    commitDoc(next);
+                    setSelectedNodes(new Set());
+                    if (!next.items.some((it) => it.id === item.id))
+                        handleSelectPath(null);
+                    return true;
+                };
                 if (item.kind === "path" && selectedNodes.size > 0) {
-                    const next = deleteNodes(
-                        item,
-                        [...selectedNodes].map(parseNodeKey),
-                    );
+                    const refs = [...selectedNodes].map(parseNodeKey);
+                    // Planar region: delete the underlying shared-edge nodes so the
+                    // neighbour region loses them too (junctions are kept).
+                    if (item.loops) {
+                        const prov = regionProvenance(doc, item);
+                        if (prov) {
+                            const next = deleteRegionNodes(doc, prov, refs);
+                            if (next !== doc) {
+                                commitDoc(next);
+                                setSelectedNodes(new Set());
+                                return;
+                            }
+                            // Nothing was thinnable (the selection is a whole blob's
+                            // junctions, which can't be deleted without unwelding the
+                            // graph) → dissolve that blob and heal it instead of doing
+                            // nothing. The selected nodes' subpath index IS the loop.
+                            const sub = refs[0]?.sub ?? 0;
+                            if (applyHeal(removeRegionSection(doc, item.id, sub)))
+                                return;
+                            // Still nothing actionable — leave the doc untouched.
+                            setSelectedNodes(new Set());
+                            return;
+                        }
+                    }
+                    const next = deleteNodes(item, refs);
                     if (next) {
                         commitDoc(withItem(doc, next));
                         setSelectedNodes(new Set());
@@ -451,6 +713,23 @@ export function VectorizeStudio() {
                         handleSelectPath(null);
                     }
                 } else {
+                    // Planar region, no nodes selected: dissolve the ONE section the
+                    // user clicked to select it and heal the gap into the neighbour
+                    // (live graph edit, undoable) — instead of tearing a transparent
+                    // hole by dropping every blob of the colour. Needs the in-region
+                    // seed from that selecting click; falls back to the whole-item
+                    // delete when the region is non-planar or the seed is stale.
+                    const seed =
+                        seedRef.current?.id === item.id
+                            ? seedRef.current.pt
+                            : null;
+                    if (
+                        item.kind === "path" &&
+                        item.loops &&
+                        seed &&
+                        applyHeal(removeRegionAndHeal(doc, item.id, seed))
+                    )
+                        return;
                     commitDoc({
                         ...doc,
                         items: doc.items.filter((it) => it.id !== item.id),
@@ -476,17 +755,17 @@ export function VectorizeStudio() {
                     k === "ArrowLeft" ? -step : k === "ArrowRight" ? step : 0;
                 const dy =
                     k === "ArrowUp" ? -step : k === "ArrowDown" ? step : 0;
-                commitDoc(
-                    withItem(
-                        doc,
-                        moveNodes(
-                            item,
-                            [...selectedNodes].map(parseNodeKey),
-                            dx,
-                            dy,
-                        ),
-                    ),
-                );
+                const refs = [...selectedNodes].map(parseNodeKey);
+                // Planar region: nudge through the graph so junctions drag every
+                // incident spoke and shared edges keep the neighbour coincident.
+                if (item.loops) {
+                    const prov = regionProvenance(doc, item);
+                    if (prov) {
+                        commitDoc(translateRegionNodes(doc, prov, refs, dx, dy));
+                        return;
+                    }
+                }
+                commitDoc(withItem(doc, moveNodes(item, refs, dx, dy)));
             }
         };
         window.addEventListener("keydown", onKey);
@@ -587,8 +866,12 @@ export function VectorizeStudio() {
         selectedPathId,
         selectedNodes,
         markers,
+        markMode,
+        preMerge,
+        highlightFill,
         onSelectPath: handleSelectPath,
         onSelectNodes: handleSelectNodes,
+        onRegionSeed: handleRegionSeed,
         onDocChange: handleCanvasChange,
         onDocCommit: handleCanvasCommit,
         onAddMarker: addMarker,
@@ -605,19 +888,29 @@ export function VectorizeStudio() {
         source: retraceVector,
         onSourceChange: setRetraceVector,
         opts,
-        onPatch: (p: Partial<VectorizeOptions>) => setOpts((o) => ({ ...o, ...p })),
+        sourceMaxDim:
+            Math.max(logo.naturalWidth ?? 0, logo.naturalHeight ?? 0) || undefined,
+        onPatch: (p: Partial<VectorizeOptions>) => {
+            // A hand-flip of the gradients toggle pins it: the content probe must
+            // not override a deliberate user choice for this image.
+            if ("gradients" in p) gradientsTouchedRef.current = true;
+            setOpts((o) => ({ ...o, ...p }));
+        },
         forceColorOn,
         onForceColorOn: setForceColorOn,
         forceColor,
         onForceColor: setForceColor,
-        regionsEnabled,
-        onRegionsEnabledChange: toggleRegionsEnabled,
         marking: tool === "mark",
         onMarkingChange: (on: boolean) => setTool(on ? "mark" : "pan"),
         markerCount: markers.length,
+        flatCount: markers.filter((m) => m.flat).length,
+        removeCount: markers.filter((m) => m.remove).length,
+        markMode,
+        onMarkModeChange: setMarkMode,
         onClearMarkers: clearMarkers,
         busy,
         staleEdits,
+        staleOpts,
         onTrace: () => {
             setTraceSheetOpen(false);
             void run();
@@ -903,12 +1196,34 @@ export function VectorizeStudio() {
                         trace runs off-thread) and the CSS sweep stays smooth. */}
                     {busy && (
                         <div className="animate-in-fade pointer-events-none absolute inset-0 overflow-hidden">
-                            <div className="trace-sweep" />
-                            <div className="absolute left-1/2 top-3 -translate-x-1/2">
-                                <span className="flex items-center gap-2 rounded-full border border-line bg-surface/90 px-3 py-1 text-xs font-medium text-accent shadow-sm backdrop-blur">
-                                    <Loader2 size={13} className="animate-spin" />
-                                    {progress || "Tracing…"}
-                                </span>
+                            {progressFraction <= 0 && <div className="trace-sweep" />}
+                            <div className="absolute left-1/2 top-3 w-64 max-w-[80%] -translate-x-1/2">
+                                <div className="pointer-events-auto rounded-xl border border-line bg-surface/90 px-3 py-2 shadow-sm backdrop-blur">
+                                    <div className="flex items-center gap-2 text-xs font-medium text-accent">
+                                        <Loader2 size={13} className="shrink-0 animate-spin" />
+                                        <span className="min-w-0 flex-1 truncate">{progress || "Tracing…"}</span>
+                                        {progressFraction > 0 && (
+                                            <span className="shrink-0 tabular-nums text-ink-2">
+                                                {Math.round(progressFraction * 100)}%
+                                            </span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={stop}
+                                            className="-mr-1 flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-ink-2 transition-colors hover:bg-surface-3 hover:text-bad"
+                                            title="Stop tracing (keeps the current result)"
+                                        >
+                                            <X size={12} />
+                                            Stop
+                                        </button>
+                                    </div>
+                                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-3">
+                                        <div
+                                            className={`h-full rounded-full bg-accent ${progressFraction > 0 ? "transition-[width] duration-200 ease-out" : "animate-pulse"}`}
+                                            style={{ width: `${Math.max(5, Math.round(progressFraction * 100))}%` }}
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -917,9 +1232,21 @@ export function VectorizeStudio() {
                         on-stage banner makes it obvious the canvas is now clickable. */}
                     {tool === "mark" && !busy && (
                         <div className="animate-in-fade pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2">
-                            <span className="flex items-center gap-2 rounded-full border border-emerald-400/50 bg-surface/90 px-3 py-1 text-xs font-medium text-emerald-600 shadow-sm backdrop-blur dark:text-emerald-400">
+                            <span
+                                className={`flex items-center gap-2 rounded-full border bg-surface/90 px-3 py-1 text-xs font-medium shadow-sm backdrop-blur ${
+                                    markMode === "flat"
+                                        ? "border-amber-400/50 text-amber-600 dark:text-amber-400"
+                                        : markMode === "remove"
+                                          ? "border-rose-400/50 text-rose-600 dark:text-rose-400"
+                                          : "border-emerald-400/50 text-emerald-600 dark:text-emerald-400"
+                                }`}
+                            >
                                 <MapPin size={13} />
-                                Click the image to keep that region as its own shape
+                                {markMode === "flat"
+                                    ? "Click a region to paint it one flat colour"
+                                    : markMode === "remove"
+                                      ? "Click a section to remove it and heal the neighbours in"
+                                      : "Click a region to keep it as its own shape"}
                                 <button
                                     type="button"
                                     onClick={() => setTool("pan")}
@@ -944,6 +1271,15 @@ export function VectorizeStudio() {
                         <span className="flex shrink-0 items-center gap-1.5 text-accent">
                             <Loader2 size={12} className="animate-spin" />
                             {progress || "Tracing…"}
+                            <button
+                                type="button"
+                                onClick={stop}
+                                className="ml-0.5 flex items-center gap-0.5 rounded px-1 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-bad"
+                                title="Stop tracing (keeps the current result)"
+                            >
+                                <X size={11} />
+                                Stop
+                            </button>
                         </span>
                     )}
                     {error && (
@@ -1001,6 +1337,11 @@ export function VectorizeStudio() {
                     onRecolor={handleRecolor}
                     onToggleVisible={handleToggleVisible}
                     onDelete={handleDeleteItem}
+                    showPalette={flatPaletteActive}
+                    autoPalette={autoPalette}
+                    lockedPalette={lockedPalette}
+                    onPaletteChange={handlePaletteChange}
+                    onHighlight={setHighlightFill}
                 />
             )}
 
@@ -1027,6 +1368,11 @@ export function VectorizeStudio() {
                         onRecolor={handleRecolor}
                         onToggleVisible={handleToggleVisible}
                         onDelete={handleDeleteItem}
+                        showPalette={flatPaletteActive}
+                        autoPalette={autoPalette}
+                        lockedPalette={lockedPalette}
+                        onPaletteChange={handlePaletteChange}
+                        onHighlight={setHighlightFill}
                     />
                 </Sheet>
             )}
@@ -1040,6 +1386,8 @@ export function VectorizeStudio() {
 
 /** Region-marker glyph colour (emerald) + halo, matching EditorCanvas. */
 const MARKER_FILL = "#10b981";
+const FLAT_MARKER_FILL = "#f59e0b"; // amber — "flat colour" markers
+const REMOVE_MARKER_FILL = "#f43f5e"; // rose — "remove & heal" markers
 const MARKER_HALO = "#ffffff";
 /** Screen-px radius for clicking an existing marker to remove it. */
 const MARKER_HIT_PX = 11;
@@ -1069,7 +1417,7 @@ function OriginalPane({
     aspectW: number;
     aspectH: number;
     primary?: boolean;
-    markers?: { x: number; y: number }[];
+    markers?: { x: number; y: number; flat?: boolean; remove?: boolean }[];
     marking?: boolean;
     onAddMarker?: (x: number, y: number) => void;
     onRemoveMarker?: (index: number) => void;
@@ -1133,8 +1481,12 @@ function OriginalPane({
                                     top: `${m.y * 100}%`,
                                     width: 14,
                                     height: 14,
-                                    borderRadius: "9999px",
-                                    background: MARKER_FILL,
+                                    borderRadius: m.flat ? "3px" : "9999px",
+                                    background: m.remove
+                                        ? REMOVE_MARKER_FILL
+                                        : m.flat
+                                          ? FLAT_MARKER_FILL
+                                          : MARKER_FILL,
                                     border: `2px solid ${MARKER_HALO}`,
                                     boxShadow: "0 0 0 1px rgba(0,0,0,.25)",
                                     transform: `translate(-50%, -50%) scale(${inv})`,

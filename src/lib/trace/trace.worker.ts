@@ -1,7 +1,8 @@
 // Web Worker that runs vectorize work OFF the main thread, so the UI stays
 // responsive (and animations stay smooth) while computing.
 //
-// Two jobs, both crisp-engine / pure-JS (no DOM/WASM, so worker-safe):
+// Two jobs, both pure-JS (no DOM/WASM, so worker-safe) — the planar and crisp
+// engines run here:
 //   - 'trace':   run the full pipeline, return the EditableDoc (the studio result).
 //   - 'analyze': run the pipeline AND the intermediate stages, returning the
 //                stage visualisations (smoothed / discontinuity / regions / region
@@ -9,7 +10,7 @@
 //                user-facing "How it works" explainer, so it no longer freezes.
 //
 // Potrace stays on the main thread (esm-potrace-wasm needs DOMParser); the caller
-// only dispatches the crisp engine here.
+// dispatches the pure-JS engines (planar, crisp) here.
 
 import { traceImage, segmentOptionsFor } from './index.ts'
 import { segmentImage } from './segment.ts'
@@ -57,13 +58,27 @@ self.onmessage = async (e: MessageEvent<Req>) => {
         fills: regionFillsToRgba(seg.labels, seg.palette, w, h),
         regionCount: seg.palette.length,
         paints: paints.map((p) => (p ? { model: p.model, solid: p.solid } : null)),
-        svg: serializeDoc(doc, 2),
+        svg: serializeDoc(doc, 3),
         stats: { paths: st.paths, nodes: st.nodes },
       })
       return
     }
-    const doc = await traceImage(imageData, options, (progress) => self.postMessage({ type: 'progress', progress }))
-    self.postMessage({ type: 'result', doc })
+    let preMerge: { labels: Int32Array; width: number; height: number } | null = null
+    const doc = await traceImage(
+      imageData,
+      options,
+      (progress) => self.postMessage({ type: 'progress', progress }),
+      undefined,
+      (pm) => {
+        preMerge = pm
+      },
+    )
+    if (preMerge) {
+      const pm = preMerge as { labels: Int32Array; width: number; height: number }
+      self.postMessage({ type: 'result', doc, preMergeLabels: pm.labels, preMergeWidth: pm.width, preMergeHeight: pm.height })
+    } else {
+      self.postMessage({ type: 'result', doc })
+    }
   } catch (err) {
     self.postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) })
   }

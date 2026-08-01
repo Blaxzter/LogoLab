@@ -1,9 +1,9 @@
-import { Coffee, Heart, X } from 'lucide-react'
+import { Bug, Coffee, Heart, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useLogo, useStore } from '../store'
 import { Sheet } from './ui/Sheet'
 import { ThemeToggleSegmented } from './ThemeToggle'
-import { TABS, REPO_URL, COFFEE_URL, SPONSOR_URL, GithubMark } from './navItems'
+import { TABS, LAB_VIEWS, REPO_URL, COFFEE_URL, SPONSOR_URL, GithubMark } from './navItems'
 
 /**
  * The mobile title-bar menu (right slide-over). Below md the header collapses to
@@ -69,6 +69,29 @@ export function AppMenu({ open, onClose }: { open: boolean; onClose: () => void 
           </span>
           View source on GitHub
         </a>
+
+        {/* The desktop header's bug popover has no room here, so the harnesses
+            list flat — same set, same order. */}
+        <div className="my-2 h-px bg-line" />
+        <div className="flex items-center gap-2 px-3 pb-1 text-[0.7rem] font-bold uppercase tracking-wider text-faint">
+          <Bug size={13} />
+          Dev views
+        </div>
+        {LAB_VIEWS.map((v) => (
+          <NavLink
+            key={v.to}
+            to={v.to}
+            onClick={onClose}
+            className={({ isActive }) =>
+              `${row} ${isActive ? 'bg-accent-soft text-accent' : 'text-ink-2 hover:bg-surface-3'}`
+            }
+          >
+            <span className="grid h-5 w-5 place-items-center">{v.icon}</span>
+            {v.label}
+          </NavLink>
+        ))}
+
+        <div className="my-2 h-px bg-line" />
 
         <a
           href={COFFEE_URL}

@@ -1,11 +1,11 @@
 // Shared scoreboard runner (plan §5): trace → rasterize → score, plus a
 // byte-identical re-run determinism check. Pure and environment-agnostic, so the
-// headless `node --test` harness and the browser harness (vectorize-test.html)
+// headless `node --test` harness and the browser harness (/labs/eval — EvalLab)
 // produce directly comparable numbers from the same code.
 
 import type { EditableDoc } from '../lib/path/types.ts'
 import { rasterizeDoc, boundaryMask } from './raster.ts'
-import { fidelity, usefulness, hashDoc, type FidelityMetrics, type UsefulnessMetrics } from './metrics.ts'
+import { fidelity, usefulness, topologyMetrics, hashDoc, type FidelityMetrics, type UsefulnessMetrics, type TopologyMetrics } from './metrics.ts'
 
 /** Minimal source-image shape (a real ImageData satisfies it). */
 export interface SourceImage {
@@ -16,7 +16,7 @@ export interface SourceImage {
 
 export type TraceRun = () => Promise<EditableDoc>
 
-export interface ScoreRow extends FidelityMetrics, UsefulnessMetrics {
+export interface ScoreRow extends FidelityMetrics, UsefulnessMetrics, TopologyMetrics {
   name: string
   engine: string
   width: number
@@ -49,13 +49,14 @@ export async function score(name: string, engine: string, source: SourceImage, r
 export function scoreDoc(
   source: SourceImage,
   doc: EditableDoc,
-): FidelityMetrics & UsefulnessMetrics & { width: number; height: number } {
+): FidelityMetrics & UsefulnessMetrics & TopologyMetrics & { width: number; height: number } {
   const { width, height } = source
   const render = rasterizeDoc(doc, width, height)
   const mask = boundaryMask(doc, width, height, 1)
   const fid = fidelity(source.data, render, width, height, mask)
   const use = usefulness(doc)
-  return { width, height, ...fid, ...use }
+  const topo = topologyMetrics(doc)
+  return { width, height, ...fid, ...use, ...topo }
 }
 
 const f = (v: number, d = 3): string => (Number.isFinite(v) ? v.toFixed(d) : String(v))

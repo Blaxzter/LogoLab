@@ -10,8 +10,9 @@
 // is already baked into that rect). All gestures compute from a pointerdown
 // snapshot with cumulative deltas, so previews never accumulate drift.
 
-import { memo, useEffect, useRef, useState, useCallback } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ZoomSurface } from "../ui/ZoomSurface";
+import { useFitBox } from "./useFitBox";
 import type { PanZoom } from "../../hooks/usePanZoom";
 import type {
     EditableDoc,
@@ -20,17 +21,34 @@ import type {
     NodeRef,
     PathItem,
     RawItem,
+    SubPath,
     Vec,
 } from "../../lib/path/types";
 import { subPathsToD } from "../../lib/path/model";
 import {
+    cubicAt,
     insertNode,
     moveHandle,
     moveNodes,
     nearestPointOnItem,
+    segmentControls,
+    segmentCount,
     setNodeKind,
     translateItem,
 } from "../../lib/path/geometry";
+import {
+    regionProvenance,
+    type HandleSite,
+    type NodeProvenance,
+} from "../../lib/path/topology";
+import {
+    insertNodeOnEdge,
+    moveEdgeHandle,
+    resolveEdgeSegment,
+    setEdgeNodeKind,
+    translateRegion,
+    translateRegionNodes,
+} from "../../lib/path/topologyEdit";
 
 const ACCENT = "#5b5bd6";
 /** Selected anchor fill — warm hue that contrasts the indigo outline/stroke. */
@@ -39,6 +57,8 @@ const ACCENT_SEL = "#f25f2e";
 const HALO = "#ffffff";
 /** Region-marker pin colour (emerald) — distinct from the indigo/orange edit accents. */
 const MARKER = "#10b981";
+const FLAT_MARKER = "#f59e0b"; // amber — "flat colour" markers
+const REMOVE_MARKER = "#f43f5e"; // rose — "remove & heal" markers
 /** Screen-px movement before a pointerdown counts as a drag (not a click). */
 const DRAG_THRESHOLD_PX = 3;
 /** Max screen-px distance from a segment for double-click node insertion. */
@@ -68,9 +88,20 @@ export interface EditorCanvasProps {
     /** Original-image ghost rendered under the SVG (overlay view mode). */
     underlay?: { src: string; opacity: number } | null;
     /** Region markers (segmentation seeds) in NORMALIZED [0,1] image coords. */
-    markers?: { x: number; y: number }[];
+    markers?: { x: number; y: number; flat?: boolean; remove?: boolean }[];
+    /** Which marker kind the mark tool drops — tints the hover-highlight to match. */
+    markMode?: "separate" | "flat" | "remove";
+    /** Pre-merge region map (fine regions before the field-merge) from the last
+     *  trace; the mark tool highlights the region under the cursor from it. */
+    preMerge?: { labels: Int32Array; width: number; height: number } | null;
+    /** Hovering a palette swatch / path row sets this fill; every visible path with
+     *  it lights up, so the user sees which regions ARE that colour. null ⇒ none. */
+    highlightFill?: string | null;
     onSelectPath: (id: string | null) => void;
     onSelectNodes: (keys: Set<string>) => void;
+    /** Records the in-region click point that selected a path — the seed for a
+     *  "remove & heal" delete (which blob of a multi-blob region to dissolve). */
+    onRegionSeed?: (id: string, pt: Vec) => void;
     /** Live preview during drags (no history commit). */
     onDocChange: (doc: EditableDoc) => void;
     /** History-committing final state (pointerup, double-click edits). */
@@ -81,37 +112,6 @@ export interface EditorCanvasProps {
     onRemoveMarker?: (index: number) => void;
     /** Forwarded to ZoomSurface — registers the box the +/- buttons zoom around. */
     primary?: boolean;
-}
-
-/**
- * Fit an aspect ratio into the observed size of a container ("contain"),
- * returning explicit pixel dimensions for the fitted box. ResizeObserver-based
- * so it tracks layout (untransformed) size — the pan/zoom CSS transform scales
- * the box visually without re-measuring.
- */
-export function useFitBox(aspectW: number, aspectH: number) {
-    const parentRef = useRef<HTMLDivElement | null>(null);
-    const [avail, setAvail] = useState({ w: 0, h: 0 });
-
-    useEffect(() => {
-        const el = parentRef.current;
-        if (!el) return;
-        const ro = new ResizeObserver((entries) => {
-            const r = entries[0]?.contentRect;
-            if (r) setAvail({ w: r.width, h: r.height });
-        });
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, []);
-
-    const ratio = aspectW > 0 && aspectH > 0 ? aspectW / aspectH : 1;
-    let width = avail.w;
-    let height = width / ratio;
-    if (height > avail.h) {
-        height = avail.h;
-        width = height * ratio;
-    }
-    return { parentRef, width, height };
 }
 
 /** Replace one item (matched by id) in a doc, sharing everything else. */
@@ -139,6 +139,69 @@ function dOf(item: PathItem): string {
     return d;
 }
 
+// --- region hit-testing (remove-mode hover preview) -------------------------
+// Flatten a closed subpath into a dense polygon, cached by node-array identity so
+// a mouse-move only ray-casts (no re-sampling) until the geometry changes.
+const polyCache = new WeakMap<object, Vec[]>();
+function subPathPolygon(sp: SubPath): Vec[] {
+    let poly = polyCache.get(sp.nodes);
+    if (poly) return poly;
+    poly = [];
+    const count = segmentCount(sp);
+    for (let seg = 0; seg < count; seg++) {
+        const { p0, c1, c2, p3 } = segmentControls(sp, seg);
+        for (let k = 0; k < 6; k++) poly.push(cubicAt(p0, c1, c2, p3, k / 6));
+    }
+    polyCache.set(sp.nodes, poly);
+    return poly;
+}
+function pointInPolygon(p: Vec, poly: Vec[]): boolean {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const a = poly[i];
+        const b = poly[j];
+        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x)
+            inside = !inside;
+    }
+    return inside;
+}
+function polyAbsArea(poly: Vec[]): number {
+    let a = 0;
+    for (let i = 0, n = poly.length; i < n; i++) {
+        const p = poly[i];
+        const q = poly[(i + 1) % n];
+        a += p.x * q.y - q.x * p.y;
+    }
+    return Math.abs(a) / 2;
+}
+/**
+ * The d-string of the region boundary a "remove" click would dissolve at `pt`: the
+ * topmost visible path item with a subpath containing the point, and within it the
+ * largest containing subpath (the blob's OUTER loop, not a hole). null over empty
+ * canvas. This previews exactly what the trace-time flood removes, at the geometry
+ * the user sees — so the granularity of the click is visible before committing.
+ */
+function removeRegionDAt(doc: EditableDoc, pt: Vec): string | null {
+    for (let i = doc.items.length - 1; i >= 0; i--) {
+        const it = doc.items[i];
+        if (it.kind !== "path" || !it.visible) continue;
+        let bestSp: SubPath | null = null;
+        let bestArea = -1;
+        for (const sp of it.subPaths) {
+            const poly = subPathPolygon(sp);
+            if (poly.length >= 3 && pointInPolygon(pt, poly)) {
+                const area = polyAbsArea(poly);
+                if (area > bestArea) {
+                    bestArea = area;
+                    bestSp = sp;
+                }
+            }
+        }
+        if (bestSp) return subPathsToD([bestSp]);
+    }
+    return null;
+}
+
 function escapeAttr(v: string): string {
     return v
         .replace(/&/g, "&amp;")
@@ -162,6 +225,12 @@ interface DragState {
     moved: boolean;
     lastDoc: EditableDoc | null;
     pointerId: number;
+    /** Planar (topological) selected item: route edits through doc.topology so
+     *  the neighbour region follows. Captured at pointerdown and valid for the
+     *  whole drag (moves never change node counts). Absent ⇒ legacy per-item path. */
+    provenance?: NodeProvenance[][];
+    /** Handle drag on a planar item: the canonical edge handle to drag. */
+    handleSite?: HandleSite;
 }
 
 /** SVG paint-server element for a gradient fill (userSpaceOnUse). */
@@ -285,8 +354,12 @@ export function EditorCanvas({
     selectedNodes,
     underlay,
     markers,
+    markMode = "separate",
+    preMerge,
+    highlightFill,
     onSelectPath,
     onSelectNodes,
+    onRegionSeed,
     onDocChange,
     onDocCommit,
     onAddMarker,
@@ -301,6 +374,15 @@ export function EditorCanvas({
     // Key of the anchor/handle currently under the cursor ('sub:idx' or
     // 'sub:idx:in|out'), for hover feedback in node mode.
     const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+    // Mark tool: the PRE-merge region label under the cursor, highlighted so the
+    // user sees the section a marker will affect.
+    const [hoverLabel, setHoverLabel] = useState<number | null>(null);
+    // Remove mode: the d-string of the FINAL region under the cursor, tinted so the
+    // user sees exactly which section a click dissolves (the flood is 1px-sensitive).
+    const [removeHoverD, setRemoveHoverD] = useState<string | null>(null);
+    // Mark tool: the live cursor position (viewBox coords) so a ghost marker can
+    // ride the pointer — placement is then WYSIWYG (the dot lands where the ghost is).
+    const [hoverPt, setHoverPt] = useState<Vec | null>(null);
 
     // --- marquee (rubber-band) selection state ---
     interface MarqueeState {
@@ -342,14 +424,58 @@ export function EditorCanvas({
     // pan/zoom transform multiplies it on screen). Guard the pre-measure frame.
     const screenScale = fit.width > 0 ? (fit.width * pz.scale) / vbW : 1;
 
+    // Region hover-highlight overlay (mark tool, flat mode only): rasterize the
+    // pre-merge region under the cursor to a tinted mask, as a data-URL <image> over
+    // the viewBox. Recomputed only when the hovered label changes — O(w·h) once per
+    // region entered, not per mouse-move. Amber to match the "flat colour" marker.
+    const hoverOverlay = useMemo(() => {
+        if (hoverLabel === null || hoverLabel < 0 || !preMerge) return null;
+        if (typeof document === "undefined") return null;
+        const { labels, width, height } = preMerge;
+        const cnv = document.createElement("canvas");
+        cnv.width = width;
+        cnv.height = height;
+        const ctx = cnv.getContext("2d");
+        if (!ctx) return null;
+        const img = ctx.createImageData(width, height);
+        const d = img.data;
+        const [tr, tg, tb] = [245, 158, 11]; // amber (FLAT_MARKER)
+        for (let i = 0; i < labels.length; i++) {
+            if (labels[i] === hoverLabel) {
+                const o = i * 4;
+                d[o] = tr;
+                d[o + 1] = tg;
+                d[o + 2] = tb;
+                d[o + 3] = 255;
+            }
+        }
+        ctx.putImageData(img, 0, 0);
+        return cnv.toDataURL();
+    }, [preMerge, hoverLabel]);
+
     const sel = doc.items.find((it) => it.id === selectedPathId);
     const selectedItem = sel && sel.kind === "path" ? sel : null;
+
+    // Colour-locator highlight: every visible path painted exactly `highlightFill`
+    // (set while hovering its palette swatch / path row).
+    const highlightItems = highlightFill
+        ? (doc.items.filter(
+              (it) => it.kind === "path" && it.visible && it.fill === highlightFill,
+          ) as PathItem[])
+        : [];
 
     // The grab targets unmount on selection / mode change without firing
     // pointerout, so drop any stale hover highlight explicitly.
     useEffect(() => {
         setHoveredKey(null);
     }, [selectedPathId, interactive]);
+
+    // Drop the remove-preview whenever we leave remove mode (or marking entirely),
+    // and the ghost marker whenever we leave the mark tool.
+    useEffect(() => {
+        if (!marking || markMode !== "remove") setRemoveHoverD(null);
+        if (!marking) setHoverPt(null);
+    }, [marking, markMode]);
 
     /** Map client coords to viewBox coords via the fitted box's live rect. */
     const toVb = (clientX: number, clientY: number): Vec | null => {
@@ -430,6 +556,11 @@ export function EditorCanvas({
 
         const pt = toVb(e.clientX, e.clientY);
         if (!pt) return;
+
+        // Remember the in-region click as the "remove & heal" seed: which blob the
+        // user is pointing at, so a later ⌫ dissolves that section (not the whole
+        // colour). Updated on every pointerdown on a path so it tracks the cursor.
+        onRegionSeed?.(item.id, pt);
 
         if (interactive) {
             // Dragging on the SELECTED path → move that path (existing behavior).
@@ -518,16 +649,20 @@ export function EditorCanvas({
                 e.stopPropagation();
                 const ref: NodeRef = bestRef;
                 const node = selectedItem.subPaths[ref.sub].nodes[ref.idx];
-                onDocCommit(
-                    withItem(
-                        doc,
-                        setNodeKind(
-                            selectedItem,
-                            ref,
-                            node.kind === "smooth" ? "corner" : "smooth",
-                        ),
-                    ),
-                );
+                const kind = node.kind === "smooth" ? "corner" : "smooth";
+                // Planar: toggle the shared edge node's kind so both regions update.
+                if (selectedItem.loops) {
+                    const pv = regionProvenance(doc, selectedItem)?.[ref.sub]?.[
+                        ref.idx
+                    ];
+                    if (pv) {
+                        onDocCommit(
+                            setEdgeNodeKind(doc, pv.edgeId, pv.edgeNodeIdx, kind),
+                        );
+                        return;
+                    }
+                }
+                onDocCommit(withItem(doc, setNodeKind(selectedItem, ref, kind)));
                 return;
             }
             // 2) Handle dot: dblclick is a no-op, but never a zoom reset.
@@ -551,6 +686,21 @@ export function EditorCanvas({
             const hit = nearestPointOnItem(item, pt);
             if (!hit || hit.dist > tolerance) continue;
             e.stopPropagation();
+            // Planar: split the underlying shared edge so both regions gain the node.
+            if (item.loops) {
+                const prov = regionProvenance(doc, item);
+                const subLen = item.subPaths[hit.sub]?.nodes.length ?? 0;
+                const seg = prov
+                    ? resolveEdgeSegment(prov, hit.sub, hit.seg, subLen, hit.t)
+                    : null;
+                if (!seg) return;
+                const next = insertNodeOnEdge(doc, seg.edgeId, seg.segIdx, seg.t);
+                if (next === doc) return;
+                onSelectPath(item.id);
+                onSelectNodes(new Set([`${hit.sub}:${hit.seg + 1}`]));
+                onDocCommit(next);
+                return;
+            }
             const next = insertNode(item, hit.sub, hit.seg, hit.t);
             if (next === item) return;
             onSelectPath(item.id);
@@ -576,6 +726,11 @@ export function EditorCanvas({
         const pt = toVb(e.clientX, e.clientY);
         if (!pt) return;
         const startClient = { x: e.clientX, y: e.clientY };
+        // Planar region: provenance bridges a materialized NodeRef back to the
+        // shared-edge graph so the neighbour region follows. null ⇒ legacy item.
+        const topoProv = selectedItem.loops
+            ? regionProvenance(doc, selectedItem) ?? undefined
+            : undefined;
 
         if (nodeKey) {
             let next: Set<string>;
@@ -596,6 +751,7 @@ export function EditorCanvas({
                 preDoc: doc,
                 origItem: selectedItem,
                 refs: [...next].map(parseNodeKey),
+                provenance: topoProv,
                 startClient,
                 startVb: pt,
                 moved: false,
@@ -609,14 +765,31 @@ export function EditorCanvas({
         const ref: NodeRef = { sub: Number(subS), idx: Number(idxS) };
         const node = selectedItem.subPaths[ref.sub]?.nodes[ref.idx];
         if (!node) return;
+        const whichSide: "in" | "out" = which === "in" ? "in" : "out";
+        // For a planar item, resolve the canonical edge handle this materialized
+        // handle maps to (in/out swap under a reversed traversal is baked in).
+        const pv = topoProv?.[ref.sub]?.[ref.idx];
+        const handleSite = pv
+            ? whichSide === "in"
+                ? pv.inHandle
+                : pv.outHandle
+            : null;
+        if (selectedItem.loops && !handleSite) return; // planar handle with no graph site
         // Alt breaks symmetry: the node becomes a corner before the (unmirrored)
         // handle drag, so smooth-mirroring stops following this handle.
         let baseDoc = doc;
         let baseItem = selectedItem;
         if (e.altKey && node.kind !== "corner") {
-            baseItem = setNodeKind(selectedItem, ref, "corner");
-            baseDoc = withItem(doc, baseItem);
-            onDocChange(baseDoc);
+            if (handleSite) {
+                // Corner the edge node THIS handle belongs to (at a junction the
+                // out-handle lives on a different edge than the anchor owner).
+                baseDoc = setEdgeNodeKind(doc, handleSite.edgeId, handleSite.edgeNodeIdx, "corner");
+                onDocChange(baseDoc);
+            } else {
+                baseItem = setNodeKind(selectedItem, ref, "corner");
+                baseDoc = withItem(doc, baseItem);
+                onDocChange(baseDoc);
+            }
         }
         beginDrag(e, {
             type: "handle",
@@ -624,7 +797,8 @@ export function EditorCanvas({
             preDoc: doc,
             origItem: baseItem,
             handleRef: ref,
-            which: which === "in" ? "in" : "out",
+            which: whichSide,
+            handleSite: handleSite ?? undefined,
             mirror: !e.altKey,
             startClient,
             startVb: pt,
@@ -637,6 +811,41 @@ export function EditorCanvas({
     // --- drag tracking on the svg root (pointer capture retargets here) ----------
 
     const handleSvgPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+        // --- region hover-highlight (mark tool) ---
+        if (marking) {
+            // A ghost marker rides the pointer (the crosshair is hidden), so the user
+            // sees EXACTLY where a click lands — placement is WYSIWYG. Computed once
+            // and reused by the mode-specific previews below.
+            const pt = toVb(e.clientX, e.clientY);
+            setHoverPt(pt);
+            // Remove mode: preview the FINAL region the click would dissolve, by
+            // hit-testing the rendered geometry (resolution-independent → matches
+            // what the user sees, unlike the 1px-sensitive trace-time flood).
+            if (markMode === "remove") {
+                const d = pt ? removeRegionDAt(doc, pt) : null;
+                setRemoveHoverD((prev) => (prev === d ? prev : d));
+                return;
+            }
+            // Flat markers carve the hovered section out as its own region, so the
+            // preview maps to what the click does. "Keep separate" acts by a ridge
+            // split the pre-merge map doesn't predict, so no preview there.
+            if (markMode !== "flat" || !preMerge) {
+                setHoverLabel((prev) => (prev === null ? prev : null));
+                return;
+            }
+            let lab: number | null = null;
+            if (pt) {
+                const px = Math.floor(((pt.x - vbX) / vbW) * preMerge.width);
+                const py = Math.floor(((pt.y - vbY) / vbH) * preMerge.height);
+                if (px >= 0 && py >= 0 && px < preMerge.width && py < preMerge.height) {
+                    const v = preMerge.labels[py * preMerge.width + px];
+                    if (v >= 0) lab = v;
+                }
+            }
+            setHoverLabel((prev) => (prev === lab ? prev : lab));
+            return;
+        }
+
         // --- marquee tracking ---
         const m = marqueeRef.current;
         if (m) {
@@ -682,21 +891,32 @@ export function EditorCanvas({
         if (!pt) return;
         const dx = pt.x - drag.startVb.x;
         const dy = pt.y - drag.startVb.y;
-        let item: PathItem;
+        // Planar items route every gesture through doc.topology (so the shared
+        // edge's neighbour region follows live); legacy items edit subPaths.
+        let next: EditableDoc;
         if (drag.type === "path") {
-            item = translateItem(drag.origItem, dx, dy);
+            next = drag.origItem.loops
+                ? translateRegion(drag.origDoc, drag.origItem, dx, dy)
+                : withItem(drag.origDoc, translateItem(drag.origItem, dx, dy));
         } else if (drag.type === "nodes") {
-            item = moveNodes(drag.origItem, drag.refs!, dx, dy);
-        } else {
-            item = moveHandle(
-                drag.origItem,
-                drag.handleRef!,
-                drag.which!,
+            next = drag.provenance
+                ? translateRegionNodes(drag.origDoc, drag.provenance, drag.refs!, dx, dy)
+                : withItem(drag.origDoc, moveNodes(drag.origItem, drag.refs!, dx, dy));
+        } else if (drag.handleSite) {
+            next = moveEdgeHandle(
+                drag.origDoc,
+                drag.handleSite.edgeId,
+                drag.handleSite.edgeNodeIdx,
+                drag.handleSite.which,
                 pt,
                 drag.mirror!,
             );
+        } else {
+            next = withItem(
+                drag.origDoc,
+                moveHandle(drag.origItem, drag.handleRef!, drag.which!, pt, drag.mirror!),
+            );
         }
-        const next = withItem(drag.origDoc, item);
         drag.lastDoc = next;
         onDocChange(next);
     };
@@ -837,6 +1057,14 @@ export function EditorCanvas({
 
     const r = (px: number) => px / screenScale;
 
+    // Ghost-marker colour tracks the active mark mode.
+    const GHOST_COL =
+        markMode === "remove"
+            ? REMOVE_MARKER
+            : markMode === "flat"
+              ? FLAT_MARKER
+              : MARKER;
+
     return (
         <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
             <div
@@ -862,7 +1090,20 @@ export function EditorCanvas({
                         viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
                         width="100%"
                         height="100%"
-                        className={interactive || marking ? "cursor-crosshair" : ""}
+                        // The fitted box already carries the viewBox aspect (useFitBox),
+                        // so "none" never visibly stretches — but it pins the user→screen
+                        // map to a pure edge-to-edge proportion, exactly what toVb inverts.
+                        // The default "meet" can letterbox by a sub-pixel when the rendered
+                        // box aspect drifts, which a marker placed at 3200% then shows as a
+                        // few-px gap between the cursor and the dot.
+                        preserveAspectRatio="none"
+                        className={
+                            marking
+                                ? "cursor-none"
+                                : interactive
+                                  ? "cursor-crosshair"
+                                  : ""
+                        }
                         style={{
                             display: "block",
                             touchAction: "none",
@@ -874,6 +1115,11 @@ export function EditorCanvas({
                         onPointerMove={handleSvgPointerMove}
                         onPointerUp={handleSvgPointerUp}
                         onPointerCancel={handleSvgPointerCancel}
+                        onPointerLeave={() => {
+                            if (hoverLabel !== null) setHoverLabel(null);
+                            if (removeHoverD !== null) setRemoveHoverD(null);
+                            if (hoverPt !== null) setHoverPt(null);
+                        }}
                         onDoubleClick={handleSvgDoubleClick}
                     >
                         <g onPointerDown={handlePathPointerDown}>
@@ -901,6 +1147,36 @@ export function EditorCanvas({
                                     ) : null,
                                 )}
                         </g>
+
+                        {/* Colour-locator highlight: light up every region painted the
+                            hovered palette colour — a translucent flash + a halo/accent
+                            outline (legible over any fill), so the user sees exactly which
+                            regions are that colour before recolouring or deleting it.
+                            pointerEvents none so it never blocks editing. */}
+                        {highlightItems.length > 0 && fit.width > 0 && (
+                            <g style={{ pointerEvents: "none" }}>
+                                {highlightItems.map((it) => (
+                                    <g key={it.id}>
+                                        <path d={dOf(it)} fill={HALO} fillOpacity={0.35} fillRule={it.fillRule} />
+                                        <path
+                                            d={dOf(it)}
+                                            fill="none"
+                                            stroke={HALO}
+                                            strokeOpacity={0.9}
+                                            strokeWidth={r(3.5)}
+                                            strokeLinejoin="round"
+                                        />
+                                        <path
+                                            d={dOf(it)}
+                                            fill="none"
+                                            stroke={ACCENT}
+                                            strokeWidth={r(1.75)}
+                                            strokeLinejoin="round"
+                                        />
+                                    </g>
+                                ))}
+                            </g>
+                        )}
 
                         {/* Selection overlay: outline + handle spokes/dots + anchors.
                             All widths/radii go through r() so they stay a constant
@@ -1107,6 +1383,38 @@ export function EditorCanvas({
                             />
                         )}
 
+                        {/* Region hover-highlight (mark tool, flat mode): tint the
+                            pre-merge region under the cursor so the user sees the
+                            section a flat marker will carve out. Above the paths,
+                            below the pins. */}
+                        {marking && markMode === "flat" && hoverOverlay && (
+                            <image
+                                href={hoverOverlay}
+                                x={vbX}
+                                y={vbY}
+                                width={vbW}
+                                height={vbH}
+                                preserveAspectRatio="none"
+                                opacity={0.4}
+                                style={{ pointerEvents: "none" }}
+                            />
+                        )}
+
+                        {/* Remove mode: outline + tint the exact region the click
+                            would dissolve, so the user can aim at a thin sliver and
+                            see precisely what heals away. Above the paths, below pins. */}
+                        {marking && markMode === "remove" && removeHoverD && (
+                            <path
+                                d={removeHoverD}
+                                fill={REMOVE_MARKER}
+                                fillOpacity={0.32}
+                                stroke={REMOVE_MARKER}
+                                strokeWidth={r(1.5)}
+                                strokeOpacity={0.95}
+                                style={{ pointerEvents: "none" }}
+                            />
+                        )}
+
                         {/* Region markers (segmentation seeds). Drawn in every tool
                             so the user always sees what's protected; clicks are
                             handled geometrically by the svg, so the pins themselves
@@ -1117,13 +1425,18 @@ export function EditorCanvas({
                                 {markers.map((m, i) => {
                                     const cx = vbX + m.x * vbW;
                                     const cy = vbY + m.y * vbH;
+                                    const col = m.remove
+                                        ? REMOVE_MARKER
+                                        : m.flat
+                                          ? FLAT_MARKER
+                                          : MARKER;
                                     return (
                                         <g key={i}>
                                             <circle
                                                 cx={cx}
                                                 cy={cy}
                                                 r={r(6.5)}
-                                                fill={MARKER}
+                                                fill={col}
                                                 fillOpacity={0.22}
                                                 stroke="none"
                                             />
@@ -1131,19 +1444,65 @@ export function EditorCanvas({
                                                 cx={cx}
                                                 cy={cy}
                                                 r={r(4)}
-                                                fill={MARKER}
+                                                fill={col}
                                                 stroke={HALO}
                                                 strokeWidth={r(1.5)}
                                             />
-                                            <circle
-                                                cx={cx}
-                                                cy={cy}
-                                                r={r(1.4)}
-                                                fill={HALO}
-                                            />
+                                            {m.remove ? (
+                                                // "×" glyph reads as remove/dissolve.
+                                                <path
+                                                    d={`M${cx - r(1.6)} ${cy - r(1.6)} L${cx + r(1.6)} ${cy + r(1.6)} M${cx + r(1.6)} ${cy - r(1.6)} L${cx - r(1.6)} ${cy + r(1.6)}`}
+                                                    stroke={HALO}
+                                                    strokeWidth={r(1)}
+                                                    strokeLinecap="round"
+                                                    fill="none"
+                                                />
+                                            ) : (
+                                                <circle
+                                                    cx={cx}
+                                                    cy={cy}
+                                                    r={r(1.4)}
+                                                    fill={HALO}
+                                                />
+                                            )}
                                         </g>
                                     );
                                 })}
+                            </g>
+                        )}
+
+                        {/* Ghost marker: the pin the NEXT click will drop, riding the
+                            pointer (the crosshair is hidden). Placement is WYSIWYG — a
+                            click stores exactly this point — so it doubles as a probe for
+                            any cursor↔dot offset. A hairline cross marks the exact pixel. */}
+                        {marking && hoverPt && fit.width > 0 && (
+                            <g style={{ pointerEvents: "none" }} opacity={0.85}>
+                                <circle
+                                    cx={hoverPt.x}
+                                    cy={hoverPt.y}
+                                    r={r(6.5)}
+                                    fill={GHOST_COL}
+                                    fillOpacity={0.18}
+                                    stroke="none"
+                                />
+                                <circle
+                                    cx={hoverPt.x}
+                                    cy={hoverPt.y}
+                                    r={r(4)}
+                                    fill={GHOST_COL}
+                                    stroke={HALO}
+                                    strokeWidth={r(1.5)}
+                                    strokeDasharray={`${r(2)} ${r(1.5)}`}
+                                />
+                                {/* Exact-point crosshair (extends past the pin so it's
+                                    visible against it) — what actually gets stored. */}
+                                <path
+                                    d={`M${hoverPt.x - r(9)} ${hoverPt.y} H${hoverPt.x + r(9)} M${hoverPt.x} ${hoverPt.y - r(9)} V${hoverPt.y + r(9)}`}
+                                    stroke={GHOST_COL}
+                                    strokeWidth={r(0.75)}
+                                    fill="none"
+                                />
+                                <circle cx={hoverPt.x} cy={hoverPt.y} r={r(0.9)} fill={HALO} />
                             </g>
                         )}
                     </svg>

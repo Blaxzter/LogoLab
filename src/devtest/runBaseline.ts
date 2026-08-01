@@ -3,7 +3,7 @@
 //
 //   node src/devtest/runBaseline.ts            # crisp (default headless engine)
 //
-// potrace numbers are captured in the browser harness (vectorize-test.html),
+// potrace numbers are captured in the browser harness (/labs/eval — EvalLab),
 // which can run the WASM tracer + DOMParser the headless path can't.
 
 import { writeFileSync } from 'node:fs'

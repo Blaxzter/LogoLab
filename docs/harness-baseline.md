@@ -9,7 +9,8 @@ diff against this. Captured 2026-06-12 on branch `feat/vectorize-structure-first
   rewrites `docs/harness-baseline.json` and prints the table. `npm test` runs
   `test/harness.test.ts`, which asserts determinism + finite metrics on the same
   corpus.
-- **Browser (potrace engine):** `npm run dev`, open `/vectorize-test.html`. potrace
+- **Browser (potrace engine):** `npm run dev`, open `/labs/eval` (was
+  `/vectorize-test.html` before the labs were folded into the React app). potrace
   needs the WASM tracer + DOMParser, which the headless path doesn't have, so its
   numbers come from the browser scoreboard (`console.log` dumps `SCOREBOARD_JSON`).
   The pure rasterizer/metrics are shared, so crisp numbers from either side are

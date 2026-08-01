@@ -370,8 +370,8 @@ spread for harness targets beyond the main paper's three-row table.
 
 ## 5. Evaluation harness first (do this before any pipeline work)
 
-Extend `src/devtest/vectorizeTest.ts` + `vectorize-test.html` from a visual viewer
-into a scoreboard, run over a fixed corpus:
+Extend the eval harness (now `src/components/labs/EvalLab.tsx`, the `/labs/eval` route)
+from a visual viewer into a scoreboard, run over a fixed corpus:
 
 - **Corpus**: the 7 hand-made example SVGs rendered at 512² (ground truth known!) +
   nebula/petals PNGs + ~10 real-world logos (gradients, flat, line-art, photo-ish).
@@ -494,8 +494,8 @@ Notes:
     (ImageData polyfill + corpus loader) for the headless side.
   - `test/harness.test.ts` gates determinism + finite metrics on the PNG corpus;
     `test/color|raster|metrics.test.ts` unit-test the pure math.
-  - `src/devtest/vectorizeTest.ts` + `vectorize-test.html` upgraded from an eyeball
-    viewer into a full scoreboard table (both engines + visual strip).
+  - the eval harness (now `src/components/labs/EvalLab.tsx` at `/labs/eval`) upgraded
+    from an eyeball viewer into a full scoreboard table (both engines + visual strip).
   - Baseline recorded in `docs/harness-baseline.json` (headless crisp, machine-
     readable) and `docs/harness-baseline.md` (both engines + provenance + V1 targets).
 - **Determinism fix:** `quantize()` k-means++ now seeds a mulberry32 PRNG from an
@@ -742,7 +742,7 @@ Determinism `pass`, typecheck + build green.
 - **petals**: organic shapes, nothing snaps → **exact V2 parity** at every fidelity
   level (the line polish no longer touches its curves — see deviations).
 
-**Browser corpus** (`vectorize-test.html`, potrace + crisp over the 7-image set,
+**Browser corpus** (now `/labs/eval`, potrace + crisp over the 7-image set,
 fidelity 0 ⇒ V2 vs 1.5 ⇒ V3) — beautify runs on BOTH engines, so the **potrace product
 default** sheds nodes across the board with no fidelity regression:
 

@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
-import { Menu, SlidersHorizontal, X } from 'lucide-react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { Loader2, Menu, SlidersHorizontal, X } from 'lucide-react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useLogo, useStore } from './store'
 import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
 import { AppMenu } from './components/AppMenu'
+import { LabPopover } from './components/LabPopover'
 import { SupportPopover } from './components/SupportPopover'
 import { ThemeToggleButton } from './components/ThemeToggle'
 import { TABS, REPO_URL, GithubMark } from './components/navItems'
@@ -19,6 +20,33 @@ import ExportPanel from './components/panels/ExportPanel'
 import Impressum from './components/legal/Impressum'
 import Datenschutz from './components/legal/Datenschutz'
 import { LegalFooter } from './components/legal/LegalFooter'
+
+/**
+ * The vectorizer's labs (see LAB_VIEWS in components/navItems). Lazy, every one of
+ * them: each pulls in the devtest scoring modules and traces a whole corpus, and none
+ * of that has any business in the bundle a normal user downloads to crop a logo. They
+ * were separate Vite HTML entries for exactly this reason — React.lazy is what keeps
+ * that isolation now that they're routes.
+ */
+const LabsIndex = lazy(() => import('./components/labs/LabsIndex'))
+const PipelineLab = lazy(() => import('./components/labs/PipelineLab'))
+const AbLab = lazy(() => import('./components/labs/AbLab'))
+// The Workbench asks ONE question — "is the trace correct against the art that made the pixels?" —
+// of a switchable corpus. What can't be asked of every corpus lives in its own lab: raster-only art
+// in the Gallery (just look) and Feature A/B (compare revisions), potrace vs crisp in EngineLab.
+const Workbench = lazy(() => import('./components/labs/workbench/Workbench'))
+const GalleryLab = lazy(() => import('./components/labs/GalleryLab'))
+const EngineLab = lazy(() => import('./components/labs/EngineLab'))
+const ProfilerLab = lazy(() => import('./components/labs/ProfilerLab'))
+
+function LabLoading() {
+  return (
+    <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted">
+      <Loader2 size={16} className="animate-spin text-accent" />
+      Loading the harness…
+    </div>
+  )
+}
 
 function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
   const logo = useLogo()
@@ -72,6 +100,7 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
         <span className="text-xs text-faint">Runs 100% in your browser</span>
         <div className="flex items-center gap-1">
           <ThemeToggleButton />
+          <LabPopover />
           <SupportPopover />
           <a
             href={REPO_URL}
@@ -164,6 +193,39 @@ export function App() {
         <Route path="/impressum" element={<Impressum />} />
         <Route path="/datenschutz" element={<Datenschutz />} />
       </Routes>
+    )
+  }
+
+  // The labs keep the app header (they're part of the app, not a dev sidecar) but drop
+  // the studio sidebar and the appearance FAB: they carry their own toolbar, and they
+  // want the full width for the panel strips.
+  if (pathname.startsWith('/labs')) {
+    return (
+      <div className="flex h-full flex-col overflow-x-hidden">
+        <Header onOpenMenu={() => setMenuOpen(true)} />
+        <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+        <main className="min-h-0 flex-1 overflow-y-auto bg-bg">
+          <Suspense fallback={<LabLoading />}>
+            <Routes>
+              <Route path="/labs" element={<LabsIndex />} />
+              <Route path="/labs/pipeline" element={<PipelineLab />} />
+              <Route path="/labs/ab" element={<AbLab />} />
+              <Route path="/labs/workbench" element={<Workbench />} />
+              <Route path="/labs/gallery" element={<GalleryLab />} />
+              <Route path="/labs/scoreboard" element={<EngineLab />} />
+              <Route path="/labs/profiler" element={<ProfilerLab />} />
+              {/* Old routes, kept as deep-links so bookmarks survive. `golden` has no view any
+                  more — the regression gate still runs in CI, but Feature A/B already shows those
+                  exact fixtures, which is where you'd go to look at them. */}
+              <Route path="/labs/truth" element={<Navigate to="/labs/workbench?corpus=tier0" replace />} />
+              <Route path="/labs/logos" element={<Navigate to="/labs/workbench?corpus=logos" replace />} />
+              <Route path="/labs/eval" element={<Navigate to="/labs/scoreboard" replace />} />
+              <Route path="/labs/golden" element={<Navigate to="/labs/ab" replace />} />
+              <Route path="*" element={<Navigate to="/labs" replace />} />
+            </Routes>
+          </Suspense>
+        </main>
+      </div>
     )
   }
 

@@ -119,12 +119,44 @@ export interface VectorizeOptions {
    */
   gradients?: boolean
   /**
-   * Tracer backend. 'potrace' = the classic bilevel WASM tracer (default;
-   * seamless on stacked multi-color gradients). 'crisp' = sub-pixel
-   * marching-squares + Schneider Bézier fitting — cleaner, lower-node curves,
-   * best for line-art / solid-shape logos.
+   * Tracer backend. 'planar' = the shared-edge planar subdivision (default for
+   * color): adjacent regions share one boundary curve, so there is no overlap
+   * and no hairline seam, and shared boundaries are jointly editable. 'crisp' =
+   * sub-pixel marching-squares + Schneider Bézier fitting per region (overlapping
+   * stacked masks). 'potrace' = the classic bilevel WASM tracer.
    */
-  engine?: 'potrace' | 'crisp'
+  engine?: 'potrace' | 'crisp' | 'planar'
+  /**
+   * Trace detail / resolution preset. 'balanced' (default) uses the adaptive cap
+   * (flat art 2048, gradient/photo 1024). 'high' raises the FLAT cap to 4096 for
+   * crisper edges on large sources, at ~the square of the cost; gradient/photo is
+   * unchanged (keeps the Step-3c freeze guard). No effect when the source is
+   * already ≤ the balanced cap — rasters are never upscaled. Omitted ⇒ 'balanced'.
+   */
+  traceDetail?: 'balanced' | 'high'
+  /**
+   * Flat-art segmentation strategy. When gradients are OFF, the default is
+   * PALETTE-FIRST (paletteSegment.ts): pick the dominant colours, snap every pixel
+   * to the nearest, so anti-alias transitions never become their own blend region.
+   * Set false to fall back to the Mumford–Shah smoothness segmenter for flat art.
+   * Ignored when gradients are on (MS always owns gradient art). Omitted ⇒ palette.
+   */
+  flatPalette?: boolean
+  /**
+   * User-LOCKED flat palette (color mode, gradients OFF). When set, the
+   * palette-first segmenter skips automatic colour extraction and snaps every pixel
+   * to the nearest of THESE colours — the user owns both the colours (emitted as
+   * exact hex) and the count. A locked palette also bypasses the automatic
+   * coverage / ≤14-colour gates (the user has decided this art is flat). Omitted ⇒
+   * the palette is extracted automatically and snapped to each region's true design
+   * hex. Ignored when gradients are on. Seed it from the auto palette and edit.
+   *
+   * Each entry may carry an optional alpha 0–255 (undefined ⇒ opaque): pixels snap
+   * to the nearest colour in RGBA space, and a translucent entry paints its region
+   * with that `fill-opacity` (planar engine). The auto path fills `a` from each
+   * region's alpha mode, so a flat semi-transparent region round-trips its opacity.
+   */
+  palette?: { r: number; g: number; b: number; a?: number }[]
   /**
    * Shape-beautification fidelity tolerance (px): how far a traced contour may
    * drift from the source when snapping it to a perfect circle/ellipse/line or
@@ -142,7 +174,19 @@ export interface VectorizeOptions {
    * split a translucent overlap from a neighbouring shape, mark BOTH. Omitted /
    * empty ⇒ byte-identical to no markers.
    */
-  markers?: { x: number; y: number }[]
+  /**
+   * User-placed region markers (segmentation seeds), NORMALIZED [0,1] coords. Each
+   * marker keeps its region distinct (a seeded split settles the boundary on the
+   * colour ridge). A marker tagged `flat: true` ADDITIONALLY pins its region to its
+   * pre-merge flat form — excluded from the gradient field-merge and painted one
+   * solid colour ("this section is flat, kept its own thing"). The two tags are
+   * split into the segmenter's `markers` / `flatMarkers` by `segmentOptionsFor`.
+   * A marker tagged `remove: true` instead DISSOLVES the section under it: at trace
+   * time (planar engine) its connected region is removed and its bordering colours
+   * grow into the freed area (nearest-neighbour split — `applyRemoveMarkers`), so
+   * the gap heals instead of leaving a hole. Omitted / empty ⇒ no markers.
+   */
+  markers?: { x: number; y: number; flat?: boolean; remove?: boolean }[]
   /**
    * Translucent layer decomposition (V6, color mode). When the segmentation has
    * recovered overlap-shaped regions (via markers or Region detail), try to
@@ -154,4 +198,23 @@ export interface VectorizeOptions {
    * Defaults to on when omitted; set false to force opaque bands.
    */
   layeredDecomposition?: boolean
+  /**
+   * Advanced override of the planar curve-fit tunables (epsilon / line vs cubic
+   * cost / corner angle / pre-smoothing). Merged over the smoothing-derived
+   * defaults. Used by the crispness study to A/B faceting; omitted ⇒ defaults.
+   */
+  planarFit?: Partial<import('./lib/trace/planarFit').PlanarFitOptions>
+  /**
+   * EXPERIMENTAL background layer separation (color mode, gradients OFF, planar).
+   * With gradients off a smooth background ramp posterizes into flat bands; every
+   * band boundary is traced, and each band that touches a foreground outline (a
+   * ring, a chevron) mints a junction that splits the outline — the ring "pull" /
+   * jagged-band defect. When true, the border-seeded background band-set that one
+   * gradient explains (Step-3c's union-fit test, applied only to the background)
+   * is RELABELED into a single region painted with that fitted gradient: the
+   * background becomes one uninterrupted layer (a real SVG gradient), foreground
+   * shapes keep their flat fills, and the outline is a junction-free closed loop.
+   * No-op when nothing merges (flat background, no gradient fit). Omitted ⇒ off.
+   */
+  backgroundGradient?: boolean
 }

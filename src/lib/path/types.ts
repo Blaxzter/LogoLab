@@ -68,6 +68,45 @@ export interface SubPath {
   closed: boolean
 }
 
+/**
+ * A junction in the planar subdivision: a lattice point where ≥3 region
+ * boundaries meet. Its (x, y) is the single owner of the junction position —
+ * every edge that ends here references it, so moving the vertex moves all
+ * incident edges together.
+ */
+export interface Vertex {
+  id: number
+  x: number
+  y: number
+}
+
+/**
+ * One fitted boundary curve between exactly two regions, stored ONCE and
+ * referenced (forward in one region, reversed in the other) so adjacent regions
+ * are byte-coincident — no overlap, no hairline seam. `nodes` run start→end
+ * (canonical direction). `startVertex`/`endVertex` index the doc's vertex table,
+ * or are null for a pure closed-loop edge (e.g. a disc fully inside a field).
+ */
+export interface SharedEdge {
+  id: number
+  nodes: PathNode[]
+  closed: boolean
+  startVertex: number | null
+  endVertex: number | null
+}
+
+/** A region's reference to a shared edge, traversed forward or reversed. */
+export interface EdgeRef {
+  edge: number
+  reversed: boolean
+}
+
+/** The planar graph carried by a topological (planar-traced) EditableDoc. */
+export interface Topology {
+  vertices: Vertex[]
+  edges: SharedEdge[]
+}
+
 /** A fillable, node-editable path (possibly compound — holes via subpaths). */
 export interface PathItem {
   kind: 'path'
@@ -88,6 +127,14 @@ export interface PathItem {
   fillOpacity?: number
   /** Only 'evenodd' is ever serialized; nonzero is the SVG default. */
   fillRule: 'nonzero' | 'evenodd'
+  /**
+   * The region's boundary as ordered loops of shared-edge references (planar
+   * model). When present, `subPaths` is a DERIVED render/hit cache rebuilt from
+   * the doc's `topology` via materializeRegion; edits go through the edges so
+   * shared boundaries stay coincident. Absent ⇒ legacy independent path (e.g.
+   * an imported SVG) whose `subPaths` are edited directly.
+   */
+  loops?: EdgeRef[][]
   subPaths: SubPath[]
   /** Editor-only: hidden items render nowhere and are excluded from export. */
   visible: boolean
@@ -116,6 +163,12 @@ export interface EditableDoc {
   viewBox: [number, number, number, number]
   /** Paint order: first = bottom. */
   items: DocItem[]
+  /**
+   * Shared-edge graph for planar-traced docs. Source of truth for any PathItem
+   * carrying `loops`; their `subPaths` are materialized from it. Omitted for
+   * legacy docs (independent paths only).
+   */
+  topology?: Topology
 }
 
 /** Stable reference to one node inside a PathItem. */

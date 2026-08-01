@@ -1,4 +1,4 @@
-import { Download, Eraser, Eye, Wand2 } from 'lucide-react'
+import { Columns2, Download, Eraser, Eye, FlaskConical, Gauge, Images, Layers, Timer, Wand2 } from 'lucide-react'
 import type { Tab } from '../store'
 
 /** The four panel tabs — shared by the desktop header nav and the mobile menu. */
@@ -10,6 +10,56 @@ export const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ]
 
 export const REPO_URL = 'https://github.com/Blaxzter/LogoLab'
+
+/**
+ * The vectorizer's harnesses — lazily-loaded React routes under `/labs` (see the
+ * `<Suspense>` block in App.tsx; the chunks they pull in, tracer + scoring modules
+ * included, stay out of the main bundle).
+ *
+ * ONE LAB, ONE QUESTION. The Workbench asks "is the trace correct?" of a switchable corpus
+ * and never changes shape; anything that can't be asked of every corpus is its own lab
+ * instead. (They were briefly a corpus × lens matrix — the available comparisons mutated
+ * when you switched corpus, so the view's meaning changed under you. Don't do that again.)
+ * Kept here so the header popover, the mobile menu and the labs index list the same set.
+ */
+export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.ReactNode }[] = [
+  {
+    to: '/labs/pipeline',
+    label: 'Pipeline debug',
+    blurb: 'Every intermediate stage: smoothing, discontinuity, regions, paints.',
+    icon: <Layers size={15} />,
+  },
+  {
+    to: '/labs/ab',
+    label: 'Feature A/B',
+    blurb: 'Trace variants side by side, synced pan/zoom, nodes/edges overlay.',
+    icon: <Columns2 size={15} />,
+  },
+  {
+    to: '/labs/workbench',
+    label: 'Workbench',
+    blurb: 'Is it correct? Scored against the authored SVG — boundary error, node economy, dropped regions. Pick the corpus.',
+    icon: <FlaskConical size={15} />,
+  },
+  {
+    to: '/labs/gallery',
+    label: 'Gallery',
+    blurb: 'How the tracer renders art it can’t be scored on: the brand-logo set, and anything you drop in.',
+    icon: <Images size={15} />,
+  },
+  {
+    to: '/labs/scoreboard',
+    label: 'Engine scoreboard',
+    blurb: 'potrace vs crisp: ΔE, SSIM, seam, node counts, runtime, determinism.',
+    icon: <Gauge size={15} />,
+  },
+  {
+    to: '/labs/profiler',
+    label: 'Profiler',
+    blurb: 'Where the trace spends its time, and what each optional feature would cost to enable.',
+    icon: <Timer size={15} />,
+  },
+]
 
 /** Support links — surfaced together in the header's support popover. */
 export const COFFEE_URL = 'https://www.buymeacoffee.com/fabraham'
