@@ -113,6 +113,14 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // narrowest gradeable cap; w8+ is phase-robust and the in-case w8/w10 controls must stay
   // green through any fix. See genEdgeCases.ts for the per-bar (angle, phase) cells.
   { name: 'bar-caps', svg: 'public/examples/edge-cases/bar-caps.svg', note: 'butt-capped 7px bars at AA-losing phases — cap corner recall (§0 #6b)', gradients: false, tier: 0 },
+  // The CONTRAST-RANK driver (user-reported 2026-07-30, /labs/gallery on the Affinity mark).
+  // A weak colour boundary (ΔE 2.7–7.5) terminating on a strong one (ΔE 47–58) splits the
+  // strong edge and pins it at a junction placed by the weak evidence: the bar's flanks tilt
+  // and the plate's arc kinks where it joins its straight sides. Authored FLAT so the bands
+  // are IN the answer sheet — the ramp art that exposed it cannot be scored at all (§13's
+  // "the defect exists only on the path nothing measures"). The control square is crossed by
+  // nothing and must stay green. genEdgeCases.ts documents the rack.
+  { name: 'band-cross', svg: 'public/examples/edge-cases/band-cross.svg', note: 'weak boundaries landing on strong edges — contrast-ranked junctions', gradients: false, tier: 0 },
 
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves

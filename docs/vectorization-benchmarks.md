@@ -31,6 +31,7 @@ guardrails):
 | 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
+| 15 | **A weak colour boundary aims a strong edge** — a posterization band seam (ΔE 2.7–10) ending on a real edge (ΔE 47–79) pins that edge to the band's INTEGER lattice corner, against 100+px of its own staircase: a 116px flank rotates 0.98px end-to-end and an arc caught between two band junctions kinks 11° into its straight neighbours. USER-REPORTED, and on ramp-traced-flat art = the AI-icon shape | `affinity-designer.svg` @512 flat (private corpus, **ungated** — `band-cross` reproduces the setup but scores green, §14.1) | flank swing 0.98px vs 0.08 with gradients ON; apex 1.54px; arc tangent breaks 11.0°/10.7° | §14 |
 | 14 | **Small region collapses to a sliver @512** — the doc item EXISTS but its geometry pinches to ~77px² for a 691px label, so the region paints white; a §10.4 REGRESSION (bisect: green at e549b29, red at fc7b7e9 — reseat/chord territory, NOT the weld deletion §12 fixed), unnoticed for five commits because tier 2 is ungated @512 | `fluent-beverage-box-flat` @512 (ungated resolution for tier 2; the case IS gated @256, where it passes) | 6/7 @512: `#990838` (522px) painted `#ffffff`, ΔE 88.6; render shows 88px of the colour | found during §12.4 (2026-07-29); §9.7's "437/437" figure predates it |
 
 Recently closed (the pattern an exit should follow): **the LOW-RESOLUTION
@@ -2064,3 +2065,95 @@ flat trace is unscorable against ramp art by construction, so this fix is protec
 nothing: the driver case that *would* gate it is flat art where a plain disc is crossed
 by a plain bar — authored circle + rect, fully scorable, the §10.5 `gear-teeth` recipe.
 Until that case exists, the regression that produced the beak can return silently.
+
+## 14. Contrast rank — a weak boundary aiming a strong edge (2026-07-30, OPEN)
+
+**Symptom (user-reported, /labs/gallery, `affinity-designer.svg` traced flat).** Two
+complaints on one mark: a straight bar edge that *bends* where a colour band boundary
+reaches it, and a rounded corner that grows *bumps*. The banding itself was explicitly
+accepted ("I don't expect a gradient"); what is not acceptable is the banding damaging the
+logo's real edges.
+
+**The contrast spectrum is cleanly bimodal.** Per shared edge, ΔE76 between the two regions
+that own it (`src/devtest/bandPullDiag.ts`, derived post-hoc from the doc's own topology):
+
+```
+posterization band seams:  ΔE  2.7 – 10.2
+real logo edges:           ΔE 47   – 79
+```
+
+Nothing in between. So "prefer the high-contrast boundary" is not a heuristic on this art —
+it is a clean separation, and 13 T-junctions have a band edge landing on real edges.
+
+**Measured, against the authored path data** (`affinity-designer.svg` is 1020 bytes of plain
+`d` attributes, so the truth is exact rather than sampled — `src/devtest/apexProbe.ts`):
+
+| | flat trace | gradients ON (no band junctions) |
+|---|---|---|
+| inner flank, displacement at s=6 → s=90 | −0.37 → **+0.61** (0.98px swing) | −0.35 → −0.27 (**0.08px**) |
+| triangle apex error | 1.54px | 0.97px |
+| inner-panel arc, tangent break at its two ends | **11.0° / 10.7°** | — |
+| outer plate corners (no band junction) | 0.03–0.06 mean, 0.40 swing | — |
+
+The flank does not step, it **rotates**: it is one fitted edge pinned at the apex and at a
+band junction, and the two ends carry different errors. (Scanned with BILINEAR sampling —
+nearest-neighbour quantizes the scan and reports a gradual tilt as a sudden step, which
+points at the wrong mechanism entirely.)
+
+**Root cause.** A junction is an INTEGER lattice corner; the edge it lands on is sub-pixel.
+Pinning a 116px edge to that corner costs ~1px at that end, against 100+px of staircase
+evidence that would have placed it far better. The band boundary decides where the pin goes,
+so the weak boundary aims the strong edge.
+
+**Not beautify.** `junctionReseat: false`, `arcSnap: false` and `fidelity: 0` are each
+byte-identical to the shipped output. §10.4's re-seat cannot help by construction: it
+corrects to the INTERSECTION of two primitives and requires transversality, while here the
+strong boundary runs *straight through* the junction; and its `MIN_MOVE` is 1.5px while this
+correction is 0.5–1px.
+
+### 14.1 Three approaches measured and rejected — read before re-attempting
+
+- **A flat-authored driver case does not reproduce it.** `band-cross` (new, gated, tier 0 —
+  four flat near-colours, ΔE 7.5/8.2/7.6, crossed by a bar, a disc, a quarter arc and an
+  uncrossed control square) scores **chamfer 0.14 / p95 0.49 @512: GREEN**. A weak boundary
+  alone does not bend a strong edge. The case is kept as a CONTROL — it pins that flat weak
+  boundaries are harmless, so a future fix that starts damaging them fails the build.
+  (Authoring note: the mark's tightest pair, ΔE 2.7, is not usable — quantize merges it, so
+  the band would be missing from the trace entirely and the case would go red for a known,
+  unrelated reason. Measured: 4 fills instead of 5, p95 25.7px.)
+- **Nor does a ramp version, nor sub-pixel phase.** Same geometry over a linear ramp, swept
+  across 10 sub-pixel phases against a no-bands control (`src/devtest/bandCrossProbe.ts`):
+  worst flank deviation **none 0.82 / flat bands 0.83 / ramp 0.94** — the control reaches the
+  same magnitude. Whatever the extra ingredient in the real mark is, it is not "bands crossing
+  a bar", and it is not phase alone.
+- **A post-fit contrast-ranked re-seat CANNOT work, and this is structural.** The obvious fix
+  — a sibling pass to `reseatJunctions` that projects the junction onto the strong edge's
+  fitted primitive, gated on the ΔE split — was built, and it correctly identified the
+  junction (`ends=3 de=[2.7,50.5,52.3]`, strong=2, weak=1, continuation confirmed). It then
+  moved it **0.000px**. The primitive is fitted from the arm of the ALREADY-PINNED edge: the
+  99px flank is a single straight fitted segment ending at the vertex, so its line passes
+  through the vertex by construction and projecting onto it is a no-op. By the time
+  `planarBeautify` runs, the tilt is baked in and the evidence that would correct it is gone.
+  (Two continuation tests were also measured along the way: comparing the two arms' fitted
+  LINES fails because a 17px arm's direction is noise; a tight corridor around the primitive
+  is circular, since the stretch being corrected is itself displaced. A chord-direction test
+  at 15° works — worth keeping if this is re-attempted.) The code was reverted rather than
+  shipped dead.
+
+### 14.2 Where the fix has to live
+
+In the FIT, not in beautify: `assemblePlanar` still holds each edge's raw lattice chain
+(`net.edges[].pts`), which is the evidence the pin destroys. The shape of it: where a WEAK
+boundary ends on a STRONG one that continues through, fit the strong boundary **through** the
+junction as one chain, then split the fitted curve at the junction's projected position — the
+strong edge is then placed by its own 100+px of staircase and the weak arm's endpoint follows.
+Both regions still reference one shared edge, so the planar invariant is untouched.
+
+The supporting evidence that this is the right direction is already measured: with gradients
+ON — where the same flank has no band junction cutting it — the trace lands at a uniform
+−0.30px with 0.08px of swing. Removing the pin recovers that.
+
+**Still open: no gated witness.** `band-cross` is green and stays a control; the real driver
+needs whatever ingredient the synthetic reproductions are missing. Until it exists, this
+family is measured only by `apexProbe.ts` on private corpus art (§14's table is the baseline
+to beat: 0.98px swing, 1.54px apex, 11° tangent breaks).

@@ -296,6 +296,67 @@ const CASES: { name: string; note: string; make: () => string }[] = [
     },
   },
   {
+    // The CONTRAST-RANK driver (user-reported 2026-07-30 on the Affinity Designer mark in
+    // /labs/gallery): a LOW-contrast boundary that terminates on a HIGH-contrast edge splits
+    // it and pins it at a junction whose position was decided by the weak evidence — so the
+    // strong edge tilts (a straight bar bends) or kinks (an arc grows bumps).
+    //
+    // Authored FLAT on purpose. The mark that exposed it is ramp art traced flat, where the
+    // weak boundaries are POSTERIZATION bands — but a posterized ramp cannot be scored
+    // against its own answer sheet (the bands are not in the authored SVG; that is why
+    // bg-ramp-twin is registered gradients:true and why §13's bulge had no gate). The
+    // mechanism does not need a ramp: it needs a weak boundary meeting a strong one. Four
+    // FLAT near-colours reproduce exactly that and stay scorable — the bands ARE authored,
+    // so every gate applies.
+    //
+    // The blues are the Affinity mark's own posterized band colours, so the ΔE ladder is the
+    // measured regime, not an invented one: ~7.5–8.2 between neighbours against 47–58 for
+    // the navy edges — the same clean bimodal split the diagnosis found (bandPullDiag.ts).
+    //
+    // The mark's tightest pair (#49c9fa/#43c5fa, ΔE 2.7) is deliberately NOT used: authored
+    // flat, quantize merges it (MERGE_DISTANCE 10, and §9.7's evidence veto only protects
+    // pairs ≥ ΔE 4), so the band would not exist in the trace at all and the case would go
+    // red for a known, unrelated reason — measured at authoring, 4 fills instead of 5, p95
+    // 25.7px of simply-missing boundary. A ramp supplies the extra evidence that lets 2.7
+    // survive in the real mark; flat authored art does not.
+    //
+    // Rack, each subject crossed by shallow (~7.6°) band boundaries:
+    //   bar    — 20px straight bar crossed 3× per flank; the segment pinned BETWEEN two weak
+    //            junctions is the image-#3 anatomy (a straight edge fitted to two bad ends).
+    //   disc   — rim split by one boundary into two arcs (the §1d co-circular interaction).
+    //   plate  — one rounded corner crossed near its start: the arc is isolated between two
+    //            weak junctions and joins its straight sides with a tangent break — image #2.
+    //   square — the CONTROL: high contrast, no crossing, must stay green through any fix.
+    name: 'band-cross',
+    note: 'weak colour boundaries terminating on strong edges → contrast-ranked junctions',
+    make: () => {
+      // The four bands, painted back-to-front; each polygon covers everything below its
+      // boundary line, so the visible seams are exactly the three authored diagonals.
+      const below = (y0: number, y1: number, fill: string): string =>
+        `<polygon points="0,${y0} ${V},${y1} ${V},${V} 0,${V}" fill="${fill}"/>`
+      const B1 = rgb(90, 213, 251) // #5ad5fb
+      const B2 = rgb(73, 201, 250) // #49c9fa   ΔE(B1,B2) = 7.5
+      const B3 = rgb(56, 189, 250) // #38bdfa   ΔE(B2,B3) = 8.2
+      const B4 = rgb(40, 176, 247) // #28b0f7   ΔE(B3,B4) = 7.6
+      const DEEP = rgb(19, 72, 129) // #134881 — ΔE 47–58 against every band
+      // Plate: three sharp corners + ONE quarter arc (r28) at the bottom-left, which
+      // boundary C crosses ~4px below its start. Sharp corners: bar 4 + square 4 + plate 3
+      // = 11, over the corner gate's CORNER_MIN_COUNT of 10, so that gate stays applicable.
+      const plate =
+        `<path d="M140,165 H240 V245 H168 A28,28 0 0,1 140,217 Z" fill="${DEEP}"/>`
+      return svg(
+        `<rect width="${V}" height="${V}" fill="${B1}"/>` +
+          below(62, 96, B2) + // boundary A
+          below(132, 166, B3) + // boundary B
+          below(196, 230, B4) + // boundary C
+          `<polygon points="${thickLine(40, 8, 96, 248, 20)}" fill="${DEEP}"/>` +
+          `<circle cx="170" cy="80" r="40" fill="${DEEP}"/>` +
+          plate +
+          `<rect x="205" y="8" width="40" height="40" fill="${DEEP}"/>`,
+      )
+    },
+  },
+  {
     // The §10 "driver" case — small SHARP features on the same canvas as a large smooth
     // shape, so one absolute fit tolerance cannot serve both. A 14-tooth gear whose tooth
     // chords are all ≥ 7.5px @512 — above the answer sheet's CORNER_MIN_EDGE grading
