@@ -30,6 +30,9 @@ const [X0, Y0, CW, CH] = arg('--crop', `0,0,${RES},${RES}`).split(',').map(Numbe
 
 const VARIANTS: Record<string, Record<string, unknown>> = {
   base: {},
+  // §14: the pre-contrast-rank tracer — every junction back on its integer lattice
+  // corner, including the ones a band seam plants on a real edge.
+  'thread-off': { planarFit: { fitThrough: false } },
   'reseat-off': { planarFit: { junctionReseat: false } },
   'arcsnap-off': { planarFit: { arcSnap: false } },
   grad: { gradients: true },
