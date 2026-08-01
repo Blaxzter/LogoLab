@@ -77,6 +77,15 @@ export interface PlanarFitOptions {
    */
   localScaleK: number
   /**
+   * §14 contrast rank (default true). Where a WEAK colour boundary (a posterization
+   * band seam) ends on a STRONG one that continues through, fit the strong boundary
+   * THROUGH the junction as one chain and split the fitted curve at the junction's
+   * projected position — instead of pinning a 100+px edge to the band seam's integer
+   * lattice corner (planarThread.ts). Needs the palette: without one, or with this
+   * false, nothing threads and the fit is byte-identical to the pre-§14 tracer.
+   */
+  fitThrough: boolean
+  /**
    * EXPERIMENTAL (default true = the shipped §9.8 behaviour). The corner-turn veto in
    * planarBeautify that refuses to round a sharp-cornered loop (a checker cell's four
    * right angles) into a disc. Exposed so the scale-relative-ε prototype
@@ -100,6 +109,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   junctionReseat: true,
   localScaleK: 0,
   cornerVeto: true,
+  fitThrough: true,
 }
 
 /** Flat-art line cost: > cubicCost so the DP prefers a CUBIC on any span where a
@@ -265,7 +275,9 @@ function windowClamped(dense: Vec[], i: number, k: number, side = 0): Vec[] {
   return out
 }
 
-function fitCircle(pts: Vec[]): { cx: number; cy: number; r: number } | null {
+/** Least-squares circle through `pts` (Kasa), or null when degenerate. Exported for
+ *  the §14 continuation test. */
+export function fitCircle(pts: Vec[]): { cx: number; cy: number; r: number } | null {
   const n = pts.length
   if (n < 3) return null
   let mx = 0
@@ -298,7 +310,10 @@ function fitCircle(pts: Vec[]): { cx: number; cy: number; r: number } | null {
   if (!(r2 > 0)) return null
   return { cx: uc + mx, cy: vc + my, r: Math.sqrt(r2) }
 }
-function circleMaxDev(pts: Vec[]): number | null {
+/** Max radial deviation of `pts` from their best-fit circle (null when degenerate).
+ *  Exported for the §14 continuation test — "does this boundary curve SMOOTHLY
+ *  through the junction" is the same question the evidence score asks locally. */
+export function circleMaxDev(pts: Vec[]): number | null {
   const c = fitCircle(pts)
   if (!c) return null
   let maxD = 0
