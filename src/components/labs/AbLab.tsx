@@ -180,6 +180,10 @@ interface AbAnalysis {
   /** Snapshot mode only: did the working tree's trace differ from the frozen one? undefined in
    *  variants mode (no baseline to diff against). Drives the "Changed only" filter. */
   changed?: boolean
+  /** …and the SAME question for the gradient setting that is NOT on screen. The stamp froze
+   *  both, so both are always checked: a change that only shows with gradients on must not be
+   *  invisible because you happened to be looking at flat. */
+  changedOther?: boolean
   /** Snapshot mode, changed cases only: a per-pixel heat of WHERE the two traces disagree
    *  (data URL). Lets a change be located, not just counted. */
   heatUrl?: string
@@ -230,6 +234,17 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean, snap: SnapEntry): 
   // serializes byte-identically — a difference here is a real trace change, nothing cosmetic.
   const live = serializeDoc(doc, 2)
   const changed = live !== snapSvg
+  // THE OTHER GRADIENT SETTING, always. A stamp freezes both traces per case, and the toggle
+  // only picks which pair is on screen — so judging "did anything move" from the visible pair
+  // alone would hide every change that lives on the other side of it (§14's fix moved four
+  // FLAT traces and no gradient one; reviewing with gradients on would have shown a clean
+  // corpus). This second trace is a boolean only: no panels, no heat, just the verdict, and
+  // the badge says which side moved so the toggle can be flipped deliberately.
+  const otherSnap = SNAP_SVGS[`${dir}/${gradients ? entry.flat : entry.grad}`]
+  const otherLive = otherSnap
+    ? serializeDoc(await labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: !gradients }), 2)
+    : null
+  const changedOther = otherLive != null && otherSnap != null && otherLive !== otherSnap
   // For changed cases, rasterize BOTH plain-fill traces (no wireframe) on white and heat
   // their per-pixel delta, so the diff is LOCATED. Only changed cases pay this, and only in
   // snapshot mode — an unchanged corpus costs nothing.
@@ -248,6 +263,7 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean, snap: SnapEntry): 
     height: entry.height,
     srcOverride: pngUrl,
     changed,
+    changedOther,
     heatUrl,
     variants: [
       { name: `Snapshot @ ${snap.manifest.rev}`, tone: 'base', svg: snapSvg },
@@ -309,7 +325,7 @@ export default function AbLab() {
       label: (c) => (snapMode ? `Tracing ${c.name} vs ${selectedSnap!.name}` : `Tracing ${c.name} × ${VARIANTS.length} variants`),
       done: (n) =>
         selectedSnap
-          ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · gradients ${ui.gradients ? 'on' : 'off'} · input pinned to the snapshot's stored pixels.`
+          ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · panels show gradients ${ui.gradients ? 'on' : 'off'}, BOTH settings checked for changes · input pinned to the snapshot's stored pixels.`
           : `Done — ${n} cases × ${VARIANTS.length} variants · gradients ${ui.gradients ? 'on' : 'off'} @ ${ui.raster}px. Drop an image anywhere to add it.`,
       deps: [ui.raster, ui.gradients, cases, ui.snapName],
       // Cache corpus cases (stable `id`); skip session-dropped images (no id). The snapshot NAME
@@ -320,7 +336,7 @@ export default function AbLab() {
         id: 'ab',
         key: (c) => c.id ?? null,
         optionsKey: selectedSnap
-          ? `snap:v2:${selectedSnap.name}:g${ui.gradients}`
+          ? `snap:v3:${selectedSnap.name}:g${ui.gradients}`
           : `var:r${ui.raster}:g${ui.gradients}:v${VARIANTS_HASH}`,
       },
     },
@@ -334,11 +350,14 @@ export default function AbLab() {
     ])
   }
 
-  // "Changed only" hides cases whose working-tree trace serializes identically to the snapshot.
-  // Errors (value null) and still-resolving rows are kept — only a confirmed match is hidden.
-  const shown = changedOnly ? run.results.filter((r) => r.value?.changed !== false) : run.results
+  // "Changed only" hides cases that serialize identically to the snapshot in BOTH gradient
+  // settings — a case that moved only on the other side of the toggle stays on the page, with
+  // a badge saying so. Errors (value null) and still-resolving rows are kept.
+  const moved = (a: AbAnalysis | null | undefined): boolean => !a || a.changed !== false || a.changedOther === true
+  const shown = changedOnly ? run.results.filter((r) => moved(r.value)) : run.results
   const changedN = run.results.filter((r) => r.value?.changed === true).length
-  const unchangedN = run.results.filter((r) => r.value?.changed === false).length
+  const otherOnlyN = run.results.filter((r) => r.value?.changed === false && r.value?.changedOther === true).length
+  const unchangedN = run.results.filter((r) => r.value?.changed === false && r.value?.changedOther !== true).length
 
   return (
     <div
@@ -431,9 +450,16 @@ export default function AbLab() {
           <div className="mb-2 text-xs text-muted">
             <b className="text-fg">{changedN}</b> changed · {unchangedN} unchanged vs snapshot{' '}
             {selectedSnap!.name} @ {selectedSnap!.manifest.rev}
+            {otherOnlyN > 0 && (
+              <span className="text-warn">
+                {' '}
+                · <b>{otherOnlyN}</b> moved only with gradients {ui.gradients ? 'OFF' : 'ON'} — flip the toggle to see
+                {' '}{otherOnlyN === 1 ? 'it' : 'them'}
+              </span>
+            )}
             {changedOnly && unchangedN > 0 && <span className="text-faint"> · {unchangedN} hidden</span>}
-            {changedOnly && changedN === 0 && (
-              <span className="text-good"> — working tree matches the snapshot</span>
+            {changedOnly && changedN === 0 && otherOnlyN === 0 && (
+              <span className="text-good"> — working tree matches the snapshot, both gradient settings</span>
             )}
             {notInSnap > 0 && (
               <span className="text-faint">
@@ -463,6 +489,13 @@ export default function AbLab() {
                       className={`rounded px-1 py-0.5 text-[0.6rem] ${a.changed ? 'bg-warn/20 text-warn' : 'text-faint'}`}
                     >
                       {a.changed ? 'changed' : 'unchanged'}
+                    </span>
+                  )}
+                  {snapMode && a.changedOther && (
+                    // The panels show the selected setting; this says the OTHER one moved too,
+                    // so an unchanged-looking row is never the whole answer.
+                    <span className="rounded bg-warn/10 px-1 py-0.5 text-[0.6rem] text-warn">
+                      {a.changed ? 'also' : 'changed'} with gradients {ui.gradients ? 'off' : 'on'}
                     </span>
                   )}
                   {c.file && (
@@ -559,6 +592,15 @@ function AbAbout() {
         accepted. (Residual caveat: the browser&apos;s canvas PNG decode can differ from
         Node&apos;s by ±1 on a few partial-alpha pixels — the aurora story in docs/labs.md — which
         is far below anything judged visually here.)
+      </p>
+      <p className="mb-2 max-w-[96ch]">
+        A stamp freezes <b>two</b> traces per case — gradients off and on — so in Vs-snapshot mode
+        the <b>Gradients</b> toggle only picks which frozen pair is on screen (both panels always
+        use the same setting; the input is one stored PNG either way). The <b>changed</b> verdict
+        does not follow the toggle: every case is checked against <i>both</i> frozen traces, and a
+        case that moved only on the other side of it is kept on the page and badged{' '}
+        <i>changed with gradients on/off</i>. Judging &quot;did anything move&quot; from the visible
+        pair alone would hide exactly the collateral changes this page exists to catch.
       </p>
       <p className="mb-2 max-w-[96ch]">
         <b>Cases</b> picks the lane. The ⟐ <b>fixtures</b> are handcrafted to isolate one mechanism
