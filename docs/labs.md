@@ -165,6 +165,23 @@ Typical flow: `git stash && pnpm gen:absnapshot && git stash pop` freezes the la
 revision; the lab then shows exactly what the working tree changed. Re-bless (re-run the
 command) once a change is accepted — same lifecycle as `gen:golden`.
 
+**Two lanes: fixtures and gallery.** The ⟐ handcrafted cases isolate one mechanism each,
+which is what makes them good gates and weak evidence — they go green long before real art
+looks right, and every user-reported defect so far arrived on a brand mark, not on a fixture.
+So the corpus also carries a curated slice of the same logos `/labs/gallery` shows (◆ rows),
+rasterized **on white** exactly as that page does, so what you judge here is what you saw
+there. Those SVGs are the private, gitignored corpus (`npm run fetch:logos`): the writer skips
+the ones that aren't on disk and the view drops them, so a clone that never fetched them still
+runs the fixture lane. **Cases** in the lab switches lane (the gallery doubles the corpus, and
+in variants mode every case costs one trace per variant); `AB_LOGOS` in `src/devtest/abCorpus.ts`
+is the list, and `pnpm gen:absnapshot <name> --logos all|a,b|none` overrides it for one run.
+
+**Stamps are not committed.** `test/ab-snapshots/` is gitignored (its README explains the
+lifecycle): a stamp is a local working artifact — regenerable from any revision, and what you
+freeze depends on what you are about to change — and the gallery lane's inputs are trademarked
+art. Two diagnostics (`rimCapDiag.ts`, `rimCapRender.ts`) read one stamp by name and say which
+command to run when it isn't there.
+
 ## The Truth lab is paged, and tiered
 
 `TRUTH_CORPUS` is now **231 cases**: 16 handcrafted (tier 0) + **109 Fluent Emoji "Color"**

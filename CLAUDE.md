@@ -15,9 +15,19 @@ pnpm gen:absnapshot before-<what>     # e.g. before-checker
 Then make the change and open **`/labs/ab`** → pick your baseline in the **Vs snapshot**
 dropdown → **Changed only** shows exactly which cases moved, and each gets a **diff heat**
 panel showing *where*. This is how you catch collateral changes (a corner-veto for `checker`
-also nudged `aa-seam`'s flat trace — only the A/B view revealed it). Snapshots live in
-`test/ab-snapshots/<name>/`; several coexist. Re-bless (`pnpm gen:absnapshot <name>`) once a
-change is accepted.
+also nudged `aa-seam`'s flat trace — only the A/B view revealed it).
+
+Two lanes, both in `src/devtest/abCorpus.ts`: the ⟐ **fixtures** (handcrafted, one mechanism
+each — good gates, weak evidence: they are "good enough" long before real art is) and a slice
+of the ◆ **gallery** corpus, the same brand marks `/labs/gallery` shows, rasterized on white
+exactly as that page does. The gallery lane needs `npm run fetch:logos`; without it the lane
+is empty and everything else still works. `--logos all|a,b|none` overrides the slice for one
+run. Judge a tracer change on BOTH — the defects get reported on the marks.
+
+Snapshots live in `test/ab-snapshots/<name>/`, several coexist, and they are **gitignored**:
+a stamp is a local working artifact (regenerable from any revision), and the gallery lane
+traces trademarked art that is not redistributed. Re-bless (`pnpm gen:absnapshot <name>`)
+once a change is accepted.
 
 ## Verifying tracer correctness (not just "did it change")
 

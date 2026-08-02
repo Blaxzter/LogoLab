@@ -25,7 +25,8 @@ import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { VectorizeOptions } from '../../types'
 import type { EditableDoc } from '../../lib/path/types'
 import type { PlanarFitOptions } from '../../lib/trace/planarFit'
-import { AB_CORPUS, abUrl, type AbSnapshotManifest } from '../../devtest/abCorpus'
+import { AB_CORPUS, AB_LOGO_CASES, abUrl, type AbSnapshotManifest } from '../../devtest/abCorpus'
+import { LOGO_CORPUS } from '../../devtest/logoCorpus'
 import { fnv1a } from './engineFingerprint'
 import { LabPage, LabCheck, LabSelect } from './LabPage'
 import { Panel, RawArt } from './Panel'
@@ -127,13 +128,45 @@ interface AbCase {
   id?: string
   /** Session-dropped images carry their File so they can be re-rasterized at a new size. */
   file?: File
+  /** Gallery lane: the mark's markup, bundled by logoCorpus's glob (the files live
+   *  outside public/, so there is no URL to fetch — same reason /labs/gallery inlines it). */
+  text?: string
+  /** Composite the raster on this colour (the gallery lane's white). */
+  background?: string
 }
 
 // The case list is OWNED by src/devtest/abCorpus.ts — the same list the snapshot
 // writer traces, so the two consumers cannot drift. The handcrafted ⟐ edge cases
 // are authored as SVG (src/devtest/genEdgeCases.ts), so the raster switch
 // re-rasterizes each at any size: same vector content, varying resolution.
-const CASES: AbCase[] = AB_CORPUS.map((c) => ({ id: c.id, name: c.name, kind: c.kind, src: abUrl(c.path) }))
+const FIXTURES: AbCase[] = AB_CORPUS.map((c) => ({ id: c.id, name: c.name, kind: c.kind, src: abUrl(c.path) }))
+
+// The GALLERY lane — the same brand marks /labs/gallery shows, so a tracer change can be
+// judged on art someone recognizes and not only on fixtures that are already good enough.
+// Their SVGs are gitignored and live outside public/, so they arrive as bundled markup via
+// logoCorpus (dev-only, empty in any build that never ran `npm run fetch:logos`) and are
+// rasterized on WHITE, matching the gallery. A mark in abCorpus but not on disk is dropped
+// here rather than erroring — the lane is as full as the local corpus is.
+const LOGO_SVG = new Map(LOGO_CORPUS.map((l) => [l.file, l.svg]))
+const GALLERY: AbCase[] = AB_LOGO_CASES.flatMap((c) => {
+  const text = LOGO_SVG.get(c.path.split('/').pop()!)
+  if (!text) return []
+  // A blob URL so the source panel and labImageData behave exactly like a fixture's.
+  return [{ id: c.id, name: c.name, kind: 'svg' as const, src: svgBlobUrl(text), text, background: c.background }]
+})
+
+/** Bundled markup → an object URL the <img> panels can show. */
+function svgBlobUrl(text: string): string {
+  return URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }))
+}
+
+/** Which lane(s) to run — the gallery lane doubles the corpus, and in variants mode every
+ *  case costs VARIANTS.length traces, so it is switchable rather than always on. */
+const LANES = [
+  { value: 'all', label: 'Fixtures + gallery' },
+  { value: 'fixtures', label: 'Fixtures only' },
+  { value: 'gallery', label: 'Gallery only' },
+]
 
 /** Rasterization sizes offered by the raster switch (SVG cases re-render at each; raster
  *  cases only downscale, so they cap at their native size). */
@@ -224,8 +257,9 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean, snap: SnapEntry): 
 }
 
 async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<AbAnalysis> {
-  const svgText = c.kind === 'svg' ? await (c.file ? c.file.text() : (await fetch(c.src)).text()) : undefined
-  const image = await labImageData(c.src, raster, svgText)
+  // Gallery cases carry their markup (c.text); fixtures are fetched from public/.
+  const svgText = c.kind === 'svg' ? (c.text ?? (await (c.file ? c.file.text() : (await fetch(c.src)).text()))) : undefined
+  const image = await labImageData(c.src, raster, svgText, c.background ? { background: c.background } : undefined)
   const w = image.width
   const h = image.height
 
@@ -244,17 +278,29 @@ async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<A
 }
 
 export default function AbLab() {
-  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snapName: '', changedOnly: false })
+  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snapName: '', changedOnly: false, lane: 'all' })
   // Dropped images live for the session only — their object URLs die on reload.
   const [extras, setExtras] = useState<AbCase[]>([])
   const [over, setOver] = useState(false)
 
-  const cases = useMemo(() => [...CASES, ...extras], [extras])
   // The selected snapshot (or null in variants mode). An unknown name (a snapshot deleted since
   // it was last chosen) falls back to variants rather than erroring.
   const selectedSnap = SNAPSHOTS.find((s) => s.name === ui.snapName) ?? null
   const snapMode = selectedSnap != null
   const changedOnly = snapMode && ui.changedOnly
+
+  const lane = useMemo(
+    () => [...(ui.lane === 'gallery' ? [] : FIXTURES), ...(ui.lane === 'fixtures' ? [] : GALLERY), ...extras],
+    [extras, ui.lane],
+  )
+  // A snapshot frozen before a case existed (an older stamp, or one taken with a different
+  // --logos slice) simply doesn't have it. Hide those rather than filling the page with
+  // "case not in snapshot" errors — the count is reported in the summary line instead.
+  const cases = useMemo(
+    () => (selectedSnap ? lane.filter((c) => !c.id || selectedSnap.manifest.cases.some((s) => s.id === c.id)) : lane),
+    [lane, selectedSnap],
+  )
+  const notInSnap = lane.length - cases.length
 
   const run = useLabRun(
     cases,
@@ -339,6 +385,16 @@ export default function AbLab() {
                 onChange={(changedOnly) => setUi({ changedOnly })}
               />
             )}
+            <LabSelect
+              label="Cases"
+              value={ui.lane}
+              onChange={(lane) => setUi({ lane })}
+              options={LANES.map((l) => ({
+                value: l.value,
+                // An unfetched logo corpus is a fact worth showing, not an empty list.
+                label: l.value !== 'fixtures' && GALLERY.length === 0 ? `${l.label} (no logos — npm run fetch:logos)` : l.label,
+              }))}
+            />
             <LabCheck
               label="Gradients"
               checked={ui.gradients}
@@ -378,6 +434,13 @@ export default function AbLab() {
             {changedOnly && unchangedN > 0 && <span className="text-faint"> · {unchangedN} hidden</span>}
             {changedOnly && changedN === 0 && (
               <span className="text-good"> — working tree matches the snapshot</span>
+            )}
+            {notInSnap > 0 && (
+              <span className="text-faint">
+                {' '}
+                · {notInSnap} case{notInSnap === 1 ? '' : 's'} not in this stamp (re-run{' '}
+                <code>pnpm gen:absnapshot {selectedSnap!.name}</code> to include them)
+              </span>
             )}
           </div>
         )}
@@ -496,6 +559,18 @@ function AbAbout() {
         accepted. (Residual caveat: the browser&apos;s canvas PNG decode can differ from
         Node&apos;s by ±1 on a few partial-alpha pixels — the aurora story in docs/labs.md — which
         is far below anything judged visually here.)
+      </p>
+      <p className="mb-2 max-w-[96ch]">
+        <b>Cases</b> picks the lane. The ⟐ <b>fixtures</b> are handcrafted to isolate one mechanism
+        each, which makes them good gates and weak evidence — they are already &quot;good enough&quot;
+        long before real art is. The ◆ <b>gallery</b> lane is a slice of the same brand marks{' '}
+        <code>/labs/gallery</code> shows, rasterized on white exactly as that page does, so a change
+        can be judged on a mark you recognize. Those files are gitignored (trademarks); run{' '}
+        <code>npm run fetch:logos</code> to fill the lane, edit <code>AB_LOGOS</code> in
+        src/devtest/abCorpus.ts to change which marks it carries, or pass{' '}
+        <code>--logos all</code> / <code>--logos a,b</code> to the snapshot writer for a one-off.
+        Snapshots are <b>never committed</b> — they are local working artifacts, and this lane
+        traces art that must not be redistributed.
       </p>
       <p className="max-w-[96ch]">
         Drop an image anywhere on the page (or use <b>Add image</b>) to run your own logo through
