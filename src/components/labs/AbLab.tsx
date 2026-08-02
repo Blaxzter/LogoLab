@@ -607,7 +607,12 @@ function AbAbout() {
         each, which makes them good gates and weak evidence — they are already &quot;good enough&quot;
         long before real art is. The ◆ <b>gallery</b> lane is a slice of the same brand marks{' '}
         <code>/labs/gallery</code> shows, rasterized on white exactly as that page does, so a change
-        can be judged on a mark you recognize. Those files are gitignored (trademarks); run{' '}
+        can be judged on a mark you recognize. The two controls are independent axes — this one
+        picks the ART, <b>Gradients</b> picks the trace config on screen — with one thing worth
+        knowing about the pairing: <code>/labs/gallery</code> itself traces FLAT, so{' '}
+        <b>gradients off</b> is the gallery-parity view of a ◆ row, and gradients on is what the
+        studio would do to the same mark (the product default, with the rampiness probe choosing
+        per image). Both are stamped, so neither is lost. Those files are gitignored (trademarks); run{' '}
         <code>npm run fetch:logos</code> to fill the lane, edit <code>AB_LOGOS</code> in
         src/devtest/abCorpus.ts to change which marks it carries, or pass{' '}
         <code>--logos all</code> / <code>--logos a,b</code> to the snapshot writer for a one-off.
