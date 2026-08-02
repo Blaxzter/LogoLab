@@ -177,13 +177,12 @@ interface AbAnalysis {
   height: number
   /** In snapshot mode the source panel must show the SNAPSHOT's pixels, not the live case URL. */
   srcOverride?: string
-  /** Snapshot mode only: did the working tree's trace differ from the frozen one? undefined in
-   *  variants mode (no baseline to diff against). Drives the "Changed only" filter. */
+  /** Snapshot mode only: did the working tree's trace differ from the frozen one, in EITHER
+   *  gradient setting? undefined in variants mode (no baseline). Drives "Changed only". */
   changed?: boolean
-  /** …and the SAME question for the gradient setting that is NOT on screen. The stamp froze
-   *  both, so both are always checked: a change that only shows with gradients on must not be
-   *  invisible because you happened to be looking at flat. */
-  changedOther?: boolean
+  /** …and which ones moved — the stamp froze both, so both are always compared and the answer
+   *  is a set, not a property of whatever happened to be on screen. */
+  changedIn?: ('flat' | 'gradients')[]
   /** Snapshot mode, changed cases only: a per-pixel heat of WHERE the two traces disagree.
    *  Lets a change be located, not just counted — one per gradient setting on screen. */
   heats?: { label: string; url: string }[]
@@ -219,7 +218,7 @@ function diffHeatBuffer(a: ImageData, b: ImageData): Uint8ClampedArray {
 
 /** Vs-snapshot mode: trace the WORKING TREE's default config from the snapshot's own stored
  *  pixels and pair it with the stored trace — same input file, two code revisions. */
-async function analyzeSnapshot(c: AbCase, gradients: boolean, snap: SnapEntry): Promise<AbAnalysis> {
+async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> {
   const entry = snap.manifest.cases.find((s) => s.id === c.id)
   if (!entry) throw new Error(`case not in snapshot ${snap.name} — rerun pnpm gen:absnapshot`)
   const dir = `/test/ab-snapshots/${snap.name}`
@@ -227,9 +226,10 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean, snap: SnapEntry): 
   if (!pngUrl) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
   const image = await labImageData(pngUrl, Math.max(entry.width, entry.height))
 
-  // ONE PASS PER GRADIENT SETTING. A stamp freezes both traces per case, so both are always
-  // compared — the toggle must not decide what counts as a change (§14's fix moved four FLAT
-  // traces and no gradient one; reviewing with gradients on would have shown a clean corpus).
+  // ONE PASS PER GRADIENT SETTING — a stamp freezes both traces per case, so both are always
+  // compared and both are candidates for the row. Nothing here depends on a toggle: §14's fix
+  // moved four FLAT traces and no gradient one, and a view whose verdict follows a control is
+  // a view that can be read wrong.
   // "Changed" is an exact-serialization diff: the snapshot IS serializeDoc(doc) at the frozen
   // rev (writeAbSnapshots.ts) and gradientId is deterministic, so identical geometry+paint
   // serializes byte-identically — a difference is a real trace change, nothing cosmetic.
@@ -240,29 +240,30 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean, snap: SnapEntry): 
     const live = serializeDoc(doc, 2)
     return { g, snapSvg, doc, live, changed: live !== snapSvg }
   }
-  const main = await pass(gradients)
-  if (!main) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
-  const other = await pass(!gradients)
+  const flat = await pass(false)
+  const grad = await pass(true)
+  if (!flat || !grad) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
 
-  // The selected setting is always on screen; the other JOINS THE ROW when it moved, so a
-  // change never sits behind a toggle. When it didn't move there is nothing to look at, and
-  // 33 rows of duplicate panels is noise, not information.
-  const views = [main, ...(other && other.changed ? [other] : [])]
-  const both = views.length > 1
-  const tag = (v: { g: boolean }): string => (both ? ` · gradients ${v.g ? 'on' : 'off'}` : '')
+  // WHAT IS ON SCREEN IS WHAT MOVED: every setting that changed gets its own snapshot /
+  // working-tree pair and its own heat, in a fixed order (flat, then gradients) so rows are
+  // comparable. A case that moved in neither shows the flat pair alone — there is nothing to
+  // locate, and duplicating it for every quiet row is noise, not information.
+  const views = [flat, grad].filter((v) => v.changed)
+  if (views.length === 0) views.push(flat)
+  const label = (v: { g: boolean }): string => ` · gradients ${v.g ? 'on' : 'off'}`
 
   const variants: AbAnalysis['variants'] = views.flatMap((v) => [
-    { name: `Snapshot @ ${snap.manifest.rev}${tag(v)}`, tone: 'base', svg: v.snapSvg },
+    { name: `Snapshot @ ${snap.manifest.rev}${label(v)}`, tone: 'base', svg: v.snapSvg },
     {
-      name: `Working tree${tag(v)}`,
+      name: `Working tree${label(v)}`,
       tone: 'shipped',
       svg: traceSvg(v.doc, entry.width, entry.height),
       stats: docStats(v.doc),
     },
   ])
 
-  // For changed views, rasterize BOTH plain-fill traces (no wireframe) on white and heat their
-  // per-pixel delta, so the diff is LOCATED. Only changed views pay this.
+  // Changed views also rasterize BOTH plain-fill traces (no wireframe) on white and heat their
+  // per-pixel delta, so the diff is LOCATED. A quiet view has no heat: nothing to paint.
   const heats = (
     await Promise.all(
       views.map(async (v) => {
@@ -272,17 +273,20 @@ async function analyzeSnapshot(c: AbCase, gradients: boolean, snap: SnapEntry): 
           rasterizeSvgResvg(v.live, entry.width, { background: 'white' }),
         ])
         if (snapImg.width !== liveImg.width || snapImg.height !== liveImg.height) return null
-        return { label: `diff heat${tag(v)}`, url: rgbaToUrl(diffHeatBuffer(snapImg, liveImg), snapImg.width, snapImg.height) }
+        return { label: `diff heat${label(v)}`, url: rgbaToUrl(diffHeatBuffer(snapImg, liveImg), snapImg.width, snapImg.height) }
       }),
     )
   ).filter((h): h is { label: string; url: string } => h != null)
 
+  const changedIn: AbAnalysis['changedIn'] = []
+  if (flat.changed) changedIn.push('flat')
+  if (grad.changed) changedIn.push('gradients')
   return {
     width: entry.width,
     height: entry.height,
     srcOverride: pngUrl,
-    changed: main.changed,
-    changedOther: other?.changed ?? false,
+    changed: changedIn.length > 0,
+    changedIn,
     heats,
     variants,
   }
@@ -336,12 +340,12 @@ export default function AbLab() {
 
   const run = useLabRun(
     cases,
-    (c) => (selectedSnap ? analyzeSnapshot(c, ui.gradients, selectedSnap) : analyze(c, ui.raster, ui.gradients)),
+    (c) => (selectedSnap ? analyzeSnapshot(c, selectedSnap) : analyze(c, ui.raster, ui.gradients)),
     {
       label: (c) => (snapMode ? `Tracing ${c.name} vs ${selectedSnap!.name}` : `Tracing ${c.name} × ${VARIANTS.length} variants`),
       done: (n) =>
         selectedSnap
-          ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · panels show gradients ${ui.gradients ? 'on' : 'off'}, BOTH settings checked for changes · input pinned to the snapshot's stored pixels.`
+          ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · both gradient settings compared, whichever moved is on screen · input pinned to the snapshot's stored pixels.`
           : `Done — ${n} cases × ${VARIANTS.length} variants · gradients ${ui.gradients ? 'on' : 'off'} @ ${ui.raster}px. Drop an image anywhere to add it.`,
       deps: [ui.raster, ui.gradients, cases, ui.snapName],
       // Cache corpus cases (stable `id`); skip session-dropped images (no id). The snapshot NAME
@@ -352,7 +356,7 @@ export default function AbLab() {
         id: 'ab',
         key: (c) => c.id ?? null,
         optionsKey: selectedSnap
-          ? `snap:v4:${selectedSnap.name}:g${ui.gradients}`
+          ? `snap:v5:${selectedSnap.name}`
           : `var:r${ui.raster}:g${ui.gradients}:v${VARIANTS_HASH}`,
       },
     },
@@ -367,13 +371,13 @@ export default function AbLab() {
   }
 
   // "Changed only" hides cases that serialize identically to the snapshot in BOTH gradient
-  // settings — a case that moved only on the other side of the toggle stays on the page, with
-  // a badge saying so. Errors (value null) and still-resolving rows are kept.
-  const moved = (a: AbAnalysis | null | undefined): boolean => !a || a.changed !== false || a.changedOther === true
-  const shown = changedOnly ? run.results.filter((r) => moved(r.value)) : run.results
+  // settings. Errors (value null) and still-resolving rows are kept — only a confirmed
+  // match in both is hidden.
+  const shown = changedOnly ? run.results.filter((r) => r.value?.changed !== false) : run.results
   const changedN = run.results.filter((r) => r.value?.changed === true).length
-  const otherOnlyN = run.results.filter((r) => r.value?.changed === false && r.value?.changedOther === true).length
-  const unchangedN = run.results.filter((r) => r.value?.changed === false && r.value?.changedOther !== true).length
+  const flatN = run.results.filter((r) => r.value?.changedIn?.includes('flat')).length
+  const gradN = run.results.filter((r) => r.value?.changedIn?.includes('gradients')).length
+  const unchangedN = run.results.filter((r) => r.value?.changed === false).length
 
   return (
     <div
@@ -430,11 +434,18 @@ export default function AbLab() {
                 label: l.value !== 'fixtures' && GALLERY.length === 0 ? `${l.label} (no logos — npm run fetch:logos)` : l.label,
               }))}
             />
-            <LabCheck
-              label="Gradients"
-              checked={ui.gradients}
-              onChange={(gradients) => setUi({ gradients })}
-            />
+            {/* Variants mode only. In snapshot mode the stamp holds BOTH traces per case and the
+                row shows whichever moved, so there is nothing left for a gradient toggle to
+                decide — and a control that only reorders panels is a control that reads like it
+                filters them. (Input px is hidden there for the same reason: the input is pinned
+                to the stamp's stored pixels.) */}
+            {!snapMode && (
+              <LabCheck
+                label="Gradients"
+                checked={ui.gradients}
+                onChange={(gradients) => setUi({ gradients })}
+              />
+            )}
             {!snapMode && (
               <LabSelect
                 label="Input px"
@@ -463,17 +474,18 @@ export default function AbLab() {
         about={<AbAbout />}
       >
         {snapMode && (changedN > 0 || unchangedN > 0) && (
-          <div className="mb-2 text-xs text-muted">
-            <b className="text-fg">{changedN}</b> changed · {unchangedN} unchanged vs snapshot{' '}
-            {selectedSnap!.name} @ {selectedSnap!.manifest.rev}
-            {otherOnlyN > 0 && (
-              <span className="text-warn">
+          // px-4 to sit on the same left edge as every CaseRow below it.
+          <div className="px-4 pt-3 text-xs text-muted">
+            <b className="text-fg">{changedN}</b> changed
+            {changedN > 0 && (
+              <span className="text-muted">
                 {' '}
-                · <b>{otherOnlyN}</b> moved only with gradients {ui.gradients ? 'OFF' : 'ON'} — shown in the row
+                ({flatN} flat{gradN > 0 && ` · ${gradN} with gradients`})
               </span>
-            )}
+            )}{' '}
+            · {unchangedN} unchanged vs snapshot {selectedSnap!.name} @ {selectedSnap!.manifest.rev}
             {changedOnly && unchangedN > 0 && <span className="text-faint"> · {unchangedN} hidden</span>}
-            {changedOnly && changedN === 0 && otherOnlyN === 0 && (
+            {changedN === 0 && unchangedN > 0 && (
               <span className="text-good"> — working tree matches the snapshot, both gradient settings</span>
             )}
             {notInSnap > 0 && (
@@ -500,17 +512,12 @@ export default function AbLab() {
               badges={
                 <>
                   {snapMode && a.changed != null && (
+                    // WHICH settings moved, not "did the one on screen move" — the panels
+                    // below are exactly these, in this order.
                     <span
                       className={`rounded px-1 py-0.5 text-[0.6rem] ${a.changed ? 'bg-warn/20 text-warn' : 'text-faint'}`}
                     >
-                      {a.changed ? 'changed' : 'unchanged'}
-                    </span>
-                  )}
-                  {snapMode && a.changedOther && (
-                    // The other gradient setting moved too — its panels are in this row,
-                    // labelled, so an unchanged-looking row is never the whole answer.
-                    <span className="rounded bg-warn/10 px-1 py-0.5 text-[0.6rem] text-warn">
-                      {a.changed ? 'also' : 'changed'} with gradients {ui.gradients ? 'off' : 'on'} ↓
+                      {a.changed ? `changed · ${a.changedIn?.join(' + ')}` : 'unchanged'}
                     </span>
                   )}
                   {c.file && (
@@ -614,12 +621,14 @@ function AbAbout() {
         A stamp freezes <b>two</b> traces per case — gradients off and on — so in Vs-snapshot mode
         the <b>Gradients</b> toggle only picks which frozen pair is on screen (both panels always
         use the same setting; the input is one stored PNG either way). The <b>changed</b> verdict
-        does not follow the toggle: every case is checked against <i>both</i> frozen traces, and
-        when the setting you are <i>not</i> looking at moved, <b>its panels join the row too</b>
-        (snapshot, working tree and diff heat, each labelled with the setting) — so a change is
-        never behind a toggle. Rows where the other setting did not move stay single, because
-        there is nothing to look at there. Judging &quot;did anything move&quot; from the visible
-        pair alone would hide exactly the collateral changes this page exists to catch.
+        is not a mode at all: a stamp freezes <b>both</b> traces per case (gradients off and on),
+        both are compared, and <b>whichever moved is what you see</b> — its snapshot pair and its
+        own diff heat, labelled with the setting, flat first. A case that moved in both shows two
+        pairs and two heats; one that moved in neither shows the flat pair alone, because there
+        is nothing to locate. That is why there is no Gradients toggle here (nor an Input px one:
+        the input is pinned to the stamp&apos;s stored pixels) — §14&apos;s fix moved four FLAT
+        traces and no gradient one, and a page whose verdict follows a control is a page that can
+        be read wrong.
       </p>
       <p className="mb-2 max-w-[96ch]">
         <b>Cases</b> picks the lane. The ⟐ <b>fixtures</b> are handcrafted to isolate one mechanism
@@ -627,11 +636,12 @@ function AbAbout() {
         long before real art is. The ◆ <b>gallery</b> lane is a slice of the same brand marks{' '}
         <code>/labs/gallery</code> shows, rasterized on white exactly as that page does, so a change
         can be judged on a mark you recognize. The two controls are independent axes — this one
-        picks the ART, <b>Gradients</b> picks the trace config on screen — with one thing worth
-        knowing about the pairing: <code>/labs/gallery</code> itself traces FLAT, so{' '}
-        <b>gradients off</b> is the gallery-parity view of a ◆ row, and gradients on is what the
-        studio would do to the same mark (the product default, with the rampiness probe choosing
-        per image). Both are stamped, so neither is lost. Those files are gitignored (trademarks); run{' '}
+        picks the ART; what is traced is the variants (here) or whatever moved (Vs snapshot). One
+        thing worth knowing about a ◆ row: <code>/labs/gallery</code> itself traces FLAT, so the{' '}
+        <i>gradients off</i> panels are the gallery-parity view of that mark, and{' '}
+        <i>gradients on</i> is what the studio would do to it (the product default, with the
+        rampiness probe choosing per image). Both are stamped, so neither is lost. Those files are
+        gitignored (trademarks); run{' '}
         <code>npm run fetch:logos</code> to fill the lane, edit <code>AB_LOGOS</code> in
         src/devtest/abCorpus.ts to change which marks it carries, or pass{' '}
         <code>--logos all</code> / <code>--logos a,b</code> to the snapshot writer for a one-off.
