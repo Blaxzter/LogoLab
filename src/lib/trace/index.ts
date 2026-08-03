@@ -564,7 +564,10 @@ export async function traceImage(
     }
     const labels = bgUnion ? bgUnion.labels : healed
     const fitOpts = planarFitOptionsFor(options)
-    const trace = tracePlanar(labels, width, height, fitOpts)
+    // The palette rides along for the §14 contrast rank only: it lets the fit tell a
+    // posterization band seam (weak) from a real logo edge (strong) so the weak one
+    // stops aiming the strong one. Geometry-only when omitted.
+    const trace = tracePlanar(labels, width, height, fitOpts, q.palette)
     stage('trace') // includes the flat-art prep above (bg detect / remove-heal / heal-spikes)
     // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
     // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a

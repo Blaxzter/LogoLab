@@ -31,8 +31,10 @@ guardrails):
 | 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
-| 15 | **A weak colour boundary aims a strong edge** — a posterization band seam (ΔE 2.7–10) ending on a real edge (ΔE 47–79) pins that edge to the band's INTEGER lattice corner, against 100+px of its own staircase: a 116px flank rotates 0.98px end-to-end and an arc caught between two band junctions kinks 11° into its straight neighbours. USER-REPORTED, and on ramp-traced-flat art = the AI-icon shape | `affinity-designer.svg` @512 flat (private corpus, **ungated** — `band-cross` reproduces the setup but scores green, §14.1) | flank swing 0.98px vs 0.08 with gradients ON; apex 1.54px; arc tangent breaks 11.0°/10.7° | §14 |
+| 15 | **A junction that is a REAL CORNER is still pinned to its integer lattice corner** — the residue of the closed #15 (§14, the weak-boundary pin). A band-seam junction now lands on the strong edge it interrupts; a junction that IS a corner of the art does not, so an edge spanning one of each trades a constant offset for a TILT. Same for a corner NEAR a junction: the seam truncates the arm `snapCornerToArms` reconstructs the apex from (§10.6's short-arm regime), which is why the Affinity apex did not improve | `affinity-designer.svg` @512 flat (private corpus, **ungated**); the mechanism is generic to any junction the art corners at | the mark's 133px top edge: constant 1.06px offset → mean 0.69 with **0.71px swing**; triangle apex **1.54px** (0.97 with gradients ON, i.e. with no seam cutting its arm) | §14.3 |
 | 14 | **Small region collapses to a sliver @512** — the doc item EXISTS but its geometry pinches to ~77px² for a 691px label, so the region paints white; a §10.4 REGRESSION (bisect: green at e549b29, red at fc7b7e9 — reseat/chord territory, NOT the weld deletion §12 fixed), unnoticed for five commits because tier 2 is ungated @512 | `fluent-beverage-box-flat` @512 (ungated resolution for tier 2; the case IS gated @256, where it passes) | 6/7 @512: `#990838` (522px) painted `#ffffff`, ΔE 88.6; render shows 88px of the colour | found during §12.4 (2026-07-29); §9.7's "437/437" figure predates it |
+
+Recently closed: **a weak colour boundary aiming a strong edge** (was #15) — closed 2026-08-01, **§14** is the record. A posterization band seam ending on a real edge pinned that edge to the seam's INTEGER lattice corner and rotated it ~1px end to end; the junction is now placed on a fit taken THROUGH it from both strong arms' raw lattice chains (`planarThread.ts`), before anything is fitted. Flank swing 0.98px → 0.24 (0.10 with gradients ON), tangent breaks 15.4°/9.5° → 0.7°/0.7°, and the `band-cross` control improves rather than moving. The §14.2 shape as WRITTEN — fit the chain through and split the fitted curve — was built and rejected on measurement: it fixes more (apex, a 150px arm) but bows a dead-flat 78px edge by 0.7px; §14.3 has both sets of numbers. What is left of #15 is the row above.
 
 Recently closed (the pattern an exit should follow): **the LOW-RESOLUTION
 scale-blindness family** (`hairlines` @256, was #6; `flute` @256, was #11 — plus two
@@ -2066,7 +2068,7 @@ nothing: the driver case that *would* gate it is flat art where a plain disc is 
 by a plain bar — authored circle + rect, fully scorable, the §10.5 `gear-teeth` recipe.
 Until that case exists, the regression that produced the beak can return silently.
 
-## 14. Contrast rank — a weak boundary aiming a strong edge (2026-07-30, OPEN)
+## 14. Contrast rank — a weak boundary aiming a strong edge (2026-07-30, FIXED 2026-08-01)
 
 **Symptom (user-reported, /labs/gallery, `affinity-designer.svg` traced flat).** Two
 complaints on one mark: a straight bar edge that *bends* where a colour band boundary
@@ -2140,20 +2142,100 @@ correction is 0.5–1px.
   at 15° works — worth keeping if this is re-attempted.) The code was reverted rather than
   shipped dead.
 
-### 14.2 Where the fix has to live
+### 14.2 Where the fix lives: BEFORE the fit, in the junction itself
 
-In the FIT, not in beautify: `assemblePlanar` still holds each edge's raw lattice chain
-(`net.edges[].pts`), which is the evidence the pin destroys. The shape of it: where a WEAK
-boundary ends on a STRONG one that continues through, fit the strong boundary **through** the
-junction as one chain, then split the fitted curve at the junction's projected position — the
-strong edge is then placed by its own 100+px of staircase and the weak arm's endpoint follows.
-Both regions still reference one shared edge, so the planar invariant is untouched.
+In `assemblePlanar`, which still holds each edge's raw lattice chain (`net.edges[].pts`) —
+the evidence the pin destroys. `planarThread.ts` ranks every junction's incident boundaries
+by contrast, and where a WEAK one ends on a STRONG one that CONTINUES through, it joins the
+two strong arms' raw chains into one window across the junction, fits that window (one line,
+or one circle where the boundary curves through), and moves the junction onto it. Every
+incident edge — including the band seam, whose endpoint follows — is then fitted pinned to
+that one point, so both regions still reference one shared edge and the planar
+byte-coincidence invariant is untouched.
 
-The supporting evidence that this is the right direction is already measured: with gradients
-ON — where the same flank has no band junction cutting it — the trace lands at a uniform
-−0.30px with 0.08px of swing. Removing the pin recovers that.
+The correction is purely NORMAL to the strong boundary, and that is the whole point. The
+lattice quantizes the junction ACROSS the edge, which is what tilts it; where the junction
+sits ALONG the edge is the weak boundary's business, and an error there is invisible.
 
-**Still open: no gated witness.** `band-cross` is green and stays a control; the real driver
-needs whatever ingredient the synthetic reproductions are missing. Until it exists, this
-family is measured only by `apexProbe.ts` on private corpus art (§14's table is the baseline
-to beat: 0.98px swing, 1.54px apex, 11° tangent breaks).
+**Measured on the driver** (`affinity-designer.svg` @512 flat, `apexProbe.ts` — the rendered
+scan is bilinear, see the trap above):
+
+| | before | after | gradients ON (no band junctions) |
+|---|---|---|---|
+| inner flank, rendered displacement s=6 → s=108 | −0.37 → **+0.61**, swing **0.98** | −0.41 … −0.17, swing **0.24** | −0.37 … −0.27, swing 0.10 |
+| inner flank vs the authored line (fitted geometry) | 0.03 → 0.75 ramp | 0.01 → 0.21 | 0.10 → 0.21 |
+| arm B→C mean / max | 0.41 / 0.86 | **0.10 / 0.21** | 0.16 / 0.22 |
+| tangent break at the panel's two seam junctions | **15.4° / 9.5°** | **0.7° / 0.7°** | — |
+| whole mark, render vs source | ΔE mean 1.361, p99 8.69 | ΔE mean **1.332**, p99 **7.50** | — |
+| triangle apex A | 1.54px | 1.54px (unchanged — see below) | 0.97px |
+| outer plate corners (no band junction) | 0.03–0.06 mean, 0.40 swing | unchanged | — |
+
+The flank stops rotating: it lands at a uniform −0.3px, which is where gradients-ON puts it.
+20 of the mark's 34 junctions move, none by more than 0.84px (`threadDiag.ts`).
+
+**Blast radius.** On the flat-authored tier-0 corpus — `checker` (1837 junctions),
+`sharp-star`, `gear-teeth`, `bar-caps`, `hairlines`, `cross-bars`, `aa-seam`, `concentric`,
+`annulus`, `overlap` — **zero** junctions move: ordinary flat art has no weak boundaries, so
+the rank never fires. `band-cross`, the authored weak-boundary control, moves all 16 and gets
+BETTER (chamfer 0.14 → 0.12, p95 0.49 → 0.34 @512; 0.19 → 0.13, 0.70 → 0.57 @256). Of the 42
+`/labs/ab` outputs, 4 move — `aurora`, `bg-ramp-twin`, `nebula`, `petals`, all FLAT traces of
+ramp art, i.e. exactly this family — and rendered against their source they are neutral to
+better (aurora ΔE p95 20.90 → 19.99; nebula and bg-ramp-twin unchanged to 3 decimals; petals
+mean 0.971 → 0.979). With `planarFit.fitThrough: false` all 42 are byte-identical, so the
+pass is fully gated and the refactor it rides on is exact.
+
+### 14.3 Calibration, and the three things that died on the way
+
+`src/devtest/threadDiag.ts` prints what the rank sees per junction — the ΔE census, the arm
+lengths, the through-fit residual against one line and one circle, the chord turn, and the
+verdict. Every gate below is read off that table, not assumed.
+
+- **ΔE 12 / 25 (weak / strong).** The spectrum is bimodal on every case that fires: the
+  widest gap is 10.2 → 47.0 on the Affinity mark, 8.3 → 42.0 on `band-cross`, 15.0 → 60.2 on
+  `bg-ramp-twin`. The gates sit inside a gap 30–45 wide. A junction with anything in between
+  is not classified and is left alone.
+- **The residual test ALONE threads a real corner — measured, and it is why the chord-turn
+  gate exists.** A 40° corner of the navy plate fits a CIRCLE to 1.11px over the ±12px window
+  (a 40° bend over 24px *is* an arc of radius ~35), so it passes any residual gate loose
+  enough to accept the plate's genuine radius-50 corners (0.75–0.84) — and would be rounded
+  off. The chord TURN separates them cleanly where the residual cannot: continuations and
+  radius-50 corners read 0–13.2°, real corners 39.8–105.3°. The gate is 20°, 1.5× from both
+  sides; anything in [14°, 39°] is identical on this corpus. The residual gate is KEPT at
+  1.2px but is not load-bearing: across tier 0 it never fires once the turn gate is in. It
+  guards the shape the turn cannot see — two arms that each bend but net ~0°.
+- **The §14.2-as-written CHAIN FIT was built and rejected on measurement.** Threading the
+  strong edges into one chain, fitting THAT, and splitting the fitted curve at each junction
+  (exact de Casteljau, both regions still on one shared edge) does fix the flank — and it
+  fixes MORE: apex 1.54 → 1.23 and the P0→A arm's stray 0.76 → 0.12, because a longer chain
+  gives the fit room to absorb a pin error locally instead of tilting a 150px run. But
+  re-fitting the chain re-decomposes geometry that had nothing wrong with it: the inner
+  panel's dead-flat 78px bottom edge (y = 308.00 at every sample, a constant −0.47px offset)
+  came out BOWED by 0.7px (y → 308.7 mid-span, swing 0.57), and the A→P1 arm grew a 0.77px
+  excursion where it had 0.29. Trading a 1px tilt for a 0.7px sag is not an improvement —
+  §10.4 and §13 are both in this file because sub-tolerance geometry the gates do not see is
+  still a defect. Junction placement alone gets the reported defect and touches nothing else.
+  - A sub-experiment that ALSO died: the sag was first blamed on the chain becoming a CLOSED
+    loop and so reaching a different fitter (`fitCorneredLoop`, ≥2 loop corners). Cutting the
+    loop open at its weakest junction and fitting it as an open chain reproduced the sag
+    node-for-node. The cause is the re-fit itself, not which fitter runs.
+- **What the chain experiment DID establish, and is now a named follow-up:** the apex error
+  (1.54px, target ~1.0) is NOT the pin. It is the corner snap's arm evidence being CUT by the
+  band junction — `snapCornerToArms` can only sample up to the neighbouring junction, so a
+  seam landing 20px from an apex halves the arm the apex is reconstructed from (§10.6's
+  short-arm regime). That is a corner-recovery mechanism, and fixing it there would keep the
+  apex win without the sag.
+
+**Known residual, measured and named.** Correcting a junction whose edge's OTHER end is a
+real corner — also a junction, and still pinned to its integer lattice corner — converts a
+constant offset into a tilt: the mark's 133px top edge went from a uniform 1.06px offset to
+mean 0.69 with 0.71px of swing. Across the mark's 29 strong edges the mean error improves
+(−0.43px total) and the swing is a wash (9 better, 10 worse, 10 unchanged, +1.57px total),
+while the whole-mark render ΔE improves. The fix is the same one the follow-up above needs: a
+junction that IS a real corner deserves the same sub-pixel placement, from its arm
+intersection rather than from a through fit. Until then this is the honest cost of the trade.
+
+**Gated by** `test/planar-thread.test.ts` (the mechanism at its smallest: a sub-pixel diagonal
+cut by a weak seam — the junction lands on the true edge, a 65° corner under the same seam
+does not move, equal contrast moves nothing, and no palette is byte-identical) and by
+`band-cross`, which stays a CONTROL: it pins that flat weak boundaries are harmless, and it
+must stay green.

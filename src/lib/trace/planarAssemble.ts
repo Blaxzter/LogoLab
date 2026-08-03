@@ -10,6 +10,7 @@ import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
 import { buildPlanarNetwork, EXT, type PlanarNetwork } from './planarNetwork.ts'
 import { detectCorners, detectLoopCorners, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
 import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
+import { threadJunctions, type ThreadColor } from './planarThread.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
 
 export interface PlanarTrace {
@@ -23,24 +24,38 @@ export interface PlanarTrace {
  *  consistent side (validated by the per-pixel relabel check). */
 const ROT = [1, 2, 3] // try clockwise turns from the reverse direction first
 
-/** Build the full planar trace from a label map. */
+/** Build the full planar trace from a label map. `palette` (label → colour) is
+ *  optional and only feeds the §14 contrast rank: without it nothing threads and the
+ *  fit is byte-identical to the pre-§14 tracer. */
 export function tracePlanar(
   labels: Int32Array,
   width: number,
   height: number,
   opts: PlanarFitOptions = DEFAULT_PLANAR_FIT,
+  palette?: readonly ThreadColor[],
 ): PlanarTrace {
   const net = buildPlanarNetwork(labels, width, height)
-  return assemblePlanar(net, opts)
+  return assemblePlanar(net, opts, palette)
 }
 
-export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): PlanarTrace {
-  // --- vertices: one per junction corner ---
-  // With refineJunctions (experimental, off by default) each junction is placed at
-  // the sub-pixel arm intersection and every incident edge endpoint is pinned to it
-  // below; otherwise it stays the raw integer lattice corner (the shipped path).
+export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions, palette?: readonly ThreadColor[]): PlanarTrace {
   const cw = net.width + 1
-  const juncPos = opts.refineJunctions ? subpixelJunctions(net, cw) : null
+  // --- vertices: one per junction corner ---
+  // §14 CONTRAST RANK: where a band seam (weak colour boundary) ends on a real edge
+  // (strong) that continues through, the junction is placed on a fit THROUGH it,
+  // taken from both strong arms' raw lattice chains — instead of on the integer
+  // lattice corner, which quantizes it across the edge and tilts a 100+px boundary
+  // (planarThread.ts). Needs the palette (contrast is a colour question) and is
+  // skipped under refineJunctions, a competing placement rule for the same vertices.
+  // With refineJunctions (experimental, off by default) every junction instead moves
+  // to its sub-pixel arm intersection. Either way, each incident edge's endpoints are
+  // pinned to the moved vertex below; junctions in neither map keep their integer
+  // lattice corner (the shipped path).
+  const juncPos = opts.refineJunctions
+    ? subpixelJunctions(net, cw)
+    : palette && opts.fitThrough
+      ? threadJunctions(net, palette)
+      : null
   const vidByCorner = new Map<number, number>()
   const vertices: Vertex[] = []
   for (const c of net.junctions) {
@@ -63,10 +78,10 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): Plan
   }
   const meta: EdgeMeta[] = []
   for (const e of net.edges) {
-    let nodes: PathNode[]
-    // refineJunctions: pin open-edge endpoints to the sub-pixel junction positions
-    // so the fitted arc ends exactly on the shared vertex (both regions stay
-    // byte-coincident). No-op / e.pts unchanged when refinement is off or closed.
+    // Pin open-edge endpoints to the sub-pixel junction positions (refineJunctions, or
+    // a junction the §14 through fit moved — including the band seam's own endpoint,
+    // which follows the real edge) so the fitted arc ends exactly on the shared vertex
+    // and both regions stay byte-coincident. e.pts unchanged when nothing moved.
     let pts = e.pts
     if (juncPos && !e.closed) {
       const sp0 = e.startV >= 0 ? juncPos.get(e.startV) : undefined
@@ -79,6 +94,7 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions): Plan
     }
     // Sharp corners are found on the RAW staircase and pinned through pre-smoothing
     // so a valley/point isn't melted into a curve before the fitter detects it.
+    let nodes: PathNode[]
     const corners = detectCorners(pts, opts.cornerTurnDeg, e.closed)
     if (e.closed) {
       // A closed loop with ≥2 genuine sharp corners is fitted corner-first (snap
