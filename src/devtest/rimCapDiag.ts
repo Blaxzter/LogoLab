@@ -8,7 +8,7 @@
 // that bracket the mechanism (fidelity, junctionReseat, arcSnap), because the
 // visible failure is a §1d co-circular snap VETOED by a §10.4 re-seat artifact.
 // Companion render: rimCapRender.ts. PURELY DIAGNOSTIC — src/lib/trace untouched.
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { decodePng } from './png.ts'
@@ -19,7 +19,13 @@ import type { PathItem, PathNode } from '../lib/path/types.ts'
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const snapDir = join(root, 'test', 'ab-snapshots', 'before-lowres')
-const img = decodePng(readFileSync(join(snapDir, 'bg-ramp-twin.png')))
+// A/B stamps are LOCAL artifacts (test/ab-snapshots/README.md), so this input may simply
+// not exist on a fresh clone — say what to run rather than throwing ENOENT.
+const input = join(snapDir, 'bg-ramp-twin.png')
+if (!existsSync(input)) {
+  throw new Error(`missing ${input} — A/B stamps are not committed; regenerate with \`pnpm gen:absnapshot before-lowres\` (any stamp's bg-ramp-twin.png works: it is the fixture's raster, not that revision's trace)`)
+}
+const img = decodePng(readFileSync(input))
 
 // authored truth @512: green disc cx=144 cy=256 r=52 ; blue disc cx=368 cy=256 r=66
 const DISCS = [

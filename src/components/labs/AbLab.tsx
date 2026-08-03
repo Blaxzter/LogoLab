@@ -25,7 +25,8 @@ import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { VectorizeOptions } from '../../types'
 import type { EditableDoc } from '../../lib/path/types'
 import type { PlanarFitOptions } from '../../lib/trace/planarFit'
-import { AB_CORPUS, abUrl, type AbSnapshotManifest } from '../../devtest/abCorpus'
+import { AB_CORPUS, AB_LOGO_CASES, abUrl, type AbSnapshotManifest } from '../../devtest/abCorpus'
+import { LOGO_CORPUS } from '../../devtest/logoCorpus'
 import { fnv1a } from './engineFingerprint'
 import { LabPage, LabCheck, LabSelect } from './LabPage'
 import { Panel, RawArt } from './Panel'
@@ -127,13 +128,45 @@ interface AbCase {
   id?: string
   /** Session-dropped images carry their File so they can be re-rasterized at a new size. */
   file?: File
+  /** Gallery lane: the mark's markup, bundled by logoCorpus's glob (the files live
+   *  outside public/, so there is no URL to fetch — same reason /labs/gallery inlines it). */
+  text?: string
+  /** Composite the raster on this colour (the gallery lane's white). */
+  background?: string
 }
 
 // The case list is OWNED by src/devtest/abCorpus.ts — the same list the snapshot
 // writer traces, so the two consumers cannot drift. The handcrafted ⟐ edge cases
 // are authored as SVG (src/devtest/genEdgeCases.ts), so the raster switch
 // re-rasterizes each at any size: same vector content, varying resolution.
-const CASES: AbCase[] = AB_CORPUS.map((c) => ({ id: c.id, name: c.name, kind: c.kind, src: abUrl(c.path) }))
+const FIXTURES: AbCase[] = AB_CORPUS.map((c) => ({ id: c.id, name: c.name, kind: c.kind, src: abUrl(c.path) }))
+
+// The GALLERY lane — the same brand marks /labs/gallery shows, so a tracer change can be
+// judged on art someone recognizes and not only on fixtures that are already good enough.
+// Their SVGs are gitignored and live outside public/, so they arrive as bundled markup via
+// logoCorpus (dev-only, empty in any build that never ran `npm run fetch:logos`) and are
+// rasterized on WHITE, matching the gallery. A mark in abCorpus but not on disk is dropped
+// here rather than erroring — the lane is as full as the local corpus is.
+const LOGO_SVG = new Map(LOGO_CORPUS.map((l) => [l.file, l.svg]))
+const GALLERY: AbCase[] = AB_LOGO_CASES.flatMap((c) => {
+  const text = LOGO_SVG.get(c.path.split('/').pop()!)
+  if (!text) return []
+  // A blob URL so the source panel and labImageData behave exactly like a fixture's.
+  return [{ id: c.id, name: c.name, kind: 'svg' as const, src: svgBlobUrl(text), text, background: c.background }]
+})
+
+/** Bundled markup → an object URL the <img> panels can show. */
+function svgBlobUrl(text: string): string {
+  return URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }))
+}
+
+/** Which lane(s) to run — the gallery lane doubles the corpus, and in variants mode every
+ *  case costs VARIANTS.length traces, so it is switchable rather than always on. */
+const LANES = [
+  { value: 'all', label: 'Fixtures + gallery' },
+  { value: 'fixtures', label: 'Fixtures only' },
+  { value: 'gallery', label: 'Gallery only' },
+]
 
 /** Rasterization sizes offered by the raster switch (SVG cases re-render at each; raster
  *  cases only downscale, so they cap at their native size). */
@@ -144,12 +177,15 @@ interface AbAnalysis {
   height: number
   /** In snapshot mode the source panel must show the SNAPSHOT's pixels, not the live case URL. */
   srcOverride?: string
-  /** Snapshot mode only: did the working tree's trace differ from the frozen one? undefined in
-   *  variants mode (no baseline to diff against). Drives the "Changed only" filter. */
+  /** Snapshot mode only: did the working tree's trace differ from the frozen one, in EITHER
+   *  gradient setting? undefined in variants mode (no baseline). Drives "Changed only". */
   changed?: boolean
-  /** Snapshot mode, changed cases only: a per-pixel heat of WHERE the two traces disagree
-   *  (data URL). Lets a change be located, not just counted. */
-  heatUrl?: string
+  /** …and which ones moved — the stamp froze both, so both are always compared and the answer
+   *  is a set, not a property of whatever happened to be on screen. */
+  changedIn?: ('flat' | 'gradients')[]
+  /** Snapshot mode, changed cases only: a per-pixel heat of WHERE the two traces disagree.
+   *  Lets a change be located, not just counted — one per gradient setting on screen. */
+  heats?: { label: string; url: string }[]
   variants: { name: string; tone?: string; svg: string; stats?: ReturnType<typeof docStats> }[]
 }
 
@@ -182,50 +218,84 @@ function diffHeatBuffer(a: ImageData, b: ImageData): Uint8ClampedArray {
 
 /** Vs-snapshot mode: trace the WORKING TREE's default config from the snapshot's own stored
  *  pixels and pair it with the stored trace — same input file, two code revisions. */
-async function analyzeSnapshot(c: AbCase, gradients: boolean, snap: SnapEntry): Promise<AbAnalysis> {
+async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> {
   const entry = snap.manifest.cases.find((s) => s.id === c.id)
   if (!entry) throw new Error(`case not in snapshot ${snap.name} — rerun pnpm gen:absnapshot`)
   const dir = `/test/ab-snapshots/${snap.name}`
   const pngUrl = SNAP_PNGS[`${dir}/${entry.png}`]
-  const snapSvg = SNAP_SVGS[`${dir}/${gradients ? entry.grad : entry.flat}`]
-  if (!pngUrl || !snapSvg) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
-
+  if (!pngUrl) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
   const image = await labImageData(pngUrl, Math.max(entry.width, entry.height))
-  const doc: EditableDoc = await labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients })
+
+  // ONE PASS PER GRADIENT SETTING — a stamp freezes both traces per case, so both are always
+  // compared and both are candidates for the row. Nothing here depends on a toggle: §14's fix
+  // moved four FLAT traces and no gradient one, and a view whose verdict follows a control is
+  // a view that can be read wrong.
   // "Changed" is an exact-serialization diff: the snapshot IS serializeDoc(doc) at the frozen
   // rev (writeAbSnapshots.ts) and gradientId is deterministic, so identical geometry+paint
-  // serializes byte-identically — a difference here is a real trace change, nothing cosmetic.
-  const live = serializeDoc(doc, 2)
-  const changed = live !== snapSvg
-  // For changed cases, rasterize BOTH plain-fill traces (no wireframe) on white and heat
-  // their per-pixel delta, so the diff is LOCATED. Only changed cases pay this, and only in
-  // snapshot mode — an unchanged corpus costs nothing.
-  let heatUrl: string | undefined
-  if (changed) {
-    const [snapImg, liveImg] = await Promise.all([
-      rasterizeSvgResvg(snapSvg, entry.width, { background: 'white' }),
-      rasterizeSvgResvg(live, entry.width, { background: 'white' }),
-    ])
-    if (snapImg.width === liveImg.width && snapImg.height === liveImg.height) {
-      heatUrl = rgbaToUrl(diffHeatBuffer(snapImg, liveImg), snapImg.width, snapImg.height)
-    }
+  // serializes byte-identically — a difference is a real trace change, nothing cosmetic.
+  const pass = async (g: boolean) => {
+    const snapSvg = SNAP_SVGS[`${dir}/${g ? entry.grad : entry.flat}`]
+    if (!snapSvg) return null
+    const doc: EditableDoc = await labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: g })
+    const live = serializeDoc(doc, 2)
+    return { g, snapSvg, doc, live, changed: live !== snapSvg }
   }
+  const flat = await pass(false)
+  const grad = await pass(true)
+  if (!flat || !grad) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
+
+  // WHAT IS ON SCREEN IS WHAT MOVED: every setting that changed gets its own snapshot /
+  // working-tree pair and its own heat, in a fixed order (flat, then gradients) so rows are
+  // comparable. A case that moved in neither shows the flat pair alone — there is nothing to
+  // locate, and duplicating it for every quiet row is noise, not information.
+  const views = [flat, grad].filter((v) => v.changed)
+  if (views.length === 0) views.push(flat)
+  const label = (v: { g: boolean }): string => ` · gradients ${v.g ? 'on' : 'off'}`
+
+  const variants: AbAnalysis['variants'] = views.flatMap((v) => [
+    { name: `Snapshot @ ${snap.manifest.rev}${label(v)}`, tone: 'base', svg: v.snapSvg },
+    {
+      name: `Working tree${label(v)}`,
+      tone: 'shipped',
+      svg: traceSvg(v.doc, entry.width, entry.height),
+      stats: docStats(v.doc),
+    },
+  ])
+
+  // Changed views also rasterize BOTH plain-fill traces (no wireframe) on white and heat their
+  // per-pixel delta, so the diff is LOCATED. A quiet view has no heat: nothing to paint.
+  const heats = (
+    await Promise.all(
+      views.map(async (v) => {
+        if (!v.changed) return null
+        const [snapImg, liveImg] = await Promise.all([
+          rasterizeSvgResvg(v.snapSvg, entry.width, { background: 'white' }),
+          rasterizeSvgResvg(v.live, entry.width, { background: 'white' }),
+        ])
+        if (snapImg.width !== liveImg.width || snapImg.height !== liveImg.height) return null
+        return { label: `diff heat${label(v)}`, url: rgbaToUrl(diffHeatBuffer(snapImg, liveImg), snapImg.width, snapImg.height) }
+      }),
+    )
+  ).filter((h): h is { label: string; url: string } => h != null)
+
+  const changedIn: AbAnalysis['changedIn'] = []
+  if (flat.changed) changedIn.push('flat')
+  if (grad.changed) changedIn.push('gradients')
   return {
     width: entry.width,
     height: entry.height,
     srcOverride: pngUrl,
-    changed,
-    heatUrl,
-    variants: [
-      { name: `Snapshot @ ${snap.manifest.rev}`, tone: 'base', svg: snapSvg },
-      { name: 'Working tree', tone: 'shipped', svg: traceSvg(doc, entry.width, entry.height), stats: docStats(doc) },
-    ],
+    changed: changedIn.length > 0,
+    changedIn,
+    heats,
+    variants,
   }
 }
 
 async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<AbAnalysis> {
-  const svgText = c.kind === 'svg' ? await (c.file ? c.file.text() : (await fetch(c.src)).text()) : undefined
-  const image = await labImageData(c.src, raster, svgText)
+  // Gallery cases carry their markup (c.text); fixtures are fetched from public/.
+  const svgText = c.kind === 'svg' ? (c.text ?? (await (c.file ? c.file.text() : (await fetch(c.src)).text()))) : undefined
+  const image = await labImageData(c.src, raster, svgText, c.background ? { background: c.background } : undefined)
   const w = image.width
   const h = image.height
 
@@ -244,26 +314,38 @@ async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<A
 }
 
 export default function AbLab() {
-  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snapName: '', changedOnly: false })
+  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snapName: '', changedOnly: false, lane: 'all' })
   // Dropped images live for the session only — their object URLs die on reload.
   const [extras, setExtras] = useState<AbCase[]>([])
   const [over, setOver] = useState(false)
 
-  const cases = useMemo(() => [...CASES, ...extras], [extras])
   // The selected snapshot (or null in variants mode). An unknown name (a snapshot deleted since
   // it was last chosen) falls back to variants rather than erroring.
   const selectedSnap = SNAPSHOTS.find((s) => s.name === ui.snapName) ?? null
   const snapMode = selectedSnap != null
   const changedOnly = snapMode && ui.changedOnly
 
+  const lane = useMemo(
+    () => [...(ui.lane === 'gallery' ? [] : FIXTURES), ...(ui.lane === 'fixtures' ? [] : GALLERY), ...extras],
+    [extras, ui.lane],
+  )
+  // A snapshot frozen before a case existed (an older stamp, or one taken with a different
+  // --logos slice) simply doesn't have it. Hide those rather than filling the page with
+  // "case not in snapshot" errors — the count is reported in the summary line instead.
+  const cases = useMemo(
+    () => (selectedSnap ? lane.filter((c) => !c.id || selectedSnap.manifest.cases.some((s) => s.id === c.id)) : lane),
+    [lane, selectedSnap],
+  )
+  const notInSnap = lane.length - cases.length
+
   const run = useLabRun(
     cases,
-    (c) => (selectedSnap ? analyzeSnapshot(c, ui.gradients, selectedSnap) : analyze(c, ui.raster, ui.gradients)),
+    (c) => (selectedSnap ? analyzeSnapshot(c, selectedSnap) : analyze(c, ui.raster, ui.gradients)),
     {
       label: (c) => (snapMode ? `Tracing ${c.name} vs ${selectedSnap!.name}` : `Tracing ${c.name} × ${VARIANTS.length} variants`),
       done: (n) =>
         selectedSnap
-          ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · gradients ${ui.gradients ? 'on' : 'off'} · input pinned to the snapshot's stored pixels.`
+          ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · both gradient settings compared, whichever moved is on screen · input pinned to the snapshot's stored pixels.`
           : `Done — ${n} cases × ${VARIANTS.length} variants · gradients ${ui.gradients ? 'on' : 'off'} @ ${ui.raster}px. Drop an image anywhere to add it.`,
       deps: [ui.raster, ui.gradients, cases, ui.snapName],
       // Cache corpus cases (stable `id`); skip session-dropped images (no id). The snapshot NAME
@@ -274,7 +356,7 @@ export default function AbLab() {
         id: 'ab',
         key: (c) => c.id ?? null,
         optionsKey: selectedSnap
-          ? `snap:v2:${selectedSnap.name}:g${ui.gradients}`
+          ? `snap:v5:${selectedSnap.name}`
           : `var:r${ui.raster}:g${ui.gradients}:v${VARIANTS_HASH}`,
       },
     },
@@ -288,10 +370,13 @@ export default function AbLab() {
     ])
   }
 
-  // "Changed only" hides cases whose working-tree trace serializes identically to the snapshot.
-  // Errors (value null) and still-resolving rows are kept — only a confirmed match is hidden.
+  // "Changed only" hides cases that serialize identically to the snapshot in BOTH gradient
+  // settings. Errors (value null) and still-resolving rows are kept — only a confirmed
+  // match in both is hidden.
   const shown = changedOnly ? run.results.filter((r) => r.value?.changed !== false) : run.results
   const changedN = run.results.filter((r) => r.value?.changed === true).length
+  const flatN = run.results.filter((r) => r.value?.changedIn?.includes('flat')).length
+  const gradN = run.results.filter((r) => r.value?.changedIn?.includes('gradients')).length
   const unchangedN = run.results.filter((r) => r.value?.changed === false).length
 
   return (
@@ -339,11 +424,28 @@ export default function AbLab() {
                 onChange={(changedOnly) => setUi({ changedOnly })}
               />
             )}
-            <LabCheck
-              label="Gradients"
-              checked={ui.gradients}
-              onChange={(gradients) => setUi({ gradients })}
+            <LabSelect
+              label="Cases"
+              value={ui.lane}
+              onChange={(lane) => setUi({ lane })}
+              options={LANES.map((l) => ({
+                value: l.value,
+                // An unfetched logo corpus is a fact worth showing, not an empty list.
+                label: l.value !== 'fixtures' && GALLERY.length === 0 ? `${l.label} (no logos — npm run fetch:logos)` : l.label,
+              }))}
             />
+            {/* Variants mode only. In snapshot mode the stamp holds BOTH traces per case and the
+                row shows whichever moved, so there is nothing left for a gradient toggle to
+                decide — and a control that only reorders panels is a control that reads like it
+                filters them. (Input px is hidden there for the same reason: the input is pinned
+                to the stamp's stored pixels.) */}
+            {!snapMode && (
+              <LabCheck
+                label="Gradients"
+                checked={ui.gradients}
+                onChange={(gradients) => setUi({ gradients })}
+              />
+            )}
             {!snapMode && (
               <LabSelect
                 label="Input px"
@@ -372,12 +474,26 @@ export default function AbLab() {
         about={<AbAbout />}
       >
         {snapMode && (changedN > 0 || unchangedN > 0) && (
-          <div className="mb-2 text-xs text-muted">
-            <b className="text-fg">{changedN}</b> changed · {unchangedN} unchanged vs snapshot{' '}
-            {selectedSnap!.name} @ {selectedSnap!.manifest.rev}
+          // px-4 to sit on the same left edge as every CaseRow below it.
+          <div className="px-4 pt-3 text-xs text-muted">
+            <b className="text-fg">{changedN}</b> changed
+            {changedN > 0 && (
+              <span className="text-muted">
+                {' '}
+                ({flatN} flat{gradN > 0 && ` · ${gradN} with gradients`})
+              </span>
+            )}{' '}
+            · {unchangedN} unchanged vs snapshot {selectedSnap!.name} @ {selectedSnap!.manifest.rev}
             {changedOnly && unchangedN > 0 && <span className="text-faint"> · {unchangedN} hidden</span>}
-            {changedOnly && changedN === 0 && (
-              <span className="text-good"> — working tree matches the snapshot</span>
+            {changedN === 0 && unchangedN > 0 && (
+              <span className="text-good"> — working tree matches the snapshot, both gradient settings</span>
+            )}
+            {notInSnap > 0 && (
+              <span className="text-faint">
+                {' '}
+                · {notInSnap} case{notInSnap === 1 ? '' : 's'} not in this stamp (re-run{' '}
+                <code>pnpm gen:absnapshot {selectedSnap!.name}</code> to include them)
+              </span>
             )}
           </div>
         )}
@@ -396,10 +512,12 @@ export default function AbLab() {
               badges={
                 <>
                   {snapMode && a.changed != null && (
+                    // WHICH settings moved, not "did the one on screen move" — the panels
+                    // below are exactly these, in this order.
                     <span
                       className={`rounded px-1 py-0.5 text-[0.6rem] ${a.changed ? 'bg-warn/20 text-warn' : 'text-faint'}`}
                     >
-                      {a.changed ? 'changed' : 'unchanged'}
+                      {a.changed ? `changed · ${a.changedIn?.join(' + ')}` : 'unchanged'}
                     </span>
                   )}
                   {c.file && (
@@ -444,17 +562,19 @@ export default function AbLab() {
                   <RawArt html={v.svg} />
                 </Panel>
               ))}
-              {snapMode && a.heatUrl && (
-                <Panel
-                  label={<span className="text-warn">diff heat</span>}
-                  note="hot = snapshot ≠ working tree"
-                  aspect={a.width / a.height}
-                  pixelated
-                  grid={{ w: a.width, h: a.height }}
-                >
-                  <img src={a.heatUrl} alt="" style={{ background: HEAT_BG }} />
-                </Panel>
-              )}
+              {snapMode &&
+                a.heats?.map((h) => (
+                  <Panel
+                    key={h.label}
+                    label={<span className="text-warn">{h.label}</span>}
+                    note="hot = snapshot ≠ working tree"
+                    aspect={a.width / a.height}
+                    pixelated
+                    grid={{ w: a.width, h: a.height }}
+                  >
+                    <img src={h.url} alt="" style={{ background: HEAT_BG }} />
+                  </Panel>
+                ))}
             </CaseRow>
           )
         })}
@@ -496,6 +616,37 @@ function AbAbout() {
         accepted. (Residual caveat: the browser&apos;s canvas PNG decode can differ from
         Node&apos;s by ±1 on a few partial-alpha pixels — the aurora story in docs/labs.md — which
         is far below anything judged visually here.)
+      </p>
+      <p className="mb-2 max-w-[96ch]">
+        A stamp freezes <b>two</b> traces per case — gradients off and on — so in Vs-snapshot mode
+        the <b>Gradients</b> toggle only picks which frozen pair is on screen (both panels always
+        use the same setting; the input is one stored PNG either way). The <b>changed</b> verdict
+        is not a mode at all: a stamp freezes <b>both</b> traces per case (gradients off and on),
+        both are compared, and <b>whichever moved is what you see</b> — its snapshot pair and its
+        own diff heat, labelled with the setting, flat first. A case that moved in both shows two
+        pairs and two heats; one that moved in neither shows the flat pair alone, because there
+        is nothing to locate. That is why there is no Gradients toggle here (nor an Input px one:
+        the input is pinned to the stamp&apos;s stored pixels) — §14&apos;s fix moved four FLAT
+        traces and no gradient one, and a page whose verdict follows a control is a page that can
+        be read wrong.
+      </p>
+      <p className="mb-2 max-w-[96ch]">
+        <b>Cases</b> picks the lane. The ⟐ <b>fixtures</b> are handcrafted to isolate one mechanism
+        each, which makes them good gates and weak evidence — they are already &quot;good enough&quot;
+        long before real art is. The ◆ <b>gallery</b> lane is a slice of the same brand marks{' '}
+        <code>/labs/gallery</code> shows, rasterized on white exactly as that page does, so a change
+        can be judged on a mark you recognize. The two controls are independent axes — this one
+        picks the ART; what is traced is the variants (here) or whatever moved (Vs snapshot). One
+        thing worth knowing about a ◆ row: <code>/labs/gallery</code> itself traces FLAT, so the{' '}
+        <i>gradients off</i> panels are the gallery-parity view of that mark, and{' '}
+        <i>gradients on</i> is what the studio would do to it (the product default, with the
+        rampiness probe choosing per image). Both are stamped, so neither is lost. Those files are
+        gitignored (trademarks); run{' '}
+        <code>npm run fetch:logos</code> to fill the lane, edit <code>AB_LOGOS</code> in
+        src/devtest/abCorpus.ts to change which marks it carries, or pass{' '}
+        <code>--logos all</code> / <code>--logos a,b</code> to the snapshot writer for a one-off.
+        Snapshots are <b>never committed</b> — they are local working artifacts, and this lane
+        traces art that must not be redistributed.
       </p>
       <p className="max-w-[96ch]">
         Drop an image anywhere on the page (or use <b>Add image</b>) to run your own logo through

@@ -47,3 +47,10 @@ pnpm-debug.log*
 
 # vendored-corpus download cache (src/devtest/vendorFluentEmoji.ts)
 /.cache/
+
+# A/B feature stamps (`pnpm gen:absnapshot`) — LOCAL working artifacts: a frozen copy
+# of the tracer's output used to judge the next change against, regenerable from any
+# revision, and (since the gallery lane) full of brand art that is not redistributed
+# here. The README explains the lifecycle; nothing else under it is committed.
+/test/ab-snapshots/*
+!/test/ab-snapshots/README.md

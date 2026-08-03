@@ -1,6 +1,6 @@
 // Rim-cap render (§13) — the green disc's right cap: source | current | reseat-off.
 //   node --experimental-strip-types src/devtest/rimCapRender.ts [out.png]
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { decodePng } from './png.ts'
@@ -12,7 +12,12 @@ import { rasterizeDoc } from '../lib/render/raster.ts'
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const out = process.argv[2] ?? join(root, 'twin-cap.png')
-const img = decodePng(readFileSync(join(root, 'test', 'ab-snapshots', 'before-lowres', 'bg-ramp-twin.png')))
+// A/B stamps are LOCAL artifacts (test/ab-snapshots/README.md) — this input may not exist.
+const input = join(root, 'test', 'ab-snapshots', 'before-lowres', 'bg-ramp-twin.png')
+if (!existsSync(input)) {
+  throw new Error(`missing ${input} — A/B stamps are not committed; regenerate with \`pnpm gen:absnapshot before-lowres\``)
+}
+const img = decodePng(readFileSync(input))
 
 const X0 = 168, Y0 = 222, CW = 46, CH = 76, Z = 7 // crop window + zoom (right cap of the green disc)
 
