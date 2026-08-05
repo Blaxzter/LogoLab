@@ -28,7 +28,7 @@ guardrails):
 | # | defect | reproducing case | number | details |
 |---|---|---|---|---|
 | 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.12px, p95 0.43px (was 0.22/0.74; §12's classify fixpoint routes the sliver's mid-blends to better endpoints — earlier 1.44/24.8 was the seam occluded under the circle, §9.6) | §7; §12 |
-| 8 | **Sub-pixel edge placement** slightly behind the crisp engine on smooth high-contrast boundaries (planar fits the integer crack lattice, not the AA coverage field) | nebula (gradient golden; seam metric) | last-decimal seam delta | `docs/planar-tracer.md` §3 |
+| 8 | **Sub-pixel edge placement** — PARTIALLY CLOSED 2026-08-05 (§15.7): `planarSubpixel.ts` displaces every edge chain onto the AA's iso-0.5 crossing before the fit (shared edges stay shared by construction), with three measured-in guards (corner self-guard, apex tangent pin, anchor flatness). Fine-end error collapsed 2–3× (bar-caps 0.089, gear 0.080, sharp-star 0.068 ref-px @1024); `concentric` + `sharp-star` deleted from the scale gate's KNOWN_DEFECTS by the CI contract; gear-teeth corner recall 51→52/60. WHAT REMAINS OPEN: the four coarse-end cases (`overlap` , `aa-seam`, `petals`, `band-cross` — @256's AA is too wide for the guards' fixed sampling geometry, an audit-ART-list follow-up), two witness corners @512, and chupa-chups' small-feature zone trading 0.06px mean @1024 | `test/scale-invariance.test.ts` KNOWN_DEFECTS (4 entries left, only shrinks); witnesses in `examples/logos/` | gate: coarse ≤ 2.0 · max(fine, 0.15) ref-px | **§15**, instrument `scaleDiag.ts --lattice` |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **A junction that is a REAL CORNER is still pinned to its integer lattice corner** — the residue of the closed #15 (§14, the weak-boundary pin). A band-seam junction now lands on the strong edge it interrupts; a junction that IS a corner of the art does not, so an edge spanning one of each trades a constant offset for a TILT. Same for a corner NEAR a junction: the seam truncates the arm `snapCornerToArms` reconstructs the apex from (§10.6's short-arm regime), which is why the Affinity apex did not improve | `affinity-designer.svg` @512 flat (private corpus, **ungated**); the mechanism is generic to any junction the art corners at | the mark's 133px top edge: constant 1.06px offset → mean 0.69 with **0.71px swing**; triangle apex **1.54px** (0.97 with gradients ON, i.e. with no seam cutting its arm) | §14.3 |
@@ -2239,3 +2239,188 @@ cut by a weak seam — the junction lands on the true edge, a 65° corner under 
 does not move, equal contrast moves nothing, and no palette is byte-identical) and by
 `band-cross`, which stays a CONTROL: it pins that flat weak boundaries are harmless, and it
 must stay green.
+
+## 15. Cross-resolution consistency — the lattice floor, measured (§0 #8, Phase 0: 2026-08-04)
+
+**Symptom (user-reported, /labs/gallery, five marks at once).** Every visible defect the
+user named — chupa-chups' ® disintegrating, cnn's uneven gap, coca-cola's bump on a smooth
+curve, ahrefs' arch flattening to a trapezoid, bluetooth's rune — shrinks 3–4× when the
+SAME artwork is rasterized at 1536 instead of 512, with nodes rising only 8–20%. Not one
+of them is a fit-logic bug: output quality is a function of raster resolution rather than
+of the artwork. That is §0 #8, and this section is its Phase 0 — the instrument and the
+numbers, landed BEFORE any fix (the §12 discipline).
+
+### 15.1 The hole: no gate compares two resolutions
+
+Every gate scores ONE resolution independently — truth-gate @512, the LOWRES lane @256 —
+each against tolerances calibrated at THAT raster, in that raster's pixels. Both honest,
+and structurally blind to the question "is this the same shape at two sizes?": a tracer
+whose geometry is chosen by the lattice passes all of them, at every size, forever.
+
+`src/devtest/scaleScore.ts` (the arithmetic) + `scaleDiag.ts` (the CLI) close it. Each
+case is traced at 256/512/1024; every lane's doc is affine-scaled into the FINEST lane's
+space (exact on Bézier control points — nothing resampled or re-fitted) and scored there
+against the authored SVG, with the reference raster driving the §9.6 visibility filter.
+The only thing that differs between lanes is the resolution the tracer saw.
+
+  drift = chamfer(coarsest) / chamfer(finest), both in reference px.
+  1.00 = the trace is a function of the ARTWORK.  4.00 = of the LATTICE (over this span).
+
+Traps the instrument is built against, all three of which produced confident wrong
+conclusions the day the witnesses were measured: rasterizeDoc silently CROPS an enlarged
+doc (geometry-only end to end, nothing renders); meanΔE PREFERS a structurally broken
+trace (headline numbers are structural); a mean hides a destroyed small glyph (p95 +
+worst-cell always reported).
+
+### 15.2 The numbers: the corpus sits AT the pure-lattice line
+
+Tier 0 @256/512/1024 (16 scorable): median drift **4.69×** over a 4× lattice. Every
+curved case lands in 3.7–7.2 (overlap 6.96, cross-bars 7.40, bar-caps 7.16, aa-seam 4.98,
+sharp-star 4.69, nebula 4.40, concentric 4.28, gradient-flat 4.02, petals 3.98,
+band-cross 3.69, bloom 2.67). The witnesses, same sweep: cnn **5.10×**, chupa-chups
+**5.30×**, coca-cola **6.11×** (chamfer 1.41 → 0.23 ref-px). bluetooth (`<use>`) and
+ahrefs (clipped) have no readable answer sheet — the self-consistency lane (coarsest
+geometry vs finest geometry directly, no answer sheet needed) reads 1.95/19.6 and
+1.42/3.5 px (μ/p95; ideal 0).
+
+Two structural findings ride along: corner recovery on the witnesses CLIMBS with
+resolution (75% @256 → 87.8% @512 → 94.7% @1024 — the product traces at 2048, the lab
+judges at 512, §0's lab-bias note), and `checker` reads 0.003px error at every size —
+axis-aligned art is EXACTLY representable on the lattice, which is why the whole family
+stayed invisible on fixtures and shows on curved brand art.
+
+### 15.3 Attribution: the error is in the samples, not the fit
+
+Drift alone confirms the consequence, not the cause — and two causes predict the same
+drift: samples quantized to the crack lattice, or absolute-px fit tolerances meaning
+different things at different sizes. `scaleDiag --lattice` separates them: score the RAW
+crack chains (`net.edges[].pts`, exactly what the fitter is handed — via an inert
+`onPlanarLabels` tap in index.ts, A/B verified 0/33 files changed) against the authored
+SVG in the same reference space.
+
+Measured, in each lane's OWN pixels:
+
+```
+median lattice error:  @256 0.223px   @512 0.224px   @1024 0.226px
+```
+
+A CONSTANT — the quantization floor of integer-lattice sampling (the theoretical mean
+|error| of a uniform ±0.5px quantizer along both axes lands exactly in this range). And
+"fit adds" ≤ 1.0× on most cases (concentric 0.40×, annulus 0.35× — the circle snap
+AVERAGES lattice noise away; sharp-star 0.67×, petals 0.89×, gear-teeth 0.85×). The fit
+is already extracting more accuracy than its input carries. **No tolerance change can
+recover what the samples never had** — the Phase-0 audit's scale-relative-ε workstream is
+therefore SECOND-order for #8 (it still matters for feature-size-dependent melting, §10).
+
+The sub-pixel information exists and the engine ignores it: the CRISP engine (subpixel.ts)
+builds a continuous coverage field and places marching-squares vertices at true iso-0.5
+crossings — but a coverage field is per-region, and two neighbouring regions must agree on
+ONE shared boundary. Making edges sub-pixel while keeping them SHARED is the open design
+problem; the icon-sheet measurement (same pixels, 3× finer lattice: ink-area drift
+0.75pp → 0.13pp, SSIM 0.864 → 0.946) bounds the available win from below.
+
+### 15.4 The gate
+
+`test/scale-invariance.test.ts` — 7 cases (curved/diagonal boundary only; `checker`-style
+axis-aligned art reports INAPPLICABLE below a 0.05px signal floor, per the
+evaluateTruthGates "n/a is not a pass" discipline), @256 vs @1024, `SCALE_DRIFT_MAX 2.0`.
+The limit is derived, not fitted: there is NO healthy population to calibrate on (the
+corpus sits at the pure-lattice line), so 2.0 encodes "boundary error must improve less
+than proportionally to the raster — the trace must be at least half a function of the
+artwork". It sits below today's whole population and above `annulus`' 1.69, so it is
+demonstrably reachable. Six cases land in `KNOWN_DEFECTS` (the truth-gate boolean
+contract: listed must fail, unlisted must pass, the list only shrinks); `annulus` passes
+on merit and doubles as the control a fix must not cost. Contract verified in both
+directions before landing.
+
+### 15.5 What Phase 0 rules out / defers
+
+- **An ML super-resolution upscaler in front of the tracer** — rejected in the mission
+  brief: it hallucinates edges the tracer then faithfully traces, and plain bilinear 3×
+  already recovers most of the measured win. If SR is ever added it belongs in Cleanup,
+  opt-in.
+- **Fixing via wider tolerances** — the drift is in the samples; tolerances only decide
+  how faithfully the fit reproduces the quantized input.
+- **The /labs/gallery raster cap** (512 vs the app's 2048, hardcoded gradients:false) —
+  real lab bias, understates the tracer, but fixing the lab is not a tracer fix; noted,
+  not a workstream.
+
+Residue, named: `aa-seam`'s @1024 error stalls at 0.228 (the §0 #3 sliver residue, so its
+drift ratio UNDERSTATES the lattice share); `hairlines` drift 24.9× is the thin-feature
+family compounding on top of #8, not pure lattice; aurora (ramp art traced flat) shows
+self 15.8/113.5px — band boundaries are unstable across resolution, expected for
+posterization and out of #8's scope.
+
+### 15.6 The absolute-px constant audit (Phase 0.2)
+
+`docs/absolute-px-audit.md` — 122 constants classified ART (must scale with raster) /
+SENSOR (must NOT — the AA ramp is ~1px at every size) / CAP / UNCLEAR, each from its
+actual comparand with quoted evidence; 25 initial classifications were refuted by an
+adversarial verification pass and corrected. Highlights that are FINDINGS, not just
+classification: `THROUGH_SPAN` 12px (planarThread) reads the same authored junction's
+chord turn as 21.4° @256 but 7.1° @2048 and FLIPS the line-vs-circle winner — §14's
+threading silently degrades off-512; `CHORD_MAX_LEN` 80px (planarReseat) is measured DEAD
+on its own §10.4 driver above ~1024 (the authored chord is 130.7px @2048 > 80); the
+`minRegionArea` px²-floor family compares res²-growing areas against a fixed 50 (measured
+0/80/176/922 across 128→512 for one colour — the §12.5 knife edge, now with numbers). The
+tripwire list (SENSOR constants and what breaks if scaled) is the do-not-touch map for
+every fix in this family. Per the audit's own honesty note, the segment-lane rows are
+single-auditor evidence, and the witness ranking is mechanism inference, not measurement —
+each candidate still needs its own gated case before any change.
+
+### 15.7 The fix: sub-pixel edge displacement + the three guards it needed (2026-08-05)
+
+**The pass** (`planarSubpixel.ts`, `PlanarFitOptions.subpixelEdges`, default ON; OFF or an
+imageless `tracePlanar` call is byte-identical — every label-only caller is unchanged by
+construction). Before fitting, each edge chain's interior points move from the integer
+crack lattice to the iso-0.5 crossing of the LOCAL two-colour coverage profile, read from
+the source raster along the chain normal: two far anchors at ±1.75px (validated against
+the LABEL MAP — one guard covers junctions, thin features and the border), the local
+contrast axis farL−farR (no palette needed), linear interpolation of the projected
+profile, and skip-don't-guess guards (contrast ≥ 12 RGB, blend-segment residual ≤ 16,
+monotone profile, |δ| ≤ 0.75). Sharedness is free — the chain is stored once and both
+regions reference it (the §14 threadJunctions move, applied to whole chains). Corner
+detection, the area guard and the staircase fallback all stay on the LATTICE chain
+(index-preserving displacement makes that a one-line distinction).
+
+**The three guards, each measured in, none designed in advance:**
+1. **Corner self-guard** (in-pass): the AA iso-line ROUNDS every apex, and fitting that
+   rounding melts corners — gear-teeth's 67.3° roots fell 28→6 recovered (recall 51/60 →
+   36/60) while its 80° tips kept their margin. Windowed detection on the lattice cannot
+   see small corners (§10.6's dilution), but on the DISPLACED chain staircase noise is
+   gone, so local turn IS corner evidence at any scale: turn > 35° over ±4 steps reverts
+   ±5 steps to the lattice.
+2. **Tangent pin** (`pinCornerTangents`, per-displaced-edge): the arc fits' end tangents
+   are free within ε and rotate toward the bisector on smooth displaced evidence — a 91°
+   authored corner read 77° from the lattice fit and 51° displaced, crossing the 60°
+   sharp bar (chupa-chups, six letterform corners at once). Apex HANDLES now rotate onto
+   the fitted arm-line directions (the same evidence the apex position already trusts,
+   via `snapCornerToArmsFull`), capped at 30°. In `fitCorneredOpen` the pin is doubly
+   load-bearing: the weak-turn prune reads those tangents to decide if a corner is real.
+   Side effect: gear-teeth 51/60 → **52/60**, one better than the pre-§15 baseline.
+3. **Anchor flatness** (in-pass): an anchor inside a ~3.5px bar carries the right label
+   but never pure colour (the opposite wall's AA reaches it), biasing both walls INWARD —
+   bar-caps @256 narrowed three bars past the area guard into the staircase fallback
+   (82/36/72 nodes, parsimony 5.99×), and coca-cola's thin script corners shifted ~1.8px.
+   |I(±FAR) − I(±(FAR+1))| ≤ 10 RGB or skip. Plus: an area-guard trip on a displaced
+   chain now refits from the LATTICE chain first (the pre-§15 path) before any staircase.
+
+**After (all gates green, suite 344/0):** tier-0 fine-end chamfer collapses — bar-caps
+0.181 → **0.089**, gear-teeth 0.177 → **0.080**, sharp-star 0.125 → **0.068**, concentric
+0.081 → **0.039** ref-px @1024 — and two scale-gate cases pass outright: **concentric**
+(drift 4.28× → reg. 1.19×) and **sharp-star** (4.69× → reg. 1.76×), both deleted from
+KNOWN_DEFECTS by the CI contract. Witnesses: ahrefs self-consistency 1.42 → **1.24**
+(p95 3.53 → 3.33), bluetooth 1.95 → 1.90, cnn @1024 0.237 → **0.212**; corner recovery
+@256 **75.0 → 76.4%**, @1024 equal, @512 **87.8 → 85.4%** (−2 corners — see residue).
+gear 52/60, bar-caps 43/43, cross-bars/checker/hairlines all green at both lanes.
+
+**Residue, named:** (a) two witness corners @512 (chupa-chups 54/55's one, plus one
+more across the marks) still soften or shift ≤ ~3px — small-corner apex placement on
+mixed lattice/displaced arms; (b) chupa-chups @1024 chamfer 0.236 → 0.301 (the guards
+revert most displacement on its small-feature-dense ® zone, and what remains trades a
+little mean error there); (c) the four remaining scale-gate KNOWN_DEFECTS (overlap,
+aa-seam, petals, band-cross) improved at the fine end but their COARSE ends still ride
+the lattice — the @256 lane's AA is too wide relative to the guards' sampling geometry
+for displacement to survive its own safety checks there. The next lever for those is
+resolution-aware guard geometry, which is workstream-2 territory (the audit's ART list),
+not more displacement.

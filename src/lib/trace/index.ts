@@ -319,6 +319,13 @@ export async function traceImage(
    *  side channel: it never touches the returned geometry, so output stays byte-
    *  identical, and when omitted NOT EVEN `performance.now()` is called (zero cost). */
   onStage?: (name: string, ms: number) => void,
+  /** Optional sink for the FINAL label map — the exact array `tracePlanar` is handed,
+   *  after heal / remove-heal / background union. Diagnostic only (`scaleDiag.ts` scores
+   *  the raw crack lattice against the authored SVG, to separate lattice-placement error
+   *  from fit error). Same contract as `onStage`: a pure side channel, never read back,
+   *  so the returned geometry is byte-identical whether or not it is supplied. Planar
+   *  colour path only — mono and the legacy layer path never call it. */
+  onPlanarLabels?: (l: { labels: Int32Array; width: number; height: number }) => void,
 ): Promise<EditableDoc> {
   const { width, height } = imageData
   // Emits the ms since the previous mark under `name`, then re-marks. `mark()` starts a
@@ -563,11 +570,17 @@ export async function traceImage(
       }
     }
     const labels = bgUnion ? bgUnion.labels : healed
+    onPlanarLabels?.({ labels, width, height })
     const fitOpts = planarFitOptionsFor(options)
     // The palette rides along for the §14 contrast rank only: it lets the fit tell a
     // posterization band seam (weak) from a real logo edge (strong) so the weak one
     // stops aiming the strong one. Geometry-only when omitted.
-    const trace = tracePlanar(labels, width, height, fitOpts, q.palette)
+    // The source raster rides along for §15's sub-pixel edge placement: the chains are
+    // displaced from the integer crack lattice onto the AA's iso-0.5 crossing before the
+    // fit (planarSubpixel.ts). Guards inside the pass fall back to the lattice wherever
+    // the local two-colour model does not hold (junction neighbourhoods, thin features,
+    // healed boundaries the image no longer witnesses).
+    const trace = tracePlanar(labels, width, height, fitOpts, q.palette, imageData)
     stage('trace') // includes the flat-art prep above (bg detect / remove-heal / heal-spikes)
     // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
     // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a

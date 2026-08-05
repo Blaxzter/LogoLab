@@ -93,6 +93,28 @@ export interface PlanarFitOptions {
    * scale-relative ε SUBSUMES it. Leave true in production.
    */
   cornerVeto: boolean
+  /**
+   * §0 #8 sub-pixel edge placement (benchmarks §15, default true). Before fitting,
+   * displace each edge chain's interior points from their integer crack-lattice
+   * position to the iso-0.5 crossing of the LOCAL two-colour coverage profile, read
+   * from the source raster along the chain normal (planarSubpixel.ts). Sharedness is
+   * free: the chain is stored once and referenced by both regions. Only effective
+   * when the caller hands tracePlanar the source image — callers that pass labels
+   * alone (tests, diagnostics) are byte-identical by construction. `false` restores
+   * the pure lattice chains — the pre-§15 baseline, for the Test view A/B.
+   */
+  subpixelEdges: boolean
+  /**
+   * INTERNAL (set per-edge by assemblePlanar, never in defaults): pin each snapped
+   * apex's handle DIRECTIONS onto its fitted arm lines. Only meaningful on a §15
+   * sub-pixel displaced chain, where the arc fits' end tangents are free within ε and
+   * rotate toward the bisector (the displaced evidence near an apex is genuinely
+   * smooth, so nothing anchors the tangent) — a 91° authored corner read 77° from the
+   * lattice fit and 51° displaced, crossing the 60° sharp bar. The arm lines read the
+   * true flank directions at any scale, and the pin restores the corner without
+   * touching its position. Absent/false ⇒ byte-identical fits.
+   */
+  pinCornerTangents?: boolean
 }
 
 export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
@@ -110,6 +132,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   localScaleK: 0,
   cornerVeto: true,
   fitThrough: true,
+  subpixelEdges: true,
 }
 
 /** Flat-art line cost: > cubicCost so the DP prefers a CUBIC on any span where a
@@ -650,6 +673,21 @@ export function armLine(pts: Vec[]): { c: Vec; d: Vec } {
  * arm), so a bad fit can never push the apex off into space.
  */
 function snapCornerToArms(pts: Vec[], c: number, inGap: number, outGap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0): Vec {
+  return snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax).p
+}
+
+/**
+ * `snapCornerToArms`, but ALSO returning the two fitted arm DIRECTIONS (unit, oriented
+ * along the chain's travel: `inDir` INTO the apex, `outDir` AWAY from it) whenever the
+ * reconstruction had usable arm evidence — null on every lattice-fallback path. The §15
+ * tangent pin consumes them: on a sub-pixel displaced chain the fitted arcs' end tangents
+ * at an apex are free within ε and rotate toward the bisector (a 91° authored corner read
+ * 77° from the lattice fit and 51° displaced — under the 60° sharp bar), while the arm
+ * lines read the true flank directions at any resolution.
+ */
+function snapCornerToArmsFull(
+  pts: Vec[], c: number, inGap: number, outGap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0,
+): { p: Vec; inDir: Vec | null; outDir: Vec | null } {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
   // Base window [gap..span], then extend up to `max` while the arm stays COLLINEAR.
@@ -682,14 +720,21 @@ function snapCornerToArms(pts: Vec[], c: number, inGap: number, outGap: number, 
   // from 3–5 phase-noise samples lands 2.6–7.9px off. Keep the lattice apex.
   // (The threshold was SWEPT: raising it to 11/14 collapses recall to 57–62% —
   // medium arms genuinely profit from reconstruction; only the shortest do not.)
-  if (Math.min(inSpan, outSpan) < SNAP_GAP + 4) return { x: pts[c].x, y: pts[c].y }
+  if (Math.min(inSpan, outSpan) < SNAP_GAP + 4) return { p: { x: pts[c].x, y: pts[c].y }, inDir: null, outDir: null }
   const inPts = collect(-1, inGap, inSpan, inMax)
   const outPts = collect(1, outGap, outSpan, outMax)
-  if (inPts.length < 2 || outPts.length < 2) return { x: pts[c].x, y: pts[c].y }
+  if (inPts.length < 2 || outPts.length < 2) return { p: { x: pts[c].x, y: pts[c].y }, inDir: null, outDir: null }
   const a = armLine(inPts)
   const b = armLine(outPts)
+  // Orient along chain travel: `a` was sampled BEFORE the apex (in), `b` AFTER (out).
+  const orient = (d: Vec, from: Vec, to: Vec): Vec => {
+    const s = d.x * (to.x - from.x) + d.y * (to.y - from.y)
+    return s >= 0 ? { x: d.x, y: d.y } : { x: -d.x, y: -d.y }
+  }
+  const inDir = orient(a.d, pts[wrap(c - inSpan)], pts[c])
+  const outDir = orient(b.d, pts[c], pts[wrap(c + outSpan)])
   const det = a.d.x * -b.d.y - a.d.y * -b.d.x
-  if (Math.abs(det) < 1e-6) return { x: pts[c].x, y: pts[c].y }
+  if (Math.abs(det) < 1e-6) return { p: { x: pts[c].x, y: pts[c].y }, inDir, outDir }
   const rx = b.c.x - a.c.x
   const ry = b.c.y - a.c.y
   const t = (rx * -b.d.y - ry * -b.d.x) / det
@@ -706,8 +751,8 @@ function snapCornerToArms(pts: Vec[], c: number, inGap: number, outGap: number, 
   // keep the lattice corner.
   const shortSpan = Math.min(inSpan, outSpan)
   const allow = shortSpan >= SNAP_SPAN ? Math.max(inSpan, outSpan) : Math.max(2, 0.5 * shortSpan)
-  if (dist({ x: ix, y: iy }, pts[c]) > allow) return { x: pts[c].x, y: pts[c].y }
-  return { x: ix, y: iy }
+  if (dist({ x: ix, y: iy }, pts[c]) > allow) return { p: { x: pts[c].x, y: pts[c].y }, inDir, outDir }
+  return { p: { x: ix, y: iy }, inDir, outDir }
 }
 
 /**
@@ -1004,6 +1049,28 @@ function snapCapCorner(pts: Vec[], c: number, sign: -1 | 1, toLong: number, capL
  * says it IS a line, and a cubic fitted over ≤7 ragged points bends its end
  * tangents enough to read a true 90° corner as 45° (§0 #6b, capDiag).
  */
+/** Max rotation (deg) the §15 tangent pin may apply to an apex handle. Beyond this the
+ *  arm-line and the fitted tangent genuinely disagree — a curved arm — and the line is
+ *  not the boundary's tangent, so pinning would flatten real curvature at the corner. */
+const PIN_ROTATE_MAX_DEG = 30
+
+/** Rotate one handle of an apex node onto `dir` (unit, oriented along chain travel),
+ *  keeping its length. `hIn` sits BEHIND the apex along the incoming direction; `hOut`
+ *  AHEAD along the outgoing one. No-op on absent handles and past PIN_ROTATE_MAX. */
+function pinHandle(node: PathNode, which: 'hIn' | 'hOut', dir: Vec): void {
+  const h = node[which]
+  if (!h) return
+  const vx = h.x - node.x
+  const vy = h.y - node.y
+  const len = Math.hypot(vx, vy)
+  if (len < 1e-9) return
+  const sx = which === 'hIn' ? -dir.x : dir.x
+  const sy = which === 'hIn' ? -dir.y : dir.y
+  const cos = (vx * sx + vy * sy) / len
+  if (cos < Math.cos((PIN_ROTATE_MAX_DEG * Math.PI) / 180)) return
+  node[which] = { x: node.x + len * sx, y: node.y + len * sy }
+}
+
 export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOptions): PathNode[] {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
@@ -1020,6 +1087,9 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     capLineOf.set(s, capChordLine(pts, s, partner))
   }
   // Snap each corner, capping arm samples to the gap to its neighbour corners.
+  // Arm DIRECTIONS ride along for the §15 tangent pin (null wherever the snap fell
+  // back to the lattice or the corner is cap-resolved — those get no pin).
+  const armDirsAll: ({ inDir: Vec | null; outDir: Vec | null } | null)[] = []
   const snappedAll: Vec[] = C.map((c, k) => {
     const prev = C[(k - 1 + C.length) % C.length]
     const next = C[(k + 1) % C.length]
@@ -1027,8 +1097,14 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     const toNext = wrap(next - c)
     // Cap corners: intersection of the LONG arm with the shared cap-chord line
     // (snapCapCorner). The long arm is on the non-cap side.
-    if (capPartner.has(c)) return snapCapCorner(pts, c, -1, toPrev, capLineOf.get(c)!, CAP_SNAP_MAX)
-    if (capPartner.get(prev) === c) return snapCapCorner(pts, c, 1, toNext, capLineOf.get(prev)!, CAP_SNAP_MAX)
+    if (capPartner.has(c)) {
+      armDirsAll.push(null)
+      return snapCapCorner(pts, c, -1, toPrev, capLineOf.get(c)!, CAP_SNAP_MAX)
+    }
+    if (capPartner.get(prev) === c) {
+      armDirsAll.push(null)
+      return snapCapCorner(pts, c, 1, toNext, capLineOf.get(prev)!, CAP_SNAP_MAX)
+    }
     const inGap = armGap(toPrev)
     const outGap = armGap(toNext)
     const inSpan = Math.min(SNAP_SPAN, Math.max(inGap + 1, toPrev - 1))
@@ -1037,21 +1113,26 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     // still never past the neighbouring corner.
     const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1))
     const outMax = Math.min(SNAP_SPAN_MAX, Math.max(outGap + 1, toNext - 1))
-    return snapCornerToArms(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
+    const full = snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
+    armDirsAll.push({ inDir: full.inDir, outDir: full.outDir })
+    return full.p
   })
   // Drop corners whose snapped point coincides with the previous (a shoulder pair
   // that both resolved onto the same apex) — incl. the cyclic first/last pair.
   const idx: number[] = []
   const snap: Vec[] = []
+  const armDirs: ({ inDir: Vec | null; outDir: Vec | null } | null)[] = []
   for (let k = 0; k < C.length; k++) {
     const last = snap[snap.length - 1]
     if (last && dist(last, snappedAll[k]) < 1) continue
     idx.push(C[k])
     snap.push(snappedAll[k])
+    armDirs.push(armDirsAll[k])
   }
   if (snap.length >= 2 && dist(snap[0], snap[snap.length - 1]) < 1) {
     idx.pop()
     snap.pop()
+    armDirs.pop()
   }
   if (idx.length < 2) return fitLoopEdge(presmooth(pts, opts.smoothPasses, false), opts)
   // A cap arc is line-pinned only while its start and twin are still ADJACENT
@@ -1101,6 +1182,26 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     kept[0] = { x: snap[k].x, y: snap[k].y }
     kept[kept.length - 1] = { x: snap[(k + 1) % arcs].x, y: snap[(k + 1) % arcs].y }
     fitted.push(fitOpenArc(presmooth(kept, arcSmoothPasses(opts.smoothPasses, kept.length), true), opts))
+  }
+
+  // §15 TANGENT PIN (pinCornerTangents — set only for sub-pixel displaced chains).
+  // Rotate each apex-adjacent HANDLE onto its fitted arm-line direction, keeping the
+  // handle's length and the apex position. The arc fit's end tangent is free within ε,
+  // and on a displaced (genuinely smooth) chain it rotates toward the bisector — the
+  // corner survives as a node but its measured turn softens below the 60° sharp bar
+  // (chupa-chups: authored 91°, lattice fit 77°, displaced 51°). The arm line is the
+  // same evidence the apex POSITION already trusts. ROTATE_MAX caps the correction:
+  // a larger disagreement means the arm is genuinely curved and the line is not its
+  // tangent — leave the fit alone there.
+  if (opts.pinCornerTangents) {
+    for (let k = 0; k < arcs; k++) {
+      const dirs = armDirs[k]
+      if (!dirs) continue
+      const arriving = fitted[(k - 1 + arcs) % arcs]
+      const leaving = fitted[k]
+      if (dirs.inDir && arriving.length >= 2) pinHandle(arriving[arriving.length - 1], 'hIn', dirs.inDir)
+      if (dirs.outDir && leaving.length >= 2) pinHandle(leaving[0], 'hOut', dirs.outDir)
+    }
   }
 
   // Stitch into a closed node list: each shared corner is one node carrying the
@@ -1200,6 +1301,7 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
   for (;;) {
     if (C.length === 0) return fallback()
 
+    const armDirsAll: { inDir: Vec | null; outDir: Vec | null }[] = []
     const snappedAll: Vec[] = C.map((c, k) => {
       const toPrev = c - (k > 0 ? C[k - 1] : 0)
       const toNext = (k < C.length - 1 ? C[k + 1] : n - 1) - c
@@ -1211,16 +1313,20 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
       const outSpan = Math.min(SNAP_SPAN, Math.max(outGap + 1, toNext - 1), n - 1 - c)
       const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1), c)
       const outMax = Math.min(SNAP_SPAN_MAX, Math.max(outGap + 1, toNext - 1), n - 1 - c)
-      return snapCornerToArms(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
+      const full = snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
+      armDirsAll.push({ inDir: full.inDir, outDir: full.outDir })
+      return full.p
     })
     // Drop corners whose snap collapsed onto the previous breakpoint or an endpoint.
     const idx: number[] = []
     const snap: Vec[] = []
+    const armDirs: { inDir: Vec | null; outDir: Vec | null }[] = []
     for (let k = 0; k < C.length; k++) {
       const prevPin = snap[snap.length - 1] ?? pts[0]
       if (dist(prevPin, snappedAll[k]) < 1 || dist(pts[n - 1], snappedAll[k]) < 1) continue
       idx.push(C[k])
       snap.push(snappedAll[k])
+      armDirs.push(armDirsAll[k])
     }
     if (idx.length === 0) return fallback()
 
@@ -1245,6 +1351,21 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
       kept[0] = { x: pins[k].x, y: pins[k].y }
       kept[kept.length - 1] = { x: pins[k + 1].x, y: pins[k + 1].y }
       fitted.push(fitOpenArc(presmooth(kept, arcSmoothPasses(opts.smoothPasses, kept.length), true), opts))
+    }
+
+    // §15 TANGENT PIN — same as fitCorneredLoop's, and doubly load-bearing here: the
+    // weak-turn prune below reads these very tangents to decide whether a corner is
+    // REAL, so a displaced chain's softened tangents would get a genuine corner
+    // pruned outright, not just rounded.
+    if (opts.pinCornerTangents) {
+      for (let k = 0; k < idx.length; k++) {
+        const dirs = armDirs[k]
+        if (!dirs) continue
+        const arriving = fitted[k]
+        const leaving = fitted[k + 1]
+        if (dirs.inDir && arriving.length >= 2) pinHandle(arriving[arriving.length - 1], 'hIn', dirs.inDir)
+        if (dirs.outDir && leaving && leaving.length >= 2) pinHandle(leaving[0], 'hOut', dirs.outDir)
+      }
     }
 
     // Stitch: each interior breakpoint is ONE hard node — arriving hIn, leaving

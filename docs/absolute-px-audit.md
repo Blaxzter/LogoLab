@@ -1,0 +1,223 @@
+# Phase-0 Absolute-Pixel Constant Audit — LogoLab tracer
+
+**Scope of evidence.** Three auditor lanes are represented: `planarFit` (fit/corner/cap), `junction` (planarThread/planarReseat/planarJunction/planarWeld), `segment` (paletteSegment/quantize/segment). The adversarial verifier ran on the planarFit and junction lanes only — **every segment-lane classification below is unverified** and should be treated as one-auditor evidence. Corrections applied by the verifier are marked **[CORRECTED]** with the original class in brackets.
+
+---
+
+## ART — must scale with raster resolution (the actionable list)
+
+| constant | file:line | value | compared against | already scale-aware? | consequence at 2× raster |
+|---|---|---|---|---|---|
+| `SNAP_SPAN` (arm evidence window) **[CORRECTED: was SENSOR]** | planarFit.ts:586 | 14 | `min(SNAP_SPAN, max(gap+1, toPrev-1))` — an inter-corner lattice span, i.e. px of artwork arm | no | 14 steps covers half the physical arm; the AA role is carried by a *different* constant (SNAP_GAP), so nothing argues for holding it fixed. Sibling `SNAP_SPAN_MAX=40` is plainly artwork-length. |
+| `THROUGH_SPAN` | planarThread.ts:46 | 12 px of raw lattice arc per arm | Euclidean arc length along the artwork outline (armWindow accumulates `dist`) | no | **Measured**: same authored junction reads chord turn 21.4°→13.2°→13.2°→7.1° at 256/512/1024/2048; @256 it trips the 20° gate and is dropped (15/16 junctions move), @512+ it does not. Also flips the line-vs-circle winner (circleDev 0.79→1.99, lineDev 1.25→0.67). |
+| `CHORD_MAX_LEN` | planarReseat.ts:91 | 80 px | `dist(a,b)` between the two junction anchors of a candidate chord edge — an artwork span | no | **Measured**: gradient-flat's authored disc chord is 32.9px @512 but 130.7px @2048, so the veto fires and §10.4's occluder-chord straightening is **dead on its own driver case** above ~1024. |
+| `ARM_MAX` | planarReseat.ts:53 | 110 px along the fitted boundary | `cum` = polyLen of flattened fitted cubics walking inward; also becomes `Prim.conf`, the pair-ranking key | no | Evidence budget covers half the artwork boundary at 1024, a quarter at 2048; `conf` saturates for more arms, so *which* primitive pair wins the re-seat can change with raster size on identical art. |
+| `ARM_SPAN` | planarJunction.ts:33 | 10 lattice steps | index offset into the unit-crack chain feeding `armLine` TLS — px of outline | no | Direction is fitted from the first half of the arm at 1024; at 256 the window spans two authored features and blends them. (Behind `refineJunctions`, default false.) |
+| `R_MIN` | planarReseat.ts:67 | 6 px | fitted circle radius `c.r` — the size of a real round feature | no | An authored dot that is r=5 @512 is r=10 @1024 and must be judged identically; fixed floor rejects the circle primitive at low res, so the junction loses its second primitive and is never corrected. |
+| `minRegionArea` → `real[]` flat-interior floor | paletteSegment.ts:783 | 64 default / **50 production** | `flatInteriorCounts[i]` — a pixel **area** (≈(s−2)²) | no | Grows ≥quadratically: measured 0/80/176/922 @128/192/256/512 for one authored colour. `real[i]` is the only thing exempting an entry from the minShare drop, from AA-blend classification, and counting into `dominantColors` (which selects the **engine**). Same art, different palette per raster. |
+| `minRegionArea` → `modal[]` thin-feature floor | paletteSegment.ts:816 | 64 / **50** | `modalColorCounts[i]` — pixel count of the modal exact RGB; ~res¹ for sub-px features, res² once wider than a pixel | no | The *only* keep-test a sub-pixel authored feature can pass. **Measured knife edge**: hairlines' fringe entries sit at exactly 50 vs a floor of 50 @256 (101/119 @512, 198/201 @1024). Below 256 the feature dissolves into the nearest survivor. |
+| `keepDistinctMinArea` (= minRegionArea) → anchor floor | quantize.ts:320 (and :389) | 64 / **50** | `flatCount` per exact RGB — an area | no | Gates both the §12.3(a) anchor **split** and the §9.7 merge **veto**. Measured res² fall (2796/586/287/94 @512/256/192/128) ⇒ below ~160px raster the anchor is gone, the split cannot fire, two authored colours fuse. Also means the Despeckle dial silently moves the palette. |
+| `minRegionArea` → `despeckleComponents` | paletteSegment.ts:856 (test at :83) | 64 / **50** | `pixels.length` of a 4-connected component — px² | §12.5 **rejected** scaling this: it is the user-facing Despeckle dial ("absolute px², same across engines") | ART by measurement, defended by contract: dial strength in *artwork* units falls as 1/res². Honest note — the `checker` witness was tried and **falsified**: tessellations survive every floor 0–800 at 192–1024 because dissolution cannot cascade. The floor bites *isolated* small features. |
+| `minRegionArea` → `restoreErasedComponents` | paletteSegment.ts:854 (test at :515) | 64 / **50** | `pixels.length` of a pre-modeFilter 8-connected component | same Despeckle contract | A thin feature under 50px² total footprint is never rescued from the mode filter — and footprint ∝ res, so the rescue is least available exactly at the resolution that needs it. |
+| `minRegionArea` (SegmentOptions) → `mergeSmallRegions` | segment.ts:1133 (also :1153, :1172) | 0 default / **50** production | `cnt[g]`, a macro-region opaque pixel count | same contract | MS/gradient path twin. Below ~362px raster no region scores `keepScore=1`, so slivers chain through each other instead of collapsing — a qualitative change, not just a shifted threshold. |
+| `minFacing` | segment.ts:145 | 4 observations | count of (𝒟-pixel × axis) facing observations ∝ shared boundary **length in px** (𝒟 total measured 917/1879/3718 @256/512/1024) | no | A short authored contact edge with f=3 @512 has f≈6 @1024: the must-stay-separate veto does not fire at 512 and does at 1024. **Region topology changes with raster size** — the coarsest thing the tracer can get wrong. No corpus pair yet exhibited straddling f=4. |
+| `nearestSmoothPixel` snap radius | segment.ts:199 | 64 px (capped by max(w,h)) | expanding Chebyshev ring radius from a marker's pixel position; markers arrive in normalized coords | no | 12.5% of image width @512, 3% @2048 — the same hand-placed marker snaps at 512 and silently no-ops at 2048, losing keep-separate protection. Low severity (marker path only). |
+
+---
+
+## SENSOR — must NOT scale (see tripwires below for what breaks)
+
+| constant | file:line | value | compared against | already scale-aware? | at 2× raster |
+|---|---|---|---|---|---|
+| `smoothPasses` | planarFit.ts:100 | 2 | pass count of a fixed 3-tap [.25,.5,.25] over consecutive lattice indices (±2px support) | indirectly: `arcSmoothPasses` throttles by arc length; production overrides from the Smoothing dial (index.ts:297) | melts the same 1px staircase; unchanged |
+| `arcSmoothPasses` thresholds | planarFit.ts:611 | 16 / 9 | `kept.length` — samples on an inter-corner arc | IS the §10.6 precedent | crossover is a fixed sample count because both costs are (1 lattice unit)/(arc steps) |
+| `SNAP_COLLINEAR` | planarFit.ts:618 | 0.75 px | perp deviation of the next sample from the TLS arm line | none needed | ±0.5px lattice quantization is ±0.5px at 256 and 2048 |
+| `CAP_CHORD_MAX` | planarFit.ts:809 | 10 | `dist(pts[A],pts[B])`, rasterized bar-end width | none | resolver simply stops firing (w7→w14 caps read fine on the plain path) — **cheap falsifier below** |
+| `CAP_FLAT` | planarFit.ts:812 | 1.3 px | max perp dev of the cap interior from the A→B chord | none | ±0.5–1px lattice/AA residual, invariant |
+| `CAP_JOIN_GAP` | planarFit.ts:813 | 6 | non-sharp vertices between two sub-threshold runs | none | shoulder runs sit 14px apart, never join, resolver correctly idles |
+| `CAP_SNAP_MAX` | planarFit.ts:814 | 2.5 px | how far arm∩chord moves a cap corner | none — **numerically pinned to geomScore `CORNER_MATCH_R=2.5`** | allowance is half the artistic error; tightens in the good direction |
+| `CAP_ARM_K` | planarFit.ts:816 | 10 | seed offset from group centre = CAP_CHORD_MAX/2 + CORNER_WINDOW + 1px margin | none | seed window no longer wraps a neighbour corner ⇒ the collinearity guard weakens; anti-parallel test alone separates cell corner from bar end |
+| `CAP_ARM_SEED` | planarFit.ts:818 | 6 | vertices in the seed line fit | none | same statistics at any raster |
+| `CAP_EXTEND_DEV` | planarFit.ts:823 | 1.2 px | perp dev of next inward vertex from the re-fitted arm line | none — **the only non-plateau constant in the file** (1.0 costs chamfer, 1.4 eats gear corners) | ±1px isophote phase chatter, invariant |
+| coincident-corner drop | planarFit.ts:1048 (also :1052, :1221) | 1 px | distance between two snapped sub-pixel apexes | none | sub-lattice coincidence; a second, undocumented corner-fusion distance behind CORNER_MERGE |
+| cap-trim interior floor | planarFit.ts:1099 (also :1239) | 4 (⇒ ≥2 interior points) | arc/piece sample count | trim amount rides `armGap` | self-disables upward |
+| `fitCorneredOpen` min edge | planarFit.ts:1192 | 9 (=2·SNAP_GAP+3) | `n`, samples on the open edge | derived from SNAP_GAP/CORNER_WINDOW | self-disables upward; @256 short edges silently fall back to the plain fit (ungated) |
+| `MIN_MOVE` | planarReseat.ts:48 | 1.5 px | `dist(best.H, v)`, the junction slide | none | **Measured px-constant** over 8× raster (overlap 1.52–1.85px @512–1536; gradient-flat 1.85–8.08px @256–2048). Knife edge: overlap re-seats 0/2/2/2/4/0/0 junctions @256…2048 — *phase*, not resolution |
+| `MAX_SLIDE` | planarReseat.ts:43 | 12 px | `hd`, vertex→intersection distance | none (the radius-relative guard is a separate line) | ~2.5× headroom over the measured population, and it does not shrink; consistent with `MIN_ANGLE_SIN` (1px/sin5° ≈ 11.5px) |
+| `NEAR_TOL` | planarReseat.ts:41 | 3.0 px | `primDist(v, pi)` — across-boundary residual | none | across-distance ≈ slide × sin(incidence) ≈ 1px + fit tol, invariant |
+| `MIN_LINE_ARM` | planarReseat.ts:64 | 8 px | fitted arm length for a direction estimate | none | angular noise = (fixed sub-px placement error)/(arm px), so a fixed px count is right |
+| `MIN_ARM` | planarThread.ts:49 | 6 px | `min(a.arm, b.arm)` raw arc collected | none | staircase phase noise is ±0.5px/endpoint at every raster; measured never binding (arms saturate at 12) |
+| `THROUGH_DEV` | planarThread.ts:54 | 1.2 px | `min(lineDev, circleDev)` over the joined window | none | **Measured flat**: best-dev 0.79/0.88/0.77/0.72 @256…2048. *If THROUGH_SPAN is ever scaled, this must scale with it.* |
+| `MAX_MOVE` | planarThread.ts:66 | 2.0 px | lattice corner → its projection on the through fit | none | **Measured** max move 0.68/0.67/0.76/0.72 px across 256…2048 — safest constant in the family |
+| `MAX_DISP` | planarJunction.ts:35 | 2.0 px | lattice corner → LS intersection of incident arm lines | none | same lattice residual + ill-conditioning runaway guard |
+| `ARM_GAP` | planarJunction.ts:32 | 1 | index offset excluding the junction corner itself | n/a | already at its floor |
+| `MIN_ARM_PTS` | planarJunction.ts:34 | 2 | `ap.length` | n/a | algebraic rank condition |
+| `win.length < 5` | planarThread.ts:234 | 5 | joined-window point count | n/a | well-posedness floor; never binds |
+| `RESEAT_WELD_LEN` | planarReseat.ts:672 | 2.0 px | `edgeLength` of a junction micro-edge | derived from MIN_MOVE | rasterization split ~1 lattice cell; real thin features double away from it |
+| weld `radius` | planarWeld.ts:107 | 2.0 (production) | `edgeLength` of an open edge between two junctions | **the only scale hook in these four modules** (a parameter) | AA/posterization split distance, invariant |
+| `spanCap` | planarWeld.ts:153 | radius×2 = 4.0 | max pairwise vertex distance in a cluster | relative to `radius` | bounds one rasterized crossing's extent |
+| lollipop guard | planarWeld.ts:173 | radius = 2.0 | `edgeLength` of the other edge joining the fused pair | relative to `radius` | ~50× margin (129px outline vs 2px micro-edge), widens with res |
+| border guard band | planarReseat.ts:544 | 1 px inset | vertex coords vs 1 / w−1 / h−1 | none | frame sits at 0 and w at every raster |
+| `CHORD_COLLINEAR_OFF` | planarReseat.ts:86 | 1.0 px | perp offset of the second line's anchor from the first | none | fit noise, px-constant; lever-arm growth and angular-error shrink roughly cancel |
+| `minShare` | paletteSegment.ts:42 | 0.006 / **0.007** production | `counts[i]/totalOpaque` — a ratio, both terms res² | §12.5 rejected scaling; **measurement confirms** (shares stable to ~2% across 192/256/512) | nothing for 2-D regions. Caveat: AA-blend shares fall as ~1/res, so blends drop under the floor on their own at high res and outrank real features at low res |
+| `EDGE_LOCAL_MIN` | paletteSegment.ts:399 | 0.6 | `edgeFractions[i]` | none | **Measured**: true AA blends hold 1.000 at 256/512/1024 (the invariant sensor signature); real regions fall 1/res (checker 0.799→0.502→0.277→0.145). Margin shrinks at low res, not at high |
+| `RESTORE_MAX_SURVIVAL` | paletteSegment.ts:569 | 0.3 | `kept/pixels.length` after modeFilter | none needed | **Measured** survival gap 0.11 (3px square) vs 0.75 (4px); bars 0.000 (w1) vs 0.960 (w2) — ≥2.5× margin both sides. Self-disables safely upward |
+| `modePasses` | paletteSegment.ts:43 | 2 (hard-coded in production) | 3×3 majority passes, ≤1px boundary move each | none needed | erosion budget stays 2px = half the artwork it was |
+| `BLEND_LINE_EPS` | paletteSegment.ts:148 | 10 (eps²=100) | `segDist2` in sRGB — colour space | n/a | AA interpolates in sRGB at any size |
+| `MERGE_DISTANCE` | quantize.ts:16 | 10 | euclidean RGB centroid distance | none (its evidence gate is the res-dependent anchor floor) | centroids stable (≤1 unit @192–512); the hazard is the *veto's* anchor evaporating at low res |
+| `ANCHOR_DISTINCT_DE` | quantize.ts:38 | 4.0 | ΔE76 between anchor colours; pinned to scoreRegions' MATCH_DELTA_E | n/a | invariant by construction |
+| `FLAT_TIGHT2` | paletteSegment.ts:593 | 32² = 1024 | RGB² distance pixel↔assigned flat colour | none | tolerance invariant, but its consumer `flatCoverage` **climbs with res** (petals .984→.998, hairlines .959→.992) against an absolute 0.7 engine gate — a borderline input routes to MS at 256 and palette-first at 1024 |
+| `FEATHER_ALPHA_STD` / `FEATHER_MODE_SHARE` | paletteSegment.ts:178 | 10 / 0.15 | per-label alpha std and modal share | none | a ramp is a ramp at any size; **unmeasured** (gate is inert on the on-white corpus) |
+| alpha opacity mask | quantize.ts:109 (also paletteSegment.ts:621) | 128/255 | pixel alpha byte | n/a | 50% coverage isophote; scaling is not even well-defined |
+| `sigma` | segment.ts:143 | 5 px | facing-scan step count across the MS discontinuity band 𝒟 | none needed | **Measured** 𝒟 horizontal run median 5/5/5 and p90 6/5/5 @256/512/1024 — the band does not widen. Residual risk: a genuinely feathered source edge might |
+| `tauA` | segment.ts:144 | 0.25 | `f/t` — both counts ∝ boundary length, cancels | none needed | decision is scale-free; only eligibility (`minFacing`) is not |
+| `tauS` | segment.ts:142 | 10 (CIELAB ΔE) | mean-colour delta between fine segments | none needed | invariant; second-order only (small regions' means are AA-contaminated at low res) |
+
+---
+
+## UNCLEAR — genuinely mixed; do not act without the measurement in §UNRESOLVED
+
+| constant | file:line | value | compared against | already scale-aware? | consequence at 2× raster |
+|---|---|---|---|---|---|
+| `epsilon` (DEFAULT_PLANAR_FIT) | planarFit.ts:99 | 1.0 | perp distance from lattice chain to RDP chord / cubic maxDev — artwork-vs-primitive px | none (`planarFitOptionsFor` takes no w/h); §10.1's `localScaleK` is the precedent on the *snap* side and says explicitly the fit ε "is still absolute" | Two constants in one. Sensor leg: must stay ≥ the ~±0.5px staircase it exists to absorb. Art leg: at 1024 it discards half the artistic detail it discarded at 512 — same artwork, different design and superlinear node growth per size. **This is what makes the family's "defects shrink 3–4× at 3× raster" headline true.** Any fix needs the §10 `min(ε_abs, k·localScale)` form; needs an unbuilt medial-radius field. |
+| `cornerTurnDeg` | planarFit.ts:106 | 60° | cos of turn across a ±CORNER_WINDOW=4px chord — an angle over an absolute window | §10.6 aligned 70→60 (definition, not scale) | The threshold is scale-free and must not move; the *quantity* it grades is not. An authored 80.1° gear tip reads 53–72° by staircase phase at 512 and cleanly at 1024. Fix belongs to CORNER_WINDOW. |
+| `CORNER_WINDOW` **[CORRECTED: was SENSOR]** | planarFit.ts:125 | 4 | ±index chord half-length; also the `n < 2·win+1` and `lo=win/hi=n−win` guards | none, deliberately (§10.6 swept it; win≤3 quantizes turns into 45°/63° buckets) | Sensor half is real (staircase period is 1/slope, res-independent). But the same index bounds an artwork span: gear corners 7.5–12.5px apart are washed by the fixed ±4px window (recall 21/60), and the whole `resolveLoopCaps` machine exists only because the window over-spans a 7px feature. docs §10/§12 list the non-scaling as an **open defect**, so SENSOR asserts the bug is correct. |
+| `CORNER_MERGE` **[CORRECTED: was SENSOR]** | planarFit.ts:131 (also :1166) | 3 | `dist` between two detected apexes | §10.6 changed 5→3 but left it absolute | Comment states both bounds: above a ~2px rasterized shoulder pair (sensor) *and* below gear-teeth's 7.5px authored chords (art, which halves at 256). §10.7 records a spurious vertex surviving at 3.6px, i.e. the noise it should absorb exceeds the claimed 2px. |
+| `SNAP_GAP` **[CORRECTED: was SENSOR]** | planarFit.ts:585 | 3 | (a) samples skipped at the AA/eroded tip; (b) base of the arm-length threshold at :685; (c) `n < 2·SNAP_GAP+3` chain-extent guard at :1192 | one-sided via `armGap` | Three use sites, two meanings. As a censor it must not scale; as the base of a *swept feature-size* gate it must. Needs splitting before it can be classified. |
+| `armGap` ramp | planarFit.ts:599 **[CORRECTED: was SENSOR]** | min(3, max(1,(steps−1)/4)) | `steps` = inter-corner lattice arc length | IS the §10.6 precedent | Cap 3 and floor 1 are sensor-sized; the interior term is a 25% fraction of an *artwork* span that doubles with the raster, while the AA rounding it censors does not. Output is also reused as a **trim that deletes real points** (:1099, :1235). |
+| `SNAP_SPAN` as full-arm classifier + `allow` | planarFit.ts:708 **[CORRECTED: was ART]** | `shortSpan≥14 ? max(in,out) : max(2, 0.5·shortSpan)` | shorter arm span, then bounds `dist(reconstructed apex, lattice apex)` | IS §10.6's "scale-aware displacement cap" | Verifier's decisive catch: `inSpan`/`outSpan` are **already clamped to SNAP_SPAN by every caller**, so `shortSpan >= SNAP_SPAN` is a window-*saturation* flag and the long-arm budget is pinned at exactly 14px at every resolution. The original "guard disengages on upscaled art up to 40px" reading is wrong. Still mixed: an artwork-derived branch bounding an AA-scale displacement, with a fixed 2px floor. |
+| short-arm bypass (`SNAP_GAP+4`) **[CORRECTED: was SENSOR]** | planarFit.ts:685 | 7 | `min(inSpan,outSpan)`; at :1210 additionally clamped by distance to the chain endpoint (a third meaning) | swept in §10.6, left absolute | Threshold is 3 (AA censor) + 4 (min line-fit samples) compared against an artwork span that doubles. The sweep (11/14 collapses recall to 57–62%) was run at one resolution and cannot separate "7 samples" from "7 artwork px". |
+| `CAP_CHORD_MIN` **[CORRECTED: was SENSOR]** | planarFit.ts:808 | 3 | `dist(pts[A],pts[B])`, rasterized cap width | none; §10.7 plateau | Rejects a non-scaling ≤2px tip plateau from below while forming one window with CAP_CHORD_MAX that must *contain* corpus cap widths, which halve at 256 (a 7px cap → 3.5px, right on the floor). No measured sensor boundary behind the 3 (±1 notch was identical on the whole watchlist). |
+| `THROUGH_TURN_DEG` | planarThread.ts:62 | 20° | `v.turnDeg` from two chords over the fixed THROUGH_SPAN window | none | Threshold is scale-free; the population is not. §14.3's "1.5× margin from both sides" is a 512-only statement: rounded corners read 0–21.4° @256 (gate stops firing) and 0–7.1° @2048. **Fix belongs in THROUGH_SPAN, not here.** |
+| `MIN_ARC_ARM` **[CORRECTED: was ART]** | planarReseat.ts:65 | 24 px | fitted arm length gating a circle claim | none; the radius-relative `hd > 0.5·r` at :571 is the in-module precedent | Discriminability, not size: an arc separates from a line when sagitta ≈ len²/8R clears CIRC_TOL's fixed ~1px floor, so the correct minimum scales as **√k**, neither ART nor SENSOR. It also straddles the needle-mangled terminal zone, which consumes a res-independent slice of the 24px budget. |
+| `CAP_MAX` | planarReseat.ts:58 | 24 px | `segLen[0]`, terminal fitted segment length | none | Two populations with different laws: mangle ~px-constant, real short terminal doubles. Calibration cites a 20px mangle and a 24px real terminal **at the same raster — zero margin**, and this gate authorizes **deleting a node** (:448). |
+| `CAP_STOP_BYPASS` | planarReseat.ts:80 | 8 px | `segLen[0]`, deciding whether the ≥30° corner-stop is ignored | none | 3× margin @512 (3px mangle vs 24px real terminal), 1.5× @256, **inverts below 128** — the bypass then walks the arm through a genuine corner and the polluted fit re-seats the junction wherever MAX_SLIDE allows. |
+| `LINE_TOL` **[CORRECTED: was SENSOR]** | planarReseat.ts:61 | 0.8 px | `lineMaxDev` of an **already-fitted** arm, over a span of 8–110px | none | AA is absorbed upstream, so the residual is artwork curvature over an ART-scaled span: sagitta grows ~linearly with res, so the line-vs-circle classification is strictly stricter at 1024. Sensor floor is fit wobble in the mangled zone — both roles, one scalar. |
+| `CIRC_TOL` **[CORRECTED: was SENSOR]** | planarReseat.ts:62 | 0.9 px | `maxRadialDev` of the fitted arm over 24–110px | none | Same duality; sharper failure: as the window covers less sweep the circle fit de-conditions and a near-straight arm passes the tolerance against a huge, badly-determined circle — **the gate passes exactly when the primitive is least trustworthy** (circleDev 0.79→1.99 measured on the thread lane's fixed window). |
+| `CHORD_TOL` **[CORRECTED: was SENSOR]** | planarReseat.ts:89 | 2.5 px | `lineMaxDev` of the chord edge vs the re-seat line | none | Admit side is the mangled zone (sensor); veto side is "a genuinely different boundary must survive" — real curvature, which doubles. At 2.5px it is 3× LINE_TOL, far above any 1px AA footprint. |
+
+**Dimensionless — reported UNCLEAR only because the schema had no bucket. No scaling decision exists; do not rank these as offenders.** `STRONG_DE` 25 / `WEAK_DE` 12 (planarThread.ts:42,44 — ΔE76, measured identical at 256…2048), `CAP_ANTIPARALLEL_DEG` 150 and `COS_WEAK_CORNER` cos30° (planarFit.ts:807,1296), `STRAIGHT_TURN_DEG` 20° / `MAX_ROTATE_DEG` 25° (planarJunction.ts:104-105), `MIN_ANGLE_SIN` sin5° (planarReseat.ts:51), `CORNER_STOP_COS` cos30° (:72), `CHORD_COLLINEAR_SIN` sin3° (:85), `RESHAPE_K_MIN` 0.25 (:327), and the circle-slide fraction `0.5·r` (:571) — the latter is already the §10.1 `localScaleK` pattern and is **the template** for fixing any ART entry above.
+
+---
+
+## CAP — bounds cost, not fidelity (brief)
+
+| constant | file:line | value | note |
+|---|---|---|---|
+| `MAX_SPAN` | planarFit.ts:121 | 20 | RDP key-vertex span per DP cubic. Key spacing goes as √(8εR), so a smooth arc carries ~√2× more keys at 2× raster — a one-cubic arc can split in two, nudging node parsimony. Cheap to raise. |
+| `MAX_FIT_POINTS` | planarFit.ts:122 | 64 | evenly subsampled over the arc ⇒ scale-free. Residue: `maxDev` is checked at half the px density at 2×; cosmetic. |
+| `MAX_EVIDENCE_WINDOW` **[CORRECTED: was ART]** | planarFit.ts:123 | 24 | Verbatim duplicate of curveFit.ts:254, whose doc states the rationale outright: unbounded growth is O(loop²) and "a real corner breaks the line and circle **far below this cap**". ε is the decision threshold, not 24; L/S/C all saturate at 49 so the cap cancels in the ratios. **Do not scale** — doubling it quadruples per-vertex cost for no discrimination change. |
+| `SNAP_SPAN_MAX` | planarFit.ts:615 | 40 | every extension point is individually gated by SNAP_COLLINEAR, so it only bounds work. Raising it at high res is a free small win; no risk either way. |
+| cap-group span guard | planarFit.ts:928 | 24 | redundant pre-filter (survivors must still pass chord/uturn/flat); the load-bearing clause is the topological second term. Document, don't scale. |
+| `R_MAX` **[CORRECTED: was ART]** | planarReseat.ts:68 | 2500 | Degeneracy sentinel, not a feature measure — nothing in artwork has r=2500. Inert at 1024 (1.7× the diagonal); at traceDetail-high 4096 it becomes 0.43× the image and would reject a genuine gentle arc. If ever tightened, express it relative to image size. |
+| `ARM_SAMPLES` | planarReseat.ts:82 | 12 | flattening density; segments lengthen ~√2× per doubling under absolute ε, so sampling coarsens. Harmless. |
+| `edgeLength` steps | planarWeld.ts:49 | 6 | arc-length precision on a ≤2px micro-edge. Harmless. |
+| `maxColors` | paletteSegment.ts:41 | 16 (→40 with detail) | **CAP in the "don't scale" sense, not the "harmless" sense.** Authored colour count is artwork, not raster — 16→64 at 2× would just admit more AA clusters. Its *bindingness* is res-dependent (§12.2 starvation); §12.3(a)'s anchor split is the shipped, evidence-gated repair. |
+| `MAX_CLUSTER_ENTRIES` | quantize.ts:13 | 65536 | graceful truncation, but **binds more often at high res**: impossible at 512², reachable on ordinary art at 2048² — a res-dependent truncation of the clustering input. |
+| `GATE_MIN_SEGMENTS` | segment.ts:164 | 64 | cost switch, byte-identical when off — but its promise ("small gradient art stays un-gated") is stated in *segment count*, which climbs with res. Same art can be un-gated @256 and gated @1024, losing non-adjacent field reunites. Unmeasured. |
+| `sampleCap` | segment.ts:150 | 3000 | **not inert**: §10.3 established that re-striding the sample stream changes fitted PAINT with every geometry gate green. At 2× the same region is subsampled at 4× the stride ⇒ real cross-resolution paint drift, gated only at tier 0. |
+| `MAX_MERGE_PASSES` | segment.ts:1064 | 64 | loop breaks on its own fixpoint; harmless. |
+| k-means iters / convergence | quantize.ts:191, :233 | 24 / 0.5 RGB | cost bound + colour-space convergence; invariant. |
+
+---
+
+## RANKED — which ART constants would move the five confirmed witnesses most
+
+**Stated plainly up front: this ranking is inference, not measurement.** No auditor traced bluetooth, chupa-chups, cnn, coca-cola, or ahrefs-wordmark. All measurements above are on `band-cross`, `overlap`, `gradient-flat`, `fluent-flute-flat`, `fluent-parachute-flat`, `hairlines`, `checker`, `petals`, `aa-seam`. The ranking is by *mechanism match to the named defect*, with the strength of the measured scaling law as the tie-break. Nor was the defect→witness mapping given; I map by defect shape and say where the mapping itself is a guess.
+
+**1. The `minRegionArea` area-floor family — `real[]` (paletteSegment.ts:783), `modal[]` (:816), `keepDistinctMinArea` (quantize.ts:320)** — targets *the disintegrating small glyph*.
+Mechanism, not speculation: these three compare a **px² area** against a fixed 50, and the comparand grows as res² (measured 0/80/176/922 across 128→512 for one authored colour). A small glyph inside a wordmark is precisely the object whose flat-interior count is smallest — it has the least interior per unit of outline. Once `real[i]` is false the entry loses its minShare exemption, becomes an AA-blend candidate, and is repainted with the nearest surviving colour: that *is* "disintegrating". `modal[]` is the only test a stroke thinner than the erosion budget can pass, and it was measured sitting **exactly on the floor** (50 vs 50) on hairlines @256. Speculative part: which witness carries the R glyph, and whether that glyph's actual flat-interior count is in the 30–120 band where the floor bites. That is a one-command measurement (below).
+
+**2. `THROUGH_SPAN` (planarThread.ts:46)** — targets *the bump on a smooth curve*, secondarily *the arch flattening*.
+Strongest *measured* scale defect in the audit: on the same authored junction the chord turn reads 21.4° @256 and 7.1° @2048, and the line-vs-circle winner **flips** (circleDev 0.79→1.99 while lineDev 1.25→0.67). A junction that gets projected onto a line where an arc belongs is exactly a visible bump/kink on an otherwise smooth curve. Because the fix is arithmetic (window/radius), it also drags `THROUGH_TURN_DEG`'s calibrated margin with it — one fix, two rows. Speculative part: that the bump sits at a *junction* rather than mid-edge. If the bump is mid-edge, this constant is irrelevant and the cause is ε (UNCLEAR) or `MAX_SPAN` splitting one cubic into two.
+
+**3. `SNAP_SPAN` (planarFit.ts:586) + `ARM_SPAN` (planarJunction.ts:33)** — targets *the uneven gap between strokes* and *the arch → trapezoid*.
+Both are fixed evidence windows over the artwork outline that set where a corner apex lands. Two stroke ends whose arms differ in length get their apexes reconstructed from *differently-saturated* windows; the resulting apex placements are asymmetric by a sub-pixel-to-pixel amount that is constant in px and therefore **relatively larger on the smaller of the two strokes** — which reads as an uneven gap. For an arch, arms that saturate a 14px window on a large curve look locally straight, the arm-line reconstruction pins two corners, and the span between them fits as a line: an arch becomes a trapezoid. Speculative part: the whole mechanism chain; the verifier's correction to the `allow` row (budget is *pinned at 14px*, not 40) actually **reduces** the blast radius I would have predicted here, so treat this as the most likely of the three to be overrated.
+
+**4. `ARM_MAX` (planarReseat.ts:53) and `CHORD_MAX_LEN` (planarReseat.ts:91)** — targets *the arch flattening*, only if the arch meets other shapes at junctions.
+`CHORD_MAX_LEN` is **measured dead above ~1024** on its own driver case (authored chord 32.9px @512 → 130.7px @2048 > 80), so the occluder-chord straightening simply stops existing on large rasters — a boundary that should be an exact straight cut reverts to "fits neither the line nor the arc". `ARM_MAX`'s 110px budget covering a quarter of a boundary at 2048 means the primitive is fitted from a window that never reaches the curve. Both only fire on `reseatJunctions`, so they matter for the witnesses only if their defects sit at multi-region crossings. Speculative: whether these wordmarks re-seat at all — the reseat probe reported zero corrections on some rasters.
+
+**5. `minFacing` (segment.ts:145)** — low probability, high blast radius, and only on the MS/gradient path.
+It is the only ART constant in the audit that can change **region topology** (whether two regions are allowed to merge) purely from raster size, because its comparand is a boundary length in px. If any witness shows two strokes fusing or splitting rather than merely mis-placed, this is the first thing to instrument. Flat logos route through paletteSegment and never reach it — so for five flat wordmarks this is probably inert. Listed because if it *is* the cause, nothing else in the list would explain the symptom.
+
+**Deliberately not in the ranking, but likely to outrank all of it:** `epsilon` (planarFit.ts:99, **UNCLEAR**). Every one of the four named defects — a glyph losing shape, an uneven gap, a bump, a flattened arch — is a *simplification* symptom, and ε is the simplification budget. It is not in the ART list only because its sensor leg is real (it must stay ≥ the ±0.5px staircase). If the witnesses are to be fixed by one change, the §10 `min(ε_abs, k·localScale)` form is the candidate, and it needs the unbuilt medial-radius field from planarNetwork.ts.
+
+---
+
+## DO NOT SCALE — tripwires
+
+One line each: what breaks if someone "makes it resolution-aware".
+
+**planarFit**
+- `smoothPasses` 2 → 4 at 1024: the ±4px kernel melts a genuine 4px feature that was invisible to smoothing at 512; also breaks the user Smoothing dial's contract (the §12.5 reason).
+- `arcSmoothPasses` 16/9 → 32/18: strips smoothing from arcs that genuinely carry a staircase; curves re-facet.
+- `SNAP_COLLINEAR` 0.75 → 1.5: a genuinely *curved* arm keeps extending (a ring corner starts moving — the exact thing §10.2 built this test to prevent), and at :899 the cap resolver loses the guard that keeps it off checker cells and gear teeth.
+- `CAP_CHORD_MAX` 10 → 20: runs the cap resolver on 20px caps the plain detector already resolves perfectly — pure added risk, zero demonstrated win.
+- `CAP_FLAT` 1.3 → 2.6: shallow real V-tips classify as flat caps and are emitted as straight LINES between two corners — §10.2's tip destruction, re-created by a scale factor.
+- `CAP_JOIN_GAP` 6 → 12: unrelated shoulder runs join into one "cap" group at high res.
+- `CAP_SNAP_MAX` 2.5 → 5: it stops meaning "inside tolerance", because 2.5 is numerically geomScore's `CORNER_MATCH_R`; engine and gate silently decouple.
+- `CAP_ARM_K` 10: **desync hazard, not a scale hazard** — anyone who scales `CAP_CHORD_MAX` without scaling this puts the arm seed *inside* the cap and the resolver fits arm lines to the cap itself.
+- `CAP_ARM_SEED` 6 → 12: requires 12px of straight edge per side, silently excluding short bars from the resolver and weakening the collinearity guard.
+- `CAP_EXTEND_DEV` 1.2 → 2.4: the arm extension walks straight through the cap turn (which only deviates 2px+) and the arm stop lands past the real corner. This is the one constant with measured walls on **both** sides (1.0 costs chamfer, 1.4 eats gear corners).
+- coincident-corner drop `< 1` → `< 2`: deletes genuinely distinct corners 1–2px apart — the pre-§10.6 `CORNER_MERGE 5` failure, re-created downstream of the detector where no sweep covers it.
+- cap-trim floor 4: raising it starves short arcs (a small checker cell edge) of the ≥2 interior points a fit needs.
+- `fitCorneredOpen` min 9: raising it makes more short edges fall back to the plain fit, losing corners with no gate watching (§12.1 leaves tier-2 corner recall ungated).
+
+**junction / thread / reseat / weld**
+- `MIN_MOVE` 1.5 → 3 at 1024: refuses **every** correction the pass exists to make — the entire measured population is 1.5–4px at every raster.
+- `MAX_SLIDE` 12 → 24: a near-parallel primitive pair drags a junction 24px onto a far-away intersection; the 5° transversality gate is a weak guard at that distance.
+- `NEAR_TOL` 3.0 → 6: admits primitives the junction is genuinely far from and "corrects" it onto a boundary it never belonged to.
+- `MIN_LINE_ARM` 8 → 16: starves small features of line primitives for no measurement reason (direction noise is already finer at 2×).
+- `MIN_ARM` 6 → 12: rejects arms whose chord direction is perfectly well-determined; the phase noise it guards is ±0.5px at every raster.
+- `THROUGH_DEV` 1.2: safe to leave, but **if THROUGH_SPAN is ever scaled this must scale with it** — doubling the window doubles a sharp corner's residual (the 40° navy-plate corner would read ~2.2px, not 1.11px) and the gate stops separating corners from continuations.
+- `MAX_MOVE` 2.0 → 4: accepts a 4px disagreement between the through fit and the label map as "sub-pixel placement" — the gate exists precisely to drop those.
+- `MAX_DISP` 2.0 → 4: a near-parallel two-arm solve places a junction 4 lattice cells from the label map's own corner.
+- `ARM_GAP` 1 → 2: discards a second perfectly good sample; already at its floor.
+- `MIN_ARM_PTS` 2 → 4: silently excludes short edges from the normal equations for no numerical reason (2 points define a line at any raster).
+- `win.length < 5` → larger: starts rejecting windows that are numerically fine; it never binds today.
+- `RESEAT_WELD_LEN` 2.0 → 4 at 1024: puts the weld radius back on top of **real thin features** — the §9.3 beverage-box regression.
+- planarWeld `radius` (the one scale hook that exists): scaling it re-creates the same §9.3/§10.4 corpus regression; production should keep passing `RESEAT_WELD_LEN`.
+- `spanCap` (radius×2): scaling it lets transitive union-find chain a textured patch into one "crossing" cluster at high resolution.
+- lollipop threshold (radius): scaling it lets a real thin neck (beverage-box's straw, 129px outline) be pinched shut.
+- border guard 1 → 2: starts excluding genuinely interior junctions near the frame.
+- `CHORD_COLLINEAR_OFF` 1.0 → 2: fuses two genuinely different parallel edges into "one occluder line" and straightens the edge between them.
+
+**segment / palette / quantize**
+- `minShare` 0.007: already a fraction; scaling it is the §12.5 mistake and would drop real 2-D regions whose share is measured stable to ~2% across rasters.
+- `EDGE_LOCAL_MIN` 0.6: raising it at high res starts dissolving **authored stripes** — true AA blends hold edgeFrac 1.000 at every resolution, so any movement of this line only eats real art.
+- `RESTORE_MAX_SURVIVAL` 0.3: raising it makes the erase-rescue fire on real blobs that were merely boundary-smoothed and re-plants their pre-filter stair-steps.
+- `modePasses` 2 → 4 at 1024: eats 4px = 2 artwork-px off every feature tip (§10.2's tip-row measurement is the direct evidence).
+- `BLEND_LINE_EPS` 10: has no length units — a coverage blend lies on the sRGB A–B segment whether it is one pixel or a thousand; scaling is meaningless.
+- `MERGE_DISTANCE` 10: colour space; the resolution hazard is entirely in its **anchor veto's** evidence floor, not here.
+- `ANCHOR_DISTINCT_DE` 4.0: pinned to scoreRegions' `MATCH_DELTA_E` so any fusion the veto allows stays invisible to the region gate; moving it breaks that pinning.
+- alpha `< 128`: a 50% coverage isophote; "scaling" it is not well-defined and would mask or admit whole features arbitrarily.
+- `FLAT_TIGHT2` 32²: an RGB tolerance; scaling it is meaningless — the flag is on its *consumer* (`flatCoverage` vs the absolute 0.7 **engine** gate).
+- `FEATHER_ALPHA_STD` 10 / `FEATHER_MODE_SHARE` 0.15: a ramp is a ramp at any size and the authored-flat control sits at std≈0; scaling either would re-open §11's soft-alpha defect. (Unmeasured — see UNRESOLVED.)
+- `sigma` 5 → 10 at 1024: the facing scan reaches **past** the discontinuity band into the second region, manufacturing facing observations between segments that share no edge and firing the must-stay-separate veto on unrelated pairs.
+- `tauA` 0.25: numerator and denominator share the same length factor; scaling it breaks a ratio that is already scale-free.
+- `tauS` 10: a ΔE between region means; scaling it changes which regions merge for no measurement reason.
+
+---
+
+## UNRESOLVED — the measurement that settles each
+
+1. **`epsilon` 1.0 (planarFit.ts:99).** Trace one corpus case at 512 and 1024 with ε absolute vs ε = `min(1.0, k·localScale)`; compare node count and truth-gate boundary p95 **per artwork unit**, not per px. Blocked on a medial-radius field in planarNetwork.ts (unbuilt) — that field is the real deliverable.
+2. **`cornerTurnDeg` 60° / `CORNER_WINDOW` 4 (planarFit.ts:106,125).** Trace `gear-teeth` at 512 and 1024 and record the *distribution of measured turn* at each authored tip (gearDiag already emits this histogram). If the same authored 80.1° tip reads 53–72° @512 and 76–82° @1024, the effective threshold moves with resolution and the fix belongs to the window.
+3. **`CORNER_MERGE` 3 (planarFit.ts:131).** Run gear-teeth at **@256** (chords become 3.75px) and count corner recall. If recall drops, the constant is eating real corner pairs and its ceiling is ART.
+4. **`SNAP_GAP` 3 (planarFit.ts:585) and the short-arm bypass 7 (:685).** Mechanical, byte-identical-at-512 refactor: split the identifier per use site (censor / arm-length gate / chain-extent guard), then re-sweep each site independently at 256 and 1024. Without the split neither can be classified.
+5. **`armGap` ramp (planarFit.ts:599).** Instrument the returned gap for every corner on gear-teeth at 512 and 1024. If the same authored tooth gets gap 1 @512 and gap 3 @1024 while its AA rounding is unchanged, the /4 term is ART and needs a px cap independent of `steps`.
+6. **`SNAP_SPAN` classifier + `allow` (planarFit.ts:708).** Log `shortSpan`, the chosen branch, and the resulting displacement for every snapped corner at 512/1024/2048. Confirm the verifier's clamp argument holds (`shortSpan` never exceeds 14) and measure whether the fixed 14px long-arm budget is ever *reached*; if the real population is 1–3px, re-derive `allow` from an erosion budget and delete the arm-length branch entirely.
+7. **`CAP_CHORD_MIN` 3 / `CAP_CHORD_MAX` 10 (planarFit.ts:808-809).** **The single cheapest falsifier in this report:** trace `bar-caps` at 1024 (its w7 bars become w14) and confirm corner recall stays 43/43 with the resolver never firing. If recall drops, the cap band is ART and the whole §10.7 mechanism is a 512-only accident. No gate in the repo runs bar-caps above 512, and it is not in AB_CORPUS.
+8. **`THROUGH_TURN_DEG` 20° (planarThread.ts:62).** Already measured on `band-cross` (rounded population 0–21.4° @256 vs 0–7.1° @2048). What remains: re-run `threadDiag` on the *gallery* lane at 256/512/1024 to confirm the same margin collapse on real marks, then fix `THROUGH_SPAN` (not this number) as a span keyed to local radius.
+9. **`MIN_ARC_ARM` 24 (planarReseat.ts:65).** Fit a synthetic arc of known radius at 512/1024/2048 with a fixed 24px arm and record `maxRadialDev` vs `CIRC_TOL`. If the predicted √k law holds (24 → 34 → 48), the constant is neither ART nor SENSOR and should be expressed as `sqrt(8·R·CIRC_TOL)`.
+10. **`CAP_MAX` 24 / `CAP_STOP_BYPASS` 8 (planarReseat.ts:58,80).** Measure `segLen[0]` at `overlap`'s two lens tips (mangle population) and at `gradient-flat`'s hypotenuse terminal (real population) at 256, 512 and 1024. Nobody has done this. It decides whether a node gets **deleted** (:448) and the two populations currently have **zero margin** at 512.
+11. **`LINE_TOL` 0.8 / `CIRC_TOL` 0.9 (planarReseat.ts:61-62).** Coupled to `ARM_MAX`: hold the arm at a fixed *artwork* fraction instead of 110px and re-measure how many arms claim `line` at 512 vs 1024. Neither tolerance should move unless `ARM_MAX` moves with it — scaling the tolerance alone is strictly worse than leaving both.
+12. **`CHORD_TOL` 2.5 (planarReseat.ts:89).** Measure the mangled-lens sagitta at a near-tangent crossing at two resolutions. If the lens length is set by crossing angle *and* radii (i.e. it scales), the admit side is ART too and the constant needs splitting from `CHORD_MAX_LEN`.
+13. **`minFacing` 4 (segment.ts:145).** Instrument per-pair `facing` tallies in segment.ts and find a corpus pair that straddles f=4 between 512 and 1024. The 𝒟 length law is measured (917/1879/3718); the straddling witness is not.
+14. **`FEATHER_ALPHA_STD` / `FEATHER_MODE_SHARE` (paletteSegment.ts:178).** Resample the §11 feathered source PNG to two sizes and re-measure per-label alpha std. Expectation (unverified): downscaling a 3px ramp below ~1px collapses the shells into one cluster and drops std below 10, silently disabling the gate. The gate is structurally inert on every gated corpus (the truth gate rasterizes on white ⇒ alpha mode 255 everywhere), so this needs a new fixture.
+15. **`GATE_MIN_SEGMENTS` 64 (segment.ts:164).** Emit `fineSegments` per case per raster (the field already exists) and check whether any small gradient case crosses S=64 between 256 and 1024 — that case would silently lose its non-adjacent field reunites at high res.
+16. **`sampleCap` 3000 (segment.ts:150).** Render-and-ΔE the same gradient case at 512 and 1024 (the §10.3 paint gate, tier 0). Cross-resolution **paint** drift from re-striding has no gate below tier 0.
+
+---
+
+**Structural note that constrains every fix above:** not one constant in planarFit/planarThread/planarReseat/planarJunction is reachable from `PlanarFitOptions` — they are all module-private literals. The single exception is planarWeld's `radius` parameter. There is therefore **no dial to A/B any of this behind**, unlike `localScaleK` / `cornerVeto` / `arcSnap`. Any change needs new plumbing plus a frozen A/B snapshot first (`pnpm gen:absnapshot before-<what>`), per CLAUDE.md.

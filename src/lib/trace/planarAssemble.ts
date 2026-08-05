@@ -10,6 +10,7 @@ import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
 import { buildPlanarNetwork, EXT, type PlanarNetwork } from './planarNetwork.ts'
 import { detectCorners, detectLoopCorners, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
 import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
+import { subpixelEdgeChains, type SourceImage } from './planarSubpixel.ts'
 import { threadJunctions, type ThreadColor } from './planarThread.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
 
@@ -24,21 +25,36 @@ export interface PlanarTrace {
  *  consistent side (validated by the per-pixel relabel check). */
 const ROT = [1, 2, 3] // try clockwise turns from the reverse direction first
 
+
 /** Build the full planar trace from a label map. `palette` (label → colour) is
  *  optional and only feeds the §14 contrast rank: without it nothing threads and the
- *  fit is byte-identical to the pre-§14 tracer. */
+ *  fit is byte-identical to the pre-§14 tracer. `image` (the source raster the labels
+ *  were segmented from) is optional and only feeds the §15 sub-pixel edge placement:
+ *  without it every chain stays on the integer crack lattice — so label-only callers
+ *  (tests, diagnostics, synthetic label maps with no raster) are unchanged by
+ *  construction. */
 export function tracePlanar(
   labels: Int32Array,
   width: number,
   height: number,
   opts: PlanarFitOptions = DEFAULT_PLANAR_FIT,
   palette?: readonly ThreadColor[],
+  image?: SourceImage,
 ): PlanarTrace {
   const net = buildPlanarNetwork(labels, width, height)
-  return assemblePlanar(net, opts, palette)
+  // §0 #8: read the sub-pixel edge position out of the source AA (planarSubpixel.ts).
+  // Computed on the raw network — BEFORE junction placement — so §14's threadJunctions
+  // keeps reading the raw lattice chains its gates were calibrated on (§14.3).
+  const subpix = image && opts.subpixelEdges ? subpixelEdgeChains(net, labels, image) : undefined
+  return assemblePlanar(net, opts, palette, subpix)
 }
 
-export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions, palette?: readonly ThreadColor[]): PlanarTrace {
+export function assemblePlanar(
+  net: PlanarNetwork,
+  opts: PlanarFitOptions,
+  palette?: readonly ThreadColor[],
+  subpix?: ReadonlyMap<number, Vec[]>,
+): PlanarTrace {
   const cw = net.width + 1
   // --- vertices: one per junction corner ---
   // §14 CONTRAST RANK: where a band seam (weak colour boundary) ends on a real edge
@@ -82,29 +98,55 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions, palet
     // a junction the §14 through fit moved — including the band seam's own endpoint,
     // which follows the real edge) so the fitted arc ends exactly on the shared vertex
     // and both regions stay byte-coincident. e.pts unchanged when nothing moved.
-    let pts = e.pts
+    let latticePts = e.pts
     if (juncPos && !e.closed) {
       const sp0 = e.startV >= 0 ? juncPos.get(e.startV) : undefined
       const sp1 = e.endV >= 0 ? juncPos.get(e.endV) : undefined
       if (sp0 || sp1) {
-        pts = e.pts.map((p) => ({ x: p.x, y: p.y }))
-        if (sp0) pts[0] = { x: sp0.x, y: sp0.y }
-        if (sp1) pts[pts.length - 1] = { x: sp1.x, y: sp1.y }
+        latticePts = e.pts.map((p) => ({ x: p.x, y: p.y }))
+        if (sp0) latticePts[0] = { x: sp0.x, y: sp0.y }
+        if (sp1) latticePts[latticePts.length - 1] = { x: sp1.x, y: sp1.y }
       }
     }
     // Sharp corners are found on the RAW staircase and pinned through pre-smoothing
     // so a valley/point isn't melted into a curve before the fitter detects it.
     let nodes: PathNode[]
-    const corners = detectCorners(pts, opts.cornerTurnDeg, e.closed)
+    const corners = detectCorners(latticePts, opts.cornerTurnDeg, e.closed)
+    // §15 sub-pixel chain: displaced interior points + the same pinned endpoints. Two
+    // chains deliberately coexist: CORNER DETECTION (above) and the area-guard fallback
+    // stay on `latticePts` — their thresholds are turn angles / exact areas calibrated
+    // on the integer staircase, and the displacement is index-preserving, so indices
+    // detected on the lattice chain address the same points in the displaced one. The
+    // FIT reads `pts`, which carries the sub-pixel evidence. (Corner zones are already
+    // reverted to the lattice INSIDE the pass — planarSubpixel's corner self-guard; the
+    // AA iso-line rounds every apex, and fitting that rounding melts corners.) Absent
+    // from the map (or the pass off/imageless) ⇒ pts === latticePts, today's path
+    // byte-for-byte.
+    const sub = subpix?.get(e.id)
+    let pts = latticePts
+    // Displaced chains additionally get the §15 TANGENT PIN (planarFit): the arc fits'
+    // end tangents are free within ε, and on a smooth displaced chain they rotate
+    // toward the bisector, softening real corners below the 60° sharp bar. Per-edge so
+    // label-only callers stay byte-identical.
+    let edgeOpts = opts
+    if (sub) {
+      pts = sub.map((p) => ({ x: p.x, y: p.y }))
+      const n = pts.length
+      if (!e.closed) {
+        pts[0] = { x: latticePts[0].x, y: latticePts[0].y }
+        pts[n - 1] = { x: latticePts[n - 1].x, y: latticePts[n - 1].y }
+      }
+      edgeOpts = { ...opts, pinCornerTangents: true }
+    }
     if (e.closed) {
       // A closed loop with ≥2 genuine sharp corners is fitted corner-first (snap
       // each corner to its sub-pixel arm intersection, then fit the arcs between
       // them) so the apex is an exact node, not a beveled pair. Smooth loops have
       // <2 corners and fall through to the unchanged closed-loop fitter.
-      const loopCorners = detectLoopCorners(pts, opts.cornerTurnDeg)
+      const loopCorners = detectLoopCorners(latticePts, opts.cornerTurnDeg)
       nodes =
         loopCorners.length >= 2
-          ? fitCorneredLoop(pts, loopCorners, opts)
+          ? fitCorneredLoop(pts, loopCorners, edgeOpts)
           : fitLoopEdge(presmooth(pts, opts.smoothPasses, false, corners), opts)
       // AREA GUARD. A fit can keep every boundary sample within ε and still
       // pinch a thin loop's two walls together — a thin bar's cap shoulder-
@@ -118,9 +160,26 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions, palet
       // "smooth" outright (an axis-aligned bar is just its 4 corners); for
       // normal blobs a real fit's area drift is a small fraction of ε·perimeter
       // and never approaches 25% (tier 2 measured byte-identical under this).
-      const rawArea = Math.abs(polySignedArea(pts))
+      // Both sides read the LATTICE chain: the reference area is the label map's
+      // own, and the fallback is BY DEFINITION the exact staircase (float-displaced
+      // points would turn every mid-run point into a "corner" there).
+      const rawArea = Math.abs(polySignedArea(latticePts))
       if (rawArea >= 4 && Math.abs(polySignedArea(flattenNodes(nodes))) < rawArea * 0.75) {
-        nodes = staircaseCorners(pts)
+        // §15: when the pinch came from DISPLACED evidence (a thin loop whose anchors
+        // the flatness guard could not fully clean), first refit from the lattice
+        // chain — the exact pre-§15 path, which held these loops fine. Only a fit
+        // that pinches on the LATTICE too falls through to the staircase (bar-caps
+        // @256 measured: the direct-to-staircase fallback exploded three ~3.5px bars
+        // to 82/36/72 nodes, parsimony 5.99× — for a defect the lattice fit never had).
+        if (sub) {
+          nodes =
+            loopCorners.length >= 2
+              ? fitCorneredLoop(latticePts, loopCorners, opts)
+              : fitLoopEdge(presmooth(latticePts, opts.smoothPasses, false, corners), opts)
+        }
+        if (Math.abs(polySignedArea(flattenNodes(nodes))) < rawArea * 0.75) {
+          nodes = staircaseCorners(latticePts)
+        }
       }
     } else {
       // An open edge with genuinely sharp interior corners (a tip that a junction
@@ -128,7 +187,7 @@ export function assemblePlanar(net: PlanarNetwork, opts: PlanarFitOptions, palet
       // (fitCorneredOpen); without corners this is the unchanged legacy fit.
       nodes =
         corners.size > 0
-          ? fitCorneredOpen(pts, corners, opts)
+          ? fitCorneredOpen(pts, corners, edgeOpts)
           : fitOpenArc(presmooth(pts, opts.smoothPasses, true, corners), opts)
     }
     const startV = e.startV >= 0 ? vidByCorner.get(e.startV)! : -1
