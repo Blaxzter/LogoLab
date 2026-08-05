@@ -348,13 +348,48 @@ function classifyBlends(
       routeTo[i] = route
     }
   }
-  // Path-compress: a route into an entry a later pass dissolved follows it to its
-  // own endpoint (chains are acyclic — see the doc comment above).
-  for (let i = 0; i < palette.length; i++) {
+  return { blend, routeTo: compressRoutes(blend, routeTo) }
+}
+
+/**
+ * Path-compress the blend routes: a route into an entry that a later pass
+ * dissolved follows it to its own endpoint.
+ *
+ * The chains are ALMOST acyclic. A route always targets an entry that was
+ * accepted when the route was chosen, so a route can only ever point "backwards"
+ * in dissolution time — except inside ONE fixpoint pass, which commits every
+ * entry it found at the same moment. Two such entries can explain each other
+ * (i's best segment ends at j and j's at i), and that closed pair has no accepted
+ * endpoint to route to at all: following it looped forever, hanging the tracer on
+ * the image that produced the pair.
+ *
+ * A mutual pair is exactly the case where the evidence does not prefer either
+ * entry, so neither is dissolved — the cycle is un-dissolved and both stay real
+ * palette colours. Acyclic input is untouched, so every image that traced before
+ * traces byte-identically.
+ */
+export function compressRoutes(blend: boolean[], routeTo: Int32Array): Int32Array {
+  for (let i = 0; i < blend.length; i++) {
+    if (!blend[i]) continue
+    const chain: number[] = []
+    let t = i
+    while (t >= 0 && blend[t] && !chain.includes(t)) {
+      chain.push(t)
+      t = routeTo[t]
+    }
+    if (t >= 0 && blend[t]) {
+      // Closed on itself: drop the cycle's members back to accepted.
+      for (let k = chain.indexOf(t); k < chain.length; k++) {
+        blend[chain[k]] = false
+        routeTo[chain[k]] = -1
+      }
+    }
+  }
+  for (let i = 0; i < blend.length; i++) {
     if (!blend[i]) continue
     while (routeTo[i] >= 0 && blend[routeTo[i]]) routeTo[i] = routeTo[routeTo[i]]
   }
-  return { blend, routeTo }
+  return routeTo
 }
 
 /** An entry is "edge-local" — a candidate AA transition zone — when at least this

@@ -7,7 +7,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ensureImageData } from '../src/devtest/nodeHarness.ts'
-import { segmentFlatPalette } from '../src/lib/trace/paletteSegment.ts'
+import { compressRoutes, segmentFlatPalette } from '../src/lib/trace/paletteSegment.ts'
 import { traceImage } from '../src/lib/trace/index.ts'
 
 ensureImageData()
@@ -160,4 +160,35 @@ test('traceImage paints a translucent locked colour with fill-opacity', async ()
   )
   assert.equal(byFill.get('#f01020')?.fillOpacity, undefined) // opaque ⇒ no fill-opacity
   assert.ok(Math.abs((byFill.get('#1040f0')?.fillOpacity ?? 1) - 128 / 255) < 1e-6)
+})
+
+/* --------------------------------------------------------------- blend routes */
+
+// A fixpoint pass dissolves everything it found AT ONCE, so two entries can each
+// route to the other. Following that closed pair spun forever — it froze the
+// tracer on real art (an icon-sheet crop, 13 palette entries).
+test('mutually-routed blend entries do not hang the route compression', () => {
+  // 1 ↔ 2 explain each other; 3 routes into the pair; 4 is a plain chain.
+  const blend = [false, true, true, true, true, false]
+  const routeTo = Int32Array.from([-1, 2, 1, 1, 5, -1])
+  const out = compressRoutes(blend, routeTo)
+
+  // The cycle is not evidence for either entry, so neither dissolves…
+  assert.equal(blend[1], false)
+  assert.equal(blend[2], false)
+  assert.equal(out[1], -1)
+  assert.equal(out[2], -1)
+  // …and everything routed INTO it now lands on a surviving colour.
+  assert.equal(blend[3], true)
+  assert.equal(out[3], 1)
+  assert.equal(out[4], 5)
+})
+
+test('acyclic route chains compress exactly as before', () => {
+  //   0 → 1 → 2 → 3(accepted)
+  const blend = [true, true, true, false]
+  const routeTo = Int32Array.from([1, 2, 3, -1])
+  const out = compressRoutes(blend, routeTo)
+  assert.deepEqual(Array.from(out), [3, 3, 3, -1])
+  assert.deepEqual(blend, [true, true, true, false])
 })
