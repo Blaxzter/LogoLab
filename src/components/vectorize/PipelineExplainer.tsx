@@ -18,8 +18,18 @@ import type { VectorizeOptions } from '../../types'
 
 const ANALYZE_DIM = 512
 
-export function PipelineExplainer({ opts, onClose }: { opts: VectorizeOptions; onClose: () => void }) {
-  const logo = useLogo()
+export function PipelineExplainer({
+  opts,
+  onClose,
+  source,
+}: {
+  opts: VectorizeOptions
+  onClose: () => void
+  /** The image to explain. Defaults to the app's working logo. */
+  source?: { src: string | null; isSvg: boolean; svgText: string | null }
+}) {
+  const storeLogo = useLogo()
+  const logo = source ?? storeLogo
   const [analysis, setAnalysis] = useState<OffThreadAnalysis | null>(null)
   // Gradient-detection probe (rampiness + colour histogram), computed on the main
   // thread from the same decoded image — it's what auto-defaults the toggle.

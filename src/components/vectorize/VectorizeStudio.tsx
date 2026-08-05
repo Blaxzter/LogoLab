@@ -3,8 +3,12 @@
 // pan/zoom stage (split / traced / original / overlay views) + status bar,
 // right rail = per-path list. The traced doc lives in undo/redo history; node
 // edits flow back from the canvas as live previews + committed steps.
+//
+// It traces THE app's working logo by default and needs no props for that. Every
+// binding to the global store is also a prop, so the same studio — not a fork of
+// it — edits one cropped tile of an icon sheet (see components/sheet).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
     Check,
     Copy,
@@ -28,6 +32,7 @@ import { CheckerToggle } from "../ui/CheckerToggle";
 import { Segmented } from "../ui/controls";
 import { Button } from "../ui/Button";
 import { getImageData } from "../../lib/image";
+import { rasterCapFor } from "../../lib/traceCaps";
 import { hexToRgb, normalizeHex, rgbToHex } from "../../lib/colorUtils";
 import { downloadText } from "../../lib/download";
 import { cleanSvg } from "../../lib/svgClean";
@@ -55,17 +60,6 @@ import { LegalLinksInline } from "../legal/LegalFooter";
 import { Tooltip } from "../ui/Tooltip";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
-// Long-side cap for the raster the tracer sees. Flat art (mono, or colour with
-// gradients OFF) traces at full 2048 for crisp corners / sub-pixel edges; colour
-// art WITH gradients stays at 1024 to bound the O(S²) Step-3c field-merge (which
-// froze on complex photos — see memory + crispness-study). Measured on Schild.png:
-// 1024→2048 cut meanΔE 0.96→0.78 and lifted SSIM +0.024, at ~4× trace time.
-const RASTER_MAX_DIM = 1024;
-const RASTER_MAX_DIM_FLAT = 2048;
-// "High" detail cap for flat art (gradients-off / mono). Bounded — not native —
-// so a huge upload can't blow up trace time/memory. Rasters are never upscaled,
-// so this only bites when the source's longest side exceeds RASTER_MAX_DIM_FLAT.
-const RASTER_MAX_DIM_HIGH = 4096;
 const DEBOUNCE_MS = 400;
 
 type ViewMode = "split" | "traced" | "original" | "overlay";
@@ -91,15 +85,69 @@ function withItem(doc: EditableDoc, item: DocItem): EditableDoc {
     };
 }
 
-export function VectorizeStudio() {
-    const logo = useLogo();
-    const checkerClass = useCheckerClass();
+/** The fields of a `LogoAsset` the studio actually traces — a sheet tile supplies the same six. */
+export interface VectorizeSource {
+    src: string | null;
+    isSvg: boolean;
+    svgText: string | null;
+    naturalWidth: number;
+    naturalHeight: number;
+    fileName: string | null;
+}
+
+export interface VectorizeStudioProps {
+    /** What to trace. Defaults to the app's working logo. */
+    source?: VectorizeSource;
+    /** Transparency backdrop class. Defaults to the global checker preference. */
+    checkerClass?: string;
+    /** What the Apply button does. Defaults to replacing the app's working logo. */
+    onApply?: (svgText: string, width: number, height: number) => void;
+    applyLabel?: string;
+    appliedLabel?: string;
+    /**
+     * False when this studio is on screen but not in charge (a second instance,
+     * or a host that owns the keyboard) — the global shortcut handler stands down.
+     */
+    active?: boolean;
+    /** Trace parameters to start from (defaults to the app-wide defaults). */
+    initialOptions?: VectorizeOptions;
+    onOptionsChange?: (opts: VectorizeOptions) => void;
+    /**
+     * A document that was already traced for this source. Seeds the editor and
+     * suppresses the mount re-trace — the host (icon sheet) traced it in a batch
+     * and re-tracing on open would be seconds of work for the same result.
+     */
+    initialDoc?: EditableDoc | null;
+    /** Fires whenever the traced/edited document changes, so a host can keep it. */
+    onResult?: (result: { doc: EditableDoc; svgText: string; stats: { paths: number; nodes: number; colors: number } } | null) => void;
+    /** Host chrome for the start of the toolbar (e.g. "back to all icons"). */
+    leading?: ReactNode;
+}
+
+export function VectorizeStudio({
+    source,
+    checkerClass: checkerClassProp,
+    onApply: onApplyProp,
+    applyLabel,
+    appliedLabel,
+    active = true,
+    initialOptions,
+    onOptionsChange,
+    initialDoc,
+    onResult,
+    leading,
+}: VectorizeStudioProps = {}) {
+    const storeLogo = useLogo();
+    const storeChecker = useCheckerClass();
     const setProcessedSvg = useStore((s) => s.setProcessedSvg);
+    // The image being traced: the app's working logo unless a host passed one.
+    const logo = source ?? storeLogo;
+    const checkerClass = checkerClassProp ?? storeChecker;
     const pz = usePanZoom({ maxScale: 32 });
     const isMobile = useIsMobile();
 
     const [opts, setOpts] = useState<VectorizeOptions>(
-        DEFAULT_VECTORIZE_OPTIONS,
+        initialOptions ?? DEFAULT_VECTORIZE_OPTIONS,
     );
     // Output coordinate precision (decimals). 3dp matches what desktop tracers
     // (Affinity/Canva) emit and preserves sub-pixel geometry when the SVG is
@@ -382,13 +430,9 @@ export function VectorizeStudio() {
                 // everything else (mono, or flat colour with gradients OFF) traces
                 // at full res for Affinity-grade crispness. The user "Detail" preset
                 // lifts the flat cap to 4096 ("High"); gradient/photo is unaffected.
-                const isFlat = opts.mode === "mono" || opts.gradients === false;
-                const flatCap =
-                    opts.traceDetail === "high" ? RASTER_MAX_DIM_HIGH : RASTER_MAX_DIM_FLAT;
-                const rasterMaxDim = isFlat ? flatCap : RASTER_MAX_DIM;
                 const imageData = await getImageData(
                     logo.src,
-                    rasterMaxDim,
+                    rasterCapFor(opts),
                     logo.isSvg ? logo.svgText : null,
                 );
                 if (runId !== runIdRef.current) return;
@@ -509,6 +553,21 @@ export function VectorizeStudio() {
         };
     }, [logo.src, logo.isSvg, logo.svgText, isVectorSource, retraceVector]);
 
+    // Adopt a document the host already traced for this exact source (the icon
+    // sheet traces every tile in a batch). Runs once, before the auto-run effect
+    // below — it claims the gradient probe and the first debounced run so opening
+    // an icon shows the batch result instantly instead of re-tracing it.
+    useEffect(() => {
+        if (!initialDoc) return;
+        historyReset(initialDoc);
+        skipRetraceRef.current = true;
+        gradientsTouchedRef.current = true;
+        autoGradientsSrcRef.current = logo.src;
+        // Mount only: a later prop change means the host swapped tiles, and that
+        // remounts the studio (keyed by tile id) rather than mutating this one.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // Auto-run (debounced) whenever the source or parameters change — unless
     // the user has hand-edited paths, in which case their edits win.
     useEffect(() => {
@@ -602,6 +661,17 @@ export function VectorizeStudio() {
         setApplied(false);
     }, [svgText]);
 
+    // Report the current result / parameters to a host that is keeping them (the
+    // icon sheet stores every tile's doc so it survives leaving the icon).
+    useEffect(() => {
+        if (!onResult) return;
+        onResult(derivedDoc && svgText && stats ? { doc: derivedDoc, svgText, stats } : null);
+    }, [onResult, derivedDoc, svgText, stats]);
+
+    useEffect(() => {
+        onOptionsChange?.(opts);
+    }, [onOptionsChange, opts]);
+
     // The Paths sheet is gated on `derivedDoc`; if the doc ever clears, drop the
     // open flag so the sheet can't silently re-open when a doc returns.
     useEffect(() => {
@@ -610,7 +680,11 @@ export function VectorizeStudio() {
 
     /* ------------------------------------------------------------ keyboard */
 
+    // Window-level, so it works wherever the pointer is — which means a studio
+    // that is mounted but not in charge must stand down, or two of them would
+    // both undo on one Ctrl+Z.
     useEffect(() => {
+        if (!active) return;
         const onKey = (e: KeyboardEvent) => {
             const t = e.target;
             if (
@@ -771,6 +845,7 @@ export function VectorizeStudio() {
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
     }, [
+        active,
         doc,
         selectedPathId,
         selectedNodes,
@@ -840,7 +915,10 @@ export function VectorizeStudio() {
     const onApply = () => {
         if (!svgText || !derivedDoc) return;
         const [, , w, h] = derivedDoc.viewBox;
-        setProcessedSvg(svgText, w, h);
+        // Default sink: become the app's working logo. A host (icon sheet) passes
+        // its own, because replacing the logo would destroy the sheet the crop
+        // came from.
+        (onApplyProp ?? setProcessedSvg)(svgText, w, h);
         setApplied(true);
     };
 
@@ -928,6 +1006,7 @@ export function VectorizeStudio() {
             <div className="flex min-w-0 flex-1 flex-col">
                 {/* ------------------------------------------ toolbar (desktop) */}
                 <div className="hidden h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 md:flex">
+                    {leading}
                     <Segmented<ViewMode>
                         value={viewMode}
                         onChange={setViewMode}
@@ -1019,7 +1098,9 @@ export function VectorizeStudio() {
                             onClick={onApply}
                             disabled={!svgText}
                         >
-                            {applied ? "Applied \u2713" : "Apply to logo"}
+                            {applied
+                                ? (appliedLabel ?? "Applied") + " \u2713"
+                                : (applyLabel ?? "Apply to logo")}
                         </Button>
                         <Button
                             variant="secondary"
@@ -1050,6 +1131,7 @@ export function VectorizeStudio() {
 
                 {/* ------------------------------------------- top strip (mobile) */}
                 <StudioTopBar>
+                    {leading}
                     <Segmented<ViewMode>
                         value={view}
                         onChange={setViewMode}
@@ -1323,7 +1405,7 @@ export function VectorizeStudio() {
                         onClick={onApply}
                         disabled={!svgText}
                     >
-                        {applied ? "Applied" : "Apply"}
+                        {applied ? (appliedLabel ?? "Applied") : (applyLabel ?? "Apply")}
                     </Button>
                 </StudioActionBar>
             </div>
@@ -1377,7 +1459,13 @@ export function VectorizeStudio() {
                 </Sheet>
             )}
 
-            {showHelp && <PipelineExplainer opts={opts} onClose={() => setShowHelp(false)} />}
+            {showHelp && (
+                <PipelineExplainer
+                    opts={opts}
+                    source={logo}
+                    onClose={() => setShowHelp(false)}
+                />
+            )}
         </div>
     );
 }

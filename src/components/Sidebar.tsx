@@ -247,9 +247,10 @@ function SidebarBody() {
  */
 export function Sidebar({ className = '' }: { className?: string }) {
   const tab = useActiveTab()
-  // Cleanup & Vectorize don't use any sidebar controls (and load logos from their
-  // own empty state), so the whole panel slides away there for a roomier canvas.
-  const collapsed = tab === 'cleanup' || tab === 'vectorize'
+  // Cleanup, Vectorize & Icon sheet don't use any sidebar controls (and load
+  // their images from their own empty state), so the whole panel slides away
+  // there for a roomier canvas.
+  const collapsed = tab === 'cleanup' || tab === 'vectorize' || tab === 'sheet'
 
   return (
     <aside

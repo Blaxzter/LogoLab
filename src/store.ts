@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Appearance, Environment, LogoAsset } from "./types";
 
-export type Tab = "preview" | "cleanup" | "vectorize" | "export";
+export type Tab = "preview" | "cleanup" | "vectorize" | "sheet" | "export";
 
 export type DeviceId = "ios" | "android";
 

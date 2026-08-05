@@ -1,8 +1,8 @@
 import { useLocation } from 'react-router-dom'
 import type { Tab } from '../store'
 
-/** The four panel tabs — each maps 1:1 to a top-level route segment. */
-const TAB_SET = new Set<Tab>(['preview', 'cleanup', 'vectorize', 'export'])
+/** The panel tabs — each maps 1:1 to a top-level route segment. */
+const TAB_SET = new Set<Tab>(['preview', 'cleanup', 'vectorize', 'sheet', 'export'])
 
 /**
  * The active tab, derived from the URL's first path segment (the router is the

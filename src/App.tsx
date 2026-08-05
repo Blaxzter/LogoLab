@@ -16,6 +16,7 @@ import { TryExampleButton } from './components/ExamplesDialog'
 import { PreviewGrid } from './components/PreviewGrid'
 import CleanupPanel from './components/panels/CleanupPanel'
 import VectorizePanel from './components/panels/VectorizePanel'
+import SheetPanel from './components/panels/SheetPanel'
 import ExportPanel from './components/panels/ExportPanel'
 import Impressum from './components/legal/Impressum'
 import Datenschutz from './components/legal/Datenschutz'
@@ -176,7 +177,7 @@ export function App() {
   // own desktop status bar, so on desktop we drop the bottom footer there — it
   // would otherwise add a second scroll past an already full-height tool. On
   // mobile those studios have no status bar, so the footer stays (scrolls in).
-  const isStudio = tab === 'cleanup' || tab === 'vectorize'
+  const isStudio = tab === 'cleanup' || tab === 'vectorize' || tab === 'sheet'
 
   // Close any open overlay on navigation (covers the back button, not just the
   // in-menu links), and drop the appearance drawer when its trigger disappears.
@@ -251,6 +252,7 @@ export function App() {
             <Route path="/preview" element={<PreviewGrid />} />
             <Route path="/cleanup" element={<CleanupPanel />} />
             <Route path="/vectorize" element={<VectorizePanel />} />
+            <Route path="/sheet" element={<SheetPanel />} />
             <Route path="/export" element={<ExportPanel />} />
             {/* Root and any unknown path land on Preview. */}
             <Route path="/" element={<Navigate to="/preview" replace />} />
