@@ -357,6 +357,77 @@ const CASES: { name: string; note: string; make: () => string }[] = [
     },
   },
   {
+    // The §15.8 driver (user-reported 2026-08-05, /labs/ab on the Instagram wordmark): the
+    // top of a script 'a', where the bowl's crown and the stem converge into a thin white
+    // COUNTER WEDGE. The wedge is sub-pixel for its last few px, so the lattice fuses its
+    // tip into a 2px step — a sharp corner whose one arm is the crown, already turning
+    // inside the [SNAP_GAP..SNAP_SPAN] window the §15 tangent pin measures its "arm line"
+    // over. The line is then a CHORD, not the boundary's tangent, and pinning a long handle
+    // onto it swings the crown px off its own samples (measured on the witness: 29.3° on a
+    // 26px handle = 13.1px of control-point movement, ~2px of sag, the counter's white gap
+    // closed). Thin converging counters are ordinary letterform anatomy — a, e, g of any
+    // wordmark — which is why this is authored as a rack rather than left to the gallery.
+    //
+    // Each unit is a bowl RING (ink annulus + gold counter, so the counter is its own
+    // scored region) whose rim a stem bar grazes as a NEAR-TANGENT chord: `depth` sets how
+    // far the chord cuts in, which is what makes the wedge converge slowly enough to pinch
+    // out sub-pixel. The three (R, depth, φ) cells are the ones a pipeline sweep measured
+    // losing at HEAD (handle-tip movement 5.5 / 5.2 / 3.5px, boundary p95 2.1× worse than
+    // with the pass off); the fourth is the in-case CONTROL — the same shape with the stem
+    // meeting the rim STEEPLY, where the wedge never goes sub-pixel and the pin is right.
+    //
+    // NOTE, honestly, and this is why the case is UNGATED (the `scale-blind` arrangement:
+    // in genEdgeCases + the A/B lane, not in TRUTH_CORPUS): (a) it is not RED at HEAD on its
+    // own aggregate numbers — the worst sag is ~2px over a short arc, which a whole-case p95
+    // dilutes to 1.19, inside tier 0's 2.5. The red gate for the mechanism is
+    // test/planar-pin.test.ts, which measures the fit against its own evidence. And (b)
+    // gating it would ALSO pin an unrelated open defect at a knife edge: @256 the §15
+    // displacement pass costs this art 2 of its 20 authored corners (16/20 = exactly the
+    // corner gate's 80% floor, both before and after §15.8 — the coarse-end residue named in
+    // §15.7). What this rack is for is the pipeline-level and visual witness: measured @512,
+    // boundary p95 1.19 → 0.45 and chamfer 0.24 → 0.16 across the fix.
+    name: 'wedge-counter',
+    note: 'converging counter wedge over a curved crown → tangent-pin arm-line extrapolation (§15.8)',
+    make: () => {
+      // One 'a'-like unit. `phi` is where the stem's chord meets the rim (deg from the top),
+      // `depth` how deep it cuts, `crown` the ink left between counter and rim.
+      const unit = (cx: number, cy: number, R: number, depth: number, phi: number): string => {
+        const crown = Math.max(1.2, R * 0.16)
+        const dy = -Math.max(1, R * 0.15)
+        const r = R + dy - crown
+        const stemW = Math.max(4, R * 0.45)
+        const a = (phi * Math.PI) / 180
+        const nx = Math.sin(a)
+        const ny = -Math.cos(a)
+        // The chord: offset R−depth from the centre along n, running along its perpendicular.
+        const ox = cx + nx * (R - depth)
+        const oy = cy + ny * (R - depth)
+        const dx = -ny
+        const dyv = nx
+        const L = R * 2.2
+        const p = (x: number, y: number): string => `${x.toFixed(2)},${y.toFixed(2)}`
+        const stem = [
+          p(ox - dx * L * 0.15, oy - dyv * L * 0.15),
+          p(ox + dx * L, oy + dyv * L),
+          p(ox + dx * L + nx * stemW, oy + dyv * L + ny * stemW),
+          p(ox - dx * L * 0.15 + nx * stemW, oy - dyv * L * 0.15 + ny * stemW),
+        ].join(' ')
+        return (
+          `<path d="${circleD(cx, cy, R)} ${circleD(cx, cy + dy, r)}" fill="${INK}" fill-rule="evenodd"/>` +
+          `<circle cx="${cx}" cy="${(cy + dy).toFixed(2)}" r="${r.toFixed(2)}" fill="${GOLD}"/>` +
+          `<polygon points="${stem}" fill="${INK}"/>`
+        )
+      }
+      return svg(
+        `<rect width="${V}" height="${V}" fill="${WHITE}"/>` +
+          unit(62, 62, 28, 0.8, 65) + // measured: 5.54px of handle-tip movement, p95 0.71 → 1.49
+          unit(190.5, 58.5, 22, 0.6, 65) + // 5.22px, p95 0.59 → 1.34 (half-pixel phase)
+          unit(62.5, 190.5, 22, 0.6, 75) + // 3.50px, p95 0.38 → 1.45
+          unit(190, 190, 26, 2.6, 30), // CONTROL: a steep meeting, no sub-pixel wedge
+      )
+    },
+  },
+  {
     // The §10 "driver" case — small SHARP features on the same canvas as a large smooth
     // shape, so one absolute fit tolerance cannot serve both. A 14-tooth gear whose tooth
     // chords are all ≥ 7.5px @512 — above the answer sheet's CORNER_MIN_EDGE grading

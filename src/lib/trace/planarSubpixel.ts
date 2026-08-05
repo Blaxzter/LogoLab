@@ -104,17 +104,55 @@ const TURN_WIN = 4
 const TURN_MAX_DEG = 35
 const TURN_GUARD = 5
 
+/** Why one chain point did or did not move — the per-point outcome the diagnostics
+ *  (src/devtest/counterDiag.ts) tabulate. Purely observational: the pass behaves
+ *  identically whether or not a sink is attached. */
+export type SubpixelOutcome =
+  | 'moved'
+  | 'degenerate-tangent'
+  | 'label-left'
+  | 'label-right'
+  | 'contrast'
+  | 'flat-left'
+  | 'flat-right'
+  | 'residual'
+  | 'monotone'
+  | 'max-disp'
+  | 'zero'
+  | 'corner-revert'
+
+export interface SubpixelDiagRecord {
+  edgeId: number
+  /** Index into the chain (same index in the lattice and displaced arrays). */
+  index: number
+  /** The lattice point. */
+  x: number
+  y: number
+  /** Left normal at this point (unit), or 0,0 when the tangent was degenerate. */
+  nx: number
+  ny: number
+  outcome: SubpixelOutcome
+  /** Signed displacement along the left normal (0 unless outcome is 'moved'). */
+  delta: number
+}
+
+export type SubpixelDiag = (r: SubpixelDiagRecord) => void
+
 /**
  * Compute sub-pixel positions for every edge chain in the network. Returns edgeId →
  * displaced pts (same length, same indices — corner indices detected on the raw chain
  * remain valid). Open-edge ENDPOINTS are never displaced: junction placement is its own
  * problem (§14 thread / §0 #15), and the assemble step pins them to the junction vertex.
  * Chains the estimator declines are returned as-is (the caller can use identity).
+ *
+ * `diag` is an optional observational sink (one record per interior point); it never
+ * changes what the pass does.
  */
 export function subpixelEdgeChains(
   net: PlanarNetwork,
   labels: Int32Array,
   image: SourceImage,
+  diag?: SubpixelDiag,
 ): Map<number, Vec[]> {
   const { width: w, height: h, data } = image
   const labelAt = (x: number, y: number): number => {
@@ -176,16 +214,28 @@ export function subpixelEdgeChains(
       const tx = next.x - prev.x
       const ty = next.y - prev.y
       const tl = Math.hypot(tx, ty)
-      if (tl < 1e-9) continue
+      if (tl < 1e-9) {
+        diag?.({ edgeId: e.id, index: i, x: p.x, y: p.y, nx: 0, ny: 0, outcome: 'degenerate-tangent', delta: 0 })
+        continue
+      }
       // Left normal: rotate the tangent so it points into e.left's pixels (for an E step
       // the left label is the N pixel — see stepLabels in planarNetwork.ts).
       const nx = ty / tl
       const ny = -tx / tl
+      const say = (outcome: SubpixelOutcome, delta = 0): void => {
+        diag?.({ edgeId: e.id, index: i, x: p.x, y: p.y, nx, ny, outcome, delta })
+      }
 
       // Far anchors must land in their OWN region's pixels — the one guard that covers
       // junction neighbourhoods, thin features and the border alike.
-      if (labelAt(p.x + FAR * nx, p.y + FAR * ny) !== e.left) continue
-      if (labelAt(p.x - FAR * nx, p.y - FAR * ny) !== e.right) continue
+      if (labelAt(p.x + FAR * nx, p.y + FAR * ny) !== e.left) {
+        say('label-left')
+        continue
+      }
+      if (labelAt(p.x - FAR * nx, p.y - FAR * ny) !== e.right) {
+        say('label-right')
+        continue
+      }
 
       bilin(p.x + FAR * nx, p.y + FAR * ny, farL)
       bilin(p.x - FAR * nx, p.y - FAR * ny, farR)
@@ -193,16 +243,25 @@ export function subpixelEdgeChains(
       const ay = farL[1] - farR[1]
       const az = farL[2] - farR[2]
       const c2 = ax * ax + ay * ay + az * az
-      if (c2 < MIN_CONTRAST * MIN_CONTRAST) continue
+      if (c2 < MIN_CONTRAST * MIN_CONTRAST) {
+        say('contrast')
+        continue
+      }
 
       // Anchor flatness (see ANCHOR_FLAT_MAX): an anchor sitting in a ramp — the
       // opposite wall of a thin feature, a wide blur — is not a pure-colour witness.
       bilin(p.x + (FAR + 1) * nx, p.y + (FAR + 1) * ny, flatS)
       let d0 = flatS[0] - farL[0], d1 = flatS[1] - farL[1], d2 = flatS[2] - farL[2]
-      if (d0 * d0 + d1 * d1 + d2 * d2 > ANCHOR_FLAT_MAX * ANCHOR_FLAT_MAX) continue
+      if (d0 * d0 + d1 * d1 + d2 * d2 > ANCHOR_FLAT_MAX * ANCHOR_FLAT_MAX) {
+        say('flat-left')
+        continue
+      }
       bilin(p.x - (FAR + 1) * nx, p.y - (FAR + 1) * ny, flatS)
       d0 = flatS[0] - farR[0]; d1 = flatS[1] - farR[1]; d2 = flatS[2] - farR[2]
-      if (d0 * d0 + d1 * d1 + d2 * d2 > ANCHOR_FLAT_MAX * ANCHOR_FLAT_MAX) continue
+      if (d0 * d0 + d1 * d1 + d2 * d2 > ANCHOR_FLAT_MAX * ANCHOR_FLAT_MAX) {
+        say('flat-right')
+        continue
+      }
 
       // Coverage profile along the normal: f(-FAR) = 0 and f(+FAR) = 1 by construction.
       let ok = true
@@ -228,9 +287,15 @@ export function subpixelEdgeChains(
         if (k === 0) f1 = f
         else f2 = f
       }
-      if (!ok) continue
+      if (!ok) {
+        say('residual')
+        continue
+      }
       // A single edge crossing is monotone in s (f rises toward the left region).
-      if (f1 > f2 + MONO_EPS || f1 < -MONO_EPS || f2 > 1 + MONO_EPS) continue
+      if (f1 > f2 + MONO_EPS || f1 < -MONO_EPS || f2 > 1 + MONO_EPS) {
+        say('monotone')
+        continue
+      }
 
       // Locate f = 0.5 by linear interpolation between the bracketing samples.
       let delta: number
@@ -244,15 +309,23 @@ export function subpixelEdgeChains(
         // The typical case: between the two near samples.
         delta = -NEAR + ((0.5 - f1) / Math.max(1e-9, f2 - f1)) * (2 * NEAR)
       }
-      if (!Number.isFinite(delta) || Math.abs(delta) > MAX_DISP) continue
-      if (delta === 0) continue
+      if (!Number.isFinite(delta) || Math.abs(delta) > MAX_DISP) {
+        say('max-disp', Number.isFinite(delta) ? delta : 0)
+        continue
+      }
+      if (delta === 0) {
+        say('zero')
+        continue
+      }
 
       if (!displaced) displaced = pts.map((q) => ({ x: q.x, y: q.y }))
       displaced[i] = { x: p.x + delta * nx, y: p.y + delta * ny }
+      say('moved', delta)
     }
 
     if (displaced) {
-      revertCorners(displaced, pts, e.closed)
+      const reverted = revertCorners(displaced, pts, e.closed)
+      if (diag) for (const i of reverted) diag({ edgeId: e.id, index: i, x: pts[i].x, y: pts[i].y, nx: 0, ny: 0, outcome: 'corner-revert', delta: 0 })
       out.set(e.id, displaced)
     }
   }
@@ -260,10 +333,11 @@ export function subpixelEdgeChains(
 }
 
 /** The corner self-guard (see TURN_MAX_DEG above): measure the local turn on the
- *  DISPLACED chain and revert to the lattice around every corner-sharp zone. */
-function revertCorners(displaced: Vec[], lattice: Vec[], closed: boolean): void {
+ *  DISPLACED chain and revert to the lattice around every corner-sharp zone. Returns the
+ *  reverted indices (for the diagnostics; the caller ignores them otherwise). */
+function revertCorners(displaced: Vec[], lattice: Vec[], closed: boolean): number[] {
   const n = displaced.length
-  if (n < 2 * TURN_WIN + 1) return
+  if (n < 2 * TURN_WIN + 1) return []
   const cosMax = Math.cos((TURN_MAX_DEG * Math.PI) / 180)
   const at = (i: number): Vec => (closed ? displaced[((i % n) + n) % n] : displaced[Math.min(n - 1, Math.max(0, i))])
   const sharp: number[] = []
@@ -282,12 +356,15 @@ function revertCorners(displaced: Vec[], lattice: Vec[], closed: boolean): void 
     if (ul < 1e-9 || vl < 1e-9) continue
     if ((ux * vx + uy * vy) / (ul * vl) < cosMax) sharp.push(i)
   }
+  const reverted: number[] = []
   for (const i of sharp) {
     for (let o = -TURN_GUARD; o <= TURN_GUARD; o++) {
       const j = closed ? (((i + o) % n) + n) % n : Math.min(n - 1, Math.max(0, i + o))
       displaced[j] = { x: lattice[j].x, y: lattice[j].y }
+      reverted.push(j)
     }
   }
+  return reverted
 }
 
 /** Re-export for callers that only need the type. */

@@ -115,6 +115,13 @@ export interface PlanarFitOptions {
    * touching its position. Absent/false ⇒ byte-identical fits.
    */
   pinCornerTangents?: boolean
+  /**
+   * DIAGNOSTIC (never in defaults, never read back): a sink called once per tangent-pin
+   * candidate with the evidence behind it — the rotation the pin wants, and how straight
+   * the arm that would supply it actually is. `src/devtest/pinDiag.ts` histograms this
+   * across the corpus; attaching it cannot change the fit.
+   */
+  pinDiag?: PinDiag
 }
 
 export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
@@ -640,6 +647,25 @@ const SNAP_SPAN_MAX = 40
  *  straight arm" — just above the ±0.5px staircase quantization. */
 const SNAP_COLLINEAR = 0.75
 
+/**
+ * An arm line WITH the evidence that says whether it is a tangent at all: the max
+ * perpendicular deviation of its own samples (`bow`) and the window's chord length.
+ * A straight arm's samples sit on the line (bow ≈ the raster's own ±0.5px staircase,
+ * far less on a §15-displaced chain); a CURVED arm's line is a chord, and its bow is
+ * the arc's sagitta over that window. The §15 tangent pin needs the distinction: a
+ * chord's direction is not the boundary's direction at the apex.
+ */
+export interface ArmFit {
+  /** Unit direction, oriented along the chain's travel by the caller. */
+  dir: Vec
+  /** Max |perpendicular deviation| of the arm samples from the fitted line, px. */
+  bow: number
+  /** Distance between the first and last arm sample, px. */
+  chord: number
+  /** Number of samples in the window. */
+  n: number
+}
+
 /** Least-squares line through `pts` → a point on it (`c`) and a unit direction (`d`). */
 export function armLine(pts: Vec[]): { c: Vec; d: Vec } {
   let mx = 0
@@ -662,6 +688,18 @@ export function armLine(pts: Vec[]): { c: Vec; d: Vec } {
   }
   const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy)
   return { c: { x: mx, y: my }, d: { x: Math.cos(theta), y: Math.sin(theta) } }
+}
+
+/** `armLine` plus the straightness evidence (see ArmFit). `dir` is returned raw — the
+ *  caller orients it along the chain's travel. */
+function armFitOf(pts: Vec[]): { line: { c: Vec; d: Vec }; fit: ArmFit } {
+  const line = armLine(pts)
+  let bow = 0
+  for (const p of pts) {
+    const dev = Math.abs((p.x - line.c.x) * line.d.y - (p.y - line.c.y) * line.d.x)
+    if (dev > bow) bow = dev
+  }
+  return { line, fit: { dir: line.d, bow, chord: dist(pts[0], pts[pts.length - 1]), n: pts.length } }
 }
 
 /**
@@ -687,7 +725,7 @@ function snapCornerToArms(pts: Vec[], c: number, inGap: number, outGap: number, 
  */
 function snapCornerToArmsFull(
   pts: Vec[], c: number, inGap: number, outGap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0,
-): { p: Vec; inDir: Vec | null; outDir: Vec | null } {
+): { p: Vec; inArm: ArmFit | null; outArm: ArmFit | null } {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
   // Base window [gap..span], then extend up to `max` while the arm stays COLLINEAR.
@@ -720,21 +758,23 @@ function snapCornerToArmsFull(
   // from 3–5 phase-noise samples lands 2.6–7.9px off. Keep the lattice apex.
   // (The threshold was SWEPT: raising it to 11/14 collapses recall to 57–62% —
   // medium arms genuinely profit from reconstruction; only the shortest do not.)
-  if (Math.min(inSpan, outSpan) < SNAP_GAP + 4) return { p: { x: pts[c].x, y: pts[c].y }, inDir: null, outDir: null }
+  if (Math.min(inSpan, outSpan) < SNAP_GAP + 4) return { p: { x: pts[c].x, y: pts[c].y }, inArm: null, outArm: null }
   const inPts = collect(-1, inGap, inSpan, inMax)
   const outPts = collect(1, outGap, outSpan, outMax)
-  if (inPts.length < 2 || outPts.length < 2) return { p: { x: pts[c].x, y: pts[c].y }, inDir: null, outDir: null }
-  const a = armLine(inPts)
-  const b = armLine(outPts)
+  if (inPts.length < 2 || outPts.length < 2) return { p: { x: pts[c].x, y: pts[c].y }, inArm: null, outArm: null }
+  const aFit = armFitOf(inPts)
+  const bFit = armFitOf(outPts)
+  const a = aFit.line
+  const b = bFit.line
   // Orient along chain travel: `a` was sampled BEFORE the apex (in), `b` AFTER (out).
   const orient = (d: Vec, from: Vec, to: Vec): Vec => {
     const s = d.x * (to.x - from.x) + d.y * (to.y - from.y)
     return s >= 0 ? { x: d.x, y: d.y } : { x: -d.x, y: -d.y }
   }
-  const inDir = orient(a.d, pts[wrap(c - inSpan)], pts[c])
-  const outDir = orient(b.d, pts[c], pts[wrap(c + outSpan)])
+  const inArm: ArmFit = { ...aFit.fit, dir: orient(a.d, pts[wrap(c - inSpan)], pts[c]) }
+  const outArm: ArmFit = { ...bFit.fit, dir: orient(b.d, pts[c], pts[wrap(c + outSpan)]) }
   const det = a.d.x * -b.d.y - a.d.y * -b.d.x
-  if (Math.abs(det) < 1e-6) return { p: { x: pts[c].x, y: pts[c].y }, inDir, outDir }
+  if (Math.abs(det) < 1e-6) return { p: { x: pts[c].x, y: pts[c].y }, inArm, outArm }
   const rx = b.c.x - a.c.x
   const ry = b.c.y - a.c.y
   const t = (rx * -b.d.y - ry * -b.d.x) / det
@@ -751,8 +791,8 @@ function snapCornerToArmsFull(
   // keep the lattice corner.
   const shortSpan = Math.min(inSpan, outSpan)
   const allow = shortSpan >= SNAP_SPAN ? Math.max(inSpan, outSpan) : Math.max(2, 0.5 * shortSpan)
-  if (dist({ x: ix, y: iy }, pts[c]) > allow) return { p: { x: pts[c].x, y: pts[c].y }, inDir, outDir }
-  return { p: { x: ix, y: iy }, inDir, outDir }
+  if (dist({ x: ix, y: iy }, pts[c]) > allow) return { p: { x: pts[c].x, y: pts[c].y }, inArm, outArm }
+  return { p: { x: ix, y: iy }, inArm, outArm }
 }
 
 /**
@@ -1054,20 +1094,71 @@ function snapCapCorner(pts: Vec[], c: number, sign: -1 | 1, toLong: number, capL
  *  not the boundary's tangent, so pinning would flatten real curvature at the corner. */
 const PIN_ROTATE_MAX_DEG = 30
 
-/** Rotate one handle of an apex node onto `dir` (unit, oriented along chain travel),
+/**
+ * …and the same rule stated in the units the CURVE feels (§15.8, issue #11). An angle cap
+ * alone bounds the wrong quantity: rotating a handle moves the curve in proportion to the
+ * handle's LENGTH, so the same 29° that is a harmless nudge on a 2px handle swings a 26px
+ * one 13px sideways. That is what closed the counter of a script 'a' on the reported
+ * witness — an arm line measured over 10px of boundary, extrapolated onto a handle steering
+ * 34px of curve.
+ *
+ * The pin exists to correct a TANGENT, so bound its side effect by the fit's own tolerance:
+ * moving one cubic control point by d moves the curve by at most max{3t(1−t)²} = 4/9 of d,
+ * and a correction that moves the curve further than ε is no longer a tangent correction —
+ * it is a re-fit onto evidence the fit itself rejected. Derived, not calibrated: measured
+ * over tier 0 + the gallery witnesses (703 applied pins, src/devtest/pinDiag.ts), 99% move
+ * the control point < 2.0px and the whole tier-0 corpus stays under 1.9px, so this bound is
+ * inert on the population it was NOT aimed at, and the witness's 13.1px is 5.8× outside it.
+ */
+const PIN_CURVE_BASIS = 4 / 9
+
+/** One tangent-pin candidate, for the histogram behind any change to the pin's gate
+ *  (`src/devtest/pinDiag.ts`). Observational only — attaching a sink never changes the
+ *  fit. See PlanarFitOptions.pinDiag. */
+export interface PinDiagRecord {
+  /** Apex position. */
+  x: number
+  y: number
+  /** Which handle of the apex node. */
+  side: 'in' | 'out'
+  /** Angle between the fitted handle and the arm-line direction (deg). */
+  rotDeg: number
+  /** Max deviation of the arm samples from their own line — 0 = a straight arm. */
+  bow: number
+  /** Chord length of the arm window (px) and its sample count. */
+  chord: number
+  n: number
+  /** Handle length (px) — the pin keeps it and rotates only the direction. */
+  handle: number
+  /** Did the pin actually rotate this handle. */
+  applied: boolean
+}
+
+export type PinDiag = (r: PinDiagRecord) => void
+
+/** Rotate one handle of an apex node onto `arm.dir` (unit, oriented along chain travel),
  *  keeping its length. `hIn` sits BEHIND the apex along the incoming direction; `hOut`
- *  AHEAD along the outgoing one. No-op on absent handles and past PIN_ROTATE_MAX. */
-function pinHandle(node: PathNode, which: 'hIn' | 'hOut', dir: Vec): void {
+ *  AHEAD along the outgoing one. No-op on absent handles, past PIN_ROTATE_MAX, and past the
+ *  curve-displacement bound (PIN_CURVE_BASIS). */
+function pinHandle(node: PathNode, which: 'hIn' | 'hOut', arm: ArmFit, eps: number, diag?: PinDiag): void {
   const h = node[which]
   if (!h) return
   const vx = h.x - node.x
   const vy = h.y - node.y
   const len = Math.hypot(vx, vy)
   if (len < 1e-9) return
+  const dir = arm.dir
   const sx = which === 'hIn' ? -dir.x : dir.x
   const sy = which === 'hIn' ? -dir.y : dir.y
-  const cos = (vx * sx + vy * sy) / len
-  if (cos < Math.cos((PIN_ROTATE_MAX_DEG * Math.PI) / 180)) return
+  const cos = Math.min(1, Math.max(-1, (vx * sx + vy * sy) / len))
+  const rotDeg = (Math.acos(cos) * 180) / Math.PI
+  // What the rotation does to the control point (the chord of the rotation), and through it
+  // to the curve. Both caps: the angle says the arm line disagrees with the fit; the curve
+  // displacement says the disagreement is big enough to matter at this handle's reach.
+  const shift = 2 * len * Math.sin((rotDeg * Math.PI) / 360)
+  const applied = cos >= Math.cos((PIN_ROTATE_MAX_DEG * Math.PI) / 180) && PIN_CURVE_BASIS * shift <= eps
+  diag?.({ x: node.x, y: node.y, side: which === 'hIn' ? 'in' : 'out', rotDeg, bow: arm.bow, chord: arm.chord, n: arm.n, handle: len, applied })
+  if (!applied) return
   node[which] = { x: node.x + len * sx, y: node.y + len * sy }
 }
 
@@ -1089,7 +1180,7 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
   // Snap each corner, capping arm samples to the gap to its neighbour corners.
   // Arm DIRECTIONS ride along for the §15 tangent pin (null wherever the snap fell
   // back to the lattice or the corner is cap-resolved — those get no pin).
-  const armDirsAll: ({ inDir: Vec | null; outDir: Vec | null } | null)[] = []
+  const armDirsAll: ({ inArm: ArmFit | null; outArm: ArmFit | null } | null)[] = []
   const snappedAll: Vec[] = C.map((c, k) => {
     const prev = C[(k - 1 + C.length) % C.length]
     const next = C[(k + 1) % C.length]
@@ -1114,14 +1205,14 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1))
     const outMax = Math.min(SNAP_SPAN_MAX, Math.max(outGap + 1, toNext - 1))
     const full = snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
-    armDirsAll.push({ inDir: full.inDir, outDir: full.outDir })
+    armDirsAll.push({ inArm: full.inArm, outArm: full.outArm })
     return full.p
   })
   // Drop corners whose snapped point coincides with the previous (a shoulder pair
   // that both resolved onto the same apex) — incl. the cyclic first/last pair.
   const idx: number[] = []
   const snap: Vec[] = []
-  const armDirs: ({ inDir: Vec | null; outDir: Vec | null } | null)[] = []
+  const armDirs: ({ inArm: ArmFit | null; outArm: ArmFit | null } | null)[] = []
   for (let k = 0; k < C.length; k++) {
     const last = snap[snap.length - 1]
     if (last && dist(last, snappedAll[k]) < 1) continue
@@ -1199,8 +1290,8 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
       if (!dirs) continue
       const arriving = fitted[(k - 1 + arcs) % arcs]
       const leaving = fitted[k]
-      if (dirs.inDir && arriving.length >= 2) pinHandle(arriving[arriving.length - 1], 'hIn', dirs.inDir)
-      if (dirs.outDir && leaving.length >= 2) pinHandle(leaving[0], 'hOut', dirs.outDir)
+      if (dirs.inArm && arriving.length >= 2) pinHandle(arriving[arriving.length - 1], 'hIn', dirs.inArm, opts.epsilon, opts.pinDiag)
+      if (dirs.outArm && leaving.length >= 2) pinHandle(leaving[0], 'hOut', dirs.outArm, opts.epsilon, opts.pinDiag)
     }
   }
 
@@ -1301,7 +1392,7 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
   for (;;) {
     if (C.length === 0) return fallback()
 
-    const armDirsAll: { inDir: Vec | null; outDir: Vec | null }[] = []
+    const armDirsAll: { inArm: ArmFit | null; outArm: ArmFit | null }[] = []
     const snappedAll: Vec[] = C.map((c, k) => {
       const toPrev = c - (k > 0 ? C[k - 1] : 0)
       const toNext = (k < C.length - 1 ? C[k + 1] : n - 1) - c
@@ -1314,13 +1405,13 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
       const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1), c)
       const outMax = Math.min(SNAP_SPAN_MAX, Math.max(outGap + 1, toNext - 1), n - 1 - c)
       const full = snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
-      armDirsAll.push({ inDir: full.inDir, outDir: full.outDir })
+      armDirsAll.push({ inArm: full.inArm, outArm: full.outArm })
       return full.p
     })
     // Drop corners whose snap collapsed onto the previous breakpoint or an endpoint.
     const idx: number[] = []
     const snap: Vec[] = []
-    const armDirs: { inDir: Vec | null; outDir: Vec | null }[] = []
+    const armDirs: { inArm: ArmFit | null; outArm: ArmFit | null }[] = []
     for (let k = 0; k < C.length; k++) {
       const prevPin = snap[snap.length - 1] ?? pts[0]
       if (dist(prevPin, snappedAll[k]) < 1 || dist(pts[n - 1], snappedAll[k]) < 1) continue
@@ -1363,8 +1454,8 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
         if (!dirs) continue
         const arriving = fitted[k]
         const leaving = fitted[k + 1]
-        if (dirs.inDir && arriving.length >= 2) pinHandle(arriving[arriving.length - 1], 'hIn', dirs.inDir)
-        if (dirs.outDir && leaving && leaving.length >= 2) pinHandle(leaving[0], 'hOut', dirs.outDir)
+        if (dirs.inArm && arriving.length >= 2) pinHandle(arriving[arriving.length - 1], 'hIn', dirs.inArm, opts.epsilon, opts.pinDiag)
+        if (dirs.outArm && leaving && leaving.length >= 2) pinHandle(leaving[0], 'hOut', dirs.outArm, opts.epsilon, opts.pinDiag)
       }
     }
 
