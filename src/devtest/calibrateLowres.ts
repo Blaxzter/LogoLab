@@ -85,14 +85,15 @@ const f = (v: number, d = 2): string => v.toFixed(d).padStart(7)
 console.log(`━━━ PER-CASE GATE VALUES @ ${RES}px ━━━\n`)
 console.log(
   `  ${'case'.padEnd(24)} ${'chamfer'.padStart(7)} ${'p95'.padStart(7)} ${'parsim'.padStart(7)}` +
-    ` ${'corners'.padStart(9)} ${'regions'.padStart(9)} ${'paint μ/p95'.padStart(12)}`,
+    ` ${'corners'.padStart(9)} ${'regions'.padStart(9)} ${'worstInk'.padStart(9)} ${'paint μ/p95'.padStart(12)}`,
 )
 for (const r of rows) {
   const corners = r.gtCorners > 0 && !r.gradients ? `${r.cornersRecovered}/${r.gtCorners}` : 'n/a'
   const regions = r.gradients ? 'n/a' : `${r.regions.recovered}/${r.regions.trueRegions}`
+  const worstInk = r.gradients ? 'n/a' : `${(r.regions.worstInk * 100).toFixed(1)}%`
   const paint = r.paintMean !== null ? `${r.paintMean.toFixed(2)}/${r.paintP95!.toFixed(2)}` : 'n/a'
   const bnd = r.samples > 0 ? `${f(r.chamfer)} ${f(r.p95)} ${f(r.parsimony, 1)}` : `${'n/a'.padStart(7)} ${'n/a'.padStart(7)} ${'n/a'.padStart(7)}`
-  console.log(`  ${r.name.padEnd(24)} ${bnd} ${corners.padStart(9)} ${regions.padStart(9)} ${paint.padStart(12)}`)
+  console.log(`  ${r.name.padEnd(24)} ${bnd} ${corners.padStart(9)} ${regions.padStart(9)} ${worstInk.padStart(9)} ${paint.padStart(12)}`)
 }
 
 for (const r of rows) {
@@ -129,3 +130,20 @@ console.log(`\n━━━ DISTRIBUTIONS (${scorable.length} scorable cases @ ${RE
 report('chamfer', TRUTH_TOL.chamfer, 'px', [0.5, 0.75, 1, 1.5, 2])
 report('p95', TRUTH_TOL.p95, 'px', [1.5, 2, 2.5, 4, 6])
 report('parsimony', TRUTH_TOL.parsimony, '×', [2, 3, 4, 5, 6])
+
+// INK KEPT is a FLOOR, not a ceiling — report it from the other end (§0 #14's lens:
+// a region whose doc item survives while its geometry pinches away).
+{
+  const flat = rows.filter((r) => !r.gradients)
+  const xs = flat.map((r) => r.regions.worstInk).sort((a, b) => a - b)
+  if (xs.length) {
+    const q = (p: number) => (xs[Math.min(xs.length - 1, Math.floor(p * xs.length))] * 100).toFixed(1)
+    const over = (t: number) => `${flat.filter((r) => r.regions.worstInk >= t).length}/${flat.length}`
+    console.log(`── worst ink kept ${'─'.repeat(45)}`)
+    console.log(`   p05 ${q(0.05)}%  p10 ${q(0.1)}%  p50 ${q(0.5)}%  min ${(xs[0] * 100).toFixed(1)}%`)
+    const worst = [...flat].sort((a, b) => a.regions.worstInk - b.regions.worstInk).slice(0, 5)
+    console.log(`   worst: ${worst.map((r) => `${r.name} ${(r.regions.worstInk * 100).toFixed(1)}%`).join(' · ')}`)
+    console.log(`   candidates: ${[0.3, 0.4, 0.5, 0.6, 0.7].map((t) => `${t * 100}% → ${over(t)}`).join('   ')}`)
+    console.log()
+  }
+}

@@ -237,6 +237,7 @@ function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions:
     cornersRecovered: geom.cornersRecovered,
     paintMean: paint?.mean,
     paintP95: paint?.p95,
+    worstInk: regions.worstInk,
     flatArt: !gradients,
     // Per-tier tolerances: tier 1 is soft-edged gradient art and is NOT gradeable at the
     // thresholds tier 0's crisp flat art was calibrated on. The limit shown is whichever one
@@ -255,7 +256,9 @@ function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions:
         why:
           g.key === 'regions'
             ? 'gradient art — a flat-region count here is a quantisation artifact, not a region count'
-            : g.key === 'corners'
+            : g.key === 'ink'
+              ? 'gradient art — ink area per flat region is meaningless where the art has no flat regions'
+              : g.key === 'corners'
               ? 'too few authored corners to grade (mostly-round art), or gradient art'
               : g.key === 'paintMean' || g.key === 'paintP95'
                 ? 'flat art (regions + boundary already pin the paint), or tier-1 paint not yet calibrated'
@@ -270,8 +273,11 @@ function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions:
         ? `${regions.recovered}/${regions.trueRegions}`
         : g.key === 'corners'
           ? `${geom.cornersRecovered}/${geom.gtCorners}`
-          : g.value.toFixed(g.digits) + (g.key === 'parsimony' ? '×' : isPaint ? 'ΔE' : 'px')
-    const unit = g.key === 'parsimony' ? '×' : g.key === 'regions' || g.key === 'corners' ? '' : isPaint ? 'ΔE' : 'px'
+          : g.key === 'ink'
+            ? `${(g.value * 100).toFixed(0)}%`
+            : g.value.toFixed(g.digits) + (g.key === 'parsimony' ? '×' : isPaint ? 'ΔE' : 'px')
+    const unit =
+      g.key === 'parsimony' ? '×' : g.key === 'regions' || g.key === 'corners' || g.key === 'ink' ? '' : isPaint ? 'ΔE' : 'px'
     return {
       key: g.key,
       label: g.label,

@@ -46,6 +46,8 @@ import {
   LOWRES_CORPUS,
   LOWRES_RES,
   LOWRES_TOL,
+  TIER2_REGION_CORPUS,
+  TIER2_REGION_RES,
   evaluateTruthGates,
   type TruthCase,
   type TruthTol,
@@ -174,6 +176,9 @@ async function runCase(
     trueRegions: r.trueRegions, recovered: r.recovered,
     ...corners,
     paintMean: paint?.meanDeltaE, paintP95: paint?.p95DeltaE,
+    // Ink kept (§0 #14): region recovery is a MEDIAN and only flips past 50% loss, so a
+    // region can pinch to a sliver with every other gate green. Flat art only.
+    worstInk: r.worstInk,
     // Region recovery is meaningless on gradient art — a smooth ramp's 8-bit quantisation
     // bands read as dozens of "flat regions", so a tracer that correctly fits ONE gradient
     // would look like it dropped sixty. evaluateTruthGates returns it applicable:false, and
@@ -244,4 +249,71 @@ for (const c of LOWRES_CORPUS) {
       tol: LOWRES_TOL[c.tier],
       skipTier2Corners: true,
     }))
+}
+
+/**
+ * The TIER-2 REGION lane @512 (§0 #14): does every flat region of a tier-2 twin SURVIVE
+ * at the resolution the main gate runs at? Tier 2 is browse-only @512 (too slow to gate
+ * whole), and that gap is how a §10.4 regression collapsed beverage-box's `#990838` to a
+ * sliver for five commits with CI green — the case is gated @256, where it passed.
+ *
+ * Two gates only, both tolerance-free: region recovery (zero tolerance) and ink kept
+ * (a ratio, INK_MIN). truthCorpus.ts's TIER2_REGION_CORPUS comment says why the boundary
+ * numbers are deliberately NOT gated here.
+ */
+const KNOWN_DEFECTS_TIER2_512: Record<string, string> = {
+  // Empty, and it landed empty — the defect this lane exists for (§0 #14) had already
+  // been closed, incidentally and unnoticed, by §15's sub-pixel edge placement. The lane
+  // was verified RED against the tracer that had the defect: at 88ef5a2 (and at HEAD with
+  // `planarFit.subpixelEdges: false`, which restores the lattice chains §10.4's re-seat
+  // mis-reads) beverage-box measures 6/7 regions and 13.9% ink. See §12.4/§16.
+}
+
+async function runRegionCase(c: TruthCase): Promise<void> {
+  const svg = readFileSync(join(root, c.svg), 'utf8')
+  const img = decodePng(
+    new Resvg(svg, { fitTo: { mode: 'width', value: TIER2_REGION_RES }, background: 'white' }).render().asPng(),
+  )
+  const doc = await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: c.gradients,
+  })
+  const r = scoreRegions(img, doc)
+  const gates = evaluateTruthGates({
+    // Boundary is not gated in this lane (see TIER2_REGION_CORPUS): samples 0 reports
+    // those gates n/a, and geometry is not scored at all, which is most of the runtime.
+    samples: 0, chamfer: 0, p95: 0, parsimony: 0,
+    trueRegions: r.trueRegions, recovered: r.recovered,
+    worstInk: r.worstInk,
+    flatArt: !c.gradients,
+    tier: c.tier,
+  })
+  const failing = gates.filter((x) => x.applicable && !x.pass)
+  const known = KNOWN_DEFECTS_TIER2_512[c.name]
+
+  if (known) {
+    assert.ok(
+      failing.length > 0,
+      `${c.name} is listed in KNOWN_DEFECTS_TIER2_512 ("${known}") but now PASSES @ ${TIER2_REGION_RES}px.\n` +
+        `      Delete its entry in test/truth-gate.test.ts to lock the improvement in.`,
+    )
+    return
+  }
+
+  assert.equal(
+    failing.length,
+    0,
+    `${c.name} (tier ${c.tier}) fails ${failing.length} region gate(s) @ ${TIER2_REGION_RES}px:\n` +
+      failing.map((x) => `        ✗ ${x.label}: ${x.value.toFixed(x.digits)} vs ${x.rule}`).join('\n') +
+      (r.missing.length
+        ? `\n      dropped: ${r.missing.map((m) => `${m.hex} (${m.areaPx}px) painted ${m.paintedHex}, ΔE ${m.deltaE.toFixed(1)}`).join('; ')}`
+        : '') +
+      `\n      worst ink: ${r.ink[0]?.hex} ${(r.worstInk * 100).toFixed(1)}% (${r.ink[0]?.renderPx} rendered px of ${r.ink[0]?.srcPx}).\n` +
+      `      A region can keep its colour and lose its AREA — that is §0 #14's mechanism.`,
+  )
+}
+
+for (const c of TIER2_REGION_CORPUS) {
+  test(`truth regions @${TIER2_REGION_RES}: ${c.name} (tier ${c.tier})`, () => runRegionCase(c))
 }

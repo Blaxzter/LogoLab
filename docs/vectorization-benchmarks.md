@@ -32,7 +32,22 @@ guardrails):
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **A junction that is a REAL CORNER is still pinned to its integer lattice corner** — the residue of the closed #15 (§14, the weak-boundary pin). A band-seam junction now lands on the strong edge it interrupts; a junction that IS a corner of the art does not, so an edge spanning one of each trades a constant offset for a TILT. Same for a corner NEAR a junction: the seam truncates the arm `snapCornerToArms` reconstructs the apex from (§10.6's short-arm regime), which is why the Affinity apex did not improve | `affinity-designer.svg` @512 flat (private corpus, **ungated**); the mechanism is generic to any junction the art corners at | the mark's 133px top edge: constant 1.06px offset → mean 0.69 with **0.71px swing**; triangle apex **1.54px** (0.97 with gradients ON, i.e. with no seam cutting its arm) | §14.3 |
-| 14 | **Small region collapses to a sliver @512** — the doc item EXISTS but its geometry pinches to ~77px² for a 691px label, so the region paints white; a §10.4 REGRESSION (bisect: green at e549b29, red at fc7b7e9 — reseat/chord territory, NOT the weld deletion §12 fixed), unnoticed for five commits because tier 2 is ungated @512 | `fluent-beverage-box-flat` @512 (ungated resolution for tier 2; the case IS gated @256, where it passes) | 6/7 @512: `#990838` (522px) painted `#ffffff`, ΔE 88.6; render shows 88px of the colour | found during §12.4 (2026-07-29); §9.7's "437/437" figure predates it |
+
+Recently closed: **a small region collapsing to a sliver @512** (`fluent-beverage-box-flat`'s
+`#990838`, was #14) — closed 2026-08-06, **§16** is the record, and it closed the way this
+list does not usually get to: the forward bisect the exit protocol demands found the defect
+**already fixed**, incidentally and silently, by §15's sub-pixel edge placement (red at
+88ef5a2, green at 7a740e9 — the commit that landed §15). Ink kept **13.5% → 98.3%**, regions
+6/7 → **7/7**. The mechanism was still attributed rather than assumed: a flag matrix at HEAD
+(`lowresDiag --fit`) isolates the pincher as §10.4's junction RE-SEAT — with the lattice
+chains restored (`subpixelEdges:false`) the blob's two ends both re-seat against circle×circle
+pairs and its loop self-crosses into a 77px² bowtie; turning `junctionReseat` off on top
+restores it (101.7%). §10.4's chord straightening is exonerated — it never fires here. What
+this exit actually BUILDS is the gate that was missing, because the fix arriving by accident
+is the same hole as the regression arriving unnoticed: `truth regions @512:` gates the seven
+tier-2 cases the @256 lane already runs, on region recovery plus a new **ink-kept** gate (the
+area question — recovery is a MEDIAN and only flips past 50% loss). Verified RED on the
+regressed tracer before being trusted green.
 
 Recently closed: **the §15 tangent pin closed a letterform counter** (`logo-instagram`'s `a`,
 user-reported 2026-08-05 from /labs/ab, a one-day-old regression of §15.7's guard 2) — closed
@@ -2541,3 +2556,167 @@ own samples are collinear (`bow` is already computed and carried on `ArmFit` for
 that), which is worth doing when a case demands it — the `bow` distribution measured here is
 NOT separable (straight arms read 0.5–0.75px on a lattice staircase, the pathological arm
 1.01px), so it is not a gate on its own.
+
+## 16. The tier-2 @512 region lane, and how §0 #14 was already fixed (2026-08-06, issue #12)
+
+§0 #14 was a 522px region of `fluent-beverage-box-flat` whose doc item survived with the
+right fill while its GEOMETRY pinched to a ~77px² sliver, so the region rendered white.
+§12.4 found it while verifying the low-res family, bisected it to §10.4 (green at e549b29,
+red at fc7b7e9), and left it a row instead of a drive-by fix. The issue's own plan put the
+gate first — and following that order is what turned up the surprise.
+
+### 16.1 The instrument first, and what it measured
+
+`src/devtest/lowresDiag.ts` gains two things, both extensions of what was already there:
+
+- the doc-level autopsy runs for **every** authored colour, not only the ones
+  `scoreRegions` already calls missing, and reports **ink** — source px vs rendered px of
+  that colour. #14 is an ink collapse; a missing-only autopsy cannot see one coming, and
+  (as it turned out) cannot see one go either.
+- `--fit k=v,k2=v2` overrides `PlanarFitOptions` for the final trace, so a mechanism can be
+  switched off at runtime instead of in a worktree.
+
+The first run at HEAD did not reproduce the defect:
+
+```
+#990838  src 634px  render 640px  ink 100.9%   ← the row says 88px rendered
+```
+
+Healthy at 256 / 384 / 512 / 640 / 768 / 1024 — not a resolution accident. A forward bisect
+(worktree + the same probe) dated the repair exactly:
+
+```
+fdf6f48 (§13 rim-cap)     ink 13.9%   88px    anchor-polygon 76.8px²
+c5eba6a (§14 contrast)    ink 13.9%   88px
+88ef5a2 (§15's parent)    ink 13.9%   88px
+7a740e9 (§15 sub-pixel)   ink 100.9%  640px   anchor-polygon 513.6px²   ← fixed here
+```
+
+**§15 closed #14 as a side effect, and nobody knew.** Not one number in §15.7 mentions it,
+because nothing in CI was measuring tier 2 at 512.
+
+### 16.2 The mechanism, attributed rather than assumed
+
+The issue asked which §10.4 sub-mechanism pinches the blob. A 2×2 flag matrix at HEAD @512
+answers it without a worktree — `subpixelEdges:false` restores the pre-§15 lattice chains:
+
+| planarFit | regions | `#990838` ink |
+|---|---|---|
+| (default) | 7/7 | 100.9% |
+| `subpixelEdges:false` | **6/7** — painted `#ffffff`, ΔE 88.6 | **13.9%** |
+| `subpixelEdges:false, junctionReseat:false` | 7/7 | 101.7% |
+| `junctionReseat:false` | 7/7 | 101.1% |
+
+(Ink here is the autopsy's EXACT-colour count, which is what `lowresDiag` prints; the gate
+counts both sides at ΔE ≤ 4 and reads the same collapse as 13.5% of 651px. Same measurement,
+two fringe conventions — quoted as printed rather than silently reconciled.)
+
+So the pincher is §10.4's junction **re-seat**, and §15 removed its trigger rather than the
+fault. A log inside `reseatJunctions` shows what differs. The blob is a two-edge loop between
+v0 (272,48) and v1 (268,79):
+
+- **lattice chains:** BOTH ends re-seat against circle×circle pairs (v0 +1.74px, v1 +2.81px),
+  and the terminal re-emit leaves the closed subpath self-crossing — its six anchors run down
+  the left arc and then back up further LEFT again (x 256–259), with the right arc out to
+  x≈287 simply gone. Shoelace 76.8px². RENDERED, that is not two lobes but a **~4px-wide
+  crescent hugging the blob's left rim** — the return curve runs back along the outbound one,
+  so the enclosed area is the gap between them and the other 86% of the region paints white:
+
+  ```
+    source (#990838)                     traced, lattice chains
+      .......+###+.........                ....++#++............
+      ...+#############+...                ..+##+...............
+      +##################..                #####................
+      #####################                +###.................
+      ##################### ×32 rows       +###.................  ×32 rows
+      #####################                #####................
+      +##################..                ..+##+...............
+      ...+#############+...                 ....++................
+  ```
+- **displaced chains (shipped):** only v1 re-seats, and the blob is a clean five-anchor loop
+  spanning x 259–287, 513.6px².
+
+`chords` is empty in both runs, so §10.4's occluder-chord straightening — the other half of
+the "reseat/chord territory" the row named — is **exonerated**.
+
+### 16.3 The gate that was actually missing
+
+§12.4 wrote the diagnosis plainly: *"Tier 2 being ungated in CI is how a 2-region regression
+survived five commits unnoticed."* The repair arriving unnoticed is the same hole. So the
+deliverable here is the lane, not a fix.
+
+**`truth regions @512:`** — `TIER2_REGION_CORPUS` in `truthCorpus.ts`, the SAME seven tier-2
+cases the @256 lane runs (three region-fragile drivers + four healthy controls, selected in
+§12.1 by sweeping all 106 twins for region loss — the same question, so the selection carries
+over rather than being re-argued). Two gates, both tolerance-free:
+
+- **region recovery** — zero tolerance, as everywhere else;
+- **ink kept** (new) — `worstInk` from `scoreRegions`: rendered px / source px per region,
+  both counted at ΔE ≤ 4. Recovery asks its question with a MEDIAN at the region's own
+  pixels, so it flips only once more than half the region is gone; #14 tripped it only
+  because the collapse was near-total. A region pinched to 45% keeps its median AND its
+  boundary numbers, because the boundary that survives is traced accurately. Ink degrades
+  continuously.
+
+`INK_MIN` = 0.5, measured (`calibrateLowres.ts`, worst region per case over the healthy
+population):
+
+| population | min | p05 | p50 |
+|---|---|---|---|
+| tier 2 @512 (106 twins) | 89.8% (ginger-root) | 93.7% | 99.7% |
+| tier 2 @256 (106 twins) | 81.7% (donkey) | 86.5% | 99.1% |
+| tier 0 + controls @512 | 93.4% (flute) | 95.9% | 99.4% |
+| tier 0 + controls @256 | 86.1% (flute) | 92.5% | 98.9% |
+
+The defect measures **13.5%**. The floor sits 1.6× below the healthiest-worst case and 3.7×
+above the failure — the paint gate's recipe (§10.3), and being a RATIO it is the first limit
+in this corpus that is resolution-free, so all three lanes share it.
+
+**Why this lane gates no boundary numbers.** `TIER_TOL[2]` is a calibrated catastrophe gate
+that deliberately leaves ~10% of the twins red, and beverage-box's own p95 sits in that tail
+(1.28 vs 1.20). Gating boundary here would need either a `KNOWN_DEFECTS` entry — which would
+make the lane BLIND to #14's return, since a listed case only has to fail *something* — or a
+second, looser p95 at the same resolution as `TIER_TOL[2]`, which is precisely the
+tolerance-widening this corpus exists to prevent.
+
+**Red before green.** The gate files are byte-identical between 88ef5a2 and HEAD, so the new
+lane was copied verbatim into a worktree at 88ef5a2 and run against the tracer that HAD the
+defect:
+
+```
+✖ truth regions @512: fluent-beverage-box-flat
+    ✗ regions recovered: 1 vs all
+    ✗ ink kept (worst region): 0.14 vs ≥ 50%
+  dropped: #990838 (522px) painted #ffffff, ΔE 88.6
+  worst ink: #990838 13.5% (88 rendered px of 651)
+```
+
+The other six cases pass there too, so the lane is discriminating, not uniformly angry. At
+HEAD: 7/7 and **98.3%** (640 of 651).
+
+### 16.4 After (the numbers), and the residue
+
+Zero files under `src/lib/**` changed — the tracer is byte-identical, so the A/B corpus
+cannot have moved and no snapshot needed judging. What changed is `src/devtest`, the gate,
+and one labs gate-row renderer.
+
+- Suite **347 → 354 pass / 2 skip** (+7, the new lane); truth gate 55 → 62 tests.
+- The ink gate is evaluated in ALL THREE lanes (it is part of `evaluateTruthGates`), and no
+  pre-existing case fails it — 55 cases gained a gate for free.
+- Corner watchlist byte-stable, as it must be: gear-teeth **52/60**, bar-caps **43/43**,
+  sharp-star **11/11**, cross-bars **10/10**, checker **3556/3588 (99.1%)**.
+- `KNOWN_DEFECTS_TIER2_512` landed **empty**, and it is the one case where an empty defect
+  list is not a claim of virtue — §16.1 explains why it was already green.
+
+**Residue, named.** §10.4's re-seat still mis-reads this geometry; §15 masks it by moving the
+chains off the lattice, and that mask is *not* categorical — `planarSubpixel` declines points
+one at a time (label guard, contrast, flatness, corner revert), so a neighbourhood it declines
+is a neighbourhood where the pinch is still reachable. There is no shipped configuration that
+reproduces it today (the one production `tracePlanar` call always passes the image, so
+`subpixelEdges` is always live), which is why this is a residue and not a row: per §0's rules
+a defect needs a case that reproduces it. The repro, for whoever meets it again:
+
+```
+node --experimental-strip-types src/devtest/lowresDiag.ts fluent-beverage-box-flat \
+  --res 512 --fit subpixelEdges=false
+```
