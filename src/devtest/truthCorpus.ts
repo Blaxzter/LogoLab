@@ -328,6 +328,38 @@ export const LOWRES_CORPUS: TruthCase[] = [
   ...TRUTH_CORPUS.filter((c) => LOWRES_TIER2.includes(c.name)),
 ]
 
+/*
+ * ---------------------------------------------------------------------------
+ * The TIER-2 REGION lane @512 (§0 #14)
+ *
+ * The hole this closes is stated plainly in §12.4: "Tier 2 being ungated in CI is how a
+ * 2-region regression survived five commits unnoticed." Tier 2 is browse-only @512 by
+ * design (106 cases is too slow to gate, and a gate that is off is not a gate), and the
+ * @256 lane added in §12 gates these same seven cases — but only at 256. #14 lived in
+ * the gap: `fluent-beverage-box-flat`'s `#990838` collapsed to a sliver @512 while @256
+ * stayed green, and nothing in CI was looking.
+ *
+ * WHY REGION + INK ONLY, and no boundary numbers. TIER_TOL[2] is a calibrated
+ * CATASTROPHE gate that deliberately leaves ~10% of the twins red (§9.6's recipe: limits
+ * just above the corpus p90), and beverage-box's own p95 sits in that tail at 1.28 vs
+ * 1.20. Gating boundary here would therefore need either a KNOWN_DEFECTS entry — which
+ * would make this lane BLIND to #14's return, since a listed case only has to fail
+ * SOMETHING — or a second, looser p95 limit at the same resolution as TIER_TOL[2],
+ * which is the tolerance-widening this corpus exists to prevent. Region recovery and ink
+ * need no tolerance argument at all: one is zero-tolerance, the other is a ratio with a
+ * 1.6× margin over the whole healthy population (INK_MIN). So the lane gates exactly the
+ * two things #14 broke, and the boundary numbers stay where they were calibrated.
+ *
+ * Case selection: the SAME seven tier-2 cases the @256 lane runs — three region-fragile
+ * drivers (flute, parachute, beverage-box) and four healthy controls (pencil, rugby-
+ * football, nazar-amulet, violin). They were chosen in §12.1 by sweeping all 106 twins
+ * for region loss; that is the same question this lane asks, so the selection carries
+ * over unchanged rather than being re-argued.
+ */
+export const TIER2_REGION_RES = 512
+
+export const TIER2_REGION_CORPUS: TruthCase[] = TRUTH_CORPUS.filter((c) => LOWRES_TIER2.includes(c.name))
+
 /**
  * Tolerances for the @256 lane — MEASURED (calibrateLowres.ts, 2026-07-28), not copied.
  *
@@ -409,6 +441,30 @@ const PAINT_MEAN_MAX = 3.0
 const PAINT_P95_MAX = 8.0
 
 /**
+ * INK-KEPT floor (flat art): the fraction of a region's colour AREA the trace still
+ * paints (geomScore.scoreRegions.worstInk — rendered px / source px, both at ΔE ≤ 4).
+ *
+ * The gate §0 #14 proved missing on the *other* side of region recovery. That defect was
+ * not a dropped region: the `#990838` doc item existed, carried the right fill, and had
+ * pinched to a 77px² sliver of a 651px region (13.5% ink). Recovery caught it only
+ * because the median flips once MORE THAN HALF the region is gone; a region pinched to
+ * 45% keeps its median, and every boundary number stays sub-tolerance because the
+ * boundary that IS traced is traced accurately. Ink degrades continuously, so it sees
+ * the collapse coming.
+ *
+ * MEASURED (calibrateLowres.ts, 2026-08-06) — worst ink per case over the healthy
+ * population, at both resolutions and both tiers:
+ *   tier 2 @512 (106 twins): min 89.8% (ginger-root) · p05 93.7% · p50 99.7%
+ *   tier 2 @256 (106 twins): min 81.7% (donkey)      · p05 86.5% · p50 99.1%
+ *   tier 0 + controls @512:  min 93.4% (flute)       · p50 99.4%
+ *   tier 0 + controls @256:  min 86.1% (flute)       · p50 98.9%
+ * The §0 #14 collapse measures 13.5%. 0.5 sits 1.6× below the healthiest-worst case and
+ * 3.7× above the defect — a catastrophe bound like the paint gate's, not a drift band.
+ * A RATIO, so unlike every boundary limit it is resolution-free and shared by all lanes.
+ */
+const INK_MIN = 0.5
+
+/**
  * Evaluate every gate for one scored case. Pure arithmetic — no assertions.
  *
  * Two gates can be INAPPLICABLE rather than passing, and saying so is the whole point:
@@ -441,6 +497,9 @@ export function evaluateTruthGates(s: {
    *  Only consulted on GRADIENT tier-0 cases — see PAINT_MEAN_MAX. */
   paintMean?: number
   paintP95?: number
+  /** Worst per-region ink kept (geomScore.scoreRegions.worstInk). Omitted ⇒ the ink gate
+   *  reports n/a (a caller that has not rendered the trace). Flat art only — see INK_MIN. */
+  worstInk?: number
   /** False for gradient cases — see above. */
   flatArt: boolean
   /** Picks the tolerances (TIER_TOL). Defaults to tier 0, whose numbers are unchanged. */
@@ -488,6 +547,23 @@ export function evaluateTruthGates(s: {
       pass: !s.flatArt || s.recovered >= s.trueRegions,
       headroom: !s.flatArt || s.recovered >= s.trueRegions ? 1 : -1,
       digits: 0,
+    },
+    {
+      // A region can be RECOVERED and still be mostly gone: recovery is a median at the
+      // region's own pixels, so it only flips past 50% loss, and boundary error stays
+      // sub-tolerance because the surviving boundary is traced accurately. §0 #14 is the
+      // case — a 634px region pinched to a 77px² sliver whose doc item still carried the
+      // right fill. This gate asks the area question directly.
+      key: 'ink',
+      label: 'ink kept (worst region)',
+      rule: `≥ ${Math.round(INK_MIN * 100)}%`,
+      value: s.worstInk ?? 1,
+      limit: INK_MIN,
+      applicable: s.flatArt && s.worstInk !== undefined,
+      pass: !(s.flatArt && s.worstInk !== undefined) || s.worstInk >= INK_MIN,
+      headroom:
+        !(s.flatArt && s.worstInk !== undefined) ? 1 : (s.worstInk - INK_MIN) / (1 - INK_MIN),
+      digits: 2,
     },
     {
       // Zero-distance defect: the tracer keeps every region and every boundary within

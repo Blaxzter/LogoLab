@@ -47,7 +47,19 @@ ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const argv = process.argv.slice(2)
 const RES = Number(argv[argv.indexOf('--res') + 1]) || 256
-const names = argv.filter((a) => !a.startsWith('--') && !/^\d+$/.test(a))
+
+// `--fit k=v,k2=v2` overrides PlanarFitOptions for the FINAL traceImage + autopsy only
+// (the stage replay above it is segmentation, which no fit flag touches). This is the
+// mechanism bisect: §0 #14's collapse is present with `subpixelEdges=false` and absent
+// with it on, and turning `junctionReseat=false` off on TOP of that says whether §10.4
+// is the pincher or merely the trigger.
+const fitArg = argv.includes('--fit') ? argv[argv.indexOf('--fit') + 1] : ''
+const FIT_OVERRIDE: Record<string, unknown> = {}
+for (const kv of fitArg ? fitArg.split(',') : []) {
+  const [k, v] = kv.split('=')
+  FIT_OVERRIDE[k] = v === 'true' ? true : v === 'false' ? false : Number(v)
+}
+const names = argv.filter((a) => !a.startsWith('--') && !/^\d+$/.test(a) && a !== fitArg)
 const CASES = names.length ? names : ['hairlines', 'fluent-flute-flat', 'fluent-parachute-flat', 'fluent-beverage-box-flat']
 
 // --- paletteOptionsFor (index.ts, verbatim at the gate's defaults) -----------
@@ -608,20 +620,32 @@ for (const name of CASES) {
   }
 
   // FINAL — the real pipeline end to end, scored the gate's way.
-  const doc = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: c.gradients })
+  const doc = await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: c.gradients,
+    ...(Object.keys(FIT_OVERRIDE).length ? { planarFit: FIT_OVERRIDE } : {}),
+  })
   const r = scoreRegions(img as unknown as ImageData, doc)
-  console.log(`\n  FINAL (traceImage + scoreRegions): ${r.recovered}/${r.trueRegions} regions`)
+  const fitNote = Object.keys(FIT_OVERRIDE).length ? `  [planarFit ${fitArg}]` : ''
+  console.log(`\n  FINAL (traceImage + scoreRegions): ${r.recovered}/${r.trueRegions} regions${fitNote}`)
   for (const miss of r.missing) console.log(`    ✗ ${miss.hex} (${miss.areaPx}px) painted ${miss.paintedHex}, ΔE ${miss.deltaE.toFixed(1)}`)
 
-  // Doc-level autopsy for each missing colour: does a path with that fill even EXIST,
-  // and with what geometry? Separates "the label died in segmentation" from "the label
+  // Doc-level autopsy per authored colour: does a path with that fill even EXIST, and
+  // with what geometry? Separates "the label died in segmentation" from "the label
   // survived and the FIT/doc-build collapsed it" (the §9.5 zero-area-path family, which
   // boundary metrics are blind to — renders are part of the exit protocol for a reason).
-  if (r.missing.length) {
+  //
+  // Runs for EVERY authored colour, not only the ones scoreRegions already calls missing:
+  // §0 #14 is exactly a region whose median survives (so the gate is green) while its INK
+  // is a fraction of the source's — the collapse is a ratio, not a flip, and a
+  // missing-only autopsy cannot see it coming (or going).
+  {
     const render = rasterizeDoc(doc, w, h)
-    for (const miss of r.missing) {
-      const v = parseInt(miss.hex.slice(1), 16)
-      const target = { r: (v >> 16) & 0xff, g: (v >> 8) & 0xff, b: v & 0xff }
+    console.log(`\n  DOC AUTOPSY — ink kept per authored colour (src px vs rendered px, ΔE ≤ 4)`)
+    for (let a = 0; a < authored.length; a++) {
+      const target = authored[a]
+      if (masks[a].reduce((s, v) => s + v, 0) < 8) continue
       const tLab = srgbToLab(target.r, target.g, target.b)
       const carriers = doc.items.filter((it) => {
         if (it.kind !== 'path') return false
@@ -629,11 +653,19 @@ for (const name of CASES) {
         return deltaE76(srgbToLab((f >> 16) & 0xff, (f >> 8) & 0xff, f & 0xff), tLab) <= 4
       })
       let rendered = 0
+      let src = 0
       for (let i = 0; i < w * h; i++) {
         const lab = srgbToLab(render[i * 4], render[i * 4 + 1], render[i * 4 + 2])
         if (deltaE76(lab, tLab) <= 4) rendered++
+        const o = i * 4
+        if (data[o] === target.r && data[o + 1] === target.g && data[o + 2] === target.b) src++
       }
-      console.log(`    ${miss.hex}: ${carriers.length} doc item(s) carry the colour; render shows ${rendered}px of it`)
+      const keep = src > 0 ? rendered / src : NaN
+      console.log(
+        `    ${hex(target)}  src ${String(src).padStart(7)}px  render ${String(rendered).padStart(7)}px` +
+          `  ink ${(keep * 100).toFixed(1).padStart(6)}%  ${carriers.length} item(s)` +
+          `${Number.isFinite(keep) && keep < 0.5 ? '   ⇐ INK COLLAPSED' : ''}`,
+      )
       for (const it of carriers) {
         if (it.kind !== 'path') continue
         // Shoelace over anchor polylines — coarse, but zero-vs-real area is what matters.

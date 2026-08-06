@@ -458,6 +458,23 @@ export interface RegionScore {
   /** 1 where a pixel belongs to a DROPPED region — so the view can show you WHERE, not
    *  just tell you a count. Same dimensions as the raster. */
   dropMask: Uint8Array
+  /**
+   * INK KEPT per region: how much of the colour the trace actually paints, as
+   * rendered px / source px (both counted at ΔE ≤ MATCH_DELTA_E of the region colour,
+   * over the whole raster). 1.0 = the trace covers the region's area exactly.
+   *
+   * `recovered` above asks a question at the region's OWN pixels and answers it with a
+   * MEDIAN — so it flips only once the collapse has eaten more than half the region.
+   * §0 #14 is the failure that motivated this: the `#990838` doc item EXISTED, with a
+   * plausible fill, and had pinched to a 77px² sliver of a 634px region. The median
+   * caught that one (13.5% ink), but only because the collapse was near-total; a region
+   * pinched to 45% keeps its median and every boundary number stays sub-tolerance,
+   * because the boundary that IS traced is traced accurately. Ink is the direct
+   * question, and it degrades continuously.
+   */
+  ink: { hex: string; srcPx: number; renderPx: number; kept: number }[]
+  /** The worst `kept` over all regions — the gated number. 1 when there are none. */
+  worstInk: number
 }
 
 /** A region counts as recovered if the trace paints it within this CIE76 ΔE of the truth. */
@@ -573,7 +590,47 @@ export function scoreRegions(
     for (let i = 0; i < area; i++) if (droppedKeys.has(rgbAt(i))) dropMask[i] = 1
   }
 
-  return { trueRegions: regions.length, recovered, missing, dropMask }
+  // INK KEPT — the same render, asked an AREA question instead of a median one. Both
+  // sides count at ΔE ≤ MATCH_DELTA_E of the region colour, so AA fringes are counted
+  // (or not) identically on the source and the render and the ratio stays ~1 on a
+  // healthy trace. One pass over the pixels, with region membership memoised per
+  // distinct packed RGB — a gradient raster has tens of thousands of distinct colours
+  // and dozens of "regions", and the naive regions × pixels loop is 36M ΔE there.
+  const regionLabs = regions.map((r) => srgbToLab(r.rgb[0], r.rgb[1], r.rgb[2]))
+  const memberCache = new Map<number, number[]>()
+  const membersOf = (packed: number): number[] => {
+    let m = memberCache.get(packed)
+    if (!m) {
+      const lab = srgbToLab((packed >> 16) & 255, (packed >> 8) & 255, packed & 255)
+      m = []
+      for (let k = 0; k < regionLabs.length; k++) if (deltaE76(lab, regionLabs[k]) <= MATCH_DELTA_E) m.push(k)
+      memberCache.set(packed, m)
+    }
+    return m
+  }
+  const srcCount = new Int32Array(regions.length)
+  const renCount = new Int32Array(regions.length)
+  for (let i = 0; i < area; i++) {
+    const o = i * 4
+    for (const k of membersOf(rgbAt(i))) srcCount[k]++
+    for (const k of membersOf((render[o] << 16) | (render[o + 1] << 8) | render[o + 2])) renCount[k]++
+  }
+  const ink: RegionScore['ink'] = regions.map((r, k) => ({
+    hex: toHex(r.rgb),
+    srcPx: srcCount[k],
+    renderPx: renCount[k],
+    kept: srcCount[k] > 0 ? renCount[k] / srcCount[k] : 1,
+  }))
+  ink.sort((a, b) => a.kept - b.kept)
+
+  return {
+    trueRegions: regions.length,
+    recovered,
+    missing,
+    dropMask,
+    ink,
+    worstInk: ink.length ? ink[0].kept : 1,
+  }
 }
 
 const mean = (a: number[]): number => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0)
