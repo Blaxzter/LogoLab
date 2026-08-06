@@ -31,7 +31,26 @@ guardrails):
 | 8 | **Sub-pixel edge placement** — PARTIALLY CLOSED 2026-08-05 (§15.7): `planarSubpixel.ts` displaces every edge chain onto the AA's iso-0.5 crossing before the fit (shared edges stay shared by construction), with three measured-in guards (corner self-guard, apex tangent pin, anchor flatness) — the tangent pin gained a fourth bound the same week, after it closed a letterform counter (§15.8, below). Fine-end error collapsed 2–3× (bar-caps 0.089, gear 0.080, sharp-star 0.068 ref-px @1024); `concentric` + `sharp-star` deleted from the scale gate's KNOWN_DEFECTS by the CI contract; gear-teeth corner recall 51→52/60. WHAT REMAINS OPEN: the four coarse-end cases (`overlap` , `aa-seam`, `petals`, `band-cross` — @256's AA is too wide for the guards' fixed sampling geometry, an audit-ART-list follow-up), two witness corners @512, and chupa-chups' small-feature zone trading 0.06px mean @1024 | `test/scale-invariance.test.ts` KNOWN_DEFECTS (4 entries left, only shrinks); witnesses in `examples/logos/` | gate: coarse ≤ 2.0 · max(fine, 0.15) ref-px | **§15**, instrument `scaleDiag.ts --lattice` |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
-| 15 | **A junction that is a REAL CORNER is still pinned to its integer lattice corner** — the residue of the closed #15 (§14, the weak-boundary pin). A band-seam junction now lands on the strong edge it interrupts; a junction that IS a corner of the art does not, so an edge spanning one of each trades a constant offset for a TILT. Same for a corner NEAR a junction: the seam truncates the arm `snapCornerToArms` reconstructs the apex from (§10.6's short-arm regime), which is why the Affinity apex did not improve | `affinity-designer.svg` @512 flat (private corpus, **ungated**); the mechanism is generic to any junction the art corners at | the mark's 133px top edge: constant 1.06px offset → mean 0.69 with **0.71px swing**; triangle apex **1.54px** (0.97 with gradients ON, i.e. with no seam cutting its arm) | §14.3 |
+| 15 | **A corner NEAR a junction has its arm evidence TRUNCATED by the seam** — what is left of #15 after §17. `snapCornerToArms` can only sample up to the neighbouring junction, so a band seam landing 2–3px from an authored corner halves (or kills) the arm the apex is reconstructed from — §10.6's short-arm regime — and the corner keeps a lattice apex the fit then drags its 150px flank toward. §17 measured that this, NOT "the junction is the corner", is what the Affinity numbers below are: all five of that mark's corner-verdict junctions sit **1.8–2.9px from** the nearest authored corner, none on one, and the mark is byte-identical under §17 | `affinity-designer.svg` @512 flat (private corpus, **ungated**) | the mark's 133px top edge: constant 1.06px offset → mean 0.69 with **0.71px swing**; triangle apex **1.54px** (0.97 with gradients ON, i.e. with no seam cutting its arm) | §14.3, §17.1 |
+
+Recently closed: **a junction that IS a real corner of the art** (the other half of #15) —
+closed 2026-08-06, **§17** is the record. §14 places a junction on a fit taken THROUGH it,
+which only exists where the strong boundary continues; where it CORNERS, the chord-turn gate
+correctly refuses (a through fit rounds the corner off) and the junction kept its integer
+lattice corner. It is now placed at the INTERSECTION of the two strong arms' own fitted lines
+— §10.6's corner evidence, which the snap cannot reach at a junction because the chain ends
+there. Phase 0 came first and moved the goalposts twice: a census of the 101 corner-verdict
+junctions across the 128 GT-scorable private marks, scored against the AUTHORED outline,
+showed the issue's named witness is a witness for the OTHER mechanism (the row above), and
+the obvious arm-straightness gate is **not separable** (bow ≤ 0.79 holds 51 authored-straight
+arms and 100 authored-bent ones) — so `ARM_BOW` ships as a one-sided veto that can only drop
+an arm. Red gate first (`test/planar-thread.test.ts`: junction 0.620 → **0.143px** off the
+authored apex, worst arm node 0.581 → **0.127px**), corpus case `seam-corner` (chamfer 0.242
+→ **0.214** @512, 0.295 → **0.262** @1024, corners 40/40 and 38/38 throughout). The loudest
+witness is `checker` traced with gradients ON, where every cell corner is a rank-firing corner
+junction: chamfer **0.222 → 0.107**, p95 **0.829 → 0.411**, with node count, item count and
+corner recall all byte-identical — 961 of 1024 cells better, 0 worse. A/B: 5 of 68 outputs
+move, 4 better. The one-arm NORMAL correction was built, measured and REJECTED (§17.3).
 
 Recently closed: **a small region collapsing to a sliver @512** (`fluent-beverage-box-flat`'s
 `#990838`, was #14) — closed 2026-08-06, **§16** is the record, and it closed the way this
@@ -2720,3 +2739,188 @@ a defect needs a case that reproduces it. The repro, for whoever meets it again:
 node --experimental-strip-types src/devtest/lowresDiag.ts fluent-beverage-box-flat \
   --res 512 --fit subpixelEdges=false
 ```
+
+## 17. The junction that IS a corner (§0 #15, 2026-08-06, issue #13)
+
+§14 places a junction on a fit taken THROUGH it — which is only defined where the strong
+boundary CONTINUES. Where it CORNERS, §14's chord-turn gate refuses (correctly: one line or
+circle across the bend rounds the corner off, and §14.3 measured a 40° corner passing the
+residual test), and the junction then kept its INTEGER lattice corner. That is the residue
+§14.3 named and left open, and it is what this section closes — half of it.
+
+### 17.1 Phase 0: the census, and the thing it found before any code changed
+
+`threadDiag.ts` gained a CORNER lane: for every junction the rank rejects with a `corner`
+verdict it now prints each strong arm's own line residual (`bow`) and which rule placed the
+junction. A throwaway census scored the same population against the AUTHORED outline —
+101 corner-verdict junctions across the 128 GT-scorable marks of the private corpus, each
+placement measured as its distance off the authored boundary, which is the right score
+because it is blind to the ALONG-edge freedom (that position is the weak boundary's
+business, §14.2).
+
+**The finding that re-scoped the issue.** The issue's named witness is `affinity-designer.svg`,
+whose five corner-verdict junctions the issue treats as corners. They are not. Measured
+against the authored path data, every one of them sits **1.8–2.9px from the nearest authored
+corner** — they are junctions ON a straight edge with a real corner just inside the 12px arm
+window, which is why their arm bows split 1.20/0.77, 0.77/1.58, 1.21/0.77, 1.33/0.77 and
+0.66/1.40: one arm is the flat top edge, the other is a chord across a bend. §0 #15 is
+therefore TWO mechanisms, not one:
+
+- **(a) the junction IS the corner** — three regions meeting at an authored corner. This is
+  what the issue prescribes a fix for, and what §17 builds.
+- **(b) a corner NEAR a junction** — the seam truncates the arm `snapCornerToArms`
+  reconstructs the apex from (§10.6's short-arm regime). §14.3 already named this as a
+  separate follow-up. It stays open, and it is the mechanism the row's Affinity numbers
+  measure.
+
+The Affinity mark is a witness for (b), not (a), so **it does not move under this fix** — it
+is byte-identical, its five junctions all refused by the arm gate. Saying so is the point of
+having measured it.
+
+**A second measurement, and it killed the obvious gate.** The natural way to ask "is this arm
+a tangent?" is its own line residual. Scoring all 202 arms against whether the ART runs
+straight over that same window (authored sagitta ≤ 0.15px):
+
+```
+bow ≤ 0.79    51 authored-STRAIGHT   100 authored-bent
+bow > 0.79     0 authored-STRAIGHT    51 authored-bent
+```
+
+So `bow` is **not separable** — exactly what §15.8's residue predicted for a lattice
+staircase, re-measured here rather than assumed, and not separable in this population either.
+It is bounded on ONE side only: no straight arm in the corpus reaches 0.8. `ARM_BOW = 0.8` is
+therefore only ever used to DROP an arm, never to certify one.
+
+Two more candidates died in the same census, so they are not re-attempted:
+
+- **A gap before the arm window** (skip the first `g` px, the §10.6 `armGap` idea) is worse
+  at every value: off-outline mean 0.581 (g=0) → 0.746 (g=2) → 0.831 (g=3) → 0.937 (g=4).
+  The points nearest the junction carry the most information about where the junction is.
+- **Fitting the arms on the §15 DISPLACED chains** instead of the lattice is a wash (mean
+  0.559 vs 0.581), because `planarSubpixel`'s own guards revert the first ~12px next to a
+  junction anyway — its far anchors land in the third region there and fail the label check.
+  The displaced bow equals the lattice bow to two decimals on the Affinity junctions.
+
+### 17.2 The fixture, and the gate that was red first
+
+`seam-corner` (`genEdgeCases.ts`, A/B lane, **ungated** — the `scale-blind` / `wedge-counter`
+arrangement): eight sideways WEDGES, six with their apex sitting ON a shallow band seam. The
+seam's direction lies inside the wedge, so past the apex it runs into the navy and is hidden:
+it TERMINATES on the corner, and three regions meet at one authored corner with ΔE ≈ 42–52 /
+42–52 / 7.7 — §14's rank exactly, on the branch it refuses. The same seam re-emerges through
+the wedge's base, where §14 does thread it, so every flank is a long strong edge with one
+corner-pinned end and one threaded end: the tilt anatomy, per unit. Two CONTROL wedges have
+the same shape and the same seam crossings but their apex on no seam, so it is an interior
+vertex of one chain that §10.6's snap already resolves.
+
+An UP-pointing triangle does not work, and the reason is worth keeping: a shallow seam
+through its apex does not enter the downward wedge, so it passes THROUGH — the vertex is
+degree 4, and on the lattice it splits into two degree-3 junctions ~2px apart whose arms are
+2px long (measured while authoring: `arm 2px < 6`, no verdict at all).
+
+It is ungated because a lattice pin is at most 0.71px by construction and a whole-case p95
+dilutes that far inside tier 0's 2.5 — **no case-level tolerance can be RED on this
+mechanism**. The red gate is `test/planar-thread.test.ts`, which measures the junction
+against the authored corner it is supposed to be. Its fixture samples the label at pixel
+CENTRES, so the staircase is an unbiased quantization and the authored apex is exact in
+lattice coordinates rather than a blessed number:
+
+| | before | after |
+|---|---|---|
+| seam junction, off the authored apex (48, 48.380) | (48.000, 49.000) — **0.620px** | (48.017, 48.522) — **0.143px** |
+| worst arm node vs its authored line | **0.581px** | **0.127px** |
+
+Three companions keep it honest: the corner must not be ROUNDED by being placed (the reason
+§14 refused it — the fitted arms' opening must survive), a CONTINUATION under the same seam
+must still take §14's through fit, and `cornerJunctions: false` must be byte-identical to
+the no-palette trace.
+
+### 17.3 The fix, and the half of it that was measured and rejected
+
+`planarThread.ts`, in the same rank, on the other side of the same turn gate: fit each strong
+arm's own line over the window the turn gate already used (junction-first, `THROUGH_SPAN`
+12px, no gap), and place the junction at their INTERSECTION. Both arms must clear `ARM_BOW`
+or the junction keeps its lattice corner — a bowed arm's "line" is a chord of something
+turning, and intersecting against a chord throws the apex px ALONG the other arm (measured,
+with the veto removed: moves reach 10.4px). §14's `MAX_MOVE` 2.0 is shared unchanged.
+
+**REJECTED, so it is not rebuilt: the one-arm NORMAL correction.** With only one usable arm
+the junction can still be corrected in that arm's normal direction — §14's own rule, since
+the along-edge position is the weak boundary's business. It is geometrically right, it is the
+only branch that fires on the Affinity witness, and it does improve the junction itself
+(0.50px → 0.27px off the authored outline, all five). It was built, measured, and dropped:
+the correction has a component ACROSS the OTHER arm, whose chain is still on the lattice, so
+it tilts that one instead.
+
+| | apex only | apex + normal |
+|---|---|---|
+| chamfer better / worse, over the 110 GT-scorable marks | **6 / 3** | 8 / 6 |
+| `affinity-designer` corners recovered (was 5/7) | **5/7** | **4/7** |
+| Affinity authored-straight-run swing, Σ over 22 runs (was 7.39px) | 7.39 (inert) | 7.57 |
+| Affinity Σ mean offset (was 3.66px) | 3.66 (inert) | 3.37 |
+
+The mean improves and the swing does not, which is the signature of trading one arm's error
+for another's. Fixing it properly means propagating the endpoint correction into the first
+few lattice points of the arm that turns — §15 territory, not this one.
+
+**Also measured and NOT taken: a wider move cap for the apex branch.** An acute apex is the
+one place a bigger move is legitimate (the raster erodes a narrow tip, so the true corner
+sits px past the lattice), and `seam-corner`'s 17° wedge is refused at 2.16px. But the sweep
+saturates instantly — every value from 3 to 12px does exactly the same thing, that one
+junction and nothing else, for @512 chamfer 0.214 → 0.209 against @256 0.196 → 0.200. A knob
+that trades one lane against another for 0.005px does not earn its place.
+
+### 17.4 After (the numbers)
+
+`seam-corner`, the driver, at all three resolutions — corner recovery perfect throughout, so
+nothing is being bought by melting a corner:
+
+| | chamfer | p95 | corners | nodes |
+|---|---|---|---|---|
+| @256 | 0.214 → **0.196** | 0.639 → 0.664 | 37/37 | 110 |
+| @512 | 0.242 → **0.214** | 0.661 → **0.642** | 40/40 | 110 → **108** |
+| @1024 | 0.295 → **0.262** | 0.646 → **0.608** | 38/38 | 106 → **104** |
+
+Five of the six seam apexes are placed (`◆ APEX`); the sixth is the 17° wedge refused by
+`MAX_MOVE` above. Five more corner junctions — the wedge BASE corners, where the 12px window
+crosses the base — are refused by the arm gate reading 1.08–1.57 bow on one side.
+
+**Blast radius: 5 of the 68 A/B outputs move**, and the biggest of them is the strongest
+evidence in this section. `checker` traced with GRADIENTS ON posterizes its own AA into weak
+bands, so every one of its 3588 cell corners becomes a rank-firing corner junction with two
+straight arms — and there the fix is measurable at case level:
+
+```
+checker, gradients ON:  chamfer 0.222 → 0.107   p95 0.829 → 0.411
+                        corners 3556/3588 unchanged, nodes 10466 unchanged, items 1760 unchanged
+                        961 of 1024 16px cells better, 0 worse
+```
+
+Identical topology, identical node count, boundary error halved — which is what a pure
+sub-pixel junction placement is supposed to look like, and the reason to trust the number
+rather than the mean-ΔE trap. The other four: `scale-blind` grad ΔE mean 12.450 → **11.635**,
+`logo-fedex` grad 0.9238 → **0.9117** (−2 nodes), `logo-coca-cola` grad 4.2316 → **4.2229**
+(p99 55.99 → 55.72), and `logo-instagram` FLAT 1.3444 → 1.3458 — a +0.1% local trade confined
+to nine 16px cells in one glyph (3 better / 6 worse), p99 unchanged, −2 nodes. It is not the
+§15.8 counter: that ROI does not move.
+
+The tier-0 FLAT lane is untouched, as §14's zero-blast-radius property predicts — ordinary
+flat art has no weak boundaries, so the rank never fires. Corner watchlist byte-stable:
+gear-teeth **52/60**, bar-caps **43/43**, sharp-star **11/11**, cross-bars **10/10**, checker
+**3556/3588 (99.1%)**, and `band-cross` — §14's control — byte-identical at 25/25.
+
+Suite **354 → 358 pass / 2 skip** (+4, all in `test/planar-thread.test.ts`); truth gate
+62/62, scale gate 7/7 with its four KNOWN_DEFECTS unchanged.
+
+**Residue, named.**
+- Mechanism (b) above — a corner NEAR a junction, its arm truncated by the seam — is
+  untouched, and it is what the §0 row now carries. `affinity-designer` is its witness and is
+  byte-identical under this fix.
+- `THROUGH_SPAN` is still a fixed 12 absolute px, so the arm window and therefore `ARM_BOW`
+  are resolution-blind. §15.6's audit already flagged this constant (it flips §14's
+  line-vs-circle winner between 256 and 2048); §17 inherits the problem rather than adding to
+  it, and the honest fix is the same one — shorten the window until its own samples are
+  collinear, which needs a case that demands it.
+- The arm gate is a one-sided veto by construction (§17.1), so a junction whose corner is
+  real but whose two arms are both gently curved is left on the lattice. Nothing in the
+  corpus measures the cost of that today.

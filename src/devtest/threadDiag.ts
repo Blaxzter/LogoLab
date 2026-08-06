@@ -88,9 +88,12 @@ console.log('  EDGE CONTRAST SPECTRUM (ΔE76 across each shared edge, ∞/border
   console.log(`    widest gap: ${gap.lo.toFixed(1)} → ${gap.hi.toFixed(1)}  (${gap.size.toFixed(1)} wide) — the gates sit at 12 / 25\n`)
 }
 
-// 2. Every junction the rank looked at, and what it decided.
+// 2. Every junction the rank looked at, and what it decided. `bow` is the §17 arm gate:
+//    the max deviation of each strong arm's samples from its own fitted line. It only
+//    matters on the CORNER branch, where a bowed arm's line is a chord across the bend
+//    and may not be intersected against (ARM_BOW 0.8, one-sided — see planarThread.ts).
 console.log('  JUNCTIONS (only degree ≥3 with at least one weak arm are candidates)')
-console.log('     at            deg  ΔE of arms                  arm px   line   circ   turn   verdict')
+console.log('     at            deg  ΔE of arms                  arm px   line   circ   turn    bow A/B   verdict')
 const showAll = argv.includes('--all')
 for (const v of verdicts) {
   const weakish = v.ends.some((e) => e.de <= 12)
@@ -102,8 +105,10 @@ for (const v of verdicts) {
     .join(' ')
   const arms = v.ends.map((e) => e.arm.toFixed(0)).join('/')
   const f = (x: number | null) => (x == null ? '  —  ' : x.toFixed(2).padStart(5))
+  const bow = v.armBow ? `${v.armBow[0].toFixed(2)}/${v.armBow[1].toFixed(2)}` : '  —  '
+  const mark = v.linked ? (v.kind === 'thread' ? '★ THREAD' : '◆ APEX') : v.reason
   console.log(
-    `  (${v.x.toString().padStart(3)},${v.y.toString().padStart(3)})   ${String(v.ends.length).padStart(2)}   ${des2.padEnd(26)} ${arms.padStart(8)}  ${f(v.lineDev)}  ${f(v.circleDev)}  ${v.turnDeg == null ? '  —  ' : v.turnDeg.toFixed(1).padStart(5)}   ${v.linked ? '★ THREAD' : v.reason}`,
+    `  (${v.x.toString().padStart(3)},${v.y.toString().padStart(3)})   ${String(v.ends.length).padStart(2)}   ${des2.padEnd(26)} ${arms.padStart(8)}  ${f(v.lineDev)}  ${f(v.circleDev)}  ${v.turnDeg == null ? '  —  ' : v.turnDeg.toFixed(1).padStart(5)}  ${bow.padStart(9)}   ${mark}`,
   )
 }
 
@@ -127,11 +132,16 @@ function bestDev(v: (typeof verdicts)[number]): number {
 //    placement — anything approaching MAX_MOVE (2px) means the through fit and the
 //    label map disagree, and that junction is dropped rather than dragged.
 const moved = verdicts.filter((v) => v.linked)
-console.log(`\n  MOVED: ${moved.length} of ${verdicts.length} junctions — off the lattice corner, onto what:`)
+const byKind = (k: string): number => moved.filter((v) => v.kind === k).length
+console.log(
+  `\n  MOVED: ${moved.length} of ${verdicts.length} junctions — off the lattice corner, onto what:` +
+    `   (§14 thread ${byKind('thread')} · §17 apex ${byKind('apex')})`,
+)
 for (const v of moved.slice().sort((a, b) => (b.move ?? 0) - (a.move ?? 0))) {
+  const how = v.kind === 'thread' ? (bestDev(v) === v.circleDev ? 'through-circle' : 'through-line') : 'arm∩arm'
   console.log(
     `    (${v.x.toString().padStart(3)},${v.y.toString().padStart(3)})  ${(v.move ?? 0).toFixed(2)}px` +
-      `  → (${v.moveTo!.x.toFixed(2)},${v.moveTo!.y.toFixed(2)})   ${bestDev(v) === v.circleDev ? 'circle' : 'line'}`,
+      `  → (${v.moveTo!.x.toFixed(2)},${v.moveTo!.y.toFixed(2)})   ${how}`,
   )
 }
 console.log()

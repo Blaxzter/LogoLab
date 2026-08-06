@@ -357,6 +357,84 @@ const CASES: { name: string; note: string; make: () => string }[] = [
     },
   },
   {
+    // The §0 #15 driver (the residue §14 named and left open): a junction that IS a real
+    // CORNER of the art. §14 places a junction on a fit taken THROUGH it, which is only
+    // defined where the strong boundary CONTINUES — at a corner the chord-turn gate
+    // correctly refuses (a through fit would round the corner off), and the junction then
+    // keeps its INTEGER lattice corner. An edge with one threaded end and one corner-pinned
+    // end therefore trades a constant offset for a TILT: on the Affinity mark the 133px top
+    // edge went from a uniform offset to 0.66px of swing (measured, §17).
+    //
+    // The anatomy at its smallest is a sideways WEDGE whose apex sits ON a shallow band
+    // seam. The seam's direction lies INSIDE the wedge, so past the apex it runs into the
+    // navy and is hidden: it TERMINATES on the corner. Three regions meet at one authored
+    // corner (navy, band above, band below) with ΔE ≈ 42–52 / 42–52 / 7.7 — exactly §14's
+    // rank, and exactly the branch it refuses. The same seam re-emerges through the wedge's
+    // BASE, where §14 does thread it, so each flank is a long strong edge with a
+    // corner-pinned end and a threaded end: the tilt anatomy, per unit.
+    // (An UP-pointing triangle does not work and the reason is worth recording: a shallow
+    // seam through its apex does not enter the downward wedge, so it passes THROUGH — the
+    // vertex is degree 4, and on the lattice it splits into two degree-3 junctions ~2px
+    // apart whose arms are 2px long. Measured while authoring: `arm 2px < 6`, no verdict.)
+    //
+    // Cells — the apex half-angle sets how much of the tip the raster erodes, and the two
+    // columns put the apex at both ends of a chain (start vs end):
+    //   right-pointing 32° / 17° / 45°   left-pointing 45° / 32° / 17°
+    //   CONTROL row — the same 32° wedges whose apex is NOT on a seam (the seam crosses a
+    //   flank instead): that corner is an interior vertex of one chain, which the §10.6
+    //   snap already resolves. Same shape, same seam crossings, only the apex differs — so
+    //   a fix that helps the six and moves the two controls is fixing the wrong thing.
+    //
+    // UNGATED (the `scale-blind` / `wedge-counter` arrangement: genEdgeCases + the A/B lane,
+    // not TRUTH_CORPUS). A lattice pin is at most 0.71px by construction, and a whole-case
+    // p95 dilutes that far inside tier 0's 2.5 — no case-level tolerance can be RED on this
+    // mechanism. The red gate is test/planar-thread.test.ts, which measures the junction
+    // against the authored corner it is supposed to be.
+    name: 'seam-corner',
+    note: 'a band seam terminating ON a corner of the art → the junction IS the corner (§0 #15)',
+    make: () => {
+      const below = (y0: number, y1: number, fill: string): string =>
+        `<polygon points="0,${y0} ${V},${y1} ${V},${V} 0,${V}" fill="${fill}"/>`
+      // The Affinity mark's own posterized band ladder (ΔE ≈ 7.5–8.2 between neighbours,
+      // 42–52 against the navy) — the measured regime band-cross already uses, extended by
+      // one step so four seams fit.
+      const B1 = rgb(90, 213, 251)
+      const B2 = rgb(73, 201, 250)
+      const B3 = rgb(56, 189, 250)
+      const B4 = rgb(40, 176, 247)
+      const B5 = rgb(24, 163, 243)
+      const DEEP = rgb(19, 72, 129)
+      /** Sideways isoceles wedge: apex (x,y), body extending `dir` (−1 left / +1 right),
+       *  half-angle `half`°, arm length `arm`. */
+      const wedge = (x: number, y: number, dir: -1 | 1, half: number, arm: number): string => {
+        const t = (half * Math.PI) / 180
+        const dx = dir * arm * Math.cos(t)
+        const dy = arm * Math.sin(t)
+        const p = (px: number, py: number): string => `${px.toFixed(2)},${py.toFixed(2)}`
+        return `<polygon points="${p(x, y)} ${p(x + dx, y - dy)} ${p(x + dx, y + dy)}" fill="${DEEP}"/>`
+      }
+      // All four seams share one shallow slope (0.0472, ~2.7°) — the same weak-boundary
+      // regime band-cross uses. S1..S3 carry an apex in each column; S4 carries none.
+      const SL = 0.0472
+      const seamY = (y0: number, x: number): number => y0 + SL * x
+      return svg(
+        `<rect width="${V}" height="${V}" fill="${B1}"/>` +
+          below(44, 44 + SL * V, B2) + // S1
+          below(100, 100 + SL * V, B3) + // S2
+          below(156, 156 + SL * V, B4) + // S3
+          below(212, 212 + SL * V, B5) + // S4 — crosses the CONTROL wedges' flanks
+          wedge(206, seamY(44, 206), -1, 32, 52) +
+          wedge(206, seamY(100, 206), -1, 17, 52) +
+          wedge(206.5, seamY(156, 206.5), -1, 45, 44) +
+          wedge(50, seamY(44, 50), 1, 45, 44) +
+          wedge(50, seamY(100, 50), 1, 32, 52) +
+          wedge(50.5, seamY(156, 50.5), 1, 17, 52) +
+          wedge(206, 228, -1, 32, 52) + // CONTROL — apex off every seam
+          wedge(50, 228, 1, 32, 52), // CONTROL
+      )
+    },
+  },
+  {
     // The §15.8 driver (user-reported 2026-08-05, /labs/ab on the Instagram wordmark): the
     // top of a script 'a', where the bowl's crown and the stem converge into a thin white
     // COUNTER WEDGE. The wedge is sub-pixel for its last few px, so the lattice fuses its

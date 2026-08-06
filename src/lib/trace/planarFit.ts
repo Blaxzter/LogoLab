@@ -86,6 +86,17 @@ export interface PlanarFitOptions {
    */
   fitThrough: boolean
   /**
+   * §0 #15 corner-junction placement (benchmarks §17, default true). The other half of
+   * `fitThrough`: where the strong boundary TURNS at the junction, a through fit is not
+   * defined (it would round the corner off, which is why §14's chord-turn gate refuses
+   * it) — so such a junction kept its INTEGER lattice corner and carried that error into
+   * both arms. It is instead placed on the INTERSECTION of the two strong arms' own
+   * fitted lines, or, where only one arm is usable evidence, projected onto that one.
+   * Rides `fitThrough`'s preconditions exactly (needs the palette and the same contrast
+   * rank); `false` restores the lattice pin — the pre-§17 baseline, for the Test view A/B.
+   */
+  cornerJunctions: boolean
+  /**
    * EXPERIMENTAL (default true = the shipped §9.8 behaviour). The corner-turn veto in
    * planarBeautify that refuses to round a sharp-cornered loop (a checker cell's four
    * right angles) into a disc. Exposed so the scale-relative-ε prototype
@@ -139,6 +150,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   localScaleK: 0,
   cornerVeto: true,
   fitThrough: true,
+  cornerJunctions: true,
   subpixelEdges: true,
 }
 
