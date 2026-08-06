@@ -28,11 +28,25 @@ guardrails):
 | # | defect | reproducing case | number | details |
 |---|---|---|---|---|
 | 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.12px, p95 0.43px (was 0.22/0.74; §12's classify fixpoint routes the sliver's mid-blends to better endpoints — earlier 1.44/24.8 was the seam occluded under the circle, §9.6) | §7; §12 |
-| 8 | **Sub-pixel edge placement** — PARTIALLY CLOSED 2026-08-05 (§15.7): `planarSubpixel.ts` displaces every edge chain onto the AA's iso-0.5 crossing before the fit (shared edges stay shared by construction), with three measured-in guards (corner self-guard, apex tangent pin, anchor flatness). Fine-end error collapsed 2–3× (bar-caps 0.089, gear 0.080, sharp-star 0.068 ref-px @1024); `concentric` + `sharp-star` deleted from the scale gate's KNOWN_DEFECTS by the CI contract; gear-teeth corner recall 51→52/60. WHAT REMAINS OPEN: the four coarse-end cases (`overlap` , `aa-seam`, `petals`, `band-cross` — @256's AA is too wide for the guards' fixed sampling geometry, an audit-ART-list follow-up), two witness corners @512, and chupa-chups' small-feature zone trading 0.06px mean @1024 | `test/scale-invariance.test.ts` KNOWN_DEFECTS (4 entries left, only shrinks); witnesses in `examples/logos/` | gate: coarse ≤ 2.0 · max(fine, 0.15) ref-px | **§15**, instrument `scaleDiag.ts --lattice` |
+| 8 | **Sub-pixel edge placement** — PARTIALLY CLOSED 2026-08-05 (§15.7): `planarSubpixel.ts` displaces every edge chain onto the AA's iso-0.5 crossing before the fit (shared edges stay shared by construction), with three measured-in guards (corner self-guard, apex tangent pin, anchor flatness) — the tangent pin gained a fourth bound the same week, after it closed a letterform counter (§15.8, below). Fine-end error collapsed 2–3× (bar-caps 0.089, gear 0.080, sharp-star 0.068 ref-px @1024); `concentric` + `sharp-star` deleted from the scale gate's KNOWN_DEFECTS by the CI contract; gear-teeth corner recall 51→52/60. WHAT REMAINS OPEN: the four coarse-end cases (`overlap` , `aa-seam`, `petals`, `band-cross` — @256's AA is too wide for the guards' fixed sampling geometry, an audit-ART-list follow-up), two witness corners @512, and chupa-chups' small-feature zone trading 0.06px mean @1024 | `test/scale-invariance.test.ts` KNOWN_DEFECTS (4 entries left, only shrinks); witnesses in `examples/logos/` | gate: coarse ≤ 2.0 · max(fine, 0.15) ref-px | **§15**, instrument `scaleDiag.ts --lattice` |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **A junction that is a REAL CORNER is still pinned to its integer lattice corner** — the residue of the closed #15 (§14, the weak-boundary pin). A band-seam junction now lands on the strong edge it interrupts; a junction that IS a corner of the art does not, so an edge spanning one of each trades a constant offset for a TILT. Same for a corner NEAR a junction: the seam truncates the arm `snapCornerToArms` reconstructs the apex from (§10.6's short-arm regime), which is why the Affinity apex did not improve | `affinity-designer.svg` @512 flat (private corpus, **ungated**); the mechanism is generic to any junction the art corners at | the mark's 133px top edge: constant 1.06px offset → mean 0.69 with **0.71px swing**; triangle apex **1.54px** (0.97 with gradients ON, i.e. with no seam cutting its arm) | §14.3 |
 | 14 | **Small region collapses to a sliver @512** — the doc item EXISTS but its geometry pinches to ~77px² for a 691px label, so the region paints white; a §10.4 REGRESSION (bisect: green at e549b29, red at fc7b7e9 — reseat/chord territory, NOT the weld deletion §12 fixed), unnoticed for five commits because tier 2 is ungated @512 | `fluent-beverage-box-flat` @512 (ungated resolution for tier 2; the case IS gated @256, where it passes) | 6/7 @512: `#990838` (522px) painted `#ffffff`, ΔE 88.6; render shows 88px of the colour | found during §12.4 (2026-07-29); §9.7's "437/437" figure predates it |
+
+Recently closed: **the §15 tangent pin closed a letterform counter** (`logo-instagram`'s `a`,
+user-reported 2026-08-05 from /labs/ab, a one-day-old regression of §15.7's guard 2) — closed
+2026-08-05, **§15.8** is the record. The ranked hypothesis (the wedge's anchor sampling) was
+FALSIFIED by the per-point dump — 229 of 306 point-outcomes in the ROI are `corner-revert`,
+so the pass had already left that neighbourhood on the lattice; the mover was the pin, whose
+"arm line" is fitted over [3..16]px and there measures a crown that has already turned 45°.
+Rotating a 26px handle by the 29.3° that bought (just under the 30° cap) moved its control
+point 13.1px and the crown left its own samples by ~2px. The pin now also honours the fit's
+own tolerance — `(4/9)·handle-tip movement ≤ ε`, the cubic-basis bound — which is inert on
+the 703-pin measured population below 1.9px and 5.8× tighter than the defect. Gate:
+`test/planar-pin.test.ts` (crown sag 2.77 → **1.24px**, limit 1.6), corpus witness
+`wedge-counter` (p95 1.19 → **0.45** @512), corner watchlist and every §15.7 witness number
+unchanged.
 
 Recently closed: **a weak colour boundary aiming a strong edge** (was #15) — closed 2026-08-01, **§14** is the record. A posterization band seam ending on a real edge pinned that edge to the seam's INTEGER lattice corner and rotated it ~1px end to end; the junction is now placed on a fit taken THROUGH it from both strong arms' raw lattice chains (`planarThread.ts`), before anything is fitted. Flank swing 0.98px → 0.24 (0.10 with gradients ON), tangent breaks 15.4°/9.5° → 0.7°/0.7°, and the `band-cross` control improves rather than moving. The §14.2 shape as WRITTEN — fit the chain through and split the fitted curve — was built and rejected on measurement: it fixes more (apex, a 150px arm) but bows a dead-flat 78px edge by 0.7px; §14.3 has both sets of numbers. What is left of #15 is the row above.
 
@@ -2424,3 +2438,106 @@ the lattice — the @256 lane's AA is too wide relative to the guards' sampling 
 for displacement to survive its own safety checks there. The next lever for those is
 resolution-aware guard geometry, which is workstream-2 territory (the audit's ART list),
 not more displacement.
+
+### 15.8 The regression the pin caused, and the bound that fixes it (2026-08-05, issue #11)
+
+**Symptom (user-reported, /labs/ab ◆ gallery lane, `logo-instagram` @512).** The `a` of the
+Instagram wordmark loses the thin white gap at the top of its counter: the frozen
+`before-subpixel` stamp keeps it, the working tree closes it, and the gradient trace grows a
+notch at the same place. Attribution was clean by construction — `before-subpixel` differs
+from the working tree only by the §15 pass.
+
+**Phase 0, the instrument.** `src/devtest/counterDiag.ts` — per-point displacement dump for a
+chosen ROI (reading `planarSubpixel`'s own observational hook, so there is no second copy of
+the estimator), the tangent-pin candidates that fired there, and the INTERIOR white run per
+raster row measured three ways in the same units: source raster, trace with the pass off,
+trace with the pass on. `src/devtest/pinDiag.ts` histograms the pin across a corpus.
+
+**The measured cause — and it is NOT the ranked hypothesis.** The issue ranked the anchor
+sampling geometry inside a converging wedge first (suspect 1). The dump refutes it: in the
+ROI **229 of 306 point-outcomes are `corner-revert`** — the pass's own corner self-guard has
+already put that whole neighbourhood back on the lattice, and the surviving displacements are
+≤ 0.5px. The chain the fitter sees there is, to within half a pixel, the pre-§15 chain.
+
+What changed is the FIT, through guard 2. At the wedge tip (a 2px-deep V, the quantized tip
+of the counter's white sliver) the corner's outgoing arm is the bowl's crown, which turns 45°
+→ 0° within ~4px — i.e. INSIDE the [SNAP_GAP..SNAP_SPAN] = [3..16]px window
+`snapCornerToArmsFull` fits its "arm line" over. The line is therefore a CHORD of a turning
+boundary, not the boundary's tangent at the apex, and the pin rotated the handle onto it:
+
+```
+apex (323,121) out   rot 29.3°   handle 26.0px   → control point moves 13.1px
+   (the same neighbourhood's other five pins: ≤ 0.93px)
+```
+
+29.3° sits just under `PIN_ROTATE_MAX_DEG` 30, so the shipped cap allowed it. The fitted
+crown then left its own samples by ~2px, the bowl's arch thinned to a smear, and the counter's
+white tip merged with the page. Confirmed by isolation: with the pin disabled and the
+displacement kept, the crown is restored exactly (`counterDiag --ascii`).
+
+**Why an angle cap is the wrong quantity.** Rotating a handle moves the curve in proportion
+to the handle's LENGTH. The same 29° is a 1px nudge on a 2px handle and a 13px swing on a
+26px one. Measured over tier 0 + the gallery witnesses (703 applied pins, `pinDiag`), the
+handle-tip movement is where the population separates and the angle is not:
+
+```
+applied pins by handle-tip shift   <0.25  <0.5   <1   <1.5   <2    <3    <5   ≥5
+  tier 0 (162)                       118    27    14     2     1     0     0    0
+  gallery witnesses (541)            271   139    90    31     4     4     1    1  ← 13.1px
+```
+
+**The fix (one clause).** The pin exists to correct a TANGENT, so bound its side effect by
+the fit's own tolerance: moving one cubic control point by `d` moves the curve by at most
+max{3t(1−t)²} = 4/9 of `d`, and a correction that moves the curve further than ε is not a
+tangent correction — it is a re-fit onto evidence the fit itself rejected. `pinHandle` now
+also requires `(4/9)·2·|h|·sin(rot/2) ≤ epsilon`. Derived, not calibrated: the whole tier-0
+corpus stays under 1.9px of handle-tip movement, so the bound is inert on the population it
+was not aimed at, and the witness's 13.1px is 5.8× outside it.
+
+**The gate (red before the fix).** `test/planar-pin.test.ts` — the witness's anatomy built
+from two analytic strokes and quantized onto the crack lattice (curved crown, the 2px pinch
+step, shoulder, straight stem), handed straight to `fitCorneredLoop`. It asserts the fitted
+curve still explains the crown samples it was fitted to: **2.77px before, 1.24px after**
+(limit 1.6 = ε + the staircase's own ±0.5). Two companions keep it honest: the same fixture
+UNPINNED is inside the bar (so the pin is what moves it), and a lens whose tips are sharp
+corners between gently curved arms keeps all four of its pins applied — guard 2's own win
+(chupa-chups' letterform corners) must not be switched off by the bound.
+
+**The corpus case.** `wedge-counter` (`genEdgeCases.ts`, A/B lane, deliberately UNGATED —
+the `scale-blind` arrangement): a rack of three bowl+stem units at the (radius, cut depth,
+meeting angle) cells a pipeline sweep measured losing, plus a steep-meeting control. @512
+its boundary p95 goes **1.19 → 0.45** and chamfer **0.24 → 0.16** across the fix, and its
+three pathological pins (5.5 / 5.2 / 3.6px of handle-tip movement) are refused while the
+control's stay applied. It is ungated for two honest reasons: its worst sag is ~2px over a
+short arc, which a whole-case p95 dilutes to 1.19 — inside tier 0's 2.5 — and gating it
+would ALSO pin §15.7's coarse-end residue at a knife edge (@256 the displacement pass costs
+this art 2 of 20 corners, exactly the 80% floor, before AND after this fix).
+
+**After.** Suite 347/0 (+3 new), truth gate 55/55, scale gate 7/7 with its four
+KNOWN_DEFECTS unchanged. Corner watchlist byte-stable: gear-teeth **52/60**, bar-caps
+**43/43**, sharp-star **11/11**, cross-bars **10/10**, checker **3556/3588 (99.1%)**.
+Witnesses unchanged where §15.7 measured them (corner recovery @256 76.4% / @512 85.4% /
+@1024 95.8%, cnn @1024 0.212, ahrefs self 1.24, bluetooth 1.90) and better where the bound
+bites: coca-cola @512 chamfer 0.347 → **0.335**, p95 0.962 → **0.905**; nike 0.239 →
+**0.235**. A/B vs `before-counter`: **7 of 33 cases moved** — one fixture (`nebula`, the
+gradient photo, Δmean 0.026) and six gallery marks, `logo-instagram` flat among them.
+
+**The gradient half of the report is a DIFFERENT defect — measured, not assumed.** The issue
+also names a notch at the counter tip in the gradients-ON trace. Attribution first: a
+worktree at the pre-§15 commit (88ef5a2) confirms the issue's premise — `subpixelEdges:false`
+reproduces that commit BYTE-IDENTICALLY on this mark, in both lanes. But in the gradient lane
+the crown is already broken there: pre-§15, HEAD and the fixed tree render that neighbourhood
+the same way (Δmean 1.70 in the 34×22px ROI between pre-§15 and HEAD, and **0.000 between
+HEAD and the fix** — the pins there are ≤ 0.41px of handle-tip movement, far under any
+bound). So the gradient notch is not this regression: it is the gradient segmentation
+splitting the wedge, present before §15, and it stays open. Flat art is the product target
+and the flat lane is what this fixes.
+
+**Residue, named:** the pin is still gated by an ANGLE as well (30°), which remains a
+proxy — a short handle can rotate far on evidence that does not support it and stay inside
+both bounds. Nothing in the corpus measures that today. And the arm window itself is still
+fixed at [3..16]px: the honest fix for a turning arm would be to shorten the window until its
+own samples are collinear (`bow` is already computed and carried on `ArmFit` for exactly
+that), which is worth doing when a case demands it — the `bow` distribution measured here is
+NOT separable (straight arms read 0.5–0.75px on a lattice staircase, the pathological arm
+1.01px), so it is not a gate on its own.

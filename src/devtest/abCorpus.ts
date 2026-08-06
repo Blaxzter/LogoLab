@@ -54,6 +54,7 @@ export const AB_CORPUS: AbCorpusCase[] = [
   { id: 'gradient-flat', name: '⟐ gradient-flat — render gate', kind: 'svg', path: 'public/examples/edge-cases/gradient-flat.svg' },
   { id: 'sharp-star', name: '⟐ sharp-star — corner detection', kind: 'svg', path: 'public/examples/edge-cases/sharp-star.svg' },
   { id: 'flute-flat', name: 'flute (flat twin) — near-colour pair ΔE 4.5', kind: 'svg', path: 'public/corpus/fluent/flat/flute.svg' },
+  { id: 'wedge-counter', name: '⟐ wedge-counter — converging counter wedge (§15.8)', kind: 'svg', path: 'public/examples/edge-cases/wedge-counter.svg' },
   { id: 'annulus', name: '⟐ annulus — hole winding + alpha', kind: 'svg', path: 'public/examples/edge-cases/annulus.svg' },
   { id: 'overlap', name: '⟐ overlap — layer decomposition', kind: 'svg', path: 'public/examples/edge-cases/overlap.svg' },
 ]
