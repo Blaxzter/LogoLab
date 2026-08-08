@@ -61,7 +61,9 @@ export function assemblePlanar(
   // (strong) that continues through, the junction is placed on a fit THROUGH it,
   // taken from both strong arms' raw lattice chains — instead of on the integer
   // lattice corner, which quantizes it across the edge and tilts a 100+px boundary
-  // (planarThread.ts). Needs the palette (contrast is a colour question) and is
+  // (planarThread.ts). §17 covers the other branch of the same rank: where the strong
+  // boundary CORNERS at the junction, it is placed on the two arms' line intersection.
+  // Needs the palette (contrast is a colour question) and is
   // skipped under refineJunctions, a competing placement rule for the same vertices.
   // With refineJunctions (experimental, off by default) every junction instead moves
   // to its sub-pixel arm intersection. Either way, each incident edge's endpoints are
@@ -70,7 +72,7 @@ export function assemblePlanar(
   const juncPos = opts.refineJunctions
     ? subpixelJunctions(net, cw)
     : palette && opts.fitThrough
-      ? threadJunctions(net, palette)
+      ? threadJunctions(net, palette, opts.cornerJunctions !== false)
       : null
   const vidByCorner = new Map<number, number>()
   const vertices: Vertex[] = []
