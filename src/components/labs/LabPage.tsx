@@ -224,11 +224,16 @@ export function LabSelect<T extends string | number>({
   hint,
 }: {
   value: T
-  options: { value: T; label: string }[]
+  /** `group` puts the option under an <optgroup> of that name; ungrouped options render
+   *  first, in order. Groups appear in the order their first option does, so the caller
+   *  controls the layout by list order alone. */
+  options: { value: T; label: string; group?: string }[]
   onChange: (v: T) => void
   label: string
   hint?: ReactNode
 }) {
+  const groups: string[] = []
+  for (const o of options) if (o.group && !groups.includes(o.group)) groups.push(o.group)
   return (
     <LabField label={label} hint={hint}>
       <select
@@ -240,10 +245,23 @@ export function LabSelect<T extends string | number>({
         }}
         className="h-7 rounded-md border border-line-strong bg-surface px-1.5 text-xs text-ink"
       >
-        {options.map((o) => (
-          <option key={String(o.value)} value={String(o.value)}>
-            {o.label}
-          </option>
+        {options
+          .filter((o) => !o.group)
+          .map((o) => (
+            <option key={String(o.value)} value={String(o.value)}>
+              {o.label}
+            </option>
+          ))}
+        {groups.map((g) => (
+          <optgroup key={g} label={g}>
+            {options
+              .filter((o) => o.group === g)
+              .map((o) => (
+                <option key={String(o.value)} value={String(o.value)}>
+                  {o.label}
+                </option>
+              ))}
+          </optgroup>
         ))}
       </select>
     </LabField>

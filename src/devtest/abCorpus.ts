@@ -136,6 +136,28 @@ export const AB_SNAPSHOT_DIR = 'test/ab-snapshots'
  *  reader so a name round-trips identically. */
 export const snapshotDirName = (name: string): string => name.trim().replace(/[^a-zA-Z0-9._-]+/g, '-') || 'snapshot'
 
+/**
+ * The CONVENTIONAL counterpart of a snapshot name: `before-x` ↔ `after-x`, the naming
+ * CLAUDE.md's workflow already prescribes. Returns null for a name outside the convention.
+ *
+ * This exists because the two stamps of a change are a SET, not two unrelated baselines:
+ * freezing `before-x`, changing the tracer, then freezing `after-x` leaves a pair whose
+ * whole point is to be diffed against each other — and before this the view could only
+ * compare a stamp against the working tree, so the `after-` half was inert. `AbSnapshotManifest.pair`
+ * records the same relationship EXPLICITLY for names that do not follow the convention;
+ * the view accepts either.
+ */
+export function conventionalPartner(name: string): string | null {
+  if (name.startsWith('before-')) return `after-${name.slice('before-'.length)}`
+  if (name.startsWith('after-')) return `before-${name.slice('after-'.length)}`
+  return null
+}
+
+/** The shared slug of a before-/after- pair (`before-checker` → `checker`), for labelling. */
+export function pairSlug(name: string): string {
+  return name.replace(/^(before|after)-/, '')
+}
+
 export interface AbSnapshotCase {
   id: string
   name: string
@@ -160,6 +182,12 @@ export interface AbSnapshotManifest {
   /** ISO date of generation (informational only — never used by the tracer). */
   date: string
   res: number
+  /** The snapshot this one is the OTHER HALF of — set by `pnpm gen:absnapshot <name>
+   *  --pair <base>`, i.e. "this stamp is the after of <base>". /labs/ab offers the two as
+   *  one PAIR entry that selects both sides at once. Absent for a standalone baseline; the
+   *  `before-x`/`after-x` naming convention (see `conventionalPartner`) is detected without
+   *  it, so this field is only needed for names outside that convention. */
+  pair?: string
   cases: AbSnapshotCase[]
 }
 

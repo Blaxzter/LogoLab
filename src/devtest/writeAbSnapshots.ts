@@ -1,10 +1,17 @@
 // Freeze the tracer's current output for the /labs/ab "Vs snapshot" comparison.
 //
-//   pnpm gen:absnapshot [name] [--logos all|a,b,c|none]
+//   pnpm gen:absnapshot [name] [--logos all|a,b,c|none] [--pair <base>]
 //
 // `name` is optional and defaults to the git short rev; pass one to keep a labelled
 // baseline (e.g. `before-checker`). Each snapshot is its OWN subdir so several coexist
 // and the A/B view lists them in a dropdown.
+//
+// TWO STAMPS OF ONE CHANGE ARE A PAIR. Freeze `before-x`, change the tracer, freeze
+// `after-x`, and /labs/ab offers the two as a single PAIR entry that diffs them against
+// each other — no working-tree trace involved, so the comparison stays valid however the
+// tree moves on afterwards. The `before-`/`after-` prefix convention is detected on its
+// own; `--pair <base>` records the same relationship explicitly for names that do not
+// follow it ("this stamp is the after of <base>").
 //
 // TWO LANES (both from abCorpus.ts): the handcrafted ⟐ fixtures, and a slice of the ◆
 // GALLERY corpus — the real brand marks the defects get reported on. The gallery lane
@@ -44,6 +51,7 @@ import {
   AB_LOGO_CASES,
   AB_SNAPSHOT_DIR,
   AB_SNAPSHOT_RES,
+  conventionalPartner,
   snapshotDirName,
   type AbCorpusCase,
   type AbSnapshotManifest,
@@ -67,6 +75,12 @@ const flagAt = argv.findIndex((a) => a.startsWith('--'))
 // It is the subdir name AND the A/B dropdown label, so several baselines can coexist.
 const name = snapshotDirName((flagAt === 0 ? undefined : argv[0]) ?? rev)
 const logosArg = argv.includes('--logos') ? (argv[argv.indexOf('--logos') + 1] ?? '') : null
+// `--pair <base>`: this stamp is the AFTER half of <base>. Recorded so /labs/ab can offer
+// the two as one entry even when the names are outside the before-/after- convention.
+const pairArg = argv.includes('--pair') ? snapshotDirName(argv[argv.indexOf('--pair') + 1] ?? '') : null
+if (pairArg && !existsSync(join(root, AB_SNAPSHOT_DIR, pairArg))) {
+  console.log(`  note: --pair ${pairArg} does not exist under ${AB_SNAPSHOT_DIR}/ — recording it anyway (stamp it and the pair appears)`)
+}
 const outDir = join(root, AB_SNAPSHOT_DIR, name)
 mkdirSync(outDir, { recursive: true })
 
@@ -112,6 +126,7 @@ const manifest: AbSnapshotManifest = {
   rev: dirty ? `${rev}+dirty` : rev,
   date: new Date().toISOString().slice(0, 10),
   res: AB_SNAPSHOT_RES,
+  ...(pairArg ? { pair: pairArg } : {}),
   cases: [],
 }
 
@@ -157,3 +172,12 @@ for (const c of cases) {
 
 writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
 console.log(`\n${manifest.cases.length} cases snapshotted at ${manifest.rev} → ${AB_SNAPSHOT_DIR}/${name}/  (dropdown: "${name}")`)
+const partner = pairArg ?? conventionalPartner(name)
+if (partner) {
+  const have = existsSync(join(root, AB_SNAPSHOT_DIR, partner))
+  console.log(
+    have
+      ? `  paired with "${partner}" — /labs/ab lists them as one entry that diffs the two stamps directly`
+      : `  pairs with "${partner}" once that stamp exists (pnpm gen:absnapshot ${partner})`,
+  )
+}
