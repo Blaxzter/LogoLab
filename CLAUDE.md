@@ -12,10 +12,17 @@ output on cases you weren't looking at. So **before** you start, freeze a baseli
 pnpm gen:absnapshot before-<what>     # e.g. before-checker
 ```
 
-Then make the change and open **`/labs/ab`** → pick your baseline in the **Vs snapshot**
+Then make the change and open **`/labs/ab`** → pick your baseline in the **Baseline**
 dropdown → **Changed only** shows exactly which cases moved, and each gets a **diff heat**
 panel showing *where*. This is how you catch collateral changes (a corner-veto for `checker`
 also nudged `aa-seam`'s flat trace — only the A/B view revealed it).
+
+If you also freeze an `after-<what>` stamp when the change is accepted, the two are a **pair**:
+they show up in the Baseline dropdown under **⇄ Pairs** as one entry that diffs the two FROZEN
+stamps against each other (nothing traced, so it does not decay as you keep working, and the
+`after-` stamp is not dead weight). **Compare with** is the same control by hand — working tree
+(the default) or any other snapshot. Don't stamp an `after-` unless you mean to keep it: a lone
+`before-` is the normal case, and the pair is for a result worth being able to re-open later.
 
 Two lanes, both in `src/devtest/abCorpus.ts`: the ⟐ **fixtures** (handcrafted, one mechanism
 each — good gates, weak evidence: they are "good enough" long before real art is) and a slice

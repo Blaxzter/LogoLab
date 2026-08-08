@@ -165,6 +165,26 @@ Typical flow: `git stash && pnpm gen:absnapshot && git stash pop` freezes the la
 revision; the lab then shows exactly what the working tree changed. Re-bless (re-run the
 command) once a change is accepted — same lifecycle as `gen:golden`.
 
+**Two stamps of one change are a PAIR, and the lab diffs them directly.** The workflow above
+tends to produce two — `before-x` to freeze the baseline, `after-x` to record the accepted
+result — and for a long time only the first was usable: the view could compare a stamp against
+the *working tree* and nothing else, so the `after-` half sat inert on disk and the comparison
+decayed the moment anyone kept editing. **Compare with** (the second dropdown) fixes that: point
+it at another snapshot instead of the working tree and both panels are frozen output, diffed
+against each other. Nothing is traced, so it is fast, it does not decay, and it is the only way
+to compare two revisions when *neither* is checked out. Such a set appears in the **Baseline**
+dropdown under **⇄ Pairs** as one entry that selects both sides — detected from the
+`before-`/`after-` naming (`conventionalPartner` in abCorpus.ts, pinned by
+`test/ab-snapshot-pair.test.ts`), or recorded explicitly with
+`pnpm gen:absnapshot after-x --pair before-x` when the names don't follow it.
+
+That mode needs one guard the working-tree mode doesn't. Two stamps taken far apart may have
+traced **different pixels** for the same case — a fixture SVG was edited, `AB_SNAPSHOT_RES`
+changed — and diffing their traces would then report an *art* change as a *code* change, which
+is precisely the confounded measurement this lab exists to prevent. So both stored input PNGs
+are compared byte-for-byte; a mismatch marks the row **input differs** and drops it from the
+changed/unchanged counts instead of answering wrongly.
+
 **Two lanes: fixtures and gallery.** The ⟐ handcrafted cases isolate one mechanism each,
 which is what makes them good gates and weak evidence — they go green long before real art
 looks right, and every user-reported defect so far arrived on a brand mark, not on a fixture.
