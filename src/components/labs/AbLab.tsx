@@ -220,6 +220,17 @@ interface AbAnalysis {
   /** …and which ones moved — the stamp froze both, so both are always compared and the answer
    *  is a set, not a property of whatever happened to be on screen. */
   changedIn?: ('flat' | 'gradients')[]
+  /**
+   * Which gradient setting(s) the PANELS below actually show. Normally that is `changedIn`,
+   * but a case that moved in neither falls back to the flat pair — so switching baselines can
+   * silently switch which lane is on screen, and a lane switch looks exactly like a
+   * regression. (Reported: `checker`'s gradient trace has been visibly warped since the
+   * oldest stamp on disk, while its flat trace is pixel-perfect; comparing against two
+   * different stamps showed flat in one and gradients in the other, and read as the working
+   * tree having changed under the user.) Derived from the rendered views, not re-decided, so
+   * the badge cannot drift from the panels.
+   */
+  shownLanes?: ('flat' | 'gradients')[]
   /** Snapshot mode, changed cases only: a per-pixel heat of WHERE the two traces disagree.
    *  Lets a change be located, not just counted — one per gradient setting on screen. */
   heats?: { label: string; url: string }[]
@@ -349,6 +360,7 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
     // neither counted as changed nor claimed unchanged, and so "Changed only" keeps showing it.
     changed: inputDiffers ? undefined : changedIn.length > 0,
     changedIn: inputDiffers ? undefined : changedIn,
+    shownLanes: views.map((v) => (v.g ? 'gradients' : 'flat')),
     heats,
     inputDiffers,
     variants,
@@ -426,6 +438,7 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
     srcOverride: pngUrl,
     changed: changedIn.length > 0,
     changedIn,
+    shownLanes: views.map((v) => (v.g ? 'gradients' : 'flat')),
     heats,
     variants,
   }
@@ -752,12 +765,15 @@ export default function AbLab() {
                     </span>
                   )}
                   {snapMode && a.changed != null && (
-                    // WHICH settings moved, not "did the one on screen move" — the panels
-                    // below are exactly these, in this order.
+                    // WHICH settings moved, not "did the one on screen move" — and, always,
+                    // which lane the panels below are. For a changed case those are the same
+                    // set; for an UNCHANGED one the view falls back to the flat pair, and
+                    // saying so is what stops a silent lane switch between two baselines from
+                    // reading as a regression (see AbAnalysis.shownLanes).
                     <span
                       className={`rounded px-1 py-0.5 text-[0.6rem] ${a.changed ? 'bg-warn/20 text-warn' : 'text-faint'}`}
                     >
-                      {a.changed ? `changed · ${a.changedIn?.join(' + ')}` : 'unchanged'}
+                      {a.changed ? `changed · ${a.changedIn?.join(' + ')}` : `unchanged · showing ${a.shownLanes?.join(' + ') ?? 'flat'}`}
                     </span>
                   )}
                   {c.file && (
@@ -882,7 +898,13 @@ function AbAbout() {
         both are compared, and <b>whichever moved is what you see</b> — its snapshot pair and its
         own diff heat, labelled with the setting, flat first. A case that moved in both shows two
         pairs and two heats; one that moved in neither shows the flat pair alone, because there
-        is nothing to locate. That is why there is no Gradients toggle here (nor an Input px one:
+        is nothing to locate. The row badge always names the lane on screen (<i>changed ·
+        gradients</i>, <i>unchanged · showing flat</i>) — worth reading, because two different
+        baselines can put two different lanes in front of you and a lane switch looks exactly
+        like a regression. (Real example: <code>checker</code>&apos;s gradient trace has been
+        visibly warped since the oldest stamp on disk while its flat trace is pixel-perfect, so
+        a baseline that moves it shows the warped lane and one that doesn&apos;t shows the clean
+        one — same working tree, both times.) That is why there is no Gradients toggle here (nor an Input px one:
         the input is pinned to the stamp&apos;s stored pixels) — §14&apos;s fix moved four FLAT
         traces and no gradient one, and a page whose verdict follows a control is a page that can
         be read wrong.
