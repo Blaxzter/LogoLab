@@ -56,6 +56,7 @@ export const AB_CORPUS: AbCorpusCase[] = [
   { id: 'flute-flat', name: 'flute (flat twin) — near-colour pair ΔE 4.5', kind: 'svg', path: 'public/corpus/fluent/flat/flute.svg' },
   { id: 'wedge-counter', name: '⟐ wedge-counter — converging counter wedge (§15.8)', kind: 'svg', path: 'public/examples/edge-cases/wedge-counter.svg' },
   { id: 'seam-corner', name: '⟐ seam-corner — a seam ending ON a corner (§17)', kind: 'svg', path: 'public/examples/edge-cases/seam-corner.svg' },
+  { id: 'acute-counter', name: '⟐ acute-counter — apex reconstructed past the ink (§18)', kind: 'svg', path: 'public/examples/edge-cases/acute-counter.svg' },
   { id: 'annulus', name: '⟐ annulus — hole winding + alpha', kind: 'svg', path: 'public/examples/edge-cases/annulus.svg' },
   { id: 'overlap', name: '⟐ overlap — layer decomposition', kind: 'svg', path: 'public/examples/edge-cases/overlap.svg' },
 ]

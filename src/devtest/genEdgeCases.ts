@@ -542,6 +542,86 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       )
     },
   },
+  {
+    // Issue #17's anatomy, which no existing fixture carries. `wedge-counter` was measured
+    // for it first and does NOT reproduce (max overshoot 0.21px): its wedges pinch out
+    // SUB-PIXEL and the lattice fuses them, which is §15.8's mechanism, not this one.
+    //
+    // Here the counter is fully resolved and still acute: a LENS of two circular arcs, so
+    // both arms are CURVED and converge slowly. `snapCornerToArms` fits a straight line to
+    // each arm over [SNAP_GAP..SNAP_SPAN] = [3..14]px and intersects them — on a curved arm
+    // that line is a CHORD, it leans INTO the lens, and the two chords cross px past the
+    // real tip. The shallower the tip, the harder the error multiplies (a slope error
+    // divides by tan of the half-angle), which is why the rack sweeps the tip ANGLE as its
+    // primary axis rather than size.
+    //
+    // Each unit is a GOLD lens counter inside an INK disc on white, so the counter is its
+    // own scored region with a strong boundary on both flanks. Rotations are per-cell so
+    // the tips land at different raster phases and no result is an axis-alignment artifact.
+    //
+    // The two CONTROLS matter as much as the cells, because the fix must not become "stop
+    // reconstructing": the bottom row carries thin INK SPIKES whose tips the raster genuinely
+    // ERODES — sharp-star's regime, where reconstructing px past the last labelled pixel is
+    // the RIGHT answer (§10.2, corner recall 11/11). A veto that also silences these is
+    // fixing the wrong thing.
+    name: 'acute-counter',
+    note: 'acute LENS counters (two slowly-converging CURVED arms) → apex reconstructed past the ink (#17)',
+    make: () => {
+      /**
+       * A lens of two circular arcs of radius `R` meeting at a full tip angle of `tip`°.
+       * Both tips lie on the local y axis, h apart; each arc bulges by sagitta s.
+       * From (R−s)² + (h/2)² = R²:  h = 2R·sin(tip/2),  s = R·(1−cos(tip/2)).
+       */
+      const lens = (cx: number, cy: number, R: number, tip: number, rot: number, fill: string): string => {
+        const half = (tip * Math.PI) / 360
+        const h = 2 * R * Math.sin(half)
+        const r = R.toFixed(3)
+        const d =
+          `M 0,${(-h / 2).toFixed(3)} A ${r},${r} 0 0 1 0,${(h / 2).toFixed(3)}` +
+          ` A ${r},${r} 0 0 1 0,${(-h / 2).toFixed(3)} Z`
+        return `<path d="${d}" fill="${fill}" transform="translate(${cx},${cy}) rotate(${rot})"/>`
+      }
+      /** One rack cell: the ink disc that carries the counter, plus the counter. */
+      const unit = (cx: number, cy: number, R: number, tip: number, rot: number): string => {
+        const h = 2 * R * Math.sin((tip * Math.PI) / 360)
+        return (
+          `<circle cx="${cx}" cy="${cy}" r="${(h / 2 + 7).toFixed(2)}" fill="${INK}"/>` +
+          lens(cx, cy, R, tip, rot, GOLD)
+        )
+      }
+      /** Isoceles spike, apex (x,y), pointing `rot`° — the ERODED-tip control. */
+      const spike = (x: number, y: number, halfDeg: number, arm: number, rot: number): string => {
+        const t = (halfDeg * Math.PI) / 180
+        const p = (px: number, py: number): string => `${px.toFixed(2)},${py.toFixed(2)}`
+        const pts = `${p(0, 0)} ${p(arm * Math.cos(t), -arm * Math.sin(t))} ${p(arm * Math.cos(t), arm * Math.sin(t))}`
+        return `<polygon points="${pts}" fill="${INK}" transform="translate(${x},${y}) rotate(${rot})"/>`
+      }
+      // EVERY CELL MUST RESOLVE AT 256px, or it measures the wrong thing. A lens is
+      // 2·R·(1−cos(tip/2)) wide at its middle, and the first draft's 24° cells came to
+      // 1.5px @256 — they were dropped WHOLE (authored tip 120–143px from any fitted
+      // node, a thin-feature loss, §12's territory) and would have scored this mechanism
+      // with another one's failure. The cells below are all ≥ 3.7px wide @256, so the
+      // counter survives at every resolution and the only thing under test is where its
+      // tip lands.
+      return svg(
+        `<rect width="${V}" height="${V}" fill="${WHITE}"/>` +
+          // Row 1 — the tip-angle sweep at ~26 units of length, phases 0/23/47°.
+          unit(46, 46, 48, 32, 0) +
+          unit(128, 46, 40, 38, 23) +
+          unit(210, 46, 34, 44, 47) +
+          // Row 2 — the same angles SHORTER, so the [3..14]px arm window covers a larger
+          // share of each arc and its chord leans further in (half-pixel phase offsets).
+          unit(46.5, 128.5, 30, 38, 11) +
+          unit(128.5, 128.5, 24, 44, 67) +
+          unit(210.5, 128.5, 20, 56, 90) +
+          // Row 3, CONTROLS — eroded ink spikes that MUST still reconstruct past the lattice.
+          spike(24, 200, 5, 62, -8) +
+          spike(24, 232, 8, 62, 4) +
+          // …and the in-case blunt counter, where the chord lean is negligible.
+          unit(210, 210, 30, 96, 31),
+      )
+    },
+  },
 ]
 
 // --- emit -------------------------------------------------------------------
