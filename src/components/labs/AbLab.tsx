@@ -614,14 +614,16 @@ export default function AbLab() {
                   ...SNAP_PAIRS.map((p, i) => ({
                     value: `p:${i}`,
                     // `label` is the shared slug when both names follow the convention, and
-                    // already spells out both when they don't — so only append the arrow form
-                    // in the first case.
-                    label: p.label.includes('→') ? p.label : `${p.label} · ${p.base.name} → ${p.head.name}`,
+                    // already spells out both when they don't — in which case the name IS
+                    // the pair, and there is no separate note to hang beside it.
+                    label: p.label,
+                    note: p.label.includes('→') ? undefined : `${p.base.name} → ${p.head.name}`,
                     group: '⇄ Pairs (both stamps frozen)',
                   })),
                   ...SNAPSHOTS.map((s) => ({
                     value: `s:${s.name}`,
-                    label: `${s.name} · ${s.manifest.date}`,
+                    label: s.name,
+                    note: s.manifest.date,
                     group: 'Snapshots',
                   })),
                 ]}
@@ -636,7 +638,8 @@ export default function AbLab() {
                   { value: '', label: 'Working tree' },
                   ...SNAPSHOTS.filter((s) => s.name !== selectedSnap!.name).map((s) => ({
                     value: s.name,
-                    label: `${s.name} · ${s.manifest.date}`,
+                    label: s.name,
+                    note: s.manifest.date,
                     group: 'Snapshots (frozen vs frozen)',
                   })),
                 ]}
