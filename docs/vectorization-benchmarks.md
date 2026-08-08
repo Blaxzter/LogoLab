@@ -51,6 +51,10 @@ witness is `checker` traced with gradients ON, where every cell corner is a rank
 junction: chamfer **0.222 → 0.107**, p95 **0.829 → 0.411**, with node count, item count and
 corner recall all byte-identical — 961 of 1024 cells better, 0 worse. A/B: 5 of 68 outputs
 move, 4 better. The one-arm NORMAL correction was built, measured and REJECTED (§17.3).
+**Scope it honestly** (§17.4's caveats, user-raised): that checker lane is one the rampiness
+probe turns OFF for this art, no gallery mark exhibits the mechanism (their whole footprints
+are 102–184 px), and what shipped is a closed, gated mechanism rather than a visible
+improvement to any mark in the corpus today.
 
 Recently closed: **a small region collapsing to a sliver @512** (`fluent-beverage-box-flat`'s
 `#990838`, was #14) — closed 2026-08-06, **§16** is the record, and it closed the way this
@@ -2903,6 +2907,24 @@ rather than the mean-ΔE trap. The other four: `scale-blind` grad ΔE mean 12.45
 (p99 55.99 → 55.72), and `logo-instagram` FLAT 1.3444 → 1.3458 — a +0.1% local trade confined
 to nine 16px cells in one glyph (3 better / 6 worse), p99 unchanged, −2 nodes. It is not the
 §15.8 counter: that ROI does not move.
+
+**Two caveats on that evidence, because the numbers above read stronger than the change is**
+(both user-raised from /labs/ab — "I don't really see any improvements" — and both measured
+rather than conceded):
+
+- **The loudest witness is in a lane the product never chooses.** `suggestGradients(checker)`
+  returns **false**: the rampiness probe (§ the gradients auto-default) correctly traces that
+  art FLAT, and the flat lane has been byte-perfect — ΔE 0.000 against its own input — since
+  §9.8 landed on 2026-07-20. So `checker` gradients-ON is a lab lane the A/B stamps freeze on
+  purpose (so a change cannot hide in the setting you were not looking at), not a picture any
+  user gets. The halving is a real measurement of the mechanism; it is not a product win.
+- **No mark in the gallery slice exhibits mechanism (a) at all**, so on real art this fix
+  buys nothing visible. Measured from the frozen stamps, the total footprint of every gallery
+  change is: `logo-instagram` flat **102 px**, `logo-fedex` grad **104 px**, `logo-coca-cola`
+  grad **184 px** — each out of ~131k. Cropped at 10×, the instagram change is a wash with a
+  slight local regression (ROI mean ΔE 2.815 → **2.876**, p99 29.17 → 27.89). The accurate
+  claim for this section is *the mechanism is closed and gated*, not *the marks look better*;
+  the marks that would benefit are the ones this corpus does not yet contain.
 
 The tier-0 FLAT lane is untouched, as §14's zero-blast-radius property predicts — ordinary
 flat art has no weak boundaries, so the rank never fires. Corner watchlist byte-stable:
