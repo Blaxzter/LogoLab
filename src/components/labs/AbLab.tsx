@@ -5,12 +5,18 @@
 // under one camera PER ROW — so a change can be JUDGED VISUALLY (a band↔ring junction, a wedge
 // crossing) at the same framing across every variant of a case at once.
 //
-// TWO modes:
+// THREE modes:
 //  • variants (default) — the same working-tree code, one planarFit flag apart per panel.
 //  • VS SNAPSHOT — the working-tree DEFAULT trace against the output frozen by
 //    `pnpm gen:absnapshot` at an earlier revision (test/ab-snapshots/). Both panels trace
 //    the snapshot's OWN stored pixels, so the delta is code, never rasterizer — the input
 //    contract lives in src/devtest/abCorpus.ts, which also owns the shared case list.
+//  • SNAPSHOT vs SNAPSHOT — two frozen stamps against each other, nothing traced at all.
+//    The workflow CLAUDE.md prescribes produces exactly this: freeze `before-x`, change the
+//    tracer, freeze `after-x`. Those two are a SET, and until this mode existed the `after-`
+//    half was inert — the view could only diff a stamp against the working tree, so the
+//    comparison decayed the moment the tree moved on. Frozen-vs-frozen does not decay, and
+//    it is also the only way to compare two revisions neither of which is checked out.
 //
 // Meant to STAY in the tree and grow with future features. To A/B a new feature: add a VARIANT
 // with its `planarFit` override (index.ts merges it last), or add a CASE in abCorpus.ts — or
@@ -25,7 +31,7 @@ import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { VectorizeOptions } from '../../types'
 import type { EditableDoc } from '../../lib/path/types'
 import type { PlanarFitOptions } from '../../lib/trace/planarFit'
-import { AB_CORPUS, AB_LOGO_CASES, abUrl, type AbSnapshotManifest } from '../../devtest/abCorpus'
+import { AB_CORPUS, AB_LOGO_CASES, abUrl, conventionalPartner, pairSlug, type AbSnapshotManifest } from '../../devtest/abCorpus'
 import { LOGO_CORPUS } from '../../devtest/logoCorpus'
 import { fnv1a } from './engineFingerprint'
 import { LabPage, LabCheck, LabSelect } from './LabPage'
@@ -71,6 +77,37 @@ const SNAPSHOTS: SnapEntry[] = Object.entries(SNAP_META)
     return { name, manifest: JSON.parse(raw) as AbSnapshotManifest }
   })
   .sort((a, b) => (a.manifest.date < b.manifest.date ? 1 : a.manifest.date > b.manifest.date ? -1 : a.name.localeCompare(b.name)))
+
+/** A before/after SET: two stamps of one change, offered as ONE dropdown entry that selects
+ *  both sides. Sourced two ways and deduped — an explicit `pair` in the newer stamp's
+ *  manifest (`--pair`), or the `before-x`/`after-x` naming convention. Only pairs whose BOTH
+ *  halves are present on disk are listed; a lone `before-` stamp is just a baseline. */
+interface SnapPair {
+  base: SnapEntry
+  head: SnapEntry
+  label: string
+}
+const SNAP_PAIRS: SnapPair[] = (() => {
+  const byName = new Map(SNAPSHOTS.map((s) => [s.name, s]))
+  const out: SnapPair[] = []
+  const seen = new Set<string>()
+  const add = (base: SnapEntry | undefined, head: SnapEntry | undefined): void => {
+    if (!base || !head || base.name === head.name) return
+    const key = `${base.name}→${head.name}`
+    if (seen.has(key)) return
+    seen.add(key)
+    // The shared slug when both follow the convention, else just both names.
+    const slug = pairSlug(base.name)
+    out.push({ base, head, label: pairSlug(head.name) === slug ? slug : `${base.name} → ${head.name}` })
+  }
+  // Explicit first, so an author's `--pair` wins the dedupe over a coincidental name match.
+  for (const s of SNAPSHOTS) if (s.manifest.pair) add(byName.get(s.manifest.pair), s)
+  for (const s of SNAPSHOTS) {
+    if (!s.name.startsWith('before-')) continue
+    add(s, byName.get(conventionalPartner(s.name)!))
+  }
+  return out
+})()
 
 /** One trace configuration rendered per case. `planarFit` overrides the fit tunables;
  *  `opts` overrides any other VectorizeOptions (e.g. backgroundGradient). */
@@ -186,7 +223,13 @@ interface AbAnalysis {
   /** Snapshot mode, changed cases only: a per-pixel heat of WHERE the two traces disagree.
    *  Lets a change be located, not just counted — one per gradient setting on screen. */
   heats?: { label: string; url: string }[]
-  variants: { name: string; tone?: string; svg: string; stats?: ReturnType<typeof docStats> }[]
+  /** Pair mode only: the two stamps did not trace the same INPUT for this case (the source
+   *  art or AB_SNAPSHOT_RES changed between them), so their traces are not comparable and
+   *  the row is excluded from the changed/unchanged counts. */
+  inputDiffers?: string
+  /** `note` overrides the panel's stats line for a panel that has no live doc to count
+   *  (a frozen stamp) — in pair mode BOTH panels are frozen and each carries its own rev. */
+  variants: { name: string; tone?: string; svg: string; stats?: ReturnType<typeof docStats>; note?: string }[]
 }
 
 /** Full-scale (RGB euclidean distance) at which the diff heat saturates to its hottest. A
@@ -214,6 +257,102 @@ function diffHeatBuffer(a: ImageData, b: ImageData): Uint8ClampedArray {
     out[o] = hr; out[o + 1] = hg; out[o + 2] = hb; out[o + 3] = 255
   }
   return out
+}
+
+/** Fetch a snapshot's stored input PNG as bytes, for the pair-mode input check. */
+async function snapPngBytes(url: string): Promise<Uint8Array> {
+  return new Uint8Array(await (await fetch(url)).arrayBuffer())
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+/**
+ * PAIR mode: two FROZEN stamps against each other. Nothing is traced — both sides are the
+ * serialized docs the writer stored — so this is fast, and (unlike vs-working-tree) the
+ * comparison does not decay as the tree moves on.
+ *
+ * The input check is not optional. Two stamps taken weeks apart may have traced DIFFERENT
+ * pixels for the same case id — the fixture SVG was edited, or AB_SNAPSHOT_RES changed —
+ * and diffing traces of different inputs is exactly the confounded measurement this lab
+ * exists to prevent. Both stored PNGs are compared byte-for-byte; a mismatch marks the row
+ * and keeps it out of the counts rather than quietly reporting the art change as a code
+ * change.
+ */
+async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry): Promise<AbAnalysis> {
+  const be = base.manifest.cases.find((s) => s.id === c.id)
+  const he = head.manifest.cases.find((s) => s.id === c.id)
+  if (!be || !he) throw new Error(`case missing from ${be ? head.name : base.name} — rerun pnpm gen:absnapshot`)
+  const bDir = `/test/ab-snapshots/${base.name}`
+  const hDir = `/test/ab-snapshots/${head.name}`
+  const bPng = SNAP_PNGS[`${bDir}/${be.png}`]
+  const hPng = SNAP_PNGS[`${hDir}/${he.png}`]
+  if (!bPng || !hPng) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
+
+  let inputDiffers: string | undefined
+  if (be.width !== he.width || be.height !== he.height) {
+    inputDiffers = `${be.width}×${be.height} vs ${he.width}×${he.height}`
+  } else {
+    const [bb, hb] = await Promise.all([snapPngBytes(bPng), snapPngBytes(hPng)])
+    if (!sameBytes(bb, hb)) inputDiffers = 'same size, different pixels'
+  }
+
+  // Same exact-serialization diff the vs-working-tree path uses: a stamp IS serializeDoc(doc)
+  // at its revision and gradientId is deterministic, so identical geometry+paint serializes
+  // byte-identically and any difference is a real trace change.
+  const view = (g: boolean) => {
+    const bSvg = SNAP_SVGS[`${bDir}/${g ? be.grad : be.flat}`]
+    const hSvg = SNAP_SVGS[`${hDir}/${g ? he.grad : he.flat}`]
+    if (!bSvg || !hSvg) return null
+    return { g, bSvg, hSvg, changed: bSvg !== hSvg }
+  }
+  const flat = view(false)
+  const grad = view(true)
+  if (!flat || !grad) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
+
+  const views = [flat, grad].filter((v) => v.changed)
+  if (views.length === 0) views.push(flat)
+  const label = (v: { g: boolean }): string => ` · gradients ${v.g ? 'on' : 'off'}`
+
+  const variants: AbAnalysis['variants'] = views.flatMap((v) => [
+    { name: `${base.name}${label(v)}`, tone: 'base', svg: v.bSvg, note: `frozen ${base.manifest.rev} · ${base.manifest.date}` },
+    { name: `${head.name}${label(v)}`, tone: 'shipped', svg: v.hSvg, note: `frozen ${head.manifest.rev} · ${head.manifest.date}` },
+  ])
+
+  const heats = inputDiffers
+    ? []
+    : (
+        await Promise.all(
+          views.map(async (v) => {
+            if (!v.changed) return null
+            const [bImg, hImg] = await Promise.all([
+              rasterizeSvgResvg(v.bSvg, be.width, { background: 'white' }),
+              rasterizeSvgResvg(v.hSvg, he.width, { background: 'white' }),
+            ])
+            if (bImg.width !== hImg.width || bImg.height !== hImg.height) return null
+            return { label: `diff heat${label(v)}`, url: rgbaToUrl(diffHeatBuffer(bImg, hImg), bImg.width, bImg.height) }
+          }),
+        )
+      ).filter((h): h is { label: string; url: string } => h != null)
+
+  const changedIn: AbAnalysis['changedIn'] = []
+  if (flat.changed) changedIn.push('flat')
+  if (grad.changed) changedIn.push('gradients')
+  return {
+    width: be.width,
+    height: be.height,
+    srcOverride: bPng,
+    // A row whose input moved has no meaningful verdict — leave `changed` undefined so it is
+    // neither counted as changed nor claimed unchanged, and so "Changed only" keeps showing it.
+    changed: inputDiffers ? undefined : changedIn.length > 0,
+    changedIn: inputDiffers ? undefined : changedIn,
+    heats,
+    inputDiffers,
+    variants,
+  }
 }
 
 /** Vs-snapshot mode: trace the WORKING TREE's default config from the snapshot's own stored
@@ -314,7 +453,17 @@ async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<A
 }
 
 export default function AbLab() {
-  const [ui, setUi] = useLabState('lab:ab', { box: 300, gradients: false, raster: 512, wire: false, snapName: '', changedOnly: false, lane: 'all' })
+  const [ui, setUi] = useLabState('lab:ab', {
+    box: 300,
+    gradients: false,
+    raster: 512,
+    wire: false,
+    snapName: '',
+    /** '' = the working tree; otherwise the snapshot the baseline is compared AGAINST. */
+    vsName: '',
+    changedOnly: false,
+    lane: 'all',
+  })
   // Dropped images live for the session only — their object URLs die on reload.
   const [extras, setExtras] = useState<AbCase[]>([])
   const [over, setOver] = useState(false)
@@ -323,6 +472,10 @@ export default function AbLab() {
   // it was last chosen) falls back to variants rather than erroring.
   const selectedSnap = SNAPSHOTS.find((s) => s.name === ui.snapName) ?? null
   const snapMode = selectedSnap != null
+  // …and what it is compared against: the working tree (the default) or a SECOND stamp. A
+  // stale/deleted name falls back to the working tree, same forgiving rule as the baseline.
+  const vsSnap = snapMode ? (SNAPSHOTS.find((s) => s.name === ui.vsName && s.name !== selectedSnap.name) ?? null) : null
+  const pairMode = vsSnap != null
   const changedOnly = snapMode && ui.changedOnly
 
   const lane = useMemo(
@@ -331,32 +484,53 @@ export default function AbLab() {
   )
   // A snapshot frozen before a case existed (an older stamp, or one taken with a different
   // --logos slice) simply doesn't have it. Hide those rather than filling the page with
-  // "case not in snapshot" errors — the count is reported in the summary line instead.
+  // "case not in snapshot" errors — the count is reported in the summary line instead. In pair
+  // mode BOTH stamps must have the case, for the same reason.
   const cases = useMemo(
-    () => (selectedSnap ? lane.filter((c) => !c.id || selectedSnap.manifest.cases.some((s) => s.id === c.id)) : lane),
-    [lane, selectedSnap],
+    () =>
+      selectedSnap
+        ? lane.filter(
+            (c) =>
+              !c.id ||
+              (selectedSnap.manifest.cases.some((s) => s.id === c.id) && (!vsSnap || vsSnap.manifest.cases.some((s) => s.id === c.id))),
+          )
+        : lane,
+    [lane, selectedSnap, vsSnap],
   )
   const notInSnap = lane.length - cases.length
 
   const run = useLabRun(
     cases,
-    (c) => (selectedSnap ? analyzeSnapshot(c, selectedSnap) : analyze(c, ui.raster, ui.gradients)),
+    (c) =>
+      selectedSnap
+        ? vsSnap
+          ? analyzeSnapshotPair(c, selectedSnap, vsSnap)
+          : analyzeSnapshot(c, selectedSnap)
+        : analyze(c, ui.raster, ui.gradients),
     {
-      label: (c) => (snapMode ? `Tracing ${c.name} vs ${selectedSnap!.name}` : `Tracing ${c.name} × ${VARIANTS.length} variants`),
+      label: (c) =>
+        pairMode
+          ? `Diffing ${c.name} — ${selectedSnap!.name} vs ${vsSnap!.name}`
+          : snapMode
+            ? `Tracing ${c.name} vs ${selectedSnap!.name}`
+            : `Tracing ${c.name} × ${VARIANTS.length} variants`,
       done: (n) =>
-        selectedSnap
-          ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · both gradient settings compared, whichever moved is on screen · input pinned to the snapshot's stored pixels.`
-          : `Done — ${n} cases × ${VARIANTS.length} variants · gradients ${ui.gradients ? 'on' : 'off'} @ ${ui.raster}px. Drop an image anywhere to add it.`,
-      deps: [ui.raster, ui.gradients, cases, ui.snapName],
-      // Cache corpus cases (stable `id`); skip session-dropped images (no id). The snapshot NAME
-      // is in the key so switching snapshots (or re-blessing one) invalidates results — the frozen
-      // SVGs live outside src/, so ENGINE_HASH alone wouldn't catch a re-bless. `v2` bumps past
-      // caches written before the diff-heat field existed.
+        pairMode
+          ? `Done — ${n} cases, snapshot ${selectedSnap!.name} @ ${selectedSnap!.manifest.rev} (${selectedSnap!.manifest.date}) vs ${vsSnap!.name} @ ${vsSnap!.manifest.rev} (${vsSnap!.manifest.date}) · both frozen, nothing traced, so the working tree cannot affect this comparison.`
+          : selectedSnap
+            ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · both gradient settings compared, whichever moved is on screen · input pinned to the snapshot's stored pixels.`
+            : `Done — ${n} cases × ${VARIANTS.length} variants · gradients ${ui.gradients ? 'on' : 'off'} @ ${ui.raster}px. Drop an image anywhere to add it.`,
+      deps: [ui.raster, ui.gradients, cases, ui.snapName, ui.vsName],
+      // Cache corpus cases (stable `id`); skip session-dropped images (no id). BOTH snapshot
+      // names are in the key so switching either side (or re-blessing one) invalidates results —
+      // the frozen SVGs live outside src/, so ENGINE_HASH alone wouldn't catch a re-bless.
       cache: {
         id: 'ab',
         key: (c) => c.id ?? null,
         optionsKey: selectedSnap
-          ? `snap:v5:${selectedSnap.name}`
+          ? vsSnap
+            ? `pair:v1:${selectedSnap.name}:${vsSnap.name}`
+            : `snap:v5:${selectedSnap.name}`
           : `var:r${ui.raster}:g${ui.gradients}:v${VARIANTS_HASH}`,
       },
     },
@@ -378,6 +552,7 @@ export default function AbLab() {
   const flatN = run.results.filter((r) => r.value?.changedIn?.includes('flat')).length
   const gradN = run.results.filter((r) => r.value?.changedIn?.includes('gradients')).length
   const unchangedN = run.results.filter((r) => r.value?.changed === false).length
+  const mismatchN = run.results.filter((r) => r.value?.inputDiffers != null).length
 
   return (
     <div
@@ -407,13 +582,50 @@ export default function AbLab() {
         controls={
           <>
             {SNAPSHOTS.length > 0 && (
+              // One control, three destinations. A PAIR entry sets both sides at once — that
+              // is the whole "two stamps are a set" affordance — and the second select below
+              // then shows what it resolved to, so nothing is hidden behind the shortcut.
               <LabSelect
-                label="Vs snapshot"
-                value={ui.snapName}
-                onChange={(snapName) => setUi({ snapName })}
+                label="Baseline"
+                value={ui.snapName === '' ? '' : `s:${ui.snapName}`}
+                onChange={(v) => {
+                  if (v === '') return setUi({ snapName: '', vsName: '' })
+                  if (v.startsWith('p:')) {
+                    const p = SNAP_PAIRS[Number(v.slice(2))]
+                    return setUi({ snapName: p.base.name, vsName: p.head.name })
+                  }
+                  setUi({ snapName: v.slice(2), vsName: '' })
+                }}
                 options={[
                   { value: '', label: 'Live variants' },
-                  ...SNAPSHOTS.map((s) => ({ value: s.name, label: `${s.name} · ${s.manifest.date}` })),
+                  ...SNAP_PAIRS.map((p, i) => ({
+                    value: `p:${i}`,
+                    // `label` is the shared slug when both names follow the convention, and
+                    // already spells out both when they don't — so only append the arrow form
+                    // in the first case.
+                    label: p.label.includes('→') ? p.label : `${p.label} · ${p.base.name} → ${p.head.name}`,
+                    group: '⇄ Pairs (both stamps frozen)',
+                  })),
+                  ...SNAPSHOTS.map((s) => ({
+                    value: `s:${s.name}`,
+                    label: `${s.name} · ${s.manifest.date}`,
+                    group: 'Snapshots',
+                  })),
+                ]}
+              />
+            )}
+            {snapMode && (
+              <LabSelect
+                label="Compare with"
+                value={ui.vsName}
+                onChange={(vsName) => setUi({ vsName })}
+                options={[
+                  { value: '', label: 'Working tree' },
+                  ...SNAPSHOTS.filter((s) => s.name !== selectedSnap!.name).map((s) => ({
+                    value: s.name,
+                    label: `${s.name} · ${s.manifest.date}`,
+                    group: 'Snapshots (frozen vs frozen)',
+                  })),
                 ]}
               />
             )}
@@ -483,10 +695,31 @@ export default function AbLab() {
                 ({flatN} flat{gradN > 0 && ` · ${gradN} with gradients`})
               </span>
             )}{' '}
-            · {unchangedN} unchanged vs snapshot {selectedSnap!.name} @ {selectedSnap!.manifest.rev}
+            · {unchangedN} unchanged
+            {pairMode ? (
+              <>
+                {' '}
+                · {selectedSnap!.name} @ {selectedSnap!.manifest.rev} <b className="text-fg">→</b> {vsSnap!.name} @{' '}
+                {vsSnap!.manifest.rev}
+              </>
+            ) : (
+              <>
+                {' '}
+                vs snapshot {selectedSnap!.name} @ {selectedSnap!.manifest.rev}
+              </>
+            )}
             {changedOnly && unchangedN > 0 && <span className="text-faint"> · {unchangedN} hidden</span>}
+            {mismatchN > 0 && (
+              <span className="text-bad">
+                {' '}
+                · {mismatchN} not comparable (the two stamps traced different input pixels — re-stamp both)
+              </span>
+            )}
             {changedN === 0 && unchangedN > 0 && (
-              <span className="text-good"> — working tree matches the snapshot, both gradient settings</span>
+              <span className="text-good">
+                {' '}
+                — {pairMode ? 'the two stamps agree' : 'working tree matches the snapshot'}, both gradient settings
+              </span>
             )}
             {notInSnap > 0 && (
               <span className="text-faint">
@@ -511,6 +744,13 @@ export default function AbLab() {
               title={c.name}
               badges={
                 <>
+                  {a.inputDiffers && (
+                    // The one verdict this view must never fake: two stamps that traced
+                    // different pixels cannot say anything about the CODE between them.
+                    <span className="rounded bg-bad/20 px-1 py-0.5 text-[0.6rem] text-bad">
+                      input differs · {a.inputDiffers}
+                    </span>
+                  )}
                   {snapMode && a.changed != null && (
                     // WHICH settings moved, not "did the one on screen move" — the panels
                     // below are exactly these, in this order.
@@ -554,7 +794,7 @@ export default function AbLab() {
                   note={
                     v.stats
                       ? `${v.stats.paths}p · ${v.stats.nodes}n · ${v.stats.edges}e · ${v.stats.junctions}j`
-                      : `frozen ${selectedSnap?.manifest.date ?? ''}`
+                      : (v.note ?? `frozen ${selectedSnap?.manifest.date ?? ''}`)
                   }
                   aspect={a.width / a.height}
                   grid={{ w: a.width, h: a.height }}
@@ -567,7 +807,7 @@ export default function AbLab() {
                   <Panel
                     key={h.label}
                     label={<span className="text-warn">{h.label}</span>}
-                    note="hot = snapshot ≠ working tree"
+                    note={pairMode ? `hot = ${selectedSnap!.name} ≠ ${vsSnap!.name}` : 'hot = snapshot ≠ working tree'}
                     aspect={a.width / a.height}
                     pixelated
                     grid={{ w: a.width, h: a.height }}
@@ -601,12 +841,12 @@ function AbAbout() {
         no re-trace.
       </p>
       <p className="mb-2 max-w-[96ch]">
-        <b>Vs snapshot</b> (the dropdown) compares the working tree against a baseline frozen by{' '}
-        <code>pnpm gen:absnapshot [name]</code> — each snapshot is its own subdir under
-        test/ab-snapshots, so several coexist and you pick which to diff against (newest first;
-        the manifest records the git rev + date). Both panels trace the snapshot&apos;s own stored
-        pixels, so what differs is the code, never the rasterizer; the raster switch is hidden
-        because the input is pinned. Typical flow: BEFORE a change, freeze a baseline —{' '}
+        <b>Baseline</b> (the dropdown) picks what to compare against: a snapshot frozen by{' '}
+        <code>pnpm gen:absnapshot [name]</code> — each is its own subdir under test/ab-snapshots,
+        so several coexist and you pick which to diff against (newest first; the manifest records
+        the git rev + date). Both panels then trace the snapshot&apos;s own stored pixels, so what
+        differs is the code, never the rasterizer; the raster switch is hidden because the input is
+        pinned. Typical flow: BEFORE a change, freeze a baseline —{' '}
         <code>pnpm gen:absnapshot before-thing</code> — then this page shows exactly what the
         working tree changed against it. <b>Changed only</b> collapses the corpus to just the cases
         whose trace actually moved (an exact serialization diff — a snapshot IS{' '}
@@ -616,6 +856,23 @@ function AbAbout() {
         accepted. (Residual caveat: the browser&apos;s canvas PNG decode can differ from
         Node&apos;s by ±1 on a few partial-alpha pixels — the aurora story in docs/labs.md — which
         is far below anything judged visually here.)
+      </p>
+      <p className="mb-2 max-w-[96ch]">
+        <b>Compare with</b> is the second half of that question, and its default is the{' '}
+        <b>working tree</b>. Point it at another <b>snapshot</b> instead and nothing is traced at
+        all: both panels are frozen stamps, diffed against each other. That matters because the
+        prescribed workflow produces two stamps per change — freeze <code>before-x</code>, change
+        the tracer, freeze <code>after-x</code> — and those two are a <b>set</b>. A
+        working-tree comparison decays the moment you keep editing; a frozen-vs-frozen one does
+        not, and it is the only way to compare two revisions when neither is checked out. Such a
+        set shows up in the Baseline dropdown under <b>⇄ Pairs</b> as a single entry that selects
+        both sides at once — detected from the <code>before-</code>/<code>after-</code> naming, or
+        recorded explicitly with <code>pnpm gen:absnapshot after-x --pair before-x</code> for names
+        outside that convention. One guard is worth knowing: two stamps taken far apart may have
+        traced <i>different pixels</i> for the same case (a fixture SVG was edited,{' '}
+        <code>AB_SNAPSHOT_RES</code> changed), and a trace diff would then report an art change as
+        a code change — so both stored input PNGs are compared byte-for-byte and a mismatched row
+        is marked <b>input differs</b> and kept out of the counts rather than answered wrongly.
       </p>
       <p className="mb-2 max-w-[96ch]">
         A stamp freezes <b>two</b> traces per case — gradients off and on — so in Vs-snapshot mode
