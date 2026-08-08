@@ -1,10 +1,12 @@
-import { createContext, useContext, useEffect, useRef } from 'react'
+import { createContext, useContext, useEffect, useId, useRef } from 'react'
 import type { CSSProperties, MutableRefObject, ReactNode } from 'react'
 import { ArrowLeft, ChevronDown, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import type { PanZoom } from '../../hooks/usePanZoom'
 import { Tooltip } from '../ui/Tooltip'
+import { Select } from '../ui/Select'
+import type { SelectOption } from '../ui/Select'
 import { useLabState } from './useLabState'
 import './labs.css'
 
@@ -214,8 +216,14 @@ export function LabField({
   )
 }
 
-/** A native select styled like the app's inputs — the labs pick from short fixed lists
- *  (raster size, heat scale) where a segmented control would eat the whole toolbar. */
+/** The labs' dropdown — a {@link Select}, not a native `<select>`, so it wears the app's
+ *  theme and its groups read as section structure (see that file for why).
+ *
+ *  It lays out its own label rather than going through {@link LabField}, for one
+ *  reason: LabField hangs the hint bubble under the WHOLE field, which is exactly where
+ *  the open list lands. Hover-the-label keeps the hint reachable without it covering
+ *  the options — and the label needs an id anyway, to name the combobox the way the
+ *  native control's wrapping `<label>` used to. */
 export function LabSelect<T extends string | number>({
   value,
   options,
@@ -224,47 +232,24 @@ export function LabSelect<T extends string | number>({
   hint,
 }: {
   value: T
-  /** `group` puts the option under an <optgroup> of that name; ungrouped options render
-   *  first, in order. Groups appear in the order their first option does, so the caller
-   *  controls the layout by list order alone. */
-  options: { value: T; label: string; group?: string }[]
+  /** `group` puts the option in a titled section; ungrouped options come first, in
+   *  order. Groups appear in the order their first option does, so the caller controls
+   *  the layout by list order alone. `note` is dimmed metadata trailing the label. */
+  options: SelectOption<T>[]
   onChange: (v: T) => void
   label: string
   hint?: ReactNode
 }) {
-  const groups: string[] = []
-  for (const o of options) if (o.group && !groups.includes(o.group)) groups.push(o.group)
+  const labelId = useId()
   return (
-    <LabField label={label} hint={hint}>
-      <select
-        value={String(value)}
-        onChange={(e) => {
-          const raw = e.target.value
-          const hit = options.find((o) => String(o.value) === raw)
-          if (hit) onChange(hit.value)
-        }}
-        className="h-7 rounded-md border border-line-strong bg-surface px-1.5 text-xs text-ink"
-      >
-        {options
-          .filter((o) => !o.group)
-          .map((o) => (
-            <option key={String(o.value)} value={String(o.value)}>
-              {o.label}
-            </option>
-          ))}
-        {groups.map((g) => (
-          <optgroup key={g} label={g}>
-            {options
-              .filter((o) => o.group === g)
-              .map((o) => (
-                <option key={String(o.value)} value={String(o.value)}>
-                  {o.label}
-                </option>
-              ))}
-          </optgroup>
-        ))}
-      </select>
-    </LabField>
+    <span className="inline-flex items-center gap-1.5 text-muted">
+      <Tooltip label={hint} side="bottom">
+        <span id={labelId} className="whitespace-nowrap">
+          {label}
+        </span>
+      </Tooltip>
+      <Select value={value} options={options} onChange={onChange} labelledBy={labelId} />
+    </span>
   )
 }
 
