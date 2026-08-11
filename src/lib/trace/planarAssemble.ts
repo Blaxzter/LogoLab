@@ -8,7 +8,8 @@
 import type { EdgeRef, PathNode, SharedEdge, Vec, Vertex } from '../path/types'
 import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
 import { buildPlanarNetwork, EXT, type PlanarNetwork } from './planarNetwork.ts'
-import { detectCorners, detectLoopCorners, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import { detectCorners, detectLoopCorners, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type ApexReach, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import { srgbToLab, deltaE76 } from './lab.ts'
 import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
 import { subpixelEdgeChains, type SourceImage } from './planarSubpixel.ts'
 import { threadJunctions, type ThreadColor } from './planarThread.ts'
@@ -24,6 +25,84 @@ export interface PlanarTrace {
 /** Direction rotation that selects the next half-edge keeping the face on one
  *  consistent side (validated by the per-pixel relabel check). */
 const ROT = [1, 2, 3] // try clockwise turns from the reverse direction first
+
+// --- §18 (issue #17): the raster evidence behind an apex reconstruction ------------
+// planarFit is pure geometry and stays that way; this is the layer that holds both the
+// source raster and the two regions' colours, so the probe is built here and handed down
+// as a closure (PlanarFitOptions.apexReach). See APEX_OVERSHOOT_MAX in planarFit.ts for
+// what consumes it and the corpus numbers the bound was read off.
+
+/** Coverage below this is "the own region is not here". */
+const APEX_ALPHA_FLOOR = 0.1
+/** Walk step (px) along the reconstruction ray. */
+const APEX_STEP = 0.25
+/** How far BEHIND the lattice vertex the own region is identified — inside the corner,
+ *  where neither AA nor the reconstruction can reach. */
+const APEX_BEHIND = 2.5
+/** Below this own↔other ΔE the projection is noise and the probe declines to judge. */
+const APEX_MIN_SEP = 10
+
+/**
+ * How far the corner's OWN region still has coverage in the source raster, walking from
+ * `from` toward `to`. Coverage is recovered by projecting the sampled colour onto the
+ * own↔other line in sRGB — which is where the rasterizer composited it, so the mixing
+ * line is straight there and would curve in Lab. Sampling is BILINEAR: nearest-neighbour
+ * quantizes the very trail being measured into whole pixels (§14's trap).
+ *
+ * Which of the two regions is "own" is read from the raster BEHIND `from`, so convex and
+ * concave corners need no separate treatment — whichever region fills the corner's
+ * interior is the one whose coverage is followed outward.
+ *
+ * Returns Infinity when it cannot judge (colours too close), which vetoes nothing.
+ */
+function apexReachFor(image: SourceImage, a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }): ApexReach | null {
+  const la = srgbToLab(a.r, a.g, a.b)
+  const lb = srgbToLab(b.r, b.g, b.b)
+  if (deltaE76(la, lb) < APEX_MIN_SEP) return null
+  const { data, width, height } = image
+  const px = (x: number, y: number, k: number): number => data[(y * width + x) * 4 + k]
+  const at = (x: number, y: number, out: [number, number, number]): void => {
+    const cx = Math.max(0, Math.min(width - 1.001, x))
+    const cy = Math.max(0, Math.min(height - 1.001, y))
+    const x0 = Math.floor(cx)
+    const y0 = Math.floor(cy)
+    const fx = cx - x0
+    const fy = cy - y0
+    for (let k = 0; k < 3; k++) {
+      const t = px(x0, y0, k) * (1 - fx) + px(x0 + 1, y0, k) * fx
+      const u = px(x0, y0 + 1, k) * (1 - fx) + px(x0 + 1, y0 + 1, k) * fx
+      out[k] = t * (1 - fy) + u * fy
+    }
+  }
+  const buf: [number, number, number] = [0, 0, 0]
+  return (from: Vec, to: Vec): number => {
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const len = Math.hypot(dx, dy)
+    if (len < 1e-9) return Infinity
+    const ux = dx / len
+    const uy = dy / len
+    at(from.x - ux * APEX_BEHIND, from.y - uy * APEX_BEHIND, buf)
+    const behind = srgbToLab(buf[0], buf[1], buf[2])
+    const own = deltaE76(behind, la) <= deltaE76(behind, lb) ? a : b
+    const other = own === a ? b : a
+    const vx = own.r - other.r
+    const vy = own.g - other.g
+    const vz = own.b - other.b
+    const den = vx * vx + vy * vy + vz * vz
+    let reach = 0
+    let miss = 0
+    for (let t = APEX_STEP; t <= len; t += APEX_STEP) {
+      at(from.x + ux * t, from.y + uy * t, buf)
+      const alpha = ((buf[0] - other.r) * vx + (buf[1] - other.g) * vy + (buf[2] - other.b) * vz) / den
+      if (alpha >= APEX_ALPHA_FLOOR) {
+        reach = t
+        miss = 0
+      } else if (++miss >= 2) break
+    }
+    return reach
+  }
+}
 
 
 /** Build the full planar trace from a label map. `palette` (label → colour) is
@@ -46,7 +125,7 @@ export function tracePlanar(
   // Computed on the raw network — BEFORE junction placement — so §14's threadJunctions
   // keeps reading the raw lattice chains its gates were calibrated on (§14.3).
   const subpix = image && opts.subpixelEdges ? subpixelEdgeChains(net, labels, image) : undefined
-  return assemblePlanar(net, opts, palette, subpix)
+  return assemblePlanar(net, opts, palette, subpix, image)
 }
 
 export function assemblePlanar(
@@ -54,6 +133,8 @@ export function assemblePlanar(
   opts: PlanarFitOptions,
   palette?: readonly ThreadColor[],
   subpix?: ReadonlyMap<number, Vec[]>,
+  /** §18 (issue #17): the source raster the apex evidence veto reads. Absent ⇒ no veto. */
+  image?: SourceImage,
 ): PlanarTrace {
   const cw = net.width + 1
   // --- vertices: one per junction corner ---
@@ -139,6 +220,21 @@ export function assemblePlanar(
         pts[n - 1] = { x: latticePts[n - 1].x, y: latticePts[n - 1].y }
       }
       edgeOpts = { ...opts, pinCornerTangents: true }
+    }
+    // §18 (issue #17): hand the fit this edge's own raster evidence probe — the two
+    // regions it separates are what "own" and "other" mean at any corner on it. An EXT
+    // side has no colour (issue #9's territory) and simply gets no probe.
+    if (image && palette && e.left !== EXT && e.right !== EXT && palette[e.left] && palette[e.right]) {
+      const reach = apexReachFor(image, palette[e.left], palette[e.right])
+      if (reach) edgeOpts = { ...edgeOpts, apexReach: reach }
+    }
+    // DIAGNOSTIC only: the fitter does not know which shared edge it is fitting, and the
+    // apex histogram needs it to look the corner's two regions up. Wrapping is per-edge
+    // and inert without a sink.
+    if (opts.apexDiag) {
+      const sink = opts.apexDiag
+      const eid = e.id
+      edgeOpts = { ...edgeOpts, apexDiag: (r) => sink({ ...r, edge: eid }) }
     }
     if (e.closed) {
       // A closed loop with ≥2 genuine sharp corners is fitted corner-first (snap

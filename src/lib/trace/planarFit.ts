@@ -133,7 +133,37 @@ export interface PlanarFitOptions {
    * across the corpus; attaching it cannot change the fit.
    */
   pinDiag?: PinDiag
+  /**
+   * DIAGNOSTIC (never in defaults, never read back): a sink called once per corner the
+   * apex snap CONSIDERS — where the lattice put it, where the arm intersection wants it,
+   * which rule decided, and how much evidence each arm had. `src/devtest/apexDiag.ts`
+   * joins this with the source raster to ask whether a reconstruction ran past the ink
+   * (issue #17); attaching it cannot change the fit.
+   */
+  apexDiag?: ApexDiag
+  /**
+   * §18 / issue #17 (default true). Refuse an apex reconstruction that lands further than
+   * APEX_OVERSHOOT_MAX past the coverage the SOURCE RASTER actually carries — see
+   * `apexReach`. `false` restores the pre-§18 snap, for the Test view A/B.
+   */
+  apexEvidence?: boolean
+  /**
+   * §18 / issue #17: how far, in px, the corner's OWN region still has coverage in the
+   * source raster walking from `from` toward `to`. Supplied per edge by assemblePlanar,
+   * which is the layer that holds both the raster and the two regions' palette colours;
+   * absent (no image, no palette, an EXT side) ⇒ the snap is byte-identical to pre-§18 by
+   * construction, which keeps every label-only caller — tests, diagnostics, synthetic
+   * label maps — unchanged.
+   */
+  apexReach?: ApexReach
+  /** EXPERIMENT KNOBS for the §18 sweep (src/devtest/apexSweep.ts) — default to the
+   *  constants. Not tuning surface: the shipped values are read off the corpus. */
+  apexOvershootMax?: number
+  apexReachFrac?: number
 }
+
+/** See PlanarFitOptions.apexReach. Returns Infinity when it cannot judge. */
+export type ApexReach = (from: Vec, to: Vec) => number
 
 export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   epsilon: 1.0,
@@ -727,6 +757,56 @@ function snapCornerToArms(pts: Vec[], c: number, inGap: number, outGap: number, 
 }
 
 /**
+ * Which rule decided where a corner's apex ended up. Every value but `reconstructed`
+ * keeps the raw lattice/chain vertex — they are the snap's four refusals, named so a
+ * histogram can tell "the arms placed this" from "the arms were not trusted".
+ */
+export type ApexOutcome =
+  | 'reconstructed' //  the arm-line intersection, inside the displacement cap
+  | 'short-arm' //      §10.6 bypass: neighbours too close to fit an arm at all
+  | 'few-samples' //    a window with < 2 points on one side
+  | 'parallel' //       the two arm lines are near-collinear (no intersection)
+  | 'over-cap' //       the intersection ran further than the GEOMETRIC cap allows
+  | 'past-evidence' //  §18: it ran past the coverage the RASTER carries
+
+/** One corner the apex snap considered, for the histogram behind any change to it
+ *  (`src/devtest/apexDiag.ts`). Observational only — attaching a sink never changes the
+ *  fit. See PlanarFitOptions.apexDiag. */
+export interface ApexDiagRecord {
+  /** Shared-edge id. Attached by assemblePlanar — the fitter does not know it. */
+  edge?: number
+  /** The chain vertex the corner was detected at (lattice, or §15-displaced). */
+  cx: number
+  cy: number
+  /** Where the apex ended up — equal to (cx,cy) on every outcome but `reconstructed`. */
+  ax: number
+  ay: number
+  /** dist((ax,ay), (cx,cy)) — how far the reconstruction moved the apex. */
+  moved: number
+  outcome: ApexOutcome
+  /** The displacement cap in force (0 when the snap bailed before computing one). */
+  allow: number
+  /** Arm windows in chain steps, as the caller capped them. */
+  inSpan: number
+  outSpan: number
+  /** Arm evidence, −1 where the arm was never fitted. */
+  inBow: number
+  outBow: number
+  inChord: number
+  outChord: number
+  inN: number
+  outN: number
+  /** Interior angle between the two fitted arm lines at the apex (deg); −1 without arms.
+   *  Acute tips — where a slow convergence throws the intersection far — read small. */
+  tipDeg: number
+  /** §18: how far the own region's coverage reaches along the reconstruction ray, px.
+   *  −1 when no probe was attached or the snap never got as far as asking. */
+  reach: number
+}
+
+export type ApexDiag = (r: ApexDiagRecord) => void
+
+/**
  * `snapCornerToArms`, but ALSO returning the two fitted arm DIRECTIONS (unit, oriented
  * along the chain's travel: `inDir` INTO the apex, `outDir` AWAY from it) whenever the
  * reconstruction had usable arm evidence — null on every lattice-fallback path. The §15
@@ -737,8 +817,11 @@ function snapCornerToArms(pts: Vec[], c: number, inGap: number, outGap: number, 
  */
 function snapCornerToArmsFull(
   pts: Vec[], c: number, inGap: number, outGap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0,
-): { p: Vec; inArm: ArmFit | null; outArm: ArmFit | null } {
+): { p: Vec; inArm: ArmFit | null; outArm: ArmFit | null; outcome: ApexOutcome; allow: number } {
   const n = pts.length
+  const keep = (outcome: ApexOutcome, inArm: ArmFit | null, outArm: ArmFit | null, allow = 0) => ({
+    p: { x: pts[c].x, y: pts[c].y }, inArm, outArm, outcome, allow,
+  })
   const wrap = (i: number): number => ((i % n) + n) % n
   // Base window [gap..span], then extend up to `max` while the arm stays COLLINEAR.
   // A 1-in-14 staircase (a shallow star tip, slope ~0.07) shows less than ONE unit
@@ -770,10 +853,10 @@ function snapCornerToArmsFull(
   // from 3–5 phase-noise samples lands 2.6–7.9px off. Keep the lattice apex.
   // (The threshold was SWEPT: raising it to 11/14 collapses recall to 57–62% —
   // medium arms genuinely profit from reconstruction; only the shortest do not.)
-  if (Math.min(inSpan, outSpan) < SNAP_GAP + 4) return { p: { x: pts[c].x, y: pts[c].y }, inArm: null, outArm: null }
+  if (Math.min(inSpan, outSpan) < SNAP_GAP + 4) return keep('short-arm', null, null)
   const inPts = collect(-1, inGap, inSpan, inMax)
   const outPts = collect(1, outGap, outSpan, outMax)
-  if (inPts.length < 2 || outPts.length < 2) return { p: { x: pts[c].x, y: pts[c].y }, inArm: null, outArm: null }
+  if (inPts.length < 2 || outPts.length < 2) return keep('few-samples', null, null)
   const aFit = armFitOf(inPts)
   const bFit = armFitOf(outPts)
   const a = aFit.line
@@ -786,7 +869,7 @@ function snapCornerToArmsFull(
   const inArm: ArmFit = { ...aFit.fit, dir: orient(a.d, pts[wrap(c - inSpan)], pts[c]) }
   const outArm: ArmFit = { ...bFit.fit, dir: orient(b.d, pts[c], pts[wrap(c + outSpan)]) }
   const det = a.d.x * -b.d.y - a.d.y * -b.d.x
-  if (Math.abs(det) < 1e-6) return { p: { x: pts[c].x, y: pts[c].y }, inArm, outArm }
+  if (Math.abs(det) < 1e-6) return keep('parallel', inArm, outArm)
   const rx = b.c.x - a.c.x
   const ry = b.c.y - a.c.y
   const t = (rx * -b.d.y - ry * -b.d.x) / det
@@ -803,8 +886,132 @@ function snapCornerToArmsFull(
   // keep the lattice corner.
   const shortSpan = Math.min(inSpan, outSpan)
   const allow = shortSpan >= SNAP_SPAN ? Math.max(inSpan, outSpan) : Math.max(2, 0.5 * shortSpan)
-  if (dist({ x: ix, y: iy }, pts[c]) > allow) return { p: { x: pts[c].x, y: pts[c].y }, inArm, outArm }
-  return { p: { x: ix, y: iy }, inArm, outArm }
+  if (dist({ x: ix, y: iy }, pts[c]) > allow) return keep('over-cap', inArm, outArm, allow)
+  return { p: { x: ix, y: iy }, inArm, outArm, outcome: 'reconstructed', allow }
+}
+
+/**
+ * §18 (issue #17) — how far past the raster's own evidence a reconstruction may land.
+ *
+ * The arm-line intersection is the right answer for a raster-ERODED tip: a shallow star
+ * point genuinely sits px beyond the last labelled pixel, and reconstructing it is what
+ * §10.2 measured as sharp-star's 11/11 corner recall. It is the wrong answer for an ACUTE
+ * CURVED counter, where each "arm line" is a chord leaning into the lens and the two
+ * chords cross px past the real tip — logo-instagram's 'a' counter lands 3.4px above its
+ * own tip, where the source luminance is 57 (solid ink).
+ *
+ * The two cases are indistinguishable by geometry — same code, same spans, similar bows
+ * (§17.1 measured `bow` NOT separable: ≤ 0.79 holds 51 authored-straight arms and 100
+ * authored-bent ones). What separates them is the RASTER: erosion leaves a decaying trail
+ * of partial coverage between the lattice vertex and the true corner — that trail IS the
+ * erosion — while a counter reconstructed into its own stem has no trail at all, coverage
+ * falling off a cliff at the lattice vertex.
+ *
+ * So the first term of the rule is the overshoot past that trail (`moved − reach`), read
+ * off the corpus rather than guessed (src/devtest/apexDiag.ts, @512). Worst overshoot
+ * among the reconstructions that must SURVIVE — every control whose recall this snap buys:
+ *
+ *     sharp-star 0.85 · gear-teeth 1.92 · fedex 1.89 · seam-corner 0.75 · cross-bars 0.37
+ *     band-cross 0.37 · wedge-counter 0.21 · acute-counter's own eroded spikes −1.08
+ *
+ * …against the defect population: `acute-counter` 7 of 15 past 2px (worst 6.47 @512,
+ * 10.25 @256), logo-instagram 20, logo-chupa-chups 12, logo-coca-cola 15. 2.5 leaves every
+ * survivor @512 untouched (2.0 would start clipping gear-teeth and fedex for 3px of
+ * `acute-counter` Σ — blast radius is worth more than that) and sits under the defect mass.
+ */
+const APEX_OVERSHOOT_MAX = 2.5
+
+/**
+ * …and the second half of the rule, because the overshoot ALONE is not separable — this is
+ * the measurement that killed the obvious version. `acute-counter`'s own eroded 10° spike
+ * @256 reconstructs 7.57px with the trail reaching 5.00 (overshoot 2.57) and lands 0.50px
+ * from its authored apex; a `gear-teeth` tooth @256 overshoots 3.55. Both are RIGHT, and
+ * both sit inside the overshoot range of the lens tips this veto exists to refuse
+ * (6.23–10.25 @256). A distance threshold that spares them spares the defect too.
+ *
+ * What does separate is what FRACTION of the way the raster's own material covers. Erosion
+ * only hides the last sub-pixel sliver of a tip, so the trail runs most of the distance
+ * (the spikes: 5.00/7.57 = 0.66, 3.75/5.98 = 0.63, and past 1.0 at finer rasters). An
+ * over-reconstruction leaves the shape at the lattice vertex and keeps going, so the trail
+ * covers a minority of it (the lens tips: 0.00–0.53, median 0.20).
+ *
+ * So the reconstruction is corrected only when it BOTH runs > APEX_OVERSHOOT_MAX past the
+ * evidence AND the evidence covers less than this fraction of it. 0.6 is the middle of the
+ * measured gap (defect ratios top out at 0.53, the surviving spikes start at 0.63) and the
+ * sweep is red on either side of it: at 0.70 the @256 spike is corrected and lands 7.07px
+ * from its authored apex instead of 0.50. Corner recall on every control — sharp-star
+ * 11/11, gear-teeth 52/60, bar-caps 43/43, cross-bars 10/10, band-cross 25/25, checker
+ * 3556/3588 — is byte-identical under every rule in the sweep, at 256 and 512 both.
+ */
+const APEX_REACH_FRAC = 0.6
+
+/**
+ * The apex snap, its §18 evidence veto, and the diagnostic emission — the one place both
+ * cornered fitters get a corner from. `tipDeg` is the INTERIOR angle between the two arms
+ * as rays leaving the apex: `inArm.dir` runs INTO the apex and `outArm.dir` away from it,
+ * so a straight run reads 180° and an acute tip reads small. That is the quantity issue
+ * #17 is about — the shallower the tip, the further a slope error in either arm throws
+ * their intersection along the bisector.
+ */
+function snapApex(
+  pts: Vec[],
+  c: number,
+  inGap: number,
+  outGap: number,
+  inSpan: number,
+  outSpan: number,
+  inMax: number,
+  outMax: number,
+  opts: PlanarFitOptions,
+): { p: Vec; inArm: ArmFit | null; outArm: ArmFit | null } {
+  let full = snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
+  let moved = dist(full.p, pts[c])
+  // Only a reconstruction that already moved further than the bound can possibly break it,
+  // so the raster probe stays off the hot path for the overwhelming majority of corners.
+  let reach = -1
+  const overMax = opts.apexOvershootMax ?? APEX_OVERSHOOT_MAX
+  const reachFrac = opts.apexReachFrac ?? APEX_REACH_FRAC
+  if (opts.apexEvidence !== false && opts.apexReach && full.outcome === 'reconstructed' && moved > overMax) {
+    reach = opts.apexReach(pts[c], full.p)
+    if (moved - reach > overMax && reach < reachFrac * moved) {
+      // CLAMP to the evidence rather than discard it. Falling all the way back to the
+      // lattice vertex was measured and is the wrong correction: where the tip is
+      // genuinely (if partly) eroded the truth lies BETWEEN the two, and pinning to the
+      // lattice pulls the whole adjacent arc in — `acute-counter` @256 boundary p95
+      // 2.13 → 3.46, worse than the overshoot it removed. `reach` is where the raster's
+      // own material actually stops, which is the best estimate of the tip either side
+      // of this rule has.
+      const k = reach / moved
+      full = {
+        p: { x: pts[c].x + (full.p.x - pts[c].x) * k, y: pts[c].y + (full.p.y - pts[c].y) * k },
+        inArm: full.inArm, outArm: full.outArm, outcome: 'past-evidence', allow: full.allow,
+      }
+      moved = reach
+    }
+  }
+  if (opts.apexDiag) {
+    const a = full.inArm
+    const b = full.outArm
+    let tipDeg = -1
+    if (a && b) {
+      const cosI = Math.min(1, Math.max(-1, -(a.dir.x * b.dir.x + a.dir.y * b.dir.y)))
+      tipDeg = (Math.acos(cosI) * 180) / Math.PI
+    }
+    opts.apexDiag({
+      cx: pts[c].x, cy: pts[c].y,
+      ax: full.p.x, ay: full.p.y,
+      moved,
+      outcome: full.outcome,
+      allow: full.allow,
+      inSpan, outSpan,
+      inBow: a?.bow ?? -1, outBow: b?.bow ?? -1,
+      inChord: a?.chord ?? -1, outChord: b?.chord ?? -1,
+      inN: a?.n ?? -1, outN: b?.n ?? -1,
+      tipDeg,
+      reach,
+    })
+  }
+  return { p: full.p, inArm: full.inArm, outArm: full.outArm }
 }
 
 /**
@@ -1216,7 +1423,7 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     // still never past the neighbouring corner.
     const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1))
     const outMax = Math.min(SNAP_SPAN_MAX, Math.max(outGap + 1, toNext - 1))
-    const full = snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
+    const full = snapApex(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax, opts)
     armDirsAll.push({ inArm: full.inArm, outArm: full.outArm })
     return full.p
   })
@@ -1416,7 +1623,7 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
       const outSpan = Math.min(SNAP_SPAN, Math.max(outGap + 1, toNext - 1), n - 1 - c)
       const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1), c)
       const outMax = Math.min(SNAP_SPAN_MAX, Math.max(outGap + 1, toNext - 1), n - 1 - c)
-      const full = snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
+      const full = snapApex(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax, opts)
       armDirsAll.push({ inArm: full.inArm, outArm: full.outArm })
       return full.p
     })

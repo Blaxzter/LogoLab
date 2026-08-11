@@ -33,6 +33,26 @@ guardrails):
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **A corner NEAR a junction has its arm evidence TRUNCATED by the seam** — what is left of #15 after §17. `snapCornerToArms` can only sample up to the neighbouring junction, so a band seam landing 2–3px from an authored corner halves (or kills) the arm the apex is reconstructed from — §10.6's short-arm regime — and the corner keeps a lattice apex the fit then drags its 150px flank toward. §17 measured that this, NOT "the junction is the corner", is what the Affinity numbers below are: all five of that mark's corner-verdict junctions sit **1.8–2.9px from** the nearest authored corner, none on one, and the mark is byte-identical under §17 | `affinity-designer.svg` @512 flat (private corpus, **ungated**) | the mark's 133px top edge: constant 1.06px offset → mean 0.69 with **0.71px swing**; triangle apex **1.54px** (0.97 with gradients ON, i.e. with no seam cutting its arm) | §14.3, §17.1 |
 
+Recently closed: **an acute counter's apex reconstructed PAST the ink** (issue #17,
+user-reported twice from /labs/ab on `logo-instagram`) — closed 2026-08-08, **§18** is the
+record. `snapCornerToArms` intersects the two fitted arm lines, which is right for a
+raster-ERODED tip (sharp-star 11/11) and wrong on an acute CURVED counter, where each arm
+line is a chord leaning into the lens and the crossing lands px inside solid ink. Geometry
+cannot tell the two apart — §17.1 already measured `bow` as not separable — so the fit now
+consults the RASTER: how far the corner's own coverage actually reaches along the
+reconstruction ray. Two hypotheses died on the way (the overshoot distance alone, which cost
+an eroded spike its reconstruction 0.50 → 7.07px; and the MEAN coverage, which reads *higher*
+on the worst cases because they cross the ink and come out the other side), and so did the
+obvious correction (falling back to the lattice vertex: `acute-counter` @256 p95 2.13 →
+**3.46**, worse than the overshoot it removed — it CLAMPS to the evidence instead). Corpus
+case `acute-counter` (authored for this, tier 0), gate `test/planar-apex.test.ts`. Worst
+overshoot past an authored tip 6.85 → **2.63px**; on real marks `logo-instagram` p95 **2.633
+→ 1.506**, `coca-cola` chamfer 0.3350 → 0.3193 with corners 8/12 → 9/12 and −22 nodes,
+`chupa-chups` 54/62 → 55/62, `firefox` 21/33 → **25/33** — no mark loses a corner, five gain.
+A/B: 14 of 70 outputs move, and the only fixture among them is `sharp-star` gradients-ON
+(flat lane byte-identical). Residue, named: ~2.6px of overshoot survives at the worst tip,
+because the raster's evidence stops just inside the authored tip.
+
 Recently closed: **a junction that IS a real corner of the art** (the other half of #15) —
 closed 2026-08-06, **§17** is the record. §14 places a junction on a fit taken THROUGH it,
 which only exists where the strong boundary continues; where it CORNERS, the chord-turn gate
@@ -2946,3 +2966,152 @@ Suite **354 → 358 pass / 2 skip** (+4, all in `test/planar-thread.test.ts`); t
 - The arm gate is a one-sided veto by construction (§17.1), so a junction whose corner is
   real but whose two arms are both gently curved is left on the lattice. Nothing in the
   corpus measures the cost of that today.
+
+---
+
+## 18. The apex that outran its evidence (issue #17, 2026-08-08)
+
+`snapCornerToArms` places a corner at the INTERSECTION of the two lines fitted to its arms.
+On a raster-ERODED tip that is the whole point — a shallow star point genuinely sits px past
+the last labelled pixel, and reconstructing it is what §10.2 measured as `sharp-star`'s 11/11
+corner recall. On an ACUTE CURVED counter the same arithmetic misfires: each "arm line" is a
+CHORD leaning into the lens, and the two chords cross px past the real tip. The reported
+witness (`logo-instagram`'s script 'a', @512, user-reported twice) put the counter's apex
+3.4px above its own tip, in pixels whose luminance is 57 — solid ink.
+
+### 18.1 Phase 0: the instrument, and the two hypotheses it killed
+
+`src/devtest/apexDiag.ts` — an observational sink in the fit (`PlanarFitOptions.apexDiag`,
+the `pinDiag` pattern) joined to the source raster. Per reconstructed apex it walks the ray
+from the lattice vertex to the apex and recovers the OWN region's coverage α by projecting
+the sampled colour onto the own↔other line **in sRGB** (where the rasterizer composited it;
+Lab curves the mixing line), sampling BILINEAR (§14's trap: nearest-neighbour quantises the
+very trail being measured). `own` is read from the raster 2.5px BEHIND the vertex, so convex
+and concave corners need no separate treatment. Census @512: **3582 scored apexes over 142
+gallery marks, 531 overshooting the raster's own coverage by > 1px and 297 by > 2px.**
+
+**Killed hypothesis 1 — the overshoot distance alone.** The obvious rule, and the one the
+issue proposes: refuse a reconstruction landing more than X px past the coverage. Not
+separable. `acute-counter`'s own eroded 10° spike @256 overshoots **2.57px** while landing
+**0.50px** from its authored apex, and a `gear-teeth` tooth @256 overshoots **3.55px** — both
+RIGHT, and both inside the range of the lens tips the rule exists to refuse (6.23–10.25
+@256). Shipped as-is it cost the spike its reconstruction: 0.50px → **7.07px**.
+
+**Killed hypothesis 2 — the MEAN coverage along the ray.** The natural repair, and wrong for
+a reason worth keeping: the worst reconstructions travel so far that they cross the ink and
+re-enter the own colour on the far side, so their mean reads **0.303 / 0.252** — *higher*
+than the legitimate spikes' 0.284. Any statistic averaged over the whole segment inherits
+that. Only the CONTIGUOUS run from the lattice vertex (`reach`) is immune.
+
+**What does separate** is the FRACTION of the distance the raster's own material covers.
+Erosion only hides the last sub-pixel sliver of a tip, so its trail runs most of the way
+(spikes: 5.00/7.57 = 0.66, 3.75/5.98 = 0.63, past 1.0 at finer rasters). An over-reconstruction
+leaves the shape at the lattice vertex and keeps going (lens tips: 0.00–0.53, median 0.20).
+
+### 18.2 The fixture, and what it took to make it measure ONE thing
+
+No existing case carries this anatomy. `wedge-counter` was measured for it FIRST and does not
+reproduce (max overshoot **0.21px**): its wedges pinch out sub-pixel and the lattice fuses
+them, which is §15.8's mechanism. So `acute-counter` (genEdgeCases, TRUTH_CORPUS tier 0) —
+lens counters of two circular arcs, both arms curved, sweeping the tip ANGLE as the primary
+axis because a slope error divides by the tangent of the half-angle. Its bottom row is the
+CONTROL that makes it a test rather than a target: eroded ink spikes whose reconstruction is
+RIGHT.
+
+The first draft was **wrong in a way only measurement caught**: its 24° cells came to 1.5px
+of width @256, were dropped WHOLE (authored tip **120–143px** from any fitted node), and
+would have scored this mechanism with a thin-feature loss (§12's territory). Every cell is
+now ≥ 3.7px wide @256.
+
+Two cheaper gates were also tried and are recorded as dead ends: a chain-only anatomy (the
+`test/planar-pin.test.ts` shape) cannot exercise a rule whose only input is the raster, and a
+hand-rendered two-colour lens UNDER-reconstructs instead (3.21px short, unchanged by the
+rule) — below ~6px of width a lens's tips erode faster than its arms converge.
+
+### 18.3 The rule, and the sweep that chose it
+
+`src/devtest/apexSweep.ts` sweeps both terms against BOTH sides at once — the authored-tip
+error on `acute-counter`, and corner recall on every control whose recall this snap buys.
+
+**The control side does not constrain the choice at all**: `sharp-star` 11/11, `gear-teeth`
+52/60, `bar-caps` 43/43, `cross-bars` 10/10, `band-cross` 25/25, `checker` 3556/3588 are
+**byte-identical under every rule in the sweep, at 256 and 512 both**. What picks the rule is
+the eroded-spike control, and it is a knife edge on the reach fraction:
+
+| rule | acute-counter Σ tip error @512 | worst | **SPIKE control** |
+|---|---|---|---|
+| off (pre-§18) | 53.7 | 6.87 | 2.01 |
+| overshoot > 2.5 alone | 19.5 | 2.64 | **7.07 ✗** |
+| overshoot > 2.5 & reach < 0.70·moved | 19.5 | 2.64 | **7.07 ✗** |
+| overshoot > 2.5 & reach < **0.60**·moved | **19.5** | **2.64** | **2.01 ✓** |
+
+0.6 is the middle of the measured gap (defect ratios top out at 0.53, surviving spikes start
+at 0.63). `APEX_OVERSHOOT_MAX` 2.5 leaves every @512 survivor untouched; 2.0 buys 3px of Σ
+and starts clipping `gear-teeth` and `fedex`, which is not worth the blast radius.
+
+**REJECTED, so it is not rebuilt: falling back to the lattice vertex.** The four existing
+refusals in this snap all do that, so it was the first thing built — and it is the wrong
+correction. Where a tip is genuinely if partly eroded the truth lies BETWEEN the two, and
+pinning to the lattice drags the whole adjacent arc in: `acute-counter` @256 boundary p95
+**2.13 → 3.46**, worse than the overshoot it removed. CLAMPING to `reach` instead — the point
+where the raster's own material actually stops — is better everywhere and worse nowhere:
+
+| acute-counter | chamfer | p95 |
+|---|---|---|
+| @256 | 0.479 → **0.443** | 2.13 → 2.13 |
+| @512 | 0.304 → **0.267** | 0.80 → **0.78** |
+| @1024 | 0.211 → **0.190** | 0.97 → **0.96** |
+
+Region recovery 3/3 and corner recovery unchanged at all three.
+
+The probe lives in `planarAssemble` (the layer that holds both the raster and the palette)
+and reaches the fit as a per-edge closure, so `planarFit` stays pure geometry and every
+label-only caller — tests, diagnostics, synthetic label maps, an EXT-sided border edge — is
+byte-identical by construction.
+
+### 18.4 After (the numbers)
+
+Gate: `test/planar-apex.test.ts` (5 tests). It is red-before-green **structurally** rather
+than historically — each test measures `apexEvidence:false` against the default in the same
+run, and its preconditions assert the pre-§18 state (Σ > 40px, worst tip > 5px, worst
+overshoot > 4px), so the gate cannot pass by the rule silently never firing.
+
+| | before | after |
+|---|---|---|
+| worst OVERSHOOT past an authored tip, `acute-counter` @512 | **6.85px** | **2.63px** |
+| Σ over its 14 authored lens tips @512 | 53.7px | **19.5px** |
+| the eroded-spike control | 2.01px | **2.01px** (untouched) |
+
+**On the real marks**, scored against the AUTHORED SVG (flat lane, @512) — this is where §18
+differs from §17, which closed a mechanism no gallery mark exhibited:
+
+| mark | chamfer | p95 | corners | nodes |
+|---|---|---|---|---|
+| `instagram` — **the reported witness** | 0.4411 → **0.4000** | **2.633 → 1.506** | 8/9 | 368 → 368 |
+| `coca-cola` | 0.3350 → **0.3193** | 0.905 → **0.817** | 8/12 → **9/12** | 256 → **234** |
+| `chupa-chups` | 0.2232 → **0.2110** | 0.652 → **0.639** | 54/62 → **55/62** | 526 → 520 |
+| `mastercard` | 0.2817 → **0.2735** | 0.668 → 0.666 | 48/49 | 308 → 306 |
+| `ibm` | 0.2428 → **0.2414** | 0.678 → **0.674** | 119/127 → **120/127** | 374 |
+| `mercedes-benz` | 1.2284 → 1.2308 | 8.225 | 11/32 → **13/32** | 574 → 576 |
+| `firefox` | 4.2128 → **4.2046** | 35.150 → 35.156 | 21/33 → **25/33** | 576 |
+| `fedex` | 0.2104 (inert) | 0.710 | 37/37 | 131 |
+
+No mark loses a corner; five gain. `mercedes-benz` trades 0.0024 of chamfer for two corners.
+Corpus-wide over the 42 gallery marks the census slice covers: apexes overshooting their
+evidence by > 1px **221 → 128**, 97 clamped, and the worst overshoot collapses from 6–13px to
+under 2.5px on a dozen marks (`soundcloud` 12.82 → 2.33, `reddit` 11.93 → 2.08, `whatsapp`
+11.33 → 2.18, `snapchat` 9.11 → 1.51, `tripadvisor` 7.93 → 0.34).
+
+**Blast radius: 14 of 70 A/B outputs move**, 13 of them gallery marks. The only fixture that
+moves is `sharp-star` **gradients-ON** — and the flat lane, which is the gated one and the one
+the product chooses, is **byte-identical**. The gradient lane improves (chamfer 0.3263 →
+0.3132, corner recall 11/11 unchanged, p95 0.911 → 0.921): its bottom-left point's near-tip
+node lands 2.00px from the authored tip instead of 2.89px.
+
+Suite **364 → 371 tests** (369 pass / 2 skip); truth gate green at 256 and 512 including the
+new `acute-counter`, scale gate unchanged.
+
+**Scope it honestly.** What remains is the rule's own resolution: a residual overshoot of
+~2.6px at the worst tip, because the bound is on the overshoot past the RASTER's evidence and
+that evidence stops a little inside the authored tip — the last sub-pixel sliver of an acute
+counter carries no measurable coverage. Closing that needs a model of the tip, not a probe.

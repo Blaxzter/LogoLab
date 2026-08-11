@@ -122,6 +122,16 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // nothing and must stay green. genEdgeCases.ts documents the rack.
   { name: 'band-cross', svg: 'public/examples/edge-cases/band-cross.svg', note: 'weak boundaries landing on strong edges — contrast-ranked junctions', gradients: false, tier: 0 },
 
+  // Issue #17's driver, authored deliberately red (the gear-teeth §10.5 / bar-caps §0 #6b
+  // pattern). An ACUTE LENS counter has two CURVED arms; the apex snap fits a straight line
+  // to each over [3..14]px and intersects them, and on a curved arm that line is a chord
+  // leaning inward — the crossing lands px past the real tip, inside solid ink. Measured at
+  // authoring (apexDiag.ts): 7 of 15 reconstructions overshoot the raster's own coverage by
+  // > 2px, worst 6.47px. The bottom row is the CONTROL that makes the case a test rather
+  // than a target: eroded ink spikes whose reconstruction is RIGHT (overshoot −1.08px, i.e.
+  // still inside the evidence), so "stop reconstructing" cannot pass this case.
+  { name: 'acute-counter', svg: 'public/examples/edge-cases/acute-counter.svg', note: 'acute lens counters — apex reconstructed past the ink (#17)', gradients: false, tier: 0 },
+
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves
   // the project root, which hid the fact that examples/*.svg would 404 in a real build.
