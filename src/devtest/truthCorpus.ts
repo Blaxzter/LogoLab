@@ -132,6 +132,14 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // still inside the evidence), so "stop reconstructing" cannot pass this case.
   { name: 'acute-counter', svg: 'public/examples/edge-cases/acute-counter.svg', note: 'acute lens counters — apex reconstructed past the ink (#17)', gradients: false, tier: 0 },
 
+  // Issue #7's driver (the mastercard "needle"), authored deliberately red. A letterform
+  // join's corner has CURVED arms but is NOT acute; the apex snap's straight arm line is a
+  // chord of the curve, and the chord intersection slides ALONG the other arm (a white
+  // needle into the 'e' stems) or off the crotch bisector — under §18's 2.5px floor, or
+  // with the reach probe blinded by the AA fringe of the edge the ray runs along.
+  // genEdgeCases.ts documents the rack; test/planar-needle.test.ts is the mechanism gate.
+  { name: 'letter-joins', svg: 'public/examples/edge-cases/letter-joins.svg', note: 'letterform joins — curved-arm corner apex displacement (#7)', gradients: false, tier: 0 },
+
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves
   // the project root, which hid the fact that examples/*.svg would 404 in a real build.

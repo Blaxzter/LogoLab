@@ -160,6 +160,55 @@ export interface PlanarFitOptions {
    *  constants. Not tuning surface: the shipped values are read off the corpus. */
   apexOvershootMax?: number
   apexReachFrac?: number
+  /**
+   * §19 / issue #7 (default true). The apex snap's arm model: a LINE is the right model
+   * exactly while the arm's samples sit on it; where they measurably BOW off it, the
+   * line is a CHORD of a curve and the chord intersection slides ALONG the other arm —
+   * mastercard's 'e' grows a 2px white needle into its stems, and a crotch apex is
+   * pushed off the bisector. Such an arm is upgraded to its own fitted CIRCLE and the
+   * apex placed on the fitted-primitive intersection (the §10.4 reseat philosophy,
+   * applied to the corner snap). Rides with a near-parallel conditioning guard (see
+   * PARALLEL_TIP_DEG). `false` restores the chords-only snap — the pre-§19 baseline,
+   * for the Test view A/B.
+   */
+  arcArms: boolean
+  /** EXPERIMENT KNOBS for the §19 sweep (src/devtest/needleDiag.ts --sweep) — default
+   *  to the constants; the shipped values are read off the corpus. `arcArmModel`:
+   *  'tangent' replaces a bent arm's chord with its ANCHORED TANGENT line (anchor = the
+   *  smoothed tip-end sample, direction = the chord rotated by the measured
+   *  chord-to-tangent angle — no radius estimate involved); 'circle' intersects fitted
+   *  circles (exact on large clean arcs, unstable on ~8px letterform windows). */
+  arcArmBowMin?: number
+  arcArmDevK?: number
+  parallelTipDeg?: number
+  arcArmModel?: 'tangent' | 'circle'
+  /** false ⇒ the §15 pin keeps seeing the pre-§19 CHORD directions while the apex still
+   *  moves — isolates apex-placement effect from pin-direction effect in the sweep. */
+  arcPin?: boolean
+  /** Minimum arm samples before the reported dir switches to the model tangent (the §15
+   *  pin consumes it). Short windows measure their tangent as noise — gear-teeth's tooth
+   *  flanks (n 5–11) lost 10 corners to it — while the letterform/counter windows that
+   *  need the correction have n ≥ 12. */
+  arcPinMinN?: number
+  /** Minimum arm samples before the arm may upgrade AT ALL (model and pin both): below
+   *  it the chord stays, byte-identically. Gear-teeth's marginal 67° roots shuffle
+   *  (2 won / 3 lost) when flank windows this short take the model. */
+  arcArmMinN?: number
+  /** Minimum measured half-turn (deg) between the window's two half-fits before the arm
+   *  counts as CURVED. The direction disagreement is the curvature, measured over ≥6
+   *  samples a side; a straight staircase's halves agree within ~5° of noise while the
+   *  needle family's arcs turn 15°+ per half-window. */
+  arcPhiMinDeg?: number
+  /** Minimum chord-estimated tip angle (deg) for the model to apply at all. At an
+   *  ACUTE tip the intersection amplifies tangent noise by 1/sin(tip), and the chord
+   *  model errs SHORT there — the safe side (§18's acute-counter @256 held its p95
+   *  only with this floor). The needle family measures 50–115°. */
+  arcTipMinDeg?: number
+  /** Minimum corrected TURN (deg) for the tangent dirs to reach the §15 pin. The pin
+   *  exists to restore a corner's sharpness; corrected tangents that leave the turn
+   *  near the 60° sharp bar would rotate handles until the corner READS smooth —
+   *  gear-teeth's marginal roots read turn 46–59° corrected and flipped exactly there. */
+  arcPinTurnMinDeg?: number
 }
 
 /** See PlanarFitOptions.apexReach. Returns Infinity when it cannot judge. */
@@ -182,6 +231,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   fitThrough: true,
   cornerJunctions: true,
   subpixelEdges: true,
+  arcArms: true,
 }
 
 /** Flat-art line cost: > cubicCost so the DP prefers a CUBIC on any span where a
@@ -698,14 +748,19 @@ const SNAP_COLLINEAR = 0.75
  * chord's direction is not the boundary's direction at the apex.
  */
 export interface ArmFit {
-  /** Unit direction, oriented along the chain's travel by the caller. */
+  /** Unit direction, oriented along the chain's travel by the caller. On a §19 circle
+   *  arm this is the tangent AT the snapped apex (a chord's direction is not the
+   *  boundary's direction there — §15.8's crown lesson), else the fitted line's. */
   dir: Vec
-  /** Max |perpendicular deviation| of the arm samples from the fitted line, px. */
+  /** Max |perpendicular deviation| of the arm samples from the fitted LINE, px — the
+   *  curvature evidence, kept line-based even when the arm upgrades to a circle. */
   bow: number
   /** Distance between the first and last arm sample, px. */
   chord: number
   /** Number of samples in the window. */
   n: number
+  /** Which §19 model placed this arm's side of the apex. Absent = line (pre-§19 shape). */
+  kind?: 'line' | 'circle' | 'tangent'
 }
 
 /** Least-squares line through `pts` → a point on it (`c`) and a unit direction (`d`). */
@@ -744,17 +799,8 @@ function armFitOf(pts: Vec[]): { line: { c: Vec; d: Vec }; fit: ArmFit } {
   return { line, fit: { dir: line.d, bow, chord: dist(pts[0], pts[pts.length - 1]), n: pts.length } }
 }
 
-/**
- * Sub-pixel position of the corner at cyclic index `c`: intersect the two lines
- * fit to the arms flanking it (each sampled [gap..span] px away so the rounded tip
- * is excluded). `inSpan`/`outSpan` are capped by the caller so a short arc between
- * two close corners doesn't bleed past the neighbour. Returns the raw lattice
- * corner when the arms are near-parallel or the intersection runs away (a curved
- * arm), so a bad fit can never push the apex off into space.
- */
-function snapCornerToArms(pts: Vec[], c: number, inGap: number, outGap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0): Vec {
-  return snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax).p
-}
+// (snapCornerToArms, the p-only wrapper, was deleted 2026-08-11 — every caller goes
+// through snapApex/snapCornerToArmsFull, which need the options and the arm fits.)
 
 /**
  * Which rule decided where a corner's apex ended up. Every value but `reconstructed`
@@ -802,21 +848,194 @@ export interface ApexDiagRecord {
   /** §18: how far the own region's coverage reaches along the reconstruction ray, px.
    *  −1 when no probe was attached or the snap never got as far as asking. */
   reach: number
+  /** §19: which model placed each arm's side of the apex. Absent = line. */
+  inKind?: 'line' | 'circle' | 'tangent'
+  outKind?: 'line' | 'circle' | 'tangent'
 }
 
 export type ApexDiag = (r: ApexDiagRecord) => void
 
+/** §19 (issue #7): a fitted tip this close to straight contradicts the ≥60°-turn corner
+ *  definition by ≥30° — the "corner" is a staircase jog whose intersection is
+ *  ill-conditioned ALONG the boundary. Census @512 flat: reconstructions with fitted tips
+ *  147–163° land 3.6–5.1px from the authored corner where the lattice vertex was
+ *  0.35–1.0px off (instagram 5.05 vs 0.35), and §18's reach probe cannot refuse them —
+ *  the ray runs along a real edge whose AA fringe reads as coverage. */
+const PARALLEL_TIP_DEG = 150
+/** §19: an arm's samples must bow at least this far off their fitted line before the
+ *  line is treated as a chord of a curve and upgraded to a fitted circle. Below it the
+ *  line model is within the staircase's own noise (SNAP_COLLINEAR 0.75 is the same
+ *  regime) and the pre-§19 path is byte-identical. */
+const ARC_ARM_BOW_MIN = 0.5
+/** §19: the fitted circle must EXPLAIN the samples — radial deviation at most this
+ *  fraction of the line's own bow, floored at SNAP_COLLINEAR (the staircase's own ±0.5px
+ *  quantization means even a perfectly circular arm cannot fit below it; the line path
+ *  extends under the same 0.75px reading of "on the model") — or the arm keeps the line. */
+const ARC_ARM_DEV_K = 0.5
+/** §19: see PlanarFitOptions.arcPinMinN / arcArmMinN / arcPhiMinDeg / arcTipMinDeg. */
+const ARC_PIN_MIN_N = 12
+const ARC_ARM_MIN_N = 12
+const ARC_PHI_MIN_DEG = 10
+const ARC_TIP_MIN_DEG = 45
+const ARC_PIN_TURN_MIN_DEG = 70
+
+/** A §19 arm circle (the file's own Kasa fit — see fitCircle above). */
+type ArmCircle = { cx: number; cy: number; r: number }
+
+/** Box-smooth a window (endpoints pinned): the raw samples are ±0.5px staircase (§15's
+ *  corner self-guard deliberately reverts sub-pixel displacement near a corner), and any
+ *  shape statistic read off them — a Kasa radius, a sagitta — is step noise otherwise
+ *  (measured: Kasa r 1.7–4.1 where the authored arc is r≈14). */
+function boxSmooth(ptsArm: Vec[], passes = 2): Vec[] {
+  let sm = ptsArm
+  for (let pass = 0; pass < passes && sm.length >= 3; pass++) {
+    const next = sm.slice()
+    for (let i = 1; i < sm.length - 1; i++) {
+      next[i] = {
+        x: (sm[i - 1].x + sm[i].x + sm[i + 1].x) / 3,
+        y: (sm[i - 1].y + sm[i].y + sm[i + 1].y) / 3,
+      }
+    }
+    sm = next
+  }
+  return sm
+}
+
+/** The §19 arm circle, when the samples earn it — null keeps the line model. */
+function armCircle(sm: Vec[], fit: ArmFit, opts: PlanarFitOptions): ArmCircle | null {
+  const circ = fitCircle(sm)
+  if (!circ) return null
+  let dev = 0
+  for (const p of sm) {
+    const d = Math.abs(Math.hypot(p.x - circ.cx, p.y - circ.cy) - circ.r)
+    if (d > dev) dev = d
+  }
+  if (dev > Math.max(SNAP_COLLINEAR, (opts.arcArmDevK ?? ARC_ARM_DEV_K) * fit.bow)) return null
+  return circ
+}
+
 /**
- * `snapCornerToArms`, but ALSO returning the two fitted arm DIRECTIONS (unit, oriented
- * along the chain's travel: `inDir` INTO the apex, `outDir` AWAY from it) whenever the
- * reconstruction had usable arm evidence — null on every lattice-fallback path. The §15
- * tangent pin consumes them: on a sub-pixel displaced chain the fitted arcs' end tangents
- * at an apex are free within ε and rotate toward the bisector (a 91° authored corner read
- * 77° from the lattice fit and 51° displaced — under the 60° sharp bar), while the arm
- * lines read the true flank directions at any resolution.
+ * The §19 'tangent' arm model: the LINE the arm's own curve is actually travelling at
+ * the tip end of the window. A bent arm's LSQ line is a CHORD — offset by the sagitta
+ * and rotated by the chord-to-tangent angle, both of which displace the apex
+ * intersection along the other arm.
+ *
+ * HALF-SPLIT, not sagitta. The window is split at its middle and each half gets its own
+ * LSQ line; on a uniform arc the two half directions disagree by θ/2 (θ the window's arc
+ * turn) and the tangent at the tip END is the tip half's direction continued by another
+ * θ/4. Everything is measured as a DIRECTION over ≥6 samples, which is what makes it
+ * robust where two rejected models were not: a sagitta statistic reads step-phase and AA
+ * fattening as curvature (the parabola model over-rotated an acute @256 tip 2.2px past
+ * its authored apex, and a 2·|s̄|/bow coherence gate was non-separable at any K — it even
+ * cost gear-teeth corners), and a Kasa radius on an ~8px window collapses to noise
+ * (r 1.7–4.1 where the authored arc is r≈14). A straight STAIRCASE arm's halves agree
+ * within noise, so the model degrades to the chord it replaced — polygonal art keeps its
+ * pre-§19 corners without needing a classifier to say so.
+ */
+interface ArmTangent {
+  /** Anchored tangent line at the window's tip end — the intersection target, and the
+   *  direction the §15 pin consumes. */
+  c: Vec
+  d: Vec
+}
+
+function armTangent(sm: Vec[], line: { c: Vec; d: Vec }, phiMinDeg: number): ArmTangent | null {
+  if (sm.length < 8) return null
+  const half = sm.length >> 1
+  const tipHalf = sm.slice(0, half)
+  const farHalf = sm.slice(half)
+  const tip = armLine(tipHalf)
+  const far = armLine(farHalf)
+  // Orient both along the full line's direction so the signed turn between them is
+  // well-defined (armLine's direction sign is arbitrary).
+  const alignTo = (d: Vec, ref: Vec): Vec => (d.x * ref.x + d.y * ref.y >= 0 ? d : { x: -d.x, y: -d.y })
+  const dTip = alignTo(tip.d, line.d)
+  const dFar = alignTo(far.d, line.d)
+  // Signed half-turn φ (far → tip); the end tangent continues the same turning by φ/2.
+  const sin = dFar.x * dTip.y - dFar.y * dTip.x
+  const cos = dFar.x * dTip.x + dFar.y * dTip.y
+  const phi = Math.atan2(sin, cos)
+  // The curvature gate: see PlanarFitOptions.arcPhiMinDeg.
+  if (Math.abs(phi) < (phiMinDeg * Math.PI) / 180) return null
+  const rot = phi / 2
+  const cr = Math.cos(rot)
+  const sr = Math.sin(rot)
+  return {
+    // Anchor: the tip half's own line, evaluated at the tip-end sample's projection —
+    // a denoised point ON the boundary at the window's corner end.
+    c: (() => {
+      const t0 = (sm[0].x - tip.c.x) * dTip.x + (sm[0].y - tip.c.y) * dTip.y
+      return { x: tip.c.x + t0 * dTip.x, y: tip.c.y + t0 * dTip.y }
+    })(),
+    d: { x: dTip.x * cr - dTip.y * sr, y: dTip.x * sr + dTip.y * cr },
+  }
+}
+
+/** Intersection candidates (0–2) of two arm primitives, each a line or a circle. */
+function armIntersections(
+  aLine: { c: Vec; d: Vec }, aCirc: ArmCircle | null,
+  bLine: { c: Vec; d: Vec }, bCirc: ArmCircle | null,
+): Vec[] {
+  const circleLine = (circ: ArmCircle, line: { c: Vec; d: Vec }): Vec[] => {
+    const t0 = (circ.cx - line.c.x) * line.d.x + (circ.cy - line.c.y) * line.d.y
+    const qx = line.c.x + t0 * line.d.x
+    const qy = line.c.y + t0 * line.d.y
+    const h2 = circ.r * circ.r - ((qx - circ.cx) ** 2 + (qy - circ.cy) ** 2)
+    if (h2 < 0) return []
+    const h = Math.sqrt(h2)
+    return [
+      { x: qx + h * line.d.x, y: qy + h * line.d.y },
+      { x: qx - h * line.d.x, y: qy - h * line.d.y },
+    ]
+  }
+  if (aCirc && bCirc) {
+    const dx = bCirc.cx - aCirc.cx
+    const dy = bCirc.cy - aCirc.cy
+    const d = Math.hypot(dx, dy)
+    if (d < 1e-9) return []
+    const a = (aCirc.r * aCirc.r - bCirc.r * bCirc.r + d * d) / (2 * d)
+    const h2 = aCirc.r * aCirc.r - a * a
+    if (h2 < 0) return []
+    const h = Math.sqrt(h2)
+    const mx = aCirc.cx + (a * dx) / d
+    const my = aCirc.cy + (a * dy) / d
+    return [
+      { x: mx + (h * -dy) / d, y: my + (h * dx) / d },
+      { x: mx - (h * -dy) / d, y: my - (h * dx) / d },
+    ]
+  }
+  if (aCirc) return circleLine(aCirc, bLine)
+  if (bCirc) return circleLine(bCirc, aLine)
+  return [] // line×line is the caller's own (pre-§19) math
+}
+
+/** Unit tangent of `circ` at `at`, oriented to agree with `along`. */
+function circleTangentAt(circ: ArmCircle, at: Vec, along: Vec): Vec {
+  let tx = -(at.y - circ.cy)
+  let ty = at.x - circ.cx
+  const l = Math.hypot(tx, ty) || 1
+  tx /= l
+  ty /= l
+  return tx * along.x + ty * along.y >= 0 ? { x: tx, y: ty } : { x: -tx, y: -ty }
+}
+
+/**
+ * The corner snap: place the apex on the intersection of the two arm models flanking it
+ * (each sampled [gap..span] px away so the rounded tip is excluded), ALSO returning the
+ * two fitted arm DIRECTIONS (unit, oriented along the chain's travel: `inDir` INTO the
+ * apex, `outDir` AWAY from it) whenever the reconstruction had usable arm evidence —
+ * null on every lattice-fallback path. The §15 tangent pin consumes them: on a
+ * sub-pixel displaced chain the fitted arcs' end tangents at an apex are free within ε
+ * and rotate toward the bisector (a 91° authored corner read 77° from the lattice fit
+ * and 51° displaced — under the 60° sharp bar), while the arm models read the true
+ * flank directions at any resolution. An arm is a LINE while its samples sit on one and
+ * a §19 anchored tangent where they measurably curve; `winding` (±1 for loops, 0 for
+ * open chains) feeds the §19 concavity read.
  */
 function snapCornerToArmsFull(
   pts: Vec[], c: number, inGap: number, outGap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0,
+  opts: PlanarFitOptions = DEFAULT_PLANAR_FIT,
+  winding = 0,
 ): { p: Vec; inArm: ArmFit | null; outArm: ArmFit | null; outcome: ApexOutcome; allow: number } {
   const n = pts.length
   const keep = (outcome: ApexOutcome, inArm: ArmFit | null, outArm: ArmFit | null, allow = 0) => ({
@@ -868,13 +1087,131 @@ function snapCornerToArmsFull(
   }
   const inArm: ArmFit = { ...aFit.fit, dir: orient(a.d, pts[wrap(c - inSpan)], pts[c]) }
   const outArm: ArmFit = { ...bFit.fit, dir: orient(b.d, pts[c], pts[wrap(c + outSpan)]) }
-  const det = a.d.x * -b.d.y - a.d.y * -b.d.x
-  if (Math.abs(det) < 1e-6) return keep('parallel', inArm, outArm)
-  const rx = b.c.x - a.c.x
-  const ry = b.c.y - a.c.y
-  const t = (rx * -b.d.y - ry * -b.d.x) / det
-  const ix = a.c.x + t * a.d.x
-  const iy = a.c.y + t * a.d.y
+  // §19 near-parallel guard (issue #7's family A): interior angle between the two arms
+  // as rays leaving the apex — a straight run reads 180°. See PARALLEL_TIP_DEG.
+  if (opts.arcArms) {
+    const cosI = Math.min(1, Math.max(-1, -(inArm.dir.x * outArm.dir.x + inArm.dir.y * outArm.dir.y)))
+    if ((Math.acos(cosI) * 180) / Math.PI > (opts.parallelTipDeg ?? PARALLEL_TIP_DEG)) {
+      return keep('parallel', inArm, outArm)
+    }
+  }
+  // §19 arm model (issue #7): where an arm's samples measurably bow off their line, the
+  // line is a CHORD of a curve and the chord intersection slides along the other arm.
+  // 'tangent' (default) replaces the chord with the arm's anchored tangent line at the
+  // tip end of the window; 'circle' intersects fitted circles instead — exact on large
+  // clean arcs, measured unstable on ~8px letterform windows. Straight arms keep the
+  // pre-§19 line untouched either way.
+  const bowMin = opts.arcArmBowMin ?? ARC_ARM_BOW_MIN
+  const model = opts.arcArmModel ?? 'tangent'
+  let aL: { c: Vec; d: Vec } = a
+  let bL: { c: Vec; d: Vec } = b
+  let circA: ArmCircle | null = null
+  let circB: ArmCircle | null = null
+  let tanA: ArmTangent | null = null
+  let tanB: ArmTangent | null = null
+  const armMinN = opts.arcArmMinN ?? ARC_ARM_MIN_N
+  const phiMin = opts.arcPhiMinDeg ?? ARC_PHI_MIN_DEG
+  // Tip floor: the chord-estimated interior angle, from the already-oriented arm dirs.
+  // See PlanarFitOptions.arcTipMinDeg — below it the chords stay, byte-identically.
+  // CONCAVE corners (a notch INTO the loop's interior — the crotch family) are exempt:
+  // their chord-tips under-read because both walls curve INTO the notch (a 77° authored
+  // crotch reads 37.6°), while every population the floor protects — lens tips,
+  // sharp-star points — is a CONVEX corner of its enclosed region.
+  const cosTip = Math.min(1, Math.max(-1, -(inArm.dir.x * outArm.dir.x + inArm.dir.y * outArm.dir.y)))
+  const turnCross = inArm.dir.x * outArm.dir.y - inArm.dir.y * outArm.dir.x
+  const concave = winding !== 0 && turnCross * winding < 0
+  const tipOk = concave || (Math.acos(cosTip) * 180) / Math.PI >= (opts.arcTipMinDeg ?? ARC_TIP_MIN_DEG)
+  // CO-CIRCULAR window extension: the line path grows a straight arm's evidence while
+  // collinear (collect/inMax); a curved arm's evidence stops dead at the span cap even
+  // where its arc continues cleanly — and at n=12 the half-split φ sits at its own noise
+  // floor (the witness 'e' corner's two MIRROR arms read φ on opposite sides of the
+  // gate). So a bent arm may extend while new samples stay on its own fitted circle; a
+  // KINKED window (gear) breaks circle-consistency at once and extends nothing.
+  const extendArc = (base: Vec[], sign: -1 | 1, span: number, max: number): Vec[] => {
+    if (base.length < 8 || max <= span) return base
+    const circ = fitCircle(boxSmooth(base))
+    if (!circ) return base
+    const out = base.slice()
+    for (let o = span + 1; o <= max; o++) {
+      const p = pts[wrap(c + sign * o)]
+      if (Math.abs(Math.hypot(p.x - circ.cx, p.y - circ.cy) - circ.r) > 1.0) break
+      out.push(p)
+    }
+    return out
+  }
+  if (opts.arcArms && tipOk && aFit.fit.bow > bowMin && aFit.fit.n >= armMinN) {
+    const sm = boxSmooth(extendArc(inPts, -1, inSpan, inMax))
+    if (model === 'circle') circA = armCircle(sm, aFit.fit, opts)
+    else {
+      tanA = armTangent(sm, a, phiMin)
+      if (tanA) aL = tanA
+    }
+  }
+  if (opts.arcArms && tipOk && bFit.fit.bow > bowMin && bFit.fit.n >= armMinN) {
+    const sm = boxSmooth(extendArc(outPts, 1, outSpan, outMax))
+    if (model === 'circle') circB = armCircle(sm, bFit.fit, opts)
+    else {
+      tanB = armTangent(sm, b, phiMin)
+      if (tanB) bL = tanB
+    }
+  }
+  const lineHit = (): Vec | null => {
+    const det = aL.d.x * -bL.d.y - aL.d.y * -bL.d.x
+    if (Math.abs(det) < 1e-6) return null
+    const rx = bL.c.x - aL.c.x
+    const ry = bL.c.y - aL.c.y
+    const t = (rx * -bL.d.y - ry * -bL.d.x) / det
+    return { x: aL.c.x + t * aL.d.x, y: aL.c.y + t * aL.d.y }
+  }
+  let hit: Vec | null
+  if (!circA && !circB) hit = lineHit()
+  else {
+    // Two circles that fail to meet (fit noise on a near-tangent crotch) fall back to
+    // the chord crossing — the §10.6/§18 caps below still bound whatever comes out.
+    const cands = armIntersections(aL, circA, bL, circB)
+    if (cands.length === 0) hit = lineHit()
+    else {
+      hit = cands[0]
+      for (const p of cands) if (dist(p, pts[c]) < dist(hit, pts[c])) hit = p
+    }
+  }
+  if (!hit) return keep('parallel', inArm, outArm)
+  const ix = hit.x
+  const iy = hit.y
+  // Report each arm's direction as the tangent AT the apex; the §15 pin consumes it.
+  const pinMinN = opts.arcPinMinN ?? ARC_PIN_MIN_N
+  // Corrected turn: from the model tangents where they exist, else the chords.
+  const dInF = tanA ? orient(tanA.d, pts[wrap(c - inSpan)], pts[c]) : circA ? circleTangentAt(circA, hit, inArm.dir) : inArm.dir
+  const dOutF = tanB ? orient(tanB.d, pts[c], pts[wrap(c + outSpan)]) : circB ? circleTangentAt(circB, hit, outArm.dir) : outArm.dir
+  const cosC = Math.min(1, Math.max(-1, -(dInF.x * dOutF.x + dInF.y * dOutF.y)))
+  const turnC = 180 - (Math.acos(cosC) * 180) / Math.PI
+  const pinTurnOk = turnC >= (opts.arcPinTurnMinDeg ?? ARC_PIN_TURN_MIN_DEG)
+  const rePinA = opts.arcPin !== false && aFit.fit.n >= pinMinN && pinTurnOk
+  const rePinB = opts.arcPin !== false && bFit.fit.n >= pinMinN && pinTurnOk
+  if (circA) {
+    if (rePinA) inArm.dir = circleTangentAt(circA, hit, inArm.dir)
+    inArm.kind = 'circle'
+  } else if (tanA) {
+    if (rePinA) inArm.dir = orient(tanA.d, pts[wrap(c - inSpan)], pts[c])
+    inArm.kind = 'tangent'
+  }
+  if (circB) {
+    if (rePinB) outArm.dir = circleTangentAt(circB, hit, outArm.dir)
+    outArm.kind = 'circle'
+  } else if (tanB) {
+    if (rePinB) outArm.dir = orient(tanB.d, pts[c], pts[wrap(c + outSpan)])
+    outArm.kind = 'tangent'
+  }
+  // Re-check conditioning on the FINAL tangents: a noisy shape model can rotate two
+  // moderately-turning chords into near-collinearity (a fitted tip of 172.7° slipped
+  // through the chord-side guard on the witness mark), and such a "corner" both places
+  // badly and reads smooth downstream. Same bound as the chord-side guard.
+  if (opts.arcArms && (inArm.kind || outArm.kind)) {
+    const cosF = Math.min(1, Math.max(-1, -(inArm.dir.x * outArm.dir.x + inArm.dir.y * outArm.dir.y)))
+    if ((Math.acos(cosF) * 180) / Math.PI > (opts.parallelTipDeg ?? PARALLEL_TIP_DEG)) {
+      return keep('parallel', inArm, outArm)
+    }
+  }
   // SCALE-AWARE displacement cap (§10.6): how far the reconstructed apex may move
   // off the lattice corner is bounded by the EVIDENCE. A long-armed corner (an
   // eroded shallow star tip) legitimately reconstructs several px past the lattice
@@ -963,8 +1300,10 @@ function snapApex(
   inMax: number,
   outMax: number,
   opts: PlanarFitOptions,
+  /** Loop orientation sign for the §19 concavity read; 0 = open chain / unknown. */
+  winding = 0,
 ): { p: Vec; inArm: ArmFit | null; outArm: ArmFit | null } {
-  let full = snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax)
+  let full = snapCornerToArmsFull(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax, opts, winding)
   let moved = dist(full.p, pts[c])
   // Only a reconstruction that already moved further than the bound can possibly break it,
   // so the raster probe stays off the hot path for the overwhelming majority of corners.
@@ -1009,6 +1348,7 @@ function snapApex(
       inN: a?.n ?? -1, outN: b?.n ?? -1,
       tipDeg,
       reach,
+      inKind: a?.kind ?? 'line', outKind: b?.kind ?? 'line',
     })
   }
   return { p: full.p, inArm: full.inArm, outArm: full.outArm }
@@ -1396,6 +1736,14 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     capPartner.set(s, partner)
     capLineOf.set(s, capChordLine(pts, s, partner))
   }
+  // Loop orientation for the §19 concavity read (signed shoelace area; y-down).
+  let area2 = 0
+  for (let i = 0; i < n; i++) {
+    const p = pts[i]
+    const q = pts[(i + 1) % n]
+    area2 += p.x * q.y - q.x * p.y
+  }
+  const winding = area2 > 0 ? 1 : area2 < 0 ? -1 : 0
   // Snap each corner, capping arm samples to the gap to its neighbour corners.
   // Arm DIRECTIONS ride along for the §15 tangent pin (null wherever the snap fell
   // back to the lattice or the corner is cap-resolved — those get no pin).
@@ -1423,7 +1771,7 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     // still never past the neighbouring corner.
     const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1))
     const outMax = Math.min(SNAP_SPAN_MAX, Math.max(outGap + 1, toNext - 1))
-    const full = snapApex(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax, opts)
+    const full = snapApex(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax, opts, winding)
     armDirsAll.push({ inArm: full.inArm, outArm: full.outArm })
     return full.p
   })

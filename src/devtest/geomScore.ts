@@ -321,15 +321,15 @@ const CORNER_MIN_TURN = Math.PI / 3
 /** A GT corner counts as reproduced if a traced corner sits within this many px of it.
  *  Distance-tolerant on purpose: a corner shifted 2px is still a corner (this gate is about
  *  the corner EXISTING, not its sub-pixel placement — that is chamfer/p95's job). */
-const CORNER_MATCH_R = 2.5
+export const CORNER_MATCH_R = 2.5
 /** A GT corner is only GRADED when BOTH its incident authored edges are at least this long:
  *  the gate judges rounding of RESOLVABLE shapes (an 8px checker cell), not the crispness of
  *  a sub-pixel sliver's cap. hairlines' bars are 0.5–6px wide, so every bar corner has one
  *  short cap edge and drops out here — thin-feature fidelity is chamfer/p95 + §9.5's job, not
  *  this gate's. Applied to GT corners only; any traced hard corner is a valid match target. */
-const CORNER_MIN_EDGE = 7
+export const CORNER_MIN_EDGE = 7
 
-interface Corner { x: number; y: number; itx: number; ity: number; otx: number; oty: number }
+export interface Corner { x: number; y: number; itx: number; ity: number; otx: number; oty: number }
 
 /**
  * SHARP corners of a set of subpath lists: a vertex where the boundary TANGENT turns by
@@ -349,15 +349,20 @@ interface Corner { x: number; y: number; itx: number; ity: number; otx: number; 
  * tested against the truth raster. Open subpaths skip their two endpoints. `minEdge` gates
  * on CHORD length (feature size), never handle length.
  */
-function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
+export function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
   const cosMax = Math.cos(CORNER_MIN_TURN) // turn ≥ MIN_TURN  ⇔  dot ≤ cos(MIN_TURN)
   const out: Corner[] = []
   for (const set of sets) {
     for (const sp of set) {
       const nodes = sp.nodes
       const n = nodes.length
-      if (n < 3) continue
       const closed = sp.closed !== false
+      // A CLOSED 2-node loop is real geometry with up to two sharp corners — a lens
+      // counter fitted as two arcs meeting at its chord ends (§19's letter-joins) is
+      // exactly that, and skipping it scored a perfectly-placed corner as missing.
+      // prev === next there, which the tangent reads below handle fine; an OPEN 2-node
+      // path has no interior vertex and still needs 3.
+      if (closed ? n < 2 : n < 3) continue
       const lo = closed ? 0 : 1
       const hi = closed ? n : n - 1
       for (let i = lo; i < hi; i++) {
@@ -684,7 +689,7 @@ const VIS_SAME = 2
  * traced-wrong case intact (gradient-flat 6.31 → 6.31, hairlines 0.39 → 0.39); real dropped
  * regions stay caught because THEIR edges are visible in the truth render by definition.
  */
-function makeVisibleAt(
+export function makeVisibleAt(
   raster: { width: number; height: number; data: Uint8ClampedArray | Uint8Array },
 ): (q: { x: number; y: number; tx: number; ty: number }) => boolean {
   const { width, height, data } = raster
