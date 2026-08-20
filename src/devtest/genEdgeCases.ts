@@ -622,6 +622,66 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       )
     },
   },
+  {
+    // Issue #7's anatomy (the mastercard "needle"): a corner whose arms are CURVED but
+    // whose tip is NOT acute — letterform joins. `snapCornerToArms` fits a straight line
+    // per arm and intersects; on a curved arm that line is a chord, it leans into the
+    // curve, and the intersection slides ALONG the other arm — measured on the mark as a
+    // white needle piercing the 'e' stems (apex 2.1–2.9px out along the crossbar) and a
+    // crotch apex pushed the WRONG way (away from the notch). §18 is structurally blind
+    // here: the move is under its 2.5px floor, or the ray runs ALONG a real edge whose AA
+    // fringe reads as coverage (reach ≈ moved). Verified to reproduce before authoring:
+    // the same cells traced as a scratch rack show moved 2.81px along-chord at bow 0.92.
+    //
+    // Two rows, one mechanism each, both arms resolvable at 256 (this rack measures the
+    // FIT's apex placement, not §12's thin-feature loss or §15.8's sub-pixel pinch):
+    //   • D-COUNTERS (arc × line, the 'e' eye): a circular-segment counter in an ink
+    //     block. The flat chord is one arm, the arc the other; the authored corner is the
+    //     chord end. The defect is axial overshoot along the chord.
+    //   • DISC-UNION CROTCHES (arc × arc, the 'm' crotch): one authored path whose two
+    //     circle arcs meet at explicit crossing vertices, so corner recovery can score
+    //     them. Both walls are curved; the chords' intersection lands off the bisector.
+    // Controls: an eroded straight-arm spike (must KEEP reconstructing far past the
+    // lattice — sharp-star's regime) and a right-angle square notch (straight arms, the
+    // line model is exact, the fix must not move it).
+    name: 'letter-joins',
+    note: 'letterform joins — CURVED-arm corners displace the chord-intersection apex (#7)',
+    make: () => {
+      /** Circular-segment counter: chord `c` wide, bulge `h`, chord along local y=0.
+       *  R = (c²/4 + h²) / 2h; corner interior angle at each chord end = asin((c/2)/R). */
+      const dseg = (cx: number, cy: number, c: number, h: number, rot: number): string => {
+        const R = (c * c) / 4 / (2 * h) + h / 2
+        const d = `M ${(-c / 2).toFixed(3)},0 A ${R.toFixed(3)},${R.toFixed(3)} 0 0 1 ${(c / 2).toFixed(3)},0 Z`
+        return `<path d="${d}" fill="${GOLD}" transform="translate(${cx},${cy}) rotate(${rot})"/>`
+      }
+      /** Union of two discs radius `r`, centres (±dc, 0), authored as ONE path whose two
+       *  crossing points are explicit vertices (corner recovery needs authored vertices —
+       *  a union computed by the renderer would leave the crossings implicit). */
+      const lensPair = (cx: number, cy: number, r: number, dc: number, rot: number): string => {
+        const yc = Math.sqrt(r * r - dc * dc)
+        const d =
+          `M 0,${(-yc).toFixed(3)}` +
+          ` A ${r},${r} 0 1 0 0,${yc.toFixed(3)}` +
+          ` A ${r},${r} 0 1 0 0,${(-yc).toFixed(3)} Z`
+        return `<path d="${d}" fill="${INK}" transform="translate(${cx},${cy}) rotate(${rot})"/>`
+      }
+      return svg(
+        `<rect width="${V}" height="${V}" fill="${WHITE}"/>` +
+          // Row 1 — D-counters at the witness's own scale (mastercard's 'e' eye is
+          // 26×9 units @512-for-2) with per-cell rotation phases.
+          `<rect x="14" y="18" width="72" height="46" fill="${INK}"/>` + dseg(50, 52, 26, 9, 0) +
+          `<rect x="100" y="18" width="72" height="46" fill="${INK}"/>` + dseg(136, 52, 34, 12, 9) +
+          `<rect x="186" y="18" width="60" height="46" fill="${INK}"/>` + dseg(216, 52, 20, 8, 31) +
+          // Row 2 — disc-union crotches, ink interior angles ~94°/77°/89°.
+          lensPair(52, 130, 30, 22, 0) +
+          lensPair(140, 130, 24, 15, 17) +
+          lensPair(216, 130, 20, 14, 43) +
+          // Row 3 — controls.
+          `<polygon points="24,236 86,214 86,222" fill="${INK}"/>` +
+          `<path d="M 120,200 h 60 v 40 h -60 Z M 145,200 v 14 h 12 v -14 Z" fill="${INK}" fill-rule="evenodd"/>`,
+      )
+    },
+  },
 ]
 
 // --- emit -------------------------------------------------------------------

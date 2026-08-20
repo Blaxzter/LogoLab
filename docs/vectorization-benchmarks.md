@@ -33,6 +33,32 @@ guardrails):
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **A corner NEAR a junction has its arm evidence TRUNCATED by the seam** — what is left of #15 after §17. `snapCornerToArms` can only sample up to the neighbouring junction, so a band seam landing 2–3px from an authored corner halves (or kills) the arm the apex is reconstructed from — §10.6's short-arm regime — and the corner keeps a lattice apex the fit then drags its 150px flank toward. §17 measured that this, NOT "the junction is the corner", is what the Affinity numbers below are: all five of that mark's corner-verdict junctions sit **1.8–2.9px from** the nearest authored corner, none on one, and the mark is byte-identical under §17 | `affinity-designer.svg` @512 flat (private corpus, **ungated**) | the mark's 133px top edge: constant 1.06px offset → mean 0.69 with **0.71px swing**; triangle apex **1.54px** (0.97 with gradients ON, i.e. with no seam cutting its arm) | §14.3, §17.1 |
 
+Recently closed: **the mastercard needle — a curved arm fitted as a chord** (issue #7,
+user-reported from /labs/ab on `logo-mastercard`'s wordmark) — closed 2026-08-11, **§19**
+is the record. `snapCornerToArms` intersects two straight arm LINES; on a curved arm that
+line is a chord and the intersection slides ALONG the other arm — under §18's 2.5px
+overshoot floor, or with its reach probe blinded because the ray runs along a real edge
+(reach ≈ moved). The 'e' eye grew 2.1px white needles into its stems; the 'm' crotch held
+the mark's one unrecovered corner. A measurably-bent arm (bow > 0.5, n ≥ 12) is now
+modelled as its ANCHORED TANGENT — the window box-smoothed, extended while co-circular,
+half-split, the tangent read as the tip half's direction continued by half the measured
+half-turn (φ ≥ 10°, the curvature test a staircase cannot pass) — with a convex-only 45°
+tip floor (holds `acute-counter` @256 at exactly p95 2.130 and sharp-star at 11/11), a
+70° pin-turn floor (a pin that leaves a corner's turn near the 60° sharp bar rotates it
+into reading smooth — gear-teeth's regime), and a >150° near-parallel guard (census:
+3.6–5.1px slides on staircase jogs; `parallel` refusals 3 → 122, every one of those
+slides gone). Three models were built, measured and rejected on the way (§19.3): Kasa
+circles (collapse on ~8px windows), a sagitta-parabola tangent (over-rotates under AA —
+acute @256 read the very p95 §18 refused), a coherence gate (non-separable at any K).
+Witness: mastercard corners 48/49 → **49/49**, chamfer 0.2735 → **0.2680**, worst
+invented boundary 2.17 → **1.30px**; corpus-wide the bow 0.6–1.0 census bucket goes mean
+0.843 → **0.639px**, worse-than-lattice 220 → **136**. Corpus case `letter-joins`
+(authored for this, tier 0, verified-reproducing before authoring), gate
+`test/planar-needle.test.ts`; golden corpus byte-identical, watchlist byte-stable except
+**gear-teeth 52 → 53/60** (a gain). Residue in §19.4: the short-arm blunt notch (144
+census records, the 'a'-join's 2.55px), and crotch corners that place sub-px but read
+< 60° sharp.
+
 Recently closed: **an acute counter's apex reconstructed PAST the ink** (issue #17,
 user-reported twice from /labs/ab on `logo-instagram`) — closed 2026-08-08, **§18** is the
 record. `snapCornerToArms` intersects the two fitted arm lines, which is right for a
@@ -3115,3 +3141,154 @@ new `acute-counter`, scale gate unchanged.
 ~2.6px at the worst tip, because the bound is on the overshoot past the RASTER's evidence and
 that evidence stops a little inside the authored tip — the last sub-pixel sliver of an acute
 counter carries no measurable coverage. Closing that needs a model of the tip, not a probe.
+
+---
+
+## 19. The arm that was measurably a curve (issue #7, 2026-08-11)
+
+`snapCornerToArms` fits a straight LINE to each arm and intersects. §18 already named what
+that does on a curved arm — the line is a CHORD leaning into the curve — and closed the
+far face of it (reconstructions outrunning the raster by > 2.5px). This issue is the near
+face: the chord intersection slides ALONG the other arm by 1–3px, under §18's floor, or
+with the reach probe blinded because the ray runs ALONG a real edge whose AA fringe reads
+as coverage (reach ≈ moved). The reported witness is `logo-mastercard`'s wordmark: the
+'e' eye's flat bottom overshoots both authored corners laterally (2.14 / ~1px), poking
+white needles into the stems — the "needle" the issue circled — and the 'm' left crotch
+keeps the mark's ONE unrecovered corner (48/49), its apex pushed 3.4px AWAY from the
+notch by two bent chords (bows 0.90/0.77).
+
+### 19.1 Phase 0: the instrument, and what it ruled out
+
+`src/devtest/needleDiag.ts` — locate (hot-sample clustering over the geomScore
+diagnostics), attribute (a fit-flag matrix, §16's `lowresDiag --fit` shape), inspect
+(label-map and crop-sheet panels, per-apex records via the §18 `apexDiag` sink), and
+census (all 128 svgGround-scorable gallery marks @512 flat, every apex record joined to
+its nearest visible authored corner within 4px).
+
+- **The fit-flag matrix is inert** on all three witness sites: `subpixelEdges`,
+  `junctionReseat`, `apexEvidence`, `arcSnap`, `smoothPasses=0` — none moves the needle
+  or the notch. The mechanism sits in the corner snap itself.
+- **The label map already truncates a notch tail** ~1–2px (the AA majority vote cannot
+  keep a sub-pixel white wedge), and the fit then rounds the blunt lattice V further.
+- **The census stratifies by arm bow** — reconstruction quality degrades continuously:
+
+  | max arm bow | n | mean errApex | mean errLattice | worse-than-lattice |
+  |---|---|---|---|---|
+  | < 0.3 | 583 | 0.283 | 0.599 | ~0% |
+  | 0.3–0.6 | 442 | 0.420 | 0.836 | 6% |
+  | 0.6–1.0 | 830 | 0.843 | 1.000 | **27%** |
+  | ≥ 1.0 | 36 | 1.875 | 0.993 | **67%** |
+
+- A second family fell out of the worst-15: **near-parallel fitted tips** (147–163°),
+  where the intersection is ill-conditioned ALONG the boundary and slides 3.6–5.1px off a
+  lattice vertex that was 0.35–1.0px correct (`instagram` 5.05 vs 0.35). §18 cannot
+  refuse these — the ray runs along a real edge, so `reach ≈ moved`.
+- **Short-arm refusals at authored corners** (n=144, 29 beyond 1.5px — a blunt truncated
+  notch presents as two shoulder corners 3 steps apart, both refused) are a THIRD
+  mechanism, measured and left open — see the residue below.
+
+### 19.2 The fixture, and the scorer hole it exposed
+
+`letter-joins` (genEdgeCases, tier 0): three D-segment counters at the witness's own
+scale (arc × line — the 'e' eye), three disc-union crotches authored as ONE path so the
+crossing vertices are explicit (arc × arc — the 'm' crotch), a straight-arm eroded spike
+and a right-angle square notch as controls. Verified to REPRODUCE before authoring
+(§18.2's lesson): the scratch rack shows moved 2.81px along-chord at bow 0.92, and the
+crotch apexes pushed off the bisector exactly like the mark.
+
+The fixed counter fits to a 2-NODE closed loop (two corners, two arcs — more parsimonious
+than before), and `geomScore.sharpCorners` skipped any subpath under 3 nodes: a perfectly
+placed corner scored as MISSING. The scorer now reads closed 2-node loops (GT-side inert:
+authored arcs arrive as multi-node cubics). That is the honest direction — the tracer
+output got better and the scorer had to catch up.
+
+### 19.3 The model, the sweep, and the three that died
+
+The shipped arm model (`planarFit.ts`, flag `arcArms`, default true): where an arm's
+samples measurably bow off their line (bow > 0.5, n ≥ 12), the window is box-smoothed,
+extended while CO-CIRCULAR (the line path's collinear extension, translated to curves —
+a kinked gear window breaks circle-consistency at once and extends nothing), split at its
+middle, and each half gets its own LSQ direction. The two half-directions disagree by
+half the window's arc turn (the φ ≥ 10° gate is the curvature test a staircase cannot
+pass); the tangent at the tip END is the tip half's direction continued by φ/2, anchored
+at the denoised tip-end sample. The apex is the intersection of the two arm models; §18's
+evidence veto applies unchanged on top.
+
+Measured and REJECTED on the way (each by the sweep, `needleDiag --sweep`, judged on the
+fixture AND mastercard AND acute-counter at 256+512 AND the corner watchlist at once):
+
+- **Fitted circles as the arm model.** Kasa on a ~8px letterform window collapses to a
+  noise-hugging circle (r 1.7–4.1 where the authored arc is r≈14); with smoothing it
+  broke the other way (a 3.35px circle×line slide at the 't'; spike control 2.01 → 4.51,
+  `letter-joins` control worst 12.46). Kept behind `arcArmModel:'circle'` as the record.
+- **A parabola-sagitta tangent** (rotate the chord by the sagitta-implied angle):
+  over-rotates where AA fattens the sagitta — an acute @256 tip landed 2.2px PAST its
+  authored apex and `acute-counter` @256 read p95 3.44, the very number §18 refused.
+- **A 2·|s̄|/bow coherence gate** for staircase-vs-arc: non-separable at every K (it even
+  cost gear-teeth corners) — §17.1's bow lesson repeating on a different statistic.
+
+Four guards shipped WITH the model, each with its measured reason: a near-parallel
+conditioning guard (fitted tip > 150° keeps the lattice — the census family above;
+`parallel` refusals go 3 → 122 corpus-wide and every 3.6–5.1px slide in the worst-15
+disappears); a tip floor (chord-estimated tip < 45° keeps the chords — at an acute tip
+the intersection amplifies tangent noise by 1/sin(tip) and the chord errs SHORT, the
+safe side; this is what holds `acute-counter` @256 at exactly p95 2.130 and sharp-star
+at 11/11) that CONCAVE corners are exempt from (a notch's chord-tips under-read — a 77°
+authored crotch reads 37.6° — and every population the floor protects is convex; the
+loop winding supplies the sign); and a pin-turn floor (corrected turn ≥ 70° before the
+§15 pin consumes the model tangents — a pin that leaves the turn near the 60° sharp bar
+rotates a real corner into reading SMOOTH, which is how gear-teeth's marginal 67° roots
+first flipped).
+
+### 19.4 After (the numbers)
+
+Gate: `test/planar-needle.test.ts` (5 tests, red-before-green structurally — each
+measures `arcArms:false` against the default in the same run, §18.4's contract).
+
+| letter-joins @512 | chords only | §19 |
+|---|---|---|
+| Σ over the 12 authored join corners | 14.07px | **8.84px** |
+| worst join corner | 1.84px | **1.22px** |
+| Σ over the 6 crotch vertices | 5.91px | **3.64px** |
+| square-notch corners / spike control | 0.00 / 2.02 | 0.00 / 2.02 (byte-identical) |
+
+**On the witness**, `logo-mastercard` @512 flat, scored against the authored SVG:
+
+| | before | after |
+|---|---|---|
+| corners | 48/49 | **49/49** — the 'm' crotch, recovered |
+| chamfer | 0.2735 | **0.2680** |
+| worst invented boundary (the needle) | 2.17px | **1.30px** |
+| the 'e' needle site / 'm' crotch miss | 2.17 / 2.49 | **1.05 / 0.46** |
+| nodes | 306 | 294 |
+
+Corpus-wide (the census re-run): the bow 0.6–1.0 bucket's mean error 0.843 → **0.639px**
+with worse-than-lattice 220 → **136**; bow ≥ 1.0 mean 1.875 → **1.066**. The bow < 0.3
+bucket is untouched to the third decimal — straight arms never enter the new code.
+
+Controls: `acute-counter` Σtip 19.5 → 18.4 @512 with the worst tip and both spike
+controls unchanged, and @256 p95 exactly 2.130 with corners 11/13 — §18's case is
+preserved to the digit. Corner watchlist: sharp-star **11/11**, bar-caps **43/43**,
+cross-bars **10/10**, band-cross **25/25**, checker **3556/3588** all byte-stable;
+**gear-teeth 52 → 53/60** — one root corner GAINED (the pin-turn floor also stops a
+pre-existing marginal pin), the only watchlist number that moves, and it moves up.
+`mastercard` @1024: 61/61 both ways, worst invented 1.65 → 1.45. The 20-case golden
+corpus is byte-identical (the hash gate passed unchanged), so the blast radius on
+ordinary art is nil; the A/B pair for review is `before-needle` ⇄ `after-needle`.
+
+Suite **371 → 378 tests** (376 pass / 2 skip): +5 in `test/planar-needle.test.ts`,
++2 truth lanes for `letter-joins` (green at 256 and 512 on landing).
+
+**Residue, named.**
+- The **short-arm blunt notch** (mechanism 3 of Phase 0) is untouched: mastercard's
+  'a'-bowl join still misses 2.55px of notch tail — the label map truncates the wedge and
+  the two shoulder corners both take the `short-arm` refusal, so nothing reconstructs.
+  §10.7's cap resolver is the template for a fix (a V-turn analog emitting ONE corner);
+  144 census records, mean 1.1px.
+- `letter-joins` cell 2's crotch pair (authored turn 77.4°) PLACES within ~0.9px but
+  still READS < 60° sharp to the corner scorer under either model — corner recall stays
+  29/31 pre and post. The gate holds placement; the sharpness classification of
+  moderately-turned concave corners is open.
+- The census tail that remains (`ubuntu`/`chupa-chups` 3.4–4.7px) has errLattice ≈
+  errApex — the LATTICE is already that far out, a segmentation-side loss no apex rule
+  can reach.
