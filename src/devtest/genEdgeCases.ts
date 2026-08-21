@@ -682,6 +682,65 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       )
     },
   },
+  {
+    // Issue #8's anatomy (the ibm mark's dropped ▼): a SMALL SOLID FEATURE, isolated from
+    // its neighbours by the art's own white gaps, whose connected component lands under
+    // the palette path's `minRegionArea` floor — so despeckleComponents dissolves it into
+    // the background and the trace loses a whole region. Measured on the reporting mark:
+    // the ▼ is 24 exactly-ink px in a 32px component, eroded to 26 by the mode filter,
+    // against a floor of 50 at the default Despeckle dial. It survives every palette
+    // COLOUR stage (its ink entry is 11.7% of the image — nowhere near any share floor);
+    // only the per-component area floor kills it.
+    //
+    // The rack sweeps component area ACROSS the floor rather than sitting on one point,
+    // because the floor moves with the user's Despeckle dial: five peaks per row at ~20,
+    // 30, 40, 48 and 64 raster-px² when rasterized at 512 (the gate's resolution), i.e.
+    // four below the default 50px floor and one above it as the in-case control that must
+    // be recovered either way. Two rows at a half-raster-pixel phase offset, because
+    // §10.7 measured cap/corner survival to be an AA-phase lottery at this scale; row 2 is
+    // GOLD so the evidence is exercised on a second accepted palette entry rather than
+    // only on the ink↔paper pair.
+    //
+    // CONTROL, in-case: a shallow (~1.8°) diagonal seam across the bottom third. That is
+    // the shrapnel generator the floor exists for — a near-horizontal AA staircase whose
+    // pixels snap alternately to either flat, littering the boundary with tiny components.
+    // Any rule that revives the peaks must leave those dead, and this case gates BOTH
+    // sides at once: the peaks show up as region recovery + boundary error, the seam's
+    // shrapnel as node parsimony.
+    name: 'peak-drop',
+    note: 'small isolated features under the despeckle area floor — dropped whole (#8)',
+    make: () => {
+      /** Downward triangle of `areaR` raster-px² at 512 (a 256-unit canvas doubles), at
+       *  the reporting mark's base/height ratio (7.15 : 9.1). Top edge at y, apex below. */
+      const peak = (cx: number, y: number, areaR: number, fill: string): string => {
+        const bR = Math.sqrt(2 * areaR * (7.15 / 9.1))
+        const bU = bR / 2 / 2 // half-base, authored units
+        const hU = bR / (7.15 / 9.1) / 2
+        return `<polygon points="${(cx - bU).toFixed(3)},${y} ${(cx + bU).toFixed(3)},${y} ${cx.toFixed(3)},${(y + hU).toFixed(3)}" fill="${fill}"/>`
+      }
+      const AREAS = [20, 30, 40, 48, 64]
+      /** One stripe cell: a bar, a clear gap, the peak, a clear gap, another bar — the ibm
+       *  stripe anatomy that isolates the peak into its own connected component. The gaps
+       *  are ≥ 7 raster px @512 (the reporting mark's are 8), so no AA bridges them. */
+      const cell = (x: number, yTop: number, areaR: number, fill: string, phase: number): string =>
+        `<rect x="${x}" y="${yTop}" width="28" height="3.5" fill="${fill}"/>` +
+        peak(x + 14 + phase, yTop + 8 + phase, areaR, fill) +
+        `<rect x="${x}" y="${yTop + 18}" width="28" height="3.5" fill="${fill}"/>`
+      // Four rows at quarter-unit (half raster px @512) phase offsets: §10.7 measured
+      // small-feature survival to be an AA-phase lottery at this scale, and one phase would
+      // gate one draw of it. Alternating INK/GOLD exercises the evidence on two accepted
+      // palette entries rather than only on the ink↔paper pair. The bars are deliberately
+      // SHORT: a rack padded with long straight edges measures its padding — the boundary
+      // percentiles have to be dominated by the features under test for them to gate.
+      const ROWS: [number, string, number][] = [[12, INK, 0], [56, GOLD, 0.25], [100, INK, 0.5], [144, GOLD, 0.75]]
+      return svg(
+        `<rect width="${V}" height="${V}" fill="${WHITE}"/>` +
+          ROWS.map(([y, fill, ph]) => AREAS.map((a, i) => cell(8 + i * 49, y, a, fill, ph)).join('')).join('') +
+          // CONTROL — the shallow AA seam whose staircase the floor is there to sweep up.
+          `<polygon points="0,204 ${V},196 ${V},${V} 0,${V}" fill="${INK}"/>`,
+      )
+    },
+  },
 ]
 
 // --- emit -------------------------------------------------------------------

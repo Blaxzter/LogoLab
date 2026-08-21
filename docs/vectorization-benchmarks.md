@@ -33,6 +33,41 @@ guardrails):
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **A corner NEAR a junction has its arm evidence TRUNCATED by the seam** — what is left of #15 after §17. `snapCornerToArms` can only sample up to the neighbouring junction, so a band seam landing 2–3px from an authored corner halves (or kills) the arm the apex is reconstructed from — §10.6's short-arm regime — and the corner keeps a lattice apex the fit then drags its 150px flank toward. §17 measured that this, NOT "the junction is the corner", is what the Affinity numbers below are: all five of that mark's corner-verdict junctions sit **1.8–2.9px from** the nearest authored corner, none on one, and the mark is byte-identical under §17 | `affinity-designer.svg` @512 flat (private corpus, **ungated**) | the mark's 133px top edge: constant 1.06px offset → mean 0.69 with **0.71px swing**; triangle apex **1.54px** (0.97 with gradients ON, i.e. with no seam cutting its arm) | §14.3, §17.1 |
 
+Recently closed: **a small isolated feature swept away by the despeckle area floor**
+(issue #8, user-reported from /labs/ab on `logo-ibm` — the ▼ peak of the m's middle
+stroke, dropped by the flat trace and kept by the gradient one) — closed 2026-08-21,
+**§20** is the record. The flat lane's `despeckleComponents` sweeps up sub-`minRegionArea`
+connected components so anti-alias shrapnel does not each become a traced loop; the ▼ is
+its own 26px component, isolated by the art's white stripes, and the broom could not tell
+it from shrapnel. Phase 0 moved the goalposts twice: the handoff's `--despeckle 0` proof
+does NOT attribute (the dial moves `minShare` AND `minRegionArea` together — a `--floor`/
+`--share` 2×2 shows `minShare` **inert**, the ink entry holding 11.74% of the image), and
+the earlier "no palette stage kills it" reading was an artefact of a whole-image survival
+FRACTION — 26px of a 40,000px ink mask reads flat at every stage. ROI-scoped, the
+component census names the stage outright: 24 → 32 → 32 → 26 → 26 px, then GONE at
+despeckle; `restoreErasedComponents` is blind because the mode filter ERODED it rather
+than erasing it whole. The fix is §9.4's flat-interior criterion asked per COMPONENT: a
+sub-floor component with at least one full 3×3 source block of exactly its palette hex is
+SPARED. Calibrated on a joint distribution, not a hunch (`lowresDiag --census`, 2,394
+sub-floor components over 174 marks against 4×-supersampled truth): it fires on 46 and
+**none of them is fringe**, worst `cov4` admitted 0.797. The intuitive axis — the share of
+a component's pixels that are exactly its palette hex — was built, measured and
+**REJECTED**: it resurrects 40–54 fringe components at every threshold while missing over
+half the real ones, because a k-means centroid need not equal any source pixel
+(mercedes-benz's greys read 0.000 at `cov4` 0.96). Ships as a ONE-SIDED veto that can only
+spare (§17's `ARM_BOW` shape). Witness: ibm missedMax **17.84 → 3.55**, corners 120 →
+**122/127**, chamfer 0.2409 → **0.2064** — what `--despeckle 0` bought, without lowering
+the floor. Corpus-wide only **12 of 152** gallery marks change at all, 8 better, no mark
+loses a corner, and the single regression is named (`soundcloud` +0.0011px chamfer).
+Corpus case `peak-drop` (authored for this, tier 0, verified reproducing first — a 20-peak
+rack straddling the floor plus an in-case AA-seam control), gate
+`test/planar-peak.test.ts`. Golden corpus byte-identical; watchlist byte-stable; A/B pair
+`before-ibm-peak` ⇄ `after-ibm-peak` moves 3 of 114 outputs, the third (`scale-blind`) a
+gain that was not designed for. Residue in §20.4: features under ~30px² carry no 3×3
+evidence and are still dropped, 88 of the census's 98 SOLID components need a TOLERANT
+flat-interior test this deliberately did not attempt, and `scoreRegions`' colour keying
+means a monochrome mark can lose whole components with the region gate green.
+
 Recently closed: **the mastercard needle — a curved arm fitted as a chord** (issue #7,
 user-reported from /labs/ab on `logo-mastercard`'s wordmark) — closed 2026-08-11, **§19**
 is the record. `snapCornerToArms` intersects two straight arm LINES; on a curved arm that
@@ -3292,3 +3327,193 @@ Suite **371 → 378 tests** (376 pass / 2 skip): +5 in `test/planar-needle.test.
 - The census tail that remains (`ubuntu`/`chupa-chups` 3.4–4.7px) has errLattice ≈
   errApex — the LATTICE is already that far out, a segmentation-side loss no apex rule
   can reach.
+
+---
+
+## 20. The feature that was smaller than the broom (issue #8, 2026-08-21)
+
+The flat lane assigns every pixel to a palette colour and then sweeps up the tiny
+connected components the assignment leaves behind — anti-alias shrapnel that would
+otherwise each become their own traced loop (`despeckleComponents`, paletteSegment.ts).
+The broom is a plain area floor, `minRegionArea`, 50px² at the default Despeckle dial of
+25. It cannot tell shrapnel from a SMALL REAL FEATURE that happens to be isolated, and
+the reported witness is exactly that: `logo-ibm`'s ▼, the peak of the m's middle stroke,
+cut off from the rest of the mark by the art's own white stripes and therefore its own
+26px connected component. The flat trace lost it whole; the gradient trace (a different
+segmenter) kept it.
+
+### 20.1 Phase 0: which knob, and which of its five consumers
+
+The handoff arrived with a measured proof that `--despeckle 0` recovers the ▼ (ibm
+missedMax 17.84 → 3.55) and the reasonable conclusion that the 50px floor is the killer.
+That is **not what the dial proves**. `paletteOptionsFor` moves TWO knobs at once:
+
+    despeckle 25  ⇒  minShare 0.007, minRegionArea 50
+    despeckle  0  ⇒  minShare 0.006, minRegionArea 24
+
+so the experiment confounds a share floor with an area floor. Sweeping the dial narrows
+it — the output is a STEP between dial 18 (`area 26`) and 20 (`area 32`) while `minShare`
+climbs continuously through it — but a monotone knob can also cross a floor, so the step
+alone does not attribute. `lowresDiag` gained `--floor N` / `--share F` to move them
+independently, and the 2×2 is unambiguous:
+
+    share 0.006 floor 24 → ▼ kept (26px)     share 0.007 floor 24 → ▼ kept (26px)
+    share 0.006 floor 50 → ▼ GONE            share 0.007 floor 50 → ▼ GONE
+
+**`minShare` is inert.** It was never a candidate on this art: the ▼'s ink entry holds
+11.74% of the image, three orders of magnitude clear of any share floor.
+
+The second Phase-0 residue was WHICH of `minRegionArea`'s consumers fires. It has five
+(quantize's merge veto, the share-drop `real` protection, the `protect` modal clause,
+`restoreErasedComponents`, `despeckleComponents`), and the earlier palette replay had
+reported "no palette stage kills it" — because that replay's survival table is a
+whole-image FRACTION, and 26px of a 40,000px ink mask reads as flat at every stage.
+`lowresDiag --roi` scopes the lens to the feature, and the component census then names
+the stage outright:
+
+    assign 24px → blends 32px → share 32px → mode 26px → restore 26px → despeckle GONE
+
+`restoreErasedComponents` cannot help: the mode filter ERODED the component (26 of 32
+kept) rather than erasing it whole, and the restore is blind to erosion by construction.
+It is `despeckleComponents`, alone, at the area floor. Note also that `segment.ts`'s
+`mergeSmallRegions` — the other `minRegionArea` consumer, and the one the AA-transition-
+sliver fix was built for — **is not on this path at all**: flat art goes through
+`segmentFlatPalette`, not the Mumford–Shah segmenter.
+
+### 20.2 The joint distribution, and the axis that failed
+
+The floor exists for a reason, so the rule that spares the ▼ has to be measured on both
+sides before it is written. `lowresDiag --census` replays the palette path to the exact
+input of `despeckleComponents` on every tier-0 fixture and gallery mark, enumerates every
+component the floor is about to eat, and scores each against an INDEPENDENT truth: `cov4`,
+the mean 4×-supersampled coverage of the component's own colour over its footprint, read
+off a higher-resolution render so it is not a restatement of the 1× floors.
+
+**2,394 sub-floor components over 174 marks:**
+
+| truth bucket | n | size p10/p50/p90 | flat3 ≥ 1 | exactFrac p50 |
+|---|---|---|---|---|
+| SOLID  (cov4 ≥ .90) | 98 | 1 / 11 / 31 | **10** | 0.000 |
+| MIXED  (.50–.90) | 540 | 1 / 1 / 16 | **36** | 0.000 |
+| FRINGE (cov4 < .50) | 1,756 | 1 / 1 / 8 | **0** | 0.000 |
+
+The obvious axis was tried first and **REJECTED on measurement**: `exactFrac`, the share
+of the component's pixels that are exactly its palette hex. At every threshold it
+resurrects 40–54 FRINGE components while still missing more than half the SOLID ones —
+because a k-means centroid need not equal any source pixel at all (mercedes-benz's four
+grey shades read `exactFrac 0.000` at `cov4 0.96`). It is not separable.
+
+`flat3` — §9.4's flat-interior criterion asked per COMPONENT instead of per LABEL — is.
+It fires on 46 of the 2,394, and **not one of them is fringe**; the lowest `cov4` it
+admits anywhere in the population is 0.797. The structural reason is the same one §9.4
+gives: nine adjacent pixels all at full coverage of one authored colour is solid ink by
+definition, and a coverage ramp cannot produce it, because consecutive AA pixels differ —
+that is what makes them a ramp. It also carries an implicit floor worth naming: a 3×3
+block needs nine pixels, so nothing under 9px can ever be spared and true salt-and-pepper
+is structurally out of reach.
+
+So it ships as a **one-sided veto that can only SPARE a component**, never dissolve one —
+§17's `ARM_BOW` shape, and the right shape for a rule calibrated on 46 positives.
+
+### 20.3 The gate, and the fixture authored for it
+
+The reporting mark is private-corpus and cannot gate CI, so `peak-drop` is authored for
+this (tier 0, verified reproducing before the gate was written): 20 downward peaks of
+20/30/40/48/64 px² @512 — four sizes below the floor and one above it as the in-case
+control — in four rows at quarter-unit phase offsets and two palette colours, each
+isolated between two bars the ibm way. The bottom third is a ~1.8° seam whose staircase
+is precisely the shrapnel the floor exists for: the OTHER control, gating the rule's
+false-positive side through node count.
+
+Two things the fixture taught, both worth keeping:
+
+- **The region gate is colour-keyed.** `scoreRegions` buckets by RGB, so a monochrome
+  mark losing a whole component is structurally invisible to it — `logo-ibm` scores
+  `2/2 regions, ink 102.6%` with the ▼ gone. The first draft of the rack passed every
+  @512 gate while dropping 8 of 10 peaks. This is the same all-gates-green class §10.4
+  named, and the corpus-level lens that DOES see it is boundary p95 plus corner recall —
+  but only once the rack's own features dominate its boundary samples rather than its
+  bars. The shipped rack is deliberately short-barred for that reason.
+- **A fixture cannot straddle an ABSOLUTE floor at two rasters two octaves apart.**
+  Quartering the raster sixteenths the area, putting the whole rack at 5–16 px² @256 with
+  no evidence on any side of the floor. `peak-drop` is therefore excluded from the @256
+  lane (`LOWRES_TIER0_UNSCORABLE`) rather than listed in `KNOWN_DEFECTS_LOWRES` — a
+  listed case only has to fail SOMETHING, so listing it would go blind to real @256
+  regressions of everything else it draws.
+
+`test/planar-peak.test.ts` is the mechanism gate, red-before-green in the same run via
+`paletteSegment: { regionEvidence: false }`. It asserts a LADDER rather than a score,
+because a count of 16 could also be a phase lottery:
+
+    veto OFF: only the four above-floor controls painted         4/20
+    veto ON : every peak from 30px² up painted, every 20px² not 16/20
+
+The 20px² miss is the rule's resolution, not slack in it: a 5.6 × 7.1px triangle is too
+thin a wedge to contain nine full-coverage pixels, so there is no evidence to read.
+Recorded as `EVIDENCE_MIN_AREA` so a later fix that reaches further has to delete it
+deliberately. Three further tests pin the shape: the above-floor control must be
+recovered EITHER WAY (so "just lower the floor" cannot pass the case), the veto must be
+one-sided feature by feature, and the seam must not shatter.
+
+### 20.4 What it measures, on both sides
+
+Witness, `logo-ibm` @512 flat — identical to what `--despeckle 0` bought, without
+lowering the floor:
+
+| | chamfer | p95 | missedMax | corners | nodes |
+|---|---|---|---|---|---|
+| before | 0.2409 | 0.674 | 17.840 | 120/127 | 374 |
+| after | **0.2064** | **0.640** | **3.552** | **122/127** | 380 |
+
+`peak-drop` @512: chamfer 0.3965 → **0.0581**, p95 **10.000 → 0.131**, corners 134/148 →
+**148/148**, nodes 352 → 436.
+
+Corpus-wide (`lowresDiag --effect`, two passes: fingerprint every mark, then score the
+movers against authored geometry) — **12 of 152 gallery marks change AT ALL**, so the
+rule is inert on 92% of the corpus, as the census predicted:
+
+| mark | Δchamfer | ΔmissedMax | Δcorners | Δnodes |
+|---|---|---|---|---|
+| snapchat | **−0.7654** | −7.14 | 0 | +148 |
+| hack-the-box-wordmark | −0.0512 | −6.02 | 0 | +6 |
+| ibm | −0.0345 | **−14.29** | **+2** | +6 |
+| fedex-wm | −0.0247 | −9.75 | 0 | +4 |
+| parcel | −0.0132 | 0.00 | 0 | +8 |
+| intel-wm | −0.0056 | −1.56 | 0 | +4 |
+| ibm-wm | −0.0006 | 0.00 | 0 | +4 |
+| chupa-chups | −0.0001 | −2.11 | 0 | +8 |
+| soundcloud | **+0.0011** | 0.00 | 0 | +16 |
+
+Eight better, one worse, and **no mark loses a corner** (+2 total). The one regression is
+named rather than rounded away: `soundcloud` gains 0.0011px of chamfer (0.9333 → 0.9343,
+0.1%) for four spared components — inside that mark's own noise, and it is the price of a
+rule with no per-mark exceptions. Three of the twelve movers (`proton-mail`,
+`proton-mail-wordmark`, `google-antigravity-wordmark`) are not svgGround-scorable and are
+reported as moving without a number, rather than silently dropped.
+
+Watchlist byte-stable: sharp-star **11/11**, gear-teeth **53/60**, bar-caps **43/43**,
+cross-bars **10/10**, band-cross **25/25**, checker **3556/3588**, `acute-counter` @256
+p95 exactly **2.130**. The 20-case golden corpus is byte-identical. Suite **378 → 383**
+tests (381 pass / 2 skip): +4 in `test/planar-peak.test.ts`, +1 truth lane for
+`peak-drop`.
+
+A/B pair `before-ibm-peak` ⇄ `after-ibm-peak`: **3 of 114 outputs move** — `peak-drop`
+(the target), `logo-ibm` (the witness), and `scale-blind`, which is a gain and worth
+stating because it was not designed for: that fixture's 6px checker cells are 36px²
+components, sub-floor by construction, and two of them were being dissolved. It now
+traces exactly — chamfer 0.0024 → **0.0000**, missedMax 8.49 → **0.00**, corners
+2690/2690 and parsimony 1.02 unchanged. Every gradient lane is byte-identical (the rule
+is on the flat palette path only).
+
+**Residue, named.**
+- **Features under ~30px² are still dropped** — no 3×3 block, no evidence, veto silent.
+  The 20px² rung of `peak-drop` is the standing witness.
+- **88 of the 98 SOLID sub-floor components in the census are still dissolved**, because
+  their palette entry is a k-means centroid no source pixel matches exactly
+  (mercedes-benz's greys, ups-wm's `#f9b502`, wikipedia's `#efefef`). Reaching them needs
+  a tolerant flat-interior test — ΔE against the entry rather than exact hex — which is a
+  separate calibration with its own false-positive risk, and was deliberately NOT
+  attempted here on the strength of this population.
+- **The region gate's colour keying** (§20.3) is a hole in the corpus, not in this fix: a
+  monochrome mark can lose any number of whole components with `regions recovered` green.
+  No case gates it today.

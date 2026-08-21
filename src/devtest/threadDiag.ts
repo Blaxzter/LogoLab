@@ -54,6 +54,7 @@ const paletteOpts = {
   minShare: Math.max(0.0006, 0.006 - 0 * 0.0052 + 0.25 * 0.004),
   modePasses: 2,
   minRegionArea: Math.max(24, Math.round(0.25 * 0.25 * 800)),
+  regionEvidence: true,
 }
 const fp = segmentFlatPalette(img as unknown as { width: number; height: number; data: Uint8ClampedArray }, paletteOpts, undefined)
 const labels = healColorSpikes(fp.labels, img.data as unknown as Uint8ClampedArray, img.width, img.height, fp.palette)
