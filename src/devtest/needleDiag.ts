@@ -38,7 +38,7 @@ import {
   type DistPoint,
 } from './geomScore.ts'
 import type { SubPath, EditableDoc } from '../lib/path/types.ts'
-import type { ApexDiagRecord } from '../lib/trace/planarFit.ts'
+import { DEFAULT_PLANAR_FIT, type ApexDiagRecord } from '../lib/trace/planarFit.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -170,6 +170,64 @@ if (argv.includes('--census')) {
   console.log(`\nworst 10 short-arm refusals (by errLattice):`)
   for (const j of refusals.filter((j) => j.r.outcome === 'short-arm').sort((a, b) => b.errLattice - a.errLattice).slice(0, 10))
     console.log(`  ${j.mark.padEnd(22)} (${f(j.r.cx, 1)},${f(j.r.cy, 1)})  errL ${f(j.errLattice, 2)}  spans ${j.r.inSpan}/${j.r.outSpan}`)
+  process.exit(0)
+}
+
+// ---------------------------------------------------------------------------
+// `--turns`: issue #23's Phase 0. Corner RECOVERY stratified by the corner's AUTHORED
+// turn angle, over every svgGround-scorable gallery mark @RES flat.
+//
+// WHY. The Λ apex #23 names is authored at exactly 60.0° — which is exactly
+// `cornerTurnDeg`, the detector's own threshold — and `detectCorners` reads a ±4-POINT
+// window on the integer lattice staircase, where a steep-diagonal corner's measured turn
+// UNDER-reads its authored one. If that is the mechanism rather than the seam-truncation
+// the issue describes, it is not a property of one witness: recovery should fall off a
+// cliff as the authored turn approaches 60° from above, on every mark. This asks that.
+// ---------------------------------------------------------------------------
+if (argv.includes('--turns')) {
+  const { readdirSync } = await import('node:fs')
+  const dir = join(root, 'examples', 'logos')
+  interface Rec { mark: string; turn: number; hit: boolean }
+  const recs: Rec[] = []
+  let marks = 0
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.svg'))) {
+    const text = readFileSync(join(dir, file), 'utf8')
+    let g
+    try { g = parseGroundTruth(text) } catch { continue }
+    if (unscorable(g)) continue
+    let raster
+    try {
+      raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+    } catch { continue }
+    marks++
+    const sh = toRasterSpace(g, raster.width)
+    const vis = makeVisibleAt(raster)
+    const gtc = sharpCorners(sh.map((s) => s.subPaths), CORNER_MIN_EDGE).filter(
+      (c) => vis({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || vis({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
+    )
+    if (!gtc.length) continue
+    const doc = await traceImage(raster as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false })
+    const docC = sharpCorners(
+      doc.items.flatMap((it) => (it.kind === 'path' ? [it.subPaths] : [])).flat().map((sp) => [sp]),
+      0,
+    )
+    for (const c of gtc) {
+      const turn = (Math.acos(Math.max(-1, Math.min(1, c.itx * c.otx + c.ity * c.oty))) * 180) / Math.PI
+      const hit = docC.some((p) => (p.x - c.x) ** 2 + (p.y - c.y) ** 2 <= CORNER_MATCH_R * CORNER_MATCH_R)
+      recs.push({ mark: file.replace(/\.svg$/, ''), turn, hit })
+    }
+  }
+  console.log(`\n━━━ AUTHORED-TURN vs RECOVERY @${RES} flat ━━━  ${recs.length} visible authored corners over ${marks} marks`)
+  console.log(`  (cornerTurnDeg = ${DEFAULT_PLANAR_FIT.cornerTurnDeg}°, and the scorer's own sharp bar is 60°)\n`)
+  const BANDS: [number, number][] = [[60, 65], [65, 70], [70, 75], [75, 80], [80, 90], [90, 105], [105, 120], [120, 150], [150, 180]]
+  console.log(`  authored turn      n   recovered      rate`)
+  for (const [lo, hi] of BANDS) {
+    const g = recs.filter((r) => r.turn >= lo && r.turn < hi)
+    if (!g.length) continue
+    const k = g.filter((r) => r.hit).length
+    const bar = '█'.repeat(Math.round((k / g.length) * 30))
+    console.log(`  ${String(lo).padStart(3)}–${String(hi).padEnd(4)}    ${String(g.length).padStart(5)}   ${String(k).padStart(5)}   ${((k / g.length) * 100).toFixed(1).padStart(6)}%  ${bar}`)
+  }
   process.exit(0)
 }
 
