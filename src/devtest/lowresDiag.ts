@@ -59,7 +59,20 @@ for (const kv of fitArg ? fitArg.split(',') : []) {
   const [k, v] = kv.split('=')
   FIT_OVERRIDE[k] = v === 'true' ? true : v === 'false' ? false : Number(v)
 }
-const names = argv.filter((a) => !a.startsWith('--') && !/^\d+$/.test(a) && a !== fitArg)
+// `--roi x0,y0,x1,y1` scopes the per-colour masks (and so the survival table and the
+// component census) to a pixel box. A whole-image survival number is BLIND to a small
+// feature: issue #8's ▼ is ~30px of an ink mask ~40 000px wide, so every stage reads
+// "flat" while the ▼ dies. Scope the lens to the feature and the killing stage shows.
+const roiArg = argv.includes('--roi') ? argv[argv.indexOf('--roi') + 1] : ''
+const ROI = roiArg.split(',').map(Number).filter(Number.isFinite)
+// `--floor N` / `--share F` override minRegionArea / minShare INDEPENDENTLY. The
+// Despeckle dial moves both at once (index.ts paletteOptionsFor), so the dial alone
+// cannot attribute a loss to one of them — these can.
+const floorArg = argv.includes('--floor') ? Number(argv[argv.indexOf('--floor') + 1]) : NaN
+const shareArg = argv.includes('--share') ? Number(argv[argv.indexOf('--share') + 1]) : NaN
+const names = argv.filter(
+  (a) => !a.startsWith('--') && !/^\d+$/.test(a) && a !== fitArg && a !== roiArg && !/^[\d.]+$/.test(a),
+)
 const CASES = names.length ? names : ['hairlines', 'fluent-flute-flat', 'fluent-parachute-flat', 'fluent-beverage-box-flat']
 
 // --- paletteOptionsFor (index.ts, verbatim at the gate's defaults) -----------
@@ -67,9 +80,9 @@ const DESPECKLE = DEFAULT_VECTORIZE_OPTIONS.despeckle ?? 0 // 25
 const minRegionAreaFor = (d: number): number => Math.round((Math.min(100, Math.max(0, d)) / 100) ** 2 * 800)
 const OPTS = {
   maxColors: 16,
-  minShare: Math.max(0.0006, 0.006 + (DESPECKLE / 100) * 0.004), // detail 0
+  minShare: Number.isFinite(shareArg) ? shareArg : Math.max(0.0006, 0.006 + (DESPECKLE / 100) * 0.004), // detail 0
   modePasses: 2,
-  minRegionArea: Math.max(24, minRegionAreaFor(DESPECKLE)),
+  minRegionArea: Number.isFinite(floorArg) ? floorArg : Math.max(24, minRegionAreaFor(DESPECKLE)),
 }
 
 // --- paletteSegment.ts private pieces, verbatim ------------------------------
@@ -386,12 +399,290 @@ function survival(labels: Int32Array, palette: PaletteColor[], mask: Uint8Array,
   return n > 0 ? ok / n : NaN
 }
 
+// ---------------------------------------------------------------------------
+// `--effect`: what the §20 evidence veto actually DOES to the corpus. Score every
+// svgGround-scorable gallery mark flat @RES with `regionEvidence` off and on, and report
+// every mark that moves — on the defect's own metrics (missed boundary, corner recall)
+// AND on the metric the floor buys (node count). A fix measured only on its witness is a
+// fix measured on the case it was fitted to.
+// ---------------------------------------------------------------------------
+if (argv.includes('--effect')) {
+  const { readdirSync } = await import('node:fs')
+  const { scoreGeometry } = await import('./geomScore.ts')
+  const { parseGroundTruth, toRasterSpace, unscorable } = await import('./svgGround.ts')
+  const dir = join(root, 'examples', 'logos')
+  const only = argv.filter((a) => !a.startsWith('--') && !/^[\d.]+$/.test(a))
+  // PASS 1 — every mark, cheaply: does the veto change the OUTPUT at all? A mark with no
+  // spared component is byte-identical by construction, and proving that beats asserting
+  // it. Only a fingerprint is retained per mark (scoreGeometry is the expensive part and
+  // runs in pass 2, on the movers alone).
+  const movers: string[] = []
+  let scanned = 0
+  const fingerprint = async (img: ReturnType<typeof decodePng>, ev: boolean): Promise<string> => {
+    const doc = await traceImage(img as unknown as ImageData, {
+      ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, paletteSegment: { regionEvidence: ev },
+    })
+    let s = ''
+    for (const it of doc.items) {
+      if (it.kind !== 'path') continue
+      s += `${it.fill}|${it.subPaths.length}|`
+      for (const sp of it.subPaths) for (const n of sp.nodes) s += `${n.x.toFixed(3)},${n.y.toFixed(3)};`
+    }
+    return s
+  }
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.svg'))) {
+    if (only.length && !only.includes(file.replace(/\.svg$/, ''))) continue
+    let img
+    try {
+      img = decodePng(new Resvg(readFileSync(join(dir, file), 'utf8'), { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+    } catch { continue }
+    scanned++
+    if ((await fingerprint(img, false)) !== (await fingerprint(img, true))) movers.push(file)
+  }
+  console.log(`\n━━━ §20 EFFECT @ ${RES}px flat ━━━  pass 1: ${movers.length} of ${scanned} gallery marks change AT ALL`)
+
+  interface Row { mark: string; dChamfer: number; dMissed: number; dCorners: number; dNodes: number; on: string }
+  const rows: Row[] = []
+  let scorable = 0
+  // PASS 2 — the movers, scored against their authored geometry.
+  for (const file of movers) {
+    const text = readFileSync(join(dir, file), 'utf8')
+    let gt
+    try { gt = parseGroundTruth(text) } catch { console.log(`  ${file}: moves, but has no parsable ground truth`); continue }
+    if (unscorable(gt)) { console.log(`  ${file}: moves, but is not svgGround-scorable`); continue }
+    let img
+    try {
+      img = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+    } catch { continue }
+    scorable++
+    const sh = toRasterSpace(gt, img.width)
+    const score = async (ev: boolean): Promise<{ chamfer: number; missed: number; corners: number; got: number; nodes: number }> => {
+      const doc = await traceImage(img as unknown as ImageData, {
+        ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, paletteSegment: { regionEvidence: ev },
+      })
+      const g = scoreGeometry(sh, doc, img.width, img.height, img)
+      const nodes = doc.items.reduce((s, it) => s + (it.kind === 'path' ? it.subPaths.reduce((t, sp) => t + sp.nodes.length, 0) : 0), 0)
+      return { chamfer: g.chamfer, missed: g.missedMax, corners: g.gtCorners, got: g.cornersRecovered, nodes }
+    }
+    const off = await score(false)
+    const on = await score(true)
+    // No "unchanged ⇒ skip" filter here: pass 1 already proved this mark's geometry moves,
+    // and a mover whose scores are flat is itself a result worth printing.
+    rows.push({
+      mark: file.replace(/\.svg$/, ''),
+      dChamfer: on.chamfer - off.chamfer,
+      dMissed: on.missed - off.missed,
+      dCorners: on.got - off.got,
+      dNodes: on.nodes - off.nodes,
+      on: `chamfer ${on.chamfer.toFixed(4)}  missedMax ${on.missed.toFixed(2)}  corners ${on.got}/${on.corners}  nodes ${on.nodes}`,
+    })
+  }
+  rows.sort((a, b) => a.dChamfer - b.dChamfer)
+  console.log(`\n  pass 2: ${rows.length} of the ${scorable} scorable movers, scored against authored geometry`)
+  console.log(`  ${'mark'.padEnd(28)}${'Δchamfer'.padStart(10)}${'ΔmissedMax'.padStart(12)}${'Δcorners'.padStart(10)}${'Δnodes'.padStart(8)}   after`)
+  for (const r of rows)
+    console.log(
+      `  ${r.mark.padEnd(28)}${r.dChamfer.toFixed(4).padStart(10)}${r.dMissed.toFixed(2).padStart(12)}` +
+        `${(r.dCorners > 0 ? '+' : '') + r.dCorners}`.padStart(10) + `${(r.dNodes > 0 ? '+' : '') + r.dNodes}`.padStart(8) + `   ${r.on}`,
+    )
+  const sum = (f: (r: Row) => number): number => rows.reduce((s, r) => s + f(r), 0)
+  console.log(
+    `\n  totals: Δchamfer ${sum((r) => r.dChamfer).toFixed(4)}  Δcorners ${sum((r) => r.dCorners) > 0 ? '+' : ''}${sum((r) => r.dCorners)}` +
+      `  Δnodes ${sum((r) => r.dNodes) > 0 ? '+' : ''}${sum((r) => r.dNodes)}` +
+      `   (marks better ${rows.filter((r) => r.dChamfer < 0).length}, worse ${rows.filter((r) => r.dChamfer > 0).length})`,
+  )
+  process.exit(0)
+}
+
+// ---------------------------------------------------------------------------
+// `--census`: the JOINT DISTRIBUTION behind issue #8's fix. Replay the palette path to
+// the exact input of despeckleComponents on every scorable mark, enumerate every
+// component the floor is about to dissolve, and dump each one's candidate evidence
+// against an INDEPENDENT truth: what the art looks like at 4× the resolution.
+//
+// Truth axis `cov4` — the mean 4×-subpixel coverage of the component's own colour over
+// its footprint. A component of authored ink reads ~1.0 (the shape really is solid
+// there); a fringe speck that only snapped to the far colour reads well under 0.5 (the
+// art there is mostly the OTHER colour). It is read off a higher-resolution render, so
+// it is not a restatement of the 1× floors the fix would change.
+//
+// Candidate evidence axes (the §9.4 shape — flat interior at an accepted colour):
+//   exactFrac  share of the component's pixels that are EXACTLY the palette hex in source
+//   flat3      pixels whose full 3×3 source block is that exact hex
+// The question this answers is whether they SEPARATE, and where — not whether the
+// hypothesis feels right. Three §0 exits died of skipping this.
+// ---------------------------------------------------------------------------
+if (argv.includes('--census')) {
+  const { readdirSync } = await import('node:fs')
+  const limitArg = argv.includes('--limit') ? Number(argv[argv.indexOf('--limit') + 1]) : Infinity
+  // Default lanes: the tier-0 fixtures (where the floor's CONTROLS live — aa-seam and
+  // the sliver family) plus the gallery marks (where the defect was reported, and the
+  // product target). The 218 Fluent tier-1/2 glyphs are opt-in with `--all`: each costs a
+  // 2048px render, and tier 1 is gradient art the flat palette path never runs on.
+  const sources: { name: string; svg: string }[] = []
+  for (const c of TRUTH_CORPUS) if (argv.includes('--all') || c.tier === 0) sources.push({ name: c.name, svg: c.svg })
+  for (const f of readdirSync(join(root, 'examples', 'logos')).filter((x) => x.endsWith('.svg')))
+    sources.push({ name: f.replace(/\.svg$/, ''), svg: `examples/logos/${f}` })
+
+  interface Rec {
+    mark: string
+    hex: string
+    size: number
+    exactPx: number
+    flat3: number
+    cov4: number
+  }
+  const recs: Rec[] = []
+  let marks = 0
+  for (const src of sources) {
+    if (marks >= limitArg) break
+    let svg: string
+    try { svg = readFileSync(join(root, src.svg), 'utf8') } catch { continue }
+    let img: Img, big: Img
+    try {
+      img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng()) as unknown as Img
+      big = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES * 4 }, background: 'white' }).render().asPng()) as unknown as Img
+    } catch { continue }
+    // The 4× render must be an exact 4× of the 1× one for the footprint mapping below.
+    if (big.width !== img.width * 4 || big.height !== img.height * 4) continue
+    marks++
+    const { width: w, height: h, data } = img
+
+    // Replay segmentFlatPalette's AUTO path to the input of despeckleComponents.
+    let q: QuantizeResult = quantize(img as unknown as ImageData, OPTS.maxColors, OPTS.minRegionArea)
+    const flat = flatInteriorCounts(img, q.labels, q.palette.length)
+    const real = Array.from(flat, (v) => v >= OPTS.minRegionArea)
+    const edgy = Array.from(edgeFractions(q.labels, w, h, q.palette.length), (fr) => fr >= EDGE_LOCAL_MIN)
+    const { blend, routeTo } = classifyBlends(q.palette, real, edgy)
+    const modal = modalColorCounts(q.labels, data, q.palette.length)
+    let snapExclude: Uint8Array | undefined
+    if (blend.some(Boolean)) {
+      const counts = q.counts.slice()
+      for (let i = 0; i < counts.length; i++) {
+        if (!blend[i]) continue
+        counts[routeTo[i]] += counts[i]
+        counts[i] = 0
+      }
+      const labels = q.labels.slice()
+      snapExclude = new Uint8Array(labels.length)
+      for (let i = 0; i < labels.length; i++) {
+        const l = labels[i]
+        if (l >= 0 && blend[l]) { labels[i] = routeTo[l]; snapExclude[i] = 1 }
+      }
+      q = { palette: q.palette, labels, counts }
+    }
+    const protect = real.map((r, i) => r || (!blend[i] && modal[i] >= OPTS.minRegionArea))
+    q = dropMinorColors(q, OPTS.minShare, protect)
+    const snapped = snapPaletteToModes(q.palette, q.labels, data, snapExclude)
+    const smoothed = modeFilter(q.labels, w, h, OPTS.modePasses)
+    const restored = restoreErasedComponents(q.labels, smoothed, w, h, OPTS.minRegionArea, data)
+
+    // Every component the floor is about to eat.
+    const n = w * h
+    const seen = new Uint8Array(n)
+    const labToLab = snapped.map((p) => srgbToLab(p.r, p.g, p.b))
+    for (let start = 0; start < n; start++) {
+      if (seen[start] || restored[start] < 0) continue
+      const lab = restored[start]
+      const px: number[] = [start]
+      seen[start] = 1
+      const stack = [start]
+      while (stack.length) {
+        const p = stack.pop()!
+        const x = p % w, y = (p / w) | 0
+        const push = (nb: number): void => {
+          if (seen[nb] || restored[nb] !== lab) return
+          seen[nb] = 1; stack.push(nb); px.push(nb)
+        }
+        if (x > 0) push(p - 1)
+        if (x < w - 1) push(p + 1)
+        if (y > 0) push(p - w)
+        if (y < h - 1) push(p + w)
+      }
+      if (px.length >= OPTS.minRegionArea) continue
+      const c = snapped[lab]
+      let exactPx = 0, flat3 = 0, cov = 0
+      const rgbAt = (i: number): number => (data[i * 4] << 16) | (data[i * 4 + 1] << 8) | data[i * 4 + 2]
+      const key = (c.r << 16) | (c.g << 8) | c.b
+      for (const i of px) {
+        if (rgbAt(i) === key) exactPx++
+        const x = i % w, y = (i / w) | 0
+        if (x > 0 && x < w - 1 && y > 0 && y < h - 1) {
+          let all = true
+          for (let dy = -1; dy <= 1 && all; dy++) for (let dx = -1; dx <= 1; dx++) if (rgbAt(i + dy * w + dx) !== key) { all = false; break }
+          if (all) flat3++
+        }
+        // 4× footprint: the 4×4 subpixel block this pixel expands to.
+        let hit = 0
+        for (let dy = 0; dy < 4; dy++) {
+          for (let dx = 0; dx < 4; dx++) {
+            const bi = ((y * 4 + dy) * big.width + (x * 4 + dx)) * 4
+            if (deltaE76(srgbToLab(big.data[bi], big.data[bi + 1], big.data[bi + 2]), labToLab[lab]) <= 4) hit++
+          }
+        }
+        cov += hit / 16
+      }
+      recs.push({ mark: src.name, hex: hex(c), size: px.length, exactPx, flat3, cov4: cov / px.length })
+    }
+  }
+
+  console.log(`\n━━━ SUB-FLOOR COMPONENT CENSUS @ ${RES}px ━━━  ${recs.length} components below the ${OPTS.minRegionArea}px floor across ${marks} marks`)
+  const bucket = (r: Rec): string => (r.cov4 >= 0.9 ? 'SOLID  (cov4 ≥ .90)' : r.cov4 >= 0.5 ? 'MIXED  (.50–.90)' : 'FRINGE (cov4 < .50)')
+  const groups = new Map<string, Rec[]>()
+  for (const r of recs) groups.set(bucket(r), [...(groups.get(bucket(r)) ?? []), r])
+  const pct = (v: number[], p: number): number => (v.length ? v.slice().sort((a, b) => a - b)[Math.min(v.length - 1, Math.floor(p * v.length))] : NaN)
+  console.log(`\n  truth bucket        n     size p10/p50/p90      exactFrac p10/p50/p90      flat3 p50   flat3=0`)
+  for (const k of ['SOLID  (cov4 ≥ .90)', 'MIXED  (.50–.90)', 'FRINGE (cov4 < .50)']) {
+    const g = groups.get(k) ?? []
+    if (!g.length) { console.log(`  ${k.padEnd(20)} 0`); continue }
+    const sz = g.map((r) => r.size), ef = g.map((r) => r.exactPx / r.size), f3 = g.map((r) => r.flat3)
+    console.log(
+      `  ${k.padEnd(20)}${String(g.length).padStart(4)}   ${pct(sz, 0.1)}/${pct(sz, 0.5)}/${pct(sz, 0.9)}`.padEnd(52) +
+        `${pct(ef, 0.1).toFixed(3)}/${pct(ef, 0.5).toFixed(3)}/${pct(ef, 0.9).toFixed(3)}`.padEnd(28) +
+        `${pct(f3, 0.5)}`.padEnd(12) + `${g.filter((r) => r.flat3 === 0).length}`,
+    )
+  }
+  // Separability: sweep each candidate veto and report what it does to BOTH classes.
+  const solid = recs.filter((r) => r.cov4 >= 0.9), mixed = recs.filter((r) => r.cov4 >= 0.5 && r.cov4 < 0.9), fringe = recs.filter((r) => r.cov4 < 0.5)
+  console.log(`\n  SEPARABILITY A — "keep a sub-floor component when exactFrac ≥ t"`)
+  console.log(`    t       SOLID kept        MIXED kept        FRINGE kept (regressions)`)
+  for (const t of [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]) {
+    const k = (g: Rec[]): string => `${g.filter((r) => r.exactPx / r.size >= t).length}/${g.length}`
+    console.log(`    ${t.toFixed(2)}    ${k(solid).padEnd(18)}${k(mixed).padEnd(18)}${k(fringe)}`)
+  }
+  console.log(`\n  SEPARABILITY B — "keep a sub-floor component when flat3 ≥ t" (the §9.4 axis, per COMPONENT)`)
+  console.log(`    t       SOLID kept        MIXED kept        FRINGE kept (regressions)`)
+  for (const t of [1, 2, 3, 4, 5, 6, 8, 10, 12, 16]) {
+    const k = (g: Rec[]): string => `${g.filter((r) => r.flat3 >= t).length}/${g.length}`
+    console.log(`    ${String(t).padEnd(6)}  ${k(solid).padEnd(18)}${k(mixed).padEnd(18)}${k(fringe)}`)
+  }
+  const withF3 = recs.filter((r) => r.flat3 > 0).sort((a, b) => a.flat3 - b.flat3)
+  console.log(`\n  flat3 > 0 population (${withF3.length} of ${recs.length}) — every one, so the margin is visible, not assumed`)
+  for (const r of withF3)
+    console.log(
+      `    flat3 ${String(r.flat3).padStart(3)}  ${r.mark.padEnd(26)} ${r.hex}  ${String(r.size).padStart(3)}px` +
+        `  exactFrac ${(r.exactPx / r.size).toFixed(3)}  cov4 ${r.cov4.toFixed(3)}  ${r.cov4 >= 0.9 ? 'SOLID' : r.cov4 >= 0.5 ? 'MIXED' : '⇐ FRINGE'}`,
+    )
+  console.log(`\n  the 12 largest SOLID components (what the floor is destroying)`)
+  for (const r of solid.slice().sort((a, b) => b.size - a.size).slice(0, 12))
+    console.log(`    ${r.mark.padEnd(26)} ${r.hex}  ${String(r.size).padStart(3)}px  exactFrac ${(r.exactPx / r.size).toFixed(3)}  flat3 ${String(r.flat3).padStart(3)}  cov4 ${r.cov4.toFixed(3)}`)
+  console.log(`\n  the 12 FRINGE components with the highest exactFrac (what a veto would resurrect)`)
+  for (const r of fringe.slice().sort((a, b) => b.exactPx / b.size - a.exactPx / a.size).slice(0, 12))
+    console.log(`    ${r.mark.padEnd(26)} ${r.hex}  ${String(r.size).padStart(3)}px  exactFrac ${(r.exactPx / r.size).toFixed(3)}  flat3 ${String(r.flat3).padStart(3)}  cov4 ${r.cov4.toFixed(3)}`)
+  process.exit(0)
+}
+
 // --- the run -----------------------------------------------------------------
 
 for (const name of CASES) {
   // Fixture corpus first; else the private gallery corpus (issue #8's ▼ lives on
   // logo-ibm — `npm run fetch:logos` rehydrates examples/logos/).
-  const c = TRUTH_CORPUS.find((x) => x.name === name) ?? { svg: `examples/logos/${name}.svg` }
+  // The gallery fallback must carry `gradients: false` explicitly: leaving it undefined
+  // makes the FINAL/autopsy sections below trace the mark with gradients ON (index.ts
+  // reads `gradients !== false`) — i.e. down the Mumford–Shah path, not the flat palette
+  // path this whole file replays. It reported the two lanes as one.
+  const c: { svg: string; gradients: boolean } =
+    TRUTH_CORPUS.find((x) => x.name === name) ?? { svg: `examples/logos/${name}.svg`, gradients: false }
   let svg: string
   try {
     svg = readFileSync(join(root, c.svg), 'utf8')
@@ -405,6 +696,16 @@ for (const name of CASES) {
   const authored = authoredColors(svg)
 
   console.log(`\n━━━ ${name} @ ${RES}px ━━━  floors: minShare ${OPTS.minShare} (${Math.round(OPTS.minShare * total)}px of ${total}), minRegionArea ${OPTS.minRegionArea}px`)
+
+  // The ROI lens, if asked for. `inRoi` gates the per-colour masks below; every stage
+  // number downstream of them (survival, component census) is then ROI-local.
+  const roiBox = ROI.length === 4 ? { x0: ROI[0], y0: ROI[1], x1: ROI[2], y1: ROI[3] } : null
+  const inRoi = (i: number): boolean => {
+    if (!roiBox) return true
+    const x = i % w, y = (i / w) | 0
+    return x >= roiBox.x0 && x <= roiBox.x1 && y >= roiBox.y0 && y <= roiBox.y1
+  }
+  if (roiBox) console.log(`  ROI ${roiBox.x0},${roiBox.y0} → ${roiBox.x1},${roiBox.y1}  (masks + survival + census scoped to it)`)
 
   // Masks per authored colour: EXACT source pixels (the evidence the floors read) and
   // NEAR pixels (nearest authored colour — the ≥50%-coverage footprint incl. AA).
@@ -420,7 +721,7 @@ for (const name of CASES) {
       if (d < bestD) { bestD = d; best = a }
       if (d === 0) exact[a]++
     }
-    if (best >= 0) masks[best][i] = 1
+    if (best >= 0 && inRoi(i)) masks[best][i] = 1
   }
   // Flat-interior evidence per authored colour (3×3 exact block — §9.4's criterion).
   const flatEvidence = new Int32Array(authored.length)
@@ -568,6 +869,70 @@ for (const name of CASES) {
       return (Number.isNaN(v) ? '—' : (v * 100).toFixed(1) + '%').padStart(10)
     })
     console.log(`    ${hex(authored[a]).padEnd(9)}${row.join('')}  (${m}px)`)
+  }
+
+  // ROI COMPONENT CENSUS — the survival table is a per-pixel FRACTION, which reports a
+  // whole small component vanishing and its neighbour bleeding in as the same number.
+  // The area floors are per-COMPONENT, so census the components themselves: 4-connected
+  // (despeckleComponents' own connectivity), sized on the FULL label map (the size the
+  // floor actually reads), listed for every stage. A component that appears in one row
+  // and is gone from the next names the killing stage AND its size vs the floor.
+  if (roiBox) {
+    console.log(`\n  ROI COMPONENT CENSUS — 4-conn components of the ROI's ink label, sized whole (floor ${OPTS.minRegionArea}px)`)
+    // Which authored colour dominates the ROI? That is the feature under test.
+    let ink = -1, inkN = 0
+    for (let a = 0; a < authored.length; a++) {
+      const n = masks[a].reduce((s, v) => s + v, 0)
+      // Skip the paper: the ROI's background is whatever covers the most of it, and the
+      // feature is the SECOND colour. Rank by "not the ROI majority" instead of guessing.
+      if (n > inkN) { inkN = n; ink = a }
+    }
+    // The feature colour = the ROI's minority authored colour with ≥ 4px of mask.
+    let feat = -1, featN = 0
+    for (let a = 0; a < authored.length; a++) {
+      if (a === ink) continue
+      const n = masks[a].reduce((s, v) => s + v, 0)
+      if (n > featN) { featN = n; feat = a }
+    }
+    for (const [who, a] of [['ROI-majority', ink], ['ROI-feature', feat]] as [string, number][]) {
+      if (a < 0) continue
+      const tLab = srgbToLab(authored[a].r, authored[a].g, authored[a].b)
+      console.log(`    ${who} ${hex(authored[a])} (${masks[a].reduce((s, v) => s + v, 0)}px of ROI mask)`)
+      for (const st of stages) {
+        const near = st.palette.map((p) => deltaE76(srgbToLab(p.r, p.g, p.b), tLab) <= 4)
+        const seen = new Int32Array(total).fill(0)
+        const sizes: number[] = []
+        // Seed only from ROI pixels, but flood the WHOLE component (the floor's view).
+        for (let i = 0; i < total; i++) {
+          if (!masks[a][i] || seen[i]) continue
+          const lab = st.labels[i]
+          if (lab < 0 || !near[lab]) continue
+          const stack = [i]
+          seen[i] = 1
+          let size = 0
+          while (stack.length) {
+            const p = stack.pop()!
+            size++
+            const x = p % w, y = (p / w) | 0
+            const push = (nb: number): void => {
+              if (seen[nb] || st.labels[nb] !== lab) return
+              seen[nb] = 1
+              stack.push(nb)
+            }
+            if (x > 0) push(p - 1)
+            if (x < w - 1) push(p + 1)
+            if (y > 0) push(p - w)
+            if (y < h - 1) push(p + w)
+          }
+          sizes.push(size)
+        }
+        sizes.sort((p, r) => r - p)
+        console.log(
+          `      ${st.name.padEnd(10)} ${String(sizes.length).padStart(2)} comp  [${sizes.slice(0, 6).join(', ')}${sizes.length > 6 ? ', …' : ''}]` +
+            `${sizes.length === 0 ? '   ⇐ GONE' : sizes.every((s) => s < OPTS.minRegionArea) ? `   ⇐ all below the ${OPTS.minRegionArea}px floor` : ''}`,
+        )
+      }
+    }
   }
 
   // DOC-BUILD — the full planar doc pipeline on the healed labels (the same calls

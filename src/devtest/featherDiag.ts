@@ -41,7 +41,7 @@ const f = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d) : '�
 
 // --- paletteOptionsFor(DEFAULT_VECTORIZE_OPTIONS) — index.ts:958, verbatim -----
 // detail 0, despeckle 25 ⇒ minShare 0.007, minRegionArea max(24, 50) = 50.
-const OPTS = { maxColors: 16, minShare: 0.007, modePasses: 2, minRegionArea: 50 }
+const OPTS = { maxColors: 16, minShare: 0.007, modePasses: 2, minRegionArea: 50, regionEvidence: true }
 
 // --- paletteSegment.ts private evidence functions, re-implemented verbatim -----
 

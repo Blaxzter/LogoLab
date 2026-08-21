@@ -140,6 +140,20 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // genEdgeCases.ts documents the rack; test/planar-needle.test.ts is the mechanism gate.
   { name: 'letter-joins', svg: 'public/examples/edge-cases/letter-joins.svg', note: 'letterform joins — curved-arm corner apex displacement (#7)', gradients: false, tier: 0 },
 
+  // Issue #8's driver (the ibm mark's dropped ▼), authored deliberately red. A small solid
+  // feature isolated by the art's own white gaps forms its own connected component; when
+  // that component lands under the palette path's per-component `minRegionArea` floor,
+  // despeckleComponents dissolves it into the background and a whole region is lost. The
+  // reporting mark is private-corpus and cannot gate CI, so the rack sweeps component area
+  // ACROSS the floor: peaks of ~20/30/40/48 px² @512 (below the default 50px floor) plus a
+  // ~64px² in-case CONTROL that is recovered either way, in two rows at a half-pixel phase
+  // offset and two palette colours. Measured at authoring: 8 of 10 peaks dropped whole,
+  // missedMax 19.50px, while chamfer/p95 stay at 0.32/0.11 — only region recovery and the
+  // corner count see it. The bottom-third shallow AA seam is the OTHER control: it is the
+  // shrapnel the floor exists to sweep up, and it gates the fix's false-positive side
+  // through node parsimony. genEdgeCases.ts documents the rack.
+  { name: 'peak-drop', svg: 'public/examples/edge-cases/peak-drop.svg', note: 'small isolated features under the despeckle area floor (#8)', gradients: false, tier: 0 },
+
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves
   // the project root, which hid the fact that examples/*.svg would 404 in a real build.
@@ -341,8 +355,23 @@ const LOWRES_TIER2 = [
   'fluent-violin-flat',
 ]
 
+/**
+ * Tier-0 cases the @256 lane CANNOT score, and why — an exclusion, not a defect list.
+ *
+ * `peak-drop` (#8) is calibrated against an ABSOLUTE pixel floor (`minRegionArea`, 50px²
+ * at the default Despeckle dial), so its features are authored to straddle that floor at
+ * the @512 raster: 20–64 px² there. Quartering the raster quarters nothing — it sixteenths
+ * the AREA, putting the whole rack at 5–16 px², under the floor with no evidence on any
+ * side of it. At that size the floor's verdict is not even wrong: a 5px² component has no
+ * flat interior to read, so there is nothing for the mechanism under test to decide. A
+ * fixture cannot straddle an absolute floor at two rasters two octaves apart, and listing
+ * it in KNOWN_DEFECTS_LOWRES would be worse than excluding it — a listed case only has to
+ * fail SOMETHING, so it would go blind to real @256 regressions of everything else it draws.
+ */
+const LOWRES_TIER0_UNSCORABLE = ['peak-drop']
+
 export const LOWRES_CORPUS: TruthCase[] = [
-  ...TRUTH_CORPUS.filter((c) => c.tier === 0),
+  ...TRUTH_CORPUS.filter((c) => c.tier === 0 && !LOWRES_TIER0_UNSCORABLE.includes(c.name)),
   ...TRUTH_CORPUS.filter((c) => LOWRES_TIER2.includes(c.name)),
 ]
 

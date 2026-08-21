@@ -35,6 +35,11 @@ export interface PaletteSegmentOptions {
    *  label that borders them most — kills salt-and-pepper specks / pinholes from
    *  source noise that would otherwise each become an extra traced loop. */
   minRegionArea: number
+  /** Spare a sub-`minRegionArea` component that carries FLAT-INTERIOR evidence —
+   *  at least one pixel whose whole 3×3 source block is exactly its palette hex
+   *  (§20, issue #8). Default true; false restores the pre-§20 unconditional
+   *  floor, which is what the mechanism gate measures against. */
+  regionEvidence: boolean
 }
 
 export const DEFAULT_PALETTE_SEGMENT: PaletteSegmentOptions = {
@@ -42,6 +47,7 @@ export const DEFAULT_PALETTE_SEGMENT: PaletteSegmentOptions = {
   minShare: 0.006,
   modePasses: 2,
   minRegionArea: 64,
+  regionEvidence: true,
 }
 
 /**
@@ -56,8 +62,17 @@ export const DEFAULT_PALETTE_SEGMENT: PaletteSegmentOptions = {
  * an 8-connected despeckle was tried here and shattered pencil-flat @256 into 166
  * fringe loops (parsimony 1.5× → 10.1×). Restored thin diagonals don't need it:
  * the restore pinch-fill 4-connects them, so they pass this floor as one comp.
+ *
+ * `evidence` arms the §20 veto: a sub-floor component is spared when it carries
+ * FLAT-INTERIOR evidence — see hasFlatInterior. Omitted ⇒ the unconditional floor.
  */
-function despeckleComponents(labels: Int32Array, w: number, h: number, minArea: number): Int32Array {
+function despeckleComponents(
+  labels: Int32Array,
+  w: number,
+  h: number,
+  minArea: number,
+  evidence?: { data: Uint8ClampedArray; palette: PaletteColor[] },
+): Int32Array {
   if (minArea <= 0) return labels
   const n = w * h
   const out = labels.slice()
@@ -80,7 +95,7 @@ function despeckleComponents(labels: Int32Array, w: number, h: number, minArea: 
       if (y > 0 && comp[p - w] === -1 && out[p - w] === lab) { comp[p - w] = cid; stack.push(p - w) }
       if (y < h - 1 && comp[p + w] === -1 && out[p + w] === lab) { comp[p + w] = cid; stack.push(p + w) }
     }
-    if (pixels.length < minArea) {
+    if (pixels.length < minArea && !(evidence && hasFlatInterior(pixels, lab, w, h, evidence))) {
       // Majority bordering label (≠ lab, ≥ 0); fall back to leaving it if isolated.
       const border = new Map<number, number>()
       for (const p of pixels) {
@@ -100,6 +115,59 @@ function despeckleComponents(labels: Int32Array, w: number, h: number, minArea: 
     cid++
   }
   return out
+}
+
+/**
+ * §20 (issue #8) — does this connected component carry FLAT-INTERIOR evidence?
+ * True when at least one of its pixels has a full 3×3 SOURCE block of exactly its
+ * own palette hex. That is §9.4's criterion (see flatInteriorCounts below) asked
+ * per COMPONENT instead of per LABEL, and it is the one thing that separates a
+ * small REAL feature from the anti-alias shrapnel `minRegionArea` exists to sweep
+ * up: nine adjacent pixels all at full coverage of one authored colour is solid
+ * ink by definition, and a coverage ramp cannot produce it — consecutive AA pixels
+ * differ, which is what makes them a ramp.
+ *
+ * The population this was calibrated on (`lowresDiag --census`, 2,394 sub-floor
+ * components over 174 marks, scored against a 4× supersampled render):
+ *
+ *      truth bucket             n     flat3 ≥ 1
+ *      SOLID  (cov4 ≥ .90)     98     10
+ *      MIXED  (.50–.90)       540     36
+ *      FRINGE (cov4 < .50)  1,756      0        ⇐ zero false positives
+ *
+ * so this ships as a ONE-SIDED veto that can only SPARE a component, never dissolve
+ * one (the §17 ARM_BOW shape). The obvious alternative axis — the share of the
+ * component's pixels that are exactly its palette hex — was measured and REJECTED:
+ * at any threshold it resurrects 40–54 fringe components while still missing more
+ * than half the solid ones, because a k-means centroid need not equal any source
+ * pixel (mercedes-benz's greys read exactFrac 0.000 at cov4 0.96).
+ *
+ * Note the implicit floor: a 3×3 block needs nine pixels, so nothing under 9px can
+ * ever be spared and true salt-and-pepper is structurally out of reach.
+ */
+function hasFlatInterior(
+  pixels: readonly number[],
+  lab: number,
+  w: number,
+  h: number,
+  evidence: { data: Uint8ClampedArray; palette: PaletteColor[] },
+): boolean {
+  const c = evidence.palette[lab]
+  if (!c) return false
+  const { data } = evidence
+  const key = (c.r << 16) | (c.g << 8) | c.b
+  const rgbAt = (i: number): number => (data[i * 4] << 16) | (data[i * 4 + 1] << 8) | data[i * 4 + 2]
+  for (const i of pixels) {
+    const x = i % w, y = (i / w) | 0
+    if (x < 1 || y < 1 || x > w - 2 || y > h - 2) continue
+    if (
+      rgbAt(i) === key &&
+      rgbAt(i - w - 1) === key && rgbAt(i - w) === key && rgbAt(i - w + 1) === key &&
+      rgbAt(i - 1) === key && rgbAt(i + 1) === key &&
+      rgbAt(i + w - 1) === key && rgbAt(i + w) === key && rgbAt(i + w + 1) === key
+    ) return true
+  }
+  return false
 }
 
 /**
@@ -852,8 +920,17 @@ export function segmentFlatPalette(
   //    measured at its full size, not against the hole the filter left.
   const smoothed = modeFilter(labels, img.width, img.height, opts.modePasses)
   const restored = restoreErasedComponents(labels, smoothed, img.width, img.height, opts.minRegionArea, img.data)
-  // 4. Dissolve sub-threshold specks/pinholes so they don't each become a loop.
-  const cleaned = despeckleComponents(restored, img.width, img.height, opts.minRegionArea)
+  // 4. Dissolve sub-threshold specks/pinholes so they don't each become a loop —
+  //    unless the component carries flat-interior evidence that it is real art
+  //    (§20: the ibm mark's ▼ is a 26px component of an accepted 11.7%-share ink
+  //    entry, and only this per-component floor was killing it).
+  const cleaned = despeckleComponents(
+    restored,
+    img.width,
+    img.height,
+    opts.minRegionArea,
+    opts.regionEvidence !== false ? { data: img.data, palette } : undefined,
+  )
 
   // modeFilter can move pixels between labels → recompute counts so they stay exact
   // (downstream paint/order never depend on them here, but keep the contract honest).

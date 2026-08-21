@@ -205,6 +205,14 @@ export interface VectorizeOptions {
    */
   planarFit?: Partial<import('./lib/trace/planarFit').PlanarFitOptions>
   /**
+   * Advanced override of the flat-palette segmenter's tunables (colour budget /
+   * share floor / mode passes / small-component area floor / the sub-floor
+   * evidence veto). Merged over the dial-derived defaults, the same way
+   * `planarFit` is; omitted ⇒ defaults. Flat art only — the Mumford–Shah path
+   * (gradients on) does not read it.
+   */
+  paletteSegment?: Partial<import('./lib/trace/paletteSegment').PaletteSegmentOptions>
+  /**
    * EXPERIMENTAL background layer separation (color mode, gradients OFF, planar).
    * With gradients off a smooth background ramp posterizes into flat bands; every
    * band boundary is traced, and each band that touches a foreground outline (a

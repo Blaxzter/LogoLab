@@ -981,6 +981,11 @@ function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
     // Reuse the despeckle→area curve, with a small floor so source noise never
     // litters the trace with single-pixel loops even at despeckle 0.
     minRegionArea: Math.max(24, minRegionAreaFor(options.despeckle ?? 0)),
+    // The §20 sub-floor evidence veto. On by default; `paletteSegment` below can
+    // turn it off, which is how its mechanism gate measures red-before-green.
+    regionEvidence: true,
+    // Advanced override for A/B experiments, the planarFit idiom.
+    ...(options.paletteSegment ?? {}),
   }
 }
 
