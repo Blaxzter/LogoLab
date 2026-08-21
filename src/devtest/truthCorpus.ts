@@ -154,6 +154,22 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // through node parsimony. genEdgeCases.ts documents the rack.
   { name: 'peak-drop', svg: 'public/examples/edge-cases/peak-drop.svg', note: 'small isolated features under the despeckle area floor (#8)', gradients: false, tier: 0 },
 
+  // Issue #23's driver: a corner authored ABOVE the 60° sharp bar that the detector's ±4-
+  // POINT chord reading UNDER-reads on the integer lattice, so it is never classified and
+  // never reaches the corner fit. The reporting witness (`affinity-designer.svg`'s Λ apex)
+  // is private-corpus and ungated, and the census behind §21 showed the defect is a
+  // threshold CLIFF rather than one site — 96.3% of authored corners recovered at 90-105°
+  // of turn, 55.1% at 60-65° — so the rack sweeps AUTHORED TURN across the cliff: 61 / 65 /
+  // 69 / 73 / 77 / 81 / 100°, eight bisector rotations each, every cell at its own
+  // quarter-unit AA phase. Every cell is a circular sector, so the swept angle is carried
+  // by exactly one corner (the apex) while the two arm ends turn exactly 90° in every cell
+  // — the rack's own control, in the band that already recovers. Four plain discs along the
+  // bottom row gate the FALSE-POSITIVE side: reading the turn over a longer span is how a
+  // small circle starts reading as a corner. Measured at authoring: 164/172 authored
+  // corners, the eight misses all at 61-69°. genEdgeCases.ts documents the rack;
+  // test/planar-turn.test.ts is the mechanism gate.
+  { name: 'corner-turns', svg: 'public/examples/edge-cases/corner-turns.svg', note: 'authored-turn sweep across the corner detector’s bar (#23)', gradients: false, tier: 0 },
+
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves
   // the project root, which hid the fact that examples/*.svg would 404 in a real build.

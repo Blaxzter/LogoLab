@@ -741,6 +741,96 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       )
     },
   },
+  {
+    // Issue #23's anatomy: a corner that IS authored sharp but whose TURN the detector
+    // under-reads. `detectCorners` measures the turn as the angle between two CHORDS taken
+    // +/-4 POINTS along the RAW integer lattice staircase (it runs in planarAssemble before
+    // `presmooth`, which receives its verdict as `pinned`). A +/-4 chord on a staircase has
+    // ~atan(0.5/4) = 7 degrees of endpoint quantization error PER ARM, and on a steep
+    // diagonal — where a run of collinear lattice steps can fill the whole window — the
+    // error is systematic rather than random: the chord snaps to the run's own direction.
+    // The reporting witness (`affinity-designer.svg`'s Lambda apex, private corpus,
+    // ungated) is authored at exactly 60.0 deg and reads 45.0, against a 60 deg threshold;
+    // it is therefore never classified, never reaches `snapCornerToArms`, and keeps a
+    // lattice-pinned node 1.54px out. The corpus census (`needleDiag --turns`, 2,934
+    // visible authored corners over 128 marks) shows this is not one witness but a
+    // monotonic CLIFF toward the threshold: 96.3% recovered at 90-105 deg of authored
+    // turn, 55.1% at 60-65.
+    //
+    // The rack sweeps the one axis that census measured — AUTHORED TURN, 60->100 deg in 5
+    // deg rungs — because the defect is a threshold effect and a single angle gates a
+    // single draw of it. Each cell is a circular SECTOR, chosen so exactly ONE corner per
+    // cell carries the swept angle:
+    //   * the apex is the corner under test (turn = the rung, arms 30px @512 — well over
+    //     the scorer's CORNER_MIN_EDGE, so it is graded);
+    //   * the two arm ends, where a straight radius meets the arc, turn EXACTLY 90 deg in
+    //     every cell regardless of the rung — the rack's own in-case control, sitting in
+    //     the 96.3%-recovered band, so a fix that shatters or loses easy corners shows up
+    //     in the same case;
+    //   * the arc itself is tangent-continuous at both ends and contributes no corner.
+    // Five bisector rotations per rung (0/18/36/54/72 deg, one lattice period at five
+    // samples) put every rung's arms through a spread of staircase orientations, and each
+    // cell carries its own quarter-unit (half raster px @512) translation phase, because
+    // §10.6/§10.7 measured corner survival at this scale to be an AA-PHASE lottery — the
+    // +/-4-point reading in §21.2 is non-monotonic in window size for exactly that reason,
+    // so one phase would gate one draw of the lottery.
+    //
+    // CONTROL, in-case, for the FALSE-POSITIVE side: four plain discs of radius 8/12/18/26
+    // px @512 along the bottom row. Reading the turn over a LONGER or evidence-bounded
+    // span is the shape a fix is likely to take, and the failure mode of a longer span is
+    // minting corners on smooth art — a small enough circle turns a lot over any fixed
+    // window. `detectCorners` documents "a smooth shape — even a tiny circle — returns the
+    // empty set at the default threshold"; these keep that promise gated, through node
+    // parsimony and through the absence of traced sharp corners on them.
+    name: 'corner-turns',
+    note: 'authored-turn sweep 60-100 deg on rotated sectors — the corner detector turn READING (#23)',
+    make: () => {
+      const f3 = (v: number): string => v.toFixed(3)
+      /** Circular SECTOR with apex at (px,py), authored TURN `t` there, two straight arms
+       *  of length `L` about bisector `beta`, closed by the radius-`L` arc between the arm
+       *  ends. Interior angle at the apex is 180-t; the arc sweeps the same 180-t, and each
+       *  arm end turns exactly 90 deg. */
+      const sector = (px: number, py: number, L: number, t: number, beta: number, fill: string): string => {
+        const h = (((180 - t) / 2) * Math.PI) / 180
+        const b = (beta * Math.PI) / 180
+        const ax = px + L * Math.cos(b - h)
+        const ay = py + L * Math.sin(b - h)
+        const bx = px + L * Math.cos(b + h)
+        const by = py + L * Math.sin(b + h)
+        return (
+          `<path d="M ${f3(px)},${f3(py)} L ${f3(ax)},${f3(ay)}` +
+          ` A ${L},${L} 0 0 1 ${f3(bx)},${f3(by)} Z" fill="${fill}"/>`
+        )
+      }
+      // 61 rather than 60 for the lowest rung: an authored turn of exactly 60.0 sits ON
+      // the SCORER's own sharp bar (`CORNER_MIN_TURN`), so whether such a corner is even
+      // GRADED is a floating-point coin flip — measured, 3 of 5 rung-60 apexes made it into
+      // the graded set. 61 is inside the census's 60-65 band and unambiguously gradable.
+      // 100 is the high control: a turn no under-read can push below the bar.
+      const TURNS = [61, 65, 69, 73, 77, 81, 100]
+      const ROTS = [0, 11, 23, 34, 45, 56, 68, 79]
+      const L = 13
+      const PITCH = 32
+      const ORIGIN = 16
+      const COLS = 8
+      const cells: string[] = []
+      for (let i = 0; i < TURNS.length * ROTS.length; i++) {
+        // 8 columns against 8 rotations would line up, so the ROTATION index runs on `i`
+        // and the RUNG on `i / ROTS.length`: every row is one rung, every column one
+        // rotation, and the quarter-unit translation phase below cycles on a period of 4
+        // against both.
+        const cx = ORIGIN + (i % COLS) * PITCH + ((i * 3) % 4) / 4
+        const cy = ORIGIN + Math.floor(i / COLS) * PITCH + ((i * 5) % 4) / 4
+        cells.push(sector(cx, cy, L, TURNS[Math.floor(i / ROTS.length)], ROTS[i % ROTS.length], i % 2 ? INK : RED))
+      }
+      // The four smooth controls fill out the last row.
+      const discs = [4, 6, 9, 12].map(
+        (r, k) =>
+          `<circle cx="${ORIGIN + (1 + 2 * k) * PITCH}" cy="${ORIGIN + 7 * PITCH}" r="${r}" fill="${k % 2 ? INK : RED}"/>`,
+      )
+      return svg(`<rect width="${V}" height="${V}" fill="${WHITE}"/>` + cells.join('') + discs.join(''))
+    },
+  },
 ]
 
 // --- emit -------------------------------------------------------------------
