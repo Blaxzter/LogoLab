@@ -389,12 +389,16 @@ function survival(labels: Int32Array, palette: PaletteColor[], mask: Uint8Array,
 // --- the run -----------------------------------------------------------------
 
 for (const name of CASES) {
-  const c = TRUTH_CORPUS.find((x) => x.name === name)
-  if (!c) {
+  // Fixture corpus first; else the private gallery corpus (issue #8's ▼ lives on
+  // logo-ibm — `npm run fetch:logos` rehydrates examples/logos/).
+  const c = TRUTH_CORPUS.find((x) => x.name === name) ?? { svg: `examples/logos/${name}.svg` }
+  let svg: string
+  try {
+    svg = readFileSync(join(root, c.svg), 'utf8')
+  } catch {
     console.log(`⨯ unknown case ${name}`)
     continue
   }
-  const svg = readFileSync(join(root, c.svg), 'utf8')
   const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng()) as unknown as Img
   const { width: w, height: h, data } = img
   const total = w * h

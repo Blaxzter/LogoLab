@@ -52,6 +52,8 @@ const flag = (name: string): string | null => {
 const CASE = flag('--case') ?? 'mastercard'
 const RES = Number(flag('--res') ?? 512)
 const GRADIENTS = argv.includes('--gradients')
+/** `--despeckle N` overrides VectorizeOptions.despeckle (drives minRegionArea — issue #8). */
+const DESPECKLE = flag('--despeckle')
 const HOT = Number(flag('--hot') ?? 1.0)
 const ROI = (flag('--roi') ?? '').split(',').map(Number).filter(Number.isFinite)
 const PNG = flag('--png')
@@ -340,6 +342,7 @@ async function trace(fitOver: Record<string, number | boolean>): Promise<Editabl
       ...DEFAULT_VECTORIZE_OPTIONS,
       engine: 'planar',
       gradients: GRADIENTS,
+      ...(DESPECKLE !== null && DESPECKLE !== '' ? { despeckle: Number(DESPECKLE) } : {}),
       planarFit: {
         ...(argv.includes('--apex') ? { apexDiag: (r: ApexDiagRecord) => { APEX.push(r) } } : {}),
         ...fitOver,
