@@ -31,7 +31,7 @@ guardrails):
 | 8 | **Sub-pixel edge placement** — PARTIALLY CLOSED 2026-08-05 (§15.7): `planarSubpixel.ts` displaces every edge chain onto the AA's iso-0.5 crossing before the fit (shared edges stay shared by construction), with three measured-in guards (corner self-guard, apex tangent pin, anchor flatness) — the tangent pin gained a fourth bound the same week, after it closed a letterform counter (§15.8, below). Fine-end error collapsed 2–3× (bar-caps 0.089, gear 0.080, sharp-star 0.068 ref-px @1024); `concentric` + `sharp-star` deleted from the scale gate's KNOWN_DEFECTS by the CI contract; gear-teeth corner recall 51→52/60. WHAT REMAINS OPEN: the four coarse-end cases (`overlap` , `aa-seam`, `petals`, `band-cross` — @256's AA is too wide for the guards' fixed sampling geometry, an audit-ART-list follow-up), two witness corners @512, and chupa-chups' small-feature zone trading 0.06px mean @1024 | `test/scale-invariance.test.ts` KNOWN_DEFECTS (4 entries left, only shrinks); witnesses in `examples/logos/` | gate: coarse ≤ 2.0 · max(fine, 0.15) ref-px | **§15**, instrument `scaleDiag.ts --lattice` |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
-| 15 | **A corner NEAR a junction has its arm evidence TRUNCATED by the seam** — what is left of #15 after §17. `snapCornerToArms` can only sample up to the neighbouring junction, so a band seam landing 2–3px from an authored corner halves (or kills) the arm the apex is reconstructed from — §10.6's short-arm regime — and the corner keeps a lattice apex the fit then drags its 150px flank toward. §17 measured that this, NOT "the junction is the corner", is what the Affinity numbers below are: all five of that mark's corner-verdict junctions sit **1.8–2.9px from** the nearest authored corner, none on one, and the mark is byte-identical under §17 | `affinity-designer.svg` @512 flat (private corpus, **ungated**) | the mark's 133px top edge: constant 1.06px offset → mean 0.69 with **0.71px swing**; triangle apex **1.54px** (0.97 with gradients ON, i.e. with no seam cutting its arm) | §14.3, §17.1 |
+| 15 | **A corner AT the 60° detection threshold is never detected** — the turn is UNDER-READ on the lattice staircase. ⚠️ The previous entry here ("arm evidence TRUNCATED by the seam", `planarThread.ts` as the fix domain) was **REFUTED 2026-08-21** on its own named witness: the Affinity Λ apex is **not a junction** (all 34 junctions of the mark enumerated, none near it) and its arms are **not truncated** (index 102 of a 276-point chain — ~100px of arm one side, ~170px the other). Its "133px top edge / 0.71px swing" numbers were stale too: §14 + §17 already fixed that tilt, and it now measures 0.19 mean / 0.66 max. What is actually left is one corner, and one mechanism: it is authored at **exactly 60.0°** = `cornerTurnDeg`, and `detectCorners` reads a ±4-**POINT** window on the RAW integer lattice (it runs before `presmooth`, which receives the corners as *pinned*), where it measures **45.0°**. So the corner is never classified, never reaches `snapCornerToArms` (no apex record is emitted), and its node stays lattice-pinned. `cornerTurnDeg=45` collapses the ROI error (mean 0.311 → 0.145), confirming the chain. **NOT a one-witness artifact**: recovery falls off a monotonic cliff toward the threshold across the corpus | `affinity-designer.svg` @512 flat (private corpus, **ungated** — no fixture yet) | apex **1.54px** (1.23 gradients-ON); corpus census (`needleDiag --turns`, 2,934 visible authored corners / 128 marks): 90–105° **96.3%** → 80–90° 90.1% → 75–80° 85.4% → 70–75° 74.3% → 65–70° 64.3° → 60–65° **55.1%**; the 60–80° band holds 540 corners and loses **152**. Probably also `gear-teeth`'s standing 53/60 (roots authored 67.3°) | **§21**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23), §14.3, §17.1; instrument `needleDiag --turns`. **Fix domain is the corner detector's turn measurement, NOT planarThread** — and *not* by lowering `cornerTurnDeg`: §10.6 aligned it to the scorer's 60° bar deliberately, and sharp-star / gear-teeth / bar-caps / checker / band-cross all sit on it |
 
 Recently closed: **a small isolated feature swept away by the despeckle area floor**
 (issue #8, user-reported from /labs/ab on `logo-ibm` — the ▼ peak of the m's middle
@@ -3517,3 +3517,86 @@ is on the flat palette path only).
 - **The region gate's colour keying** (§20.3) is a hole in the corpus, not in this fix: a
   monochrome mark can lose any number of whole components with `regions recovered` green.
   No case gates it today.
+
+---
+
+## 21. The corner that was never detected (issue #23, Phase 0 only, 2026-08-21)
+
+**No fix here.** This section exists because Phase 0 REFUTED the issue's stated mechanism
+and the §0 row that carried it, and this file is where refuted claims are supposed to be
+recorded rather than quietly re-derived a third time.
+
+### 21.1 What §0 #15 said, and what is actually true
+
+The row read: *a band seam landing 2–3px from an authored corner truncates the arm
+`snapCornerToArms` reconstructs from*, with `planarThread.ts` as the fix domain. Measured
+on the §20 tracer, on the row's own named witness (`affinity-designer.svg` @512 flat):
+
+| the claim | the measurement |
+|---|---|
+| the corner is junction-owned | **Not a junction.** All 34 junctions of the mark enumerated (`threadDiag --all`); none is anywhere near the apex. `surveyJunctions` never sees it, at any rank. |
+| a seam truncates its arm to 2–3px | **Not truncated.** The apex sits at index **102 of a 276-point chain** — ~100px of arm on one side, ~170px on the other. |
+| the 133px top edge tilts, 0.71px swing | **Stale.** §14 + §17 already fixed that tilt; it measures **0.19 mean / 0.66 max** today. |
+
+The apex error itself is real and unchanged — **1.54px** flat, byte-identical with
+`reseat off` / `arcSnap off` / `beautify off`; the gradients-ON control is **1.23** (the
+row's 0.97 was also stale).
+
+### 21.2 The actual mechanism
+
+The corner is authored at **exactly 60.0°**, which is exactly `cornerTurnDeg`. And
+`detectCorners` runs on the RAW integer lattice — `detectCorners(latticePts, …)` in
+`planarAssemble.ts`, *before* `presmooth`, which then receives the detected corners as
+`pinned` — over a **±4-POINT** window. On a steep-diagonal staircase that window
+systematically under-reads the turn:
+
+    measured turn at the apex index, by window and pre-smoothing passes
+    passes      win2     win3     win4     win5     win6     win8
+    0           45.0     53.1     45.0     47.7     56.3     49.4    ← the shipped path
+    1           31.0     36.9     37.4     42.3     45.7     49.4
+    2           24.4     33.1     36.9     40.4     45.0     49.0
+
+**45.0° measured at a 60.0° authored corner**, against a 60° threshold. So it is never
+classified, never reaches `snapCornerToArms` (confirmed: no apex record is emitted for
+it), and its node stays lattice-pinned 1.54px out. Note the non-monotonicity in window
+size — that is staircase phase aliasing, §10.6/§10.7's regime, not smoothing. Forcing
+`cornerTurnDeg` down closes the loop: at 60 and 50 the ROI error is unchanged
+(1.155/0.311 invented, 1.234/0.324 missed); at **45** it collapses to **0.750/0.145** and
+**0.911/0.153**.
+
+### 21.3 It is not one witness
+
+`needleDiag --turns` — every visible authored corner on every svgGround-scorable gallery
+mark, stratified by its AUTHORED turn. **2,934 corners over 128 marks:**
+
+| authored turn | n | recovered | rate |
+|---|---|---|---|
+| 60–65 | 78 | 43 | **55.1%** |
+| 65–70 | 126 | 81 | 64.3% |
+| 70–75 | 206 | 153 | 74.3% |
+| 75–80 | 130 | 111 | 85.4% |
+| 80–90 | 273 | 246 | 90.1% |
+| 90–105 | 1615 | 1555 | **96.3%** |
+| 105–120 | 227 | 204 | 89.9% |
+| 120–150 | 210 | 182 | 86.7% |
+| 150–180 | 68 | 39 | 57.4% |
+
+A clean monotonic cliff toward the threshold. The 60–80° band holds **540 corners and
+loses 152**; the Λ apex is one of them. (The 150–180° tail is a different regime —
+near-reversals, §18/§19's territory.) This is also the most likely reading of
+`gear-teeth`'s standing 53/60, whose roots are authored at 67.3°.
+
+### 21.4 Why no fix shipped with this
+
+The fix domain moves from `planarThread.ts` to the corner detector's TURN MEASUREMENT,
+and the blast radius is much larger than the row assumed: §10.6 deliberately aligned
+`cornerTurnDeg` to the scorer's own 60° sharp bar, and `sharp-star`, `gear-teeth`,
+`bar-caps`, `checker` and `band-cross` all sit on that constant. So the fix is **not**
+"lower the threshold" — that mints corners the scorer does not count and risks shattering
+smooth art, which is precisely the trade §10.6 measured. The shape that looks right is a
+scale/phase-aware turn read — the turn taken from FITTED arm directions over a longer,
+evidence-bounded span instead of a fixed ±4-point chord — leaving the 60° bar alone. That
+is its own Phase-0-complete pass with the whole corner watchlist as its control set, and
+it needs a tier-0 fixture first (there is none: the witness is private-corpus and
+ungated). §17's lesson, again: measure which mechanism a witness shows before trusting
+the issue's framing.
