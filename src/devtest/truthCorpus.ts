@@ -166,8 +166,13 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // — the rack's own control, in the band that already recovers. Four plain discs along the
   // bottom row gate the FALSE-POSITIVE side: reading the turn over a longer span is how a
   // small circle starts reading as a corner. Measured at authoring: 164/172 authored
-  // corners, the eight misses all at 61-69°. genEdgeCases.ts documents the rack;
-  // test/planar-turn.test.ts is the mechanism gate.
+  // corners, the eight misses all at 61-69°. genEdgeCases.ts documents the rack.
+  //
+  // The FIX this was authored for was built and REJECTED (§22): reading the turn from
+  // fitted arm evidence recovers the rack (164 -> 169/172) and +54 corners across the
+  // gallery, and puts a visible KINK in smooth boundary everywhere. The rack stays in the
+  // corpus on its own merits — an authored-turn sweep is a good corner-recall case at any
+  // resolution, and it is the only GATED witness for the residue in §0 #15.
   { name: 'corner-turns', svg: 'public/examples/edge-cases/corner-turns.svg', note: 'authored-turn sweep across the corner detector’s bar (#23)', gradients: false, tier: 0 },
 
   // --- authored art we already own ----------------------------------------------------

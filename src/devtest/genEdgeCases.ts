@@ -782,6 +782,12 @@ const CASES: { name: string; note: string; make: () => string }[] = [
     // window. `detectCorners` documents "a smooth shape — even a tiny circle — returns the
     // empty set at the default threshold"; these keep that promise gated, through node
     // parsimony and through the absence of traced sharp corners on them.
+    // NOTE (2026-08-21): the reading this rack was authored to gate was measured and
+    // REJECTED — see §22. The rack stays: the false-positive control below is exactly what
+    // caught the rejected reading at @256, and the sweep is a good corner-recall case in
+    // its own right. If a second attempt is made, the four DISCS are not a sufficient
+    // smooth control — the defect that killed the first attempt was on ELLIPSES and
+    // curvature-varying blends, which a circle-shaped guard cannot see.
     name: 'corner-turns',
     note: 'authored-turn sweep 60-100 deg on rotated sectors — the corner detector turn READING (#23)',
     make: () => {

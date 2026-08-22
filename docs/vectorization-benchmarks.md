@@ -31,38 +31,8 @@ guardrails):
 | 8 | **Sub-pixel edge placement** — PARTIALLY CLOSED 2026-08-05 (§15.7): `planarSubpixel.ts` displaces every edge chain onto the AA's iso-0.5 crossing before the fit (shared edges stay shared by construction), with three measured-in guards (corner self-guard, apex tangent pin, anchor flatness) — the tangent pin gained a fourth bound the same week, after it closed a letterform counter (§15.8, below). Fine-end error collapsed 2–3× (bar-caps 0.089, gear 0.080, sharp-star 0.068 ref-px @1024); `concentric` + `sharp-star` deleted from the scale gate's KNOWN_DEFECTS by the CI contract; gear-teeth corner recall 51→52/60. WHAT REMAINS OPEN: the four coarse-end cases (`overlap` , `aa-seam`, `petals`, `band-cross` — @256's AA is too wide for the guards' fixed sampling geometry, an audit-ART-list follow-up), two witness corners @512, and chupa-chups' small-feature zone trading 0.06px mean @1024 | `test/scale-invariance.test.ts` KNOWN_DEFECTS (4 entries left, only shrinks); witnesses in `examples/logos/` | gate: coarse ≤ 2.0 · max(fine, 0.15) ref-px | **§15**, instrument `scaleDiag.ts --lattice` |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
-| 15 | **A corner authored ON the 60° bar is a coin flip** — the residue of #23 after §22. The under-read itself is fixed: the turn is now read from FITTED arm evidence as well as from the ±4-point chord, and the corpus cliff flattens from 55.1% → **65.4%** recovery at 60–65° of authored turn (+54 corners, one lost). What is left is the last degree: the DETECTOR's bar and the SCORER's bar are the same 60°, so art authored exactly there has no headroom against a staircase reading whose residual noise is about a degree. The named witness is one — its arms read **59.2°** at an authored 60.0°. Closing it needs either an arm GAP priced better than §22.2 measured (gap 1 buys 6 corners for +203 unexplained sites; gap 2, 7 for +929) or a detector bar that is deliberately NOT the scorer's, which §10.6 aligned on purpose | `corner-turns` rungs 61° (tier 0, **gated**, `RESIDUAL_RUNG` in `test/planar-turn.test.ts`); `affinity-designer.svg` @512 flat (private corpus, ungated) | rack 61° rung **6/8** (was 3/8) @512, 5/8 @256, 4/8 @1024; corpus 60–65° **51/78** (was 43/78); witness apex reads 59.2° vs 60.0° authored and the mark is byte-identical | **§22.2**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23); instruments `turnDiag --rack` / `--sweep`, `needleDiag --turns` |
+| 15 | **A corner ABOVE the 60° bar is not detected — the turn is UNDER-READ on the lattice staircase.** Unchanged from §21; the fix §21.4 prescribed was built and **REJECTED on visual review** (§22), so this stays open. `detectCorners` reads the turn between two CHORDS taken ±4 POINTS on the RAW integer lattice; each endpoint carries half a pixel of quantization and on a steep diagonal the chord snaps to the staircase run's own direction, so the reading under-reads systematically. What §22 adds is the shape of the trap: reading the turn from FITTED ARM evidence instead DOES recover the corners (+54 across 128 marks, `gear-teeth` 53 → 57/60) and puts a visible **C⁰ KINK in smooth boundary** — 9 unexplained traced corners on `chupa-chups`' ellipse, 7 on `logo-instagram`, 2 on `logo-mastercard` — with EVERY gate green, because `cornersRecovered` has no precision term and chamfer barely moves for a kink. **Build §22.5's invented-corner lens before attempting this again** | `corner-turns` (tier 0, **gated**, 164/172 recovered — every miss at 61–69° of authored turn); `affinity-designer.svg` @512 flat (private corpus, ungated) | corpus census (`needleDiag --turns`, 2,934 visible authored corners / 128 marks): 90–105° **96.3%** → 80–90° 90.1% → 75–80° 85.4% → 70–75° 74.3% → 65–70° 64.3% → 60–65° **55.1%**; the 60–80° band holds 540 corners and loses **152**. Also `gear-teeth`'s standing 53/60 (roots authored 67.3°) | **§21**, **§22**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23); instruments `needleDiag --turns`, `turnDiag` (reader census). NOT by lowering `cornerTurnDeg` (§10.6 aligned it to the scorer's bar deliberately), and NOT by the evidence reading as §22 built it |
 
-Recently closed: **a corner whose TURN the detector under-read** (issue #23, the second and
-real half of the old #15) — closed 2026-08-21, **§22** is the record. A vertex is classified
-by the angle between two CHORDS taken ±4 POINTS along the raw integer lattice; each chord
-endpoint carries half a pixel of quantization, and where a run of collinear staircase steps
-fills the window the chord snaps to the run's own direction, so the reading UNDER-reads
-systematically on steep diagonals. §21 measured the cliff (96.3% recovery at 90–105° of
-authored turn, 55.1% at 60–65°) and stopped there. What ships is a SECOND OPINION rather
-than a replacement: at a candidate the chord already reads within 25° of the bar, the turn
-is read again from two least-squares ARM directions, each fitted over as many samples as
-stay straight to within the fit's own ε, and the SHARPER reading wins — one-sided at the
-detector, so nothing the chord finds today can be lost. That shape was chosen on
-measurement, not taste: as a REPLACEMENT the same evidence reading gains 85 authored corners
-and drops 13, as a promotion it gains the same 85 and drops none, and it still
-non-max-suppresses to 220 FEWER unexplained sites than the chord alone. Four guards were
-each measured in (§22.2) — NMS before the promotion is applied (un-suppressed it costs
-`gear-teeth` 53 → 50 and reads the rack BELOW the chord baseline), no promotion beside a
-corner the chord already found (unguarded it took `logo-ibm` 122 → 118 of 127 while
-improving its boundary error — the all-gates-green class §10.4 named), the reach gate (open
-past ~35° it costs `gear-teeth` 57 → 52), and a CO-CIRCULAR veto (without it the fixture's
-own 12px and 18px discs pick up 6 and 8 sharp corners @256). The arm GAP that would have
-recovered the named witness was built and REJECTED on price. Witness numbers: corpus
-recovery +54 corners with exactly one lost, the 60–80° band losing 152 → **103** of 540;
-`gear-teeth` **53 → 57/60** (its roots are authored at 67.3°, exactly the predicted band);
-`logo-ibm` chamfer 0.2064 → **0.1978** with corners held at 122/127; `american-express`
-**+10** corners. Corpus effect: 95 of 152 marks move, corners gained on 24 and lost on 1.
-Corpus case `corner-turns` (authored for this, tier 0, verified reproducing first — an
-authored-turn sweep 61→100° whose arm ends are a constant 90° in-case control, plus four
-smooth discs for the false-positive side), gate `test/planar-turn.test.ts`. Golden corpus
-byte-identical; the corner watchlist byte-identical except `gear-teeth`'s gain. Residue in
-§22.4, and the row above.
 Recently closed: **a small isolated feature swept away by the despeckle area floor**
 (issue #8, user-reported from /labs/ab on `logo-ibm` — the ▼ peak of the m's middle
 stroke, dropped by the flat trace and kept by the gradient one) — closed 2026-08-21,
@@ -3632,249 +3602,130 @@ ungated). §17's lesson, again: measure which mechanism a witness shows before t
 the issue's framing.
 ---
 
-## 22. The corner whose turn was under-read (issue #23, 2026-08-21)
+## 22. The turn reading that passed every gate and was rejected on sight (issue #23, 2026-08-21)
 
-§21 refuted this issue's stated mechanism and left the real one measured but unfixed: a
-vertex is classified as a corner by the angle between two CHORDS taken ±4 POINTS along the
-raw integer lattice, and on a steep diagonal that reading systematically UNDER-reads. Each
-chord endpoint carries up to half a pixel of quantization — ~7° of direction error over a
-4px chord — and where a run of collinear staircase steps fills the window the error is not
-even random: the chord snaps to the run's own direction. It is not one witness. Recovery
-falls off a monotonic cliff toward the 60° bar across the whole gallery: 96.3% of visible
-authored corners recovered at 90–105° of authored turn, **55.1% at 60–65°**.
+**No fix here.** The reading §21.4 prescribed was built, measured, shipped to a PR — and
+**pulled on the /labs/ab review**, because it put a visible KINK in smooth boundary all over
+the corpus while every gate in this repo reported a clean win. That failure is worth more
+than the mechanism was, so this section leads with it.
 
-What ships is a SECOND OPINION, not a replacement. At a candidate the chord already reads
-within 25° of the bar, the turn is read again from two least-squares ARM directions, each
-fitted over as many samples as stay straight to within the fit's own ε, and the SHARPER of
-the two readings wins. All four turn readers share it — `detectCorners`,
-`detectLoopCorners`, `detectOpenCorners` and `resolveLoopCaps`; the last had to move with
-them because a corner falling outside its own `sharp` runs is silently DROPPED, so leaving
-it on the chord would have discarded exactly the corners this recovers.
+### 22.1 What it looked like on the numbers
 
-### 22.1 Phase 0 for the FIX, not just for the defect
+The reading: at a candidate the ±4-point chord already reads within 25° of the bar, read the
+turn again from two least-squares ARM directions, each fitted over as many samples as stay
+straight to within the fit's own ε, and keep the SHARPER of the two — one-sided at the
+detector, so nothing the chord finds today can be lost. Shared by all four turn readers
+(`detectCorners`, `detectLoopCorners`, `detectOpenCorners`, `resolveLoopCaps`). Four guards
+rode with it, each caught by the end-to-end sweep and each measured in:
 
-§21 was Phase 0 for the mechanism. The fix needed its own, because a reading has two sides
-and only one of them is the defect: does it recover the authored turn at an authored
-corner, and does it stay BELOW the bar everywhere else? A longer span reads a large turn on
-any small circle, and "a smooth shape — even a tiny circle — returns ∅" is a documented
-property of `detectCorners`.
+- **NMS before the promotion is applied** — un-suppressed it costs `gear-teeth` 53 → 50 by
+  welding each tooth's tip and root into one cluster (the two-scale trade §10.6 rejected),
+  and reads the rack BELOW the chord baseline.
+- **No promotion beside a corner the chord already found** — unguarded it took `logo-ibm`
+  122 → 118 of 127 *while improving its boundary error*, §10.4's all-gates-green class.
+- **A reach gate at 25°** — open past ~35° it costs `gear-teeth` 57 → 52. It is the
+  statement that a corner is local sharpness CONFIRMED by arm evidence, never arm evidence
+  alone.
+- **A co-circular veto** — two straight arms always "explain" a small enough circle.
 
-`src/devtest/turnDiag.ts` dumps the joint distribution — every candidate reading evaluated
-at every authored corner it can locate on the lattice, plus the count of non-max-suppressed
-sites each reading would classify that no authored corner explains. **71 cases (the rack,
-the corner watchlist, 60 gallery marks), 1,760 authored corners at or above the bar:**
+And an arm GAP (§10.6's `SNAP_GAP` idea applied to the reading) was built and rejected on
+price: +203 unexplained sharp sites for 6 corners at gap 1, +929 for 7 at gap 2.
 
-| reading | recovered | gained vs chord4 | LOST | unexplained sites |
-|---|---|---|---|---|
-| `chord4` — **the shipped reading** | 1580 / 1760 | — | — | 1928 |
-| `chord8` — just a longer chord | 1596 | +58 | −34 | −363 |
-| `ls8` — least squares over ±8 | 1635 | +72 | −9 | −570 |
-| `ls12` | 1605 | +87 | −16 | −342 |
-| evidence-bounded, ε 0.5 | 1551 | +8 | −37 | −487 |
-| evidence-bounded, ε 1.0 — as a REPLACEMENT | 1652 | +85 | **−13** | −404 |
-| evidence-bounded, ε 1.0 — as a PROMOTION | 1665 | **+85** | **0** | **−220** |
-
-Three findings, none of them the obvious first guess:
-
-- **A longer chord is not the answer.** `chord8` gains 58 corners and drops 34 — the ±4
-  window's problem is quantization noise, and lengthening the chord only trades one phase
-  lottery for another. §21.2's non-monotonic window table said so; this prices it.
-- **The evidence bound has to be the FIT's ε.** At 0.5 the staircase itself never looks
-  straight, no window ever grows, and the reading collapses back onto the chord (+8/−37).
-  0.9, 1.0, 1.25 and 1.5 all gain 80–88.
-- **Promotion beats replacement on BOTH axes.** As a replacement the evidence reading is
-  the better estimator but not a superset — it drops 13 corners the chord finds today.
-  Taken as `max(chord, evidence)` it gains the same 85 and drops none, and *still*
-  non-max-suppresses to 220 FEWER unexplained sites than the chord alone, because the
-  promoted field is smoother and adjacent chord peaks collapse into one. A one-sided rule
-  that is also strictly quieter is not the usual trade, and it is why this could ship as
-  `min(cos)` rather than as a new estimator.
-
-### 22.2 Four guards, each measured IN
-
-The reading as stated still fails, in four different ways. Every guard below exists because
-the sweep caught it, and every one keeps a knob so the failure stays re-measurable.
-
-**Non-max suppression, before the promotion is applied** (`cornerEvidenceSuppress`). Both
-cluster readers emit ONE apex per RUN of sub-threshold vertices, so a promotion painted
-across a whole run FUSES neighbouring corners. That is how it was found — the first draft
-cost `gear-teeth` 53 → **50** of 60 by welding each tooth's tip and root into one cluster,
-the two-scale trade §10.6 rejected arriving by the back door — and it is still what the
-sweep measures with everything else in place: un-suppressed reads `corner-turns` 169 →
-**162** of 172, *below* the chord reading's own 164, and `sharp-star` 11 → **10**.
-
-**No promotion beside a corner the chord already found.** The cluster readers fuse apexes
-within `CORNER_MERGE` px and keep the FIRST, and the loop reader picks a cluster's apex by
-max perp-to-chord — so a promotion landing next to an existing corner can displace or
-swallow it, and the rule stops being one-sided exactly where it matters. Measured on
-`logo-ibm`, whose 70° stripe chevrons sit ~5px apart: unguarded, §22 took it 122 → **118**
-of 127 recovered corners *while improving its boundary error*, which is the all-gates-green
-class §10.4 named. Guarded, ibm returns to 122/127 with the boundary gain intact.
-
-**The reach gate, and what it actually says** (`cornerEvidenceReachDeg`). Only a candidate
-the chord already reads within 25° of the bar is re-read. Ungated the reading gains 7 more
-corners on the raw census and costs `gear-teeth` 57 → **52**: promotions on gently-bending
-flanks, where the boundary is locally straight and only turns over a long span, reshape the
-clusters its teeth are read from. So the gate is not a work bound dressed up as a rule — it
-is the statement that **a corner is local sharpness CONFIRMED by arm evidence, never arm
-evidence alone**. (It is a work bound too: ungated the reading costs +47% trace time on
-`corner-turns` and +11% on `checker`; at 25° the same traces measure 0–13%.)
-
-**The co-circular veto.** Two straight arms always "explain" a small enough circle: over a
-span long enough to average the staircase away, a 6px-radius disc turns more than 60°. The
-fixture's own smooth controls caught it — @256 its 12px and 18px discs picked up **6 and 8**
-sharp corners each. So before a promotion may create a corner, the same samples are offered
-to a single circle (`circleMaxDev`, §14's own machinery); if one explains them to the
-tolerance the two lines just met, this is a curve and the promotion is refused. A real
-corner cannot be fitted that way — a circle through a V deviates by most of an arm length.
-The veto costs 5 corners across the gallery census and buys the documented promise back.
-
-**Rejected, measured: an arm GAP.** §10.6's `SNAP_GAP` idea — skip the rounded samples
-nearest the tip — applied to the reading. It is the one thing that recovers §21's named
-witness. It was built and rejected on price: gap 1 buys 6 more authored corners for **+203**
-unexplained sites and gap 2 buys 7 for **+929**, against the shipped reading's **−220** —
-an order of magnitude of spurious sharpness per corner gained, because reading the outer
-arms across a rounded neighbourhood is precisely how a curve becomes a corner. On the
-end-to-end sweep it also costs `gear-teeth` one of the four corners the reading buys, for
-no gain on the rack.
-
-**So the named witness is NOT recovered, and that is the honest outcome.**
-`affinity-designer.svg`'s Λ apex is authored at *exactly* 60.0° — one bar-width of headroom
-in a reading whose residual noise on a staircase is about a degree. Its ±4 chord reads
-36.9–45.0° across the neighbourhood; the evidence reading lifts that to 56.0–**59.2°**. The
-mechanism is confirmed to within a degree and the corner still does not clear the bar, so
-the mark is byte-identical before and after. A corner authored ON the bar is a coin flip by
-construction: the fixture's own first draft used a 60.0° rung and only 3 of its 5 apexes
-were even GRADED, because `sharpCorners`' `≤ cos(60°)` test is a floating-point knife edge
-there too. The rack's lowest rung is 61° for that reason.
-
-### 22.3 The fixture, and what it gates
-
-`corner-turns` (tier 0, verified reproducing before the gate was written): 56 circular
-sectors sweeping AUTHORED TURN across the cliff — 61 / 65 / 69 / 73 / 77 / 81 / 100°, eight
-bisector rotations per rung, each cell at its own quarter-unit AA phase because §10.6/§10.7
-measured corner survival at this scale to be a phase lottery. A sector is chosen so exactly
-ONE corner per cell carries the swept angle — the apex — while the two arm ends, where a
-straight radius meets the closing arc, turn **exactly 90° in every cell whatever the rung**.
-Those 112 arm-end corners are the in-case control, sitting in the band that already recovers
-at 96.3%, and they are what stops "lower `cornerTurnDeg`" from passing the case: dropping
-the bar mints corners the scorer does not count and shatters the easy ones, which shows up
-there and not in the apex ladder. Four plain discs of radius 8/12/18/26 px @512 along the
-bottom row gate the false-positive side.
-
-`test/planar-turn.test.ts` is the mechanism gate, red-before-green in the same run via
-`planarFit: { cornerTurnEvidence: false }`, and it asserts a LADDER rather than a score —
-a total could be the same phase lottery redistributed:
-
-    reading OFF:  61° 3/8   65° 7/8   69° 7/8   73 / 77 / 81 / 100° 8/8 each
-    reading ON :  61° 6/8   65° 8/8   69° 8/8   73 / 77 / 81 / 100° 8/8 each
-    arm-end 90° control 111/112 either way · nodes 392 → 392 · discs 0 corners either way
-
-`RESIDUAL_RUNG` records the two 61° phases the reading still cannot clear, so a later
-reading that reaches further has to delete that line deliberately rather than quietly
-weakening the ladder. The rack behaves the same way off its calibration resolution — at
-@256 61° goes 3→5 and 65° 6→8, at @1024 61° goes 2→4 and 69° 5→8 — and at all three the
-smooth discs stay clean and no site recovered before is lost after.
-
-### 22.4 What it measures, on both sides
-
-**The corner watchlist** (`turnDiag --sweep`, @512, corners recovered and chamfer/nodes).
-Everything except the target and `gear-teeth` is byte-identical:
-
-| case | before | after |
-|---|---|---|
-| `corner-turns` | 164/172 · 0.2128 / 392 | **169/172** · 0.2086 / 392 |
-| `gear-teeth` | 53/60 · 0.1345 / 126 | **57/60** · **0.1249** / 128 |
-| `sharp-star` | 11/11 · 0.1389 / 24 | 11/11 · 0.1389 / 24 |
-| `bar-caps` | 43/43 · 0.1685 / 100 | 43/43 · 0.1685 / 100 |
-| `cross-bars` | 10/10 · 0.3011 / 32 | 10/10 · 0.3011 / 32 |
-| `band-cross` | 25/25 · 0.0863 / 76 | 25/25 · 0.0863 / 76 |
-| `checker` | 3556/3588 · 0.0001 / 7104 | 3556/3588 · 0.0001 / 7104 |
-| `letter-joins` | 29/31 · 0.0862 / 118 | 29/31 · 0.0862 / 118 |
-| `acute-counter` | 13/13 · 0.2763 / 104 | 13/13 · 0.2763 / 104 |
-| `peak-drop` | 148/148 · 0.0581 / 436 | 148/148 · 0.0581 / 436 |
-| `seam-corner` | 40/40 · 0.2143 / 108 | 40/40 · 0.2143 / 108 |
-| `wedge-counter` | 17/18 · 0.1566 / 92 | 17/18 · 0.1566 / 92 |
-| `acute-counter` @256 p95 | 2.130 | 2.130 |
-
-`gear-teeth`'s **53 → 57/60** is the standing defect §21.3 predicted would fall to this: its
-roots are authored at 67.3°, squarely inside the cliff. The 6-case golden corpus is
-byte-identical.
-
-**The corpus census** — `needleDiag --turns`, the same instrument and the same 2,934 visible
-authored corners over 128 marks as §21.3:
+What that measured, over the same 2,934 visible authored corners on 128 gallery marks §21.3
+used:
 
 | authored turn | n | before | after |
 |---|---|---|---|
-| 60–65 | 78 | 43 (55.1%) | **51 (65.4%)** |
-| 65–70 | 126 | 81 (64.3%) | **103 (81.7%)** |
-| 70–75 | 206 | 153 (74.3%) | **166 (80.6%)** |
-| 75–80 | 130 | 111 (85.4%) | **117 (90.0%)** |
-| 80–90 | 273 | 246 (90.1%) | **251 (91.9%)** |
-| 90–105 | 1615 | 1555 (96.3%) | 1556 (96.3%) |
-| 105–120 | 227 | 204 (89.9%) | 203 (89.4%) |
-| 120–150 | 210 | 182 (86.7%) | 182 (86.7%) |
-| 150–180 | 68 | 39 (57.4%) | 39 (57.4%) |
+| 60–65 | 78 | 43 (55.1%) | 51 (65.4%) |
+| 65–70 | 126 | 81 (64.3%) | 103 (81.7%) |
+| 70–75 | 206 | 153 (74.3%) | 166 (80.6%) |
+| 75–80 | 130 | 111 (85.4%) | 117 (90.0%) |
+| 80–90 | 273 | 246 (90.1%) | 251 (91.9%) |
+| 90–180 | 2120 | 1980 | 1980 |
 
-**+54 corners recovered, exactly one lost** (a single 105–120° corner). The 60–80° band held
-540 corners and lost 152; it now loses **103**. The cliff is not gone — it is half as steep,
-and what is left of it below 70° is the reading's residual noise against a bar the art is
-authored right on top of.
+**+54 corners recovered, exactly one lost.** `gear-teeth` **53 → 57/60** — the standing
+defect §21.3 predicted would fall to this. `logo-ibm` chamfer 0.2064 → **0.1978**, p95 0.640
+→ **0.588**, corners held at 122/127. `american-express` **+10** corners. Corner watchlist
+byte-identical except gear-teeth's gain; 6-case golden corpus byte-identical; suite green;
+the rack's own ladder climbed at all three resolutions with nothing lost. `turnDiag --effect`
+priced the corpus at Δcorners +54, summed Δchamfer −0.0369, corners gained on 24 marks and
+lost on 1.
 
-**The corpus effect** (`turnDiag --effect`, two passes: fingerprint every mark, score only
-the movers against authored geometry). This is a much wider blast radius than §20's, and it
-should be: the reading is on the geometry path every mark goes through, not on the flat
-palette path. **95 of 152 gallery marks change at all**, 82 of them svgGround-scorable (the
-13 unscorable movers are reported by name rather than silently dropped):
+### 22.2 What it looked like at 5×
 
-| mark | Δcorners | Δchamfer | Δnodes | after |
-|---|---|---|---|---|
-| american-express | **+10** | −0.0090 | +2 | 138/139 corners, chamfer 0.2410 |
-| chanel | +4 | −0.0185 | −2 | 39/39 |
-| powersync-wordmark | +4 | −0.0066 | +2 | 28/32 |
-| warner-bros | +4 | +0.0058 | −2 | 78/79 |
-| chupa-chups | +4 | +0.0120 | −10 | 60/62 |
-| ups / walmart / n8n / target / samsung-wm / siemens / ibm-wm / national-geographic / medium / ebay | +2 each | −0.0203 … +0.0017 | | |
-| … 9 more marks | +1 each | | | |
-| huawei | **−1** | −0.0001 | 0 | 46/48 |
+Kinks. On `chupa-chups`' brown ellipse, on `logo-instagram`'s lower ring, on the
+`logo-mastercard` wordmark's `m`. Counted after the fact — traced sharp corners with **no
+authored corner within 2.5px**:
 
-**Totals: Δcorners +54, summed Δchamfer −0.0369, Δnodes +38 — corners gained on 24 marks
-and lost on ONE, chamfer better on 46 and worse on 36.** The worst chamfer regressions are
-named rather than averaged away: `yelp` +0.0364, `line` +0.0273, `kickstarter` +0.0206,
-`dreamweaver` +0.0181, `playboy` +0.0161 — all in the third decimal of a pixel and none of
-them loses a corner. The largest gains are `brave-browser` −0.0264, `paypal-wm` −0.0230,
-`ups` −0.0203, `chanel` −0.0185.
+| mark | traced sharp corners | unexplained NEW corners | furthest from any authored corner |
+|---|---|---|---|
+| chupa-chups | 216 → 240 | **9 sites** | 25.5px |
+| logo-instagram | 196 → 206 | **7 sites** | 46.1px |
+| logo-mastercard | 172 → 176 | **2 sites** | 13.8px |
 
-Named marks the previous sections were reported on, @512 flat:
+Their read turns are 62–109°, i.e. they are not marginal: the reading is confidently
+asserting a corner in the middle of a smooth arc.
 
-| mark | before | after |
-|---|---|---|
-| `logo-ibm` (§20's witness) | chamfer 0.2064 · p95 0.640 · 122/127 · 380 nodes | **0.1978** · **0.588** · 122/127 · 382 |
-| `logo-chupa-chups` | 0.2002 · 56/62 · 510 nodes | 0.2123 · **60/62** · 500 |
-| `logo-mastercard` (§19) | 0.2680 · 49/49 | 0.2684 · 49/49 |
-| `logo-instagram` (§18) | 0.4010 · 9/9 | 0.4024 · 9/9 |
-| `logo-firefox` | 4.2086 · 25/33 | 4.2085 · 25/33 |
-| `logo-affinity-designer` (#23's witness) | — | byte-identical |
+### 22.3 Why nothing in the gate set could see it — the part to keep
 
-A/B pair `before-turnread` ⇄ `after-turnread`: **14 of 76 shared variant files move**
-(`flute-flat`, `gradient-flat`, `logo-android`, `logo-coca-cola`, `logo-firefox`,
-`logo-ibm`, `logo-instagram`, `logo-mastercard`). Unlike §20 the GRADIENT lanes move too,
-because the reading is upstream of the flat/gradient split. Suite 385 → **389** tests (387
-pass / 2 skip): +4 in `test/planar-turn.test.ts`, +2 truth lanes for `corner-turns`.
+Three independent blind spots, all of which had to line up:
 
-**Residue, named.**
-- **A corner authored ON the 60° bar is still a coin flip**, and the issue's own named
-  witness is one — 59.2° read against a 60.0° authored turn. The two unrecovered phases of
-  the rack's 61° rung are the gated version of the same limit (`RESIDUAL_RUNG`). Closing it
-  needs either an arm gap priced better than §22.2 measured, or a detector bar that is not
-  the scorer's bar.
-- **The reading is one-sided at the DETECTOR, not end to end.** Clustering, apex selection,
-  the cap resolver and the fit can all still shuffle downstream: @512 and @256 the rack
-  loses nothing, and the gallery loses one corner (`huawei`), but this is a strong tendency
-  rather than a theorem and the gate asserts it only at @512.
-- **`resolveLoopCaps` now reads the promoted turn**, because it must (a corner outside its
-  `sharp` runs is dropped). Its §10.7 calibration — chord/flatness/through-turn — was NOT
-  re-derived; `bar-caps` 43/43 and its chamfer are byte-identical, which is evidence that
-  the groups did not move on the case it was calibrated on, not proof that they cannot.
-- **The 150–180° tail is untouched** (57.4% both ways). That band is near-reversals —
-  §18/§19's territory — and nothing here addresses it.
+1. **`cornersRecovered` has no precision term.** It counts AUTHORED corners recovered.
+   Minting corners is therefore free by that metric, and occasionally scores as a *gain* —
+   a minted kink within `CORNER_MATCH_R` of an authored corner counts as recovering it.
+   "+54 corners" was one half of a two-sided quantity reported as if it were the whole.
+2. **Chamfer and p95 are nearly blind to a C⁰ kink.** A kink displaces the boundary by a
+   couple of tenths of a pixel over a short arc; the corpus percentiles drown it. It was not
+   even silent — `chupa-chups` moved +0.0120 chamfer and +0.75 missedMax while gaining 4
+   corners, and that was written up as a trade. It was the signal.
+3. **The guard and its control shared an assumption.** The co-circular veto fits a CIRCLE,
+   and the fixture control it was calibrated against is four DISCS. A control chosen to
+   match the guard can only ever confirm the guard. Real smooth boundary is ellipses and
+   curvature-varying blends — `chupa-chups`' ellipse, `instagram`'s rounded-square corner
+   blends — and there the veto never fires at all. The @256 disc control DID catch the
+   unvetoed reading (6 and 8 corners on two discs), which made the guard look validated.
+
+The first two are corpus holes, not bugs in this change: **the corpus has no PRECISION lens
+at all.** It can say a corner was lost. It cannot say a corner was invented. That is the
+same shape as §20.3's finding that `scoreRegions` is colour-keyed, and it is why a
+human A/B review is still the last gate — this is the fourth defect in this file
+(§10.3's paint drift, §10.4's line-into-circle, §15.8's crown, now this) that shipped green
+and was caught by eye.
+
+### 22.4 What survives
+
+- **`corner-turns`** (tier 0, in the truth corpus at @512 and @256): 56 circular sectors
+  sweeping AUTHORED turn 61 / 65 / 69 / 73 / 77 / 81 / 100° over eight bisector rotations
+  and four AA phases, whose arm ends turn exactly 90° in every cell as an in-case control,
+  plus four smooth discs. It reproduces the defect §21 measured on a committed case for the
+  first time (164/172 recovered, all eight misses at 61–69°), and it stands on its own as a
+  corner-recall case. **Its smooth control is now known to be insufficient** — see 22.5.
+- **`src/devtest/turnDiag.ts`**: the reader census. It evaluates any candidate turn reading
+  at every authored corner it can locate on the lattice, without touching the tracer, and
+  it is what priced chord-vs-least-squares-vs-evidence-bounded, replacement-vs-promotion,
+  and the arm gap. `--at X,Y` is the single-site autopsy.
+- **The measurement that the mechanism is real**, and that a reading CAN recover it: the
+  cliff flattens by 54 corners. Nothing about §21's diagnosis is retracted.
+- The reading itself, behind `cornerTurnEvidence` (default **false**), with its knobs, so
+  the rejection stays re-measurable — the `refineJunctions` precedent (§9.3).
+
+### 22.5 What a second attempt needs FIRST
+
+Not another guard. A **precision lens**, and it does not exist today:
+
+> a gate that fails when smooth AUTHORED boundary gains a C⁰ kink.
+
+Concretely, the ingredients are already here: `sharpCorners` on the traced doc gives every
+C⁰ kink the trace asserts; `svgGround` gives the authored geometry; the join is "a traced
+sharp corner more than `CORNER_MATCH_R` from any authored corner, on a stretch of authored
+boundary that is smooth there". That number — **invented corners per mark** — is what
+`cornersRecovered` should always have been paired with, and it would have failed this change
+on the first run. It is worth building whether or not #23 is ever attempted again, because
+it guards every future corner change, and because the three marks above are ordinary art,
+not edge cases.
+
+Only after that: the actual open question this attempt could not answer — how to separate
+"this boundary CORNERS here" from "this boundary CURVES tightly here" when both are read
+from the same short, staircase-quantized window. The circle veto was one answer and it was
+too narrow. A curvature-continuity test over the union window is the obvious next candidate,
+and it should be calibrated on ELLIPSES and blends, not on discs.

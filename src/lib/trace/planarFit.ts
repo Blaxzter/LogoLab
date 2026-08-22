@@ -35,7 +35,10 @@ export interface PlanarFitOptions {
    */
   cornerTurnDeg: number
   /**
-   * §22 / issue #23 (default true). How the macro turn at a candidate vertex is READ.
+   * §22 / issue #23 — **BUILT, MEASURED AND REJECTED (default false).** Keep reading: the
+   * numbers below are all real, and they are exactly why this shipped and had to be pulled.
+   *
+   * How the macro turn at a candidate vertex is READ.
    * The shipped reading is the angle between two CHORDS taken +/-`CORNER_WINDOW` POINTS
    * along the chain; on the integer lattice each chord endpoint carries up to half a
    * pixel of quantization, which is ~7 deg of direction error over a 4px chord — and on a
@@ -48,7 +51,27 @@ export interface PlanarFitOptions {
    * within `cornerEvidenceEps` — and the SHARPER of the two readings wins. One-sided by
    * construction (§17's ARM_BOW shape): it can only promote a vertex to corner, never
    * demote one, so every corner the shipped reading finds is still found. `false`
-   * restores the chords-only reading byte-identically.
+   * restores the chords-only reading byte-identically — and that is the shipped path.
+   *
+   * WHY IT IS OFF. On the metrics it was a clean win: +54 authored corners recovered
+   * across 128 gallery marks with one lost, `gear-teeth` 53 → 57/60, `logo-ibm` chamfer
+   * 0.2064 → 0.1978. On the /labs/ab review it put a visible KINK in smooth boundary all
+   * over the corpus — chupa-chups' brown ellipse, instagram's lower ring, the mastercard
+   * wordmark's `m`. Counted afterwards: 9 traced sharp corners on chupa-chups with no
+   * authored corner within 2.5px (the furthest 25.5px away), 7 on instagram (one 46px
+   * away), 2 on mastercard.
+   *
+   * NOTHING IN THE GATE SET COULD SEE IT, and that is the lesson worth keeping:
+   * `cornersRecovered` counts authored corners RECOVERED and has no precision term, so
+   * minting corners is free by it (and sometimes scores as a gain); chamfer/p95 barely
+   * move for a C⁰ kink on a short arc — chupa-chups' +0.0120 was the whole signal, and it
+   * was read as a trade. The co-circular veto that was supposed to stop this fits a
+   * CIRCLE, and the fixture control it was calibrated against is four DISCS: guard and
+   * control shared an assumption, so the control could only ever confirm the guard. Real
+   * smooth boundary is ellipses and curvature-varying blends, where the veto never fires.
+   *
+   * Do not re-enable this without a PRECISION lens first — a gate that fails when smooth
+   * authored boundary gains a C⁰ kink. §22.5 states what it has to measure.
    */
   cornerTurnEvidence?: boolean
   /** EXPERIMENT KNOBS for the §22 sweep (src/devtest/turnDiag.ts --sweep) — default to
@@ -259,7 +282,9 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   cornerJunctions: true,
   subpixelEdges: true,
   arcArms: true,
-  cornerTurnEvidence: true,
+  // OFF: built, measured, and REJECTED on visual review — see the option's doc above
+  // and docs/vectorization-benchmarks.md §22.
+  cornerTurnEvidence: false,
 }
 
 /** Flat-art line cost: > cubicCost so the DP prefers a CUBIC on any span where a
