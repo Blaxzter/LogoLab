@@ -837,6 +837,91 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       return svg(`<rect width="${V}" height="${V}" fill="${WHITE}"/>` + cells.join('') + discs.join(''))
     },
   },
+  {
+    // §23's fixture: art with NO CORNERS AT ALL, so any sharp corner the trace asserts on it
+    // is invented by construction and the precision gate reads as a plain count.
+    //
+    // WHY IT HAS TO EXIST, and why the existing corpus could not do this job. §22 shipped a
+    // corner-detection change that was green on every gate here and put a visible C⁰ KINK in
+    // smooth boundary across ordinary art. Two of the three reasons were metric holes (§22.3)
+    // and are fixed by `geomScore.inventedCorners`. The third was a FIXTURE hole: the smooth
+    // control that change was calibrated against is four plain DISCS, and a disc cannot
+    // exhibit the failure. Measured on the marks that reported it, the sites a bad reading
+    // kinks are where the AUTHORED art turns 12–45° per ±1px — a 1–5px radius — and they sit
+    // on ELLIPSE ends and on the straight→arc BLEND of a rounded corner, where curvature
+    // changes fast but is never discontinuous. A circle has neither property: constant
+    // curvature, no blend. So this rack is built entirely out of the two anatomies a disc
+    // lacks:
+    //   • ELLIPSES at aspect 1:1 → 1:8. The end of a 1:8 ellipse has a ~2.5px radius of
+    //     curvature at 512 while its flank is nearly straight — the whole curvature range in
+    //     one closed path, with no corner anywhere on it.
+    //   • ROUNDED RECTANGLES with corner radii 2 / 3 / 5 / 8 / 12 px @512. Each corner is a
+    //     G¹ blend from a dead-straight edge into a tight arc and out again. The 2px radius
+    //     is deliberately at the raster's own limit: it is the case where "corner or curve"
+    //     is genuinely hard, and where the answer is still CURVE.
+    //   • A curvature RAMP (an egg/teardrop) whose radius sweeps continuously, so the rack
+    //     is not only testing discrete radii.
+    // Two colours and quarter-unit phase offsets, for the same AA-lottery reason as
+    // `peak-drop` and `corner-turns`.
+    //
+    // Read it with `kinkDiag --gate` / the `cornersInvented` term of the truth gate. The bar
+    // is ZERO: there is nothing here for a corner to be recovered FROM.
+    name: 'smooth-radii',
+    note: 'art with no corners at all — ellipse ends and straight→arc blends (#23 precision)',
+    make: () => {
+      const f3 = (v: number): string => v.toFixed(3)
+      /** Rounded rectangle as an explicit path: straight edges joined by quarter-arcs, so
+       *  the ground truth carries the blend rather than a renderer-side `rx`. */
+      const rrect = (x: number, y: number, w: number, h: number, r: number, fill: string): string => {
+        const d =
+          `M ${f3(x + r)},${f3(y)} H ${f3(x + w - r)} A ${f3(r)},${f3(r)} 0 0 1 ${f3(x + w)},${f3(y + r)}` +
+          ` V ${f3(y + h - r)} A ${f3(r)},${f3(r)} 0 0 1 ${f3(x + w - r)},${f3(y + h)}` +
+          ` H ${f3(x + r)} A ${f3(r)},${f3(r)} 0 0 1 ${f3(x)},${f3(y + h - r)}` +
+          ` V ${f3(y + r)} A ${f3(r)},${f3(r)} 0 0 1 ${f3(x + r)},${f3(y)} Z`
+        return `<path d="${d}" fill="${fill}"/>`
+      }
+      /** Egg: FOUR quarter-ellipse arcs, the upper pair with semi-minor `top` and the lower
+       *  pair with `bot`. The joins are at the extremes — vertical tangent at (cx±rx, cy),
+       *  horizontal at (cx, cy∓top/bot) — so every one of them is G¹ and the outline has no
+       *  corner anywhere, while the radius of curvature sweeps continuously from the sharp
+       *  end to the blunt one. A constant-curvature disc cannot provide that, and the
+       *  two-arc version tried first is a LENS with a cusp at each end — exactly the corner
+       *  this fixture must not contain. */
+      const egg = (cx: number, cy: number, rx: number, top: number, bot: number, fill: string): string =>
+        `<path d="M ${f3(cx)},${f3(cy - top)}` +
+        ` A ${f3(rx)},${f3(top)} 0 0 1 ${f3(cx + rx)},${f3(cy)}` +
+        ` A ${f3(rx)},${f3(bot)} 0 0 1 ${f3(cx)},${f3(cy + bot)}` +
+        ` A ${f3(rx)},${f3(bot)} 0 0 1 ${f3(cx - rx)},${f3(cy)}` +
+        ` A ${f3(rx)},${f3(top)} 0 0 1 ${f3(cx)},${f3(cy - top)} Z" fill="${fill}"/>`
+
+      const body: string[] = []
+      // Row 1–2: ellipses, aspect 1:1 through 1:8, two sizes, both colours.
+      const ASPECT = [1, 1.6, 2.5, 4, 6, 8]
+      ASPECT.forEach((a, i) => {
+        const rx = 20
+        const ry = 20 / a
+        const cx = 24 + i * 40 + (i % 4) / 4
+        body.push(`<ellipse cx="${f3(cx)}" cy="${f3(28 + (i % 3) / 4)}" rx="${rx}" ry="${f3(ry)}" fill="${i % 2 ? INK : RED}"/>`)
+        // …and the same aspect ratios rotated a quarter turn, so the tight end is scanned
+        // along the other lattice axis (the under-read §21 measured is orientation-dependent,
+        // and so is anything that replaces it).
+        body.push(`<ellipse cx="${f3(24 + i * 40 + (i % 3) / 4)}" cy="${f3(76 + (i % 4) / 4)}" rx="${f3(ry)}" ry="${rx}" fill="${i % 2 ? RED : INK}"/>`)
+      })
+      // Row 3–4: rounded rectangles, corner radius 1 → 6 units (2 → 12 px @512).
+      const RADII = [1, 1.5, 2.5, 4, 6]
+      RADII.forEach((r, i) => {
+        body.push(rrect(14 + i * 48 + (i % 4) / 4, 122, 38, 30, r, i % 2 ? INK : RED))
+        // A NARROW one too: 12 units tall, so the two corner blends nearly meet and the
+        // straight run between them is only a few px — the regime where a reading that
+        // reaches too far starts seeing one feature instead of two.
+        body.push(rrect(14 + i * 48 + (i % 3) / 4, 164, 38, 12, Math.min(r, 5.5), i % 2 ? RED : INK))
+      })
+      // Row 5: curvature ramps.
+      for (let i = 0; i < 5; i++)
+        body.push(egg(28 + i * 48 + (i % 4) / 4, 214, 16 - i * 1.5, 26 - i * 2, 12 + i * 2, i % 2 ? INK : RED))
+      return svg(`<rect width="${V}" height="${V}" fill="${WHITE}"/>` + body.join(''))
+    },
+  },
 ]
 
 // --- emit -------------------------------------------------------------------

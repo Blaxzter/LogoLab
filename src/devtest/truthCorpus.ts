@@ -173,6 +173,19 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // gallery, and puts a visible KINK in smooth boundary everywhere. The rack stays in the
   // corpus on its own merits — an authored-turn sweep is a good corner-recall case at any
   // resolution, and it is the only GATED witness for the residue in §0 #15.
+  // §23's precision fixture: art with NO CORNERS AT ALL, so every sharp corner the trace
+  // asserts on it is invented by construction and `cornersInvented` reads as a plain count.
+  // It exists because the corpus could not gate §22's defect: the smooth control that change
+  // was calibrated against is four plain DISCS, and a disc cannot exhibit it. The sites a bad
+  // corner reading kinks are ELLIPSE ENDS and straight→arc BLENDS — where the art turns
+  // 12–45° per ±1px but never discontinuously — so the rack is built from exactly those:
+  // ellipses at aspect 1:1 → 1:8 in both orientations, rounded rectangles with 2 / 3 / 5 / 8 /
+  // 12 px corner radii (and narrow twins whose two blends nearly meet), and curvature-ramp
+  // eggs. Measured at authoring: the shipped tracer invents 11 corners here and the rejected
+  // §22 reading invents 18, so the case has teeth in both directions. genEdgeCases.ts
+  // documents the rack.
+  { name: 'smooth-radii', svg: 'public/examples/edge-cases/smooth-radii.svg', note: 'no authored corners at all — the corner-precision gate (#23)', gradients: false, tier: 0 },
+
   { name: 'corner-turns', svg: 'public/examples/edge-cases/corner-turns.svg', note: 'authored-turn sweep across the corner detector’s bar (#23)', gradients: false, tier: 0 },
 
   // --- authored art we already own ----------------------------------------------------
@@ -391,6 +404,9 @@ const LOWRES_TIER2 = [
  */
 const LOWRES_TIER0_UNSCORABLE = ['peak-drop']
 
+/** Cases whose §23 per-case allowance applies (see INVENTED_ALLOWED). */
+export const inventedMaxFor = (name: string): number | undefined => INVENTED_ALLOWED[name]
+
 export const LOWRES_CORPUS: TruthCase[] = [
   ...TRUTH_CORPUS.filter((c) => c.tier === 0 && !LOWRES_TIER0_UNSCORABLE.includes(c.name)),
   ...TRUTH_CORPUS.filter((c) => LOWRES_TIER2.includes(c.name)),
@@ -484,6 +500,45 @@ export interface TruthGate {
  */
 const CORNER_MIN_COUNT = 10
 const CORNER_RECALL_MIN = 0.8
+/**
+ * §23 — the PRECISION half of corner scoring. `cornersRecovered` is a recall number with no
+ * precision term, so INVENTING a corner is free by it; §22 is the worked example of a change
+ * that was green on every gate here and put a visible C⁰ kink in smooth boundary across
+ * ordinary art. `geomScore.inventedCorners` counts sharp corners the trace asserts that the
+ * art does not have, after exempting the four places a trace is RIGHT to corner (the canvas
+ * border, occluded boundary, traced junctions, authored crossings).
+ *
+ * ZERO TOLERANCE, like the region gate, and for the same reason: a corner the art does not
+ * contain is a bug, not a budget. Measured over the gated tier-0 corpus on the shipped
+ * tracer, p50 and p90 are both 0 and only three cases are non-zero at all — they are listed
+ * in KNOWN_DEFECTS with their counts, so CI breaks both when a new case invents one and when
+ * a listed one stops.
+ */
+const INVENTED_MAX = 0
+
+/**
+ * Cases that already invent corners on the SHIPPED tracer, with the count measured at
+ * authoring. This is a per-case allowance rather than a KNOWN_DEFECTS entry on purpose:
+ * KNOWN_DEFECTS is keyed by CASE, so listing these three would switch off every OTHER gate
+ * on them — and `peak-drop` was made green by §20 the week before, `hairlines` carries the
+ * thin-feature gates, and `smooth-radii` is the fixture this metric exists for. The header
+ * of test/truth-gate.test.ts is right that a recorded NUMBER is worse than a recorded
+ * boolean; the alternative here is worse still, so the numbers are named, explained, and
+ * can only come down. Each is a live entry in §0's defect list, not an accepted state.
+ */
+const INVENTED_ALLOWED: Record<string, number> = {
+  // The rack's own control: the shallow ~1.8° AA seam it draws to exercise the despeckle
+  // floor's false-positive side. The trace facets that staircase into two hard nodes.
+  'peak-drop': 2,
+  // Sub-pixel bars — the cap corners of a 0.5–6px stroke, where the raster genuinely cannot
+  // resolve the round end. Already the corpus's hardest thin-feature case.
+  hairlines: 4,
+  // The precision fixture itself, and the number that makes §0's new row real: on art with
+  // NO authored corners at all, the shipped tracer asserts 12 of them — the 1:8 ellipse
+  // ends and the 2px-radius rounded corners. This is the defect the metric was built to
+  // see, measured on a case authored to hold still while it is fixed.
+  'smooth-radii': 12,
+}
 
 /**
  * Paint-fidelity gate calibration (GRADIENT tier 0 only): the traced doc is RENDERED
@@ -560,6 +615,11 @@ export function evaluateTruthGates(s: {
    *  ⇒ the corner gate reports n/a (a caller that has not measured them). */
   gtCorners?: number
   cornersRecovered?: number
+  /** Sharp corners the trace asserts that the art does not have (geomScore.cornersInvented).
+   *  Omitted ⇒ the precision gate reports n/a. */
+  cornersInvented?: number
+  /** Per-case allowance for the above — see INVENTED_ALLOWED. */
+  inventedMax?: number
   /** Render-vs-source mean / p95 CIE76 ΔE (scoreboard.scoreDoc: meanDeltaE / p95DeltaE).
    *  Omitted ⇒ the paint gates report n/a (a caller that has not rendered the trace).
    *  Only consulted on GRADIENT tier-0 cases — see PAINT_MEAN_MAX. */
@@ -632,6 +692,28 @@ export function evaluateTruthGates(s: {
       headroom:
         !(s.flatArt && s.worstInk !== undefined) ? 1 : (s.worstInk - INK_MIN) / (1 - INK_MIN),
       digits: 2,
+    },
+    {
+      // §23, the PRECISION half of the corner question, and the gate that would have caught
+      // §22 before it reached a review. Recall says a corner was LOST; nothing said one was
+      // INVENTED, so a change that kinked smooth boundary all over the corpus scored as a
+      // clean win (+54 recovered corners) while chamfer moved in the third decimal. Zero
+      // tolerance: a corner the art does not contain is a bug, not a budget.
+      key: 'invented',
+      label: 'corners invented',
+      rule: `≤ ${s.inventedMax ?? INVENTED_MAX}`,
+      value: s.cornersInvented ?? 0,
+      limit: s.inventedMax ?? INVENTED_MAX,
+      // FLAT art only, the same scoping the region and ink gates use. On gradient art the
+      // trace's regions are posterization bands whose corners are a property of the banding,
+      // not of the authored outline, and the junction exemption does not fully model them —
+      // measured, five tier-1 cases report 1–3. Gating that for the first time here would
+      // misattribute a banding question to a corner-precision one; it is named in §23.3
+      // instead.
+      applicable: s.flatArt && s.cornersInvented !== undefined,
+      pass: !(s.flatArt && s.cornersInvented !== undefined) || s.cornersInvented <= (s.inventedMax ?? INVENTED_MAX),
+      headroom: !(s.flatArt && s.cornersInvented !== undefined) || s.cornersInvented <= (s.inventedMax ?? INVENTED_MAX) ? 1 : -1,
+      digits: 0,
     },
     {
       // Zero-distance defect: the tracer keeps every region and every boundary within

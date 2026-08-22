@@ -312,6 +312,13 @@ export interface GeomScore {
    *  cornersRecovered < gtCorners is exactly that defect (docs/vectorization-benchmarks.md
    *  §0 #7). Only meaningful when gtCorners is large enough — see evaluateTruthGates. */
   cornersRecovered: number
+  /** Sharp corners the trace asserts that the authored art does not have — the PRECISION
+   *  half of corner scoring, which this corpus was blind to until §23. `cornersRecovered`
+   *  alone made INVENTING a corner free, and §22 shipped green because of it. */
+  cornersInvented: number
+  /** The worst invented corner's excess turn, deg over the authored boundary's own turn
+   *  across ±KINK_WIN px. */
+  worstInventedExcess: number
 }
 
 /** Turn angle (rad) at/above which a boundary vertex is a "sharp corner". 60°: a circle's
@@ -721,6 +728,176 @@ export function makeVisibleAt(
  * not optional, because a scorer that silently falls back to counting occluded outline
  * would re-open §0 #1 the first time a caller forgot the argument.
  */
+// ---------------------------------------------------------------------------
+// PRECISION: corners the trace INVENTS (§23)
+//
+// `cornersRecovered` is a RECALL number and has no precision term at all, so inventing a
+// corner is free by it — and a corner invented within CORNER_MATCH_R of a real one even
+// scores as recovering that one. Chamfer and p95 are nearly blind to a C⁰ kink on a short
+// arc. §22 is the worked example: a change that put a visible kink in smooth boundary
+// across ordinary art was green on every gate in this corpus, because the corpus could say
+// a corner was LOST and never that one was INVENTED.
+//
+// The measurement, per traced sharp corner, is a like-for-like turn comparison at the
+// CORNER's own scale: how much does the trace kink here, minus how much does the AUTHORED
+// boundary turn across the same ±KINK_WIN px of arc length?
+//
+//     excess = (the traced node's C⁰ kink)  −  (authored turn over ±KINK_WIN px)
+//
+// A real corner gives excess ≈ 0 (both turn by the corner angle). A tight authored arc
+// gives excess ≈ 0 as well — and that case is why the window has to be SMALL. Measured on
+// the marks that reported §22 (instagram's glyph radii, chupa-chups' swirl), the sites a
+// bad reading kinks are NOT flat boundary: the art there turns 12–45° per ±1px, i.e. a
+// 1–5px radius. At ±5px such an arc has already turned 60–110°, so a wider window scores
+// the kink as legitimate and sees nothing at all. ±1px is the scale at which "corner or
+// curve" is actually a question.
+//
+// Four exemptions, each for boundary the trace is RIGHT to corner at:
+//   • the canvas BORDER (framing, not art — `collectBoundary` drops it for the same reason);
+//   • OCCLUDED authored boundary (the trace cannot reproduce what the raster does not show);
+//   • a traced JUNCTION, degree ≥ 3 — where three regions meet, the boundary genuinely
+//     corners even if each authored path through it is smooth (§14/§17's whole subject, and
+//     where every posterization band seam lands);
+//   • a CROSSING of two authored subpaths — a union's silhouette corners exactly there, and
+//     `sharpCorners` cannot see it on the authored side because it reads one subpath at a
+//     time.
+// A traced corner further than KINK_NEAR from any authored boundary is invented BOUNDARY,
+// which is `spuriousMax`'s job, and is not counted here.
+// ---------------------------------------------------------------------------
+/** Arc-length step the authored boundary is resampled at for the turn window. */
+const KINK_STEP = 0.5
+/** The window, in px of authored arc length, the authored turn is read over. */
+export const KINK_WIN = 1
+/** Excess turn (deg) at or above which a traced corner counts as INVENTED. */
+export const KINK_EXCESS = 40
+/** A traced corner further than this from authored boundary is `spuriousMax`'s business. */
+const KINK_NEAR = 2.0
+/** Two authored subpaths this close are crossing; the silhouette may corner there. */
+const KINK_CROSS = 1.6
+/** Distinct traced subpaths within this of a site; three or more is a junction. */
+const KINK_JUNCTION = 1.6
+
+interface TurnChain { pts: QueryPt[]; closed: boolean; shape: number }
+
+/** Uniform arc-length resample of one subpath, with per-sample tangents. */
+function turnChain(sp: SubPath, shape: number): TurnChain | null {
+  const poly = flattenSubPath(sp)
+  if (poly.length < 2) return null
+  const closed = sp.closed !== false
+  const pts = closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+    ? [...poly, poly[0]]
+    : poly
+  const out: QueryPt[] = []
+  resampleByArcLength(pts, KINK_STEP, out)
+  return out.length >= 3 ? { pts: out, closed, shape } : null
+}
+
+/** Turn of the chain's tangent across ±`win` px of arc length around sample `i`. */
+function chainTurn(ch: TurnChain, i: number, win: number): number {
+  const n = ch.pts.length
+  const k = Math.max(1, Math.round(win / KINK_STEP))
+  const idx = (j: number): number => (ch.closed ? ((j % n) + n) % n : Math.max(0, Math.min(n - 1, j)))
+  const a = ch.pts[idx(i - k)]
+  const b = ch.pts[idx(i + k)]
+  return (Math.acos(Math.max(-1, Math.min(1, a.tx * b.tx + a.ty * b.ty))) * 180) / Math.PI
+}
+
+export interface InventedCorner { x: number; y: number; excess: number }
+
+/**
+ * Sharp corners the trace asserts that the authored art does not have, and the worst one's
+ * excess turn. See the block comment above.
+ */
+export function inventedCorners(
+  gt: GroundShape[],
+  docSets: SubPath[][],
+  w: number,
+  h: number,
+  visible: (q: QueryPt) => boolean,
+): { count: number; worstExcess: number; sites: InventedCorner[] } {
+  const chains: TurnChain[] = []
+  gt.forEach((sh, si) => {
+    for (const sp of sh.subPaths) {
+      const c = turnChain(sp, si)
+      if (c) chains.push(c)
+    }
+  })
+  if (!chains.length) return { count: 0, worstExcess: 0, sites: [] }
+  const gtCorners = sharpCorners(gt.map((sh) => sh.subPaths), 0)
+  const docPolys = docSets.flat().map((sp) => flattenSubPath(sp))
+
+  // One physical corner is reported once per side of a shared edge; keep one of each.
+  const uniq: Corner[] = []
+  for (const c of sharpCorners(docSets.flat().map((sp) => [sp]), 0))
+    if (!uniq.some((u) => Math.hypot(u.x - c.x, u.y - c.y) <= 0.35)) uniq.push(c)
+
+  // A uniform bucket grid over the authored samples: without it this is
+  // (traced corners × authored samples) per case, which is ~10^6 distance tests on a mark
+  // like chupa-chups and OOMs a corpus sweep. Cell size is the query radius, so a 3×3
+  // neighbourhood is exact for every question asked below.
+  const CELL = Math.max(KINK_NEAR, KINK_CROSS) + 0.5
+  const grid = new Map<number, { ch: TurnChain; i: number }[]>()
+  const key = (gx: number, gy: number): number => gx * 100003 + gy
+  for (const ch of chains) {
+    for (let i = 0; i < ch.pts.length; i++) {
+      const k = key(Math.floor(ch.pts[i].x / CELL), Math.floor(ch.pts[i].y / CELL))
+      const bucket = grid.get(k)
+      if (bucket) bucket.push({ ch, i })
+      else grid.set(k, [{ ch, i }])
+    }
+  }
+
+  const sites: InventedCorner[] = []
+  for (const c of uniq) {
+    if (c.x < BORDER_EPS || c.y < BORDER_EPS || c.x > w - BORDER_EPS || c.y > h - BORDER_EPS) continue
+    let bch: TurnChain | null = null
+    let bi = -1
+    let bd = Infinity
+    const gx = Math.floor(c.x / CELL)
+    const gy = Math.floor(c.y / CELL)
+    const near: { ch: TurnChain; i: number; d: number }[] = []
+    for (let ox = -1; ox <= 1; ox++) {
+      for (let oy = -1; oy <= 1; oy++) {
+        const bucket = grid.get(key(gx + ox, gy + oy))
+        if (!bucket) continue
+        for (const e of bucket) {
+          const d = Math.hypot(e.ch.pts[e.i].x - c.x, e.ch.pts[e.i].y - c.y)
+          if (d <= CELL) near.push({ ...e, d })
+          if (d < bd) {
+            bd = d
+            bch = e.ch
+            bi = e.i
+          }
+        }
+      }
+    }
+    if (!bch || bd > KINK_NEAR) continue
+    // The nearest sample belonging to a DIFFERENT authored shape: two shapes this close are
+    // crossing, and a union's silhouette legitimately corners where they do.
+    let otherShape = Infinity
+    for (const e of near) if (e.ch.shape !== bch.shape && e.d < otherShape) otherShape = e.d
+    const s = bch.pts[bi]
+    if (!visible({ x: s.x, y: s.y, tx: s.tx, ty: s.ty })) continue
+    if (otherShape <= KINK_CROSS) continue
+    let degree = 0
+    for (const poly of docPolys) {
+      for (const q of poly) {
+        if (Math.hypot(q.x - c.x, q.y - c.y) <= KINK_JUNCTION) {
+          degree++
+          break
+        }
+      }
+    }
+    if (degree >= 3) continue
+    if (gtCorners.some((g) => Math.hypot(g.x - c.x, g.y - c.y) <= CORNER_MATCH_R)) continue
+    const kink = (Math.acos(Math.max(-1, Math.min(1, c.itx * c.otx + c.ity * c.oty))) * 180) / Math.PI
+    const excess = kink - chainTurn(bch, bi, KINK_WIN)
+    if (excess >= KINK_EXCESS) sites.push({ x: c.x, y: c.y, excess })
+  }
+  sites.sort((a, b) => b.excess - a.excess)
+  return { count: sites.length, worstExcess: sites.length ? sites[0].excess : 0, sites }
+}
+
 export function scoreGeometry(
   gt: GroundShape[],
   doc: EditableDoc,
@@ -750,6 +927,8 @@ export function scoreGeometry(
     (c) => visible({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || visible({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
   )
   const cornersRecovered = matchCorners(gtCornerVis, sharpCorners(docSets), CORNER_MATCH_R)
+  // …and the PRECISION half of the same question, blind in this corpus until §23.
+  const invented = inventedCorners(gt, docSets, w, h, visible)
 
   const gGrid = new SegGrid(G.segs)
   const dGrid = new SegGrid(D.segs)
@@ -785,6 +964,8 @@ export function scoreGeometry(
     docPaths,
     gtCorners: gtCornerVis.length,
     cornersRecovered,
+    cornersInvented: invented.count,
+    worstInventedExcess: invented.worstExcess,
     diagnostics: { gtPoints, docPoints },
   }
 }

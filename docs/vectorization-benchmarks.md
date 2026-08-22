@@ -32,6 +32,7 @@ guardrails):
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **A corner ABOVE the 60° bar is not detected — the turn is UNDER-READ on the lattice staircase.** Unchanged from §21; the fix §21.4 prescribed was built and **REJECTED on visual review** (§22), so this stays open. `detectCorners` reads the turn between two CHORDS taken ±4 POINTS on the RAW integer lattice; each endpoint carries half a pixel of quantization and on a steep diagonal the chord snaps to the staircase run's own direction, so the reading under-reads systematically. What §22 adds is the shape of the trap: reading the turn from FITTED ARM evidence instead DOES recover the corners (+54 across 128 marks, `gear-teeth` 53 → 57/60) and puts a visible **C⁰ KINK in smooth boundary** — 9 unexplained traced corners on `chupa-chups`' ellipse, 7 on `logo-instagram`, 2 on `logo-mastercard` — with EVERY gate green, because `cornersRecovered` has no precision term and chamfer barely moves for a kink. **Build §22.5's invented-corner lens before attempting this again** | `corner-turns` (tier 0, **gated**, 164/172 recovered — every miss at 61–69° of authored turn); `affinity-designer.svg` @512 flat (private corpus, ungated) | corpus census (`needleDiag --turns`, 2,934 visible authored corners / 128 marks): 90–105° **96.3%** → 80–90° 90.1% → 75–80° 85.4% → 70–75° 74.3% → 65–70° 64.3% → 60–65° **55.1%**; the 60–80° band holds 540 corners and loses **152**. Also `gear-teeth`'s standing 53/60 (roots authored 67.3°) | **§21**, **§22**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23); instruments `needleDiag --turns`, `turnDiag` (reader census). NOT by lowering `cornerTurnDeg` (§10.6 aligned it to the scorer's bar deliberately), and NOT by the evidence reading as §22 built it |
+| 16 | **The trace INVENTS corners on smooth art** — sharp nodes the authored geometry does not contain, on ellipse ends and straight→arc blends. Newly VISIBLE rather than newly introduced: `cornersRecovered` is a recall number with no precision term, so this was free by every gate here until §23 built `cornersInvented`. It is the measured form of “every nice radius has a kink in it”, and it is why §22 was rejected on sight after passing CI. The metric asks a like-for-like question at the corner's own scale — the traced node's C⁰ kink minus the AUTHORED boundary's turn over ±1px — and exempts the four places a trace is right to corner (canvas border, occluded boundary, traced junctions of degree ≥3, authored crossings) | `smooth-radii` (tier 0, **gated**, authored for this: art with NO corners at all — ellipses 1:1→1:8 in both orientations, rounded rects at 2/3/5/8/12px radii, curvature-ramp eggs) | **12** invented on a case with zero authored corners; corpus-wide over the 23 gated tier-0 cases, flat lane: p50 0, p90 2, max 12, **18 over 3 cases** (`smooth-radii` 12, `hairlines` 4, `peak-drop` 2). The rejected §22 reading takes `smooth-radii` to **18** | **§23**; instrument `src/devtest/kinkDiag.ts` (`--gate`, `--probe x,y`, `--compare`). Gate scope today: FLAT art, @512 only — gradient banding and the halved radii at @256 are each their own calibration (§23.3) |
 
 Recently closed: **a small isolated feature swept away by the despeckle area floor**
 (issue #8, user-reported from /labs/ab on `logo-ibm` — the ▼ peak of the m's middle
@@ -3729,3 +3730,128 @@ Only after that: the actual open question this attempt could not answer — how 
 from the same short, staircase-quantized window. The circle veto was one answer and it was
 too narrow. A curvature-continuity test over the union window is the obvious next candidate,
 and it should be calibrated on ELLIPSES and blends, not on discs.
+---
+
+## 23. The corner the corpus could not see — a precision lens (2026-08-23)
+
+§22's post-mortem named the hole: **`cornersRecovered` is a recall number with no precision
+term**, so inventing a corner is free by it, and chamfer/p95 barely move for a C⁰ kink on a
+short arc. A change that put a visible kink in smooth boundary across ordinary art scored
++54 recovered corners and passed every gate. This section is the missing half.
+
+    cornersInvented — sharp corners the trace asserts that the authored art does not have.
+
+`geomScore.inventedCorners`, reported by `scoreGeometry`, gated by `evaluateTruthGates`.
+
+### 23.1 The measurement, and the two drafts that were wrong
+
+Per traced sharp corner, a like-for-like turn comparison at the CORNER's own scale:
+
+    excess = (the traced node's C⁰ kink)  −  (authored turn over ±KINK_WIN px of arc length)
+
+A real corner gives excess ≈ 0 — both turn by the corner angle. A tight authored arc gives
+excess ≈ 0 as well. A kink laid on boundary the art carries smoothly gives the whole kink.
+
+Two earlier drafts failed, and both failures were informative:
+
+- **"Is the authored boundary FLAT here?"** (authored window turn < K, ignoring the traced
+  side). Too blunt on curved art, and blunt in exactly the wrong direction: on the marks
+  that reported §22 it exempted every kink. Probing the sites one at a time is what killed
+  it — the places a bad reading kinks are **not** flat boundary. `instagram`'s glyph radii
+  and `chupa-chups`' swirl turn **12–45° per ±1px** there, a 1–5px radius of curvature.
+- **A WINDOW on the traced side too** (traced window turn − authored window turn). That
+  re-adds the same arc curvature to both sides and the difference cancels the signal. The
+  traced side needs no window at all: `sharpCorners` reads the kink straight off the node's
+  handles, and that IS the turn the trace asserts at a point.
+
+And the window has to be **±1px**, not ±5. At ±5px a 3px-radius authored arc has already
+turned 60–110°, so a wide window scores any kink on it as legitimate and the census sees
+nothing. ±1px is the scale at which "corner or curve" is actually a question.
+
+Four exemptions, each for boundary a trace is RIGHT to corner at — and the first three were
+each found by a census run that was obviously wrong before they existed:
+
+| exemption | why | what it was hiding |
+|---|---|---|
+| the canvas BORDER | framing, not art (`collectBoundary` drops it for the same reason) | all 71 of the first run's hits on tier 0 |
+| a traced JUNCTION (degree ≥ 3) | three regions meeting genuinely corner — §14/§17's subject, and where every posterization band seam lands | 4,125 of 5,609 sites |
+| an authored CROSSING | a union's silhouette corners where two smooth shapes cross, and `sharpCorners` cannot see it on the authored side because it reads one subpath at a time | the rest of `checker` |
+| OCCLUDED boundary | the trace cannot reproduce what the raster does not show | the same exclusion §9.6 applies to the missed side |
+
+A traced corner further than 2px from any authored boundary is invented BOUNDARY — that is
+`spuriousMax`'s job and is not counted here.
+
+### 23.2 It catches the thing it was built for
+
+On the marks that reported §22, with the rejected reading toggled:
+
+| case | invented, reading OFF | reading ON |
+|---|---|---|
+| `chupa-chups` | 11 | **18** |
+| `logo-instagram` | 28 | **32** |
+| `logo-coca-cola` | 15 | **19** |
+| `logo-mastercard` | 1 | **3** |
+| `logo-ibm` | 1 | 1 |
+| `nike` | 1 | 1 |
+
+`ibm` and `nike` hold still, which matters: §22 was a genuine gain on `ibm` and the lens
+agrees. The gallery is private and cannot gate CI, so the gate needed a fixture — and the
+existing corpus could not provide one. That is the *third* hole §22.3 named: the smooth
+control that change was calibrated against is four plain DISCS, and a disc has neither of
+the anatomies the defect lives on (constant curvature, no blend).
+
+**`smooth-radii`** (tier 0, authored for this): art with **no corners at all**, so every
+sharp corner the trace asserts on it is invented by construction and the metric reads as a
+plain count. Ellipses at aspect 1:1 → 1:8 in both orientations (a 1:8 end has a ~2.5px
+radius while its flank is nearly straight — the whole curvature range on one closed path);
+rounded rectangles with 2 / 3 / 5 / 8 / 12 px corner radii, each a G¹ blend from a dead
+straight edge into a tight arc, plus narrow twins whose two blends nearly meet; and
+curvature-ramp eggs built from four quarter-ellipse arcs. (The first draft built those eggs
+from two half-ellipses, which is a LENS with a cusp at each end — a corner, in the fixture
+whose whole premise is that it has none.)
+
+Measured: the shipped tracer invents **12** corners on it, the rejected §22 reading **18**.
+The gate's allowance is 12, so §22 would have gone **red on a committed CI case**.
+
+### 23.3 What the lens found on the way in — a new §0 row
+
+Turning it on is itself a measurement, and it is not flattering. Over the 23 gated tier-0
+cases, flat lane, the shipped tracer:
+
+    p50 0   p90 2   max 12      18 invented corners over 3 of 23 cases
+
+`peak-drop` 2 (its own ~1.8° AA-seam control, faceted into two hard nodes), `hairlines` 4
+(sub-pixel bar caps, the corpus's hardest thin-feature case), `smooth-radii` **12** — on art
+with no corners in it at all, which is §0's new row. These are per-case ALLOWANCES rather
+than `KNOWN_DEFECTS` entries, and that choice has a cost worth stating: KNOWN_DEFECTS is
+keyed by CASE, so listing these three would switch off every other gate on them — and
+`peak-drop` was made green by §20 the week before. The header of `truth-gate.test.ts` is
+right that a recorded number is worse than a recorded boolean; the alternative here was
+worse still. The numbers are named, explained, and can only come down.
+
+**Scope, stated honestly:**
+- **FLAT art only**, the same predicate the region and ink gates use. On gradient art the
+  traced regions are posterization bands whose corners are a property of the banding rather
+  than of the authored outline, and the junction exemption does not fully model them —
+  measured, five tier-1 cases report 1–3 invented corners. Gating that here would
+  misattribute a banding question to a corner-precision one.
+- **@512 only.** Every radius in the corpus halves at 256, so "corner or curve" is a
+  different question there and the allowances would be a different calibration. §12's
+  warning about gating tier-2 corners for the first time inside the low-res lane applies
+  exactly.
+- A corpus-wide gallery sweep is still missing: the first attempt OOM'd on the brute-force
+  nearest-sample query (since replaced with a bucket grid, but the run was not repeated).
+
+### 23.4 Where this leaves #23
+
+The issue stays open and its §0 row is unchanged — the turn is still under-read on the
+lattice, `gear-teeth` still stands at 53/60, and the cliff toward the 60° bar is still
+there. What has changed is that a second attempt can now be judged before a human has to
+look at it: the reading that recovers those corners must do it **without moving
+`smooth-radii` off 12**. §22.5 asked for exactly this gate; it exists now.
+
+The open question that attempt could not answer is unchanged and is the real one — how to
+separate "this boundary CORNERS here" from "this boundary CURVES tightly here" when both
+are read from the same short, staircase-quantized window. The circle veto was one answer
+and it was too narrow. Whatever the next one is, it now has to be calibrated on ellipse
+ends and straight→arc blends, because that is what `smooth-radii` is made of.
