@@ -27,8 +27,8 @@ export default function SplashScreen() {
   // identically in app-light and app-dark.
   return (
     <div
-      className="flex w-full items-center justify-center py-7"
-      style={{ height: 420, backgroundColor: '#f2f3f5' }}
+      className="flex h-full w-full items-center justify-center py-7"
+      style={{ minHeight: 420, backgroundColor: '#f2f3f5' }}
     >
       {/* Phone frame */}
       <div
