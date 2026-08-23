@@ -31,7 +31,7 @@ import {
   type DistPoint,
 } from '../../../devtest/geomScore'
 import { scoreDoc } from '../../../devtest/scoreboard'
-import { TIER_TOL, evaluateTruthGates } from '../../../devtest/truthCorpus'
+import { TIER_TOL, evaluateTruthGates, inventedMaxFor } from '../../../devtest/truthCorpus'
 import { Panel, RawArt } from '../Panel'
 import { traceSvg, subPathsWire } from '../wire'
 import { Badge, CaseRow, NoteBox } from '../CaseRow'
@@ -225,7 +225,7 @@ export async function analyze(c: WbCase, res: number, ab: boolean): Promise<Anal
 
 /** The gates, as bar rows. `applicable: false` ⇒ tone 'na' — never a pass. Only ever called for a
  *  case with a calibrated tier; an untiered case has no honest limit to draw. */
-function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions: RegionScore, paint?: { mean: number; p95: number }): GateBarRow[] {
+function gateRows(name: string, tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions: RegionScore, paint?: { mean: number; p95: number }): GateBarRow[] {
   return evaluateTruthGates({
     samples: geom.samples,
     chamfer: geom.chamfer,
@@ -235,6 +235,10 @@ function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions:
     recovered: regions.recovered,
     gtCorners: geom.gtCorners,
     cornersRecovered: geom.cornersRecovered,
+    // §23's precision term. Recall alone made INVENTING a corner free — see the gate's own
+    // note in truthCorpus. Passed here so the view shows the same number CI gates on.
+    cornersInvented: geom.cornersInvented,
+    inventedMax: inventedMaxFor(name),
     paintMean: paint?.mean,
     paintP95: paint?.p95,
     worstInk: regions.worstInk,
@@ -260,6 +264,8 @@ function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions:
               ? 'gradient art — ink area per flat region is meaningless where the art has no flat regions'
               : g.key === 'corners'
               ? 'too few authored corners to grade (mostly-round art), or gradient art'
+              : g.key === 'invented'
+              ? 'gradient art — its traced corners belong to the posterization banding, not to the authored outline'
               : g.key === 'paintMean' || g.key === 'paintP95'
                 ? 'flat art (regions + boundary already pin the paint), or tier-1 paint not yet calibrated'
                 : "no interior boundary to compare (the art's whole outline is the canvas border)",
@@ -273,11 +279,19 @@ function gateRows(tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions:
         ? `${regions.recovered}/${regions.trueRegions}`
         : g.key === 'corners'
           ? `${geom.cornersRecovered}/${geom.gtCorners}`
+          : g.key === 'invented'
+            ? `${geom.cornersInvented}`
           : g.key === 'ink'
             ? `${(g.value * 100).toFixed(0)}%`
             : g.value.toFixed(g.digits) + (g.key === 'parsimony' ? '×' : isPaint ? 'ΔE' : 'px')
     const unit =
-      g.key === 'parsimony' ? '×' : g.key === 'regions' || g.key === 'corners' || g.key === 'ink' ? '' : isPaint ? 'ΔE' : 'px'
+      g.key === 'parsimony'
+        ? '×'
+        : g.key === 'regions' || g.key === 'corners' || g.key === 'ink' || g.key === 'invented'
+          ? ''
+          : isPaint
+            ? 'ΔE'
+            : 'px'
     return {
       key: g.key,
       label: g.label,
@@ -459,7 +473,7 @@ export function AnalysisCaseRow({ c, value, error, ui }: AnalysisRowProps) {
       </CaseRow>
     )
   }
-  const rows = c.tier !== undefined ? gateRows(c.tier, c.gradients, a.geom, a.regions, a.paint) : null
+  const rows = c.tier !== undefined ? gateRows(c.key, c.tier, c.gradients, a.geom, a.regions, a.paint) : null
   const failing = rows?.filter((r) => r.tone === 'fail') ?? []
   return (
     <CaseRow
