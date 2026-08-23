@@ -35,6 +35,56 @@ export interface PlanarFitOptions {
    */
   cornerTurnDeg: number
   /**
+   * §22 / issue #23 — **BUILT, MEASURED AND REJECTED (default false).** Keep reading: the
+   * numbers below are all real, and they are exactly why this shipped and had to be pulled.
+   *
+   * How the macro turn at a candidate vertex is READ.
+   * The shipped reading is the angle between two CHORDS taken +/-`CORNER_WINDOW` POINTS
+   * along the chain; on the integer lattice each chord endpoint carries up to half a
+   * pixel of quantization, which is ~7 deg of direction error over a 4px chord — and on a
+   * steep diagonal, where a run of collinear staircase steps can fill the whole window,
+   * the error is SYSTEMATIC rather than random: the chord snaps to the run's own
+   * direction. Measured, a corner authored at exactly 60.0 deg reads 45.0 (§21.2), so it
+   * never clears a 60 deg bar. With this on, a candidate the chord already reads within
+   * `cornerEvidenceReachDeg` of the bar gets a SECOND opinion — the turn between two
+   * least-squares arm directions, each fitted over as many samples as stay straight to
+   * within `cornerEvidenceEps` — and the SHARPER of the two readings wins. One-sided by
+   * construction (§17's ARM_BOW shape): it can only promote a vertex to corner, never
+   * demote one, so every corner the shipped reading finds is still found. `false`
+   * restores the chords-only reading byte-identically — and that is the shipped path.
+   *
+   * WHY IT IS OFF. On the metrics it was a clean win: +54 authored corners recovered
+   * across 128 gallery marks with one lost, `gear-teeth` 53 → 57/60, `logo-ibm` chamfer
+   * 0.2064 → 0.1978. On the /labs/ab review it put a visible KINK in smooth boundary all
+   * over the corpus — chupa-chups' brown ellipse, instagram's lower ring, the mastercard
+   * wordmark's `m`. Counted afterwards: 9 traced sharp corners on chupa-chups with no
+   * authored corner within 2.5px (the furthest 25.5px away), 7 on instagram (one 46px
+   * away), 2 on mastercard.
+   *
+   * NOTHING IN THE GATE SET COULD SEE IT, and that is the lesson worth keeping:
+   * `cornersRecovered` counts authored corners RECOVERED and has no precision term, so
+   * minting corners is free by it (and sometimes scores as a gain); chamfer/p95 barely
+   * move for a C⁰ kink on a short arc — chupa-chups' +0.0120 was the whole signal, and it
+   * was read as a trade. The co-circular veto that was supposed to stop this fits a
+   * CIRCLE, and the fixture control it was calibrated against is four DISCS: guard and
+   * control shared an assumption, so the control could only ever confirm the guard. Real
+   * smooth boundary is ellipses and curvature-varying blends, where the veto never fires.
+   *
+   * Do not re-enable this without a PRECISION lens first — a gate that fails when smooth
+   * authored boundary gains a C⁰ kink. §22.5 states what it has to measure.
+   */
+  cornerTurnEvidence?: boolean
+  /** EXPERIMENT KNOBS for the §22 sweep (src/devtest/turnDiag.ts --sweep) — default to
+   *  the constants below; the shipped values are read off the corpus. */
+  cornerEvidenceEps?: number
+  cornerEvidenceMaxK?: number
+  cornerEvidenceReachDeg?: number
+  cornerEvidenceGap?: number
+  /** false ⇒ apply the promotion at EVERY vertex that reads sharper, instead of only at
+   *  the non-max-suppressed one. Exists so the fusion it causes stays measurable: it costs
+   *  gear-teeth 4 of its 60 corners (docs §22.3). */
+  cornerEvidenceSuppress?: boolean
+  /**
    * EXPERIMENTAL (off by default). Place each junction VERTEX at the sub-pixel
    * intersection of its incident edge arms instead of the integer lattice corner,
    * and weld two edges a region runs straight THROUGH a junction to a shared G¹
@@ -232,6 +282,9 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   cornerJunctions: true,
   subpixelEdges: true,
   arcArms: true,
+  // OFF: built, measured, and REJECTED on visual review — see the option's doc above
+  // and docs/vectorization-benchmarks.md §22.
+  cornerTurnEvidence: false,
 }
 
 /** Flat-art line cost: > cubicCost so the DP prefers a CUBIC on any span where a
@@ -245,6 +298,30 @@ const MAX_FIT_POINTS = 64
 const MAX_EVIDENCE_WINDOW = 24
 /** ±px window the macro-turn corner test looks across (spans the unit staircase). */
 const CORNER_WINDOW = 4
+/**
+ * §22 (issue #23) — the evidence-bounded turn reading. Every one of these sits MID-PLATEAU
+ * on the end-to-end sweep (`turnDiag --sweep`, the defect rack plus the whole corner
+ * watchlist): the shipped triple, ±1 notch on any knob, all measure the same 169/172 on
+ * `corner-turns` and 57/60 on `gear-teeth`, and each has a named edge past which it costs
+ * something. They are not free parameters.
+ *
+ * MIN_K matches CORNER_WINDOW so the second opinion never reads a SHORTER span than the
+ * chord it is second-guessing. MAX_K bounds the reach — 14 and 20 measure identically, 8
+ * collapses the whole gain (164/172, gear back to 53). EPS is the fit's own default
+ * tolerance, because "these samples are explained by a straight line" is exactly the
+ * question the fitter asks; 0.9 and 1.1 measure identically, 1.5 costs the rack 7 corners
+ * by reading a curve's own bow as arm evidence. REACH_DEG gates WHICH candidates get the
+ * second opinion — a vertex the chord already reads within this many degrees of the bar.
+ * That is not just a work bound: it is the statement that a corner must be locally sharp
+ * AND confirmed by its arms, never arm evidence alone. 15 and 32 measure identically; past
+ * ~35 the gate is effectively open and `gear-teeth` falls 57 → 52, because promotions on
+ * gently-bending flanks reshape the clusters its teeth are read from.
+ */
+const CORNER_EVIDENCE_MIN_K = CORNER_WINDOW
+const CORNER_EVIDENCE_MAX_K = 16
+const CORNER_EVIDENCE_EPS = 1.0
+const CORNER_EVIDENCE_REACH_DEG = 25
+const CORNER_EVIDENCE_GAP = 0
 /** Apex-merge distance for the loop/open corner detectors (§10.6): sits between
  *  the two scales it must separate — ABOVE a rasterized tip's shoulder pair
  *  (≤ ~2px), BELOW the smallest corner spacing the corpus asks the tracer to keep
@@ -306,6 +383,233 @@ export function presmooth(pts: Vec[], passes: number, pinEnds: boolean, pinned?:
   return cur
 }
 
+// --- §22 (issue #23): how a candidate vertex's macro TURN is READ -----------
+/**
+ * The reading options the four turn-readers share. Threaded rather than global so a
+ * label-only caller (tests, diagnostics, synthetic label maps) and the §22 sweep can both
+ * pin the reading explicitly; omitted ⇒ the shipped defaults.
+ */
+export interface TurnRead {
+  /** false ⇒ the chords-only reading, byte-identically (the pre-§22 path). */
+  evidence?: boolean
+  eps?: number
+  maxK?: number
+  /** false ⇒ promote every vertex that reads sharper, not only the NMS'd one. */
+  suppress?: boolean
+  /** Samples nearest the candidate to SKIP before an arm window starts — §10.6's
+   *  `SNAP_GAP` idea (the rounded part of a rasterized tip is not arm evidence) applied to
+   *  the reading. Ships at 0: measured, it is a bad trade (docs §22.2). */
+  gap?: number
+  /** Only a candidate the chord already reads within this many degrees of the bar is
+   *  re-read. ≥180 (the default) ⇒ ungated: measured to cost 16 of 85 corpus gains at 30°
+   *  and 43 at 10°, for no measurable saving anywhere it mattered. */
+  reachDeg?: number
+}
+export const turnReadOf = (opts: PlanarFitOptions): TurnRead => ({
+  evidence: opts.cornerTurnEvidence,
+  eps: opts.cornerEvidenceEps,
+  maxK: opts.cornerEvidenceMaxK,
+  reachDeg: opts.cornerEvidenceReachDeg,
+  gap: opts.cornerEvidenceGap,
+  suppress: opts.cornerEvidenceSuppress,
+})
+
+/**
+ * One arm's direction at `i`, read over the LONGEST span the evidence supports: grow away
+ * from `i` in direction `sign` while the accumulated samples stay within `eps` of their own
+ * least-squares line, from `minK` up to `maxK` steps, and return that line's direction
+ * oriented along the chain's TRAVEL. On a straight arm the span reaches far and the
+ * staircase averages out of the direction; on a curve it stops as soon as the curvature
+ * shows, which is what keeps a small circle from reading as a corner. Null when the chain
+ * ends before `minK` steps (an open edge's junction anchor).
+ */
+function evidenceArmDir(
+  pts: Vec[],
+  i: number,
+  sign: -1 | 1,
+  closed: boolean,
+  minK: number,
+  maxK: number,
+  eps: number,
+  gap: number,
+): { x: number; y: number; k: number } | null {
+  const n = pts.length
+  const idx = (o: number): number => {
+    const j = i + sign * o
+    if (closed) return ((j % n) + n) % n
+    return j < 0 || j >= n ? -1 : j
+  }
+  let sx = 0
+  let sy = 0
+  let sxx = 0
+  let sxy = 0
+  let syy = 0
+  let m = 0
+  let bestX = 0
+  let bestY = 0
+  let bestK = -1
+  for (let k = 0; k <= maxK; k++) {
+    const j = idx(gap + k)
+    if (j < 0) break
+    const p = pts[j]
+    sx += p.x
+    sy += p.y
+    sxx += p.x * p.x
+    sxy += p.x * p.y
+    syy += p.y * p.y
+    m++
+    if (k < minK) continue
+    // Least-squares line of the accumulated window (the `armLine` estimator, taken from
+    // running sums so growing the window costs O(1) rather than a refit).
+    const mx = sx / m
+    const my = sy / m
+    const cxx = sxx / m - mx * mx
+    const cxy = sxy / m - mx * my
+    const cyy = syy / m - my * my
+    const theta = 0.5 * Math.atan2(2 * cxy, cxx - cyy)
+    const dx = Math.cos(theta)
+    const dy = Math.sin(theta)
+    let bow = 0
+    for (let o = 0; o <= k; o++) {
+      const q = pts[idx(gap + o)]
+      const dev = Math.abs((q.x - mx) * dy - (q.y - my) * dx)
+      if (dev > bow) bow = dev
+    }
+    // The shortest window is accepted unconditionally: below `minK` there is no span at
+    // which a staircase looks straight, and refusing there would just hand the answer back
+    // to the chord this reading exists to second-guess.
+    if (k > minK && bow > eps) break
+    bestX = dx
+    bestY = dy
+    bestK = k
+  }
+  if (bestK < 0) return null
+  // The fitted line is un-oriented: aim it away from `i`, then flip the INCOMING side so
+  // both arms run along the chain's travel and their dot product is the turn's cosine.
+  const tip = pts[idx(gap + bestK)]
+  const s = bestX * (tip.x - pts[i].x) + bestY * (tip.y - pts[i].y) >= 0 ? 1 : -1
+  const span = gap + bestK
+  return sign > 0 ? { x: bestX * s, y: bestY * s, k: span } : { x: -bestX * s, y: -bestY * s, k: span }
+}
+
+/**
+ * The CO-CIRCULAR veto on a promotion. Two straight arms always "explain" a small enough
+ * circle — that is the whole failure mode of reading a turn over a longer span, and
+ * `detectCorners` documents the opposite as a promise ("a smooth shape — even a tiny
+ * circle — returns ∅"). Measured on `corner-turns`' four smooth discs @256, the
+ * unvetoed reading breaks that promise outright: the 12px and 18px discs pick up 6 and 8
+ * sharp corners each. So before a promotion may create a corner, the SAME samples are
+ * offered to a single circle; if one explains them to the same tolerance the two lines
+ * did, this is a curve and the promotion is refused. A real corner cannot be fitted this
+ * way — a circle through a V deviates by most of the arm length.
+ */
+function coCircular(pts: Vec[], i: number, closed: boolean, kIn: number, kOut: number, eps: number): boolean {
+  const n = pts.length
+  const w: Vec[] = []
+  for (let o = -kIn; o <= kOut; o++) {
+    const j = closed ? ((i + o) % n + n) % n : i + o
+    if (j < 0 || j >= n) return false
+    w.push(pts[j])
+  }
+  const dev = circleMaxDev(w)
+  return dev !== null && dev <= eps
+}
+
+/**
+ * The macro-turn COSINE at every index — what all four readers (`detectCorners`,
+ * `detectLoopCorners`, `detectOpenCorners`, `resolveLoopCaps`) test against their
+ * threshold. Outside [lo, hi) the value is 1 (no turn), as before.
+ *
+ * The base reading is the shipped one: the angle between two CHORDS taken ±`win` POINTS
+ * along the chain. §22 adds a second opinion from `evidenceArmDir` and keeps the SHARPER
+ * of the two — a ONE-SIDED promotion (§17's `ARM_BOW` shape). One-sidedness is not a
+ * stylistic choice here, it is what the corpus measured: as a REPLACEMENT the evidence
+ * reading gains 85 authored corners but drops 13 the chord finds today, while as a
+ * promotion it gains the same 85 and drops none — and, because the promoted field is
+ * smoother, it still non-max-suppresses to 220 FEWER unexplained sites than the chord
+ * reading alone (docs §22.2).
+ */
+function readTurnCos(
+  pts: Vec[],
+  closed: boolean,
+  win: number,
+  lo: number,
+  hi: number,
+  turnDeg: number,
+  read?: TurnRead,
+): Float64Array {
+  const n = pts.length
+  const cos = new Float64Array(n)
+  cos.fill(1)
+  const wrap = (i: number): number => ((i % n) + n) % n
+  const useEvidence = read?.evidence !== false
+  const eps = read?.eps ?? CORNER_EVIDENCE_EPS
+  const maxK = read?.maxK ?? CORNER_EVIDENCE_MAX_K
+  const reachDeg = read?.reachDeg ?? CORNER_EVIDENCE_REACH_DEG
+  const gap = read?.gap ?? CORNER_EVIDENCE_GAP
+  const suppress = read?.suppress !== false
+  const reachCos = Math.cos((Math.max(0, turnDeg - reachDeg) * Math.PI) / 180)
+  const thrCos = Math.cos((turnDeg * Math.PI) / 180)
+  for (let i = lo; i < hi; i++) {
+    const b = closed ? pts[wrap(i - win)] : pts[Math.max(0, i - win)]
+    const a = closed ? pts[wrap(i + win)] : pts[Math.min(n - 1, i + win)]
+    const inDir = unit(sub(pts[i], b))
+    const outDir = unit(sub(a, pts[i]))
+    cos[i] = inDir.x * outDir.x + inDir.y * outDir.y
+  }
+  if (!useEvidence) return cos
+  const ev = new Float64Array(n)
+  ev.fill(1)
+  for (let i = lo; i < hi; i++) {
+    if (cos[i] > reachCos) continue
+    const dIn = evidenceArmDir(pts, i, -1, closed, CORNER_EVIDENCE_MIN_K, maxK, eps, gap)
+    const dOut = evidenceArmDir(pts, i, 1, closed, CORNER_EVIDENCE_MIN_K, maxK, eps, gap)
+    if (!dIn || !dOut) continue
+    const c = dIn.x * dOut.x + dIn.y * dOut.y
+    // Only a reading that would actually MINT a corner has to answer the curve question,
+    // which keeps the circle fit off every other vertex.
+    if (c < thrCos && coCircular(pts, i, closed, dIn.k, dOut.k, eps)) continue
+    ev[i] = c
+  }
+  // The promotion is NON-MAX-SUPPRESSED before it is applied, and that is load-bearing,
+  // not tidiness. Both cluster readers (`detectLoopCorners`, `detectOpenCorners`) emit ONE
+  // apex per RUN of sub-threshold vertices, so a promotion that paints a whole run sharp
+  // FUSES neighbouring corners into one. That is how it was found — the first draft cost
+  // `gear-teeth` 53 → 50 of 60 by welding each tooth's tip and root into a single cluster,
+  // precisely the two-scale trade §10.6 rejected — and it is still what the sweep measures
+  // with everything else in place: `cornerEvidenceSuppress: false` reads `corner-turns`
+  // 169 → 162 of 172 (BELOW the chord reading's own 164) and `sharp-star` 11 → 10.
+  // Suppressed, the promotion lands on one vertex per neighbourhood: a corner the chord
+  // missed becomes its own cluster and no existing run grows by more than a vertex.
+  // `cos` is mutated as this loop runs, so an earlier promotion also suppresses a later
+  // one within `win` — which is the same rule, applied to the promotions themselves.
+  for (let i = lo; i < hi; i++) {
+    if (ev[i] >= cos[i]) continue
+    if (!suppress) {
+      cos[i] = ev[i]
+      continue
+    }
+    let isMin = true
+    for (let j = i - win; j <= i + win && isMin; j++) {
+      const k = closed ? wrap(j) : j
+      if (k === i || k < lo || k >= hi) continue
+      // A promotion is only offered where the CHORD found nothing. Both cluster readers
+      // fuse apexes within `CORNER_MERGE` px and keep the FIRST, and the loop reader picks
+      // a cluster's apex by max perp-to-chord — so a promotion landing beside a corner the
+      // chord already found can displace or swallow it, and the reading stops being
+      // one-sided where it matters most. Measured on `logo-ibm`, whose 70° stripe chevrons
+      // sit ~5px apart: unguarded, §22 cost it 122 → 118 of 127 recovered corners while
+      // improving its boundary error, which is exactly the all-gates-green trade §10.4
+      // named. Guarded, the promotion can only ADD a corner in a neighbourhood that had
+      // none.
+      if (cos[k] < thrCos) isMin = false
+      else if (ev[k] < ev[i] || (ev[k] === ev[i] && k < i)) isMin = false
+    }
+    if (isMin) cos[i] = ev[i]
+  }
+  return cos
+}
+
 /**
  * Indices of MACRO corners on a lattice staircase: vertices where the path
  * direction turns by more than `turnDeg`, measured over a ±`win` px window so the
@@ -321,23 +625,16 @@ export function detectCorners(
   turnDeg: number,
   closed: boolean,
   win = CORNER_WINDOW,
+  read?: TurnRead,
 ): Set<number> {
   const out = new Set<number>()
   const n = pts.length
   if (turnDeg >= 180 || n < 2 * win + 1) return out
   const wrap = (i: number): number => ((i % n) + n) % n
-  const before = (i: number): Vec => (closed ? pts[wrap(i - win)] : pts[Math.max(0, i - win)])
-  const after = (i: number): Vec => (closed ? pts[wrap(i + win)] : pts[Math.min(n - 1, i + win)])
   const thr = Math.cos((turnDeg * Math.PI) / 180)
-  const cos = new Float64Array(n)
-  cos.fill(1)
   const lo = closed ? 0 : win
   const hi = closed ? n : n - win
-  for (let i = lo; i < hi; i++) {
-    const inDir = unit(sub(pts[i], before(i)))
-    const outDir = unit(sub(after(i), pts[i]))
-    cos[i] = inDir.x * outDir.x + inDir.y * outDir.y
-  }
+  const cos = readTurnCos(pts, closed, win, lo, hi, turnDeg, read)
   for (let i = lo; i < hi; i++) {
     if (cos[i] >= thr) continue // not sharp enough
     let isLocalMin = true
@@ -1366,18 +1663,12 @@ function snapApex(
  * neighbours' fitted tangents — and a ±2px fine-turn apex re-localization — a
  * staircase reads ~90° at ordinary step vertices too.)
  */
-export function detectLoopCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = CORNER_MERGE): number[] {
+export function detectLoopCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = CORNER_MERGE, read?: TurnRead): number[] {
   const n = pts.length
   if (turnDeg >= 180 || n < 2 * win + 1) return []
   const wrap = (i: number): number => ((i % n) + n) % n
   const thr = Math.cos((turnDeg * Math.PI) / 180)
-  const cos = new Float64Array(n)
-  cos.fill(1)
-  for (let i = 0; i < n; i++) {
-    const inDir = unit(sub(pts[i], pts[wrap(i - win)]))
-    const outDir = unit(sub(pts[wrap(i + win)], pts[i]))
-    cos[i] = inDir.x * outDir.x + inDir.y * outDir.y
-  }
+  const cos = readTurnCos(pts, true, win, 0, n, turnDeg, read)
   // Cluster consecutive sub-threshold (sharp) vertices; apex = max perp-to-chord.
   const used = new Uint8Array(n)
   const apexes: number[] = []
@@ -1473,18 +1764,19 @@ interface ResolvedCaps {
   capStarts: Set<number>
 }
 
-export function resolveLoopCaps(pts: Vec[], corners: number[], turnDeg: number, win = CORNER_WINDOW): ResolvedCaps {
+export function resolveLoopCaps(pts: Vec[], corners: number[], turnDeg: number, win = CORNER_WINDOW, read?: TurnRead): ResolvedCaps {
   const n = pts.length
   const none = (): ResolvedCaps => ({ corners, capStarts: new Set() })
   if (corners.length < 1 || turnDeg >= 180 || n < 2 * win + 1) return none()
   const wrap = (i: number): number => ((i % n) + n) % n
   const thr = Math.cos((turnDeg * Math.PI) / 180)
+  // The SAME reading the detector used, deliberately: a group here is a run of `sharp`
+  // vertices, and a corner that falls in no group is DROPPED below. Leaving this on the
+  // chord while the detector reads evidence would silently discard exactly the corners
+  // §22 exists to recover.
+  const cos = readTurnCos(pts, true, win, 0, n, turnDeg, read)
   const sharp = new Uint8Array(n)
-  for (let i = 0; i < n; i++) {
-    const inDir = unit(sub(pts[i], pts[wrap(i - win)]))
-    const outDir = unit(sub(pts[wrap(i + win)], pts[i]))
-    if (inDir.x * outDir.x + inDir.y * outDir.y < thr) sharp[i] = 1
-  }
+  for (let i = 0; i < n; i++) if (cos[i] < thr) sharp[i] = 1
   // Maximal cyclic runs of sub-threshold vertices, in loop order.
   const runs: { s: number; e: number }[] = []
   const seen = new Uint8Array(n)
@@ -1724,7 +2016,7 @@ function pinHandle(node: PathNode, which: 'hIn' | 'hOut', arm: ArmFit, eps: numb
 export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOptions): PathNode[] {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
-  const resolved = resolveLoopCaps(pts, corners.slice().sort((a, b) => a - b), opts.cornerTurnDeg)
+  const resolved = resolveLoopCaps(pts, corners.slice().sort((a, b) => a - b), opts.cornerTurnDeg, CORNER_WINDOW, turnReadOf(opts))
   const C = resolved.corners
   // Cap pairing BEFORE the coincident-drop below: start → its twin (the next
   // corner). A pair whose members don't both survive the drop reverts to normal.
@@ -1888,19 +2180,13 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
  * so a vertex's two staircase shoulders never yield two corners. The endpoint
  * regions (± `win`, junction anchors) are excluded, as in `detectCorners`.
  */
-export function detectOpenCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = CORNER_MERGE): number[] {
+export function detectOpenCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = CORNER_MERGE, read?: TurnRead): number[] {
   const n = pts.length
   if (turnDeg >= 180 || n < 2 * win + 1) return []
   const thr = Math.cos((turnDeg * Math.PI) / 180)
   const lo = win
   const hi = n - win
-  const cos = new Float64Array(n)
-  cos.fill(1)
-  for (let i = lo; i < hi; i++) {
-    const inDir = unit(sub(pts[i], pts[i - win]))
-    const outDir = unit(sub(pts[i + win], pts[i]))
-    cos[i] = inDir.x * outDir.x + inDir.y * outDir.y
-  }
+  const cos = readTurnCos(pts, false, win, lo, hi, turnDeg, read)
   const apexes: number[] = []
   for (let s = lo; s < hi; s++) {
     if (cos[s] >= thr) continue
@@ -1947,7 +2233,7 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
   // Clustered corners (one per feature, like the loop path) — the raw `pinned`
   // set has BOTH staircase shoulders of a vertex, which must not become two
   // breakpoints (a 2-node chamfer where the art has one corner).
-  let C = detectOpenCorners(pts, opts.cornerTurnDeg)
+  let C = detectOpenCorners(pts, opts.cornerTurnDeg, CORNER_WINDOW, CORNER_MERGE, turnReadOf(opts))
   if (n < 2 * SNAP_GAP + 3) return fallback()
 
   // Prune-and-refit loop: a detected corner whose FITTED junction comes out

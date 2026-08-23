@@ -41,7 +41,9 @@ import { useLabState } from './useLabState'
 import { useLabRun } from './useLabRun'
 import { labTrace } from './labTrace'
 import { docStats, traceSvg } from './wire'
-import { serializeDoc } from '../../lib/path/model'
+import { serializeDoc, parseSvg } from '../../lib/path/model'
+import { parseGroundTruth, toRasterSpace, unscorable, type GroundShape } from '../../devtest/svgGround'
+import { inventedCorners, makeVisibleAt } from '../../devtest/geomScore'
 
 // The frozen comparison targets, bundled like GoldenLab's fixtures (they live outside
 // public/, so fetching would 404 in a build). Each snapshot is a SUBDIR under
@@ -240,7 +242,73 @@ interface AbAnalysis {
   inputDiffers?: string
   /** `note` overrides the panel's stats line for a panel that has no live doc to count
    *  (a frozen stamp) — in pair mode BOTH panels are frozen and each carries its own rev. */
-  variants: { name: string; tone?: string; svg: string; stats?: ReturnType<typeof docStats>; note?: string }[]
+  variants: {
+    name: string
+    tone?: string
+    svg: string
+    stats?: ReturnType<typeof docStats>
+    note?: string
+    /** §23's precision count for THIS panel's trace, when the case has authored geometry to
+     *  score against. The one number this view carries that is not structural, and it earns
+     *  the exception: a corner the art does not contain is the defect class this whole view
+     *  exists to catch by eye (§22), and it is cheap to put it beside the picture. */
+    invented?: number
+  }[]
+}
+
+/**
+ * The case's AUTHORED geometry in raster space, or null when there is none to score against
+ * (a dropped PNG, a stroked SVG svgGround refuses, a fetch that fails). Gallery marks carry
+ * their markup inline — their files live outside public/ and have no URL.
+ */
+async function authoredShapes(c: AbCase, width: number): Promise<GroundShape[] | null> {
+  if (c.kind !== 'svg') return null
+  try {
+    const text = c.text ?? (await (await fetch(c.src)).text())
+    const gt = parseGroundTruth(text)
+    if (unscorable(gt)) return null
+    return toRasterSpace(gt, width)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * How many sharp corners a panel's trace asserts that the art does not have (§23). Works off
+ * the SERIALIZED svg so both sides are read identically — the frozen stamp has no live doc,
+ * and `serializeDoc`/`parseSvg` round-trip, so re-parsing is the honest way to put the two
+ * revisions' numbers side by side rather than scoring one and estimating the other.
+ */
+function inventedIn(
+  svg: string,
+  gt: GroundShape[] | null,
+  image: ImageData | null,
+  w: number,
+  h: number,
+): number | undefined {
+  if (!gt || !image) return undefined
+  const doc = parseSvg(svg)
+  if (!doc) return undefined
+  const sets = doc.items.flatMap((it) => (it.kind === 'path' && it.visible !== false ? [it.subPaths] : []))
+  if (!sets.length) return undefined
+  try {
+    return inventedCorners(gt, sets, w, h, makeVisibleAt(image)).count
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * ` · N inv` for a panel, and ` (+N)` against the panel it is being compared with. Panels come
+ * in pairs (base, then shipped) per lane, so the partner is the even-indexed neighbour. The
+ * delta is the whole point: 12 on its own says little, 12 → 18 is a rejected change.
+ */
+function inventedNote(variants: AbAnalysis['variants'], i: number): string {
+  const v = variants[i]
+  if (v.invented === undefined) return ''
+  const partner = i % 2 === 1 ? variants[i - 1] : undefined
+  const d = partner?.invented !== undefined ? v.invented - partner.invented : 0
+  return ` · ${v.invented} inv${d !== 0 ? ` (${d > 0 ? '+' : ''}${d})` : ''}`
 }
 
 /** Full-scale (RGB euclidean distance) at which the diff heat saturates to its hottest. A
@@ -328,9 +396,12 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
   if (views.length === 0) views.push(flat)
   const label = (v: { g: boolean }): string => ` · gradients ${v.g ? 'on' : 'off'}`
 
+  const pairGt = await authoredShapes(c, be.width)
+  const pairImg = bPng ? await labImageData(bPng, Math.max(be.width, be.height)) : null
+  const pInv = (svg: string): number | undefined => inventedIn(svg, pairGt, pairImg, be.width, be.height)
   const variants: AbAnalysis['variants'] = views.flatMap((v) => [
-    { name: `${base.name}${label(v)}`, tone: 'base', svg: v.bSvg, note: `frozen ${base.manifest.rev} · ${base.manifest.date}` },
-    { name: `${head.name}${label(v)}`, tone: 'shipped', svg: v.hSvg, note: `frozen ${head.manifest.rev} · ${head.manifest.date}` },
+    { name: `${base.name}${label(v)}`, tone: 'base', svg: v.bSvg, note: `frozen ${base.manifest.rev} · ${base.manifest.date}`, invented: pInv(v.bSvg) },
+    { name: `${head.name}${label(v)}`, tone: 'shipped', svg: v.hSvg, note: `frozen ${head.manifest.rev} · ${head.manifest.date}`, invented: pInv(v.hSvg) },
   ])
 
   const heats = inputDiffers
@@ -403,13 +474,16 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
   if (views.length === 0) views.push(flat)
   const label = (v: { g: boolean }): string => ` · gradients ${v.g ? 'on' : 'off'}`
 
+  const gtShapes = await authoredShapes(c, entry.width)
+  const inv = (svg: string): number | undefined => inventedIn(svg, gtShapes, image, entry.width, entry.height)
   const variants: AbAnalysis['variants'] = views.flatMap((v) => [
-    { name: `Snapshot @ ${snap.manifest.rev}${label(v)}`, tone: 'base', svg: v.snapSvg },
+    { name: `Snapshot @ ${snap.manifest.rev}${label(v)}`, tone: 'base', svg: v.snapSvg, invented: inv(v.snapSvg) },
     {
       name: `Working tree${label(v)}`,
       tone: 'shipped',
       svg: traceSvg(v.doc, entry.width, entry.height),
       stats: docStats(v.doc),
+      invented: inv(v.live),
     },
   ])
 
@@ -806,14 +880,14 @@ export default function AbLab() {
               >
                 <img src={a.srcOverride ?? c.src} alt="" />
               </Panel>
-              {a.variants.map((v) => (
+              {a.variants.map((v, vi) => (
                 <Panel
                   key={v.name}
                   label={<span className={v.tone ? TONE[v.tone] : undefined}>{v.name}</span>}
                   note={
-                    v.stats
+                    (v.stats
                       ? `${v.stats.paths}p · ${v.stats.nodes}n · ${v.stats.edges}e · ${v.stats.junctions}j`
-                      : (v.note ?? `frozen ${selectedSnap?.manifest.date ?? ''}`)
+                      : (v.note ?? `frozen ${selectedSnap?.manifest.date ?? ''}`)) + inventedNote(a.variants, vi)
                   }
                   aspect={a.width / a.height}
                   grid={{ w: a.width, h: a.height }}

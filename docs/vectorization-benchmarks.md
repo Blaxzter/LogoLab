@@ -31,7 +31,8 @@ guardrails):
 | 8 | **Sub-pixel edge placement** — PARTIALLY CLOSED 2026-08-05 (§15.7): `planarSubpixel.ts` displaces every edge chain onto the AA's iso-0.5 crossing before the fit (shared edges stay shared by construction), with three measured-in guards (corner self-guard, apex tangent pin, anchor flatness) — the tangent pin gained a fourth bound the same week, after it closed a letterform counter (§15.8, below). Fine-end error collapsed 2–3× (bar-caps 0.089, gear 0.080, sharp-star 0.068 ref-px @1024); `concentric` + `sharp-star` deleted from the scale gate's KNOWN_DEFECTS by the CI contract; gear-teeth corner recall 51→52/60. WHAT REMAINS OPEN: the four coarse-end cases (`overlap` , `aa-seam`, `petals`, `band-cross` — @256's AA is too wide for the guards' fixed sampling geometry, an audit-ART-list follow-up), two witness corners @512, and chupa-chups' small-feature zone trading 0.06px mean @1024 | `test/scale-invariance.test.ts` KNOWN_DEFECTS (4 entries left, only shrinks); witnesses in `examples/logos/` | gate: coarse ≤ 2.0 · max(fine, 0.15) ref-px | **§15**, instrument `scaleDiag.ts --lattice` |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
-| 15 | **A corner AT the 60° detection threshold is never detected** — the turn is UNDER-READ on the lattice staircase. ⚠️ The previous entry here ("arm evidence TRUNCATED by the seam", `planarThread.ts` as the fix domain) was **REFUTED 2026-08-21** on its own named witness: the Affinity Λ apex is **not a junction** (all 34 junctions of the mark enumerated, none near it) and its arms are **not truncated** (index 102 of a 276-point chain — ~100px of arm one side, ~170px the other). Its "133px top edge / 0.71px swing" numbers were stale too: §14 + §17 already fixed that tilt, and it now measures 0.19 mean / 0.66 max. What is actually left is one corner, and one mechanism: it is authored at **exactly 60.0°** = `cornerTurnDeg`, and `detectCorners` reads a ±4-**POINT** window on the RAW integer lattice (it runs before `presmooth`, which receives the corners as *pinned*), where it measures **45.0°**. So the corner is never classified, never reaches `snapCornerToArms` (no apex record is emitted), and its node stays lattice-pinned. `cornerTurnDeg=45` collapses the ROI error (mean 0.311 → 0.145), confirming the chain. **NOT a one-witness artifact**: recovery falls off a monotonic cliff toward the threshold across the corpus | `affinity-designer.svg` @512 flat (private corpus, **ungated** — no fixture yet) | apex **1.54px** (1.23 gradients-ON); corpus census (`needleDiag --turns`, 2,934 visible authored corners / 128 marks): 90–105° **96.3%** → 80–90° 90.1% → 75–80° 85.4% → 70–75° 74.3% → 65–70° 64.3° → 60–65° **55.1%**; the 60–80° band holds 540 corners and loses **152**. Probably also `gear-teeth`'s standing 53/60 (roots authored 67.3°) | **§21**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23), §14.3, §17.1; instrument `needleDiag --turns`. **Fix domain is the corner detector's turn measurement, NOT planarThread** — and *not* by lowering `cornerTurnDeg`: §10.6 aligned it to the scorer's 60° bar deliberately, and sharp-star / gear-teeth / bar-caps / checker / band-cross all sit on it |
+| 15 | **CLOSED — not planned** (2026-08-23). The turn IS under-read on the lattice (§21, unretracted: `detectCorners` reads two chords ±4 POINTS on the integer staircase, and recovery falls from 96.3% at 90–105° of authored turn to **55.1%** at 60–65°). The ISSUE is what closed, on four grounds: its target metric is corner RECALL, which has no precision term — so “find more corners” and “invent corners” are the same instruction, and §22 optimising it produced visible kinks; a missed 60° corner is a gentle bend drawn as a gentle curve while an invented one is a visible kink, so it spends the detector's budget on the invisible direction; row #16 shows the tracer already errs the OTHER way on the SAME knob (12 invented corners on art with none), so the two rows pulled one lever in opposite directions; and the framing was refuted twice (§21's seam truncation, §22's reading) with a named witness authored at exactly 60.0° — the detector's bar AND the scorer's bar — which no reading can reliably clear. The one defensible remnant is `gear-teeth` **53/60**, where the corners are unambiguous (67.3° roots on a mechanical shape); it carries on as a narrow case, not a corpus-wide detector change | `corner-turns` (tier 0, gated — kept: an authored-turn sweep is a good corner-recall case regardless); `gear-teeth` 53/60 | the cliff, unchanged and still measurable with `needleDiag --turns` / `turnDiag` | **§21**, **§22**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23) (closed not-planned). **Corner work continues at row #16** |
+| 16 | **The trace INVENTS corners on smooth art** — sharp nodes the authored geometry does not contain, on ellipse ends and straight→arc blends. Newly VISIBLE rather than newly introduced: `cornersRecovered` is a recall number with no precision term, so this was free by every gate here until §23 built `cornersInvented`. It is the measured form of “every nice radius has a kink in it”, and it is why §22 was rejected on sight after passing CI. The metric asks a like-for-like question at the corner's own scale — the traced node's C⁰ kink minus the AUTHORED boundary's turn over ±1px — and exempts the four places a trace is right to corner (canvas border, occluded boundary, traced junctions of degree ≥3, authored crossings) | `smooth-radii` (tier 0, **gated**, authored for this: art with NO corners at all — ellipses 1:1→1:8 in both orientations, rounded rects at 2/3/5/8/12px radii, curvature-ramp eggs) | **12** invented on a case with zero authored corners; corpus-wide over the 23 gated tier-0 cases, flat lane: p50 0, p90 2, max 12, **18 over 3 cases** (`smooth-radii` 12, `hairlines` 4, `peak-drop` 2). The rejected §22 reading takes `smooth-radii` to **18** | **§23**; instrument `src/devtest/kinkDiag.ts` (`--gate`, `--probe x,y`, `--compare`). Gate scope today: FLAT art, @512 only — gradient banding and the halved radii at @256 are each their own calibration (§23.3) |
 
 Recently closed: **a small isolated feature swept away by the despeckle area floor**
 (issue #8, user-reported from /labs/ab on `logo-ibm` — the ▼ peak of the m's middle
@@ -3600,3 +3601,257 @@ is its own Phase-0-complete pass with the whole corner watchlist as its control 
 it needs a tier-0 fixture first (there is none: the witness is private-corpus and
 ungated). §17's lesson, again: measure which mechanism a witness shows before trusting
 the issue's framing.
+---
+
+## 22. The turn reading that passed every gate and was rejected on sight (issue #23, 2026-08-21)
+
+**No fix here.** The reading §21.4 prescribed was built, measured, shipped to a PR — and
+**pulled on the /labs/ab review**, because it put a visible KINK in smooth boundary all over
+the corpus while every gate in this repo reported a clean win. That failure is worth more
+than the mechanism was, so this section leads with it.
+
+### 22.1 What it looked like on the numbers
+
+The reading: at a candidate the ±4-point chord already reads within 25° of the bar, read the
+turn again from two least-squares ARM directions, each fitted over as many samples as stay
+straight to within the fit's own ε, and keep the SHARPER of the two — one-sided at the
+detector, so nothing the chord finds today can be lost. Shared by all four turn readers
+(`detectCorners`, `detectLoopCorners`, `detectOpenCorners`, `resolveLoopCaps`). Four guards
+rode with it, each caught by the end-to-end sweep and each measured in:
+
+- **NMS before the promotion is applied** — un-suppressed it costs `gear-teeth` 53 → 50 by
+  welding each tooth's tip and root into one cluster (the two-scale trade §10.6 rejected),
+  and reads the rack BELOW the chord baseline.
+- **No promotion beside a corner the chord already found** — unguarded it took `logo-ibm`
+  122 → 118 of 127 *while improving its boundary error*, §10.4's all-gates-green class.
+- **A reach gate at 25°** — open past ~35° it costs `gear-teeth` 57 → 52. It is the
+  statement that a corner is local sharpness CONFIRMED by arm evidence, never arm evidence
+  alone.
+- **A co-circular veto** — two straight arms always "explain" a small enough circle.
+
+And an arm GAP (§10.6's `SNAP_GAP` idea applied to the reading) was built and rejected on
+price: +203 unexplained sharp sites for 6 corners at gap 1, +929 for 7 at gap 2.
+
+What that measured, over the same 2,934 visible authored corners on 128 gallery marks §21.3
+used:
+
+| authored turn | n | before | after |
+|---|---|---|---|
+| 60–65 | 78 | 43 (55.1%) | 51 (65.4%) |
+| 65–70 | 126 | 81 (64.3%) | 103 (81.7%) |
+| 70–75 | 206 | 153 (74.3%) | 166 (80.6%) |
+| 75–80 | 130 | 111 (85.4%) | 117 (90.0%) |
+| 80–90 | 273 | 246 (90.1%) | 251 (91.9%) |
+| 90–180 | 2120 | 1980 | 1980 |
+
+**+54 corners recovered, exactly one lost.** `gear-teeth` **53 → 57/60** — the standing
+defect §21.3 predicted would fall to this. `logo-ibm` chamfer 0.2064 → **0.1978**, p95 0.640
+→ **0.588**, corners held at 122/127. `american-express` **+10** corners. Corner watchlist
+byte-identical except gear-teeth's gain; 6-case golden corpus byte-identical; suite green;
+the rack's own ladder climbed at all three resolutions with nothing lost. `turnDiag --effect`
+priced the corpus at Δcorners +54, summed Δchamfer −0.0369, corners gained on 24 marks and
+lost on 1.
+
+### 22.2 What it looked like at 5×
+
+Kinks. On `chupa-chups`' brown ellipse, on `logo-instagram`'s lower ring, on the
+`logo-mastercard` wordmark's `m`. Counted after the fact — traced sharp corners with **no
+authored corner within 2.5px**:
+
+| mark | traced sharp corners | unexplained NEW corners | furthest from any authored corner |
+|---|---|---|---|
+| chupa-chups | 216 → 240 | **9 sites** | 25.5px |
+| logo-instagram | 196 → 206 | **7 sites** | 46.1px |
+| logo-mastercard | 172 → 176 | **2 sites** | 13.8px |
+
+Their read turns are 62–109°, i.e. they are not marginal: the reading is confidently
+asserting a corner in the middle of a smooth arc.
+
+### 22.3 Why nothing in the gate set could see it — the part to keep
+
+Three independent blind spots, all of which had to line up:
+
+1. **`cornersRecovered` has no precision term.** It counts AUTHORED corners recovered.
+   Minting corners is therefore free by that metric, and occasionally scores as a *gain* —
+   a minted kink within `CORNER_MATCH_R` of an authored corner counts as recovering it.
+   "+54 corners" was one half of a two-sided quantity reported as if it were the whole.
+2. **Chamfer and p95 are nearly blind to a C⁰ kink.** A kink displaces the boundary by a
+   couple of tenths of a pixel over a short arc; the corpus percentiles drown it. It was not
+   even silent — `chupa-chups` moved +0.0120 chamfer and +0.75 missedMax while gaining 4
+   corners, and that was written up as a trade. It was the signal.
+3. **The guard and its control shared an assumption.** The co-circular veto fits a CIRCLE,
+   and the fixture control it was calibrated against is four DISCS. A control chosen to
+   match the guard can only ever confirm the guard. Real smooth boundary is ellipses and
+   curvature-varying blends — `chupa-chups`' ellipse, `instagram`'s rounded-square corner
+   blends — and there the veto never fires at all. The @256 disc control DID catch the
+   unvetoed reading (6 and 8 corners on two discs), which made the guard look validated.
+
+The first two are corpus holes, not bugs in this change: **the corpus has no PRECISION lens
+at all.** It can say a corner was lost. It cannot say a corner was invented. That is the
+same shape as §20.3's finding that `scoreRegions` is colour-keyed, and it is why a
+human A/B review is still the last gate — this is the fourth defect in this file
+(§10.3's paint drift, §10.4's line-into-circle, §15.8's crown, now this) that shipped green
+and was caught by eye.
+
+### 22.4 What survives
+
+- **`corner-turns`** (tier 0, in the truth corpus at @512 and @256): 56 circular sectors
+  sweeping AUTHORED turn 61 / 65 / 69 / 73 / 77 / 81 / 100° over eight bisector rotations
+  and four AA phases, whose arm ends turn exactly 90° in every cell as an in-case control,
+  plus four smooth discs. It reproduces the defect §21 measured on a committed case for the
+  first time (164/172 recovered, all eight misses at 61–69°), and it stands on its own as a
+  corner-recall case. **Its smooth control is now known to be insufficient** — see 22.5.
+- **`src/devtest/turnDiag.ts`**: the reader census. It evaluates any candidate turn reading
+  at every authored corner it can locate on the lattice, without touching the tracer, and
+  it is what priced chord-vs-least-squares-vs-evidence-bounded, replacement-vs-promotion,
+  and the arm gap. `--at X,Y` is the single-site autopsy.
+- **The measurement that the mechanism is real**, and that a reading CAN recover it: the
+  cliff flattens by 54 corners. Nothing about §21's diagnosis is retracted.
+- The reading itself, behind `cornerTurnEvidence` (default **false**), with its knobs, so
+  the rejection stays re-measurable — the `refineJunctions` precedent (§9.3).
+
+### 22.5 What a second attempt needs FIRST
+
+Not another guard. A **precision lens**, and it does not exist today:
+
+> a gate that fails when smooth AUTHORED boundary gains a C⁰ kink.
+
+Concretely, the ingredients are already here: `sharpCorners` on the traced doc gives every
+C⁰ kink the trace asserts; `svgGround` gives the authored geometry; the join is "a traced
+sharp corner more than `CORNER_MATCH_R` from any authored corner, on a stretch of authored
+boundary that is smooth there". That number — **invented corners per mark** — is what
+`cornersRecovered` should always have been paired with, and it would have failed this change
+on the first run. It is worth building whether or not #23 is ever attempted again, because
+it guards every future corner change, and because the three marks above are ordinary art,
+not edge cases.
+
+Only after that: the actual open question this attempt could not answer — how to separate
+"this boundary CORNERS here" from "this boundary CURVES tightly here" when both are read
+from the same short, staircase-quantized window. The circle veto was one answer and it was
+too narrow. A curvature-continuity test over the union window is the obvious next candidate,
+and it should be calibrated on ELLIPSES and blends, not on discs.
+---
+
+## 23. The corner the corpus could not see — a precision lens (2026-08-23)
+
+§22's post-mortem named the hole: **`cornersRecovered` is a recall number with no precision
+term**, so inventing a corner is free by it, and chamfer/p95 barely move for a C⁰ kink on a
+short arc. A change that put a visible kink in smooth boundary across ordinary art scored
++54 recovered corners and passed every gate. This section is the missing half.
+
+    cornersInvented — sharp corners the trace asserts that the authored art does not have.
+
+`geomScore.inventedCorners`, reported by `scoreGeometry`, gated by `evaluateTruthGates`.
+
+### 23.1 The measurement, and the two drafts that were wrong
+
+Per traced sharp corner, a like-for-like turn comparison at the CORNER's own scale:
+
+    excess = (the traced node's C⁰ kink)  −  (authored turn over ±KINK_WIN px of arc length)
+
+A real corner gives excess ≈ 0 — both turn by the corner angle. A tight authored arc gives
+excess ≈ 0 as well. A kink laid on boundary the art carries smoothly gives the whole kink.
+
+Two earlier drafts failed, and both failures were informative:
+
+- **"Is the authored boundary FLAT here?"** (authored window turn < K, ignoring the traced
+  side). Too blunt on curved art, and blunt in exactly the wrong direction: on the marks
+  that reported §22 it exempted every kink. Probing the sites one at a time is what killed
+  it — the places a bad reading kinks are **not** flat boundary. `instagram`'s glyph radii
+  and `chupa-chups`' swirl turn **12–45° per ±1px** there, a 1–5px radius of curvature.
+- **A WINDOW on the traced side too** (traced window turn − authored window turn). That
+  re-adds the same arc curvature to both sides and the difference cancels the signal. The
+  traced side needs no window at all: `sharpCorners` reads the kink straight off the node's
+  handles, and that IS the turn the trace asserts at a point.
+
+And the window has to be **±1px**, not ±5. At ±5px a 3px-radius authored arc has already
+turned 60–110°, so a wide window scores any kink on it as legitimate and the census sees
+nothing. ±1px is the scale at which "corner or curve" is actually a question.
+
+Four exemptions, each for boundary a trace is RIGHT to corner at — and the first three were
+each found by a census run that was obviously wrong before they existed:
+
+| exemption | why | what it was hiding |
+|---|---|---|
+| the canvas BORDER | framing, not art (`collectBoundary` drops it for the same reason) | all 71 of the first run's hits on tier 0 |
+| a traced JUNCTION (degree ≥ 3) | three regions meeting genuinely corner — §14/§17's subject, and where every posterization band seam lands | 4,125 of 5,609 sites |
+| an authored CROSSING | a union's silhouette corners where two smooth shapes cross, and `sharpCorners` cannot see it on the authored side because it reads one subpath at a time | the rest of `checker` |
+| OCCLUDED boundary | the trace cannot reproduce what the raster does not show | the same exclusion §9.6 applies to the missed side |
+
+A traced corner further than 2px from any authored boundary is invented BOUNDARY — that is
+`spuriousMax`'s job and is not counted here.
+
+### 23.2 It catches the thing it was built for
+
+On the marks that reported §22, with the rejected reading toggled:
+
+| case | invented, reading OFF | reading ON |
+|---|---|---|
+| `chupa-chups` | 11 | **18** |
+| `logo-instagram` | 28 | **32** |
+| `logo-coca-cola` | 15 | **19** |
+| `logo-mastercard` | 1 | **3** |
+| `logo-ibm` | 1 | 1 |
+| `nike` | 1 | 1 |
+
+`ibm` and `nike` hold still, which matters: §22 was a genuine gain on `ibm` and the lens
+agrees. The gallery is private and cannot gate CI, so the gate needed a fixture — and the
+existing corpus could not provide one. That is the *third* hole §22.3 named: the smooth
+control that change was calibrated against is four plain DISCS, and a disc has neither of
+the anatomies the defect lives on (constant curvature, no blend).
+
+**`smooth-radii`** (tier 0, authored for this): art with **no corners at all**, so every
+sharp corner the trace asserts on it is invented by construction and the metric reads as a
+plain count. Ellipses at aspect 1:1 → 1:8 in both orientations (a 1:8 end has a ~2.5px
+radius while its flank is nearly straight — the whole curvature range on one closed path);
+rounded rectangles with 2 / 3 / 5 / 8 / 12 px corner radii, each a G¹ blend from a dead
+straight edge into a tight arc, plus narrow twins whose two blends nearly meet; and
+curvature-ramp eggs built from four quarter-ellipse arcs. (The first draft built those eggs
+from two half-ellipses, which is a LENS with a cusp at each end — a corner, in the fixture
+whose whole premise is that it has none.)
+
+Measured: the shipped tracer invents **12** corners on it, the rejected §22 reading **18**.
+The gate's allowance is 12, so §22 would have gone **red on a committed CI case**.
+
+### 23.3 What the lens found on the way in — a new §0 row
+
+Turning it on is itself a measurement, and it is not flattering. Over the 23 gated tier-0
+cases, flat lane, the shipped tracer:
+
+    p50 0   p90 2   max 12      18 invented corners over 3 of 23 cases
+
+`peak-drop` 2 (its own ~1.8° AA-seam control, faceted into two hard nodes), `hairlines` 4
+(sub-pixel bar caps, the corpus's hardest thin-feature case), `smooth-radii` **12** — on art
+with no corners in it at all, which is §0's new row. These are per-case ALLOWANCES rather
+than `KNOWN_DEFECTS` entries, and that choice has a cost worth stating: KNOWN_DEFECTS is
+keyed by CASE, so listing these three would switch off every other gate on them — and
+`peak-drop` was made green by §20 the week before. The header of `truth-gate.test.ts` is
+right that a recorded number is worse than a recorded boolean; the alternative here was
+worse still. The numbers are named, explained, and can only come down.
+
+**Scope, stated honestly:**
+- **FLAT art only**, the same predicate the region and ink gates use. On gradient art the
+  traced regions are posterization bands whose corners are a property of the banding rather
+  than of the authored outline, and the junction exemption does not fully model them —
+  measured, five tier-1 cases report 1–3 invented corners. Gating that here would
+  misattribute a banding question to a corner-precision one.
+- **@512 only.** Every radius in the corpus halves at 256, so "corner or curve" is a
+  different question there and the allowances would be a different calibration. §12's
+  warning about gating tier-2 corners for the first time inside the low-res lane applies
+  exactly.
+- A corpus-wide gallery sweep is still missing: the first attempt OOM'd on the brute-force
+  nearest-sample query (since replaced with a bucket grid, but the run was not repeated).
+
+### 23.4 Where this leaves #23
+
+The issue stays open and its §0 row is unchanged — the turn is still under-read on the
+lattice, `gear-teeth` still stands at 53/60, and the cliff toward the 60° bar is still
+there. What has changed is that a second attempt can now be judged before a human has to
+look at it: the reading that recovers those corners must do it **without moving
+`smooth-radii` off 12**. §22.5 asked for exactly this gate; it exists now.
+
+The open question that attempt could not answer is unchanged and is the real one — how to
+separate "this boundary CORNERS here" from "this boundary CURVES tightly here" when both
+are read from the same short, staircase-quantized window. The circle veto was one answer
+and it was too narrow. Whatever the next one is, it now has to be calibrated on ellipse
+ends and straight→arc blends, because that is what `smooth-radii` is made of.

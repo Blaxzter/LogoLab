@@ -46,6 +46,7 @@ import {
   LOWRES_CORPUS,
   LOWRES_RES,
   LOWRES_TOL,
+  inventedMaxFor,
   TIER2_REGION_CORPUS,
   TIER2_REGION_RES,
   evaluateTruthGates,
@@ -170,11 +171,22 @@ async function runCase(
   // this is the gate that sees it. Skipped elsewhere — evaluateTruthGates would
   // report it n/a anyway, so the render cost is only paid where it can gate.
   const paint = c.gradients && c.tier === 0 ? scoreDoc(img, doc) : null
-  const corners = opts.skipTier2Corners && c.tier === 2 ? {} : { gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered }
+  const corners = opts.skipTier2Corners && c.tier === 2
+    ? {}
+    : { gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered }
+  // §23's precision term, @512 only for now. Every radius in the corpus HALVES at 256, so
+  // the metric's own question ("corner or curve?") is a different question there and its
+  // allowances would be a different calibration; gating a brand-new lens for the first time
+  // inside another lane's numbers is the misattribution §12 warned about with tier-2 corners.
+  // Named in §23.3 as the next thing to extend.
+  const precision = res === RES && !(opts.skipTier2Corners && c.tier === 2)
+    ? { cornersInvented: g.cornersInvented, inventedMax: inventedMaxFor(c.name) }
+    : {}
   const gates = evaluateTruthGates({
     samples: g.samples, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
     trueRegions: r.trueRegions, recovered: r.recovered,
     ...corners,
+    ...precision,
     paintMean: paint?.meanDeltaE, paintP95: paint?.p95DeltaE,
     // Ink kept (§0 #14): region recovery is a MEDIAN and only flips past 50% loss, so a
     // region can pinch to a sliver with every other gate green. Flat art only.
