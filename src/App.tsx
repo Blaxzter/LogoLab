@@ -29,6 +29,13 @@ import { LegalFooter } from './components/legal/LegalFooter'
  * were separate Vite HTML entries for exactly this reason — React.lazy is what keeps
  * that isolation now that they're routes.
  */
+/**
+ * The SVG editor. Lazy for the same reason the labs are: it is a whole vector
+ * authoring tool — canvas, shape builders, path surgery — and none of it belongs
+ * in the bundle someone downloads to preview a logo on a phone mockup.
+ */
+const EditorPanel = lazy(() => import('./components/panels/EditorPanel'))
+
 const LabsIndex = lazy(() => import('./components/labs/LabsIndex'))
 const PipelineLab = lazy(() => import('./components/labs/PipelineLab'))
 const AbLab = lazy(() => import('./components/labs/AbLab'))
@@ -177,7 +184,8 @@ export function App() {
   // own desktop status bar, so on desktop we drop the bottom footer there — it
   // would otherwise add a second scroll past an already full-height tool. On
   // mobile those studios have no status bar, so the footer stays (scrolls in).
-  const isStudio = tab === 'cleanup' || tab === 'vectorize' || tab === 'sheet'
+  const isStudio =
+    tab === 'cleanup' || tab === 'vectorize' || tab === 'sheet' || tab === 'editor'
 
   // Close any open overlay on navigation (covers the back button, not just the
   // in-menu links), and drop the appearance drawer when its trigger disappears.
@@ -235,8 +243,11 @@ export function App() {
       <Header onOpenMenu={() => setMenuOpen(true)} />
       <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <div className="flex min-h-0 flex-1">
-        {/* Inline column on desktop; a drawer (below) replaces it on mobile. */}
-        <Sidebar className="hidden md:block" />
+        {/* Inline column on desktop; a drawer (below) replaces it on mobile.
+            Hidden on the Editor tab: that tool edits its OWN document, not the
+            app's working logo, so a logo rail there is both misleading and a
+            320px bite out of the canvas. */}
+        {tab !== 'editor' && <Sidebar className="hidden md:block" />}
         {/* flex column + footer with mt-auto = the footer rides below the
             content instead of being a bar pinned to the viewport: it rests at
             the bottom on short pages and scrolls out of view under tall ones
@@ -252,6 +263,14 @@ export function App() {
             <Route path="/preview" element={<PreviewGrid />} />
             <Route path="/cleanup" element={<CleanupPanel />} />
             <Route path="/vectorize" element={<VectorizePanel />} />
+            <Route
+              path="/editor"
+              element={
+                <Suspense fallback={<LabLoading />}>
+                  <EditorPanel />
+                </Suspense>
+              }
+            />
             <Route path="/sheet" element={<SheetPanel />} />
             <Route path="/export" element={<ExportPanel />} />
             {/* Root and any unknown path land on Preview. */}

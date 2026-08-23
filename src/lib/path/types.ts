@@ -107,10 +107,30 @@ export interface Topology {
   edges: SharedEdge[]
 }
 
+/**
+ * A stroked outline on a PathItem. Absent ⇒ fill only, which is every path the
+ * tracer ever produces — the vectorizer models paint as filled regions, so this
+ * is purely an authoring affordance of the SVG editor.
+ */
+export interface Stroke {
+  /** #rrggbb. */
+  color: string
+  /** In viewBox units. */
+  width: number
+  cap: 'butt' | 'round' | 'square'
+  join: 'miter' | 'round' | 'bevel'
+  /** Dash pattern in viewBox units; omitted / empty ⇒ solid. */
+  dash?: number[]
+  /** 0–1; omitted means 1. */
+  opacity?: number
+}
+
 /** A fillable, node-editable path (possibly compound — holes via subpaths). */
 export interface PathItem {
   kind: 'path'
   id: string
+  /** Editor-only display name for the layers list. Never serialized. */
+  name?: string
   /**
    * Representative solid fill (#rrggbb). Always present, even when `gradient`
    * is set — it is the swatch color, the force-color / recolor base, and the
@@ -136,6 +156,11 @@ export interface PathItem {
    */
   loops?: EdgeRef[][]
   subPaths: SubPath[]
+  /**
+   * Optional stroke. Purely additive — the tracer never sets it, so traced
+   * output is byte-identical whether or not this field exists.
+   */
+  stroke?: Stroke
   /** Editor-only: hidden items render nowhere and are excluded from export. */
   visible: boolean
 }
@@ -148,6 +173,8 @@ export interface PathItem {
 export interface RawItem {
   kind: 'raw'
   id: string
+  /** Editor-only display name for the layers list. Never serialized. */
+  name?: string
   markup: string
   /** Composed `transform` attribute value inherited from ancestor groups. */
   transform?: string
@@ -156,7 +183,34 @@ export interface RawItem {
   visible: boolean
 }
 
-export type DocItem = PathItem | RawItem
+/**
+ * A named container of items — the layer folder of the SVG editor, serialized
+ * as a plain `<g>`.
+ *
+ * DELIBERATELY CARRIES NO TRANSFORM. Every coordinate in this model is absolute
+ * in viewBox units (see the file header), and that invariant is what lets any
+ * consumer read `subPaths` without composing an ancestor chain — `parseSvg`
+ * already bakes imported group transforms into their children for exactly this
+ * reason. Grouping is therefore *structure only*: moving or scaling a group
+ * rewrites its descendants' coordinates. That costs a walk per transform and
+ * buys immunity to the entire class of bug where a coordinate means one thing
+ * to the renderer and another to hit-testing.
+ */
+export interface GroupItem {
+  kind: 'group'
+  id: string
+  /** Display name for the layers list; also emitted as the `<g>`'s data-name. */
+  name?: string
+  /** Paint order within the group: first = bottom. */
+  children: DocItem[]
+  /** Multiplies down onto descendants at render/serialize time. 0–1. */
+  opacity?: number
+  visible: boolean
+  /** Editor-only: whether the layers list shows this group expanded. */
+  expanded?: boolean
+}
+
+export type DocItem = PathItem | RawItem | GroupItem
 
 export interface EditableDoc {
   /** [minX, minY, width, height] */

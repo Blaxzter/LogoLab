@@ -1,4 +1,4 @@
-import { Columns2, Download, Eraser, Eye, FlaskConical, Gauge, Images, Layers, LayoutGrid, Timer, Wand2 } from 'lucide-react'
+import { Columns2, Download, Eraser, Eye, FlaskConical, Gauge, Images, Layers, LayoutGrid, PenTool, Timer, Wand2 } from 'lucide-react'
 import type { Tab } from '../store'
 
 /** The panel tabs — shared by the desktop header nav and the mobile menu. */
@@ -6,6 +6,10 @@ export const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'preview', label: 'Preview', icon: <Eye size={15} /> },
   { id: 'cleanup', label: 'Cleanup', icon: <Eraser size={15} /> },
   { id: 'vectorize', label: 'Vectorize', icon: <Wand2 size={15} /> },
+  // The general-purpose vector editor. It sits after Vectorize because that is
+  // where its input usually comes from, but unlike every other tab it does NOT
+  // work on the app's logo — it opens whatever you give it (see EditorPanel).
+  { id: 'editor', label: 'Editor', icon: <PenTool size={15} /> },
   // A sheet is many logos at once, so it sits apart from the single-logo flow —
   // after the vectorizer it feeds, before the export it ends in.
   { id: 'sheet', label: 'Icon sheet', icon: <LayoutGrid size={15} /> },

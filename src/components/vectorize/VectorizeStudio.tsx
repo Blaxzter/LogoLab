@@ -36,7 +36,7 @@ import { rasterCapFor } from "../../lib/traceCaps";
 import { hexToRgb, normalizeHex, rgbToHex } from "../../lib/colorUtils";
 import { downloadText } from "../../lib/download";
 import { cleanSvg } from "../../lib/svgClean";
-import { docStats, parseSvg, serializeDoc } from "../../lib/path/model";
+import { docStats, isStrokeOnly, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
 import { regionProvenance } from "../../lib/path/topology";
 import { deleteRegionNodes, removeRegionAndHeal, removeRegionSection, translateRegionNodes } from "../../lib/path/topologyEdit";
@@ -863,14 +863,19 @@ export function VectorizeStudio({
     const handleRecolor = useCallback(
         (id: string, fill: string, commit: boolean) => {
             if (!doc) return;
-            // Picking a solid swatch color drops any fitted gradient.
             const next = {
                 ...doc,
-                items: doc.items.map((it) =>
-                    it.id === id && it.kind === "path"
-                        ? { ...it, fill, gradient: undefined }
-                        : it,
-                ),
+                items: doc.items.map((it) => {
+                    if (it.id !== id || it.kind !== "path") return it;
+                    // A stroke-only path's visible colour IS its stroke, so the
+                    // swatch has to write there — assigning `fill` would leave
+                    // it `none` and the recolor would silently do nothing.
+                    if (isStrokeOnly(it)) {
+                        return { ...it, stroke: { ...it.stroke!, color: fill } };
+                    }
+                    // Picking a solid swatch color drops any fitted gradient.
+                    return { ...it, fill, gradient: undefined };
+                }),
             };
             if (commit) commitDoc(next);
             else historySet(next);
@@ -1000,7 +1005,7 @@ export function VectorizeStudio({
     };
 
     return (
-        <div className="flex h-full min-h-0 shrink-0 animate-in-fade">
+        <div className="canvas-ui flex h-full min-h-0 shrink-0 animate-in-fade">
             <TraceControls {...traceProps} />
 
             <div className="flex min-w-0 flex-1 flex-col">

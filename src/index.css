@@ -275,6 +275,33 @@
     color: var(--color-muted);
   }
 
+  /* Canvas-app chrome (the SVG editor's workspace).
+     Nothing in a tool like this is prose: the labels, layer rows, toolbar and
+     status line are all controls, and every one of them is a place a drag can
+     START. Leaving them selectable means pressing on a layer row and moving
+     paints a blue text selection that then fights the gesture for the pointer —
+     and a double-click meant for "rename" or "insert node" highlights a word
+     instead. So the whole workspace opts out, and the places that really are
+     text — the fields you type into — opt back in, or you couldn't select what
+     you're editing inside them. */
+  .canvas-ui {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .canvas-ui input,
+  .canvas-ui textarea,
+  .canvas-ui [contenteditable='true'] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  /* Belt and braces for the drawing surface: a press-and-move on an <svg> can
+     otherwise start the browser's native element drag, which steals the pointer
+     capture out from under the gesture (the same failure the labs hit on <img>,
+     see labs.css). */
+  .canvas-ui svg {
+    -webkit-user-drag: none;
+  }
+
   /* Transparency checkerboard (for previewing logos with alpha) */
   .checkerboard {
     background-image: linear-gradient(45deg, #e9ebef 25%, transparent 25%),
