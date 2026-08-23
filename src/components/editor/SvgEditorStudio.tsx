@@ -6,7 +6,7 @@
 // keyboard here (rather than on the canvas) is what makes shortcuts work while
 // the focus is in the layers list — the one place people reach for Delete.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronsDown,
   ChevronsUp,
@@ -14,18 +14,9 @@ import {
   Download,
   Grid3x3,
   Group as GroupIcon,
-  Hand,
   Layers,
   Magnet,
-  Minus,
-  MousePointer2,
-  PenTool,
   Redo2,
-  Circle as CircleIcon,
-  Spline,
-  Square as SquareIcon,
-  Sparkles,
-  Hexagon,
   Trash2,
   Undo2,
   Ungroup,
@@ -36,6 +27,7 @@ import {
   findItem,
   groupItems,
   isGroup,
+  moveItems,
   removeItems,
   reorderItems,
   topLevelSelection,
@@ -52,6 +44,7 @@ import {
 import { alignItems, canDistribute as canDist, distributeItems } from '../../lib/editor/align'
 import type { AlignEdge, DistributeAxis } from '../../lib/editor/align'
 import { DEFAULT_SNAP, nudgeStep, type SnapConfig } from '../../lib/editor/snapping'
+import type { DropSpot } from '../../lib/editor/layerRows'
 import { deleteNodes, moveNodes } from '../../lib/path/geometry'
 import { breakAt, joinEnds, reversePath, splitCompound, combinePaths } from '../../lib/editor/pathOps'
 import { useHistory } from '../../hooks/useHistory'
@@ -64,7 +57,9 @@ import { downloadText } from '../../lib/download'
 import { EditorStage, parseNodeKey } from './EditorStage'
 import { LayersTree } from './LayersTree'
 import { Inspector } from './Inspector'
-import { TOOLS, toolForKey, type EditorTool } from './tools'
+import { toolDef, toolForKey, type EditorTool } from './tools'
+import { TOOL_ICON } from './toolIcons'
+import { ShapeFlyout } from './ShapeFlyout'
 import {
   duplicateItems,
   newId,
@@ -76,18 +71,6 @@ import {
   toggleExpanded,
   toggleVisible,
 } from './editorDoc'
-
-const TOOL_ICON: Record<EditorTool, React.ReactNode> = {
-  select: <MousePointer2 size={15} />,
-  node: <Spline size={15} />,
-  pen: <PenTool size={15} />,
-  rect: <SquareIcon size={15} />,
-  ellipse: <CircleIcon size={15} />,
-  line: <Minus size={15} />,
-  polygon: <Hexagon size={15} />,
-  star: <Sparkles size={15} />,
-  pan: <Hand size={15} />,
-}
 
 export interface SvgEditorStudioProps {
   /** The document to open. */
@@ -134,21 +117,58 @@ export function SvgEditorStudio({
   const doc = history.value
   const previewDoc = doc ?? initialDoc
 
+  // The document, for handlers that must stay identity-stable across renders
+  // (see the layers rail below) — reading a ref rather than closing over the
+  // render's document is what lets them be `useCallback([])`.
+  const docRef = useRef(previewDoc)
+  docRef.current = previewDoc
+
+  // `history` is a fresh object every render; its methods are not. Depending on
+  // the methods keeps every callback built from them stable.
+  const { set: historySet, commitMerged: historyMerge } = history
+
   const commit = useCallback(
     (next: EditableDoc) => {
-      history.set(next, true)
+      historySet(next, true)
       setApplied(false)
     },
-    [history],
+    [historySet],
   )
-  const preview = useCallback((next: EditableDoc) => history.set(next), [history])
+  const preview = useCallback((next: EditableDoc) => historySet(next), [historySet])
+
+  /**
+   * A paint edit that arrives as a STREAM — a colour well being scrubbed, an
+   * opacity slider being dragged. Every frame is committed (so nothing is left
+   * uncommitted when the gesture just stops, which is all a colour picker ever
+   * does), but the whole burst folds into one undo entry. Keyed by the control
+   * AND the selection, so moving to another shape starts a new entry rather
+   * than absorbing it into the last one.
+   */
+  const selectionKey = useMemo(() => [...selection].sort().join(','), [selection])
+  const commitLive = useCallback(
+    (next: EditableDoc, control: string) => {
+      historyMerge(next, `${control}:${selectionKey}`)
+      setApplied(false)
+    },
+    [historyMerge, selectionKey],
+  )
+
+  /** Switch tools. Leaving the pen abandons the path it was drawing. */
+  const pickTool = useCallback((next: EditorTool) => {
+    setTool(next)
+    if (next !== 'pen') setPenPathId(null)
+  }, [])
 
   const box = useMemo(
     () => selectionBox(previewDoc.items, selection),
     [previewDoc.items, selection],
   )
   const stats = useMemo(() => docStats(previewDoc), [previewDoc])
-  const svgText = useMemo(() => serializeDoc(previewDoc, 2), [previewDoc])
+  // Built on demand, NOT memoized per document: serializing rebuilds the `d` of
+  // every path in the file, and the only three things that want it are a
+  // download, a copy and an apply. Kept as a memo it re-ran on every frame of
+  // every drag and every colour scrub, for a string nobody was looking at.
+  const buildSvg = useCallback(() => serializeDoc(previewDoc, 2), [previewDoc])
 
   /* --------------------------------------------------------- operations */
 
@@ -234,6 +254,55 @@ export function SvgEditorStudio({
     setSelection(freed)
     setEnteredGroupId(null)
   }, [previewDoc, selection, commit])
+
+  /** A layers-rail drag: drop the moved ids at a paint-order insertion point. */
+  const doMove = useCallback(
+    (ids: ReadonlySet<string>, to: DropSpot) => {
+      const d = docRef.current
+      const items = moveItems(d.items, ids, to)
+      if (items) commit({ ...d, items })
+    },
+    [commit],
+  )
+
+  /* -------------------------------------------------------- layers rail */
+
+  // The rail lags DELIBERATELY. It is the most expensive thing on screen (one
+  // row per item, each with a thumbnail) and the least urgent: during a colour
+  // scrub the only thing in it that changes is one 16px swatch. Deferred, React
+  // renders it at low priority and simply drops the intermediate frames of a
+  // drag — which it can only do if the rail bails out of the urgent render, so
+  // `LayersTree` is memoized and every prop below is identity-stable.
+  const railDoc = useDeferredValue(previewDoc)
+
+  const selectRows = useCallback((ids: ReadonlySet<string>) => {
+    setNodeSel(new Set())
+    setSelection(ids)
+  }, [])
+  const rowToggleVisible = useCallback(
+    (id: string) => commit(toggleVisible(docRef.current, id)),
+    [commit],
+  )
+  const rowToggleExpanded = useCallback(
+    (id: string) => preview(toggleExpanded(docRef.current, id)),
+    [preview],
+  )
+  const rowRename = useCallback(
+    (id: string, name: string) => commit(renameItem(docRef.current, id, name)),
+    [commit],
+  )
+  const rowDelete = useCallback(
+    (id: string) => {
+      const d = docRef.current
+      commit({ ...d, items: removeItems(d.items, new Set([id])) })
+      setSelection((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    },
+    [commit],
+  )
 
   const reorder = useCallback(
     (how: 'front' | 'back' | 'forward' | 'backward') => {
@@ -443,25 +512,22 @@ export function SvgEditorStudio({
       }
       if (!e.altKey && !e.shiftKey) {
         const next = toolForKey(k)
-        if (next) {
-          setTool(next)
-          if (next !== 'pen') setPenPathId(null)
-        }
+        if (next) pickTool(next)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [
     history, previewDoc, selection, nodeSel, penPathId, enteredGroupId, snap.grid,
-    deleteSelection, duplicateSelection, doGroup, doUngroup, doJoin, reorder, nudge,
+    deleteSelection, duplicateSelection, doGroup, doUngroup, doJoin, reorder, nudge, pickTool,
   ])
 
   /* ------------------------------------------------------------ export */
 
-  const download = () => downloadText(svgText, `${fileName}.svg`, 'image/svg+xml')
-  const copy = () => void navigator.clipboard?.writeText(svgText)
+  const download = () => downloadText(buildSvg(), `${fileName}.svg`, 'image/svg+xml')
+  const copy = () => void navigator.clipboard?.writeText(buildSvg())
   const apply = () => {
-    onApply?.(svgText, previewDoc.viewBox[2], previewDoc.viewBox[3])
+    onApply?.(buildSvg(), previewDoc.viewBox[2], previewDoc.viewBox[3])
     setApplied(true)
   }
 
@@ -478,24 +544,20 @@ export function SvgEditorStudio({
     <div className="canvas-ui flex h-full min-h-0 w-full shrink-0 flex-col animate-in-fade">
       {/* Toolbar */}
       <div className="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-surface px-2">
-        <div className="flex items-center gap-0.5 rounded-lg bg-surface-3 p-0.5">
-          {TOOLS.map((t) => (
-            <Tooltip key={t.id} label={`${t.label} (${t.key.toUpperCase()}) — ${t.hint}`}>
-              <button
-                type="button"
-                aria-label={t.label}
-                onClick={() => {
-                  setTool(t.id)
-                  if (t.id !== 'pen') setPenPathId(null)
-                }}
-                className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-                  tool === t.id ? 'bg-surface text-accent shadow-xs' : 'text-ink-2 hover:text-ink'
-                }`}
-              >
-                {TOOL_ICON[t.id]}
-              </button>
-            </Tooltip>
-          ))}
+        {/* Three groups, so the bar says what a tool DOES before you hover it:
+            what you select and reshape with, what draws new geometry, the view. */}
+        <div className="flex items-center gap-1.5">
+          <ToolPill>
+            <ToolBtn id="select" tool={tool} onPick={pickTool} />
+            <ToolBtn id="node" tool={tool} onPick={pickTool} />
+          </ToolPill>
+          <ToolPill>
+            <ToolBtn id="pen" tool={tool} onPick={pickTool} />
+            <ShapeFlyout tool={tool} onPick={pickTool} />
+          </ToolPill>
+          <ToolPill>
+            <ToolBtn id="pan" tool={tool} onPick={pickTool} />
+          </ToolPill>
         </div>
 
         <Divider />
@@ -505,27 +567,6 @@ export function SvgEditorStudio({
         </BarBtn>
         <BarBtn label="Redo (Ctrl+Shift+Z)" onClick={history.redo} disabled={!history.canRedo}>
           <Redo2 size={15} />
-        </BarBtn>
-
-        <Divider />
-
-        <BarBtn label="Group (Ctrl+G)" onClick={doGroup} disabled={!canGroup}>
-          <GroupIcon size={15} />
-        </BarBtn>
-        <BarBtn label="Ungroup (Ctrl+Shift+G)" onClick={doUngroup} disabled={!canUngroup}>
-          <Ungroup size={15} />
-        </BarBtn>
-        <BarBtn label="Bring to front (Ctrl+Shift+])" onClick={() => reorder('front')} disabled={!selection.size}>
-          <ChevronsUp size={15} />
-        </BarBtn>
-        <BarBtn label="Send to back (Ctrl+Shift+[)" onClick={() => reorder('back')} disabled={!selection.size}>
-          <ChevronsDown size={15} />
-        </BarBtn>
-        <BarBtn label="Duplicate (Ctrl+D)" onClick={duplicateSelection} disabled={!selection.size}>
-          <Copy size={15} />
-        </BarBtn>
-        <BarBtn label="Delete (Del)" onClick={deleteSelection} disabled={!selection.size && !nodeSel.size}>
-          <Trash2 size={15} />
         </BarBtn>
 
         <Divider />
@@ -598,36 +639,59 @@ export function SvgEditorStudio({
 
       {/* Body */}
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface md:flex">
+        <aside className="hidden w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-line px-3">
             <h3 className="field-label">Layers</h3>
             <span className="text-[0.68rem] text-faint">{stats.paths} paths</span>
           </div>
-          <LayersTree
-            doc={previewDoc}
-            selection={selection}
-            onSelect={(id, additive) => {
-              setNodeSel(new Set())
-              setSelection((prev) => {
-                if (!additive) return new Set([id])
-                const next = new Set(prev)
-                if (next.has(id)) next.delete(id)
-                else next.add(id)
-                return next
-              })
-            }}
-            onToggleVisible={(id) => commit(toggleVisible(previewDoc, id))}
-            onToggleExpanded={(id) => preview(toggleExpanded(previewDoc, id))}
-            onRename={(id, name) => commit(renameItem(previewDoc, id, name))}
-            onDelete={(id) => {
-              commit({ ...previewDoc, items: removeItems(previewDoc.items, new Set([id])) })
-              setSelection((prev) => {
-                const next = new Set(prev)
-                next.delete(id)
-                return next
-              })
-            }}
-          />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <LayersTree
+              doc={railDoc}
+              selection={selection}
+              onSelect={selectRows}
+              onToggleVisible={rowToggleVisible}
+              onToggleExpanded={rowToggleExpanded}
+              onRename={rowRename}
+              onMove={doMove}
+              onDelete={rowDelete}
+            />
+          </div>
+
+          {/* The layer ops live WITH the layers. They act on the same selection
+              the rail shows, and in the top bar they read as "tools" — sat next
+              to the pen, they invite the question "what will this draw?". */}
+          <div className="flex shrink-0 items-center gap-0.5 border-t border-line px-1.5 py-1.5">
+            <BarBtn label="Group (Ctrl+G)" onClick={doGroup} disabled={!canGroup}>
+              <GroupIcon size={15} />
+            </BarBtn>
+            <BarBtn label="Ungroup (Ctrl+Shift+G)" onClick={doUngroup} disabled={!canUngroup}>
+              <Ungroup size={15} />
+            </BarBtn>
+            <BarBtn
+              label="Bring to front (Ctrl+Shift+])"
+              onClick={() => reorder('front')}
+              disabled={!selection.size}
+            >
+              <ChevronsUp size={15} />
+            </BarBtn>
+            <BarBtn
+              label="Send to back (Ctrl+Shift+[)"
+              onClick={() => reorder('back')}
+              disabled={!selection.size}
+            >
+              <ChevronsDown size={15} />
+            </BarBtn>
+            <BarBtn label="Duplicate (Ctrl+D)" onClick={duplicateSelection} disabled={!selection.size}>
+              <Copy size={15} />
+            </BarBtn>
+            <BarBtn
+              label="Delete (Del)"
+              onClick={deleteSelection}
+              disabled={!selection.size && !nodeSel.size}
+            >
+              <Trash2 size={15} />
+            </BarBtn>
+          </div>
         </aside>
 
         <div className="relative min-w-0 flex-1 bg-bg">
@@ -667,10 +731,22 @@ export function SvgEditorStudio({
             selection={selection}
             box={box}
             canDistribute={canDist(previewDoc.items, selection)}
-            onFill={(f) => commit(setFill(previewDoc, selection, f))}
-            onFillOpacity={(v) => commit(setFillOpacity(previewDoc, selection, v))}
+            onFill={(f, live) => {
+              const next = setFill(previewDoc, selection, f)
+              if (live) commitLive(next, 'fill')
+              else commit(next)
+            }}
+            onFillOpacity={(v, live) => {
+              const next = setFillOpacity(previewDoc, selection, v)
+              if (live) commitLive(next, 'fillOpacity')
+              else commit(next)
+            }}
             onFillRule={(r) => commit(setFillRule(previewDoc, selection, r))}
-            onStroke={(s: Stroke | null) => commit(setStroke(previewDoc, selection, s))}
+            onStroke={(s: Stroke | null, live?: boolean) => {
+              const next = setStroke(previewDoc, selection, s)
+              if (live) commitLive(next, 'stroke')
+              else commit(next)
+            }}
             onGeometry={setGeometry}
             onAlign={align}
             onDistribute={distribute}
@@ -711,6 +787,34 @@ export function SvgEditorStudio({
 }
 
 /* -------------------------------------------------------------- helpers */
+
+/** One segmented group of tool buttons. */
+function ToolPill({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg bg-surface-3 p-0.5">{children}</div>
+  )
+}
+
+function ToolBtn({
+  id, tool, onPick,
+}: { id: EditorTool; tool: EditorTool; onPick: (t: EditorTool) => void }) {
+  const def = toolDef(id)
+  return (
+    <Tooltip label={`${def.label} (${def.key.toUpperCase()}) — ${def.hint}`}>
+      <button
+        type="button"
+        aria-label={def.label}
+        aria-pressed={tool === id}
+        onClick={() => onPick(id)}
+        className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+          tool === id ? 'bg-surface text-accent shadow-xs' : 'text-ink-2 hover:text-ink'
+        }`}
+      >
+        {TOOL_ICON[id]}
+      </button>
+    </Tooltip>
+  )
+}
 
 function Divider() {
   return <span className="mx-1 h-6 w-px shrink-0 bg-line" />

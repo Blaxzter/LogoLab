@@ -45,3 +45,17 @@ export function toolForKey(key: string): EditorTool | null {
 export function isDrawTool(tool: EditorTool): boolean {
   return tool === 'rect' || tool === 'ellipse' || tool === 'line' || tool === 'polygon' || tool === 'star'
 }
+
+/**
+ * The shape tools, in the order the toolbar's shape flyout lists them. They are
+ * the ones that CREATE geometry from a drag, which is why the bar groups them
+ * apart from the tools that select and reshape what is already there.
+ */
+export const SHAPE_TOOLS: ToolDef[] = TOOLS.filter((t) => isDrawTool(t.id))
+
+/** Look a tool's definition up by id. */
+export function toolDef(id: EditorTool): ToolDef {
+  const found = TOOLS.find((t) => t.id === id)
+  if (!found) throw new Error(`unknown tool ${id}`)
+  return found
+}

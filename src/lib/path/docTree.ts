@@ -277,6 +277,59 @@ export function ungroup(items: readonly DocItem[], groupId: string): DocItem[] |
   return insertItems(stripped, at.parent?.id ?? null, at.index, kids)
 }
 
+/**
+ * Move `ids` to a paint-order insertion point — what a layers-panel drag does.
+ *
+ * Returns null when the move is impossible or pointless: dropping a group into
+ * its own subtree, or landing exactly where the items already are (which would
+ * otherwise cost an undo step that visibly does nothing).
+ *
+ * The subtlety is the index. It is quoted against the ORIGINAL tree, but the
+ * insert happens after the movers have been pulled out — so every mover that
+ * sat before the target inside the same parent has shifted it down by one.
+ */
+export function moveItems(
+  items: readonly DocItem[],
+  ids: ReadonlySet<string>,
+  to: { parentId: string | null; index: number },
+): DocItem[] | null {
+  const top = topLevelSelection(items, ids)
+  if (top.length === 0) return null
+  const moving = new Set(top)
+
+  if (to.parentId !== null) {
+    const dest = findItem(items, to.parentId)
+    if (!dest || !isGroup(dest)) return null
+    // A group cannot be dropped inside itself, or inside anything it contains.
+    if (moving.has(to.parentId)) return null
+    if (ancestorsOf(items, to.parentId).some((g) => moving.has(g.id))) return null
+  }
+
+  // Movers keep their relative stacking, whatever order the selection is in.
+  const order = new Map<string, number>()
+  let n = 0
+  walkItems(items, (it) => order.set(it.id, n++))
+  const picked = top
+    .slice()
+    .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))
+    .map((id) => findItem(items, id))
+    .filter((it): it is DocItem => it !== null)
+  if (picked.length === 0) return null
+
+  const siblings =
+    to.parentId === null ? items : (findItem(items, to.parentId) as GroupItem).children
+  const shift = siblings.filter((c, i) => i < to.index && moving.has(c.id)).length
+  const next = insertItems(removeItems(items, moving), to.parentId, to.index - shift, picked)
+  return treeSig(next) === treeSig(items) ? null : next
+}
+
+/** Ids in tree order with their depth — enough to tell "nothing moved". */
+function treeSig(items: readonly DocItem[]): string {
+  const parts: string[] = []
+  walkItems(items, (it, depth) => parts.push(`${depth}:${it.id}`))
+  return parts.join('|')
+}
+
 /** Selected ids with any that are nested inside another selected id dropped. */
 export function topLevelSelection(
   items: readonly DocItem[],

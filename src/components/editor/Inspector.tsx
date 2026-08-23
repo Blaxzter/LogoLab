@@ -4,8 +4,12 @@
 // field that applied on each keystroke would push one undo step per digit and
 // would fight you the moment you cleared it to retype — so the draft lives in
 // local state until you leave the field.
+//
+// The two CONTINUOUS controls — the colour wells and the sliders — can't work
+// that way: they have no commit moment, they just stop. They pass `live` with
+// every change instead, and the studio folds the burst into one undo entry.
 
-import { useEffect, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -30,10 +34,11 @@ export interface InspectorProps {
   doc: EditableDoc
   selection: ReadonlySet<string>
   box: Box | null
-  onFill: (fill: string) => void
-  onFillOpacity: (v: number) => void
+  /** `live` marks one frame of a scrub, not a finished pick. */
+  onFill: (fill: string, live?: boolean) => void
+  onFillOpacity: (v: number, live?: boolean) => void
   onFillRule: (rule: 'nonzero' | 'evenodd') => void
-  onStroke: (stroke: Stroke | null) => void
+  onStroke: (stroke: Stroke | null, live?: boolean) => void
   onGeometry: (patch: { x?: number; y?: number; w?: number; h?: number }) => void
   onAlign: (edge: AlignEdge) => void
   onDistribute: (axis: DistributeAxis) => void
@@ -65,7 +70,19 @@ export function Inspector({
     else if (item.kind === 'path') paths.push(item)
   }
   const lead = paths[0] ?? null
-  const palette = docPalette(doc)
+
+  // The document's palette is DEFERRED. Every frame of a colour scrub changes
+  // the document, hence the palette, hence all of its swatches — for a strip
+  // nobody is reading mid-drag, and which flickers while it re-sorts. Deferred,
+  // React renders the swatches at low priority: during a fast scrub the whole
+  // strip is simply skipped, and it catches up the moment the drag settles.
+  const paletteDoc = useDeferredValue(doc)
+  const palette = useMemo(() => docPalette(paletteDoc), [paletteDoc])
+  // Stable, so <Palette> can bail out on the frames where `palette` has not
+  // moved. `onFill` itself is a fresh closure on every parent render.
+  const fillRef = useRef(onFill)
+  fillRef.current = onFill
+  const pickPaletteColor = useCallback((c: string) => fillRef.current(c), [])
 
   if (selection.size === 0) {
     return (
@@ -78,16 +95,7 @@ export function Inspector({
         {palette.length > 0 && (
           <div className="mt-4">
             <h4 className="field-label mb-1.5">Document colours</h4>
-            <div className="flex flex-wrap gap-1">
-              {palette.map((p) => (
-                <span
-                  key={p.color}
-                  title={`${p.color} · ${p.count} path${p.count === 1 ? '' : 's'}`}
-                  className="h-5 w-5 rounded ring-1 ring-line"
-                  style={{ backgroundColor: p.color }}
-                />
-              ))}
-            </div>
+            <Palette palette={palette} />
           </div>
         )}
       </div>
@@ -130,7 +138,11 @@ export function Inspector({
 
       <Section title="Fill">
         <div className="flex items-center gap-2">
-          <ColorWell value={lead?.fill ?? '#000000'} disabled={!lead} onChange={onFill} />
+          <ColorWell
+            value={lead?.fill ?? '#000000'}
+            disabled={!lead}
+            onChange={(c) => onFill(c, true)}
+          />
           <HexField
             value={lead?.fill ?? '#000000'}
             onCommit={(hex) => onFill(hex)}
@@ -146,26 +158,13 @@ export function Inspector({
           </Tooltip>
         </div>
 
-        {palette.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {palette.map((p) => (
-              <button
-                key={p.color}
-                type="button"
-                title={p.color}
-                onClick={() => onFill(p.color)}
-                className="h-5 w-5 rounded ring-1 ring-line transition-transform hover:scale-110"
-                style={{ backgroundColor: p.color }}
-              />
-            ))}
-          </div>
-        )}
+        {palette.length > 0 && <Palette palette={palette} onPick={pickPaletteColor} />}
 
         <div className="mt-2">
           <SliderRow
             label="Opacity"
             value={Math.round((lead?.fillOpacity ?? 1) * 100)}
-            onChange={(v) => onFillOpacity(v / 100)}
+            onChange={(v) => onFillOpacity(v / 100, true)}
           />
         </div>
 
@@ -195,7 +194,7 @@ function StrokeSection({
   onStroke,
 }: {
   stroke: Stroke | null
-  onStroke: (s: Stroke | null) => void
+  onStroke: (s: Stroke | null, live?: boolean) => void
 }) {
   const on = stroke !== null
   const base: Stroke = stroke ?? { color: '#111827', width: 2, cap: 'butt', join: 'miter' }
@@ -203,7 +202,7 @@ function StrokeSection({
   return (
     <Section title="Stroke">
       <div className="flex items-center gap-2">
-        <ColorWell value={base.color} onChange={(c) => onStroke({ ...base, color: c })} />
+        <ColorWell value={base.color} onChange={(c) => onStroke({ ...base, color: c }, true)} />
         <HexField value={base.color} onCommit={(c) => onStroke({ ...base, color: c })} />
         <button
           type="button"
@@ -237,7 +236,7 @@ function StrokeSection({
             <SliderRow
               label="Opacity"
               value={Math.round((base.opacity ?? 1) * 100)}
-              onChange={(v) => onStroke({ ...base, opacity: v / 100 })}
+              onChange={(v) => onStroke({ ...base, opacity: v / 100 }, true)}
             />
           </div>
           <div className="mt-2 flex gap-1">
@@ -266,6 +265,43 @@ function StrokeSection({
     </Section>
   )
 }
+
+/**
+ * The document-colours strip. Memoized because it is the widest thing in the
+ * rail — one node per distinct fill, which on traced art is hundreds — and it
+ * has no reason to re-render for anything but its own list changing.
+ */
+const Palette = memo(function Palette({
+  palette,
+  onPick,
+}: {
+  palette: { color: string; count: number }[]
+  onPick?: (color: string) => void
+}) {
+  return (
+    <div className={onPick ? 'mt-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1'}>
+      {palette.map((p) =>
+        onPick ? (
+          <button
+            key={p.color}
+            type="button"
+            title={p.color}
+            onClick={() => onPick(p.color)}
+            className="h-5 w-5 rounded ring-1 ring-line transition-transform hover:scale-110"
+            style={{ backgroundColor: p.color }}
+          />
+        ) : (
+          <span
+            key={p.color}
+            title={`${p.color} · ${p.count} path${p.count === 1 ? '' : 's'}`}
+            className="h-5 w-5 rounded ring-1 ring-line"
+            style={{ backgroundColor: p.color }}
+          />
+        ),
+      )}
+    </div>
+  )
+})
 
 /* ------------------------------------------------------------- controls */
 
