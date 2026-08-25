@@ -26,7 +26,8 @@ import type { EditableDoc, PathItem, Stroke } from '../../lib/path/types'
 import { allPaths, findItem, isGroup } from '../../lib/path/docTree'
 import type { AlignEdge, DistributeAxis } from '../../lib/editor/align'
 import type { Box } from '../../lib/editor/transform'
-import { Tooltip } from '../ui/Tooltip'
+import { TipLabel, Tooltip } from '../ui/Tooltip'
+import { ActionButton, isOff } from '../ui/ActionButton'
 import { normalizeHex } from '../../lib/colorUtils'
 import { docPalette } from './editorDoc'
 
@@ -102,36 +103,67 @@ export function Inspector({
     )
   }
 
+  // Why a paint control can't be used. `lead` is the first selected PATH, so
+  // its absence means the selection is all groups-of-nothing or raw markup.
+  const paintReason = lead
+    ? null
+    : 'Nothing paintable is selected — imported markup keeps the paint it came with and can\u2019t be recoloured here.'
+  const spreadReason = canDistribute
+    ? null
+    : 'Select three or more items. Spacing two of them evenly is the same as aligning them.'
+
   return (
     <div className="flex flex-col gap-4 p-3">
       <Section title="Arrange">
         <div className="grid grid-cols-6 gap-1">
-          <AlignBtn label="Align left" onClick={() => onAlign('left')}><AlignStartVertical size={14} /></AlignBtn>
-          <AlignBtn label="Centre horizontally" onClick={() => onAlign('hcenter')}><AlignCenterVertical size={14} /></AlignBtn>
-          <AlignBtn label="Align right" onClick={() => onAlign('right')}><AlignEndVertical size={14} /></AlignBtn>
-          <AlignBtn label="Align top" onClick={() => onAlign('top')}><AlignStartHorizontal size={14} /></AlignBtn>
-          <AlignBtn label="Centre vertically" onClick={() => onAlign('vcenter')}><AlignCenterHorizontal size={14} /></AlignBtn>
-          <AlignBtn label="Align bottom" onClick={() => onAlign('bottom')}><AlignEndHorizontal size={14} /></AlignBtn>
+          <AlignBtn label="Align left" note={ALIGN_REF} onClick={() => onAlign('left')}><AlignStartVertical size={14} /></AlignBtn>
+          <AlignBtn label="Centre horizontally" note={ALIGN_REF} onClick={() => onAlign('hcenter')}><AlignCenterVertical size={14} /></AlignBtn>
+          <AlignBtn label="Align right" note={ALIGN_REF} onClick={() => onAlign('right')}><AlignEndVertical size={14} /></AlignBtn>
+          <AlignBtn label="Align top" note={ALIGN_REF} onClick={() => onAlign('top')}><AlignStartHorizontal size={14} /></AlignBtn>
+          <AlignBtn label="Centre vertically" note={ALIGN_REF} onClick={() => onAlign('vcenter')}><AlignCenterHorizontal size={14} /></AlignBtn>
+          <AlignBtn label="Align bottom" note={ALIGN_REF} onClick={() => onAlign('bottom')}><AlignEndHorizontal size={14} /></AlignBtn>
         </div>
         <div className="mt-1 grid grid-cols-6 gap-1">
-          <AlignBtn label="Distribute horizontally" disabled={!canDistribute} onClick={() => onDistribute('horizontal')}>
+          <AlignBtn
+            label="Distribute horizontally"
+            note="Spaces the selection evenly left to right; the outermost two stay put."
+            reason={spreadReason}
+            onClick={() => onDistribute('horizontal')}
+          >
             <AlignHorizontalSpaceAround size={14} />
           </AlignBtn>
-          <AlignBtn label="Distribute vertically" disabled={!canDistribute} onClick={() => onDistribute('vertical')}>
+          <AlignBtn
+            label="Distribute vertically"
+            note="Spaces the selection evenly top to bottom; the outermost two stay put."
+            reason={spreadReason}
+            onClick={() => onDistribute('vertical')}
+          >
             <AlignVerticalSpaceAround size={14} />
           </AlignBtn>
-          <AlignBtn label="Flip horizontally" onClick={() => onFlip('x')}><FlipHorizontal size={14} /></AlignBtn>
-          <AlignBtn label="Flip vertically" onClick={() => onFlip('y')}><FlipVertical size={14} /></AlignBtn>
+          <AlignBtn
+            label="Flip horizontally"
+            note="Mirrors the selection left-to-right inside its own bounding box, so it doesn't move."
+            onClick={() => onFlip('x')}
+          >
+            <FlipHorizontal size={14} />
+          </AlignBtn>
+          <AlignBtn
+            label="Flip vertically"
+            note="Mirrors the selection top-to-bottom inside its own bounding box, so it doesn't move."
+            onClick={() => onFlip('y')}
+          >
+            <FlipVertical size={14} />
+          </AlignBtn>
         </div>
       </Section>
 
       {box && (
         <Section title="Geometry">
           <div className="grid grid-cols-2 gap-2">
-            <NumField label="X" value={box.x} onCommit={(v) => onGeometry({ x: v })} />
-            <NumField label="Y" value={box.y} onCommit={(v) => onGeometry({ y: v })} />
-            <NumField label="W" value={box.w} min={0.01} onCommit={(v) => onGeometry({ w: v })} />
-            <NumField label="H" value={box.h} min={0.01} onCommit={(v) => onGeometry({ h: v })} />
+            <NumField label="X" tip="Left edge of the selection, in artboard units." value={box.x} onCommit={(v) => onGeometry({ x: v })} />
+            <NumField label="Y" tip="Top edge of the selection, in artboard units." value={box.y} onCommit={(v) => onGeometry({ y: v })} />
+            <NumField label="W" tip="Width. Resizes from the left edge, so X stays put." value={box.w} min={0.01} onCommit={(v) => onGeometry({ w: v })} />
+            <NumField label="H" tip="Height. Resizes from the top edge, so Y stays put." value={box.h} min={0.01} onCommit={(v) => onGeometry({ h: v })} />
           </div>
         </Section>
       )}
@@ -139,23 +171,26 @@ export function Inspector({
       <Section title="Fill">
         <div className="flex items-center gap-2">
           <ColorWell
+            label="Fill colour"
+            note="Drag in the picker to preview live — the whole drag is one undo step."
+            reason={paintReason}
             value={lead?.fill ?? '#000000'}
-            disabled={!lead}
             onChange={(c) => onFill(c, true)}
           />
           <HexField
+            tip="Fill colour as a hex code. Applies on Enter or when you leave the field."
             value={lead?.fill ?? '#000000'}
             onCommit={(hex) => onFill(hex)}
           />
-          <Tooltip label="No fill">
-            <button
-              type="button"
-              onClick={() => onFill('none')}
-              className={`btn btn-secondary h-8 px-2 text-xs ${lead?.fill === 'none' ? 'is-active' : ''}`}
-            >
-              None
-            </button>
-          </Tooltip>
+          <ActionButton
+            label="No fill"
+            note="Clears the fill so the shape paints only its stroke, if it has one."
+            reason={paintReason}
+            onClick={() => onFill('none')}
+            className={`btn btn-secondary h-8 px-2 text-xs ${lead?.fill === 'none' ? 'is-active' : ''}`}
+          >
+            None
+          </ActionButton>
         </div>
 
         {palette.length > 0 && <Palette palette={palette} onPick={pickPaletteColor} />}
@@ -163,23 +198,30 @@ export function Inspector({
         <div className="mt-2">
           <SliderRow
             label="Opacity"
+            tip="Fill opacity"
+            note="How see-through the FILL is. The stroke has its own opacity, further down."
             value={Math.round((lead?.fillOpacity ?? 1) * 100)}
             onChange={(v) => onFillOpacity(v / 100, true)}
           />
         </div>
 
+        {/* Fill RULE, not opacity — it sits under the slider but answers a
+            different question: which parts of a path count as inside when the
+            path has several subpaths or crosses itself. */}
         <div className="mt-2 flex gap-1">
-          {(['nonzero', 'evenodd'] as const).map((rule) => (
-            <button
-              key={rule}
-              type="button"
-              onClick={() => onFillRule(rule)}
+          {FILL_RULES.map((r) => (
+            <ActionButton
+              key={r.id}
+              label={r.label}
+              note={r.note}
+              reason={paintReason}
+              onClick={() => onFillRule(r.id)}
               className={`btn btn-secondary h-7 flex-1 px-2 text-[0.7rem] ${
-                lead?.fillRule === rule ? 'is-active' : ''
+                lead?.fillRule === r.id ? 'is-active' : ''
               }`}
             >
-              {rule === 'nonzero' ? 'Non-zero' : 'Even-odd'}
-            </button>
+              {r.short}
+            </ActionButton>
           ))}
         </div>
       </Section>
@@ -202,48 +244,67 @@ function StrokeSection({
   return (
     <Section title="Stroke">
       <div className="flex items-center gap-2">
-        <ColorWell value={base.color} onChange={(c) => onStroke({ ...base, color: c }, true)} />
-        <HexField value={base.color} onCommit={(c) => onStroke({ ...base, color: c })} />
-        <button
-          type="button"
+        <ColorWell
+          label="Stroke colour"
+          note="Drag in the picker to preview live — the whole drag is one undo step."
+          value={base.color}
+          onChange={(c) => onStroke({ ...base, color: c }, true)}
+        />
+        <HexField
+          tip="Stroke colour as a hex code. Applies on Enter or when you leave the field."
+          value={base.color}
+          onCommit={(c) => onStroke({ ...base, color: c })}
+        />
+        <ActionButton
+          label={on ? 'Stroke on' : 'Stroke off'}
+          note={on ? 'Click to remove the outline entirely.' : 'Click to give the selection an outline.'}
           onClick={() => onStroke(on ? null : base)}
           className={`btn btn-secondary h-8 px-2 text-xs ${on ? 'is-active' : ''}`}
         >
           {on ? 'On' : 'Off'}
-        </button>
+        </ActionButton>
       </div>
 
       {on && (
         <>
           <div className="mt-2">
-            <NumField label="Width" value={base.width} min={0} onCommit={(v) => onStroke({ ...base, width: v })} />
+            <NumField
+              label="Width"
+              tip="Outline thickness, in artboard units. It straddles the path — half inside, half outside."
+              value={base.width}
+              min={0}
+              onCommit={(v) => onStroke({ ...base, width: v })}
+            />
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <SegRow
               label="Cap"
               value={base.cap}
-              options={['butt', 'round', 'square']}
+              options={CAPS}
               onChange={(v) => onStroke({ ...base, cap: v as Stroke['cap'] })}
             />
             <SegRow
               label="Join"
               value={base.join}
-              options={['miter', 'round', 'bevel']}
+              options={JOINS}
               onChange={(v) => onStroke({ ...base, join: v as Stroke['join'] })}
             />
           </div>
           <div className="mt-2">
             <SliderRow
               label="Opacity"
+              tip="Stroke opacity"
+              note="How see-through the OUTLINE is, independently of the fill."
               value={Math.round((base.opacity ?? 1) * 100)}
               onChange={(v) => onStroke({ ...base, opacity: v / 100 }, true)}
             />
           </div>
           <div className="mt-2 flex gap-1">
-            {([[], [6, 4], [1, 4]] as number[][]).map((dash, i) => (
-              <button
-                key={i}
-                type="button"
+            {DASHES.map(({ dash, label, note }) => (
+              <ActionButton
+                key={label}
+                label={label}
+                note={note}
                 onClick={() => onStroke({ ...base, dash: dash.length ? dash : undefined })}
                 className={`btn btn-secondary h-7 flex-1 px-1 ${
                   (base.dash?.join(',') ?? '') === dash.join(',') ? 'is-active' : ''
@@ -257,7 +318,7 @@ function StrokeSection({
                     strokeLinecap="round"
                   />
                 </svg>
-              </button>
+              </ActionButton>
             ))}
           </div>
         </>
@@ -278,6 +339,10 @@ const Palette = memo(function Palette({
   palette: { color: string; count: number }[]
   onPick?: (color: string) => void
 }) {
+  // These keep the native `title` rather than a <Tooltip>: traced art has one
+  // swatch per distinct fill, which runs to hundreds, and each Tooltip is a
+  // component with its own state and portal. The strip is the one place in the
+  // rail where the cheap tooltip is the right one.
   return (
     <div className={onPick ? 'mt-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1'}>
       {palette.map((p) =>
@@ -285,7 +350,7 @@ const Palette = memo(function Palette({
           <button
             key={p.color}
             type="button"
-            title={p.color}
+            title={`${p.color} — click to apply to the selection (${p.count} path${p.count === 1 ? '' : 's'} use it)`}
             onClick={() => onPick(p.color)}
             className="h-5 w-5 rounded ring-1 ring-line transition-transform hover:scale-110"
             style={{ backgroundColor: p.color }}
@@ -303,6 +368,45 @@ const Palette = memo(function Palette({
   )
 })
 
+/* ---------------------------------------------------------------- copy */
+
+/** Align aims at the artboard for one item and at the selection for several. */
+const ALIGN_REF =
+  'With one item selected this aligns to the artboard; with several, to the selection\u2019s own bounds.'
+
+const FILL_RULES = [
+  {
+    id: 'nonzero' as const,
+    short: 'Non-zero',
+    label: 'Non-zero fill rule',
+    note: 'Counts overlaps by direction: a hole appears only where a subpath winds the opposite way to the one around it. The SVG default.',
+  },
+  {
+    id: 'evenodd' as const,
+    short: 'Even-odd',
+    label: 'Even-odd fill rule',
+    note: 'Counts overlaps regardless of direction: every second layer of overlap becomes a hole. Reach for it when a counter fills in solid.',
+  },
+]
+
+const CAPS = [
+  { id: 'butt', label: 'Butt cap', note: 'The line stops dead at its end point.' },
+  { id: 'round', label: 'Round cap', note: 'A half-circle carries past each end.' },
+  { id: 'square', label: 'Square cap', note: 'A half-square carries past each end.' },
+]
+
+const JOINS = [
+  { id: 'miter', label: 'Miter join', note: 'Corners run out to a sharp point.' },
+  { id: 'round', label: 'Round join', note: 'Corners are rounded off.' },
+  { id: 'bevel', label: 'Bevel join', note: 'Corners are cut flat.' },
+]
+
+const DASHES = [
+  { dash: [] as number[], label: 'Solid line', note: 'An unbroken outline.' },
+  { dash: [6, 4], label: 'Dashed line', note: 'Six units on, four off.' },
+  { dash: [1, 4], label: 'Dotted line', note: 'Round dots, four units apart.' },
+]
+
 /* ------------------------------------------------------------- controls */
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -315,35 +419,53 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function AlignBtn({
-  label, onClick, disabled, children,
-}: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+  label, note, onClick, reason, children,
+}: {
+  label: string
+  note?: string
+  onClick: () => void
+  reason?: string | null
+  children: React.ReactNode
+}) {
+  const off = isOff(reason)
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        aria-label={label}
-        className="flex h-7 items-center justify-center rounded-md border border-line-strong bg-surface text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink disabled:opacity-40 disabled:hover:bg-surface"
-      >
-        {children}
-      </button>
-    </Tooltip>
+    <ActionButton
+      label={label}
+      note={note}
+      reason={reason}
+      onClick={onClick}
+      className={`flex h-7 items-center justify-center rounded-md border border-line-strong bg-surface text-ink-2 transition-colors ${
+        off ? 'cursor-not-allowed opacity-40' : 'hover:bg-surface-3 hover:text-ink'
+      }`}
+    >
+      {children}
+    </ActionButton>
   )
 }
 
 function ColorWell({
-  value, onChange, disabled,
-}: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  value, onChange, label, note, reason,
+}: {
+  value: string
+  onChange: (v: string) => void
+  label: string
+  note?: string
+  reason?: string | null
+}) {
   // `none` is the absence of paint, not a colour — showing the picker's black
   // fallback would claim the shape is filled black, which is exactly what the
   // user is looking at the well to find out.
   const none = value.trim().toLowerCase() === 'none'
+  const off = isOff(reason)
+  // The tooltip goes on the WELL, not the input: a disabled input is silent
+  // (see ui/ActionButton.tsx), and focus bubbles, so the swatch hears both the
+  // hover and the keyboard focus of the picker inside it.
   return (
+    <Tooltip label={<TipLabel title={none ? `${label} — none` : label} detail={off ? reason : note} />}>
     <span
       className={`relative h-8 w-8 shrink-0 overflow-hidden rounded-md ring-1 ring-line-strong ${
         none ? 'checkerboard' : ''
-      }`}
+      } ${off ? 'opacity-40' : ''}`}
     >
       {none ? (
         <svg viewBox="0 0 32 32" className="absolute inset-0 h-full w-full" aria-hidden>
@@ -355,16 +477,17 @@ function ColorWell({
       <input
         type="color"
         value={normalizeHex(value) ?? '#000000'}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className="absolute inset-0 cursor-pointer opacity-0"
-        aria-label="Colour"
+        aria-disabled={off || undefined}
+        onChange={off ? undefined : (e) => onChange(e.target.value)}
+        className={`absolute inset-0 opacity-0 ${off ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        aria-label={label}
       />
     </span>
+    </Tooltip>
   )
 }
 
-function HexField({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+function HexField({ value, onCommit, tip }: { value: string; onCommit: (v: string) => void; tip: string }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   const commit = () => {
@@ -373,27 +496,29 @@ function HexField({ value, onCommit }: { value: string; onCommit: (v: string) =>
     else setDraft(value)
   }
   return (
-    <input
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape') {
-          setDraft(value)
-          e.currentTarget.blur()
-        }
-        e.stopPropagation()
-      }}
-      spellCheck={false}
-      className="input h-8 min-w-0 flex-1 font-mono text-xs"
-    />
+    <Tooltip label={tip}>
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') {
+            setDraft(value)
+            e.currentTarget.blur()
+          }
+          e.stopPropagation()
+        }}
+        spellCheck={false}
+        className="input h-8 min-w-0 flex-1 font-mono text-xs"
+      />
+    </Tooltip>
   )
 }
 
 function NumField({
-  label, value, onCommit, min,
-}: { label: string; value: number; onCommit: (v: number) => void; min?: number }) {
+  label, value, onCommit, min, tip,
+}: { label: string; value: number; onCommit: (v: number) => void; min?: number; tip: string }) {
   const shown = String(Number(value.toFixed(2)))
   const [draft, setDraft] = useState(shown)
   useEffect(() => setDraft(shown), [shown])
@@ -402,42 +527,52 @@ function NumField({
     if (Number.isFinite(n) && (min === undefined || n >= min)) onCommit(n)
     else setDraft(shown)
   }
+  // The tooltip goes on the INPUT, not on the <label> around it. Wrapping the
+  // label means focus arrives by bubbling from a child, and a bubble opened
+  // that way can be left stranded when focus leaves by a route the label never
+  // hears — the trigger should be the thing that actually takes focus.
   return (
     <label className="flex items-center gap-1.5">
       <span className="w-8 shrink-0 text-[0.7rem] text-muted">{label}</span>
-      <input
-        value={draft}
-        inputMode="decimal"
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
-          if (e.key === 'Escape') {
-            setDraft(shown)
-            e.currentTarget.blur()
-          }
-          e.stopPropagation()
-        }}
-        className="input h-8 min-w-0 flex-1 text-xs"
-      />
+      <Tooltip label={<TipLabel title={label} detail={tip} />}>
+        <input
+          value={draft}
+          inputMode="decimal"
+          aria-label={label}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur()
+            if (e.key === 'Escape') {
+              setDraft(shown)
+              e.currentTarget.blur()
+            }
+            e.stopPropagation()
+          }}
+          className="input h-8 min-w-0 flex-1 text-xs"
+        />
+      </Tooltip>
     </label>
   )
 }
 
 function SliderRow({
-  label, value, onChange,
-}: { label: string; value: number; onChange: (v: number) => void }) {
+  label, tip, note, value, onChange,
+}: { label: string; tip: string; note: string; value: number; onChange: (v: number) => void }) {
   return (
     <label className="flex items-center gap-2">
       <span className="w-14 shrink-0 text-[0.7rem] text-muted">{label}</span>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="min-w-0 flex-1 accent-[var(--color-accent)]"
-      />
+      <Tooltip label={<TipLabel title={tip} detail={note} />}>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={value}
+          aria-label={tip}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="min-w-0 flex-1 accent-[var(--color-accent)]"
+        />
+      </Tooltip>
       <span className="w-9 shrink-0 text-right text-[0.7rem] tabular-nums text-muted">{value}%</span>
     </label>
   )
@@ -445,22 +580,28 @@ function SliderRow({
 
 function SegRow({
   label, value, options, onChange,
-}: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
+}: {
+  label: string
+  value: string
+  options: { id: string; label: string; note: string }[]
+  onChange: (v: string) => void
+}) {
   return (
     <div>
       <span className="mb-1 block text-[0.7rem] text-muted">{label}</span>
       <div className="flex gap-0.5">
         {options.map((o) => (
-          <button
-            key={o}
-            type="button"
-            onClick={() => onChange(o)}
+          <ActionButton
+            key={o.id}
+            label={o.label}
+            note={o.note}
+            onClick={() => onChange(o.id)}
             className={`btn btn-secondary h-7 flex-1 px-1 text-[0.65rem] capitalize ${
-              value === o ? 'is-active' : ''
+              value === o.id ? 'is-active' : ''
             }`}
           >
-            {o}
-          </button>
+            {o.id}
+          </ActionButton>
         ))}
       </div>
     </div>

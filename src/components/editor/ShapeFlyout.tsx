@@ -11,11 +11,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
-import { Tooltip } from '../ui/Tooltip'
+import { TipLabel, Tooltip } from '../ui/Tooltip'
+import { ActionButton } from '../ui/ActionButton'
 import { SHAPE_TOOLS, isDrawTool, type EditorTool } from './tools'
 import { TOOL_ICON } from './toolIcons'
 
-const MENU_W = 190
+const MENU_W = 236
 
 export function ShapeFlyout({
   tool,
@@ -125,18 +126,17 @@ export function ShapeFlyout({
           isShape ? 'bg-surface text-accent shadow-xs' : 'text-ink-2'
         }`}
       >
-        <Tooltip label={`${def.label} (${def.key.toUpperCase()}) — ${def.hint}`}>
-          <button
-            type="button"
-            aria-label={def.label}
-            aria-pressed={isShape}
-            onClick={() => pick(def.id)}
-            className="flex h-8 w-8 items-center justify-center rounded-l-md pl-0.5 transition-colors hover:text-ink"
-          >
-            {TOOL_ICON[def.id]}
-          </button>
-        </Tooltip>
-        <Tooltip label="Shape tools">
+        <ActionButton
+          label={`${def.label} (${def.key.toUpperCase()})`}
+          note={def.hint}
+          ariaLabel={def.label}
+          pressed={isShape}
+          onClick={() => pick(def.id)}
+          className="flex h-8 w-8 items-center justify-center rounded-l-md pl-0.5 transition-colors hover:text-ink"
+        >
+          {TOOL_ICON[def.id]}
+        </ActionButton>
+        <Tooltip label={<TipLabel title="Shape tools" detail="Pick a different shape. Each one keeps its own letter key." />}>
           <button
             type="button"
             aria-label="Shape tools"
@@ -171,13 +171,20 @@ export function ShapeFlyout({
                 tabIndex={-1}
                 onClick={() => pick(t.id)}
                 onPointerEnter={() => setCursor(i)}
-                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
+                className={`flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
                   i === cursor ? 'bg-surface-3' : ''
                 } ${tool === t.id ? 'text-accent' : 'text-ink'}`}
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center">{TOOL_ICON[t.id]}</span>
-                <span className="flex-1">{t.label}</span>
-                <kbd className="rounded border border-line px-1 text-[0.65rem] text-faint">
+                {/* The hint rides IN the row rather than in a tooltip: a bubble
+                    floating over an open menu fights the menu's own hover
+                    cursor, and this is the one place there is room to just say
+                    it. */}
+                <span className="min-w-0 flex-1">
+                  <span className="block">{t.label}</span>
+                  <span className="block text-[0.65rem] leading-tight text-faint">{t.hint}</span>
+                </span>
+                <kbd className="shrink-0 self-start rounded border border-line px-1 text-[0.65rem] text-faint">
                   {t.key.toUpperCase()}
                 </kbd>
               </button>

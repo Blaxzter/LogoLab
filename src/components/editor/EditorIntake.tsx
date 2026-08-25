@@ -9,6 +9,7 @@ import { ClipboardPaste, FilePlus2, FolderOpen, ImageDown, Loader2 } from 'lucid
 import type { EditableDoc } from '../../lib/path/types'
 import { parseSvg } from '../../lib/path/model'
 import { useLogo } from '../../store'
+import { ActionButton } from '../ui/ActionButton'
 import { adoptIds, blankDoc } from './editorDoc'
 
 /** Artboard presets for a blank document. */
@@ -108,14 +109,15 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
               e.target.value = ''
             }}
           />
-          <button
-            type="button"
+          <ActionButton
+            label="Choose file"
+            note="Opens a file picker. Only .svg files can be edited here."
+            reason={busy ? 'Still reading the last file — one moment.' : null}
             onClick={() => fileRef.current?.click()}
-            disabled={busy}
             className="btn btn-primary h-9 w-full text-sm"
           >
             {busy ? <Loader2 size={15} className="animate-spin" /> : 'Choose file'}
-          </button>
+          </ActionButton>
         </Card>
 
         {/* Blank */}
@@ -126,23 +128,25 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
         >
           <div className="mb-2 flex gap-1">
             {SIZES.map((s) => (
-              <button
+              <ActionButton
                 key={s}
-                type="button"
+                label={`${s} × ${s} artboard`}
+                note="The viewBox the new drawing gets. It can be any size later."
                 onClick={() => setSize(s)}
                 className={`btn btn-secondary h-8 flex-1 px-1 text-xs ${size === s ? 'is-active' : ''}`}
               >
                 {s}
-              </button>
+              </ActionButton>
             ))}
           </div>
-          <button
-            type="button"
+          <ActionButton
+            label={`New ${size} × ${size}`}
+            note="Opens an empty artboard. Press R or E and drag to draw your first shape."
             onClick={() => onOpen(blankDoc(size), 'drawing')}
             className="btn btn-secondary h-9 w-full text-sm"
           >
             New {size} × {size}
-          </button>
+          </ActionButton>
         </Card>
 
         {/* From the working logo */}
@@ -157,14 +161,21 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
                 : 'No logo loaded yet.'
           }
         >
-          <button
-            type="button"
-            disabled={!logoIsSvg}
+          <ActionButton
+            label="Open logo"
+            note="Brings the logo this app is working on into the editor."
+            reason={
+              logoIsSvg
+                ? null
+                : logo.src
+                  ? 'The loaded logo is a bitmap. Trace it on the Vectorize tab first — that produces the SVG this editor works on.'
+                  : 'No logo is loaded. Drop one on the Preview tab, or open an SVG file here.'
+            }
             onClick={() => logo.svgText && open(logo.svgText, logo.fileName?.replace(/\.[^.]+$/, '') ?? 'logo')}
             className="btn btn-secondary h-9 w-full text-sm"
           >
             Open logo
-          </button>
+          </ActionButton>
         </Card>
 
         {/* Paste markup */}
@@ -183,23 +194,25 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
                 spellCheck={false}
                 className="input mb-2 h-auto w-full resize-y py-1.5 font-mono text-[0.7rem]"
               />
-              <button
-                type="button"
-                disabled={!markup.trim()}
+              <ActionButton
+                label="Open markup"
+                note="Parses the text above into an editable drawing."
+                reason={markup.trim() ? null : 'The box above is empty — paste some <svg> markup into it first.'}
                 onClick={() => open(markup, 'pasted')}
                 className="btn btn-primary h-9 w-full text-sm"
               >
                 Open markup
-              </button>
+              </ActionButton>
             </>
           ) : (
-            <button
-              type="button"
+            <ActionButton
+              label="Paste SVG"
+              note="Opens a box to paste raw <svg> text into."
               onClick={() => setPasting(true)}
               className="btn btn-secondary h-9 w-full text-sm"
             >
               Paste SVG
-            </button>
+            </ActionButton>
           )}
         </Card>
       </div>

@@ -31,7 +31,7 @@ import {
 import { itemLabel } from './editorDoc'
 import { PathView } from '../vector/DocRender'
 import { itemBox } from '../../lib/editor/transform'
-import { Tooltip } from '../ui/Tooltip'
+import { TipLabel, Tooltip } from '../ui/Tooltip'
 
 export interface LayersTreeProps {
   doc: EditableDoc
@@ -295,7 +295,7 @@ const LayerRowView = memo(function LayerRowView({
       {over === 'above' && <DropLine side="top" depth={depth} />}
       {over === 'below' && <DropLine side="bottom" depth={depth} />}
 
-      <Tooltip label="Drag to reorder">
+      <Tooltip label={<TipLabel title="Drag to reorder" detail="Drop between rows to restack, or onto a group to move it inside." />}>
         <button
           type="button"
           aria-label="Reorder layer"
@@ -307,6 +307,14 @@ const LayerRowView = memo(function LayerRowView({
       </Tooltip>
 
       {group ? (
+        <Tooltip
+          label={
+            <TipLabel
+              title={item.expanded === false ? 'Expand group' : 'Collapse group'}
+              detail="Only changes what this list shows — the artwork is untouched."
+            />
+          }
+        >
         <button
           type="button"
           onPointerDown={(e) => {
@@ -318,6 +326,7 @@ const LayerRowView = memo(function LayerRowView({
         >
           {item.expanded === false ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
         </button>
+        </Tooltip>
       ) : (
         <span className="w-4 shrink-0" />
       )}
@@ -349,7 +358,7 @@ const LayerRowView = memo(function LayerRowView({
         <span className="min-w-0 flex-1 truncate">{itemLabel(item, number)}</span>
       )}
 
-      <Tooltip label={item.visible ? 'Hide' : 'Show'}>
+      <Tooltip label={<TipLabel title={item.visible ? 'Hide layer' : 'Show layer'} detail="Hidden layers stay in the file but are left out of the export." />}>
         <button
           type="button"
           onPointerDown={(e) => {
@@ -363,7 +372,7 @@ const LayerRowView = memo(function LayerRowView({
           {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
         </button>
       </Tooltip>
-      <Tooltip label="Delete">
+      <Tooltip label={<TipLabel title="Delete layer" detail="Removes it from the drawing. Ctrl+Z brings it back." />}>
         <button
           type="button"
           onPointerDown={(e) => {

@@ -32,6 +32,7 @@ import {
   reorderItems,
   topLevelSelection,
   ungroup,
+  walkItems,
 } from '../../lib/path/docTree'
 import { docStats, serializeDoc } from '../../lib/path/model'
 import {
@@ -52,7 +53,7 @@ import { usePanZoom } from '../../hooks/usePanZoom'
 import { useCheckerClass } from '../../store'
 import { ZoomControls } from '../ui/ZoomControls'
 import { CheckerToggle } from '../ui/CheckerToggle'
-import { Tooltip } from '../ui/Tooltip'
+import { ActionButton, isOff } from '../ui/ActionButton'
 import { downloadText } from '../../lib/download'
 import { EditorStage, parseNodeKey } from './EditorStage'
 import { LayersTree } from './LayersTree'
@@ -534,11 +535,77 @@ export function SvgEditorStudio({
   /* ------------------------------------------------------------ render */
 
   const selectedCount = topLevelSelection(previewDoc.items, selection).length
-  const canGroup = selectedCount >= 2
-  const canUngroup = [...selection].some((id) => {
-    const it = findItem(previewDoc.items, id)
-    return it !== null && isGroup(it)
-  })
+
+  // What is selected, counted in ONE walk. (The previous `findItem` per
+  // selected id was a tree search each time — quadratic the moment you press
+  // Ctrl+A on a traced document.)
+  const sel = useMemo(() => {
+    let paths = 0
+    let groups = 0
+    let other = 0
+    walkItems(previewDoc.items, (it) => {
+      if (!selection.has(it.id)) return
+      if (isGroup(it)) groups++
+      else if (it.kind === 'path') paths++
+      else other++
+    })
+    return { paths, groups, other }
+  }, [previewDoc.items, selection])
+
+  /** The one path the single-path operations act on, or null. */
+  const activePath = useMemo(() => {
+    if (!activePathId) return null
+    const it = findItem(previewDoc.items, activePathId)
+    return it && it.kind === 'path' ? it : null
+  }, [activePathId, previewDoc.items])
+
+  /**
+   * Why each action can't be used right now — null when it can.
+   *
+   * One place, so the greyed-out state and the tooltip that explains it can
+   * never drift apart, and so every reason is phrased as what WOULD make the
+   * button work rather than as a complaint that it doesn't.
+   */
+  const nothing = 'Nothing is selected — click a shape on the canvas or a row in the layers list.'
+  const onePath =
+    selection.size === 0
+      ? 'Select one path.'
+      : selection.size > 1
+        ? `Select just one path — ${selection.size} items are selected.`
+        : 'The selected item is a group or imported markup, not an editable path.'
+
+  const why = {
+    undo: history.canUndo ? null : 'Nothing to undo — this is the oldest state of the drawing.',
+    redo: history.canRedo ? null : 'Nothing to redo — this is the newest state of the drawing.',
+    group:
+      selectedCount >= 2
+        ? null
+        : `Select two or more items to put in a group — ${
+            selectedCount === 0 ? 'nothing is selected' : 'only one is selected'
+          }.`,
+    ungroup: sel.groups > 0 ? null : 'Select a group. A plain shape has nothing to ungroup.',
+    selection: selection.size > 0 ? null : nothing,
+    remove: selection.size > 0 || nodeSel.size > 0 ? null : nothing,
+    reverse: activePath ? null : onePath,
+    split: !activePath
+      ? onePath
+      : activePath.subPaths.length < 2
+        ? 'This path has a single subpath, so there is nothing to split apart. Compound paths (a shape with holes) can be split.'
+        : null,
+    combine:
+      sel.paths >= 2
+        ? null
+        : `Select two or more paths to merge into one compound path — ${
+            sel.paths === 1 ? 'only one path is selected' : 'none are selected'
+          }.`,
+    breakNode:
+      nodeSel.size === 1
+        ? null
+        : `Switch to the Node tool (A) and select exactly one node — ${
+            nodeSel.size === 0 ? 'none are selected' : `${nodeSel.size} are selected`
+          }.`,
+    join: joinReason(nodeSel),
+  }
 
   return (
     <div className="canvas-ui flex h-full min-h-0 w-full shrink-0 flex-col animate-in-fade">
@@ -562,10 +629,10 @@ export function SvgEditorStudio({
 
         <Divider />
 
-        <BarBtn label="Undo (Ctrl+Z)" onClick={history.undo} disabled={!history.canUndo}>
+        <BarBtn label="Undo (Ctrl+Z)" onClick={history.undo} reason={why.undo}>
           <Undo2 size={15} />
         </BarBtn>
-        <BarBtn label="Redo (Ctrl+Shift+Z)" onClick={history.redo} disabled={!history.canRedo}>
+        <BarBtn label="Redo (Ctrl+Shift+Z)" onClick={history.redo} reason={why.redo}>
           <Redo2 size={15} />
         </BarBtn>
 
@@ -573,67 +640,71 @@ export function SvgEditorStudio({
 
         <BarBtn
           label={snap.enabled ? 'Snapping on' : 'Snapping off'}
+          note="Edges and centres pull towards each other as you drag. Hold Ctrl to bypass it for one drag."
           onClick={() => setSnap((s) => ({ ...s, enabled: !s.enabled }))}
           active={snap.enabled}
         >
           <Magnet size={15} />
         </BarBtn>
-        <BarBtn label={showGrid ? 'Hide grid' : 'Show grid'} onClick={() => setShowGrid((g) => !g)} active={showGrid}>
+        <BarBtn
+          label={showGrid ? 'Hide grid' : 'Show grid'}
+          note="A reference grid over the artboard. It is never exported."
+          onClick={() => setShowGrid((g) => !g)}
+          active={showGrid}
+        >
           <Grid3x3 size={15} />
         </BarBtn>
 
         <div className="ml-auto flex items-center gap-1.5">
           {enteredGroupId && (
-            <button
-              type="button"
+            <ActionButton
+              label="Leave group"
+              note="Go back to selecting whole groups instead of the shapes inside this one. Escape does the same."
               onClick={() => setEnteredGroupId(null)}
               className="btn btn-secondary h-8 gap-1.5 px-2 text-xs"
             >
               <Layers size={13} />
               Leave group
-            </button>
+            </ActionButton>
           )}
           <CheckerToggle />
           <ZoomControls pz={pz} />
           {onApply && (
-            <button
-              type="button"
+            <ActionButton
+              label={applyLabel}
+              note="Hand this drawing back to the app as the working logo. The editor stays open."
               onClick={apply}
-              aria-label={applyLabel}
+              ariaLabel={applyLabel}
               className="btn btn-secondary h-8 px-2.5 text-xs"
             >
               {applied ? 'Applied' : applyLabel}
-            </button>
+            </ActionButton>
           )}
-          <Tooltip label="Copy SVG markup">
-            <button
-              type="button"
-              onClick={copy}
-              aria-label="Copy SVG markup"
-              className="btn btn-ghost h-8 w-8 px-0"
-            >
-              <Copy size={15} />
-            </button>
-          </Tooltip>
-          <button
-            type="button"
+          <ActionButton
+            label="Copy SVG markup"
+            note="Puts the whole drawing on the clipboard as <svg> text."
+            onClick={copy}
+            className="btn btn-ghost h-8 w-8 px-0"
+          >
+            <Copy size={15} />
+          </ActionButton>
+          <ActionButton
+            label="Download SVG"
+            note="Saves the drawing as a file. Hidden layers are left out."
             onClick={download}
-            aria-label="Download SVG"
             className="btn btn-primary h-8 gap-1.5 px-2.5 text-xs"
           >
             <Download size={14} />
             SVG
-          </button>
-          <Tooltip label="Close this drawing">
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close this drawing"
-              className="btn btn-ghost h-8 w-8 px-0"
-            >
-              <X size={15} />
-            </button>
-          </Tooltip>
+          </ActionButton>
+          <ActionButton
+            label="Close this drawing"
+            note="Back to the start screen. Unsaved changes are lost."
+            onClick={onClose}
+            className="btn btn-ghost h-8 w-8 px-0"
+          >
+            <X size={15} />
+          </ActionButton>
         </div>
       </div>
 
@@ -661,33 +732,41 @@ export function SvgEditorStudio({
               the rail shows, and in the top bar they read as "tools" — sat next
               to the pen, they invite the question "what will this draw?". */}
           <div className="flex shrink-0 items-center gap-0.5 border-t border-line px-1.5 py-1.5">
-            <BarBtn label="Group (Ctrl+G)" onClick={doGroup} disabled={!canGroup}>
+            <BarBtn label="Group (Ctrl+G)" onClick={doGroup} reason={why.group}>
               <GroupIcon size={15} />
             </BarBtn>
-            <BarBtn label="Ungroup (Ctrl+Shift+G)" onClick={doUngroup} disabled={!canUngroup}>
+            <BarBtn label="Ungroup (Ctrl+Shift+G)" onClick={doUngroup} reason={why.ungroup}>
               <Ungroup size={15} />
             </BarBtn>
             <BarBtn
               label="Bring to front (Ctrl+Shift+])"
+              note="Paints the selection above everything else in its group."
               onClick={() => reorder('front')}
-              disabled={!selection.size}
+              reason={why.selection}
             >
               <ChevronsUp size={15} />
             </BarBtn>
             <BarBtn
               label="Send to back (Ctrl+Shift+[)"
+              note="Paints the selection below everything else in its group."
               onClick={() => reorder('back')}
-              disabled={!selection.size}
+              reason={why.selection}
             >
               <ChevronsDown size={15} />
             </BarBtn>
-            <BarBtn label="Duplicate (Ctrl+D)" onClick={duplicateSelection} disabled={!selection.size}>
+            <BarBtn
+              label="Duplicate (Ctrl+D)"
+              note="Copies the selection, nudged slightly so it isn't hidden behind the original."
+              onClick={duplicateSelection}
+              reason={why.selection}
+            >
               <Copy size={15} />
             </BarBtn>
             <BarBtn
               label="Delete (Del)"
+              note="Removes the selected shapes — or, with the Node tool, just the selected nodes."
               onClick={deleteSelection}
-              disabled={!selection.size && !nodeSel.size}
+              reason={why.remove}
             >
               <Trash2 size={15} />
             </BarBtn>
@@ -756,11 +835,36 @@ export function SvgEditorStudio({
           <div className="border-t border-line p-3">
             <h4 className="field-label mb-1.5">Path</h4>
             <div className="grid grid-cols-2 gap-1">
-              <MiniBtn label="Reverse" onClick={doReverse} disabled={!activePathId} />
-              <MiniBtn label="Split" onClick={doSplit} disabled={!activePathId} />
-              <MiniBtn label="Combine" onClick={doCombine} disabled={selection.size < 2} />
-              <MiniBtn label="Break node" onClick={doBreak} disabled={nodeSel.size !== 1} />
-              <MiniBtn label="Join (Ctrl+J)" onClick={doJoin} disabled={nodeSel.size !== 2} />
+              <MiniBtn
+                label="Reverse"
+                note="Flips the direction the path is drawn in. Changes which side a non-zero fill treats as inside."
+                onClick={doReverse}
+                reason={why.reverse}
+              />
+              <MiniBtn
+                label="Split"
+                note="Breaks a compound path into one separate shape per subpath."
+                onClick={doSplit}
+                reason={why.split}
+              />
+              <MiniBtn
+                label="Combine"
+                note="Merges the selected paths into one compound path, set to even-odd so overlaps cut holes."
+                onClick={doCombine}
+                reason={why.combine}
+              />
+              <MiniBtn
+                label="Break node"
+                note="Splits the path open at the selected node, leaving two loose ends."
+                onClick={doBreak}
+                reason={why.breakNode}
+              />
+              <MiniBtn
+                label="Join (Ctrl+J)"
+                note="Welds two loose ends of the same path back together."
+                onClick={doJoin}
+                reason={why.join}
+              />
             </div>
           </div>
         </aside>
@@ -800,19 +904,18 @@ function ToolBtn({
 }: { id: EditorTool; tool: EditorTool; onPick: (t: EditorTool) => void }) {
   const def = toolDef(id)
   return (
-    <Tooltip label={`${def.label} (${def.key.toUpperCase()}) — ${def.hint}`}>
-      <button
-        type="button"
-        aria-label={def.label}
-        aria-pressed={tool === id}
-        onClick={() => onPick(id)}
-        className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-          tool === id ? 'bg-surface text-accent shadow-xs' : 'text-ink-2 hover:text-ink'
-        }`}
-      >
-        {TOOL_ICON[id]}
-      </button>
-    </Tooltip>
+    <ActionButton
+      label={`${def.label} (${def.key.toUpperCase()})`}
+      note={def.hint}
+      ariaLabel={def.label}
+      pressed={tool === id}
+      onClick={() => onPick(id)}
+      className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+        tool === id ? 'bg-surface text-accent shadow-xs' : 'text-ink-2 hover:text-ink'
+      }`}
+    >
+      {TOOL_ICON[id]}
+    </ActionButton>
   )
 }
 
@@ -821,44 +924,72 @@ function Divider() {
 }
 
 function BarBtn({
-  label, onClick, disabled, active, children,
+  label, note, onClick, reason, active, children,
 }: {
   label: string
+  note?: string
   onClick: () => void
-  disabled?: boolean
+  reason?: string | null
   active?: boolean
   children: React.ReactNode
 }) {
+  // Hover styling is DROPPED when the button is off rather than overridden: a
+  // greyed control that lights up under the pointer still reads as pressable,
+  // and the whole point of keeping it hoverable is the explanation, not the
+  // invitation.
+  const off = isOff(reason)
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        aria-label={label}
-        onClick={onClick}
-        disabled={disabled}
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-35 ${
-          active ? 'bg-accent-soft text-accent' : 'text-ink-2 hover:bg-surface-3 hover:text-ink'
-        }`}
-      >
-        {children}
-      </button>
-    </Tooltip>
+    <ActionButton
+      label={label}
+      note={note}
+      reason={reason}
+      onClick={onClick}
+      pressed={active}
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
+        off
+          ? 'cursor-not-allowed text-ink-2 opacity-35'
+          : active
+            ? 'bg-accent-soft text-accent'
+            : 'text-ink-2 hover:bg-surface-3 hover:text-ink'
+      }`}
+    >
+      {children}
+    </ActionButton>
   )
 }
 
 function MiniBtn({
-  label, onClick, disabled,
-}: { label: string; onClick: () => void; disabled?: boolean }) {
+  label, note, onClick, reason,
+}: { label: string; note?: string; onClick: () => void; reason?: string | null }) {
+  // `.btn` dims and un-hovers itself off `aria-disabled` (see index.css), so
+  // unlike the icon buttons this one needs no conditional class of its own.
   return (
-    <button
-      type="button"
+    <ActionButton
+      label={label}
+      note={note}
+      reason={reason}
       onClick={onClick}
-      disabled={disabled}
       className="btn btn-secondary h-7 px-1.5 text-[0.68rem]"
     >
       {label}
-    </button>
+    </ActionButton>
   )
+}
+
+/**
+ * Join welds two loose ends of ONE path, so "two nodes selected" isn't the
+ * whole requirement — two ends of different shapes is the mistake worth naming.
+ */
+function joinReason(nodeSel: ReadonlySet<string>): string | null {
+  if (nodeSel.size !== 2) {
+    return `Switch to the Node tool (A) and select the two end nodes to weld — ${
+      nodeSel.size === 0 ? 'none are selected' : `${nodeSel.size} are selected`
+    }.`
+  }
+  const [a, b] = [...nodeSel].map(parseNodeKey)
+  return a.itemId === b.itemId
+    ? null
+    : 'Both nodes have to be on the same path. Combine the two shapes first, then join.'
 }
 
 /** Replace a path item anywhere in the tree. */
