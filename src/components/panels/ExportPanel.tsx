@@ -9,7 +9,7 @@ import { CheckerToggle } from '../ui/CheckerToggle'
 import { downloadBlob } from '../../lib/download'
 import { loadRenderSource } from '../../lib/image'
 import type { RenderSource } from '../../lib/image'
-import { DEFAULT_TARGETS, buildExportZip, renderIcon } from '../../lib/pwaExport'
+import { DEFAULT_TARGETS, MASKABLE_SAFE_DIAMETER, buildExportZip, renderIcon } from '../../lib/pwaExport'
 import { PanelEmptyState } from '../PanelEmptyState'
 
 /* ----------------------------------------------------------------- constants */
@@ -246,8 +246,9 @@ export default function ExportPanel(): ReactNode {
               </label>
             </div>
             <p className="mt-3 rounded-md bg-surface-3 px-3 py-2 text-xs leading-snug text-muted">
-              Maskable icons are drawn full-bleed and opaque with an enlarged safe-zone (dashed circle in the
-              preview) so Android can crop them to any shape without clipping your mark.
+              Maskable icons are drawn full-bleed and opaque with an enlarged safe-zone so Android can crop them
+              to any shape without clipping your mark. The dashed circle in the preview is that crop — the centre
+              66% Android guarantees, a circle rather than a square.
             </p>
           </section>
         </div>
@@ -382,11 +383,12 @@ function PreviewTile({
           }}
         />
         {maskable && (
-          // Dashed safe-zone circle (~80% of the tile) overlaid on the maskable preview.
+          // Dashed safe-zone circle overlaid on the maskable preview — Android's
+          // real 66.7% crop, not the spec's ~80% (see MASKABLE_SAFE_DIAMETER).
           <span
             aria-hidden
             className="pointer-events-none absolute rounded-full border border-dashed border-accent/70"
-            style={{ width: display * 0.8, height: display * 0.8 }}
+            style={{ width: display * MASKABLE_SAFE_DIAMETER, height: display * MASKABLE_SAFE_DIAMETER }}
           />
         )}
       </div>

@@ -5,7 +5,7 @@
 // real favicon.ico, a webmanifest, and a copy-paste <head> snippet.
 
 import JSZip from 'jszip'
-import { loadRenderSource } from './image'
+import { loadRenderSource } from './image.ts'
 import type { ExportTarget, RenderIconOptions, IconShape } from '../types'
 
 /**
@@ -50,6 +50,35 @@ export const DEFAULT_TARGETS: ExportTarget[] = [
   { id: 'windows-150', label: 'Windows tile 150', size: 150, fileName: 'mstile-150.png', maskable: false, group: 'windows', enabled: false },
   { id: 'windows-310', label: 'Windows tile 310', size: 310, fileName: 'mstile-310.png', maskable: false, group: 'windows', enabled: false },
 ]
+
+/* ------------------------------------------------------- maskable safe zone */
+
+/**
+ * Android's adaptive-icon mask keeps only the centre **72dp of 108dp** — a
+ * circle of 66.7% diameter. The web maskable spec talks about an "~80% safe
+ * zone", but 66.7% is what actually survives once Chrome installs the PNG as a
+ * WebAPK, so that is the number we design to.
+ */
+export const MASKABLE_SAFE_DIAMETER = 72 / 108
+
+/**
+ * Smallest padding that keeps a *square* content box inside that *circle*. The
+ * logo is drawn `contain` inside a square inset box, so art that reaches its
+ * bounding-box corners sits at the box's half-DIAGONAL, not its half-width:
+ *
+ *     S·√2 / 2 ≤ R    ⇒    padding = (1 − D·√½) / 2
+ *
+ * 26.4% at D = 66.7% (and still 21.7% against the spec's 80%, so the old 18%
+ * floor was short even against the number it was aiming at).
+ */
+export const MASKABLE_MIN_PADDING_PCT = ((1 - MASKABLE_SAFE_DIAMETER * Math.SQRT1_2) / 2) * 100
+
+/**
+ * The floor actually applied to maskable targets: the geometric minimum rounded
+ * up, so the mark clears the mask with a visible margin instead of sitting
+ * flush against it.
+ */
+export const MASKABLE_PADDING_FLOOR_PCT = 28
 
 /* --------------------------------------------------------------- renderIcon */
 
@@ -146,9 +175,9 @@ export function renderIcon(
     ctx.clip()
   }
 
-  // Safe-zone inset. Maskable needs a larger margin so content stays within the
-  // ~80% center "safe zone".
-  const effPaddingPct = maskable ? Math.max(opts.paddingPct, 18) : opts.paddingPct
+  // Safe-zone inset. Maskable needs a larger margin so content stays within
+  // Android's centre safe CIRCLE (see MASKABLE_PADDING_FLOOR_PCT).
+  const effPaddingPct = maskable ? Math.max(opts.paddingPct, MASKABLE_PADDING_FLOOR_PCT) : opts.paddingPct
   const inset = (size * effPaddingPct) / 100
   const box = Math.max(0, (size - inset * 2) * scale)
 
@@ -159,6 +188,18 @@ export function renderIcon(
     let ch = box
     if (ar >= 1) ch = box / ar
     else cw = box * ar
+    if (maskable) {
+      // The padding floor sets the default, but `scale` (up to 120%) multiplies
+      // into the box and can push the corners back out of the mask — so enforce
+      // the safe circle on the FITTED rect: its half-diagonal has to fit inside.
+      // Fitted, not the square box, so wide/tall art is not over-shrunk.
+      const limit = (MASKABLE_SAFE_DIAMETER * size) / 2
+      const half = Math.hypot(cw, ch) / 2
+      if (half > limit) {
+        cw *= limit / half
+        ch *= limit / half
+      }
+    }
     const dx = (size - cw) / 2
     const dy = (size - ch) / 2
 
@@ -419,6 +460,8 @@ function buildReadme(
   lines.push('--------------')
   lines.push('  maskable-*.png are full-bleed, opaque icons with extra safe-zone')
   lines.push('  padding so Android can mask them to any shape without clipping your')
-  lines.push('  logo. Keep important content within the central ~80%.')
+  lines.push('  logo. Android only guarantees the centre 72dp of 108dp, so keep')
+  lines.push('  important content inside a CIRCLE of ~66% diameter — not a square')
+  lines.push('  of ~66% width: corner-filling art sits at the box half-diagonal.')
   return lines.join('\n')
 }
