@@ -11,6 +11,7 @@
 // (../../devtest/scoreboard) runs under `node --test` for crisp, but potrace needs a browser (WASM +
 // DOMParser), so its numbers can only come from here.
 
+import { useMemo } from 'react'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import { serializeDoc } from '../../lib/path/model'
 import { score, type ScoreRow, type SourceImage } from '../../devtest/scoreboard'
@@ -18,6 +19,7 @@ import { LabPage } from './LabPage'
 import { Panel, RawArt } from './Panel'
 import { CaseRow, NoteBox, PendingRow } from './CaseRow'
 import { useLabState } from './useLabState'
+import { useLabSearch } from './useLabSearch'
 import { useLabRun } from './useLabRun'
 import { labImageData } from './resvgRaster'
 import { labTrace } from './labTrace'
@@ -79,11 +81,13 @@ async function analyze(c: Case): Promise<EvalResult> {
 
 export default function EngineLab() {
   const [ui, setUi] = useLabState('lab:engine', { box: 260 })
+  const search = useLabSearch()
+  const cases = useMemo(() => CASES.filter((c) => search.match(c.name, c.kind)), [search.match])
 
-  const run = useLabRun(CASES, analyze, {
+  const run = useLabRun(cases, analyze, {
     label: (c) => `Tracing ${c.name} (${ENGINES.join(' + ')})`,
     done: (n) => `Done — ${n} cases × ${ENGINES.length} engines @ ${MAX_DIM}px.`,
-    deps: [],
+    deps: [cases],
     // Fixed corpus and options — the whole result is deterministic except `runtimeMs`, which a
     // hit freezes at its first-measured value. Acceptable: it's a single noisy sample either way,
     // and skipping the double-retrace determinism check + potrace's main-thread block on every
@@ -103,6 +107,7 @@ export default function EngineLab() {
       progress={run.progress}
       box={ui.box}
       onBox={(box) => setUi({ box })}
+      search={{ state: search, matched: cases.length, total: CASES.length }}
       about={<EngineAbout />}
     >
       {all.length > 0 && <Scoreboard rows={all} />}

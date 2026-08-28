@@ -26,6 +26,7 @@ import type { PlanarFitOptions } from '../../lib/trace/planarFit'
 import { AB_CORPUS, abUrl } from '../../devtest/abCorpus'
 import { LabPage, LabSelect, LabCheck } from './LabPage'
 import { useLabState } from './useLabState'
+import { useLabSearch } from './useLabSearch'
 import { useLabRun } from './useLabRun'
 
 interface Case {
@@ -152,11 +153,16 @@ function StageBar({ stages, total }: { stages: { key: string; ms: number }[]; to
 
 export default function ProfilerLab() {
   const [ui, setUi] = useLabState('lab:profiler', { box: 300, raster: 512, gradients: false, runs: 5, nonce: 0 })
+  // Profiling is the most expensive thing any lab does (minutes for the six cases at 9× runs),
+  // so narrowing the corpus to the one case you're tuning against is worth more here than
+  // anywhere else — the filter drops cases before they are ever traced.
+  const search = useLabSearch()
+  const cases = useMemo(() => CASES.filter((c) => search.match(c.id, c.name)), [search.match])
 
-  const run = useLabRun(CASES, (c) => analyze(c, ui.raster, ui.gradients, ui.runs), {
+  const run = useLabRun(cases, (c) => analyze(c, ui.raster, ui.gradients, ui.runs), {
     label: (c) => `Profiling ${c.name}`,
     done: (n) => `Done — ${n} cases · best of ${ui.runs} interleaved runs @ ${ui.raster}px · gradients ${ui.gradients ? 'on' : 'off'}. Timing is noisy; read the shape, not the last digit.`,
-    deps: [ui.raster, ui.gradients, ui.runs, ui.nonce],
+    deps: [ui.raster, ui.gradients, ui.runs, ui.nonce, cases],
     // Cached like the other labs (ENGINE_HASH + settings), so reopening is instant. The `nonce`
     // (bumped by Re-measure, persisted so a reopen shows your LAST reading) rotates the key to
     // force a fresh measurement on demand. Prof is plain numbers — no serialize needed.
@@ -199,6 +205,7 @@ export default function ProfilerLab() {
       progress={run.progress}
       box={ui.box}
       onBox={(box) => setUi({ box })}
+      search={{ state: search, matched: cases.length, total: CASES.length }}
       about={<ProfilerAbout />}
       controls={
         <>
@@ -272,7 +279,7 @@ export default function ProfilerLab() {
         <section>
           <h2 className="mb-1 text-sm font-semibold text-ink">What each optional feature costs</h2>
           <p className="mb-3 text-xs text-muted">
-            Added ms per trace (best of {ui.runs} interleaved runs), summed across the {CASES.length} cases — so “enable it by default?” is a measured call. A flag that ships ON is timed by turning it OFF.
+            Added ms per trace (best of {ui.runs} interleaved runs), summed across the {cases.length} case{cases.length === 1 ? '' : 's'} — so “enable it by default?” is a measured call. A flag that ships ON is timed by turning it OFF.
           </p>
           <div className="overflow-x-auto rounded-lg border border-line-strong bg-surface">
             <table className="w-full text-xs tabular-nums">

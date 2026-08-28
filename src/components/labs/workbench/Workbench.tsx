@@ -12,6 +12,7 @@ import { useSearchParams } from 'react-router-dom'
 import { LabPage, LabSelect, LabCheck, LabField } from '../LabPage'
 import { PendingRow } from '../CaseRow'
 import { useLabRun } from '../useLabRun'
+import { useLabSearch } from '../useLabSearch'
 import { useLabState } from '../useLabState'
 import { TRUTH_RESOLUTIONS } from '../../../devtest/truthCorpus'
 import { CORPORA, corpusById } from './corpora'
@@ -29,9 +30,21 @@ export default function Workbench() {
   // routes redirect here with ?corpus=…).
   const corpus = corpusById(params.get('corpus') ?? '') ?? CORPORA[0]
 
-  const all = useMemo(() => corpus.cases(), [corpus])
+  // Searching jumps back to page 1 — "All tiers" is 231 cases over 8 pages, and the case you
+  // just named is almost certainly not on the one you were reading.
+  const search = useLabSearch(() => setUi({ page: 0 }))
+
+  const corpusCases = useMemo(() => corpus.cases(), [corpus])
+  // Filtered BEFORE the page slice, so a query reaches the whole corpus rather than the 16
+  // cases in front of you — and so only the matches are ever traced.
+  // `note` is a ReactNode in general (a corpus may hand back markup); only a plain string is
+  // something a substring query can honestly be run against.
+  const all = useMemo(
+    () => corpusCases.filter((c) => search.match(c.title, c.key, typeof c.note === 'string' ? c.note : undefined)),
+    [corpusCases, search.match],
+  )
   const pages = Math.max(1, Math.ceil(all.length / ui.pageSize))
-  // Changing the corpus or the page size can strand you past the end.
+  // Changing the corpus, the page size or the search can strand you past the end.
   const page = Math.min(ui.page, pages - 1)
   const cases = useMemo(
     () => all.slice(page * ui.pageSize, page * ui.pageSize + ui.pageSize),
@@ -41,10 +54,11 @@ export default function Workbench() {
   const run = useLabRun(cases, (c) => analyze(c, ui.res, ui.ab), {
     label: (c) => `Tracing ${c.title} @ ${ui.res}px`,
     done: () =>
-      `${cases.length} of ${all.length} cases · page ${page + 1}/${pages} @ ${ui.res}px. ` +
+      `${cases.length} of ${all.length}${search.active ? ` matching “${search.q}”` : ''} cases · ` +
+      `page ${page + 1}/${pages} @ ${ui.res}px. ` +
       `Every number is measured against the authored SVG — nothing here reads or writes trace-baseline.json.`,
     // The heat scale only recolours the diagnostics (no re-trace), so it stays out of the deps.
-    deps: [corpus.id, page, ui.pageSize, ui.res, ui.ab],
+    deps: [corpus.id, cases, ui.res, ui.ab],
     // Cache per case, keyed by corpus + the only two globals that move the numbers (res, ab —
     // gradients is per-case identity). Also makes paging back instant: `page` in the deps used to
     // discard the other page's traces, now they're served from the store.
@@ -75,6 +89,7 @@ export default function Workbench() {
       box={ui.box}
       onBox={(box) => setUi({ box })}
       wires={ui.wire}
+      search={{ state: search, matched: all.length, total: corpusCases.length }}
       controls={
         <>
           <LabSelect

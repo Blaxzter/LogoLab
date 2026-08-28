@@ -18,6 +18,7 @@ import { Tooltip } from '../ui/Tooltip'
 import { Panel, RawArt } from './Panel'
 import { CaseRow, NoteBox, PendingRow } from './CaseRow'
 import { useLabState } from './useLabState'
+import { useLabSearch } from './useLabSearch'
 import { useLabRun } from './useLabRun'
 import { labImageData } from './resvgRaster'
 import { labTrace } from './labTrace'
@@ -69,24 +70,37 @@ export default function GalleryLab() {
   const [over, setOver] = useState(false)
   const idRef = useRef(0)
 
-  const logos = useMemo(
+  // A search sends you back to page 1: the mark you just typed the name of is, by definition,
+  // unlikely to be on the page you were reading.
+  const search = useLabSearch(() => setUi({ page: 0 }))
+
+  const all = useMemo(
     (): GalleryCase[] =>
       LOGO_CORPUS.map((c) => ({ key: c.file, title: c.company, note: c.notes, svgText: c.svg })),
     [],
+  )
+  // Filtered BEFORE paging, so `airbnb` finds the mark wherever in the 150 it sits instead of
+  // hiding whatever the current page happened to hold. Dropped images are filtered too — they
+  // are cases like any other, and an unfiltered one riding above an empty result reads as a
+  // broken search.
+  const logos = useMemo(() => all.filter((c) => search.match(c.title, c.note, c.key)), [all, search.match])
+  const shownDropped = useMemo(
+    () => dropped.filter((c) => search.match(c.title, c.note)),
+    [dropped, search.match],
   )
   const pages = Math.max(1, Math.ceil(logos.length / PAGE_SIZE))
   const page = Math.min(ui.page, pages - 1)
   // Dropped images always ride along at the top — you dropped them to look at them now, not to
   // find them on page 4.
   const cases = useMemo(
-    () => [...dropped, ...logos.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)],
-    [dropped, logos, page],
+    () => [...shownDropped, ...logos.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)],
+    [shownDropped, logos, page],
   )
 
   const run = useLabRun(cases, analyze, {
     label: (c) => `Tracing ${c.title}`,
     done: (n) => `Done — ${n} @ ${MAX_DIM}px${pages > 1 ? ` (logos page ${page + 1}/${pages})` : ''}.`,
-    deps: [page, dropped],
+    deps: [cases],
     // Cache the logo traces (stable keys) across pages and sessions; skip session-dropped images
     // (their object URLs die on reload, so a `drop-N` key can't be re-derived). Fixed size, flat.
     cache: {
@@ -137,6 +151,12 @@ export default function GalleryLab() {
         box={ui.box}
         onBox={(box) => setUi({ box })}
         wires={ui.wire}
+        search={{
+          state: search,
+          matched: logos.length + shownDropped.length,
+          total: all.length + dropped.length,
+          noun: 'mark',
+        }}
         controls={
           <>
             {pages > 1 && (

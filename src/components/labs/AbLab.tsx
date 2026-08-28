@@ -38,6 +38,7 @@ import { LabPage, LabCheck, LabSelect } from './LabPage'
 import { Panel, RawArt } from './Panel'
 import { CaseRow, PendingRow, NoteBox } from './CaseRow'
 import { useLabState } from './useLabState'
+import { useLabSearch } from './useLabSearch'
 import { useLabRun } from './useLabRun'
 import { labTrace } from './labTrace'
 import { docStats, traceSvg } from './wire'
@@ -565,10 +566,16 @@ export default function AbLab() {
   const pairMode = vsSnap != null
   const changedOnly = snapMode && ui.changedOnly
 
+  const search = useLabSearch()
+
   const lane = useMemo(
     () => [...(ui.lane === 'gallery' ? [] : FIXTURES), ...(ui.lane === 'fixtures' ? [] : GALLERY), ...extras],
     [extras, ui.lane],
   )
+  // The search filters the CORPUS, not the rows on screen — in variants mode every case costs
+  // VARIANTS.length traces, so narrowing to `gear` has to mean tracing gear, not tracing all of
+  // them and hiding the rest. `Changed only` still applies on top, to whatever matched.
+  const found = useMemo(() => lane.filter((c) => search.match(c.name, c.id)), [lane, search.match])
   // A snapshot frozen before a case existed (an older stamp, or one taken with a different
   // --logos slice) simply doesn't have it. Hide those rather than filling the page with
   // "case not in snapshot" errors — the count is reported in the summary line instead. In pair
@@ -576,15 +583,15 @@ export default function AbLab() {
   const cases = useMemo(
     () =>
       selectedSnap
-        ? lane.filter(
+        ? found.filter(
             (c) =>
               !c.id ||
               (selectedSnap.manifest.cases.some((s) => s.id === c.id) && (!vsSnap || vsSnap.manifest.cases.some((s) => s.id === c.id))),
           )
-        : lane,
-    [lane, selectedSnap, vsSnap],
+        : found,
+    [found, selectedSnap, vsSnap],
   )
-  const notInSnap = lane.length - cases.length
+  const notInSnap = found.length - cases.length
 
   const run = useLabRun(
     cases,
@@ -666,6 +673,7 @@ export default function AbLab() {
         box={ui.box}
         onBox={(box) => setUi({ box })}
         wires={ui.wire}
+        search={{ state: search, matched: found.length, total: lane.length }}
         controls={
           <>
             {SNAPSHOTS.length > 0 && (

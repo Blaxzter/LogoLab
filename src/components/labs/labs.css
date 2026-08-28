@@ -160,3 +160,35 @@
   padding: 1px 4px;
   border-radius: 3px;
 }
+
+/* --- toolbar search box ---------------------------------------------------
+   A compact sibling of the global `.input` (2.25rem tall, full width): the lab
+   toolbar is one wrapping row of 1.75rem controls, and a full-size field there
+   would set the row height for everything beside it. It widens on focus so a
+   long query is readable while you type it, and shrinks back afterwards — the
+   filtered corpus, not the query, is what you're reading the rest of the time. */
+.lab-search {
+  height: 1.75rem;
+  width: 9.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-line-strong);
+  background-color: var(--color-surface);
+  padding-inline: 1.55rem 1.35rem;
+  font-size: 0.75rem;
+  color: var(--color-ink);
+  transition: border-color 120ms ease, box-shadow 120ms ease, width 120ms ease;
+}
+.lab-search::placeholder {
+  color: var(--color-faint);
+}
+.lab-search:focus {
+  width: 13rem;
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+/* WebKit's own clear affordance sits exactly where our (keyboard-reachable) one does. */
+.lab-search::-webkit-search-cancel-button,
+.lab-search::-webkit-search-decoration {
+  display: none;
+}

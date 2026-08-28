@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useRef } from 'react'
-import type { CSSProperties, MutableRefObject, ReactNode } from 'react'
-import { ArrowLeft, ChevronDown, Loader2 } from 'lucide-react'
+import type { CSSProperties, MutableRefObject, ReactNode, RefObject } from 'react'
+import { ArrowLeft, ChevronDown, Loader2, Search, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import type { PanZoom } from '../../hooks/usePanZoom'
@@ -8,6 +8,7 @@ import { Tooltip } from '../ui/Tooltip'
 import { Select } from '../ui/Select'
 import type { SelectOption } from '../ui/Select'
 import { useLabState } from './useLabState'
+import type { LabSearchState } from './useLabSearch'
 import './labs.css'
 
 /**
@@ -52,12 +53,26 @@ export const useLabDark = (): boolean => useContext(LabDarkContext)
 /** Panel side length, in px — the range the box-size slider offers. */
 export const BOX_RANGE = { min: 180, max: 900 }
 
+/** What a lab hands {@link LabPage} to get the corpus search box. The counts are the lab's
+ *  to supply — only it knows how big its corpus is before the filter and after it — and they
+ *  are what turns the box from a text field into a readout: `12/231` while you type. */
+export interface LabSearchProps {
+  state: LabSearchState
+  /** Cases the query matched (across the WHOLE corpus, not the current page). */
+  matched: number
+  /** Cases there are, unfiltered. */
+  total: number
+  /** What a case is called here, singular — 'case', 'logo', 'mark'. */
+  noun?: string
+}
+
 export function LabPage({
   storageKey,
   title,
   subtitle,
   about,
   controls,
+  search,
   status,
   running = false,
   progress,
@@ -73,6 +88,9 @@ export function LabPage({
   about: ReactNode
   /** Lab-specific toolbar controls (rendered between the title and the zoom pill). */
   controls?: ReactNode
+  /** Filter the corpus by name from the toolbar. See {@link useLabSearch} — it filters the
+   *  case LIST, so a match is a trace away whatever page it lived on. */
+  search?: LabSearchProps
   status: string
   running?: boolean
   /** Drives the run progress bar (from useLabRun). `cached` of them were served from the store. */
@@ -87,8 +105,27 @@ export function LabPage({
   const pz = usePanZoom({ maxScale: 40 })
   const claimed = useRef(false)
   const [ui, setUi] = useLabState(`${storageKey}:ui`, { about: false, dark: false })
+  const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => pz.reset(), [pz.reset])
+
+  // `/` jumps to the search box from anywhere on the page — these are long, scrolling pages
+  // and the toolbar is sticky but the box is one control among a dozen. Typing `/` INTO a
+  // field (this one included) has to stay a slash, so any editable target is left alone.
+  const hasSearch = search != null
+  useEffect(() => {
+    if (!hasSearch) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      e.preventDefault()
+      searchRef.current?.focus()
+      searchRef.current?.select()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [hasSearch])
 
   return (
     <LabZoomContext.Provider value={{ pz, claimed }}>
@@ -112,6 +149,7 @@ export function LabPage({
             </div>
             <div className="hidden h-5 w-px shrink-0 bg-line sm:block" />
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+              {search && <LabSearchBox {...search} inputRef={searchRef} />}
               {controls}
               <LabCheck
                 label="Dark bg"
@@ -181,10 +219,96 @@ export function LabPage({
         </div>
 
         <main>
-          <LabDarkContext.Provider value={ui.dark}>{children}</LabDarkContext.Provider>
+          <LabDarkContext.Provider value={ui.dark}>
+            {search && search.state.active && search.matched === 0 && search.total > 0 && (
+              <div className="px-4 py-10 text-center text-sm text-muted">
+                No {search.noun ?? 'case'} matches{' '}
+                <b className="text-ink">“{search.state.q}”</b>.{' '}
+                <button
+                  type="button"
+                  onClick={() => search.state.setQuery('')}
+                  className="text-accent underline-offset-2 hover:underline"
+                >
+                  Clear the search
+                </button>{' '}
+                to get all {search.total} back.
+              </div>
+            )}
+            {children}
+          </LabDarkContext.Provider>
         </main>
       </div>
     </LabZoomContext.Provider>
+  )
+}
+
+/**
+ * The corpus search box. It filters the case LIST (see {@link useLabSearch}), so the counter
+ * beside it reads against the whole corpus — `12/231` means twelve of the 231 cases will be
+ * traced, not twelve of whatever this page happened to have already drawn.
+ *
+ * It is rendered by {@link LabPage} rather than passed in through `controls`, so it sits in
+ * the same place, and answers to the same `/`, in every lab.
+ */
+function LabSearchBox({
+  state,
+  matched,
+  total,
+  noun = 'case',
+  inputRef,
+}: LabSearchProps & { inputRef: RefObject<HTMLInputElement | null> }) {
+  return (
+    <Tooltip
+      side="bottom"
+      label={
+        <>
+          Filter the corpus by name — <b>before</b> anything is traced, so a match hiding on
+          page 4 comes to you and the rest is never traced at all. Space-separated terms all
+          have to match. Press <b>/</b> from anywhere on the page to jump here, <b>Esc</b> to
+          clear.
+        </>
+      }
+    >
+      <div className="inline-flex items-center gap-1.5">
+        {/* The icon + clear button are absolutely placed, so they need a wrapper that is exactly
+            the FIELD — hanging them off a box that also contains the counter puts the ✕ on top
+            of it. */}
+        <div className="relative inline-flex items-center">
+          <Search size={12} className="pointer-events-none absolute left-2 text-faint" />
+          <input
+            ref={inputRef}
+            type="search"
+            value={state.query}
+            onChange={(e) => state.setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape') return
+              e.preventDefault()
+              if (state.query) state.setQuery('')
+              else e.currentTarget.blur()
+            }}
+            placeholder={`Search ${noun}s`}
+            aria-label={`Search ${noun}s`}
+            className="lab-search"
+          />
+          {state.query && (
+            <button
+              type="button"
+              onClick={() => state.setQuery('')}
+              aria-label="Clear search"
+              className="absolute right-1 grid h-4 w-4 place-items-center rounded text-faint transition-colors hover:bg-surface-3 hover:text-ink"
+            >
+              <X size={11} />
+            </button>
+          )}
+        </div>
+        {/* Only while the query bites — an idle "231/231" is a number nobody asked for. */}
+        {state.active && (
+          <span className="whitespace-nowrap tabular-nums text-[0.68rem] text-faint">
+            {matched}/{total}
+          </span>
+        )}
+      </div>
+    </Tooltip>
   )
 }
 

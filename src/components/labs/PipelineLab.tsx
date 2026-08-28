@@ -8,6 +8,7 @@
 //   source → Mumford–Shah smoothed → discontinuity map 𝒟 → segmentation (false-coloured, then
 //   the actual region fills) → per-region paint models → the final crisp & potrace traces.
 
+import { useMemo } from 'react'
 import { labImageData } from './resvgRaster'
 import { segmentImage, DEFAULT_SEGMENT_OPTIONS } from '../../lib/trace/segment'
 import { fitPaintLadder } from '../../lib/trace/gradient'
@@ -23,6 +24,7 @@ import { LabPage } from './LabPage'
 import { Panel, RawArt } from './Panel'
 import { CaseRow, NoteBox, PendingRow } from './CaseRow'
 import { useLabState } from './useLabState'
+import { useLabSearch } from './useLabSearch'
 import { useLabRun } from './useLabRun'
 import { labTrace } from './labTrace'
 import { rgbaToUrl } from './raster'
@@ -114,11 +116,13 @@ async function analyze(c: Case): Promise<Stages> {
 
 export default function PipelineLab() {
   const [ui, setUi] = useLabState('lab:pipeline', { box: 260 })
+  const search = useLabSearch()
+  const cases = useMemo(() => CASES.filter((c) => search.match(c.name, c.kind)), [search.match])
 
-  const run = useLabRun(CASES, analyze, {
+  const run = useLabRun(cases, analyze, {
     label: (c) => `Analysing ${c.name}`,
     done: (n) => `Done — ${n} cases @ ${MAX_DIM}px. Each row's panels share a camera; rows zoom independently.`,
-    deps: [],
+    deps: [cases],
     // Fixed corpus + options; every stage output is a small deterministic string/data-URL.
     cache: { id: 'pipeline', key: (c) => c.name, optionsKey: `${MAX_DIM}` },
   })
@@ -133,6 +137,7 @@ export default function PipelineLab() {
       progress={run.progress}
       box={ui.box}
       onBox={(box) => setUi({ box })}
+      search={{ state: search, matched: cases.length, total: CASES.length }}
       about={<PipelineAbout />}
     >
       {run.results.map(({ case: c, value: s, error }, i) => {

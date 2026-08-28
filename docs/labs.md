@@ -88,6 +88,16 @@ inspecting one junction flung every other case off-screen; pinch-zoom included),
   fallback camera for panels rendered outside a `CaseRow`. The first panel mounted under a
   camera auto-claims itself as the box that camera's +/− buttons zoom around, so no lab threads
   a `primary` flag row by row.
+- **`useLabSearch`** — the corpus search box every lab wears (rendered by `LabPage`, so it sits
+  in the same place and answers to the same `/` everywhere). It filters the **case list**, not
+  the finished rows: the Workbench's "All tiers" is 231 cases over 8 pages and Feature A/B costs
+  seven traces a case, so hiding rows after the fact would still make you page to the case and
+  still pay for tracing the rest. Filtering the corpus means only the matches are ever traced,
+  and the paged labs jump back to page 1 so the match you named is in front of you. The query
+  **settles** (~220 ms) before it bites — `useLabRun` re-runs on every deps change, so a
+  per-keystroke value would cancel and restart the run five times a word — and it is deliberately
+  **not** persisted, unlike everything else in `useLabState`: reopening a lab to a corpus
+  mysteriously cut to three cases by last week's search is a bug report, not a convenience.
 - **`Panel`** / **`CaseRow`** / **`Badge`** / **`NoteBox`** / **`PendingRow`** — a labelled
   zoomable box, a corpus row, and the boxes that carry caveats.
 - **`GateTable`** — the headroom bars. Both scoring labs feed it the same row shape.
