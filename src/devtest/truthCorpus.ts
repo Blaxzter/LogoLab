@@ -187,6 +187,7 @@ export const TRUTH_CORPUS: TruthCase[] = [
   { name: 'smooth-radii', svg: 'public/examples/edge-cases/smooth-radii.svg', note: 'no authored corners at all — the corner-precision gate (#23)', gradients: false, tier: 0 },
 
   { name: 'corner-turns', svg: 'public/examples/edge-cases/corner-turns.svg', note: 'authored-turn sweep across the corner detector’s bar (#23)', gradients: false, tier: 0 },
+  { name: 'shaded-ink', svg: 'public/examples/edge-cases/shaded-ink.svg', note: 'one ink with soft shading — the colour path carves it (#15)', gradients: false, tier: 0, gated: true },
 
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves

@@ -259,6 +259,16 @@ export interface PlanarFitOptions {
    *  near the 60° sharp bar would rotate handles until the corner READS smooth —
    *  gear-teeth's marginal roots read turn 46–59° corrected and flipped exactly there. */
   arcPinTurnMinDeg?: number
+  /** DIAGNOSTIC out-sink (chordDiag.ts / issue #14): one record per candidate the
+   *  occluder-chord pass weighed, with the value each gate saw. Undefined in production
+   *  and the pass is byte-identical without it — it exists because a candidate rejected by
+   *  the CHORD_MAX_LEN veto was otherwise indistinguishable from an edge that was never a
+   *  candidate, so the audit's "measured dead above ~1024" claim could not be re-checked. */
+  onChord?: import('./planarReseat.ts').ChordObserver
+  /** DIAGNOSTIC out-sink (ringDiag.ts / issue #10): one record per region loop the §1d
+   *  co-circular arc snap weighed, naming the gate that declined it. Undefined in
+   *  production; the snap is byte-identical without it. */
+  onArcLoop?: import('./planarBeautify.ts').ArcLoopObserver
 }
 
 /** See PlanarFitOptions.apexReach. Returns Infinity when it cannot judge. */

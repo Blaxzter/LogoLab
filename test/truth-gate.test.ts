@@ -130,6 +130,17 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // the tracer splits that smooth shading into regions the art does not contain. It is the
   // headline tier-1 finding — see docs/vectorization-benchmarks.md §8.
   'fluent-olive': 'chamfer 7.0px, p95 97px — invents interior edges across a 3-gradient stack',
+  // shaded-ink (issue #15, authored deliberately RED 2026-08-23): the colour path keeps ONE
+  // ink's shading as separate palette entries and cuts every shape where the nearest-colour
+  // assignment flips. The worst excursion is at the CENTRE of a disc — a boundary drawn
+  // straight across it, 57px from anything the artist drew, which is the reported
+  // "a disc lost its upper-left arc" reproduced. The silhouette itself survives
+  // (missedMax 1.95px); the damage is invented interior structure. The case carries its
+  // own control: two GENUINELY distinct authored colours at ΔE 4.63 / RGB 13.4 (flute-flat's
+  // regime) that must stay two regions — the shading's knife-edge pair is ΔE 4.44 / RGB 13.5,
+  // so the fixture states on its face why a colour-DISTANCE threshold cannot be the fix.
+  'shaded-ink': 'chamfer 3.41px, p95 35.5px — the colour path carves one shaded ink into pieces (#15)',
+
 }
 
 /**
@@ -253,6 +264,14 @@ const KNOWN_DEFECTS_LOWRES: Record<string, string> = {
   //     deleted a LOLLIPOP region outright (the straw's whole 129px outline shared its
   //     fused vertex pair with the 2.8px neck). Fixed by the weld length guard: 7/7,
   //     0.25/1.02.
+  //
+  // shaded-ink (issue #15, authored deliberately RED 2026-08-23) is listed at BOTH
+  // resolutions, unlike `peak-drop`, and that difference is the point: peak-drop is
+  // calibrated against an ABSOLUTE px floor and cannot straddle two rasters two octaves
+  // apart, so it is excluded from this lane. This defect is a COLOUR one — the palette
+  // separation of an ink's tones does not care about the raster — so it reproduces at 256
+  // as it does at 512, and belongs on the list rather than out of the lane.
+  'shaded-ink': 'the colour path carves one shaded ink into pieces at every raster (#15)',
 }
 
 for (const c of LOWRES_CORPUS) {

@@ -90,6 +90,27 @@ const CHORD_TOL = 2.5
 /** …and no longer than this (the mangled zone is junction-local). */
 const CHORD_MAX_LEN = 80
 
+/**
+ * Diagnostic out-sink for the chord pass (`chordDiag.ts`, issue #14). The audit measured
+ * CHORD_MAX_LEN as an ART constant compared against an ARTWORK span, and therefore dead on
+ * its own driver case above ~1024 — but nothing in the repo could observe the candidates it
+ * rejects, so the claim could not be re-checked without this. One record per candidate edge,
+ * with the value each gate saw and which gate stopped it.
+ *
+ * Same shape and cost as `onReseat` in planarBeautify: undefined in production, so the pass
+ * is byte-identical when no observer is attached.
+ */
+export interface ChordCandidate {
+  edgeId: number
+  /** `dist(a,b)` — the artwork span CHORD_MAX_LEN is compared against. */
+  len: number
+  /** Max deviation of the edge's own fit from the re-seat line (CHORD_TOL). */
+  maxDev: number
+  sameLine: boolean
+  verdict: 'straightened' | 'too-long' | 'not-collinear' | 'dev-exceeded'
+}
+export type ChordObserver = (c: ChordCandidate) => void
+
 const dist = (a: Vec, b: Vec): number => Math.hypot(a.x - b.x, a.y - b.y)
 
 /** A terminal primitive at one edge end. Line: point `a` + unit dir `d`.
@@ -518,6 +539,7 @@ export function reseatJunctions(
   vertices: Vertex[],
   width?: number,
   height?: number,
+  onChord?: ChordObserver,
 ): { chords: Set<number>; moved: Set<number> } {
   const incident = new Map<number, End[]>()
   for (const e of edges) {
@@ -606,7 +628,13 @@ export function reseatJunctions(
     if (!l1s?.length || !l2s?.length) continue
     const a = e.nodes[0]
     const b = e.nodes[e.nodes.length - 1]
-    if (dist(a, b) > CHORD_MAX_LEN) continue
+    const len = dist(a, b)
+    const tooLong = len > CHORD_MAX_LEN
+    // Production short-circuits here. With an observer attached the remaining gates are
+    // evaluated anyway — that is the whole point of the census (what does the length veto
+    // actually reject?) — but the mutation below stays behind the identical condition, so
+    // the pass is byte-identical either way.
+    if (tooLong && !onChord) continue
     const sameLine = l1s.some((l1) =>
       l2s.some(
         (l2) =>
@@ -614,7 +642,10 @@ export function reseatJunctions(
           primDist(l2.a!, l1) <= CHORD_COLLINEAR_OFF,
       ),
     )
-    if (!sameLine) continue
+    if (!sameLine) {
+      onChord?.({ edgeId: e.id, len, maxDev: NaN, sameLine: false, verdict: tooLong ? 'too-long' : 'not-collinear' })
+      continue
+    }
     // The edge's own fit must sit near the chord (it crossed the mangled zone —
     // a genuinely different boundary between the two junctions must survive).
     const line = l1s[0]
@@ -627,7 +658,9 @@ export function reseatJunctions(
       const d = lineMaxDev(pts, line.a!, line.d!)
       if (d > maxDev) maxDev = d
     }
-    if (maxDev > CHORD_TOL) continue
+    const verdict = tooLong ? 'too-long' : maxDev > CHORD_TOL ? 'dev-exceeded' : 'straightened'
+    onChord?.({ edgeId: e.id, len, maxDev, sameLine: true, verdict })
+    if (verdict !== 'straightened') continue
     e.nodes = [
       { x: a.x, y: a.y, hIn: null, hOut: null, kind: 'corner' },
       { x: b.x, y: b.y, hIn: null, hOut: null, kind: 'corner' },

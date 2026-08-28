@@ -595,6 +595,8 @@ export async function traceImage(
       width,
       height,
       onReseat: (m) => { reseated = m },
+      onChord: fitOpts.onChord,
+      onArcLoop: fitOpts.onArcLoop,
     })
     // §10.4 second half — fuse junction pairs the re-seat converged (a rasterized
     // degree-4 crossing = two degree-3 junctions + a micro-edge; once re-seated

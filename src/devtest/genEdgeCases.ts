@@ -922,6 +922,79 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       return svg(`<rect width="${V}" height="${V}" fill="${WHITE}"/>` + body.join(''))
     },
   },
+  {
+    // SHADED SINGLE INK — issue #15. The colour path keeps ONE ink's shading as separate
+    // palette entries and CARVES every shape along the line where the nearest-colour
+    // assignment flips (measured on a real icon sheet: a disc lost its upper-left arc; 4
+    // paths / 191 nodes through colour vs 1 path / 33 nodes through mono).
+    //
+    // The issue's protocol says this fixture has to exist and be RED before quantize.ts is
+    // touched, and it says why a threshold move is almost certainly the wrong axis. This
+    // case is built to make that argument MEASURABLE rather than rhetorical, by putting
+    // both populations in one image at the same separation:
+    //   • the SHADED shapes use the three tones measured on the real sheet — #0f1c13,
+    //     #050f06, #15251b, pairwise ΔE76 4.44 / 6.80 / 11.09 — as two-stop ramps inside a
+    //     SINGLE authored outline. The truth for each is one shape.
+    //   • the CONTROL pair at the bottom is two GENUINELY distinct authored colours at
+    //     ΔE 4.63 / RGB 13.4 — flute-flat's ΔE 4.5 regime, whose merge is a gated
+    //     region-drop regression. The shaded knife-edge pair sits at ΔE 4.44 / RGB 13.5.
+    // The two are within 0.2 ΔE and 0.1 RGB of each other, so any fix that separates them
+    // by colour DISTANCE has to thread 0.2 ΔE — the case says so on its face. A real fix
+    // needs a different evidence dimension (the issue's hypothesis: shading interleaves
+    // within one connected ink mass, authored colours occupy disjoint regions).
+    //
+    // Each ramp holds its two tones FLAT over most of the shape and transitions across a
+    // short band, so every tone keeps a flat interior: `scoreRegions` reads regions off the
+    // RASTER and a smooth ramp would make it report dozens of phantom bands (its own
+    // bg-ramp caveat). Traced flat (gradients OFF) — the colour path is where the defect is.
+    name: 'shaded-ink',
+    note: 'one ink with soft shading — the colour path carves it (#15); carries its own ΔE 4.63 distinct-colour control',
+    make: () => {
+      const f3 = (v: number): string => v.toFixed(3)
+      // The three tones measured on the real sheet.
+      const T = { mid: '#15251b', dark: '#0f1c13', deep: '#050f06' }
+      const PAIRS: [string, string, string][] = [
+        ['p0', T.mid, T.dark], // ΔE 4.44 — the knife edge
+        ['p1', T.dark, T.deep], // ΔE 6.80
+        ['p2', T.mid, T.deep], // ΔE 11.09
+      ]
+      // Two flat plateaus joined by a short soft transition: shading, not a ramp.
+      const defs = PAIRS.map(
+        ([id, a, b]) =>
+          `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">` +
+          `<stop offset="0%" stop-color="${a}"/><stop offset="40%" stop-color="${a}"/>` +
+          `<stop offset="60%" stop-color="${b}"/><stop offset="100%" stop-color="${b}"/>` +
+          `</linearGradient>`,
+      ).join('')
+
+      const body: string[] = [`<rect width="${V}" height="${V}" fill="${WHITE}"/>`]
+      // Row 1 — discs. The reported casualty: a disc that loses an arc where the
+      // assignment flips. One authored circle each.
+      PAIRS.forEach(([id], i) => body.push(`<path d="${circleD(44 + i * 84, 46, 30)}" fill="url(#${id})"/>`))
+      // Row 2 — rounded bars: a long shape whose shading band crosses it lengthwise, so the
+      // carve (if any) cuts a straight run rather than a curve.
+      PAIRS.forEach(([id], i) => {
+        const x = 14 + i * 84
+        const d =
+          `M ${f3(x + 8)},100 H ${f3(x + 60)} A 8,8 0 0 1 ${f3(x + 68)},108 V 128` +
+          ` A 8,8 0 0 1 ${f3(x + 60)},136 H ${f3(x + 8)} A 8,8 0 0 1 ${f3(x)},128 V 108` +
+          ` A 8,8 0 0 1 ${f3(x + 8)},100 Z`
+        body.push(`<path d="${d}" fill="url(#${id})"/>`)
+      })
+      // Row 3 — a RING: the shading crosses a shape with a hole, so a carve also threatens
+      // the topology, not just the outline.
+      body.push(`<path d="${circleD(44, 186, 32)} ${circleD(44, 186, 16)}" fill-rule="evenodd" fill="url(#p2)"/>`)
+      // …and a FLAT single-tone control: same ink, no shading. It must stay one clean shape
+      // at every stage, so a fix cannot take credit for what the case would show anyway.
+      body.push(`<path d="${circleD(128, 186, 32)}" fill="${T.dark}"/>`)
+      // Row 3 right — THE CONTROL PAIR. Two authored colours at ΔE 4.63 / RGB 13.4 meeting
+      // on a straight seam. They must stay TWO regions: this is flute-flat's constraint,
+      // authored in-case so a merge shows up right here instead of two corpora away.
+      body.push(`<rect x="180" y="154" width="62" height="32" fill="${rgb(74, 106, 168)}"/>`)
+      body.push(`<rect x="180" y="186" width="62" height="32" fill="${rgb(86, 112, 168)}"/>`)
+      return svg(body.join(''), defs)
+    },
+  },
 ]
 
 // --- emit -------------------------------------------------------------------

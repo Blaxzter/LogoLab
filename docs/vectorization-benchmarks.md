@@ -34,6 +34,57 @@ guardrails):
 | 15 | **CLOSED — not planned** (2026-08-23). The turn IS under-read on the lattice (§21, unretracted: `detectCorners` reads two chords ±4 POINTS on the integer staircase, and recovery falls from 96.3% at 90–105° of authored turn to **55.1%** at 60–65°). The ISSUE is what closed, on four grounds: its target metric is corner RECALL, which has no precision term — so “find more corners” and “invent corners” are the same instruction, and §22 optimising it produced visible kinks; a missed 60° corner is a gentle bend drawn as a gentle curve while an invented one is a visible kink, so it spends the detector's budget on the invisible direction; row #16 shows the tracer already errs the OTHER way on the SAME knob (12 invented corners on art with none), so the two rows pulled one lever in opposite directions; and the framing was refuted twice (§21's seam truncation, §22's reading) with a named witness authored at exactly 60.0° — the detector's bar AND the scorer's bar — which no reading can reliably clear. The one defensible remnant is `gear-teeth` **53/60**, where the corners are unambiguous (67.3° roots on a mechanical shape); it carries on as a narrow case, not a corpus-wide detector change | `corner-turns` (tier 0, gated — kept: an authored-turn sweep is a good corner-recall case regardless); `gear-teeth` 53/60 | the cliff, unchanged and still measurable with `needleDiag --turns` / `turnDiag` | **§21**, **§22**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23) (closed not-planned). **Corner work continues at row #16** |
 | 16 | **The trace INVENTS corners on smooth art** — sharp nodes the authored geometry does not contain, on ellipse ends and straight→arc blends. Newly VISIBLE rather than newly introduced: `cornersRecovered` is a recall number with no precision term, so this was free by every gate here until §23 built `cornersInvented`. It is the measured form of “every nice radius has a kink in it”, and it is why §22 was rejected on sight after passing CI. The metric asks a like-for-like question at the corner's own scale — the traced node's C⁰ kink minus the AUTHORED boundary's turn over ±1px — and exempts the four places a trace is right to corner (canvas border, occluded boundary, traced junctions of degree ≥3, authored crossings) | `smooth-radii` (tier 0, **gated**, authored for this: art with NO corners at all — ellipses 1:1→1:8 in both orientations, rounded rects at 2/3/5/8/12px radii, curvature-ramp eggs) | **12** invented on a case with zero authored corners; corpus-wide over the 23 gated tier-0 cases, flat lane: p50 0, p90 2, max 12, **18 over 3 cases** (`smooth-radii` 12, `hairlines` 4, `peak-drop` 2). The rejected §22 reading takes `smooth-radii` to **18** | **§23**; instrument `src/devtest/kinkDiag.ts` (`--gate`, `--probe x,y`, `--compare`). Gate scope today: FLAT art, @512 only — gradient banding and the halved radii at @256 are each their own calibration (§23.3) |
 
+### 0.1 Premise re-check of the four open issues (2026-08-23)
+
+The issues were filed 2026-08-04/05, **before** §15, §17, §18, §19, §20 and §23 shipped.
+§16 is the precedent for doing this first: §0 #14 had already been fixed by §15 and nobody
+noticed until it was re-measured. Every claim below was re-run against the current tree;
+the instruments named are new and live in `src/devtest/`.
+
+| issue | premise | verdict |
+|---|---|---|
+| **#14** THROUGH_SPAN | same junction reads 21.4° → 13.2° → 13.2° → 7.1° @256/512/1024/2048; line-vs-circle winner flips | **holds exactly** — junction (209,90)→(418,180)→(836,359)→(1671,718), turns and both dev pairs (circ 0.79/line 1.25 @256, circ 1.99/line 0.67 @2048) reproduce to the decimal (`threadDiag --case band-cross`) |
+| **#14** THROUGH_SPAN, *consequence* | "@256 it trips the 20° gate and the junction is DROPPED (15/16 move)" | **STALE** — @256 now moves **16 of 16**: 15 by §14 thread and **1 by §17 apex**. §17 landed 2026-08-06, the day after the issue, and catches exactly the junction the 20° gate refuses. The defect is now "same art routed down a different branch per raster", not a lost junction |
+| **#14** CHORD_MAX_LEN | dead above ~1024 on its own driver case (32.9px @512 → 130.7px @2048 > 80) | **holds** — `chordDiag`: gradient-flat has 3 candidates at every raster; 1 straightened @512 (len 32.0) and @1024 (65.2), then **0 straightened / 3 too-long @2048** (131.1). Counterfactual `--cap 400` recovers exactly the 1 |
+| **#14** coarse-end tail | 4 scale KNOWN_DEFECTS remain (overlap, aa-seam, petals, band-cross) | **holds** — all four still listed, gate 7/7 green |
+| **#10** rings | 69 edges / 46 junctions @512; §1d / §14 / §17 all aim here and none holds | **holds, and is now explained** — see below |
+| **#9** border | `collectBoundary` drops every query within BORDER_EPS 1.5px; no gate can see the border | **holds** — the exclusion is intact and two-sided. `borderDiag` measures the hole at **4,489 transversal band samples** on the fixtures alone |
+| **#9** symptom | "odd corners and ragged edges", witness `logo-mastercard` | **half REFUTED on the witness** — see below |
+| **#15** knife edge | shaded tones ΔE 4.44–11.09 / RGB 13.5–34.4; flute-flat's authored pair at ΔE 4.5 must survive | **holds** — tones reproduce exactly (4.44 / 6.80 / 11.09), and `fluent-flute-flat` passes region recovery @512 today (truth gate 73/73), so it is a live constraint, not an already-failing one |
+| **#15** "no gated case exists" | author one first | **held; now closed** — `shaded-ink` authored, gated, RED |
+
+**#10 — the answer to "why does none of it hold here" is measured, and it is one gate.**
+`threadDiag` on `olympic-rings`: every edge on the mark is ΔE ≥ 60 (five saturated rings on
+white), and the §14 rank only considers a junction with at least one **weak** arm (ΔE ≤ 12).
+It therefore has **zero candidates**, and **0 of 46 junctions move** — §14 *and* §17 are
+structurally inert on this art, not mistuned. `ringDiag` then settles the third mechanism:
+of **24** candidate region loops, **24 are rejected by `corner-veto`** and not one reaches
+the circle fit, at turns of 67–158°. The veto exists to stop a checker cell scalloping into
+a disc, and it reads `maxTurnRad` over the WHOLE loop — on a crossing-dense mark the loop's
+turn is dominated by its own junction corners, so a ring split by crossings is guaranteed to
+read "polygon". That is a structural mismatch, not a calibration one, and it is a different
+fix from the one the issue's "the snap's acceptance may not fire" line anticipated.
+
+**#9 — the corner half of the symptom does not survive a like-for-like test.** The first
+`borderDiag` draft scored 11 invented corners on `mastercard` at excess 87–120°, all on the
+canvas rect. Every one was a **frame closure**: where art meets the canvas edge the traced
+region legitimately turns to run ALONG the edge — a real ~90° corner in the doc, and no
+corner at all in the authored art, which simply continues off-canvas. Requiring **both**
+arms to be transversal (the first draft tested only the out-tangent) takes mastercard to
+**0**, the fixtures to **0**, and the whole 152-mark gallery to **9**. This is the same trap
+the issue itself named — re-admitting the framing artifact — reached from the corner side
+instead of the distance side. What remains is the distance half, and there mastercard is
+**not** the worst case: it reads **1.27×** its own interior, against `wedge-counter` 4.70×
+(fixture) and `langchain` 2.38× / `boeing-wm` 2.12× / `visa` 1.82× (gallery). 42 of 152
+gallery marks reach the border at all. Per §17's lesson, **measure which mechanism a witness
+shows before trusting the issue's framing** — the named witness is mid-pack here.
+
+**New instruments** (all purely diagnostic; two production out-sinks, `onChord` and
+`onArcLoop`, are undefined in production and the passes are byte-identical without them):
+`src/devtest/borderDiag.ts` (#9), `src/devtest/ringDiag.ts` (#10),
+`src/devtest/chordDiag.ts` (#14). `threadDiag` already covered #14's THROUGH_SPAN witness.
+New corpus case `shaded-ink` (#15, tier 0, gated, in `KNOWN_DEFECTS` at 512 **and** 256).
+
 Recently closed: **a small isolated feature swept away by the despeckle area floor**
 (issue #8, user-reported from /labs/ab on `logo-ibm` — the ▼ peak of the m's middle
 stroke, dropped by the flat trace and kept by the gradient one) — closed 2026-08-21,

@@ -21,7 +21,7 @@
 import type { EdgeRef, PathNode, SharedEdge, Topology, Vec, Vertex } from '../path/types'
 import type { BeautifyOptions } from './beautify.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
-import { reseatJunctions } from './planarReseat.ts'
+import { reseatJunctions, type ChordObserver } from './planarReseat.ts'
 import {
   anchorSignedArea,
   arcSlice,
@@ -74,6 +74,12 @@ const CORNER_TURN = Math.PI / 3 // 60°: veto the circle/ellipse snap past this 
  *    moved. The converged-pair weld (§10.4, weldConvergedJunctions) keys on
  *    them, and it must run in the CALLER — contracting a micro-edge rewrites
  *    the region loops, which this function treats as read-only input.
+ *  • `onChord`      — out-sink: one record per candidate the occluder-chord pass
+ *    weighed, with the value each gate saw (chordDiag.ts / issue #14). Undefined
+ *    in production, and the pass is byte-identical without it.
+ *  • `onArcLoop`    — out-sink: one record per region loop the §1d co-circular snap
+ *    weighed, naming the gate that declined it (ringDiag.ts / issue #10). Same
+ *    contract: undefined in production, byte-identical without it.
  */
 export interface SnapOptions {
   arcSnap?: boolean
@@ -83,7 +89,40 @@ export interface SnapOptions {
   width?: number
   height?: number
   onReseat?: (movedVertexIds: ReadonlySet<number>) => void
+  onChord?: ChordObserver
+  onArcLoop?: ArcLoopObserver
 }
+
+/**
+ * One §1d co-circular candidate loop, and what stopped it. `verdict` names the FIRST gate
+ * that declined, in evaluation order — that is the actionable fact (issue #10 asks "why
+ * does the arc snap not hold on the olympic rings", and the answer is a gate name plus the
+ * value it saw, not a guess).
+ */
+export interface ArcLoopRecord {
+  label: number
+  edges: number
+  openEdges: number
+  /** Fitted circle radius (px), when a circle could be fitted at all. */
+  r: number
+  /** Max radial deviation of the loop's flattened points from that circle (px). */
+  radialDev: number
+  /** Effective budget the deviation is compared against (fidelity, scale-relative if on). */
+  budget: number
+  /** Max turn along the loop (deg) — the corner veto's comparand, bar at 60. */
+  turnDeg: number
+  verdict:
+    | 'snapped'
+    | 'single-edge-loop'
+    | 'carries-chord'
+    | 'no-open-edge'
+    | 'too-few-points'
+    | 'corner-veto'
+    | 'circle-fit-failed'
+    | 'radius-too-small'
+    | 'dev-exceeds-budget'
+}
+export type ArcLoopObserver = (r: ArcLoopRecord) => void
 
 /**
  * Effective snap tolerance at a given local feature scale (§10). With `localScaleK`
@@ -175,7 +214,7 @@ export function planarBeautify(
   // (a disc crossed by a line is a "D"): 1d must not absorb them into a circle.
   let chordEdges: ReadonlySet<number> = new Set<number>()
   if (snap.reseat ?? true) {
-    const r = reseatJunctions(edges, vertices, snap.width, snap.height)
+    const r = reseatJunctions(edges, vertices, snap.width, snap.height, snap.onChord)
     chordEdges = r.chords
     snap.onReseat?.(r.moved)
   }
@@ -188,7 +227,7 @@ export function planarBeautify(
   // independently-fitted corners. Runs FIRST on the raw fitted arcs; the edges it
   // snaps skip the per-edge 1a/1b passes below.
   const arcSnapped = arcSnap
-    ? snapCoCircularLoops(edges, vertices, loopsByLabel, fid, localScaleK, cornerVeto, chordEdges)
+    ? snapCoCircularLoops(edges, vertices, loopsByLabel, fid, localScaleK, cornerVeto, chordEdges, snap.onArcLoop)
     : new Set<number>()
 
   const discCircles: DiscCircle[] = []
@@ -299,6 +338,7 @@ function snapCoCircularLoops(
   localScaleK = 0,
   cornerVeto = true,
   chordEdges: ReadonlySet<number> = new Set(),
+  onArcLoop?: ArcLoopObserver,
 ): Set<number> {
   const snapped = new Set<number>()
   const byId = new Map<number, SharedEdge>()
@@ -310,12 +350,18 @@ function snapCoCircularLoops(
   // circular loop that claims them (a vertex/edge lies on at most one such circle).
   const edgeCircle = new Map<number, Circle>()
   const vertCircle = new Map<number, Circle>()
-  for (const loops of loopsByLabel.values()) {
+  for (const [label, loops] of loopsByLabel) {
     for (const loop of loops) {
-      if (loop.length < 2) continue // a single closed-loop edge is a disc — 1a's job
+      // The observer (issue #10) needs the gate NAME plus what it saw; production only
+      // needs the `continue`. `say` is a no-op when nothing is listening, so the pass
+      // stays byte-identical and costs nothing extra.
+      const openEdges = loop.filter((ref) => byId.get(ref.edge)?.closed === false).length
+      const say = (verdict: ArcLoopRecord['verdict'], r = NaN, radialDev = NaN, budget = NaN, turnDeg = NaN): void =>
+        onArcLoop?.({ label, edges: loop.length, openEdges, r, radialDev, budget, turnDeg, verdict })
+      if (loop.length < 2) { say('single-edge-loop'); continue } // a single closed-loop edge is a disc — 1a's job
       // A loop carrying a re-seated occluder chord is a disc CUT by a line (a
       // "D") — snapping it to one circle would absorb the chord into the arc.
-      if (loop.some((ref) => chordEdges.has(ref.edge))) continue
+      if (loop.some((ref) => chordEdges.has(ref.edge))) { say('carries-chord'); continue }
       let ok = true
       let hasOpen = false
       const raw: Vec[] = []
@@ -326,16 +372,22 @@ function snapCoCircularLoops(
         const arc = ref.reversed ? reverseEdgeNodes(e.nodes) : e.nodes
         for (const p of flatten({ nodes: arc, closed: e.closed })) raw.push(p)
       }
-      if (!ok || !hasOpen || raw.length < 8) continue
+      if (!ok || !hasOpen || raw.length < 8) { say(ok && !hasOpen ? 'no-open-edge' : 'too-few-points'); continue }
       // A loop that turns a sharp corner is a polygon (a checker cell's 4 right
       // angles), not a ring split into arcs — snapping it to a circle is the
       // fine-checkerboard scalloping. Radial deviation is blind to it at small scale;
       // turning is not. See CORNER_TURN.
-      if (cornerVeto && maxTurnRad(raw) >= CORNER_TURN) continue
+      const turn = maxTurnRad(raw)
+      if (cornerVeto && turn >= CORNER_TURN) { say('corner-veto', NaN, NaN, NaN, (turn * 180) / Math.PI); continue }
       const c = fitCircle(raw)
       // Scale-relative tolerance (§10): the ring's own radius is its local scale, so a
       // genuine large ring keeps the full budget and a tiny fake one must fit tightly.
-      if (!c || c.r <= 2 * fid || maxRadialDev(raw, c) > effFidelity(fid, c.r, localScaleK)) continue
+      if (!c) { say('circle-fit-failed', NaN, NaN, NaN, (turn * 180) / Math.PI); continue }
+      const dev = maxRadialDev(raw, c)
+      const budget = effFidelity(fid, c.r, localScaleK)
+      if (c.r <= 2 * fid) { say('radius-too-small', c.r, dev, budget, (turn * 180) / Math.PI); continue }
+      if (dev > budget) { say('dev-exceeds-budget', c.r, dev, budget, (turn * 180) / Math.PI); continue }
+      say('snapped', c.r, dev, budget, (turn * 180) / Math.PI)
       for (const ref of loop) {
         const e = byId.get(ref.edge)!
         if (e.closed) continue
