@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react'
 import { AlertTriangle, Eye, EyeOff, Info, Trash2, X } from 'lucide-react'
 import type { DocItem, EditableDoc, PathItem, RawItem } from '../../lib/path/types'
 import { normalizeHex } from '../../lib/colorUtils'
+import { isStrokeOnly, representativePaint } from '../../lib/path/model'
 import { Tooltip } from '../ui/Tooltip'
 import { PaletteEditor } from './PaletteEditor'
 
@@ -15,6 +16,15 @@ type RGB = { r: number; g: number; b: number; a?: number }
 /** Swatch background: a CSS preview of the gradient when present, else the flat fill. */
 function swatchStyle(item: PathItem): CSSProperties {
   const g = item.gradient
+  // A stroke-only path has no fill to show, so the swatch becomes a RING in the
+  // stroke colour — which reads as "outline" at a glance and, unlike a solid
+  // chip, doesn't claim the shape is filled.
+  if (isStrokeOnly(item)) {
+    return {
+      backgroundColor: 'transparent',
+      boxShadow: `inset 0 0 0 4px ${item.stroke?.color ?? '#000'}`,
+    }
+  }
   if (!g) return { backgroundColor: item.fill }
   const stops = g.stops.map((s) => `${s.color} ${Math.round(s.offset * 100)}%`).join(', ')
   if (g.type === 'linear') {
@@ -193,14 +203,14 @@ export function PathsPanelBody({
               onDelete={() => onDelete(item.id)}
               onHighlight={onHighlight}
             />
-          ) : (
+          ) : item.kind === 'raw' ? (
             <RawRow
               key={item.id}
               item={item}
               onToggleVisible={() => onToggleVisible(item.id)}
               onDelete={() => onDelete(item.id)}
             />
-          ),
+          ) : null,
         )}
 
         {selectedPathId && (
@@ -270,7 +280,7 @@ function PathRow({
       tabIndex={0}
       onClick={onSelect}
       // Hovering the row locates its region(s) on the canvas (and clears on leave).
-      onPointerEnter={() => onHighlight?.(item.fill)}
+      onPointerEnter={() => onHighlight?.(representativePaint(item))}
       onPointerLeave={() => onHighlight?.(null)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -285,11 +295,17 @@ function PathRow({
       {/* Translucent flat fills (fill-opacity < 1) show their colour over a checker
           so the opacity is visible; opaque fills / gradients keep the solid swatch. */}
       {(() => {
-        const translucent = !item.gradient && item.fillOpacity !== undefined && item.fillOpacity < 1
+        const translucent =
+          !item.gradient &&
+          !isStrokeOnly(item) &&
+          item.fillOpacity !== undefined &&
+          item.fillOpacity < 1
         return (
           <Tooltip
             label={
-              item.gradient
+              isStrokeOnly(item)
+                ? 'Recolor stroke'
+                : item.gradient
                 ? 'Recolor (replaces gradient with a solid)'
                 : translucent
                   ? `Recolor · ${Math.round((item.fillOpacity ?? 1) * 100)}% opacity`
@@ -298,7 +314,12 @@ function PathRow({
           >
             <label
               onClick={(e) => e.stopPropagation()}
-              className={`relative h-[18px] w-[18px] shrink-0 cursor-pointer overflow-hidden rounded border border-line ${translucent ? 'checkerboard' : ''}`}
+              // The stroke ring needs the checker behind it too: white outlines
+              // are extremely common, and a white ring on the white panel is
+              // an invisible swatch.
+              className={`relative h-[18px] w-[18px] shrink-0 cursor-pointer overflow-hidden rounded border border-line ${
+                translucent || isStrokeOnly(item) ? 'checkerboard' : ''
+              }`}
               style={translucent ? undefined : swatchStyle(item)}
             >
               {translucent && (
@@ -306,11 +327,11 @@ function PathRow({
               )}
               <input
                 type="color"
-                value={normalizeHex(item.fill) ?? '#000000'}
+                value={normalizeHex(representativePaint(item)) ?? '#000000'}
                 onChange={(e) => onRecolor(e.target.value, false)}
                 onBlur={(e) => onRecolor(e.target.value, true)}
                 className="absolute inset-0 cursor-pointer opacity-0"
-                aria-label={`Path ${index} fill color`}
+                aria-label={`Path ${index} ${isStrokeOnly(item) ? 'stroke' : 'fill'} color`}
               />
             </label>
           </Tooltip>

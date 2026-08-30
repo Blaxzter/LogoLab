@@ -1,6 +1,6 @@
 import { Minus, Plus, Scan } from 'lucide-react'
 import type { PanZoom } from '../../hooks/usePanZoom'
-import { Tooltip } from './Tooltip'
+import { ActionButton, isOff } from './ActionButton'
 
 /**
  * Compact zoom pill: − / percentage / +, plus a fit-to-view reset. Click the
@@ -12,22 +12,34 @@ export function ZoomControls({ pz, className = '' }: { pz: PanZoom; className?: 
     <div
       className={`flex items-center gap-0.5 rounded-lg border border-line-strong bg-surface/90 p-0.5 shadow-xs backdrop-blur ${className}`}
     >
-      <IconBtn title="Zoom out" onClick={pz.zoomOut} disabled={!pz.canZoomOut}>
+      <IconBtn
+        title="Zoom out"
+        onClick={pz.zoomOut}
+        reason={pz.canZoomOut ? null : 'Already at the smallest zoom this view allows.'}
+      >
         <Minus size={15} />
       </IconBtn>
-      <Tooltip label="Reset zoom (fit)">
-        <button
-          type="button"
-          onClick={pz.reset}
-          className="h-7 min-w-[3.1rem] rounded-md px-1.5 font-mono text-xs tabular-nums text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
-        >
-          {pz.scalePct}%
-        </button>
-      </Tooltip>
-      <IconBtn title="Zoom in" onClick={pz.zoomIn} disabled={!pz.canZoomIn}>
+      <ActionButton
+        label="Reset zoom"
+        note="Back to 100% and re-centred."
+        onClick={pz.reset}
+        className="h-7 min-w-[3.1rem] rounded-md px-1.5 font-mono text-xs tabular-nums text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+        ariaLabel="Reset zoom"
+      >
+        {pz.scalePct}%
+      </ActionButton>
+      <IconBtn
+        title="Zoom in"
+        onClick={pz.zoomIn}
+        reason={pz.canZoomIn ? null : 'Already at the largest zoom this view allows.'}
+      >
         <Plus size={15} />
       </IconBtn>
-      <IconBtn title="Fit to view" onClick={pz.reset} disabled={pz.atDefault}>
+      <IconBtn
+        title="Fit to view"
+        onClick={pz.reset}
+        reason={pz.atDefault ? 'The view is already fitted and centred.' : null}
+      >
         <Scan size={15} />
       </IconBtn>
     </div>
@@ -37,25 +49,27 @@ export function ZoomControls({ pz, className = '' }: { pz: PanZoom; className?: 
 function IconBtn({
   title,
   onClick,
-  disabled,
+  reason,
   children,
 }: {
   title: string
   onClick: () => void
-  disabled?: boolean
+  reason?: string | null
   children: React.ReactNode
 }) {
+  // Hover styling is dropped rather than overridden when the button is off: a
+  // greyed control that lights up under the pointer reads as pressable.
+  const off = isOff(reason)
   return (
-    <Tooltip label={title}>
-      <button
-        type="button"
-        aria-label={title}
-        onClick={onClick}
-        disabled={disabled}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-      >
-        {children}
-      </button>
-    </Tooltip>
+    <ActionButton
+      label={title}
+      reason={reason}
+      onClick={onClick}
+      className={`flex h-7 w-7 items-center justify-center rounded-md text-ink-2 transition-colors ${
+        off ? 'cursor-not-allowed opacity-40' : 'hover:bg-surface-3 hover:text-ink'
+      }`}
+    >
+      {children}
+    </ActionButton>
   )
 }

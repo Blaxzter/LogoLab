@@ -92,6 +92,21 @@ export function composeAffine(outer: Affine, inner: Affine): Affine {
   ]
 }
 
+/**
+ * The uniform-equivalent scale an affine applies: √|det|.
+ *
+ * For the quantities SVG stores as scalars rather than coordinates — stroke
+ * width, dash lengths, a radial gradient's radius — this is the only honest
+ * answer once a transform is BAKED into coordinates instead of kept as a
+ * matrix. Under a non-uniform scale a stroked circle really does become an
+ * ellipse-ish ring that no single width can express, and this model has no
+ * field for that; √|det| preserves area, which is the least-wrong choice and
+ * exact whenever the scale is uniform (the overwhelmingly common case).
+ */
+export function affineScale(m: Affine): number {
+  return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1
+}
+
 /** Apply an affine to a point. */
 export function applyAffine(m: Affine, p: Vec): Vec {
   return {

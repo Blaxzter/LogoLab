@@ -17,22 +17,23 @@ import type { PanZoom } from "../../hooks/usePanZoom";
 import type {
     EditableDoc,
     DocItem,
-    GradientFill,
     NodeRef,
     PathItem,
-    RawItem,
     SubPath,
     Vec,
 } from "../../lib/path/types";
-import { subPathsToD } from "../../lib/path/model";
+import { representativePaint, subPathsToD } from "../../lib/path/model";
 import {
-    cubicAt,
+    flattenSubPath,
+    pointInPolygon,
+    polygonArea,
+} from "../../lib/editor/hitTest";
+import { HitPath, ItemsView, pathD, visiblePaths } from "../vector/DocRender";
+import {
     insertNode,
     moveHandle,
     moveNodes,
     nearestPointOnItem,
-    segmentControls,
-    segmentCount,
     setNodeKind,
     translateItem,
 } from "../../lib/path/geometry";
@@ -127,53 +128,11 @@ function parseNodeKey(key: string): NodeRef {
     return { sub, idx };
 }
 
-// subPathsToD is pure string work over an immutable array — cache per subPaths
-// identity so the static layer, hit layer and selection outline share one pass.
-const dCache = new WeakMap<object, string>();
-function dOf(item: PathItem): string {
-    let d = dCache.get(item.subPaths);
-    if (d === undefined) {
-        d = subPathsToD(item.subPaths);
-        dCache.set(item.subPaths, d);
-    }
-    return d;
-}
-
 // --- region hit-testing (remove-mode hover preview) -------------------------
-// Flatten a closed subpath into a dense polygon, cached by node-array identity so
-// a mouse-move only ray-casts (no re-sampling) until the geometry changes.
-const polyCache = new WeakMap<object, Vec[]>();
-function subPathPolygon(sp: SubPath): Vec[] {
-    let poly = polyCache.get(sp.nodes);
-    if (poly) return poly;
-    poly = [];
-    const count = segmentCount(sp);
-    for (let seg = 0; seg < count; seg++) {
-        const { p0, c1, c2, p3 } = segmentControls(sp, seg);
-        for (let k = 0; k < 6; k++) poly.push(cubicAt(p0, c1, c2, p3, k / 6));
-    }
-    polyCache.set(sp.nodes, poly);
-    return poly;
-}
-function pointInPolygon(p: Vec, poly: Vec[]): boolean {
-    let inside = false;
-    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        const a = poly[i];
-        const b = poly[j];
-        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x)
-            inside = !inside;
-    }
-    return inside;
-}
-function polyAbsArea(poly: Vec[]): number {
-    let a = 0;
-    for (let i = 0, n = poly.length; i < n; i++) {
-        const p = poly[i];
-        const q = poly[(i + 1) % n];
-        a += p.x * q.y - q.x * p.y;
-    }
-    return Math.abs(a) / 2;
-}
+// The flattening, containment and area tests all come from lib/editor/hitTest,
+// which is the same code the SVG editor picks with — so "what did I click?"
+// cannot answer differently in the two studios.
+
 /**
  * The d-string of the region boundary a "remove" click would dissolve at `pt`: the
  * topmost visible path item with a subpath containing the point, and within it the
@@ -188,9 +147,9 @@ function removeRegionDAt(doc: EditableDoc, pt: Vec): string | null {
         let bestSp: SubPath | null = null;
         let bestArea = -1;
         for (const sp of it.subPaths) {
-            const poly = subPathPolygon(sp);
+            const poly = flattenSubPath(sp);
             if (poly.length >= 3 && pointInPolygon(pt, poly)) {
-                const area = polyAbsArea(poly);
+                const area = polygonArea(poly);
                 if (area > bestArea) {
                     bestArea = area;
                     bestSp = sp;
@@ -200,13 +159,6 @@ function removeRegionDAt(doc: EditableDoc, pt: Vec): string | null {
         if (bestSp) return subPathsToD([bestSp]);
     }
     return null;
-}
-
-function escapeAttr(v: string): string {
-    return v
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/"/g, "&quot;");
 }
 
 interface DragState {
@@ -232,118 +184,6 @@ interface DragState {
     /** Handle drag on a planar item: the canonical edge handle to drag. */
     handleSite?: HandleSite;
 }
-
-/** SVG paint-server element for a gradient fill (userSpaceOnUse). */
-function GradientDef({ id, gradient }: { id: string; gradient: GradientFill }) {
-    const stops = gradient.stops.map((s, i) => (
-        <stop
-            key={i}
-            offset={s.offset}
-            stopColor={s.color}
-            stopOpacity={s.opacity ?? 1}
-        />
-    ));
-    if (gradient.type === "linear") {
-        return (
-            <linearGradient
-                id={id}
-                gradientUnits="userSpaceOnUse"
-                x1={gradient.x1}
-                y1={gradient.y1}
-                x2={gradient.x2}
-                y2={gradient.y2}
-            >
-                {stops}
-            </linearGradient>
-        );
-    }
-    return (
-        <radialGradient
-            id={id}
-            gradientUnits="userSpaceOnUse"
-            cx={gradient.cx}
-            cy={gradient.cy}
-            r={gradient.r}
-            fx={gradient.fx}
-            fy={gradient.fy}
-        >
-            {stops}
-        </radialGradient>
-    );
-}
-
-/** Memoized static fill — re-renders only when the item identity changes. */
-const PathView = memo(function PathView({
-    item,
-    interactive,
-}: {
-    item: PathItem;
-    interactive: boolean;
-}) {
-    const gid = item.gradient ? `grad-${item.id}` : null;
-    return (
-        <>
-            {item.gradient && (
-                <defs>
-                    <GradientDef id={gid!} gradient={item.gradient} />
-                </defs>
-            )}
-            <path
-                data-id={item.id}
-                d={dOf(item)}
-                fill={gid ? `url(#${gid})` : item.fill}
-                fillOpacity={item.fillOpacity}
-                fillRule={item.fillRule}
-                style={
-                    interactive
-                        ? { pointerEvents: "visiblePainted", cursor: "move" }
-                        : undefined
-                }
-            />
-        </>
-    );
-});
-
-/** Invisible wide-stroke copy so thin outlines are grabbable in node mode. */
-const HitPath = memo(function HitPath({
-    item,
-    width,
-}: {
-    item: PathItem;
-    width: number;
-}) {
-    return (
-        <path
-            data-id={item.id}
-            d={dOf(item)}
-            fill="none"
-            stroke="transparent"
-            strokeWidth={width}
-            style={{ pointerEvents: "stroke", cursor: "move" }}
-        />
-    );
-});
-
-/** Verbatim markup, re-wrapped in its captured ancestor context (mirrors serializeDoc). */
-const RawView = memo(function RawView({ item }: { item: RawItem }) {
-    const inherited = item.inherited ?? {};
-    const keys = Object.keys(inherited);
-    let html = item.markup;
-    if (item.transform || keys.length > 0) {
-        let open = "<g";
-        if (item.transform)
-            open += ` transform="${escapeAttr(item.transform)}"`;
-        for (const key of keys)
-            open += ` ${key}="${escapeAttr(inherited[key])}"`;
-        html = `${open}>${item.markup}</g>`;
-    }
-    return (
-        <g
-            style={{ pointerEvents: "none" }}
-            dangerouslySetInnerHTML={{ __html: html }}
-        />
-    );
-});
 
 export function EditorCanvas({
     doc,
@@ -460,7 +300,13 @@ export function EditorCanvas({
     // (set while hovering its palette swatch / path row).
     const highlightItems = highlightFill
         ? (doc.items.filter(
-              (it) => it.kind === "path" && it.visible && it.fill === highlightFill,
+              (it) =>
+                  it.kind === "path" &&
+                  it.visible &&
+                  // A stroke-only path's colour is its stroke, so matching on
+                  // `fill` would compare the literal string "none" and the row
+                  // you're hovering would light up nothing.
+                  representativePaint(it) === highlightFill,
           ) as PathItem[])
         : [];
 
@@ -1123,29 +969,16 @@ export function EditorCanvas({
                         onDoubleClick={handleSvgDoubleClick}
                     >
                         <g onPointerDown={handlePathPointerDown}>
-                            {doc.items.map((item) =>
-                                item.kind === "path"
-                                    ? item.visible && (
-                                          <PathView
-                                              key={item.id}
-                                              item={item}
-                                              interactive={interactive}
-                                          />
-                                      )
-                                    : item.visible && (
-                                          <RawView key={item.id} item={item} />
-                                      ),
-                            )}
+                            {/* Paint layer — the SHARED renderer (see
+                                components/vector/DocRender). Nothing about how a
+                                path looks is decided in this file. */}
+                            <ItemsView items={doc.items} interactive={interactive} />
+                            {/* Interaction layer: fat invisible strokes so a
+                                hairline outline is still grabbable. */}
                             {interactive &&
-                                doc.items.map((item) =>
-                                    item.kind === "path" && item.visible ? (
-                                        <HitPath
-                                            key={item.id}
-                                            item={item}
-                                            width={r(10)}
-                                        />
-                                    ) : null,
-                                )}
+                                visiblePaths(doc.items).map((item) => (
+                                    <HitPath key={item.id} item={item} width={r(10)} />
+                                ))}
                         </g>
 
                         {/* Colour-locator highlight: light up every region painted the
@@ -1157,9 +990,9 @@ export function EditorCanvas({
                             <g style={{ pointerEvents: "none" }}>
                                 {highlightItems.map((it) => (
                                     <g key={it.id}>
-                                        <path d={dOf(it)} fill={HALO} fillOpacity={0.35} fillRule={it.fillRule} />
+                                        <path d={pathD(it)} fill={HALO} fillOpacity={0.35} fillRule={it.fillRule} />
                                         <path
-                                            d={dOf(it)}
+                                            d={pathD(it)}
                                             fill="none"
                                             stroke={HALO}
                                             strokeOpacity={0.9}
@@ -1167,7 +1000,7 @@ export function EditorCanvas({
                                             strokeLinejoin="round"
                                         />
                                         <path
-                                            d={dOf(it)}
+                                            d={pathD(it)}
                                             fill="none"
                                             stroke={ACCENT}
                                             strokeWidth={r(1.75)}
@@ -1187,7 +1020,7 @@ export function EditorCanvas({
                                 {/* White halo under the accent line keeps the outline
                                     legible even when the path's own colour is the accent. */}
                                 <path
-                                    d={dOf(selectedItem)}
+                                    d={pathD(selectedItem)}
                                     fill="none"
                                     stroke={HALO}
                                     strokeOpacity={0.85}
@@ -1195,7 +1028,7 @@ export function EditorCanvas({
                                     strokeLinejoin="round"
                                 />
                                 <path
-                                    d={dOf(selectedItem)}
+                                    d={pathD(selectedItem)}
                                     fill="none"
                                     stroke={ACCENT}
                                     strokeWidth={r(1.5)}

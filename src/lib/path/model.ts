@@ -11,13 +11,17 @@ import type {
   DocItem,
   EditableDoc,
   GradientFill,
+  GroupItem,
   PathItem,
   PathNode,
   RawItem,
+  Stroke,
   SubPath,
   Vec,
 } from './types'
+import { allLeaves, leafItems, removeItems } from './docTree.ts'
 import {
+  affineScale,
   affineToString,
   composeAffine,
   isIdentityAffine,
@@ -439,6 +443,11 @@ interface PaintContext {
   fillRule: string | null
   fillOpacity: number | null
   stroke: string | null
+  strokeWidth: string | null
+  strokeCap: string | null
+  strokeJoin: string | null
+  strokeDash: string | null
+  strokeOpacity: number | null
   /** Group opacity multiplies down the tree (unlike the inherited props). */
   opacity: number
 }
@@ -446,12 +455,48 @@ interface PaintContext {
 const SHAPE_TAGS = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line'])
 
 /**
+ * Attributes that change how a shape paints in ways this model cannot express.
+ * A shape carrying any of them stays a RawItem, because lifting it into a
+ * PathItem would render it correctly today and then silently drop the attribute
+ * on export — a lossless round-trip quietly becoming a lossy one is far worse
+ * than a shape you can't node-edit.
+ */
+const UNMODELLABLE_ATTRS = [
+  'filter',
+  'mask',
+  'clip-path',
+  'marker-start',
+  'marker-mid',
+  'marker-end',
+  'vector-effect',
+  'stroke-miterlimit',
+  'stroke-dashoffset',
+  'pathLength',
+  'transform-origin',
+]
+
+/** Options for {@link parseSvg}. */
+export interface ParseSvgOptions {
+  /**
+   * Keep `<g>` nesting as GroupItems instead of flattening it away.
+   *
+   * OFF by default, because the vectorize studio re-parses its own serialized
+   * output and wants the flat item list it has always had. The SVG editor turns
+   * it ON so an imported file keeps the layer folders its author made.
+   *
+   * Either way ancestor transforms are still baked into the leaves — a
+   * GroupItem carries no transform of its own (see {@link GroupItem}).
+   */
+  preserveGroups?: boolean
+}
+
+/**
  * Parse SVG markup into an EditableDoc. Fillable shapes (fill that isn't
  * none/url(), no stroke) become PathItems with ancestor transforms baked in;
  * everything else that paints round-trips as RawItems in document order.
  * Returns null when the markup doesn't parse as SVG.
  */
-export function parseSvg(svg: string): EditableDoc | null {
+export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDoc | null {
   let dom: Document
   try {
     dom = new DOMParser().parseFromString(svg, 'image/svg+xml')
@@ -486,13 +531,25 @@ export function parseSvg(svg: string): EditableDoc | null {
   const deferredDefs: { item: RawItem; el: Element }[] = []
   let counter = 0
   const nextId = () => `p${++counter}`
-  const ctx: WalkContext = { items, nextId, gradients, consumedGradients, deferredDefs }
+  const ctx: WalkContext = {
+    items,
+    nextId,
+    gradients,
+    consumedGradients,
+    deferredDefs,
+    preserveGroups: options.preserveGroups === true,
+  }
   const rootCtx = childContext(root, {
     transform: [1, 0, 0, 1, 0, 0],
     fill: null,
     fillRule: null,
     fillOpacity: null,
     stroke: null,
+    strokeWidth: null,
+    strokeCap: null,
+    strokeJoin: null,
+    strokeDash: null,
+    strokeOpacity: null,
     opacity: 1,
   })
   walkChildren(root, rootCtx, ctx)
@@ -501,7 +558,7 @@ export function parseSvg(svg: string): EditableDoc | null {
   // item still references them (e.g. a stroked shape sharing the same paint).
   if (consumedGradients.size > 0) {
     const stillReferenced = new Set<string>()
-    for (const it of items) {
+    for (const it of allLeaves(items)) {
       if (it.kind === 'raw') for (const id of referencedIds(it.markup)) stillReferenced.add(id)
     }
     const removable = new Set([...consumedGradients].filter((id) => !stillReferenced.has(id)))
@@ -512,7 +569,7 @@ export function parseSvg(svg: string): EditableDoc | null {
         if (next === null) dropped.add(item.id)
         else item.markup = next
       }
-      if (dropped.size > 0) return { viewBox, items: items.filter((it) => !dropped.has(it.id)) }
+      if (dropped.size > 0) return { viewBox, items: removeItems(items, dropped) }
     }
   }
   return { viewBox, items }
@@ -525,6 +582,7 @@ interface WalkContext {
   gradients: Map<string, Element>
   consumedGradients: Set<string>
   deferredDefs: { item: RawItem; el: Element }[]
+  preserveGroups: boolean
 }
 
 function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void {
@@ -548,21 +606,46 @@ function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void 
     }
     if (tag === 'g') {
       if (el.children.length === 0) continue
-      walkChildren(el, childContext(el, ctx), w)
+      if (!w.preserveGroups) {
+        walkChildren(el, childContext(el, ctx), w)
+        continue
+      }
+      // Collect the subtree into its own list, then wrap it. The group's own
+      // transform/opacity are consumed by `childContext` on the way down — they
+      // reach the leaves baked into coordinates and paint, so the GroupItem is
+      // pure structure and nothing downstream has to compose a matrix chain.
+      const children: DocItem[] = []
+      walkChildren(el, childContext(el, ctx), { ...w, items: children })
+      if (children.length === 0) continue
+      const group: GroupItem = {
+        kind: 'group',
+        id: w.nextId(),
+        children,
+        visible: true,
+        expanded: true,
+      }
+      const name = el.getAttribute('data-name') ?? el.getAttribute('id')
+      if (name) group.name = name
+      w.items.push(group)
       continue
     }
     if (SHAPE_TAGS.has(tag)) {
       const shapeCtx = childContext(el, ctx)
-      if (isFillable(shapeCtx)) {
+      // Anything carrying paint we can't re-emit stays raw, whatever else is
+      // true of it — a lossy round-trip is worse than an uneditable shape.
+      const lossy = hasUnmodellableAttrs(el) || hasUnmodellableStroke(shapeCtx)
+
+      if (!lossy && hasPlainFill(shapeCtx)) {
         const subPaths = shapeToSubPaths(el, tag)
         // Degenerate shapes (zero size, too few points) render nothing.
         if (!subPaths || subPaths.length === 0) continue
         w.items.push(makePathItem(w.nextId(), subPaths, shapeCtx))
         continue
       }
-      // Gradient fill + no stroke: lift into an editable path when the paint
-      // server resolves to a gradient the model can represent.
-      const gradId = !hasStroke(shapeCtx) ? gradientRefId(shapeCtx.fill) : null
+      // Gradient fill: lift into an editable path when the paint server
+      // resolves to a gradient the model can represent. A modellable stroke
+      // rides along; an unmodellable one already forced `lossy`.
+      const gradId = !lossy ? gradientRefId(shapeCtx.fill) : null
       const gradEl = gradId ? w.gradients.get(gradId) : null
       if (gradId && gradEl) {
         const subPaths = shapeToSubPaths(el, tag)
@@ -610,11 +693,6 @@ function stripGradients(el: Element, remove: Set<string>): string | null {
   return clone.children.length === 0 ? null : serializeElement(clone)
 }
 
-/** A paint stroke that isn't `none`. */
-function hasStroke(ctx: PaintContext): boolean {
-  return ctx.stroke !== null && ctx.stroke.toLowerCase() !== 'none'
-}
-
 /** Compose an element's transform + presentation props onto its parent context. */
 function childContext(el: Element, ctx: PaintContext): PaintContext {
   const t = el.getAttribute('transform')
@@ -625,8 +703,79 @@ function childContext(el: Element, ctx: PaintContext): PaintContext {
     fillRule: presentationProp(el, 'fill-rule') ?? ctx.fillRule,
     fillOpacity: parseOpacity(presentationProp(el, 'fill-opacity')) ?? ctx.fillOpacity,
     stroke: presentationProp(el, 'stroke') ?? ctx.stroke,
+    strokeWidth: presentationProp(el, 'stroke-width') ?? ctx.strokeWidth,
+    strokeCap: presentationProp(el, 'stroke-linecap') ?? ctx.strokeCap,
+    strokeJoin: presentationProp(el, 'stroke-linejoin') ?? ctx.strokeJoin,
+    strokeDash: presentationProp(el, 'stroke-dasharray') ?? ctx.strokeDash,
+    strokeOpacity: parseOpacity(presentationProp(el, 'stroke-opacity')) ?? ctx.strokeOpacity,
     opacity: opacity !== null ? ctx.opacity * opacity : ctx.opacity,
   }
+}
+
+/**
+ * The stroke a context paints, as an editable Stroke — or null when there is
+ * none, or when it is a paint server this model can't express (a gradient or
+ * pattern stroke, which has to stay raw to survive export).
+ */
+function resolveStroke(ctx: PaintContext): Stroke | null {
+  if (ctx.stroke === null) return null
+  const paint = ctx.stroke.trim().toLowerCase()
+  if (paint === 'none' || paint === 'transparent' || paint.startsWith('url(')) return null
+
+  // SVG's own default is 1 when the attribute is absent.
+  const width = ctx.strokeWidth === null ? 1 : parseFloat(ctx.strokeWidth)
+  if (!Number.isFinite(width) || width <= 0) return null
+  // A percentage width resolves against the viewport diagonal, which we don't
+  // track here — leave those raw rather than guess.
+  if (ctx.strokeWidth !== null && /%\s*$/.test(ctx.strokeWidth)) return null
+
+  const cap = ctx.strokeCap?.trim().toLowerCase()
+  const join = ctx.strokeJoin?.trim().toLowerCase()
+  const stroke: Stroke = {
+    color: ctx.stroke.trim(),
+    width,
+    cap: cap === 'round' || cap === 'square' ? cap : 'butt',
+    join: join === 'round' || join === 'bevel' ? join : 'miter',
+  }
+
+  if (ctx.strokeDash) {
+    const dash = ctx.strokeDash
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number)
+    if (dash.length > 0 && dash.every((n) => Number.isFinite(n) && n >= 0) && dash.some((n) => n > 0)) {
+      stroke.dash = dash
+    } else if (ctx.strokeDash.trim().toLowerCase() !== 'none') {
+      // An unparseable dash pattern would be silently dropped — keep it raw.
+      return null
+    }
+  }
+
+  // Element opacity multiplies the stroke as well as the fill.
+  const alpha = (ctx.strokeOpacity ?? 1) * ctx.opacity
+  if (alpha < 1) stroke.opacity = alpha
+  return stroke
+}
+
+/** Scale a stroke's scalar lengths by a baked transform. */
+function scaleStroke(stroke: Stroke, m: Affine): Stroke {
+  const k = affineScale(m)
+  if (k === 1) return stroke
+  const next: Stroke = { ...stroke, width: stroke.width * k }
+  if (stroke.dash) next.dash = stroke.dash.map((d) => d * k)
+  return next
+}
+
+/** True when the element carries paint we would drop on the way back out. */
+function hasUnmodellableAttrs(el: Element): boolean {
+  for (const name of UNMODELLABLE_ATTRS) {
+    const v = el.getAttribute(name)
+    if (v !== null && v.trim() !== '' && v.trim().toLowerCase() !== 'none') return true
+    // The same properties can arrive through `style`.
+    const style = el.getAttribute('style')
+    if (style && new RegExp(`(?:^|;)\\s*${name}\\s*:`, 'i').test(style)) return true
+  }
+  return false
 }
 
 /** Resolve a presentation property: inline style wins over the attribute. */
@@ -649,27 +798,43 @@ function parseOpacity(v: string | null): number | null {
   return Math.max(0, Math.min(1, pct ? num / 100 : num))
 }
 
-/** Editable = solid fill (not none / url(...)) and no stroke. */
-function isFillable(ctx: PaintContext): boolean {
-  if (ctx.fill !== null) {
-    const f = ctx.fill.toLowerCase()
-    if (f === 'none' || f.startsWith('url(')) return false
-  }
-  if (ctx.stroke !== null && ctx.stroke.toLowerCase() !== 'none') return false
-  return true
+/**
+ * Whether the fill is one this model can hold directly: absent (⇒ black),
+ * `none`, or a solid colour. A `url(...)` fill is handled separately, by
+ * lifting the referenced gradient.
+ */
+function hasPlainFill(ctx: PaintContext): boolean {
+  if (ctx.fill === null) return true
+  const f = ctx.fill.trim().toLowerCase()
+  return !f.startsWith('url(')
+}
+
+/** A stroke that exists but this model can't express ⇒ the shape stays raw. */
+function hasUnmodellableStroke(ctx: PaintContext): boolean {
+  if (ctx.stroke === null) return false
+  const s = ctx.stroke.trim().toLowerCase()
+  if (s === 'none' || s === 'transparent') return false
+  return resolveStroke(ctx) === null
 }
 
 function makePathItem(id: string, subPaths: SubPath[], ctx: PaintContext): PathItem {
   const fillOpacity = (ctx.fillOpacity ?? 1) * ctx.opacity
+  // `fill` is the SVG keyword when the shape is stroke-only, so a line drawn
+  // as pure outline round-trips as one instead of gaining a black interior.
+  const fill = ctx.fill === null ? '#000000' : ctx.fill.trim()
+  const filled = fill.toLowerCase() !== 'none'
   const item: PathItem = {
     kind: 'path',
     id,
-    fill: ctx.fill ?? '#000000',
+    fill: filled ? fill : 'none',
     fillRule: ctx.fillRule?.toLowerCase() === 'evenodd' ? 'evenodd' : 'nonzero',
     subPaths: transformSubPaths(subPaths, ctx.transform),
     visible: true,
   }
-  if (fillOpacity < 1) item.fillOpacity = fillOpacity
+  if (filled && fillOpacity < 1) item.fillOpacity = fillOpacity
+  const stroke = resolveStroke(ctx)
+  // The transform is baked into the coordinates, so the width has to follow it.
+  if (stroke) item.stroke = scaleStroke(stroke, ctx.transform)
   return item
 }
 
@@ -851,10 +1016,12 @@ export function serializeDoc(doc: EditableDoc, precision = 2): string {
 
   // Gradient paint servers for visible paths that carry one. Shared gradient
   // objects (merged bands) are emitted once and referenced by every path.
+  // `leafItems` flattens groups and prunes hidden subtrees, so for the flat,
+  // group-free docs the tracer produces this visits exactly what it always did.
   const gradIds = new Map<GradientFill, string>()
   let defs = ''
-  for (const item of doc.items) {
-    if (item.visible && item.kind === 'path' && item.gradient && !gradIds.has(item.gradient)) {
+  for (const item of leafItems(doc.items)) {
+    if (item.kind === 'path' && item.gradient && !gradIds.has(item.gradient)) {
       const id = gradientId(item.id)
       gradIds.set(item.gradient, id)
       defs += gradientToSvgDef(item.gradient, id, precision)
@@ -862,15 +1029,51 @@ export function serializeDoc(doc: EditableDoc, precision = 2): string {
   }
   if (defs) out += `<defs>${defs}</defs>`
 
-  for (const item of doc.items) {
+  out += serializeItems(doc.items, gradIds, precision, fmt)
+  return out + '</svg>'
+}
+
+/** Body markup for one level of the item tree; recurses through groups. */
+function serializeItems(
+  items: readonly DocItem[],
+  gradIds: Map<GradientFill, string>,
+  precision: number,
+  fmt: (v: number) => string,
+): string {
+  let out = ''
+  for (const item of items) {
     if (!item.visible) continue
-    if (item.kind === 'path') {
+    if (item.kind === 'group') {
+      // An empty folder (or one whose children are all hidden) is structure the
+      // editor cares about and markup nobody does — emitting `<g></g>` would
+      // just add noise to every export.
+      const inner = serializeItems(item.children, gradIds, precision, fmt)
+      if (!inner) continue
+      out += '<g'
+      if (item.name) out += ` data-name="${escapeAttr(item.name)}"`
+      if (item.opacity !== undefined && item.opacity < 1) {
+        out += ` opacity="${Number(item.opacity.toFixed(4))}"`
+      }
+      out += `>${inner}</g>`
+    } else if (item.kind === 'path') {
       const fill = item.gradient ? `url(#${gradIds.get(item.gradient)})` : escapeAttr(item.fill)
       out += `<path fill="${fill}"`
       if (item.fillOpacity !== undefined && item.fillOpacity < 1) {
         out += ` fill-opacity="${Number(item.fillOpacity.toFixed(4))}"`
       }
       if (item.fillRule === 'evenodd') out += ' fill-rule="evenodd"'
+      const s = item.stroke
+      if (s && s.width > 0) {
+        out += ` stroke="${escapeAttr(s.color)}" stroke-width="${fmt(s.width)}"`
+        if (s.cap !== 'butt') out += ` stroke-linecap="${s.cap}"`
+        if (s.join !== 'miter') out += ` stroke-linejoin="${s.join}"`
+        if (s.dash && s.dash.length > 0) {
+          out += ` stroke-dasharray="${s.dash.map(fmt).join(' ')}"`
+        }
+        if (s.opacity !== undefined && s.opacity < 1) {
+          out += ` stroke-opacity="${Number(s.opacity.toFixed(4))}"`
+        }
+      }
       out += ` d="${subPathsToD(item.subPaths, precision)}"/>`
     } else {
       const inherited = item.inherited ?? {}
@@ -885,7 +1088,7 @@ export function serializeDoc(doc: EditableDoc, precision = 2): string {
       }
     }
   }
-  return out + '</svg>'
+  return out
 }
 
 function escapeAttr(v: string): string {
@@ -896,16 +1099,33 @@ function escapeAttr(v: string): string {
 // Stats
 // ---------------------------------------------------------------------------
 
+/**
+ * True when the path paints only its outline — `fill="none"` with a stroke.
+ * Such a path's visible colour is its STROKE, so any UI that shows "the
+ * colour of this path" (swatch, palette, recolor, hover highlight) has to ask
+ * here rather than reading `fill` and getting the string "none".
+ */
+export function isStrokeOnly(item: PathItem): boolean {
+  return item.fill.trim().toLowerCase() === 'none' && item.stroke !== undefined
+}
+
+/** The colour that represents a path on screen: its fill, or its stroke. */
+export function representativePaint(item: PathItem): string {
+  return isStrokeOnly(item) ? (item.stroke?.color ?? '#000000') : item.fill
+}
+
 /** Path / node / distinct-fill counts over the visible PathItems. */
 export function docStats(doc: EditableDoc): { paths: number; nodes: number; colors: number } {
   let paths = 0
   let nodes = 0
   const fills = new Set<string>()
-  for (const item of doc.items) {
-    if (item.kind !== 'path' || !item.visible) continue
+  for (const item of leafItems(doc.items)) {
+    if (item.kind !== 'path') continue
     paths++
     for (const sp of item.subPaths) nodes += sp.nodes.length
-    fills.add(item.fill.trim().toLowerCase())
+    // A stroke-only path contributes no fill colour.
+    const f = item.fill.trim().toLowerCase()
+    if (f !== 'none') fills.add(f)
   }
   return { paths, nodes, colors: fills.size }
 }

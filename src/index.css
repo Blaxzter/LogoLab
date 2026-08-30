@@ -209,7 +209,13 @@
   .btn:active {
     transform: translateY(0.5px);
   }
-  .btn:disabled {
+  /* `aria-disabled` counts as disabled here. A control that must explain why
+     it is unavailable cannot use the `disabled` attribute — the browser drops
+     pointer and focus events on it, so its tooltip could never open (see
+     ui/ActionButton.tsx) — so every rule that keys off :disabled has to accept
+     the ARIA state too, or an unavailable button would look pressable. */
+  .btn:disabled,
+  .btn[aria-disabled='true'] {
     opacity: 0.5;
     cursor: not-allowed;
   }
@@ -218,7 +224,7 @@
     color: var(--color-accent-fg);
     box-shadow: var(--shadow-xs);
   }
-  .btn-primary:hover:not(:disabled) {
+  .btn-primary:hover:not(:disabled):not([aria-disabled='true']) {
     background-color: var(--color-accent-hover);
   }
   .btn-secondary {
@@ -226,7 +232,7 @@
     border-color: var(--color-line-strong);
     color: var(--color-ink);
   }
-  .btn-secondary:hover:not(:disabled) {
+  .btn-secondary:hover:not(:disabled):not([aria-disabled='true']) {
     background-color: var(--color-surface-3);
   }
   /* Selected/active secondary (e.g. the matching export preset). The compound
@@ -236,14 +242,14 @@
     border-color: var(--color-accent);
     color: var(--color-accent);
   }
-  .btn-secondary.is-active:hover:not(:disabled) {
+  .btn-secondary.is-active:hover:not(:disabled):not([aria-disabled='true']) {
     background-color: color-mix(in oklab, var(--color-accent-soft) 82%, var(--color-accent));
   }
   .btn-ghost {
     background-color: transparent;
     color: var(--color-ink-2);
   }
-  .btn-ghost:hover:not(:disabled) {
+  .btn-ghost:hover:not(:disabled):not([aria-disabled='true']) {
     background-color: var(--color-surface-3);
     color: var(--color-ink);
   }
@@ -273,6 +279,33 @@
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: var(--color-muted);
+  }
+
+  /* Canvas-app chrome (the SVG editor's workspace).
+     Nothing in a tool like this is prose: the labels, layer rows, toolbar and
+     status line are all controls, and every one of them is a place a drag can
+     START. Leaving them selectable means pressing on a layer row and moving
+     paints a blue text selection that then fights the gesture for the pointer —
+     and a double-click meant for "rename" or "insert node" highlights a word
+     instead. So the whole workspace opts out, and the places that really are
+     text — the fields you type into — opt back in, or you couldn't select what
+     you're editing inside them. */
+  .canvas-ui {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .canvas-ui input,
+  .canvas-ui textarea,
+  .canvas-ui [contenteditable='true'] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  /* Belt and braces for the drawing surface: a press-and-move on an <svg> can
+     otherwise start the browser's native element drag, which steals the pointer
+     capture out from under the gesture (the same failure the labs hit on <img>,
+     see labs.css). */
+  .canvas-ui svg {
+    -webkit-user-drag: none;
   }
 
   /* Transparency checkerboard (for previewing logos with alpha) */

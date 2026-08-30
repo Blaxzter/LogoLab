@@ -10,7 +10,8 @@ import {
 import type { ReactElement, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-type Side = 'top' | 'bottom' | 'left' | 'right'
+export type TooltipSide = 'top' | 'bottom' | 'left' | 'right'
+type Side = TooltipSide
 
 /** Distance in px between the trigger and the bubble. */
 const GAP = 8
@@ -126,15 +127,22 @@ export function Tooltip({
     setCoords({ left, top })
   }, [open, side, label])
 
-  // A fixed bubble would float away from its trigger on scroll/resize — drop it.
+  // A fixed bubble would float away from its trigger on scroll/resize — drop
+  // it. `blur` on the WINDOW is the safety net: the bubble closes on the
+  // trigger's own blur, but focus can leave without the trigger ever hearing
+  // about it (the window is deactivated, the trigger unmounts under the
+  // pointer), and a bubble stranded on screen with nothing under it is worse
+  // than one dismissed a moment early.
   useEffect(() => {
     if (!open) return
     const dismiss = () => hide()
     window.addEventListener('scroll', dismiss, true)
     window.addEventListener('resize', dismiss)
+    window.addEventListener('blur', dismiss)
     return () => {
       window.removeEventListener('scroll', dismiss, true)
       window.removeEventListener('resize', dismiss)
+      window.removeEventListener('blur', dismiss)
     }
   }, [open, hide])
 
@@ -183,6 +191,21 @@ export function Tooltip({
           </div>,
           document.body,
         )}
+    </>
+  )
+}
+
+/**
+ * A tooltip label in two parts: what the control is, and a muted second line —
+ * either why it can't be pressed and what would change that, or a note about
+ * what it will do. Kept here so every such bubble in the app reads the same.
+ */
+export function TipLabel({ title, detail }: { title: ReactNode; detail?: ReactNode }) {
+  if (!detail) return <>{title}</>
+  return (
+    <>
+      <span className="block font-semibold">{title}</span>
+      <span className="mt-0.5 block font-normal opacity-70">{detail}</span>
     </>
   )
 }
