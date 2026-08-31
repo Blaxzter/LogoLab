@@ -73,9 +73,29 @@ export default function Workbench() {
     },
   })
 
+  // The finished rows, as elements. Memoized because they are the expensive half of this page
+  // (each row is ~8 panels of generated SVG) and almost nothing re-renders them for a reason:
+  // typing in the search box, dragging the box-size slider and toggling the wireframe all leave
+  // every row's content identical. Holding the ELEMENTS' identity lets React skip those subtrees
+  // outright — `heat` is the only view state a row reads, so it is the only one in the deps.
+  const rows = useMemo(
+    () =>
+      run.results.map((r) => (
+        <AnalysisCaseRow key={r.case.key} c={r.case} value={r.value} error={r.error} heat={ui.heat} />
+      )),
+    [run.results, ui.heat],
+  )
+
   const selectCorpus = (id: string) => {
     setUi({ page: 0 })
-    setParams({ corpus: id }, { replace: true })
+    // Keep every OTHER param — `q` above all: switching corpus is what you do when the search
+    // told you your case lives in a different one, and dropping the query on the way there
+    // would land you on 231 unfiltered cases.
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('corpus', id)
+      return next
+    }, { replace: true })
   }
 
   return (
@@ -89,7 +109,7 @@ export default function Workbench() {
       box={ui.box}
       onBox={(box) => setUi({ box })}
       wires={ui.wire}
-      search={{ state: search, matched: all.length, total: corpusCases.length }}
+      search={{ state: search, matched: all.length, total: corpusCases.length, here: `workbench:${corpus.id}` }}
       controls={
         <>
           <LabSelect
@@ -167,10 +187,7 @@ export default function Workbench() {
       about={<WorkbenchAbout blurb={corpus.blurb} />}
     >
       {!corpus.available && corpus.emptyState}
-      {corpus.available &&
-        run.results.map((r) => (
-          <AnalysisCaseRow key={r.case.key} c={r.case} value={r.value} error={r.error} ui={ui} />
-        ))}
+      {corpus.available && rows}
       {corpus.available && run.pending && (
         <PendingRow title={run.pending.title} note={run.pending.note} />
       )}

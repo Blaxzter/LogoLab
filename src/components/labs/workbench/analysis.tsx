@@ -459,7 +459,7 @@ function Ungated({ geom }: { geom: GeomScore }) {
 }
 
 /** One case, analysed. Gates render only for a case with a calibrated tier. */
-export function AnalysisCaseRow({ c, value, error, ui }: AnalysisRowProps) {
+export function AnalysisCaseRow({ c, value, error, heat }: AnalysisRowProps) {
   const a = value as AnalysisResult | undefined
   if (!a || 'blocked' in a) {
     const why = a ? a.blocked : `failed to render — ${error}`
@@ -511,7 +511,7 @@ export function AnalysisCaseRow({ c, value, error, ui }: AnalysisRowProps) {
         </GatePanel>
       }
     >
-      <CasePanels c={c} a={a} heat={ui.heat} />
+      <CasePanels c={c} a={a} heat={heat} />
     </CaseRow>
   )
 }

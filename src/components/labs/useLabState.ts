@@ -15,9 +15,15 @@ export function useLabState<T extends object>(key: string, defaults: T): [T, (pa
     }
   })
 
+  // A patch that changes nothing returns the SAME object, so React bails out of the render.
+  // Callers legitimately fire no-op patches on a hot path — every lab with paging resets to
+  // `page: 0` on each keystroke of the corpus search, and page 0 is where you already were —
+  // and a fresh `{...prev}` there would re-render the whole corpus (and write localStorage)
+  // per character typed.
   const patch = useCallback(
     (p: Partial<T>) =>
       setState((prev) => {
+        if (Object.keys(p).every((k) => Object.is(prev[k as keyof T], p[k as keyof T]))) return prev
         const next = { ...prev, ...p }
         try {
           localStorage.setItem(key, JSON.stringify(next))

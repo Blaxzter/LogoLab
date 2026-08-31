@@ -22,7 +22,8 @@
 // with its `planarFit` override (index.ts merges it last), or add a CASE in abCorpus.ts — or
 // just drop an image onto the page.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Upload, X } from 'lucide-react'
 import { labImageData, rasterizeSvgResvg } from './resvgRaster'
 import { rgbaToUrl } from './raster'
@@ -207,6 +208,14 @@ const LANES = [
   { value: 'fixtures', label: 'Fixtures only' },
   { value: 'gallery', label: 'Gallery only' },
 ]
+
+/** Which corpusIndex places this lane IS, so "…also in" never offers a lane already on screen.
+ *  Module-level and frozen per lane so the identity is stable across renders. */
+const LANE_PLACES: Record<string, readonly string[]> = {
+  all: ['ab:fixtures', 'ab:gallery'],
+  fixtures: ['ab:fixtures'],
+  gallery: ['ab:gallery'],
+}
 
 /** Rasterization sizes offered by the raster switch (SVG cases re-render at each; raster
  *  cases only downscale, so they cap at their native size). */
@@ -568,6 +577,28 @@ export default function AbLab() {
 
   const search = useLabSearch()
 
+  // `?lane=` — how a "your case is in the gallery lane" link arrives. The lane is otherwise
+  // remembered per-user in useLabState, so a link that only carried `?q=` could land on
+  // "Fixtures only" and show the empty state it was sent to disprove. The selector writes the
+  // param back for the same reason `?q=` is republished: a URL that disagrees with the page is
+  // a link that lies about what it will show.
+  const [params, setParams] = useSearchParams()
+  const laneParam = params.get('lane')
+  useEffect(() => {
+    if (laneParam && LANES.some((l) => l.value === laneParam)) setUi({ lane: laneParam })
+  }, [laneParam, setUi])
+  const selectLane = (lane: string) => {
+    setUi({ lane })
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('lane', lane)
+        return next
+      },
+      { replace: true },
+    )
+  }
+
   const lane = useMemo(
     () => [...(ui.lane === 'gallery' ? [] : FIXTURES), ...(ui.lane === 'fixtures' ? [] : GALLERY), ...extras],
     [extras, ui.lane],
@@ -673,7 +704,7 @@ export default function AbLab() {
         box={ui.box}
         onBox={(box) => setUi({ box })}
         wires={ui.wire}
-        search={{ state: search, matched: found.length, total: lane.length }}
+        search={{ state: search, matched: found.length, total: lane.length, here: LANE_PLACES[ui.lane] }}
         controls={
           <>
             {SNAPSHOTS.length > 0 && (
@@ -737,7 +768,7 @@ export default function AbLab() {
             <LabSelect
               label="Cases"
               value={ui.lane}
-              onChange={(lane) => setUi({ lane })}
+              onChange={selectLane}
               options={LANES.map((l) => ({
                 value: l.value,
                 // An unfetched logo corpus is a fact worth showing, not an empty list.

@@ -153,6 +153,7 @@ export default function GalleryLab() {
         wires={ui.wire}
         search={{
           state: search,
+          here: 'gallery',
           matched: logos.length + shownDropped.length,
           total: all.length + dropped.length,
           noun: 'mark',

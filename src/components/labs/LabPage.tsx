@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useRef } from 'react'
+import { createContext, useContext, useEffect, useId, useMemo, useRef } from 'react'
 import type { CSSProperties, MutableRefObject, ReactNode, RefObject } from 'react'
 import { ArrowLeft, ChevronDown, Loader2, Search, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -9,6 +9,7 @@ import { Select } from '../ui/Select'
 import type { SelectOption } from '../ui/Select'
 import { useLabState } from './useLabState'
 import type { LabSearchState } from './useLabSearch'
+import { searchElsewhere, type Elsewhere } from './corpusIndex'
 import './labs.css'
 
 /**
@@ -64,6 +65,14 @@ export interface LabSearchProps {
   total: number
   /** What a case is called here, singular — 'case', 'logo', 'mark'. */
   noun?: string
+  /**
+   * Which corpus this is, in `corpusIndex`'s `CORPUS_PLACES` terms (`workbench:tier0`, … ) —
+   * a list where a lab shows several at once (A/B's two lanes). Supplying it turns on
+   * "…also in": the corpora don't overlap, so a name you can picture is often simply not in
+   * the one you're looking at, and a bare "no match" reads as "we don't have it" when the
+   * truth is "not on this page". Omit it and every indexed corpus is fair game to point at.
+   */
+  here?: string | readonly string[]
 }
 
 export function LabPage({
@@ -106,6 +115,18 @@ export function LabPage({
   const claimed = useRef(false)
   const [ui, setUi] = useLabState(`${storageKey}:ui`, { about: false, dark: false })
   const searchRef = useRef<HTMLInputElement>(null)
+
+  // Every OTHER corpus the settled query hits. Computed here, once, and used in two places (the
+  // counter line and the empty state) — it walks every indexed corpus, so it must not be a thing
+  // each of them recomputes. Only while a query is actually biting: with an empty box the answer
+  // is "everything, everywhere", which is not a finding.
+  const sq = search?.state.active ? search.state.q : ''
+  const sMatch = search?.state.match
+  const sHere = search?.here
+  const elsewhere = useMemo(
+    () => (sq && sMatch ? searchElsewhere(sMatch, sHere) : []),
+    [sq, sMatch, sHere],
+  )
 
   useEffect(() => pz.reset(), [pz.reset])
 
@@ -206,6 +227,11 @@ export function LabPage({
               </span>
             )}
           </div>
+          {/* Matches here, matches elsewhere: the corpora don't overlap, so "8 of 25" is only
+              half the answer to "where is the thing I typed". */}
+          {search && search.matched > 0 && elsewhere.length > 0 && (
+            <ElsewhereLine q={search.state.q} places={elsewhere} lead="also in" />
+          )}
           {/* The run fills the corpus one case at a time; the bar tracks it, and a run that is
               entirely cache hits just blips to full. */}
           {progress && progress.total > 1 && running && (
@@ -223,7 +249,7 @@ export function LabPage({
             {search && search.state.active && search.matched === 0 && search.total > 0 && (
               <div className="px-4 py-10 text-center text-sm text-muted">
                 No {search.noun ?? 'case'} matches{' '}
-                <b className="text-ink">“{search.state.q}”</b>.{' '}
+                <b className="text-ink">“{search.state.q}”</b> in this corpus.{' '}
                 <button
                   type="button"
                   onClick={() => search.state.setQuery('')}
@@ -232,6 +258,11 @@ export function LabPage({
                   Clear the search
                 </button>{' '}
                 to get all {search.total} back.
+                {elsewhere.length > 0 && (
+                  <div className="mt-3 flex justify-center">
+                    <ElsewhereLine q={search.state.q} places={elsewhere} lead="Found in" />
+                  </div>
+                )}
               </div>
             )}
             {children}
@@ -239,6 +270,35 @@ export function LabPage({
         </main>
       </div>
     </LabZoomContext.Provider>
+  )
+}
+
+/**
+ * "…also in Gallery 1 · Feature A/B — Gallery lane 1" — the other corpora this query hits.
+ *
+ * Each chip is a link that carries the query (`?q=`), so following it lands on the match rather
+ * than on that lab's front page with the search to type again. Both halves of the name are shown
+ * — the lab and the corpus within it — because "Logo corpus (scorable)" alone does not tell you
+ * that getting there is a tab away.
+ */
+function ElsewhereLine({ q, places, lead }: { q: string; places: Elsewhere[]; lead: string }) {
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[0.68rem] text-faint">
+      <span>{lead}</span>
+      {places.map(({ place, count }, i) => (
+        <span key={place.id} className="whitespace-nowrap">
+          {i > 0 && <span className="mr-1.5 text-line-strong">·</span>}
+          <Link
+            to={place.href(q)}
+            className="rounded px-1 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-accent"
+          >
+            {place.lab}
+            {place.corpus && <span className="text-faint"> — {place.corpus}</span>}{' '}
+            <b className="tabular-nums text-ink">{count}</b>
+          </Link>
+        </span>
+      ))}
+    </div>
   )
 }
 

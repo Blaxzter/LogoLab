@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 /**
  * The labs' corpus filter — "show me `gear`", typed, in any lab.
@@ -15,7 +16,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
  *
  * Deliberately NOT persisted (unlike everything else in useLabState): reopening a lab to a
  * corpus mysteriously filtered down to three cases by a search you typed last week is a bug
- * report, not a convenience.
+ * report, not a convenience. It does live in the URL as `?q=`, which is the opposite thing —
+ * not state that follows you around, but a link that says what to look at. That is what makes
+ * "your case is in the Gallery" (see corpusIndex.ts) a place you can click through to.
  */
 
 /** How long typing settles before the corpus is re-filtered — long enough that a word costs
@@ -47,8 +50,11 @@ export interface LabSearchState {
  *                be on a page you are not looking at.
  */
 export function useLabSearch(onQuery?: () => void): LabSearchState {
-  const [query, setQuery] = useState('')
-  const [q, setQ] = useState('')
+  const [params, setParams] = useSearchParams()
+  // Seeded ONCE, from the link that opened the page — thereafter the box owns the value, so
+  // clearing it is not undone by the `?q=` still sitting in the URL.
+  const [query, setQuery] = useState(() => params.get('q') ?? '')
+  const [q, setQ] = useState(query)
 
   const cb = useRef(onQuery)
   cb.current = onQuery
@@ -63,6 +69,23 @@ export function useLabSearch(onQuery?: () => void): LabSearchState {
     const t = setTimeout(() => setQ(query), SETTLE_MS)
     return () => clearTimeout(t)
   }, [query, q])
+
+  // Publish the SETTLED query back, so what you're looking at is what you'd send someone. Once
+  // per settle, never per keystroke, and `replace` so a typed word is not eight history entries.
+  // Guarded on the URL already agreeing: `setParams` navigates, which re-renders this hook, and
+  // an unguarded write would chase its own tail.
+  useEffect(() => {
+    if ((params.get('q') ?? '') === q) return
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (q) next.set('q', q)
+        else next.delete('q')
+        return next
+      },
+      { replace: true },
+    )
+  }, [q, params, setParams])
 
   const terms = useMemo(() => q.toLowerCase().split(/\s+/).filter(Boolean), [q])
 

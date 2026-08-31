@@ -132,9 +132,18 @@ function namespaceIds(html: string, prefix: string): string {
 }
 
 /** Panel content from a generated SVG/HTML string (a serialized trace, an overlay). Ids are
- *  namespaced per instance so sibling panels' gradient defs never collide (see namespaceIds). */
+ *  namespaced per instance so sibling panels' gradient defs never collide (see namespaceIds).
+ *
+ *  The `{ __html }` WRAPPER is memoized, not just the string inside it. React's DOM update
+ *  compares props by REFERENCE (`nextProp === lastProp`), and `dangerouslySetInnerHTML` is the
+ *  one prop whose value is an object — so a fresh `{ __html: sameString }` each render reads as
+ *  a change and re-runs `domElement.innerHTML = …`, making the browser re-parse the whole
+ *  fragment. On a Workbench page that is ~50 panels of generated SVG, several of them heat maps
+ *  with thousands of `<rect>`s, and it happened on EVERY re-render — a keystroke in the search
+ *  box cost over a second of pure HTML parsing. Holding the object's identity makes React skip
+ *  the write entirely while the markup is unchanged. */
 export function RawArt({ html }: { html: string }) {
   const prefix = useId().replace(/:/g, '') // useId yields ":r0:" — colons are awkward in refs
-  const scoped = useMemo(() => namespaceIds(html, prefix), [html, prefix])
-  return <div className="contents" dangerouslySetInnerHTML={{ __html: scoped }} />
+  const scoped = useMemo(() => ({ __html: namespaceIds(html, prefix) }), [html, prefix])
+  return <div className="contents" dangerouslySetInnerHTML={scoped} />
 }

@@ -97,7 +97,19 @@ inspecting one junction flung every other case off-screen; pinch-zoom included),
   **settles** (~220 ms) before it bites — `useLabRun` re-runs on every deps change, so a
   per-keystroke value would cancel and restart the run five times a word — and it is deliberately
   **not** persisted, unlike everything else in `useLabState`: reopening a lab to a corpus
-  mysteriously cut to three cases by last week's search is a bug report, not a convenience.
+  mysteriously cut to three cases by last week's search is a bug report, not a convenience. It
+  does live in the URL as **`?q=`** — not state that follows you around, a link that says what to
+  look at — seeded once on mount and republished on each settle.
+- **`corpusIndex`** — **where a case lives**, across every lab. Each lab's search covers its own
+  corpus, the corpora do not overlap, and so "No case matches “olympic”" is regularly a true
+  statement answering the wrong question: it reads as *we don't have it* when the truth is *not
+  on this page*. The index knows all nine searchable corpora (the Workbench's six, the Gallery,
+  A/B's two lanes), so a lab can add "…also in **Gallery 1**" beside its counter and put the same
+  list in its empty state, each entry a link carrying `?q=` (and `?corpus=` / `?lane=`) so
+  following it lands on the match. Every entry derives its names from the module the lab itself
+  renders from, so a corpus cannot drift out from under it. `olympic-rings` is the worked example:
+  stroked, so `svgGround` refuses it and the Workbench's scorable logo corpus rightly excludes it
+  — it exists only in the Gallery and the A/B gallery lane, and now the Workbench says so.
 - **`Panel`** / **`CaseRow`** / **`Badge`** / **`NoteBox`** / **`PendingRow`** — a labelled
   zoomable box, a corpus row, and the boxes that carry caveats.
 - **`GateTable`** — the headroom bars. Both scoring labs feed it the same row shape.
@@ -148,9 +160,23 @@ inspecting one junction flung every other case off-screen; pinch-zoom included),
 
    **Still main-thread, and still stalls (~1–2 s per case):** the scoring — `scoreGeometry`,
    `scoreRegions`, `rasterizeDoc` — plus the SVG rasterization in `labImageData` (resvg-wasm runs
-   synchronously on the calling thread). Moving that off-thread is the next win if the labs ever
-   feel sluggish again; it needs a new worker protocol, since the current one only returns a
-   traced document.
+   synchronously on the calling thread). Moving that off-thread is the next win *for a run*; it
+   needs a new worker protocol, since the current one only returns a traced document.
+6. **A lab page is expensive to RE-RENDER, not just to compute — and that is a different bug.**
+   The Workbench draws ~50 panels of generated SVG, several of them heat maps of thousands of
+   `<rect>`s. Typing one character in the search box cost **over a second**, and none of it was
+   tracing or scoring: it was `set innerHTML`, re-parsing every panel. Two rules keep it honest,
+   both measured (1200 ms → ~12 ms per keystroke with 25 rows on screen):
+   - **Memoize the `{ __html }` OBJECT, not just the string** (`RawArt`). React's DOM update
+     compares props by *reference*, and `dangerouslySetInnerHTML` is the one prop whose value is
+     an object — a fresh `{ __html: sameString }` each render reads as a change and re-parses the
+     fragment. Holding the object's identity makes React skip the write.
+   - **Hand `LabPage` the rendered rows as memoized ELEMENTS**, keyed on the little view state a
+     row actually reads (the Workbench: `run.results` + `ui.heat`). Stable element identity lets
+     React bail out of those subtrees entirely, so a keystroke, the box slider and the wireframe
+     toggle cost nothing. This is also why `useLabState`'s patch returns the *same* object when
+     nothing changed — every paged lab fires `setUi({ page: 0 })` on each keystroke, and page 0
+     is where you already were.
 
 ## The A/B lab can compare against a frozen revision ("Vs snapshot")
 

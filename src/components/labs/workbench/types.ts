@@ -90,7 +90,10 @@ export interface AnalysisRowProps {
   c: WbCase
   value: unknown
   error?: string
-  ui: WbUi
+  /** Full-scale of the heat maps, in px — the ONE piece of view state a row reads. It used to
+   *  take the whole `WbUi`, which made every row a dependent of the box slider and the page
+   *  number, so the rendered list could not be memoized against anything. */
+  heat: number
 }
 
 export type AnalysisRow = FC<AnalysisRowProps>
