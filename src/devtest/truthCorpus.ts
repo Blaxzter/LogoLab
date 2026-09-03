@@ -188,6 +188,15 @@ export const TRUTH_CORPUS: TruthCase[] = [
 
   { name: 'corner-turns', svg: 'public/examples/edge-cases/corner-turns.svg', note: 'authored-turn sweep across the corner detector’s bar (#23)', gradients: false, tier: 0 },
   { name: 'shaded-ink', svg: 'public/examples/edge-cases/shaded-ink.svg', note: 'one ink with soft shading — the colour path carves it (#15)', gradients: false, tier: 0, gated: true },
+  // The §0 #10 driver, authored deliberately RED (2026-09-03). The reported witness
+  // `logo-olympic-rings` is authored with strokes and svgGround refuses it, so the defect
+  // has never had a number; this is the same mechanism as filled annuli at the witness's
+  // own scale (r 72px / band 16px @512 vs 73.7 / 14.2). A ring cut by a crossing leaves a
+  // "C" whose ONE boundary loop runs outer arc → cap → inner arc → cap, so the §1d
+  // co-circular snap is asked to fit points from two concentric circles to one circle and
+  // cannot. The fourth ring is the same ring untouched — an in-case control that must stay
+  // circular through any change here.
+  { name: 'ring-cross', svg: 'public/examples/edge-cases/ring-cross.svg', note: 'interlocking annuli — co-circular arc snap across crossings (#10)', gradients: false, tier: 0, gated: true },
 
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves
@@ -408,6 +417,9 @@ const LOWRES_TIER0_UNSCORABLE = ['peak-drop']
 /** Cases whose §23 per-case allowance applies (see INVENTED_ALLOWED). */
 export const inventedMaxFor = (name: string): number | undefined => INVENTED_ALLOWED[name]
 
+/** Cases whose §24 per-case allowance applies (see CIRCLE_SPREAD_ALLOWED). */
+export const circleSpreadMaxFor = (name: string): number | undefined => CIRCLE_SPREAD_ALLOWED[name]
+
 export const LOWRES_CORPUS: TruthCase[] = [
   ...TRUTH_CORPUS.filter((c) => c.tier === 0 && !LOWRES_TIER0_UNSCORABLE.includes(c.name)),
   ...TRUTH_CORPUS.filter((c) => LOWRES_TIER2.includes(c.name)),
@@ -542,6 +554,64 @@ const INVENTED_ALLOWED: Record<string, number> = {
 }
 
 /**
+ * §24 — CIRCLE RECOVERY (issue #10). A boundary the artist drew as ONE circle must come back
+ * as that circle, whether or not other shapes cut it into arcs. `geomScore.circleRecovery`
+ * finds the authored circles in the ground truth and measures the traced boundary's radial
+ * residual against each, then reports the p95 of that residual with the circle's own MEAN
+ * residual removed — "did the arc stay on one circle", which is exactly what §1d's
+ * co-circular arc snap promises and the only question this gate asks.
+ *
+ * WHY THE EXISTING GATES CANNOT ASK IT. `chamfer`/`p95` average over the whole document, so
+ * a defect living on the few arcs around a crossing is diluted by every correct pixel
+ * elsewhere — `ring-cross` reads 0.10 / 0.51 against limits of 1.0 / 2.5 while its rings
+ * visibly wobble. `cornersInvented` exempts traced junctions and authored crossings, which
+ * is precisely where this lives. `hausdorff` sees the excursion but has no notion of the
+ * right answer, so it cannot be gated tightly. A circle DOES have an exact answer, and that
+ * is what makes the residual attributable.
+ *
+ * CALIBRATED @512 on 2026-09-03 (`ringDiag --circles --corpus`, 13 flat tier-0 cases with
+ * authored circles). The corpus splits into two populations with an order of magnitude
+ * between them, which is where the limit goes:
+ *
+ *   circles the snap CAN fit      corner-turns 0.01 · aa-seam 0.02 · smooth-radii 0.03 ·
+ *                                 gear-teeth 0.03 · acute-counter 0.03 · annulus 0.04 ·
+ *                                 concentric 0.07 · band-cross 0.08
+ *   circles CUT INTO ARCS         overlap 0.38 · ring-cross 0.78 · letter-joins 0.81 ·
+ *                                 bloom 0.84 · shaded-ink 1.16
+ *
+ * 0.25 sits 3× above the clean maximum and 1.5× below the lowest defect — an absolute "this
+ * is wrong" bound, not a drift band.
+ *
+ * @512 ONLY, for §23's reason: every radius in the corpus halves at 256, so the same
+ * relative error is half the pixels there and the limit would be a different calibration.
+ *
+ * NOT gated: the companion `bias` (a circle traced uniformly too small or too large).
+ * De-biasing is what makes this gate answer ONE question — and it immediately paid for
+ * itself: `acute-counter` reads a raw p95 of 0.81 that is entirely bias (its 40px circle
+ * comes back 0.79px undersized, p50 ≈ p95 ≈ |bias|) and a spread of 0.03. Rolling the two
+ * together would have let a fix for either claim the other's ground. The bias number is a
+ * real, previously unmeasured defect and is its own §0 row, not this one.
+ */
+const CIRCLE_SPREAD_MAX = 0.25
+
+/**
+ * Cases that already exceed it on the SHIPPED tracer, measured at authoring. A per-case
+ * allowance rather than a KNOWN_DEFECTS entry for INVENTED_ALLOWED's reason: KNOWN_DEFECTS
+ * is keyed by CASE, and listing these would switch off every other gate on art that is
+ * otherwise green. Every entry here is the SAME defect as §0 #10 — a circle cut into arcs
+ * by crossings, which §1d cannot fit — so they are candidates to come down with its fix,
+ * not accepted states. Values are the measurement rounded up to the next 0.05.
+ */
+const CIRCLE_SPREAD_ALLOWED: Record<string, number> = {
+  // Three translucent discs, each cut into arcs by the other two (0.84).
+  bloom: 0.85,
+  // Letterform bowls cut by their joins (0.81).
+  'letter-joins': 0.85,
+  // Two translucent discs cut by their lens (0.38).
+  overlap: 0.40,
+}
+
+/**
  * Paint-fidelity gate calibration (GRADIENT tier 0 only): the traced doc is RENDERED
  * (scoreboard.scoreDoc → the harness rasterizer) and compared against the source raster,
  * mean / p95 CIE76 ΔE over all pixels. This is the gate §10.3's radial-glow regression
@@ -621,6 +691,12 @@ export function evaluateTruthGates(s: {
   cornersInvented?: number
   /** Per-case allowance for the above — see INVENTED_ALLOWED. */
   inventedMax?: number
+  /** Authored circles found (geomScore.circleRecovery.circles) and the worst per-circle
+   *  co-circularity spread. Omitted, or 0 circles ⇒ the circle gate reports n/a. */
+  circles?: number
+  circleSpread?: number
+  /** Per-case allowance for the above — see CIRCLE_SPREAD_ALLOWED. */
+  circleSpreadMax?: number
   /** Render-vs-source mean / p95 CIE76 ΔE (scoreboard.scoreDoc: meanDeltaE / p95DeltaE).
    *  Omitted ⇒ the paint gates report n/a (a caller that has not rendered the trace).
    *  Only consulted on GRADIENT tier-0 cases — see PAINT_MEAN_MAX. */
@@ -653,10 +729,19 @@ export function evaluateTruthGates(s: {
     digits,
   })
 
+  // §24 — circle recovery. Flat art only (a gradient boundary is a ramp, not a step) and
+  // only where the art HAS an authored circle; the per-case allowance is CIRCLE_SPREAD_MAX
+  // unless CIRCLE_SPREAD_ALLOWED names the case.
+  const circleApplicable = s.flatArt && (s.circles ?? 0) > 0 && s.circleSpread !== undefined
+
   return [
     upper('chamfer', 'boundary mean', s.chamfer, tol.chamfer, 2),
     upper('p95', 'boundary p95', s.p95, tol.p95, 2),
     upper('parsimony', 'node economy', s.parsimony, tol.parsimony, 1),
+    // §24 — a boundary the artist drew as one circle must come back as that circle, even
+    // where crossings cut it into arcs. The only gate that can see the ring wobble (#10):
+    // every distance gate averages it away and the corner gates exempt the junctions.
+    upper('circleSpread', 'circle recovery', s.circleSpread ?? 0, s.circleSpreadMax ?? CIRCLE_SPREAD_MAX, 2, circleApplicable),
     // Render-vs-source paint fidelity — the gate that would have caught radial-glow's
     // re-centred glow (§10.3): a pure PAINT failure is invisible to every geometry
     // gate on gradient art, where region/corner recovery are n/a by construction.

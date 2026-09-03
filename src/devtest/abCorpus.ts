@@ -63,6 +63,7 @@ export const AB_CORPUS: AbCorpusCase[] = [
   { id: 'corner-turns', name: '⟐ corner-turns — authored-turn sweep, the detector’s turn reading (§22)', kind: 'svg', path: 'public/examples/edge-cases/corner-turns.svg' },
   { id: 'shaded-ink', name: '⟐ shaded-ink — one ink, soft shading; the colour path carves it (#15)', kind: 'svg', path: 'public/examples/edge-cases/shaded-ink.svg' },
   { id: 'annulus', name: '⟐ annulus — hole winding + alpha', kind: 'svg', path: 'public/examples/edge-cases/annulus.svg' },
+  { id: 'ring-cross', name: '⟐ ring-cross — interlocking annuli; co-circular snap across crossings (#10)', kind: 'svg', path: 'public/examples/edge-cases/ring-cross.svg' },
   { id: 'overlap', name: '⟐ overlap — layer decomposition', kind: 'svg', path: 'public/examples/edge-cases/overlap.svg' },
 ]
 

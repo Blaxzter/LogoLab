@@ -235,6 +235,49 @@ const CASES: { name: string; note: string; make: () => string }[] = [
     make: () => svg(ring(128, 128, 83, 54, RED) + ring(128, 128, 27, 23, rgb(22, 150, 150))),
   },
   {
+    // The §0 #10 / issue #10 driver, authored deliberately RED (2026-09-03, the gear-teeth
+    // §10.5 pattern: author the missing red number, then fix). The reported witness is
+    // `logo-olympic-rings`, whose ring boundaries bend where the black ring crosses yellow
+    // and green — and that mark CANNOT be gated: it is authored with `stroke`, so its
+    // visible boundary is the stroke OUTLINE and svgGround refuses it outright. Every claim
+    // about it is therefore visual. This is the same mechanism authored as FILLED ANNULI,
+    // which makes the ground truth exact (see the fills-not-strokes note above).
+    //
+    // WHY THIS ARRANGEMENT. The defect needs a ring whose FACE is cut by crossings: where a
+    // band passes over another, the covered ring's annulus loses a chunk, and what is left
+    // is a "C" whose single boundary loop runs outer arc → cap → inner arc → cap. That loop
+    // draws its points from BOTH radii, which is precisely what the §1d co-circular snap
+    // cannot fit to one circle. Three rings in a row, the middle one painted FIRST so it
+    // goes under both neighbours, gives the middle ring 4 such faces and the outer two 2
+    // each — the black ring's own regime (two crossing partners).
+    //
+    // The geometry is the witness's, to the pixel: at the gate's 512px raster this is
+    // r 72px, band 16px (olympic-rings @512 is r 73.7, band 14.2), so an arc between two
+    // crossings is the same length in the same units and the fit is asked the same question.
+    //
+    // IN-CASE CONTROL. The fourth ring is IDENTICAL (same rc, same band) and touches
+    // nothing. Its loops are single closed edges that go to 1a's disc snap, never to 1d —
+    // so it must stay a clean circle through any change here. A fix that buys the crossed
+    // rings by loosening the ring test would show up as this one drifting.
+    name: 'ring-cross',
+    note: 'interlocking filled annuli → co-circular arc snap across crossings (§0 #10), + an untouched ring as control',
+    make: () => {
+      const RC = 36 // ring centerline radius; ×2 at the 512px gate raster
+      const W = 8 // band width (16px @512 — the witness's 14.2px regime)
+      const row: [number, number, string][] = [
+        [72, 80, NAVY],
+        [184, 80, GOLD],
+      ]
+      // Middle ring FIRST so both neighbours paint over it: its face is cut four times.
+      return svg(
+        `<rect width="${V}" height="${V}" fill="${WHITE}"/>` +
+          ring(128, 80, RC, W, RED) +
+          row.map(([cx, cy, c]) => ring(cx, cy, RC, W, c)).join('') +
+          ring(128, 190, RC, W, BLUE), // control: same ring, no crossings
+      )
+    },
+  },
+  {
     name: 'overlap',
     note: 'two translucent discs → layer decomposition (the lens)',
     make: () =>

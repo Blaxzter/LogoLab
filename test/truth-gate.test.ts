@@ -39,7 +39,7 @@ import { ensureImageData } from '../src/devtest/nodeHarness.ts'
 import { decodePng } from '../src/devtest/png.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from '../src/devtest/svgGround.ts'
-import { scoreGeometry, scoreRegions } from '../src/devtest/geomScore.ts'
+import { scoreGeometry, scoreRegions, circleRecovery } from '../src/devtest/geomScore.ts'
 import { scoreDoc } from '../src/devtest/scoreboard.ts'
 import {
   GATED_CORPUS,
@@ -47,6 +47,7 @@ import {
   LOWRES_RES,
   LOWRES_TOL,
   inventedMaxFor,
+  circleSpreadMaxFor,
   TIER2_REGION_CORPUS,
   TIER2_REGION_RES,
   evaluateTruthGates,
@@ -140,6 +141,16 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // regime) that must stay two regions — the shading's knife-edge pair is ΔE 4.44 / RGB 13.5,
   // so the fixture states on its face why a colour-DISTANCE threshold cannot be the fix.
   'shaded-ink': 'chamfer 3.41px, p95 35.5px — the colour path carves one shaded ink into pieces (#15)',
+  // ring-cross (issue #10, authored deliberately RED 2026-09-03): the reported witness
+  // `logo-olympic-rings` is stroked and svgGround refuses it, so the ring wobble has never
+  // had a number. This is the same mechanism as filled annuli at the witness's own scale.
+  // A ring cut by a crossing leaves a "C" whose ONE boundary loop runs outer arc → cap →
+  // inner arc → cap, so §1d's co-circular snap is handed points from two concentric circles
+  // and asked to fit one — it cannot, at any threshold, and the arcs are then fitted
+  // independently. The case carries its own control: a FOURTH ring, identical and touching
+  // nothing, whose loops go to 1a's disc snap and read 0.06 — 13× tighter than the crossed
+  // middle ring, in the same image at the same raster.
+  'ring-cross': 'circle recovery 0.78px spread — crossed rings do not stay on one circle (#10)',
 
 }
 
@@ -193,11 +204,20 @@ async function runCase(
   const precision = res === RES && !(opts.skipTier2Corners && c.tier === 2)
     ? { cornersInvented: g.cornersInvented, inventedMax: inventedMaxFor(c.name) }
     : {}
+  // §24's circle recovery, @512 only for §23's reason (every radius halves at 256, so the
+  // same relative error is half the pixels there — its own calibration, not this one's).
+  const gtRaster = toRasterSpace(gt, img.width)
+  const docSets = doc.items.filter((i) => i.kind === 'path' && i.visible !== false).map((i) => i.subPaths)
+  const cr = res === RES && !c.gradients ? circleRecovery(gtRaster, docSets, img.width, img.height) : null
+  const circle = cr
+    ? { circles: cr.circles, circleSpread: cr.spread, circleSpreadMax: circleSpreadMaxFor(c.name) }
+    : {}
   const gates = evaluateTruthGates({
     samples: g.samples, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
     trueRegions: r.trueRegions, recovered: r.recovered,
     ...corners,
     ...precision,
+    ...circle,
     paintMean: paint?.meanDeltaE, paintP95: paint?.p95DeltaE,
     // Ink kept (§0 #14): region recovery is a MEDIAN and only flips past 50% loss, so a
     // region can pinch to a sliver with every other gate green. Flat art only.

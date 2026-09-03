@@ -3,6 +3,8 @@
 //   node --experimental-strip-types src/devtest/ringDiag.ts                      # olympic-rings
 //   node --experimental-strip-types src/devtest/ringDiag.ts --case concentric --res 512
 //   node --experimental-strip-types src/devtest/ringDiag.ts olympic-rings.svg --gradients
+//   node --experimental-strip-types src/devtest/ringDiag.ts --circles --case ring-cross
+//   node --experimental-strip-types src/devtest/ringDiag.ts --circles --corpus   # calibration
 //   --res N (default 512)   --fid F (probe a different fidelity)   --logos (gallery sweep)
 //
 // WHY. Issue #10: on `logo-olympic-rings` the black ring's boundaries visibly bend where it
@@ -39,7 +41,15 @@
 // `corner-veto` is a structural one, and they lead to completely different fixes. That is
 // the whole reason to measure before touching anything.
 //
-// PURELY DIAGNOSTIC — no gate, no fix, no production behaviour change.
+// --circles — THE OTHER HALF THE ISSUE ASKS FOR: "a per-ring 'how far is each fitted arc
+// from the ring's own best-fit circle' table would rank the wobble contributors in one run".
+// This scores the TRACE against the AUTHORED circle (geomScore.circleRecovery), so it is a
+// correctness number and not a census: `devP95`/`devMax` are radial px, 0 is perfect, and a
+// case only reports one if the art contains an authored circle at all. `--corpus` runs it
+// over the gated tier-0 corpus, which is the distribution any gate limit has to come from.
+//
+// The census above is a diagnostic; --circles is the measurement. Keep them apart: the
+// census says which gate declined, not whether the output is wrong.
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -48,6 +58,9 @@ import { decodePng } from './png.ts'
 import { ensureImageData } from './nodeHarness.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import type { ArcLoopRecord } from '../lib/trace/planarBeautify.ts'
+import { parseGroundTruth, toRasterSpace, unscorable } from './svgGround.ts'
+import { circleRecovery } from './geomScore.ts'
+import { GATED_CORPUS } from './truthCorpus.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -60,6 +73,8 @@ const flag = (n: string): string | null => {
 }
 const RES = Number(flag('--res') ?? 512)
 const GRADIENTS = argv.includes('--gradients')
+const CIRCLES = argv.includes('--circles')
+const CORPUS = argv.includes('--corpus')
 const FID = flag('--fid') ? Number(flag('--fid')) : null
 const f = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d) : '   —  ')
 
@@ -68,19 +83,64 @@ const cases: [string, string][] = []
 const CASE = flag('--case')
 const FILE = argv.find((a) => a.endsWith('.svg'))
 if (CASE) {
-  try {
-    cases.push([CASE, readFileSync(join(EDGE, `${CASE}.svg`), 'utf8')])
-  } catch {
-    cases.push([CASE, readFileSync(join(root, 'examples', 'logos', `${CASE}.svg`), 'utf8')])
-  }
+  const tries = [join(EDGE, `${CASE}.svg`), join(root, 'public', 'examples', `${CASE}.svg`), join(root, 'examples', 'logos', `${CASE}.svg`)]
+  const hit = tries.find((t) => { try { readFileSync(t); return true } catch { return false } })
+  if (!hit) throw new Error(`no such case: ${CASE}`)
+  cases.push([CASE, readFileSync(hit, 'utf8')])
 } else if (FILE) {
   cases.push([FILE.replace(/\.svg$/, ''), readFileSync(join(root, 'examples', 'logos', FILE), 'utf8')])
 } else if (argv.includes('--logos')) {
   for (const file of readdirSync(join(root, 'examples', 'logos')).filter((x) => x.endsWith('.svg')))
     cases.push([file.replace(/\.svg$/, ''), readFileSync(join(root, 'examples', 'logos', file), 'utf8')])
+} else if (CORPUS) {
+  for (const c of GATED_CORPUS.filter((c) => c.tier === 0 && !c.gradients))
+    cases.push([c.name, readFileSync(join(root, c.svg), 'utf8')])
 } else {
   // The issue's own mark.
   cases.push(['olympic-rings', readFileSync(join(root, 'examples', 'logos', 'olympic-rings.svg'), 'utf8')])
+}
+
+// --- --circles: the trace scored against the AUTHORED circles -----------------------
+if (CIRCLES) {
+  console.log(`
+━━━ CIRCLE RECOVERY @${RES} ${GRADIENTS ? 'grad' : 'flat'} — radial px from the authored circle, 0 is perfect ━━━`)
+  const rows: [string, number, number, number][] = []
+  for (const [name, text] of cases) {
+    const why = unscorable(parseGroundTruth(text))
+    if (why) { console.log(`  ${name.padEnd(24)} not scorable — ${why}`); continue }
+    const raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+    const doc = await traceImage(raster as unknown as ImageData, {
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: GRADIENTS,
+      ...(FID != null ? { fidelity: FID } : {}),
+    })
+    const shapes = toRasterSpace(parseGroundTruth(text), raster.width)
+    const docSets = doc.items.filter((i) => i.kind === 'path' && i.visible !== false).map((i) => (i as { subPaths: never[] }).subPaths)
+    const cr = circleRecovery(shapes, docSets, raster.width, raster.height)
+    if (!cr.circles) { console.log(`  ${name.padEnd(24)} no authored circle — n/a`); continue }
+    rows.push([name, cr.circles, cr.spread, cr.bias])
+    if (cases.length === 1) {
+      console.log(`
+  ${name} @${RES}px — ${cr.circles} scored authored circle(s)
+`)
+      console.log(`    ${'cx'.padStart(8)}${'cy'.padStart(8)}${'r'.padStart(8)}${'samples'.padStart(9)}${'spread'.padStart(9)}${'bias'.padStart(8)}${'p50'.padStart(7)}${'p95'.padStart(7)}${'max'.padStart(7)}`)
+      for (const c of cr.per.slice().sort((a, b) => b.spread - a.spread))
+        console.log(`    ${f(c.cx, 1).padStart(8)}${f(c.cy, 1).padStart(8)}${f(c.r, 1).padStart(8)}${String(c.samples).padStart(9)}${f(c.spread).padStart(9)}${f(c.bias).padStart(8)}${f(c.p50).padStart(7)}${f(c.p95).padStart(7)}${f(c.max).padStart(7)}${c.samples < 16 ? '   (occluded — not scored)' : ''}`)
+    }
+  }
+  if (cases.length > 1) {
+    console.log()
+    console.log(`    ${'case'.padEnd(24)}${'circles'.padStart(8)}${'spread'.padStart(9)}${'|bias|'.padStart(9)}`)
+    for (const [n, k, p95, mx] of rows.slice().sort((a, b) => b[2] - a[2]))
+      console.log(`    ${n.padEnd(24)}${String(k).padStart(8)}${f(p95).padStart(9)}${f(mx).padStart(9)}`)
+    const ps = rows.map((r) => r[2]).sort((a, b) => a - b)
+    const at = (q: number): number => ps[Math.min(ps.length - 1, Math.floor(q * ps.length))]
+    console.log(`
+  spread over ${rows.length} case(s): p50 ${f(at(0.5))}  p90 ${f(at(0.9))}  max ${f(at(1))}`)
+  }
+  console.log()
+  process.exit(0)
 }
 
 const totals = new Map<ArcLoopRecord['verdict'], number>()
