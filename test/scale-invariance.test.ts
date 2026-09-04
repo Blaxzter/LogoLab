@@ -74,12 +74,14 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // sharp-star was here ("drift 4.69× — straight arms ride the lattice") until the same
   // day, closed by the same §15 pass once the anchor-flatness guard stopped its thin-arm
   // anchors being polluted: chamfer 0.264 → 0.068 ref-px, regularized drift 1.76×.
-  // petals was here ('drift 3.98× — smooth flat multi-region art, the product target
-  // shape') until 2026-09-03, closed by §24's co-circular family pass: its three discs are
-  // each cut into arcs by the overlaps, and once those arcs are snapped back onto one
-  // resolution-FREE circle the boundary stops being lattice samples. Regularized drift
-  // 1.84×, chamfer 0.529 → 0.288 ref-px. This is the mechanism `annulus` was kept here to
-  // demonstrate, reaching art the disc snap alone could not — see the note above.
+  // §24 took this from 3.98× to 2.01×, and it still fails — by a whisker, and for a reason
+  // the note above already predicts. The family pass makes the FINE end resolution-free
+  // (chamfer @1024 0.288 → 0.263 ref-px) while @256 stays on the lattice at 0.529, and this
+  // gate is a RATIO: improving one lane and not the other raises it. That is the same
+  // mechanism `annulus` is kept here to demonstrate, seen from its unhappy side — drift
+  // falls toward 1 only once BOTH lanes stop being lattice samples. The absolute error is
+  // strictly better than when this entry read 3.98×; the entry can only shrink further.
+  petals: 'drift 2.01× — @1024 is now resolution-free (0.263 ref-px) but @256 still rides the lattice at 0.529; a ratio gate reads that as drift (§24)',
   'aa-seam': 'drift 4.98× — the diagonal blend band; @1024 stalls at 0.228 on the §0 #3 sliver residue, so the ratio understates it',
   'band-cross': 'drift 3.69× — the §14 control; weak boundaries are harmless but the strong edges still ride the lattice',
 }

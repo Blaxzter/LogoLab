@@ -592,7 +592,12 @@ function snapCoCircularLoops(
       if (!refit) break
       cf = refit
     }
-    if (group.length < 2) continue
+    // NO member-count rule. "At least two arcs" was a proxy for "enough evidence", and
+    // FAMILY_MIN_SPAN below is the real measure: a single arc sweeping 266° constrains its
+    // circle better than two 90° ones. The proxy had a hole — a ring cut only once leaves
+    // ONE long open arc, which the closed-disc snap (1a) never sees and the line snap (1b)
+    // is not for, so it was left as a freehand chain. That is `olympic-rings`' red ring
+    // inner boundary (e24, r 66.5, sweep 266°) and most of what still pulled after §24.
     const all: Vec[] = []
     let sweep = 0
     for (const k of group) {
@@ -617,18 +622,38 @@ function snapCoCircularLoops(
 
   // Place each claimed vertex on its circle, moving EVERY incident edge endpoint with it
   // (ring arcs get overwritten below; spokes keep this, so no seam). One circle ⇒ the
-  // radial snap. TWO ⇒ their intersection (§24): a junction where two snapped rings cross
-  // is a point of both, and the radial snap can only ever satisfy one of them.
+  // radial snap. TWO OR MORE ⇒ the crossing of the PAIR whose intersection lies nearest the
+  // raw junction (§24): a junction where two snapped rings cross is a point of both, and the
+  // radial snap can only ever satisfy one of them.
+  //
+  // "Nearest pair", not "first two". Three boundaries can meet inside a couple of pixels —
+  // `bloom`'s lower two discs cross at (256, 277.9) and the upper disc's own bottom is at
+  // (256, 276.0), 1.9px away — and taking the circles in the order they happened to claim
+  // the vertex then picks an arbitrary one of the three crossings. That is not merely
+  // imprecise, it is ASYMMETRIC: bloom is mirror-symmetric about x=256 by construction, and
+  // claim order is not, so the mirror-image junction chose a different pair and the traced
+  // lens came back with one side bitten in. Ranking every pair by how far its crossing sits
+  // from the raw junction is order-independent, mirrors correctly, and picks the crossing
+  // the art actually has — the raw junction is already within ~1px of it.
   for (const [vid, circles] of vertCircle) {
     const v = vById.get(vid)
     if (!v) continue
     const c = circles[0]
     let nx = 0
     let ny = 0
-    const xing = circles.length > 1 ? circleIntersectNear(c, circles[1], v) : null
-    if (xing && Math.hypot(xing.x - v.x, xing.y - v.y) <= JUNCTION_XING_MAX_MOVE) {
-      nx = xing.x
-      ny = xing.y
+    let best: Vec | null = null
+    let bestD = Infinity
+    for (let a = 0; a < circles.length; a++) {
+      for (let b = a + 1; b < circles.length; b++) {
+        const x = circleIntersectNear(circles[a], circles[b], v)
+        if (!x) continue
+        const d = Math.hypot(x.x - v.x, x.y - v.y)
+        if (d < bestD) { bestD = d; best = x }
+      }
+    }
+    if (best && bestD <= JUNCTION_XING_MAX_MOVE) {
+      nx = best.x
+      ny = best.y
     } else {
       const dx = v.x - c.cx
       const dy = v.y - c.cy

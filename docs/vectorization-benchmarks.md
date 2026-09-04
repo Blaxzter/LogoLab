@@ -4114,7 +4114,8 @@ half a circle is not a cut ring.
 | `bloom` | 0.84 | **0.12** |
 | `overlap` | 0.38 | **0.03** |
 | `bloom-flat` nodes / meanΔE / SSIM | 46 / 0.113 / 0.9922 | **34 / 0.060 / 0.9939** |
-| `petals` scale drift @256 vs @1024 | 3.98× (KNOWN_DEFECT) | **1.84×**, entry deleted |
+| `petals` scale drift @256 vs @1024 | 3.98× | **2.01×** (still listed — see §24.7) |
+| `olympic-rings` worst spread (the witness) | 0.785 | **0.664** |
 | every other case with authored circles | — | unmoved |
 
 The control ring is the load-bearing row: same ring, same image, same raster, no crossings —
@@ -4125,8 +4126,72 @@ A/B, both lanes: 17 of 84 outputs moved, all of it circle-bearing art (ring-cros
 overlap, petals, nebula, aa-seam.grad, gradient-flat; gallery chrome, instagram, mastercard,
 olympic-rings). Suite 463/463.
 
-### 24.7 What is left
+### 24.7 The user's A/B review, and three things it found
 
+The fix went to /labs/ab before it went anywhere else, and the review is why §24 has this
+section. Four observations, and only one of them was a bug — but that one was real.
+
+**(a) `bloom` came back ASYMMETRIC, and it should not have.** Its three discs are mirror-
+symmetric about x=256 by construction, and the traced lens below the triple point had one
+side bitten in. The cause was the junction rule of §24.4(c) taking `circles[0] × circles[1]`
+in CLAIM ORDER. Three boundaries meet inside two pixels there — the lower two discs cross at
+(256, 277.9), the upper disc's own bottom is at (256, 276.0) — and claim order is not
+mirror-symmetric, so the two sides picked different crossings. Ranking every PAIR by how far
+its crossing sits from the raw junction is order-independent and mirrors correctly. Measured
+after: the three junctions land at (254.90, 275.93), (257.20, 275.93) and (256.05, 277.86)
+against authored (254.9, 276.0), (257.1, 276.0), (256.0, 277.9) — every one inside 0.1px.
+
+A second thing fell out of that, and it is worth writing down because it looked like a
+regression: the tiny WHITE SPECK at bloom's centre disappears. It was never a traced region.
+The before trace has six fills and not one of them is near-white, and the source raster has
+no white pixel there either — the authored 2px² triangle is entirely AA fringe at 512. The
+speck was a HAIRLINE CRACK between regions whose shared junctions had been placed
+inconsistently, and consistent placement closes it. Region recovery stays 7/7 and boundary
+agreement improves (chamfer 0.06, p95 0.11 @512).
+
+**(b) `olympic-rings` still pulled, and a ring cut ONCE was the reason.** The census found 21
+of its arcs unclaimed, and among them `e24`: r 66.5, sweep **266°**, the red ring's whole
+inner boundary as a single edge. The "a family needs two members" rule refused it — and
+nothing else would take it either, because the closed-disc snap (1a) never sees an open edge
+and the line snap (1b) is not for arcs. So the longest, best-conditioned arc in the mark was
+left as a freehand chain. The member count was only ever a PROXY for evidence and
+`FAMILY_MIN_SPAN` is the real measure, so the proxy is gone: a single arc sweeping 266°
+constrains its circle better than two 90° ones do. olympic-rings goes to 10 families.
+
+**(c) The radius pre-filter looks like a bug and is load-bearing.** The same census showed
+every one of those 21 arcs sitting 0.34–1.07px from its ring, comfortably inside the 1.5px
+budget, and rejected anyway — by the cheap `|r_own − r_family|` guard, on fitted radii of 18
+and 99 for arcs of a ring authored at 66.6. That is exactly the ill-conditioning §24.4(b)
+exists to escape, so removing the guard looked obviously right. It was measured and
+**REVERTED**: with only the distance test, arcs of genuinely different circles that graze
+within budget over a short span join and are bent onto the wrong one. `bloom-flat`'s render
+mean ΔE went 0.06 → **1.44** and `ring-cross`'s gradient lane blew past its own baseline
+(middle inner 0.28 → 1.59, against 0.75 before §24). The crude radius comparison is what
+keeps different rings apart, and the arcs it costs are worth less than the ones it saves.
+
+**(d) `instagram` is deformed, and it is not this.** Measured at the branch point and after:
+inner ring spread 1.87 → 1.75, dot 1.57 → 1.57, outer 0.87 → 0.91. Pre-existing and
+essentially untouched. Its ring is small (r 25.6) and gradient-banded, so the flat trace cuts
+it into many short arcs of different colours whose own fits scatter far more than
+`FAMILY_CLUSTER_REL · r` = 1.5px allows them to group. A scale-relative clustering tolerance
+is tightest exactly where the per-arc fits are worst; that is its own calibration and its own
+row, not this one.
+
+**What the review cost elsewhere.** `petals` returns to the scale gate's `KNOWN_DEFECTS` at
+**2.01×** (it was 3.98× before §24, and 1.84× with the member-count rule still in). Nothing
+got worse: @1024 improved to 0.263 ref-px while @256 stayed on the lattice at 0.529, and a
+RATIO gate reads a fine-end-only improvement as drift. It is the `annulus` note from its
+unhappy side — drift falls toward 1 only once BOTH lanes stop being lattice samples.
+
+### 24.8 What is left
+
+- **`instagram`'s small gradient-banded ring** (spread 1.75, pre-existing) — §24.7(d). The
+  round-0 grouping tolerance is `FAMILY_CLUSTER_REL · r`, which is tightest exactly where the
+  per-arc fits are worst. An absolute floor alongside the relative one is the obvious idea and
+  is NOT free: §24.7(c) is the measured warning about loosening this pass's grouping.
+- **`olympic-rings` still reads 0.664** against `ring-cross`'s 0.07 — short arcs at crossings
+  that never reach a family, plus a systematic **+0.28 to +0.40px outward bias on every outer
+  circle**, which is row #17 and not this mechanism.
 - **`letter-joins` 0.81 is NOT this mechanism**, despite reading like it. Its three bowls are
   each ONE CLOSED edge, so they never reach §1d — `ringDiag` counts 18 single-edge loops and
   not one candidate — and the family pass groups OPEN arcs, so it cannot reach them either.
