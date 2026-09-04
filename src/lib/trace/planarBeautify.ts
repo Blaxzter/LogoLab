@@ -578,10 +578,12 @@ function snapCoCircularLoops(
     if (taken[i]) continue
     let cf: Circle = cands[i].c
     let group = [i]
+    let credible = new Set<number>([i])
     for (let round = 0; round < FAMILY_GROW_ROUNDS; round++) {
       const budget = effFidelity(fid, cf.r, localScaleK)
       const tol = FAMILY_CLUSTER_REL * cf.r
       const grown = [i]
+      const viaRadius = new Set<number>([i])
       for (let j = 0; j < cands.length; j++) {
         if (j === i || taken[j]) continue
         // ROUND 0 has only the seed's own badly-conditioned circle to go on, so it groups
@@ -606,10 +608,14 @@ function snapCoCircularLoops(
         // 0.06 → 1.44). Two circles that cross can stay inside a 1.5px budget of each other
         // for a few degrees either side of the crossing; they cannot do it for forty.
         const joins = byRadius || (cands[j].span >= FAMILY_JOIN_MIN_SPAN && maxRadialDev(cands[j].pts, cf) <= budget)
-        if (joins) grown.push(j)
+        if (!joins) continue
+        grown.push(j)
+        if (byRadius) viaRadius.add(j)
+        else viaRadius.delete(j)
       }
       const settled = grown.length === group.length && grown.every((v, n) => v === group[n])
       group = grown
+      credible = viaRadius
       if (group.length < 2) break
       if (settled && round > 0) break
       const all: Vec[] = []
@@ -630,9 +636,19 @@ function snapCoCircularLoops(
     // the family, and the circle is refitted without them — what is left still has to clear
     // the sweep and budget tests below.
     for (let pass = 0; pass < 2 && group.length; pass++) {
-      const keep = group.filter(
-        (k) => maxRadialDev(cands[k].pts, cf) <= Math.max(FAMILY_WORSEN_K * maxRadialDev(cands[k].pts, cands[k].c), FAMILY_WORSEN_FLOOR),
-      )
+      const keep = group.filter((k) => {
+        // The guard's baseline is the member's distance from ITS OWN fitted circle, so it can
+        // only be asked where that fit was credible enough to be the REASON the member
+        // joined. A member admitted on the geometric route has, by construction, an own
+        // circle nothing like the family's — `olympic-rings`' e37 sweeps 49° and fits r 18.2
+        // on a ring authored at 66.6 — and reading "it sits 0.3px from THAT" as evidence the
+        // family makes it 3.6× worse is backwards: the family circle is the better estimate
+        // of the two. Members that agreed on radius are a different matter: `ring-cross`'s
+        // gradient outlier fits its own circle at 0.17px at a comparable radius, and being
+        // 1.18px off the family's is real evidence it belongs to another.
+        if (!credible.has(k)) return true
+        return maxRadialDev(cands[k].pts, cf) <= Math.max(FAMILY_WORSEN_K * maxRadialDev(cands[k].pts, cands[k].c), FAMILY_WORSEN_FLOOR)
+      })
       if (keep.length === group.length) break
       group = keep
       if (!group.length) break

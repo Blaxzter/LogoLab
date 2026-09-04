@@ -4293,11 +4293,21 @@ family circle or the freehand arc is closer to a truth neither of them knows. An
 population cannot break the tie either: over the **27 gallery marks with authored circles the
 two settings are byte-identical**, 0 of 27 differ. It is a two-witness trade.
 
-It is settled on §0's ranking rule rather than on a threshold. The guard stays ON, so nothing
-is made worse than it was: **olympic keeps 0.547 and ring-cross's gradient lane keeps 0.49
-instead of 0.70.** Flipping it is a one-line change (`FAMILY_WORSEN_K`'s filter) worth
-0.135px on the witness's FLAT lane against 0.21px on a gradient lane whose untouched control
-ring already reads 0.23 — and gradient art is scoring infrastructure, not the target.
+**Settled by the user, 2026-09-04: take the olympic gain.** The rule shipped is the one that
+states the principle rather than the outcome — the worsening guard's baseline is a member's
+distance from its OWN fitted circle, so it is only asked where that fit was CREDIBLE enough
+to be the reason the member joined. A member admitted on the geometric route has, by
+construction, an own circle nothing like the family's (e37: r 18.2 on a ring of 66.6), and
+"it sits 0.28px from THAT" is not evidence of anything. When a member's own circle is
+nonsense, believe the family.
+
+  olympic-rings  0.547 → **0.412**   yellow 0.43 → 0.38, green 0.55 → 0.36, black 0.20 → 0.17
+  ring-cross gradients, gold inner   0.49 → 0.70 (the accepted cost)
+  flat lane, corpus, golden, suite   unmoved
+
+Recorded so the next person does not re-derive it: this is a TWO-WITNESS trade with no
+discriminator, not a tuned threshold. Reversing it means dropping every member that fails
+the ratio, credible or not.
 
 ### 24.9 What is left
 
