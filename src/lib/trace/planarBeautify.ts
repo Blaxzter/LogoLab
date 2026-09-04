@@ -80,6 +80,10 @@ const FAMILY_MIN_SPAN = Math.PI
 /** §24 — grow rounds for a family. The first refit already lands sub-pixel, so two is
  *  enough in practice; the loop exits early the moment the membership settles. */
 const FAMILY_GROW_ROUNDS = 3
+/** §24.7 — how far a candidate must sweep before "it lies on the family circle" counts as
+ *  evidence on its own, without agreeing on radius. Calibrated on `bloom`, where the arcs
+ *  that must join sweep 52–56° and the fragments that must not sweep 2–6°. */
+const FAMILY_JOIN_MIN_SPAN = 0.6
 /** §24 — how far a junction may travel to reach the intersection of the two circles that
  *  claim it. It is already within ~1px of both, so a bigger jump means the pairing is
  *  wrong and the radial snap is the safer answer (§10.4's MIN_MOVE lesson, from the other
@@ -577,9 +581,22 @@ function snapCoCircularLoops(
         // the family circle is the refit, and the test becomes the one that matters:
         // does this candidate's polyline lie within budget of it. Members can leave as
         // well as join, and the final acceptance below re-checks the whole set.
-        const joins = round === 0
+        const byRadius = round === 0
           ? Math.abs(cands[j].c.r - cf.r) <= tol && Math.hypot(cands[j].c.cx - cf.cx, cands[j].c.cy - cf.cy) <= tol
           : Math.abs(cands[j].c.r - cf.r) <= tol + budget && maxRadialDev(cands[j].pts, cf) <= budget
+        // …OR the candidate simply LIES on the family circle, provided it sweeps far enough
+        // for that to be evidence. A radius comparison alone is a knife edge on exactly the
+        // quantity least worth trusting here: `bloom`'s two short pink arcs fit their own
+        // circles at r 110.7 on a disc authored at 104 and miss the 6.23px tolerance by 0.6,
+        // while their MIRROR IMAGES on the blue disc fit 105.6 and 108.6 and pass. Same
+        // geometry, opposite verdicts — and the asymmetry was visible in the trace.
+        //
+        // The sweep condition is what keeps this safe, and it is not optional: admitting
+        // candidates of ANY span on the distance test alone was measured and REVERTED — it
+        // bends arcs of different circles onto one another (bloom-flat's render mean ΔE went
+        // 0.06 → 1.44). Two circles that cross can stay inside a 1.5px budget of each other
+        // for a few degrees either side of the crossing; they cannot do it for forty.
+        const joins = byRadius || (cands[j].span >= FAMILY_JOIN_MIN_SPAN && maxRadialDev(cands[j].pts, cf) <= budget)
         if (joins) grown.push(j)
       }
       const settled = grown.length === group.length && grown.every((v, n) => v === group[n])

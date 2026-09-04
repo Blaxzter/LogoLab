@@ -4131,6 +4131,45 @@ olympic-rings). Suite 463/463.
 The fix went to /labs/ab before it went anywhere else, and the review is why §24 has this
 section. Four observations, and only one of them was a bug — but that one was real.
 
+**(a0) THE FIRST ANSWER TO (a) WAS VERIFIED ON THE WRONG INPUT.** Worth the most attention
+of anything in this section. The A/B FIXTURE lane rasterizes its SVG cases on a TRANSPARENT
+background — `writeAbSnapshots` only composites on white for the gallery lane, "the
+transparent input the app's own rasterization produces" — while `circleRecovery`, the truth
+gate and every measurement in §24.1–24.6 render on white. Those are two different traces of
+`bloom`: with alpha the discs stay translucent and the region graph differs. The junction fix
+in (a) is real and it is measured, but it is measured on the composited trace, and the
+picture in /labs/ab did not move at all. The user said so — "I don't see any difference" —
+and was right; the stamp was current and the fix simply did not reach that input.
+
+Two habits come out of it. Regenerating a stamp is not evidence that anything changed: diff
+the SVGs (`cmp`), which takes a second. And when a lab view and a gate disagree, check what
+each one is actually FEEDING the tracer before explaining the difference — a byte comparison
+against a freshly traced doc is worthless if the two used different rasterization, which is
+exactly the false "STAMP IS STALE" reading that cost a round here.
+
+On the alpha input the asymmetry is stark in the numbers, and it is not the junction rule:
+the LEFT disc reads spread **0.77** and its mirror image on the right reads **0.01**. The
+cause is a KNIFE EDGE in the round-0 grouping. That round compares fitted RADII within
+`FAMILY_CLUSTER_REL · r` = 6.23px, and the two short pink arcs fit their own circles at
+r 110.7 on a disc authored at 104 — missing by 0.6 — while their mirror images on the blue
+disc fit 105.6 and 108.6 and pass. Same geometry, opposite verdicts, decided by 0.6px of a
+quantity §24.4(b) already established is not trustworthy for short arcs.
+
+The fix adds a second way in, and the sweep condition is the whole of its safety: a candidate
+may also join when its polyline simply LIES within budget of the family circle, provided it
+sweeps at least `FAMILY_JOIN_MIN_SPAN` (0.6 rad). §24.7(c) is the measured reason that
+condition is not optional — admitting any span on the distance test alone bends arcs of
+different circles onto one another. Two circles that cross can stay inside a 1.5px budget of
+each other for a few degrees either side of the crossing; they cannot do it for forty.
+Calibrated on this case: the arcs that must join sweep 52–56°, the fragments that must not
+sweep 2–6°. Result: pink 0.77 → **0.09**, all three families 3 arcs and ~354°, and the white
+speck stays (it is authored, and on this input it IS a traced region — see (a) for the
+composited case where it is not).
+
+It also reached a lane nothing else had. `petals` **passes** the scale gate at drift 1.56×
+where the previous round left it failing at 2.01×: @256 improved 0.529 → 0.410 alongside
+@1024's 0.263, so the ratio came down for the right reason instead of going up.
+
 **(a) `bloom` came back ASYMMETRIC, and it should not have.** Its three discs are mirror-
 symmetric about x=256 by construction, and the traced lens below the triple point had one
 side bitten in. The cause was the junction rule of §24.4(c) taking `circles[0] × circles[1]`
@@ -4177,11 +4216,14 @@ it into many short arcs of different colours whose own fits scatter far more tha
 is tightest exactly where the per-arc fits are worst; that is its own calibration and its own
 row, not this one.
 
-**What the review cost elsewhere.** `petals` returns to the scale gate's `KNOWN_DEFECTS` at
-**2.01×** (it was 3.98× before §24, and 1.84× with the member-count rule still in). Nothing
-got worse: @1024 improved to 0.263 ref-px while @256 stayed on the lattice at 0.529, and a
-RATIO gate reads a fine-end-only improvement as drift. It is the `annulus` note from its
-unhappy side — drift falls toward 1 only once BOTH lanes stop being lattice samples.
+**What the review cost elsewhere.** Nothing, in the end. `petals` spent one round back in the
+scale gate's `KNOWN_DEFECTS` at 2.01× — @1024 had gone resolution-free while @256 stayed on
+the lattice, and a RATIO gate reads a fine-end-only improvement as drift — and (a0)'s
+sweep-gated join reached the coarse lane too, closing it at **1.56×**. The one residue is
+`ring-cross`'s gradient lane, where the gold ring's inner circle reads 0.70 against a 0.31
+baseline (the crossed middle ring is 0.75 → 0.28 and 0.55 → 0.16 the other way, and the
+untouched control ring reads 0.23 in gradient mode against 0.04 flat, so that lane carries
+~0.23 of noise before anything else).
 
 ### 24.8 What is left
 
