@@ -33,6 +33,7 @@ guardrails):
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **CLOSED — not planned** (2026-08-23). The turn IS under-read on the lattice (§21, unretracted: `detectCorners` reads two chords ±4 POINTS on the integer staircase, and recovery falls from 96.3% at 90–105° of authored turn to **55.1%** at 60–65°). The ISSUE is what closed, on four grounds: its target metric is corner RECALL, which has no precision term — so “find more corners” and “invent corners” are the same instruction, and §22 optimising it produced visible kinks; a missed 60° corner is a gentle bend drawn as a gentle curve while an invented one is a visible kink, so it spends the detector's budget on the invisible direction; row #16 shows the tracer already errs the OTHER way on the SAME knob (12 invented corners on art with none), so the two rows pulled one lever in opposite directions; and the framing was refuted twice (§21's seam truncation, §22's reading) with a named witness authored at exactly 60.0° — the detector's bar AND the scorer's bar — which no reading can reliably clear. The one defensible remnant is `gear-teeth` **53/60**, where the corners are unambiguous (67.3° roots on a mechanical shape); it carries on as a narrow case, not a corpus-wide detector change | `corner-turns` (tier 0, gated — kept: an authored-turn sweep is a good corner-recall case regardless); `gear-teeth` 53/60 | the cliff, unchanged and still measurable with `needleDiag --turns` / `turnDiag` | **§21**, **§22**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23) (closed not-planned). **Corner work continues at row #16** |
 | 16 | **The trace INVENTS corners on smooth art** — sharp nodes the authored geometry does not contain, on ellipse ends and straight→arc blends. Newly VISIBLE rather than newly introduced: `cornersRecovered` is a recall number with no precision term, so this was free by every gate here until §23 built `cornersInvented`. It is the measured form of “every nice radius has a kink in it”, and it is why §22 was rejected on sight after passing CI. The metric asks a like-for-like question at the corner's own scale — the traced node's C⁰ kink minus the AUTHORED boundary's turn over ±1px — and exempts the four places a trace is right to corner (canvas border, occluded boundary, traced junctions of degree ≥3, authored crossings) | `smooth-radii` (tier 0, **gated**, authored for this: art with NO corners at all — ellipses 1:1→1:8 in both orientations, rounded rects at 2/3/5/8/12px radii, curvature-ramp eggs) | **12** invented on a case with zero authored corners; corpus-wide over the 23 gated tier-0 cases, flat lane: p50 0, p90 2, max 12, **18 over 3 cases** (`smooth-radii` 12, `hairlines` 4, `peak-drop` 2). The rejected §22 reading takes `smooth-radii` to **18** | **§23**; instrument `src/devtest/kinkDiag.ts` (`--gate`, `--probe x,y`, `--compare`). Gate scope today: FLAT art, @512 only — gradient banding and the halved radii at @256 are each their own calibration (§23.3) |
+| 17 | **A circle's whole boundary sits off its authored radius by a near-constant amount** — a BIAS, not a wobble: the trace is perfectly round and in the wrong place. Found by §24's circle lens on the day it landed, and only because that lens reports the mean residual SEPARATELY from the spread — the raw p95 reads 0.81 and looks exactly like the ring wobble, while the co-circularity spread is 0.03. Every other gate is blind: 0.8px is far inside chamfer/p95, and the shape is still round, so no corner or region lens sees it either. NOT a size law and not yet explained — the two worst circles are the same size and disagree in SIGN. Untouched by §24, whose family pass only reaches circles cut into arcs | `acute-counter` (tier 0, gated, passes — the gate is on spread, not bias) | seven authored circles read |bias| 0.09–**0.79**px: r=40.5 at **−0.79** (traced inside) against r=39.5 at **+0.19** (outside) and r=58.6 at +0.16 | **§24.3**; instrument `ringDiag --circles` (the `bias` column) |
 
 ### 0.1 Premise re-check of the four open issues (2026-08-23)
 
@@ -47,11 +48,25 @@ the instruments named are new and live in `src/devtest/`.
 | **#14** THROUGH_SPAN, *consequence* | "@256 it trips the 20° gate and the junction is DROPPED (15/16 move)" | **STALE** — @256 now moves **16 of 16**: 15 by §14 thread and **1 by §17 apex**. §17 landed 2026-08-06, the day after the issue, and catches exactly the junction the 20° gate refuses. The defect is now "same art routed down a different branch per raster", not a lost junction |
 | **#14** CHORD_MAX_LEN | dead above ~1024 on its own driver case (32.9px @512 → 130.7px @2048 > 80) | **holds** — `chordDiag`: gradient-flat has 3 candidates at every raster; 1 straightened @512 (len 32.0) and @1024 (65.2), then **0 straightened / 3 too-long @2048** (131.1). Counterfactual `--cap 400` recovers exactly the 1 |
 | **#14** coarse-end tail | 4 scale KNOWN_DEFECTS remain (overlap, aa-seam, petals, band-cross) | **holds** — all four still listed, gate 7/7 green |
-| **#10** rings | 69 edges / 46 junctions @512; §1d / §14 / §17 all aim here and none holds | **holds, and is now explained** — see below |
+| **#10** rings | 69 edges / 46 junctions @512; §1d / §14 / §17 all aim here and none holds | **held; now CLOSED** (§24). The premise was right and §0.1's own explanation was half wrong — see the correction below |
 | **#9** border | `collectBoundary` drops every query within BORDER_EPS 1.5px; no gate can see the border | **holds** — the exclusion is intact and two-sided. `borderDiag` measures the hole at **4,489 transversal band samples** on the fixtures alone |
 | **#9** symptom | "odd corners and ragged edges", witness `logo-mastercard` | **half REFUTED on the witness** — see below |
 | **#15** knife edge | shaded tones ΔE 4.44–11.09 / RGB 13.5–34.4; flute-flat's authored pair at ΔE 4.5 must survive | **holds** — tones reproduce exactly (4.44 / 6.80 / 11.09), and `fluent-flute-flat` passes region recovery @512 today (truth gate 73/73), so it is a live constraint, not an already-failing one |
 | **#15** "no gated case exists" | author one first | **held; now closed** — `shaded-ink` authored, gated, RED |
+
+**#10 — CLOSED 2026-09-03 by §24.** The paragraph below is kept as written because its
+correction is the useful part. Its first half stands: §14 and §17 are structurally inert on
+this art, not mistuned. Its second half — "it is one gate", the corner veto, and the fixes
+that follow from that — was **refuted by the counterfactual the option switch already
+allowed**. `planarFit.cornerVeto: false` leaves `olympic-rings` BYTE-IDENTICAL (212 nodes,
+69 edges, 46 junctions): all 24 loops simply fall through to `dev-exceeds-budget`, which
+declines them too. The veto was only FIRST in the queue, and `ringDiag` reports the first
+gate that declines — which is not the same as the gate that matters. The same switch snaps
+992 of `checker`'s loops into discs, so the veto is doing its job and both prescriptions
+below ("loop-local turn, or excluding junction corners") would have bought zero here while
+re-opening the scalloping. What was actually wrong is that a ring is not a loop: its face
+boundary carries TWO radii (outer arc → cap → inner arc → cap) and its arcs are spread over
+several faces. §24 has the numbers.
 
 **#10 — the answer to "why does none of it hold here" is measured, and it is one gate.**
 `threadDiag` on `olympic-rings`: every edge on the mark is ΔE ≥ 60 (five saturated rings on
@@ -3906,3 +3921,226 @@ separate "this boundary CORNERS here" from "this boundary CURVES tightly here" w
 are read from the same short, staircase-quantized window. The circle veto was one answer
 and it was too narrow. Whatever the next one is, it now has to be calibrated on ellipse
 ends and straight→arc blends, because that is what `smooth-radii` is made of.
+
+---
+
+## 24. The ring that could not be one circle (issue #10, 2026-09-03)
+
+**Status: SHIPPED.** `ring-cross` circle recovery **0.78 → 0.07** px, and the mark the issue
+was filed on — `logo-olympic-rings` — stops kinking through its crossings. Two cases the
+defect list did not know it owned came with it: `bloom` 0.84 → 0.12, `overlap` 0.38 → 0.03,
+and `petals` left the scale gate's `KNOWN_DEFECTS` at drift 3.98× → 1.84×.
+
+### 24.1 The framing that was wrong, and how the counterfactual showed it
+
+§0.1 re-measured this issue on 2026-08-23 and concluded, with a census to back it: of 24
+candidate region loops on `olympic-rings`, **24 are rejected by `corner-veto`** and not one
+reaches the circle fit. The reading was that `CORNER_TURN` is structurally mismatched — it
+reads `maxTurnRad` over the WHOLE loop, and on crossing-dense art the loop's turn is
+dominated by its own junction corners — and the prescription that followed was a loop-local
+turn, or excluding junction corners from the veto's reading.
+
+The census was right and the prescription was wrong, because `ringDiag` reports the FIRST
+gate that declines and that is not the same as the only one. Running the counterfactual the
+option switch already allowed (`planarFit.cornerVeto: false`) settles it in one line:
+
+| case | veto | nodes | edges | verdicts |
+|---|---|---|---|---|
+| olympic-rings | on | 212 | 69 | corner-veto 24 |
+| olympic-rings | **off** | **212** | **69** | dev-exceeds-budget 24 |
+| checker | on | 7104 | 3596 | corner-veto 1760 |
+| checker | **off** | **7195** | 3596 | **snapped 992**, dev 768 |
+
+Switching the veto off changes the rings **not at all** — byte-identical output; all 24
+loops simply fall through to the next gate. It is not the gate holding them back, it is
+merely first in the queue. Meanwhile the same switch rounds 992 checker cells into discs, so
+the veto is doing exactly the job §9.8 built it for. Both halves of the prescription — loosen
+the turn reading, or exempt junction corners — would therefore have bought **zero** on this
+mark while re-opening the scalloping.
+
+The lesson generalises past this issue: **an instrument that reports the first failing gate
+cannot tell you the gate is load-bearing.** `ringDiag`'s own header says a `corner-veto`
+verdict and a `dev-exceeds-budget` verdict "lead to completely different fixes" — true, but
+only once you know which one you would actually hit. The counterfactual costs one flag.
+
+### 24.2 What is actually wrong: a ring is not a loop, twice over
+
+With the veto off, the real gate reports numbers that are not close:
+
+| loop | edges | fitted r | radialDev | budget |
+|---|---|---|---|---|
+| 1 / 2 | 12 | 77.4 / 77.1 | 12.62 / 12.91 | 1.50 |
+| 3 / 4 / 5 | 10 | 74.9–75.8 | 11.87–12.33 | 1.50 |
+| 3 / 4 / 5 | 8 | 47.9–50.0 | 15.21–18.22 | 1.50 |
+
+`olympic-rings` is authored `r="49.25" stroke-width="9.5"` on a 342-wide canvas, so at the
+512px raster its inner radius is 66.6px and its outer 80.8px. Every fitted circle lands
+*between* the two, missing by roughly half the band. That is not a calibration that drifted;
+it is the wrong model:
+
+1. **A ring's face carries two radii.** Where one band passes over another, the covered
+   ring's annulus loses a chunk, and what is left is a "C" whose single boundary loop runs
+   outer arc → cap → inner arc → cap. Those points come from two concentric circles a
+   band-width apart. No single circle fits them at any threshold.
+2. **A ring's arcs live in several faces.** `ring-cross`'s middle ring is cut into four
+   C-faces, each holding exactly one outer arc and one inner arc — so even a grouping that
+   handled (1) could never put two arcs of the same circle together, because they are never
+   in the same loop. **A ring is a document-level object; a loop is a face-level one.**
+
+This also explains why the corpus never caught it. `concentric` and `annulus` are rings too,
+but their loops are single closed edges that go to 1a's disc snap and never enter §1d at
+all — `ringDiag` reports 13 and 9 `single-edge-loop` verdicts respectively. The mechanism had
+no fixture exercising it in the direction where it fails.
+
+### 24.3 The fixture, and the lens the corpus was missing
+
+The issue's own protocol note turned out to be a hard requirement rather than a preference:
+`olympic-rings` is authored with `stroke`, so `svgGround` refuses it outright and no claim
+about it can carry a number. `ring-cross` is the same mechanism as FILLED ANNULI — three
+interlocking rings, the middle painted first so it goes under both neighbours, at the
+witness's own scale (r 72px / band 16px @512, against olympic-rings' 73.7 / 14.2) — plus a
+**fourth ring, identical and touching nothing**, as an in-case control.
+
+Authoring it proved the second half of the problem: **it passed every gate.** chamfer 0.10,
+p95 0.51, parsimony 1.9× against limits of 1.0 / 2.5 / 3.0, region recovery 5/5. The rings
+visibly wobble and the corpus had no number for it, for three separate reasons:
+
+- `chamfer`/`p95` average over the whole document, so a defect confined to the arcs around a
+  crossing is diluted by every correct pixel elsewhere;
+- `cornersInvented` (§23) exempts traced junctions of degree ≥3 and authored crossings **by
+  construction** — precisely where this lives;
+- `hausdorff` sees the excursion (1.74px vs `annulus`'s 0.13px) but is a whole-document max
+  with no notion of the right answer, so it cannot be gated tightly without failing art that
+  has no exact answer.
+
+A circle **does** have an exact answer, and that is what makes the residual attributable.
+`geomScore.circleRecovery` finds the authored circles in the ground truth and measures the
+traced boundary's radial residual against each. One-sided on purpose (traced → authored):
+occlusion then needs no special case, because where a ring is covered there is simply no
+traced boundary to score, whereas the missed direction would charge the trace for arcs the
+renderer never drew.
+
+**The de-biasing is the design, not a detail.** The gate is the p95 residual with each
+circle's own MEAN residual removed — "did the arc stay on one circle", which is exactly what
+§1d promises. It paid for itself on the first corpus run: `acute-counter` reads a raw p95 of
+0.81 that is **entirely bias** (its 40px circle comes back a uniform 0.79px undersized,
+p50 ≈ p95 ≈ |bias|) and a spread of 0.03. That is a different defect — a real, previously
+unmeasured one, now §0 row #17 — and rolling the two together would have let a fix for
+either claim the other's ground.
+
+Calibrated @512 over the 13 flat tier-0 cases with authored circles (`ringDiag --circles
+--corpus`). The corpus split into two populations an order of magnitude apart:
+
+| | cases |
+|---|---|
+| circles the snap CAN fit | corner-turns 0.01 · aa-seam 0.02 · smooth-radii 0.03 · gear-teeth 0.03 · acute-counter 0.03 · annulus 0.04 · concentric 0.07 · band-cross 0.08 |
+| circles CUT INTO ARCS | overlap 0.38 · ring-cross 0.78 · letter-joins 0.81 · bloom 0.84 · shaded-ink 1.16 |
+
+The limit is **0.25** — 3× above the clean maximum, 1.5× below the lowest defect. An absolute
+"this is wrong" bound, not a drift band. RED on landing: `ring-cross`, 0.78.
+
+### 24.4 The fix: families, not loops
+
+`snapCoCircularLoops` keeps its loop pass unchanged, and gains a second pass that runs ONCE
+over the whole topology on the open edges the first did not claim: **fit each open edge on
+its own, cluster them all by the circle each found, snap every cluster to its own refit.** A
+ring's outer arcs become one family and its inner arcs another, wherever in the document
+they were traced.
+
+**Why this does not re-open the checker scalloping.** §24.1's counterfactual says the veto is
+load-bearing, so it is kept — but applied per EDGE, which is the level at which what it says
+is true. A checker cell's 90° turns sit at its VERTICES, exactly where a crossing ring's do,
+which is why a whole-loop reading cannot tell the two apart. Read per edge and they separate
+cleanly: a cell's side is a straight chain that turns 0° and fits no circle worth having,
+while a ring's arc turns smoothly and fits its own radius. Three more guards a straight chain
+cannot pass: its own fit must hold within budget, a family needs at least two member arcs,
+and their combined sweep must reach `FAMILY_MIN_SPAN`.
+
+Three things were measured wrong on the way and are worth keeping written down, because each
+looked like a working fix:
+
+**(a) An open chain is not a closed one.** `maxTurnRad` wrapped the last direction back onto
+the first — right for a region loop, catastrophic for a single arc: the wrap step is the
+CLOSING CHORD, which runs the opposite way, so an arc's own sweep reads as a 150° corner.
+Every one of `ring-cross`'s eight ring arcs was vetoed at 132–162°, on fits of dev
+0.53–1.04px. The pass looked correct and did nothing at all.
+
+**(b) A short arc's circle fit is not usable as a clustering key.** `ring-cross`'s four ring
+arcs fit r 78.0–78.4 with centres scattered over 2.6px, on a ring authored at r 80.0. A
+pairwise test on (cx, cy, r) either misses real members — it left one of the four inner arcs
+behind — or merges wrong ones. The pass now SEEDS AND GROWS: round 0 groups on the loose
+proxy, then refits, and from round 1 the test is the one that matters — does this candidate's
+own polyline lie within budget of the family's circle. The refit over several arcs is
+conditioned by their combined sweep and lands within 0.14px of the authored circle
+(c = (255.94, 159.99) r 79.86 against an authored (256, 160) r 80.0).
+
+**(c) A snapped circle is worth nothing if the junctions are on someone else's.** With the
+family fitted correctly, the output still barely moved: the middle ring landed at radius
+80.6 while its family circle was 79.86. `arcSlice` splits into ≤90° pieces, so a sub-90° arc
+emits **only its two pinned endpoints** — the circle enters solely through the handle
+lengths. Those endpoints are crossing junctions, and the loop pass had already claimed them
+for the neighbouring ring and snapped them radially onto ITS circle. The arc was therefore
+displaced bodily off its own. The fix is the one §0 #15 named as the residue, in its
+narrowest possible form: **a vertex claimed by two snapped circles goes to their
+intersection**, capped at `JUNCTION_XING_MAX_MOVE` 3px (§10.4's MIN_MOVE lesson from the
+other side — a junction move needs positive evidence, and a far intersection is not it). A
+crossing is a point of both rings; the radial snap can only ever satisfy one.
+
+### 24.5 `FAMILY_MIN_SPAN`, and the regression that set it
+
+The sweep floor is the guard that stops the pass ASSERTING a circle it has not seen. It was
+first set at 0.6 rad (34°) on intuition, and the corpus caught it immediately:
+`schild-flat`'s worst seam went **68.5 → 77.4 ΔE**, from one family of two arcs covering 65°
+between them. Two short shallow chains that happen to agree are not evidence of a ring.
+
+The census (`ringDiag --families`, both lanes @512) says where the bar goes. On the fixture
+corpus every family the pass finds sweeps **285–358°** — near-complete rings, as the
+mechanism predicts. The gallery is a continuum from 45° up, with no gap, and every family
+below ~100° has exactly two arcs. At **π** (half a turn) every fixture family survives, all
+eight of `olympic-rings`'s do, and the short pairs are refused — `schild-flat` returns to
+byte-identical.
+
+The rule is stated as a claim about the art rather than a threshold that happened to work: a
+ring cut by crossings keeps most of its 2π by construction, so anything covering less than
+half a circle is not a cut ring.
+
+### 24.6 Results
+
+| | before | after |
+|---|---|---|
+| `ring-cross` circle recovery | **0.78** | **0.07** |
+| `ring-cross` middle ring, outer / inner | 0.69 / 0.78 | 0.07 / 0.03 |
+| `ring-cross` control ring (untouched) | 0.04 | **0.04** |
+| `bloom` | 0.84 | **0.12** |
+| `overlap` | 0.38 | **0.03** |
+| `bloom-flat` nodes / meanΔE / SSIM | 46 / 0.113 / 0.9922 | **34 / 0.060 / 0.9939** |
+| `petals` scale drift @256 vs @1024 | 3.98× (KNOWN_DEFECT) | **1.84×**, entry deleted |
+| every other case with authored circles | — | unmoved |
+
+The control ring is the load-bearing row: same ring, same image, same raster, no crossings —
+and it does not move. A fix that bought the crossed rings by loosening the ring test would
+show up there.
+
+A/B, both lanes: 17 of 84 outputs moved, all of it circle-bearing art (ring-cross, bloom,
+overlap, petals, nebula, aa-seam.grad, gradient-flat; gallery chrome, instagram, mastercard,
+olympic-rings). Suite 463/463.
+
+### 24.7 What is left
+
+- **`letter-joins` 0.81 is NOT this mechanism**, despite reading like it. Its three bowls are
+  each ONE CLOSED edge, so they never reach §1d — `ringDiag` counts 18 single-edge loops and
+  not one candidate — and the family pass groups OPEN arcs, so it cannot reach them either.
+  What declines is 1a's own disc snap: a bowl with a join in it turns sharply, the corner
+  veto refuses to round it (rightly — it would eat the join), and the arc is then fitted
+  freehand. **A circle interrupted by a CORNER rather than by a crossing is its own fix**,
+  and it is the obvious next one: the same family idea applied to the sub-chains of a single
+  closed edge, split at its corners.
+- **`shaded-ink` 1.16** is issue #15 seen through this lens, not a circle problem: the colour
+  path carves the art, so the boundary is in the wrong place before any snap runs.
+- **The gate is @512 and flat-art only**, for §23's reason — every radius halves at 256, so
+  the same relative error is half the pixels there and the limit would be its own
+  calibration.
+- **The junction-intersection rule only fires where two circles both claim a vertex.** A
+  junction between a snapped circle and a fitted LINE (a spoke meeting a ring) still gets the
+  radial snap; §17's arm-intersection placement is the mechanism for that case and was not
+  extended here.

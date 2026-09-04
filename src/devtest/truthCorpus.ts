@@ -570,7 +570,7 @@ const INVENTED_ALLOWED: Record<string, number> = {
  * is what makes the residual attributable.
  *
  * CALIBRATED @512 on 2026-09-03 (`ringDiag --circles --corpus`, 13 flat tier-0 cases with
- * authored circles). The corpus splits into two populations with an order of magnitude
+ * authored circles). The corpus split into two populations with an order of magnitude
  * between them, which is where the limit goes:
  *
  *   circles the snap CAN fit      corner-turns 0.01 · aa-seam 0.02 · smooth-radii 0.03 ·
@@ -581,6 +581,10 @@ const INVENTED_ALLOWED: Record<string, number> = {
  *
  * 0.25 sits 3× above the clean maximum and 1.5× below the lowest defect — an absolute "this
  * is wrong" bound, not a drift band.
+ *
+ * §24's family pass then closed three of the five: ring-cross 0.78 → 0.07, bloom
+ * 0.84 → 0.12, overlap 0.38 → 0.03, with every clean case unmoved. What is left is not the
+ * crossing mechanism at all — see CIRCLE_SPREAD_ALLOWED.
  *
  * @512 ONLY, for §23's reason: every radius in the corpus halves at 256, so the same
  * relative error is half the pixels there and the limit would be a different calibration.
@@ -595,20 +599,23 @@ const INVENTED_ALLOWED: Record<string, number> = {
 const CIRCLE_SPREAD_MAX = 0.25
 
 /**
- * Cases that already exceed it on the SHIPPED tracer, measured at authoring. A per-case
- * allowance rather than a KNOWN_DEFECTS entry for INVENTED_ALLOWED's reason: KNOWN_DEFECTS
- * is keyed by CASE, and listing these would switch off every other gate on art that is
- * otherwise green. Every entry here is the SAME defect as §0 #10 — a circle cut into arcs
- * by crossings, which §1d cannot fit — so they are candidates to come down with its fix,
- * not accepted states. Values are the measurement rounded up to the next 0.05.
+ * Cases that still exceed it, measured after §24. A per-case allowance rather than a
+ * KNOWN_DEFECTS entry for INVENTED_ALLOWED's reason: KNOWN_DEFECTS is keyed by CASE, and
+ * listing these would switch off every other gate on art that is otherwise green. Values
+ * are the measurement rounded up to the next 0.05, and can only come down.
+ *
+ * `bloom` (0.84 → 0.12) and `overlap` (0.38 → 0.03) were listed here for one commit and
+ * were closed by the family pass, which is the outcome the entries predicted.
  */
 const CIRCLE_SPREAD_ALLOWED: Record<string, number> = {
-  // Three translucent discs, each cut into arcs by the other two (0.84).
-  bloom: 0.85,
-  // Letterform bowls cut by their joins (0.81).
+  // NOT the crossing mechanism, despite reading like it. This case's three bowls are each
+  // ONE CLOSED edge, so they never reach §1d at all — `ringDiag` counts 18 single-edge
+  // loops and not one candidate — and §24's family pass groups OPEN arcs, so it cannot
+  // reach them either. What declines here is 1a's own disc snap: a bowl with a join in it
+  // turns sharply, the corner veto refuses to round it (rightly — it would eat the join),
+  // and the arc is then fitted freehand and wobbles 0.81px. A circle interrupted by a
+  // CORNER rather than by a crossing is its own row and its own fix.
   'letter-joins': 0.85,
-  // Two translucent discs cut by their lens (0.38).
-  overlap: 0.40,
 }
 
 /**

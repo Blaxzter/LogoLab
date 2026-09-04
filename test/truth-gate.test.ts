@@ -141,16 +141,15 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // regime) that must stay two regions — the shading's knife-edge pair is ΔE 4.44 / RGB 13.5,
   // so the fixture states on its face why a colour-DISTANCE threshold cannot be the fix.
   'shaded-ink': 'chamfer 3.41px, p95 35.5px — the colour path carves one shaded ink into pieces (#15)',
-  // ring-cross (issue #10, authored deliberately RED 2026-09-03): the reported witness
-  // `logo-olympic-rings` is stroked and svgGround refuses it, so the ring wobble has never
-  // had a number. This is the same mechanism as filled annuli at the witness's own scale.
-  // A ring cut by a crossing leaves a "C" whose ONE boundary loop runs outer arc → cap →
-  // inner arc → cap, so §1d's co-circular snap is handed points from two concentric circles
-  // and asked to fit one — it cannot, at any threshold, and the arcs are then fitted
-  // independently. The case carries its own control: a FOURTH ring, identical and touching
-  // nothing, whose loops go to 1a's disc snap and read 0.06 — 13× tighter than the crossed
-  // middle ring, in the same image at the same raster.
-  'ring-cross': 'circle recovery 0.78px spread — crossed rings do not stay on one circle (#10)',
+  // ring-cross (issue #10) was here for the span of one commit, authored deliberately RED
+  // at circle recovery 0.78px: a ring cut by a crossing leaves a "C" whose ONE boundary
+  // loop runs outer arc → cap → inner arc → cap, so §1d's co-circular snap was handed
+  // points from two concentric circles and asked to fit one — and the ring's arcs were
+  // spread over four separate faces besides, so no per-loop grouping could ever reach
+  // them. Fixed by the co-circular FAMILY pass (planarBeautify: fit each open edge, cluster
+  // them across the whole topology, snap each cluster to its refit) plus placing a junction
+  // claimed by two snapped circles on their INTERSECTION: 0.78 → 0.07, with the case's own
+  // untouched control ring unmoved — docs/vectorization-benchmarks.md §24.
 
 }
 

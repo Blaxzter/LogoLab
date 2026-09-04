@@ -74,7 +74,12 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // sharp-star was here ("drift 4.69× — straight arms ride the lattice") until the same
   // day, closed by the same §15 pass once the anchor-flatness guard stopped its thin-arm
   // anchors being polluted: chamfer 0.264 → 0.068 ref-px, regularized drift 1.76×.
-  petals: 'drift 3.98× — smooth flat multi-region art, the product target shape; lattice 0.238/0.237/0.254px per lane',
+  // petals was here ('drift 3.98× — smooth flat multi-region art, the product target
+  // shape') until 2026-09-03, closed by §24's co-circular family pass: its three discs are
+  // each cut into arcs by the overlaps, and once those arcs are snapped back onto one
+  // resolution-FREE circle the boundary stops being lattice samples. Regularized drift
+  // 1.84×, chamfer 0.529 → 0.288 ref-px. This is the mechanism `annulus` was kept here to
+  // demonstrate, reaching art the disc snap alone could not — see the note above.
   'aa-seam': 'drift 4.98× — the diagonal blend band; @1024 stalls at 0.228 on the §0 #3 sliver residue, so the ratio understates it',
   'band-cross': 'drift 3.69× — the §14 control; weak boundaries are harmless but the strong edges still ride the lattice',
 }

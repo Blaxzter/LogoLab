@@ -5,6 +5,7 @@
 //   node --experimental-strip-types src/devtest/ringDiag.ts olympic-rings.svg --gradients
 //   node --experimental-strip-types src/devtest/ringDiag.ts --circles --case ring-cross
 //   node --experimental-strip-types src/devtest/ringDiag.ts --circles --corpus   # calibration
+//   node --experimental-strip-types src/devtest/ringDiag.ts --families --logos   # §24 sweep census
 //   --res N (default 512)   --fid F (probe a different fidelity)   --logos (gallery sweep)
 //
 // WHY. Issue #10: on `logo-olympic-rings` the black ring's boundaries visibly bend where it
@@ -41,6 +42,11 @@
 // `corner-veto` is a structural one, and they lead to completely different fixes. That is
 // the whole reason to measure before touching anything.
 //
+// --families — every §24 co-circular family, with the ANGULAR SWEEP it covers. That is the
+// number FAMILY_MIN_SPAN is calibrated against, and it separates the two populations by
+// itself: a ring cut into arcs by crossings keeps most of its 2π, while a false family
+// fitted through two short shallow chains covers almost nothing.
+//
 // --circles — THE OTHER HALF THE ISSUE ASKS FOR: "a per-ring 'how far is each fitted arc
 // from the ring's own best-fit circle' table would rank the wobble contributors in one run".
 // This scores the TRACE against the AUTHORED circle (geomScore.circleRecovery), so it is a
@@ -74,6 +80,7 @@ const flag = (n: string): string | null => {
 const RES = Number(flag('--res') ?? 512)
 const GRADIENTS = argv.includes('--gradients')
 const CIRCLES = argv.includes('--circles')
+const FAMILIES = argv.includes('--families')
 const CORPUS = argv.includes('--corpus')
 const FID = flag('--fid') ? Number(flag('--fid')) : null
 const f = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d) : '   —  ')
@@ -144,6 +151,7 @@ if (CIRCLES) {
 }
 
 const totals = new Map<ArcLoopRecord['verdict'], number>()
+const fams: [string, number, number, number, number][] = []
 console.log(`\n━━━ §1d CO-CIRCULAR ARC-SNAP CENSUS @${RES} ${GRADIENTS ? 'grad' : 'flat'} ━━━`)
 
 for (const [name, text] of cases) {
@@ -157,6 +165,11 @@ for (const [name, text] of cases) {
     planarFit: { onArcLoop: (r) => loops.push(r) },
   })
   for (const l of loops) totals.set(l.verdict, (totals.get(l.verdict) ?? 0) + 1)
+  if (FAMILIES) {
+    for (const l of loops.filter((x) => x.verdict === 'family-snapped'))
+      fams.push([name, l.edges, l.r, l.radialDev, l.turnDeg])
+    continue
+  }
   if (cases.length > 1) {
     const snapped = loops.filter((l) => l.verdict === 'snapped').length
     const veto = loops.filter((l) => l.verdict === 'corner-veto').length
@@ -172,6 +185,16 @@ for (const [name, text] of cases) {
         `${f(l.r, 1).padStart(9)}${f(l.radialDev, 3).padStart(11)}${f(l.budget, 3).padStart(9)}${f(l.turnDeg, 1).padStart(8)}   ${l.verdict}`,
     )
   }
+}
+
+if (FAMILIES) {
+  console.log(`\n  ${'case'.padEnd(26)}${'arcs'.padStart(6)}${'r'.padStart(9)}${'dev'.padStart(8)}${'sweep°'.padStart(9)}`)
+  for (const [n, arcs, r, dev, sweep] of fams.slice().sort((a, b) => a[4] - b[4]))
+    console.log(`  ${n.padEnd(26)}${String(arcs).padStart(6)}${f(r, 1).padStart(9)}${f(dev).padStart(8)}${f(sweep, 0).padStart(9)}`)
+  const ss = fams.map((x) => x[4]).sort((a, b) => a - b)
+  const at = (q: number): number => ss[Math.min(ss.length - 1, Math.floor(q * ss.length))]
+  console.log(`\n  ${fams.length} families over ${cases.length} case(s) — sweep°: min ${f(at(0), 0)}  p10 ${f(at(0.1), 0)}  p50 ${f(at(0.5), 0)}  max ${f(at(1), 0)}\n`)
+  process.exit(0)
 }
 
 console.log(`\n  VERDICT TOTALS over ${cases.length} case(s):`)
