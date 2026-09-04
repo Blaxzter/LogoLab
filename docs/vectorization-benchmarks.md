@@ -4311,6 +4311,16 @@ the ratio, credible or not.
 
 ### 24.9 What is left
 
+**Handoff for the residue: `docs/handoff-through-chains.md`.** The 18 unclaimed arcs on
+`olympic-rings` and the wrong-angled crossing corners are ONE defect, and the direction worth
+trying is not more geometry — it is deciding membership from the TOPOLOGY at the junction
+(which incident edges continue one another), which `planarThread.ts` already implements and
+gates behind a contrast rank that saturated art cannot trigger. That file carries the
+measured dead ends so they are not re-derived.
+
+### 24.10 Also open
+
+
 - **`instagram`'s small gradient-banded ring** (spread 1.75, pre-existing) — §24.7(d). The
   round-0 grouping tolerance is `FAMILY_CLUSTER_REL · r`, which is tightest exactly where the
   per-arc fits are worst. An absolute floor alongside the relative one is the obvious idea and
