@@ -1,5 +1,18 @@
 # Handoff — the 18 arcs, and through-chains at equal-strength junctions
 
+> **DONE, 2026-09-04 — the outcome is `docs/vectorization-benchmarks.md` §25.**
+> §4's direction was right and the measurement it asks for in its last paragraph came back
+> 32/32 at every resolution. All 55 arcs now reach a family (was 37) and the worst crossing
+> corner is **0.60°** off authored (was 11.13°). Two things this file did not anticipate:
+> the admission has to be a RANK, not a threshold — §14's own `THROUGH_TURN_DEG` starts
+> vetoing REAL continuations at @1024 — and `circleSpread` folds a THIRD defect (centre
+> placement, §0 #17) into its number, which becomes the dominant term the moment a ring is
+> genuinely recovered as one circle, so it reads 0.45 → 0.53 while the wobble it was built
+> to measure goes 0.33 → 0.01 (§25.3).
+>
+> **This file is kept for §3.** Those four measured dead ends are still the reason the
+> obvious local fixes do not work, and §25 rests on them.
+
 **Branch:** `fix/ring-crossing-arcs` (PR #31, open). Read `docs/vectorization-benchmarks.md`
 **§24** first — all of it. This file is the follow-on that §24.8/§24.9 stop short of.
 

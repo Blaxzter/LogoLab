@@ -40,7 +40,7 @@
 // ---------------------------------------------------------------------------
 
 import { segmentCount, segmentControls } from '../lib/path/geometry.ts'
-import { fitCircle } from '../lib/trace/circleFit.ts'
+import { fitCircle, makeCircleSubPath } from '../lib/trace/circleFit.ts'
 import { rasterizeDoc } from '../lib/render/raster.ts'
 import { srgbToLab, deltaE76 } from './color.ts'
 import type { SubPath, EditableDoc, Vec } from '../lib/path/types.ts'
@@ -967,10 +967,53 @@ export interface CircleRecovery {
    * ground, so they are reported apart and only `spread` gates today.
    */
   bias: number
-  per: { cx: number; cy: number; r: number; samples: number; p50: number; p95: number; max: number; bias: number; spread: number }[]
+  /** §25.3 — worst |traced circle centre − authored centre| (px). REPORTED, not gated. */
+  centre: number
+  /** §25.3 — worst p95 residual about the TRACE'S OWN best-fit circle (px): pure wobble,
+   *  with both the size and the placement terms removed. REPORTED, not gated. */
+  roundness: number
+  per: {
+    cx: number; cy: number; r: number; samples: number; p50: number; p95: number
+    max: number; bias: number; spread: number; centre: number; roundness: number
+  }[]
 }
 
 /** The authored subpaths that are exact circles, in the space `gt` is given in. */
+/**
+ * The circles a STROKED `<circle>` authors — one at r − w/2 and one at r + w/2, because a
+ * stroke paints a band and the raster has an edge at each side of it.
+ *
+ * `svgGround` refuses stroked art outright and rightly so: a stroke's FILLED outline is not
+ * the path we parse, so nothing else about such a file can be scored (§24.3). But a circle's
+ * two edges are unambiguous, and this is the construction §24.8 measured `olympic-rings`
+ * with by hand — the one mark issue #10 was filed on, and until now the one mark that could
+ * carry no number at all. Coordinates come back in RASTER space for `rasterWidth`.
+ */
+export function strokedCircleGround(svg: string, rasterWidth: number): GroundShape[] {
+  const vb = /<svg[^>]*\bviewBox="([-\d.\s]+)"/.exec(svg)
+  const w = /<svg[^>]*\bwidth="([\d.]+)"/.exec(svg)
+  const srcW = vb ? Number(vb[1].trim().split(/\s+/)[2]) : w ? Number(w[1]) : rasterWidth
+  const k = rasterWidth / srcW
+  const out: GroundShape[] = []
+  for (const m of svg.matchAll(/<circle\b[^>]*>/g)) {
+    const tag = m[0]
+    const attr = (n: string): string | null => new RegExp(`\\b${n}="([^"]*)"`).exec(tag)?.[1] ?? null
+    const before = svg.slice(0, m.index)
+    // stroke-width may be inherited from an ancestor <g>; the innermost declaration before
+    // the element is enough for the flat one-group files this applies to.
+    const sw = attr('stroke-width') ? Number(attr('stroke-width')) : Number([...before.matchAll(/stroke-width="([\d.]+)"/g)].pop()?.[1] ?? 0)
+    if (!(sw > 0) && attr('fill') === 'none') continue
+    const cx = Number(attr('cx') ?? 0) * k
+    const cy = Number(attr('cy') ?? 0) * k
+    const r = Number(attr('r') ?? 0) * k
+    if (!(r > 0)) continue
+    const stroked = sw > 0 && (attr('fill') === 'none' || /fill="none"/.test(before.slice(-400)))
+    const radii = stroked ? [r - (sw * k) / 2, r + (sw * k) / 2] : [r]
+    for (const rr of radii) if (rr > 0) out.push({ tag: 'circle', subPaths: [makeCircleSubPath(cx, cy, rr, true)] })
+  }
+  return out
+}
+
 export function authoredCircles(gt: GroundShape[]): AuthoredCircle[] {
   const out: AuthoredCircle[] = []
   for (const sh of gt) {
@@ -998,13 +1041,16 @@ export function authoredCircles(gt: GroundShape[]): AuthoredCircle[] {
  */
 export function circleRecovery(gt: GroundShape[], docSets: SubPath[][], w: number, h: number): CircleRecovery {
   const circles = authoredCircles(gt)
-  if (!circles.length) return { circles: 0, devP95: 0, devMax: 0, per: [] }
+  if (!circles.length) return { circles: 0, spread: 0, bias: 0, centre: 0, roundness: 0, per: [] }
   const D = collectBoundary(docSets, w, h)
   const gGrid = new SegGrid(collectBoundary(gt.map((s) => s.subPaths), w, h).segs)
   const errs: number[][] = circles.map(() => [])
   // Signed residual (outward positive): separates a whole arc DISPLACED off the circle
   // (|bias| ≈ p95) from one that wobbles about it (bias ≈ 0). Different defects.
   const signed: number[][] = circles.map(() => [])
+  /** The attributed traced points themselves — `centre`/`roundness` need the geometry, not
+   *  just the residual. */
+  const pts: Vec[][] = circles.map(() => [])
 
   for (const p of D.queries) {
     // Nearest authored boundary of ANY shape — the attribution reference.
@@ -1023,10 +1069,23 @@ export function circleRecovery(gt: GroundShape[], docSets: SubPath[][], w: numbe
     if (bestE > dGT + CIRCLE_ATTR_EPS) continue
     errs[best].push(bestE)
     signed[best].push(Math.hypot(p.x - circles[best].cx, p.y - circles[best].cy) - circles[best].r)
+    pts[best].push(p)
   }
 
   const per = circles.map((c, i) => {
     const b = mean(signed[i])
+    // §25.3 — `spread` folds THREE defects into one number and only two of them were ever
+    // separated. §24.3 pulled `bias` out of it (a circle uniformly the wrong SIZE is not a
+    // wobbly one, and `acute-counter` is 0.79 of pure bias). The third is a circle in the
+    // right shape and the wrong PLACE: an off-centre traced circle produces a residual
+    // d·cos(θ−φ) about the authored one, which reads as spread ≈ d however perfectly round
+    // the trace is. That term dominates the moment a ring is genuinely recovered as ONE
+    // circle, so it has to be reported next to spread or an improvement reads as a
+    // regression. `centre` is that offset; `roundness` is what is left — the p95 residual
+    // about the trace's OWN best-fit circle, which is "did the arc stay on one circle" with
+    // both placement terms removed. NEITHER IS GATED; `spread` remains the limit.
+    const own = pts[i].length >= 8 ? fitCircle(pts[i]) : null
+    const ownErr = own ? pts[i].map((p) => Math.abs(Math.hypot(p.x - own.cx, p.y - own.cy) - own.r)) : []
     return {
       cx: c.cx, cy: c.cy, r: c.r,
       samples: errs[i].length,
@@ -1035,15 +1094,20 @@ export function circleRecovery(gt: GroundShape[], docSets: SubPath[][], w: numbe
       max: maxOf(errs[i]),
       bias: b,
       spread: pct(signed[i].map((v) => Math.abs(v - b)), 0.95),
+      centre: own ? Math.hypot(own.cx - c.cx, own.cy - c.cy) : NaN,
+      roundness: own ? pct(ownErr, 0.95) : NaN,
     }
   })
   // A circle with almost no attributed samples is occluded away, not recovered badly —
   // scoring it would report a number computed from a handful of cap pixels.
   const scored = per.filter((x) => x.samples >= CIRCLE_MIN_SAMPLES)
+  const fin = (v: number[]): number => (v.filter(Number.isFinite).length ? Math.max(...v.filter(Number.isFinite)) : 0)
   return {
     circles: scored.length,
     spread: scored.length ? Math.max(...scored.map((x) => x.spread)) : 0,
     bias: scored.length ? Math.max(...scored.map((x) => Math.abs(x.bias))) : 0,
+    centre: fin(scored.map((x) => x.centre)),
+    roundness: fin(scored.map((x) => x.roundness)),
     per,
   }
 }

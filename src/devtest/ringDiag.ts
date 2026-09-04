@@ -65,8 +65,9 @@ import { ensureImageData } from './nodeHarness.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import type { ArcLoopRecord } from '../lib/trace/planarBeautify.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from './svgGround.ts'
-import { circleRecovery } from './geomScore.ts'
+import { circleRecovery, strokedCircleGround } from './geomScore.ts'
 import { GATED_CORPUS } from './truthCorpus.ts'
+import type { SubPath } from '../lib/path/types.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -82,6 +83,9 @@ const GRADIENTS = argv.includes('--gradients')
 const CIRCLES = argv.includes('--circles')
 const FAMILIES = argv.includes('--families')
 const CORPUS = argv.includes('--corpus')
+// §24.1's lesson, as a flag: the counterfactual costs one line and settles what a census
+// cannot. --nochain turns §25 through-chaining off — the §24 tracer, byte-identical.
+const NOCHAIN = argv.includes('--nochain')
 const FID = flag('--fid') ? Number(flag('--fid')) : null
 const f = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d) : '   —  ')
 
@@ -110,10 +114,15 @@ if (CASE) {
 // --- --circles: the trace scored against the AUTHORED circles -----------------------
 if (CIRCLES) {
   console.log(`
-━━━ CIRCLE RECOVERY @${RES} ${GRADIENTS ? 'grad' : 'flat'} — radial px from the authored circle, 0 is perfect ━━━`)
-  const rows: [string, number, number, number][] = []
+━━━ CIRCLE RECOVERY @${RES} ${GRADIENTS ? 'grad' : 'flat'}${NOCHAIN ? ' NO-CHAIN (§24)' : ''} — radial px from the authored circle, 0 is perfect ━━━`)
+  const rows: [string, number, number, number, number, number][] = []
   for (const [name, text] of cases) {
-    const why = unscorable(parseGroundTruth(text))
+    // A STROKED file is not scorable as a whole (svgGround refuses it, §24.3) — but its
+    // circles are unambiguous, and `olympic-rings`, the mark issue #10 was filed on, is one.
+    // Score those directly rather than leaving the witness without a number (§24.8 did this
+    // by hand; it belongs in the instrument).
+    const strokeGt = strokedCircleGround(text, RES)
+    const why = strokeGt.length ? null : unscorable(parseGroundTruth(text))
     if (why) { console.log(`  ${name.padEnd(24)} not scorable — ${why}`); continue }
     const raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
     const doc = await traceImage(raster as unknown as ImageData, {
@@ -121,26 +130,27 @@ if (CIRCLES) {
       engine: 'planar',
       gradients: GRADIENTS,
       ...(FID != null ? { fidelity: FID } : {}),
+      ...(NOCHAIN ? { planarFit: { chainArcs: false } } : {}),
     })
-    const shapes = toRasterSpace(parseGroundTruth(text), raster.width)
-    const docSets = doc.items.filter((i) => i.kind === 'path' && i.visible !== false).map((i) => (i as { subPaths: never[] }).subPaths)
+    const shapes = strokeGt.length ? strokeGt : toRasterSpace(parseGroundTruth(text), raster.width)
+    const docSets = doc.items.filter((i) => i.kind === 'path' && i.visible !== false).map((i) => (i as unknown as { subPaths: SubPath[] }).subPaths)
     const cr = circleRecovery(shapes, docSets, raster.width, raster.height)
     if (!cr.circles) { console.log(`  ${name.padEnd(24)} no authored circle — n/a`); continue }
-    rows.push([name, cr.circles, cr.spread, cr.bias])
+    rows.push([name, cr.circles, cr.spread, cr.bias, cr.centre, cr.roundness])
     if (cases.length === 1) {
       console.log(`
   ${name} @${RES}px — ${cr.circles} scored authored circle(s)
 `)
-      console.log(`    ${'cx'.padStart(8)}${'cy'.padStart(8)}${'r'.padStart(8)}${'samples'.padStart(9)}${'spread'.padStart(9)}${'bias'.padStart(8)}${'p50'.padStart(7)}${'p95'.padStart(7)}${'max'.padStart(7)}`)
+      console.log(`    ${'cx'.padStart(8)}${'cy'.padStart(8)}${'r'.padStart(8)}${'samples'.padStart(9)}${'spread'.padStart(9)}${'bias'.padStart(8)}${'centre'.padStart(8)}${'round'.padStart(8)}${'p50'.padStart(7)}${'p95'.padStart(7)}${'max'.padStart(7)}`)
       for (const c of cr.per.slice().sort((a, b) => b.spread - a.spread))
-        console.log(`    ${f(c.cx, 1).padStart(8)}${f(c.cy, 1).padStart(8)}${f(c.r, 1).padStart(8)}${String(c.samples).padStart(9)}${f(c.spread).padStart(9)}${f(c.bias).padStart(8)}${f(c.p50).padStart(7)}${f(c.p95).padStart(7)}${f(c.max).padStart(7)}${c.samples < 16 ? '   (occluded — not scored)' : ''}`)
+        console.log(`    ${f(c.cx, 1).padStart(8)}${f(c.cy, 1).padStart(8)}${f(c.r, 1).padStart(8)}${String(c.samples).padStart(9)}${f(c.spread).padStart(9)}${f(c.bias).padStart(8)}${f(c.centre).padStart(8)}${f(c.roundness).padStart(8)}${f(c.p50).padStart(7)}${f(c.p95).padStart(7)}${f(c.max).padStart(7)}${c.samples < 16 ? '   (occluded — not scored)' : ''}`)
     }
   }
   if (cases.length > 1) {
     console.log()
-    console.log(`    ${'case'.padEnd(24)}${'circles'.padStart(8)}${'spread'.padStart(9)}${'|bias|'.padStart(9)}`)
-    for (const [n, k, p95, mx] of rows.slice().sort((a, b) => b[2] - a[2]))
-      console.log(`    ${n.padEnd(24)}${String(k).padStart(8)}${f(p95).padStart(9)}${f(mx).padStart(9)}`)
+    console.log(`    ${'case'.padEnd(24)}${'circles'.padStart(8)}${'spread'.padStart(9)}${'|bias|'.padStart(9)}${'centre'.padStart(9)}${'round'.padStart(9)}`)
+    for (const [n, k, p95, mx, ce, ro] of rows.slice().sort((a, b) => b[2] - a[2]))
+      console.log(`    ${n.padEnd(24)}${String(k).padStart(8)}${f(p95).padStart(9)}${f(mx).padStart(9)}${f(ce).padStart(9)}${f(ro).padStart(9)}`)
     const ps = rows.map((r) => r[2]).sort((a, b) => a - b)
     const at = (q: number): number => ps[Math.min(ps.length - 1, Math.floor(q * ps.length))]
     console.log(`
@@ -162,7 +172,7 @@ for (const [name, text] of cases) {
     engine: 'planar',
     gradients: GRADIENTS,
     ...(FID != null ? { fidelity: FID } : {}),
-    planarFit: { onArcLoop: (r) => loops.push(r) },
+    planarFit: { onArcLoop: (r) => loops.push(r), ...(NOCHAIN ? { chainArcs: false } : {}) },
   })
   for (const l of loops) totals.set(l.verdict, (totals.get(l.verdict) ?? 0) + 1)
   if (FAMILIES) {

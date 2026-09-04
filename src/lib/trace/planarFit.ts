@@ -155,6 +155,18 @@ export interface PlanarFitOptions {
    */
   cornerVeto: boolean
   /**
+   * §25 THROUGH-CHAINS (default true). Before the §24 co-circular family pass clusters
+   * open arcs, join the ones the TOPOLOGY says continue one another: at each junction rank
+   * every pairing of the incident arms by how straight the boundary runs across, and take
+   * the matching. A ring cut by crossings then arrives as one arc instead of a handful of
+   * fragments whose own circle fits are noise (§24.8's blocker, benchmarks §25).
+   *
+   * `false` restores the §24 tracer byte-identically. Keep it — §24.1's lesson is that a
+   * diagnostic naming the first failing gate cannot tell you the gate is load-bearing, and
+   * the counterfactual costs one flag.
+   */
+  chainArcs: boolean
+  /**
    * §0 #8 sub-pixel edge placement (benchmarks §15, default true). Before fitting,
    * displace each edge chain's interior points from their integer crack-lattice
    * position to the iso-0.5 crossing of the LOCAL two-colour coverage profile, read
@@ -288,6 +300,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   junctionReseat: true,
   localScaleK: 0,
   cornerVeto: true,
+  chainArcs: true,
   fitThrough: true,
   cornerJunctions: true,
   subpixelEdges: true,

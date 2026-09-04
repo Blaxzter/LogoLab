@@ -33,7 +33,7 @@ guardrails):
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **CLOSED — not planned** (2026-08-23). The turn IS under-read on the lattice (§21, unretracted: `detectCorners` reads two chords ±4 POINTS on the integer staircase, and recovery falls from 96.3% at 90–105° of authored turn to **55.1%** at 60–65°). The ISSUE is what closed, on four grounds: its target metric is corner RECALL, which has no precision term — so “find more corners” and “invent corners” are the same instruction, and §22 optimising it produced visible kinks; a missed 60° corner is a gentle bend drawn as a gentle curve while an invented one is a visible kink, so it spends the detector's budget on the invisible direction; row #16 shows the tracer already errs the OTHER way on the SAME knob (12 invented corners on art with none), so the two rows pulled one lever in opposite directions; and the framing was refuted twice (§21's seam truncation, §22's reading) with a named witness authored at exactly 60.0° — the detector's bar AND the scorer's bar — which no reading can reliably clear. The one defensible remnant is `gear-teeth` **53/60**, where the corners are unambiguous (67.3° roots on a mechanical shape); it carries on as a narrow case, not a corpus-wide detector change | `corner-turns` (tier 0, gated — kept: an authored-turn sweep is a good corner-recall case regardless); `gear-teeth` 53/60 | the cliff, unchanged and still measurable with `needleDiag --turns` / `turnDiag` | **§21**, **§22**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23) (closed not-planned). **Corner work continues at row #16** |
 | 16 | **The trace INVENTS corners on smooth art** — sharp nodes the authored geometry does not contain, on ellipse ends and straight→arc blends. Newly VISIBLE rather than newly introduced: `cornersRecovered` is a recall number with no precision term, so this was free by every gate here until §23 built `cornersInvented`. It is the measured form of “every nice radius has a kink in it”, and it is why §22 was rejected on sight after passing CI. The metric asks a like-for-like question at the corner's own scale — the traced node's C⁰ kink minus the AUTHORED boundary's turn over ±1px — and exempts the four places a trace is right to corner (canvas border, occluded boundary, traced junctions of degree ≥3, authored crossings) | `smooth-radii` (tier 0, **gated**, authored for this: art with NO corners at all — ellipses 1:1→1:8 in both orientations, rounded rects at 2/3/5/8/12px radii, curvature-ramp eggs) | **12** invented on a case with zero authored corners; corpus-wide over the 23 gated tier-0 cases, flat lane: p50 0, p90 2, max 12, **18 over 3 cases** (`smooth-radii` 12, `hairlines` 4, `peak-drop` 2). The rejected §22 reading takes `smooth-radii` to **18** | **§23**; instrument `src/devtest/kinkDiag.ts` (`--gate`, `--probe x,y`, `--compare`). Gate scope today: FLAT art, @512 only — gradient banding and the halved radii at @256 are each their own calibration (§23.3) |
-| 17 | **A circle's whole boundary sits off its authored radius by a near-constant amount** — a BIAS, not a wobble: the trace is perfectly round and in the wrong place. Found by §24's circle lens on the day it landed, and only because that lens reports the mean residual SEPARATELY from the spread — the raw p95 reads 0.81 and looks exactly like the ring wobble, while the co-circularity spread is 0.03. Every other gate is blind: 0.8px is far inside chamfer/p95, and the shape is still round, so no corner or region lens sees it either. NOT a size law and not yet explained — the two worst circles are the same size and disagree in SIGN. Untouched by §24, whose family pass only reaches circles cut into arcs | `acute-counter` (tier 0, gated, passes — the gate is on spread, not bias) | seven authored circles read |bias| 0.09–**0.79**px: r=40.5 at **−0.79** (traced inside) against r=39.5 at **+0.19** (outside) and r=58.6 at +0.16 | **§24.3**; instrument `ringDiag --circles` (the `bias` column) |
+| 17 | **A circle's whole boundary sits off its authored radius by a near-constant amount** — a BIAS, not a wobble: the trace is perfectly round and in the wrong place. Found by §24's circle lens on the day it landed, and only because that lens reports the mean residual SEPARATELY from the spread — the raw p95 reads 0.81 and looks exactly like the ring wobble, while the co-circularity spread is 0.03. Every other gate is blind: 0.8px is far inside chamfer/p95, and the shape is still round, so no corner or region lens sees it either. NOT a size law and not yet explained — the two worst circles are the same size and disagree in SIGN. Untouched by §24, whose family pass only reaches circles cut into arcs | `acute-counter` (tier 0, gated, passes — the gate is on spread, not bias) | seven authored circles read |bias| 0.09–**0.79**px: r=40.5 at **−0.79** (traced inside) against r=39.5 at **+0.19** (outside) and r=58.6 at +0.16 | **§24.3**, **§25.3**; instrument `ringDiag --circles` (the `bias` column, and since §25 the `centre` / `round` columns — a circle in the wrong PLACE is a third term `spread` folds in, and on `olympic-rings` it is now the whole residue: measured identical under an algebraic and a geometric fit, so the evidence is displaced and no estimator recovers it) |
 
 ### 0.1 Premise re-check of the four open issues (2026-08-23)
 
@@ -4311,12 +4311,14 @@ the ratio, credible or not.
 
 ### 24.9 What is left
 
-**Handoff for the residue: `docs/handoff-through-chains.md`.** The 18 unclaimed arcs on
-`olympic-rings` and the wrong-angled crossing corners are ONE defect, and the direction worth
-trying is not more geometry — it is deciding membership from the TOPOLOGY at the junction
-(which incident edges continue one another), which `planarThread.ts` already implements and
-gates behind a contrast rank that saturated art cannot trigger. That file carries the
-measured dead ends so they are not re-derived.
+**CLOSED by §25 (2026-09-04).** The 18 unclaimed arcs on `olympic-rings` and the
+wrong-angled crossing corners were ONE defect, and the direction was the right one: decide
+membership from the TOPOLOGY at the junction (which incident edges continue one another).
+All 55 arcs now reach a family and the worst crossing corner is 0.60° off authored instead of
+11.13°. The admission for an equal-strength crossing turned out to be a RANK (which pairing
+is straightest) and not a threshold — §14's own `THROUGH_TURN_DEG` starts vetoing real
+continuations at @1024. `docs/handoff-through-chains.md` remains as the record of the four
+dead ends §24.8 measured; **§25** is the outcome.
 
 ### 24.10 Also open
 
@@ -4327,6 +4329,9 @@ measured dead ends so they are not re-derived.
   is NOT free: §24.7(c) is the measured warning about loosening this pass's grouping.
 - **`olympic-rings` reads 0.547** against `ring-cross`'s 0.07 — see §24.8 for exactly what is
   left, the three measured attempts on it, and the trade that stops it going further.
+  **SUPERSEDED by §25:** every arc is now in a family and the ring is one circle to 0.01px of
+  roundness; what the spread number still carries there is CENTRE PLACEMENT, which is §0 #17
+  and measurably not a fit problem (§25.3).
 - **`letter-joins` 0.81 is NOT this mechanism**, despite reading like it. Its three bowls are
   each ONE CLOSED edge, so they never reach §1d — `ringDiag` counts 18 single-edge loops and
   not one candidate — and the family pass groups OPEN arcs, so it cannot reach them either.
@@ -4344,3 +4349,170 @@ measured dead ends so they are not re-derived.
   junction between a snapped circle and a fitted LINE (a spoke meeting a ring) still gets the
   radial snap; §17's arm-intersection placement is the mechanism for that case and was not
   extended here.
+
+## 25. Through-chains — membership from the topology, not from the fit (2026-09-04)
+
+**Status: SHIPPED (PR open for review).** The residue §24.9 handed on
+(`docs/handoff-through-chains.md`) is closed on the witness. All **55** of `olympic-rings`'
+candidate arcs now reach a co-circular family (§24 got 37; the 18 that did not were the whole
+defect), and the crossing corners the handoff's §2 names as the second symptom land within
+**0.60°** of authored where the worst was **11.13°**.
+
+| `olympic-rings` @512 | §24 | §25 |
+|---|---|---|
+| candidate arcs in a family | 37 of 55 | **55 of 55** |
+| circle **roundness** — p95 about the trace's own circle | 0.33 | **0.01** |
+| crossing corner angle, mean / p90 / **max** error | 1.26° / 3.76° / **11.13°** | 0.22° / 0.50° / **0.60°** |
+| circle **centre** offset, worst | 0.43 | 0.50 |
+| `circleSpread` (the gate's number, the three folded together) | 0.45 | 0.53 |
+
+The last two rows are the honest cost and §25.3 is about them. Gated corpus: **unmoved on all
+13 circle-bearing cases**, byte-identical. Truth gate 75/75, suite 463/463, golden untouched
+(every golden case is byte-identical with §25 on or off, so the three stale advisories in
+`trace-regression` are not this change's to bless). A/B: **4 of 84 outputs moved** —
+olympic-rings flat + grad, and `nebula.flat` / `petals.flat` by mean ΔE 0.018 / 0.002.
+
+### 25.1 The measurement that had to come first
+
+The handoff asked for one thing before any code: *if §14's contrast rank admitted its
+equal-strength junctions, which pairing would tangent continuity choose, and is it right?*
+
+§14 joins two arms across a junction and fits them as one window, but only where the CONTRAST
+RANK finds a WEAK arm aiming a STRONG one — because for weak/strong the strong pair IS the
+through-pair, for free. Five saturated rings on white have no weak edge anywhere, so the rank
+has zero candidates and 0 of 46 junctions move. The open question is which pairing is right
+when three or four EQUALLY STRONG arms meet.
+
+`src/devtest/xingDiag.ts` answers it: at every junction, enumerate every pairing, score each
+by §14's own chord turn, take the matching tangent continuity picks (straightest first, each
+arm used once), and compare with GROUND TRUTH — which arms lie on the same authored circle.
+`olympic-rings` is stroked so `svgGround` refuses it; its circles are read off the `<circle>`
+elements as centre ± half the stroke width (`geomScore.strokedCircleGround`, which also makes
+the mark issue #10 was filed on scorable in `ringDiag --circles` for the first time).
+
+**Correct at every real crossing, at every resolution:**
+
+| | @256 | @512 | @1024 | @2048 |
+|---|---|---|---|---|
+| chosen matching correct | 32/32 | 32/32 | 32/32 | 32/32 |
+| margin over the straightest rejected pair | ≥45.0° | ≥45.0° | ≥36.9° | ≥43.2° |
+| worst TRUE continuation turn | 19.4° | 16.5° | **20.2°** | **20.2°** |
+| true continuations §14's `THROUGH_TURN_DEG`=20 would veto | 0 | 0 | **1** | **1** |
+
+**That last row is the design.** §0 #14's scale-dependence lands squarely on the ABSOLUTE
+reading — the threshold sits at 0.99× the worst true continuation once the raster is fine
+enough, and starts vetoing real continuations. The RANK does not move: right at every scale,
+never by less than 36.9°. So the admission for an equal-strength crossing is *which pairing
+is straightest*, not *is this pairing straight enough*. The turn cap is kept as a coarse
+sanity bound (`CHAIN_TURN_MAX` 30°, with TRUE CONTINUATION ≤ 20.2° and REAL CORNER ≥ 45.0°
+across four resolutions and the whole gated flat corpus), but the margin is what decides.
+
+Corpus-wide the chosen matching is correct on **46/46** junctions of circle-bearing art.
+
+**THREE SCORING TRAPS, each of which first produced a false negative.** They are the reason
+this section exists rather than a one-line "tangent continuity works":
+
+1. **Ground truth is a MATCHING, not a pair.** At a degree-4 crossing of two circles BOTH
+   pairings are true continuations at once — `bloom`'s triple point is exactly this. Scored
+   one-pair-against-one-pair, `bloom` read 7/8 and `overlap` 2/4; scored as matchings, both
+   are 100%.
+2. **A canvas-clip junction is not a crossing.** `olympic-rings` is authored tangent to its
+   own canvas on all four sides, so 14 of its 46 junctions are places where a ring runs off
+   the raster and its boundary continues ALONG the straight image edge. "On the circle" and
+   "on the border" then agree to a fraction of a pixel and read a turn of **0.0° exactly**.
+   Every rule of this shape gets all 14 wrong, and not one of them is a ring defect.
+3. **A short arm's chord direction is staircase noise** — §14's `MIN_ARM` already says so.
+   Without it, `overlap`'s two 3px lens tips look like counter-evidence and are not.
+
+### 25.2 What chaining actually buys: a radius worth trusting
+
+§24.8's blocker, restated: a short arc's own circle fit is noise (r 18.2 and r 99 on a ring
+authored at 66.6), the worsening guard's baseline IS that fit, and every attempt to decide
+membership from it fails on one witness or the other — four of them measured and rejected in
+§24.8 / handoff §3. The way out is not a better threshold on that quantity. It is to stop
+asking it:
+
+    |fitted r − authored r| — the CHAIN: max 1.38px over 16 chains
+                    its member EDGES alone: max 75.65px over 43 edges     (@512)
+                                            max 178.67px                 (@2048)
+
+The pass therefore joins arcs FIRST and clusters SECOND. `throughChains` in
+`planarBeautify.ts` runs over the §24 candidate list, surveys every incident open edge at each
+junction (not only the candidates — the arm that decides a pairing is usually the covered
+ring's boundary, which the family pass will never touch), links only pairs of candidates, and
+walks the links into chains. A chain must still BE an arc: its own fit within budget, or it
+falls back to its members unchained, never dropped. Everything downstream is unchanged —
+what changes is that `cands[k].c` is now a ring's fit rather than a fragment's.
+
+`ring-cross` shows the mechanism at its cleanest: the middle ring's inner and outer circles,
+which §24.2 established can never share a face, come back as complete **360° chains of four
+edges**, fitted r **80.00** and **64.03** against authored 80.0 and 64.0.
+
+`chainArcs: false` restores the §24 tracer byte-identically — §24.1's lesson, that a census
+naming the first failing gate cannot tell you the gate is load-bearing, kept as a flag.
+
+### 25.3 The lens folded three defects into one, and the third now dominates
+
+**`circleSpread` went UP on the witness, 0.45 → 0.53, and reading that as a regression is the
+trap this section exists to prevent.**
+
+§24.3 already pulled one term out of the raw residual: `bias`, a circle uniformly the wrong
+SIZE, "a different defect — and rolling the two together would have let a fix for either claim
+the other's ground". There is a third. A traced circle of the right size and shape in the
+wrong PLACE produces a residual d·cos(θ−φ) about the authored one, so it reads as spread ≈ d
+however perfectly round the trace is. That term was invisible while the rings were still
+wobbling, and it dominates the moment a ring is genuinely recovered as ONE circle.
+
+`circleRecovery` now reports both halves alongside `spread` (**neither is gated — the limit
+stays `spread`**): `centre`, the traced circle's centre offset, and `roundness`, the p95
+residual about the trace's OWN best-fit circle — "did the arc stay on one circle" with both
+placement terms removed. On `olympic-rings` every one of the ten circles goes to **roundness
+0.01px**: the trace IS ten circles, to a hundredth of a pixel, where §24 left up to 0.33.
+
+**And the centre error is not the fit's fault.** Fitting each ring's evidence with the
+ALGEBRAIC (Kåsa) estimator the tracer uses and with a GEOMETRIC one that minimises the true
+orthogonal residual gives centre errors **identical to two decimals on all ten circles**
+(`xingDiag`, "PER AUTHORED CIRCLE"). A partial-arc fit bias would have shown there. The
+evidence itself is displaced, and the split is the same one §24.8 found: blue/black/red read
+0.08–0.23 while yellow and green — the rings cut into the most pieces — read 0.34–0.43. That
+is the §0 **#17** family (`Δr` on the same table is +0.33 to +0.42 on every OUTER circle and
+−0.05 to −0.19 on the inners, exactly #17's signature, measured on the RAW network before any
+snap runs). The handoff named it out of scope in advance and it stays out of scope.
+
+The honest cost line: yellow's two circles move 0.38 → 0.50 and 0.43 → 0.46 of centre error,
+because more of the ring is now on one circle and therefore shows more of that displacement.
+Eight of ten are unchanged or better. It buys roundness 0.33 → 0.01 and the corner angle
+11.13° → 0.60°.
+
+### 25.4 Exposure, and what did NOT move
+
+The pairing being right on rings says nothing about art with no rings in it, so the blast
+radius was counted before the change was believed (`xingDiag --corpus`). At `margin ≥ 30°`
+over the gated flat corpus, `checker` chains **1667 of 1681** junctions — correct (a
+checkerboard vertex genuinely has two straight-through pairs) but by far the largest exposure
+in the corpus, and the downstream guards are what absorb it: a straight chain fits no circle
+worth having, so the per-edge corner veto, the own-fit-in-budget test and `FAMILY_MIN_SPAN`
+refuse it exactly as they refuse the unchained version. `hairlines`, `letter-joins`,
+`gear-teeth`, `bar-caps`, `smooth-radii`, `overlap`, `concentric`, `annulus`, `sharp-star`,
+`corner-turns`, `acute-counter` and `nebula` chain **zero**.
+
+Measured after: the gated corpus's circle recovery is byte-identical on all 13 cases, and the
+A/B stamps differ on 4 of 84 outputs — the witness, and two cases by mean ΔE ≤ 0.018.
+
+### 25.5 What is left
+
+- **`olympic-rings` centre placement (0.50px worst)** is now the whole residue on that mark,
+  and it is §0 **#17**, measured here on the raw network: the evidence is displaced before any
+  snap, and no estimator recovers it. The new `centre` / `roundness` columns are the lens for
+  it when someone takes #17 on.
+- **The gate still reads `spread`,** which folds size, placement and wobble together. That is
+  deliberate — it is an absolute "this is wrong" bound and it caught §24's regressions in one
+  run — but anyone judging a ring change should read `roundness` next to it.
+- **Chaining is gated to degree ≥3 junctions,** matching the census. A degree-2 vertex is an
+  unambiguous continuation and joining those is free evidence that was NOT measured here.
+- **The junction-intersection rule (§24.4c) is unchanged.** With both arms of a crossing now
+  snapped it fires on strictly more junctions, which is why the corner angles closed; a
+  junction between a snapped circle and a fitted LINE still gets the radial snap (§24.10).
+- **Instruments:** `xingDiag` (the pairing census, `--corpus`, `--scales`, `--all`),
+  `xingAngle` (crossing corner angles against the authored crossing, `--nochain`),
+  `ringDiag --circles` (now scores stroked circles, so `olympic-rings` carries a number).

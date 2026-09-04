@@ -99,6 +99,51 @@ const FAMILY_WORSEN_FLOOR = 0.6
  *  side: a junction move needs positive evidence, and a far intersection is not it). */
 const JUNCTION_XING_MAX_MOVE = 3
 
+// --- §25 THROUGH-CHAINS: membership decided by the topology, not by the fit ---
+//
+// §24.8's blocker is that a SHORT ARC'S OWN CIRCLE FIT IS NOISE — `olympic-rings` has arcs
+// of a ring authored at r 66.6 fitting r 18.2 and r 99 — and every attempt to decide family
+// membership from it, in either direction, fails on one witness or the other (four of them
+// are recorded in §24.8 / docs/handoff-through-chains.md §3). The way out is not a better
+// threshold on that quantity; it is to stop asking it. At a crossing, which incident arcs
+// CONTINUE one another is a topological fact, and chaining them first means the family pass
+// is handed rings rather than fragments to guess at.
+//
+// The measurement is `src/devtest/xingDiag.ts`, §25.1. Over `olympic-rings`' 32 real
+// crossings the matching tangent continuity picks is correct 32/32 at 256, 512, 1024 AND
+// 2048px, and 46/46 over every gated flat case that authors a circle. The chained radius is
+// what makes it worth doing: |fitted r − authored r| is ≤ 1.38px for the chains and up to
+// 75.65px for the same edges taken one at a time (@512; 178.67px @2048).
+//
+/** §25 — arc (px) of each arm sampled to read its direction at the junction. §14's own
+ *  THROUGH_SPAN, and the value the census was run at. */
+const CHAIN_ARM_SPAN = 12
+/** §25 — the shortest arm that earns a verdict. Below this a chord direction is
+ *  staircase-phase noise (§14's MIN_ARM, §10.6's lesson). It is load-bearing here and not a
+ *  formality: without it `overlap`'s two 3px lens tips read as counter-evidence. */
+const CHAIN_MIN_ARM = 6
+/**
+ * §25 — how far the boundary may turn across a junction and still be one arc.
+ *
+ * Stated as a claim about art rather than a tuned number: an arc that continues turns by
+ * about what the raster's own staircase can hide, and a corner turns by tens of degrees.
+ * Over four resolutions and the whole gated flat corpus the two populations are
+ * TRUE CONTINUATION ≤ 20.2° and REAL CORNER ≥ 45.0°, so this sits 1.49× above one and 1.5×
+ * below the other.
+ */
+const CHAIN_TURN_MAX = (30 * Math.PI) / 180
+/**
+ * §25 — and how far behind the chosen matching the straightest REJECTED pairing must sit.
+ *
+ * THIS IS THE GATE THAT MATTERS, and the reason the rule is a RANK and not a threshold.
+ * §0 #14's scale-dependence lands squarely on the absolute reading: the worst TRUE
+ * continuation measures 16.5° @512 but 20.2° @1024 and @2048, so §14's own
+ * THROUGH_TURN_DEG (20) starts vetoing real continuations at 0.99× as the raster gets
+ * finer. The rank does not move — it is right at every scale, with a margin that never
+ * drops below 36.9°. A pairing that wins by a hair is a coin flip and is refused.
+ */
+const CHAIN_MIN_MARGIN = (30 * Math.PI) / 180
+
 /**
  * Snap-gate tuning passed down from the planar fit options (§10 prototype).
  *  • `arcSnap`      — run the co-circular open-arc loop snap (§1d).
@@ -125,6 +170,10 @@ const JUNCTION_XING_MAX_MOVE = 3
  */
 export interface SnapOptions {
   arcSnap?: boolean
+  /** §25 — join open arcs into THROUGH-CHAINS across their junctions before the co-circular
+   *  family pass clusters them. Default on; `false` is a byte-identical §24 tracer, which is
+   *  the counterfactual `ringDiag`/`xingDiag` compare against (§24.1's one-flag lesson). */
+  chainArcs?: boolean
   localScaleK?: number
   cornerVeto?: boolean
   reseat?: boolean
@@ -147,6 +196,13 @@ export interface ArcLoopRecord {
   openEdges: number
   /** Fitted circle radius (px), when a circle could be fitted at all. */
   r: number
+  /** …and its centre, when there is one. On art with SEVERAL rings of equal radius the
+   *  radius alone cannot say WHICH ring a family is, and that is the question every
+   *  attribution asks first (§25.2). */
+  cx?: number
+  cy?: number
+  /** Member edge ids, for the two document-wide verdicts. */
+  ids?: number[]
   /** Max radial deviation of the loop's flattened points from that circle (px). */
   radialDev: number
   /** Effective budget the deviation is compared against (fidelity, scale-relative if on). */
@@ -169,6 +225,13 @@ export interface ArcLoopRecord {
      *  This is the crossing-ring path — a ring's arcs are spread over several faces, so
      *  no per-loop grouping can reach them. */
     | 'family-snapped'
+    /** §25 — one THROUGH-CHAIN: open edges joined across their shared junctions because
+     *  tangent continuity says they continue one another, BEFORE any family is formed.
+     *  Reported with `label` -1, `edges` = member arcs, `turnDeg` = the chain's sweep, and
+     *  `r`/`radialDev` from the chain's own circle fit — the number §24.8 could not trust
+     *  per arc and can trust per chain. A one-edge chain is not reported (it is the
+     *  pre-§25 candidate unchanged). */
+    | 'through-chain'
 }
 export type ArcLoopObserver = (r: ArcLoopRecord) => void
 
@@ -327,7 +390,7 @@ export function planarBeautify(
   // independently-fitted corners. Runs FIRST on the raw fitted arcs; the edges it
   // snaps skip the per-edge 1a/1b passes below.
   const arcSnapped = arcSnap
-    ? snapCoCircularLoops(edges, vertices, loopsByLabel, fid, localScaleK, cornerVeto, chordEdges, snap.onArcLoop)
+    ? snapCoCircularLoops(edges, vertices, loopsByLabel, fid, localScaleK, cornerVeto, chordEdges, snap.onArcLoop, snap.chainArcs ?? true, snap.width, snap.height)
     : new Set<number>()
 
   const discCircles: DiscCircle[] = []
@@ -430,6 +493,214 @@ function shiftNodeTo(n: PathNode, x: number, y: number): void {
  * `fid`: the loop must fit a circle within fidelity (radius > 2·fid), exactly as the
  * disc snap (1a) gates. Mutates `edges` / `vertices` in place.
  */
+/** One §24 family candidate: a run of one or more open edges fitted as one arc. */
+interface ArcCand {
+  /** Member edges, in walk order. One entry ⇒ the pre-§25 per-edge candidate. */
+  es: SharedEdge[]
+  pts: Vec[]
+  c: Circle
+  span: number
+}
+
+/** Points of one arm, JUNCTION FIRST, out to `span` px of arc (§14's `armWindow`). */
+function armWindow(pts: Vec[], atEnd: boolean, span: number): Vec[] {
+  const out: Vec[] = []
+  let acc = 0
+  const n = pts.length
+  for (let k = 0; k < n; k++) {
+    const p = atEnd ? pts[n - 1 - k] : pts[k]
+    if (k > 0) acc += Math.hypot(p.x - out[out.length - 1].x, p.y - out[out.length - 1].y)
+    out.push(p)
+    if (acc >= span) break
+  }
+  return out
+}
+
+/** Unit direction from a window's junction end to its far end, and the arc it covers. */
+function armChord(w: Vec[]): { dir: Vec; len: number } | null {
+  let len = 0
+  for (let i = 1; i < w.length; i++) len += Math.hypot(w[i].x - w[i - 1].x, w[i].y - w[i - 1].y)
+  const a = w[0]
+  const b = w[w.length - 1]
+  const d = Math.hypot(b.x - a.x, b.y - a.y)
+  return d < 1e-9 ? null : { dir: { x: (b.x - a.x) / d, y: (b.y - a.y) / d }, len }
+}
+
+/**
+ * §25 — join candidate arcs across their shared junctions into THROUGH-CHAINS.
+ *
+ * §14 already fits two arms across a junction as one window, but only where the CONTRAST
+ * RANK finds a weak arm aiming a strong one: for weak/strong the strong pair IS the
+ * through-pair, for free. Five saturated rings on white have no weak edge anywhere, so that
+ * rank has zero candidates there and the mechanism is structurally inert (§24.9). What is
+ * missing is an admission for EQUAL-STRENGTH crossings, and it is this: at a junction,
+ * enumerate every pairing of the incident arms, rank them by how straight the boundary runs
+ * across, and take the matching — straightest first, each arm used once.
+ *
+ * A MATCHING, not a pair, and that is not a detail: at a degree-4 crossing of two circles
+ * BOTH pairings are true continuations at once (`bloom`'s triple point). Scoring one chosen
+ * pair against one "the" GT pair marks a right answer wrong, which it did on the first pass
+ * of the census.
+ *
+ * Two populations are excluded before any of it, each because it is not a crossing:
+ *   • A CANVAS-CLIP JUNCTION. Where art runs off the raster its region boundary continues
+ *     ALONG the straight image edge, so "on the circle" and "on the border" agree to a
+ *     fraction of a pixel and read a turn of 0.0° exactly. `olympic-rings` is authored
+ *     tangent to its own canvas on all four sides and has 14 such junctions against 32 real
+ *     ones; every rule of this shape gets all 14 wrong, and none of them is a ring defect.
+ *   • A SHORT ARM (CHAIN_MIN_ARM), whose chord direction is staircase phase.
+ *
+ * Arms are surveyed over EVERY incident open edge, not only the candidates: the arm that
+ * decides a pairing is often one the family pass will never touch (the covered ring's
+ * boundary terminating on the covering ring's). Only pairs of CANDIDATES are then linked.
+ *
+ * Pure: fixed iteration order by vertex id then edge id, no floating-point tie that is not
+ * broken by an id. With no vertex admitted the output is the input list, so §25 off is a
+ * byte-identical no-op.
+ */
+function throughChains(
+  cands: ArcCand[],
+  edges: SharedEdge[],
+  vertices: Vertex[],
+  fid: number,
+  localScaleK: number,
+  width?: number,
+  height?: number,
+  onArcLoop?: ArcLoopObserver,
+): ArcCand[] {
+  const candOf = new Map<number, number>()
+  for (let i = 0; i < cands.length; i++) candOf.set(cands[i].es[0].id, i)
+  const vById = new Map<number, Vertex>()
+  for (const v of vertices) vById.set(v.id, v)
+
+  // Every incident open edge-end, by vertex.
+  const inc = new Map<number, { edge: SharedEdge; atEnd: boolean }[]>()
+  const add = (vid: number | null, end: { edge: SharedEdge; atEnd: boolean }): void => {
+    if (vid == null || vid < 0) return
+    const a = inc.get(vid)
+    if (a) a.push(end)
+    else inc.set(vid, [end])
+  }
+  for (const e of edges) {
+    if (e.closed || e.nodes.length < 2) continue
+    add(e.startVertex, { edge: e, atEnd: false })
+    add(e.endVertex, { edge: e, atEnd: true })
+  }
+
+  // link[edgeId * 2 + (atEnd ? 1 : 0)] = the edge-end it continues into.
+  const key = (edgeId: number, atEnd: boolean): number => edgeId * 2 + (atEnd ? 1 : 0)
+  const link = new Map<number, number>()
+  for (const vid of [...inc.keys()].sort((a, b) => a - b)) {
+    const v = vById.get(vid)
+    if (!v) continue
+    // A junction on the canvas frame is a clip, not a crossing (see above).
+    if (width != null && height != null && (v.x <= 1 || v.y <= 1 || v.x >= width - 1 || v.y >= height - 1)) continue
+    const ends = (inc.get(vid) ?? []).slice().sort((a, b) => a.edge.id - b.edge.id || Number(a.atEnd) - Number(b.atEnd))
+    if (ends.length < 3) continue
+    const arms = ends.map((e) => {
+      const cand = candOf.get(e.edge.id)
+      const pts = cand != null ? cands[cand].pts : flatten({ nodes: e.edge.nodes, closed: false })
+      // `pts` runs start→end; the junction is at the end when `atEnd`.
+      return { ...e, cand, chord: armChord(armWindow(pts, e.atEnd, CHAIN_ARM_SPAN)) }
+    })
+    if (arms.some((a) => !a.chord || a.chord.len < CHAIN_MIN_ARM)) continue
+
+    const pairs: { i: number; j: number; turn: number }[] = []
+    for (let a = 0; a < arms.length; a++) {
+      for (let b = a + 1; b < arms.length; b++) {
+        const da = arms[a].chord!.dir
+        const db = arms[b].chord!.dir
+        const dot = Math.max(-1, Math.min(1, da.x * db.x + da.y * db.y))
+        // Both chords point AWAY from the junction, so a boundary running straight through
+        // has them opposed: turn 0 = straight on, π = doubling back.
+        pairs.push({ i: a, j: b, turn: Math.PI - Math.acos(dot) })
+      }
+    }
+    pairs.sort((p, q) => p.turn - q.turn || p.i - q.i || p.j - q.j)
+    const used = new Set<number>()
+    const chosen: typeof pairs = []
+    for (const p of pairs) {
+      if (used.has(p.i) || used.has(p.j)) continue
+      used.add(p.i)
+      used.add(p.j)
+      chosen.push(p)
+    }
+    if (!chosen.length) continue
+    const rejected = pairs.find((p) => !chosen.includes(p))
+    const margin = rejected ? rejected.turn - chosen[chosen.length - 1].turn : Infinity
+    if (margin < CHAIN_MIN_MARGIN) continue
+    for (const p of chosen) {
+      if (p.turn > CHAIN_TURN_MAX) continue
+      const a = arms[p.i]
+      const b = arms[p.j]
+      if (a.cand == null || b.cand == null) continue
+      link.set(key(a.edge.id, a.atEnd), key(b.edge.id, b.atEnd))
+      link.set(key(b.edge.id, b.atEnd), key(a.edge.id, a.atEnd))
+    }
+  }
+  if (!link.size) return cands
+
+  // Walk the links into chains: back to a free end (or once round a cycle), then forward.
+  const seen = new Set<number>()
+  const out: ArcCand[] = []
+  for (let i = 0; i < cands.length; i++) {
+    const e0 = cands[i].es[0]
+    if (seen.has(e0.id)) continue
+    let cur = key(e0.id, false)
+    const guard = new Set<number>()
+    while (link.has(cur) && !guard.has(cur)) {
+      guard.add(cur)
+      const nxt = link.get(cur)!
+      const nid = nxt >> 1
+      if (nid === e0.id && guard.size > 1) break
+      cur = key(nid, (nxt & 1) === 0) // enter at one end, leave by the other
+    }
+    const es: SharedEdge[] = []
+    const pts: Vec[] = []
+    for (let n = 0; n <= cands.length; n++) {
+      const eid = cur >> 1
+      if (seen.has(eid)) break
+      seen.add(eid)
+      const ci = candOf.get(eid)!
+      es.push(cands[ci].es[0])
+      // `pts` runs start→end; entering at the END means walking it backwards.
+      for (const p of (cur & 1) === 1 ? [...cands[ci].pts].reverse() : cands[ci].pts) pts.push(p)
+      const nxt = link.get(key(eid, (cur & 1) === 0))
+      if (nxt === undefined) break
+      cur = nxt
+    }
+    if (es.length < 2) {
+      out.push(cands[candOf.get(es[0].id)!])
+      continue
+    }
+    // A chain still has to BE an arc. Its own fit is the acceptance test the members could
+    // not carry, and it is the one place a wrong pairing gets caught: two circles that
+    // cross stay inside a 1.5px budget of each other for a few degrees, not for a whole
+    // arc. A chain that fails falls back to its members, unchained — never dropped.
+    const c = fitCircle(pts)
+    const okDev = c && c.r > 2 * fid && maxRadialDev(pts, c) <= effFidelity(fid, c.r, localScaleK)
+    if (!c || !okDev) {
+      for (const e of es) out.push(cands[candOf.get(e.id)!])
+      continue
+    }
+    out.push({ es, pts, c, span: arcSweep(pts, c) })
+    onArcLoop?.({
+      label: -1,
+      edges: es.length,
+      openEdges: es.length,
+      r: c.r,
+      cx: c.cx,
+      cy: c.cy,
+      ids: es.map((e) => e.id),
+      radialDev: maxRadialDev(pts, c),
+      budget: effFidelity(fid, c.r, localScaleK),
+      turnDeg: (arcSweep(pts, c) * 180) / Math.PI,
+      verdict: 'through-chain',
+    })
+  }
+  return out
+}
+
 function snapCoCircularLoops(
   edges: SharedEdge[],
   vertices: Vertex[],
@@ -439,6 +710,9 @@ function snapCoCircularLoops(
   cornerVeto = true,
   chordEdges: ReadonlySet<number> = new Set(),
   onArcLoop?: ArcLoopObserver,
+  chainArcs = true,
+  width?: number,
+  height?: number,
 ): Set<number> {
   const snapped = new Set<number>()
   const byId = new Map<number, SharedEdge>()
@@ -552,7 +826,7 @@ function snapCoCircularLoops(
   // needs at least two member arcs, and their combined angular sweep must reach
   // FAMILY_MIN_SPAN (a false circle through short near-straight edges has an enormous
   // radius and almost no sweep).
-  const cands: { e: SharedEdge; pts: Vec[]; c: Circle; span: number }[] = []
+  const perEdge: ArcCand[] = []
   for (const e of edges) {
     if (e.closed || e.nodes.length < 2 || edgeCircle.has(e.id) || chordEdges.has(e.id)) continue
     const pts = flatten({ nodes: e.nodes, closed: false })
@@ -562,8 +836,13 @@ function snapCoCircularLoops(
     const c = fitCircle(pts)
     if (!c || c.r <= 2 * fid) continue
     if (maxRadialDev(pts, c) > effFidelity(fid, c.r, localScaleK)) continue
-    cands.push({ e, pts, c, span: arcSweep(pts, c) })
+    perEdge.push({ es: [e], pts, c, span: arcSweep(pts, c) })
   }
+  // §25 — and THEN join the ones the topology says continue one another, so what the
+  // clustering below sees is rings rather than fragments. Every gate under it is unchanged;
+  // what changes is that `cands[k].c` — the quantity §24.8 is blocked on, and which for a
+  // 38° arc is worth nothing — is now a chain's fit rather than a fragment's.
+  const cands = chainArcs ? throughChains(perEdge, edges, vertices, fid, localScaleK, width, height, onArcLoop) : perEdge
   // SEED AND GROW, widest arc first, against the family's own REFIT rather than a pairwise
   // test on (cx, cy, r). A short arc's circle fit is badly conditioned — `ring-cross`'s four
   // ring arcs fit r 78.0–78.4 with centres scattered over 2.6px, on a ring authored at
@@ -572,7 +851,7 @@ function snapCoCircularLoops(
   // their combined sweep and lands within 0.14px of the authored circle, so each round grows
   // from a better estimate than the last, and the test is the one that actually matters:
   // does this candidate's own polyline lie within budget of the family's circle.
-  cands.sort((a, b) => b.span - a.span || a.e.id - b.e.id)
+  cands.sort((a, b) => b.span - a.span || a.es[0].id - b.es[0].id)
   const taken = new Array<boolean>(cands.length).fill(false)
   for (let i = 0; i < cands.length; i++) {
     if (taken[i]) continue
@@ -676,14 +955,29 @@ function snapCoCircularLoops(
     const fdev = maxRadialDev(all, cf)
     const fbudget = effFidelity(fid, cf.r, localScaleK)
     if (fdev > fbudget) continue
+    let members = 0
     for (const k of group) {
       taken[k] = true
-      const e = cands[k].e
-      edgeCircle.set(e.id, cf)
-      claimVertex(e.startVertex, cf)
-      claimVertex(e.endVertex, cf)
+      for (const e of cands[k].es) {
+        members++
+        edgeCircle.set(e.id, cf)
+        claimVertex(e.startVertex, cf)
+        claimVertex(e.endVertex, cf)
+      }
     }
-    onArcLoop?.({ label: -1, edges: group.length, openEdges: group.length, r: cf.r, radialDev: fdev, budget: fbudget, turnDeg: (sweep * 180) / Math.PI, verdict: 'family-snapped' })
+    onArcLoop?.({
+      label: -1,
+      edges: members,
+      openEdges: members,
+      r: cf.r,
+      cx: cf.cx,
+      cy: cf.cy,
+      ids: group.flatMap((k) => cands[k].es.map((e) => e.id)),
+      radialDev: fdev,
+      budget: fbudget,
+      turnDeg: (sweep * 180) / Math.PI,
+      verdict: 'family-snapped',
+    })
   }
 
   if (edgeCircle.size === 0) return snapped

@@ -591,6 +591,7 @@ export async function traceImage(
       arcSnap: fitOpts.arcSnap,
       localScaleK: fitOpts.localScaleK,
       cornerVeto: fitOpts.cornerVeto,
+      chainArcs: fitOpts.chainArcs,
       reseat: fitOpts.junctionReseat,
       width,
       height,
