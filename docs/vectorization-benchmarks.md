@@ -4216,6 +4216,35 @@ it into many short arcs of different colours whose own fits scatter far more tha
 is tightest exactly where the per-arc fits are worst; that is its own calibration and its own
 row, not this one.
 
+**(e) `ring-cross` still pulled in GRADIENT mode, and "within budget" was hiding it.** The
+one place §24 had made something worse: the gold ring's inner circle read 0.70 against a 0.31
+baseline. The per-member numbers name the cause outright — an arc that fitted its OWN circle
+at **0.17px** was being dragged to **1.18px** on the family circle, a 7× degradation, and the
+family was accepted because its overall deviation (1.18) still cleared the 1.5px budget.
+Within budget is not the same as an improvement. The healthy pattern looks nothing like it:
+on the same case's flat lane every member comes out better or comparable (own 1.04 → 0.73 on
+the family), and the honest ratios top out near 1.7.
+
+So a family may no longer make a member substantially worse than it already was: members over
+`FAMILY_WORSEN_K` (2×) of their own fit — with a floor, so an unusually clean arc does not set
+an impossible bar — are DROPPED, the circle is refitted without them, and what remains must
+still clear the sweep and budget tests. Gold inner 0.70 → **0.49**, navy inner back to its
+0.66 baseline, and the flat lane, the corpus and the golden records all unmoved.
+
+Tightening the bar to 1.5 was measured and **rejected**: it buys the gradient lane a further
+0.11px and takes `bloom` from 0.12 to **0.55**, because dropping a member re-fits the circle
+without it and the remaining members then sit worse. The truth gate caught that within one
+run, which is the argument for having built it in §24.3.
+
+WHAT REMAINS, and why it is not a family problem. Gold's inner boundary in gradient mode is
+ONE arc sweeping 270° whose own best-fit circle already wanders **0.77px** — the gradient
+path's edge placement is the limit, not the grouping. The same lane's UNTOUCHED control ring
+reads 0.23 against 0.04 flat, so it carries an order of magnitude more noise before any of
+this runs. Against that floor the crossed ring is 0.75 → 0.30 and 0.55 → 0.16, navy 0.67 →
+0.66, and gold 0.31 → 0.49: three better, one worse. Gradient art is scoring infrastructure
+rather than the product target (§0's ranking rule), and the flat lane — which is the target —
+is 0.78 → 0.07.
+
 **What the review cost elsewhere.** Nothing, in the end. `petals` spent one round back in the
 scale gate's `KNOWN_DEFECTS` at 2.01× — @1024 had gone resolution-free while @256 stayed on
 the lattice, and a RATIO gate reads a fine-end-only improvement as drift — and (a0)'s

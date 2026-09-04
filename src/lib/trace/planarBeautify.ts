@@ -84,6 +84,15 @@ const FAMILY_GROW_ROUNDS = 3
  *  evidence on its own, without agreeing on radius. Calibrated on `bloom`, where the arcs
  *  that must join sweep 52–56° and the fragments that must not sweep 2–6°. */
 const FAMILY_JOIN_MIN_SPAN = 0.6
+/** §24.7 — how much worse than its OWN fit a family may leave a member before that member is
+ *  dropped, and the floor below which the ratio is not asked (an arc fitting its own circle
+ *  at 0.17px must not thereby demand 0.34px of the family). Calibrated on `ring-cross`: the
+ *  honest ratios top out near 1.7 while the member this exists to drop reads 6.9 — its own
+ *  fit is 0.17px and the family would leave it at 1.18px. Tightening to 1.5 was measured and
+ *  rejected: it buys ring-cross's gradient lane 0.11px and takes `bloom` from 0.12 to 0.55,
+ *  because dropping a member re-fits the circle without it and the rest then sit worse. */
+const FAMILY_WORSEN_K = 2
+const FAMILY_WORSEN_FLOOR = 0.6
 /** §24 — how far a junction may travel to reach the intersection of the two circles that
  *  claim it. It is already within ~1px of both, so a bigger jump means the pairing is
  *  wrong and the radial snap is the safer answer (§10.4's MIN_MOVE lesson, from the other
@@ -609,6 +618,32 @@ function snapCoCircularLoops(
       if (!refit) break
       cf = refit
     }
+    // A family may not make a member substantially WORSE than it already was. "Within
+    // budget" is not the same as "an improvement", and the difference is measurable: in
+    // `ring-cross`'s gradient lane an arc that fitted its OWN circle at 0.17px was being
+    // dragged to 1.18px on the family circle — 7×, and it took the gold ring's inner circle
+    // from 0.31 to 0.70 against a lane whose noise floor is 0.23. The healthy pattern looks
+    // nothing like it: on the same case's flat lane every member comes out better or
+    // comparable (own 1.04 → 0.73 on the family), and the worst honest ratio anywhere in
+    // the corpus is ~1.7. So the bar is 2× a member's own fit, with a floor so that an
+    // unusually clean arc does not set an impossible one. Members are dropped rather than
+    // the family, and the circle is refitted without them — what is left still has to clear
+    // the sweep and budget tests below.
+    for (let pass = 0; pass < 2 && group.length; pass++) {
+      const keep = group.filter(
+        (k) => maxRadialDev(cands[k].pts, cf) <= Math.max(FAMILY_WORSEN_K * maxRadialDev(cands[k].pts, cands[k].c), FAMILY_WORSEN_FLOOR),
+      )
+      if (keep.length === group.length) break
+      group = keep
+      if (!group.length) break
+      const kept: Vec[] = []
+      for (const k of group) for (const p of cands[k].pts) kept.push(p)
+      const refit = fitCircle(kept)
+      if (!refit) break
+      cf = refit
+    }
+    if (!group.length) continue
+
     // NO member-count rule. "At least two arcs" was a proxy for "enough evidence", and
     // FAMILY_MIN_SPAN below is the real measure: a single arc sweeping 266° constrains its
     // circle better than two 90° ones. The proxy had a hole — a ring cut only once leaves
