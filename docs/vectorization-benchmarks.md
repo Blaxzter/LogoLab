@@ -4254,15 +4254,59 @@ baseline (the crossed middle ring is 0.75 → 0.28 and 0.55 → 0.16 the other w
 untouched control ring reads 0.23 in gradient mode against 0.04 flat, so that lane carries
 ~0.23 of noise before anything else).
 
-### 24.8 What is left
+### 24.8 How far the witness got, and the trade that stops it going further
+
+`olympic-rings` worst spread, measured against its authored circles directly (it is stroked,
+so `svgGround` refuses it): **0.785 → 0.547**, over four steps — 0.682 with families, 0.668
+with the single-arc rule, 0.547 with the sweep-gated join and the worsening guard.
+
+It is no longer uniform. Blue, black and red now read **0.17–0.23**; the whole residue is on
+**yellow (0.41 / 0.43) and green (0.40 / 0.55)** — the two rings that pass UNDER at every
+crossing and are therefore cut into the most pieces. And a good part of what remains is not
+wobble at all: every OUTER circle carries a **+0.26 to +0.40px uniform outward bias** with
+~0.00 on the inners, which is §0 row #17 and invisible as a shape defect.
+
+**The remaining arcs can be admitted, and it was measured three ways.** 20 candidates stay
+unclaimed, all of them 0.34–1.07px from their ring — inside the 1.5px budget. They are held
+out by the worsening guard of §24.7(e), whose baseline is a member's distance from its OWN
+fitted circle. Three attempts to let them through:
+
+1. **Skip the guard for short members** (their own fit being meaningless). olympic 0.547 →
+   **0.412**. But `ring-cross`'s gradient gold ring went back to 0.70 — the member that guard
+   exists to drop turned out to sweep only 38°, not the ~143° assumed.
+2. **Skip the guard for members admitted on the geometric route** rather than on radius
+   agreement. Identical outcome: olympic 0.412, gold 0.70, because that member joins
+   geometrically too.
+3. **Give `arcSlice` a minimum of two segments** so a sub-90° slice carries a node actually
+   ON its circle instead of only its two pinned endpoints. olympic 0.547 → 0.420 — but gold
+   unmoved, so this is not the mechanism, and it costs nodes for nothing. Reverted.
+
+The two contested members are **indistinguishable in every local property**:
+
+| | span | own circle | own dev | dev on family | joined via |
+|---|---|---|---|---|---|
+| `ring-cross` grad e18 (must be dropped) | 38° | r 26.5 vs family 63.9 | 0.17 | 1.18 | geometric |
+| `olympic-rings` e37 (should be kept) | 49° | r 18.2 vs family 66.6 | 0.28 | 1.13 | geometric |
+
+Nothing the tracer can see separates them. The difference is only in the ANSWER — whether the
+family circle or the freehand arc is closer to a truth neither of them knows. And the
+population cannot break the tie either: over the **27 gallery marks with authored circles the
+two settings are byte-identical**, 0 of 27 differ. It is a two-witness trade.
+
+It is settled on §0's ranking rule rather than on a threshold. The guard stays ON, so nothing
+is made worse than it was: **olympic keeps 0.547 and ring-cross's gradient lane keeps 0.49
+instead of 0.70.** Flipping it is a one-line change (`FAMILY_WORSEN_K`'s filter) worth
+0.135px on the witness's FLAT lane against 0.21px on a gradient lane whose untouched control
+ring already reads 0.23 — and gradient art is scoring infrastructure, not the target.
+
+### 24.9 What is left
 
 - **`instagram`'s small gradient-banded ring** (spread 1.75, pre-existing) — §24.7(d). The
   round-0 grouping tolerance is `FAMILY_CLUSTER_REL · r`, which is tightest exactly where the
   per-arc fits are worst. An absolute floor alongside the relative one is the obvious idea and
   is NOT free: §24.7(c) is the measured warning about loosening this pass's grouping.
-- **`olympic-rings` still reads 0.664** against `ring-cross`'s 0.07 — short arcs at crossings
-  that never reach a family, plus a systematic **+0.28 to +0.40px outward bias on every outer
-  circle**, which is row #17 and not this mechanism.
+- **`olympic-rings` reads 0.547** against `ring-cross`'s 0.07 — see §24.8 for exactly what is
+  left, the three measured attempts on it, and the trade that stops it going further.
 - **`letter-joins` 0.81 is NOT this mechanism**, despite reading like it. Its three bowls are
   each ONE CLOSED edge, so they never reach §1d — `ringDiag` counts 18 single-edge loops and
   not one candidate — and the family pass groups OPEN arcs, so it cannot reach them either.
