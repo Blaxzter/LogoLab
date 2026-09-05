@@ -125,6 +125,7 @@ const manifest: AbSnapshotManifest = {
   name,
   rev: dirty ? `${rev}+dirty` : rev,
   date: new Date().toISOString().slice(0, 10),
+  createdAt: new Date().toISOString(),
   res: AB_SNAPSHOT_RES,
   ...(pairArg ? { pair: pairArg } : {}),
   cases: [],

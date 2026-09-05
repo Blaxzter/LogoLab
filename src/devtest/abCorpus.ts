@@ -186,8 +186,14 @@ export interface AbSnapshotManifest {
   /** `git rev-parse --short HEAD` at generation, "+dirty" when the tracked tree
    *  had modifications — a snapshot of uncommitted code is honest but says so. */
   rev: string
-  /** ISO date of generation (informational only — never used by the tracer). */
+  /** ISO date of generation, day resolution — what the dropdown shows beside a stamp
+   *  (informational only — never used by the tracer). */
   date: string
+  /** Full ISO timestamp of generation — the dropdown's SORT key, so two stamps frozen on
+   *  the same day list newest first instead of alphabetically (a `before-`/`after-` pair
+   *  from an afternoon's work used to sort under an unrelated morning stamp). Absent on
+   *  stamps older than 2026-09-06; `date` is the fallback. */
+  createdAt?: string
   res: number
   /** The snapshot this one is the OTHER HALF of — set by `pnpm gen:absnapshot <name>
    *  --pair <base>`, i.e. "this stamp is the after of <base>". /labs/ab offers the two as
