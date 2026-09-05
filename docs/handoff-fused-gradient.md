@@ -1,5 +1,29 @@
 # Handoff — the ramp painted over two flat objects
 
+**Status: FIXED 2026-09-05 — see `docs/vectorization-benchmarks.md` §26.** This file is kept as
+the record of the diagnosis that framed the work; the answers to its open questions are in
+§26, and two of its premises were corrected there:
+
+- **§5's question is answered: the pair REACHES `evalPair` and the veto's own measurement
+  reads 0.** The unwitnessed-jump veto binned t into 24 and only measured contrast across
+  EMPTY bins; olympic's accepted blue∪green union was a radial fit whose two flats met at
+  t 0.479→0.521 — inside one bin — so no bin was empty and the jump read 0.000 (the same
+  pair's two earlier evaluations, with one green arc, read 0.262 and were vetoed). The
+  greedy search over pairs × fit types × radial centres finds such a parametrization
+  whenever one exists. The fix is the MEASUREMENT (sample resolution, side-extrapolated), not
+  a threshold and not a new gate.
+- **§2/§6's ground truth was checked and the labels partly corrected.** `flute-flat` authors
+  NO gradient (it is the Fluent FLAT twin) — every one of its traced gradients is a fusion of
+  near-colour flats, not "genuinely smooth ones alongside a step". The mixed-art witness with
+  real ramps is `logo-mercedes-benz` (15 authored gradients), and §26.2's census is labelled
+  by the SOURCE's authored paint, not by eye.
+- **§6's transition-span lead was not needed** — the discriminator turned out to live where
+  §10.3 already put it, once measured at the right resolution.
+
+---
+
+*Original handoff below, unchanged.*
+
 **Status: OPEN, not started.** Everything below is measured; no code has been written for it.
 Read `docs/vectorization-benchmarks.md` **§10.3** first (the unwitnessed-jump veto — the
 mechanism that already exists for this and does not reach it), then **§0 #9** (gradient

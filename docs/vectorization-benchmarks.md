@@ -33,6 +33,7 @@ guardrails):
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **CLOSED — not planned** (2026-08-23). The turn IS under-read on the lattice (§21, unretracted: `detectCorners` reads two chords ±4 POINTS on the integer staircase, and recovery falls from 96.3% at 90–105° of authored turn to **55.1%** at 60–65°). The ISSUE is what closed, on four grounds: its target metric is corner RECALL, which has no precision term — so “find more corners” and “invent corners” are the same instruction, and §22 optimising it produced visible kinks; a missed 60° corner is a gentle bend drawn as a gentle curve while an invented one is a visible kink, so it spends the detector's budget on the invisible direction; row #16 shows the tracer already errs the OTHER way on the SAME knob (12 invented corners on art with none), so the two rows pulled one lever in opposite directions; and the framing was refuted twice (§21's seam truncation, §22's reading) with a named witness authored at exactly 60.0° — the detector's bar AND the scorer's bar — which no reading can reliably clear. The one defensible remnant is `gear-teeth` **53/60**, where the corners are unambiguous (67.3° roots on a mechanical shape); it carries on as a narrow case, not a corpus-wide detector change | `corner-turns` (tier 0, gated — kept: an authored-turn sweep is a good corner-recall case regardless); `gear-teeth` 53/60 | the cliff, unchanged and still measurable with `needleDiag --turns` / `turnDiag` | **§21**, **§22**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23) (closed not-planned). **Corner work continues at row #16** |
 | 16 | **The trace INVENTS corners on smooth art** — sharp nodes the authored geometry does not contain, on ellipse ends and straight→arc blends. Newly VISIBLE rather than newly introduced: `cornersRecovered` is a recall number with no precision term, so this was free by every gate here until §23 built `cornersInvented`. It is the measured form of “every nice radius has a kink in it”, and it is why §22 was rejected on sight after passing CI. The metric asks a like-for-like question at the corner's own scale — the traced node's C⁰ kink minus the AUTHORED boundary's turn over ±1px — and exempts the four places a trace is right to corner (canvas border, occluded boundary, traced junctions of degree ≥3, authored crossings) | `smooth-radii` (tier 0, **gated**, authored for this: art with NO corners at all — ellipses 1:1→1:8 in both orientations, rounded rects at 2/3/5/8/12px radii, curvature-ramp eggs) | **12** invented on a case with zero authored corners; corpus-wide over the 23 gated tier-0 cases, flat lane: p50 0, p90 2, max 12, **18 over 3 cases** (`smooth-radii` 12, `hairlines` 4, `peak-drop` 2). The rejected §22 reading takes `smooth-radii` to **18** | **§23**; instrument `src/devtest/kinkDiag.ts` (`--gate`, `--probe x,y`, `--compare`). Gate scope today: FLAT art, @512 only — gradient banding and the halved radii at @256 are each their own calibration (§23.3) |
+| 18 | **Near-colour flats fused into a gentle "ramp"** (gradient lane) — the residue of §26. Two flat objects whose colours differ by a small Oklab step are still unioned by the Step-3c field merge and painted as one shallow gradient, because at the veto's window scale (1/24 of the fitted axis) a step of ≤ 0.09 is indistinguishable from a real steep ramp piece: the honest reunites in gradient-authoring art reach 0.078 (`logo-firefox`), the fakes in this family read 0.019–0.086, and the census found no scale-W separation. §26 raised the catch rate of the flat∪flat fusion family from 0 to 41 of 60 labelled rows; these are the 19 it does not reach. The product exposure is bounded: `suggestGradients` keeps flat art out of the lane, so this is the mixed-art case only | `flute-flat` (A/B fixture lane, ungated: 16 of its 19 flat∪flat unions read ≤ 0.080), `logo-chrome` (gallery, 0.086), `seam-corner` (0.030), `bloom` (0.019) | fakes 0.019–0.086 vs the real maximum 0.078 — no threshold separates them | **§26.6**; instrument `stepRampDiag --census` (labelled by the SOURCE's authored paint) |
 | 17 | **A circle's whole boundary sits off its authored radius by a near-constant amount** — a BIAS, not a wobble: the trace is perfectly round and in the wrong place. Found by §24's circle lens on the day it landed, and only because that lens reports the mean residual SEPARATELY from the spread — the raw p95 reads 0.81 and looks exactly like the ring wobble, while the co-circularity spread is 0.03. Every other gate is blind: 0.8px is far inside chamfer/p95, and the shape is still round, so no corner or region lens sees it either. NOT a size law and not yet explained — the two worst circles are the same size and disagree in SIGN. Untouched by §24, whose family pass only reaches circles cut into arcs | `acute-counter` (tier 0, gated, passes — the gate is on spread, not bias) | seven authored circles read |bias| 0.09–**0.79**px: r=40.5 at **−0.79** (traced inside) against r=39.5 at **+0.19** (outside) and r=58.6 at +0.16 | **§24.3**, **§25.3**; instrument `ringDiag --circles` (the `bias` column, and since §25 the `centre` / `round` columns — a circle in the wrong PLACE is a third term `spread` folds in, and on `olympic-rings` it is now the whole residue: measured identical under an algebraic and a geometric fit, so the evidence is displaced and no estimator recovers it) |
 
 ### 0.1 Premise re-check of the four open issues (2026-08-23)
@@ -4516,3 +4517,203 @@ A/B stamps differ on 4 of 84 outputs — the witness, and two cases by mean ΔE 
 - **Instruments:** `xingDiag` (the pairing census, `--corpus`, `--scales`, `--all`),
   `xingAngle` (crossing corner angles against the authored crossing, `--nochain`),
   `ringDiag --circles` (now scores stroked circles, so `olympic-rings` carries a number).
+
+## 26. The ramp painted over two flat objects — a veto that could not see a narrow step (2026-09-05)
+
+Traced with gradients ON, the tracer fused two DISJOINT flat objects into one region and
+painted them with a linear/radial gradient that is a step: `logo-olympic-rings`' blue ring ∪
+green ring, 182 authored units apart, as `#0078d0` to t 0.354 and `#00a651` from 0.646;
+`letter-joins`' background ∪ a letter; `logo-mastercard` five times over. The handoff
+(`docs/handoff-fused-gradient.md`) had measured the shape of it, ruled out three things, and
+left one question and one warning: find where the fusion is DECIDED before touching anything
+(§24.1's lesson — the shipped veto's counterfactual at 0 changes nothing on the two clearest
+witnesses, so it is not the load-bearing gate), and do not calibrate any signal on eyeballed
+labels (how `profileCliff` went wrong, §10.3). Both were followed and both paid.
+
+### 26.1 The measurement that had to come first
+
+`evalPair` (segment.ts, Step 3c) accepts a union when the union fit's Oklab residual is under
+`mergeTol`, its profile gap is under `maxProfileGap`, and its unwitnessed jump is under
+`maxUnwitnessedJump` unless both sides are themselves ramped (the §10.3 flat-flank escape).
+A read-only observer (`SegmentOptions.onPair`, threaded through a `segment` override on
+`VectorizeOptions` — the `planarFit` idiom) now reports all four terms for every evaluation
+that ran, computed in full past the short-circuit, and one record per accepted merge in
+merge order. `src/devtest/stepRampDiag.ts` is the consumer. With the observer set the output
+is byte-identical (66 of 66 stamp SVGs `cmp`-equal to `before-stepramp`).
+
+On `olympic-rings` @512 on white (24 fine segments, so the candidate gate is off and every
+pair is eligible; 526 evaluations, 20 merges, 4 final groups):
+
+| merge | union | res | gap | jump | solid I / J | ΔE of means |
+|---|---|---|---|---|---|---|
+| 2 | `{3}` black ∪ `{5}` red | 0.0000 | 0.000 | **0.000** | 0.0000 / 0.0000 | 0.657 |
+| 8 | `{1}` blue ∪ `{11,13}` green | 0.0000 | 0.000 | **0.000** | 0.0000 / 0.0000 | 0.262 |
+
+**The pair reaches `evalPair`, and the veto's own measurement reads 0.** The same colours
+had been evaluated twice before, as blue ∪ ONE green arc, and read jump 0.262 / gap 0.250 on
+both — correctly vetoed. What changed at merge 8 is the union's shape, and with it the fit
+the greedy picked: a radial centred at (343, 76) with r 341 px whose two flats meet at
+t 0.479 → 0.521. The 24-bin occupancy of that fit's t has NO empty bin:
+
+```
+{1}#0078d0 ∪ {11}#00a651        radial c(79,0)  r 371   t-bins ####██████#······####███   jump 0.262  vetoed
+{1}#0078d0 ∪ {13}#00a651        linear len 432          t-bins ██████#██······██######█   jump 0.262  vetoed
+{1}#0078d0 ∪ {11,13}#00a651     radial c(343,76) r 341  t-bins ##########█##██######███   jump 0.000  ACCEPTED
+```
+
+`unwitnessedJump` binned t into 24 and measured contrast only across EMPTY interior bins. A
+sample-free stretch narrower than two bins (< 2/24 = 0.083 of the axis) can sit between two
+filled bins and never register. At sample resolution the blue∪green hole is 0.073 of t and
+black∪red's is 0.054, with the full contrast across each (0.262 / 0.657). The greedy search
+runs every pair through two fit types and four radial centres and keeps the residual minimum;
+where a parametrization with a sub-bin step exists, it finds it. That is why the §4
+counterfactual could not move: at `maxUnwitnessedJump` 0 the veto still compares 0.000 ≤ 0.
+Nothing about the threshold, the flat-flank condition or the merge reaching the gate was
+wrong; the instrument was blind at the resolution the defect lives at.
+
+### 26.2 Ground truth, and the census labelled by it
+
+The handoff's §6 labelled the 45 stamp gradients "suspected fake" / "unambiguously real" by
+eye and said so. Checked against the SOURCE (`grep` of `<linearGradient|<radialGradient>`
+per SVG, and the fills around them):
+
+- **`flute-flat` authors NO gradient** — it is the Fluent FLAT twin. Every one of its traced
+  gradients is a union of near-colour flats; the handoff's "one step-ramp alongside genuinely
+  smooth ones" is two fakes and a family of fakes. The mixed-art witness with real ramps is
+  `logo-mercedes-benz` (15 authored gradients).
+- **`logo-instagram` authors a FLAT object** (`fill="#16375f"`) next to its three gradients;
+  its navy ∪ pink fusions are a flat object swallowed by a ramp — fake in a gradient-authoring
+  case, which a case-level label would have called real.
+- **`aurora` authors one real gradient and white STROKES** (the corpus labels it flat because
+  it is stroked, §7); its lavender ∪ white union is the stroke fused into the field.
+- `olympic-rings`, `mastercard`, `chrome`, `letter-joins`, `corner-turns`, `peak-drop`,
+  `acute-counter`, `seam-corner`, `overlap`, `bloom` author none: on those, EVERY accepted
+  union of two flat blocks of different colour is a fusion of distinct objects by definition.
+
+`stepRampDiag --census` traces every /labs/ab case with gradients ON (fixtures on transparent
+AND on white, gallery on white) and lists each accepted Step-3c merge with its terms, the
+sides' own flatness, and the source's authored-gradient count: 851 merges, of which 130 are
+FLAT∪FLAT (min side solid ≤ `FLAT_FLANK_RES` 0.008) with different colours — the only
+population a step-paste can hide in. Two lenses were scored against those labels:
+
+1. **The widest sample-free hole, and the ΔE across it.** Catches the big ones (mastercard
+   0.64–1.00, olympic 0.26–0.66, acute-counter 0.57) and reads ≤ 0.009 on every posterized-
+   band reunite. But a second family of fakes reads exactly **0.000**: letter-joins,
+   corner-turns, peak-drop, overlap, chrome, instagram. There the widest hole is elsewhere in
+   the profile (the background is split by other letters; the ring's own pieces) and the two
+   flats meet across a NARROW gap whose flanks the lens never compares. Wrong hole.
+2. **The largest step at ANY boundary between consecutive samples along t**, comparing the
+   W = 1/24 windows on either side. Two forms: their pooled means, and each side's own linear
+   trend in t EXTRAPOLATED to the boundary. The extrapolated form is the one that survives:
+   a genuine steep ramp piece on `logo-instagram` reads **0.096 pooled but 0.012 extrapolated**
+   (its two trends meet), while a step between two flats reads its full contrast either way.
+
+The extrapolated step, over the 130 labelled rows, at the shipped threshold 0.12:
+
+| case (authored gradients) | fusions caught / rows | max step |
+|---|---|---|
+| `logo-mastercard` (0) | **6 / 6** | 1.000 |
+| `corner-turns` (0) | **14 / 14** | 0.391 |
+| `logo-olympic-rings` (0) | **3 / 3** | 0.657 |
+| `letter-joins` (0) | **4 / 4** | 0.254 |
+| `acute-counter` (0) | **4 / 4** | 0.572 |
+| `peak-drop` (0) | **2 / 2** | 0.572 |
+| `overlap` (0) | **2 / 2** | 0.380 |
+| `logo-instagram` (3, + a flat object) | **2 / 3** — the third is the real ramp piece above | 0.245 |
+| `aurora` (1, + strokes) | **1 / 1** | 0.129 |
+| `flute-flat` (0) | 3 / 19 | 0.414 |
+| `logo-chrome` (0) | 0 / 1 | 0.086 |
+| `seam-corner` (0), `bloom` (0) | 0 / 2, 0 / 1 | 0.030, 0.019 |
+| `logo-firefox` (12) | 0 / 30 | **0.078** |
+| `bg-ramp-twin` (1) | 0 / 24 | 0.005 |
+| `gradient-flat` (1), `bg-ramp` (1) | 0 / 4, 0 / 2 | 0.004, 0.003 |
+| `logo-mercedes-benz` (15) | 0 / 4 | 0.050 |
+| `nebula` (png), `petals` (png) | 0 / 3, 0 / 1 | 0.026, 0.015 |
+
+**41 of the 60 fusions in no-gradient (or flat-object) art are caught; 0 of the 70 honest
+reunites in gradient-authoring art are.** The other 721 merges — same-colour reunites and
+unions with two ramped sides — include 564 with a flat flank, and none of those reads above
+0.06. What does not separate is the **near-colour family**: `flute-flat`'s remaining 16
+unions (≤ 0.080), `chrome` (0.086), `seam-corner`, `bloom` sit under `firefox`'s real
+0.078. At scale W a 0.08 step between two flats and a real steep ramp piece are the same
+number, and no threshold in the census orders them. That is §0 **#18**.
+
+### 26.3 The fix
+
+`unwitnessedJump` is now the sample-resolution, side-extrapolated step: sort the union's
+samples by the fitted t, and at every boundary between consecutive samples compare the
+least-squares Oklab-vs-t trend of the W-window on each side, evaluated at the boundary
+(the plain mean when a window has < 3 samples or no spread in t); the veto's value is the
+largest such ΔE. Prefix sums make it O(n log n) per evaluation, and it only runs where the
+residual and profile-gap terms have already passed. The option keeps its name and its
+threshold (`maxUnwitnessedJump` 0.12), the flat-flank condition is unchanged, `profileGap`
+still reads its 24 bins, and the scope rule (§10.3: auto path only) is untouched. The
+observer now reports the value the veto uses, plus where along t it sits and the 24-bin
+occupancy (what the old veto saw).
+
+### 26.4 The red gate
+
+The handoff's §3 named it: `letter-joins` traced with gradients ON measured paint p95 18.72
+against the §10.3 paint gate's 8.0, and no row pointed the gate at it (the case is
+`gradients: false`; the paint gate runs on gradient tier-0 rows only). `paintProbe.ts`
+confirmed it on the unchanged tracer (mean 2.74 / p95 **18.61**, RED; the flat lane 0.12 /
+0.00), and `truthCorpus.ts` now carries **`letter-joins-grad`** — the same art with
+`gradients: true`, tier 0 — so the paint gate gates it. Flat art in the gradient lane is the
+shape of the product's mixed case, where gradients are correctly on and the flats must stay
+flat. After: mean 0.36 / p95 **0.50**. Green @512 and in the @256 lane.
+
+### 26.5 After (the numbers)
+
+A/B stamps `before-stepramp` (fed752e) ⇄ `after-stepramp`, `cmp` per file: **9 of 84
+outputs moved, all nine in the GRADIENT lane; the flat lane is byte-identical on all 42.**
+
+| case (grad lane) | gradients | paths | what changed |
+|---|---|---|---|
+| `logo-olympic-rings` | 2 → **0** | 4 → 6 | five solid rings + white, as the flat lane |
+| `logo-mastercard` | 5 → **0** | 5 → 5 | every step-ramp gone |
+| `letter-joins` | 1 → **0** | 2 → 4 | background and letters separate |
+| `corner-turns` | 1 → 0 | 3 → 3 | |
+| `acute-counter` | 1 → 0 | 3 → 3 | |
+| `peak-drop` | 1 → 0 | 4 → 3 | the fused gold∪ink region's pieces went home |
+| `overlap` | 0 → 0 | 4 → 4 | the white piece back in the background (the fusion had been painted solid) |
+| `logo-instagram` | 2 → 1 | 5 → 6 | the authored flat navy object is its own region |
+| `flute-flat` | 3 → 3 | 3 → 4 | the one 0.414 fusion split; the near-colour family stays |
+
+Paint (render-vs-source CIE76 ΔE, gradient lane on white, `paintProbe --ab`): `letter-joins`
+2.74 / 18.61 → **0.36 / 0.50**; `aurora` 2.11 / 6.79 → 1.18 / 2.78; `logo-instagram` p95
+7.33 → 6.18; `flute-flat` 0.30 / 0.56 → 0.24 / 0.53. The honest cost line: `logo-olympic-rings`
+mean 1.04 → 1.42 and p95 0.88 → 2.01, `logo-mastercard` p95 0.00 → 2.19 — the step-ramp
+reproduced the two solids pixel-exactly with its transition in the empty gap, so by raster
+fidelity the fake was perfect; the solids re-flood the AA at the crossings slightly
+differently. Both sit far inside the gate (3.0 / 8.0), and structure wins over raster
+fidelity here, per the product target (§10.3 made the same call on `nebula`).
+
+`node --test test/truth-gate.test.ts` green (every row, both lanes, incl. the new one).
+`pnpm test` green. The golden regression prints advisory "output changed" lines for
+`nebula`, `schild-flat`, `aurora-flat` — and the same three lines with the SAME hashes print on main's tracer (stash + re-run), so that is the pre-existing drift the golden carries (unblessed since 2026-07-28) and nothing here is re-blessed: this change moves no golden case.
+
+Re-running the census on the fixed tracer: no accepted flat∪flat union of different colours
+reads above 0.12 any more (92 rows remain, all in the near-colour family below).
+
+### 26.6 What is left
+
+- **The near-colour family — §0 #18.** `flute-flat` 16 / 19, `logo-chrome`, `seam-corner`,
+  `bloom`: flat∪flat unions with a step ≤ 0.086 that a real ramp piece (`firefox` 0.078)
+  matches at scale W. Not a threshold question. The handoff's untested idea — that the
+  discriminator is spatial, "the ramp continues across nebula's gap and steps across
+  olympic's" — is the lead with the most in it; the census is the harness to score it on,
+  and `nebula`/`firefox`/`bg-ramp-twin` are the cases any such rule must survive.
+- **`logo-mercedes-benz` is byte-identical**, and that is right. Its three step-like ramps
+  (dark slate → light grey over 4–10% of the axis) are not Step-3c unions at all: none of the
+  mark's 16 accepted merges touches a light-grey segment (`stepRampDiag --case mercedes-benz`).
+  They are single fine segments spanning the authored soft-shadow overlays along the star
+  arms (`#02131F → transparent`, gradients e–j in the source) — authored shading painted as a
+  steep ramp. The handoff's §6 transition-span lens, which flagged them, reads the OUTPUT and
+  cannot tell an authored steep ramp from a fused pair; it was not needed here and should not
+  be trusted alone.
+- **`aurora` on the fixture lane's transparent input is unchanged**; the stroke fusion the
+  census caught appears on the white composite only.
+- **`suggestGradients` is unchanged.** Flat art still never enters this lane in the app;
+  this is the mixed-art case, where it is on by the probe's own reading.
+- **Instruments:** `stepRampDiag` (`--case`, `--pair a,b`, `--transparent`, `--all`,
+  `--jump J` counterfactual, `--census`), `paintProbe` (`--case`, `--ab`, `--lane`).

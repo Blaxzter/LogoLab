@@ -213,6 +213,13 @@ export interface VectorizeOptions {
    */
   paletteSegment?: Partial<import('./lib/trace/paletteSegment').PaletteSegmentOptions>
   /**
+   * Advanced override of the smoothness segmenter's tunables (segment.ts: merge
+   * tolerances, the Step-3c vetoes) and its devtest observer (`onPair`). Merged over
+   * the dial-derived options LAST, the same way `planarFit` is; omitted ⇒ the exact
+   * object segmentOptionsFor built (byte-identical output). Gradients-on path only.
+   */
+  segment?: Partial<import('./lib/trace/segment').SegmentOptions>
+  /**
    * EXPERIMENTAL background layer separation (color mode, gradients OFF, planar).
    * With gradients off a smooth background ramp posterizes into flat bands; every
    * band boundary is traced, and each band that touches a foreground outline (a

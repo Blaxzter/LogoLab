@@ -139,6 +139,17 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // with the reach probe blinded by the AA fringe of the edge the ray runs along.
   // genEdgeCases.ts documents the rack; test/planar-needle.test.ts is the mechanism gate.
   { name: 'letter-joins', svg: 'public/examples/edge-cases/letter-joins.svg', note: 'letterform joins — curved-arm corner apex displacement (#7)', gradients: false, tier: 0 },
+  // The SAME art traced with gradients ON — the step-ramp gate (§26). Flat art in the
+  // gradient lane is the shape of the product's mixed case (real ramps + flat objects, where
+  // gradients are correctly on and the flats must stay flat): the Step-3c field merge used
+  // to fuse this case's BACKGROUND and a LETTER — two disjoint flats — into one region
+  // painted with a linear "gradient" that is a step, and every geometry gate is blind to it
+  // (the fused region still traces the letter's outline as a hole). Only the render-vs-
+  // source paint gate sees it: p95 18.6 against 8.0 on the pre-§26 tracer, 0.00 after. The
+  // gate ran only on gradients:false rows before, so the red number existed and was never
+  // pointed at; this row points it. Region/corner/circle recovery are n/a here by the
+  // gradient-lane rule (flatArt false) — the flat row above keeps those.
+  { name: 'letter-joins-grad', svg: 'public/examples/edge-cases/letter-joins.svg', note: 'the same letterforms, gradients ON — two flats fused into one step "gradient" (§26)', gradients: true, tier: 0 },
 
   // Issue #8's driver (the ibm mark's dropped ▼), authored deliberately red. A small solid
   // feature isolated by the art's own white gaps forms its own connected component; when
