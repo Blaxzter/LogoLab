@@ -30,6 +30,14 @@
 // there, so `snapCornerToArms` has nothing to intersect against). Both arms must be
 // straight enough for their lines to be tangents (ARM_BOW) or the junction is left alone.
 //
+// §28 (issue #14) sits between the two. The turn gate reads a chord over a FIXED px window,
+// and 12px is a fraction of the art that halves with every doubling of the raster — so an
+// authored ARC that threads at 512 reads as a corner at 256 and was intersected inside its
+// own curve. A refused junction is now first offered the circle window EXTENDED while the
+// arms still fit one circle (THROUGH_EXTEND): an arc survives that at any raster, a corner
+// at none, and the circle from the widest surviving window is also the one every circle
+// placement now projects onto — its radius is read from enough sweep to mean something.
+//
 // Everything is evidence-gated and every gate can only DROP a junction: with no palette
 // (or `fitThrough: false`) nothing moves and the fit is byte-identical to the pre-§14
 // tracer. Pure & deterministic.
@@ -52,8 +60,35 @@ export interface ThreadColor {
 const STRONG_DE = 25
 /** ΔE76 at or below which a boundary is a posterization band seam. */
 const WEAK_DE = 12
-/** Raw-lattice arc (px) sampled on each arm for the through fit. */
+/** Raw-lattice arc (px) sampled on each arm for the through fit — the BASE window. It is
+ *  a fixed px count, and deliberately so for the LINE question (does the boundary run
+ *  straight through?): staircase phase noise is ±0.5px per endpoint at every raster, so a
+ *  chord direction needs the same px of evidence at every raster (the §10.6 short-arm
+ *  lesson, and why MIN_ARM does not scale either).
+ *
+ *  For the CIRCLE question it is NOT enough on its own, and that is issue #14's measured
+ *  defect: 12px of an arc is a fraction of the art that halves with every doubling of the
+ *  raster, so the same authored arc reads a chord turn of 21.4° @256 and 7.1° @2048, the
+ *  coarse end trips THROUGH_TURN_DEG and is routed to the §17 apex branch (0.73 artwork-px
+ *  off the arc, worse than its own lattice corner), and the circle 12px CAN fit is
+ *  ill-conditioned (radius 47–56 for an authored 79–81, too little sweep against the
+ *  staircase). Scaling this window with the raster was built and MEASURED worse at every
+ *  raster (§28: at 256 it shrinks to 6px and refuses four straight continuations on
+ *  noise). What is scale-free is the circle's own evidence: the window is EXTENDED
+ *  (THROUGH_EXTEND) while the joined arms still fit ONE circle within THROUGH_DEV, and the
+ *  junction threads onto the circle the widest surviving window affords. An arc survives
+ *  the extension at any raster; a corner's straight arms leave any circle at a rate set by
+ *  the corner angle alone, so it fails the first step. */
 const THROUGH_SPAN = 12
+/** Multiples of THROUGH_SPAN the circle window may grow to, in order; the extension stops
+ *  at the first that does not fit (or that an arm cannot fill) and keeps the last that did.
+ *  A junction the turn gate refused becomes a threaded arc only if the 2× window fits —
+ *  that is the evidence a corner cannot produce (§28 measured: a 40° corner's circle
+ *  residual is 1.11px at 12px and ~2.2px at 24px, a 20° corner's ~1.1px at 24px; the
+ *  turn gate's own 20° boundary, reached from the residual instead of the chord turn, and
+ *  identical at every raster). The upper multiple bounds work, not fidelity: more arc is
+ *  only more evidence, and the residual gate stops the window at any real feature. */
+const THROUGH_EXTEND = [2, 3, 4]
 /** …and the shortest arm that earns a verdict at all (below this a chord direction is
  *  staircase-phase noise — the §10.6 short-arm lesson). */
 const MIN_ARM = 6
@@ -68,7 +103,12 @@ const THROUGH_DEV = 1.2
  *  (a 40° bend over 24px IS an arc of radius ~35), so it passes THROUGH_DEV and would
  *  be moved — off the corner the lattice had right. The turn splits the same junctions
  *  cleanly where the residual cannot: continuations and the plate's radius-50 corners
- *  read 0–13.2°, real corners 39.8–105.3°. 20° sits in that gap, 1.5× from both. */
+ *  read 0–13.2°, real corners 39.8–105.3°. 20° sits in that gap, 1.5× from both.
+ *
+ *  That calibration is a 512 statement (issue #14): the same arc reads 21.4° @256. So a
+ *  junction this gate refuses is no longer sent straight to the corner branch — it is
+ *  first offered the EXTENDED circle window (THROUGH_EXTEND), which a corner cannot
+ *  pass and an arc can at any raster. The turn stays the gate for the LINE branch. */
 const THROUGH_TURN_DEG = 20
 /** How far the re-placed junction may travel off its lattice corner. It is a sub-pixel
  *  placement, not a re-seat (§10.4's MIN_MOVE 1.5px is the other end of this scale);
@@ -152,12 +192,20 @@ export interface JunctionVerdict {
   /** Which rule placed it: a §14 through fit, or a §17 corner APEX (the two arms' own
    *  lines intersected). */
   kind: 'thread' | 'apex' | null
+  /** For a through-CIRCLE placement: the THROUGH_SPAN multiple the window grew to while
+   *  still one circle (1 = the base window only; ≥ 2 = the §28 extension). Null otherwise. */
+  extK: number | null
   /** Where the placement puts this junction (null when it is not moved). */
   moveTo: Vec | null
   /** How far that is from the lattice corner. */
   move: number | null
   linked: boolean
   reason: string
+  /** DIAGNOSTIC ONLY (`tune.alt`): where EACH estimator would put the junction, gates
+   *  ignored — the through-line projection, the through-circle projection (with the fitted
+   *  radius), and the two arms' line intersection. Lets a census score the estimators
+   *  against the authored boundary independently of the rule that picks between them. */
+  alt?: { line: Vec | null; circle: Vec | null; r: number; apex: Vec | null }
 }
 
 function incidentEnds(net: PlanarNetwork): Map<number, JunctionEnd[]> {
@@ -230,6 +278,45 @@ function crossLines(a: { c: Vec; d: Vec }, b: { c: Vec; d: Vec }): Vec | null {
   return Number.isFinite(p.x) && Number.isFinite(p.y) ? p : null
 }
 
+/**
+ * §28 (issue #14) — the circle window, grown while the evidence stays ONE circle.
+ *
+ * Both arms are re-read at each multiple of the base span; the extension stops at the
+ * first window an arm cannot fill (the edge ends — another junction, another feature) or
+ * whose joined samples no longer fit one circle within `dev`, and returns the circle of the
+ * widest window that did, with its multiple. Null when not even the 2× window fits — the
+ * caller then has no more evidence than the base window gave it.
+ *
+ * Why the radius comes out right here and not from the base window: a circle fitted to
+ * 12px of a radius-40 arc has ~0.45px of sagitta to read against ±0.5px of staircase, and
+ * its radius is a coin flip (measured 47–56 for an authored 79–81 on band-cross); at 24px
+ * the sagitta is 1.8px and the radius reads 73–80. The projection error at the junction is
+ * the radius error's sagitta, so it falls the same way (0.63 → 0.38, 0.73 → 0.15 artwork
+ * px, `threadScaleDiag`).
+ */
+function extendCircle(
+  net: PlanarNetwork,
+  a: JunctionEnd,
+  b: JunctionEnd,
+  span: number,
+  dev: number,
+): { c: { cx: number; cy: number; r: number }; k: number } | null {
+  let best: { c: { cx: number; cy: number; r: number }; k: number } | null = null
+  for (const k of THROUGH_EXTEND) {
+    const s = span * k
+    const wa = armWindow(net.edges[a.edge].pts, a.atEnd, s)
+    const wb = armWindow(net.edges[b.edge].pts, b.atEnd, s)
+    if (armLen(wa) < s || armLen(wb) < s) break
+    const win = [...wa].reverse().concat(wb.slice(1))
+    const md = circleMaxDev(win)
+    if (md == null || md > dev) break
+    const c = fitCircle(win)
+    if (!c) break
+    best = { c, k }
+  }
+  return best
+}
+
 /** Centroid of a point set (the point every least-squares line passes through). */
 function centroid(pts: Vec[]): Vec {
   let mx = 0
@@ -248,14 +335,24 @@ function centroid(pts: Vec[]): Vec {
  * `src/devtest/threadDiag.ts` prints these same rows, so the calibration is
  * inspectable rather than asserted.
  */
-export function surveyJunctions(net: PlanarNetwork, contrast: Float64Array, cornerJunctions = true): JunctionVerdict[] {
+export function surveyJunctions(
+  net: PlanarNetwork,
+  contrast: Float64Array,
+  cornerJunctions = true,
+  /** DIAGNOSTIC ONLY (issue #14's paired census): override the window / residual gates so
+   *  a counterfactual can be measured without editing the constants. Production never
+   *  passes it; omitted ⇒ the shipped constants, byte-identical. */
+  tune?: { span?: number; dev?: number; alt?: boolean },
+): JunctionVerdict[] {
+  const span = tune?.span ?? THROUGH_SPAN
+  const throughDev = tune?.dev ?? THROUGH_DEV
   const cw = net.width + 1
   const inc = incidentEnds(net)
   const out: JunctionVerdict[] = []
   for (const corner of net.junctions) {
     const windows = new Map<number, Vec[]>()
     const ends = (inc.get(corner) ?? []).map((e) => {
-      const w = armWindow(net.edges[e.edge].pts, e.atEnd, THROUGH_SPAN)
+      const w = armWindow(net.edges[e.edge].pts, e.atEnd, span)
       windows.set(e.edge * 2 + (e.atEnd ? 1 : 0), w)
       return { ...e, de: contrast[e.edge], arm: armLen(w) }
     })
@@ -269,6 +366,7 @@ export function surveyJunctions(net: PlanarNetwork, contrast: Float64Array, corn
       turnDeg: null,
       armBow: null,
       kind: null,
+      extK: null,
       moveTo: null,
       move: null,
       linked: false,
@@ -315,24 +413,58 @@ export function surveyJunctions(net: PlanarNetwork, contrast: Float64Array, corn
     }
     const q = wa[0]
     let p: Vec | null = null
-    if (v.turnDeg != null && v.turnDeg <= THROUGH_TURN_DEG) {
+    if (tune?.alt) {
+      const c = fitCircle(win)
+      const l = c ? Math.hypot(q.x - c.cx, q.y - c.cy) : 0
+      const m = centroid(win)
+      const t = lf ? (q.x - m.x) * lf.dir.x + (q.y - m.y) * lf.dir.y : 0
+      v.alt = {
+        line: lf ? { x: m.x + t * lf.dir.x, y: m.y + t * lf.dir.y } : null,
+        circle: c && l > 1e-9 ? { x: c.cx + ((q.x - c.cx) / l) * c.r, y: c.cy + ((q.y - c.cy) / l) * c.r } : null,
+        r: c ? c.r : NaN,
+        apex: crossLines(armFit(wa).line, armFit(wb).line),
+      }
+    }
+    /** Project the junction radially onto a circle. Projection only: normal to the
+     *  boundary, never along it. */
+    const ontoCircle = (c: { cx: number; cy: number; r: number }): Vec | null => {
+      const l = Math.hypot(q.x - c.cx, q.y - c.cy)
+      return l > 1e-9 ? { x: c.cx + ((q.x - c.cx) / l) * c.r, y: c.cy + ((q.y - c.cy) / l) * c.r } : null
+    }
+    // §28: a junction the turn gate refuses is an ARC read at a coarse raster until proven
+    // a corner — the extended circle window is that proof either way (see THROUGH_EXTEND).
+    // Only worth asking where the base window already fits a circle; a sharp corner's
+    // residual only grows from there.
+    const refusedByTurn = v.turnDeg == null || v.turnDeg > THROUGH_TURN_DEG
+    const ext = (v.circleDev ?? Infinity) <= throughDev ? extendCircle(net, a, b, span, throughDev) : null
+    if (!refusedByTurn) {
       // --- §14: the boundary CONTINUES through. Fit it as one window and project. ---
       const dev = Math.min(v.lineDev ?? Infinity, v.circleDev ?? Infinity)
-      if (!(dev <= THROUGH_DEV)) {
+      if (!(dev <= throughDev)) {
         v.reason = `break (dev ${Number.isFinite(dev) ? dev.toFixed(2) : '—'})`
         continue
       }
       // Move the junction onto the through fit — whichever primitive the joined window
-      // is actually made of. Projection only: normal to the boundary, never along it.
+      // is actually made of. A circle is taken from the widest window that still fits it
+      // (§28) — the base window's own circle only when nothing wider does.
       if ((v.circleDev ?? Infinity) < (v.lineDev ?? Infinity)) {
-        const c = fitCircle(win)
-        const l = c ? Math.hypot(q.x - c.cx, q.y - c.cy) : 0
-        if (c && l > 1e-9) p = { x: c.cx + ((q.x - c.cx) / l) * c.r, y: c.cy + ((q.y - c.cy) / l) * c.r }
+        const c = ext?.c ?? fitCircle(win)
+        if (c) p = ontoCircle(c)
+        v.extK = ext?.k ?? 1
       } else if (lf) {
         const m = centroid(win)
         const t = (q.x - m.x) * lf.dir.x + (q.y - m.y) * lf.dir.y
         p = { x: m.x + t * lf.dir.x, y: m.y + t * lf.dir.y }
       }
+      v.kind = 'thread'
+    } else if (ext) {
+      // --- §28 (issue #14): the chord turn said "corner", the wider evidence says ARC.
+      // 24px of an authored arc fits one circle at every raster; 24px of a real corner's
+      // straight arms fit none (a 40° corner reads ~2.2px against THROUGH_DEV 1.2). The
+      // junction threads onto that circle — the through fit the base window was too short
+      // to earn, not the apex the corner branch would have intersected inside the curve.
+      p = ontoCircle(ext.c)
+      v.extK = ext.k
       v.kind = 'thread'
     } else {
       // --- §17 (§0 #15): the boundary CORNERS here. A through fit is not defined — one
@@ -373,6 +505,7 @@ export function surveyJunctions(net: PlanarNetwork, contrast: Float64Array, corn
     }
     if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
       v.kind = null
+      v.extK = null
       v.reason = 'fit degenerate'
       continue
     }
@@ -381,6 +514,7 @@ export function surveyJunctions(net: PlanarNetwork, contrast: Float64Array, corn
     if (!(v.move <= MAX_MOVE)) {
       v.reason = `move ${v.move.toFixed(2)}px > ${MAX_MOVE}`
       v.kind = null
+      v.extK = null
       continue
     }
     v.linked = true

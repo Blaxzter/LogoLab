@@ -1,9 +1,12 @@
-// CHORD DIAG — is CHORD_MAX_LEN really dead above ~1024, and on what?
+// CHORD DIAG — was CHORD_MAX_LEN really dead above ~1024, and on what? (Now: what does the
+// chord pass's length bound stop, and would an absolute cap have stopped more?)
 //
 //   node --experimental-strip-types src/devtest/chordDiag.ts                     # the driver case
 //   node --experimental-strip-types src/devtest/chordDiag.ts --case overlap --res 256,512,1024,2048
-//   node --experimental-strip-types src/devtest/chordDiag.ts --logos             # gallery sweep
-//   --res LIST (default 256,512,1024,2048)   --cap N (try a different CHORD_MAX_LEN)
+//   node --experimental-strip-types src/devtest/chordDiag.ts --logos [--verbose] # gallery sweep
+//   --res LIST (default 256,512,1024,2048)   --cap N (counterfactual: an ABSOLUTE px cap)
+//   --verbose: one row per candidate — length, the two certifying line arms, the deviation
+//              overall and in the chord's INTERIOR (past 8 / 16 / 24px from either end)
 //
 // WHY. The Phase-0 absolute-pixel audit (docs/absolute-px-audit.md) classified
 // `CHORD_MAX_LEN` 80px (planarReseat.ts) as ART — it is compared against `dist(a,b)`, the
@@ -11,7 +14,8 @@
 // with the raster. The audit's claim, and issue #14's first actionable line, is stronger
 // than a classification: it says the constant is MEASURED DEAD on its own driver case
 // above ~1024, because gradient-flat's authored disc chord is 32.9px @512 but 130.7px
-// @2048, i.e. past the veto.
+// @2048, i.e. past the veto. §28 replaced it with a bound on the chord's own EVIDENCE
+// (len ≤ the two line arms summed, `CHORD_ARM_K`); this census is what chose that shape.
 //
 // Nothing in the repo could see that. `reseatJunctions` returns only the SET of edges it
 // straightened, so a candidate rejected by the length veto is indistinguishable from an
@@ -91,12 +95,38 @@ async function run(text: string, res: number, gradients: boolean): Promise<Chord
 }
 
 const CAP = Number(flag('--cap') ?? 80)
-console.log(`\n━━━ CHORD-STRAIGHTENING CENSUS ━━━  CHORD_MAX_LEN = 80px in the build` + (CAP !== 80 ? `, counterfactual cap ${CAP}px` : ''))
-console.log(`    verdicts: straightened · too-long (the veto under test) · not-collinear · dev-exceeded\n`)
+const VERBOSE = argv.includes('--verbose')
+console.log(`\n━━━ CHORD-STRAIGHTENING CENSUS ━━━  build: len ≤ armA + armB (§28)` + (CAP !== 80 ? `, counterfactual ABSOLUTE cap ${CAP}px` : `; --cap N compares an absolute cap`))
+console.log(`    verdicts: straightened · too-long (the length bound) · not-collinear · dev-exceeded`)
+console.log(`    no-cap = passes collinearity AND CHORD_TOL regardless of length — what NO length bound would straighten\n`)
+
+/** Max deviation of the samples farther than `z` px (arc) from EITHER endpoint — the
+ *  INTERIOR of the chord, past the junction-local mangle zone. NaN when the edge has no
+ *  interior at that depth. */
+const interiorDev = (c: ChordCandidate, z: number): number => {
+  let m = -1
+  for (const p of c.profile) if (p.s > z && p.dev > m) m = p.dev
+  return m < 0 ? NaN : m
+}
+
+/** One line per candidate — the numbers the summary row folds. */
+function verbose(cands: ChordCandidate[]): void {
+  if (!cands.length) return
+  console.log(`      ${'edge'.padStart(5)}  ${'len'.padStart(7)}  ${'armA'.padStart(6)}  ${'armB'.padStart(6)}  ${'maxDev'.padStart(6)}  ${'in>8'.padStart(6)}  ${'in>16'.padStart(6)}  ${'in>24'.padStart(6)}  coll  verdict`)
+  for (const c of cands.slice().sort((a, b) => a.len - b.len)) {
+    console.log(
+      `      ${String(c.edgeId).padStart(5)}  ${f(c.len).padStart(7)}  ${f(c.armA, 0).padStart(6)}  ${f(c.armB, 0).padStart(6)}  ${f(c.maxDev, 2).padStart(6)}` +
+        `  ${f(interiorDev(c, 8), 2).padStart(6)}  ${f(interiorDev(c, 16), 2).padStart(6)}  ${f(interiorDev(c, 24), 2).padStart(6)}   ${c.sameLine ? 'y' : 'n'}   ${c.verdict}`,
+    )
+  }
+}
+
+/** Gallery-wide roll-up: every candidate the length veto alone stops, by case. */
+const noCapOnly: { name: string; res: number; c: ChordCandidate }[] = []
 
 for (const [name, text, gradients] of cases) {
   console.log(`  ${name}${gradients ? '  [gradients]' : '  [flat]'}`)
-  console.log(`    ${'res'.padStart(6)}${'cands'.padStart(8)}${'straight'.padStart(10)}${'too-long'.padStart(10)}${'not-coll'.padStart(10)}${'dev-exc'.padStart(9)}${'len p50'.padStart(9)}${'len max'.padStart(9)}${CAP !== 80 ? `${'@cap'.padStart(7)}` : ''}`)
+  console.log(`    ${'res'.padStart(6)}${'cands'.padStart(8)}${'straight'.padStart(10)}${'too-long'.padStart(10)}${'not-coll'.padStart(10)}${'dev-exc'.padStart(9)}${'no-cap'.padStart(8)}${'len p50'.padStart(9)}${'len max'.padStart(9)}${CAP !== 80 ? `${'@cap'.padStart(7)}` : ''}`)
   for (const res of RESOLUTIONS) {
     let cands: ChordCandidate[]
     try {
@@ -110,12 +140,26 @@ for (const [name, text, gradients] of cases) {
     const p50 = lens.length ? lens[lens.length >> 1] : NaN
     const mx = lens.length ? lens[lens.length - 1] : NaN
     // The counterfactual: candidates that pass every OTHER gate and are stopped only by length.
-    const atCap = cands.filter((c) => c.sameLine && c.maxDev <= 2.5 && c.len <= CAP).length
+    const noCap = cands.filter((c) => c.sameLine && c.maxDev <= 2.5)
+    const atCap = noCap.filter((c) => c.len <= CAP).length
+    for (const c of noCap) if (c.verdict === 'too-long') noCapOnly.push({ name, res, c })
     console.log(
       `    ${String(res).padStart(6)}${String(cands.length).padStart(8)}${String(by('straightened')).padStart(10)}` +
         `${String(by('too-long')).padStart(10)}${String(by('not-collinear')).padStart(10)}${String(by('dev-exceeded')).padStart(9)}` +
-        `${f(p50).padStart(9)}${f(mx).padStart(9)}${CAP !== 80 ? String(atCap).padStart(7) : ''}`,
+        `${String(noCap.length).padStart(8)}${f(p50).padStart(9)}${f(mx).padStart(9)}${CAP !== 80 ? String(atCap).padStart(7) : ''}`,
     )
+    if (VERBOSE) verbose(cands)
   }
+  console.log()
+}
+
+if (cases.length > 1) {
+  console.log(`━━━ LENGTH-BOUND-ONLY CANDIDATES (${noCapOnly.length}) — what NO length bound would ADD, corpus-wide ━━━`)
+  console.log(`      ${'case'.padEnd(28)} ${'res'.padStart(5)} ${'len'.padStart(7)}  ${'armA'.padStart(5)}  ${'armB'.padStart(5)}  ${'maxDev'.padStart(6)}  ${'in>8'.padStart(6)}  ${'in>16'.padStart(6)}  ${'in>24'.padStart(6)}`)
+  for (const { name, res, c } of noCapOnly.sort((a, b) => a.c.len - b.c.len))
+    console.log(
+      `      ${name.padEnd(28)} ${String(res).padStart(5)} ${f(c.len).padStart(7)}  ${f(c.armA, 0).padStart(5)}  ${f(c.armB, 0).padStart(5)}  ${f(c.maxDev, 2).padStart(6)}` +
+        `  ${f(interiorDev(c, 8), 2).padStart(6)}  ${f(interiorDev(c, 16), 2).padStart(6)}  ${f(interiorDev(c, 24), 2).padStart(6)}`,
+    )
   console.log()
 }

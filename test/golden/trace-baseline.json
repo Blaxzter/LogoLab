@@ -102,15 +102,15 @@
     "paths": 12,
     "nodes": 155,
     "gradientCount": 0,
-    "meanDeltaE": 1.984,
+    "meanDeltaE": 1.983,
     "p95DeltaE": 4.82,
     "ssim": 0.941,
     "seamMax": 99.47,
     "junctions": 32,
     "junctionClusters": 0,
     "clusterSpanMax": 0,
-    "jaggedness": 0.263,
-    "hash": "c7286825",
-    "geomSig": "7d304bbf"
+    "jaggedness": 0.264,
+    "hash": "56c5e801",
+    "geomSig": "eb87cd6e"
   }
 }

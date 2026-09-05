@@ -20,6 +20,9 @@ const IDENTITY: Affine = [1, 0, 0, 1, 0, 0]
 export interface GroundShape {
   tag: string
   subPaths: SubPath[]
+  /** The element's own `fill` attribute, verbatim (undefined when absent). Carried so a
+   *  diagnostic can tell one authored colour's shapes from another's; no scorer reads it. */
+  fill?: string
 }
 
 export interface GroundTruth {
@@ -283,7 +286,7 @@ export function parseGroundTruth(svg: string): GroundTruth {
     const local = shapeSubPaths(tag, a)
     if (!local.length) continue
 
-    shapes.push({ tag, subPaths: transformSubPaths(local, composeAffine(ctx.m, parseTransformAttr(a.transform))) })
+    shapes.push({ tag, subPaths: transformSubPaths(local, composeAffine(ctx.m, parseTransformAttr(a.transform))), fill: a.fill })
   }
 
   return { viewBox, shapes, stroked, filtered, clipped, masked, patterned, unmodelled }
@@ -299,7 +302,7 @@ export function toRasterSpace(gt: GroundTruth, rasterWidth: number): GroundShape
   const s = rasterWidth / vw
   if (s === 1 && minX === 0 && minY === 0) return gt.shapes
   const m: Affine = [s, 0, 0, s, -minX * s, -minY * s]
-  return gt.shapes.map((sh) => ({ tag: sh.tag, subPaths: transformSubPaths(sh.subPaths, m) }))
+  return gt.shapes.map((sh) => ({ tag: sh.tag, subPaths: transformSubPaths(sh.subPaths, m), fill: sh.fill }))
 }
 
 /** Total authored anchor count — the parsimony denominator. */

@@ -107,7 +107,7 @@ for (const v of verdicts) {
   const arms = v.ends.map((e) => e.arm.toFixed(0)).join('/')
   const f = (x: number | null) => (x == null ? '  —  ' : x.toFixed(2).padStart(5))
   const bow = v.armBow ? `${v.armBow[0].toFixed(2)}/${v.armBow[1].toFixed(2)}` : '  —  '
-  const mark = v.linked ? (v.kind === 'thread' ? '★ THREAD' : '◆ APEX') : v.reason
+  const mark = v.linked ? (v.kind === 'thread' ? (v.extK != null ? `★ THREAD (circle ×${v.extK})` : '★ THREAD') : '◆ APEX') : v.reason
   console.log(
     `  (${v.x.toString().padStart(3)},${v.y.toString().padStart(3)})   ${String(v.ends.length).padStart(2)}   ${des2.padEnd(26)} ${arms.padStart(8)}  ${f(v.lineDev)}  ${f(v.circleDev)}  ${v.turnDeg == null ? '  —  ' : v.turnDeg.toFixed(1).padStart(5)}  ${bow.padStart(9)}   ${mark}`,
   )
@@ -139,7 +139,7 @@ console.log(
     `   (§14 thread ${byKind('thread')} · §17 apex ${byKind('apex')})`,
 )
 for (const v of moved.slice().sort((a, b) => (b.move ?? 0) - (a.move ?? 0))) {
-  const how = v.kind === 'thread' ? (bestDev(v) === v.circleDev ? 'through-circle' : 'through-line') : 'arm∩arm'
+  const how = v.kind === 'thread' ? (v.extK != null ? `through-circle ×${v.extK}` : bestDev(v) === v.circleDev ? 'through-circle' : 'through-line') : 'arm∩arm'
   console.log(
     `    (${v.x.toString().padStart(3)},${v.y.toString().padStart(3)})  ${(v.move ?? 0).toFixed(2)}px` +
       `  → (${v.moveTo!.x.toFixed(2)},${v.moveTo!.y.toFixed(2)})   ${how}`,
