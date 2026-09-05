@@ -278,6 +278,10 @@ export interface PlanarFitOptions {
    *  indistinguishable from an edge that was never a candidate, so the audit's "measured
    *  dead above ~1024" claim could not be re-checked. */
   onChord?: import('./planarReseat.ts').ChordObserver
+  /** DIAGNOSTIC out-sink (reseatDiag.ts / issue #14): one record per degree-3 junction the
+   *  §10.4 re-seat weighed — each arm's primitive verdict and why it was refused, the pair
+   *  that won, the move. Undefined in production; the pass is byte-identical without it. */
+  onReseatVerdict?: import('./planarReseat.ts').ReseatObserver
   /** DIAGNOSTIC out-sink (ringDiag.ts / issue #10): one record per region loop the §1d
    *  co-circular arc snap weighed, naming the gate that declined it. Undefined in
    *  production; the snap is byte-identical without it. */

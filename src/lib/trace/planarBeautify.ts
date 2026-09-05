@@ -21,7 +21,7 @@
 import type { EdgeRef, PathNode, SharedEdge, Topology, Vec, Vertex } from '../path/types'
 import type { BeautifyOptions } from './beautify.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
-import { reseatJunctions, type ChordObserver } from './planarReseat.ts'
+import { reseatJunctions, type ChordObserver, type ReseatObserver } from './planarReseat.ts'
 import {
   anchorSignedArea,
   arcSlice,
@@ -181,6 +181,9 @@ export interface SnapOptions {
   height?: number
   onReseat?: (movedVertexIds: ReadonlySet<number>) => void
   onChord?: ChordObserver
+  /** Out-sink: one record per degree-3 junction the re-seat weighed — arm verdicts, the
+   *  winning pair, the move (reseatDiag.ts / issue #14). Undefined in production. */
+  onReseatVerdict?: ReseatObserver
   onArcLoop?: ArcLoopObserver
 }
 
@@ -377,7 +380,7 @@ export function planarBeautify(
   // (a disc crossed by a line is a "D"): 1d must not absorb them into a circle.
   let chordEdges: ReadonlySet<number> = new Set<number>()
   if (snap.reseat ?? true) {
-    const r = reseatJunctions(edges, vertices, snap.width, snap.height, snap.onChord)
+    const r = reseatJunctions(edges, vertices, snap.width, snap.height, snap.onChord, snap.onReseatVerdict)
     chordEdges = r.chords
     snap.onReseat?.(r.moved)
   }

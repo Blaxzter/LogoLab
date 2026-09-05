@@ -13,7 +13,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { segmentImage, DEFAULT_SEGMENT_OPTIONS } from '../src/lib/trace/segment.ts'
+import { segmentImage, DEFAULT_SEGMENT_OPTIONS, markerSnapRadius } from '../src/lib/trace/segment.ts'
 
 type ColorFn = (x: number, y: number) => [number, number, number, number?]
 
@@ -132,4 +132,18 @@ test('a marker on a non-smooth pixel snaps to the nearest region (no-op when unr
   // One marker can't split anything (it takes two different markers to veto a
   // merge); the natural two-flats result is unchanged.
   assert.equal(macroCount(seg), 2, 'a single marker on an edge leaves the two flats intact')
+})
+
+// --- issue #14: the snap radius is a fraction of the image, not 64px ------------------
+// Markers arrive in NORMALIZED coordinates, so the same hand-placed marker must reach the
+// same artwork at every raster. The old absolute 64px was 12.5% of the image at the lab's
+// 512 and 3% at the app's 2048 — a marker that snapped in the lab silently no-op'd on
+// export. 512 stays byte-identical; the floor is a sensor number.
+test('marker snap radius scales with the image (byte-identical at 512)', () => {
+  assert.equal(markerSnapRadius(512, 512), 64)
+  assert.equal(markerSnapRadius(1024, 768), 128)
+  assert.equal(markerSnapRadius(2048, 2048), 256)
+  assert.equal(markerSnapRadius(256, 256), 32)
+  assert.equal(markerSnapRadius(40, 40), 8, 'floor: a few px of discontinuity band at any raster')
+  assert.equal(markerSnapRadius(4, 4), 4, 'never past the image itself')
 })

@@ -123,7 +123,15 @@ stopping 29 candidates across 152 marks × 3 rasters and separating none of them
 along the whole chord). Both gates were red first: an r=30 arc fixture the apex branch
 lands 0.35px inside, and gradient-flat's real raster at 2048 (the synthetic fixture cannot
 be red — at 3× its straight chord outranks the disc arm in the re-seat's pair ranking, the
-audit's `ARM_MAX` row demonstrated live).
+audit's `ARM_MAX` row demonstrated live). **The workstream closed the next day (§28.6):**
+the re-seat's two rows were measured with a paired census (`reseatDiag`, keyed by the
+pair's intersection so slid junctions pair) — `R_MIN` never flips, `ARM_MAX`'s saturation
+flip lands on the same point, and what does change the winning pair with the raster (74 of
+481 gallery junctions, 8 with a re-seat that fires, targets 0.4–2.7 artwork px apart) is
+line-vs-circle certification over an ART-scaled arm, handed to its own issue with the
+`logo-brave-browser` witness; the marker snap radius became a fraction of the image; the
+corner-window family, the despeckle-floor contract and the coarse-end sub-pixel guards
+each got a narrow issue with their Phase-0 instrument named.
 
 Recently closed: **one ink carved along its own soft shading** (issue #15, from the
 icon-sheet work — a shaded single-ink icon traced through the colour path came back cut
@@ -5118,7 +5126,8 @@ nothing to do with the chord pass, and a live demonstration of the audit's `ARM_
 - **The rest of the ART list.** `ARM_MAX` 110 is now MEASURED changing which primitive
   pair wins a re-seat with the raster (28.3's fixture at 3×); `CIRC_TOL` / `MIN_ARC_ARM` /
   `CAP_MAX` / `R_MIN` are still unmeasured and still absolute. Each wants its own witness
-  and red gate, per the issue's rules — none was touched here.
+  and red gate, per the issue's rules — none was touched here. **→ 28.6 closes the list:
+  measured with a paired re-seat census, one more row fixed, the rest handed on.**
 - **The extension is circle-only.** The LINE window stays 12px by design (a chord
   direction needs a fixed px count of evidence at every raster); a straight junction's
   placement is unchanged and its error is already at the lattice noise floor (0.02–0.06).
@@ -5131,4 +5140,85 @@ nothing to do with the chord pass, and a live demonstration of the audit's `ARM_
 - **gradient-flat @256 has no chord candidate at all** — the re-seat itself does not fire
   there (0 candidates at every constant). That is a different coarse-end story (the slide
   vs `MIN_MOVE`, or the arm certification), not this constant's, and it is not in this
-  issue's numbers.
+  issue's numbers. **→ answered in 28.6: no qualifying PAIR at the lower crossing.**
+
+### 28.6 Closing the workstream: the rest of the ART list, measured (2026-09-06)
+
+Issue #14 named two live bugs and a list. With the two fixed, the remaining rows were each
+either measured (and fixed where a witness existed) or handed to a narrower issue with the
+instrument it needs — so that #14 could close as a workstream rather than idle as one.
+
+**`ARM_MAX` 110 and `R_MIN` 6 — the re-seat's two rows, paired.** `reseatDiag.ts` +
+`onReseatVerdict` (planarReseat.ts, undefined in production): one record per degree-3
+junction the §10.4 pass weighs — each arm's primitive verdict and the gate that refused it,
+the winning pair, the move. Paired across rasters by the pair's INTERSECTION (the slid
+lattice corner moves with the raster — 10.3 native px at gradient-flat's near-tangent
+crossing at every size — the crossing does not). The audit's two predictions were: the
+ranking key `conf` saturates at `ARM_MAX`, so WHICH pair wins changes with the raster; and
+a circle under `R_MIN` at a coarse raster is a circle at a finer one.
+
+| | paired junctions (all rasters) | pair-KIND flips | …that move | `R_MIN` flips |
+|---|---|---|---|---|
+| fixtures (gradient-flat, overlap, cross-bars, ring-cross, band-cross, bloom @256–2048) | 40 | 9 | **0** | 0 |
+| gallery, 152 marks @512/1024/2048 | 481 | 74 (15%) | **8**, on 6 marks | 0 |
+
+Every kind flip on the fixtures sits **below `MIN_MOVE`** — the pass declines the junction
+either way, so the output is byte-identical — and none of them is the saturation mechanism:
+`cross-bars` @256 fits its four straight bar-edge arms as circles of radius ~3,000 artwork
+px (`LINE_TOL` 0.8 refused, `CIRC_TOL` 0.9 accepted — the audit's "the gate passes exactly
+when the primitive is least trustworthy", now seen live), and `ring-cross`'s 16 artwork-px
+caps between crossings fall under `MIN_LINE_ARM` 8 at 256 (`short 8`). The one
+saturation effect observed is on the driver itself, inside one kind: at 2048 the chord's
+own line (136 native px) outranks the hypotenuse's short side (104) for the line slot of
+the C+L pair, where at 1024 the chord failed `LINE_TOL` and the hypotenuse won — the two
+lines are collinear by construction and the intersection is the same point.
+On the gallery the same holds for 66 of the 74 flips. The other **8** (on `brave-browser`,
+`firefox` ×2, `microsoft-office`, `tiktok`, `ups-wm` ×2, `wikipedia`) flip their pair
+while the re-seat fires at some raster, and they are not saturation either: the same
+gently curved boundary certifies as a CIRCLE over one arm length and as a LINE over
+another — `brave-browser` @(260,282) re-seats 2.72 artwork px onto a circle(r157)×line
+pair at 512 and 0.50 px onto a line×line pair at 2048, and across the eight the rasters'
+target points disagree by **0.4–2.7 artwork px**. That is `LINE_TOL`/`CIRC_TOL` applied
+over an arm whose length is a span of art — the audit's UNRESOLVED 11, now with a witness
+and its own issue (#39), because the answer sheet it needs (the authored crossing point,
+computable from the SVG) is a new instrument. `ARM_MAX` and `R_MIN` therefore stay as they
+are: the predicted consequence is measurable now and does not occur on the corpus, and
+the rules of engagement say no witness, no change.
+
+The instrument answered one of 28.5's open bullets on the way: gradient-flat's lower
+crossing @256 has no chord candidate because the re-seat finds **no qualifying pair** there
+— the junction sits 9.5 native px along the arc (the slide is ~10 native px at every
+raster on this 12° geometry: 10.3 / 10.7 / 10.3 at 512 / 1024 / 2048), and the pair gates
+(`NEAR_TOL` 3.0 across the line, `MAX_SLIDE` 12 — SENSOR rows) are at their knife edge
+there. Recorded on #39, not an ART constant.
+
+**The marker snap radius** (`nearestSmoothPixel`, 64px) — the one remaining ART row with a
+one-line fix: markers arrive in normalized coordinates, so the reach is now `max(w,h)/8`
+(`markerSnapRadius`, byte-identical at 512, floored at 8px), pinned by
+`test/markers.test.ts`. The same hand-placed marker reaches the same artwork at every
+raster instead of snapping in the lab and no-op'ing on export.
+
+**`ARM_SPAN` 10** (planarJunction) is behind `refineJunctions`, off by default and measured
+non-mergeable in §9.3 — no production trace reaches it. Unchanged, marked inert.
+
+**Handed on, each with its Phase-0 instrument named:**
+- **#36** — the corner-snap window family (`SNAP_SPAN` 14, `CORNER_WINDOW` 4,
+  `CORNER_MERGE` 3, `armGap`, `SNAP_GAP`): needs a paired per-CORNER census on
+  `threadScaleDiag`'s pattern (authored corners pair on real marks where band seams
+  cannot), then the audit's UNRESOLVED recipes 2–6. §15.7's "two witness corners @512"
+  is its named population.
+- **#37** — the `minRegionArea` area-floor family: ART by measurement, SENSOR by the
+  Despeckle dial's contract; §12.5 rejected the sed and §20's per-component veto already
+  spares isolated real features. Design work; single-auditor rows to re-verify first.
+- **#38** — the three coarse-end scale `KNOWN_DEFECTS` (`overlap`, `aa-seam`,
+  `band-cross` @256): §15.7's guard geometry, `counterDiag` at 256 as the histogram; plus
+  `minFacing` (MS lane, off the product target).
+- **#39** — the re-seat's certification over ART-scaled arms (`LINE_TOL`, `CIRC_TOL`,
+  `MIN_ARC_ARM`, `CAP_MAX`, coupled to `ARM_MAX`): `reseatDiag` is the census, the
+  authored-crossing answer sheet is the missing half, `brave-browser` @(260,282) the
+  witness; the `NEAR_TOL` knife edge above goes with it.
+
+**After.** Suite 475 / 0 (473 pass, 2 skipped), typecheck clean; golden corpus
+byte-identical (the observer is undefined in production and the marker path is untouched
+without markers); A/B `after-ws2-scale` ⇄ `after-ws2-close` (listed as a pair): **0 of 84
+outputs moved**.

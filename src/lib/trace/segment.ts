@@ -256,15 +256,30 @@ export interface SegmentResult extends QuantizeResult {
 const clamp255 = (n: number): number => Math.max(0, Math.min(255, Math.round(n)))
 
 /**
+ * How far (Chebyshev px) a marker may snap to reach a smooth pixel: a FRACTION of the
+ * image, because markers arrive in normalized coordinates — the same hand-placed marker
+ * must reach the same artwork at every raster. Was an absolute 64px (issue #14's ART
+ * list): 12.5% of the image at the lab's 512, 3% at the app's 2048, so a marker that
+ * snapped in the lab silently no-op'd on export. 1/8 keeps 512 byte-identical; the floor
+ * is a sensor number (a discontinuity band is a few px wide at any raster).
+ */
+export const MARKER_SNAP_FRAC = 1 / 8
+export const MARKER_SNAP_MIN = 8
+export function markerSnapRadius(w: number, h: number): number {
+  return Math.min(Math.max(w, h), Math.max(MARKER_SNAP_MIN, Math.round(Math.max(w, h) * MARKER_SNAP_FRAC)))
+}
+
+/**
  * Nearest SMOOTH pixel to (px,py) by an expanding Chebyshev-ring scan (fixed
  * order ⇒ deterministic). Returns its index, or −1 if the image has none within
  * range. A marker dropped on a discontinuity / transparent pixel snaps to the
  * closest real segment instead of being lost; rings are scanned out to a bound
- * so a wildly-misplaced marker degrades to a no-op rather than a full sweep.
+ * (`markerSnapRadius`) so a wildly-misplaced marker degrades to a no-op rather
+ * than a full sweep.
  */
 function nearestSmoothPixel(smooth: Uint8Array, w: number, h: number, px: number, py: number): number {
   if (smooth[py * w + px]) return py * w + px
-  const maxR = Math.min(Math.max(w, h), 64)
+  const maxR = markerSnapRadius(w, h)
   for (let r = 1; r <= maxR; r++) {
     const x0 = px - r
     const x1 = px + r
