@@ -38,6 +38,8 @@ export interface WbCase {
   gradients: boolean
   /** The same glyph authored FLAT — the tier-1 A/B control. Repo-relative path. */
   flatSvg?: string
+  /** Raster colours that are ONE authored ink's shading tones — see TruthCase.inkFamilies. */
+  inkFamilies?: string[][]
   /** Resolve the authored SVG. Fetched for served corpora, inline for bundled ones. */
   load(): Promise<CaseSource>
 }

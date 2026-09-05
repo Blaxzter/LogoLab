@@ -138,6 +138,7 @@ async function scoreSvg(
   svgText: string,
   res: number,
   gradients: boolean,
+  inkFamilies?: string[][],
 ): Promise<{ ok: true; v: Scored } | { ok: false; blocked: string }> {
   const gt = parseGroundTruth(svgText)
   const why = unscorable(gt)
@@ -156,7 +157,7 @@ async function scoreSvg(
       doc,
       shapes,
       geom: scoreGeometry(shapes, doc, img.width, img.height, img),
-      regions: scoreRegions(img, doc),
+      regions: scoreRegions(img, doc, { inkFamilies }),
     },
   }
 }
@@ -166,7 +167,7 @@ export async function analyze(c: WbCase, res: number, ab: boolean): Promise<Anal
   let main: Awaited<ReturnType<typeof scoreSvg>>
   try {
     src = await c.load()
-    main = await scoreSvg(src.svgText, res, c.gradients)
+    main = await scoreSvg(src.svgText, res, c.gradients, c.inkFamilies)
   } catch (e) {
     return { blocked: `source not readable (${String(e)})` }
   }

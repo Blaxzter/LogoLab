@@ -52,8 +52,8 @@ the instruments named are new and live in `src/devtest/`.
 | **#10** rings | 69 edges / 46 junctions @512; §1d / §14 / §17 all aim here and none holds | **held; now CLOSED** (§24). The premise was right and §0.1's own explanation was half wrong — see the correction below |
 | **#9** border | `collectBoundary` drops every query within BORDER_EPS 1.5px; no gate can see the border | **holds** — the exclusion is intact and two-sided. `borderDiag` measures the hole at **4,489 transversal band samples** on the fixtures alone |
 | **#9** symptom | "odd corners and ragged edges", witness `logo-mastercard` | **half REFUTED on the witness** — see below |
-| **#15** knife edge | shaded tones ΔE 4.44–11.09 / RGB 13.5–34.4; flute-flat's authored pair at ΔE 4.5 must survive | **holds** — tones reproduce exactly (4.44 / 6.80 / 11.09), and `fluent-flute-flat` passes region recovery @512 today (truth gate 73/73), so it is a live constraint, not an already-failing one |
-| **#15** "no gated case exists" | author one first | **held; now closed** — `shaded-ink` authored, gated, RED |
+| **#15** knife edge | shaded tones ΔE 4.44–11.09 / RGB 13.5–34.4; flute-flat's authored pair at ΔE 4.5 must survive | **holds** — tones reproduce exactly (4.44 / 6.80 / 11.09), and `fluent-flute-flat` passes region recovery @512 today (truth gate 73/73), so it is a live constraint, not an already-failing one. **CLOSED 2026-09-05 (§27)** on the axis the issue predicted: WHERE the tones meet, not how far apart they are |
+| **#15** "no gated case exists" | author one first | **held; now closed** — `shaded-ink` authored, gated, RED (2026-08-23); **green since §27** |
 
 **#10 — CLOSED 2026-09-03 by §24.** The paragraph below is kept as written because its
 correction is the useful part. Its first half stands: §14 and §17 are structurally inert on
@@ -100,6 +100,19 @@ shows before trusting the issue's framing** — the named witness is mid-pack he
 `src/devtest/borderDiag.ts` (#9), `src/devtest/ringDiag.ts` (#10),
 `src/devtest/chordDiag.ts` (#14). `threadDiag` already covered #14's THROUGH_SPAN witness.
 New corpus case `shaded-ink` (#15, tier 0, gated, in `KNOWN_DEFECTS` at 512 **and** 256).
+
+Recently closed: **one ink carved along its own soft shading** (issue #15, from the
+icon-sheet work — a shaded single-ink icon traced through the colour path came back cut
+where the nearest tone flips) — closed 2026-09-05, **§27** is the record. The tones each
+carry flat-interior evidence and sit at the same ΔE as two authored colours (the fixture
+holds both populations 0.2 ΔE apart), so no distance rule could pass; what separates them
+is WHERE they meet — a seam keeps ≥ half the colour jump across the label boundary by the
+definition of nearest-colour assignment, a ramp keeps one 8-bit level. `fuseShadingTones`
+(`shadingFuse.ts`) chains soft pairs and fuses a chain whose colour span stays within
+`SHADE_SPAN` 16, leaving a gradient traced flat (`aurora`, span 49) to posterize as before.
+Two things the first reading got wrong are in §27.1 (a halo in the raw share; softness
+alone). `shaded-ink` 3.41/35.5 → **0.13/0.57** @512, deleted from `KNOWN_DEFECTS` at both
+rasters; tier 2 437/437; 5 flat A/B traces moved, 0 gradient ones.
 
 Recently closed: **a small isolated feature swept away by the despeckle area floor**
 (issue #8, user-reported from /labs/ab on `logo-ibm` — the ▼ peak of the m's middle
@@ -4717,3 +4730,145 @@ reads above 0.12 any more (92 rows remain, all in the near-colour family below).
   this is the mixed-art case, where it is on by the probe's own reading.
 - **Instruments:** `stepRampDiag` (`--case`, `--pair a,b`, `--transparent`, `--all`,
   `--jump J` counterfactual, `--census`), `paintProbe` (`--case`, `--ab`, `--lane`).
+
+---
+
+## 27. The ink that was carved along its own shading (issue #15, 2026-09-05)
+
+Issue #15, filed from the icon-sheet work: a single-ink icon with soft shading, traced
+through the colour path, comes back cut into pieces along the line where the nearest
+palette tone flips — a disc loses an arc, a bar is sliced lengthwise. `quantize` keeps the
+ink's tones as separate entries because each tone is a wide flat plateau and therefore
+carries exactly the flat-interior evidence §9.7 and §12.3 use to protect a REAL authored
+colour, and the tones sit ΔE 4.4–11.1 apart, where two authored colours can also sit
+(`fluent-flute-flat`'s pair is ΔE 4.5, a gated region-drop regression if merged). The issue
+said on its face that a threshold move is the wrong axis and asked for a gated fixture
+first; §0.1 authored `shaded-ink` (2026-08-23) with the shading pair and a distinct-colour
+control pair within 0.2 ΔE of each other, so that no colour-distance rule can pass it.
+
+### 27.1 The measurement, and the two things that were wrong with the first reading
+
+**The separating evidence is WHERE two entries meet, not how far apart they are.** Two
+authored flats meet at an anti-aliased seam: nearest-colour assignment sends the one blend
+pixel to whichever side it is nearer, so across the label boundary the SOURCE colour still
+jumps by at least half the two colours' distance (a pixel-aligned seam: the whole distance).
+That is not a calibration, it is what "nearest" means. Two shading tones meet through a
+ramp: the boundary falls at the ramp's midpoint and the source pixels either side of it
+differ by one 8-bit level. `src/devtest/softPairDiag.ts` measures it per adjacent pair of
+`quantize` clusters — the step |src(p) − src(q)| relative to the pair's modal-colour
+distance, over every 4-adjacent pixel pair straddling the boundary, as a HARD share (step
+≥ ½ · distance) and a median — on the raw labels, before any cleanup moves a pixel.
+
+Two corrections before the numbers were trustworthy:
+
+1. **The raw share was contaminated by a halo.** The fixture's knife-edge pair read **26%
+   hard** (median 0.13) — "mixed", not soft. A darker tone's anti-alias rim against white
+   passes through the lighter tone's colour cloud (`#0f1c13` at 95% coverage on white is
+   nearer `#15251b` than itself), so every dark shape wears a 1px halo labelled as the
+   light tone, and the halo's boundary with the dark interior is a real step. Restricting
+   the census to INTERIOR pairs — both pixels' 4-neighbourhoods within {a, b} — drops the
+   pair to **0%** (747 interior pairs @512, 364 @256) and leaves the seams untouched.
+2. **Softness alone is not the rule — `aurora`.** Its eleven k-means bands are 0% hard too:
+   a smooth gradient traced flat IS a soft chain. The flat path posterizes such art today,
+   the gradient lane is where it belongs (`suggestGradients` sends it there), and turning a
+   gradient into one flat blot is not the fix. What separates the two is the SPAN: the
+   fixture's three tones span **ΔE 11.1**, `aurora`'s ramp spans **48.9**.
+
+**The census** (`softPairDiag --census`, 26 tier-0 SVGs + 152 gallery marks, quantized as
+the flat path does at detail 0 / despeckle 25, interior boundary ≥ 24 pairs; every pair
+labelled by whether its SOURCE SVG authors a gradient, since a source with none cannot
+contain a ramp):
+
+| @512 interior hard share | pairs | from gradient-free sources |
+|---|---|---|
+| 0–5% | 411 | **0** |
+| 5–10% | 15 | **0** |
+| 10–60% | 54 | 5 (`olympic-rings` 14% / 54% at n=28, `dracula` 24% / 30%) |
+| 60–90% | 43 | 15 |
+| 90–100% | 379 | 206 |
+
+Bimodal, with the whole soft mode from gradient-authoring art — the sign is unambiguous and
+`SOFT_HARD_MAX = 0.1` sits under the nearest gradient-free pair by a factor of 1.4. @256 the
+same shape: 307 pairs at 0–5%, none gradient-free, seams at 90–100%.
+
+Chaining the soft pairs (union-find) and reading each component's DIAMETER (max pairwise
+ΔE of its members' modal colours): 73 components @512. `shaded-ink` 11.1 (its four
+clusters: three tones + one ramp slice). `aurora` twice — 11.1 for the 50%-white chevron's
+three light tints and 48.9 for the ramp. Then a continuous run of subtle brand gradients:
+`wikipedia` 12.3, `microsoft-defender` 12.9, `lg` 12.9, `fly` 14.2, `ubuntu` 14.7,
+`auth-js` 15.2, `affinity-designer` 15.8, `google-classroom` 17.9, `ups-wm` 18.1 … and the
+real gradient chains at 25–130 (`kotlin` 79.5, `bg-ramp` 113.9, `canva` 129.9). There is
+**no gap** between 11 and 20, so the cap is a product choice rather than a calibration:
+under a FLAT trace a soft tonal variation this small is one flat colour, a wider one keeps
+posterizing exactly as before. **`SHADE_SPAN = 16`** — the fixture's real-sheet tones with a
+44% margin, every multi-band gradient chain untouched.
+
+### 27.2 The fix
+
+`src/lib/trace/shadingFuse.ts` — `fuseShadingTones`, called by `segmentFlatPalette` on
+`quantize`'s raw output before `flatInteriorCounts` / `classifyBlends` / `dropMinorColors`
+see it (step 1b). Per adjacent pair: interior boundary census; SOFT when ≥ 24 interior
+pairs and hard share ≤ 0.1 (identical modal colours count as soft). Soft pairs chain into
+components; a component whose diameter ≤ `SHADE_SPAN` fuses into its largest member
+(count-weighted centroid, the mode-snap picks the final hex as everywhere), the palette
+re-sorted by count — the contract `classifyBlends` relies on. A no-op returns the same
+object, so any image without a qualifying component traces byte-identically by
+construction. `PaletteSegmentOptions.shadingFuse` (default true) turns it off for the
+mechanism gate. The flat path is the only caller; the MS/gradient lane is untouched.
+
+**The answer sheet had to learn what an ink is.** `scoreRegions` reads regions off the
+RASTER, so the fixture's plateaus are three colour-regions, and a trace that correctly
+paints the ink ONE colour is scored as dropping two of them (ΔE 4.44 / 6.80 / 11.09 > the
+ΔE 4 match). `TruthCase.inkFamilies` lists the authored gradient's stops — knowledge that
+is in the SVG, not a tolerance — and `scoreRegions({ inkFamilies })` folds a family into
+one region: recovered when the paint is within ΔE 4 of ANY member, ink kept over the union,
+membership by colour (within ΔE 4 of a member or of the Lab segment between two members, so
+the ramp's own 8-bit levels, which clear the area floor @1024, belong too). Colours outside
+every family score exactly as before — which is why the control pair is not listed and
+must still come back as two regions. Threaded through the CI gate, `groundTruthRun` and
+the workbench.
+
+### 27.3 The red gate, and the numbers
+
+`test/shading-fuse.test.ts`: the same two tones (`#15251b` / `#0f1c13`, ΔE 4.44) laid out
+both ways on a synthetic canvas — joined by a 24px ramp they fuse to ONE label; meeting at a
+crisp seam they stay two and the call is a byte-identical no-op; a 96px ramp between two
+colours ΔE 116 apart bands and is left alone. Then the mechanism gate on the real fixture:
+`shadingFuse: false` carves the ink into ≥ 2 fills, the default paints it as ONE, and the
+ΔE 4.63 control pair is traced verbatim (`#4a6aa8`, `#5670a8`) either way.
+
+`shaded-ink`, before → after:
+
+| res | chamfer | p95 | Hausdorff | spurious | nodes | parsimony | regions |
+|---|---|---|---|---|---|---|---|
+| 256 | 1.36 → **0.15** | 16.51 → **0.46** | 29.6 → 0.66 | 2.57 → 0.15 | 162 → 108 | 1.4× → 1.1× | 6/6 → 4/4 |
+| 512 | 3.41 → **0.13** | 35.51 → **0.57** | 57.1 → 0.73 | 6.66 → 0.13 | 188 → 114 | 1.4× → 1.2× | 6/6 → 4/4 |
+| 1024 | 5.16 → **0.08** | 66.56 → **0.23** | 119.3 → 0.67 | 10.18 → 0.08 | 164 → 114 | 1.4× → 1.2× | 16/16 → 4/4 |
+
+(The region counts are the answer sheet folding: 6 raster colours → white, ONE ink family,
+two blues; @1024 the ramp's ten 8-bit levels join the family instead of reading as regions.)
+Deleted from `KNOWN_DEFECTS` at 512 and 256; truth gate **77 / 77**.
+
+- **Tier 2 @512: 106 / 106 cases, 437 / 437 regions** — flute's ΔE 4.5 pair and every
+  other authored near-pair untouched (a seam is ≥ 50% hard by construction).
+- **A/B** (`before-shaded-ink` ⇄ `after-shaded-ink`, 42 cases): **5 flat traces moved, 0
+  gradient traces** — the fusion lives only in the flat path. `shaded-ink` (the fix);
+  `petals` (its PNG's soft drop shadow, three light greys at ΔE 3.2 / 3.9 around the discs,
+  no longer traces as grey blobs); `logo-affinity-designer` (the four blues at 15.8 fuse —
+  the flat lane loses the posterized bands that were §14's witness for "seams landing on
+  real edges"; the gradient lane still shows them); `logo-mercedes-benz` (three grey
+  pairs at ΔE 6.0–6.5 in the metallic shading); `aurora` (the chevron's three tints;
+  the ramp's bands are unchanged). The other 37 cases are byte-identical.
+
+### 27.4 What is left
+
+- **`SHADE_SPAN` is a product line, not a measured gap.** The census is continuous from 11
+  to 20; a subtle brand gradient at 12–16 now traces flat as one colour and one at 17+
+  still posterizes. If a user wants the old bands on `affinity-designer`, that is the knob.
+- **A blurred seam is a ramp.** An upscaled raster whose crisp seams were resampled 3× would
+  read ~0.33 per step and fuse two authored colours if they sit within the span; no corpus
+  case does this (the gallery is authored SVG), and the sheet workflow's 3× upscale
+  (memory: helps mono) is the place it would first show.
+- **Instrument:** `softPairDiag` (`--case`, a file, `--res`, `--min`, `--transparent`,
+  `--census`, `--soft`), printing per pair the raw and interior shares, and what
+  `fuseShadingTones` actually fuses on the input.

@@ -30,6 +30,7 @@ function truthWbCase(c: TruthCase): WbCase {
     tier: c.tier,
     gradients: c.gradients,
     flatSvg: c.flatSvg,
+    inkFamilies: c.inkFamilies,
     load: async () => {
       const url = truthUrl(c)
       const resp = await fetch(url)

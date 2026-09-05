@@ -42,7 +42,7 @@
 import { segmentCount, segmentControls } from '../lib/path/geometry.ts'
 import { fitCircle, makeCircleSubPath } from '../lib/trace/circleFit.ts'
 import { rasterizeDoc } from '../lib/render/raster.ts'
-import { srgbToLab, deltaE76 } from './color.ts'
+import { srgbToLab, deltaE76, type Lab } from './color.ts'
 import type { SubPath, EditableDoc, Vec } from '../lib/path/types.ts'
 import type { GroundShape } from './svgGround.ts'
 
@@ -498,6 +498,17 @@ const MIN_AREA_FRAC = 0.0005
 const toHex = (c: [number, number, number]): string =>
   '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')
 
+/** CIE76 distance from `p` to the SEGMENT a—b in Lab (clamped, so "past an end" reads as
+ *  "near that end"): the ramp between two tones of one ink is that ink too. */
+function labSegDist(p: Lab, a: Lab, b: Lab): number {
+  const abL = b[0] - a[0], abA = b[1] - a[1], abB = b[2] - a[2]
+  const len2 = abL * abL + abA * abA + abB * abB
+  let t = len2 > 0 ? ((p[0] - a[0]) * abL + (p[1] - a[1]) * abA + (p[2] - a[2]) * abB) / len2 : 0
+  t = Math.max(0, Math.min(1, t))
+  const dL = p[0] - (a[0] + t * abL), dA = p[1] - (a[1] + t * abA), dB = p[2] - (a[2] + t * abB)
+  return Math.sqrt(dL * dL + dA * dA + dB * dB)
+}
+
 /** Median of a small sample — robust to the odd pixel that lands on a traced edge. */
 function median(xs: number[]): number {
   if (!xs.length) return NaN
@@ -526,6 +537,18 @@ function median(xs: number[]): number {
 export function scoreRegions(
   raster: { width: number; height: number; data: Uint8ClampedArray },
   doc: EditableDoc,
+  opts: {
+    /**
+     * INK FAMILIES (§27, issue #15) — groups of hex colours that are ONE authored ink's
+     * shading tones. Raster regions in a family are scored as ONE region: recovered when the
+     * trace paints the family's pixels within MATCH_DELTA_E of ANY member, ink kept over the
+     * family's union. Membership is by colour, not by exact hex: a raster region joins the
+     * family when it lies within MATCH_DELTA_E of a member OR of the Lab segment between two
+     * members — the 8-bit levels of the ramp between two tones are that ink too (they clear
+     * the area floor at 1024). Colours outside every family are scored exactly as before.
+     */
+    inkFamilies?: string[][]
+  } = {},
 ): RegionScore {
   const { width, height, data } = raster
   const area = width * height
@@ -550,10 +573,49 @@ export function scoreRegions(
   }
 
   const minArea = Math.max(16, area * MIN_AREA_FRAC)
-  const regions = [...hist.entries()]
+  const rawRegions = [...hist.entries()]
     .filter(([, n]) => n >= minArea)
     .map(([k, n]) => ({ key: k, rgb: [(k >> 16) & 255, (k >> 8) & 255, k & 255] as [number, number, number], areaPx: n }))
     .sort((a, b) => b.areaPx - a.areaPx)
+
+  // Fold ink families: every raster region that belongs to a family becomes part of ONE
+  // region keyed by its largest member. `keys` lists every packed RGB the region owns (the
+  // pixel census below samples all of them); `labs` every colour the region may be painted
+  // as (the family's listed members — the trace paints one of them, whichever tone wins).
+  type Region = { key: number; rgb: [number, number, number]; areaPx: number; keys: number[]; labs: Lab[] }
+  const families = (opts.inkFamilies ?? []).map((f) => f.map((hx) => {
+    const v = parseInt(hx.replace('#', ''), 16)
+    return srgbToLab((v >> 16) & 255, (v >> 8) & 255, v & 255)
+  }))
+  const familyOf = (rgb: [number, number, number]): number => {
+    const lab = srgbToLab(rgb[0], rgb[1], rgb[2])
+    for (let f = 0; f < families.length; f++) {
+      const m = families[f]
+      for (let i = 0; i < m.length; i++) {
+        if (deltaE76(lab, m[i]) <= MATCH_DELTA_E) return f
+        for (let j = i + 1; j < m.length; j++) if (labSegDist(lab, m[i], m[j]) <= MATCH_DELTA_E) return f
+      }
+    }
+    return -1
+  }
+  const regions: Region[] = []
+  const familyRegion = new Map<number, Region>()
+  for (const r of rawRegions) {
+    const f = familyOf(r.rgb)
+    if (f < 0) {
+      regions.push({ ...r, keys: [r.key], labs: [srgbToLab(r.rgb[0], r.rgb[1], r.rgb[2])] })
+      continue
+    }
+    let fr = familyRegion.get(f)
+    if (!fr) {
+      // rawRegions is area-descending, so the first member seen is the family's largest.
+      fr = { ...r, keys: [], labs: families[f] }
+      familyRegion.set(f, fr)
+      regions.push(fr)
+    } else fr.areaPx += r.areaPx
+    fr.keys.push(r.key)
+  }
+  regions.sort((a, b) => b.areaPx - a.areaPx)
 
   // Ask the trace what colour it paints AT EACH REGION'S OWN PIXELS, rather than looking for
   // a fill of a similar colour anywhere in the doc.
@@ -566,7 +628,10 @@ export function scoreRegions(
   // colour where the region actually is, the region is not recovered.
   const render = rasterizeDoc(doc, width, height)
   const sampleOf = new Map<number, number[][]>()
-  for (const r of regions) sampleOf.set(r.key, [])
+  for (const r of regions) {
+    const bucket: number[][] = []
+    for (const k of r.keys) sampleOf.set(k, bucket)
+  }
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
       const i = y * width + x
@@ -587,13 +652,14 @@ export function scoreRegions(
     const got: [number, number, number] = [
       median(s.map((p) => p[0])), median(s.map((p) => p[1])), median(s.map((p) => p[2])),
     ]
+    // A family is recovered when the paint is within tolerance of ANY of its tones.
     const d = Number.isFinite(got[0])
-      ? deltaE76(srgbToLab(r.rgb[0], r.rgb[1], r.rgb[2]), srgbToLab(got[0], got[1], got[2]))
+      ? Math.min(...r.labs.map((lab) => deltaE76(lab, srgbToLab(got[0], got[1], got[2]))))
       : Infinity
     if (d <= MATCH_DELTA_E) recovered++
     else {
       missing.push({ hex: toHex(r.rgb), areaPx: r.areaPx, paintedHex: Number.isFinite(got[0]) ? toHex(got) : '—', deltaE: d })
-      droppedKeys.add(r.key)
+      for (const k of r.keys) droppedKeys.add(k)
     }
   }
   missing.sort((a, b) => b.areaPx - a.areaPx)
@@ -609,14 +675,16 @@ export function scoreRegions(
   // healthy trace. One pass over the pixels, with region membership memoised per
   // distinct packed RGB — a gradient raster has tens of thousands of distinct colours
   // and dozens of "regions", and the naive regions × pixels loop is 36M ΔE there.
-  const regionLabs = regions.map((r) => srgbToLab(r.rgb[0], r.rgb[1], r.rgb[2]))
+  // (A family region matches at ΔE ≤ MATCH_DELTA_E of ANY of its tones, on both sides.)
   const memberCache = new Map<number, number[]>()
   const membersOf = (packed: number): number[] => {
     let m = memberCache.get(packed)
     if (!m) {
       const lab = srgbToLab((packed >> 16) & 255, (packed >> 8) & 255, packed & 255)
       m = []
-      for (let k = 0; k < regionLabs.length; k++) if (deltaE76(lab, regionLabs[k]) <= MATCH_DELTA_E) m.push(k)
+      for (let k = 0; k < regions.length; k++) {
+        if (regions[k].labs.some((rl) => deltaE76(lab, rl) <= MATCH_DELTA_E)) m.push(k)
+      }
       memberCache.set(packed, m)
     }
     return m
