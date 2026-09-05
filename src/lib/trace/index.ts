@@ -963,8 +963,13 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
       }
     : DEFAULT_SEGMENT_OPTIONS
   const withVetoScope = userSteered ? { ...base, maxUnwitnessedJump: 1 } : base
-  if (!markers && !flatMarkers) return withVetoScope
-  return { ...withVetoScope, ...(markers ? { markers } : {}), ...(flatMarkers ? { flatMarkers } : {}) }
+  const withMarkers =
+    !markers && !flatMarkers
+      ? withVetoScope
+      : { ...withVetoScope, ...(markers ? { markers } : {}), ...(flatMarkers ? { flatMarkers } : {}) }
+  // Advanced override for A/B experiments and devtest observers, the planarFit idiom.
+  // Absent ⇒ the very same object as before (identity preserved, output byte-identical).
+  return options.segment ? { ...withMarkers, ...options.segment } : withMarkers
 }
 
 /**

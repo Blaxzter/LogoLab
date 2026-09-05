@@ -63,20 +63,32 @@ export interface SegmentOptions {
    * adjacent merge's (a real ramp carries curvature; a step of two flats is
    * exact), so greedy hands e.g. a gradient background's corner band to a WHITE
    * shape's colour class (the nebula-png / gradient-flat corner sliver, painted
-   * flat mid-gradient). The step's signature is that its entire contrast sits in
-   * a t-run NO sample witnesses; a genuine smooth field is witnessed everywhere
-   * along its own axis (consecutive filled bins abut), and a genuine reunite
-   * (nebula's field outside the ring re-joining the hole) OVERLAPS in t. NOT the
-   * reverted profileCliff veto: that measured contrast at the pair's colour seam
-   * (inverted between real bg-reunite and fake, see §0 history); this measures
-   * contrast across EMPTY parameter space. Calibrated on tier 0+1: honest
-   * unions sit ≈0; the degenerate step-pastes measure 0.29–0.75. The veto fires
-   * only when the FLAT-FLANK condition also holds — one of the two groups is
-   * itself a near-flat colour block (see FLAT_FLANK_RES): pieces of a smooth
-   * field can jump across a gap their own interior trend explains, and blocking
-   * those merely reorders the merge sequence, perturbing the strided sample
-   * stream and thus the fitted paint (radial-glow's re-centred glow, §10.3).
-   * Effectively disabled at ≥ 1.2 (the Oklab ΔE ceiling).
+   * flat mid-gradient) — or fuses two DISJOINT flat objects into one region wearing
+   * a step "gradient" (olympic's blue ∪ green rings, letter-joins' background ∪
+   * letter; §26). The step's signature is that its entire contrast sits at a point
+   * of the fitted parameter t that NO sample explains: the samples on either side,
+   * each extrapolated along their own colour trend in t, do not meet there. A
+   * genuine smooth field's two sides always meet (that is what smooth means), and
+   * a genuine reunite (nebula's field outside the ring re-joining the hole)
+   * OVERLAPS in t. NOT the reverted profileCliff veto: that measured contrast at
+   * the pair's colour seam (inverted between real bg-reunite and fake, see §0
+   * history); this measures the step the FITTED MODEL asserts between adjacent
+   * samples along its own axis, at sample resolution. The §10.3 form of this
+   * measurement binned t into 24 and only looked across EMPTY bins, and the
+   * greedy min-residual search over pairs × fit types × radial centres reliably
+   * found a parametrization whose sample-free stretch was narrower than a bin
+   * (olympic's accepted blue∪green: a radial with the two flats meeting at t
+   * 0.479→0.521, no empty bin, jump read 0.000) — §26. Calibrated on the /labs/ab
+   * corpus labelled by the SOURCE's authored paint (§26.2): every accepted
+   * flat∪flat fusion of distinct objects reads 0.13–1.00 except two near-colour
+   * families (chrome 0.086, flute's ΔE-4.5 flats ≤ 0.080); every honest reunite in
+   * gradient-authoring art reads ≤ 0.078 (firefox), posterized bands ≤ 0.009.
+   * The veto fires only when the FLAT-FLANK condition also holds — one of the
+   * two groups is itself a near-flat colour block (see FLAT_FLANK_RES): pieces of
+   * a smooth field can jump across a gap their own interior trend explains, and
+   * blocking those merely reorders the merge sequence, perturbing the strided
+   * sample stream and thus the fitted paint (radial-glow's re-centred glow,
+   * §10.3). Effectively disabled at ≥ 1.2 (the Oklab ΔE ceiling).
    */
   maxUnwitnessedJump: number
   /**
@@ -135,7 +147,63 @@ export interface SegmentOptions {
    * fixed input order so the veto is deterministic.
    */
   markers?: { x: number; y: number }[]
+  /**
+   * Devtest observer for the Step-3c merge. Called once per pair evaluation that actually
+   * RAN (a cache miss in evalPair) with all four terms of the acceptance condition —
+   * computed in full even where the condition short-circuited, because an instrument
+   * that names only the first failing gate cannot say which one is load-bearing (§24.1)
+   * — and once per ACCEPTED merge, in merge order. Read-only: the extra terms come from
+   * the same pure functions on the same inputs, so a trace with the observer set is
+   * byte-identical to one without. `src/devtest/stepRampDiag.ts` is the consumer.
+   */
+  onPair?: MergePairObserver
 }
+
+/**
+ * One Step-3c event for `SegmentOptions.onPair`: a pair EVALUATION (`kind: 'eval'`,
+ * every cache-miss call of evalPair, whether or not it reached the fit) or an accepted
+ * MERGE (`kind: 'merged'`, the global-min pair of one sweep, fused into group `c`).
+ */
+export interface MergePairRecord {
+  kind: 'eval' | 'merged'
+  /** Group ids — stable, never reused; ≥ S for a group born of a merge. */
+  gi: number
+  gj: number
+  /** Fine-segment members of each side, and each side's opaque pixel count + mean sRGB
+   *  (over EVERY pixel of the members, not the strided sample). */
+  membersI: number[]
+  membersJ: number[]
+  pxI: number
+  pxJ: number
+  meanI: [number, number, number]
+  meanJ: [number, number, number]
+  /** How far the pair got. Only 'evaluated' pairs carry finite terms below. */
+  reached: 'flat-pinned' | 'gate' | 'edge-veto' | 'no-fit' | 'evaluated'
+  /** The acceptance condition's four terms: union-fit Oklab residual (≤ mergeTol),
+   *  profile gap (≤ maxProfileGap), unwitnessed jump (≤ maxUnwitnessedJump unless the
+   *  flat-flank escape holds: min(solidI, solidJ) > FLAT_FLANK_RES). NaN when unreached. */
+  res: number
+  gap: number
+  jump: number
+  solidI: number
+  solidJ: number
+  /** The union fit that produced those terms. */
+  fitType?: 'linear' | 'radial'
+  stops?: number
+  fit?: GradientFill
+  /** Sample count per bin of the fitted parameter t (the 24 bins profileGap reads, and
+   *  the §10.3 jump veto read before §26) — shows whether the two sides ABUT in t. */
+  bins?: number[]
+  /** Where along t the `jump` sits, and the widest sample-free stretch of t strictly
+   *  inside the union's own [tmin, tmax] (fraction of [0,1]). */
+  jumpT?: number
+  holeT?: number
+  /** 'eval': the pair qualifies as a merge candidate. 'merged': always true. */
+  accepted: boolean
+  /** 'merged' only: the new group's id. */
+  c?: number
+}
+export type MergePairObserver = (r: MergePairRecord) => void
 
 export const DEFAULT_SEGMENT_OPTIONS: SegmentOptions = {
   ms: DEFAULT_MS_OPTIONS,
@@ -589,15 +657,42 @@ export function segmentImage(
     // A flat-pinned segment never merges (it stays its own region). Its group id equals
     // the segment id and is never retired — a vetoed group is never the merge target —
     // so the singleton check stays valid; freshly-merged groups get ids ≥ S, never pinned.
+    // Observer support (SegmentOptions.onPair). `describe` is only ever called when an
+    // observer is set, so the default path pays nothing and stays byte-identical.
+    const onPair = opts.onPair
+    const describe = (g: number): { members: number[]; px: number; mean: [number, number, number] } => {
+      const m = members.get(g)!
+      let r = 0
+      let gg = 0
+      let b = 0
+      let c = 0
+      for (const s of m) {
+        r += segSumR[s]
+        gg += segSumG[s]
+        b += segSumB[s]
+        c += segCnt[s]
+      }
+      return { members: m.slice(), px: c, mean: [r / (c || 1), gg / (c || 1), b / (c || 1)] }
+    }
     const evalPair = (gi: number, gj: number): { res: number; samples: RegionSamples } | null => {
       const k = ckey(gi, gj)
       if (cache.has(k)) return cache.get(k)!
       let result: { res: number; samples: RegionSamples } | null = null
-      if (!flatPinned.has(gi) && !flatPinned.has(gj) && gateEligible(gi, gj) && !pairVetoed(gi, gj)) {
-        const union = strideConcat([samples.get(gi)!, samples.get(gj)!], opts.sampleCap)
-        const fit = fitBestGradient(union)
+      // The same predicate chain as before, unrolled so an observer can learn WHICH
+      // link stopped a pair (identical evaluation order and short-circuiting).
+      let reached: MergePairRecord['reached'] = 'evaluated'
+      let fit: ReturnType<typeof fitBestGradient> = null
+      let union: RegionSamples | null = null
+      if (flatPinned.has(gi) || flatPinned.has(gj)) reached = 'flat-pinned'
+      else if (!gateEligible(gi, gj)) reached = 'gate'
+      else if (pairVetoed(gi, gj)) reached = 'edge-veto'
+      else {
+        union = strideConcat([samples.get(gi)!, samples.get(gj)!], opts.sampleCap)
+        fit = fitBestGradient(union)
+        if (!fit) reached = 'no-fit'
+      }
+      if (fit && union) {
         if (
-          fit &&
           fit.oklabResidual <= opts.mergeTol &&
           profileGap(fit.gradient, union) <= opts.maxProfileGap &&
           (unwitnessedJump(fit.gradient, union) <= opts.maxUnwitnessedJump ||
@@ -615,6 +710,32 @@ export function segmentImage(
         ) {
           result = { res: fit.oklabResidual, samples: union }
         }
+      }
+      if (onPair) {
+        const di = describe(gi)
+        const dj = describe(gj)
+        const step = fit && union ? unwitnessedStep(fit.gradient, union) : null
+        onPair({
+          kind: 'eval',
+          gi,
+          gj,
+          membersI: di.members,
+          membersJ: dj.members,
+          pxI: di.px,
+          pxJ: dj.px,
+          meanI: di.mean,
+          meanJ: dj.mean,
+          reached,
+          res: fit ? fit.oklabResidual : NaN,
+          gap: fit && union ? profileGap(fit.gradient, union) : NaN,
+          jump: step ? step.jump : NaN,
+          solidI: fit ? solidResidual(samples.get(gi)!) : NaN,
+          solidJ: fit ? solidResidual(samples.get(gj)!) : NaN,
+          ...(fit && union && step
+            ? { fitType: fit.gradient.type, stops: fit.gradient.stops.length, fit: fit.gradient, bins: tBins(fit.gradient, union), jumpT: step.at, holeT: step.holeT }
+            : {}),
+          accepted: result !== null,
+        })
       }
       cache.set(k, result)
       noteRow(gi, k)
@@ -645,6 +766,29 @@ export function segmentImage(
       seeding = false
       if (!best) break
       const c = nextId++
+      if (onPair) {
+        const di = describe(best.i)
+        const dj = describe(best.j)
+        onPair({
+          kind: 'merged',
+          gi: best.i,
+          gj: best.j,
+          membersI: di.members,
+          membersJ: dj.members,
+          pxI: di.px,
+          pxJ: dj.px,
+          meanI: di.mean,
+          meanJ: dj.mean,
+          reached: 'evaluated',
+          res: best.res,
+          gap: NaN,
+          jump: NaN,
+          solidI: NaN,
+          solidJ: NaN,
+          accepted: true,
+          c,
+        })
+      }
       members.set(c, members.get(best.i)!.concat(members.get(best.j)!))
       samples.set(c, best.samples)
       if (gated) {
@@ -1341,56 +1485,103 @@ function solidResidual(s: RegionSamples): number {
 }
 
 /**
- * Largest Oklab ΔE between the sample populations flanking an EMPTY interior
- * run of the fitted gradient's parameter t — the colour jump the gradient makes
- * where NO sample witnesses it (see SegmentOptions.maxUnwitnessedJump). Each
- * side's colour pools up to two filled bins so a single sparse bin can't fake
- * or hide a jump. 0 when every pair of consecutive filled bins abuts.
+ * The colour jump a fitted gradient asserts that NO sample witnesses (see
+ * SegmentOptions.maxUnwitnessedJump): the largest Oklab ΔE, over every boundary
+ * between consecutive samples along the gradient's own parameter t, between the
+ * two sides' colour trends extrapolated to that boundary. Each side is a window
+ * of width W = 1/24 in t; its trend is the least-squares line of Oklab against t
+ * over the window (the plain mean when the window is too small or has no spread
+ * in t). A smooth ramp's two trends meet at every boundary — steep or shallow —
+ * so it reads ≈ 0; two flats of different colour meet nowhere, so the fit's step
+ * between them reads its full contrast whatever axis the fit chose. Measured at
+ * sample resolution on purpose: the §10.3 form binned t into 24 and only looked
+ * across EMPTY bins, and was blind to any step narrower than a bin (§26).
  */
-function unwitnessedJump(g: GradientFill, s: RegionSamples, bins = 24): number {
-  const cnt = new Uint32Array(bins)
-  const sL = new Float64Array(bins)
-  const sA = new Float64Array(bins)
-  const sB = new Float64Array(bins)
-  for (let i = 0; i < s.n; i++) {
-    const t = gradientParamT(g, s.xs[i], s.ys[i])
-    let bi = Math.floor(t * bins)
-    if (bi < 0) bi = 0
-    else if (bi >= bins) bi = bins - 1
-    const o = srgbToOklab(s.rs[i], s.gs[i], s.bs[i])
-    cnt[bi]++
-    sL[bi] += o[0]
-    sA[bi] += o[1]
-    sB[bi] += o[2]
+function unwitnessedJump(g: GradientFill, s: RegionSamples): number {
+  return unwitnessedStep(g, s).jump
+}
+
+/** unwitnessedJump with its location (`at`, in t) and the widest sample-free stretch of
+ *  t strictly inside the union's own range — the observer's extras. */
+function unwitnessedStep(g: GradientFill, s: RegionSamples): { jump: number; at: number; holeT: number } {
+  const n = s.n
+  if (n < 2) return { jump: 0, at: 0, holeT: 0 }
+  const t = new Float64Array(n)
+  const idx = new Uint32Array(n)
+  for (let i = 0; i < n; i++) {
+    t[i] = gradientParamT(g, s.xs[i], s.ys[i])
+    idx[i] = i
   }
-  // Pooled mean colour of the filled bin at `b` plus the next filled bin further
-  // away from the gap (direction `dir`), if any.
-  const sideMean = (b: number, dir: -1 | 1): Oklab => {
-    let c = cnt[b]
-    let L = sL[b]
-    let a = sA[b]
-    let bb = sB[b]
-    for (let j = b + dir; j >= 0 && j < bins; j += dir) {
-      if (!cnt[j]) continue
-      c += cnt[j]
-      L += sL[j]
-      a += sA[j]
-      bb += sB[j]
-      break
+  idx.sort((a, b) => t[a] - t[b])
+  // Sorted t and Oklab, with prefix sums for O(1) window means / regressions:
+  // n, Σt, Σt², ΣL, Σa, Σb, ΣtL, Σta, Σtb.
+  const ts = new Float64Array(n)
+  const P = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(() => new Float64Array(n + 1))
+  for (let k = 0; k < n; k++) {
+    const i = idx[k]
+    const o = srgbToOklab(s.rs[i], s.gs[i], s.bs[i])
+    const tk = t[i]
+    ts[k] = tk
+    P[0][k + 1] = P[0][k] + 1
+    P[1][k + 1] = P[1][k] + tk
+    P[2][k + 1] = P[2][k] + tk * tk
+    P[3][k + 1] = P[3][k] + o[0]
+    P[4][k + 1] = P[4][k] + o[1]
+    P[5][k + 1] = P[5][k] + o[2]
+    P[6][k + 1] = P[6][k] + tk * o[0]
+    P[7][k + 1] = P[7][k] + tk * o[1]
+    P[8][k + 1] = P[8][k] + tk * o[2]
+  }
+  const W = 1 / 24
+  // Linear trend of the sorted window [a,b) evaluated at tb — the mean when the
+  // window has < 3 samples or no spread in t.
+  const extrap = (a: number, b: number, tb: number): Oklab => {
+    const c = P[0][b] - P[0][a] || 1
+    const m: Oklab = [(P[3][b] - P[3][a]) / c, (P[4][b] - P[4][a]) / c, (P[5][b] - P[5][a]) / c]
+    if (c < 3) return m
+    const st = P[1][b] - P[1][a]
+    const varT = P[2][b] - P[2][a] - (st * st) / c
+    if (varT < 1e-12) return m
+    const mt = st / c
+    for (let ch = 0; ch < 3; ch++) {
+      const sv = P[3 + ch][b] - P[3 + ch][a]
+      const stv = P[6 + ch][b] - P[6 + ch][a]
+      m[ch] += ((stv - (st * sv) / c) / varT) * (tb - mt)
     }
-    return [L / c, a / c, bb / c]
+    return m
   }
   let jump = 0
-  let prev = -1
-  for (let b = 0; b < bins; b++) {
-    if (!cnt[b]) continue
-    if (prev >= 0 && b - prev > 1) {
-      const d = oklabDeltaE(sideMean(prev, -1), sideMean(b, 1))
-      if (d > jump) jump = d
+  let at = 0
+  let holeT = 0
+  let lo = 0 // first sorted index with ts ≥ ts[k-1] − W
+  let hi = 0 // first sorted index with ts > ts[k] + W
+  for (let k = 1; k < n; k++) {
+    const d = ts[k] - ts[k - 1]
+    if (d > holeT) holeT = d
+    while (ts[lo] < ts[k - 1] - W) lo++
+    if (hi < k) hi = k
+    while (hi < n && ts[hi] <= ts[k] + W) hi++
+    const tb = (ts[k - 1] + ts[k]) / 2
+    const x = oklabDeltaE(extrap(lo, k, tb), extrap(k, hi, tb))
+    if (x > jump) {
+      jump = x
+      at = tb
     }
-    prev = b
   }
-  return jump
+  return { jump, at, holeT }
+}
+
+/** Observer-only: sample count per t-bin of a fitted gradient over a sample set (the
+ *  24 bins profileGap reads, and the pre-§26 jump veto read). */
+function tBins(g: GradientFill, s: RegionSamples, bins = 24): number[] {
+  const cnt = new Array<number>(bins).fill(0)
+  for (let i = 0; i < s.n; i++) {
+    let bi = Math.floor(gradientParamT(g, s.xs[i], s.ys[i]) * bins)
+    if (bi < 0) bi = 0
+    else if (bi >= bins) bi = bins - 1
+    cnt[bi]++
+  }
+  return cnt
 }
 
 /** Longest run of empty interior bins (as a fraction of [0,1]) of a gradient's
