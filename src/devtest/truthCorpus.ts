@@ -64,6 +64,18 @@ export interface TruthCase {
    * (src/devtest/fluentAbRun.ts). Tier 1 only.
    */
   flatSvg?: string
+  /**
+   * INK FAMILIES — groups of raster colours that are ONE authored ink's shading tones (§27,
+   * issue #15). `scoreRegions` reads regions off the RASTER, so a shaded shape's plateaus
+   * read as separate colour-regions and a trace that correctly paints the shape ONE flat
+   * colour would be scored as dropping the other tones. Listing the tones here (the
+   * authored gradient's stops — the answer sheet, not a tolerance) makes the family one
+   * region: recovered when the trace paints it within ΔE 4 of any member, and every raster
+   * colour on a ramp between members belongs to it. A colour NOT in any family is scored
+   * exactly as before, so a case can carry a shaded ink and a distinct-colour control side
+   * by side (`shaded-ink` does).
+   */
+  inkFamilies?: string[][]
 }
 
 /**
@@ -198,7 +210,10 @@ export const TRUTH_CORPUS: TruthCase[] = [
   { name: 'smooth-radii', svg: 'public/examples/edge-cases/smooth-radii.svg', note: 'no authored corners at all — the corner-precision gate (#23)', gradients: false, tier: 0 },
 
   { name: 'corner-turns', svg: 'public/examples/edge-cases/corner-turns.svg', note: 'authored-turn sweep across the corner detector’s bar (#23)', gradients: false, tier: 0 },
-  { name: 'shaded-ink', svg: 'public/examples/edge-cases/shaded-ink.svg', note: 'one ink with soft shading — the colour path carves it (#15)', gradients: false, tier: 0, gated: true },
+  { name: 'shaded-ink', svg: 'public/examples/edge-cases/shaded-ink.svg', note: 'one ink with soft shading — the colour path carves it (#15); carries its own ΔE 4.63 distinct-colour control', gradients: false, tier: 0, gated: true,
+    // The three tones the shaded shapes are authored with (genEdgeCases.ts): one ink. The
+    // control pair (#4a6aa8 / #5670a8) is deliberately NOT listed — it must stay two regions.
+    inkFamilies: [['#15251b', '#0f1c13', '#050f06']] },
   // The §0 #10 driver, authored deliberately RED (2026-09-03). The reported witness
   // `logo-olympic-rings` is authored with strokes and svgGround refuses it, so the defect
   // has never had a number; this is the same mechanism as filled annuli at the witness's

@@ -69,7 +69,7 @@ async function runCase(c: TruthCase, size: number): Promise<Row> {
     engine: 'planar',
     gradients: c.gradients,
   })
-  return { ...scoreGeometry(shapes, doc, img.width, img.height, img), size, regions: scoreRegions(img, doc) }
+  return { ...scoreGeometry(shapes, doc, img.width, img.height, img), size, regions: scoreRegions(img, doc, { inkFamilies: c.inkFamilies }) }
 }
 
 for (const c of selected) {

@@ -16,6 +16,7 @@
 
 import type { PaletteColor, QuantizeResult } from './types'
 import { quantize, dropMinorColors, modeFilter } from './quantize.ts'
+import { fuseShadingTones } from './shadingFuse.ts'
 
 export interface PaletteSegmentOptions {
   /** k-means cluster budget. Over-provisioned: dropMinorColors trims the extras,
@@ -40,6 +41,12 @@ export interface PaletteSegmentOptions {
    *  (§20, issue #8). Default true; false restores the pre-§20 unconditional
    *  floor, which is what the mechanism gate measures against. */
   regionEvidence: boolean
+  /** Fuse palette entries that are one ink's SHADING tones — plateaus joined by a soft
+   *  ramp rather than an anti-aliased seam — so a softly shaded flat shape traces as one
+   *  region instead of being carved where the nearest tone flips (§27, issue #15; the
+   *  rule and its calibration are in shadingFuse.ts). Default true; false restores the
+   *  pre-§27 behaviour, which is what its mechanism gate measures against. */
+  shadingFuse?: boolean
 }
 
 export const DEFAULT_PALETTE_SEGMENT: PaletteSegmentOptions = {
@@ -48,6 +55,7 @@ export const DEFAULT_PALETTE_SEGMENT: PaletteSegmentOptions = {
   modePasses: 2,
   minRegionArea: 64,
   regionEvidence: true,
+  shadingFuse: true,
 }
 
 /**
@@ -828,6 +836,13 @@ export function segmentFlatPalette(
     //    tells that apart from a split pixel cloud. Same floor as the region
     //    protection below, for the same reason.
     let q = quantize(img as ImageData, opts.maxColors, opts.minRegionArea)
+    // 1b. Fuse one ink's SHADING tones (§27, issue #15). Two tones of a softly shaded
+    //     shape each carry the flat-interior evidence of a real colour and sit at the
+    //     same ΔE as two authored colours can, so nothing below can tell them apart —
+    //     but WHERE they meet can: a seam keeps ≥ half the colour jump across the label
+    //     boundary, a ramp keeps one 8-bit level. Reads quantize's raw labels, before any
+    //     cleanup moves a pixel; a no-op returns the same object (byte-identical).
+    if (opts.shadingFuse !== false) q = fuseShadingTones(img, q).q
     // 2. Dissolve the low-share entries (the blend smears) into their nearest real
     //    colour — this is what kills the olive/brown sliver colours. PROTECT any
     //    entry with enough flat-interior evidence to be a real region: share alone

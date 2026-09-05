@@ -131,16 +131,14 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // the tracer splits that smooth shading into regions the art does not contain. It is the
   // headline tier-1 finding — see docs/vectorization-benchmarks.md §8.
   'fluent-olive': 'chamfer 7.0px, p95 97px — invents interior edges across a 3-gradient stack',
-  // shaded-ink (issue #15, authored deliberately RED 2026-08-23): the colour path keeps ONE
-  // ink's shading as separate palette entries and cuts every shape where the nearest-colour
-  // assignment flips. The worst excursion is at the CENTRE of a disc — a boundary drawn
-  // straight across it, 57px from anything the artist drew, which is the reported
-  // "a disc lost its upper-left arc" reproduced. The silhouette itself survives
-  // (missedMax 1.95px); the damage is invented interior structure. The case carries its
-  // own control: two GENUINELY distinct authored colours at ΔE 4.63 / RGB 13.4 (flute-flat's
-  // regime) that must stay two regions — the shading's knife-edge pair is ΔE 4.44 / RGB 13.5,
-  // so the fixture states on its face why a colour-DISTANCE threshold cannot be the fix.
-  'shaded-ink': 'chamfer 3.41px, p95 35.5px — the colour path carves one shaded ink into pieces (#15)',
+  // shaded-ink (issue #15, authored deliberately RED 2026-08-23, "chamfer 3.41px, p95
+  // 35.5px — the colour path carves one shaded ink into pieces") was here until 2026-09-05:
+  // the tones of one softly shaded ink each carry flat-interior evidence and sit at the
+  // same ΔE as two authored colours, so no colour distance could tell them apart; what
+  // does is WHERE they meet — a seam keeps ≥ half the colour jump across the label
+  // boundary, a ramp keeps one 8-bit level. fuseShadingTones (shadingFuse.ts) fuses soft
+  // chains within SHADE_SPAN before any cleanup: 0.13/0.57 @512, 4/4 regions with the ink
+  // scored as ONE family — docs/vectorization-benchmarks.md §27.
   // ring-cross (issue #10) was here for the span of one commit, authored deliberately RED
   // at circle recovery 0.78px: a ring cut by a crossing leaves a "C" whose ONE boundary
   // loop runs outer arc → cap → inner arc → cap, so §1d's co-circular snap was handed
@@ -185,7 +183,7 @@ async function runCase(
     gradients: c.gradients,
   })
   const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
-  const r = scoreRegions(img, doc)
+  const r = scoreRegions(img, doc, { inkFamilies: c.inkFamilies })
   // Paint fidelity (gradient tier 0 only): RENDER the trace and score the pixels
   // against the source. On gradient art the geometry gates are structurally blind
   // to a paint failure (radial-glow's re-centred glow kept every gate green, §10.3);
@@ -284,13 +282,8 @@ const KNOWN_DEFECTS_LOWRES: Record<string, string> = {
   //     fused vertex pair with the 2.8px neck). Fixed by the weld length guard: 7/7,
   //     0.25/1.02.
   //
-  // shaded-ink (issue #15, authored deliberately RED 2026-08-23) is listed at BOTH
-  // resolutions, unlike `peak-drop`, and that difference is the point: peak-drop is
-  // calibrated against an ABSOLUTE px floor and cannot straddle two rasters two octaves
-  // apart, so it is excluded from this lane. This defect is a COLOUR one — the palette
-  // separation of an ink's tones does not care about the raster — so it reproduces at 256
-  // as it does at 512, and belongs on the list rather than out of the lane.
-  'shaded-ink': 'the colour path carves one shaded ink into pieces at every raster (#15)',
+  // shaded-ink (issue #15) was listed here too until 2026-09-05 — a colour defect
+  // reproduces at every raster, and so does its fix (§27): 0.15/0.46 @256, 4/4 regions.
 }
 
 for (const c of LOWRES_CORPUS) {
@@ -329,7 +322,7 @@ async function runRegionCase(c: TruthCase): Promise<void> {
     engine: 'planar',
     gradients: c.gradients,
   })
-  const r = scoreRegions(img, doc)
+  const r = scoreRegions(img, doc, { inkFamilies: c.inkFamilies })
   const gates = evaluateTruthGates({
     // Boundary is not gated in this lane (see TIER2_REGION_CORPUS): samples 0 reports
     // those gates n/a, and geometry is not scored at all, which is most of the runtime.
