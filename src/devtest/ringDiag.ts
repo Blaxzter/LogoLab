@@ -3,6 +3,9 @@
 //   node --experimental-strip-types src/devtest/ringDiag.ts                      # olympic-rings
 //   node --experimental-strip-types src/devtest/ringDiag.ts --case concentric --res 512
 //   node --experimental-strip-types src/devtest/ringDiag.ts olympic-rings.svg --gradients
+//   node --experimental-strip-types src/devtest/ringDiag.ts --circles --case ring-cross
+//   node --experimental-strip-types src/devtest/ringDiag.ts --circles --corpus   # calibration
+//   node --experimental-strip-types src/devtest/ringDiag.ts --families --logos   # §24 sweep census
 //   --res N (default 512)   --fid F (probe a different fidelity)   --logos (gallery sweep)
 //
 // WHY. Issue #10: on `logo-olympic-rings` the black ring's boundaries visibly bend where it
@@ -39,7 +42,20 @@
 // `corner-veto` is a structural one, and they lead to completely different fixes. That is
 // the whole reason to measure before touching anything.
 //
-// PURELY DIAGNOSTIC — no gate, no fix, no production behaviour change.
+// --families — every §24 co-circular family, with the ANGULAR SWEEP it covers. That is the
+// number FAMILY_MIN_SPAN is calibrated against, and it separates the two populations by
+// itself: a ring cut into arcs by crossings keeps most of its 2π, while a false family
+// fitted through two short shallow chains covers almost nothing.
+//
+// --circles — THE OTHER HALF THE ISSUE ASKS FOR: "a per-ring 'how far is each fitted arc
+// from the ring's own best-fit circle' table would rank the wobble contributors in one run".
+// This scores the TRACE against the AUTHORED circle (geomScore.circleRecovery), so it is a
+// correctness number and not a census: `devP95`/`devMax` are radial px, 0 is perfect, and a
+// case only reports one if the art contains an authored circle at all. `--corpus` runs it
+// over the gated tier-0 corpus, which is the distribution any gate limit has to come from.
+//
+// The census above is a diagnostic; --circles is the measurement. Keep them apart: the
+// census says which gate declined, not whether the output is wrong.
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -48,6 +64,10 @@ import { decodePng } from './png.ts'
 import { ensureImageData } from './nodeHarness.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import type { ArcLoopRecord } from '../lib/trace/planarBeautify.ts'
+import { parseGroundTruth, toRasterSpace, unscorable } from './svgGround.ts'
+import { circleRecovery, strokedCircleGround } from './geomScore.ts'
+import { GATED_CORPUS } from './truthCorpus.ts'
+import type { SubPath } from '../lib/path/types.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -60,6 +80,12 @@ const flag = (n: string): string | null => {
 }
 const RES = Number(flag('--res') ?? 512)
 const GRADIENTS = argv.includes('--gradients')
+const CIRCLES = argv.includes('--circles')
+const FAMILIES = argv.includes('--families')
+const CORPUS = argv.includes('--corpus')
+// §24.1's lesson, as a flag: the counterfactual costs one line and settles what a census
+// cannot. --nochain turns §25 through-chaining off — the §24 tracer, byte-identical.
+const NOCHAIN = argv.includes('--nochain')
 const FID = flag('--fid') ? Number(flag('--fid')) : null
 const f = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d) : '   —  ')
 
@@ -68,22 +94,74 @@ const cases: [string, string][] = []
 const CASE = flag('--case')
 const FILE = argv.find((a) => a.endsWith('.svg'))
 if (CASE) {
-  try {
-    cases.push([CASE, readFileSync(join(EDGE, `${CASE}.svg`), 'utf8')])
-  } catch {
-    cases.push([CASE, readFileSync(join(root, 'examples', 'logos', `${CASE}.svg`), 'utf8')])
-  }
+  const tries = [join(EDGE, `${CASE}.svg`), join(root, 'public', 'examples', `${CASE}.svg`), join(root, 'examples', 'logos', `${CASE}.svg`)]
+  const hit = tries.find((t) => { try { readFileSync(t); return true } catch { return false } })
+  if (!hit) throw new Error(`no such case: ${CASE}`)
+  cases.push([CASE, readFileSync(hit, 'utf8')])
 } else if (FILE) {
   cases.push([FILE.replace(/\.svg$/, ''), readFileSync(join(root, 'examples', 'logos', FILE), 'utf8')])
 } else if (argv.includes('--logos')) {
   for (const file of readdirSync(join(root, 'examples', 'logos')).filter((x) => x.endsWith('.svg')))
     cases.push([file.replace(/\.svg$/, ''), readFileSync(join(root, 'examples', 'logos', file), 'utf8')])
+} else if (CORPUS) {
+  for (const c of GATED_CORPUS.filter((c) => c.tier === 0 && !c.gradients))
+    cases.push([c.name, readFileSync(join(root, c.svg), 'utf8')])
 } else {
   // The issue's own mark.
   cases.push(['olympic-rings', readFileSync(join(root, 'examples', 'logos', 'olympic-rings.svg'), 'utf8')])
 }
 
+// --- --circles: the trace scored against the AUTHORED circles -----------------------
+if (CIRCLES) {
+  console.log(`
+━━━ CIRCLE RECOVERY @${RES} ${GRADIENTS ? 'grad' : 'flat'}${NOCHAIN ? ' NO-CHAIN (§24)' : ''} — radial px from the authored circle, 0 is perfect ━━━`)
+  const rows: [string, number, number, number, number, number][] = []
+  for (const [name, text] of cases) {
+    // A STROKED file is not scorable as a whole (svgGround refuses it, §24.3) — but its
+    // circles are unambiguous, and `olympic-rings`, the mark issue #10 was filed on, is one.
+    // Score those directly rather than leaving the witness without a number (§24.8 did this
+    // by hand; it belongs in the instrument).
+    const strokeGt = strokedCircleGround(text, RES)
+    const why = strokeGt.length ? null : unscorable(parseGroundTruth(text))
+    if (why) { console.log(`  ${name.padEnd(24)} not scorable — ${why}`); continue }
+    const raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+    const doc = await traceImage(raster as unknown as ImageData, {
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: GRADIENTS,
+      ...(FID != null ? { fidelity: FID } : {}),
+      ...(NOCHAIN ? { planarFit: { chainArcs: false } } : {}),
+    })
+    const shapes = strokeGt.length ? strokeGt : toRasterSpace(parseGroundTruth(text), raster.width)
+    const docSets = doc.items.filter((i) => i.kind === 'path' && i.visible !== false).map((i) => (i as unknown as { subPaths: SubPath[] }).subPaths)
+    const cr = circleRecovery(shapes, docSets, raster.width, raster.height)
+    if (!cr.circles) { console.log(`  ${name.padEnd(24)} no authored circle — n/a`); continue }
+    rows.push([name, cr.circles, cr.spread, cr.bias, cr.centre, cr.roundness])
+    if (cases.length === 1) {
+      console.log(`
+  ${name} @${RES}px — ${cr.circles} scored authored circle(s)
+`)
+      console.log(`    ${'cx'.padStart(8)}${'cy'.padStart(8)}${'r'.padStart(8)}${'samples'.padStart(9)}${'spread'.padStart(9)}${'bias'.padStart(8)}${'centre'.padStart(8)}${'round'.padStart(8)}${'p50'.padStart(7)}${'p95'.padStart(7)}${'max'.padStart(7)}`)
+      for (const c of cr.per.slice().sort((a, b) => b.spread - a.spread))
+        console.log(`    ${f(c.cx, 1).padStart(8)}${f(c.cy, 1).padStart(8)}${f(c.r, 1).padStart(8)}${String(c.samples).padStart(9)}${f(c.spread).padStart(9)}${f(c.bias).padStart(8)}${f(c.centre).padStart(8)}${f(c.roundness).padStart(8)}${f(c.p50).padStart(7)}${f(c.p95).padStart(7)}${f(c.max).padStart(7)}${c.samples < 16 ? '   (occluded — not scored)' : ''}`)
+    }
+  }
+  if (cases.length > 1) {
+    console.log()
+    console.log(`    ${'case'.padEnd(24)}${'circles'.padStart(8)}${'spread'.padStart(9)}${'|bias|'.padStart(9)}${'centre'.padStart(9)}${'round'.padStart(9)}`)
+    for (const [n, k, p95, mx, ce, ro] of rows.slice().sort((a, b) => b[2] - a[2]))
+      console.log(`    ${n.padEnd(24)}${String(k).padStart(8)}${f(p95).padStart(9)}${f(mx).padStart(9)}${f(ce).padStart(9)}${f(ro).padStart(9)}`)
+    const ps = rows.map((r) => r[2]).sort((a, b) => a - b)
+    const at = (q: number): number => ps[Math.min(ps.length - 1, Math.floor(q * ps.length))]
+    console.log(`
+  spread over ${rows.length} case(s): p50 ${f(at(0.5))}  p90 ${f(at(0.9))}  max ${f(at(1))}`)
+  }
+  console.log()
+  process.exit(0)
+}
+
 const totals = new Map<ArcLoopRecord['verdict'], number>()
+const fams: [string, number, number, number, number][] = []
 console.log(`\n━━━ §1d CO-CIRCULAR ARC-SNAP CENSUS @${RES} ${GRADIENTS ? 'grad' : 'flat'} ━━━`)
 
 for (const [name, text] of cases) {
@@ -94,9 +172,14 @@ for (const [name, text] of cases) {
     engine: 'planar',
     gradients: GRADIENTS,
     ...(FID != null ? { fidelity: FID } : {}),
-    planarFit: { onArcLoop: (r) => loops.push(r) },
+    planarFit: { onArcLoop: (r) => loops.push(r), ...(NOCHAIN ? { chainArcs: false } : {}) },
   })
   for (const l of loops) totals.set(l.verdict, (totals.get(l.verdict) ?? 0) + 1)
+  if (FAMILIES) {
+    for (const l of loops.filter((x) => x.verdict === 'family-snapped'))
+      fams.push([name, l.edges, l.r, l.radialDev, l.turnDeg])
+    continue
+  }
   if (cases.length > 1) {
     const snapped = loops.filter((l) => l.verdict === 'snapped').length
     const veto = loops.filter((l) => l.verdict === 'corner-veto').length
@@ -112,6 +195,16 @@ for (const [name, text] of cases) {
         `${f(l.r, 1).padStart(9)}${f(l.radialDev, 3).padStart(11)}${f(l.budget, 3).padStart(9)}${f(l.turnDeg, 1).padStart(8)}   ${l.verdict}`,
     )
   }
+}
+
+if (FAMILIES) {
+  console.log(`\n  ${'case'.padEnd(26)}${'arcs'.padStart(6)}${'r'.padStart(9)}${'dev'.padStart(8)}${'sweep°'.padStart(9)}`)
+  for (const [n, arcs, r, dev, sweep] of fams.slice().sort((a, b) => a[4] - b[4]))
+    console.log(`  ${n.padEnd(26)}${String(arcs).padStart(6)}${f(r, 1).padStart(9)}${f(dev).padStart(8)}${f(sweep, 0).padStart(9)}`)
+  const ss = fams.map((x) => x[4]).sort((a, b) => a - b)
+  const at = (q: number): number => ss[Math.min(ss.length - 1, Math.floor(q * ss.length))]
+  console.log(`\n  ${fams.length} families over ${cases.length} case(s) — sweep°: min ${f(at(0), 0)}  p10 ${f(at(0.1), 0)}  p50 ${f(at(0.5), 0)}  max ${f(at(1), 0)}\n`)
+  process.exit(0)
 }
 
 console.log(`\n  VERDICT TOTALS over ${cases.length} case(s):`)
