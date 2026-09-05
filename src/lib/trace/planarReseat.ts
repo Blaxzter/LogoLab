@@ -87,27 +87,53 @@ const CHORD_COLLINEAR_OFF = 1.0
 /** …the edge between them must stay within this of that line (it crosses the
  *  needle-mangled zone, so it is looser than the arm tolerance but bounded), */
 const CHORD_TOL = 2.5
-/** …and no longer than this (the mangled zone is junction-local). */
-const CHORD_MAX_LEN = 80
+/**
+ * …and no longer than the straight evidence that certifies it: the two line arms'
+ * fitted lengths (`Prim.conf`) summed, times this. A chord is the claim "the line
+ * continues across this gap"; the arms are the observed straight runs on either side,
+ * so a gap longer than both of them together is extrapolation past the evidence (two
+ * short straight feet either side of a wide, gently curved arch), and 1 is the
+ * bound with no free constant — "at most as much straightened span as observed
+ * straight span".
+ *
+ * Was `CHORD_MAX_LEN = 80`, an absolute px number compared against an ARTWORK span
+ * (issue #14, the Phase-0 audit's ART list): gradient-flat's authored chord is 32.9px
+ * @512 and 131px @2048, so the pass fired at the lab's raster and was dead at the app's
+ * own export — measured with chordDiag, 1 straightened @512 and @1024, 0 @2048 (§0.1).
+ * Both sides of this bound are spans of art, so it reads the same at every raster. The
+ * gallery census (chordDiag --logos, 152 marks × 512/1024/2048) found the absolute cap
+ * separating NOTHING: every one of the 29 candidates it stopped had line arms at least
+ * as long as the chord, i.e. this bound admits exactly what deleting the cap would, while
+ * still refusing the one case a length bound is for. §28 has the numbers.
+ */
+const CHORD_ARM_K = 1
 
 /**
  * Diagnostic out-sink for the chord pass (`chordDiag.ts`, issue #14). The audit measured
- * CHORD_MAX_LEN as an ART constant compared against an ARTWORK span, and therefore dead on
- * its own driver case above ~1024 — but nothing in the repo could observe the candidates it
- * rejects, so the claim could not be re-checked without this. One record per candidate edge,
- * with the value each gate saw and which gate stopped it.
+ * the old CHORD_MAX_LEN as an ART constant compared against an ARTWORK span, and therefore
+ * dead on its own driver case above ~1024 — but nothing in the repo could observe the
+ * candidates it rejects, so the claim could not be re-checked without this. One record per
+ * candidate edge, with the value each gate saw and which gate stopped it.
  *
  * Same shape and cost as `onReseat` in planarBeautify: undefined in production, so the pass
  * is byte-identical when no observer is attached.
  */
 export interface ChordCandidate {
   edgeId: number
-  /** `dist(a,b)` — the artwork span CHORD_MAX_LEN is compared against. */
+  /** `dist(a,b)` — the artwork span the length bound is compared against. */
   len: number
   /** Max deviation of the edge's own fit from the re-seat line (CHORD_TOL). */
   maxDev: number
   sameLine: boolean
   verdict: 'straightened' | 'too-long' | 'not-collinear' | 'dev-exceeded'
+  /** Arm evidence (fitted px, `Prim.conf`) of the line primitive at each end — the two
+   *  spans of boundary that CERTIFIED the line the chord is asked to continue. */
+  armA: number
+  armB: number
+  /** The deviation PROFILE behind `maxDev`: every sample's distance off the re-seat line
+   *  against its arc distance `s` from the NEARER endpoint. Empty unless `sameLine` — the
+   *  profile is only computed where the length veto is the next gate. */
+  profile: { s: number; dev: number }[]
 }
 export type ChordObserver = (c: ChordCandidate) => void
 
@@ -629,7 +655,10 @@ export function reseatJunctions(
     const a = e.nodes[0]
     const b = e.nodes[e.nodes.length - 1]
     const len = dist(a, b)
-    const tooLong = len > CHORD_MAX_LEN
+    const armOf = (ls: Prim[]): number => ls.reduce((m, l) => Math.max(m, l.conf), 0)
+    const armA = armOf(l1s)
+    const armB = armOf(l2s)
+    const tooLong = len > CHORD_ARM_K * (armA + armB)
     // Production short-circuits here. With an observer attached the remaining gates are
     // evaluated anyway — that is the whole point of the census (what does the length veto
     // actually reject?) — but the mutation below stays behind the identical condition, so
@@ -643,13 +672,16 @@ export function reseatJunctions(
       ),
     )
     if (!sameLine) {
-      onChord?.({ edgeId: e.id, len, maxDev: NaN, sameLine: false, verdict: tooLong ? 'too-long' : 'not-collinear' })
+      onChord?.({ edgeId: e.id, len, maxDev: NaN, sameLine: false, verdict: tooLong ? 'too-long' : 'not-collinear', armA, armB, profile: [] })
       continue
     }
     // The edge's own fit must sit near the chord (it crossed the mangled zone —
     // a genuinely different boundary between the two junctions must survive).
     const line = l1s[0]
     let maxDev = 0
+    // Observer only: each sample's deviation against its arc position along the edge.
+    const raw: { cum: number; dev: number }[] | null = onChord ? [] : null
+    let cum = 0
     for (let s = 0; s + 1 < e.nodes.length; s++) {
       const p = e.nodes[s]
       const q = e.nodes[s + 1]
@@ -657,9 +689,24 @@ export function reseatJunctions(
       sampleCubic(p, p.hOut, q.hIn, q, ARM_SAMPLES, pts)
       const d = lineMaxDev(pts, line.a!, line.d!)
       if (d > maxDev) maxDev = d
+      if (raw) {
+        for (let k = 0; k < pts.length; k++) {
+          if (k > 0) cum += dist(pts[k - 1], pts[k])
+          raw.push({ cum, dev: Math.abs((pts[k].x - line.a!.x) * line.d!.y - (pts[k].y - line.a!.y) * line.d!.x) })
+        }
+      }
     }
     const verdict = tooLong ? 'too-long' : maxDev > CHORD_TOL ? 'dev-exceeded' : 'straightened'
-    onChord?.({ edgeId: e.id, len, maxDev, sameLine: true, verdict })
+    onChord?.({
+      edgeId: e.id,
+      len,
+      maxDev,
+      sameLine: true,
+      verdict,
+      armA,
+      armB,
+      profile: raw ? raw.map((r) => ({ s: Math.min(r.cum, cum - r.cum), dev: r.dev })) : [],
+    })
     if (verdict !== 'straightened') continue
     e.nodes = [
       { x: a.x, y: a.y, hIn: null, hOut: null, kind: 'corner' },

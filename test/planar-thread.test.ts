@@ -248,3 +248,59 @@ test('thread: deterministic', () => {
   assert.deepEqual(a.vertices, b.vertices)
   assert.deepEqual(a.edges, b.edges)
 })
+
+// --- issue #14: the junction on an ARC, at a coarse raster -----------------------------
+// THROUGH_SPAN is 12px of raw lattice at every raster, so at a coarse raster the window
+// covers more of the art: the same authored arc reads a chord turn of 21.4° @256 and 7.1°
+// @2048 (`threadDiag --case band-cross`, §0.1), and at the coarse end that trips the 20°
+// corner gate. The junction is then routed to the §17 apex branch — the two arms' LINES
+// intersected — and on an arc those lines are secants, so the apex lands INSIDE the curve:
+// measured on band-cross @256, 0.73 artwork-px off the authored arc against 0.51 for the
+// lattice corner it replaced (`threadScaleDiag`, §28). The circle the 12px window fits is
+// no better (its radius reads 47–56 for an authored 79–81: too little sweep against the
+// staircase). What separates an arc from a corner at ANY raster is that an arc keeps
+// fitting one circle as the window GROWS, and a corner's straight arms leave any circle at
+// a rate set by the corner angle alone — so the fix extends the window while co-circular
+// and threads the junction onto the circle the widest window affords.
+//
+// The fixture: a disc of radius 30 (the band-cross regime, r≈40 @256, made a little
+// tighter so the 12px chord turn is unambiguously past the gate) with a band seam ending
+// on its top. The disc's centre sits off the lattice so the junction's lattice corner is
+// measurably off the authored circle; the placement is measured against that circle.
+
+const ARC_C: Vec = { x: 48, y: 50.4 }
+const ARC_R = 30
+function arcFixture(): Int32Array {
+  const L = new Int32Array(W * H)
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const cx = x + 0.5
+      const cy = y + 0.5
+      const inside = Math.hypot(cx - ARC_C.x, cy - ARC_C.y) <= ARC_R
+      L[y * W + x] = inside ? 0 : cx < SEAM_X ? 2 : 1
+    }
+  }
+  return L
+}
+const offCircle = (p: Vec): number => Math.abs(Math.hypot(p.x - ARC_C.x, p.y - ARC_C.y) - ARC_R)
+/** The seam junction on the disc's TOP (the seam also meets the disc at the bottom). */
+function topVertex(t: ReturnType<typeof tracePlanar>): Vec {
+  const near = t.vertices.filter((v) => Math.abs(v.x - SEAM_X) < 2 && Math.abs(v.y - (ARC_C.y - ARC_R)) < 2)
+  assert.equal(near.length, 1, 'fixture should produce exactly one seam junction on the disc top')
+  return { x: near[0].x, y: near[0].y }
+}
+
+test('arc: a seam junction on a tight arc lands on the circle, not inside it (issue #14)', () => {
+  const L = arcFixture()
+  const pinned = topVertex(tracePlanar(L, W, H))
+  const placed = topVertex(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, PALETTE))
+
+  assert.ok(Number.isInteger(pinned.x) && Number.isInteger(pinned.y), `lattice corner expected, got ${JSON.stringify(pinned)}`)
+  assert.ok(offCircle(pinned) > 0.3, `fixture must offer something to fix (lattice sits ${offCircle(pinned).toFixed(2)}px off the circle)`)
+  assert.ok(
+    offCircle(placed) < 0.5 * offCircle(pinned),
+    `arc junction should land on the authored circle: ${offCircle(placed).toFixed(2)}px vs lattice ${offCircle(pinned).toFixed(2)}px`,
+  )
+  // …and only radially: along the arc is the seam's business.
+  assert.ok(Math.abs(placed.x - pinned.x) < 0.6, `move should be ~normal to the arc, got dx ${(placed.x - pinned.x).toFixed(2)}`)
+})

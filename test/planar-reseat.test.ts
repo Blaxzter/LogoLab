@@ -21,14 +21,21 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { Resvg } from '@resvg/resvg-js'
 import { ensureImageData } from '../src/devtest/nodeHarness.ts'
+import { decodePng } from '../src/devtest/png.ts'
 import { tracePlanar } from '../src/lib/trace/planarAssemble.ts'
 import { planarBeautify, type SnapOptions } from '../src/lib/trace/planarBeautify.ts'
-import { reseatJunctions, weldConvergedJunctions } from '../src/lib/trace/planarReseat.ts'
+import { reseatJunctions, weldConvergedJunctions, type ChordCandidate } from '../src/lib/trace/planarReseat.ts'
+import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import type { BeautifyOptions } from '../src/lib/trace/beautify.ts'
 import type { EdgeRef, SharedEdge, Topology, Vec, Vertex } from '../src/lib/path/types.ts'
 
 ensureImageData()
+const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 const W = 512, H = 512
 const OPTS: BeautifyOptions = { fidelity: 1.5, relationFrac: 0.1, hvAngleDeg: 0 }
@@ -169,6 +176,59 @@ test('reseat: the occluder line stays straight through the crossing (no pull), c
   assert.ok(chord, 'the occluder chord is a 2-node straight edge on the line')
   assert.equal(chord!.nodes[0].hOut, null)
   assert.equal(chord!.nodes[1].hIn, null)
+})
+
+// --- issue #14: the chord's length bound is a span of ART, not of raster ----------------
+// The chord between the two re-seated junctions IS the occluder line continuing through
+// the crossing, and its length is the disc's chord — a span of ART that doubles with the
+// raster. The old `CHORD_MAX_LEN = 80` (absolute px) let the pass fire at the lab's 512
+// (the authored chord is 32.9px there) and silently killed it at the app's own 2048 export
+// (131px): chordDiag on the real gradient-flat raster read 1 straightened @512 and @1024,
+// 0 straightened / 3 too-long @2048 (§0.1). The bound is now the chord's own evidence —
+// the two certifying line arms summed — so the pass must straighten the driver's chord at
+// the export raster too.
+//
+// This is the REAL pipeline on the real raster, deliberately: the synthetic fixture above
+// cannot be red here. At 3× and beyond its dead-straight chord outranks the disc arm in
+// the re-seat's own pair ranking (`ARM_MAX` caps the arc's evidence, the audit's next ART
+// row) and gets straightened by `applyEnd` instead — the outcome is right for a reason
+// that has nothing to do with the chord pass. On the AA raster the chord is not a line
+// primitive (0.11px of fit wobble) and the chord pass is the only route.
+test('reseat: gradient-flat @2048 — the occluder chord is straightened at the export raster (issue #14)', async () => {
+  const svg = readFileSync(join(root, 'public', 'examples', 'edge-cases', 'gradient-flat.svg'), 'utf8')
+  const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: 2048 }, background: 'white' }).render().asPng())
+  const seen: ChordCandidate[] = []
+  const doc = await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: true,
+    planarFit: { onChord: (c) => seen.push(c) },
+  })
+  // The census the fix was measured on: three edges reach the chord gate (the chord and
+  // the disc's two arcs between the same junctions); the arcs are refused on deviation.
+  const chord = seen.filter((c) => c.sameLine && c.maxDev <= 2.5)
+  assert.equal(chord.length, 1, `exactly one collinear, in-tolerance candidate (${seen.map((c) => `${c.len.toFixed(0)}px→${c.verdict}`).join(', ')})`)
+  assert.ok(chord[0].len > 100, `the authored chord is ~131px at 2048 (${chord[0].len.toFixed(1)})`)
+  assert.equal(chord[0].verdict, 'straightened', `chord len ${chord[0].len.toFixed(1)}px with arms ${chord[0].armA.toFixed(0)}/${chord[0].armB.toFixed(0)} must straighten`)
+
+  // And the doc shows it: a straight segment between two nodes at the chord's authored
+  // ends — (218.1,194)/(240.1,218.4) @512, ×4 — with no handles between them.
+  const ends = [{ x: 872.4, y: 776.0 }, { x: 960.4, y: 873.6 }]
+  let straight = false
+  for (const it of doc.items) {
+    if (it.kind !== 'path') continue
+    for (const sp of it.subPaths) {
+      const n = sp.nodes.length
+      for (let i = 0; i < n; i++) {
+        const a = sp.nodes[i]
+        const b = sp.nodes[(i + 1) % n]
+        if (i === n - 1 && !sp.closed) break
+        const hit = (p: Vec, q: Vec): boolean => Math.hypot(p.x - q.x, p.y - q.y) < 4
+        if (((hit(a, ends[0]) && hit(b, ends[1])) || (hit(a, ends[1]) && hit(b, ends[0]))) && !a.hOut && !b.hIn) straight = true
+      }
+    }
+  }
+  assert.ok(straight, 'the traced doc carries the chord as one straight segment between its two junctions')
 })
 
 test('reseat: an ideally-quantized junction is untouched (MIN_MOVE guard)', () => {

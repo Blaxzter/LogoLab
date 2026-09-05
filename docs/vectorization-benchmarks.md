@@ -45,9 +45,9 @@ the instruments named are new and live in `src/devtest/`.
 
 | issue | premise | verdict |
 |---|---|---|
-| **#14** THROUGH_SPAN | same junction reads 21.4° → 13.2° → 13.2° → 7.1° @256/512/1024/2048; line-vs-circle winner flips | **holds exactly** — junction (209,90)→(418,180)→(836,359)→(1671,718), turns and both dev pairs (circ 0.79/line 1.25 @256, circ 1.99/line 0.67 @2048) reproduce to the decimal (`threadDiag --case band-cross`) |
-| **#14** THROUGH_SPAN, *consequence* | "@256 it trips the 20° gate and the junction is DROPPED (15/16 move)" | **STALE** — @256 now moves **16 of 16**: 15 by §14 thread and **1 by §17 apex**. §17 landed 2026-08-06, the day after the issue, and catches exactly the junction the 20° gate refuses. The defect is now "same art routed down a different branch per raster", not a lost junction |
-| **#14** CHORD_MAX_LEN | dead above ~1024 on its own driver case (32.9px @512 → 130.7px @2048 > 80) | **holds** — `chordDiag`: gradient-flat has 3 candidates at every raster; 1 straightened @512 (len 32.0) and @1024 (65.2), then **0 straightened / 3 too-long @2048** (131.1). Counterfactual `--cap 400` recovers exactly the 1 |
+| **#14** THROUGH_SPAN | same junction reads 21.4° → 13.2° → 13.2° → 7.1° @256/512/1024/2048; line-vs-circle winner flips | **holds exactly** — junction (209,90)→(418,180)→(836,359)→(1671,718), turns and both dev pairs (circ 0.79/line 1.25 @256, circ 1.99/line 0.67 @2048) reproduce to the decimal (`threadDiag --case band-cross`). **FIXED 2026-09-05 (§28)**: the paired census measured that junction 0.73 artwork-px INSIDE its arc @256; the circle window now extends while co-circular and it threads to 0.18 |
+| **#14** THROUGH_SPAN, *consequence* | "@256 it trips the 20° gate and the junction is DROPPED (15/16 move)" | **STALE** — @256 now moves **16 of 16**: 15 by §14 thread and **1 by §17 apex**. §17 landed 2026-08-06, the day after the issue, and catches exactly the junction the 20° gate refuses. The defect is now "same art routed down a different branch per raster", not a lost junction. **§28 measured the branch flip itself**: the apex branch was worse than the lattice on both arc junctions; the issue's scale-the-window prescription and its two-window-ratio hypothesis were both cut against the paired census and both fell |
+| **#14** CHORD_MAX_LEN | dead above ~1024 on its own driver case (32.9px @512 → 130.7px @2048 > 80) | **holds** — `chordDiag`: gradient-flat has 3 candidates at every raster; 1 straightened @512 (len 32.0) and @1024 (65.2), then **0 straightened / 3 too-long @2048** (131.1). Counterfactual `--cap 400` recovers exactly the 1. **FIXED 2026-09-05 (§28)**: the cap is now the chord's own evidence (≤ the two line arms summed); the gallery census showed the absolute 80 separated nothing in 152 marks × 3 rasters |
 | **#14** coarse-end tail | 4 scale KNOWN_DEFECTS remain (overlap, aa-seam, petals, band-cross) | **holds** — all four still listed, gate 7/7 green |
 | **#10** rings | 69 edges / 46 junctions @512; §1d / §14 / §17 all aim here and none holds | **held; now CLOSED** (§24). The premise was right and §0.1's own explanation was half wrong — see the correction below |
 | **#9** border | `collectBoundary` drops every query within BORDER_EPS 1.5px; no gate can see the border | **holds** — the exclusion is intact and two-sided. `borderDiag` measures the hole at **4,489 transversal band samples** on the fixtures alone |
@@ -100,6 +100,30 @@ shows before trusting the issue's framing** — the named witness is mid-pack he
 `src/devtest/borderDiag.ts` (#9), `src/devtest/ringDiag.ts` (#10),
 `src/devtest/chordDiag.ts` (#14). `threadDiag` already covered #14's THROUGH_SPAN witness.
 New corpus case `shaded-ink` (#15, tier 0, gated, in `KNOWN_DEFECTS` at 512 **and** 256).
+
+Recently closed: **two absolute-px constants compared against spans of art** (issue #14,
+the audit's two measured live bugs) — closed 2026-09-05, **§28** is the record. Phase 0
+was a PAIRED per-junction census (`threadScaleDiag`: the same authored junction at
+256/512/1024/2048, scored off the authored strong boundary in artwork px) that killed
+both written hypotheses before any code moved: scaling `THROUGH_SPAN` with the raster is
+worse than HEAD at every raster (at 256 it refuses four straight continuations on
+staircase noise), and the two-window turn ratio does not separate an arc (1.24) from a
+corner (1.12) at the coarse end. The defect it did measure is narrower than the issue's
+framing: two junctions on the disc, placed WORSE than their own lattice corners at 256 —
+one threaded onto a circle whose 12px window mis-read the radius (56 for 81), one refused
+by the 20° turn gate and intersected 0.73px inside the curve. The circle window now grows
+while the arms still fit one circle (`THROUGH_EXTEND`, 2–4×): an arc survives that at any
+raster, a corner at none (its residual grows ~W·θ/2), and every circle placement takes the
+widest surviving window — 0.63 → **0.07** and 0.73 → **0.18** artwork-px, the paired mean
+0.249 → **0.138** @256 and 0.099 → **0.063** @512, byte-identical at 1024/2048 and on the
+corner control. `CHORD_MAX_LEN` 80 became a bound on the chord's own evidence (≤ the two
+certifying line arms summed, no free constant) after `chordDiag` showed the absolute cap
+stopping 29 candidates across 152 marks × 3 rasters and separating none of them, and the
+"junction-local tolerance" redesign was falsified at 512 (the driver's deviation is spread
+along the whole chord). Both gates were red first: an r=30 arc fixture the apex branch
+lands 0.35px inside, and gradient-flat's real raster at 2048 (the synthetic fixture cannot
+be red — at 3× its straight chord outranks the disc arm in the re-seat's pair ranking, the
+audit's `ARM_MAX` row demonstrated live).
 
 Recently closed: **one ink carved along its own soft shading** (issue #15, from the
 icon-sheet work — a shaded single-ink icon traced through the colour path came back cut
@@ -4872,3 +4896,239 @@ Deleted from `KNOWN_DEFECTS` at 512 and 256; truth gate **77 / 77**.
 - **Instrument:** `softPairDiag` (`--case`, a file, `--res`, `--min`, `--transparent`,
   `--census`, `--soft`), printing per pair the raw and interior shares, and what
   `fuseShadingTones` actually fuses on the input.
+
+## 28. Two absolute-px constants compared against spans of art (issue #14, 2026-09-05)
+
+Issue #14 is the audit's ART workstream (§15.6, `docs/absolute-px-audit.md`), and it names
+two entries that are not classifications but measured live bugs: `THROUGH_SPAN` 12px
+(§14's contrast-rank window reads the same authored junction's chord turn as 21.4° @256 and
+7.1° @2048) and `CHORD_MAX_LEN` 80px (§10.4's occluder-chord straightening, dead on its own
+driver case above ~1024). §0.1 re-measured both on 2026-08-23 and found the numbers exact
+and one consequence stale — the coarse-end junction is no longer DROPPED, §17 catches it on
+the apex branch, so the defect became "the same art routed down a different branch per
+raster". The issue's own rules: every constant gets its own witness and red gate; the
+audit's DO-NOT-SCALE list is the do-not-touch map (`THROUGH_DEV` must scale WITH
+`THROUGH_SPAN` if that is ever scaled); and the issue's second comment warned that scaling
+the window is probably the wrong shape and proposed a two-window turn ratio — "a
+hypothesis, not a measurement", to be cut against a paired per-junction census first.
+
+This section is that census, what it did to both hypotheses, and the two fixes it chose.
+
+### 28.1 `THROUGH_SPAN` — the paired census, and the two written hypotheses it killed
+
+**The instrument.** `src/devtest/threadScaleDiag.ts`. `threadDiag` prints one raster's
+verdicts, and the junction POPULATION differs per raster (16/34/24/30 on the Affinity mark),
+so its rates were never a paired comparison. The new census traces one authored case at
+256/512/1024/2048 through the production flat path up to the survey, keys every junction
+the rank fires on by its position in 512-px ARTWORK space, pairs them across rasters, and
+scores every placement as its distance off the AUTHORED strong boundary — the shapes in the
+mark's own ink; the band seams are the weak boundaries and deliberately not ground truth,
+since the along-seam position is free (§14.2) — in artwork px, so the lanes compare. Ground
+truth also says what the boundary IS at each junction (line / arc with radius / corner; the
+reader gained a `fill` field for this). Two diagnostic hooks on `surveyJunctions`, both
+undefined in production: `tune` overrides the window and residual gates so a counterfactual
+runs without editing constants, and `alt` records where EACH estimator (through-line,
+through-circle with its radius, arm∩arm apex) would have put the junction, gates ignored.
+
+On a real mark the census cannot pair at all — `affinity-designer` pairs **0 of 28**
+junctions across four rasters, because its seams are posterization of an authored gradient
+and land somewhere else at every size. `band-cross` (authored bands, 10 junctions present
+at every raster: 8 on lines, 2 on the r=40 disc) is therefore the witness, with
+`seam-corner` (its 90–143° corners) as the control.
+
+**Before the fix, per raster** (10 paired junctions, mean / max artwork-px off the strong
+boundary; `lattice` = the integer corner's own error, i.e. the cost of not moving):
+
+| res | lattice | HEAD (span 12 / dev 1.2) | SCALED (span 12·res/512, dev 1.2·res/512) |
+|---|---|---|---|
+| 256 | 0.421 / 1.42 | 0.249 / 0.73 | **0.413 / 1.42** — 4 continuations refused on residual |
+| 512 | 0.254 / 0.64 | 0.099 / 0.37 | 0.099 / 0.37 (identical by construction) |
+| 1024 | 0.163 / 0.45 | 0.027 / 0.09 | 0.052 / 0.19 |
+| 2048 | 0.083 / 0.21 | 0.030 / 0.05 | 0.046 / 0.11 |
+
+- **Hypothesis 1 — scale the window with the raster (the issue's literal prescription,
+  tripwire honoured): FALSIFIED.** Worse than HEAD at every raster but 512. At 256 the
+  window shrinks to 6px and four straight continuations fail `THROUGH_DEV` on staircase
+  noise (the §10.6 short-arm regime the issue's comment predicted); at 1024/2048 the
+  wider window and looser residual admit worse circles.
+- **Hypothesis 2 — a two-window turn ratio (24px / 12px; arc → ~2, corner → ~1): NOT
+  SEPARABLE at the coarse end.** Corners read 1.00–1.12 at every raster (`seam-corner`,
+  ten of them) and straight lines 0.48 (the turn of a 1px step halves with the window),
+  but the two arcs read **1.24** and 1.79 @256, 1.30 / 1.57 @512, 0.78 / 1.48 @1024 — the
+  staircase's 1/span term contaminates the ratio, and 1.24 is not distinguishable from a
+  corner's 1.12.
+- **The defect, quantified.** Two of ten paired junctions change branch across rasters,
+  both on the disc, and both are placed WORSE than their own lattice corner at 256: the
+  r=81 (artwork) arc at (260,158) threads onto a circle fitted from the 12px window whose
+  radius reads **56** (37 @512, 23 @1024 — too little sweep against ±0.5px of staircase),
+  0.63px off; the r=79 arc at (418,180) reads 21.4° of turn, is refused as a corner, and
+  the §17 apex — two secant lines intersected — lands **0.73px inside the curve** against
+  0.51 for the lattice. Everything else is a straight junction the line handles at every
+  raster (8 of 8, byte-stable).
+
+**Each estimator alone, gates ignored** (mean / max over the same 10 junctions), which is
+what actually chose the fix:
+
+| res | HEAD rule | always line | always circle (12px) | always apex | best of 3 | circle @24px | best incl. 24px |
+|---|---|---|---|---|---|---|---|
+| 256 | 0.249 / 0.73 | 0.292 / 0.94 | 3.87 / 10.4 | 0.648 / 3.03 | 0.203 / 0.65 | 6.01 / 14.8 | **0.095 / 0.38** |
+| 512 | 0.099 / 0.37 | 0.089 / 0.27 | 2.12 / 5.1 | 2.95 / 22.3 | 0.085 / 0.23 | 3.67 / 8.3 | 0.060 / 0.16 |
+| 1024 | 0.027 / 0.09 | 0.027 / 0.09 | 1.14 / 2.3 | 0.249 / 1.6 | 0.016 / 0.04 | 1.99 / 4.9 | 0.014 / 0.04 |
+
+Read across: a circle is catastrophic on a straight edge at any window (the "always
+circle" columns are the eight lines), so no rule may prefer it there; an oracle choosing
+among the three 12px estimators only reaches 0.203 @256 — the 12px window is the limit, not
+the selector; and the 24px circle is what lands the two arcs — radius **73** and **80** for
+authored 81 / 79, errors **0.38** and **0.15** against 0.63 / 0.73. The information that
+separates "an arc of radius 40" from "a 40° corner" is not in one 12px window; it is in
+whether the circle SURVIVES a wider one.
+
+### 28.2 The fix: extend the circle window while the evidence stays one circle
+
+`planarThread.ts` — `extendCircle` + `THROUGH_EXTEND = [2, 3, 4]`. The base window and
+its two gates are unchanged for the LINE question (does the boundary run straight
+through?): a chord direction needs a fixed px of evidence at every raster because
+staircase phase noise is ±0.5px per endpoint at every raster — the audit's SENSOR
+reasoning, kept. For the CIRCLE the window is grown to 2×, 3×, 4× the span, each step
+requiring both arms to fill it and the joined samples to fit ONE circle within
+`THROUGH_DEV` (unchanged at 1.2 — the tripwire was about scaling the BASE window, where a
+rounded corner would bow more; here a larger window is the point, since a corner's residual
+grows with it and an arc's does not), and the circle of the widest surviving window is
+kept. Two uses:
+
+- Every circle placement (turn ≤ 20°, circle beats line) now projects onto the extended
+  circle when one exists, the base window's own circle only when nothing wider fits.
+- A junction the turn gate REFUSES is first offered the extended circle; only if the 2×
+  window does not fit one circle does it go to §17's corner branch. That is the evidence
+  a corner cannot produce: a corner's circle residual over a window ±W is ~W·θ/2 (a 40°
+  corner reads 1.11px at 12px and ~2.2 at 24px; a 20° corner ~1.1 at 24px), so the 24px
+  window at `THROUGH_DEV` 1.2 refuses corners above ~22° — the turn gate's own boundary,
+  reached from the residual instead of the chord turn, and the same at every raster.
+  An authored arc's residual is staircase noise at any window its arms can fill.
+
+`JunctionVerdict.extK` records the multiple reached (1 = base); `threadDiag` prints it.
+
+**After** (same census, same 10 junctions):
+
+| res | lattice | HEAD before | **HEAD after** | branches after |
+|---|---|---|---|---|
+| 256 | 0.421 / 1.42 | 0.249 / 0.73 | **0.138 / 0.33** | line 8 · circle×4 2 |
+| 512 | 0.254 / 0.64 | 0.099 / 0.37 | **0.063 / 0.16** | line 9 · circle×4 1 |
+| 1024 | 0.163 / 0.45 | 0.027 / 0.09 | 0.027 / 0.09 (byte-identical) | line 10 |
+| 2048 | 0.083 / 0.21 | 0.030 / 0.05 | 0.030 / 0.05 (byte-identical) | line 10 |
+
+The two arcs: (260,158) **0.63 → 0.07** @256 and 0.37 → 0.02 @512; (418,180) **0.73 →
+0.18** @256 (threaded ×4 instead of intersected). They still change branch across rasters
+(circle at the coarse end, line at the fine end) — the §0.1 wording — but both branches
+now put the junction on the boundary within 0.1–0.2px, which is the thing that matters.
+`seam-corner`: no junction takes the circle branch at any raster; its ten corners are
+apex or refused exactly as before. The issue's own prescription (SCALED) is still worse
+than this at every raster.
+
+**The gate** (`test/planar-thread.test.ts`, red first): a disc of radius 30 with its
+centre off the lattice, a band seam ending on its top — the band-cross regime made a
+little tighter so the 12px chord turn is unambiguously past 20°. HEAD intersects the arms
+and lands 0.35px off the circle against 0.40 for the lattice corner; the fix threads it
+to within half the lattice error, moving radially only.
+
+### 28.3 `CHORD_MAX_LEN` — the census that chose the bound's shape
+
+`chordDiag` gained a deviation PROFILE per candidate (each sample's distance off the
+re-seat line against its arc distance from the nearer junction) and the two certifying
+line arms' fitted lengths, so the alternatives could be measured rather than argued.
+
+**gradient-flat**, the driver, per raster (the one chord; the disc's two arcs between the
+same junctions are refused on deviation at every size, as they should be):
+
+| res | chord len | arms | maxDev | dev beyond 8px from either end | beyond 24px |
+|---|---|---|---|---|---|
+| 512 | 32.0 | 24 / 145 | 1.26 | 1.20 | — |
+| 1024 | 65.2 | 51 / 312 | 0.55 | 0.46 | 0.34 |
+| 2048 | 131.1 | 136 / 626 | 0.11 | 0.00 | 0.00 |
+
+Two things this settles. The obvious redesign — hold `CHORD_TOL` 2.5 only in a junction-
+local mangle zone and `LINE_TOL` 0.8 in the interior, deleting the length cap — is
+**falsified at the lab's own raster**: at 512 the driver's deviation is 1.20 of 1.26 beyond
+8px from the ends, i.e. spread along the whole chord (the fit followed two wrong endpoints),
+and the split would refuse the §10.4 fix that ships today. And the "dead" pass costs
+0.11px of bend at 2048 — the mechanism is dead there, the visible damage is the chord's
+handles and nodes, not its position. Every span in the table doubles with the raster; the
+arms are the artwork's own straight runs on either side (24px is the hypotenuse up to the
+triangle's corner, 145 the rest of it).
+
+**The gallery** (`chordDiag --logos`, 152 marks × 512/1024/2048): the absolute cap stopped
+**29** candidates that passed collinearity and `CHORD_TOL` — and separated nothing. Every
+one of the 29 has line arms at least as long as the chord (sap 91px on arms 139/94 …
+apple-music 319 on 308/311 … affinity-designer 1232 on 1228/1230); 21 are dead-straight
+already (maxDev 0.00–0.14), and the only three with a deviation to speak of are
+`parcel` @2048 (103px, 1.19 along its whole length), `app-store` @2048 (245px, 1.16) and
+`auth-js` @1024 (217px, 0.73) — each between two 200–450px straight runs collinear to 1px,
+i.e. a bump the arms do not corroborate, at the export raster where 1px is a quarter of a
+lab pixel. At 512 the lifted cap admits three chords of 0.13–0.27px deviation.
+
+**The bound.** `CHORD_ARM_K = 1`: a chord may be no longer than its two certifying line
+arms summed. A chord is the claim "this line continues across the gap"; the arms are the
+observed straight runs either side, so a gap longer than both together is extrapolation
+past the evidence — two short straight feet either side of a wide gentle arch, the one
+case a length bound exists for and the one no corpus mark exhibits. Both sides are spans
+of art, so it reads the same at every raster; 1 is the value with no free constant. On
+the corpus it admits exactly what deleting the cap would.
+
+**The gate** (`test/planar-reseat.test.ts`, red first): the real gradient-flat raster at
+**2048**, through `traceImage`, with the chord observer — exactly one collinear,
+in-tolerance candidate, ~131px, verdict `straightened`, and the traced doc carrying the
+chord as one handle-less segment between its two junctions. It is the real pipeline
+deliberately: the synthetic occluded-disc fixture cannot be red here. Scaled to 3× or 4×
+its dead-straight chord outranks the disc arm in the re-seat's own pair ranking
+(`ARM_MAX` caps the arc's evidence near 110px while the chord's line reads its full
+length) and is straightened by `applyEnd` instead — the right outcome for a reason that has
+nothing to do with the chord pass, and a live demonstration of the audit's `ARM_MAX` row.
+
+### 28.4 After (the numbers)
+
+- **Suite 472 / 0** (474, 2 skipped), typecheck clean. Truth gate, the @256 lane, the tier-2
+  region lanes and the scale gate all unchanged — the four coarse-end `KNOWN_DEFECTS`
+  (`overlap`, `aa-seam`, `petals`, `band-cross`) still fail the drift gate as listed (28.5
+  says why they were never going to move).
+- **Golden corpus:** one advisory drift, `aurora-flat` — the thread extension, re-blessed.
+- **A/B** (`before-ws2-scale` ⇄ `after-ws2-scale`, 42 cases / 84 outputs): **4 moved**,
+  each attributed by switching the mechanism off and re-stamping, not by reading the
+  diff (the [[golden-baseline-stale]] rule):
+  - `logo-instagram` flat — the extension. Two seam junctions on the RING, chord turns
+    24.2° and 33.7° at the lab's own 512 (the r≈45px ring is the band-cross regime one
+    size up), both refused by the turn gate before, both now threaded onto the ×2 circle:
+    moves 0.13px and 0.54px, radially. The mark's own `logo-instagram` §0 history (§15.8,
+    §18) is the counter and the tips; this is the ring.
+  - `aurora` flat — the extension. One junction on the chevron at 26.6° of turn, threaded
+    ×3, 0.11px.
+  - `logo-coca-cola` gradient lane — the extension (2 fewer path commands; the flat-path
+    census cannot see the MS label map, so this one is attributed by the switch alone).
+  - `cross-bars` gradient lane — the chord bound. An 87.7px occluder chord across the
+    other bar, certified by two 261px line arms, was 1.45px bent and refused by the
+    absolute 80; it is now the straight cut §10.4 exists to draw. 552 → 498 bytes.
+  - The other 80 outputs are byte-identical, `band-cross` and `seam-corner` among them
+    (band-cross's 512 arc junction re-projects onto the same lattice point; seam-corner's
+    corners never enter the circle branch).
+- **Instruments:** `threadScaleDiag` (`--case`, `--logo`, `--res`, `--k`), `chordDiag
+  --verbose` (per-candidate arms + interior deviation, gallery roll-up of what no length
+  bound would admit), `threadDiag` now labels an extended circle placement `×k`.
+
+### 28.5 What is left
+
+- **The rest of the ART list.** `ARM_MAX` 110 is now MEASURED changing which primitive
+  pair wins a re-seat with the raster (28.3's fixture at 3×); `CIRC_TOL` / `MIN_ARC_ARM` /
+  `CAP_MAX` / `R_MIN` are still unmeasured and still absolute. Each wants its own witness
+  and red gate, per the issue's rules — none was touched here.
+- **The extension is circle-only.** The LINE window stays 12px by design (a chord
+  direction needs a fixed px count of evidence at every raster); a straight junction's
+  placement is unchanged and its error is already at the lattice noise floor (0.02–0.06).
+- **The coarse-end scale `KNOWN_DEFECTS` (§15.7) do not move.** `band-cross`'s drift is
+  boundary chamfer over the whole case, and ten junctions are a vanishing share of it; the
+  strong edges still ride the lattice at 256 for the reason §15.7 names.
+- **Real marks cannot be paired.** Posterization bands land elsewhere at every raster, so
+  on the gallery the census can only report per-raster rates; the branch-flip defect is
+  witnessed on authored bands alone.
+- **gradient-flat @256 has no chord candidate at all** — the re-seat itself does not fire
+  there (0 candidates at every constant). That is a different coarse-end story (the slide
+  vs `MIN_MOVE`, or the arm certification), not this constant's, and it is not in this
+  issue's numbers.
