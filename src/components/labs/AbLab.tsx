@@ -72,15 +72,19 @@ interface SnapEntry {
   manifest: AbSnapshotManifest
 }
 
-/** Every snapshot found under test/ab-snapshots/<name>/, newest date first (the dropdown
- *  order). The subdir name is the identity; the manifest's own `name` mirrors it. */
+/** Every snapshot found under test/ab-snapshots/<name>/, newest first (the dropdown
+ *  order). The subdir name is the identity; the manifest's own `name` mirrors it. The sort
+ *  key is the full `createdAt` timestamp where a stamp has one, else its day — a day alone
+ *  tied every stamp frozen that day and fell back to the NAME, so a same-day pair could
+ *  list under an unrelated earlier one. Pairs (below) inherit this order. */
+const stampedAt = (s: SnapEntry): string => s.manifest.createdAt ?? s.manifest.date
 const SNAPSHOTS: SnapEntry[] = Object.entries(SNAP_META)
   .map(([path, raw]) => {
     // /test/ab-snapshots/<name>/manifest.json → <name>
     const name = path.split('/').slice(-2, -1)[0]
     return { name, manifest: JSON.parse(raw) as AbSnapshotManifest }
   })
-  .sort((a, b) => (a.manifest.date < b.manifest.date ? 1 : a.manifest.date > b.manifest.date ? -1 : a.name.localeCompare(b.name)))
+  .sort((a, b) => (stampedAt(a) < stampedAt(b) ? 1 : stampedAt(a) > stampedAt(b) ? -1 : a.name.localeCompare(b.name)))
 
 /** A before/after SET: two stamps of one change, offered as ONE dropdown entry that selects
  *  both sides. Sourced two ways and deduped — an explicit `pair` in the newer stamp's

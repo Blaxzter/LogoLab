@@ -4,7 +4,9 @@
 here, one subdir per stamp, so the next change can be judged against it in **/labs/ab →
 Vs snapshot**. Each subdir holds, per case: the exact input pixels (`<id>.png`), the
 serialized trace with gradients off and on (`<id>.flat.svg`, `<id>.grad.svg`), and a
-`manifest.json` recording the git rev (`+dirty` when the tree had modifications) and date.
+`manifest.json` recording the git rev (`+dirty` when the tree had modifications), the date,
+and a full `createdAt` timestamp (the dropdown's sort key — stamps list newest first, and a
+same-day pair no longer sorts under an unrelated earlier stamp by name).
 
 **Nothing in here is committed** (`.gitignore`), for two reasons:
 
