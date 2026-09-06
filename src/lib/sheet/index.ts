@@ -4,6 +4,8 @@ export { cropTile, downscaleImageData, upscaleImageData, toImageData, defaultTil
 export type { CropFill } from './crop.ts'
 export { probeInk } from './inkProbe.ts'
 export type { InkProbe } from './inkProbe.ts'
+export { matchCaptions, captionToName, cleanAffix, exportName, prepareCaption } from './captions.ts'
+export type { CaptionMatch } from './captions.ts'
 export type {
   DetectOptions,
   ImageDataLike,

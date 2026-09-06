@@ -97,6 +97,19 @@ Generate a complete, production-ready icon set as a single `.zip`.
 - Presets (**Web essentials / Full PWA / Everything**) and a live preview that follows your
   sidebar appearance (card color, shape, radius, padding, scale, tint).
 
+### 🧩 Icon sheet — one image, a whole set
+Drop the sheet an image model hands you ("a set of 16 weather icons, captioned") and get every
+icon back as its own clean SVG.
+
+- The icons are found on the paper — captions and titles are recognised and set aside — or the
+  sheet is split by an even grid you specify. Boxes can be dragged, resized and drawn by hand.
+- Every icon goes through the same vectorizer, a few at a time; open any one for the full editor.
+- **Names from captions** — each icon is named after the text under it (`security-camera.svg`),
+  read in the browser by [Tesseract.js](https://github.com/naptha/tesseract.js) (engine fetched
+  the first time a sheet has captions, ~5 MB, then cached; switch it off under **Names**). Add a
+  **prefix / suffix** to every name for the export.
+- One zip: traced SVGs, cropped PNGs (paper knocked out), or both.
+
 ## 🚀 Getting started
 
 ```bash
@@ -135,6 +148,8 @@ No environment variables or server routes required.
   (export) · **lucide-react** (icons)
 - **@huggingface/transformers** (Transformers.js) for the in-browser AI background remover —
   lazily `import()`-ed so it never weighs down the initial bundle.
+- **tesseract.js** to read the captions on an icon sheet — also lazily `import()`-ed; the WASM
+  engine and English model come from its CDN on first use and are cached by the browser.
 - Everything runs client-side via the Canvas & DOM APIs.
 
 ## 🔬 Algorithms & papers

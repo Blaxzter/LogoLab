@@ -15,6 +15,7 @@ import { Sheet } from '../ui/Sheet'
 import { StudioActionBar, StudioTopBar } from '../studio/StudioBar'
 import { LegalLinksInline } from '../legal/LegalFooter'
 import { downloadBlob } from '../../lib/download'
+import { exportName } from '../../lib/sheet'
 import { SheetControls, SheetControlsBody } from './SheetControls'
 import { SheetStage } from './SheetStage'
 import { IconGrid } from './IconGrid'
@@ -38,6 +39,8 @@ export function SheetStudio() {
   const colorMode = useSheetStore((s) => s.colorMode)
   const hiRes = useSheetStore((s) => s.hiRes)
   const gradientMode = useSheetStore((s) => s.gradientMode)
+  const naming = useSheetStore((s) => s.naming)
+  const ocr = useSheetStore((s) => s.ocr)
   const running = useSheetStore((s) => s.running)
   const selectedId = useSheetStore((s) => s.selectedId)
   // Actions are created once with the store, so these references are stable and
@@ -47,6 +50,8 @@ export function SheetStudio() {
   const setColorMode = useSheetStore((s) => s.setColorMode)
   const setHiRes = useSheetStore((s) => s.setHiRes)
   const setGradientMode = useSheetStore((s) => s.setGradientMode)
+  const setNaming = useSheetStore((s) => s.setNaming)
+  const readCaptions = useSheetStore((s) => s.readCaptions)
   const setAllIncluded = useSheetStore((s) => s.setAllIncluded)
   const setSource = useSheetStore((s) => s.setSource)
   const updateTile = useSheetStore((s) => s.updateTile)
@@ -129,7 +134,11 @@ export function SheetStudio() {
       const state = useSheetStore.getState()
       const items = state.tiles
         .filter((t) => t.included)
-        .map((t) => ({ tile: t, pixels: exportPng ? state.crop(t.id) : null }))
+        .map((t) => ({
+          tile: t,
+          pixels: exportPng ? state.crop(t.id) : null,
+          name: exportName(t.name, state.naming.prefix, state.naming.suffix),
+        }))
       const blob = await buildSheetZip(items, { svg: exportSvg, png: exportPng, transparent: transparentPng })
       const base = (source?.fileName ?? 'sheet').replace(/\.[^.]+$/, '') || 'sheet'
       downloadBlob(blob, `${base}-icons.zip`)
@@ -153,6 +162,10 @@ export function SheetStudio() {
       onHiRes: setHiRes,
       gradientMode,
       onGradientMode: setGradientMode,
+      naming,
+      onNaming: setNaming,
+      ocr,
+      onRetryCaptions: () => void readCaptions(),
       running,
       onTraceAll: () => void traceAll(),
       onTraceStale: () =>
@@ -177,7 +190,7 @@ export function SheetStudio() {
     }),
     // onExport closes over the export toggles, which are all in the dep list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [detect, grid, warnings, tiles, traceOptions, colorMode, hiRes, gradientMode, running, exportSvg, exportPng, transparentPng, exporting, source],
+    [detect, grid, warnings, tiles, traceOptions, colorMode, hiRes, gradientMode, naming, ocr, running, exportSvg, exportPng, transparentPng, exporting, source],
   )
 
   if (!source || !image) return null
@@ -307,6 +320,7 @@ export function SheetStudio() {
               image={image}
               background={background}
               tiles={tiles}
+              naming={naming}
               checkerClass={checkerClass}
               showTraced={showTraced}
               onOpen={open}

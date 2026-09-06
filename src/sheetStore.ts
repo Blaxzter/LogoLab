@@ -9,6 +9,8 @@
 import { create } from 'zustand'
 import { DEFAULT_VECTORIZE_OPTIONS } from './lib/trace'
 import { cropTile, defaultTileName, detectSheetIcons, gridTiles, nameStem } from './lib/sheet'
+import { captionToName, matchCaptions, prepareCaption } from './lib/sheet/captions.ts'
+import { captionOcrSupported, loadCaptionReader, type CaptionRead } from './lib/sheet/ocr.ts'
 import type { ImageDataLike, Rect, SheetBackground, SheetGrid, TileKind } from './lib/sheet'
 import { traceTile, planTileTrace, tileTraceInput, type SheetColorMode } from './lib/sheet/traceTile'
 import type { EditableDoc } from './lib/path/types'
@@ -47,6 +49,20 @@ export interface SheetIcon {
   renamed: boolean
   /** The user drew or edited this box by hand. */
   manual: boolean
+  /**
+   * The caption under this icon, when the detector found one: its ink on the
+   * sheet, and what the OCR read off it once it has run.
+   */
+  caption: TileCaption | null
+}
+
+export interface TileCaption {
+  /** The caption's ink, in sheet px — what the OCR is shown. */
+  ink: Rect
+  /** What the OCR read; null until it has run on this caption. */
+  text: string | null
+  /** Tesseract's 0–100 confidence in `text`. */
+  confidence: number | null
 }
 
 export interface SheetSource {
@@ -97,6 +113,40 @@ export const DEFAULT_DETECT: SheetDetectSettings = {
   gutter: 0,
 }
 
+export interface SheetNaming {
+  /** Put in front of every exported name (`ic-` → `ic-sun.svg`). */
+  prefix: string
+  /** Put after every exported name (`-24` → `sun-24.svg`). */
+  suffix: string
+  /** Name each icon after the caption under it, read by OCR. */
+  fromCaptions: boolean
+}
+
+/**
+ * Captions are read by default: a captioned sheet is the normal case, and the
+ * caption IS the name the user would type. The engine (~5 MB, cached after the
+ * first time) is only fetched when a loaded sheet actually has captions to read
+ * — a plain sheet costs nothing.
+ */
+export const DEFAULT_NAMING: SheetNaming = { prefix: '', suffix: '', fromCaptions: true }
+
+/** Below this OCR confidence a caption name is flagged for a second look. */
+export const CAPTION_UNSURE_BELOW = 80
+
+export type OcrStatus = 'idle' | 'loading' | 'reading' | 'done' | 'error'
+
+export interface OcrState {
+  status: OcrStatus
+  /** Engine download/initialisation, 0–1 (`loading` only). */
+  progress: number
+  /** Captions read so far in this run, and how many it set out to read. */
+  done: number
+  total: number
+  error: string | null
+}
+
+const IDLE_OCR: OcrState = { status: 'idle', progress: 0, done: 0, total: 0, error: null }
+
 /**
  * Sheet tiles carry the paper colour around their icon, so the tracer's own
  * background drop is on by default — it removes the background LABEL during the
@@ -139,12 +189,18 @@ interface SheetState {
   selectedId: string | null
   /** A batch run is in flight. */
   running: boolean
+  naming: SheetNaming
+  /** Where the caption OCR is: not asked for, loading the engine, reading, done, failed. */
+  ocr: OcrState
 
   setSource: (source: SheetSource, image: ImageDataLike) => void
   clear: () => void
   setColorMode: (mode: SheetColorMode) => void
   setHiRes: (on: boolean) => void
   setGradientMode: (mode: GradientMode) => void
+  setNaming: (patch: Partial<SheetNaming>) => void
+  /** Read every caption that has not been read yet and name its icon after it. */
+  readCaptions: () => Promise<void>
   patchDetect: (patch: Partial<SheetDetectSettings>) => void
   redetect: () => void
   setTraceOptions: (patch: Partial<VectorizeOptions>) => void
@@ -187,7 +243,28 @@ function blankTile(id: string, name: string, rect: Rect, kind: TileKind): SheetI
     resolved: null,
     renamed: false,
     manual: false,
+    caption: null,
   }
+}
+
+/**
+ * OCR results by caption ink box. A re-detect rebuilds every tile, but the
+ * captions it finds are the same pixels — reading them again would be a second
+ * or two of pointless work every time a detection slider moves. Cleared with
+ * the sheet.
+ */
+const captionCache = new Map<string, CaptionRead>()
+const captionKey = (r: Rect) => `${r.x}:${r.y}:${r.w}:${r.h}`
+/** Bumped by anything that makes an in-flight caption run obsolete. */
+let ocrToken = 0
+
+/** The name a tile gets by itself: its caption when that is wanted and known, else its number. */
+function autoName(tile: Pick<SheetIcon, 'caption'>, index: number, stem: string, fromCaptions: boolean): string {
+  if (fromCaptions && tile.caption?.text) {
+    const name = captionToName(tile.caption.text)
+    if (name) return name
+  }
+  return defaultTileName(index, stem)
 }
 
 /** How many tiles trace at once. Each one is a dedicated Worker holding a full
@@ -211,9 +288,13 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   tiles: [],
   selectedId: null,
   running: false,
+  naming: DEFAULT_NAMING,
+  ocr: IDLE_OCR,
 
   setSource: (source, image) => {
     get().stopAll()
+    ocrToken++
+    captionCache.clear()
     const previous = get().source
     if (previous?.owned && previous.src !== source.src) URL.revokeObjectURL(previous.src)
     set({
@@ -224,6 +305,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       grid: null,
       background: null,
       warnings: [],
+      ocr: IDLE_OCR,
       // A fresh sheet gets fresh detection defaults; the previous sheet's tuned
       // threshold rarely transfers, and a stale one looks like a broken detector.
       detect: { ...DEFAULT_DETECT, mode: get().detect.mode },
@@ -233,6 +315,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
   clear: () => {
     get().stopAll()
+    ocrToken++
+    captionCache.clear()
     const previous = get().source
     if (previous?.owned) URL.revokeObjectURL(previous.src)
     set({
@@ -244,6 +328,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       tiles: [],
       selectedId: null,
       detect: DEFAULT_DETECT,
+      ocr: IDLE_OCR,
     })
   },
 
@@ -277,9 +362,11 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   redetect: () => {
-    const { image, detect, tiles: previous } = get()
+    const { image, detect, naming, tiles: previous } = get()
     if (!image) return
     get().stopAll()
+    // The tiles a caption run is naming are about to be replaced.
+    ocrToken++
 
     // Renamed tiles keep their name by POSITION — the boxes themselves are
     // recomputed from scratch, so identity by id is meaningless across a re-run.
@@ -288,15 +375,22 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       if (t.renamed) keptNames.set(i, t.name)
     })
     const stem = nameStem(get().source?.fileName)
+    const named = (tile: SheetIcon, i: number): SheetIcon => {
+      const kept = keptNames.get(i)
+      return kept !== undefined
+        ? { ...tile, name: kept, renamed: true }
+        : { ...tile, name: autoName(tile, i, stem, naming.fromCaptions) }
+    }
 
     if (detect.mode === 'grid') {
       const raw = gridTiles(image.width, image.height, detect)
       set({
-        tiles: raw.map((t, i) => blankTile(t.id, keptNames.get(i) ?? defaultTileName(i, stem), t.box, 'icon')),
+        tiles: raw.map((t, i) => named(blankTile(t.id, '', t.box, 'icon'), i)),
         grid: { rows: detect.rows, cols: detect.cols, pitchX: 0, pitchY: 0 },
         warnings: [],
         background: null,
         selectedId: null,
+        ocr: IDLE_OCR,
       })
       return
     }
@@ -309,15 +403,114 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       uniform: detect.uniform,
     })
     const visible = result.tiles.filter((t) => (detect.keepLabels ? t.kind !== 'noise' : t.kind === 'icon'))
+    // Every icon learns which caption is its own now, whether or not the
+    // captions are going to be read — the pairing is free, and it is what the
+    // naming toggle acts on later.
+    const captions = matchCaptions(result.tiles, result.grid)
+    const tiles = visible.map((t, i) => {
+      const match = captions.get(t.id)
+      const cached = match ? captionCache.get(captionKey(match.ink)) : undefined
+      const tile = blankTile(t.id, '', t.box, t.kind)
+      tile.caption = match
+        ? { ink: match.ink, text: cached?.text ?? null, confidence: cached?.confidence ?? null }
+        : null
+      return named(tile, i)
+    })
     set({
-      tiles: visible.map((t, i) =>
-        blankTile(t.id, keptNames.get(i) ?? defaultTileName(i, stem), t.box, t.kind),
-      ),
+      tiles,
       grid: result.grid,
       background: result.background,
       warnings: result.warnings,
       selectedId: null,
+      ocr: IDLE_OCR,
     })
+    if (naming.fromCaptions) void get().readCaptions()
+  },
+
+  setNaming: (patch) => {
+    const before = get().naming
+    set({ naming: { ...before, ...patch } })
+    if (patch.fromCaptions === undefined || patch.fromCaptions === before.fromCaptions) return
+    if (patch.fromCaptions) {
+      void get().readCaptions()
+      return
+    }
+    // Back to numbers. Names the user typed stay; a run in flight is dropped.
+    ocrToken++
+    const stem = nameStem(get().source?.fileName)
+    set((s) => ({
+      ocr: IDLE_OCR,
+      tiles: s.tiles.map((t, i) => (t.renamed ? t : { ...t, name: defaultTileName(i, stem) })),
+    }))
+  },
+
+  readCaptions: async () => {
+    const token = ++ocrToken
+    const stem = nameStem(get().source?.fileName)
+    // What is already known applies at once; only the rest needs the engine.
+    set((s) => ({
+      tiles: s.tiles.map((t, i) => (t.renamed ? t : { ...t, name: autoName(t, i, stem, true) })),
+    }))
+    const pending = get().tiles.filter((t) => t.caption && t.caption.text === null)
+    if (pending.length === 0) {
+      set((s) => ({ ocr: { ...IDLE_OCR, status: s.tiles.some((t) => t.caption) ? 'done' : 'idle' } }))
+      return
+    }
+    if (!captionOcrSupported()) {
+      set({
+        ocr: {
+          ...IDLE_OCR,
+          status: 'error',
+          error: 'Reading captions needs Web Workers and WebAssembly, which this browser does not offer.',
+        },
+      })
+      return
+    }
+
+    set({ ocr: { status: 'loading', progress: 0, done: 0, total: pending.length, error: null } })
+    let reader: Awaited<ReturnType<typeof loadCaptionReader>>
+    try {
+      reader = await loadCaptionReader((progress) => {
+        if (token === ocrToken) set((s) => ({ ocr: { ...s.ocr, progress } }))
+      })
+    } catch (err) {
+      if (token === ocrToken) {
+        set((s) => ({
+          ocr: { ...s.ocr, status: 'error', error: err instanceof Error ? err.message : 'Could not load the OCR engine' },
+        }))
+      }
+      return
+    }
+    if (token !== ocrToken) return
+    set((s) => ({ ocr: { ...s.ocr, status: 'reading', progress: 1 } }))
+
+    let done = 0
+    for (const tile of pending) {
+      const { image, background } = get()
+      if (token !== ocrToken || !image || !background || !tile.caption) return
+      const ink = tile.caption.ink
+      let read: CaptionRead
+      try {
+        read = await reader.read(prepareCaption(image, ink, background))
+      } catch (err) {
+        if (token === ocrToken) {
+          set((s) => ({ ocr: { ...s.ocr, status: 'error', error: err instanceof Error ? err.message : 'Reading a caption failed' } }))
+        }
+        return
+      }
+      if (token !== ocrToken) return
+      captionCache.set(captionKey(ink), read)
+      done++
+      set((s) => ({
+        ocr: { ...s.ocr, done },
+        tiles: s.tiles.map((t, i) => {
+          if (t.id !== tile.id || !t.caption) return t
+          const next = { ...t, caption: { ...t.caption, text: read.text, confidence: read.confidence } }
+          return t.renamed ? next : { ...next, name: autoName(next, i, stem, true) }
+        }),
+      }))
+    }
+    if (token === ocrToken) set((s) => ({ ocr: { ...s.ocr, status: 'done' } }))
   },
 
   setTraceOptions: (patch) =>

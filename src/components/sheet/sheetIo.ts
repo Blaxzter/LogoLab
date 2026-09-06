@@ -74,6 +74,8 @@ export interface SheetExportOptions {
 export interface SheetExportItem {
   tile: SheetIcon
   pixels: ImageDataLike | null
+  /** The file-name stem — the tile's name with the sheet's prefix and suffix on. */
+  name: string
 }
 
 /**
@@ -86,12 +88,13 @@ export async function buildSheetZip(items: SheetExportItem[], opts: SheetExportO
   const both = opts.svg && opts.png
   const used = new Map<string, number>()
 
-  for (const { tile, pixels } of items) {
+  for (const { tile, pixels, name: stem } of items) {
     // Two icons can end up with the same name (the user renamed one onto
-    // another); a zip with duplicate paths silently loses entries.
-    const seen = used.get(tile.name) ?? 0
-    used.set(tile.name, seen + 1)
-    const name = seen === 0 ? tile.name : `${tile.name}-${seen + 1}`
+    // another, or two captions read the same); a zip with duplicate paths
+    // silently loses entries.
+    const seen = used.get(stem) ?? 0
+    used.set(stem, seen + 1)
+    const name = seen === 0 ? stem : `${stem}-${seen + 1}`
 
     if (opts.svg && tile.svg) {
       zip.file(both ? `svg/${name}.svg` : `${name}.svg`, tile.svg)

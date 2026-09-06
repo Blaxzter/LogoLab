@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import { VectorizeStudio, type VectorizeSource } from '../vectorize/VectorizeStudio'
 import { Tooltip } from '../ui/Tooltip'
 import { canvasToBlob, imageDataToCanvas } from '../../lib/image'
-import { cropTile, toImageData, type ImageDataLike } from '../../lib/sheet'
+import { cropTile, exportName, toImageData, type ImageDataLike } from '../../lib/sheet'
 import { planTileTrace, repaintDoc, TILE_PRECISION, tileTraceInput } from '../../lib/sheet/traceTile'
 import { serializeDoc } from '../../lib/path/model'
 import { useStore } from '../../store'
@@ -39,8 +39,11 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
   const hiRes = useSheetStore((s) => s.hiRes)
   const gradientMode = useSheetStore((s) => s.gradientMode)
   const sheetBackground = useSheetStore((s) => s.background)
+  const naming = useSheetStore((s) => s.naming)
   const setTileDoc = useSheetStore((s) => s.setTileDoc)
   const updateTile = useSheetStore((s) => s.updateTile)
+  /** What this icon's files are called — the sheet's prefix and suffix included. */
+  const fileStem = exportName(tile.name, naming.prefix, naming.suffix)
 
   const pixels = useMemo(
     () =>
@@ -86,7 +89,7 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
           svgText: null,
           naturalWidth: traceInput.width,
           naturalHeight: traceInput.height,
-          fileName: `${tile.name}.png`,
+          fileName: `${fileStem}.png`,
         })
       } catch (err) {
         if (!cancelled) setCutError(err instanceof Error ? err.message : 'Could not cut this icon out of the sheet.')
@@ -96,7 +99,7 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
       cancelled = true
       if (url) URL.revokeObjectURL(url)
     }
-  }, [traceInput, tile.name])
+  }, [traceInput, fileStem])
 
   /**
    * What goes back to the sheet. A mono trace comes back black; the batch
@@ -162,7 +165,7 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
     setLogo({
       src: url,
       originalSrc: url,
-      fileName: `${tile.name}.png`,
+      fileName: `${fileStem}.png`,
       mime: 'image/png',
       isSvg: false,
       svgText: null,

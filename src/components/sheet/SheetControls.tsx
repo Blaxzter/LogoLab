@@ -3,11 +3,22 @@
 // rail (Field / Slider / Toggle / Segmented / Collapsible) so the two studios
 // feel like one app.
 
+import type { ReactNode } from 'react'
 import { Loader2, Play, RefreshCw, Square, Trash2, Download } from 'lucide-react'
 import { Button } from '../ui/Button'
-import { Collapsible, Field, Segmented, Slider, Toggle } from '../ui/controls'
-import type { DetectMode, GradientMode, SheetDetectSettings, SheetIcon, SheetSource } from '../../sheetStore'
+import { Collapsible, Field, Segmented, Slider, TextField, Toggle } from '../ui/controls'
+import { CAPTION_UNSURE_BELOW } from '../../sheetStore'
+import type {
+  DetectMode,
+  GradientMode,
+  OcrState,
+  SheetDetectSettings,
+  SheetIcon,
+  SheetNaming,
+  SheetSource,
+} from '../../sheetStore'
 import type { SheetColorMode } from '../../lib/sheet/traceTile'
+import { cleanAffix, exportName } from '../../lib/sheet'
 import type { SheetGrid } from '../../lib/sheet'
 import type { VectorizeOptions } from '../../types'
 
@@ -26,6 +37,11 @@ export interface SheetControlsProps {
   onHiRes: (on: boolean) => void
   gradientMode: GradientMode
   onGradientMode: (mode: GradientMode) => void
+  naming: SheetNaming
+  onNaming: (patch: Partial<SheetNaming>) => void
+  ocr: OcrState
+  /** Run the caption OCR again after a failure. */
+  onRetryCaptions: () => void
   running: boolean
   onTraceAll: () => void
   onTraceStale: () => void
@@ -66,6 +82,10 @@ export function SheetControlsBody({
   onHiRes,
   gradientMode,
   onGradientMode,
+  naming,
+  onNaming,
+  ocr,
+  onRetryCaptions,
   running,
   onTraceAll,
   onTraceStale,
@@ -86,6 +106,19 @@ export function SheetControlsBody({
   const traced = tiles.filter((t) => t.svg).length
   const stale = tiles.filter((t) => t.stale && t.doc).length
   const exportable = icons.filter((t) => (exportSvg && t.svg) || exportPng).length
+  const affix = cleanAffix(naming.prefix) || cleanAffix(naming.suffix)
+  const exampleName = icons[0] ? exportName(icons[0].name, naming.prefix, naming.suffix) : null
+  // The section is closed by default and the captions are read by default, so
+  // the collapsed line is where the run's progress has to show.
+  const namesSummary = !naming.fromCaptions
+    ? 'numbered'
+    : ocr.status === 'loading'
+      ? `loading the OCR engine… ${Math.round(ocr.progress * 100)}%`
+      : ocr.status === 'reading'
+        ? `reading captions ${ocr.done}/${ocr.total}…`
+        : ocr.status === 'error'
+          ? 'captions could not be read'
+          : 'from captions'
 
   return (
     <>
@@ -209,6 +242,39 @@ export function SheetControlsBody({
             </Field>
           </Collapsible>
         )}
+
+        {/* ------------------------------------------------------------ names */}
+        <Collapsible
+          title="Names"
+          summary={`${namesSummary}${affix ? ` · ${cleanAffix(naming.prefix)}…${cleanAffix(naming.suffix)}` : ''}`}
+        >
+          <Field
+            label="Name from captions"
+            hint="Reads the caption under each icon and uses it as the icon's name. The OCR engine (~5 MB) is downloaded the first time a sheet has captions, then cached; the sheet itself never leaves this tab."
+            right={
+              <Toggle
+                checked={naming.fromCaptions}
+                onChange={(v) => onNaming({ fromCaptions: v })}
+                label="Name from captions"
+              />
+            }
+          >
+            {naming.fromCaptions ? <CaptionStatus ocr={ocr} tiles={tiles} onRetry={onRetryCaptions} /> : <></>}
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Prefix">
+              <TextField value={naming.prefix} onChange={(v) => onNaming({ prefix: v })} placeholder="ic-" maxLength={40} />
+            </Field>
+            <Field label="Suffix">
+              <TextField value={naming.suffix} onChange={(v) => onNaming({ suffix: v })} placeholder="-24" maxLength={40} />
+            </Field>
+          </div>
+          {exampleName && (
+            <p className="-mt-2 truncate font-mono text-[11px] text-muted" title={`${exampleName}.svg`}>
+              e.g. {exampleName}.svg
+            </p>
+          )}
+        </Collapsible>
 
         {/* ------------------------------------------------------------ trace */}
         <Collapsible
@@ -356,4 +422,50 @@ export function SheetControlsBody({
       </div>
     </>
   )
+}
+
+/**
+ * Where the caption naming stands: the engine coming down, captions being
+ * read, or the tally — including how many reads deserve a second look, since a
+ * misread caption exports a misnamed file without anyone noticing otherwise.
+ */
+function CaptionStatus({ ocr, tiles, onRetry }: { ocr: OcrState; tiles: SheetIcon[]; onRetry: () => void }) {
+  const icons = tiles.filter((t) => t.kind === 'icon')
+  const captioned = icons.filter((t) => t.caption).length
+  const unsure = icons.filter(
+    (t) => t.caption?.text != null && !t.renamed && (t.caption.confidence ?? 0) < CAPTION_UNSURE_BELOW,
+  ).length
+
+  let body: ReactNode
+  if (ocr.status === 'loading') {
+    body = (
+      <>
+        <Loader2 size={11} className="shrink-0 animate-spin text-accent" />
+        Loading the OCR engine… {Math.round(ocr.progress * 100)}%
+      </>
+    )
+  } else if (ocr.status === 'reading') {
+    body = (
+      <>
+        <Loader2 size={11} className="shrink-0 animate-spin text-accent" />
+        Reading captions {ocr.done}/{ocr.total}…
+      </>
+    )
+  } else if (ocr.status === 'error') {
+    body = (
+      <span className="text-bad">
+        {ocr.error ?? 'Reading the captions failed.'}{' '}
+        <button type="button" onClick={onRetry} className="underline underline-offset-2">
+          Retry
+        </button>
+      </span>
+    )
+  } else if (captioned === 0) {
+    body = 'No captions were found under the icons on this sheet — names stay numbered.'
+  } else {
+    body = `${captioned} of ${icons.length} icons have a caption${
+      unsure > 0 ? ` · ${unsure} read with low confidence — check ${unsure === 1 ? 'it' : 'them'} in the grid` : ''
+    }.`
+  }
+  return <p className="flex items-center gap-1.5 text-xs leading-snug text-muted">{body}</p>
 }

@@ -5,15 +5,16 @@
 // traced / failed) and its remote control (include, rename, open, download).
 
 import { memo, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Check, Download, Loader2, Pencil, Type } from 'lucide-react'
-import { cropTile, toImageData, type ImageDataLike, type Rect } from '../../lib/sheet'
+import { AlertTriangle, Check, Download, Loader2, Pencil, ScanText, Type } from 'lucide-react'
+import { cleanAffix, cropTile, exportName, toImageData, type ImageDataLike, type Rect } from '../../lib/sheet'
 import { downloadText } from '../../lib/download'
-import type { SheetIcon } from '../../sheetStore'
+import { CAPTION_UNSURE_BELOW, type SheetIcon, type SheetNaming } from '../../sheetStore'
 
 export interface IconGridProps {
   image: ImageDataLike
   background: { r: number; g: number; b: number; transparent: boolean } | null
   tiles: SheetIcon[]
+  naming: SheetNaming
   checkerClass: string
   /** Show the traced result instead of the source pixels where one exists. */
   showTraced: boolean
@@ -26,6 +27,7 @@ export function IconGrid({
   image,
   background,
   tiles,
+  naming,
   checkerClass,
   showTraced,
   onOpen,
@@ -41,6 +43,7 @@ export function IconGrid({
           tile={tile}
           image={image}
           background={background}
+          naming={naming}
           checkerClass={checkerClass}
           showTraced={showTraced}
           onOpen={onOpen}
@@ -57,6 +60,7 @@ function IconCard({
   tile,
   image,
   background,
+  naming,
   checkerClass,
   showTraced,
   onOpen,
@@ -67,6 +71,7 @@ function IconCard({
   tile: SheetIcon
   image: ImageDataLike
   background: IconGridProps['background']
+  naming: SheetNaming
   checkerClass: string
   showTraced: boolean
   onOpen: (id: string) => void
@@ -74,6 +79,13 @@ function IconCard({
   onRename: (id: string, name: string) => void
 }) {
   const traced = showTraced && tile.svg ? tile.svg : null
+  const prefix = cleanAffix(naming.prefix)
+  const suffix = cleanAffix(naming.suffix)
+  // The name came off the sheet, not from the user — say so, and say when the
+  // read was shaky: a misread caption is otherwise a misnamed file nobody sees.
+  const caption = naming.fromCaptions && !tile.renamed && tile.caption?.text != null ? tile.caption : null
+  const confidence = caption ? Math.round(caption.confidence ?? 0) : 0
+  const unsure = caption !== null && (caption.text === '' || confidence < CAPTION_UNSURE_BELOW)
 
   return (
     <div
@@ -128,17 +140,45 @@ function IconCard({
           title={tile.included ? 'Included in trace & export' : 'Excluded'}
           className="size-3.5 shrink-0 accent-[var(--color-accent)]"
         />
-        <input
-          value={tile.name}
-          onChange={(e) => onRename(tile.id, e.target.value)}
-          spellCheck={false}
-          className="min-w-0 flex-1 truncate rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-ink-2 outline-none hover:border-line focus:border-accent focus:bg-surface"
-        />
+        <div className="flex min-w-0 flex-1 items-center">
+          {prefix && (
+            <span className="max-w-[40%] shrink-0 truncate text-xs text-faint" title={prefix}>
+              {prefix}
+            </span>
+          )}
+          <input
+            value={tile.name}
+            onChange={(e) => onRename(tile.id, e.target.value)}
+            spellCheck={false}
+            className="min-w-0 flex-1 truncate rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-ink-2 outline-none hover:border-line focus:border-accent focus:bg-surface"
+          />
+          {suffix && (
+            <span className="max-w-[40%] shrink-0 truncate text-xs text-faint" title={suffix}>
+              {suffix}
+            </span>
+          )}
+        </div>
+        {caption && (
+          <span
+            title={
+              caption.text === ''
+                ? 'The caption under this icon could not be read — numbered instead'
+                : unsure
+                  ? `Read from the caption with low confidence (${confidence}%): “${caption.text}” — check the name`
+                  : `Named from its caption “${caption.text}” (${confidence}%)`
+            }
+            className={`flex h-6 w-6 shrink-0 items-center justify-center ${unsure ? 'text-warn' : 'text-faint'}`}
+          >
+            {unsure ? <AlertTriangle size={12} /> : <ScanText size={12} />}
+          </span>
+        )}
         {tile.svg && (
           <button
             type="button"
             title="Download this icon as SVG"
-            onClick={() => downloadText(tile.svg!, `${tile.name}.svg`, 'image/svg+xml')}
+            onClick={() =>
+              downloadText(tile.svg!, `${exportName(tile.name, naming.prefix, naming.suffix)}.svg`, 'image/svg+xml')
+            }
             className="btn btn-ghost h-6 w-6 shrink-0 px-0"
           >
             <Download size={12} />
