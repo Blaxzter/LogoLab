@@ -5567,3 +5567,324 @@ bar concentric reached at 0.045 and sharp-star at 0.066 when §15.7 closed them:
   today, and overlap's "pure lattice staircase" is no longer its mechanism.
 - **No tracer change; suite untouched.** The instrument reads the pass's own observational
   hook, undefined in production, and the three cases stay listed.
+
+## 32. An AI upscaler in front of the tracer, measured against bilinear (issue #42, Phase 0, 2026-09-06)
+
+§30 closed the scale-gate question the only way it could be closed: the tracer places every edge
+to a constant accuracy in NATIVE px, so in artwork units its error falls 1:1 with the raster,
+and the lever for small rasters is more pixels in front of the tracer, not a resolution-free
+tracer. The sheet path already does that — bilinear 3× to ~512 px, measured on 54 real tiles
+(`plan.ts` `traceScale`), where 4× bought nothing over 3× because bilinear adds no information.
+Issue #42 asks the question that measurement could not: does an upscaler that CAN add
+information — a super-resolution model — beat plain resampling on flat icon art, and at what
+hallucination cost? §15.5 rejected ML super-resolution in one sentence ("it hallucinates edges
+the tracer then faithfully traces") and never on a number. This section is the number, per
+the issue's own Phase 0: rasterize the answer sheet small, upscale it every way, trace, and
+count what was invented.
+
+### 32.1 The instrument
+
+`src/devtest/upscaleDiag.ts`, two lanes, one roster.
+
+**The roster.** Plain: `none`, `bilinear{2,3,4}` (the sheet's own `upscaleImageData`),
+`lanczos{2,3,4}` (Lanczos-3, because the issue asked). AI, every one running on
+onnxruntime — the same runtime transformers.js already ships for RMBG-1.4 — so each is a
+candidate for the browser as-is:
+
+| name | model | size | licence | trained on | input rule |
+|---|---|---|---|---|---|
+| `swin2sr-lw-x2` | Xenova/swin2SR-lightweight-x2-64 (transformers.js `image-to-image`) | 8 MB | Apache-2.0 | DIV2K photos | processor pads to the window; crop to k·W |
+| `swin2sr-cl-x2/x4`, `swin2sr-rw-x4` | Swin2SR classical / real-world (opt-in, not in the default run) | 53–55 MB | Apache-2.0 | photos | same |
+| `waifu2x-cunet-x2` | nunif waifu2x cunet/art scale2x | 5 MB | MIT | line art, anime | even size; eats an 18 px border |
+| `waifu2x-swin-x2/x4` | nunif waifu2x swin_unet/art scale2x / scale4x | 17 / 19 MB | MIT | line art, anime | multiple of 64; eats an 8 px border |
+| `realesrgan-anime-x4` | RealESRGAN_x4plus_anime_6B (ONNX export) | 18 MB | BSD-3 | anime | any size |
+
+The raw ONNX weights are not in the repo (they are other people's weights and the harness
+says where to fetch them); the border and size rules were found by probing each model with
+odd sizes — the cunet export throws on 171 px and returns (W − 36)·2 for even W, the swin_unet
+exports throw on anything that is not a multiple of 64 and return (W − 16)·k. The wrapper
+pads by reflection and crops, so every upscaler returns exactly k·W × k·H.
+
+**Lane 1 — fixtures.** The flat tier-0 authored SVGs (gradients off, `checker` excluded — its
+3588 authored corners make the corner matcher take ten minutes a row for a case whose
+lattice representation is exact anyway) rasterized at 128 and 256 px, each upscaler's output
+traced through the colour path with the truth gate's own options, the trace affine-scaled
+into the 512 px reference space (§15's trick — nothing is resampled) and scored against the
+authored geometry with the truth-gate lenses: chamfer / p95, parsimony, corner recall,
+`cornersInvented` (§23), region recovery. An invented edge is an invented corner or an
+invented region, so "does it hallucinate" is a count.
+
+**Lane 2 — real sheet tiles.** The four example sheets (`public/examples/sheets/*.webp`,
+2048 px, model output, real icon art). The 2048 crop is the truth; the same sheet
+Lanczos-downscaled to 1024 and 768 (what an image model hands you at "normal" size, and the
+sizes /sheet looks bad at) is the input — 94–214 px tiles, 65 icons; the production ink
+probe routes 36 of them mono at 1024 and 32 at 768 (it re-decides per size), the rest colour. Each tile goes through the
+PRODUCTION plan (`planTileBase`: mono/colour, ink/paper threshold, invert, size-scaled
+smoothing) with the upscaler swapped in, the trace is rendered in the truth crop's space
+over the paper in the ink's colour, and scored against the truth's ink mask: area drift,
+IoU, and the outline distance both ways — truth→trace (**missed**) and trace→truth
+(**spurious**), in the SMALL tile's native px, plus the share of traced outline farther than
+1.5 native px from any truth edge (the hallucination counter for art with no answer sheet).
+`--contact` writes one contact sheet per sheet × size with the pixels each upscaler handed
+the tracer beside the trace; `--tiles` and `--cell` zoom a few.
+
+**The browser cost** was measured separately, in the user's own Chrome on the same four ONNX
+files through onnxruntime-web 1.22 from the CDN (`bench/index.html` in the session
+scratchpad — a static page, nothing in the repo).
+
+### 32.2 Real sheet tiles: the best model ties bilinear ×4
+
+Medians over the tiles of each lane; W/L = tiles where the upscaler's missed+spurious sum is
+more than 5% better / worse than the shipped bilinear 3×. `bad` = tiles with missed p95 > 2
+px, or > 5% spurious share, or IoU < 0.85.
+
+| mono path (36 / 32 tiles) | 125–214 px (sheet @1024) ||||| 94–160 px (sheet @768) |||||
+|---|---|---|---|---|---|---|---|---|---|---|
+| | missed | spurious | bad | nodes | vs bil3 | missed | spurious | bad | nodes | vs bil3 |
+| none | 0.99 | 0.88 | 28 | 27 | 0W/35L | 0.72 | 0.66 | 14 | 25 | 1W/31L |
+| bilinear 2 | 0.72 | 0.70 | 9 | 35 | 2W/28L | 0.47 | 0.44 | 9 | 33 | 3W/28L |
+| **bilinear 3 (shipped)** | 0.67 | 0.64 | 4 | 40 | — | 0.41 | 0.39 | 6 | 36 | — |
+| **bilinear 4** | **0.61** | **0.60** | 4 | 44 | **19W/1L** | **0.36** | **0.36** | 5 | 42 | **15W/3L** |
+| lanczos 3 | 0.66 | 0.65 | 6 | 43 | 2W/4L | 0.42 | 0.39 | 8 | 37 | 2W/2L |
+| swin2sr-lw ×2 | 0.71 | 0.73 | 10 | 35 | 1W/31L | 0.46 | 0.45 | 8 | 30 | 3W/28L |
+| waifu2x cunet ×2 | 0.72 | 0.70 | 10 | 33 | 0W/31L | 0.46 | 0.45 | 8 | 30 | 4W/27L |
+| waifu2x swin ×2 | 0.69 | 0.69 | 9 | 33 | 2W/31L | 0.46 | 0.45 | 8 | 30 | 2W/27L |
+| **waifu2x swin ×4** | 0.59 | 0.63 | 8 | 42 | 14W/13L | 0.345 | 0.34 | 7 | 38 | 15W/5L |
+| Real-ESRGAN anime ×4 | 0.62 | 0.75 | 9 | 42 | 5W/23L | 0.37 | 0.36 | 8 | 38 | 12W/13L |
+
+Read down the mono block:
+
+- **Plain upscaling is the whole win, and it is large.** Native traces 28 of 36 tiles badly
+  at 125–214 px (7.7% of the outline more than 1.5 px from any real edge); bilinear 3× takes
+  that to 4 tiles and 0.0%. This is the measurement behind `traceScale`, re-done with an
+  outline metric instead of ink-area drift, and it agrees.
+- **Bilinear 4× beats 3×, 19W/1L and 15W/3L**, by 9–12% on both outline distances, for +23%
+  trace time (103 → 127 ms) and +10% nodes (40 → 44). The 2026-08-04 measurement read "4×
+  buys nothing" off ink-area drift and SSIM (0.13 → 0.14 pp, 0.946 → 0.951); the outline
+  metric sees what those could not. Whether 4× should become the default is a product call
+  (nodes and time against a sub-pixel gain that the contact sheets do not show at 1×); it is
+  the one plain-resampling knob left with measured headroom.
+- **No model beats bilinear 4×.** The best AI row, waifu2x swin_unet ×4, ties it: 4W/18L at
+  125–214 px, 7W/6L at 94–160 px, on the missed side, and is WORSE on the spurious side at
+  the larger tiles (0.63 vs 0.60; Real-ESRGAN 0.75). Every ×2 model lands on bilinear 2×
+  (0.69–0.72 vs 0.72), which is what "the model added no information the AA did not already
+  carry" looks like as a number.
+- **Lanczos is bilinear** on the mono path (2W/4L) and rings on the colour path (§32.3).
+
+The colour path (29 / 33 two-ink tiles, kept native in production because the palette
+segmentation chases every interpolated tone — [memory] measured 93 → 1465 nodes at 4×):
+bilinear 3× here costs 56 → 165 median nodes at 125–214 px and 50 → 144 at 94–160 px for
+0.61 → 0.45 missed; the AI ×2 rows get 0.48–0.50 missed at 120–131 nodes, and waifu2x swin
+×2 at 94–160 px gets 0.34 missed at **63** nodes against bilinear 2×'s 0.37 at 78 (18W/8L
+against it). That is the one place a model does something resampling cannot — it upscales a
+soft two-tone edge without manufacturing intermediate tones — and it is a lead for the
+colour path, not a result: 14 of 33 tiles are still `bad` on every row, and the colour path's
+real problem on these tiles is §0's thin-line routing (black core + slate edge at ΔE 15.2,
+[memory: sheet-example-sheets]), which no upscaler touches.
+
+### 32.3 Fixtures: on the colour path the model wins, and plain resampling does not
+
+The flat tier-0 answer sheet, rasterized at 128 and 256 px, traced through the COLOUR path
+(the path a small raster upload takes today). Medians over cases; corners and invented are
+sums; W/L = cases whose chamfer moved more than 5% against `none` / against bilinear at the
+same factor.
+
+| @256 → traced at | n | chamfer | p95 | parsimony | corners | invented | regions lost | nodes | vs none | vs same-k bilinear |
+|---|---|---|---|---|---|---|---|---|---|---|
+| none → 256 | 20 | 0.38 | 1.24 | 1.17 | 391/564 | 47 | 0 | 76 | — | — |
+| bilinear 2 → 512 | 20 | 0.24 | 0.72 | 1.44 | 483/564 | 37 | 2 | 94 | 12W/7L | — |
+| bilinear 3 → 768 | 19 | 0.21 | 0.56 | 1.62 | 425/555 | 36 | 2 | 116 | 11W/7L | — |
+| bilinear 4 → 1024 | 19 | 0.17 | 0.46 | 1.81 | 364/539 | 47 | 1 | 154 | 12W/7L | — |
+| lanczos 3 → 768 | 19 | 0.46 | 2.67 | 2.51 | 456/533 | 144 | 4 | 194 | 5W/10L | 2W/16L |
+| swin2sr-lw ×2 → 512 | 19 | 0.30 | 0.73 | 1.61 | 434/504 | 157 | 2 | 94 | 11W/8L | 8W/10L |
+| waifu2x cunet ×2 → 512 | 20 | 0.14 | 0.50 | 1.25 | 530/564 | 39 | 0 | 84 | 17W/1L | 18W/2L |
+| waifu2x swin ×2 → 512 | 20 | 0.13 | 0.53 | 1.25 | 535/564 | 16 | 0 | 82 | 16W/2L | 16W/1L |
+| waifu2x swin ×4 → 1024 | 20 | 0.09 | 0.30 | 1.56 | 529/564 | 23 | 1 | 91 | 18W/2L | 15W/3L |
+| Real-ESRGAN anime ×4 → 1024 | 20 | 0.49 | 3.47 | 2.62 | 508/564 | 135 | 9 | 265 | 7W/12L | 2W/16L |
+
+| @128 → traced at | n | chamfer | p95 | parsimony | corners | invented | regions lost | nodes | vs none | vs same-k bilinear |
+|---|---|---|---|---|---|---|---|---|---|---|
+| none → 128 | 20 | 0.93 | 3.12 | 1.08 | 180/564 | 100 | 2 | 50 | — | — |
+| bilinear 2 → 256 | 20 | 0.66 | 2.19 | 1.12 | 268/564 | 121 | 7 | 77 | 11W/8L | — |
+| bilinear 3 → 384 | 20 | 0.58 | 1.64 | 1.65 | 409/564 | 82 | 4 | 108 | 15W/5L | — |
+| bilinear 4 → 512 | 19 | 0.47 | 1.10 | 1.78 | 382/561 | 110 | 4 | 144 | 14W/5L | — |
+| lanczos 3 → 384 | 20 | 1.04 | 5.47 | 1.91 | 341/564 | 174 | 7 | 183 | 10W/10L | 5W/15L |
+| swin2sr-lw ×2 → 256 | 20 | 0.71 | 1.96 | 1.46 | 278/564 | 115 | 7 | 94 | 15W/4L | 10W/10L |
+| waifu2x cunet ×2 → 256 | 20 | 0.38 | 1.22 | 1.18 | 329/564 | 103 | 4 | 66 | 17W/3L | 15W/3L |
+| waifu2x swin ×2 → 256 | 20 | 0.41 | 1.20 | 1.16 | 331/564 | 94 | 2 | 70 | 16W/3L | 18W/2L |
+| waifu2x swin ×4 → 512 | 20 | 0.25 | 0.79 | 1.52 | 476/564 | 52 | 1 | 82 | 18W/2L | 12W/5L |
+| Real-ESRGAN anime ×4 → 512 | 20 | 1.31 | 7.68 | 1.99 | 449/564 | 98 | 13 | 160 | 8W/11L | 4W/15L |
+
+Three things the sheet lane could not show, because the sheet lane is the mono path:
+
+- **Plain upscaling is not a clean win here.** Bilinear 4× at 256 halves the median chamfer
+  (0.38 → 0.17) and LOSES corners (391 → 364 recovered of ~560), invents as many as native
+  (47), doubles the nodes (76 → 154) and blows up on individual cases: `cross-bars` 32 →
+  7010 nodes, `shaded-ink` 0.30 → 2.12 px with 24 invented corners and a lost region,
+  `bloom` / `concentric` / `overlap` all worse than native. A 4 px AA ramp is not what the
+  palette snap (§9.7) or the sub-pixel estimator's ±1.75 px anchors (§15.7, SENSOR) were
+  calibrated on — each interpolated tone can become a palette entry, and a corner's coverage
+  profile smears into a curve (`sharp-star` @128: 11/11 → 6/11 recovered, 4 invented).
+  Lanczos is worse still: ringing puts a light halo outside every edge and the palette makes
+  it a region (144–174 invented corners across the corpus).
+- **waifu2x swin_unet ×4 beats everything on the answer sheet.** At 256: chamfer 0.09 against
+  bilinear 4×'s 0.17 and native's 0.38, corners 529/564 against 364 and 391, invented 23
+  against 47 and 47, one region lost, 91 nodes against 154 — 18W/2L against native, 15W/3L
+  against bilinear 4×. At 128 the gap is wider (0.25 vs 0.47 vs 0.93; corners 476 vs 382 vs
+  180; invented 52 vs 110 vs 100). Per case it is the best or within noise of the best on
+  `bar-caps` (43/43 corners; native 21/43 at 256 and 4/43 at 128), `peak-drop` (145/148
+  against bilinear's 107), `corner-turns`, `hairlines` (0.14 against native 2.35 — the
+  sub-pixel bars survive), `annulus`, `ring-cross`, `overlap`. It is not magic: the model
+  emits a nearly hard edge between the two EXACT source colours (§32.4), which is the input
+  the palette stage and the corner detector were built for, at a raster where the lattice
+  error is a quarter of the art.
+- **Its two failure modes are named cases.** `shaded-ink` at 256: ×4 sharpens the soft
+  shading into steps the §27 fuse no longer recognises — 3.11 px, 13 invented corners, 830
+  nodes (the ×2 model, at 0.12, is the best row on that case). `smooth-radii` at 128: ×4
+  invents 27 corners on corner-free art against native's 13 (the §23 precision lens).
+  waifu2x swin ×2 is the conservative choice — 0.13 at 256 with the fewest invented corners
+  of any row (16) and the fewest nodes (82) — but at 128 it recovers 331 corners to ×4's
+  476, so the factor wants to follow the raster the way `traceScale` already does (target
+  ~512 px).
+- **Real-ESRGAN loses on the answer sheet on every count** (§32.4): 1.31 px at 128, 13
+  regions lost across the corpus at 128 and 9 at 256, 135 invented corners at 256 against
+  native's 47, node explosions of 1194 / 1319 / 1934 on acute-counter /
+  concentric / corner-turns, and it is the slowest model by 2–3×.
+
+Per case, the rows the argument rests on (chamfer · corners recovered/authored · invented ·
+regions lost · nodes):
+
+| @256 | none | bilinear 4 | waifu2x swin ×2 | waifu2x swin ×4 | Real-ESRGAN anime ×4 |
+|---|---|---|---|---|---|
+| aa-seam | 0.50 · 8/8 · 0 · 0 · 20 | 0.09 · 8/8 · 0 · 0 · 22 | 0.12 · 8/8 · 0 · 0 · 20 | 0.13 · 8/8 · 0 · 0 · 24 | 0.19 · 8/8 · 0 · 0 · 20 |
+| acute-counter | 0.90 · 9/13 · 5 · 0 · 98 | 0.12 · 12/13 · 5 · 0 · 152 | 0.26 · 12/13 · 3 · 0 · 106 | 0.11 · 13/13 · 4 · 0 · 142 | 1.58 · 11/13 · 9 · 0 · 1194 |
+| annulus | 0.14 · 0/0 · 0 · 0 · 36 | 0.16 · 0/0 · 0 · 0 · 36 | 0.04 · 0/0 · 0 · 0 · 36 | 0.03 · 0/0 · 0 · 0 · 36 | 0.51 · 0/0 · 2 · 0 · 132 |
+| band-cross | 0.22 · 25/25 · 0 · 0 · 76 | — | 0.13 · 25/25 · 0 · 0 · 76 | 0.06 · 25/25 · 0 · 0 · 86 | 0.64 · 22/25 · 20 · 0 · 478 |
+| bar-caps | 0.63 · 21/43 · 5 · 0 · 98 | 0.12 · 28/43 · 0 · 0 · 130 | 0.28 · 43/43 · 0 · 0 · 104 | 0.09 · 43/43 · 0 · 0 · 100 | 0.46 · 42/43 · 19 · 1 · 537 |
+| bloom | 0.11 · 0/0 · 0 · 0 · 46 | 0.24 · 0/0 · 0 · 0 · 132 | 0.12 · 0/0 · 0 · 0 · 46 | 0.07 · 0/0 · 0 · 0 · 46 | 1.15 · 0/0 · 0 · 2 · 36 |
+| concentric | 0.10 · 4/4 · 0 · 0 · 52 | 0.20 · 4/4 · 0 · 0 · 52 | 0.06 · 4/4 · 0 · 0 · 52 | 0.03 · 4/4 · 0 · 0 · 52 | 0.40 · 4/4 · 32 · 0 · 1319 |
+| corner-turns | 0.48 · 136/172 · 12 · 0 · 394 | 0.22 · 105/172 · 0 · 0 · 598 | 0.20 · 164/172 · 0 · 0 · 394 | 0.08 · 160/172 · 0 · 0 · 490 | 0.63 · 146/172 · 21 · 0 · 1934 |
+| cross-bars | 0.84 · 10/10 · 0 · 0 · 32 | 0.39 · 10/10 · 0 · 0 · 7010 | 0.33 · 10/10 · 0 · 0 · 32 | 0.20 · 10/10 · 0 · 0 · 50 | 0.72 · 10/10 · 0 · 0 · 165 |
+| gear-teeth | 0.42 · 15/60 · 8 · 0 · 86 | 0.10 · 19/60 · 0 · 0 · 138 | 0.12 · 56/60 · 0 · 0 · 128 | 0.08 · 44/60 · 0 · 0 · 142 | 0.44 · 51/60 · 3 · 0 · 286 |
+| hairlines | 2.35 · 4/4 · 1 · 0 · 76 | 2.06 · 4/4 · 0 · 0 · 196 | 6.56 · 4/4 · 2 · 0 · 88 | 0.14 · 4/4 · 1 · 1 · 90 | 0.22 · 4/4 · 4 · 1 · 102 |
+| letter-joins | 0.39 · 26/31 · 1 · 0 · 104 | 0.09 · 26/31 · 1 · 0 · 162 | 0.10 · 29/31 · 0 · 0 · 116 | 0.10 · 29/31 · 3 · 0 · 165 | 0.20 · 29/31 · 0 · 1 · 126 |
+| nebula | 0.37 · 3/3 · 0 · 0 · 36 | 0.21 · 3/3 · 8 · 0 · 245 | 0.23 · 3/3 · 0 · 0 · 36 | 0.11 · 3/3 · 0 · 0 · 50 | 0.19 · 3/3 · 0 · 0 · 70 |
+| overlap | 0.19 · 4/4 · 0 · 0 · 24 | 0.30 · 4/4 · 0 · 0 · 114 | 0.08 · 4/4 · 0 · 0 · 26 | 0.09 · 4/4 · 0 · 0 · 26 | 0.30 · 4/4 · 0 · 0 · 24 |
+| peak-drop | 0.87 · 88/148 · 0 · 0 · 328 | 0.13 · 107/148 · 6 · 0 · 566 | 0.40 · 134/148 · 0 · 0 · 352 | 0.04 · 145/148 · 2 · 0 · 502 | 0.41 · 140/148 · 7 · 1 · 660 |
+| petals | 0.20 · 8/9 · 0 · 0 · 52 | 0.42 · 9/9 · 0 · 0 · 493 | 0.20 · 9/9 · 0 · 0 · 58 | 0.19 · 7/9 · 0 · 0 · 110 | 0.64 · 8/9 · 0 · 0 · 146 |
+| ring-cross | 0.21 · 4/4 · 0 · 0 · 100 | 0.11 · 4/4 · 0 · 0 · 154 | 0.06 · 4/4 · 0 · 0 · 92 | 0.05 · 4/4 · 0 · 0 · 92 | 0.67 · 4/4 · 1 · 2 · 282 |
+| shaded-ink | 0.30 · 11/11 · 0 · 0 · 108 | 2.12 · 7/11 · 24 · 1 · 1021 | 0.12 · 11/11 · 0 · 0 · 110 | 3.11 · 11/11 · 13 · 0 · 830 | 2.65 · 7/11 · 0 · 1 · 406 |
+| sharp-star | 0.13 · 11/11 · 0 · 0 · 24 | 0.17 · 10/11 · 2 · 0 · 70 | 0.13 · 11/11 · 0 · 0 · 24 | 0.17 · 11/11 · 0 · 0 · 36 | 1.11 · 11/11 · 5 · 0 · 248 |
+| smooth-radii | 0.43 · 4/4 · 15 · 0 · 224 | 0.14 · 4/4 · 1 · 0 · 362 | 0.23 · 4/4 · 11 · 0 · 234 | 0.11 · 4/4 · 0 · 0 · 314 | 0.47 · 4/4 · 12 · 0 · 584 |
+
+| @128 | none | bilinear 4 | waifu2x swin ×2 | waifu2x swin ×4 | Real-ESRGAN anime ×4 |
+|---|---|---|---|---|---|
+| aa-seam | 0.53 · 8/8 · 0 · 0 · 20 | 0.35 · 8/8 · 0 · 0 · 26 | 0.51 · 8/8 · 0 · 0 · 22 | 0.35 · 8/8 · 0 · 0 · 20 | 3.03 · 8/8 · 0 · 0 · 84 |
+| acute-counter | 2.84 · 8/13 · 0 · 0 · 74 | 0.47 · 9/13 · 13 · 0 · 142 | 1.01 · 9/13 · 8 · 0 · 98 | 0.27 · 11/13 · 6 · 0 · 126 | 1.31 · 11/13 · 6 · 0 · 222 |
+| annulus | 0.98 · 0/0 · 0 · 0 · 36 | 0.21 · 0/0 · 0 · 0 · 36 | 0.16 · 0/0 · 0 · 0 · 36 | 0.04 · 0/0 · 0 · 0 · 36 | 1.47 · 0/0 · 0 · 0 · 94 |
+| band-cross | 0.88 · 24/25 · 0 · 0 · 80 | 0.60 · 20/25 · 5 · 0 · 290 | 0.24 · 25/25 · 0 · 0 · 76 | 0.15 · 25/25 · 0 · 0 · 82 | 3.08 · 22/25 · 18 · 1 · 594 |
+| bar-caps | 56.44 · 4/43 · 0 · 1 · 4 | 0.97 · 23/43 · 5 · 1 · 340 | 0.76 · 18/43 · 7 · 0 · 96 | 0.36 · 40/43 · 0 · 0 · 120 | 0.57 · 37/43 · 2 · 1 · 104 |
+| bloom | 0.47 · 0/0 · 0 · 0 · 42 | 0.73 · 0/0 · 0 · 0 · 98 | 0.16 · 0/0 · 0 · 0 · 46 | 0.20 · 0/0 · 0 · 0 · 44 | 1.30 · 0/0 · 1 · 0 · 100 |
+| concentric | 0.51 · 4/4 · 0 · 0 · 52 | 0.12 · 4/4 · 0 · 0 · 52 | 0.12 · 4/4 · 0 · 0 · 52 | 0.20 · 4/4 · 0 · 0 · 76 | 0.79 · 4/4 · 13 · 0 · 687 |
+| corner-turns | 1.54 · 31/172 · 73 · 0 · 392 | 0.62 · 101/172 · 24 · 0 · 480 | 0.52 · 136/172 · 9 · 0 · 390 | 0.23 · 155/172 · 0 · 0 · 414 | 1.14 · 147/172 · 16 · 1 · 1107 |
+| cross-bars | 0.69 · 10/10 · 0 · 0 · 32 | 0.25 · 6/10 · 0 · 0 · 58 | 0.77 · 10/10 · 0 · 0 · 32 | 0.38 · 10/10 · 0 · 0 · 32 | 0.67 · 9/10 · 0 · 0 · 84 |
+| gear-teeth | 0.81 · 15/60 · 12 · 0 · 68 | 0.29 · 26/60 · 0 · 0 · 98 | 0.58 · 12/60 · 5 · 0 · 86 | 0.20 · 34/60 · 1 · 0 · 116 | 1.44 · 24/60 · 6 · 0 · 248 |
+| hairlines | 14.47 · 4/4 · 0 · 0 · 79 | 10.11 · 4/4 · 14 · 1 · 516 | 18.76 · 4/4 · 9 · 1 · 40 | 9.99 · 4/4 · 0 · 1 · 70 | 2.96 · 4/4 · 2 · 1 · 74 |
+| letter-joins | 1.22 · 20/31 · 2 · 0 · 94 | 0.24 · 22/31 · 2 · 0 · 148 | 0.24 · 25/31 · 1 · 0 · 104 | 0.22 · 28/31 · 4 · 0 · 170 | 1.53 · 24/31 · 3 · 1 · 570 |
+| nebula | 1.37 · 3/3 · 0 · 0 · 30 | — | 0.46 · 3/3 · 0 · 0 · 34 | 0.21 · 3/3 · 0 · 0 · 40 | 0.75 · 3/3 · 1 · 0 · 126 |
+| overlap | 0.33 · 4/4 · 0 · 0 · 28 | 0.47 · 4/4 · 0 · 0 · 28 | 0.14 · 4/4 · 0 · 0 · 26 | 0.05 · 4/4 · 0 · 0 · 26 | 0.38 · 4/4 · 1 · 0 · 30 |
+| peak-drop | 39.46 · 8/148 · 0 · 1 · 8 | 0.60 · 128/148 · 0 · 1 · 328 | 1.87 · 35/148 · 37 · 1 · 262 | 0.68 · 113/148 · 11 · 0 · 628 | 0.96 · 122/148 · 1 · 1 · 340 |
+| petals | 0.65 · 7/9 · 0 · 0 · 48 | 0.89 · 6/9 · 0 · 0 · 170 | 0.35 · 8/9 · 1 · 0 · 64 | 0.28 · 7/9 · 0 · 0 · 82 | 3.53 · 6/9 · 0 · 3 · 54 |
+| ring-cross | 0.67 · 4/4 · 0 · 0 · 84 | 0.46 · 4/4 · 0 · 0 · 144 | 0.41 · 4/4 · 0 · 0 · 100 | 0.13 · 4/4 · 0 · 0 · 92 | 0.32 · 4/4 · 0 · 4 · 98 |
+| shaded-ink | 1.05 · 11/11 · 0 · 0 · 114 | 2.67 · 7/11 · 25 · 1 · 668 | 0.20 · 11/11 · 0 · 0 · 110 | 1.57 · 11/11 · 3 · 0 · 318 | 3.35 · 7/11 · 0 · 0 · 338 |
+| sharp-star | 0.15 · 11/11 · 0 · 0 · 24 | 0.29 · 6/11 · 4 · 0 · 36 | 0.16 · 11/11 · 0 · 0 · 24 | 0.36 · 11/11 · 0 · 0 · 36 | 1.49 · 9/11 · 2 · 0 · 194 |
+| smooth-radii | 2.64 · 4/4 · 13 · 0 · 182 | 0.24 · 4/4 · 18 · 0 · 284 | 0.41 · 4/4 · 17 · 0 · 230 | 0.26 · 4/4 · 27 · 0 · 381 | 1.31 · 4/4 · 26 · 0 · 448 |
+
+### 32.4 Why a good-looking Real-ESRGAN upscale traces badly
+
+The user's reading of the contact sheets — "the ×4 ESRGAN upscale looks nice, the vectorizer
+doesn't seem to handle it" — is exactly right, and the reason is two things the model does
+that the eye ignores and the colour path cannot. One row of luma across the outer-ring edge
+of `concentric` (128 → 512; source: one flat grey 48 on one flat paper 246):
+
+```
+bilinear ×4            246 246 246 246 246 246 221 172 122  73  48  48  48  48  48
+waifu2x swin ×4        246 246 246 246 245 245 247  53  46  47  48  48  48  48  48
+Real-ESRGAN anime ×4   254 254 254 254 255 255 255 120  30  32  33  37  39  40  43
+```
+
+- **It repaints the flat colours.** Paper 246 → 254, ink 48 → ~40. Over every flat interior
+  (≥ 3 native px from any edge) the output sits ΔE 2.4–2.7 from the source on all three
+  fixtures probed, p95 3.1–4.5; bilinear and waifu2x are 0.00 on every pixel. The traced
+  fills come out the wrong hex — on `ring-cross` the region scorer matches 1 of 5 authored
+  colours — which for a logo tool is a defect before any geometry is looked at.
+- **It draws a dark rim 2–3 native px wide just inside every edge** (30 → 43 behind it) and
+  a light halo outside — a sharpening overshoot, the classic GAN-upscaler signature. The
+  palette-first stage reads the rim as its own tone and cuts slivers along every boundary:
+  687 nodes and 13 invented corners on `concentric` @128, parsimony 10.5. That is §15.5's
+  "hallucinates edges the tracer faithfully traces", now with a mechanism and a count — and
+  it is a palette-stage fragility a JPEG-sharpened upload could trigger without any model
+  (a §0 candidate on its own, not opened here).
+- **The mono path is immune** — a threshold ignores both — which is why the same model
+  lands on bilinear ×4 on one-ink sheet tiles and why the sheet contact sheets show nothing
+  wrong. waifu2x's swin_unet does neither thing (its output is a nearly hard 1 px edge
+  between the two exact source colours), which is why it is the one model that helps the
+  colour path.
+
+### 32.5 What it costs in the browser
+
+onnxruntime-web 1.22, WASM, the user's Chrome. `crossOriginIsolated` is false on the deploy
+(no COOP/COEP headers), so WASM runs single-threaded — the same condition RMBG-1.4 runs
+under today. WebGPU was refused an adapter in this Chrome, so the WebGPU column is empty
+here, not measured fast.
+
+| per tile | 160 px | 214 px | download |
+|---|---|---|---|
+| bilinear ×4 (main thread) | ~5 ms | ~10 ms | — |
+| waifu2x cunet ×2 | 1.2 s | 2.0 s | 5 MB |
+| waifu2x swin ×2 | 1.9 s | 3.5 s | 17 MB |
+| waifu2x swin ×4 | 2.9 s | 5.4 s | 19 MB |
+| Real-ESRGAN anime ×4 | 7.7 s | 13.6 s | 18 MB |
+
+A 20-icon sheet is ~2 minutes with the only model that ties bilinear ×4, ~4.5 minutes with
+Real-ESRGAN, against under a second for the resampler. Native CPU in Node (onnxruntime-node,
+multi-threaded) is 5–10× faster than this; a COOP/COEP-isolated deploy with 4 WASM threads
+would sit between. Swin2SR lightweight through transformers.js was slower still in Node
+(1–4 s per tile) and photo-trained, and it never beat bilinear 2× on anything.
+
+### 32.6 What this decides
+
+- **Sheet path (mono): no `ai` option now.** The best model ties bilinear ×4 at 300–1000×
+  the compute (5.4 s per 214 px tile single-threaded in the browser, ~2 minutes for a
+  20-icon sheet) and 19 MB; the model that looks best (Real-ESRGAN) repaints colours and
+  manufactures rims. The measured headroom on this path is plain: **bilinear 4×**, 19W/1L over
+  the shipped 3× — `MAX_TRACE_SCALE` is the one-line knob, and whether +23% time / +10% nodes
+  is worth a sub-pixel outline gain is a product call. The 2026-08-04 note that "4× buys
+  nothing" is now known to be a metric artefact (ink-area drift and SSIM cannot see a 9%
+  outline gain), not a fact about the pixels.
+- **Single-image path (colour), small rasters: the `ai` option earns its place, opt-in.**
+  This is the path the issue's table says gets nothing today, and it is the path where a
+  blind plain upscaler would HURT (bilinear 4× loses corners, doubles nodes, explodes
+  `cross-bars`). waifu2x swin_unet — MIT, 17/19 MB, onnxruntime-web, lazy-loaded exactly like
+  RMBG-1.4 — halves bilinear's outline error on the answer sheet, recovers 25–45% more
+  authored corners than bilinear 4× (529 vs 364 at 256, 476 vs 382 at 128), invents half as
+  many, and keeps the node count near native's (91 vs 76 against bilinear's 154). Cost: 2–5 s for a 160–256 px image single-threaded, scaling ~quadratically, so
+  the option belongs to rasters below ~300 px (the only ones it helps anyway) and stays off
+  by default. Factor follows the raster (×4 below ~160 px, ×2 up to ~300), the way
+  `traceScale` already does. Not RMBG-1.4's HF Hub path for the weights: nunif's ONNX
+  exports sit on the Hub too (`deepghs/waifu2x_onnx`), behind the same hotlink rule the
+  `no-referrer` meta already handles.
+- **Do not ship a blind plain upscaler on the single-image path** off this data; if the
+  `plain` option is wanted for symmetry it needs the sheet path's mono/colour split (mono
+  only), where the sheet numbers already back it.
+- **Two tracer-side findings, filed as leads, not opened:** the palette-first stage is
+  fragile to a 2–3 px tone rim inside an edge (§32.4) — a JPEG-sharpened upload can carry
+  the same rim without any model; and a smeared AA ramp (any k× resample of a 1 px ramp)
+  defeats the corner detector's coverage profile (`sharp-star` 11/11 → 6/11). Both are §0
+  candidates with named cases in this lane.
+- The instrument stays: `upscaleDiag.ts` is how the next candidate (a WebGPU-fast model, a
+  line-art-specific one, a smaller waifu2x) gets the same two lanes and the same counts
+  before anyone ships it. Its cost: one Node process cannot hold more than ~15 rows of
+  256-px colour traces (JavaScript heap out of memory at 8 GB — something retains across
+  traces; not chased here) — run it one process per case, or per (case, size, upscaler) for
+  the heavy five (gear-teeth, band-cross, letter-joins, nebula, petals).
