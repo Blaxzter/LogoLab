@@ -137,6 +137,43 @@ export interface ChordCandidate {
 }
 export type ChordObserver = (c: ChordCandidate) => void
 
+/**
+ * Diagnostic out-sink for the re-seat itself (`reseatDiag.ts`, issue #14): one record per
+ * degree-3 interior junction the pass weighed — each incident arm's primitive verdict (and
+ * why it was refused), the pair that won, and how far the vertex moved. The audit classed
+ * `ARM_MAX` (the arm evidence budget, `Prim.conf`, the pair-ranking key) and `R_MIN` (the
+ * circle-radius floor) as ART constants; whether either changes a verdict on the SAME art
+ * at another raster is exactly what this makes observable. Undefined in production — the
+ * pass computes nothing extra without it.
+ */
+export interface ReseatVerdict {
+  vertex: number
+  /** The lattice position BEFORE any move. */
+  x: number
+  y: number
+  arms: {
+    kind: 'line' | 'circle' | null
+    /** Fitted arm length (px): the primitive's `conf`, or the collected length when refused. */
+    conf: number
+    /** Fitted radius for a circle arm (NaN otherwise). */
+    r: number
+    skipCap: boolean
+    /** Empty for an accepted primitive; the gate(s) that refused it otherwise. */
+    why: string
+  }[]
+  /** Arm indices of the winning pair (null when no pair qualified). */
+  pair: [number, number] | null
+  /** The pair's intersection — where the vertex goes (or would go, below MIN_MOVE); NaN
+   *  with no pair. The slid lattice corner moves with the raster, this point does not,
+   *  so it is what pairs the same junction across rasters. */
+  tx: number
+  ty: number
+  /** Distance the vertex moved (0 when it was not re-seated). */
+  move: number
+  reason: 'moved' | 'below MIN_MOVE' | 'no pair' | 'border'
+}
+export type ReseatObserver = (v: ReseatVerdict) => void
+
 const dist = (a: Vec, b: Vec): number => Math.hypot(a.x - b.x, a.y - b.y)
 
 /** A terminal primitive at one edge end. Line: point `a` + unit dir `d`.
@@ -242,42 +279,55 @@ function lineMaxDev(pts: Vec[], a: Vec, d: Vec): number {
   return maxD
 }
 
-/** Fit `pts` (total length `len`) to a line, else a circle. */
-function evalArm(pts: Vec[], len: number): Prim | null {
-  if (pts.length < 2) return null
+/** Fit `pts` (total length `len`) to a line, else a circle. `why` names the gate(s) that
+ *  refused it (empty on success) — read only by the diagnostic observer. */
+function evalArm(pts: Vec[], len: number): { prim: Prim | null; why: string } {
+  if (pts.length < 2) return { prim: null, why: 'empty' }
+  let why: string
   if (len >= MIN_LINE_ARM) {
     const l = armLine(pts)
-    if (lineMaxDev(pts, l.c, l.d) <= LINE_TOL) return { kind: 'line', a: l.c, d: l.d, conf: len, skipCap: false }
-  }
+    const dev = lineMaxDev(pts, l.c, l.d)
+    if (dev <= LINE_TOL) return { prim: { kind: 'line', a: l.c, d: l.d, conf: len, skipCap: false }, why: '' }
+    why = `line-dev ${dev.toFixed(2)}`
+  } else why = `short ${len.toFixed(0)}`
   if (len >= MIN_ARC_ARM) {
     const c = fitCircle(pts)
-    if (c && c.r >= R_MIN && c.r <= R_MAX && maxRadialDev(pts, c) <= CIRC_TOL)
-      return { kind: 'circle', c, conf: len, skipCap: false }
-  }
-  return null
+    if (!c) why += ' · no-circle'
+    else if (c.r < R_MIN) why += ` · r ${c.r.toFixed(1)} < R_MIN`
+    else if (c.r > R_MAX) why += ` · r ${c.r.toFixed(0)} > R_MAX`
+    else {
+      const rd = maxRadialDev(pts, c)
+      if (rd <= CIRC_TOL) return { prim: { kind: 'circle', c, conf: len, skipCap: false }, why: '' }
+      why += ` · circ-dev ${rd.toFixed(2)} (r ${c.r.toFixed(0)})`
+    }
+  } else why += ` · arc-short ${len.toFixed(0)}`
+  return { prim: null, why }
 }
 
 /**
  * Terminal primitive at one edge end. Preference order: the arm INCLUDING the
  * terminal segment (the boundary is already primitive-clean up to the vertex);
  * else, when the terminal segment is short enough to be a mangled cap, the arm
- * EXCLUDING it (the neighbouring run carries the true primitive).
+ * EXCLUDING it (the neighbouring run carries the true primitive). `len` is the
+ * collected arm length either way; `why` the refusal(s) when `prim` is null.
  */
-function endPrimitive(e: SharedEdge, atEnd: boolean): Prim | null {
+function endPrimitive(e: SharedEdge, atEnd: boolean): { prim: Prim | null; len: number; why: string } {
   const arm = collectArm(e, atEnd)
-  if (arm.segPts.length === 0) return null
+  if (arm.segPts.length === 0) return { prim: null, len: 0, why: 'no arm' }
   const all: Vec[] = []
   for (const seg of arm.segPts) for (const p of seg) all.push(p)
   const total = arm.segLen.reduce((a, b) => a + b, 0)
   const pa = evalArm(all, total)
-  if (pa) return pa
+  if (pa.prim) return { prim: pa.prim, len: total, why: '' }
+  let why = pa.why
   if (arm.segPts.length >= 2 && arm.segLen[0] <= CAP_MAX) {
     const rest: Vec[] = []
     for (let s = 1; s < arm.segPts.length; s++) for (const p of arm.segPts[s]) rest.push(p)
     const pb = evalArm(rest, total - arm.segLen[0])
-    if (pb) return { ...pb, skipCap: true }
+    if (pb.prim) return { prim: { ...pb.prim, skipCap: true }, len: total, why: '' }
+    why += ` | cap-skipped: ${pb.why}`
   }
-  return null
+  return { prim: null, len: total, why }
 }
 
 /** Distance from `p` to a primitive. */
@@ -566,6 +616,7 @@ export function reseatJunctions(
   width?: number,
   height?: number,
   onChord?: ChordObserver,
+  onVerdict?: ReseatObserver,
 ): { chords: Set<number>; moved: Set<number> } {
   const incident = new Map<number, End[]>()
   for (const e of edges) {
@@ -589,10 +640,32 @@ export function reseatJunctions(
   for (const v of vertices) {
     const ends = incident.get(v.id)
     if (!ends || ends.length !== 3) continue
-    if (width != null && height != null && (v.x <= 1 || v.y <= 1 || v.x >= width - 1 || v.y >= height - 1)) continue
+    const at = { x: v.x, y: v.y }
+    if (width != null && height != null && (v.x <= 1 || v.y <= 1 || v.x >= width - 1 || v.y >= height - 1)) {
+      onVerdict?.({ vertex: v.id, ...at, arms: [], pair: null, tx: NaN, ty: NaN, move: 0, reason: 'border' })
+      continue
+    }
 
     // Fresh primitives per vertex (an earlier re-seat may have touched an edge).
-    const prims = ends.map((end) => endPrimitive(end.e, end.atEnd))
+    const armV = ends.map((end) => endPrimitive(end.e, end.atEnd))
+    const prims = armV.map((a) => a.prim)
+    const verdict = (pair: [number, number] | null, H: Vec | null, move: number, reason: ReseatVerdict['reason']): void =>
+      onVerdict?.({
+        vertex: v.id,
+        ...at,
+        arms: armV.map((a) => ({
+          kind: a.prim?.kind ?? null,
+          conf: a.prim?.conf ?? a.len,
+          r: a.prim?.c?.r ?? NaN,
+          skipCap: a.prim?.skipCap ?? false,
+          why: a.why,
+        })),
+        pair,
+        tx: H?.x ?? NaN,
+        ty: H?.y ?? NaN,
+        move,
+        reason,
+      })
 
     // Best qualifying pair by summed arm confidence.
     let best: { i: number; j: number; H: Vec; conf: number } | null = null
@@ -626,8 +699,16 @@ export function reseatJunctions(
         if (!best || conf > best.conf) best = { i, j, H, conf }
       }
     }
-    if (!best) continue
-    if (dist(best.H, v) < MIN_MOVE) continue
+    if (!best) {
+      verdict(null, null, 0, 'no pair')
+      continue
+    }
+    const hd = dist(best.H, v)
+    if (hd < MIN_MOVE) {
+      verdict([best.i, best.j], best.H, hd, 'below MIN_MOVE')
+      continue
+    }
+    verdict([best.i, best.j], best.H, hd, 'moved')
 
     v.x = best.H.x
     v.y = best.H.y
