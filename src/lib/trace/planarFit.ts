@@ -218,6 +218,14 @@ export interface PlanarFitOptions {
    *  the pre-§31 `SNAP_GAP + 4` step rule on every arm whose gap is 1 — the red gate's
    *  "before" arm (test/planar-short-arm.test.ts). */
   shortArmSamples?: number
+  /** Fewest samples BOTH arms need before their line directions are handed to the §15
+   *  tangent pin (default ARM_PIN_SAMPLES). The apex and the tangent are two claims on
+   *  different evidence — see ARM_PIN_SAMPLES. */
+  armPinSamples?: number
+  /** §31: a SHORT-ARMED reconstruction (either arm under ARM_PIN_SAMPLES) is checked against
+   *  the raster whenever it moved further than this (default SHORT_ARM_PROBE_MIN px), not
+   *  only past APEX_OVERSHOOT_MAX; Infinity switches the probe off for the census. */
+  shortArmProbeMin?: number
   /**
    * §18 / issue #17 (default true). Refuse an apex reconstruction that lands further than
    * APEX_OVERSHOOT_MAX past the coverage the SOURCE RASTER actually carries — see
@@ -1063,11 +1071,37 @@ const SNAP_SPAN = 14 // …and fit the arm line over up to this many px beyond t
  * hold the noisy regime the bypass was written for. Measured walls: 4 samples invents
  * corners on corner-turns @256 (inv 5 → 9) and costs bar-caps @256 placement; at 5 every
  * watchlist case is byte-stable except gear-teeth's own placement (@512 mean 0.615 →
- * 0.562, max 2.46 → 2.06) and one ibm stripe-end corner recovered @512. Stated in samples
+ * 0.542, p90 1.20 → 0.99, max 2.46 → 2.06). Stated in samples
  * so it stays consistent with the gap it follows: a span clamped by an open chain's end
  * (fitCorneredOpen) with the full 3-px gap is 3 samples, not 6.
  */
 const SHORT_ARM_SAMPLES = 5
+/**
+ * …and the floor at which a corner's arm LINE DIRECTIONS are trusted as tangents for the
+ * §15 pin — the old bypass floor, kept for the claim it was actually good for, on BOTH
+ * sides. The 5-sample floor above admits a population the pin never saw (§15.7/§15.8
+ * calibrated it on corners whose two arms both carried ≥ 7 samples), and the census
+ * measured what the pin does there: on `stripe` @512 both admitted apexes land closer to
+ * their authored corners (0.99 → 0.53 px, 0.35 → 0.31) and chamfer still rises 0.194 →
+ * 0.209 — the corner's LONG arm on a curved letterform is a 14-sample chord with 0.86 px
+ * of bow, and rotating the handle onto it bows the adjacent arc; pinning only the long
+ * side measured the same 0.209. An intersection is tolerant of that bow (two chords still
+ * cross near the corner); a tangent is not. So a corner with a short side takes its apex
+ * from the intersection and keeps the fit's own tangents on both sides — exactly the pin
+ * population the old rule had, and byte-identical for every corner it admitted.
+ */
+const ARM_PIN_SAMPLES = SNAP_GAP + 4
+/**
+ * §31: how far a short-armed reconstruction may move before the raster is asked whether the
+ * corner is out there (§18's `apexReach` probe, otherwise consulted only past
+ * APEX_OVERSHOOT_MAX 2.5). The population the 5-sample floor admits includes the
+ * detector's false positives on tight SMOOTH authored nodes — a kink the old bypass had
+ * left at its lattice vertex — whose two chord lines cross OUTSIDE the ink and slide the
+ * kink 1–2.4 px off the boundary (sony, intel-wm, mercado-pago @512). The raster settles it
+ * the way §18 settled the acute counters: an eroded true corner leaves a coverage trail
+ * along the ray, a chord crossing on a convex arc leaves none.
+ */
+const SHORT_ARM_PROBE_MIN = 0.5
 
 /**
  * SCALE-AWARE snap gap (§10.6): the fixed 3px gap is right for a long arm (skip
@@ -1470,12 +1504,19 @@ function snapCornerToArmsFull(
   }
   const inArm: ArmFit = { ...aFit.fit, dir: orient(a.d, pts[wrap(c - inSpan)], pts[c]) }
   const outArm: ArmFit = { ...bFit.fit, dir: orient(b.d, pts[c], pts[wrap(c + outSpan)]) }
+  // The arms handed back are the §15 pin's evidence; a corner with a side under
+  // ARM_PIN_SAMPLES places its apex (below) and pins nothing on either side. Byte-identical
+  // for every corner the old 7-step floor admitted, since both of its sides carry ≥ 7
+  // samples by construction.
+  const pinMin = opts.armPinSamples ?? ARM_PIN_SAMPLES
+  const pinOk = Math.min(inSamples, outSamples) >= pinMin
+  const pinArm = (arm: ArmFit, _samples: number): ArmFit | null => (pinOk ? arm : null)
   // §19 near-parallel guard (issue #7's family A): interior angle between the two arms
   // as rays leaving the apex — a straight run reads 180°. See PARALLEL_TIP_DEG.
   if (opts.arcArms) {
     const cosI = Math.min(1, Math.max(-1, -(inArm.dir.x * outArm.dir.x + inArm.dir.y * outArm.dir.y)))
     if ((Math.acos(cosI) * 180) / Math.PI > (opts.parallelTipDeg ?? PARALLEL_TIP_DEG)) {
-      return keep('parallel', inArm, outArm)
+      return keep('parallel', pinArm(inArm, inSamples), pinArm(outArm, outSamples))
     }
   }
   // §19 arm model (issue #7): where an arm's samples measurably bow off their line, the
@@ -1558,7 +1599,7 @@ function snapCornerToArmsFull(
       for (const p of cands) if (dist(p, pts[c]) < dist(hit, pts[c])) hit = p
     }
   }
-  if (!hit) return keep('parallel', inArm, outArm)
+  if (!hit) return keep('parallel', pinArm(inArm, inSamples), pinArm(outArm, outSamples))
   const ix = hit.x
   const iy = hit.y
   const hitOut: Vec = { x: ix, y: iy }
@@ -1593,7 +1634,7 @@ function snapCornerToArmsFull(
   if (opts.arcArms && (inArm.kind || outArm.kind)) {
     const cosF = Math.min(1, Math.max(-1, -(inArm.dir.x * outArm.dir.x + inArm.dir.y * outArm.dir.y)))
     if ((Math.acos(cosF) * 180) / Math.PI > (opts.parallelTipDeg ?? PARALLEL_TIP_DEG)) {
-      return keep('parallel', inArm, outArm, 0, hitOut)
+      return keep('parallel', pinArm(inArm, inSamples), pinArm(outArm, outSamples), 0, hitOut)
     }
   }
   // SCALE-AWARE displacement cap (§10.6): how far the reconstructed apex may move
@@ -1607,8 +1648,8 @@ function snapCornerToArmsFull(
   // keep the lattice corner.
   const shortSpan = Math.min(inSpan, outSpan)
   const allow = shortSpan >= (opts.snapSpan ?? SNAP_SPAN) ? Math.max(inSpan, outSpan) : Math.max(2, 0.5 * shortSpan)
-  if (dist({ x: ix, y: iy }, pts[c]) > allow) return keep('over-cap', inArm, outArm, allow, hitOut)
-  return { p: { x: ix, y: iy }, inArm, outArm, outcome: 'reconstructed', allow, hit: hitOut }
+  if (dist({ x: ix, y: iy }, pts[c]) > allow) return keep('over-cap', pinArm(inArm, inSamples), pinArm(outArm, outSamples), allow, hitOut)
+  return { p: { x: ix, y: iy }, inArm: pinArm(inArm, inSamples), outArm: pinArm(outArm, outSamples), outcome: 'reconstructed', allow, hit: hitOut }
 }
 
 /** Intersection of two lines given as point + unit direction; null when parallel. */
@@ -1704,9 +1745,14 @@ function snapApex(
   let reach = -1
   const overMax = opts.apexOvershootMax ?? APEX_OVERSHOOT_MAX
   const reachFrac = opts.apexReachFrac ?? APEX_REACH_FRAC
-  if (opts.apexEvidence !== false && opts.apexReach && full.outcome === 'reconstructed' && moved > overMax) {
+  // §31: a short-armed reconstruction is asked the same question at a shorter range — its
+  // arms are 5–6 samples, so the intersection is trusted only as far as the raster's own
+  // material follows it (see SHORT_ARM_PROBE_MIN).
+  const shortArmed = Math.min(inSpan - inGap, outSpan - outGap) + 1 < (opts.armPinSamples ?? ARM_PIN_SAMPLES)
+  const probeMin = shortArmed ? Math.min(overMax, opts.shortArmProbeMin ?? SHORT_ARM_PROBE_MIN) : overMax
+  if (opts.apexEvidence !== false && opts.apexReach && full.outcome === 'reconstructed' && moved > probeMin) {
     reach = opts.apexReach(pts[c], full.p)
-    if (moved - reach > overMax && reach < reachFrac * moved) {
+    if (moved - reach > probeMin && reach < reachFrac * moved) {
       // CLAMP to the evidence rather than discard it. Falling all the way back to the
       // lattice vertex was measured and is the wrong correction: where the tip is
       // genuinely (if partly) eroded the truth lies BETWEEN the two, and pinning to the

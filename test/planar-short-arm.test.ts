@@ -113,6 +113,36 @@ test('§31 the corners the new floor still bypasses are ones the intersection wo
   }
 })
 
+test('§31 a corner the new floor admits takes its apex from the intersection and keeps the fit’s own tangents (ARM_PIN_SAMPLES)', async () => {
+  // The census that lowered the floor also measured the §15 pin on the admitted population:
+  // stripe @512 places both new apexes closer to their authored corners and still loses
+  // 0.015 of chamfer when the pin rotates a handle onto a 14-sample CHORD (bow 0.86) at a
+  // corner whose other arm is short. So the pin's population is exactly the old rule's —
+  // no pin candidate is even raised at a corner with a side under ARM_PIN_SAMPLES.
+  const { gt, t: oldT } = await trace('gear-teeth', OLD_RULE)
+  const admitted = gt.filter((g) => recordAt(g, oldT.recs)?.outcome === 'short-arm')
+  assert.ok(admitted.length >= 6)
+  const svg = readFileSync(join(root, 'public', 'examples', 'edge-cases', 'gear-teeth.svg'), 'utf8')
+  const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+  const pins: { x: number; y: number; applied: boolean }[] = []
+  const recs: ApexDiagRecord[] = []
+  await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    planarFit: { pinDiag: (p) => { pins.push({ x: p.x, y: p.y, applied: p.applied }) }, apexDiag: (r: ApexDiagRecord) => { recs.push(r) } },
+  })
+  // …every one of them is now placed by the intersection (so the change is live here)…
+  const placed = admitted.filter((g) => recordAt(g, recs)?.outcome === 'reconstructed')
+  assert.ok(placed.length >= 5, `${placed.length} of ${admitted.length} admitted corners reconstructed`)
+  // …and none of them raised a pin candidate on either side.
+  for (const g of placed) {
+    const r = recordAt(g, recs)!
+    const near = pins.filter((p) => Math.hypot(p.x - r.ax, p.y - r.ay) < 0.5)
+    assert.equal(near.length, 0, `corner @(${g.x.toFixed(0)},${g.y.toFixed(0)}) raised ${near.length} pin candidate(s)`)
+  }
+})
+
 test('§31 the floor is inert where the bypass was never the placer: bar-caps and sharp-star are byte-identical', async () => {
   for (const name of ['bar-caps', 'sharp-star']) {
     const a = await trace(name, OLD_RULE)
