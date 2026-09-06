@@ -282,6 +282,11 @@ export interface PlanarFitOptions {
    *  §10.4 re-seat weighed — each arm's primitive verdict and why it was refused, the pair
    *  that won, the move. Undefined in production; the pass is byte-identical without it. */
   onReseatVerdict?: import('./planarReseat.ts').ReseatObserver
+  /** DIAGNOSTIC dial (reseatDiag.ts / issue #39): counterfactual values for the re-seat's
+   *  arm-certification constants (`ARM_MAX`, `LINE_TOL`, `CIRC_TOL`, `MIN_ARC_ARM`,
+   *  `CAP_MAX`), so the audit's "hold the arm at an ARTWORK fraction" recipe runs without
+   *  editing the module. Undefined in production; every field defaults to the constant. */
+  reseatTune?: import('./planarReseat.ts').ReseatTune
   /** DIAGNOSTIC out-sink (ringDiag.ts / issue #10): one record per region loop the §1d
    *  co-circular arc snap weighed, naming the gate that declined it. Undefined in
    *  production; the snap is byte-identical without it. */

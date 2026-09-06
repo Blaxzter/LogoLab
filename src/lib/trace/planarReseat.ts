@@ -63,6 +63,33 @@ const CIRC_TOL = 0.9
  *  to pin its centre). */
 const MIN_LINE_ARM = 8
 const MIN_ARC_ARM = 24
+/**
+ * THROUGH-PAIR VETO (issue #39, §29). A re-seat is the intersection of two DIFFERENT
+ * boundaries, and at a degree-3 junction one of the three arms is the continuation of
+ * another: the boundary that passes THROUGH the junction (gradient-flat: the hypotenuse
+ * continuing as the chord, turn 0°) while the third arm terminates on it. The pair may
+ * therefore not be the two halves of the through-boundary — yet nothing stopped it: on
+ * brave-browser's notch×seam junction the seam (the crossing boundary) was refused, and the
+ * pass paired the notch's two sides (one boundary with a 24° corner, fitted at 512 as a
+ * r≈157 circle and a line) and moved the junction 2.7 px onto their intersection, 2.2 px
+ * off the authored crossing where the lattice corner sat 0.5 px off. Scored against the
+ * authored crossing over five gallery marks, EVERY ungated estimator pair at that junction
+ * lands within 0.6 px except that one — the selector, not the certification, is wrong there
+ * (§29 measured the certification alternatives too: holding the arm at an artwork fraction,
+ * a residual-based uncertainty gate, demoting circles by their line prefix — each a wash or
+ * worse on the reliable cells).
+ *
+ * The turn between two arms is 180° minus the angle between their away-from-vertex
+ * directions: 0° for a boundary continuing straight through, ~168° for the two flanks of a
+ * needle. The smallest-turn pair is the through-boundary, and it is vetoed ONLY when the
+ * third arm is transversal to both its halves by at least this — at a near-tangent crossing
+ * (the pass's own regime, 12° on the driver) all three arms are within ~15° of one line and
+ * the smallest turn says nothing, so the veto needs a T, not a needle. 45°: on the reliable
+ * cells of the five witness marks (61 junctions at authored crossings ≥ 5°) it keeps every
+ * one of HEAD's 15 improving moves and refuses 4 of its 6 moves away; 30° is the same, 60°
+ * lets the witness through again.
+ */
+const THROUGH_VETO_DEG = 45
 /** Circle-radius sanity range for an arm primitive. */
 const R_MIN = 6
 const R_MAX = 2500
@@ -160,9 +187,22 @@ export interface ReseatVerdict {
     skipCap: boolean
     /** Empty for an accepted primitive; the gate(s) that refused it otherwise. */
     why: string
+    /** Length of the arm's TERMINAL fitted segment (px) — the value `CAP_MAX` and
+     *  `CAP_STOP_BYPASS` compare against (audit UNRESOLVED 10). */
+    segLen0: number
+    /**
+     * Every estimator, GATES IGNORED (issue #39, §28.1's pattern: measure the estimators
+     * before designing the selector): the line and the circle fitted to the full collected
+     * arm and to the arm with its terminal segment excluded, each with the deviation the
+     * tolerance gate would have read. `null` when the fit itself is degenerate. Only
+     * computed with an observer attached.
+     */
+    alt: ReseatArmAlt | null
   }[]
   /** Arm indices of the winning pair (null when no pair qualified). */
   pair: [number, number] | null
+  /** The pair the §29 through-veto refused at this junction (null when none was). */
+  vetoed: [number, number] | null
   /** The pair's intersection — where the vertex goes (or would go, below MIN_MOVE); NaN
    *  with no pair. The slid lattice corner moves with the raster, this point does not,
    *  so it is what pairs the same junction across rasters. */
@@ -174,11 +214,49 @@ export interface ReseatVerdict {
 }
 export type ReseatObserver = (v: ReseatVerdict) => void
 
+/** One ungated fit of an arm — see `ReseatVerdict.arms[].alt`. */
+export interface ReseatArmAlt {
+  /** Collected arm length (px) the fits below were made over. */
+  len: number
+  line: { prim: ReseatPrim; dev: number } | null
+  circle: { prim: ReseatPrim; dev: number } | null
+  /** The same two fits with the terminal segment excluded (null when the arm has one
+   *  segment) — what the cap-skip branch would see, whatever `CAP_MAX` says. */
+  noCap: { len: number; line: { prim: ReseatPrim; dev: number } | null; circle: { prim: ReseatPrim; dev: number } | null } | null
+}
+
+/**
+ * DIAGNOSTIC overrides for the arm-certification constants (issue #39 — the audit's
+ * UNRESOLVED 9–11: hold the arm at a fixed ARTWORK fraction instead of `ARM_MAX` 110 px and
+ * re-count which arms certify as a line and which as a circle at each raster). Undefined
+ * in production; every field defaults to the module constant, so the pass is byte-identical
+ * without it. This is a counterfactual dial for `reseatDiag`, not a product option.
+ */
+export interface ReseatTune {
+  armMax?: number
+  lineTol?: number
+  circTol?: number
+  minArcArm?: number
+  capMax?: number
+  /** `THROUGH_VETO_DEG`; 0 = no through-pair veto (the pre-§29 pass). */
+  throughVeto?: number
+}
+
+interface Cfg {
+  armMax: number
+  lineTol: number
+  circTol: number
+  minArcArm: number
+  capMax: number
+  throughVeto: number
+}
+
 const dist = (a: Vec, b: Vec): number => Math.hypot(a.x - b.x, a.y - b.y)
 
 /** A terminal primitive at one edge end. Line: point `a` + unit dir `d`.
  *  Circle: `c`. `conf` = arm length (px); `skipCap` = the terminal segment was
- *  excluded as a suspected mangled cap. */
+ *  excluded as a suspected mangled cap. Exported (as `ReseatPrim`) only so the
+ *  diagnostic can intersect the ungated alternatives with `intersectPrims`. */
 interface Prim {
   kind: 'line' | 'circle'
   a?: Vec
@@ -187,6 +265,7 @@ interface Prim {
   conf: number
   skipCap: boolean
 }
+export type ReseatPrim = Prim
 
 interface End {
   e: SharedEdge
@@ -226,7 +305,7 @@ interface Arm {
  * at ARM_MAX px or at an interior corner turning ≥ 30° (the boundary beyond a
  * corner belongs to a different primitive).
  */
-function collectArm(e: SharedEdge, atEnd: boolean): Arm {
+function collectArm(e: SharedEdge, atEnd: boolean, cfg: Cfg): Arm {
   const nodes = e.nodes
   const m = nodes.length
   const segPts: Vec[][] = []
@@ -234,7 +313,7 @@ function collectArm(e: SharedEdge, atEnd: boolean): Arm {
   let cum = 0
   let prevDir: Vec | null = null
   const count = m - 1
-  for (let s = 0; s < count && cum < ARM_MAX; s++) {
+  for (let s = 0; s < count && cum < cfg.armMax; s++) {
     // Node closer to the vertex (`p`) and its inner neighbour (`q`), with the
     // handles facing each other in that orientation.
     const p = atEnd ? nodes[m - 1 - s] : nodes[s]
@@ -281,27 +360,37 @@ function lineMaxDev(pts: Vec[], a: Vec, d: Vec): number {
 
 /** Fit `pts` (total length `len`) to a line, else a circle. `why` names the gate(s) that
  *  refused it (empty on success) — read only by the diagnostic observer. */
-function evalArm(pts: Vec[], len: number): { prim: Prim | null; why: string } {
+function evalArm(pts: Vec[], len: number, cfg: Cfg): { prim: Prim | null; why: string } {
   if (pts.length < 2) return { prim: null, why: 'empty' }
   let why: string
   if (len >= MIN_LINE_ARM) {
     const l = armLine(pts)
     const dev = lineMaxDev(pts, l.c, l.d)
-    if (dev <= LINE_TOL) return { prim: { kind: 'line', a: l.c, d: l.d, conf: len, skipCap: false }, why: '' }
+    if (dev <= cfg.lineTol) return { prim: { kind: 'line', a: l.c, d: l.d, conf: len, skipCap: false }, why: '' }
     why = `line-dev ${dev.toFixed(2)}`
   } else why = `short ${len.toFixed(0)}`
-  if (len >= MIN_ARC_ARM) {
+  if (len >= cfg.minArcArm) {
     const c = fitCircle(pts)
     if (!c) why += ' · no-circle'
     else if (c.r < R_MIN) why += ` · r ${c.r.toFixed(1)} < R_MIN`
     else if (c.r > R_MAX) why += ` · r ${c.r.toFixed(0)} > R_MAX`
     else {
       const rd = maxRadialDev(pts, c)
-      if (rd <= CIRC_TOL) return { prim: { kind: 'circle', c, conf: len, skipCap: false }, why: '' }
+      if (rd <= cfg.circTol) return { prim: { kind: 'circle', c, conf: len, skipCap: false }, why: '' }
       why += ` · circ-dev ${rd.toFixed(2)} (r ${c.r.toFixed(0)})`
     }
   } else why += ` · arc-short ${len.toFixed(0)}`
   return { prim: null, why }
+}
+
+/** Both fits of an arm with every gate ignored — the diagnostic's estimator table. */
+function altFits(pts: Vec[], len: number): { line: ReseatArmAlt['line']; circle: ReseatArmAlt['circle'] } {
+  if (pts.length < 2) return { line: null, circle: null }
+  const l = armLine(pts)
+  const line = { prim: { kind: 'line' as const, a: l.c, d: l.d, conf: len, skipCap: false }, dev: lineMaxDev(pts, l.c, l.d) }
+  const c = fitCircle(pts)
+  const circle = c ? { prim: { kind: 'circle' as const, c, conf: len, skipCap: false }, dev: maxRadialDev(pts, c) } : null
+  return { line, circle }
 }
 
 /**
@@ -311,23 +400,48 @@ function evalArm(pts: Vec[], len: number): { prim: Prim | null; why: string } {
  * EXCLUDING it (the neighbouring run carries the true primitive). `len` is the
  * collected arm length either way; `why` the refusal(s) when `prim` is null.
  */
-function endPrimitive(e: SharedEdge, atEnd: boolean): { prim: Prim | null; len: number; why: string } {
-  const arm = collectArm(e, atEnd)
-  if (arm.segPts.length === 0) return { prim: null, len: 0, why: 'no arm' }
+function endPrimitive(
+  e: SharedEdge,
+  atEnd: boolean,
+  cfg: Cfg,
+  wantAlt: boolean,
+): { prim: Prim | null; len: number; why: string; segLen0: number; dir: Vec | null; alt: ReseatArmAlt | null } {
+  const arm = collectArm(e, atEnd, cfg)
+  if (arm.segPts.length === 0) return { prim: null, len: 0, why: 'no arm', segLen0: 0, dir: null, alt: null }
   const all: Vec[] = []
   for (const seg of arm.segPts) for (const p of seg) all.push(p)
   const total = arm.segLen.reduce((a, b) => a + b, 0)
-  const pa = evalArm(all, total)
-  if (pa.prim) return { prim: pa.prim, len: total, why: '' }
+  // Away-from-vertex direction of the arm as a whole: vertex → centroid of its samples (the
+  // through-pair veto's turn is read on this; certified or not, every arm has one).
+  let cx = 0
+  let cy = 0
+  for (const p of all) {
+    cx += p.x
+    cy += p.y
+  }
+  cx = cx / all.length - all[0].x
+  cy = cy / all.length - all[0].y
+  const cl = Math.hypot(cx, cy)
+  const dir = cl > 1e-9 ? { x: cx / cl, y: cy / cl } : null
+  const rest: Vec[] = []
+  if (arm.segPts.length >= 2) for (let s = 1; s < arm.segPts.length; s++) for (const p of arm.segPts[s]) rest.push(p)
+  let alt: ReseatArmAlt | null = null
+  if (wantAlt) {
+    alt = {
+      len: total,
+      ...altFits(all, total),
+      noCap: rest.length ? { len: total - arm.segLen[0], ...altFits(rest, total - arm.segLen[0]) } : null,
+    }
+  }
+  const pa = evalArm(all, total, cfg)
+  if (pa.prim) return { prim: pa.prim, len: total, why: '', segLen0: arm.segLen[0], dir, alt }
   let why = pa.why
-  if (arm.segPts.length >= 2 && arm.segLen[0] <= CAP_MAX) {
-    const rest: Vec[] = []
-    for (let s = 1; s < arm.segPts.length; s++) for (const p of arm.segPts[s]) rest.push(p)
-    const pb = evalArm(rest, total - arm.segLen[0])
-    if (pb.prim) return { prim: { ...pb.prim, skipCap: true }, len: total, why: '' }
+  if (arm.segPts.length >= 2 && arm.segLen[0] <= cfg.capMax) {
+    const pb = evalArm(rest, total - arm.segLen[0], cfg)
+    if (pb.prim) return { prim: { ...pb.prim, skipCap: true }, len: total, why: '', segLen0: arm.segLen[0], dir, alt }
     why += ` | cap-skipped: ${pb.why}`
   }
-  return { prim: null, len: total, why }
+  return { prim: null, len: total, why, segLen0: arm.segLen[0], dir, alt }
 }
 
 /** Distance from `p` to a primitive. */
@@ -347,7 +461,10 @@ function primTangent(p: Vec, pr: Prim): Vec {
   return { x: -dy / l, y: dx / l }
 }
 
-/** Intersection points of two primitives (0, 1 or 2). */
+/** Intersection points of two primitives (0, 1 or 2). Exported for the diagnostic only. */
+export function intersectPrims(p1: Prim, p2: Prim): Vec[] {
+  return intersect(p1, p2)
+}
 function intersect(p1: Prim, p2: Prim): Vec[] {
   if (p1.kind === 'line' && p2.kind === 'line') {
     const det = p1.d!.x * p2.d!.y - p1.d!.y * p2.d!.x
@@ -617,7 +734,16 @@ export function reseatJunctions(
   height?: number,
   onChord?: ChordObserver,
   onVerdict?: ReseatObserver,
+  tune?: ReseatTune,
 ): { chords: Set<number>; moved: Set<number> } {
+  const cfg: Cfg = {
+    armMax: tune?.armMax ?? ARM_MAX,
+    lineTol: tune?.lineTol ?? LINE_TOL,
+    circTol: tune?.circTol ?? CIRC_TOL,
+    minArcArm: tune?.minArcArm ?? MIN_ARC_ARM,
+    capMax: tune?.capMax ?? CAP_MAX,
+    throughVeto: tune?.throughVeto ?? THROUGH_VETO_DEG,
+  }
   const incident = new Map<number, End[]>()
   for (const e of edges) {
     if (e.closed || e.nodes.length < 2) continue
@@ -642,12 +768,12 @@ export function reseatJunctions(
     if (!ends || ends.length !== 3) continue
     const at = { x: v.x, y: v.y }
     if (width != null && height != null && (v.x <= 1 || v.y <= 1 || v.x >= width - 1 || v.y >= height - 1)) {
-      onVerdict?.({ vertex: v.id, ...at, arms: [], pair: null, tx: NaN, ty: NaN, move: 0, reason: 'border' })
+      onVerdict?.({ vertex: v.id, ...at, arms: [], pair: null, vetoed: null, tx: NaN, ty: NaN, move: 0, reason: 'border' })
       continue
     }
 
     // Fresh primitives per vertex (an earlier re-seat may have touched an edge).
-    const armV = ends.map((end) => endPrimitive(end.e, end.atEnd))
+    const armV = ends.map((end) => endPrimitive(end.e, end.atEnd, cfg, onVerdict != null))
     const prims = armV.map((a) => a.prim)
     const verdict = (pair: [number, number] | null, H: Vec | null, move: number, reason: ReseatVerdict['reason']): void =>
       onVerdict?.({
@@ -659,13 +785,42 @@ export function reseatJunctions(
           r: a.prim?.c?.r ?? NaN,
           skipCap: a.prim?.skipCap ?? false,
           why: a.why,
+          segLen0: a.segLen0,
+          alt: a.alt,
         })),
         pair,
+        vetoed,
         tx: H?.x ?? NaN,
         ty: H?.y ?? NaN,
         move,
         reason,
       })
+
+    // §29 — the through-boundary: the smallest-turn arm pair, vetoed as a re-seat pair when
+    // the third arm meets both its halves transversally (see THROUGH_VETO_DEG).
+    const dirs = armV.map((a) => a.dir)
+    const turn = (i: number, j: number): number => {
+      const a = dirs[i]
+      const b = dirs[j]
+      if (!a || !b) return Infinity
+      return 180 - (Math.acos(Math.max(-1, Math.min(1, a.x * b.x + a.y * b.y))) * 180) / Math.PI
+    }
+    let vetoed: [number, number] | null = null
+    if (cfg.throughVeto > 0) {
+      let minTurn = Infinity
+      for (let i = 0; i < 3; i++)
+        for (let j = i + 1; j < 3; j++) {
+          const t = turn(i, j)
+          if (t < minTurn) {
+            minTurn = t
+            vetoed = [i, j]
+          }
+        }
+      if (vetoed) {
+        const k = 3 - vetoed[0] - vetoed[1]
+        if (Math.min(turn(vetoed[0], k), turn(vetoed[1], k)) < cfg.throughVeto) vetoed = null
+      }
+    }
 
     // Best qualifying pair by summed arm confidence.
     let best: { i: number; j: number; H: Vec; conf: number } | null = null
@@ -677,6 +832,7 @@ export function reseatJunctions(
         const pj = prims[j]
         if (!pj) continue
         if (primDist(v, pj) > NEAR_TOL) continue
+        if (vetoed && vetoed[0] === i && vetoed[1] === j) continue
         let H: Vec | null = null
         let hd = Infinity
         for (const cand of intersect(pi, pj)) {

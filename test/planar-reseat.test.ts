@@ -21,7 +21,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
@@ -29,7 +29,9 @@ import { ensureImageData } from '../src/devtest/nodeHarness.ts'
 import { decodePng } from '../src/devtest/png.ts'
 import { tracePlanar } from '../src/lib/trace/planarAssemble.ts'
 import { planarBeautify, type SnapOptions } from '../src/lib/trace/planarBeautify.ts'
-import { reseatJunctions, weldConvergedJunctions, type ChordCandidate } from '../src/lib/trace/planarReseat.ts'
+import { reseatJunctions, weldConvergedJunctions, type ChordCandidate, type ReseatVerdict } from '../src/lib/trace/planarReseat.ts'
+import { parseGroundTruth, toRasterSpace } from '../src/devtest/svgGround.ts'
+import { authoredCrossings, nearestCrossing } from '../src/devtest/authoredCrossings.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import type { BeautifyOptions } from '../src/lib/trace/beautify.ts'
 import type { EdgeRef, SharedEdge, Topology, Vec, Vertex } from '../src/lib/path/types.ts'
@@ -280,16 +282,22 @@ test('reseat: a terminal arc re-emit never laps the fitted circle (mangled-cap h
   const arcNodes = []
   for (let deg = 31; deg >= 1; deg -= 3) arcNodes.push(corner(P(deg)))
   arcNodes.push(corner(Vold))
+  // The third arm continues the occluder LINE past the junction (the driver's geometry: the
+  // hypotenuse goes on as the chord), as a short kinked stub with no primitive of its own.
+  // §29's through-pair veto reads the three arms' directions: the line and its continuation
+  // are the through-boundary here, so the arc×line pair is a crossing and stays eligible.
+  const perp = { x: -dir.y, y: dir.x }
+  const stub = (t: number, off: number): Vec => ({ x: Vold.x + t * dir.x + off * perp.x, y: Vold.y + t * dir.y + off * perp.y })
   const vertices: Vertex[] = [
     { id: 0, x: Vold.x, y: Vold.y },
     { id: 1, ...P(31) },
     { id: 2, ...at(-100) },
-    { id: 3, x: Vold.x - 9, y: Vold.y - 10 },
+    { id: 3, ...stub(7, 1.5) },
   ]
   const edges: SharedEdge[] = [
     { id: 0, closed: false, startVertex: 1, endVertex: 0, nodes: arcNodes }, // circle arm + mangled cap
     { id: 1, closed: false, startVertex: 2, endVertex: 0, nodes: [corner(at(-100)), corner(at(-9)), corner(Vold)] }, // line arm + bent cap
-    { id: 2, closed: false, startVertex: 0, endVertex: 3, nodes: [corner(Vold), corner({ x: Vold.x - 6, y: Vold.y - 3 }), corner({ x: Vold.x - 9, y: Vold.y - 10 })] }, // kinked spoke: no primitive
+    { id: 2, closed: false, startVertex: 0, endVertex: 3, nodes: [corner(Vold), corner(stub(4, 0.5)), corner(stub(7, 1.5))] }, // kinked stub: no primitive
   ]
 
   const { moved } = reseatJunctions(edges, vertices, W, H)
@@ -379,4 +387,61 @@ test('weld: no moved vertices ⇒ graph untouched', () => {
   const before = JSON.stringify({ vertices, edges, loops: [...loops] })
   weldConvergedJunctions(vertices, edges, loops, W, H, new Set())
   assert.equal(JSON.stringify({ vertices, edges, loops: [...loops] }), before)
+})
+
+// --- issue #39: arm certification over ART-scaled spans — the witness ----------
+// The re-seat certifies each incident arm as a line (LINE_TOL 0.8) or a circle
+// (CIRC_TOL 0.9) over up to ARM_MAX 110 px of fitted boundary, so what a boundary
+// "is" depends on how much of it the raster lets the pass see. brave-browser's
+// junction where the two overlay halves' central seam meets the white mask's notch
+// (a 24° V with an r≈26 tip, authored crossing (257,282) in 512-artwork px) is the
+// measured witness: at 512 the notch side certifies as a circle of r≈157 and the
+// pass moves the junction 2.72 px onto that circle's intersection with the other
+// side — 2.23 px from the authored crossing, where the lattice corner sat 0.50 px
+// off; at 2048 the same art certifies line×line and lands 0.03 px off. The answer
+// sheet (`authoredCrossings`) scores both. This gate holds the 512 placement to the
+// lattice corner's own error (a re-seat must never move a junction AWAY from the
+// crossing) and keeps the 2048 landing. Skipped when the gitignored gallery corpus
+// is absent (`npm run fetch:logos`).
+const BRAVE = join(root, 'examples', 'logos', 'brave-browser.svg')
+const HAVE_BRAVE = existsSync(BRAVE)
+
+async function braveJunction(res: number): Promise<{ lat: number; placed: number; reason: string; kind: string }[]> {
+  const svg = readFileSync(BRAVE, 'utf8')
+  const s = res / 512
+  const cross = nearestCrossing(authoredCrossings(toRasterSpace(parseGroundTruth(svg), 512)), { x: 257, y: 282 }, 3)
+  assert.ok(cross, 'the answer sheet has the notch×seam crossing near (257,282)')
+  const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng())
+  const seen: ReseatVerdict[] = []
+  await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    planarFit: { onReseatVerdict: (v) => seen.push(v) },
+  })
+  const cx = cross!.c.x * s
+  const cy = cross!.c.y * s
+  return seen
+    .filter((v) => v.reason !== 'border' && Math.hypot(v.x - cx, v.y - cy) <= 3 * s)
+    .map((v) => {
+      const lat = Math.hypot(v.x - cx, v.y - cy) / s
+      const placed = v.reason === 'moved' ? Math.hypot(v.tx - cx, v.ty - cy) / s : lat
+      const kind = v.pair ? v.arms.filter((_, i) => v.pair!.includes(i)).map((a) => (a.kind === 'line' ? 'L' : 'C')).sort().join('+') : 'none'
+      return { lat, placed, reason: v.reason, kind }
+    })
+}
+
+test('reseat: brave-browser @512 — the notch×seam junction is not moved AWAY from the authored crossing (issue #39)', { skip: !HAVE_BRAVE && 'examples/logos absent (npm run fetch:logos)' }, async () => {
+  const at = await braveJunction(512)
+  assert.ok(at.length >= 1, 'the pass weighs a junction at the crossing')
+  for (const j of at) {
+    assert.ok(j.placed <= j.lat + 0.1, `placement ${j.placed.toFixed(2)} px off the authored crossing, the lattice corner was ${j.lat.toFixed(2)} (${j.reason}, ${j.kind})`)
+    assert.ok(j.placed <= 0.75, `placement ${j.placed.toFixed(2)} px off the authored crossing (${j.reason}, ${j.kind})`)
+  }
+})
+
+test('reseat: brave-browser @2048 — the same junction still lands on the crossing (issue #39 tripwire)', { skip: !HAVE_BRAVE && 'examples/logos absent (npm run fetch:logos)' }, async () => {
+  const at = await braveJunction(2048)
+  assert.ok(at.length >= 1, 'the pass weighs a junction at the crossing')
+  for (const j of at) assert.ok(j.placed <= 0.25, `placement ${j.placed.toFixed(2)} px off the authored crossing (${j.reason}, ${j.kind})`)
 })

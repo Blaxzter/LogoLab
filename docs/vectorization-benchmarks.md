@@ -35,6 +35,7 @@ guardrails):
 | 16 | **The trace INVENTS corners on smooth art** — sharp nodes the authored geometry does not contain, on ellipse ends and straight→arc blends. Newly VISIBLE rather than newly introduced: `cornersRecovered` is a recall number with no precision term, so this was free by every gate here until §23 built `cornersInvented`. It is the measured form of “every nice radius has a kink in it”, and it is why §22 was rejected on sight after passing CI. The metric asks a like-for-like question at the corner's own scale — the traced node's C⁰ kink minus the AUTHORED boundary's turn over ±1px — and exempts the four places a trace is right to corner (canvas border, occluded boundary, traced junctions of degree ≥3, authored crossings) | `smooth-radii` (tier 0, **gated**, authored for this: art with NO corners at all — ellipses 1:1→1:8 in both orientations, rounded rects at 2/3/5/8/12px radii, curvature-ramp eggs) | **12** invented on a case with zero authored corners; corpus-wide over the 23 gated tier-0 cases, flat lane: p50 0, p90 2, max 12, **18 over 3 cases** (`smooth-radii` 12, `hairlines` 4, `peak-drop` 2). The rejected §22 reading takes `smooth-radii` to **18** | **§23**; instrument `src/devtest/kinkDiag.ts` (`--gate`, `--probe x,y`, `--compare`). Gate scope today: FLAT art, @512 only — gradient banding and the halved radii at @256 are each their own calibration (§23.3) |
 | 18 | **Near-colour flats fused into a gentle "ramp"** (gradient lane) — the residue of §26. Two flat objects whose colours differ by a small Oklab step are still unioned by the Step-3c field merge and painted as one shallow gradient, because at the veto's window scale (1/24 of the fitted axis) a step of ≤ 0.09 is indistinguishable from a real steep ramp piece: the honest reunites in gradient-authoring art reach 0.078 (`logo-firefox`), the fakes in this family read 0.019–0.086, and the census found no scale-W separation. §26 raised the catch rate of the flat∪flat fusion family from 0 to 41 of 60 labelled rows; these are the 19 it does not reach. The product exposure is bounded: `suggestGradients` keeps flat art out of the lane, so this is the mixed-art case only | `flute-flat` (A/B fixture lane, ungated: 16 of its 19 flat∪flat unions read ≤ 0.080), `logo-chrome` (gallery, 0.086), `seam-corner` (0.030), `bloom` (0.019) | fakes 0.019–0.086 vs the real maximum 0.078 — no threshold separates them | **§26.6**; instrument `stepRampDiag --census` (labelled by the SOURCE's authored paint) |
 | 17 | **A circle's whole boundary sits off its authored radius by a near-constant amount** — a BIAS, not a wobble: the trace is perfectly round and in the wrong place. Found by §24's circle lens on the day it landed, and only because that lens reports the mean residual SEPARATELY from the spread — the raw p95 reads 0.81 and looks exactly like the ring wobble, while the co-circularity spread is 0.03. Every other gate is blind: 0.8px is far inside chamfer/p95, and the shape is still round, so no corner or region lens sees it either. NOT a size law and not yet explained — the two worst circles are the same size and disagree in SIGN. Untouched by §24, whose family pass only reaches circles cut into arcs | `acute-counter` (tier 0, gated, passes — the gate is on spread, not bias) | seven authored circles read |bias| 0.09–**0.79**px: r=40.5 at **−0.79** (traced inside) against r=39.5 at **+0.19** (outside) and r=58.6 at +0.16 | **§24.3**, **§25.3**; instrument `ringDiag --circles` (the `bias` column, and since §25 the `centre` / `round` columns — a circle in the wrong PLACE is a third term `spread` folds in, and on `olympic-rings` it is now the whole residue: measured identical under an algebraic and a geometric fit, so the evidence is displaced and no estimator recovers it) |
+| 19 | **The junction re-seat moves a junction AWAY from its authored crossing** — the residue of §29 after the through-pair veto: 16 of 62 gallery re-seats on scorable crossings (128 marks, 512/1024/2048) still land further from the crossing than the lattice corner they left. Three mechanisms, none of them the certification constant issue #39 was filed on: a cap-skip that drops a REAL short terminal (an authored r=6 curve, 11.6 px at 1024) and extrapolates the line beyond it to the junction — audit recipe 10, `CAP_MAX`'s zero-margin populations; two huge-radius circle arms (r≈535 × r≈1104) whose intersection is ill-conditioned; and stub arms of 8 native px paired at a 14° angle. Visible on the mark at 1×: the junction sits 1.8–3.1 px off a crossing the lattice had within 0.3 | `logo-brave-browser` @512 (258,474) and @1024 (259,474) artwork px (gallery, ungated — the §29 gate covers the witness junction only); the answer sheet is `authoredCrossings` | 3.12 px off vs 0.29 lattice (C+C @512); 1.78 vs 0.18 (cap-skip @1024); gallery-wide 16 / 62 | **§29.4**; instruments `reseatDiag --lanes` (census, `--json`) and `reseatSelect --worse` (offline, per pair) |
 
 ### 0.1 Premise re-check of the four open issues (2026-08-23)
 
@@ -5216,9 +5217,187 @@ non-mergeable in §9.3 — no production trace reaches it. Unchanged, marked ine
 - **#39** — the re-seat's certification over ART-scaled arms (`LINE_TOL`, `CIRC_TOL`,
   `MIN_ARC_ARM`, `CAP_MAX`, coupled to `ARM_MAX`): `reseatDiag` is the census, the
   authored-crossing answer sheet is the missing half, `brave-browser` @(260,282) the
-  witness; the `NEAR_TOL` knife edge above goes with it.
+  witness; the `NEAR_TOL` knife edge above goes with it. **→ §29: the answer sheet was
+  built, the witness scored (512 wrong by 2.2 px, 2048 right), and the defect turned out
+  to be the PAIRING, not the certification.**
 
 **After.** Suite 475 / 0 (473 pass, 2 skipped), typecheck clean; golden corpus
 byte-identical (the observer is undefined in production and the marker path is untouched
 without markers); A/B `after-ws2-scale` ⇄ `after-ws2-close` (listed as a pair): **0 of 84
 outputs moved**.
+
+## 29. The re-seat scored against the authored crossing (issue #39, 2026-09-06)
+
+Issue #39 is the certification half of the §10.4 junction re-seat: `LINE_TOL` 0.8 /
+`CIRC_TOL` 0.9 decide whether each incident arm is a line or a circle over up to `ARM_MAX`
+110 px of fitted boundary, and 110 px is a different amount of ART at every raster, so §28.6
+found the same authored boundary certified as a circle at one raster and a line at another
+on 74 gallery junctions — 8 of them with a re-seat that fires, and on those the rasters'
+target points disagreed by 0.4–2.7 artwork px with nothing to say which was right. The
+issue's instruction, and this section's order of work: build the ANSWER SHEET first, score
+every raster's target against it, run the audit's recipe 11 (hold the arm at an artwork
+fraction and re-count the claims), red-gate the witness, and only then design — measuring
+the estimators before the selector, §28's lesson.
+
+### 29.1 The answer sheet, and what it said about the witness
+
+`src/devtest/authoredCrossings.ts`: a re-seat junction is where two authored outlines cross,
+so the crossing point is computable from the SVG. Every authored subpath (`svgGround`, in
+512-artwork px) is flattened to 0.02 px and intersected with every other one (spatial hash,
+touching corners within 0.15 px count as a T, crossings within 0.5 px are one point); each
+crossing records what the two boundaries ARE there — a straight segment, or a curve with its
+local radius from the cubic's own curvature — and the angle they cross at. `reseatDiag` then
+scores every raster's TARGET (tx,ty) against the nearest crossing (6 artwork px; a junction
+with no qualifying pair is matched on its lattice corner within 10), next to the lattice
+corner's own error, and pairs junctions across rasters BY THE CROSSING, never by the lattice
+corner. 128 of the 152 gallery marks are scorable (the rest: clip paths, strokes, filters,
+masks — `svgGround`'s refusals). One class of crossing is not: two authored arcs that
+COINCIDE (firefox's flame shares its outline with the shapes under it) intersect everywhere
+along their shared run at "0°", and a junction there has no crossing point to be scored
+against — its along-boundary position is free, exactly §28.1's band-seam caveat. The offline
+evaluator (`reseatSelect`) therefore scores crossings of ≥ 5° only; the census prints them
+all and labels the angle.
+
+Two more diagnostic hooks ride the verdict now, undefined in production: every arm's
+UNGATED fits (line and circle, over the full arm and with its terminal segment dropped —
+`alt`), so the diag can put the junction where EACH pair of estimators would and score that
+too; and `reseatTune`, a counterfactual dial for the certification constants (`armMax`,
+`lineTol`, `circTol`, `minArcArm`, `capMax`, and the veto below). `segLen0` — the value
+`CAP_MAX` reads — is on the record for audit recipe 10.
+
+**The witness, scored** (`brave-browser`, the seam between the two overlay halves meeting
+the white mask's notch — a 24° V with an r≈26 tip, crossing (257,282) in artwork px):
+
+| res | pair | move | target → crossing | lattice → crossing |
+|---|---|---|---|---|
+| 512 | circle r157 × line | 2.72 | **2.23** | 0.50 |
+| 1024 | circle r43 × line | 0.06 (below `MIN_MOVE`) | 0.22 | 0.24 |
+| 2048 | line × line | 0.50 | **0.03** | 0.48 |
+
+So the answer to §28.6's open question is: 2048 is right and 512 is wrong — the pass
+moved the junction 1.7 px AWAY from the crossing at the lab's own raster. And the estimator
+table at that junction says where the fault is: line×line 0.55, circle×line 0.29,
+circle×circle 0.62, best of all 0.29 — EVERY ungated pair lands within 0.6 px except the one
+the pass chose. The chosen pair is the V's two SIDES (one boundary with a corner at the
+junction, fitted at 512 as an r≈157 bow over 42 px and a 25 px line), meeting at 15°; the
+seam — the boundary that actually crosses there — was refused as a line (1.40 px of wobble
+over its 87 px arm, a low-contrast translucent edge). Two sides of one boundary are not a
+crossing.
+
+**The population.** Over the five gallery marks the issue named that have an answer sheet
+(brave-browser, firefox, firefox-wm, microsoft-office, tiktok; ups-wm is clipped and
+wikipedia stroked), 512/1024/2048, every matched junction: the pass moves 89 and lands 72
+closer to the crossing than the lattice corner, 8 further — a net-positive pass with a
+defect class, not a broken one. On the reliable cells (crossings ≥ 5°: 61 junctions, 21
+moved): 15 better, 6 worse. Gallery-wide, 128 marks: 841 reliable cells, 70 moved, **47
+better / 22 worse**. The fixtures (gradient-flat, overlap, cross-bars, ring-cross,
+band-cross, bloom @256–2048) never move a junction away: 0 worse at every raster, the driver
+at 2048 lands 0.08 px off its crossing.
+
+### 29.2 Recipe 11, and four other things that did not work
+
+Every alternative below was scored on the answer sheet before the fix was chosen; each is
+what §28 calls a written hypothesis, and each died on the numbers.
+
+- **Audit recipe 11 — `ARM_MAX` at 110 ARTWORK px** (`reseatDiag --arm-frac`, 128 marks ×
+  512/1024/2048). The claim counts move as the audit predicted: at 2048 lines 3028→2820,
+  circles 1441→1275, refused 4654→5028 — a fixed px tolerance over more art refuses more —
+  and the moves shrink in proportion (233→206 @1024, 264→215 @2048; worse 16→13 / 16→10,
+  better 65→61 / 69→57). It does not touch the witness: the bend-absorbing circle is inside
+  the first 42 px of art either way. Not a fix; the audit's "neither can move alone" holds.
+- **A residual-based uncertainty gate.** The intersection of two primitives moves by
+  ~(devᵢ + devⱼ)/sin θ under fit noise, so "the slide must exceed its own error bar" reads
+  well. Measured (`reseatSelect`, 626 cells): the 8 moves-away sit on BOTH sides of it (move >
+  unc: 1/8, 2/12, 1/6 worse/better per raster; move ≤ unc: 2/15, 1/14, 1/17), and the gate
+  at k=1 keeps 30 of 81 moves — 46 good ones thrown away for 4 bad ones avoided. Ranking
+  pairs by uncertainty instead of arm length is worse still (11 worse, max 9.8 px).
+- **Certifying every arm over its longest one-primitive PREFIX** ("extension that stops at
+  the first feature", the literal §28.2 pattern). Doubles the moves (30→52 @512) with more
+  of them wrong (worse 3→5, 3→7), and breaks the §10.4 driver: the occluder chord — the
+  boundary through the needle-mangled zone, refused whole-arm by both tests precisely
+  because its full-length deviation reveals the mangle — has a 39 px prefix under tolerance
+  that outranks the correct pair at 512 and 256. Certifying a prefix of a REFUSED arm is
+  the wrong half of the idea.
+- **Demoting a whole-arm CIRCLE to its line prefix** when the prefix covers most of the
+  arm (the witness: 40 of 42 px). Narrower, and it fixes the witness — and it is a wash:
+  on the reliable witness-mark cells 2 fixed, 2 regressed (an r=57 arc at 1024 whose good
+  1.56 px move became a decline at 2.70; gradient-flat @256 from 0.36 to 1.55 px, the
+  demoted chord+arc arm outranking the 11 px hypotenuse), and gallery-wide 65 moved with
+  18 worse / 45 better against 70 with 22 / 47, plus a new 7.65 px worst case. The prefix
+  SHARE is continuous over 749 whole-arm circles (no gap: the witness 0.95, the regressed
+  true arcs 0.84–0.85). Two guards were tried on top and each fell to the driver: a
+  "dead-straight for 2·CAP_MAX at the vertex" clause demoted the disc arm at 2048 because
+  the fit had emitted the arc's first 52 px as a straight FACET (its 1.1 px sagitta is the
+  fit epsilon — facet length is ~√(8·r·ε), 49 px at r=304, so no fixed minimum separates a
+  facet from an authored line); and a "residual concentrated at one end" test found the
+  witness's own arm symmetric (0.64 at the vertex end, 1.04 at the far end): at 512 the
+  tracer fitted the tip and the side as ONE smooth cubic, and the bow it made is
+  indistinguishable in shape from a real short arc. The certification cannot tell them
+  apart because the fitted curve does not contain the difference.
+
+### 29.3 The fix: the through-pair veto
+
+`planarReseat.ts` — `THROUGH_VETO_DEG = 45`, `ReseatTune.throughVeto`. At a degree-3
+junction one of the three arms continues another: the boundary passing THROUGH the junction
+(gradient-flat: the hypotenuse going on as the chord, turn 0°), with the third arm
+terminating on it. A re-seat is the intersection of two DIFFERENT boundaries, so the pair
+may not be the two halves of the through-boundary. The turn between two arms is 180° minus
+the angle between their away-from-vertex directions (vertex → centroid of the arm's samples,
+certified or not): 0° for a boundary continuing straight, ~168° for the two flanks of a
+needle. The smallest-turn pair is the through-boundary — and it is vetoed only when the
+third arm is transversal to BOTH its halves by at least 45°. That last condition is what
+the driver taught: at a near-tangent crossing all three arms are within ~15° of one line
+(the disc arc, the hypotenuse and the chord at 12°), the smallest turn says nothing, and
+without it the veto refused half of the good moves at 512 (58 moved, 43 better / 14 worse
+gallery-wide). The veto needs a T, not a needle; the witness's seam meets the notch's sides
+at 78° and 102°.
+
+**After** (`reseatSelect` on the answer sheet, crossings ≥ 5°; a selector-only change, so
+the offline re-derivation reproduces the pass exactly — 841 of 841 cells):
+
+| | moved | better | worse | placed mean |
+|---|---|---|---|---|
+| gallery, 128 marks, before | 70 | 47 | 22 | 1.179 |
+| gallery, **veto 45°** | 62 | 46 | **16** | 1.170 |
+| veto 30° | 58 | 44 | 14 | 1.168 |
+| veto 60° | 62 | 46 | 16 | 1.173 |
+| five witness marks, before | 21 | 15 | 6 | 1.277 |
+| five witness marks, **veto 45°** | 17 | 15 | **2** | 1.161 |
+
+Six of the 22 gallery moves-away are refused for one improving move lost; on the five
+witness marks four of six for none. The witness itself: no qualifying pair remains at 512
+(the seam is still refused), so the junction stays on its lattice corner, 0.24–0.50 px off
+the crossing instead of 2.23; at 2048 it still lands line×line at 0.03. The fixtures are
+byte-identical at 256/512/1024/2048 (0 of 182 cells changed — the driver's pair is the
+needle, and its through-pair is the hypotenuse→chord continuation, which was never a
+candidate).
+
+**The gate** (`test/planar-reseat.test.ts`, red first): the real `brave-browser` raster at
+512 through `traceImage` with the verdict observer, the junction found by its answer-sheet
+crossing — placement never further from the crossing than the lattice corner, and within
+0.75 px; a 2048 tripwire keeps the line×line landing within 0.25. Skipped when the
+gitignored gallery corpus is absent. The mangled-cap fixture (§10.4b) gained a realistic
+third arm: its kinked stub now continues the occluder line past the junction, as the chord
+does on the driver — the old stub pointed off at an arbitrary transversal angle, which is
+exactly the T the veto exists to refuse.
+
+### 29.4 What is left
+
+- **The residue is not one mechanism.** 16 of 62 gallery moves still land further from the
+  crossing than the lattice corner. The instrument names them: a cap-skip on a REAL short
+  terminal (brave-browser @1024, an 11.6 px authored r=6 curve dropped as a mangled cap and
+  the line beyond it extrapolated 1.78 px off where the lattice sat 0.18 — audit recipe 10,
+  now with `segLen0` on every verdict), huge-radius circle pairs whose intersection is
+  ill-conditioned (brave-browser @512, r535 × r1104 at 42°, 3.12 px off against 0.29),
+  and stub arms at shallow pair angles (a 2-artwork-px line meeting a 56 px one at 14°:
+  0.47 off against 0.10). Each is a §0 row #19 candidate with a named case; none is the
+  certification constant the issue was filed on.
+- **`LINE_TOL` / `CIRC_TOL` / `MIN_ARC_ARM` / `ARM_MAX` are unchanged**, and measured: the
+  raster-dependence the audit described is real (the same art certifies differently at
+  512 and 2048), but on the answer sheet it is not what moves junctions away — the
+  witness's bend-absorbing circle is a compromise the fitted curve itself contains, and
+  every certification rule that could refuse it refused real short arcs at the same rate.
+- **Coincident authored arcs cannot be scored** (firefox, firefox-wm, tiktok's rings): the
+  census reports them at 0° and the evaluator drops them. A ground truth for "on the shared
+  boundary, anywhere along it" would be the §28.1 seam scorer generalised; not built.
+- **A/B** `before-reseat-cert` ⇄ `after-reseat-cert` is stamped for review.
