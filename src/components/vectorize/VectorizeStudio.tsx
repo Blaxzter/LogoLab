@@ -46,6 +46,7 @@ import {
     traceImage,
 } from "../../lib/trace";
 import { traceImageOffThread, canTraceOffThread } from "../../lib/trace/traceOffThread";
+import { aiUpscale, aiUpscaleFactor } from "../../lib/aiUpscale";
 import type { VectorizeOptions } from "../../types";
 import type { DocItem, EditableDoc, NodeRef, PathItem, Vec } from "../../lib/path/types";
 import { TraceControls, TraceControlsBody } from "./TraceControls";
@@ -430,12 +431,38 @@ export function VectorizeStudio({
                 // everything else (mono, or flat colour with gradients OFF) traces
                 // at full res for Affinity-grade crispness. The user "Detail" preset
                 // lifts the flat cap to 4096 ("High"); gradient/photo is unaffected.
-                const imageData = await getImageData(
+                let imageData = await getImageData(
                     logo.src,
                     rasterCapFor(opts),
                     logo.isSvg ? logo.svgText : null,
                 );
                 if (runId !== runIdRef.current) return;
+                // Opt-in AI super-resolution on SMALL rasters only (SVG sources are
+                // rasterized at full detail already): the model output is what the
+                // tracer sees, so the doc comes back in the enlarged pixel space —
+                // markers are normalized and the overlay fits by aspect, so nothing
+                // downstream cares. See src/lib/aiUpscale.ts for the size rule.
+                const upscaleBy = opts.upscale === "ai" && !logo.isSvg
+                    ? aiUpscaleFactor(Math.max(imageData.width, imageData.height))
+                    : 0;
+                if (upscaleBy) {
+                    setProgress(`Upscaling ×${upscaleBy}…`);
+                    imageData = await aiUpscale(
+                        imageData,
+                        upscaleBy,
+                        (p) => {
+                            if (runId !== runIdRef.current) return;
+                            setProgress(
+                                p.phase === "download"
+                                    ? `Downloading upscaler${p.percent != null ? ` — ${p.percent}%` : "…"}`
+                                    : `Upscaling ×${p.factor}…`,
+                            );
+                        },
+                        controller.signal,
+                    );
+                    if (runId !== runIdRef.current) return;
+                    setProgress("Tracing…");
+                }
                 // Crisp runs in a Web Worker (pure JS) so the UI stays responsive;
                 // potrace stays on the main thread (its WASM wrapper needs DOMParser).
                 const runTrace = canTraceOffThread(opts) ? traceImageOffThread : traceImage;

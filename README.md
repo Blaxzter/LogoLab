@@ -83,6 +83,10 @@ node editor, all client-side. The research behind each stage is in
 - **Node editing, Affinity-style:** drag anchors & Bézier handles (smooth nodes mirror,
   `Alt` breaks symmetry), double-click a segment to add a node, double-click an anchor to
   toggle corner ↔ smooth, `Del` to remove, full **undo / redo**.
+- **AI upscale for small rasters (opt-in):** a tiny PNG (≤ 320 px) can be enlarged ×2–×4 by an
+  in-browser super-resolution model (waifu2x swin_unet, lazily loaded) before tracing — measured
+  to halve the outline error and keep corners that tracing it small loses, at a few seconds per
+  trace. Off by default; inert on SVGs and on rasters large enough already.
 - Already-vector uploads can be **cleaned & edited directly** or re-traced from pixels.
 - **Download** or **copy** the optimized SVG.
 
@@ -150,6 +154,9 @@ No environment variables or server routes required.
   lazily `import()`-ed so it never weighs down the initial bundle.
 - **tesseract.js** to read the captions on an icon sheet — also lazily `import()`-ed; the WASM
   engine and English model come from its CDN on first use and are cached by the browser.
+- **onnxruntime-web** for the opt-in AI upscaler in front of the tracer (waifu2x swin_unet
+  weights from the Hugging Face Hub, MIT) — not even bundled: script and WASM are loaded from
+  the CDN on first use, so nothing is fetched until you switch it on.
 - Everything runs client-side via the Canvas & DOM APIs.
 
 ## 🔬 Algorithms & papers
@@ -180,6 +187,7 @@ gradient-aware Image Trace.
 | **Beautify / shape snapping** | snap near-circles, lines and shared centres to perfect primitives (algebraic circle fit) | Hoshyari et al., [SIGGRAPH **2018**](https://www.cs.ubc.ca/labs/imager/tr/2018/PerceptionDrivenVectorization/); [PolyFit](https://www.cs.ubc.ca/labs/imager/tr/2020/ClipArtVectorization/) (Dominici et al., SIGGRAPH **2020**); [ClipGen](https://arxiv.org/abs/2106.04912), TVCG **2021** |
 | **k-means++ (deterministic seeding)** | palette generation + fallback decomposition | Arthur & Vassilvitskii, [*k-means++*](https://theory.stanford.edu/~sergei/papers/kMeansPP-soda.pdf), SODA **2007** |
 | **Potrace** (alternative engine) | classic polygon-based bitmap tracing, one click away | Selinger, [*Potrace*](https://potrace.sourceforge.net/) **2003** |
+| **AI super-resolution in front of the tracer** (opt-in) | enlarge a small raster ×2–×4 with a line-art model so the tracer's pixel lattice can place edges and corners it would otherwise round off; chosen over GAN upscalers because it keeps the flat colours exact and adds no edge rim (measured in `docs/vectorization-benchmarks.md` §32) | waifu2x **swin_unet** — nagadomi, [*nunif*](https://github.com/nagadomi/nunif) (Swin-transformer U-Net, MIT); runtime: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) |
 
 ### 🧽 Cleanup — background removal & matting
 
@@ -205,6 +213,7 @@ src/
   lib/
     bgRemove.ts    # flood-fill / color-key removal + erase/restore brushes
     aiRemove.ts    # lazy in-browser AI cutout (Transformers.js · RMBG-1.4)
+    aiUpscale.ts   # lazy in-browser AI upscaler in front of the tracer (ONNX Runtime Web · waifu2x)
     trace/         # potrace tracing pipeline (quantize → stacked masks → potrace WASM)
     path/          # editable vector model: SVG/path-d parser, serializer, Bézier node ops
     svgClean.ts    # SVG path rounding / optimization

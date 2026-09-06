@@ -13,6 +13,7 @@ import { Tooltip } from '../ui/Tooltip'
 import type { VectorizeOptions } from '../../types'
 import { CONTROL_DOCS_BY_ID } from './controlDocs'
 import { ControlInfoDialog } from './ControlInfoDialog'
+import { AI_UPSCALE_MAX_PX, aiUpscaleFactor } from '../../lib/aiUpscale'
 
 export interface TraceControlsProps {
   /** The upload is an SVG, so "clean existing markup" is an option. */
@@ -182,6 +183,26 @@ export function TraceControlsBody({
                   options={[
                     { value: 'balanced', label: 'Balanced' },
                     { value: 'high', label: 'High' },
+                  ]}
+                />
+              </Field>
+
+              <Field
+                label="Upscale"
+                hint={
+                  isVectorSource
+                    ? 'SVG sources rasterize at full detail — nothing to upscale.'
+                    : sourceMaxDim && !aiUpscaleFactor(sourceMaxDim)
+                      ? `Source (${sourceMaxDim}px) is above ${AI_UPSCALE_MAX_PX}px, where enlarging stops helping; no effect.`
+                      : `AI enlarges a small raster ×${sourceMaxDim ? aiUpscaleFactor(sourceMaxDim) || 2 : '2–4'} before tracing (waifu2x, in your browser: ~17–19 MB once, a few seconds per trace). Measured: cleaner corners and fewer nodes than tracing it small.`
+                }
+              >
+                <Segmented<'off' | 'ai'>
+                  value={opts.upscale ?? 'off'}
+                  onChange={(v) => onPatch({ upscale: v })}
+                  options={[
+                    { value: 'off', label: 'Off' },
+                    { value: 'ai', label: 'AI' },
                   ]}
                 />
               </Field>

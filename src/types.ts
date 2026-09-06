@@ -140,6 +140,14 @@ export interface VectorizeOptions {
    */
   traceDetail?: 'balanced' | 'high'
   /**
+   * AI super-resolution in front of the tracer (waifu2x swin_unet, lazy-loaded,
+   * in-browser). A UI-side policy like `traceDetail` — read by the vectorize
+   * studio, never inside src/lib/trace. Only acts on small rasters (see
+   * src/lib/aiUpscale.ts for the size rule); inert on SVG sources and on rasters
+   * above the size where it stops helping. Omitted ⇒ 'off'.
+   */
+  upscale?: 'off' | 'ai'
+  /**
    * Flat-art segmentation strategy. When gradients are OFF, the default is
    * PALETTE-FIRST (paletteSegment.ts): pick the dominant colours, snap every pixel
    * to the nearest, so anti-alias transitions never become their own blend region.
