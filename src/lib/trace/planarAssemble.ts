@@ -194,7 +194,7 @@ export function assemblePlanar(
     // Sharp corners are found on the RAW staircase and pinned through pre-smoothing
     // so a valley/point isn't melted into a curve before the fitter detects it.
     let nodes: PathNode[]
-    const corners = detectCorners(latticePts, opts.cornerTurnDeg, e.closed, undefined, turnReadOf(opts))
+    const corners = detectCorners(latticePts, opts.cornerTurnDeg, e.closed, opts.cornerWindow, turnReadOf(opts))
     // §15 sub-pixel chain: displaced interior points + the same pinned endpoints. Two
     // chains deliberately coexist: CORNER DETECTION (above) and the area-guard fallback
     // stay on `latticePts` — their thresholds are turn angles / exact areas calibrated
@@ -241,7 +241,7 @@ export function assemblePlanar(
       // each corner to its sub-pixel arm intersection, then fit the arcs between
       // them) so the apex is an exact node, not a beveled pair. Smooth loops have
       // <2 corners and fall through to the unchanged closed-loop fitter.
-      const loopCorners = detectLoopCorners(latticePts, opts.cornerTurnDeg, undefined, undefined, turnReadOf(opts))
+      const loopCorners = detectLoopCorners(latticePts, opts.cornerTurnDeg, opts.cornerWindow, opts.cornerMerge, turnReadOf(opts))
       nodes =
         loopCorners.length >= 2
           ? fitCorneredLoop(pts, loopCorners, edgeOpts)

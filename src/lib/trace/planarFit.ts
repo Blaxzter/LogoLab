@@ -204,6 +204,21 @@ export interface PlanarFitOptions {
    */
   apexDiag?: ApexDiag
   /**
+   * EXPERIMENT KNOBS for the issue-#36 paired corner census (`src/devtest/cornerScaleDiag.ts
+   * --fit k=v`): each defaults to the module constant it names, so a counterfactual runs on
+   * the SAME census without editing constants (the §28.1 `tune` idiom). Production never
+   * sets them; absent ⇒ byte-identical.
+   */
+  cornerWindow?: number
+  cornerMerge?: number
+  /** Forces `armGap(steps)` to this value on every arm (censor AND cap-trim). */
+  armGapFixed?: number
+  snapSpan?: number
+  /** The short-arm bypass floor in SAMPLES per arm (default SHORT_ARM_SAMPLES). 7 reproduces
+   *  the pre-§31 `SNAP_GAP + 4` step rule on every arm whose gap is 1 — the red gate's
+   *  "before" arm (test/planar-short-arm.test.ts). */
+  shortArmSamples?: number
+  /**
    * §18 / issue #17 (default true). Refuse an apex reconstruction that lands further than
    * APEX_OVERSHOOT_MAX past the coverage the SOURCE RASTER actually carries — see
    * `apexReach`. `false` restores the pre-§18 snap, for the Test view A/B.
@@ -1036,6 +1051,23 @@ function polylineNodes(keyIdx: number[], dense: Vec[]): PathNode[] {
 
 const SNAP_GAP = 3 // skip this many px nearest the tip (the rounded part) per arm
 const SNAP_SPAN = 14 // …and fit the arm line over up to this many px beyond the gap
+/**
+ * Fewest samples an arm may carry and still earn a reconstruction (§31, issue #36). §10.6
+ * wrote the short-arm bypass as `SNAP_GAP + 4` STEPS of span — "3 censored + 4 samples"
+ * under the then-fixed gap of 3 — and swept it upward only (11/14 collapse recall to
+ * 57–62%). With `armGap` censoring a single step on a short arm, a 5–6-step window carries
+ * 5–6 samples, and the paired census (src/devtest/cornerScaleDiag.ts) measured the bypass
+ * refusing an intersection CLOSER to the authored corner than the lattice vertex it kept
+ * on 6 of 8 gear-teeth corners at the lab raster (0.54 vs 1.04 px mean, max 0.78 vs 2.46):
+ * the §10.6 displacement cap and the §18 evidence veto, both younger than the bypass, now
+ * hold the noisy regime the bypass was written for. Measured walls: 4 samples invents
+ * corners on corner-turns @256 (inv 5 → 9) and costs bar-caps @256 placement; at 5 every
+ * watchlist case is byte-stable except gear-teeth's own placement (@512 mean 0.615 →
+ * 0.562, max 2.46 → 2.06) and one ibm stripe-end corner recovered @512. Stated in samples
+ * so it stays consistent with the gap it follows: a span clamped by an open chain's end
+ * (fitCorneredOpen) with the full 3-px gap is 3 samples, not 6.
+ */
+const SHORT_ARM_SAMPLES = 5
 
 /**
  * SCALE-AWARE snap gap (§10.6): the fixed 3px gap is right for a long arm (skip
@@ -1144,6 +1176,7 @@ export type ApexOutcome =
   | 'parallel' //       the two arm lines are near-collinear (no intersection)
   | 'over-cap' //       the intersection ran further than the GEOMETRIC cap allows
   | 'past-evidence' //  §18: it ran past the coverage the RASTER carries
+  | 'cap' //            §10.7: placed by the cap resolver (arm ∩ cap-chord), not the apex snap
 
 /** One corner the apex snap considered, for the histogram behind any change to it
  *  (`src/devtest/apexDiag.ts`). Observational only — attaching a sink never changes the
@@ -1165,6 +1198,10 @@ export interface ApexDiagRecord {
   /** Arm windows in chain steps, as the caller capped them. */
   inSpan: number
   outSpan: number
+  /** Per-side tip censor (`armGap`) the caller chose — the samples skipped nearest the
+   *  apex before the arm window starts. Recipe 5 of the absolute-px audit (issue #36). */
+  inGap: number
+  outGap: number
   /** Arm evidence, −1 where the arm was never fitted. */
   inBow: number
   outBow: number
@@ -1172,6 +1209,12 @@ export interface ApexDiagRecord {
   outChord: number
   inN: number
   outN: number
+  /** The raw arm intersection the ESTIMATOR proposed, before any selector (cap, evidence
+   *  veto, short-arm bypass) decided — NaN where no intersection exists. On `short-arm` it
+   *  is the plain base-window line∩line, computed for the record only (issue #36: measure
+   *  the estimator before the selector). */
+  hx: number
+  hy: number
   /** Interior angle between the two fitted arm lines at the apex (deg); −1 without arms.
    *  Acute tips — where a slow convergence throws the intersection far — read small. */
   tipDeg: number
@@ -1366,10 +1409,10 @@ function snapCornerToArmsFull(
   pts: Vec[], c: number, inGap: number, outGap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0,
   opts: PlanarFitOptions = DEFAULT_PLANAR_FIT,
   winding = 0,
-): { p: Vec; inArm: ArmFit | null; outArm: ArmFit | null; outcome: ApexOutcome; allow: number } {
+): { p: Vec; inArm: ArmFit | null; outArm: ArmFit | null; outcome: ApexOutcome; allow: number; hit: Vec | null } {
   const n = pts.length
-  const keep = (outcome: ApexOutcome, inArm: ArmFit | null, outArm: ArmFit | null, allow = 0) => ({
-    p: { x: pts[c].x, y: pts[c].y }, inArm, outArm, outcome, allow,
+  const keep = (outcome: ApexOutcome, inArm: ArmFit | null, outArm: ArmFit | null, allow = 0, hit: Vec | null = null) => ({
+    p: { x: pts[c].x, y: pts[c].y }, inArm, outArm, outcome, allow, hit,
   })
   const wrap = (i: number): number => ((i % n) + n) % n
   // Base window [gap..span], then extend up to `max` while the arm stays COLLINEAR.
@@ -1393,16 +1436,26 @@ function snapCornerToArmsFull(
     }
     return out
   }
-  // SHORT-ARM bypass (§10.6): reconstruction (arm-line intersection) exists to
-  // recover an apex the raster ERODED — a shallow tip whose true corner sits px
-  // past the lattice. It needs arm evidence to earn that (slope error divides by
-  // tan(tip angle)). A corner whose neighbours sit < ~8 steps away has arms too
-  // short to fit and erosion too small to matter: its RAW cluster apex is already
-  // sub-px correct (gear-teeth measured median 0.99px), while the reconstruction
-  // from 3–5 phase-noise samples lands 2.6–7.9px off. Keep the lattice apex.
-  // (The threshold was SWEPT: raising it to 11/14 collapses recall to 57–62% —
-  // medium arms genuinely profit from reconstruction; only the shortest do not.)
-  if (Math.min(inSpan, outSpan) < SNAP_GAP + 4) return keep('short-arm', null, null)
+  // SHORT-ARM bypass (§10.6, re-derived in §31): reconstruction (arm-line intersection)
+  // exists to recover an apex the raster ERODED — a shallow tip whose true corner sits
+  // px past the lattice. It needs arm evidence to earn that (slope error divides by
+  // tan(tip angle)): an arm carrying fewer than SHORT_ARM_SAMPLES samples is phase
+  // noise, and its RAW cluster apex — already sub-px correct on a feature that small
+  // (gear-teeth @256 measured the bypass right 11:6) — is kept. See SHORT_ARM_SAMPLES
+  // for the census that moved the floor from 7 steps of span to 5 samples.
+  const inSamples = inSpan - inGap + 1
+  const outSamples = outSpan - outGap + 1
+  if (Math.min(inSamples, outSamples) < (opts.shortArmSamples ?? SHORT_ARM_SAMPLES)) {
+    // Diagnostic only: what the plain base-window estimator WOULD have said, so the
+    // census can score the bypass as a selector. Never computed in production.
+    let diagHit: Vec | null = null
+    if (opts.apexDiag) {
+      const a0 = collect(-1, inGap, inSpan, inSpan)
+      const b0 = collect(1, outGap, outSpan, outSpan)
+      if (a0.length >= 2 && b0.length >= 2) diagHit = lineIntersect(armLine(a0), armLine(b0))
+    }
+    return keep('short-arm', null, null, 0, diagHit)
+  }
   const inPts = collect(-1, inGap, inSpan, inMax)
   const outPts = collect(1, outGap, outSpan, outMax)
   if (inPts.length < 2 || outPts.length < 2) return keep('few-samples', null, null)
@@ -1508,6 +1561,7 @@ function snapCornerToArmsFull(
   if (!hit) return keep('parallel', inArm, outArm)
   const ix = hit.x
   const iy = hit.y
+  const hitOut: Vec = { x: ix, y: iy }
   // Report each arm's direction as the tangent AT the apex; the §15 pin consumes it.
   const pinMinN = opts.arcPinMinN ?? ARC_PIN_MIN_N
   // Corrected turn: from the model tangents where they exist, else the chords.
@@ -1539,7 +1593,7 @@ function snapCornerToArmsFull(
   if (opts.arcArms && (inArm.kind || outArm.kind)) {
     const cosF = Math.min(1, Math.max(-1, -(inArm.dir.x * outArm.dir.x + inArm.dir.y * outArm.dir.y)))
     if ((Math.acos(cosF) * 180) / Math.PI > (opts.parallelTipDeg ?? PARALLEL_TIP_DEG)) {
-      return keep('parallel', inArm, outArm)
+      return keep('parallel', inArm, outArm, 0, hitOut)
     }
   }
   // SCALE-AWARE displacement cap (§10.6): how far the reconstructed apex may move
@@ -1552,9 +1606,19 @@ function snapCornerToArmsFull(
   // carries sub-px erosion, so there is nothing to reconstruct. Past the cap we
   // keep the lattice corner.
   const shortSpan = Math.min(inSpan, outSpan)
-  const allow = shortSpan >= SNAP_SPAN ? Math.max(inSpan, outSpan) : Math.max(2, 0.5 * shortSpan)
-  if (dist({ x: ix, y: iy }, pts[c]) > allow) return keep('over-cap', inArm, outArm, allow)
-  return { p: { x: ix, y: iy }, inArm, outArm, outcome: 'reconstructed', allow }
+  const allow = shortSpan >= (opts.snapSpan ?? SNAP_SPAN) ? Math.max(inSpan, outSpan) : Math.max(2, 0.5 * shortSpan)
+  if (dist({ x: ix, y: iy }, pts[c]) > allow) return keep('over-cap', inArm, outArm, allow, hitOut)
+  return { p: { x: ix, y: iy }, inArm, outArm, outcome: 'reconstructed', allow, hit: hitOut }
+}
+
+/** Intersection of two lines given as point + unit direction; null when parallel. */
+function lineIntersect(a: { c: Vec; d: Vec }, b: { c: Vec; d: Vec }): Vec | null {
+  const det = a.d.x * -b.d.y - a.d.y * -b.d.x
+  if (Math.abs(det) < 1e-6) return null
+  const rx = b.c.x - a.c.x
+  const ry = b.c.y - a.c.y
+  const t = (rx * -b.d.y - ry * -b.d.x) / det
+  return { x: a.c.x + t * a.d.x, y: a.c.y + t * a.d.y }
 }
 
 /**
@@ -1653,7 +1717,7 @@ function snapApex(
       const k = reach / moved
       full = {
         p: { x: pts[c].x + (full.p.x - pts[c].x) * k, y: pts[c].y + (full.p.y - pts[c].y) * k },
-        inArm: full.inArm, outArm: full.outArm, outcome: 'past-evidence', allow: full.allow,
+        inArm: full.inArm, outArm: full.outArm, outcome: 'past-evidence', allow: full.allow, hit: full.hit,
       }
       moved = reach
     }
@@ -1672,7 +1736,8 @@ function snapApex(
       moved,
       outcome: full.outcome,
       allow: full.allow,
-      inSpan, outSpan,
+      inSpan, outSpan, inGap, outGap,
+      hx: full.hit?.x ?? NaN, hy: full.hit?.y ?? NaN,
       inBow: a?.bow ?? -1, outBow: b?.bow ?? -1,
       inChord: a?.chord ?? -1, outChord: b?.chord ?? -1,
       inN: a?.n ?? -1, outN: b?.n ?? -1,
@@ -2049,7 +2114,20 @@ function pinHandle(node: PathNode, which: 'hIn' | 'hOut', arm: ArmFit, eps: numb
 export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOptions): PathNode[] {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
-  const resolved = resolveLoopCaps(pts, corners.slice().sort((a, b) => a - b), opts.cornerTurnDeg, CORNER_WINDOW, turnReadOf(opts))
+  const resolved = resolveLoopCaps(pts, corners.slice().sort((a, b) => a - b), opts.cornerTurnDeg, opts.cornerWindow ?? CORNER_WINDOW, turnReadOf(opts))
+  const snapSpan = opts.snapSpan ?? SNAP_SPAN
+  const gapOf = (steps: number): number => opts.armGapFixed ?? armGap(steps)
+  // Diagnostic only (issue #36): a cap-resolved corner is placed by the resolver, not the
+  // apex snap, and the census still needs a record for it.
+  const capRecord = (c: number, p: Vec, toPrev: number, toNext: number): void => {
+    if (!opts.apexDiag) return
+    opts.apexDiag({
+      cx: pts[c].x, cy: pts[c].y, ax: p.x, ay: p.y, moved: dist(p, pts[c]), outcome: 'cap', allow: CAP_SNAP_MAX,
+      inSpan: Math.min(snapSpan, Math.max(gapOf(toPrev) + 1, toPrev - 1)), outSpan: Math.min(snapSpan, Math.max(gapOf(toNext) + 1, toNext - 1)),
+      inGap: gapOf(toPrev), outGap: gapOf(toNext), hx: NaN, hy: NaN,
+      inBow: -1, outBow: -1, inChord: -1, outChord: -1, inN: -1, outN: -1, tipDeg: -1, reach: -1, inKind: 'line', outKind: 'line',
+    })
+  }
   const C = resolved.corners
   // Cap pairing BEFORE the coincident-drop below: start → its twin (the next
   // corner). A pair whose members don't both survive the drop reverts to normal.
@@ -2082,16 +2160,20 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     // (snapCapCorner). The long arm is on the non-cap side.
     if (capPartner.has(c)) {
       armDirsAll.push(null)
-      return snapCapCorner(pts, c, -1, toPrev, capLineOf.get(c)!, CAP_SNAP_MAX)
+      const p = snapCapCorner(pts, c, -1, toPrev, capLineOf.get(c)!, CAP_SNAP_MAX)
+      capRecord(c, p, toPrev, toNext)
+      return p
     }
     if (capPartner.get(prev) === c) {
       armDirsAll.push(null)
-      return snapCapCorner(pts, c, 1, toNext, capLineOf.get(prev)!, CAP_SNAP_MAX)
+      const p = snapCapCorner(pts, c, 1, toNext, capLineOf.get(prev)!, CAP_SNAP_MAX)
+      capRecord(c, p, toPrev, toNext)
+      return p
     }
-    const inGap = armGap(toPrev)
-    const outGap = armGap(toNext)
-    const inSpan = Math.min(SNAP_SPAN, Math.max(inGap + 1, toPrev - 1))
-    const outSpan = Math.min(SNAP_SPAN, Math.max(outGap + 1, toNext - 1))
+    const inGap = gapOf(toPrev)
+    const outGap = gapOf(toNext)
+    const inSpan = Math.min(snapSpan, Math.max(inGap + 1, toPrev - 1))
+    const outSpan = Math.min(snapSpan, Math.max(outGap + 1, toNext - 1))
     // Collinear straight arms may grow their evidence window up to SNAP_SPAN_MAX,
     // still never past the neighbouring corner.
     const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1))
@@ -2160,7 +2242,7 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     // scale-aware armGap (a short arc's snap kept its near-corner evidence, so
     // the arc fit keeps it too), and only while ≥ 2 interior points survive so
     // short arcs (a small checker cell edge) keep their evidence.
-    const trim = Math.min(armGap(arc.length - 1), Math.max(0, (arc.length - 4) >> 1))
+    const trim = Math.min(gapOf(arc.length - 1), Math.max(0, (arc.length - 4) >> 1))
     const kept = arc.slice(trim, arc.length - trim)
     kept[0] = { x: snap[k].x, y: snap[k].y }
     kept[kept.length - 1] = { x: snap[(k + 1) % arcs].x, y: snap[(k + 1) % arcs].y }
@@ -2266,8 +2348,10 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
   // Clustered corners (one per feature, like the loop path) — the raw `pinned`
   // set has BOTH staircase shoulders of a vertex, which must not become two
   // breakpoints (a 2-node chamfer where the art has one corner).
-  let C = detectOpenCorners(pts, opts.cornerTurnDeg, CORNER_WINDOW, CORNER_MERGE, turnReadOf(opts))
+  let C = detectOpenCorners(pts, opts.cornerTurnDeg, opts.cornerWindow ?? CORNER_WINDOW, opts.cornerMerge ?? CORNER_MERGE, turnReadOf(opts))
   if (n < 2 * SNAP_GAP + 3) return fallback()
+  const snapSpan = opts.snapSpan ?? SNAP_SPAN
+  const gapOf = (steps: number): number => opts.armGapFixed ?? armGap(steps)
 
   // Prune-and-refit loop: a detected corner whose FITTED junction comes out
   // nearly straight was a local staircase jog (e.g. the boundary bending into a
@@ -2282,12 +2366,12 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
     const snappedAll: Vec[] = C.map((c, k) => {
       const toPrev = c - (k > 0 ? C[k - 1] : 0)
       const toNext = (k < C.length - 1 ? C[k + 1] : n - 1) - c
-      const inGap = armGap(toPrev)
-      const outGap = armGap(toNext)
+      const inGap = gapOf(toPrev)
+      const outGap = gapOf(toNext)
       // Same spans as the loop version, additionally clamped so no window index
       // leaves [0, n-1] (open: there is nothing to wrap onto).
-      const inSpan = Math.min(SNAP_SPAN, Math.max(inGap + 1, toPrev - 1), c)
-      const outSpan = Math.min(SNAP_SPAN, Math.max(outGap + 1, toNext - 1), n - 1 - c)
+      const inSpan = Math.min(snapSpan, Math.max(inGap + 1, toPrev - 1), c)
+      const outSpan = Math.min(snapSpan, Math.max(outGap + 1, toNext - 1), n - 1 - c)
       const inMax = Math.min(SNAP_SPAN_MAX, Math.max(inGap + 1, toPrev - 1), c)
       const outMax = Math.min(SNAP_SPAN_MAX, Math.max(outGap + 1, toNext - 1), n - 1 - c)
       const full = snapApex(pts, c, inGap, outGap, inSpan, outSpan, inMax, outMax, opts)
@@ -2315,7 +2399,7 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
     const fitted: PathNode[][] = []
     for (let k = 0; k + 1 < bounds.length; k++) {
       const piece = pts.slice(bounds[k], bounds[k + 1] + 1)
-      const pieceGap = armGap(piece.length - 1)
+      const pieceGap = gapOf(piece.length - 1)
       let trimS = k > 0 ? pieceGap : 0
       let trimE = k + 1 < bounds.length - 1 ? pieceGap : 0
       // Trim only while ≥ 2 interior points survive (short pieces keep evidence).

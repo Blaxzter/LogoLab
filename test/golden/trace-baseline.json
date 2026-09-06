@@ -52,9 +52,9 @@
     "junctions": 18,
     "junctionClusters": 0,
     "clusterSpanMax": 0,
-    "jaggedness": 0.694,
-    "hash": "ffb0b75a",
-    "geomSig": "7d04b43e"
+    "jaggedness": 0.684,
+    "hash": "d62c54d0",
+    "geomSig": "a98ddd9e"
   },
   "headphones-grad": {
     "name": "headphones-grad",
@@ -62,18 +62,18 @@
     "height": 512,
     "gradients": true,
     "paths": 51,
-    "nodes": 714,
+    "nodes": 708,
     "gradientCount": 33,
-    "meanDeltaE": 4.083,
+    "meanDeltaE": 4.084,
     "p95DeltaE": 13.42,
-    "ssim": 0.7798,
+    "ssim": 0.7799,
     "seamMax": 72.4,
     "junctions": 92,
-    "junctionClusters": 9,
+    "junctionClusters": 10,
     "clusterSpanMax": 2.95,
-    "jaggedness": 2.246,
-    "hash": "970fdc16",
-    "geomSig": "2dc40c84"
+    "jaggedness": 2.249,
+    "hash": "7b5d5680",
+    "geomSig": "3d4fbff9"
   },
   "bloom-flat": {
     "name": "bloom-flat",
@@ -102,15 +102,15 @@
     "paths": 12,
     "nodes": 155,
     "gradientCount": 0,
-    "meanDeltaE": 1.983,
+    "meanDeltaE": 1.98,
     "p95DeltaE": 4.82,
-    "ssim": 0.941,
+    "ssim": 0.9411,
     "seamMax": 99.47,
     "junctions": 32,
     "junctionClusters": 0,
     "clusterSpanMax": 0,
     "jaggedness": 0.264,
-    "hash": "56c5e801",
-    "geomSig": "eb87cd6e"
+    "hash": "1affb9eb",
+    "geomSig": "6c7bfe77"
   }
 }
