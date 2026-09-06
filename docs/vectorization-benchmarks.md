@@ -28,7 +28,7 @@ guardrails):
 | # | defect | reproducing case | number | details |
 |---|---|---|---|---|
 | 3 | **AA diagonal sliver** — blend band assigned to one side; visible at 1×, sub-tolerance since the scorer counts visible boundary only | `aa-seam` (tier 0, gated, **passes**) | chamfer 0.12px, p95 0.43px (was 0.22/0.74; §12's classify fixpoint routes the sliver's mid-blends to better endpoints — earlier 1.44/24.8 was the seam occluded under the circle, §9.6) | §7; §12 |
-| 8 | **Sub-pixel edge placement** — PARTIALLY CLOSED 2026-08-05 (§15.7): `planarSubpixel.ts` displaces every edge chain onto the AA's iso-0.5 crossing before the fit (shared edges stay shared by construction), with three measured-in guards (corner self-guard, apex tangent pin, anchor flatness) — the tangent pin gained a fourth bound the same week, after it closed a letterform counter (§15.8, below). Fine-end error collapsed 2–3× (bar-caps 0.089, gear 0.080, sharp-star 0.068 ref-px @1024); `concentric` + `sharp-star` deleted from the scale gate's KNOWN_DEFECTS by the CI contract; gear-teeth corner recall 51→52/60. WHAT REMAINS OPEN: the four coarse-end cases (`overlap` , `aa-seam`, `petals`, `band-cross` — @256's AA is too wide for the guards' fixed sampling geometry, an audit-ART-list follow-up), two witness corners @512, and chupa-chups' small-feature zone trading 0.06px mean @1024 | `test/scale-invariance.test.ts` KNOWN_DEFECTS (4 entries left, only shrinks); witnesses in `examples/logos/` | gate: coarse ≤ 2.0 · max(fine, 0.15) ref-px | **§15**, instrument `scaleDiag.ts --lattice` |
+| 8 | **Sub-pixel edge placement** — PARTIALLY CLOSED 2026-08-05 (§15.7): `planarSubpixel.ts` displaces every edge chain onto the AA's iso-0.5 crossing before the fit (shared edges stay shared by construction), with three measured-in guards (corner self-guard, apex tangent pin, anchor flatness) — the tangent pin gained a fourth bound the same week, after it closed a letterform counter (§15.8, below). Fine-end error collapsed 2–3× (bar-caps 0.089, gear 0.080, sharp-star 0.068 ref-px @1024); `concentric` + `sharp-star` deleted from the scale gate's KNOWN_DEFECTS by the CI contract; gear-teeth corner recall 51→52/60. WHAT REMAINS OPEN: three coarse-end cases (`overlap`, `band-cross`, and `aa-seam`, which §30 re-files under #3; `petals` closed in §24). The written cause — "@256's AA is too wide for the guards' fixed sampling geometry" — was REFUTED by §30's histogram (issue #38, 2026-09-06): the displacement survives at 256 at the same share as at 1024 (82% / 64% of points) and to the same accuracy (0.080 vs 0.082 native px); the pass is a constant in native px, as the lattice was, and a constant cancels out of a ratio gate. What the coarse lanes lose now is in the FIT (band-cross: fit adds 1.35–1.51× on displaced input, the floor at every raster; overlap: the fit keeps the chain's gain at 512 / 1024 and not at 256 — gated drift 2.26× → 2.49× across the pass). Also open: two witness corners @512, and chupa-chups' small-feature zone trading 0.06px mean @1024 | `test/scale-invariance.test.ts` KNOWN_DEFECTS (3 entries left, only shrinks); witnesses in `examples/logos/` | gate: coarse ≤ 2.0 · max(fine, 0.15) ref-px; today 2.49× / 4.93× / 2.92× | **§15**, instrument `scaleDiag.ts --lattice`; **§30**, instrument `subpixelScaleDiag.ts` |
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **CLOSED — not planned** (2026-08-23). The turn IS under-read on the lattice (§21, unretracted: `detectCorners` reads two chords ±4 POINTS on the integer staircase, and recovery falls from 96.3% at 90–105° of authored turn to **55.1%** at 60–65°). The ISSUE is what closed, on four grounds: its target metric is corner RECALL, which has no precision term — so “find more corners” and “invent corners” are the same instruction, and §22 optimising it produced visible kinks; a missed 60° corner is a gentle bend drawn as a gentle curve while an invented one is a visible kink, so it spends the detector's budget on the invisible direction; row #16 shows the tracer already errs the OTHER way on the SAME knob (12 invented corners on art with none), so the two rows pulled one lever in opposite directions; and the framing was refuted twice (§21's seam truncation, §22's reading) with a named witness authored at exactly 60.0° — the detector's bar AND the scorer's bar — which no reading can reliably clear. The one defensible remnant is `gear-teeth` **53/60**, where the corners are unambiguous (67.3° roots on a mechanical shape); it carries on as a narrow case, not a corpus-wide detector change | `corner-turns` (tier 0, gated — kept: an authored-turn sweep is a good corner-recall case regardless); `gear-teeth` 53/60 | the cliff, unchanged and still measurable with `needleDiag --turns` / `turnDiag` | **§21**, **§22**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23) (closed not-planned). **Corner work continues at row #16** |
@@ -5213,7 +5213,9 @@ non-mergeable in §9.3 — no production trace reaches it. Unchanged, marked ine
   spares isolated real features. Design work; single-auditor rows to re-verify first.
 - **#38** — the three coarse-end scale `KNOWN_DEFECTS` (`overlap`, `aa-seam`,
   `band-cross` @256): §15.7's guard geometry, `counterDiag` at 256 as the histogram; plus
-  `minFacing` (MS lane, off the product target).
+  `minFacing` (MS lane, off the product target). **→ §30: the histogram refuted the
+  guard-geometry cause — the displacement survives at 256 at the same share and accuracy
+  as at 1024; the coarse lanes lose it in the FIT, and `aa-seam` is #3.**
 - **#39** — the re-seat's certification over ART-scaled arms (`LINE_TOL`, `CIRC_TOL`,
   `MIN_ARC_ARM`, `CAP_MAX`, coupled to `ARM_MAX`): `reseatDiag` is the census, the
   authored-crossing answer sheet is the missing half, `brave-browser` @(260,282) the
@@ -5401,3 +5403,167 @@ exactly the T the veto exists to refuse.
   census reports them at 0° and the evaluator drops them. A ground truth for "on the shared
   boundary, anywhere along it" would be the §28.1 seam scorer generalised; not built.
 - **A/B** `before-reseat-cert` ⇄ `after-reseat-cert` is stamped for review.
+
+## 30. The coarse-end scale defects: which sub-pixel guard reverts the displacement at 256 — none of them (issue #38, Phase 0, 2026-09-06)
+
+Issue #38 holds the three scale-gate `KNOWN_DEFECTS` §15.7 left behind — `overlap`,
+`aa-seam`, `band-cross` @256 — with the cause §15.7(c) wrote for them: the guards' sampling
+geometry is fixed in native px (far anchors at ±1.75, the flatness probe at ±2.75, |δ| ≤
+0.75) while the AA band covers four times the art at 256, "so the displacement fails its
+own safety checks where it would help most". The issue's Phase 0 is to check that with the
+instrument that already existed — `counterDiag`'s per-point outcome dump, tabulated
+whole-image at 256 and at 1024 — and, by its rules of engagement, to scale nothing (the
+guards are SENSOR rows in the audit) and, if the displacement turned out never to survive
+at 256, to write that up as the case for §15.3's shared coverage-field boundary. The
+histogram says something else.
+
+### 30.1 The histogram: the displacement survives at 256 at the same share as at 1024
+
+`src/devtest/subpixelScaleDiag.ts` — counterDiag's hook (`SubpixelDiag`, the pass's own
+observational sink, so there is no second estimator to drift from the shipped one), every
+chain point, per lane. The estimator's outcomes are the pass's; the corner self-guard fires
+AFTER the estimate and is counted on its own.
+
+| case | lane | points | **moved, surviving** | corner-revert | anchor label | flatness | residual | \|δ\| cap | zero | contrast / monotone |
+|---|---|---|---|---|---|---|---|---|---|---|
+| overlap | @256 | 964 | **788 (81.7%)** | 66 (6.8%) | 7 | 64 (6.6%) | 2 | 27 (2.8%) | 24 | 0 / 0 |
+| | @1024 | 3892 | **3551 (91.2%)** | 0 | 2 | 180 (4.6%) | 2 | 42 (1.1%) | 115 | 0 / 0 |
+| aa-seam | @256 | 515 | **176 (34.2%)** | 0 | 2 | 56 (10.9%) | **262 (50.9%)** | 7 (1.4%) | 12 | 0 / 0 |
+| | @1024 | 2073 | **643 (31.0%)** | 0 | 2 | 132 (6.4%) | **1252 (60.4%)** | 16 (0.8%) | 28 | 0 / 0 |
+| band-cross | @256 | 2052 | **1305 (63.6%)** | 198 (9.6%) | 13 | 180 (8.8%) | 0 | 8 (0.4%) | 465 (22.7%) | 0 / 0 |
+| | @1024 | 8280 | **5501 (66.4%)** | 262 (3.2%) | 10 | 662 (8.0%) | 0 | 52 (0.6%) | 1931 (23.3%) | 0 / 0 |
+
+(`zero` is the axis-aligned run — the estimator lands on δ = 0 exactly: band-cross's
+square, the rect's sides and the canvas-aligned band ends. The 512 lane sits between the
+two on every row.)
+
+Read across: the estimator's own guards decline **10% / 64% / 10%** of the points at 256
+against **6% / 68% / 9%** at 1024, and two of the six named guards — contrast and monotone
+— never fire on these cases at any raster. The |δ| cap refuses 0.4–2.8% of points, every
+one of them at |δ| between 0.75 and 1.0. The one guard whose share GROWS at 256 is the
+corner self-guard, and for the reason its constants say: it reverts ±`TURN_GUARD` 5 steps
+around every sharp point, a count of native steps, so band-cross's authored corners cost
+the same ~30 / 60 / 30 points per corner-bearing edge at 256, 512 and 1024 — four times the
+art at the coarse end. That is 9.6% of band-cross's points and 6.8% of overlap's, and it is
+the whole of what the histogram has to say for §15.7(c): **no guard reverts the coarse
+lane's displacement; one guard reverts a fixed native window around corners, and it is a
+minority.**
+
+The corner-revert on `overlap` is not at corners at all. Its 66 reverted points lie in six
+11-point windows in the INTERIOR of the lens arc (edge 1/3 — an r = 61 px arc with no
+authored corner), and the per-point rows show the mechanism: on the 45° staircase the
+estimator's δ alternates +0.6 / −0.1 as the lattice zig-zags about the circle; a point
+whose true offset reads 0.86–0.93 px is refused by the cap and stays on the lattice; and
+that one lattice point between displaced neighbours is a spike the corner guard reads as a
+> 35° turn (two spikes two steps apart at i = 26 / 28 — the guard's own contract, "on the
+displaced chain staircase noise is gone", does not hold on a MIXED chain). The cap seeds
+it; the corner guard multiplies it by eleven. At 512 and 1024 the same edge reverts
+nothing (the cap refuses 0.5–2% of its points there against 13% at 256). A real
+raster-dependent interaction with a witness, and bounded: those 66 points at the
+estimator's own δ would sit at 0.217 native px instead of 0.384 (a third of them are cap
+refusals that stay put either way) — 0.011 px off the chain's per-point mean.
+
+### 30.2 What the surviving displacement is worth, in the lane's own px
+
+The two cases with analytic answer sheets (overlap: two circles; aa-seam: a circle and a
+line), every chain point scored against the nearest authored primitive before and after
+its move:
+
+| | lane | n | before mean / p95 | after mean / p95 |
+|---|---|---|---|---|
+| overlap, moved | @256 | 788 | 0.303 / 0.612 | **0.080 / 0.170** |
+| | @512 | 1761 | 0.322 / 0.620 | **0.079 / 0.167** |
+| | @1024 | 3551 | 0.317 / 0.657 | **0.082 / 0.176** |
+| aa-seam, moved (the circle) | @256 | 176 | 0.279 / 0.601 | **0.085 / 0.168** |
+| | @1024 | 643 | 0.309 / 0.655 | **0.075 / 0.149** |
+| overlap, declined (flatness / cap / reverted) | @256 | 157 | 0.38–0.77 by guard | unchanged |
+| | @1024 | 222 | 0.43–0.74 by guard | unchanged |
+
+The displacement that survives is exactly as accurate at 256 as at 1024 — 0.080 against
+0.082 native px — and what it leaves behind is the same too. That is the finding: **the
+pass's accuracy is a CONSTANT in native px**, precisely as §15.3 measured the lattice's to
+be (0.223 / 0.224 / 0.226). It replaced one resolution-proportional floor with a lower
+resolution-proportional floor. In artwork units both fall 1:1 with the raster; drift is a
+ratio; a constant factor cancels out of it. The pass could not have moved these three
+cases' drift however the guards were tuned — and it did not: raw drift today 4.49× /
+4.93× / 3.78×, against §15.2's 6.96× / 4.98× / 3.69× before it.
+
+### 30.3 Where each coarse lane actually loses it
+
+The attribution — the same chain scored three ways plus the fitted output with the pass
+off and on, with the gate's arithmetic (chamfer, native px; the reference-px column the
+gate reads is 4× / 2× / 1× of it):
+
+| native px, chamfer | overlap 256 / 512 / 1024 | aa-seam 256 / 512 / 1024 | band-cross 256 / 512 / 1024 |
+|---|---|---|---|
+| lattice chain (§15.3's row) | 0.231 / 0.220 / 0.228 | 0.234 / 0.231 / 0.225 | 0.185 / 0.185 / 0.186 |
+| **displaced chain** (what the fitter is handed) | 0.107 / 0.071 / 0.084 | 0.195 / 0.187 / 0.184 | 0.082 / 0.078 / 0.077 |
+| fitted, pass OFF | 0.085 / 0.074 / 0.111 | 0.255 / 0.120 / 0.228 | 0.118 / 0.089 / 0.123 |
+| **fitted, pass ON** (the gate's row) | 0.093 / 0.027 / 0.083 | 0.255 / 0.146 / 0.205 | 0.111 / 0.091 / 0.116 |
+
+The gate today — coarse ≤ 2.0 · max(fine, 0.15) ref-px, so with the fine end under the
+floor it is an ABSOLUTE bar on the coarse lane, 0.30 ref-px = **0.075 native px @256**, the
+bar concentric reached at 0.045 and sharp-star at 0.066 when §15.7 closed them:
+
+| gated drift @256 vs @1024 | pass ON | pass OFF | displaced chain alone | lattice chain alone |
+|---|---|---|---|---|
+| overlap | **2.49×** (0.374 → 0.083) | 2.26× (0.339 → 0.111) | 2.89× | 3.89× |
+| aa-seam | **4.93×** (1.010 → 0.205) | 4.44× (1.012 → 0.228) | 4.20× | 3.98× |
+| band-cross | **2.92×** (0.437 → 0.116) | 3.10× (0.464 → 0.123) | 2.13× | 3.87× |
+
+- **`overlap`: the fit keeps the chain's gain at 512 and 1024 and not at 256.** The chain
+  gains the same at every lane (0.23 → 0.11 / 0.07 / 0.08); the fitted output keeps it at
+  512 (0.074 → 0.027) and 1024 (0.111 → 0.083) and LOSES it at 256 (0.085 → 0.093 — p95
+  does improve, 0.253 → 0.185). The lattice-chain fit at 256 averages a staircase it was
+  calibrated on into arcs at 0.085; the displaced-chain fit gets 0.093 from an input at
+  0.107, of which 16% of points are still on the lattice at 0.4–0.8 px (the six revert
+  windows, 64 flatness refusals, 27 cap refusals). So the pass moved overlap's gated drift
+  the WRONG way, 2.26× → 2.49× — §15.4's petals pattern (fine end improves, coarse end does
+  not, the ratio worsens), sitting in the fit rather than in the samples.
+- **`band-cross`: the fit is the floor at every raster.** The fitted output reads 0.11–0.12
+  native px at 256 and at 1024 whether it is handed the lattice chain (0.185) or the
+  displaced one (0.08): §15.3's "fit adds" is 0.64× on lattice input and **1.35× / 1.51×**
+  on displaced input — the fit now throws away a third to a half of the accuracy it is
+  given, at every raster. The displaced chain by itself reads 2.13× on the gate, six
+  percent outside the bar; the fit takes it to 2.92×. The inverse of §15.3's finding, and
+  it moved there the day §15.7 landed: the samples no longer carry the error, the fit's
+  absolute-px tolerance does.
+- **`aa-seam` is §0 #3, not #8.** The seam's two open edges never move at any raster —
+  100% `residual` at 1024, 80% at 256 with the rest flatness, and the handful that move at
+  256 do so by 0.02 px. The residual guard is right: the seam pixel is a THIRD colour,
+  (79,168,162) at every raster, one pixel wide, 43.9 RGB off the orange→teal segment
+  against `RESIDUAL_MAX` 16 — the conflation sliver of two independently anti-aliased
+  polygons sharing an edge, which is exactly §0 #3. The fitted seam error at 256 (0.255
+  native) is ABOVE the lattice chain's (0.234): the fit adds error on the seam (the sliver's
+  side assignment), the pass is inert on the case (fit ON 1.010 vs OFF 1.012 ref-px), and
+  its circle arcs move at 85–90% and land at 0.075–0.085 like overlap's. Its scale row
+  belongs under #3; nothing in the sub-pixel pass or its guards is involved.
+
+### 30.4 What this rules out, and what is left
+
+- **The guards' geometry is not the lever, and stays as it is.** `FAR` ±1.75, the flatness
+  probe at ±2.75 and `MAX_DISP` 0.75 decline the same share of points at 256 as at 1024,
+  and the points they let through are placed to the same accuracy. Scaling them with the
+  raster would change nothing the histogram can see; they are SENSOR rows, confirmed by
+  measurement.
+- **§15.3's shared coverage-field boundary: these numbers do not make its case.** The pass
+  already IS the marching-squares iso-0.5 move applied on the shared chain, and its 0.08
+  native-px floor is the AA's own (bilinear samples of a ~1 px ramp), not the guards'. A
+  coverage field reads the same pixels; whatever it placed would be constant in native px
+  too, and a ratio gate would not move. What has closed every coarse-end case so far —
+  annulus, concentric, sharp-star, petals — is a fit that AVERAGES a native-px floor over a
+  span of ART (the circle snap, the line fit, §24's families). The case for a coverage
+  field would have to be made on something other than drift.
+- **Next levers, named — none measured here, Phase 0 stops:** (1) the fit on displaced
+  input: on band-cross it is the floor at every raster (fit adds 1.35–1.51×) and its ε is an
+  absolute-px constant, so the audit's fit-tolerance rows are the ART constants this issue
+  is actually about, not the guards'; `subpixelScaleDiag` is the instrument and band-cross
+  the witness (displaced chain 0.319 ref-px against the fitted 0.437). (2) The cap ×
+  corner-guard interaction on a mixed chain: overlap's lens edge at 256 (six interior revert
+  windows, 66 points, none at 512 / 1024) is the witness; bounded at ~0.01 native px on the
+  chain, so it wants a red gate before any change and may not be worth one. (3) `aa-seam` →
+  §0 #3. (4) The `KNOWN_DEFECTS` reason strings in `test/scale-invariance.test.ts` quote
+  §15.2's pre-pass numbers (6.96× / 4.98× / 3.69×); the gate reads 2.49× / 4.93× / 2.92×
+  today, and overlap's "pure lattice staircase" is no longer its mechanism.
+- **No tracer change; suite untouched.** The instrument reads the pass's own observational
+  hook, undefined in production, and the three cases stay listed.
