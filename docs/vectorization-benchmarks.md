@@ -5567,3 +5567,285 @@ bar concentric reached at 0.045 and sharp-star at 0.066 when §15.7 closed them:
   today, and overlap's "pure lattice staircase" is no longer its mechanism.
 - **No tracer change; suite untouched.** The instrument reads the pass's own observational
   hook, undefined in production, and the three cases stay listed.
+
+## 31. The corner-snap window family, paired per corner (issue #36, 2026-09-06)
+
+Issue #36 holds the audit rows that decide WHERE a detected corner's apex lands and whether
+two apexes are one: `SNAP_SPAN` 14, `CORNER_WINDOW` 4, `CORNER_MERGE` 3, the `armGap`
+ramp and the `SNAP_GAP`-derived short-arm bypass — ART or UNCLEAR in
+`docs/absolute-px-audit.md`, each with a recipe (2, 3, 5, 6) that asks the same question
+in a different column: what does the SAME authored corner do across rasters? §28.1's
+rule applies unchanged — measure the estimator before the selector, pair before you
+rate, and do not scale a base window with the raster — and §30 supplied the prior: a
+per-pixel estimator is constant in native px, so a ratio gate cannot see it. This section
+is the paired census, what it did to each recipe, and the one selector it caught.
+
+### 31.1 The instrument: a census keyed on authored corners
+
+`src/devtest/cornerScaleDiag.ts`. Band seams could not be paired on a real mark (§28.1);
+authored corners can — `geomScore.sharpCorners` on the SVG gives the same corner at every
+raster, so the key is the corner's position in 512-px artwork space and the gallery pairs
+too. For one case at 256/512/1024/2048 the production flat path runs with three
+observers, none of which changes the trace: the FINAL label map (`onPlanarLabels`) gives
+the crack lattice the detector reads, so the ±`CORNER_WINDOW` chord turn at the vertex
+nearest each authored corner is the detector's own reading (recipe 2); the apex sink
+(`planarFit.apexDiag`) gives every snapped corner's outcome, arm spans, the `SNAP_SPAN`
+branch and its `allow`, the per-side `armGap` (new `inGap`/`outGap` fields, recipe 5),
+the move (recipe 6) — and, new, the RAW arm intersection `hx`/`hy` the estimator proposed
+before any selector decided (computed for the record alone on a `short-arm` bypass, so the
+census can score the bypass as a selector); a cap-resolved corner now emits `outcome:
+'cap'` so §10.7's placements are visible too. The traced doc's nearest SHARP corner is the
+final answer, and the scorer's own native-2.5 px verdict rides beside it so the watchlist
+numbers are reproduced to the digit (gear-teeth 53/60, bar-caps 43/43, sharp-star 11/11,
+cross-bars 10/10 @512). Records join corners EXCLUSIVELY (a fused pair shows one corner
+with the record and its twin as `lost-apex`), every distance is in artwork px, and `--fit
+k=v` overrides `PlanarFitOptions` so a counterfactual runs on the SAME census — five
+diagnostic knobs (`cornerWindow`, `cornerMerge`, `armGapFixed`, `snapSpan`,
+`shortArmSamples`) default to the constants they name; the instrument edits were checked
+byte-identical against the frozen `before-corner-window` stamp (84 of 84 files) before
+anything moved. `--crop x,y` prints the label map and traced nodes around one corner at
+every raster; `--logos all` runs one process per mark with `--jsonl`/`--fold`, because
+`geomScore` runs `microsoft-office` @512 out of a 4 GB heap (the scorer, not the tracer —
+`apexDiag` traces it in a second; a scorer bug, noted and left).
+
+**gear-teeth, the driver** (60 authored corners: 28 tips at 80°, 28 roots at 67°, 4
+canvas; chords 7.5 px @512):
+
+| res | scorer | lattice err | apex err | final err, recovered corners mean / p90 / max | outcomes |
+|---|---|---|---|---|---|
+| 256 | 4/4 (edges < `CORNER_MIN_EDGE`) | 0.970 | 2.50 | 2.57 / 4.78 / 4.99 | reconstructed 18 · lost-apex 16 · short-arm 13 · over-cap 6 · undetected 4 · past-evidence 3 |
+| 512 | **53/60** | 0.501 | 0.65 | 0.615 / 1.198 / 2.462 | reconstructed 35 · cap 12 · short-arm 8 · undetected 5 |
+| 1024 | 56/60 | 0.263 | 0.159 | 0.159 / 0.296 / 0.755 | reconstructed 56 · undetected 4 |
+| 2048 | 56/60 | 0.124 | 0.077 | 0.077 / 0.126 / 0.269 | reconstructed 56 · undetected 4 |
+
+(artwork px; `cap` = placed by the §10.7 resolver — six teeth qualify as 7.5-px "bars" at
+512 and none at 1024, where the resolver goes silent and the plain path takes all 43
+bar-caps corners at 47/47: the audit's recipe 7, its cheapest falsifier, passes on the way
+past.) 34 of 60 corners flip recovery across rasters, and the census's first job was to
+say which mechanism each flip belongs to.
+
+### 31.2 The four recipes, run
+
+**Recipe 2 — `CORNER_WINDOW`: the reading does not move with the raster.** The ±4 chord
+turn at each authored corner, min–median–max and how many clear the 60° bar:
+
+| authored | n | @256 | @512 | @1024 | @2048 |
+|---|---|---|---|---|---|
+| 67° (roots) | 28 | 45–72–90° (26) | 45–63–72° (23) | 45–63–90° (23) | 45–63–72° (25) |
+| 80° (tips) | 28 | 53–90–90° (26) | 53–72–90° (26) | 53–72–90° (26) | 53–63–72° (25) |
+| corner-turns 61° | 8 | 45–63–90° (5) | 45–63–90° (5) | 45–63–72° (6) | 45–63–72° (6) |
+| corner-turns 69° | 8 | 53–72–90° (7) | 53–63–90° (6) | 45–63–90° (5) | 45–63–90° (5) |
+| corner-turns 77° | 8 | 63–72–90° (8) | 63–90–90° (8) | 53–72–90° (7) | 53–72–90° (7) |
+
+The audit's conditional ("if the same 80° tip reads 53–72° @512 and 76–82° @1024 the fix
+belongs to the window") is false: the reading is quantized by the staircase into {45, 53,
+63, 72, 90}° — the turns between two 4-step chords with integer offsets — at every raster,
+and a 67° corner reads 45° or 53° at an unlucky phase at 256 and at 2048 alike (gear #7:
+72° @256, 45° @512, 53° @1024, 72° @2048). `CORNER_WINDOW` is a SENSOR; the losses it
+leaves are §0 #15's phase lottery, resolution-independent. The window's ART half is real
+only where the feature is smaller than the window — gear @256, 3.75-px chords, 16
+`lost-apex` — which the scorer does not grade and the cap resolver exists for. On the
+gallery the same lottery is the whole §15.7 population: of the corners recovered at 1024
+and missed at 512 across the census's first 33 marks, 24 of 31 are authored at 60–73°,
+and `chupa-chups`' four 89° square corners (105-px edges) are lost at 512 alone because
+the label map chamfers the corner pixel by 3 px at that phase (the AA at 0.7 coverage
+falls to the background) and the ±4 chord reads 53° — at 256 it reads 90°, at 1024 72°.
+
+**Recipe 3 — `CORNER_MERGE` @256: it eats real pairs, and no value serves both rasters.**
+gear-teeth @256 recovers 32/60 at a 5-artwork-px tolerance with 16 corners `lost-apex`;
+`cornerMerge` 1 recovers 41/60 there and costs 2 corners @512 (53 → 51), `cornerMerge` 2
+buys 2 @256 and costs the same 2 @512. The ceiling is art (chord spacing, which halves
+with the raster) and the floor is sensor (a rasterized tip's shoulder pair), and at 256 the
+gear's 3.75-px chords fall between them. Unchanged; the constant is correctly placed for
+the graded regime and cannot be placed for the ungraded one.
+
+**Recipe 5 — `armGap`: the same tooth gets gap 1 @512 and 3 @1024, and that is the right
+answer.** 25 of the 38 gear corners with a record at every raster go 1→x→3→3. The
+counterfactuals: `armGapFixed` 3 at 512 (the pre-§10.6 censor) costs a corner (53 → 52);
+`armGapFixed` 1 at 512 costs five (53 → 48, mean placement of the survivors IMPROVES
+0.615 → 0.415 — the arm line reads the rounded tip, and the §15 pin rotates a correctly
+placed corner smooth); at 1024 gap 1 vs 3 is a wash (56/60 either way, 0.152 vs 0.159).
+The ramp is a sample-count rule — it censors ≤ 3 samples and never more than ~25% of the
+arm — and the number of samples an arm carries IS the comparand at every raster. Unchanged.
+
+**Recipe 6 — `SNAP_SPAN` and `allow`: the clamp holds, the budget is never reached, and
+the branch is load-bearing anyway.** `shortSpan` ≤ 14 on 7 fixtures × 4 rasters and 65
+gallery marks (the verifier's argument); no reconstruction comes within 90% of the 14-px
+long-arm `allow`; but the move population is not 1–3 px. It is ~1.2 px / sin(half-tip):
+right angles move ~1 px at any raster, sharp-star's 36° tips 4.1, and `acute-counter`'s
+10° spike **5.98 / 5.98 / 4.89 / 5.26** native px at 256/512/1024/2048 (raw intersection
+~7.6 before the §18 clamp) — over the short branch's 7 px and inside the full branch's
+14. The condition for deleting the arm-length branch ("population 1–3 px") is false; it
+is the erosion budget for acute tips. Unchanged.
+
+**And the estimator, in native px, across rasters** — the §30 law, seen again:
+
+| raw arm intersection off the authored corner, native px (mean · p90 · max) | @256 | @512 | @1024 | @2048 |
+|---|---|---|---|---|
+| gear-teeth | 2.13 · 5.63 · 5.91 | 0.56 · 0.86 · 2.06 | 0.32 · 0.59 · 1.51 | 0.31 · 0.50 · 1.08 |
+| sharp-star | 0.14 · 0.43 · 0.43 | 0.24 · 0.66 · 1.16 | 0.09 · 0.13 · 0.61 | 0.05 · 0.13 · 0.13 |
+| corner-turns | 0.78 · 1.47 · 4.95 | 0.46 · 1.02 · 1.44 | 0.52 · 1.05 · 1.94 | 0.52 · 1.04 · 1.43 |
+| letter-joins | 0.50 · 2.17 · 4.66 | 0.23 · 0.89 · 1.22 | 0.35 · 1.25 · 1.91 | 0.22 · 0.66 · 1.02 |
+
+Constant in native px wherever the arms fill the window; the coarse-end blow-up is the
+sub-window regime (gear's 3.75-px chords, bar-caps' 3.5-px bars whose arms run parallel).
+So the audit's literal prescription for `SNAP_SPAN` — scale it with the raster — was run
+as the §28.1 counterfactual (span 7 @256, 28 @1024, 56 @2048): WORSE at 256 on every
+fixture (sharp-star 11 → 10/11, gear 32 → 28, corner-turns 153 → 148, acute-counter
+11 → 8) and mixed at the fine end (gear 56 → 54 @1024 and 56 → 53 @2048 while
+corner-turns gains 159 → 164 / 161 → 164). Not shipped; the ART row is corrected to
+SENSOR by measurement.
+
+### 31.3 The selector the census caught: the short-arm bypass
+
+The census's selector table asks, per outcome, whether the raw intersection the rule
+REFUSED would have landed closer to the authored corner than what it kept. At 256 the
+refusals are right — gear `short-arm` kept-better 11 : hit-better 6, `over-cap` 2 : 0,
+bar-caps `over-cap` 12 : 0 with raw intersections in the thousands of px on 3.5-px bars.
+At the lab raster the same table reads the other way:
+
+| gear-teeth @512 | n | kept, mean / max | raw intersection, mean / max | hit better | kept better |
+|---|---|---|---|---|---|
+| reconstructed | 35 | 0.56 / 2.06 | 0.56 / 2.06 | — | — |
+| **short-arm** | **8** | **1.04 / 2.46** | **0.54 / 0.78** | **6** | **0** |
+
+§10.6 wrote the bypass as `SNAP_GAP + 4` steps of span — "3 censored + 4 samples" under
+the fixed 3-px gap of the day, when the reconstruction from a short arm's 3–5 phase-noise
+samples measured 2.6–7.9 px off — and swept it upward only (11/14 collapse recall to
+57–62%). Two things changed under it since: `armGap` censors one step on a short arm, so a
+5–6-step window carries 5–6 samples, not 2–3; and the §10.6 displacement cap and the §18
+evidence veto now bound whatever a noisy intersection proposes. The bypass was refusing
+estimates the rest of the chain would have accepted and placed better, and — the ibm
+witness below — withholding the ARM DIRECTIONS the §15 tangent pin needs, so a correctly
+kept vertex could still read smooth.
+
+**The fix (`planarFit.ts`, `SHORT_ARM_SAMPLES` 5):** the bypass compares a per-arm sample
+count, `span − gap + 1 ≥ 5`, instead of a span — the quantity §10.6 meant, stated so it
+stays consistent with the gap it follows (an open chain's clamped 5-step window with the
+full 3-px gap is 3 samples, not 6). Swept: 4 samples invents corners (corner-turns @256
+`cornersInvented` 5 → 9, bar-caps @256 placement 1.74 → 1.83); 5 is the wall. The
+`shortArmSamples` knob reproduces the old rule at 7 on every arm whose gap is 1 — every
+short arm on the driver — which is the red gate's "before" arm.
+
+**What the corpus said about the floor alone, and the two selectors it needed.** The
+watchlist was byte-stable and the driver improved, and the A/B slice (42 cases) moved 17
+outputs with nothing gated among them — and the per-mark corpus census (126 scorable
+marks @512/1024, `shortArmSamples` 7 vs 5) still found two things the slice could not:
+
+| floor alone, corpus | @512 | @1024 |
+|---|---|---|
+| authored corners recovered | 2588 → 2592 / 2891 | 3151 → 3152 / 3433 |
+| marks with recall up / down | 4 / 0 | 1 / 0 |
+| placement, corners recovered both ways (mean); marks better / worse | 0.484 → 0.481; 8 / 0 | 0.198 → 0.198; 2 / 0 |
+| **§23 corners invented** | 445 → **455** | 440 → **531** |
+| marks with chamfer up / down by > 0.003 | 7 / 5 | 5 / 4 |
+
+The +91 at 1024 is two marks, `snapchat` (99 → 135) and `nasa` (31 → 85) — outlines the
+detector already kinks by the dozen (tight authored curves under the ±4 chord, §0 #15) —
+and the 512 tail is `stripe` (chamfer 0.194 → 0.209), `adidas-wm` (0.194 → 0.205),
+`sony` (0.230 → 0.237, +1 invented), `intel-wm` (+1 invented), `mercado-pago` (+1). Each
+was autopsied at the corner (`--crop`, the apex records before and after), and they are
+two mechanisms, neither of them the apex:
+
+1. **The tangent pin on a chord.** Every corner the floor admits was, under the old rule,
+   unpinned (§15's pin consumes the arm directions the snap returns, and a bypass returns
+   none). `stripe`'s two admitted apexes land CLOSER to their authored corners (0.99 → 0.53
+   px, 0.35 → 0.31) and chamfer still rises, because the corner's LONG arm is a 14-sample
+   line with 0.86 px of bow on a curved letterform — a chord — and rotating the handle
+   onto it bows the adjacent arc (§15.8's crown, at 6 px); pinning the long side only
+   measured the same 0.209. **`ARM_PIN_SAMPLES` 7, on both sides:** a corner with a short
+   side takes its apex from the intersection and keeps the fit's own tangents — the pin's
+   population is exactly the old rule's, byte-identical for every corner it admitted.
+   `nasa` @1024 85 → 50 invented, `snapchat` 135 → 121, and gear-teeth @512 improves again
+   (placement 0.562 → 0.542 mean, p90 1.20 → 0.99). The cost is the ibm stripe-end corner
+   the floor had recovered (123 → 122/127): it was recovered BY the long-side pin, on the
+   same evidence that bows `stripe`. Kept honest rather than kept.
+2. **A false corner sliding along its chords.** `sony` (16,81), `intel-wm` (502,182) and
+   `mercado-pago` (183,236) are kinks the detector reads on tight SMOOTH authored nodes
+   (0.09–0.85 px from an authored vertex that is not a corner); the old bypass had left
+   them at the lattice, and the intersection of two 5–6-sample chords on a convex arc
+   crosses OUTSIDE the ink and slides them 1.0–2.4 px off the boundary (`allow` is 2.5–3
+   there; the §18 veto asks the raster only past 2.5). **`SHORT_ARM_PROBE_MIN` 0.5:** a
+   short-armed reconstruction that moved more than half a pixel is put to the same
+   question §18 asks the acute counters — does the raster's own material follow the ray? —
+   and clamped to the reach where it does not. An eroded true corner leaves a coverage
+   trail; a chord crossing on a convex arc leaves none. `intel-wm` and `mercado-pago`
+   return exactly to their pre-change numbers, `sony` lands better than before (0.227 vs
+   0.230); on the fixtures the probe is byte-identical everywhere (every gear-teeth
+   reconstruction it examines keeps its trail).
+
+What is left after both: `stripe` and `adidas-wm` keep their chamfer (0.209 / 0.201).
+Located by the GT-side distance map, neither is at the corner: the trace moved ~0.5 px
+along the ARCS adjacent to the reconstructed apex (stripe's (326–330,88) and (350,106)
+stretches, 0.07 → 0.56 px), two nodes fewer, hausdorff unchanged at 1.07 — the DP fit
+re-segmenting at the same ε from a pinned endpoint that moved 0.74 px, a cost-model
+choice inside tolerance (the §10 ε family, §30's "the fit loses it"), not a placement
+one. And `nasa`/`snapchat` @1024 keep +13 invented each over a base of 31/99 — kinks the
+detector already asserts, now placed by an intersection that is right by the raster and
+slightly sharper by the §23 lens; chamfer +0.003 / +0.001, placement of their authored
+corners better (nasa 0.314 → 0.303 mean, max 0.986 → 0.870). That residual is the one
+precision question this fix leaves for the A/B review; `planarFit: { shortArmSamples: 7 }`
+is the one-line counterfactual.
+
+**Gate:** `test/planar-short-arm.test.ts` (4 tests), red-before-green structurally
+(§18.4's contract): gear-teeth @512 under the old rule and the default in one run, the
+precondition asserting the old rule bypassed ≥ 6 authored corners, Σ placement over those
+corners 7.27 → ≤ 0.75× (measured 0.52×), recall/precision/chamfer not worse; the corners
+the new floor still refuses keep a vertex at least as good as the intersection they
+refused; an admitted corner raises no pin candidate on either side (the `ARM_PIN_SAMPLES`
+contract, read off `pinDiag`); bar-caps and sharp-star byte-identical under both rules.
+Shown red with the floor at 7 (Σ 7.27 → 7.27, and a still-bypassed corner kept 2.46 px
+against a refused 0.53).
+
+### 31.4 After
+
+- **Suite 481 / 0** (479 pass, 2 skipped; +4), typecheck clean; truth gate, @256 lane, tier-2 lanes and
+  the scale gate unchanged, `KNOWN_DEFECTS` untouched. Golden: `schild-flat` moved (this
+  fix) and `aurora-flat` was already drifting on `main` (the same hashes before any edit
+  here); both re-blessed.
+- **Watchlist**, `shortArmSamples` 7 → default on the same census: gear-teeth **53/60**
+  @512 (placement 0.615 / 1.198 / 2.462 → **0.542 / 0.988 / 2.058**, chamfer 0.135 →
+  0.129), 56/60 @1024 and @2048 byte-identical; bar-caps 43/43 · sharp-star 11/11 ·
+  cross-bars 10/10 · checker 3556/3588 · smooth-radii invented 6/12/3 · corner-turns
+  164/172 · acute-counter 13/13 · letter-joins 29/31 — byte-identical @256/512/1024.
+  peak-drop 148/148 with placement p90 0.540 → 0.268 / max 1.909 → 1.007.
+- **A/B `before-corner-window` ⇄ `after-corner-window`:** **17 of 84 outputs moved** — the same seventeen as the floor alone (the two selectors change what moves inside them, not which), and no gated flat lane among them: checker moves in its GRADIENT lane only; smooth-radii, sharp-star, bar-caps, cross-bars and gear-teeth's own stamp are byte-identical (the A/B fixtures trace on a transparent background, so their short-arm populations differ from the white-composited census's). Fixtures: bg-ramp-twin flat, checker grad, nebula flat, peak-drop both, scale-blind grad. Gallery: coca-cola, firefox, ibm, mastercard, mercedes-benz (both lanes), instagram grad. Attributed by construction — the instrument edits were byte-identical (84/84) and the fix is the only other change — and characterised on the white-composited census @512: peak-drop placement p90 0.540 → 0.268; mastercard chamfer 0.237 → 0.235 with four sharp nodes gained 0.6–1.8 px from authored vertices on sub-7-px features; ibm 0.206 → 0.205 at 122/127 both ways; coca-cola's one pre-existing kink at (417,139) shifts 1.1 px (§23 count 15 → 16 at unchanged worst excess); mercedes-benz 20/32 both ways, placement 0.935 → 0.928; firefox identical at 512 on white; the rest are gradient lanes or gradient art traced flat.
+- **Corpus-wide** (the per-mark census, 126 marks) (`shortArmSamples` 7 vs default, one process per mark; `firefox` @1024 and `microsoft-office` fall to the scorer's heap and are not paired):
+
+  | final, corpus | @512 | @1024 |
+  |---|---|---|
+  | authored corners recovered | 2588 → **2590** / 2891 | 3151 → 3151 / 3433 |
+  | marks with recall up / down | 2 / 0 (bmw, firefox-wm) | 0 / 0 |
+  | placement, corners recovered both ways (mean); marks better / worse | 0.484 → **0.481**; **8 / 0** | 0.198 → 0.198; 2 / 0 |
+  | §23 corners invented | 445 → 446 (+1 net: six marks +1, five marks −1) | 440 → 466 (snapchat +13, nasa +13, three marks +1, parcel −3) |
+  | marks with chamfer up / down by > 0.003 | 4 / 4 (stripe +0.015, adidas-wm +0.007, kotlin +0.004, snapchat +0.003 · paypal-wm −0.011, firefox-wm −0.004, sony −0.003, swc −0.003) | 3 / 3 |
+  | marks with any change | 48 of 126 | 28 of 126 |
+
+  Against the floor alone: invented 455 → 446 @512 and 531 → 466 @1024, sony/intel-wm/mercado-pago back on or better than their pre-change numbers, recall +2 instead of +3 (the ibm stripe end, above), placement gains kept.
+- **Instruments:** `cornerScaleDiag` (`--case`, `--logo`, `--logos [list|all]`, `--res`,
+  `--fit`, `--crop`, `--jsonl`/`--fold`, `--verbose`); `ApexDiagRecord` gained
+  `inGap`/`outGap`/`hx`/`hy` and the `cap` outcome; knobs `cornerWindow`, `cornerMerge`,
+  `armGapFixed`, `snapSpan`, `shortArmSamples`, `armPinSamples`, `shortArmProbeMin`.
+
+### 31.5 What is left, named
+
+- **The detector's phase lottery is the corner loss that remains on real marks** — §0 #15,
+  closed-not-planned, now with a corpus count (24 of 31 in the 512-missed/1024-recovered
+  population are authored at 60–73°) and the chupa-chups chamfer as a visible witness at
+  the lab raster. Any rule that reads a wider or evidence-based turn must clear the §23
+  precision lens first; nothing here touched it — and the same lens is what caught the
+  floor's two side effects above, which is the lens doing its job.
+- **Sub-window features at 256** (gear's 3.75-px chords, bar-caps' 3.5-px bars, ibm's
+  8-px stripe ends where a 140° spike still takes `over-cap` at 512): the regime below
+  `CORNER_MIN_EDGE`, ungraded, the cap resolver's and §19's blunt-notch territory. ibm's
+  70° stripe-end corner at (352,115) is placed 0.69 px right at 512 and reads smooth
+  because its 6-step flank's fitted tangent is 23° off — a tangent the pin could restore
+  only from a chord it must not trust (above); a V-turn analog of the cap resolver is the
+  shape of a fix.
+- **Re-segmentation at the same ε** behind a sub-pixel endpoint move (`stripe`,
+  `adidas-wm`): the §10 ε family; `hausdorff` cannot see it and `chamfer` barely can.
+- **`geomScore` on `microsoft-office` @512 exhausts the heap** — a scorer bug on a 5-shape
+  SVG (the tracer is fine); the census routes around it, the truth corpus never meets it.
+  `firefox` @1024 the same.
+- **The rows:** every constant in this family is SENSOR by measurement, and the audit's
+  recipes 2, 3, 5, 6 and 7 are marked resolved with their numbers.
