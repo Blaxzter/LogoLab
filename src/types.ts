@@ -110,6 +110,11 @@ export interface VectorizeOptions {
   regionDetail?: number
   /** Mono threshold 0–255 (mono mode). */
   threshold: number
+  /**
+   * Mono: the ink is LIGHTER than the threshold (light art on dark paper), so
+   * pixels above the cut become solid instead of pixels below it. Omitted ⇒ off.
+   */
+  invert?: boolean
   /** Drop the detected background layer for transparent output. */
   removeBackground: boolean
   /**

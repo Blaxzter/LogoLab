@@ -23,7 +23,11 @@ const EXAMPLES: Example[] = [
   { file: 'bloom.svg', name: 'Bloom', blurb: 'Multi-color shapes — great for Vectorize.' },
 ]
 
-const fileFormat = (file: string) => (file.toLowerCase().endsWith('.svg') ? 'SVG' : 'PNG')
+/** The badge on a card: the file's extension, as people say it. */
+const fileFormat = (file: string) => {
+  const ext = file.slice(file.lastIndexOf('.') + 1).toUpperCase()
+  return ext === 'JPEG' ? 'JPG' : ext
+}
 
 const exampleUrl = (file: string) => `${import.meta.env.BASE_URL}examples/${file}`
 
@@ -52,12 +56,19 @@ export function TryExampleButton() {
  * host react to a successful load (e.g. the modal closes itself).
  */
 /**
+ * How a swatch frames its image: `contain` shows the whole mark on the checker
+ * (a logo); `cover` fills the square (a sheet — a wide one shrunk to fit would be
+ * a faint strip).
+ */
+export type ThumbFit = 'contain' | 'cover'
+
+/**
  * An example's preview swatch. Decides its *own* checker from the image: a
  * light/white mark (e.g. white line-art) gets the dark checker so it stays
  * visible, everything else keeps the light one. This is per-thumbnail — it does
  * not follow the global preview backdrop.
  */
-function ExampleThumb({ url, busy }: { url: string; busy: boolean }) {
+function ExampleThumb({ url, busy, fit = 'contain' }: { url: string; busy: boolean; fit?: ThumbFit }) {
   const [dark, setDark] = useState(false)
 
   useEffect(() => {
@@ -76,13 +87,58 @@ function ExampleThumb({ url, busy }: { url: string; busy: boolean }) {
     <div
       className={`${dark ? 'checkerboard-dark' : 'checkerboard'} relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line`}
     >
-      <img src={url} alt="" className="h-full w-full object-contain p-1.5" />
+      <img src={url} alt="" className={`h-full w-full ${fit === 'cover' ? 'object-cover' : 'object-contain p-1.5'}`} />
       {busy && (
         <div className="absolute inset-0 flex items-center justify-center bg-surface/70">
           <Loader2 size={18} className="animate-spin text-accent" />
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * One gallery card — swatch, name, format badge, blurb. Shared with the icon
+ * sheet's example gallery so the two read as one thing.
+ */
+export function ExampleCard({
+  url,
+  file,
+  name,
+  blurb,
+  busy,
+  disabled,
+  onClick,
+  fit,
+}: {
+  url: string
+  /** File name; only its extension is shown. */
+  file: string
+  name: string
+  blurb: string
+  busy: boolean
+  disabled: boolean
+  onClick: () => void
+  fit?: ThumbFit
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="scene-card group flex items-center gap-3 p-3 text-left disabled:opacity-60"
+    >
+      <ExampleThumb url={url} busy={busy} fit={fit} />
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-semibold text-ink">{name}</p>
+          <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[0.6rem] font-medium uppercase tracking-wide text-muted">
+            {fileFormat(file)}
+          </span>
+        </div>
+        <p className="text-xs leading-snug text-muted">{blurb}</p>
+      </div>
+    </button>
   )
 }
 
@@ -124,29 +180,18 @@ export function ExampleGrid({
   return (
     <div className="flex flex-col gap-3">
       <div className={`grid gap-3 ${className ?? 'sm:grid-cols-2'}`}>
-        {EXAMPLES.map((ex) => {
-          const busy = loadingFile === ex.file
-          return (
-            <button
-              key={ex.file}
-              type="button"
-              onClick={() => pick(ex)}
-              disabled={!!loadingFile}
-              className="scene-card group flex items-center gap-3 p-3 text-left disabled:opacity-60"
-            >
-              <ExampleThumb url={exampleUrl(ex.file)} busy={busy} />
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-semibold text-ink">{ex.name}</p>
-                  <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[0.6rem] font-medium uppercase tracking-wide text-muted">
-                    {fileFormat(ex.file)}
-                  </span>
-                </div>
-                <p className="text-xs leading-snug text-muted">{ex.blurb}</p>
-              </div>
-            </button>
-          )
-        })}
+        {EXAMPLES.map((ex) => (
+          <ExampleCard
+            key={ex.file}
+            url={exampleUrl(ex.file)}
+            file={ex.file}
+            name={ex.name}
+            blurb={ex.blurb}
+            busy={loadingFile === ex.file}
+            disabled={!!loadingFile}
+            onClick={() => void pick(ex)}
+          />
+        ))}
       </div>
       {error && <p className="text-xs text-bad">{error}</p>}
     </div>

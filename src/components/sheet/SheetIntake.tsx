@@ -11,6 +11,7 @@ import { useLogo } from '../../store'
 import { useSheetStore } from '../../sheetStore'
 import { getImageData } from '../../lib/image'
 import { isImageFile, readSheetFile, SHEET_MAX_DIM } from './sheetIo'
+import { SheetExampleGrid } from './SheetExamples'
 
 export function SheetIntake() {
   const setSource = useSheetStore((s) => s.setSource)
@@ -114,6 +115,18 @@ export function SheetIntake() {
           Use the loaded image ({logo.fileName ?? 'current logo'})
         </button>
       )}
+
+      {/* No sheet handy? Start from a bundled one — same cards as the logo panels. */}
+      <div className="w-full">
+        <div className="mb-3 flex items-center gap-3">
+          <span className="h-px flex-1 bg-line" />
+          <span className="text-xs font-medium uppercase tracking-wider text-faint">
+            Or start with an example sheet
+          </span>
+          <span className="h-px flex-1 bg-line" />
+        </div>
+        <SheetExampleGrid className="sm:grid-cols-2" />
+      </div>
 
       <div className="w-full rounded-lg border border-line bg-surface p-4 text-sm leading-relaxed text-muted">
         <h3 className="mb-1 text-sm font-semibold text-ink">How it works</h3>

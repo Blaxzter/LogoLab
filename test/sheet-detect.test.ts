@@ -355,6 +355,56 @@ test('a two-colour tile keeps the colour path', () => {
   assert.equal(plan.recolor, null)
 })
 
+test('a light ink on light paper gets its mono cut between the two, not the black-on-white default', () => {
+  // The travel example's boarding ticket: orange (luma ≈ 174) on cream (≈ 244).
+  // At the studio's default cut of 128 the ink is on the PAPER side, and the
+  // tile traced to nothing.
+  const CREAM_BG = { r: 251, g: 245, b: 223, a: 255, coverage: 0.8, transparent: false, uniform: true }
+  const img = sheet(120, 120, [251, 245, 223, 255], [{ x: 20, y: 30, w: 80, h: 60, rgba: [245, 160, 58, 255] }])
+  const plan = planTileBase(img, DEFAULT_VECTORIZE_OPTIONS, { colorMode: 'auto', background: CREAM_BG })
+  assert.equal(plan.opts.mode, 'mono')
+  const ink = 0.2126 * 245 + 0.7152 * 160 + 0.0722 * 58
+  const paper = 0.2126 * 251 + 0.7152 * 245 + 0.0722 * 223
+  assert.ok(
+    plan.opts.threshold > ink && plan.opts.threshold < paper,
+    `cut ${plan.opts.threshold} must sit between ink ${ink.toFixed(0)} and paper ${paper.toFixed(0)}`,
+  )
+
+  // Black on white keeps a cut near the studio default.
+  const bw = planTileBase(
+    sheet(120, 120, WHITE, [{ x: 20, y: 20, w: 80, h: 80, rgba: [15, 28, 19, 255] }]),
+    DEFAULT_VECTORIZE_OPTIONS,
+    { colorMode: 'auto', background: WHITE_BG },
+  )
+  assert.ok(bw.opts.threshold >= 120 && bw.opts.threshold <= 150, `black on white: ${bw.opts.threshold}`)
+})
+
+test('a light ink on dark paper is traced mono with the cut inverted, repainted light', () => {
+  // The smart-home example: white glyphs on navy. On the colour path the
+  // anti-aliasing band between glyph and paper survives as a dark sliver region
+  // around every shape; mono has no palette to split, it just needs the cut
+  // the other way up.
+  const NAVY: [number, number, number, number] = [33, 39, 58, 255]
+  const NAVY_BG = { r: 33, g: 39, b: 58, a: 255, coverage: 0.85, transparent: false, uniform: true }
+  const img = sheet(120, 120, NAVY, [{ x: 30, y: 20, w: 60, h: 80, rgba: [255, 255, 255, 255] }])
+  const plan = planTileBase(img, DEFAULT_VECTORIZE_OPTIONS, { colorMode: 'auto', background: NAVY_BG })
+  assert.equal(plan.opts.mode, 'mono')
+  assert.equal(plan.opts.invert, true)
+  assert.equal(plan.recolor, '#ffffff')
+  const paper = 0.2126 * 33 + 0.7152 * 39 + 0.0722 * 58
+  assert.ok(plan.opts.threshold > paper && plan.opts.threshold < 255, `cut ${plan.opts.threshold}`)
+
+  // Forcing mono on the same tile flips the cut too.
+  assert.equal(planTileBase(img, DEFAULT_VECTORIZE_OPTIONS, { colorMode: 'mono', background: NAVY_BG }).opts.invert, true)
+  // …and dark-on-light stays the right way up.
+  const dark = planTileBase(
+    sheet(120, 120, WHITE, [{ x: 20, y: 20, w: 80, h: 80, rgba: [15, 28, 19, 255] }]),
+    DEFAULT_VECTORIZE_OPTIONS,
+    { colorMode: 'auto', background: WHITE_BG },
+  )
+  assert.equal(dark.opts.invert, false)
+})
+
 test('forcing the mode overrules the probe', () => {
   const img = sheet(120, 120, WHITE, [{ x: 20, y: 20, w: 80, h: 80, rgba: [15, 28, 19, 255] }])
   assert.equal(planTileBase(img, DEFAULT_VECTORIZE_OPTIONS, { colorMode: 'color', background: WHITE_BG }).opts.mode, 'color')

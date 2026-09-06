@@ -12,7 +12,8 @@ import { VectorizeStudio, type VectorizeSource } from '../vectorize/VectorizeStu
 import { Tooltip } from '../ui/Tooltip'
 import { canvasToBlob, imageDataToCanvas } from '../../lib/image'
 import { cropTile, toImageData, type ImageDataLike } from '../../lib/sheet'
-import { planTileTrace, tileTraceInput } from '../../lib/sheet/traceTile'
+import { planTileTrace, repaintDoc, TILE_PRECISION, tileTraceInput } from '../../lib/sheet/traceTile'
+import { serializeDoc } from '../../lib/path/model'
 import { useStore } from '../../store'
 import { useSheetStore, type SheetIcon } from '../../sheetStore'
 import type { EditableDoc } from '../../lib/path/types'
@@ -97,6 +98,23 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
     }
   }, [traceInput, tile.name])
 
+  /**
+   * What goes back to the sheet. A mono trace comes back black; the batch
+   * repaints a tile that follows the sheet defaults in the ink the probe saw,
+   * and the studio's result gets the same treatment — otherwise opening a white
+   * glyph would hand it back to the grid black.
+   */
+  const keep = useCallback(
+    (r: { doc: EditableDoc; svgText: string; stats: SheetIcon['stats'] }) => {
+      const repaint = !tile.opts && plan.recolor
+      const doc = repaint ? repaintDoc(r.doc, plan.recolor!) : r.doc
+      setTileDoc(tile.id, doc, repaint ? serializeDoc(doc, TILE_PRECISION) : r.svgText, r.stats)
+    },
+    [setTileDoc, tile.id, tile.opts, plan.recolor],
+  )
+  const keepRef = useRef(keep)
+  keepRef.current = keep
+
   // Live node edits fire on every drag frame; writing each one into the sheet
   // store would rebuild the whole tile array per frame. Settle first.
   const syncTimer = useRef<number | null>(null)
@@ -109,19 +127,19 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
       syncTimer.current = window.setTimeout(() => {
         syncTimer.current = null
         const r = latest.current
-        if (r) setTileDoc(tile.id, r.doc, r.svgText, r.stats)
+        if (r) keepRef.current(r)
       }, SYNC_MS)
     },
-    [setTileDoc, tile.id],
+    [],
   )
   useEffect(
     () => () => {
       if (syncTimer.current === null) return
       window.clearTimeout(syncTimer.current)
       const r = latest.current
-      if (r) setTileDoc(tile.id, r.doc, r.svgText, r.stats)
+      if (r) keepRef.current(r)
     },
-    [setTileDoc, tile.id],
+    [],
   )
 
   const onOptionsChange = useCallback(

@@ -30,10 +30,30 @@ export interface InkProbe {
   dominant: string | null
   /** One ink, clearly darker than the paper ⇒ trace it mono. */
   mono: boolean
+  /**
+   * One ink, clearly LIGHTER than the paper (white glyphs on a dark sheet) ⇒
+   * mono as well, with the cut inverted (`VectorizeOptions.invert`). The colour
+   * path on such a tile keeps the anti-aliasing band between glyph and paper as
+   * a region of its own: dark slivers around every shape, worse the smaller the
+   * tile (measured: 16/16 tiles at 184px).
+   */
+  monoInverted: boolean
+  /**
+   * Luminance (Rec.709, 0–255, the tracer's own mask weights) of the dominant
+   * ink — null when the tile holds none — and of the paper: the two values a
+   * mono cut has to fall between.
+   */
+  inkLuma: number | null
+  paperLuma: number
 }
+
+/** Rec.709 luminance, the weights the tracer's mono mask thresholds on. */
+const luma = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 export function probeInk(img: ImageDataLike, bg: SheetBackground, threshold = 24): InkProbe {
   const { width: W, height: H, data } = img
+  const paperLuma = bg.transparent ? 255 : luma(bg.r, bg.g, bg.b)
+  const none: InkProbe = { inks: 0, dominant: null, mono: false, monoInverted: false, inkLuma: null, paperLuma }
 
   // 5 bits per channel: fine enough to separate real colours, coarse enough that
   // dithering and JPEG mush land in the same bucket.
@@ -59,13 +79,13 @@ export function probeInk(img: ImageDataLike, bg: SheetBackground, threshold = 24
       }
     }
   }
-  if (inkPixels === 0) return { inks: 0, dominant: null, mono: false }
+  if (inkPixels === 0) return none
 
   const entries = [...buckets.values()]
     .filter((e) => e.n >= inkPixels * MIN_INK_SHARE)
     .map((e) => ({ n: e.n, r: e.r / e.n, g: e.g / e.n, b: e.b / e.n }))
     .sort((a, b) => b.n - a.n)
-  if (entries.length === 0) return { inks: 0, dominant: null, mono: false }
+  if (entries.length === 0) return none
 
   // Greedy fusion, biggest first: a tonal variant joins the ink it belongs to.
   const inks: { n: number; r: number; g: number; b: number }[] = []
@@ -86,14 +106,16 @@ export function probeInk(img: ImageDataLike, bg: SheetBackground, threshold = 24
   inks.sort((a, b) => b.n - a.n)
 
   const top = inks[0]
-  const paperLuma = bg.transparent ? 255 : 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b
-  const inkLuma = 0.299 * top.r + 0.587 * top.g + 0.114 * top.b
+  const inkLuma = luma(top.r, top.g, top.b)
   return {
     inks: inks.length,
     dominant: hex(top.r, top.g, top.b),
-    // Mono thresholds dark-against-light; a light ink on dark paper would come out
-    // inverted, so that case stays on the colour path.
+    // Mono thresholds dark-against-light; a light ink on dark paper needs the
+    // cut flipped, which is what `monoInverted` asks the planner for.
     mono: inks.length === 1 && paperLuma - inkLuma >= MIN_INK_CONTRAST,
+    monoInverted: inks.length === 1 && inkLuma - paperLuma >= MIN_INK_CONTRAST,
+    inkLuma,
+    paperLuma,
   }
 }
 

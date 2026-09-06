@@ -4,7 +4,7 @@
 // the tracer and a Worker and so is browser-only.)
 
 import { estimateBackground } from './detect.ts'
-import { probeInk } from './inkProbe.ts'
+import { probeInk, type InkProbe } from './inkProbe.ts'
 import type { ImageDataLike, SheetBackground } from './types'
 import type { VectorizeOptions } from '../../types'
 
@@ -61,6 +61,18 @@ export function traceScale(longSide: number): number {
   return Math.max(1, Math.min(MAX_TRACE_SCALE, Math.round(TRACE_TARGET_PX / longSide)))
 }
 
+/**
+ * Where a mono trace cuts. The studio's default (128) assumes black ink on white
+ * paper; a sheet knows both the ink and the paper, so the cut goes halfway
+ * between them. Without this an orange ticket (luma 174) on cream paper (244)
+ * sits ABOVE the default cut — on the paper side — and the tile traces to
+ * nothing (0 paths on the travel example's tile 08).
+ */
+export function monoThreshold(probe: Pick<InkProbe, 'inkLuma' | 'paperLuma'>, fallback: number): number {
+  if (probe.inkLuma == null) return fallback
+  return Math.round((probe.inkLuma + probe.paperLuma) / 2)
+}
+
 export interface TileBasePlan {
   /** Options with the per-tile mode and smoothing applied. */
   opts: VectorizeOptions
@@ -90,15 +102,20 @@ export function planTileBase(
   base: VectorizeOptions,
   settings: { colorMode: SheetColorMode; background: SheetBackground | null; hiRes?: boolean },
 ): TileBasePlan {
-  let probe: { inks: number; dominant: string | null; mono: boolean }
+  let probe: InkProbe
   try {
     probe = probeInk(pixels, settings.background ?? estimateBackground(pixels, 24))
   } catch {
-    probe = { inks: 0, dominant: null, mono: false }
+    probe = { inks: 0, dominant: null, mono: false, monoInverted: false, inkLuma: null, paperLuma: 255 }
   }
 
   const long = Math.max(pixels.width, pixels.height)
-  const wantMono = settings.colorMode === 'mono' || (settings.colorMode === 'auto' && probe.mono)
+  const wantMono =
+    settings.colorMode === 'mono' || (settings.colorMode === 'auto' && (probe.mono || probe.monoInverted))
+  // Light ink on dark paper: the same one-shape trace, with the cut flipped. A
+  // forced mono gets it too — without it a white glyph on navy comes back as the
+  // paper traced around a hole.
+  const invert = wantMono && probe.inkLuma != null && probe.inkLuma > probe.paperLuma
   // Enlarging pays off for the MONO path, where a finer lattice buys sub-pixel
   // threshold placement. The colour path gains accuracy too, but at a price no
   // icon wants: measured on the same tiles, colour at 4× went from 93 to 1465
@@ -114,6 +131,12 @@ export function planTileBase(
   }
   return wantMono
     ? // Mono paints #000; the sheet knows the ink's real colour, so hand it back.
-      { opts: { ...opts, mode: 'mono' }, recolor: probe.dominant, inks: probe.inks, color: false, scale }
+      {
+        opts: { ...opts, mode: 'mono', threshold: monoThreshold(probe, base.threshold), invert },
+        recolor: probe.dominant,
+        inks: probe.inks,
+        color: false,
+        scale,
+      }
     : { opts: { ...opts, mode: 'color' }, recolor: null, inks: probe.inks, color: true, scale }
 }

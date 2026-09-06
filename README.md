@@ -23,7 +23,8 @@ circular avatar?
 junk background, trace it to a clean SVG, and export every favicon / PWA icon you need.
 
 > No logo handy? Hit **Try an example logo** in the sidebar to load one of the built-in
-> samples and play with every tool right away.
+> samples and play with every tool right away. The **Icon sheet** tab has its own examples —
+> real image-model output, so you can try the splitter without generating a sheet first.
 
 ## ✨ Features
 
@@ -199,6 +200,7 @@ src/
   store.ts         # Zustand store (logo, appearance, environment, device placements)
 public/mockups/    # device frames + screenshots used by the device previews
 public/examples/   # built-in sample logos for the "Try an example" gallery
+public/examples/sheets/  # example icon sheets for the Icon sheet tab (Gemini output, re-encoded as WebP)
 ```
 
 ### How the device mockups work

@@ -371,7 +371,7 @@ export async function traceImage(
   const beautifyOpts = beautifyOptionsFor(options)
 
   if (options.mode === 'mono') {
-    const traced = await traceOne(thresholdToMask(imageData, options.threshold))
+    const traced = await traceOne(thresholdToMask(imageData, options.threshold, options.invert === true))
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError') // parity with the colour path's checkpoints
     const [subPaths] = beautify([traced], beautifyOpts)
     const items: PathItem[] = []
@@ -1002,16 +1002,17 @@ function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
 /**
  * Threshold to a potrace-ready binary mask: dark opaque pixels become opaque
  * black, everything else (light or alpha < 16) opaque white. Luminance uses
- * Rec.709 weights. The input is not mutated.
+ * Rec.709 weights. `invert` flips which side of the cut is ink — light art on
+ * dark paper — and nothing else. The input is not mutated.
  */
-function thresholdToMask(img: ImageData, threshold: number): ImageData {
+function thresholdToMask(img: ImageData, threshold: number, invert = false): ImageData {
   const { width, height, data } = img
   const out = new ImageData(width, height)
   const dst = out.data
   const cut = clamp(Math.round(threshold), 0, 255)
   for (let i = 0; i < data.length; i += 4) {
     const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]
-    const v = data[i + 3] >= 16 && lum < cut ? 0 : 255
+    const v = data[i + 3] >= 16 && (invert ? lum > cut : lum < cut) ? 0 : 255
     dst[i] = v
     dst[i + 1] = v
     dst[i + 2] = v
