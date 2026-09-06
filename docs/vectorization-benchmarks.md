@@ -36,6 +36,7 @@ guardrails):
 | 18 | **Near-colour flats fused into a gentle "ramp"** (gradient lane) — the residue of §26. Two flat objects whose colours differ by a small Oklab step are still unioned by the Step-3c field merge and painted as one shallow gradient, because at the veto's window scale (1/24 of the fitted axis) a step of ≤ 0.09 is indistinguishable from a real steep ramp piece: the honest reunites in gradient-authoring art reach 0.078 (`logo-firefox`), the fakes in this family read 0.019–0.086, and the census found no scale-W separation. §26 raised the catch rate of the flat∪flat fusion family from 0 to 41 of 60 labelled rows; these are the 19 it does not reach. The product exposure is bounded: `suggestGradients` keeps flat art out of the lane, so this is the mixed-art case only | `flute-flat` (A/B fixture lane, ungated: 16 of its 19 flat∪flat unions read ≤ 0.080), `logo-chrome` (gallery, 0.086), `seam-corner` (0.030), `bloom` (0.019) | fakes 0.019–0.086 vs the real maximum 0.078 — no threshold separates them | **§26.6**; instrument `stepRampDiag --census` (labelled by the SOURCE's authored paint) |
 | 17 | **A circle's whole boundary sits off its authored radius by a near-constant amount** — a BIAS, not a wobble: the trace is perfectly round and in the wrong place. Found by §24's circle lens on the day it landed, and only because that lens reports the mean residual SEPARATELY from the spread — the raw p95 reads 0.81 and looks exactly like the ring wobble, while the co-circularity spread is 0.03. Every other gate is blind: 0.8px is far inside chamfer/p95, and the shape is still round, so no corner or region lens sees it either. NOT a size law and not yet explained — the two worst circles are the same size and disagree in SIGN. Untouched by §24, whose family pass only reaches circles cut into arcs | `acute-counter` (tier 0, gated, passes — the gate is on spread, not bias) | seven authored circles read |bias| 0.09–**0.79**px: r=40.5 at **−0.79** (traced inside) against r=39.5 at **+0.19** (outside) and r=58.6 at +0.16 | **§24.3**, **§25.3**; instrument `ringDiag --circles` (the `bias` column, and since §25 the `centre` / `round` columns — a circle in the wrong PLACE is a third term `spread` folds in, and on `olympic-rings` it is now the whole residue: measured identical under an algebraic and a geometric fit, so the evidence is displaced and no estimator recovers it) |
 | 19 | **The junction re-seat moves a junction AWAY from its authored crossing** — the residue of §29 after the through-pair veto: 16 of 62 gallery re-seats on scorable crossings (128 marks, 512/1024/2048) still land further from the crossing than the lattice corner they left. Three mechanisms, none of them the certification constant issue #39 was filed on: a cap-skip that drops a REAL short terminal (an authored r=6 curve, 11.6 px at 1024) and extrapolates the line beyond it to the junction — audit recipe 10, `CAP_MAX`'s zero-margin populations; two huge-radius circle arms (r≈535 × r≈1104) whose intersection is ill-conditioned; and stub arms of 8 native px paired at a 14° angle. Visible on the mark at 1×: the junction sits 1.8–3.1 px off a crossing the lattice had within 0.3 | `logo-brave-browser` @512 (258,474) and @1024 (259,474) artwork px (gallery, ungated — the §29 gate covers the witness junction only); the answer sheet is `authoredCrossings` | 3.12 px off vs 0.29 lattice (C+C @512); 1.78 vs 0.18 (cap-skip @1024); gallery-wide 16 / 62 | **§29.4**; instruments `reseatDiag --lanes` (census, `--json`) and `reseatSelect --worse` (offline, per pair) |
+| 20 | **The flat lane's ENGINE is chosen per raster** — `dominantColors` (paletteSegment.ts) counts the palette entries with share ≥ `minShare` OR `real[i]`, and `real[i]` is a 3×3 flat-interior count against the absolute 50px² floor, so the SAME art clears the `FLAT_PALETTE_MAX_COLORS` (14) gate at one raster and falls to the Mumford–Shah segmenter at another. The audit had named the consequence ("counting into `dominantColors`, which selects the engine"); §33's census is the first time it was witnessed. No lane traces one case through the engine gate at two rasters, so nothing gates it. | gallery, production, no override: `auth-js`, `bing`, `kotlin`, `proton-vpn`, `ups-wm` trace on the palette path @256 and on Mumford–Shah @512; `swc` the reverse — 6 of 152 marks, all many-colour art sitting at dominant 12–14. No fixture (ungated). | dominant 14→22, 14→16, 12→15, 14→23, 14→19, 16→12 across 256→512 | **§33.5**; instrument `floorDiag --lane gallery --res 256,512` (the `ENGINE` column) |
 
 ### 0.1 Premise re-check of the four open issues (2026-08-23)
 
@@ -6170,3 +6171,297 @@ would sit between. Swin2SR lightweight through transformers.js was slower still 
   256-px colour traces (JavaScript heap out of memory at 8 GB — something retains across
   traces; not chased here) — run it one process per case, or per (case, size, upscaler) for
   the heavy five (gear-teeth, band-cross, letter-joins, nebula, petals).
+
+## 33. The area-floor family — census and counterfactual, measurement only (issue #37, Phase 0, 2026-09-06)
+
+Issue #37 is the one family the Phase-0 audit (`docs/absolute-px-audit.md`) classified ART
+by measurement and left untouched by CONTRACT: every floor keyed to `minRegionArea` (50px²
+at the default Despeckle dial of 25) compares a pixel AREA against an absolute number, and
+the user-facing dial promises exactly that ("absolute px², reads the same across engines",
+§12.5). The issue's own rules apply — §12's lesson is that the written hypothesis about
+these floors was falsified by the histogram, so: instrument first, witness second, contract
+decision last, and the decision is the owner's. This section is the first two steps. **No
+tracer change was made.** Every audit row was single-auditor and is re-verified in §33.1
+before it is used.
+
+### 33.1 The audit rows, re-verified
+
+| row | audit claim | measured here | verdict |
+|---|---|---|---|
+| `real[]` flat-interior floor | 0 / 80 / 176 / 922 flat px @128/192/256/512 for one authored colour (flute `#974827`) | per exact RGB: **19** / 80 / 176 / 922. Per LABEL @128 the figure is 0 because no label anchors on `#974827` at all — the §12.2 k-means starvation, not the floor | three of four verbatim; the 128 figure measured a different thing |
+| `modal[]` thin-feature floor | hairlines' fringe entries sit at exactly 50 vs floor 50 @256; 101/119 @512; 198/201 @1024 | `lowresDiag hairlines --res N`, PALETTE DECISIONS: @256 `#b83447` modal **50** → kept (protected), `#c45b6b` modal 50 → blend; @512 101 / 119; @1024 198 / 201 | verbatim |
+| `keepDistinctMinArea` anchor floor | 2796 / 586 / 287 / 94 @512/256/192/128 (flute `#f5a165`) | 2796 / 586 / 287 / 94 | verbatim |
+| `despeckleComponents` | bites ISOLATED small features; `checker` falsified as a witness | the census below. At 256 checker's cells are 16px² with flat3 = 4 each, so every one is spared by §20's evidence veto — and 992 of the 1,023 evidence-carrying sub-floor components in `lowresDiag --census --res 256` are checker's cells: the named instrument's 256 census is one fixture | confirmed, with that caveat |
+| `restoreErasedComponents` | never rescues a component under `minRegionArea`; footprint ∝ res | `pixels.length >= minArea` (paletteSegment.ts) — whole-component, absolute | confirmed by reading |
+| `mergeSmallRegions` (MS lane) | the segment.ts twin, "not on this path at all" (§20.1) | not on the flat PALETTE path — but the flat lane reaches the Mumford–Shah path through the engine gate, and which raster gets which engine is decided by `real[]` (§33.5, §0 #20) | confirmed; the consequence is larger than the row states |
+
+`lowresDiag.ts` itself has drifted from production since it was last synced (§20): its
+replayed `despeckleComponents` has no §20 evidence veto, its palette replay has no §27
+`fuseShadingTones`, and its DOC-BUILD section calls `tracePlanar` without the palette and
+raster (§14 contrast rank, §15 sub-pixel). Its `--census` stops at the INPUT of despeckle,
+so the veto does not affect it; the fuse does on shaded marks. Named, not fixed — the §20.2
+numbers were produced by the replay as it stands, and this section's own numbers come from
+the production code path below.
+
+### 33.2 The instrument: `floorDiag.ts`
+
+`src/devtest/floorDiag.ts` answers both questions per raster, on three lanes (`--lane
+tier2` = the seven cases of the @256 and @512 region lanes; `tier0` = the 22 flat tier-0
+fixtures; `gallery` = every mark in `examples/logos/`, rasterized on white at `--res`).
+
+**The census.** Per authored colour (the SVG's fills crossed with the raster, plus the
+paper; 33–34 gallery marks with CSS-class fills fall back to the raster's own solid inks,
+flagged): its 3×3 flat-interior count (the comparand of `real[]` per label and of the
+anchor floor per exact RGB — the same measurement) and its exact-RGB count (`modal[]`).
+Per 4-connected component of its ≥50%-coverage footprint (nearest authored colour):
+the pixel count `despeckleComponents` reads, and whether the component carries a 3×3
+block of its own hex — §20's evidence. Counted against the production floor AND the
+raster-relative one.
+
+**The counterfactual.** The issue's first candidate shape: keep the dial's number at 512
+and express the INTERNAL floors relative to the raster with the dial as the multiplier,
+`F_rel(w) = round(50 · (w/512)²)` — 3 @128, 7 @192, 13 @256, 50 @512, 200 @1024 (no
+clamp; production's `max(24, …)` is about loop litter, not these floors). Three recipes,
+each traced through the PRODUCTION pipeline and scored the region lane's way
+(`scoreRegions`: regions recovered, ink kept, plus Σ|kept − 1| over the scored regions as
+a distance-from-source term, since a "worst ink" gain can be over-painting):
+
+    A   anchor / real / modal at F_rel;  restore + despeckle at 50     <- the issue's shape
+    B   all five at F_rel                                              <- "the dial is a strength"
+    C   anchor / real / modal at 50;     restore + despeckle at F_rel  <- the complement, for attribution
+
+**How the split reaches production code without a tracer change.** `paletteSegment.ts`
+reads `opts.minRegionArea` in exactly five places, one per consumer. The diag writes a
+SHADOW copy to the OS temp dir with each read rewritten to a per-consumer override riding
+on the existing `paletteSegment` options spread (absent ⇒ the production value), and a
+shadow `index.ts` importing it; every other byte is the production source with its
+relative imports resolved to the real modules, so the shadow shares quantize / planar /
+beautify with the real tracer. Each rewrite must match exactly once or the run aborts.
+Fidelity, asserted rather than assumed: the shadow with no override is `hashDoc`-identical
+to the real `traceImage` on **154 / 154** traces (tier 2 at 128–512, tier 0 at 128–1024,
+a gallery sample at 256/512/1024), and at 512 — where every recipe equals production by
+construction — the tier-2 and tier-0 lanes traced all three recipes anyway: **29 / 29
+byte-identical**. A recipe whose final label map AND palette equal production's aborts
+before the fit and is reported as identical, so non-movers cost segmentation only.
+
+### 33.3 The census
+
+Columns: authored colours; under the real/anchor floor (flat3 < F); under the modal floor
+(exact px < F); footprint components; under the despeckle floor, of which without evidence
+(and, of those, ≥ 9px — big enough to hold a 3×3 block yet carrying none); colours whose
+EVERY component is under the floor.
+
+**Tier-2 region lane (7 cases)**
+
+| raster | F | colours | <real/anchor | <modal | comps | <despeckle (no-ev / no-ev ≥9px) | whole colour |
+|---|---|---|---|---|---|---|---|
+| 128 | 50 | 47 | 13 | 7 | 1,220 | 1,157 (1,148 / 13) | 8 |
+| 128 | 3 | 47 | 6 | 0 | 1,220 | 1,093 (1,093 / 0) | 0 |
+| 192 | 50 | 48 | 9 | 3 | 1,802 | 1,729 (1,717 / 13) | 3 |
+| 192 | 7 | 48 | 3 | 0 | 1,802 | 1,700 (1,700 / 0) | 0 |
+| 256 | 50 | 48 | 4 | 2 | 2,366 | 2,284 (2,278 / 5) | 2 |
+| 256 | 13 | 48 | 3 | 0 | 2,366 | 2,275 (2,275 / 2) | 0 |
+| 512 | 50 | 48 | 0 | 0 | 4,411 | 4,323 (4,321 / 17) | 0 |
+
+**Tier-0 flat fixtures (22 cases)**
+
+| raster | F | colours | <real/anchor | <modal | comps | <despeckle (no-ev / no-ev ≥9px) | whole colour |
+|---|---|---|---|---|---|---|---|
+| 128 | 50 | 73 | 10 | 0 | 3,068 | 2,924 (2,098 / 67) | 3 |
+| 128 | 3 | 73 | 3 | 0 | 3,068 | 985 (985 / 0) | 0 |
+| 192 | 50 | 94 | 5 | 0 | 4,043 | 3,775 (2,013 / 54) | 2 |
+| 192 | 7 | 94 | 2 | 0 | 4,043 | 1,947 (1,947 / 0) | 0 |
+| 256 | 50 | 94 | 1 | 0 | 4,597 | 3,539 (2,547 / 36) | 0 |
+| 256 | 13 | 94 | 1 | 0 | 4,597 | 2,517 (2,517 / 6) | 0 |
+| 512 | 50 | 155 | 6 | 0 | 7,237 | 5,090 (5,076 / 10) | 0 |
+| 1024 | 50 | 241 | 0 | 0 | 13,051 | 10,744 (10,744 / 18) | 0 |
+| 1024 | 200 | 241 | 12 | 0 | 13,051 | 10,763 (10,744 / 18) | 0 |
+
+**Gallery (152 marks)**
+
+| raster | F | colours | <real/anchor | <modal | comps | <despeckle (no-ev / no-ev ≥9px) | whole colour |
+|---|---|---|---|---|---|---|---|
+| 256 | 50 | 1,078 | 252 | 8 | 27,470 | 24,809 (24,614 / 643) | 5 |
+| 256 | 13 | 1,078 | 20 | 3 | 27,470 | 24,209 (24,181 / 210) | 1 |
+| 512 | 50 | 2,513 | 444 | 7 | 69,832 | 64,300 (63,906 / 1,754) | 13 |
+| 1024 | 50 | 6,809 | 1,797 | 92 | 163,580 | 150,489 (149,236 / 7,319) | 79 |
+| 1024 | 200 | 6,809 | 3,118 | 1,549 | 163,580 | 154,930 (150,629 / 8,712) | 1,308 |
+
+What the census says, before any trace:
+- **The sub-floor component population is the floor's intended prey.** 99%+ of the
+  components under the despeckle floor carry no evidence and are 1–8 px: nearest-colour
+  footprint shrapnel along AA edges. The evidence-carrying sub-floor components — the
+  small REAL features §20 exists for — are a handful per lane (tier 2 @256: 6 of 2,284;
+  the two whole colours are violin's `#ffec56`, 22px, and parachute's `#26eafc`, 47px).
+  The "no-evidence ≥ 9px" column is the ambiguous band (thin or fringe); it is 0.2–2% of
+  the population and shrinks, not grows, under the raster-relative floor.
+- **The per-colour floors bite the smallest authored colours, and only below 256.**
+  Tier 2 @256: 4 of 48 colours under the real floor, 2 under modal; @192: 9 / 3; @128:
+  13 / 7; @512: none. Whether that is a defect is what the counterfactual measures.
+- **The gallery's "colours" are not all authored flats.** 33–34 marks fall back to
+  raster-derived colour sets, and many marks carry gradients or posterized shading, so the
+  1024 rows' 3,118 colours under a 200px real floor and 1,308 whole colours under a 200px
+  despeckle floor are dominated by ramp tones. Read those rows as an upper bound.
+- **The region gate cannot see this family at 256.** `scoreRegions` counts a region at
+  ≥ max(16, 0.05% of the raster) flat px — a RASTER-RELATIVE floor — so the colours that
+  fall under the absolute floors at 256 are exactly the ones it stops scoring there
+  (violin `#ffec56` has 5 flat px @256; parachute `#26eafc` 2). They are not scored @512
+  either (violin: 6 true regions of 7 colours).
+
+### 33.4 The counterfactual
+
+**Tier-2 region lane.** Σ Δregions with cases up/down; "dist" is Σ|kept − 1| nearer /
+farther and its total; Δnodes summed over movers.
+
+| raster | F_rel | recipe | changed | Σ Δregions (↑/↓) | dist nearer/farther, ΣΔ | Σ Δnodes | movers |
+|---|---|---|---|---|---|---|---|
+| 128 | 3 | A | 4/7 | **+1** (1/0) | 3/0, −108.7pp | +14 | parachute, beverage-box, pencil, flute (+1: `#974827`, 19 flat px, painted `#893925` ΔE 8.0 in P) |
+| 128 | 3 | B | 5/7 | +1 (1/0) | 3/0, −146.6pp | **+520** | the same plus violin |
+| 128 | 3 | C | 4/7 | 0 | 4/0, −27.6pp | **+458** | violin, parachute, pencil, flute |
+| 192 | 7 | A | 4/7 | **+1** (1/0) | 2/1, −82.6pp | +36 | violin, parachute, beverage-box, flute (+1: `#d27653`, 23 flat px, painted `#fea069` ΔE 17.4 in P) |
+| 192 | 7 | B | 4/7 | +1 (1/0) | 3/1, −128.8pp | +90 | the same |
+| 192 | 7 | C | 2/7 | 0 | 2/0, −33.3pp | +81 | violin, parachute |
+| 256 | 13 | A | 2/7 | 0 | 2/0, −11.2pp | 0 | violin, parachute |
+| 256 | 13 | B | 2/7 | 0 | 2/0, −12.4pp | +22 | the same |
+| 256 | 13 | C | 2/7 | 0 | 1/0, −3.3pp | +20 | the same |
+| 512 | 50 | A/B/C | 0/7 | 0 | — | 0 | control: traced, byte-identical |
+
+The @256 lane — the gate that "will move" per the issue — does not move under any recipe.
+What A does there: it admits blend clusters as real (violin `+#b7958a`; parachute `+#fad16c
+#a15147`, dominant 9→10, entries 10→12); none becomes a doc item, and ink moves a few pp
+both ways (violin `#e1ada0` 94.2 → 101.4%; parachute `#635994` 97.2 → 93.5%, `#00a6ed`
+97.5 → 100.0%). Below 256 A recovers exactly the dropped authored colour per case the
+census predicted, and B/C's Δnodes are the despeckle floor letting shrapnel through.
+
+**Tier-0 flat fixtures.**
+
+| raster | F_rel | A: changed / Σ Δregions / Σ Δnodes | B | C |
+|---|---|---|---|---|
+| 128 | 3 | 5/22 / 0 / 0 — blend entries admitted (aa-seam +3, gear-teeth +1, letter-joins +1, ring-cross +2, petals +1) | 13/22 / 0 / **+511** (peak-drop +188, bar-caps +116, acute-counter +64, hairlines +53) | 11/22 / 0 / +481 |
+| 192 | 7 | 3/22 / 0 / 0 | 8/22 / 0 / +174 | 6/22 / 0 / +174 |
+| 256 | 13 | 1/22 (aa-seam) / 0 / 0 | 3/22 / 0 / +20 | 2/22 / 0 / +20 |
+| 512 | 50 | 0/22, traced identical | 0/22 | 0/22 |
+| 1024 | 200 | 3/22 / 0 / 0 — blend entries **removed** (aa-seam `−#b79d68 #4fa8a2 #85aa93`, gear-teeth `−#a3a3a8`, ring-cross `−#f3ecde`) | 3/22 / 0 / 0 | 0/22 |
+
+**Gallery.**
+
+| raster | F_rel | recipe | changed | Σ Δregions (↑/↓) | engine flips | Σ Δnodes |
+|---|---|---|---|---|---|---|
+| 256 | 13 | A | 19/152 | −37 (5/3) | **2** | +30 |
+| 256 | 13 | B | 48/152 | −37 (5/3) | 2 | **+1,339** |
+| 256 | 13 | C | 36/152 | 0 (0/0) | 0 | **+1,466** |
+| 512 | 50 | A/B/C | 0/152, by construction | | | |
+| 1024 | 200 | A | 14/152 | −23 (0/1) | 0 | −49 |
+| 1024 | 200 | B | 28/152 | −23 (0/1) | 0 | −876 |
+| 1024 | 200 | C | 23/152 | 0 | 0 | −771 |
+
+Every recipe-A mover @256, so the −37 can be read (P = production; "palette" = entries
+added/removed):
+
+| mark | P regions | P worst ink | Δregions | Δworst ink | dist Δ | Δnodes | palette | what |
+|---|---|---|---|---|---|---|---|---|
+| bing | 59/66 | 3.8% | **−28** | −3.6pp | +1,466pp | −96 | +12/−13 | ENGINE palette→ms, dominant 14→16 (§33.5) |
+| ups-wm | 48/63 | 1.0% | **−19** | −1.0pp | +2,871pp | +181 | +28/−10 | ENGINE palette→ms, dominant 14→18 |
+| mercedes-benz | 5/5 | 74.4% | −1 | −62.5pp | +104.6pp | −50 | +0/−1 | `#333f47` (70px, ΔE 5.0) lost — the entry disappears |
+| microsoft-defender | 30/54 | 0.0% | +6 | 0.0pp | −282.7pp | +13 | +1/−0 | posterized ramp; 6 more bands painted within ΔE 4 |
+| proton-mail | 13/17 | 6.8% | +2 | +44.1pp | −71.1pp | +1 | +3/−3 | `#aa8eff` 43px, `#ae91ff` 29px recovered |
+| parcel | 13/14 | 0.4% | +1 | +60.6pp | −89.9pp | +18 | +1/−0 | `#964e23` 37px recovered |
+| tripadvisor | 4/5 | 0.0% | +1 | +86.0pp | −88.1pp | 0 | +2/−0 | `#ef6a45` 18px recovered (was painted `#fcc40f`, ΔE 59.9) |
+| wikipedia | 2/3 | 19.2% | +1 | +31.2pp | −57.9pp | −6 | +1/−0 | `#393939` 26px recovered |
+| fly | 2/3 | 22.4% | 0 | −21.9pp | +22.0pp | −62 | +2/−4 | four purple entries → two greys, items 7→3: a repaint |
+| canva | 5/5 | 100.9% | 0 | −7.7pp | −76.2pp | +21 | +1/−0 | `+#08bbce` |
+| nbc | 8/8 | 95.9% | 0 | +2.0pp | −5.3pp | 0 | +2/−0 | `+#f2bfd2 #9f9f9f` (blends) |
+| olympic-rings | 6/6 | 96.7% | 0 | +2.2pp | −2.3pp | 0 | +1/−0 | `+#7fd2a8` |
+| google-drive | 7/7 | 96.9% | 0 | +1.1pp | −1.5pp | 0 | +1/−0 | `+#20b65e` |
+| google-classroom | 59/59 | 99.8% | 0 | +0.5pp | −1.7pp | +4 | +1/−0 | `+#b9dccb` |
+| mercado-pago | 3/3 | 98.7% | 0 | −1.2pp | +1.8pp | −4 | +1/−0 | `+#102498` |
+| chrome | 5/5 | 99.2% | 0 | −0.1pp | +1.3pp | 0 | +2/−0 | `+#feefc4 #74bb88` (blends) |
+| abacatepay, whatsapp, yelp | — | — | 0 | ≤ 0.6pp | ≤ 1.7pp | ≤ +6 | +1/−0 | one blend entry each |
+
+The 29 marks that move under B but not A (bmw +206 nodes, lua +202, signal +170, lego
++104, fedex-wm +83, hack-the-box-wordmark +52, …) are the despeckle floor alone: not one
+of them changes a region or worst ink by more than 5.5pp, and C's 36 movers sum to
+Σ Δregions 0 at +1,466 nodes.
+
+Every recipe-A mover @1024 (F_rel 200):
+
+| mark | P items 256/512/1024 | A items @1024 | Δregions | dist Δ | Δnodes | entries removed |
+|---|---|---|---|---|---|---|
+| netflix | 8/4/7 | 4 | **−23** (34/35 → 11/35) | +1,901pp | −25 | `#9c040e #90030d #97040e #83020c` (+`#d88287`) |
+| disney | 3/2/8 | 3 | 0 | +8.4pp | −106 | `#0000fe #5e9aff #cbf5ff #a6e0ff #80c0ff` |
+| lg | 9/9/11 | 10 | 0 | +20.7pp | −4 | `#88023d` |
+| google-classroom | 5/7/11 | 10 | 0 | +16.9pp | −12 | `#f0ab03` |
+| wikipedia | 2/6/13 | 12 | 0 | +4.1pp | +94 | `#606060` |
+| instagram | 7/7/11 | 10 | 0 | 0.0pp | +18 | `#b83284` |
+| nbc | 8/8/10 | 9 | 0 | −0.4pp | −4 | `#fcc94c` |
+| tiktok | 4/5/5 | 4 | 0 | −0.5pp | −4 | `#bfbfbf #7f4053` |
+| fly | 7/3/10 | 9 | 0 | −0.6pp | −8 | `#c0c0c0` |
+| olympic-rings | 6/6/6 | 6 | 0 | +2.4pp | +4 | `#bfe8d3 #fcd6d7 #9fddbd` |
+| chrome, lego, mercado-pago, shell | unchanged | unchanged | 0 | ≤ 0.3pp | ≤ 2 | one or two pale tints each |
+
+**None of the 26 entries A removes at 1024 is an authored fill** (each hex grepped against
+its SVG: zero hits), and 8 of the 14 marks carry gradients. Production's item count on
+these marks GROWS with the raster while the authored geometry does not — at 1024 a wide
+AA band or a shading tone has ≥ 50 full 3×3 blocks, clears the absolute `real[]` floor, and
+is emitted as a region (the §0 #3 sliver family, and the §26/§27 tone family, one raster
+up). A at 200 prunes them back toward the 512 count. The one scored loss, netflix's −23
+"regions", is a gradient-shaded wordmark whose 35 true regions are ramp bands (worst ink
+0.1% in production already) — the flat-art metric on gradient art that `scoreRegions`'
+own doc comment warns about; not a flat-region loss.
+
+### 33.5 What the counterfactual found that the issue did not state
+
+1. **The flat lane's ENGINE is chosen per raster today** (§0 #20). `dominantColors` counts
+   entries with share ≥ `minShare` OR `real[i]`, `real[i]` grows with the raster, and
+   `FLAT_PALETTE_MAX_COLORS` is 14: with NO override, six gallery marks trace on the
+   palette path at one raster and on Mumford–Shah at another (auth-js, bing, kotlin,
+   proton-vpn, ups-wm: palette @256 → MS @512, dominant 14→22 / 14→16 / 12→15 / 14→23 /
+   14→19; swc the reverse, 16→12). So recipe A's two large "regressions" @256 — bing −28,
+   ups-wm −19 — are the engine gate at 256 agreeing with what production already does at
+   512 (bing 72/140 regions on MS there, ups-wm 85/118): a lower `real[]` floor moves the
+   engine boundary, in the direction of consistency for those two, and any decision about
+   the floors is also a decision about the gate.
+2. **Below 256 the internal floors ARE the killer for the smallest authored colours, and the
+   raster-relative floor recovers them.** flute `#d27653` @192 and `#974827` @128 (one
+   region each, both dropped by share once `real[]` fails); gallery @256: parcel 37px,
+   tripadvisor 18px, wikipedia 26px, proton-mail 43 + 29px. §12.2's finding stands —
+   at 256 on the drivers the floors were not the killer — and it was a statement about
+   256: one octave lower they are.
+3. **The price below 512 is blend clusters admitted as "real"**: 13 of the 19 A-movers
+   @256 gain one or two palette entries that are not authored colours; nearly none
+   becomes an item, ink moves ≤ 2pp. One real loss (mercedes-benz `#333f47`, 70px) and
+   one repaint (fly) are in the table above and are not attributed here. **Above 512 the
+   absolute floor is TOO LOW for its own purpose**: it admits AA bands and shading tones
+   as real (the item counts in the 1024 table), and the raster-relative floor removes
+   them — the same ART law, read from the other side.
+4. **Scaling `despeckleComponents` / `restoreErasedComponents` (B, C) buys nothing and
+   costs shrapnel at every raster on every lane**: 0 region gains anywhere; +1,339 /
+   +1,466 nodes on the gallery @256, +511 / +481 on tier 0 @128 (peak-drop's seam
+   control +188, bar-caps +116 — §20.3's false-positive side, and §12.5's 8-connectivity
+   lesson in another form); at 1024 a 200px² despeckle floor removes 771–876 nodes with
+   no region or worst-ink change. Shrapnel is a per-pixel phenomenon, constant in native
+   px — the §30/§31 law for a per-pixel estimator, here for a per-pixel broom.
+5. **The gated lanes cannot arbitrate this family.** The @256 and @512 region lanes read
+   0 Δregions under every recipe (§33.3's last bullet says why: the gate's own region
+   floor is raster-relative and drops the same colours the absolute floors drop). The
+   numbers that see the family are the per-colour census and the gallery.
+
+### 33.6 What the numbers say per consumer — and what is the owner's
+
+- **`despeckleComponents` + `restoreErasedComponents`: SENSOR by measurement.** The
+  px² contract the dial promises is also the right unit for the broom (finding 4). The
+  audit's "ART by measurement" for this row rested on dial strength in ARTWORK units
+  falling as 1/res², which is true and turned out not to matter: the things the broom
+  sweeps do not scale with the artwork either.
+- **`real[]` / anchor / `modal[]`: ART by measurement, both ways** (findings 2 and 3),
+  with `dominantColors` — the engine gate — riding on `real[]` (finding 1).
+- So the issue's "px² vs strength" is not one decision about one dial: the family splits
+  into a per-pixel half and a per-feature half at exactly the boundary the shadow's five
+  overrides draw. What is the owner's to decide, and is NOT decided here: whether the
+  internal floors get a raster-relative unit (and what the user-visible dial then means
+  for them), what happens to the engine gate that already flips per raster without any
+  change, and whether the two side effects named in finding 3 are acceptable or need
+  their own evidence rule (a tolerant flat-interior test — §20.4's residue — is the
+  obvious candidate on both sides). `floorDiag` reproduces every number above from the
+  production source on each run; the run outputs of 2026-09-06 (`--json`) were kept only
+  in the session scratchpad.
