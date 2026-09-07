@@ -39,7 +39,7 @@ import { ensureImageData } from '../src/devtest/nodeHarness.ts'
 import { decodePng } from '../src/devtest/png.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from '../src/devtest/svgGround.ts'
-import { scoreGeometry, scoreRegions, circleRecovery } from '../src/devtest/geomScore.ts'
+import { scoreGeometry, scoreRegions, circleRecovery, scoreBorderBand, makeVisibleAt } from '../src/devtest/geomScore.ts'
 import { scoreDoc } from '../src/devtest/scoreboard.ts'
 import {
   GATED_CORPUS,
@@ -206,6 +206,13 @@ async function runCase(
   const gtRaster = toRasterSpace(gt, img.width)
   const docSets = doc.items.filter((i) => i.kind === 'path' && i.visible !== false).map((i) => i.subPaths)
   const cr = res === RES && !c.gradients ? circleRecovery(gtRaster, docSets, img.width, img.height) : null
+  // §34's border band, @512 only for §23's and §24's reason: every span in the corpus halves
+  // at 256, so the same relative error is half the pixels there and the floor would mean a
+  // different thing. Flat art only — the gate declares itself n/a otherwise, and on gradient
+  // art the interior denominator is posterization banding rather than geometry.
+  const bb = res === RES && !c.gradients
+    ? scoreBorderBand(gtRaster, docSets, img.width, img.height, makeVisibleAt(img))
+    : null
   const circle = cr
     ? { circles: cr.circles, circleSpread: cr.spread, circleSpreadMax: circleSpreadMaxFor(c.name) }
     : {}
@@ -216,6 +223,7 @@ async function runCase(
     ...precision,
     ...circle,
     paintMean: paint?.meanDeltaE, paintP95: paint?.p95DeltaE,
+    borderChamfer: bb?.chamfer, borderInterior: bb?.interior, borderSamples: bb?.n,
     // Ink kept (§0 #14): region recovery is a MEDIAN and only flips past 50% loss, so a
     // region can pinch to a sliver with every other gate green. Flat art only.
     worstInk: r.worstInk,

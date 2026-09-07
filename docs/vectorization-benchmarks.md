@@ -36,6 +36,7 @@ guardrails):
 | 18 | **Near-colour flats fused into a gentle "ramp"** (gradient lane) — the residue of §26. Two flat objects whose colours differ by a small Oklab step are still unioned by the Step-3c field merge and painted as one shallow gradient, because at the veto's window scale (1/24 of the fitted axis) a step of ≤ 0.09 is indistinguishable from a real steep ramp piece: the honest reunites in gradient-authoring art reach 0.078 (`logo-firefox`), the fakes in this family read 0.019–0.086, and the census found no scale-W separation. §26 raised the catch rate of the flat∪flat fusion family from 0 to 41 of 60 labelled rows; these are the 19 it does not reach. The product exposure is bounded: `suggestGradients` keeps flat art out of the lane, so this is the mixed-art case only | `flute-flat` (A/B fixture lane, ungated: 16 of its 19 flat∪flat unions read ≤ 0.080), `logo-chrome` (gallery, 0.086), `seam-corner` (0.030), `bloom` (0.019) | fakes 0.019–0.086 vs the real maximum 0.078 — no threshold separates them | **§26.6**; instrument `stepRampDiag --census` (labelled by the SOURCE's authored paint) |
 | 17 | **A circle's whole boundary sits off its authored radius by a near-constant amount** — a BIAS, not a wobble: the trace is perfectly round and in the wrong place. Found by §24's circle lens on the day it landed, and only because that lens reports the mean residual SEPARATELY from the spread — the raw p95 reads 0.81 and looks exactly like the ring wobble, while the co-circularity spread is 0.03. Every other gate is blind: 0.8px is far inside chamfer/p95, and the shape is still round, so no corner or region lens sees it either. NOT a size law and not yet explained — the two worst circles are the same size and disagree in SIGN. Untouched by §24, whose family pass only reaches circles cut into arcs | `acute-counter` (tier 0, gated, passes — the gate is on spread, not bias) | seven authored circles read |bias| 0.09–**0.79**px: r=40.5 at **−0.79** (traced inside) against r=39.5 at **+0.19** (outside) and r=58.6 at +0.16 | **§24.3**, **§25.3**; instrument `ringDiag --circles` (the `bias` column, and since §25 the `centre` / `round` columns — a circle in the wrong PLACE is a third term `spread` folds in, and on `olympic-rings` it is now the whole residue: measured identical under an algebraic and a geometric fit, so the evidence is displaced and no estimator recovers it) |
 | 19 | **The junction re-seat moves a junction AWAY from its authored crossing** — the residue of §29 after the through-pair veto: 16 of 62 gallery re-seats on scorable crossings (128 marks, 512/1024/2048) still land further from the crossing than the lattice corner they left. Three mechanisms, none of them the certification constant issue #39 was filed on: a cap-skip that drops a REAL short terminal (an authored r=6 curve, 11.6 px at 1024) and extrapolates the line beyond it to the junction — audit recipe 10, `CAP_MAX`'s zero-margin populations; two huge-radius circle arms (r≈535 × r≈1104) whose intersection is ill-conditioned; and stub arms of 8 native px paired at a 14° angle. Visible on the mark at 1×: the junction sits 1.8–3.1 px off a crossing the lattice had within 0.3 | `logo-brave-browser` @512 (258,474) and @1024 (259,474) artwork px (gallery, ungated — the §29 gate covers the witness junction only); the answer sheet is `authoredCrossings` | 3.12 px off vs 0.29 lattice (C+C @512); 1.78 vs 0.18 (cap-skip @1024); gallery-wide 16 / 62 | **§29.4**; instruments `reseatDiag --lanes` (census, `--json`) and `reseatSelect --worse` (offline, per pair) |
+| 9b | **The border band is worse than the case's own interior, and the §15 sub-pixel pass is part of why** — GATING HOLE CLOSED 2026-09-07 (§34): `scoreBorderBand` scores the TRANSVERSAL part of the band against authored truth and `evaluateTruthGates` gates it at `band ≤ 2.0 · max(interior, 0.15)`, flat art @512, with `border-cross` authored for the lane. Two of the issue's own claims fell on the way: its nominated fixture witness was mostly INSTRUMENT (`wedge-counter` 4.70× → 1.23× once the lens stopped dropping segments on the far canvas edge and stopped scoring authored art outside it), and its stated cause — "the border stays on the lattice while everything adjacent went sub-pixel" — is REFUTED by the one-flag counterfactual: the pass is active there and makes the border WORSE on 4 of 9 cases while improving the interior on nearly all. The measured mechanism is that `bilin` clamps out-of-raster samples instead of declaring them missing, which triples `contrast` refusals and drops anchor-flatness refusals to a third of the interior rate — the guard that should be strictest where the window is worst is the one the clamp disarms. `subpixelWindowGuard` closes that half. WHAT REMAINS: `letter-joins` reads 0.21 band-missed against a 0.08 lattice with its own band points no longer displaced, so the residue is downstream of the estimator — §30's "the loss is in the FIT" is the next reading | `border-cross` (tier 0, **gated**, authored for this — passes at 83% of its limit), `letter-joins` 2.37× and `aa-seam` 1.71× (gated, pass); `langchain` 0.41 vs 0.34 and `boeing-wm` 0.54 vs 0.50 (gallery, ungated, FAIL the bar) | band ÷ own interior: fixture median 0.78×, max 2.37×; gallery max 2.36× over 42 border-touching marks | **§34**; instrument `borderDiag` (`--worst`, `--outcomes`, `--keepoff`), scorer `geomScore.scoreBorderBand` |
 | 20 | **The flat lane's ENGINE is chosen per raster** — `dominantColors` (paletteSegment.ts) counts the palette entries with share ≥ `minShare` OR `real[i]`, and `real[i]` is a 3×3 flat-interior count against the absolute 50px² floor, so the SAME art clears the `FLAT_PALETTE_MAX_COLORS` (14) gate at one raster and falls to the Mumford–Shah segmenter at another. The audit had named the consequence ("counting into `dominantColors`, which selects the engine"); §33's census is the first time it was witnessed. No lane traces one case through the engine gate at two rasters, so nothing gates it. | gallery, production, no override: `auth-js`, `bing`, `kotlin`, `proton-vpn`, `ups-wm` trace on the palette path @256 and on Mumford–Shah @512; `swc` the reverse — 6 of 152 marks, all many-colour art sitting at dominant 12–14. No fixture (ungated). | dominant 14→22, 14→16, 12→15, 14→23, 14→19, 16→12 across 256→512 | **§33.5**; instrument `floorDiag --lane gallery --res 256,512` (the `ENGINE` column) |
 
 ### 0.1 Premise re-check of the four open issues (2026-08-23)
@@ -52,8 +53,9 @@ the instruments named are new and live in `src/devtest/`.
 | **#14** CHORD_MAX_LEN | dead above ~1024 on its own driver case (32.9px @512 → 130.7px @2048 > 80) | **holds** — `chordDiag`: gradient-flat has 3 candidates at every raster; 1 straightened @512 (len 32.0) and @1024 (65.2), then **0 straightened / 3 too-long @2048** (131.1). Counterfactual `--cap 400` recovers exactly the 1. **FIXED 2026-09-05 (§28)**: the cap is now the chord's own evidence (≤ the two line arms summed); the gallery census showed the absolute 80 separated nothing in 152 marks × 3 rasters |
 | **#14** coarse-end tail | 4 scale KNOWN_DEFECTS remain (overlap, aa-seam, petals, band-cross) | **holds** — all four still listed, gate 7/7 green |
 | **#10** rings | 69 edges / 46 junctions @512; §1d / §14 / §17 all aim here and none holds | **held; now CLOSED** (§24). The premise was right and §0.1's own explanation was half wrong — see the correction below |
-| **#9** border | `collectBoundary` drops every query within BORDER_EPS 1.5px; no gate can see the border | **holds** — the exclusion is intact and two-sided. `borderDiag` measures the hole at **4,489 transversal band samples** on the fixtures alone |
-| **#9** symptom | "odd corners and ragged edges", witness `logo-mastercard` | **half REFUTED on the witness** — see below |
+| **#9** border | `collectBoundary` drops every query within BORDER_EPS 1.5px; no gate can see the border | **held; CLOSED 2026-09-07 (§34)** — the exclusion was intact and two-sided, and `borderDiag` measured the hole at **4,489 transversal band samples** on the fixtures alone. The exclusion STAYS; what the gate adds back is the transversal part only |
+| **#9** symptom | "odd corners and ragged edges", witness `logo-mastercard` | **REFUTED twice.** The corner half fell in 2026-08-23's re-check (below). The distance half's own nominated witness then fell in §34: `wedge-counter`'s 4.70× was mostly two artifacts IN THE LENS and reads 1.23× once they are out |
+| **#9** cause | "§15 skips border chains, so the border stays on the lattice while everything adjacent went sub-pixel" | **REFUTED** (§34.2) — the one-flag counterfactual has the pass ACTIVE at the border and WORSE than the lattice there on 4 of 9 cases, while it improves the interior on nearly all. The rule the issue quotes holds out EXT-sided CHAINS; the boundary that meets the frame is an interior chain whose last points lie in the band |
 | **#15** knife edge | shaded tones ΔE 4.44–11.09 / RGB 13.5–34.4; flute-flat's authored pair at ΔE 4.5 must survive | **holds** — tones reproduce exactly (4.44 / 6.80 / 11.09), and `fluent-flute-flat` passes region recovery @512 today (truth gate 73/73), so it is a live constraint, not an already-failing one. **CLOSED 2026-09-05 (§27)** on the axis the issue predicted: WHERE the tones meet, not how far apart they are |
 | **#15** "no gated case exists" | author one first | **held; now closed** — `shaded-ink` authored, gated, RED (2026-08-23); **green since §27** |
 
@@ -6465,3 +6467,173 @@ own doc comment warns about; not a flat-region loss.
   obvious candidate on both sides). `floorDiag` reproduces every number above from the
   production source on each run; the run outputs of 2026-09-06 (`--json`) were kept only
   in the session scratchpad.
+
+
+---
+
+## 34. The border band: a lens with two artifacts, and a pass that was never inert there (issue #9, 2026-09-07)
+
+**One line.** The zone is now gated — `scoreBorderBand` + the `border-cross` fixture close
+#9's deliverable 1 — and along the way the issue's own witness ranking and its stated cause
+both fell: two artifacts in the instrument were carrying most of the worst case's number, and
+the §15 sub-pixel pass turns out to be ACTIVE at the border and to make it worse, not absent
+from it as the issue assumed.
+
+### 34.1 The instrument was wrong twice, in the same direction
+
+`borderDiag` (built for the 2026-08-23 premise re-check) nominated `wedge-counter` at
+**4.70×** its own interior as "the case a fix should be developed against". It is not.
+
+| | `wedge-counter` band chamfer | ratio |
+|---|---|---|
+| as published, 2026-08-23 | 0.72 px | **4.70×** |
+| after the spatial-index fix | 0.39 px | 2.53× |
+| after the off-canvas hold-out as well | **0.19 px** | **1.23×** |
+
+**Artifact 1 — the index dropped the far canvas edge.** The lens carried its own copy of the
+uniform segment grid, and its copy clamped only the HIGH end of each segment's cell range:
+at w=512 and cell 8, a segment lying on x=512 gets `x0 = floor(512/8) = 64` and
+`x1 = min(cols-1, 64) = 63`, so `x0 > x1` and the insert loop never runs. The segment it
+silently dropped is the traced background frame's own run along x=w and y=h — precisely the
+boundary a border query is nearest to. Band samples near the far edges therefore measured the
+distance to the NEXT boundary. Interior queries never notice, which is why it survived: the
+lane it corrupts is the only lane it touches. `geomScore`'s own grid clamps both ends and was
+never affected; the fix is to delete the copy, and `nearestTo` now exports the real one.
+
+**Artifact 2 — authored art outside the canvas was scored as missed.** Art is not always
+contained by its own viewBox: `wedge-counter`'s tip runs to x=257.09 of a 256 box, and
+`toRasterSpace` does not clip. Those samples arrive with a NEGATIVE distance to the near edge,
+which the first draft's `d <= BAND` admitted. The tracer cannot draw outside the raster, so
+every one of them is "missed" by construction at a distance that grows with the bleed. This is
+the exact mirror of the background-frame artifact the border exclusion exists for — reached
+from the authored side instead of the traced one, and it is the THIRD time this lens has been
+caught re-admitting framing (the corner half fell the same way in §0.1). Both hold-outs are
+now in the shared scorer, and `borderDiag --keepoff` keeps the counterfactual reproducible.
+
+The gallery ranking, by contrast, barely moved (`langchain` 2.38 → 2.37×, `boeing-wm` 2.12×,
+`visa` 1.82×): both artifacts need art that touches the exact far edge or bleeds past the
+viewBox, and the effect is diluted across a mark with hundreds of band samples. So the
+**named witness stands mid-pack and the nominated fixture witness was mostly instrument** —
+`logo-mastercard` 1.40×, and `wedge-counter` 1.23×, against a fixture median of 0.78×.
+
+### 34.2 The issue's stated cause is refuted: the pass is not absent at the border
+
+#9 reads the symptom as a contrast effect — "sub-pixel displacement explicitly skips border
+chains, so border zones stay on the integer lattice while everything adjacent went sub-pixel."
+The one-flag counterfactual says otherwise. Scored on the MISSED lane, whose queries are the
+authored samples and therefore a population fixed by the art (the traced side's queries move
+with the trace, so a shift there can be a change of sample SET rather than of accuracy):
+
+| case | band missed, §15 ON | §15 OFF (lattice) | interior ON | interior OFF |
+|---|---|---|---|---|
+| `letter-joins` | 0.21 | **0.08** | 0.09 | 0.09 |
+| `fly` (gallery) | 0.46 | **0.32** | 0.21 | 0.25 |
+| `boeing-wm` (gallery) | 0.90 | **0.79** | 0.25 | 0.27 |
+| `langchain` (gallery) | 0.37 | 0.36 | 0.17 | 0.20 |
+| `aa-seam` | 0.26 | 0.26 | 0.14 | 0.12 |
+| `wedge-counter` | 0.22 | 0.23 | 0.15 | 0.20 |
+| `logo-mastercard` (gallery) | 0.32 | 0.33 | 0.23 | 0.27 |
+| `seam-corner` | **0.13** | 0.17 | 0.22 | 0.27 |
+| `visa` (gallery) | **0.08** | 0.13 | 0.18 | 0.21 |
+| **mean over the nine** | **0.328** | **0.297** | **0.182** | **0.209** |
+
+Read the last row. Across the same nine cases the pass improves the INTERIOR by 13%
+(0.209 → 0.182) and degrades the BORDER by 10% (0.297 → 0.328) — and the split is not
+symmetric case by case either: where it loses it loses big (`letter-joins` +163%, `fly` +44%,
+`boeing-wm` +14%) and where it wins at the border it wins by 0.01–0.05px. The pass is not
+skipping the border and leaving a visible contrast behind; it is displacing points there and
+displacing them worse than the lattice it replaced. The chain-level rule the issue quotes is
+real but narrow: it holds out EXT-sided chains, and the boundary that actually meets the frame
+is an INTERIOR chain whose last points happen to lie in the band.
+
+### 34.3 The mechanism: `bilin` clamps instead of reporting missing data
+
+Every sample the §15 estimator takes lies on the chain normal — the two pure-colour anchors at
+±FAR (1.75px), the flatness probes at ±(FAR+1), the blend samples at ±NEAR. `labelAt` returns
+EXT outside the raster and the far-anchor guard refuses on it; `bilin` **clamps** and says
+nothing. Near the canvas edge that silently changes what two of the three guards mean, in
+opposite directions. Census over the tier-0 fixtures, every interior chain point binned by its
+distance to the edge, with the guard OFF (the state the issue describes):
+
+| outcome | ≤1px | 1–2px | 2–3px | 3–6px | interior |
+|---|---|---|---|---|---|
+| `moved` | 4% | 9% | 9% | 11% | **31%** |
+| `label-left` + `label-right` | **21%** | 1% | 0% | 0% | 1% |
+| `contrast` | 13% | **30%** | **31%** | **31%** | 8% |
+| `flat-left` + `flat-right` | 2% | 3% | 3% | 2% | **8%** |
+| — total points — | 271 | 292 | 291 | 869 | 168,328 |
+
+Two readings, and the second is the load-bearing one. `contrast` refusals TRIPLE near the edge
+because two anchors that have clamped toward the same border pixels read the same colour, so a
+real edge is declined. And anchor flatness — the guard that exists to catch an anchor which
+carries its region's LABEL but never its pure colour — fires at a THIRD of its interior rate,
+because it compares a clamped anchor against a clamped probe and reads ~0. The one guard that
+should be strictest where the window is worst is the one the clamp disarms.
+
+### 34.4 The fix, and what it is worth
+
+`subpixelWindowGuard` (planarFit, default true): a chain point whose ±(FAR+1) window is not
+fully inside the raster has no profile to read, so it stays on the lattice — the same answer,
+for the same reason, that an EXT-sided chain already gets. The samples are colinear, so one
+convex test on each end covers the whole window.
+
+| case | band HEAD → guard | missed HEAD → guard | ratio HEAD → guard |
+|---|---|---|---|
+| `visa` (gallery) | 0.32 → **0.22** | 0.08 → 0.10 | 1.77× → **1.33×** |
+| `fly` (gallery) | 0.36 → **0.32** | 0.46 → **0.33** | 1.76× → **1.59×** |
+| `border-cross` (fixture) | 0.27 → **0.25** | 0.29 → **0.27** | 1.99× → **1.84×** |
+| `logo-mastercard` (gallery) | 0.34 → 0.34 | 0.32 → 0.32 | 1.45× → 1.40× |
+| `langchain` (gallery) | 0.41 → 0.41 | 0.37 → 0.36 | 2.38× → 2.37× |
+| `boeing-wm` (gallery) | 0.53 → 0.54 | 0.90 → 0.90 | 2.12× → 2.13× |
+| `letter-joins` / `aa-seam` / `seam-corner` / `wedge-counter` | unchanged to 2dp | unchanged | unchanged |
+| **mean over the ten** | **0.302 → 0.287** | **0.324 → 0.310** | |
+
+`visa` is the one to read carefully, because its headline gain is on the SPURIOUS side (0.35 →
+0.24) while its authored-side lane moves the wrong way by 0.02 and its band sample count falls
+87 → 65 — the traced boundary in its band changed shape, so the two lanes are answering
+slightly different questions there. `fly` and `border-cross` gain on both lanes, which is the
+cleaner evidence.
+
+It is a partial fix and the table says so: two gallery marks gain, two are a wash, and
+`letter-joins` (2.37×, missed 0.21 against a lattice 0.08) is untouched — its band points are
+not being displaced badly, so something downstream of the estimator is moving them. §30's
+finding on the coarse lanes is the obvious next reading: what the border loses may be in the
+FIT, where a curve fitted to a displaced interior extrapolates into a lattice-pinned terminal.
+That is the residue, and it is now a red number in a gated lane rather than something you can
+only see by eye.
+
+### 34.5 The gate, and why 2.0
+
+`geomScore.scoreBorderBand` scores only the TRANSVERSAL part of the band (boundary descending
+INTO the edge, which has authored truth), holding out the frame's own parallel run, the four
+canvas corners and off-canvas art. `evaluateTruthGates` reads it as
+`band ≤ 2.0 · max(interior, 0.15)` — the §15 scale gate's exact shape, and for its reason: the
+raw band figure is not comparable between cases, and a bare ratio explodes when the denominator
+is near-perfect. Flat art only; @512 only, for §23's and §24's reason.
+
+The border genuinely carries less evidence than the interior — the AA profile is truncated by
+the crop — so some elevation is correct and a bar of 1.0 would be wrong. 2.0 is where the
+measurement puts the line, and it is not slack: every flat gated fixture passes, three of them
+at 83–90% of their limit (`letter-joins` 0.20/0.30, `aa-seam` 0.25/0.30, `border-cross`
+0.25/0.30 — 0.27 before the fix), while the two worst marks of the 152-logo gallery FAIL it
+(`langchain` 0.41 vs 0.34, `boeing-wm` 0.54 vs 0.50). A bar no real art can fail is not a bar.
+
+`border-cross` (tier 0, gated) is the case authored for the lane, on the same "author one
+first" the #15 premise re-check demanded. Its top fan and middle fan are the SAME four stems at
+the same four angles — 90/70/55/40° off the edge — one flush on y=0 and one in open canvas, so
+the ratio compares the tracer against itself on identical geometry instead of against different
+art. Nothing in it bleeds past the viewBox, which is artifact 2 authored out of existence.
+The right-edge bump is a half-ELLIPSE and was a half-circle first: `authoredCircles` fits a
+circle to each closed authored subpath, and a semicircle closed by its own diameter passes that
+fit (the straight run contributes only its two endpoints, which lie on the circle), so the case
+arrived red on the §0 #17 centre term — a real open defect, but not this one's, and a fixture
+that arrives red on a gate it was not authored for tells you nothing about either.
+
+### 34.6 What this does not close
+
+The gating hole is closed; the defect is not. Open, and now measurable:
+- `letter-joins` and `boeing-wm` — the border residue the window guard does not reach (34.4).
+- The corner half of #9's symptom stays refuted (§0.1): 0 in-band invented corners on the
+  fixtures at excess ≥ 40°, `mastercard` 0, the gallery 9.
+- The band lane is @512 and flat-art only. The @256 calibration and the gradient lane are each
+  their own question, exactly as §23.3 says for the kink lens.

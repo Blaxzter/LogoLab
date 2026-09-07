@@ -124,7 +124,9 @@ export function tracePlanar(
   // §0 #8: read the sub-pixel edge position out of the source AA (planarSubpixel.ts).
   // Computed on the raw network — BEFORE junction placement — so §14's threadJunctions
   // keeps reading the raw lattice chains its gates were calibrated on (§14.3).
-  const subpix = image && opts.subpixelEdges ? subpixelEdgeChains(net, labels, image) : undefined
+  const subpix = image && opts.subpixelEdges
+    ? subpixelEdgeChains(net, labels, image, undefined, opts.subpixelWindowGuard)
+    : undefined
   return assemblePlanar(net, opts, palette, subpix, image)
 }
 

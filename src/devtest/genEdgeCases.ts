@@ -1038,6 +1038,89 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       return svg(body.join(''), defs)
     },
   },
+  {
+    // BORDER CROSS — issue #9. Art that MEETS THE CANVAS EDGE, authored so the meeting is
+    // scorable.
+    //
+    // Every other case in this corpus keeps its art clear of the frame, so the one zone the
+    // scorer has always excluded (geomScore drops every query within BORDER_EPS 1.5px of the
+    // canvas rect, both sides — a traced doc carries a background frame the authored art
+    // does not) had no gated case at all. #9's §0.1 verdict says for #15 what applies here
+    // too: author one first.
+    //
+    // TWO RULES the geometry obeys, and both are the point:
+    //  1. NOTHING BLEEDS PAST THE viewBox. `wedge-counter`'s tip runs to x=257.09 of a 256
+    //     box, and authored geometry outside the raster is unscorable by construction — the
+    //     tracer cannot draw there, so every such sample reads as "missed" at a distance
+    //     that grows with the bleed. That artifact alone doubles wedge-counter's band
+    //     chamfer (0.19 -> 0.39px, 1.23x -> 2.53x its own interior; §34.1). Here every
+    //     shape stops exactly ON the edge instead.
+    //  2. EVERY BORDER SHAPE HAS AN INTERIOR TWIN. The headline number is the band chamfer
+    //     over the case's OWN interior chamfer, and that ratio is only honest if the two
+    //     populations are the same art. The top fan and the middle fan are the SAME four
+    //     stems at the same four angles, one flush on y=0 and one in open canvas, so the
+    //     ratio compares a tracer against itself on identical geometry.
+    //
+    // The flanks meet the edge at 90/70/55/40 degrees: shallow enough to reach the regime
+    // where the sub-pixel estimator's ±(FAR+1) window hangs off the raster and `bilin`
+    // clamps instead of reporting missing data (§34.3), steep enough to stay clear of the
+    // 15-degree PARALLEL cut that holds the frame's own run out of the lane. The bottom
+    // apexes put a CORNER on the edge, the left bar meets it square, and the right bump is
+    // a curved boundary running into it — the four ways art can arrive at a frame. One
+    // stem in each fan is split lengthwise into two INKS, so the lane also carries the
+    // art-vs-art seam (mastercard's glyph stems) and not only art-vs-background.
+    name: 'border-cross',
+    note: 'art meeting the canvas edge at four angles, with an interior twin fan as the control (#9)',
+    make: () => {
+      const f2 = (v: number): string => v.toFixed(2)
+      /** A stem as a parallelogram: `y0` is the end AT the edge, `y1` the far end, and the
+       *  flank runs `dx` across that height — i.e. atan((y1-y0)/dx) from the edge. */
+      const stem = (x: number, y0: number, y1: number, w: number, dx: number, fill: string): string =>
+        `<polygon points="${f2(x)},${f2(y0)} ${f2(x + w)},${f2(y0)} ${f2(x + w + dx)},${f2(y1)} ${f2(x + dx)},${f2(y1)}" fill="${fill}"/>`
+      const H = 40
+      const W = 26
+      // 90 / 70 / 55 / 40 degrees off the edge, as the horizontal run over H.
+      const DEG = [90, 70, 55, 40]
+      const RUN = DEG.map((d) => H / Math.tan((d * Math.PI) / 180))
+      const X = [10, 46, 96, 160]
+      const FILL = [INK, NAVY, INK, GOLD]
+      /** One fan of four stems. The last is split lengthwise into two inks, so its middle
+       *  flank is an art-vs-art seam arriving at the same angle as its outer ones. */
+      const fan = (y0: number, y1: number): string[] => {
+        const out: string[] = []
+        for (let i = 0; i < 3; i++) out.push(stem(X[i], y0, y1, W, RUN[i], FILL[i]))
+        out.push(stem(X[3], y0, y1, W / 2, RUN[3], INK))
+        out.push(stem(X[3] + W / 2, y0, y1, W / 2, RUN[3], GOLD))
+        return out
+      }
+
+      const body: string[] = [`<rect width="${V}" height="${V}" fill="${WHITE}"/>`]
+      // TOP — flush on y=0. Held out along the edge itself (parallel), scored on the flanks.
+      body.push(...fan(0, H))
+      // MIDDLE — the control: the same four stems, no edge anywhere near them.
+      body.push(...fan(104, 104 + H))
+      // BOTTOM — a CORNER on the edge. Three apexes at 60 / 45 / 52 degrees of flank.
+      const apex = (ax: number, b: number, fill: string): string =>
+        `<polygon points="${f2(ax)},${V} ${f2(ax - b)},${f2(V - 44)} ${f2(ax + b)},${f2(V - 44)}" fill="${fill}"/>`
+      body.push(apex(44, 25, INK), apex(128, 44, RED), apex(212, 34, NAVY))
+      // LEFT — a square meeting: the bar's long sides run into x=0 at 90 degrees.
+      body.push(`<rect x="0" y="168" width="52" height="32" fill="${INK}"/>`)
+      // RIGHT — a CURVED boundary arriving at the edge: a half-ellipse whose minor axis lies
+      // on x=V, so its tangent is perpendicular to the frame at both contacts and parallel to
+      // it at the crown. One shape, the whole sweep of angles.
+      //
+      // ELLIPTICAL ON PURPOSE, and it was a circle first. `authoredCircles` fits a circle to
+      // each closed authored subpath, and a semicircle closed by its own diameter passes that
+      // fit: the straight closing run contributes only its two endpoints, which lie ON the
+      // circle, so the lens reads a whole authored circle where the art has half of one. The
+      // trace then scored 0.45 spread against a 0.25 limit, on the §0 #17 centre term — a
+      // real open defect, but somebody else's, and a new case that arrives red on a gate it
+      // was not authored for tells you nothing about either. rx != ry puts it outside the
+      // circle lens and leaves the border question alone.
+      body.push(`<path d="M ${V},96 A 44,34 0 0 0 ${V},164 Z" fill="${NAVY}"/>`)
+      return svg(body.join(''))
+    },
+  },
 ]
 
 // --- emit -------------------------------------------------------------------
