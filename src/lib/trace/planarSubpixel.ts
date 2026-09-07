@@ -119,6 +119,7 @@ export type SubpixelOutcome =
   | 'monotone'
   | 'max-disp'
   | 'zero'
+  | 'clamped'
   | 'corner-revert'
 
 export interface SubpixelDiagRecord {
@@ -153,6 +154,7 @@ export function subpixelEdgeChains(
   labels: Int32Array,
   image: SourceImage,
   diag?: SubpixelDiag,
+  windowGuard = true,
 ): Map<number, Vec[]> {
   const { width: w, height: h, data } = image
   const labelAt = (x: number, y: number): number => {
@@ -184,6 +186,25 @@ export function subpixelEdgeChains(
       out[c] = data[i00 + c] * w00 + data[i10 + c] * w10 + data[i01 + c] * w01 + data[i11 + c] * w11
     }
   }
+
+  /**
+   * TRUNCATED WINDOW (issue #9). Every sample this estimator takes lies on the normal at
+   * ±NEAR, ±FAR and ±(FAR+1), and `bilin` CLAMPS anything off the pixel-centre grid instead
+   * of reporting that it had no data. Near the canvas edge that silently changes what the
+   * guards mean, in both directions: the contrast test compares two anchors that have
+   * clamped toward the same border pixels and refuses a real edge, while the anchor-flatness
+   * test compares a clamped anchor against a clamped probe, reads ~0, and PASSES an anchor
+   * that never reached pure region colour — the one thing it exists to catch. Measured on
+   * the fixtures: flat-left/flat-right fire at 1–2% within 3px of the edge against 5%/3% in
+   * the interior, and `contrast` at 30% against 8%.
+   *
+   * The samples are colinear, so the two extremes bracket the rest and one convex test on
+   * each end covers the whole window. A point without a full window has no profile to read,
+   * which is the same reason an EXT-sided chain never enters this pass at all — so it takes
+   * the same answer: stay on the lattice.
+   */
+  const supported = (x: number, y: number): boolean =>
+    x >= 0.5 && y >= 0.5 && x <= w - 0.5 && y <= h - 0.5
 
   // Scratch buffers (hot loop; no per-point allocation).
   const farL = new Float64Array(3)
@@ -224,6 +245,16 @@ export function subpixelEdgeChains(
       const ny = -tx / tl
       const say = (outcome: SubpixelOutcome, delta = 0): void => {
         diag?.({ edgeId: e.id, index: i, x: p.x, y: p.y, nx, ny, outcome, delta })
+      }
+
+      // The whole window must be real raster, not clamped repeats of the border pixels.
+      if (
+        windowGuard &&
+        (!supported(p.x + (FAR + 1) * nx, p.y + (FAR + 1) * ny) ||
+          !supported(p.x - (FAR + 1) * nx, p.y - (FAR + 1) * ny))
+      ) {
+        say('clamped')
+        continue
       }
 
       // Far anchors must land in their OWN region's pixels — the one guard that covers

@@ -38,6 +38,11 @@
 import { FLUENT_CORPUS } from './fluentCorpus.ts'
 
 /** One ground-truth case: an authored SVG we rasterize, trace, and score against itself. */
+// The band's own geometry (its half-width and the PARALLEL cut) belongs to the measurement
+// and lives with it in geomScore; BAND_MIN_N and BAND_FLOOR are read here because they are
+// the GATE's policy. The Workbench lab already imports both modules, so this costs no bundle.
+import { BAND_MIN_N, BAND_FLOOR } from './geomScore.ts'
+
 export interface TruthCase {
   name: string
   /** Repo-relative path to the authored SVG. */
@@ -223,6 +228,14 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // cannot. The fourth ring is the same ring untouched — an in-case control that must stay
   // circular through any change here.
   { name: 'ring-cross', svg: 'public/examples/edge-cases/ring-cross.svg', note: 'interlocking annuli — co-circular arc snap across crossings (#10)', gradients: false, tier: 0, gated: true },
+  // The §0 #9 driver, authored 2026-09-07 for the BORDER lane. Every other case here keeps
+  // its art clear of the frame, so the one zone the scorer has always excluded had no gated
+  // case at all — the same "author one first" the #15 premise re-check demanded. Its top fan
+  // and middle fan are the SAME four stems at the same four angles, one flush on y=0 and one
+  // in open canvas, so the band-vs-interior ratio compares the tracer against itself on
+  // identical geometry rather than against a different piece of art. genEdgeCases.ts has the
+  // rack and the two rules the geometry obeys.
+  { name: 'border-cross', svg: 'public/examples/edge-cases/border-cross.svg', note: 'art meeting the canvas edge at four angles, with an interior twin fan as the control (#9)', gradients: false, tier: 0, gated: true },
 
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves
@@ -708,6 +721,30 @@ const INK_MIN = 0.5
  * A gate that silently passes because it had nothing to check is worse than no gate at all,
  * so those come back `applicable: false` and callers must render them as n/a — never as ✓.
  */
+/**
+ * BORDER BAND (§34, issue #9) — how much worse a case is allowed to be where its art meets
+ * the canvas edge than it is in its own interior.
+ *
+ * Shaped exactly like the §15 scale gate (`coarse ≤ 2.0 · max(fine, 0.15) ref-px`) and for
+ * the same reason: the raw band figure is not comparable between cases (art busy at the edge
+ * reads worse for reasons that are not defects), and a bare ratio explodes when the
+ * denominator is near-perfect. So the bar is relative, with a floor.
+ *
+ * WHY 2.0, and what it costs. The border genuinely carries less evidence than the interior —
+ * the AA profile is truncated by the crop and the sub-pixel estimator's window hangs off the
+ * raster — so some elevation is expected and a bar of 1.0 would be wrong. 2.0 is where the
+ * measurement puts the line: every flat gated fixture that reaches the edge passes it today
+ * (`letter-joins` 2.37× is the tightest at 0.20 against a 0.30 limit, then `aa-seam` 1.71×,
+ * `wedge-counter` 1.23×, `border-cross` 1.20×, `hairlines` 0.73×, `seam-corner` 0.71×), and
+ * the two worst marks in the 152-logo gallery FAIL it (`langchain` 0.41 vs 0.34, `boeing-wm`
+ * 0.54 vs 0.50). A bar no real art can fail is not a bar; this one separates.
+ *
+ * FLAT ART ONLY, like the region / ink / invented gates. On gradient art traced flat the
+ * interior chamfer is 22–90px of posterization banding, and a ratio over that denominator is
+ * not a number about the border.
+ */
+export const BORDER_RATIO_MAX = 2.0
+
 export function evaluateTruthGates(s: {
   samples: number
   chamfer: number
@@ -738,6 +775,12 @@ export function evaluateTruthGates(s: {
   /** Worst per-region ink kept (geomScore.scoreRegions.worstInk). Omitted ⇒ the ink gate
    *  reports n/a (a caller that has not rendered the trace). Flat art only — see INK_MIN. */
   worstInk?: number
+  /** §34 border band (geomScore.scoreBorderBand): the band chamfer, the same case's interior
+   *  chamfer, and how many transversal samples backed it. Omitted, or fewer than BAND_MIN_N
+   *  samples ⇒ the border gate reports n/a — most cases keep their art clear of the frame. */
+  borderChamfer?: number
+  borderInterior?: number
+  borderSamples?: number
   /** False for gradient cases — see above. */
   flatArt: boolean
   /** Picks the tolerances (TIER_TOL). Defaults to tier 0, whose numbers are unchanged. */
@@ -767,8 +810,28 @@ export function evaluateTruthGates(s: {
   // unless CIRCLE_SPREAD_ALLOWED names the case.
   const circleApplicable = s.flatArt && (s.circles ?? 0) > 0 && s.circleSpread !== undefined
 
+  // §34 — the border band. Applicable only where the art actually reaches the canvas edge
+  // with enough transversal boundary to mean anything; `annulus` read 2197× off TWO samples
+  // before the floor existed, which is the `samples === 0` trap this corpus keeps re-learning.
+  const borderApplicable =
+    s.flatArt &&
+    s.borderChamfer !== undefined &&
+    s.borderInterior !== undefined &&
+    Number.isFinite(s.borderInterior) &&
+    (s.borderSamples ?? 0) >= BAND_MIN_N
+  const borderLimit = BORDER_RATIO_MAX * Math.max(s.borderInterior ?? 0, BAND_FLOOR)
+
   return [
     upper('chamfer', 'boundary mean', s.chamfer, tol.chamfer, 2),
+    // §34 — fidelity WHERE THE ART MEETS THE FRAME, the zone scoreGeometry excludes by
+    // construction (collectBoundary drops every query within BORDER_EPS of the canvas rect,
+    // both sides, because the traced background frame has no authored counterpart). That
+    // exclusion is right and stays; what this adds back is only the TRANSVERSAL part of the
+    // band — boundary descending INTO the edge, which does have authored truth. Before it,
+    // border-edge fidelity was ungated on every case, every tier and every resolution, and
+    // a defect there could only be seen by eye: the same "no red number to beat" hole that
+    // let the §12 low-res family and the §15 scale family live for months.
+    upper('border', 'border band ÷ interior', s.borderChamfer ?? 0, borderLimit, 2, borderApplicable),
     upper('p95', 'boundary p95', s.p95, tol.p95, 2),
     upper('parsimony', 'node economy', s.parsimony, tol.parsimony, 1),
     // §24 — a boundary the artist drew as one circle must come back as that circle, even

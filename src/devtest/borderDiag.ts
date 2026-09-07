@@ -4,8 +4,14 @@
 //   node --max-old-space-size=6144 ... borderDiag.ts --logos                  # the whole gallery
 //   node --experimental-strip-types src/devtest/borderDiag.ts --case mastercard --list
 //   node --experimental-strip-types src/devtest/borderDiag.ts --gate --logos  # ranked table
-//   --res N (default 512)   --band P (default 3)   --deg D (default 15)   --fit k=v
-//   --gradients   --list (per-site dump)   --min P (list threshold, px)
+//   --res N (default 512)   --fit k=v   --gradients
+//   --list (per-corner dump)   --min P (list threshold, deg)   --worst N (per-sample dump)
+//   --keepoff (counterfactual: score off-canvas authored art too)   --outcomes (mechanism census)
+//
+// The band's own constants — its half-width, the PARALLEL cut and the sample floor — are no
+// longer flags here: they live in geomScore (BAND / BAND_PARALLEL_DEG / BAND_MIN_N) because
+// the GATE reads the same lane, and a lens whose thresholds can be dialled from the command
+// line is not the same measurement as the one CI runs.
 //
 // WHY. `geomScore.collectBoundary` drops every query point within BORDER_EPS (1.5px) of the
 // canvas rectangle, from BOTH sides, deliberately: a traced doc always carries a background
@@ -54,7 +60,13 @@ import { decodePng } from './png.ts'
 import { ensureImageData } from './nodeHarness.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from './svgGround.ts'
-import { sharpCorners, makeVisibleAt, flattenSubPath, CORNER_MATCH_R } from './geomScore.ts'
+import {
+  sharpCorners, makeVisibleAt, flattenSubPath, CORNER_MATCH_R,
+  scoreBorderBand, nearestTo, BAND, BAND_PARALLEL_DEG, BAND_MIN_N,
+  type BandSample, type BorderBand,
+} from './geomScore.ts'
+import { buildPlanarNetwork } from '../lib/trace/planarNetwork.ts'
+import { subpixelEdgeChains, type SubpixelDiagRecord } from '../lib/trace/planarSubpixel.ts'
 import type { SubPath } from '../lib/path/types.ts'
 
 ensureImageData()
@@ -67,15 +79,21 @@ const flag = (n: string): string | null => {
   return v === undefined || v.startsWith('--') ? '' : v
 }
 const RES = Number(flag('--res') ?? 512)
-/** Half-width of the border band (px). Wider than BORDER_EPS 1.5 on purpose: the approach
- *  zone is where the ragged run starts, and 1.5 only covers the contact itself. */
-const BAND = Number(flag('--band') ?? 3)
-/** A sample whose tangent is within this of the near canvas edge counts as PARALLEL (frame
- *  or flush cut) and is held out. 15 deg admits a stem meeting the edge at 75 deg or steeper. */
-const PAR_DEG = Number(flag('--deg') ?? 15)
 const GRADIENTS = argv.includes('--gradients')
 const LIST = argv.includes('--list')
 const LIST_MIN = Number(flag('--min') ?? 1.0)
+/** `--worst N` dumps the N worst band SAMPLES (not corners) per case, with the side they
+ *  were queried from. A ratio says a case is bad; this says WHERE, which is what a fix
+ *  needs — the ragged run turned out to be one localised family, not a spread. */
+const WORST = Number(flag('--worst') ?? 0)
+/** `--keepoff` restores the first draft's behaviour: score authored samples that lie OUTSIDE
+ *  the canvas rectangle too. The counterfactual for §34.1: it takes `wedge-counter` from
+ *  0.19px to 0.39px of band chamfer (1.23x to 2.53x), and it is half of why that case
+ *  ranked WORST in the corpus before the artifact was named. */
+const KEEP_OFF = argv.includes('--keepoff')
+/** `--outcomes` runs the §15 sub-pixel pass's own observational hook and bins every chain
+ *  point's verdict by its distance to the canvas edge — the mechanism census. */
+const OUTCOMES = argv.includes('--outcomes')
 const f = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d) : '  —  ')
 const parseFit = (s: string): Record<string, number | boolean> => {
   const o: Record<string, number | boolean> = {}
@@ -93,12 +111,12 @@ const STEP = 0.5
 const NEAR = 2.0
 /** Authored window (px) the traced kink is compared against, in the §23 like-for-like form. */
 const WIN = Number(flag('--win') ?? 1)
-const PAR_SIN = Math.sin((PAR_DEG * Math.PI) / 180)
 
 interface Sample { x: number; y: number; tx: number; ty: number }
-interface Seg { ax: number; ay: number; bx: number; by: number }
 
-/** Uniform-arc-length resample of one subpath, with tangents. */
+/** Uniform-arc-length resample of one subpath, with tangents. The corner census needs the
+ *  TANGENT at each authored sample to read the authored turn over a window; the distance
+ *  lanes take their samples from the shared scorer instead. */
 function chainOf(sp: SubPath): Sample[] {
   const poly = flattenSubPath(sp)
   if (poly.length < 2) return []
@@ -125,108 +143,30 @@ function chainOf(sp: SubPath): Sample[] {
   return out
 }
 
-function segsOf(sp: SubPath, out: Seg[]): void {
-  const poly = flattenSubPath(sp)
-  if (poly.length < 2) return
-  const pts = sp.closed !== false && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
-    ? [...poly, poly[0]]
-    : poly
-  for (let i = 1; i < pts.length; i++) out.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
-}
-
-function distToSeg(px: number, py: number, s: Seg): number {
-  const dx = s.bx - s.ax
-  const dy = s.by - s.ay
-  const l2 = dx * dx + dy * dy
-  let t = l2 > 0 ? ((px - s.ax) * dx + (py - s.ay) * dy) / l2 : 0
-  t = t < 0 ? 0 : t > 1 ? 1 : t
-  return Math.hypot(px - (s.ax + t * dx), py - (s.ay + t * dy))
-}
-
-/**
- * Uniform-grid nearest-segment index. Brute force is O(queries x segments) and both run to
- * 10^5 on a busy mark — 10^10 distance evaluations, i.e. it never finishes. The grid buckets
- * every segment into the cells its bounding box touches, then a query walks rings outward
- * and stops once the ring's guaranteed-minimum distance exceeds the best found, which is
- * exact (not approximate) for the nearest-distance question this lens asks.
- */
-class SegGrid {
-  private cell: number
-  private cols: number
-  private rows: number
-  private bins: number[][]
-  private segs: Seg[]
-  // No parameter properties: `node --experimental-strip-types` is strip-only and rejects them.
-  constructor(segs: Seg[], w: number, h: number, cell = 8) {
-    this.segs = segs
-    this.cell = cell
-    this.cols = Math.max(1, Math.ceil(w / cell))
-    this.rows = Math.max(1, Math.ceil(h / cell))
-    this.bins = Array.from({ length: this.cols * this.rows }, () => [] as number[])
-    segs.forEach((s, i) => {
-      const x0 = Math.max(0, Math.floor(Math.min(s.ax, s.bx) / cell))
-      const x1 = Math.min(this.cols - 1, Math.floor(Math.max(s.ax, s.bx) / cell))
-      const y0 = Math.max(0, Math.floor(Math.min(s.ay, s.by) / cell))
-      const y1 = Math.min(this.rows - 1, Math.floor(Math.max(s.ay, s.by) / cell))
-      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) this.bins[y * this.cols + x].push(i)
-    })
-  }
-  nearest(px: number, py: number): number {
-    const cx = Math.max(0, Math.min(this.cols - 1, Math.floor(px / this.cell)))
-    const cy = Math.max(0, Math.min(this.rows - 1, Math.floor(py / this.cell)))
-    let best = Infinity
-    const maxR = Math.max(this.cols, this.rows)
-    for (let r = 0; r <= maxR; r++) {
-      // Everything in rings beyond this one is at least (r-1)*cell away.
-      if (best < (r - 1) * this.cell) break
-      for (let y = cy - r; y <= cy + r; y++) {
-        if (y < 0 || y >= this.rows) continue
-        for (let x = cx - r; x <= cx + r; x++) {
-          if (x < 0 || x >= this.cols) continue
-          // Only the ring's shell — the interior was covered by smaller r.
-          if (r > 0 && Math.abs(y - cy) !== r && Math.abs(x - cx) !== r) continue
-          for (const i of this.bins[y * this.cols + x]) {
-            const d = distToSeg(px, py, this.segs[i])
-            if (d < best) best = d
-          }
-        }
-      }
-    }
-    return best
-  }
-}
-
-/** Distance to the canvas rectangle, and that edge's own direction. */
-function edgeOf(p: Sample, w: number, h: number): { d: number; ex: number; ey: number } {
-  const dl = p.x
-  const dr = w - p.x
-  const dt = p.y
-  const db = h - p.y
+/** The band predicates the CORNER census needs. Distances and thresholds come from the
+ *  shared constants, so a change there moves both halves of the lens at once. */
+const PAR_SIN = Math.sin((BAND_PARALLEL_DEG * Math.PI) / 180)
+let W = 0
+let H = 0
+const edgeOf = (p: Sample): { d: number; ex: number; ey: number } => {
+  const dl = p.x, dr = W - p.x, dt = p.y, db = H - p.y
   const m = Math.min(dl, dr, dt, db)
-  // Left/right edges run vertically; top/bottom run horizontally.
   return m === dl || m === dr ? { d: m, ex: 0, ey: 1 } : { d: m, ex: 1, ey: 0 }
 }
-
-/** PARALLEL to the near canvas edge = the frame's run or a flush crop. Held out. */
-const isParallel = (p: Sample, w: number, h: number): boolean => {
-  const e = edgeOf(p, w, h)
+const inBand = (p: Sample): boolean => Math.abs(edgeOf(p).d) <= BAND
+const isParallel = (p: Sample): boolean => {
+  const e = edgeOf(p)
   return Math.abs(p.tx * e.ey - p.ty * e.ex) < PAR_SIN
 }
-const inBand = (p: Sample, w: number, h: number): boolean => edgeOf(p, w, h).d <= BAND
+const atCanvasCorner = (p: Sample): boolean =>
+  Math.min(p.x, W - p.x) <= BAND && Math.min(p.y, H - p.y) <= BAND
 
-/** The four canvas CORNERS are where the background frame turns 90 degrees, so one or two
- *  of its samples read transversal there and leak into the lane as a phantom site. Art that
- *  genuinely reaches a canvas corner is rare and would be indistinguishable from the frame
- *  anyway, so the corner neighbourhood is held out with the rest of the framing. */
-const atCanvasCorner = (p: Sample, w: number, h: number): boolean =>
-  Math.min(p.x, w - p.x) <= BAND && Math.min(p.y, h - p.y) <= BAND
+// The band's rules — the transversal cut, the canvas-corner hold-out, the off-canvas
+// hold-out and the sample floor — live in geomScore.scoreBorderBand, which the GATE calls
+// too. One implementation, so the instrument and the gate cannot drift apart, and so a bug
+// in either is a bug in both (the first draft carried its own copy of the spatial index and
+// its own copy was wrong — see nearestTo).
 
-/** Below this many transversal band samples a case has no border evidence, and its ratio is
- *  noise (annulus read 2197x off TWO samples). Reported as unscorable, never as a number —
- *  the `samples === 0` lesson in GeomScore, which this lens inherits wholesale. */
-const MIN_BAND_N = Number(flag('--minband') ?? 20)
-
-const mean = (a: number[]): number => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : NaN)
 /** Reduce, not `Math.max(...a)` — these arrays run to 10^5 samples and the spread overflows. */
 const maxOf = (a: number[]): number => a.reduce((s, v) => (v > s ? v : s), 0)
 const pct = (a: number[], p: number): number => {
@@ -235,27 +175,14 @@ const pct = (a: number[], p: number): number => {
   return s[Math.min(s.length - 1, Math.floor(p * s.length))]
 }
 
-interface Lane { chamfer: number; p95: number; max: number; missed: number; spurious: number; n: number }
-const laneOf = (missed: number[], spurious: number[]): Lane => ({
-  chamfer: mean([...missed, ...spurious]),
-  p95: pct([...missed, ...spurious], 0.95),
-  max: Math.max(maxOf(missed), maxOf(spurious)),
-  missed: mean(missed),
-  spurious: mean(spurious),
-  n: missed.length + spurious.length,
-})
-
 interface Site { x: number; y: number; kink: number; authored: number; excess: number }
 export interface BorderReport {
   name: string
-  band: Lane
-  interior: Lane
-  /** band chamfer / interior chamfer — the headline. */
-  ratio: number
-  /** In-band samples held out as frame/flush, both sides. */
-  parallelHeld: number
+  band: BorderBand
   /** Traced sharp corners in the band whose kink exceeds the authored turn there. */
   sites: Site[]
+  /** Every scored band sample, for `--worst`. */
+  pts: BandSample[]
 }
 
 async function analyse(name: string, text: string, fit: Record<string, number | boolean>): Promise<BorderReport | null> {
@@ -275,6 +202,8 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
   const w = raster.width
   const h = raster.height
   const gt = toRasterSpace(gtDoc, w)
+  W = w
+  H = h
   const vis = makeVisibleAt(raster)
   const doc = await traceImage(raster as unknown as ImageData, {
     ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: GRADIENTS, planarFit: fit,
@@ -282,62 +211,30 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
   const docSets = doc.items.flatMap((it) => (it.kind === 'path' ? it.subPaths : [])) as SubPath[]
   const gtSets = gt.flatMap((s) => s.subPaths)
 
-  const gtSegs: Seg[] = []
-  const docSegs: Seg[] = []
-  for (const sp of gtSets) segsOf(sp, gtSegs)
-  for (const sp of docSets) segsOf(sp, docSegs)
-  if (!gtSegs.length || !docSegs.length) return null
-  const gtGrid = new SegGrid(gtSegs, w, h)
-  const docGrid = new SegGrid(docSegs, w, h)
+  const bandPts: BandSample[] = []
+  const band = scoreBorderBand(gt, [docSets], w, h, vis, (q) => bandPts.push(q), KEEP_OFF)
 
-  const gtPts = gtSets.flatMap(chainOf)
-  const docPts = docSets.flatMap(chainOf)
-
-  // The two lanes. Targets are the FULL opposite segment set in both cases — only the
-  // QUERY side is filtered, exactly as collectBoundary does with its own exclusions.
-  const bandMissed: number[] = []
-  const bandSpurious: number[] = []
-  // The interior lane is only ever REPORTED as a mean, and storing its distances is what
-  // put the 152-mark gallery sweep over an 8GB heap (both sides run to 10^5 samples per
-  // mark). Accumulated as a running sum instead; the band arrays stay whole because they
-  // are small and the p95/max are printed.
-  let intSum = 0
-  let intN = 0
-  let parallelHeld = 0
-
-  for (const p of gtPts) {
-    // Authored boundary that the source raster does not show is occluded, not missed (§9.6).
-    if (!vis({ x: p.x, y: p.y, tx: p.tx, ty: p.ty })) continue
-    if (inBand(p, w, h)) {
-      if (isParallel(p, w, h) || atCanvasCorner(p, w, h)) parallelHeld++
-      else bandMissed.push(docGrid.nearest(p.x, p.y))
-    } else { intSum += docGrid.nearest(p.x, p.y); intN++ }
-  }
-  for (const p of docPts) {
-    if (inBand(p, w, h)) {
-      if (isParallel(p, w, h) || atCanvasCorner(p, w, h)) parallelHeld++
-      else bandSpurious.push(gtGrid.nearest(p.x, p.y))
-    } else { intSum += gtGrid.nearest(p.x, p.y); intN++ }
-  }
-
-  const band = laneOf(bandMissed, bandSpurious)
-  const interior: Lane = { chamfer: intN ? intSum / intN : NaN, p95: NaN, max: NaN, missed: NaN, spurious: NaN, n: intN }
+  // The corner census keeps its own resampled authored chain (it needs the TANGENT at each
+  // sample to read the authored turn over a window) and the nearest-authored test, both over
+  // the shared index.
+  const gtPts = gt.flatMap((g) => g.subPaths).flatMap(chainOf)
+  const nearestGt = nearestTo(gt.map((g) => g.subPaths))
 
   // --- the corner half (§23 form, restricted to the band) ---------------------
   const gtCorners = sharpCorners(gt.map((s) => s.subPaths), 0)
   const sites: Site[] = []
   for (const c of sharpCorners([docSets], 0)) {
     const s: Sample = { x: c.x, y: c.y, tx: c.otx, ty: c.oty }
-    if (!inBand(s, w, h) || atCanvasCorner(s, w, h)) continue
+    if (!inBand(s) || atCanvasCorner(s)) continue
     // BOTH arms must be transversal. Testing only the out-tangent re-admits the very
     // artifact the exclusion exists for: where art meets the canvas edge the traced region
     // legitimately turns to run ALONG the edge, which is a real ~90 degree corner in the
     // doc and no corner at all in the authored art (which simply continues off-canvas).
     // The first draft of this lens scored 11 such sites on mastercard at excess 87-120 and
     // they were all frame closures, not invented corners.
-    if (isParallel(s, w, h)) continue
-    if (isParallel({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }, w, h)) continue
-    if (gtGrid.nearest(c.x, c.y) > NEAR) continue // invented BOUNDARY, not an invented corner
+    if (isParallel(s)) continue
+    if (isParallel({ x: c.x, y: c.y, tx: c.itx, ty: c.ity })) continue
+    if (nearestGt(c.x, c.y) > NEAR) continue // invented BOUNDARY, not an invented corner
     if (gtCorners.some((g) => Math.hypot(g.x - c.x, g.y - c.y) <= CORNER_MATCH_R)) continue // recall's case
     const dot = Math.max(-1, Math.min(1, c.itx * c.otx + c.ity * c.oty))
     const kink = (Math.acos(dot) * 180) / Math.PI
@@ -359,7 +256,7 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
   }
   sites.sort((a, b) => b.excess - a.excess)
 
-  return { name, band, interior, ratio: band.chamfer / interior.chamfer, parallelHeld, sites }
+  return { name, band, sites, pts: bandPts }
 }
 
 // --- corpus ------------------------------------------------------------------
@@ -403,37 +300,106 @@ for (const [name, text] of cases) {
 const lane = GRADIENTS ? 'grad' : 'flat'
 console.log(
   `\n━━━ BORDER-BAND FIDELITY @${RES} ${lane} ━━━  ${reports.length} scorable of ${cases.length} cases` +
-    `   band ≤${BAND}px, parallel held at <${PAR_DEG}°\n`,
+    `   band ≤${BAND}px, parallel held at <${BAND_PARALLEL_DEG}°\n`,
 )
 
 // A case whose art never reaches the canvas edge has nothing to say here, and must not be
 // reported as a perfect zero — the `samples === 0` lesson from GeomScore, same trap.
-const scorable = reports.filter((r) => r.band.n >= MIN_BAND_N && Number.isFinite(r.interior.chamfer))
-const silent = reports.filter((r) => r.band.n < MIN_BAND_N)
+const scorable = reports.filter((r) => r.band.n >= BAND_MIN_N && Number.isFinite(r.band.interior))
+const silent = reports.filter((r) => r.band.n < BAND_MIN_N)
 
-console.log(`  ${'case'.padEnd(28)}${'band n'.padStart(8)}${'chamfer'.padStart(9)}${'p95'.padStart(8)}${'max'.padStart(8)}${'interior'.padStart(10)}${'ratio'.padStart(8)}${'kinks'.padStart(7)}`)
-for (const r of [...scorable].sort((a, b) => b.ratio - a.ratio)) {
+// The MISSED side is the like-for-like lane across a counterfactual: its queries are the
+// AUTHORED samples, a population fixed by the art and the visibility mask, so it does not
+// move when the trace does. The spurious side's queries are the trace's own boundary and do
+// move, so a shift there can be a change of sample SET rather than of accuracy.
+console.log(`  ${'case'.padEnd(24)}${'band n'.padStart(8)}${'chamfer'.padStart(9)}${'missed'.padStart(8)}${'spur'.padStart(7)}${'p95'.padStart(7)}${'max'.padStart(7)}${'interior'.padStart(10)}${'ratio'.padStart(8)}${'kinks'.padStart(7)}`)
+for (const r of [...scorable].sort((a, b) => b.band.ratio - a.band.ratio)) {
   const bad = r.sites.filter((s) => s.excess >= 40).length
   console.log(
-    `  ${r.name.padEnd(28)}${String(r.band.n).padStart(8)}${f(r.band.chamfer).padStart(9)}${f(r.band.p95).padStart(8)}` +
-      `${f(r.band.max).padStart(8)}${f(r.interior.chamfer).padStart(10)}${(f(r.ratio, 2) + '×').padStart(8)}${String(bad).padStart(7)}`,
+    `  ${r.name.padEnd(24)}${String(r.band.n).padStart(8)}${f(r.band.chamfer).padStart(9)}${f(r.band.missed).padStart(8)}${f(r.band.spurious).padStart(7)}${f(r.band.p95).padStart(7)}` +
+      `${f(r.band.max).padStart(7)}${f(r.band.interior).padStart(10)}${(f(r.band.ratio, 2) + '×').padStart(8)}${String(bad).padStart(7)}`,
   )
 }
 if (silent.length) console.log(`\n  ${silent.length} case(s) never reach the canvas edge (no band samples): ${silent.map((r) => r.name).join(', ')}`)
 
 if (scorable.length) {
-  const ratios = scorable.map((r) => r.ratio).filter(Number.isFinite)
+  const ratios = scorable.map((r) => r.band.ratio).filter(Number.isFinite)
   const bandCh = scorable.map((r) => r.band.chamfer)
-  const intCh = scorable.map((r) => r.interior.chamfer)
+  const intCh = scorable.map((r) => r.band.interior)
   console.log(`\n  THE HOLE: ${scorable.reduce((s, r) => s + r.band.n, 0)} transversal band samples carry authored truth and are scored by NOTHING in the repo today.`)
-  console.log(`            (a further ${scorable.reduce((s, r) => s + r.parallelHeld, 0)} in-band samples are frame/flush and correctly held out)`)
+  console.log(`            (a further ${scorable.reduce((s, r) => s + r.band.parallelHeld, 0)} in-band samples are frame/flush and correctly held out)`)
+  const off = reports.reduce((s, r) => s + r.band.offCanvasHeld, 0)
+  if (off) console.log(`            (${off} authored samples lie OUTSIDE the canvas and are unscorable by construction${KEEP_OFF ? ' — SCORED ANYWAY, --keepoff' : ''})`)
   console.log(`\n  band chamfer     p50 ${f(pct(bandCh, 0.5))}  p90 ${f(pct(bandCh, 0.9))}  max ${f(maxOf(bandCh))}`)
   console.log(`  interior chamfer p50 ${f(pct(intCh, 0.5))}  p90 ${f(pct(intCh, 0.9))}  max ${f(maxOf(intCh))}`)
   console.log(`  ratio            p50 ${f(pct(ratios, 0.5))}×  p90 ${f(pct(ratios, 0.9))}×  max ${f(maxOf(ratios))}×`)
-  const worseCount = scorable.filter((r) => r.ratio > 1).length
+  const worseCount = scorable.filter((r) => r.band.ratio > 1).length
   console.log(`  ${worseCount} of ${scorable.length} cases are WORSE at the border than in their own interior.`)
   const kinks = scorable.reduce((s, r) => s + r.sites.filter((x) => x.excess >= 40).length, 0)
   console.log(`  ${kinks} traced corner(s) in the band turn ≥40° more than the authored boundary does (the "odd corners" half).`)
+}
+
+if (WORST > 0) {
+  console.log(`
+  WORST BAND SAMPLES (query side → distance to the other boundary)`)
+  for (const r of scorable.sort((a, b) => b.band.ratio - a.band.ratio)) {
+    const hot = [...r.pts].sort((a, b) => b.d - a.d).slice(0, WORST)
+    if (!hot.length || hot[0].d < 0.25) continue
+    console.log(`   ${r.name}`)
+    for (const s of hot) console.log(`     ${s.side.padEnd(9)} (${f(s.x, 1)},${f(s.y, 1)})   ${f(s.d)}px`)
+  }
+}
+
+if (OUTCOMES) {
+  // MECHANISM CENSUS. The documented border rule in planarSubpixel is "EXT-sided chains stay
+  // on the lattice — there is no second colour to read a crossing from". That rule is about
+  // whole CHAINS. This bins every INTERIOR chain point by its distance to the canvas edge,
+  // because the pass has a second, undocumented border behaviour: its two far anchors sit at
+  // ±FAR (1.75px) along the normal and must each land in their own region's pixels, and
+  // outside the raster `labelAt` returns EXT. A point closer than FAR to the edge therefore
+  // fails `label-left`/`label-right` on geometry alone, whatever the art is doing.
+  const BINS = [1, 2, 3, 6, Infinity]
+  const label = ['≤1px', '1–2px', '2–3px', '3–6px', 'interior']
+  const tally = BINS.map(() => new Map<string, number>())
+  for (const [name, text] of cases) {
+    let raster
+    try {
+      raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+    } catch { continue }
+    const w = raster.width
+    const h = raster.height
+    let raw: { labels: Int32Array; width: number; height: number } | null = null
+    await traceImage(raster as unknown as ImageData,
+      { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: GRADIENTS, planarFit: fit },
+      undefined, undefined, undefined, undefined, (l) => { raw = l })
+    if (!raw) continue
+    const rr = raw as { labels: Int32Array; width: number; height: number }
+    const net = buildPlanarNetwork(rr.labels, w, h)
+    const recs: SubpixelDiagRecord[] = []
+    subpixelEdgeChains(net, rr.labels, { data: raster.data, width: w, height: h }, (r) => recs.push(r))
+    // One row per point; the revert windows overlap so the raw stream repeats indices.
+    const byPoint = new Map<string, { x: number; y: number; outcome: string }>()
+    for (const r of recs) {
+      const k = `${r.edgeId}:${r.index}`
+      if (r.outcome === 'corner-revert') { if (!byPoint.has(k)) byPoint.set(k, { x: r.x, y: r.y, outcome: 'corner-revert' }); continue }
+      byPoint.set(k, { x: r.x, y: r.y, outcome: r.outcome })
+    }
+    for (const r of byPoint.values()) {
+      const d = Math.min(r.x, w - r.x, r.y, h - r.y)
+      const b = BINS.findIndex((t) => d <= t)
+      const m = tally[b < 0 ? BINS.length - 1 : b]
+      m.set(r.outcome, (m.get(r.outcome) ?? 0) + 1)
+    }
+    void name
+  }
+  const kinds = [...new Set(tally.flatMap((m) => [...m.keys()]))].sort()
+  console.log(`
+  SUB-PIXEL OUTCOME BY DISTANCE TO THE CANVAS EDGE (interior chains only; EXT-sided chains never enter the pass)`)
+  console.log(`  ${'outcome'.padEnd(20)}${label.map((l) => l.padStart(11)).join('')}`)
+  const totals = tally.map((m) => [...m.values()].reduce((s, v) => s + v, 0))
+  for (const k of kinds)
+    console.log(`  ${k.padEnd(20)}${tally.map((m, i) => `${(m.get(k) ?? 0)} (${totals[i] ? ((100 * (m.get(k) ?? 0)) / totals[i]).toFixed(0) : '0'}%)`.padStart(11)).join('')}`)
+  console.log(`  ${'— total —'.padEnd(20)}${totals.map((t) => String(t).padStart(11)).join('')}`)
 }
 
 if (LIST) {

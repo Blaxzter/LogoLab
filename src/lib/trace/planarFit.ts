@@ -178,6 +178,14 @@ export interface PlanarFitOptions {
    */
   subpixelEdges: boolean
   /**
+   * §0 #9 border band (benchmarks §34, default true). Refuse the §15 sub-pixel estimator
+   * at any chain point whose ±(FAR+1) window is not fully inside the raster. `bilin`
+   * clamps rather than reporting missing data, so without this the estimator runs on
+   * repeated border pixels and its contrast / anchor-flatness guards mis-fire in opposite
+   * directions. `false` restores the pre-§34 behaviour for the A/B.
+   */
+  subpixelWindowGuard: boolean
+  /**
    * INTERNAL (set per-edge by assemblePlanar, never in defaults): pin each snapped
    * apex's handle DIRECTIONS onto its fitted arm lines. Only meaningful on a §15
    * sub-pixel displaced chain, where the arc fits' end tangents are free within ε and
@@ -337,6 +345,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   fitThrough: true,
   cornerJunctions: true,
   subpixelEdges: true,
+  subpixelWindowGuard: true,
   arcArms: true,
   // OFF: built, measured, and REJECTED on visual review — see the option's doc above
   // and docs/vectorization-benchmarks.md §22.
