@@ -1180,6 +1180,209 @@ export function circleRecovery(gt: GroundShape[], docSets: SubPath[][], w: numbe
   }
 }
 
+/**
+ * Nearest-boundary distance to a set of subpaths, over the SAME exact spatial index the
+ * scores use. Exported so a diagnostic never has to carry its own copy: the first draft of
+ * `borderDiag` did, and its copy clamped only the HIGH end of each segment's cell range, so
+ * every segment lying exactly on the far canvas edge — the traced frame's own run, the
+ * boundary a border query is nearest to — was never indexed at all. That inflated the band
+ * lane and nothing else, which is why it survived review (§34.1).
+ */
+export function nearestTo(sets: SubPath[][]): (x: number, y: number) => number {
+  const segs: Seg[] = []
+  for (const set of sets) {
+    for (const sp of set) {
+      const poly = flattenSubPath(sp)
+      if (poly.length < 2) continue
+      const pts = sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+        ? [...poly, poly[0]]
+        : poly
+      for (let i = 1; i < pts.length; i++) segs.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
+    }
+  }
+  const grid = new SegGrid(segs)
+  return (x, y) => grid.nearest(x, y)
+}
+
+// ---------------------------------------------------------------------------
+// The BORDER BAND — the zone collectBoundary excludes (issue #9)
+// ---------------------------------------------------------------------------
+
+/**
+ * Half-width of the scored band. Wider than BORDER_EPS 1.5 on purpose: the contact is where
+ * the ragged run ENDS, and the approach to it is where it goes wrong.
+ */
+export const BAND = 3
+/**
+ * A sample whose tangent lies within this of the near canvas edge is PARALLEL — the traced
+ * background frame's own run, or art the crop cut flush. Both are framing, not drawing, and
+ * neither carries a claim about the tracer. 15° admits a stem meeting the edge at 75° or
+ * steeper.
+ */
+export const BAND_PARALLEL_DEG = 15
+/**
+ * Below this many transversal samples a case has no border evidence and its ratio is noise
+ * (`annulus` read 2197× off TWO samples). Reported unscorable, never as a number — the same
+ * `samples === 0` rule the rest of this file follows.
+ */
+export const BAND_MIN_N = 20
+/**
+ * The band's floor, in the §15 scale-gate idiom (`coarse ≤ 2.0 · max(fine, 0.15)`). Without
+ * it a case whose interior is near-perfect turns any sub-pixel band figure into a huge
+ * ratio; 0.15px is that gate's floor, and this lane's numbers live at the same scale.
+ */
+export const BAND_FLOOR = 0.15
+
+/** One scored band sample, for the instrument's per-site dump. Purely observational: the
+ *  score is identical whether or not a sink is attached. */
+export interface BandSample { x: number; y: number; d: number; side: 'missed' | 'spurious' }
+
+export interface BorderBand {
+  /** Mean of both directed distances over the band's transversal samples. */
+  chamfer: number
+  /** Authored-side mean. Its population is fixed by the art, so this is the lane that stays
+   *  like-for-like across a counterfactual — the traced side's queries move with the trace. */
+  missed: number
+  /** Traced-side mean. */
+  spurious: number
+  p95: number
+  max: number
+  /** Transversal samples scored, both sides. */
+  n: number
+  /** In-band samples held out as frame or flush crop. */
+  parallelHeld: number
+  /** Authored samples held out for lying outside the canvas rectangle. */
+  offCanvasHeld: number
+  /** The same case's chamfer OUTSIDE the band — the ratio's denominator. */
+  interior: number
+  /** chamfer / interior — the headline. */
+  ratio: number
+}
+
+/**
+ * Score the boundary WHERE IT MEETS THE CANVAS EDGE — the one zone no gate here has read.
+ *
+ * `collectBoundary` drops every query within BORDER_EPS of the canvas rect, from both sides,
+ * and its reason is sound: a traced doc always carries a background region whose outline runs
+ * the full rectangle, and authored art usually does not, so re-admitting the band would have
+ * the reverse distance dominated by a boundary with no counterpart by construction. The cost
+ * is that border fidelity is excluded on every case, every tier and every resolution — a
+ * defect there can only be seen by eye (issue #9).
+ *
+ * What makes the band scorable is DIRECTION, not distance. Boundary in the band is one of:
+ *   • PARALLEL to the near edge — the frame's run, or art the crop cut flush. Framing, not
+ *     drawing; held out, exactly as today.
+ *   • TRANSVERSAL — a real boundary descending INTO the edge (a glyph stem meeting y=h).
+ *     That has authored truth, and is scorable like any other boundary.
+ * Two further exclusions, each of which read as a defect before it was named:
+ *   • the four canvas CORNERS, where the frame turns 90° and one or two of its own samples
+ *     read transversal;
+ *   • authored geometry OUTSIDE the rectangle. Art is not always contained by its own
+ *     viewBox (`wedge-counter`'s tip runs to x=257.09 of a 256 box) and the tracer cannot
+ *     draw off the raster, so those samples are "missed" by construction, at a distance that
+ *     grows with the bleed.
+ *
+ * The number to read is the RATIO against the SAME case's interior, measured here in the same
+ * pass: a case busy at the edge reads a worse absolute figure for reasons that are not
+ * defects, while "this case's border zone is 3× its own interior" is a claim about the tracer.
+ */
+export function scoreBorderBand(
+  gt: GroundShape[],
+  docSets: SubPath[][],
+  w: number,
+  h: number,
+  visibleAt?: (q: QueryPt) => boolean,
+  sink?: (s: BandSample) => void,
+  /** Diagnostic counterfactual only: score authored samples that lie OUTSIDE the canvas
+   *  rectangle instead of holding them out. Kept so the size of that artifact stays
+   *  reproducible (`borderDiag --keepoff`); no gate ever sets it. */
+  keepOffCanvas = false,
+): BorderBand {
+  const parSin = Math.sin((BAND_PARALLEL_DEG * Math.PI) / 180)
+  /** Distance to the canvas rect and that edge's own direction. SIGNED: a point outside the
+   *  rectangle reads negative, which is how off-canvas art is detected instead of admitted. */
+  const edgeOf = (p: QueryPt): { d: number; ex: number; ey: number } => {
+    const dl = p.x, dr = w - p.x, dt = p.y, db = h - p.y
+    const m = Math.min(dl, dr, dt, db)
+    // Left/right edges run vertically; top/bottom run horizontally.
+    return m === dl || m === dr ? { d: m, ex: 0, ey: 1 } : { d: m, ex: 1, ey: 0 }
+  }
+  const inBand = (p: QueryPt): boolean => Math.abs(edgeOf(p).d) <= BAND
+  const isParallel = (p: QueryPt): boolean => {
+    const e = edgeOf(p)
+    return Math.abs(p.tx * e.ey - p.ty * e.ex) < parSin
+  }
+  const atCorner = (p: QueryPt): boolean =>
+    Math.min(p.x, w - p.x) <= BAND && Math.min(p.y, h - p.y) <= BAND
+  const offCanvas = (p: QueryPt): boolean => p.x < 0 || p.y < 0 || p.x > w || p.y > h
+
+  const collect = (sets: SubPath[][]): { segs: Seg[]; queries: QueryPt[] } => {
+    const segs: Seg[] = []
+    const queries: QueryPt[] = []
+    for (const set of sets) {
+      for (const sp of set) {
+        const poly = flattenSubPath(sp)
+        if (poly.length < 2) continue
+        const pts = sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+          ? [...poly, poly[0]]
+          : poly
+        for (let i = 1; i < pts.length; i++) segs.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
+        resampleByArcLength(pts, SPACING, queries)
+      }
+    }
+    return { segs, queries }
+  }
+
+  const A = collect(gt.map((g) => g.subPaths))
+  const B = collect(docSets)
+  const gtGrid = new SegGrid(A.segs)
+  const docGrid = new SegGrid(B.segs)
+
+  const band: number[] = []
+  const missed: number[] = []
+  const spurious: number[] = []
+  let interiorSum = 0
+  let interiorN = 0
+  let parallelHeld = 0
+  let offCanvasHeld = 0
+
+  // The AUTHORED side. Boundary the source raster does not show is occluded, not missed (§9.6).
+  for (const p of A.queries) {
+    if (visibleAt && !visibleAt(p)) continue
+    if (!keepOffCanvas && offCanvas(p)) { offCanvasHeld++; continue }
+    const d = docGrid.nearest(p.x, p.y)
+    if (!inBand(p)) { interiorSum += d; interiorN++; continue }
+    if (isParallel(p) || atCorner(p)) { parallelHeld++; continue }
+    band.push(d); missed.push(d); sink?.({ x: p.x, y: p.y, d, side: 'missed' })
+  }
+  // The TRACED side. Targets stay whole on both sides — only the QUERY set is filtered,
+  // exactly as collectBoundary does with its own exclusions.
+  for (const p of B.queries) {
+    const d = gtGrid.nearest(p.x, p.y)
+    if (!inBand(p)) { interiorSum += d; interiorN++; continue }
+    if (isParallel(p) || atCorner(p)) { parallelHeld++; continue }
+    band.push(d); spurious.push(d); sink?.({ x: p.x, y: p.y, d, side: 'spurious' })
+  }
+
+  const avg = (a: number[]): number => (a.length ? a.reduce((t, v) => t + v, 0) / a.length : NaN)
+  const sorted = [...band].sort((x, y) => x - y)
+  const interior = interiorN ? interiorSum / interiorN : NaN
+  const chamfer = avg(band)
+  return {
+    chamfer,
+    missed: avg(missed),
+    spurious: avg(spurious),
+    p95: sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(0.95 * sorted.length))] : NaN,
+    // Reduce, not Math.max(...a) — these arrays reach 10^5 samples and the spread overflows.
+    max: band.reduce((t, v) => (v > t ? v : t), 0),
+    n: band.length,
+    parallelHeld,
+    offCanvasHeld,
+    interior,
+    ratio: chamfer / interior,
+  }
+}
+
 export function scoreGeometry(
   gt: GroundShape[],
   doc: EditableDoc,
