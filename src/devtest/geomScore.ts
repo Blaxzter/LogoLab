@@ -1204,6 +1204,57 @@ export function nearestTo(sets: SubPath[][]): (x: number, y: number) => number {
   return (x, y) => grid.nearest(x, y)
 }
 
+/**
+ * SIGNED nearest-boundary distance to a set of subpaths: |d| as `nearestTo` gives it, with
+ * the sign of the side the query sits on (positive = left of the boundary's own direction).
+ *
+ * Why a lane needs this. An unsigned mean cannot tell a boundary that WOBBLES about the truth
+ * from one that sits consistently OFF it, and the two behave completely differently under a
+ * curve fit: fitting averages a zero-mean error away and reproduces a biased one faithfully.
+ * §35 is that distinction — the border chain and the lattice chain carry the same 0.22px of
+ * unsigned error, and the fit takes one to 0.08 and leaves the other at 0.21.
+ *
+ * COST: the sign needs the nearest segment's orientation, which the grid does not return, so
+ * this rescans the whole segment list per query — O(queries x segments). That is fine for a
+ * band lane (tens of queries) and ruinous for a full boundary. Diagnostics only; no gate
+ * calls it.
+ *
+ * The sign is taken from the nearest SEGMENT's left normal. Authored subpaths are wound
+ * consistently, so "left" is a fixed side of the art for the whole set; it is only ever read
+ * as a mean over many samples, never per point, so a flip at a cusp costs nothing.
+ */
+export function signedNearestTo(sets: SubPath[][]): (x: number, y: number) => number {
+  const segs: Seg[] = []
+  for (const set of sets) {
+    for (const sp of set) {
+      const poly = flattenSubPath(sp)
+      if (poly.length < 2) continue
+      const pts = sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+        ? [...poly, poly[0]]
+        : poly
+      for (let i = 1; i < pts.length; i++) segs.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
+    }
+  }
+  const grid = new SegGrid(segs)
+  return (x, y) => {
+    const d = grid.nearest(x, y)
+    if (!Number.isFinite(d)) return NaN
+    // Recover the nearest segment to read its orientation. The grid returns a distance only,
+    // and a second scan over the few segments within d + 1 is cheap next to the query itself.
+    let best = Infinity
+    let side = 1
+    for (const sg of segs) {
+      const dd = Math.sqrt(distSqToSeg(x, y, sg))
+      if (dd < best) {
+        best = dd
+        const vx = sg.bx - sg.ax, vy = sg.by - sg.ay
+        side = (x - sg.ax) * vy - (y - sg.ay) * vx >= 0 ? 1 : -1
+      }
+    }
+    return side * d
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The BORDER BAND — the zone collectBoundary excludes (issue #9)
 // ---------------------------------------------------------------------------

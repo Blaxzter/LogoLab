@@ -36,6 +36,7 @@ guardrails):
 | 18 | **Near-colour flats fused into a gentle "ramp"** (gradient lane) — the residue of §26. Two flat objects whose colours differ by a small Oklab step are still unioned by the Step-3c field merge and painted as one shallow gradient, because at the veto's window scale (1/24 of the fitted axis) a step of ≤ 0.09 is indistinguishable from a real steep ramp piece: the honest reunites in gradient-authoring art reach 0.078 (`logo-firefox`), the fakes in this family read 0.019–0.086, and the census found no scale-W separation. §26 raised the catch rate of the flat∪flat fusion family from 0 to 41 of 60 labelled rows; these are the 19 it does not reach. The product exposure is bounded: `suggestGradients` keeps flat art out of the lane, so this is the mixed-art case only | `flute-flat` (A/B fixture lane, ungated: 16 of its 19 flat∪flat unions read ≤ 0.080), `logo-chrome` (gallery, 0.086), `seam-corner` (0.030), `bloom` (0.019) | fakes 0.019–0.086 vs the real maximum 0.078 — no threshold separates them | **§26.6**; instrument `stepRampDiag --census` (labelled by the SOURCE's authored paint) |
 | 17 | **A circle's whole boundary sits off its authored radius by a near-constant amount** — a BIAS, not a wobble: the trace is perfectly round and in the wrong place. Found by §24's circle lens on the day it landed, and only because that lens reports the mean residual SEPARATELY from the spread — the raw p95 reads 0.81 and looks exactly like the ring wobble, while the co-circularity spread is 0.03. Every other gate is blind: 0.8px is far inside chamfer/p95, and the shape is still round, so no corner or region lens sees it either. NOT a size law and not yet explained — the two worst circles are the same size and disagree in SIGN. Untouched by §24, whose family pass only reaches circles cut into arcs | `acute-counter` (tier 0, gated, passes — the gate is on spread, not bias) | seven authored circles read |bias| 0.09–**0.79**px: r=40.5 at **−0.79** (traced inside) against r=39.5 at **+0.19** (outside) and r=58.6 at +0.16 | **§24.3**, **§25.3**; instrument `ringDiag --circles` (the `bias` column, and since §25 the `centre` / `round` columns — a circle in the wrong PLACE is a third term `spread` folds in, and on `olympic-rings` it is now the whole residue: measured identical under an algebraic and a geometric fit, so the evidence is displaced and no estimator recovers it) |
 | 19 | **The junction re-seat moves a junction AWAY from its authored crossing** — the residue of §29 after the through-pair veto: 16 of 62 gallery re-seats on scorable crossings (128 marks, 512/1024/2048) still land further from the crossing than the lattice corner they left. Three mechanisms, none of them the certification constant issue #39 was filed on: a cap-skip that drops a REAL short terminal (an authored r=6 curve, 11.6 px at 1024) and extrapolates the line beyond it to the junction — audit recipe 10, `CAP_MAX`'s zero-margin populations; two huge-radius circle arms (r≈535 × r≈1104) whose intersection is ill-conditioned; and stub arms of 8 native px paired at a 14° angle. Visible on the mark at 1×: the junction sits 1.8–3.1 px off a crossing the lattice had within 0.3 | `logo-brave-browser` @512 (258,474) and @1024 (259,474) artwork px (gallery, ungated — the §29 gate covers the witness junction only); the answer sheet is `authoredCrossings` | 3.12 px off vs 0.29 lattice (C+C @512); 1.78 vs 0.18 (cap-skip @1024); gallery-wide 16 / 62 | **§29.4**; instruments `reseatDiag --lanes` (census, `--json`) and `reseatSelect --worse` (offline, per pair) |
+| 9c | **The border band residue, re-measured and mostly RETRACTED** (§35, 2026-09-07). §34.4 named `letter-joins` as a live residue and §30's fit-ε as the next lever; the corpus says otherwise. Over 35 gallery marks the displaced fit is BETTER at the border on 18 and worse on 7 (mean band-missed 0.333 lattice vs 0.331 displaced — a dead heat), so the residue is one case, not a family. Five hypotheses measured and refuted: the pinned terminal (the penalty grows AWAY from the frame), the knot budget (band node counts identical, 8→8 / 38→38 / 316→316), the segment span (grows on 2 of 33 marks, shrinks on 10), chain bias (both chains unbiased: −0.06 against |·| 0.28), and §30's ε (tightening 1.0 → 0.35 takes the interior 0.09 → 0.04 and the band 0.21 → 0.19). What `letter-joins` really has is art TANGENT to the canvas edge, rendered by both engines as a 20px flat run on x=0 where the authored arc stands off by ≤ 0.84px — a shared, pre-existing approximation no distance gate can call. Methodological residue worth keeping: the traced frame contaminates a NODE lane exactly as it contaminates a distance lane, so the transversal cut belongs to both | `letter-joins` (tier 0, gated, PASSES); `boeing-wm` 2.13× on 29 samples (gallery, ungated) is the only mark still unexplained, and is small-sample | gallery 18 better / 7 worse / 10 wash; means 0.333 vs 0.331 | **§35**; instrument `borderDiag --stages` (chain vs fit on both inputs, interior as control), `--profile`, `geomScore.signedNearestTo` |
 | 9b | **The border band is worse than the case's own interior, and the §15 sub-pixel pass is part of why** — GATING HOLE CLOSED 2026-09-07 (§34): `scoreBorderBand` scores the TRANSVERSAL part of the band against authored truth and `evaluateTruthGates` gates it at `band ≤ 2.0 · max(interior, 0.15)`, flat art @512, with `border-cross` authored for the lane. Two of the issue's own claims fell on the way: its nominated fixture witness was mostly INSTRUMENT (`wedge-counter` 4.70× → 1.23× once the lens stopped dropping segments on the far canvas edge and stopped scoring authored art outside it), and its stated cause — "the border stays on the lattice while everything adjacent went sub-pixel" — is REFUTED by the one-flag counterfactual: the pass is active there and makes the border WORSE on 4 of 9 cases while improving the interior on nearly all. The measured mechanism is that `bilin` clamps out-of-raster samples instead of declaring them missing, which triples `contrast` refusals and drops anchor-flatness refusals to a third of the interior rate — the guard that should be strictest where the window is worst is the one the clamp disarms. `subpixelWindowGuard` closes that half. WHAT REMAINS: `letter-joins` reads 0.21 band-missed against a 0.08 lattice with its own band points no longer displaced, so the residue is downstream of the estimator — §30's "the loss is in the FIT" is the next reading | `border-cross` (tier 0, **gated**, authored for this — passes at 83% of its limit), `letter-joins` 2.37× and `aa-seam` 1.71× (gated, pass); `langchain` 0.41 vs 0.34 and `boeing-wm` 0.54 vs 0.50 (gallery, ungated, FAIL the bar) | band ÷ own interior: fixture median 0.78×, max 2.37×; gallery max 2.36× over 42 border-touching marks | **§34**; instrument `borderDiag` (`--worst`, `--outcomes`, `--keepoff`), scorer `geomScore.scoreBorderBand` |
 | 20 | **The flat lane's ENGINE is chosen per raster** — `dominantColors` (paletteSegment.ts) counts the palette entries with share ≥ `minShare` OR `real[i]`, and `real[i]` is a 3×3 flat-interior count against the absolute 50px² floor, so the SAME art clears the `FLAT_PALETTE_MAX_COLORS` (14) gate at one raster and falls to the Mumford–Shah segmenter at another. The audit had named the consequence ("counting into `dominantColors`, which selects the engine"); §33's census is the first time it was witnessed. No lane traces one case through the engine gate at two rasters, so nothing gates it. | gallery, production, no override: `auth-js`, `bing`, `kotlin`, `proton-vpn`, `ups-wm` trace on the palette path @256 and on Mumford–Shah @512; `swc` the reverse — 6 of 152 marks, all many-colour art sitting at dominant 12–14. No fixture (ungated). | dominant 14→22, 14→16, 12→15, 14→23, 14→19, 16→12 across 256→512 | **§33.5**; instrument `floorDiag --lane gallery --res 256,512` (the `ENGINE` column) |
 
@@ -6599,8 +6600,12 @@ It is a partial fix and the table says so: two gallery marks gain, two are a was
 not being displaced badly, so something downstream of the estimator is moving them. §30's
 finding on the coarse lanes is the obvious next reading: what the border loses may be in the
 FIT, where a curve fitted to a displaced interior extrapolates into a lattice-pinned terminal.
-That is the residue, and it is now a red number in a gated lane rather than something you can
-only see by eye.
+
+**That reading was followed up the same day and mostly does not survive — see §35.** It is
+right about `letter-joins` (identical band chain, lattice fit 0.08 against displaced 0.21) and
+wrong about the corpus: over 35 gallery marks the displaced fit is better at the border on 18
+and worse on 7. §30's ε lever is refuted for this lane too. The gate below is the durable half
+of this section.
 
 ### 34.5 The gate, and why 2.0
 
@@ -6637,3 +6642,125 @@ The gating hole is closed; the defect is not. Open, and now measurable:
   fixtures at excess ≥ 40°, `mastercard` 0, the gallery 9.
 - The band lane is @512 and flat-art only. The @256 calibration and the gradient lane are each
   their own question, exactly as §23.3 says for the kink lens.
+
+
+---
+
+## 35. The border residue does not reproduce on the corpus — five hypotheses, all refuted (issue #9, Phase 0, 2026-09-07)
+
+**One line.** §34.4 left a residue and named the next reading: `letter-joins` reads 0.21
+band-missed against a 0.08 lattice while its own band points are no longer displaced, so the
+loss must be downstream, in the FIT — §30's finding at the coarse end. That reading is right
+about `letter-joins` and **wrong about the corpus**: over 35 gallery marks the displaced fit is
+BETTER at the border on 18 and worse on 7, and the two means are a dead heat. Nothing changed
+in production; what this bought is four dead ends someone else does not have to walk.
+
+### 35.1 The decomposition, and what it says on the fixtures
+
+`borderDiag --stages` scores the same band lane at two stages — the polyline the tracer walked
+and the curves the fitters produced from it — on both inputs, so the fit's contribution is a
+difference rather than an inference. Band chamfer / missed, @512:
+
+| case | latt chain | latt fit | +fit | disp chain | disp fit | +fit |
+|---|---|---|---|---|---|---|
+| `letter-joins` | 0.24/0.22 | 0.13/**0.08** | **−0.14** | 0.23/0.22 | 0.20/**0.21** | **−0.02** |
+| `band-cross` | 0.19/0.18 | 0.00/0.00 | −0.18 | 0.06/0.06 | 0.00/0.00 | −0.05 |
+| `border-cross` | 0.16/0.16 | 0.21/0.23 | +0.07 | 0.14/0.15 | 0.25/0.27 | +0.13 |
+| `seam-corner` | 0.13/0.16 | 0.19/0.17 | +0.01 | 0.12/0.15 | 0.15/0.13 | −0.02 |
+| `hairlines` | 0.19/0.17 | 0.32/0.31 | +0.13 | 0.19/0.17 | 0.32/0.31 | +0.13 |
+
+`letter-joins` is unambiguous: the band CHAIN is 0.22 on both inputs — the §34 window guard
+refuses displacement there, so those points are the same points — and the lattice fit takes
+them to 0.08 while the displaced fit stalls at 0.21. Identical evidence in the band, a 2.6×
+difference in what comes out of the fit.
+
+### 35.2 Four mechanisms, four refutations
+
+Each was the obvious reading of the one before it, and each died on measurement.
+
+**(a) The pinned terminal.** An open chain's endpoints are never displaced (`planarAssemble`
+restores `pts[0]` and `pts[n-1]` to lattice), so a displaced chain arrives at a border junction
+as true points followed by lattice ones — a step the fit would smooth through. **Refuted by the
+approach profile**: the band's missed error binned by distance to the edge has the displaced
+penalty GROWING away from the frame (+0.07 in the 2–2.5px bin, +0.17 in 2.5–3px), the wrong
+direction for a terminal effect. It also showed `letter-joins` has **no authored samples inside
+2px at all** — see 35.3.
+
+**(b) The knot budget.** Displaced evidence is smooth, so the fitter meets its tolerance with
+fewer knots and the segment that must absorb the pinned terminal bows. **Refuted flat**: band
+node counts are IDENTICAL between the two fits on every fixture — 8→8, 38→38, 316→316. Not one
+case gains or loses a node in the band.
+
+**(c) The segment span.** Same knot count, different knot POSITION: the knot adjacent to the
+band sits further out. True on the driver — `letter-joins` 13.4 → **19.3** (+44%) — and it took
+three attempts to measure, because the traced background frame contributes four chords the
+length of the canvas and drowns any mean or median. The fix is the lens's own transversal cut,
+applied to node statistics and not just to distances: **the frame contaminates a node lane
+exactly as it contaminates a distance lane**. **Refuted on the corpus**: the transversal band
+span grows on 2 of 33 gallery marks and SHRINKS on 10.
+
+**(d) Bias vs noise.** A curve fit averages a zero-mean error away and reproduces a systematic
+one faithfully, which would explain a fit that cleans one chain and not the other. So
+`signedNearestTo` scores the band chain points signed. **Refuted**: both chains are unbiased
+there — `letter-joins` reads mean −0.06 against mean|·| 0.28 on the lattice and −0.01 against
+0.26 displaced. Whatever separates them, it is not bias.
+
+**(e) §30's prescription — the fit's ε.** "Next lever = fit ε on displaced input" (§30, for the
+coarse lanes). Tightening ε on `letter-joins` from the default 1.0 down to 0.35 moves the
+INTERIOR 0.09 → **0.04** and leaves the band at 0.21 → 0.21 → 0.21 → **0.19**. The band is
+insensitive to ε across a 3× range while the interior responds strongly, and the ratio gets
+worse (2.37× → 4.14×) because only the denominator improves. **The written next lever is dead
+for this lane.**
+
+### 35.3 What `letter-joins` actually is
+
+Its border art is the large-arc lens at `translate(52,130)`: a circle of r=30 centred at
+x=30, so its extremum is **tangent** to the left canvas edge at (0,130). Tangency is why the
+case has no band samples inside 2px — the authored tangent is parallel to the frame at the
+contact and only reaches the lane's 15° transversal cut at x = 60(1−cos15°) ≈ 2.04px @512.
+
+Both fits render that tangency the same way: a **20px straight run on x=0**, from y=250 to
+y=270, where the authored arc stands off the edge by up to 0.84px. That is a real
+approximation and it is shared, pre-existing and nothing to do with §15 — the label boundary
+genuinely runs straight there, because the arc crosses the pixel-centre column over only ~15px
+of y. It is the visible "flat where it should be curved" that #9's title describes, and no
+distance gate will ever call it: 0.84px at the extremum, inside every tolerance in the repo.
+
+### 35.4 The corpus says the residue is one case, not a family
+
+`--stages` over the gallery, 35 marks with a scorable missed band lane:
+
+| | count |
+|---|---|
+| displaced fit BETTER at the border than the lattice fit | **18** |
+| displaced fit worse | **7** |
+| wash (±0.005) | 10 |
+
+mean band-missed **0.333** lattice fit against **0.331** displaced. A dead heat. §34.4's
+residue — "the §15 pass leaves something at the border that the window guard does not reach" —
+is a property of `letter-joins` and not of the tracer. This is §31's lesson landing a second
+time in the same week: *the corpus census caught what the fixture slice could not*, and here it
+caught it pointing the other way.
+
+**One measurement that looked like a corpus finding, and is not.** The chain→fit delta over the
+gallery reads +0.058 (lattice) and +0.078 (displaced) in the band — "the fit adds error at the
+border" — and it is tempting. The INTERIOR control, measured in the same run on the same art,
+reads **+0.101 and +0.159**, and the fit makes it worse on **33 of 33** marks against 24 of 33
+in the band. So the fit adds error everywhere on gallery art and slightly LESS at the frame;
+the band half of it is not a border finding. (The comparison is confounded anyway on complex
+art: the chain network carries boundaries the tracer later merges or despeckles away, and those
+score as spurious. It is clean on the fixtures, which is where 35.1's numbers come from.)
+
+### 35.5 Where this leaves #9
+
+The gate stands (§34.5) and is the durable half. The defect list should read the residue down,
+not up:
+- `letter-joins` is a single case whose border art is tangent to the frame, and whose visible
+  defect is a flattened tangency both engines share — not a §15 residue.
+- `boeing-wm` (2.13×, band-missed 0.90 on 29 samples) is the one gallery mark still worth a
+  look, and it is small-sample: nothing in this pass explains it and nothing here should be
+  spent on it without a second witness.
+- The instrument is now able to ask the question properly — `--stages` (chain vs fit, both
+  inputs, with the interior as control), `--profile` (error by distance to the edge), and the
+  bias/noise split — so a future reading starts from measurement rather than from this issue's
+  prose.

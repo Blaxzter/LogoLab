@@ -62,12 +62,12 @@ import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from './svgGround.ts'
 import {
   sharpCorners, makeVisibleAt, flattenSubPath, CORNER_MATCH_R,
-  scoreBorderBand, nearestTo, BAND, BAND_PARALLEL_DEG, BAND_MIN_N,
+  scoreBorderBand, nearestTo, signedNearestTo, BAND, BAND_PARALLEL_DEG, BAND_MIN_N,
   type BandSample, type BorderBand,
 } from './geomScore.ts'
 import { buildPlanarNetwork } from '../lib/trace/planarNetwork.ts'
 import { subpixelEdgeChains, type SubpixelDiagRecord } from '../lib/trace/planarSubpixel.ts'
-import type { SubPath } from '../lib/path/types.ts'
+import type { SubPath, Vec } from '../lib/path/types.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -94,6 +94,12 @@ const KEEP_OFF = argv.includes('--keepoff')
 /** `--outcomes` runs the §15 sub-pixel pass's own observational hook and bins every chain
  *  point's verdict by its distance to the canvas edge — the mechanism census. */
 const OUTCOMES = argv.includes('--outcomes')
+/** `--stages` splits the band error into what the CHAIN already carries and what the FIT
+ *  adds, on both the lattice and the displaced input — §30's decomposition, at the frame. */
+const STAGES = argv.includes('--stages')
+/** `--profile` adds, per case, the band's missed error binned by distance to the edge — the
+ *  question `--stages` raises but cannot answer: WHERE in the approach the fit loses. */
+const PROFILE = argv.includes('--profile')
 const f = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d) : '  —  ')
 const parseFit = (s: string): Record<string, number | boolean> => {
   const o: Record<string, number | boolean> = {}
@@ -347,6 +353,200 @@ if (WORST > 0) {
     if (!hot.length || hot[0].d < 0.25) continue
     console.log(`   ${r.name}`)
     for (const s of hot) console.log(`     ${s.side.padEnd(9)} (${f(s.x, 1)},${f(s.y, 1)})   ${f(s.d)}px`)
+  }
+}
+
+if (STAGES) {
+  // WHERE THE BORDER ERROR ENTERS. §34.4 left a residue the window guard does not reach:
+  // `letter-joins` reads 0.21 band-missed against a 0.08 lattice while its own band points
+  // are no longer displaced at all. So the error is not the estimator putting a point in the
+  // wrong place — it arrives later. This scores the SAME band lane at two stages:
+  //
+  //   chain — the polyline the tracer walked (lattice, or displaced by §15)
+  //   fit   — the curves the fitters produced from it
+  //
+  // and on both inputs, so the fit's contribution can be read as a difference rather than
+  // inferred. It is §30's decomposition ("what the coarse lanes lose now is in the FIT")
+  // asked at the frame instead of at the coarse end.
+  //
+  // Read the MISSED column: its queries are the authored samples, a population fixed by the
+  // art, so it is the only lane that stays like-for-like when the trace changes shape.
+  const chainsDoc = (edges: { closed: boolean; pts: Vec[] }[]): SubPath[] =>
+    edges
+      .filter((e) => e.pts.length >= 2)
+      .map((e) => ({
+        closed: e.closed,
+        nodes: e.pts.map((q) => ({ x: q.x, y: q.y, hIn: null, hOut: null, kind: 'corner' as const })),
+      }))
+
+  console.log(`\n  WHERE THE BORDER ERROR ENTERS — band chamfer / missed, by stage @${RES}`)
+  console.log(
+    `  ${'case'.padEnd(20)}${'latt chain'.padStart(12)}${'latt fit'.padStart(12)}${'+fit'.padStart(8)}` +
+      `${'disp chain'.padStart(12)}${'disp fit'.padStart(12)}${'+fit'.padStart(8)}${'band nodes'.padStart(11)}${'band span'.padStart(14)}${'latt bias/|·|'.padStart(14)}${'disp bias/|·|'.padStart(14)}${'latt interior'.padStart(14)}${'disp interior'.padStart(14)}`,
+  )
+  for (const [name, text] of cases) {
+    let gtDoc
+    try {
+      gtDoc = parseGroundTruth(text)
+    } catch { continue }
+    if (unscorable(gtDoc)) continue
+    let raster
+    try {
+      raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+    } catch { continue }
+    const w = raster.width
+    const h = raster.height
+    W = w
+    H = h
+    const gt = toRasterSpace(gtDoc, w)
+    const vis = makeVisibleAt(raster)
+    const img = { data: raster.data, width: w, height: h }
+    const signedGt = signedNearestTo(gt.map((g) => g.subPaths))
+
+    let raw: { labels: Int32Array; width: number; height: number } | null = null
+    const trace = (subpixelEdges: boolean) =>
+      traceImage(raster as unknown as ImageData,
+        { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: GRADIENTS, planarFit: { ...fit, subpixelEdges } },
+        undefined, undefined, undefined, undefined, (l) => { raw = l })
+    const dispDoc = await trace(true)
+    const lattDoc = await trace(false)
+    if (!raw) continue
+    const rr = raw as { labels: Int32Array; width: number; height: number }
+    const net = buildPlanarNetwork(rr.labels, w, h)
+
+    // The lattice chains, as walked. Then the same chains with §15's displacement applied —
+    // production's own pass, called the way planarAssemble calls it.
+    const lattChains = net.edges.map((e) => ({ closed: e.closed, pts: e.pts as Vec[] }))
+    const moved = subpixelEdgeChains(net, rr.labels, img)
+    const dispChains = net.edges.map((e) => ({ closed: e.closed, pts: (moved.get(e.id) ?? e.pts) as Vec[] }))
+
+    const setsOf = (d: { items: { kind: string; visible?: boolean; subPaths?: SubPath[] }[] }): SubPath[][] =>
+      d.items.filter((i) => i.kind === 'path' && i.visible !== false).map((i) => i.subPaths as SubPath[])
+    const score = (sets: SubPath[][]) => scoreBorderBand(gt, sets, w, h, vis)
+    const lc = score([chainsDoc(lattChains)])
+    const lf = score(setsOf(lattDoc))
+    const dc = score([chainsDoc(dispChains)])
+    const df = score(setsOf(dispDoc))
+    if (lc.n < BAND_MIN_N) continue
+    // THE APPROACH PROFILE. `+fit` says the fit loses on displaced input; this says WHERE in
+    // the band it loses. If the displaced fit's extra error sits in the last half-pixel, the
+    // suspect is the chain's own terminal — an open chain's endpoints are never displaced
+    // (`lo = 1`, `hi = n-2`), so a displaced chain arrives at the frame as true points
+    // followed by two lattice ones, and a fitter with nothing else to average chases them.
+    // If instead it is flat across the band, the suspect is the fit's tolerance.
+    if (PROFILE) {
+      const BINS = [0.5, 1, 1.5, 2, 2.5, 3]
+      const bin = (b: BorderBand, sets: SubPath[][]): number[] => {
+        const sum = new Array<number>(BINS.length).fill(0)
+        const cnt = new Array<number>(BINS.length).fill(0)
+        void b
+        scoreBorderBand(gt, sets, w, h, vis, (q) => {
+          if (q.side !== 'missed') return
+          const d = Math.min(q.x, w - q.x, q.y, h - q.y)
+          const i = BINS.findIndex((t) => d <= t)
+          if (i < 0) return
+          sum[i] += q.d
+          cnt[i]++
+        })
+        return sum.map((v, i) => (cnt[i] ? v / cnt[i] : NaN))
+      }
+      const pl = bin(lf, setsOf(lattDoc))
+      const pd = bin(df, setsOf(dispDoc))
+      console.log(`\n   ${name} — band MISSED by distance to the edge (authored samples, fixed population)`)
+      console.log(`     ${'edge dist'.padEnd(12)}${BINS.map((t) => `≤${t}`.padStart(8)).join('')}`)
+      console.log(`     ${'lattice fit'.padEnd(12)}${pl.map((v) => f(v).padStart(8)).join('')}`)
+      console.log(`     ${'displaced'.padEnd(12)}${pd.map((v) => f(v).padStart(8)).join('')}`)
+      console.log(`     ${'Δ'.padEnd(12)}${pd.map((v, i) => f(v - pl[i]).padStart(8)).join('')}\n`)
+    }
+
+    // NODES IN THE BAND. The per-case geometry on `letter-joins` showed the displaced fit
+    // leaving the frame with ONE long cubic where the lattice fit used two shorter ones —
+    // the displaced evidence is smooth, so the fitter meets its tolerance with fewer knots,
+    // and the segment that has to absorb the lattice-pinned terminal bows. If that is the
+    // mechanism rather than one case's anecdote, the displaced fit carries systematically
+    // FEWER nodes within the band than the lattice fit does, on the same art.
+    const bandNodes = (sets: SubPath[][]): number => {
+      let k = 0
+      for (const set of sets)
+        for (const sp of set)
+          for (const nd of sp.nodes)
+            if (Math.min(nd.x, w - nd.x, nd.y, h - nd.y) <= BAND) k++
+      return k
+    }
+    /** MEDIAN chord between consecutive nodes where at least one is IN the band — the span the
+     *  fitter chose to leave the frame with. Counting band nodes says nothing here (it is
+     *  identical on every case); the question is how far the next knot sits. */
+    const bandSpan = (sets: SubPath[][]): number => {
+      const spans: number[] = []
+      const near = (nd: { x: number; y: number }): boolean => Math.min(nd.x, w - nd.x, nd.y, h - nd.y) <= BAND
+      for (const set of sets)
+        for (const sp of set) {
+          const ns = sp.nodes
+          for (let i = 1; i < ns.length + (sp.closed ? 1 : 0); i++) {
+            const a = ns[i - 1]
+            const b = ns[i % ns.length]
+            if (!near(a) && !near(b)) continue
+            // The SAME transversal cut the distance lane uses. A node statistic in the band
+            // is contaminated by the traced frame exactly as a distance statistic is: the
+            // background rectangle contributes four chords the length of the canvas, and
+            // they are framing, not drawing. Without this cut `letter-joins` reads 242 in
+            // both columns while the arc segment it is asking about moves 13.4 → 19.3.
+            const L = Math.hypot(b.x - a.x, b.y - a.y)
+            if (L < 1e-9) continue
+            if (!isParallel({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, tx: (b.x - a.x) / L, ty: (b.y - a.y) / L }))
+              spans.push(L)
+          }
+        }
+      spans.sort((x, y) => x - y)
+      return spans.length ? spans[spans.length >> 1] : NaN
+    }
+    const nl = bandNodes(setsOf(lattDoc))
+    const nd = bandNodes(setsOf(dispDoc))
+
+    // BIAS OR NOISE. The decisive question this decomposition raises. Both chains carry the
+    // same unsigned band error, and the fit takes one to 0.08 and leaves the other at 0.21 —
+    // which is what a curve fit does to a zero-mean error and to a systematic one
+    // respectively. So measure the SIGN: over the chain points inside the band, mean(signed)
+    // against mean(|signed|). Noise has |mean| far below mean|·|; bias has the two equal.
+    const chainBias = (chains: { closed: boolean; pts: Vec[] }[]): [number, number] => {
+      let sum = 0
+      let abs = 0
+      let k = 0
+      for (const c of chains)
+        for (let i = 0; i < c.pts.length; i++) {
+          const q = c.pts[i]
+          if (Math.min(q.x, w - q.x, q.y, h - q.y) > BAND) continue
+          // The chain's own local direction, for the same transversal cut the lanes use.
+          const a = c.pts[Math.max(0, i - 1)]
+          const b = c.pts[Math.min(c.pts.length - 1, i + 1)]
+          const L = Math.hypot(b.x - a.x, b.y - a.y)
+          if (L < 1e-9) continue
+          if (isParallel({ x: q.x, y: q.y, tx: (b.x - a.x) / L, ty: (b.y - a.y) / L })) continue
+          const d = signedGt(q.x, q.y)
+          if (!Number.isFinite(d)) continue
+          sum += d
+          abs += Math.abs(d)
+          k++
+        }
+      return k ? [sum / k, abs / k] : [NaN, NaN]
+    }
+    const [lb, la] = chainBias(lattChains)
+    const [db, da] = chainBias(dispChains)
+
+    const cell = (b: { chamfer: number; missed: number }): string => `${f(b.chamfer)}/${f(b.missed)}`
+    const add = (a: { missed: number }, b: { missed: number }): string =>
+      `${b.missed - a.missed >= 0 ? '+' : ''}${f(b.missed - a.missed)}`
+    console.log(
+      `  ${name.padEnd(20)}${cell(lc).padStart(12)}${cell(lf).padStart(12)}${add(lc, lf).padStart(8)}` +
+        `${cell(dc).padStart(12)}${cell(df).padStart(12)}${add(dc, df).padStart(8)}` +
+        `${`${nl}→${nd}`.padStart(11)}${`${f(bandSpan(setsOf(lattDoc)), 1)}→${f(bandSpan(setsOf(dispDoc)), 1)}`.padStart(14)}` +
+        `${`${f(lb)}/${f(la)}`.padStart(14)}${`${f(db)}/${f(da)}`.padStart(14)}` +
+        // THE CONTROL. The band's chain→fit move means nothing on its own — a fit is
+        // supposed to change the number. What makes it a finding is the SAME move measured
+        // outside the band, on the same art in the same run: if the fit removes error there
+        // and adds it here, the border is where fitting stops working.
+        `${`${f(lc.interior)}→${f(lf.interior)}`.padStart(14)}${`${f(dc.interior)}→${f(df.interior)}`.padStart(14)}`,
+    )
   }
 }
 
