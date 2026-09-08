@@ -6,13 +6,12 @@
 // plain pixels and produces BOXES, and the existing vectorizer runs unchanged on
 // each crop.
 
-/** Anything shaped like a browser `ImageData` (the Node harness decodes into this too). */
-export interface ImageDataLike {
-  width: number
-  height: number
-  /** Row-major RGBA, 8 bits per channel. */
-  data: Uint8ClampedArray
-}
+// Pixels and paper are not sheet-specific — the studio and the MCP server ask the
+// same questions of a single logo — so they live in `src/lib/ink.ts` and are
+// re-exported here under the names the sheet code has always used.
+import type { PaperColor } from '../ink.ts'
+export type { ImageDataLike } from '../ink.ts'
+export type SheetBackground = PaperColor
 
 export interface Rect {
   x: number
@@ -69,19 +68,6 @@ export interface DetectOptions {
   dropLabels?: boolean
   /** Blobs smaller than this fraction of the median icon area are noise. */
   noiseFraction?: number
-}
-
-export interface SheetBackground {
-  r: number
-  g: number
-  b: number
-  a: number
-  /** Fraction of the sheet within `threshold` of this colour. */
-  coverage: number
-  /** The sheet is transparent and alpha alone separates the icons. */
-  transparent: boolean
-  /** The border ring agreed with itself — a plain, flat sheet background. */
-  uniform: boolean
 }
 
 export interface SheetGrid {

@@ -2,8 +2,8 @@
 export { detectSheetIcons, gridTiles, estimateBackground, isInkPixel, DETECT_DEFAULTS } from './detect.ts'
 export { cropTile, downscaleImageData, upscaleImageData, toImageData, defaultTileName, nameStem } from './crop.ts'
 export type { CropFill } from './crop.ts'
-export { probeInk } from './inkProbe.ts'
-export type { InkProbe } from './inkProbe.ts'
+export { probeInk } from '../ink.ts'
+export type { InkProbe } from '../ink.ts'
 export { matchCaptions, captionToName, cleanAffix, exportName, prepareCaption } from './captions.ts'
 export type { CaptionMatch } from './captions.ts'
 export type {

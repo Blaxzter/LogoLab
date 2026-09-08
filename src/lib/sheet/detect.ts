@@ -33,6 +33,7 @@ import type {
   SheetTile,
   TileKind,
 } from './types'
+import { estimateBackground, isInkPixel } from '../ink.ts'
 
 export const DETECT_DEFAULTS = {
   threshold: 24,
@@ -160,91 +161,11 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
 // 1. background
 // ---------------------------------------------------------------------------
 
-/**
- * The sheet's paper colour, read off the border ring: sheets are laid out with a
- * margin, so the outermost pixels are background almost by definition. Median,
- * not mean, so a logo that bleeds into one corner cannot drag it.
- */
-export function estimateBackground(img: ImageDataLike, threshold: number): SheetBackground {
-  const { width: W, height: H, data } = img
-  const rs: number[] = []
-  const gs: number[] = []
-  const bs: number[] = []
-  const as: number[] = []
-  const stepX = Math.max(1, Math.floor(W / 400))
-  const stepY = Math.max(1, Math.floor(H / 400))
-  const push = (x: number, y: number) => {
-    const i = (y * W + x) * 4
-    rs.push(data[i])
-    gs.push(data[i + 1])
-    bs.push(data[i + 2])
-    as.push(data[i + 3])
-  }
-  for (let x = 0; x < W; x += stepX) {
-    push(x, 0)
-    push(x, H - 1)
-  }
-  for (let y = 0; y < H; y += stepY) {
-    push(0, y)
-    push(W - 1, y)
-  }
-  const med = (a: number[]) => {
-    a.sort((p, q) => p - q)
-    return a.length ? a[a.length >> 1] : 0
-  }
-  // Copy before sorting: the deviation pass below needs the original order? No —
-  // it only needs values, so sorting in place is fine.
-  const r = med(rs)
-  const g = med(gs)
-  const b = med(bs)
-  const a = med(as)
-
-  // Uniformity: how much of the ring agrees with its own median.
-  let agree = 0
-  for (let i = 0; i < rs.length; i++) {
-    // rs/gs/bs are sorted now, so compare the *distribution* instead: count ring
-    // samples within tolerance using the sorted arrays' quantiles.
-    if (Math.abs(rs[i] - r) <= threshold && Math.abs(gs[i] - g) <= threshold && Math.abs(bs[i] - b) <= threshold) agree++
-  }
-  const transparent = a < 16
-
-  let inside = 0
-  const total = Math.ceil(W / stepX) * Math.ceil(H / stepY)
-  for (let y = 0; y < H; y += stepY) {
-    for (let x = 0; x < W; x += stepX) {
-      const i = (y * W + x) * 4
-      if (transparent ? data[i + 3] < 16 : isNear(data, i, r, g, b, threshold)) inside++
-    }
-  }
-
-  return {
-    r,
-    g,
-    b,
-    a,
-    coverage: total ? inside / total : 0,
-    transparent,
-    uniform: agree / Math.max(1, rs.length) > 0.8,
-  }
-}
-
-function isNear(data: Uint8ClampedArray, i: number, r: number, g: number, b: number, threshold: number): boolean {
-  return (
-    Math.abs(data[i] - r) <= threshold &&
-    Math.abs(data[i + 1] - g) <= threshold &&
-    Math.abs(data[i + 2] - b) <= threshold
-  )
-}
-
-/** True when this source pixel is ink (i.e. not the sheet background). */
-export function isInkPixel(data: Uint8ClampedArray, i: number, bg: SheetBackground, threshold: number): boolean {
-  const alpha = data[i + 3]
-  if (bg.transparent) return alpha > 16
-  if (alpha <= 16) return false
-  // A pixel that is partly transparent over a background it doesn't match is ink
-  // regardless of its colour distance — composite before comparing.
-  return !isNear(data, i, bg.r, bg.g, bg.b, threshold) || alpha < 240
-}
+// `estimateBackground` / `isInkPixel` moved to `src/lib/ink.ts` — "what is the
+// paper, and is this pixel ink" is asked of single logos too (the studio's mono
+// mode, the MCP planner), not just of sheets. Re-exported here so every existing
+// import keeps working.
+export { estimateBackground, isInkPixel }
 
 // ---------------------------------------------------------------------------
 // 2. mask

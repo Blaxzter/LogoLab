@@ -11,6 +11,7 @@ import { Button } from '../ui/Button'
 import { ColorField, Collapsible, Field, Segmented, Slider, Toggle } from '../ui/controls'
 import { Tooltip } from '../ui/Tooltip'
 import type { VectorizeOptions } from '../../types'
+import type { InkColorMode, InkModePlan } from '../../lib/ink'
 import { CONTROL_DOCS_BY_ID } from './controlDocs'
 import { ControlInfoDialog } from './ControlInfoDialog'
 import { AI_UPSCALE_MAX_PX, aiUpscaleFactor } from '../../lib/aiUpscale'
@@ -24,6 +25,11 @@ export interface TraceControlsProps {
   onPatch: (patch: Partial<VectorizeOptions>) => void
   /** Longest side of the source image (px), for the Detail preset's effect hint. */
   sourceMaxDim?: number
+  /** Colour-vs-mono choice: `auto` defers to the ink probe (src/lib/ink.ts). */
+  colorMode: InkColorMode
+  onColorMode: (m: InkColorMode) => void
+  /** What the ink probe last saw, so Auto can say what it decided and why. */
+  inkPlan: InkModePlan | null
   forceColorOn: boolean
   onForceColorOn: (v: boolean) => void
   forceColor: string
@@ -69,6 +75,9 @@ export function TraceControlsBody({
   opts,
   onPatch,
   sourceMaxDim,
+  colorMode,
+  onColorMode,
+  inkPlan,
   forceColorOn,
   onForceColorOn,
   forceColor,
@@ -95,11 +104,19 @@ export function TraceControlsBody({
   const engineLabel = engine === 'planar' ? 'Planar' : engine === 'crisp' ? 'Crisp' : 'Potrace'
   const detailSummary = tracing
     ? opts.mode === 'mono'
-      ? `Mono · threshold ${opts.threshold}`
+      ? `Mono · threshold ${opts.threshold}${opts.invert ? ' · inverted' : ''}`
       : `${engineLabel} · smoothing ${opts.smoothing}`
     : 'Cleaning SVG markup'
   const colorSummary =
     opts.mode === 'color' && opts.gradients !== false ? 'Gradients on' : 'Flat fills'
+
+  // The AI upscaler only acts on SMALL rasters (see aiUpscale.ts): an SVG source
+  // rasterizes at full detail, and past AI_UPSCALE_MAX_PX enlarging stops paying
+  // for itself. Rather than show a dial whose own hint says it does nothing, hide
+  // it — but keep it visible while it is switched ON, so a setting carried over
+  // from a smaller image can still be turned off.
+  const upscaleInert = isVectorSource || (sourceMaxDim != null && !aiUpscaleFactor(sourceMaxDim))
+  const showUpscale = !upscaleInert || (opts.upscale ?? 'off') !== 'off'
 
   return (
     <>
@@ -141,15 +158,34 @@ export function TraceControlsBody({
           )}
 
           {tracing && (
-            <Field label="Mode">
-              <Segmented<'color' | 'mono'>
-                value={opts.mode}
-                onChange={(v) => onPatch({ mode: v })}
+            <Field label="Mode" hint={d.mode.hint} onInfo={info('mode')}>
+              <Segmented<InkColorMode>
+                value={colorMode}
+                onChange={onColorMode}
                 options={[
+                  { value: 'auto', label: 'Auto' },
                   { value: 'color', label: 'Color' },
                   { value: 'mono', label: 'Mono' },
                 ]}
               />
+              {/* What Auto decided, in the probe's own terms. A choice the user
+                  can't see is a choice they can't overrule. */}
+              {colorMode === 'auto' && inkPlan && (
+                <p className="text-xs leading-snug text-muted">
+                  {inkPlan.inks === 0
+                    ? 'Nothing but background found — tracing in colour.'
+                    : inkPlan.mode === 'mono'
+                      ? `One ink${inkPlan.invert ? ', lighter than the background' : ''} → Mono, cut at ${inkPlan.threshold}${
+                          inkPlan.invert ? ' and inverted' : ''
+                        }${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
+                      : inkPlan.inks === 1
+                        ? // One ink, but not far enough from the background in
+                          // luminance for a cut to separate them — which is the
+                          // normal case for art on transparency.
+                          'One ink, too close to the background to cut → Color.'
+                        : `${inkPlan.inks} inks → Color.`}
+                </p>
+              )}
             </Field>
           )}
 
@@ -187,6 +223,7 @@ export function TraceControlsBody({
                 />
               </Field>
 
+              {showUpscale && (
               <Field
                 label="Upscale"
                 hint={
@@ -206,11 +243,25 @@ export function TraceControlsBody({
                   ]}
                 />
               </Field>
+              )}
 
               {opts.mode === 'mono' && (
-                <Field label="Threshold" hint={d.threshold.hint} onInfo={info('threshold')}>
-                  <Slider value={opts.threshold} min={0} max={255} onChange={(v) => onPatch({ threshold: v })} />
-                </Field>
+                <>
+                  <Field label="Threshold" hint={d.threshold.hint} onInfo={info('threshold')}>
+                    <Slider value={opts.threshold} min={0} max={255} onChange={(v) => onPatch({ threshold: v })} />
+                  </Field>
+
+                  {/* The other half of a mono cut: WHICH side of it becomes solid.
+                      Without this, light art on a dark ground traces to nothing —
+                      every pixel of it sits above the cut. */}
+                  <Field label="Invert" hint={d.invert.hint} onInfo={info('invert')}>
+                    <Toggle
+                      checked={opts.invert === true}
+                      onChange={(v) => onPatch({ invert: v })}
+                      label="Light ink on a dark ground"
+                    />
+                  </Field>
+                </>
               )}
 
               <Field label="Smoothing" hint={d.smoothing.hint} onInfo={info('smoothing')}>

@@ -46,6 +46,12 @@ import {
     traceImage,
 } from "../../lib/trace";
 import { traceImageOffThread, canTraceOffThread } from "../../lib/trace/traceOffThread";
+import {
+    applyInkMode,
+    decideInkMode,
+    type InkColorMode,
+    type InkModePlan,
+} from "../../lib/ink";
 import { aiUpscale, aiUpscaleFactor } from "../../lib/aiUpscale";
 import type { VectorizeOptions } from "../../types";
 import type { DocItem, EditableDoc, NodeRef, PathItem, Vec } from "../../lib/path/types";
@@ -62,6 +68,14 @@ import { Tooltip } from "../ui/Tooltip";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
 const DEBOUNCE_MS = 400;
+
+/**
+ * Above this Rec.709 luma the probed ink is plainly not black, so a mono trace
+ * (which always comes back #000) is repainted with the ink's real colour by
+ * default. Below it the two agree closely enough that switching the recolor on
+ * would only add a control the user has to reason about.
+ */
+const INK_IS_BLACK_LUMA = 32;
 
 type ViewMode = "split" | "traced" | "original" | "overlay";
 type Tool = "pan" | "node" | "mark";
@@ -219,6 +233,71 @@ export function VectorizeStudio({
     // each new image exactly once.
     const gradientsTouchedRef = useRef(false);
     const autoGradientsSrcRef = useRef<string | null>(null);
+
+    // Colour vs mono, the mono cut, and whether to invert it. `auto` asks the ink
+    // probe (src/lib/ink.ts) — the same decision /sheet and the MCP server make,
+    // and the reason white line-art in Mono used to trace to nothing: the cut was
+    // a constant 128 and `invert` had no control (#46). A host that already
+    // planned the trace (the icon sheet) passes its own mode and is left alone.
+    const [colorMode, setColorMode] = useState<InkColorMode>(
+        initialOptions ? initialOptions.mode : "auto",
+    );
+    // Read inside the probe effect so flipping Mode doesn't re-run (and re-decode) it.
+    const colorModeRef = useRef<InkColorMode>(colorMode);
+    // What the probe last saw — drives the "why" line under Mode, and the offer to
+    // paint a mono trace in the ink's own colour instead of #000.
+    const [inkPlan, setInkPlan] = useState<InkModePlan | null>(null);
+    // The probed 512px raster, kept so a Mode flip re-decides without re-decoding.
+    const probePixelsRef = useRef<ImageData | null>(null);
+    // Pins the force-colour toggle once the user touches it, so the ink offer
+    // never overrides a deliberate choice (same contract as gradientsTouchedRef).
+    const forceColorTouchedRef = useRef(false);
+
+    /**
+     * Resolve colour/mono for the current image and push it into the options.
+     *
+     * Called on a fresh probe and whenever Mode changes — a FORCED mono still
+     * wants the measured cut and the invert flag, which is exactly what a user
+     * picking "Mono" on white-on-navy art needs and never had.
+     */
+    const applyInkDecision = useCallback(
+        (mode: InkColorMode, pixels?: ImageData | null) => {
+            const img = pixels ?? probePixelsRef.current;
+            if (!img) {
+                // The probe hasn't landed yet (or the decode failed). An explicit
+                // choice still has to take effect — it just doesn't get a measured
+                // cut; Auto has nothing to decide from and waits for the probe.
+                if (mode !== "auto") {
+                    setOpts((o) => (o.mode === mode ? o : { ...o, mode }));
+                }
+                return;
+            }
+            const plan = decideInkMode(img, DEFAULT_VECTORIZE_OPTIONS.threshold, {
+                colorMode: mode,
+            });
+            setInkPlan(plan);
+            setOpts((o) => {
+                const next = applyInkMode(o, plan);
+                // Avoid a spurious re-trace when nothing actually moved.
+                return next.mode === o.mode &&
+                    next.threshold === o.threshold &&
+                    (next.invert ?? false) === (o.invert ?? false)
+                    ? o
+                    : next;
+            });
+            // A mono trace comes back #000. The probe knows the ink's real colour,
+            // so seed the recolor field with it, and switch it on when the ink is
+            // plainly not black — a white glyph on navy is the case that matters,
+            // and painting it black would be wrong rather than merely different.
+            if (plan.recolor && !forceColorTouchedRef.current) {
+                setForceColor(plan.recolor);
+                setForceColorOn(
+                    plan.probe.inkLuma != null && plan.probe.inkLuma > INK_IS_BLACK_LUMA,
+                );
+            }
+        },
+        [],
+    );
 
     const isVectorSource = logo.isSvg && Boolean(logo.svgText);
     const cleanFromExisting = isVectorSource && retraceVector === "clean";
@@ -563,6 +642,12 @@ export function VectorizeStudio({
                 // applies. Here the cancelled run never claims, the live one does.
                 if (cancelled || gradientsTouchedRef.current) return;
                 autoGradientsSrcRef.current = src; // probe once per image
+                // The ink probe rides the SAME decode — it asks a different
+                // question of the same pixels (how many inks, and where does a
+                // mono cut belong), and decoding twice for that would be waste.
+                // Keep them: switching Mode by hand re-decides without re-decoding.
+                probePixelsRef.current = img;
+                applyInkDecision(colorModeRef.current, img);
                 const on = suggestGradients(img);
                 setOpts((o) => {
                     // Skip if the user beat the probe, or it matches the effective
@@ -578,7 +663,14 @@ export function VectorizeStudio({
         return () => {
             cancelled = true;
         };
-    }, [logo.src, logo.isSvg, logo.svgText, isVectorSource, retraceVector]);
+    }, [
+        logo.src,
+        logo.isSvg,
+        logo.svgText,
+        isVectorSource,
+        retraceVector,
+        applyInkDecision,
+    ]);
 
     // Adopt a document the host already traced for this exact source (the icon
     // sheet traces every tile in a batch). Runs once, before the auto-run effect
@@ -1006,10 +1098,25 @@ export function VectorizeStudio({
             if ("gradients" in p) gradientsTouchedRef.current = true;
             setOpts((o) => ({ ...o, ...p }));
         },
+        colorMode,
+        onColorMode: (m: InkColorMode) => {
+            setColorMode(m);
+            colorModeRef.current = m;
+            // Re-decide from the pixels we already have: a forced Mono still wants
+            // the measured cut and the invert flag, not the 128 default.
+            applyInkDecision(m);
+        },
+        inkPlan,
         forceColorOn,
-        onForceColorOn: setForceColorOn,
+        onForceColorOn: (on: boolean) => {
+            forceColorTouchedRef.current = true;
+            setForceColorOn(on);
+        },
         forceColor,
-        onForceColor: setForceColor,
+        onForceColor: (c: string) => {
+            forceColorTouchedRef.current = true;
+            setForceColor(c);
+        },
         marking: tool === "mark",
         onMarkingChange: (on: boolean) => setTool(on ? "mark" : "pan"),
         markerCount: markers.length,
