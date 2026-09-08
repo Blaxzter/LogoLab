@@ -67,7 +67,7 @@ node editor, all client-side. The research behind each stage is in
 
 ![Vectorize](docs/vectorize.png)
 
-- **Clean curves, not staircases:** the default **Crisp** engine melts each mask into a
+- **Clean curves, not staircases:** the default **Planar** engine traces each colour region as one shared boundary curve, and the **Crisp** engine melts each mask into a
   sub-pixel coverage field, contours it (marching squares) and fits minimal Béziers with
   genuinely sharp corners; **Potrace** is one click away for the most pixel-faithful trace.
   Regions are stacked so adjacent shapes overlap instead of leaving hairline seams.
@@ -159,9 +159,12 @@ It's a static SPA — the build output is `dist/`.
 
 **Wrangler (direct upload):**
 
+The deployed target is an assets-only **Worker** (`wrangler.jsonc`, name `logo-lab`) —
+not Pages — so it is plain `wrangler deploy`:
+
 ```bash
 pnpm build
-pnpm dlx wrangler pages deploy dist --project-name logolab
+pnpm dlx wrangler deploy
 ```
 
 No environment variables or server routes required.
@@ -191,7 +194,7 @@ in [docs/vectorization-plan.md](docs/vectorization-plan.md).
 
 ### ✏️ Vectorize — structure-first tracing
 
-The default **Crisp** engine follows a *structure-first* order — **segment by smoothness →
+The tracer follows a *structure-first* order — **segment by smoothness →
 fit a paint model per region → trace geometry once → beautify** — instead of the classic
 posterize-then-trace pipeline. It's a logo-scale reimplementation of Adobe's 2025
 gradient-aware Image Trace.
