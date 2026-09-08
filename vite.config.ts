@@ -13,8 +13,14 @@ const DEV_PORT = 5646
 const page = (name: string) => fileURLToPath(new URL(name, import.meta.url))
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
+  // The MCP install dialog (src/components/AgentSetup.tsx) prints a command that
+  // names this checkout. `vite dev` IS the checkout, so fill it in; a hosted build
+  // has no idea where the user cloned it, and the dialog asks instead.
+  define: {
+    __LOGOLAB_ROOT__: JSON.stringify(command === 'serve' ? process.cwd().replace(/\\/g, '/') : ''),
+  },
   build: {
     target: 'es2022',
     rollupOptions: {
@@ -56,4 +62,4 @@ export default defineConfig({
       ],
     },
   },
-})
+}))
