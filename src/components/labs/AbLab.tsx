@@ -52,33 +52,43 @@ import { inventedCorners, makeVisibleAt } from '../../devtest/geomScore'
 // test/ab-snapshots/; the globs tolerate none existing yet — the dropdown just shows
 // "Live variants" until `pnpm gen:absnapshot` runs.
 //
-// DEV ONLY, and eagerly `?raw`: a stamp is a LOCAL working artifact (gitignored, and the
-// gallery lane traces trademarked marks that are not redistributed), so a production build
-// must not carry whoever-built-it's stamps. It also cannot: they inline into this chunk,
-// and a working set of them pushed it past Cloudflare's 25 MiB per-asset limit. In a build
-// the dropdown shows "Live variants" only — exactly what a fresh clone shows.
-const NO_SNAPS: Record<string, string> = {}
+// DEV ONLY. A stamp is a LOCAL working artifact — gitignored, because it is regenerable from
+// any revision and because the gallery lane traces trademarked marks that are not
+// redistributed — so a build must not carry whoever-built-it's stamps. It also could not:
+// eagerly inlined, a working set of them put this chunk at 29.2 MiB, past Cloudflare's 25 MiB
+// per-asset limit. In a build the dropdown shows "Live variants" only, exactly what a fresh
+// clone shows.
+//
+// The MANIFESTS load eagerly, their CONTENTS lazily. The index has to exist before the
+// dropdown can be drawn, and it is small (46 stamps ≈ 480 kB); what those stamps hold is
+// ~3 000 SVGs and ~1 500 PNGs, of which a session opens one stamp's worth. Eager, that was
+// ~4 500 module requests on mount in dev; lazily, a row pulls exactly the two files it
+// diffs. The loaders need no cache of their own — a module is fetched once per specifier
+// and every later call gets the same instance back.
+const NO_META: Record<string, string> = {}
 const SNAP_META = import.meta.env.DEV
   ? (import.meta.glob('/test/ab-snapshots/*/manifest.json', {
       query: '?raw',
       import: 'default',
       eager: true,
     }) as Record<string, string>)
+  : NO_META
+
+/** A snapshot file, fetched on demand: `?raw` gives the markup, `?url` gives the asset URL. */
+type SnapLoader = Record<string, () => Promise<string>>
+const NO_SNAPS: SnapLoader = {}
+const SNAP_SVGS: SnapLoader = import.meta.env.DEV
+  ? (import.meta.glob('/test/ab-snapshots/*/*.svg', { query: '?raw', import: 'default' }) as SnapLoader)
   : NO_SNAPS
-const SNAP_SVGS = import.meta.env.DEV
-  ? (import.meta.glob('/test/ab-snapshots/*/*.svg', {
-      query: '?raw',
-      import: 'default',
-      eager: true,
-    }) as Record<string, string>)
+const SNAP_PNGS: SnapLoader = import.meta.env.DEV
+  ? (import.meta.glob('/test/ab-snapshots/*/*.png', { query: '?url', import: 'default' }) as SnapLoader)
   : NO_SNAPS
-const SNAP_PNGS = import.meta.env.DEV
-  ? (import.meta.glob('/test/ab-snapshots/*/*.png', {
-      query: '?url',
-      import: 'default',
-      eager: true,
-    }) as Record<string, string>)
-  : NO_SNAPS
+
+/** One file out of a stamp, or null when that stamp does not have it. */
+function snapFile(map: SnapLoader, path: string): Promise<string> | null {
+  const load = map[path]
+  return load ? load() : null
+}
 
 interface SnapEntry {
   name: string
@@ -394,8 +404,10 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
   if (!be || !he) throw new Error(`case missing from ${be ? head.name : base.name} — rerun pnpm gen:absnapshot`)
   const bDir = `/test/ab-snapshots/${base.name}`
   const hDir = `/test/ab-snapshots/${head.name}`
-  const bPng = SNAP_PNGS[`${bDir}/${be.png}`]
-  const hPng = SNAP_PNGS[`${hDir}/${he.png}`]
+  const [bPng, hPng] = await Promise.all([
+    snapFile(SNAP_PNGS, `${bDir}/${be.png}`),
+    snapFile(SNAP_PNGS, `${hDir}/${he.png}`),
+  ])
   if (!bPng || !hPng) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
 
   let inputDiffers: string | undefined
@@ -409,14 +421,15 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
   // Same exact-serialization diff the vs-working-tree path uses: a stamp IS serializeDoc(doc)
   // at its revision and gradientId is deterministic, so identical geometry+paint serializes
   // byte-identically and any difference is a real trace change.
-  const view = (g: boolean) => {
-    const bSvg = SNAP_SVGS[`${bDir}/${g ? be.grad : be.flat}`]
-    const hSvg = SNAP_SVGS[`${hDir}/${g ? he.grad : he.flat}`]
+  const view = async (g: boolean) => {
+    const [bSvg, hSvg] = await Promise.all([
+      snapFile(SNAP_SVGS, `${bDir}/${g ? be.grad : be.flat}`),
+      snapFile(SNAP_SVGS, `${hDir}/${g ? he.grad : he.flat}`),
+    ])
     if (!bSvg || !hSvg) return null
     return { g, bSvg, hSvg, changed: bSvg !== hSvg }
   }
-  const flat = view(false)
-  const grad = view(true)
+  const [flat, grad] = await Promise.all([view(false), view(true)])
   if (!flat || !grad) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
 
   const views = [flat, grad].filter((v) => v.changed)
@@ -471,7 +484,7 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
   const entry = snap.manifest.cases.find((s) => s.id === c.id)
   if (!entry) throw new Error(`case not in snapshot ${snap.name} — rerun pnpm gen:absnapshot`)
   const dir = `/test/ab-snapshots/${snap.name}`
-  const pngUrl = SNAP_PNGS[`${dir}/${entry.png}`]
+  const pngUrl = await snapFile(SNAP_PNGS, `${dir}/${entry.png}`)
   if (!pngUrl) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
   const image = await labImageData(pngUrl, Math.max(entry.width, entry.height))
 
@@ -483,7 +496,7 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
   // rev (writeAbSnapshots.ts) and gradientId is deterministic, so identical geometry+paint
   // serializes byte-identically — a difference is a real trace change, nothing cosmetic.
   const pass = async (g: boolean) => {
-    const snapSvg = SNAP_SVGS[`${dir}/${g ? entry.grad : entry.flat}`]
+    const snapSvg = await snapFile(SNAP_SVGS, `${dir}/${g ? entry.grad : entry.flat}`)
     if (!snapSvg) return null
     const doc: EditableDoc = await labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: g })
     const live = serializeDoc(doc, 2)
