@@ -1,13 +1,16 @@
 // Trace ONE sheet tile — the studio's `run()` boiled down to what a batch needs.
 //
-// Browser-only (it reaches for Worker via traceImageOffThread), and deliberately
-// NOT re-exported from the sheet barrel so the Node tests can keep importing the
-// detector without dragging the tracer in.
+// Deliberately NOT re-exported from the sheet barrel, so the Node tests can keep
+// importing the detector without dragging the tracer in. It DOES run headless:
+// the worker hop is opt-in (`canTraceOffThread` is false where there is no
+// `Worker`), so the MCP server traces through this same function — one tile
+// pipeline for the batch, the single-icon editor and the agent alike. That is why
+// its imports name the `.ts` extension: Node resolves specifiers literally.
 
-import { serializeDoc, docStats } from '../path/model'
-import { suggestGradients, traceImage } from '../trace'
-import { canTraceOffThread, traceImageOffThread } from '../trace/traceOffThread'
-import { rasterCapFor } from '../traceCaps'
+import { serializeDoc, docStats } from '../path/model.ts'
+import { suggestGradients, traceImage } from '../trace/index.ts'
+import { canTraceOffThread, traceImageOffThread } from '../trace/traceOffThread.ts'
+import { rasterCapFor } from '../traceCaps.ts'
 import type { TraceProgress } from '../trace/types'
 import type { EditableDoc } from '../path/types'
 import type { VectorizeOptions } from '../../types'

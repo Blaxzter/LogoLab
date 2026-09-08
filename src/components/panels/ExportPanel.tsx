@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Download, ImageOff, Package, Sparkles, Layers } from 'lucide-react'
+import { AgentSetupButton } from '../AgentSetup'
 import { useAppearance, useCheckerClass, useEnv, useLogo } from '../../store'
 import type { ExportTarget, RenderIconOptions } from '../../types'
 import { Toggle } from '../ui/controls'
@@ -283,6 +284,16 @@ export default function ExportPanel(): ReactNode {
             >
               {busy ? 'Packaging…' : selectedCount === 0 ? 'Select an icon' : `Download .zip (${selectedCount})`}
             </Button>
+          </section>
+
+          {/* The same export, without the browser: LogoLab's MCP server hands the
+              tracer and this icon pipeline to a coding agent. */}
+          <section className="panel mt-6 p-4">
+            <h2 className="text-sm font-semibold text-ink">Do this from your editor</h2>
+            <p className="mt-1 mb-3 text-xs text-muted">
+              Let your AI agent trace an image and write the icon set straight into your project.
+            </p>
+            <AgentSetupButton className="w-full text-xs" />
           </section>
         </div>
       </div>

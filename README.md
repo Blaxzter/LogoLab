@@ -114,6 +114,27 @@ icon back as its own clean SVG.
   **prefix / suffix** to every name for the export.
 - One zip: traced SVGs, cropped PNGs (paper knocked out), or both.
 
+### 🤖 MCP server — LogoLab from your AI agent
+The tracer and the icon exporter, exposed to your coding agent over
+[MCP](https://modelcontextprotocol.io). "Trace `icon.png` and put a PWA icon set in `public/`"
+becomes one tool call — locally, nothing uploaded.
+
+```bash
+node src/mcp/server.ts install          # Claude Code, this project
+node src/mcp/server.ts install --client cursor   # or Cursor / VS Code / --client print
+```
+
+- `make_app_icons` (trace + export in one call), `trace_icon`, `export_icons`,
+  `split_icon_sheet`, `inspect_icon`.
+- Collections for **PWA / favicon / web**, **Tauri**, **Electron**, **Android**, **iOS** and
+  **browser extensions** — with the real `favicon.ico` and `.icns` containers, the manifest,
+  the `<head>` snippet, `Contents.json` and the adaptive-icon XML.
+- The same decisions the studio makes (colour vs mono, gradients, trace resolution), reported
+  back so the agent can overrule one without hand-tuning the rest.
+
+The app has a button for it: **Export → Do this from your editor**. Full reference:
+[`docs/mcp.md`](docs/mcp.md).
+
 ## 🚀 Getting started
 
 ```bash
@@ -121,6 +142,8 @@ pnpm install
 pnpm dev        # http://localhost:5173
 pnpm build      # type-check + production build → ./dist
 pnpm preview    # preview the production build
+pnpm mcp        # run the MCP server on stdio (what an agent client launches)
+pnpm mcp:try public/examples/petals.png ./out    # trace + export once, no client needed
 ```
 
 > Uses **pnpm**, but `npm` / `yarn` work too.
@@ -217,8 +240,10 @@ src/
     trace/         # potrace tracing pipeline (quantize → stacked masks → potrace WASM)
     path/          # editable vector model: SVG/path-d parser, serializer, Bézier node ops
     svgClean.ts    # SVG path rounding / optimization
-    pwaExport.ts   # icon rendering, favicon.ico, manifest, zip
+    pwaExport.ts   # icon rendering (canvas), zip bundling
+    iconSpec.ts    # icon geometry + manifest/.ico — shared by the app AND the MCP server
     image.ts       # loading, SVG rasterization, render sources
+  mcp/             # the MCP server: trace + export for a coding agent (docs/mcp.md)
   hooks/
     useLiveFavicon.ts
   store.ts         # Zustand store (logo, appearance, environment, device placements)
