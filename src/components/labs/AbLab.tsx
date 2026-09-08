@@ -51,21 +51,34 @@ import { inventedCorners, makeVisibleAt } from '../../devtest/geomScore'
 // public/, so fetching would 404 in a build). Each snapshot is a SUBDIR under
 // test/ab-snapshots/; the globs tolerate none existing yet — the dropdown just shows
 // "Live variants" until `pnpm gen:absnapshot` runs.
-const SNAP_META = import.meta.glob('/test/ab-snapshots/*/manifest.json', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>
-const SNAP_SVGS = import.meta.glob('/test/ab-snapshots/*/*.svg', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>
-const SNAP_PNGS = import.meta.glob('/test/ab-snapshots/*/*.png', {
-  query: '?url',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>
+//
+// DEV ONLY, and eagerly `?raw`: a stamp is a LOCAL working artifact (gitignored, and the
+// gallery lane traces trademarked marks that are not redistributed), so a production build
+// must not carry whoever-built-it's stamps. It also cannot: they inline into this chunk,
+// and a working set of them pushed it past Cloudflare's 25 MiB per-asset limit. In a build
+// the dropdown shows "Live variants" only — exactly what a fresh clone shows.
+const NO_SNAPS: Record<string, string> = {}
+const SNAP_META = import.meta.env.DEV
+  ? (import.meta.glob('/test/ab-snapshots/*/manifest.json', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>)
+  : NO_SNAPS
+const SNAP_SVGS = import.meta.env.DEV
+  ? (import.meta.glob('/test/ab-snapshots/*/*.svg', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>)
+  : NO_SNAPS
+const SNAP_PNGS = import.meta.env.DEV
+  ? (import.meta.glob('/test/ab-snapshots/*/*.png', {
+      query: '?url',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>)
+  : NO_SNAPS
 
 interface SnapEntry {
   name: string
