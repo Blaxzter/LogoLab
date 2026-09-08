@@ -4,7 +4,6 @@
 // <LogoMark>), then bundles a complete favicon + PWA icon set into a .zip with a
 // real favicon.ico, a webmanifest, and a copy-paste <head> snippet.
 
-import JSZip from 'jszip'
 import { loadRenderSource } from './image.ts'
 import { buildHtmlSnippet, buildManifest, encodeIcoBytes, iconLayout, type RenderIconOpts } from './iconSpec.ts'
 import type { ExportTarget, RenderIconOptions } from '../types'
@@ -163,6 +162,9 @@ export async function buildExportZip(
     svgText?: string | null
   },
 ): Promise<Blob> {
+  // JSZip is 94 kB and nothing needs it until someone actually asks for the
+  // bundle, so it is fetched here rather than carried by every page load.
+  const { default: JSZip } = await import('jszip')
   // Rasterize SVGs at high resolution so exported icons are crisp (an <img>
   // with only a viewBox would render blank/150px); raster sources pass through.
   const { source, width, height } = await loadRenderSource(src, 1024, meta.svgText ?? null)

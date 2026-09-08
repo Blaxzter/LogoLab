@@ -15,8 +15,6 @@ import { Tooltip } from './components/ui/Tooltip'
 import { TryExampleButton } from './components/ExamplesDialog'
 import { PreviewGrid } from './components/PreviewGrid'
 import CleanupPanel from './components/panels/CleanupPanel'
-import VectorizePanel from './components/panels/VectorizePanel'
-import SheetPanel from './components/panels/SheetPanel'
 import ExportPanel from './components/panels/ExportPanel'
 import Impressum from './components/legal/Impressum'
 import Datenschutz from './components/legal/Datenschutz'
@@ -36,6 +34,18 @@ import { LegalFooter } from './components/legal/LegalFooter'
  */
 const EditorPanel = lazy(() => import('./components/panels/EditorPanel'))
 
+/**
+ * The two tabs that carry the TRACER. Lazy for the same reason, and it is the
+ * single biggest thing in the first load: `src/lib/trace` is 144 kB of the entry
+ * chunk, and it arrives only because these two routes were imported eagerly —
+ * Preview, the landing tab, was paying for a vectorizer it never calls. Measured
+ * on the whole entry chunk: 893 → 425 kB raw, 287 → 132 kB gzip. The cost is one
+ * Suspense fallback the first time either tab is opened; they share the trace
+ * chunk, so opening the second is free.
+ */
+const VectorizePanel = lazy(() => import('./components/panels/VectorizePanel'))
+const SheetPanel = lazy(() => import('./components/panels/SheetPanel'))
+
 const LabsIndex = lazy(() => import('./components/labs/LabsIndex'))
 const PipelineLab = lazy(() => import('./components/labs/PipelineLab'))
 const AbLab = lazy(() => import('./components/labs/AbLab'))
@@ -52,6 +62,16 @@ function LabLoading() {
     <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted">
       <Loader2 size={16} className="animate-spin text-accent" />
       Loading the harness…
+    </div>
+  )
+}
+
+/** The same wait, worded for a normal tab — "the harness" is lab language. */
+function PanelLoading({ what }: { what: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted">
+      <Loader2 size={16} className="animate-spin text-accent" />
+      Loading {what}…
     </div>
   )
 }
@@ -262,16 +282,30 @@ export function App() {
           <Routes>
             <Route path="/preview" element={<PreviewGrid />} />
             <Route path="/cleanup" element={<CleanupPanel />} />
-            <Route path="/vectorize" element={<VectorizePanel />} />
+            <Route
+              path="/vectorize"
+              element={
+                <Suspense fallback={<PanelLoading what="the vectorizer" />}>
+                  <VectorizePanel />
+                </Suspense>
+              }
+            />
             <Route
               path="/editor"
               element={
-                <Suspense fallback={<LabLoading />}>
+                <Suspense fallback={<PanelLoading what="the editor" />}>
                   <EditorPanel />
                 </Suspense>
               }
             />
-            <Route path="/sheet" element={<SheetPanel />} />
+            <Route
+              path="/sheet"
+              element={
+                <Suspense fallback={<PanelLoading what="the icon sheet" />}>
+                  <SheetPanel />
+                </Suspense>
+              }
+            />
             <Route path="/export" element={<ExportPanel />} />
             {/* Root and any unknown path land on Preview. */}
             <Route path="/" element={<Navigate to="/preview" replace />} />
