@@ -336,6 +336,61 @@ export function decideInkMode(
   }
 }
 
+/* ------------------------------------------------- what a mono cut admits */
+
+// A mono cut is the one setting in the studio that can silently produce NOTHING:
+// it is a single global threshold, and an image whose ink all sits on one side of
+// it yields an empty mask. The tracer is right to return nothing — the user asked
+// for pixels that do not exist — but a control that can reach such a state without
+// saying so is the actual defect (#47). These two let the panel show the
+// consequence on the control itself, so the blank is visible before it happens.
+
+/**
+ * Fraction of the image's VISIBLE pixels a mono cut turns solid, in [0,1].
+ *
+ * Mirrors `thresholdToMask` exactly — same Rec.709 weights, same `alpha >= 16`
+ * gate, same strict comparison — because a readout that disagreed with the mask
+ * by even one pixel at the boundary would be worse than no readout. One O(pixels)
+ * pass; ~1.5 ms on a 512px raster, so it is fine to recompute while dragging.
+ */
+export function cutFraction(img: ImageDataLike, cut: number, invert = false): number {
+  const d = img.data
+  const c = Math.max(0, Math.min(255, Math.round(cut)))
+  let visible = 0
+  let solid = 0
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 16) continue
+    visible++
+    const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
+    if (invert ? lum > c : lum < c) solid++
+  }
+  return visible === 0 ? 0 : solid / visible
+}
+
+/**
+ * Luminance span of the visible pixels — the range a mono cut has to land inside
+ * to select some of them but not all.
+ *
+ * With the cut OFF the ink is what falls BELOW it, so any cut at or under `min`
+ * selects nothing; with it ON the ink is what rises above, so any cut at or over
+ * `max` selects nothing. Those are the dead zones the Threshold slider shades.
+ * Null when the image has no visible pixels at all.
+ */
+export function inkLumaRange(img: ImageDataLike): { min: number; max: number; visible: number } | null {
+  const d = img.data
+  let min = Infinity
+  let max = -Infinity
+  let visible = 0
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 16) continue
+    visible++
+    const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
+    if (lum < min) min = lum
+    if (lum > max) max = lum
+  }
+  return visible === 0 ? null : { min, max, visible }
+}
+
 /** `decideInkMode` applied straight onto a `VectorizeOptions`. */
 export function applyInkMode(base: VectorizeOptions, plan: InkModePlan): VectorizeOptions {
   return plan.mode === 'mono'

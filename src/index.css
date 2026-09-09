@@ -21,6 +21,9 @@
   --color-surface-3: #f2f3f5;
   --color-line: #e6e8ec;
   --color-line-strong: #d6d9df;
+  /* Struck-out slider track: a range the control can reach but that cannot
+     produce a usable result (see ui/controls Slider `dead`). */
+  --slider-dead: #e9b9b9;
 
   /* Ink */
   --color-ink: #14161c;
@@ -89,6 +92,7 @@
     --color-surface-3: #21242d;
     --color-line: #262932;
     --color-line-strong: #363b47;
+    --slider-dead: #5c3336;
 
     /* Ink — soft off-white, not pure white */
     --color-ink: #e8eaf0;

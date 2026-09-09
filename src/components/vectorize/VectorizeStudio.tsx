@@ -48,7 +48,9 @@ import {
 import { traceImageOffThread, canTraceOffThread } from "../../lib/trace/traceOffThread";
 import {
     applyInkMode,
+    cutFraction,
     decideInkMode,
+    inkLumaRange,
     type InkColorMode,
     type InkModePlan,
 } from "../../lib/ink";
@@ -298,6 +300,32 @@ export function VectorizeStudio({
         },
         [],
     );
+
+    /**
+     * What the current mono cut actually admits — the numbers that let the panel
+     * show a blank BEFORE it happens instead of explaining it afterwards (#47).
+     *
+     * Keyed on `inkPlan` on purpose: it is set from exactly the pixels in
+     * `probePixelsRef` and in the same call, so it is the honest cache key for a
+     * ref the memo cannot otherwise observe.
+     */
+    const monoGuide = useMemo(() => {
+        const img = probePixelsRef.current;
+        if (!img || !inkPlan || opts.mode !== "mono") return null;
+        const range = inkLumaRange(img);
+        if (!range) return null;
+        return {
+            // Cuts that select nothing. With Invert off the ink is what falls
+            // BELOW the cut, so anything at or under the darkest pixel is dead;
+            // with it on the ink rises above, so anything at or over the lightest
+            // is. The "everything solid" end is deliberately NOT marked — on art
+            // over transparency that is the silhouette, which is a real result.
+            deadOff: Math.floor(range.min),
+            deadOn: Math.ceil(range.max),
+            fracOff: cutFraction(img, opts.threshold, false),
+            fracOn: cutFraction(img, opts.threshold, true),
+        };
+    }, [inkPlan, opts.mode, opts.threshold]);
 
     const isVectorSource = logo.isSvg && Boolean(logo.svgText);
     const cleanFromExisting = isVectorSource && retraceVector === "clean";
@@ -1107,6 +1135,7 @@ export function VectorizeStudio({
             applyInkDecision(m);
         },
         inkPlan,
+        monoGuide,
         forceColorOn,
         onForceColorOn: (on: boolean) => {
             forceColorTouchedRef.current = true;

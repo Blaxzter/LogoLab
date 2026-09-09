@@ -30,6 +30,21 @@ export interface TraceControlsProps {
   onColorMode: (m: InkColorMode) => void
   /** What the ink probe last saw, so Auto can say what it decided and why. */
   inkPlan: InkModePlan | null
+  /**
+   * What the CURRENT mono cut admits, so Threshold and Invert can show their own
+   * consequence. A control that can silently reach a state producing nothing is
+   * the defect (#47); this is what makes that state visible on the control.
+   * Null outside mono, or before the probe lands.
+   */
+  monoGuide: {
+    /** Cuts at or below this select nothing with Invert OFF. */
+    deadOff: number
+    /** Cuts at or above this select nothing with Invert ON. */
+    deadOn: number
+    /** Fraction of visible pixels each Invert position admits at this cut. */
+    fracOff: number
+    fracOn: number
+  } | null
   forceColorOn: boolean
   onForceColorOn: (v: boolean) => void
   forceColor: string
@@ -58,6 +73,14 @@ export interface TraceControlsProps {
 
 const d = CONTROL_DOCS_BY_ID
 
+/** A fraction as a percentage, keeping one decimal while it is still visible —
+ *  "0.4%" is a thin hairline that traces; rounding it to "0%" would be a lie. */
+function pct(f: number): string {
+  if (f === 0) return '0%'
+  if (f < 0.01) return `${(f * 100).toFixed(1)}%`
+  return `${Math.round(f * 100)}%`
+}
+
 /** Desktop rail — the 320px column. Below md it's hidden; the same body renders
  *  inside the studio's "Trace" bottom sheet instead (see VectorizeStudio). */
 export function TraceControls(props: TraceControlsProps) {
@@ -78,6 +101,7 @@ export function TraceControlsBody({
   colorMode,
   onColorMode,
   inkPlan,
+  monoGuide,
   forceColorOn,
   onForceColorOn,
   forceColor,
@@ -117,6 +141,23 @@ export function TraceControlsBody({
   // from a smaller image can still be turned off.
   const upscaleInert = isVectorSource || (sourceMaxDim != null && !aiUpscaleFactor(sourceMaxDim))
   const showUpscale = !upscaleInert || (opts.upscale ?? 'off') !== 'off'
+
+  // Mono cut consequences (#47). The cut is the one control that can silently
+  // yield NOTHING — a single global threshold with all the ink on one side of it.
+  // Rather than explain the blank afterwards, price both Invert positions and
+  // strike out the cuts that cannot work, so it is visible before it is chosen.
+  // The dead span is drawn, never enforced: the estimate behind it can be wrong on
+  // unusual art, so the override stays reachable.
+  const inverted = opts.invert === true
+  const deadCuts = monoGuide
+    ? inverted
+      ? [{ from: monoGuide.deadOn, to: 255 }]
+      : [{ from: 0, to: monoGuide.deadOff }]
+    : undefined
+  const currentFrac = monoGuide ? (inverted ? monoGuide.fracOn : monoGuide.fracOff) : 1
+  const otherFrac = monoGuide ? (inverted ? monoGuide.fracOff : monoGuide.fracOn) : 0
+  const selectsNothing = monoGuide != null && opts.mode === 'mono' && currentFrac === 0
+  const otherSideHelps = selectsNothing && otherFrac > 0
 
   return (
     <>
@@ -189,6 +230,19 @@ export function TraceControlsBody({
             </Field>
           )}
 
+          {/* Known from the probe at LOAD, before anything is traced: there is no
+              ink here at all. No setting recovers that, so say it once, plainly,
+              rather than letting every knob be tried against an empty image. */}
+          {tracing && inkPlan?.inks === 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-snug text-warn">
+              <AlertTriangle size={14} className="mt-px shrink-0" />
+              <span>
+                This image looks empty — every pixel matches its background, so there is
+                nothing to trace. Check the upload, or clear the background in Cleanup first.
+              </span>
+            </div>
+          )}
+
           {tracing && (
             <Collapsible title="Shape & detail" summary={detailSummary} defaultOpen>
               <Field label="Engine" hint={d.engine.hint} onInfo={info('engine')}>
@@ -248,7 +302,13 @@ export function TraceControlsBody({
               {opts.mode === 'mono' && (
                 <>
                   <Field label="Threshold" hint={d.threshold.hint} onInfo={info('threshold')}>
-                    <Slider value={opts.threshold} min={0} max={255} onChange={(v) => onPatch({ threshold: v })} />
+                    <Slider
+                      value={opts.threshold}
+                      min={0}
+                      max={255}
+                      onChange={(v) => onPatch({ threshold: v })}
+                      dead={deadCuts}
+                    />
                   </Field>
 
                   {/* The other half of a mono cut: WHICH side of it becomes solid.
@@ -260,7 +320,36 @@ export function TraceControlsBody({
                       onChange={(v) => onPatch({ invert: v })}
                       label="Light ink on a dark ground"
                     />
+                    {/* Both positions, priced. The whole point of #47: you can see
+                        which one selects nothing WITHOUT having to pick it first. */}
+                    {monoGuide && (
+                      <p className="text-xs leading-snug text-muted tabular-nums">
+                        At this cut — off takes{' '}
+                        <span className={opts.invert ? '' : 'font-semibold text-ink-2'}>
+                          {pct(monoGuide.fracOff)}
+                        </span>{' '}
+                        of the visible pixels, on takes{' '}
+                        <span className={opts.invert ? 'font-semibold text-ink-2' : ''}>
+                          {pct(monoGuide.fracOn)}
+                        </span>
+                        .
+                      </p>
+                    )}
                   </Field>
+
+                  {/* The state this whole pass exists to make impossible to reach
+                      silently: the cut selects nothing, so the trace will be empty. */}
+                  {selectsNothing && (
+                    <div className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-snug text-warn">
+                      <AlertTriangle size={14} className="mt-px shrink-0" />
+                      <span>
+                        This cut selects no pixels, so the trace comes out empty.
+                        {otherSideHelps
+                          ? ' Flip Invert — the other side selects ' + pct(otherFrac) + '.'
+                          : ' Move Threshold out of the struck-out range.'}
+                      </span>
+                    </div>
+                  )}
                 </>
               )}
 

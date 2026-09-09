@@ -98,6 +98,7 @@ export function Slider({
   unit = '',
   onChange,
   format,
+  dead,
 }: {
   value: number
   min: number
@@ -106,8 +107,32 @@ export function Slider({
   unit?: string
   onChange: (v: number) => void
   format?: (v: number) => string
+  /**
+   * Sub-ranges (in value units) where this control cannot produce a usable
+   * result — drawn as struck-out track rather than plain track, so a setting that
+   * is guaranteed to do nothing looks wrong before it is chosen. The handle is
+   * NOT clamped out of them: on unusual art the estimate that produced them can
+   * be wrong, and the override has to stay reachable.
+   */
+  dead?: { from: number; to: number }[]
 }) {
   const display = format ? format(value) : `${value}${unit}`
+  const span = max - min || 1
+  const pct = (v: number) => `${(((v - min) / span) * 100).toFixed(2)}%`
+  // Painted under the native track: the dead spans in a muted warn tint.
+  const trackStyle =
+    dead && dead.length
+      ? {
+          backgroundImage: dead
+            .map(
+              (d) =>
+                `linear-gradient(to right, transparent ${pct(d.from)}, var(--slider-dead) ${pct(
+                  d.from,
+                )}, var(--slider-dead) ${pct(d.to)}, transparent ${pct(d.to)})`,
+            )
+            .join(', '),
+        }
+      : undefined
   return (
     <div className="flex items-center gap-3">
       <input
@@ -117,6 +142,7 @@ export function Slider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
+        style={trackStyle}
         className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-line-strong"
       />
       <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-ink-2">

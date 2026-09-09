@@ -10,7 +10,14 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideInkMode, probeInk, type ImageDataLike, type PaperColor } from '../src/lib/ink.ts'
+import {
+  cutFraction,
+  decideInkMode,
+  inkLumaRange,
+  probeInk,
+  type ImageDataLike,
+  type PaperColor,
+} from '../src/lib/ink.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { docStats } from '../src/lib/path/model.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'
@@ -191,4 +198,69 @@ test('the whole point: light art forced to Mono traces the ART, not nothing and 
       `${label}: the old default inked ${(before * 100).toFixed(1)}% — it was supposed to be the broken one`,
     )
   }
+})
+
+/* ------------------------------------------- what a cut admits (#47 controls) */
+
+// These drive the Threshold slider's struck-out spans and the Invert readout, so
+// they have to agree with `thresholdToMask` exactly: a readout that disagreed at
+// the boundary would be worse than none. The end-to-end check below is the real
+// contract — the fraction predicts whether the trace comes back empty.
+
+test('cutFraction mirrors the mask: below the ink nothing is selected, above it everything', () => {
+  const img = art(64, 64, [255, 255, 255, 255], [20, 20, 20, 255])
+  assert.equal(cutFraction(img, 0, false), 0, 'no pixel is darker than 0')
+  assert.equal(cutFraction(img, 255, false), 1, 'every pixel is lighter than the max cut')
+  // The rect is the middle half of the canvas = a quarter of it.
+  const mid = cutFraction(img, 128, false)
+  assert.ok(mid > 0.2 && mid < 0.3, `expected ~25%, got ${(mid * 100).toFixed(1)}%`)
+  // Inverted is the complement at the same cut.
+  assert.ok(Math.abs(cutFraction(img, 128, true) + mid - 1) < 1e-9)
+})
+
+test('cutFraction counts only VISIBLE pixels, so transparency is not background', () => {
+  const img = art(64, 64, [0, 0, 0, 0], [255, 255, 255, 255])
+  // A quarter of the canvas is opaque white; the rest is transparent and uncounted.
+  assert.equal(cutFraction(img, 128, true), 1, 'all VISIBLE pixels are above the cut')
+  assert.equal(cutFraction(img, 128, false), 0)
+})
+
+test('inkLumaRange spans the visible pixels and ignores transparency', () => {
+  const onWhite = inkLumaRange(art(64, 64, [255, 255, 255, 255], [20, 20, 20, 255]))!
+  assert.ok(onWhite.min < 25 && onWhite.max > 250, `${onWhite.min}..${onWhite.max}`)
+  const onAlpha = inkLumaRange(art(64, 64, [0, 0, 0, 0], [255, 255, 255, 255]))!
+  assert.ok(onAlpha.min > 250, 'only the white ink is visible')
+  assert.equal(onAlpha.visible, (64 >> 1) * (64 >> 1), 'the middle-half rect')
+  assert.equal(inkLumaRange(art(8, 8, [0, 0, 0, 0], [0, 0, 0, 0])), null, 'nothing visible at all')
+})
+
+// The contract the UI leans on: a 0% readout must mean the trace really is empty,
+// and a non-zero one must mean it really is not. If these ever disagree the panel
+// would strike out a live setting, or fail to strike out a dead one.
+test('a 0% cut traces to nothing, and a non-zero one does not', async () => {
+  const img = art(96, 96, [0, 0, 0, 0], [255, 255, 255, 255])
+  for (const invert of [false, true]) {
+    const frac = cutFraction(img, 128, invert)
+    const doc = await traceImage(img as ImageData, {
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      mode: 'mono',
+      threshold: 128,
+      invert,
+    })
+    const paths = docStats(doc).paths
+    assert.equal(
+      frac === 0,
+      paths === 0,
+      `invert=${invert}: readout says ${(frac * 100).toFixed(1)}% but the trace has ${paths} paths`,
+    )
+  }
+})
+
+test('the dead span is exactly the cuts that select nothing', () => {
+  const img = art(64, 64, [0, 0, 0, 0], [255, 255, 255, 255])
+  const range = inkLumaRange(img)!
+  const deadOn = Math.ceil(range.max)
+  // Inverted: at or above the lightest pixel nothing is selected; one below, something is.
+  assert.equal(cutFraction(img, deadOn, true), 0, 'the first struck-out cut is really dead')
+  assert.ok(cutFraction(img, deadOn - 1, true) > 0, 'the cut just outside it is really live')
 })
