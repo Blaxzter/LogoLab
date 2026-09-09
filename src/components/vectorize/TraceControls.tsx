@@ -15,6 +15,7 @@ import type { InkColorMode, InkModePlan } from '../../lib/ink'
 import { CONTROL_DOCS_BY_ID } from './controlDocs'
 import { ControlInfoDialog } from './ControlInfoDialog'
 import { AI_UPSCALE_MAX_PX, aiUpscaleFactor } from '../../lib/aiUpscale'
+import { RASTER_MAX_DIM, RASTER_MAX_DIM_FLAT, RASTER_MAX_DIM_HIGH } from '../../lib/traceCaps'
 
 export interface TraceControlsProps {
   /** The upload is an SVG, so "clean existing markup" is an option. */
@@ -134,13 +135,54 @@ export function TraceControlsBody({
   const colorSummary =
     opts.mode === 'color' && opts.gradients !== false ? 'Gradients on' : 'Flat fills'
 
-  // The AI upscaler only acts on SMALL rasters (see aiUpscale.ts): an SVG source
-  // rasterizes at full detail, and past AI_UPSCALE_MAX_PX enlarging stops paying
-  // for itself. Rather than show a dial whose own hint says it does nothing, hide
-  // it — but keep it visible while it is switched ON, so a setting carried over
-  // from a smaller image can still be turned off.
-  const upscaleInert = isVectorSource || (sourceMaxDim != null && !aiUpscaleFactor(sourceMaxDim))
-  const showUpscale = !upscaleInert || (opts.upscale ?? 'off') !== 'off'
+  // WHAT DOES NOT APPLY TO THIS IMAGE, AND WHY.
+  //
+  // A control that cannot bite is worse than absent: it invites a setting that
+  // silently does nothing. But hiding it outright is its own defect — you go
+  // looking for "Threshold", it is not there, and the panel never says why. So an
+  // inert control folds into ONE collapsed list that names it, gives the reason,
+  // and says what would bring it back. The exception is a control that is inert
+  // but NOT at its default (an `upscale: 'ai'` carried over from a smaller image):
+  // that one stays in place, because a setting has to stay reachable to be undone.
+  //
+  // The rules live where the behaviour does — traceCaps.ts for the Detail cap,
+  // aiUpscale.ts for the upscaler's size window — so these reasons cannot drift
+  // from what the pipeline actually does.
+  const flatArt = opts.mode === 'mono' || opts.gradients === false
+  const detailWhy = !flatArt
+    ? `High only lifts the cap for flat art; gradient and photo colour stays at ${RASTER_MAX_DIM}px so the region merge cannot bog down. Turn Gradients off, or switch to Mono, and it applies.`
+    : sourceMaxDim != null && sourceMaxDim <= RASTER_MAX_DIM_FLAT
+      ? `Your image is ${sourceMaxDim}px on its longest side — already inside the ${RASTER_MAX_DIM_FLAT}px Balanced cap, and rasters are never upscaled, so High has no extra pixels to read.`
+      : null
+  const showDetail = detailWhy == null || (opts.traceDetail ?? 'balanced') !== 'balanced'
+
+  const upscaleWhy = isVectorSource
+    ? 'SVG sources rasterize at full detail already — there is nothing to enlarge.'
+    : sourceMaxDim != null && !aiUpscaleFactor(sourceMaxDim)
+      ? `Your image is ${sourceMaxDim}px, above the ${AI_UPSCALE_MAX_PX}px where enlarging stops paying for itself.`
+      : null
+  const showUpscale = upscaleWhy == null || (opts.upscale ?? 'off') !== 'off'
+
+  const inert: { label: string; why: string }[] = []
+  if (!tracing) {
+    inert.push({
+      label: 'Everything that traces pixels',
+      why: 'Engine, Detail, Upscale, Smoothing, Despeckle, Fidelity, Region detail, Region markers and Gradients all read the raster. Cleaning keeps the SVG’s own paths instead — switch Source to Re-trace to rebuild them from pixels.',
+    })
+  } else {
+    if (opts.mode === 'mono')
+      inert.push({
+        label: 'Region detail, Region markers, Gradients',
+        why: 'Mono traces one ink against the background, so there are no colour regions to split, to seed, or to fit a gradient into. Switch Mode to Color.',
+      })
+    else
+      inert.push({
+        label: 'Threshold, Invert',
+        why: 'The two halves of the mono black/white cut: where it falls, and which side of it becomes solid. Switch Mode to Mono.',
+      })
+    if (detailWhy && !showDetail) inert.push({ label: 'Detail — Balanced / High', why: detailWhy })
+    if (upscaleWhy && !showUpscale) inert.push({ label: 'Upscale — AI', why: upscaleWhy })
+  }
 
   // Mono cut consequences (#47). The cut is the one control that can silently
   // yield NOTHING — a single global threshold with all the ink on one side of it.
@@ -240,14 +282,12 @@ export function TraceControlsBody({
                 />
               </Field>
 
+              {showDetail && (
               <Field
                 label="Detail"
                 hint={
-                  !(opts.mode === 'mono' || opts.gradients === false)
-                    ? 'Applies to flat art; gradient/photo stays capped at 1024px for speed.'
-                    : (sourceMaxDim ?? 0) > 2048
-                      ? 'High traces large sources up to 4096px — crisper edges, slower trace.'
-                      : `Source${sourceMaxDim ? ` (${sourceMaxDim}px)` : ''} is already at full detail; High has no effect.`
+                  detailWhy ??
+                  `High traces this image at up to ${RASTER_MAX_DIM_HIGH}px instead of ${RASTER_MAX_DIM_FLAT} — crisper edges, roughly 4× the trace time.`
                 }
               >
                 <Segmented<'balanced' | 'high'>
@@ -259,16 +299,14 @@ export function TraceControlsBody({
                   ]}
                 />
               </Field>
+              )}
 
               {showUpscale && (
               <Field
                 label="Upscale"
                 hint={
-                  isVectorSource
-                    ? 'SVG sources rasterize at full detail — nothing to upscale.'
-                    : sourceMaxDim && !aiUpscaleFactor(sourceMaxDim)
-                      ? `Source (${sourceMaxDim}px) is above ${AI_UPSCALE_MAX_PX}px, where enlarging stops helping; no effect.`
-                      : `AI enlarges a small raster ×${sourceMaxDim ? aiUpscaleFactor(sourceMaxDim) || 2 : '2–4'} before tracing (waifu2x, in your browser: ~17–19 MB once, a few seconds per trace). Measured: cleaner corners and fewer nodes than tracing it small.`
+                  upscaleWhy ??
+                  `AI enlarges a small raster ×${sourceMaxDim ? aiUpscaleFactor(sourceMaxDim) || 2 : '2–4'} before tracing (waifu2x, in your browser: ~17–19 MB once, a few seconds per trace). Measured: cleaner corners and fewer nodes than tracing it small.`
                 }
               >
                 <Segmented<'off' | 'ai'>
@@ -480,6 +518,28 @@ export function TraceControlsBody({
               )}
             </Field>
           </Collapsible>
+
+          {/* The options this image has no use for — named, explained, and one
+              click away, instead of simply missing from the panel. */}
+          {inert.length > 0 && (
+            <Collapsible
+              title="Looking for another option?"
+              summary={`${inert.length} don’t apply to this image`}
+            >
+              <p className="text-xs leading-snug text-muted">
+                Folded away because they cannot change this trace. Each one says what would
+                bring it back.
+              </p>
+              <ul className="flex flex-col gap-3">
+                {inert.map((c) => (
+                  <li key={c.label} className="flex flex-col gap-0.5">
+                    <span className="text-xs font-medium text-ink-2">{c.label}</span>
+                    <span className="text-xs leading-snug text-muted">{c.why}</span>
+                  </li>
+                ))}
+              </ul>
+            </Collapsible>
+          )}
 
           <div className="mt-auto border-t border-line pt-4">
             <p className="text-[0.7rem] leading-relaxed text-faint">
