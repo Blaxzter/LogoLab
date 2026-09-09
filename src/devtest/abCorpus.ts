@@ -18,6 +18,10 @@
 // caveat in docs/labs.md), which is orders of magnitude below re-rasterizing.
 // ---------------------------------------------------------------------------
 
+import type { VectorizeOptions } from '../types'
+import { RASTER_MAX_DIM, RASTER_MAX_DIM_FLAT } from '../lib/traceCaps.ts'
+import { decideInkMode, type ImageDataLike } from '../lib/ink.ts'
+
 /** One A/B case. `path` is repo-relative — under public/ for the fixture lane, so the
  *  Node writer can read the file and the browser can fetch it (abUrl); the GALLERY lane
  *  points outside public/ and is resolved differently per consumer (see AB_LOGOS). */
@@ -131,8 +135,70 @@ export const AB_LOGO_CASES: AbCorpusCase[] = AB_LOGOS.map((l) => ({
   background: 'white',
 }))
 
-/** SVG cases are rasterized at this width for the snapshot (the lab's default). */
-export const AB_SNAPSHOT_RES = 512
+/**
+ * THE LANES A STAMP FREEZES — each traced at the resolution PRODUCTION uses for that kind
+ * of art (src/lib/traceCaps.ts), rather than one convenient number for all of them.
+ *
+ * Judging the tracer at a resolution the app never runs measures code that does not ship:
+ * displacement, corner windows and the fit are NOT scale-invariant (§12, §30, and the @512
+ * witness corners in KNOWN_DEFECTS), so a change that only bites at the flat cap was
+ * invisible to a stamp frozen at 512. The reverse waste is just as real — the gradient lane
+ * is most of a stamp's cost, and production caps gradient/photo at RASTER_MAX_DIM to bound
+ * the Step-3c merge, so tracing it larger buys minutes and nothing else.
+ *
+ * MONO IS ITS OWN LANE, not a subset of the flat one. `mode: 'mono'` returns from traceImage
+ * before segmentation: threshold → mask → traceMaskCrisp (subpixel.ts) → beautify
+ * (beautify.ts). The colour lanes pin `engine: 'planar'`, whose geometry path routes around
+ * BOTH of those modules — so the two files mono is made of were the two a stamp never
+ * executed, and a mono-side change showed up as an all-green corpus.
+ */
+export interface AbLane {
+  key: 'flat' | 'grad' | 'mono'
+  /** What the A/B view calls this lane in a badge or a panel title. */
+  label: string
+  /** Long side (px) of the raster this lane traces. */
+  res: number
+  /** Merged over DEFAULT_VECTORIZE_OPTIONS + `engine: 'planar'` by the writer and the view,
+   *  which must agree exactly or the comparison is not code-vs-code. */
+  opts: Partial<VectorizeOptions>
+  /** Options this lane can only decide FROM THE RASTER, resolved on the same pixels it
+   *  traces and merged last. Mono's cut is the case: production does not trace at a fixed
+   *  threshold, it asks the ink probe (src/lib/ink.ts) where the ink ends and the paper
+   *  begins — so a lane pinned to 128 would freeze a trace no user ever gets, and would
+   *  leave ink.ts as uncovered as the mono path itself was. */
+  resolve?: (pixels: ImageDataLike) => Partial<VectorizeOptions>
+}
+
+export type AbLaneKey = AbLane['key']
+
+export const AB_LANES: AbLane[] = [
+  { key: 'flat', label: 'gradients off', res: RASTER_MAX_DIM_FLAT, opts: { gradients: false } },
+  { key: 'grad', label: 'gradients on', res: RASTER_MAX_DIM, opts: { gradients: true } },
+  {
+    key: 'mono',
+    label: 'mono',
+    res: RASTER_MAX_DIM_FLAT,
+    opts: { mode: 'mono' },
+    // `colorMode: 'mono'` forces the mono branch and asks the probe only WHERE to cut and
+    // which side is ink — the same call /vectorize makes once the user picks Mono. `recolor`
+    // is deliberately dropped: it repaints the result and would make the lane's diff read
+    // colour changes as geometry ones.
+    resolve: (px) => {
+      const plan = decideInkMode(px, 128, { colorMode: 'mono' })
+      return { threshold: plan.threshold, invert: plan.invert }
+    },
+  },
+]
+
+/** The PRIMARY raster — the largest lane resolution, stored as `<id>.png`. A lane that
+ *  traces something smaller stores its own `<id>.r<res>.png` beside it. (Before per-lane
+ *  resolution this was a single 512 shared by every lane; old stamps still say so in their
+ *  own manifest, which is what makes them keep working — see `laneFiles`.) */
+export const AB_SNAPSHOT_RES = Math.max(...AB_LANES.map((l) => l.res))
+
+/** The stored input file for a lane tracing at `res`. */
+export const lanePngName = (id: string, res: number): string =>
+  res === AB_SNAPSHOT_RES ? `${id}.png` : `${id}.r${res}.png`
 
 /** ROOT of the snapshot store, repo-relative. Each snapshot is a NAMED SUBDIR beneath it —
  *  `test/ab-snapshots/<name>/` — holding that snapshot's manifest.json + per-case files, so
@@ -169,8 +235,9 @@ export function pairSlug(name: string): string {
 export interface AbSnapshotCase {
   id: string
   name: string
-  /** Filenames inside AB_SNAPSHOT_DIR. `png` is THE input: the exact pixels the
-   *  snapshot traced, which the view must trace too (see the header comment). */
+  /** Filenames inside AB_SNAPSHOT_DIR. `png` is THE input for every lane that traces at
+   *  AB_SNAPSHOT_RES — the exact pixels the snapshot traced, which the view must trace too
+   *  (see the header comment). A lane rasterized smaller carries its own file below. */
   png: string
   /** Traced with gradients OFF (the product default for flat art). */
   flat: string
@@ -178,6 +245,40 @@ export interface AbSnapshotCase {
   grad: string
   width: number
   height: number
+  /** The mono lane's trace. ABSENT in stamps frozen before mono had a lane — the view then
+   *  has no mono row for that stamp, rather than inventing one. */
+  mono?: string
+  /** The gradient lane's own input + size, when production caps it below `png`'s
+   *  resolution. Absent ⇒ every lane shared `png`, which is every stamp frozen before
+   *  per-lane resolution. */
+  gradPng?: string
+  gradWidth?: number
+  gradHeight?: number
+}
+
+/** One lane's files inside a stamp. */
+export interface AbLaneFiles {
+  svg: string
+  png: string
+  width: number
+  height: number
+}
+
+/**
+ * Where a lane's files live in a stamp — the ONE place that knows how to read a case entry,
+ * because the vs-working-tree view and the pair view must read a stamp identically.
+ *
+ * It is also the compatibility layer, and the reason raising the resolution did not
+ * invalidate the 46 stamps already on disk: every lane's resolution is recorded PER STAMP
+ * (the view traces the working tree at the stored size, never at today's constant), and the
+ * fields a stamp predates simply fall back — `gradPng` to `png`, and a missing `mono` to no
+ * lane at all.
+ */
+export function laneFiles(e: AbSnapshotCase, key: AbLaneKey): AbLaneFiles | null {
+  if (key === 'mono') return e.mono ? { svg: e.mono, png: e.png, width: e.width, height: e.height } : null
+  if (key === 'grad')
+    return { svg: e.grad, png: e.gradPng ?? e.png, width: e.gradWidth ?? e.width, height: e.gradHeight ?? e.height }
+  return { svg: e.flat, png: e.png, width: e.width, height: e.height }
 }
 
 export interface AbSnapshotManifest {
@@ -195,6 +296,9 @@ export interface AbSnapshotManifest {
    *  from an afternoon's work used to sort under an unrelated morning stamp). Absent on
    *  stamps older than 2026-09-06; `date` is the fallback. */
   createdAt?: string
+  /** The PRIMARY lane resolution (AB_SNAPSHOT_RES at generation). Informational: what each
+   *  lane actually traced is recorded per case, so a stamp stays readable after the
+   *  constants move. */
   res: number
   /** The snapshot this one is the OTHER HALF of — set by `pnpm gen:absnapshot <name>
    *  --pair <base>`, i.e. "this stamp is the after of <base>". /labs/ab offers the two as

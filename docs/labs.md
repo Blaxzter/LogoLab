@@ -215,13 +215,31 @@ dropdown under **⇄ Pairs** as one entry that selects both sides — detected f
 `pnpm gen:absnapshot after-x --pair before-x` when the names don't follow it.
 
 That mode needs one guard the working-tree mode doesn't. Two stamps taken far apart may have
-traced **different pixels** for the same case — a fixture SVG was edited, `AB_SNAPSHOT_RES`
+traced **different pixels** for the same case — a fixture SVG was edited, a lane's resolution
 changed — and diffing their traces would then report an *art* change as a *code* change, which
-is precisely the confounded measurement this lab exists to prevent. So both stored input PNGs
-are compared byte-for-byte; a mismatch marks the row **input differs** and drops it from the
-changed/unchanged counts instead of answering wrongly.
+is precisely the confounded measurement this lab exists to prevent. So every lane's stored
+input PNGs are compared byte-for-byte; a mismatch marks the row **input differs** and drops it
+from the changed/unchanged counts instead of answering wrongly. That guard is also what let the
+lane resolutions move without invalidating the stamps already on disk: an old stamp paired with
+a new one reports `512×512 vs 2048×2048` rather than inventing a verdict.
 
-**Two lanes: fixtures and gallery.** The ⟐ handcrafted cases isolate one mechanism each,
+**Three trace lanes, each at the resolution production uses.** `AB_LANES` in
+`src/devtest/abCorpus.ts` owns them: flat art at the flat cap, gradient/photo at the gradient
+cap (`src/lib/traceCaps.ts`), and **mono**. Judging the tracer at a resolution the app never
+runs measures code that does not ship — displacement, corner windows and the fit are not
+scale-invariant — while tracing the gradient lane *above* its production cap buys minutes and
+nothing else. Mono is a lane rather than a subset of the flat one because `mode: 'mono'`
+returns from `traceImage` before segmentation (threshold → mask → `traceMaskCrisp` →
+`beautify`) and the colour lanes pin `engine: 'planar'`, whose geometry path routes around both
+of those modules: before the lane existed, a mono-side change showed up as an all-green corpus.
+The mono lane does not trace at a fixed cut either — `AbLane.resolve` asks the ink probe
+(`src/lib/ink.ts`) where the ink ends and the paper begins, on the same pixels it traces, which
+is the call `/vectorize` makes when a user picks Mono. Both sides of a comparison resolve it
+from the same raster, so the panels still differ only by code. Each lane's resolution is
+recorded **per stamp**, and `laneFiles` resolves what an older stamp lacks, so stamps frozen
+under an earlier rule keep comparing correctly.
+
+**Two case lanes: fixtures and gallery.** The ⟐ handcrafted cases isolate one mechanism each,
 which is what makes them good gates and weak evidence — they go green long before real art
 looks right, and every user-reported defect so far arrived on a brand mark, not on a fixture.
 So the corpus also carries a curated slice of the same logos `/labs/gallery` shows (◆ rows),

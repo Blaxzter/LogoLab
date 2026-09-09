@@ -32,7 +32,18 @@ import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { VectorizeOptions } from '../../types'
 import type { EditableDoc } from '../../lib/path/types'
 import type { PlanarFitOptions } from '../../lib/trace/planarFit'
-import { AB_CORPUS, AB_LOGO_CASES, abUrl, conventionalPartner, pairSlug, type AbSnapshotManifest } from '../../devtest/abCorpus'
+import {
+  AB_CORPUS,
+  AB_LANES,
+  AB_LOGO_CASES,
+  abUrl,
+  conventionalPartner,
+  laneFiles,
+  pairSlug,
+  type AbLane,
+  type AbLaneKey,
+  type AbSnapshotManifest,
+} from '../../devtest/abCorpus'
 import { LOGO_CORPUS } from '../../devtest/logoCorpus'
 import { fnv1a } from './engineFingerprint'
 import { LabPage, LabCheck, LabSelect } from './LabPage'
@@ -83,6 +94,10 @@ const SNAP_SVGS: SnapLoader = import.meta.env.DEV
 const SNAP_PNGS: SnapLoader = import.meta.env.DEV
   ? (import.meta.glob('/test/ab-snapshots/*/*.png', { query: '?url', import: 'default' }) as SnapLoader)
   : NO_SNAPS
+
+/** Lane keys as the words the badges use ('flat' is not what the panel is called). */
+const laneLabels = (keys: AbLaneKey[] | undefined): string =>
+  (keys ?? []).map((k) => AB_LANES.find((l) => l.key === k)?.label ?? k).join(' + ')
 
 /** One file out of a stamp, or null when that stamp does not have it. */
 function snapFile(map: SnapLoader, path: string): Promise<string> | null {
@@ -256,11 +271,11 @@ interface AbAnalysis {
   /** Snapshot mode only: did the working tree's trace differ from the frozen one, in EITHER
    *  gradient setting? undefined in variants mode (no baseline). Drives "Changed only". */
   changed?: boolean
-  /** …and which ones moved — the stamp froze both, so both are always compared and the answer
-   *  is a set, not a property of whatever happened to be on screen. */
-  changedIn?: ('flat' | 'gradients')[]
+  /** …and which ones moved — the stamp froze every lane, so every lane is compared and the
+   *  answer is a set, not a property of whatever happened to be on screen. */
+  changedIn?: AbLaneKey[]
   /**
-   * Which gradient setting(s) the PANELS below actually show. Normally that is `changedIn`,
+   * Which lane(s) the PANELS below actually show. Normally that is `changedIn`,
    * but a case that moved in neither falls back to the flat pair — so switching baselines can
    * silently switch which lane is on screen, and a lane switch looks exactly like a
    * regression. (Reported: `checker`'s gradient trace has been visibly warped since the
@@ -269,9 +284,9 @@ interface AbAnalysis {
    * tree having changed under the user.) Derived from the rendered views, not re-decided, so
    * the badge cannot drift from the panels.
    */
-  shownLanes?: ('flat' | 'gradients')[]
+  shownLanes?: AbLaneKey[]
   /** Snapshot mode, changed cases only: a per-pixel heat of WHERE the two traces disagree.
-   *  Lets a change be located, not just counted — one per gradient setting on screen. */
+   *  Lets a change be located, not just counted — one per lane on screen. */
   heats?: { label: string; url: string }[]
   /** Pair mode only: the two stamps did not trace the same INPUT for this case (the source
    *  art or AB_SNAPSHOT_RES changed between them), so their traces are not comparable and
@@ -391,12 +406,13 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
  * serialized docs the writer stored — so this is fast, and (unlike vs-working-tree) the
  * comparison does not decay as the tree moves on.
  *
- * The input check is not optional. Two stamps taken weeks apart may have traced DIFFERENT
- * pixels for the same case id — the fixture SVG was edited, or AB_SNAPSHOT_RES changed —
+ * The hazard it has to guard is INPUT DRIFT: two stamps can hold different pixels for the
+ * same case id — the fixture SVG was edited, or a lane's resolution changed between them —
  * and diffing traces of different inputs is exactly the confounded measurement this lab
- * exists to prevent. Both stored PNGs are compared byte-for-byte; a mismatch marks the row
- * and keeps it out of the counts rather than quietly reporting the art change as a code
- * change.
+ * exists to prevent. Every lane's stored inputs are compared byte-for-byte; a mismatch marks
+ * the row and keeps it out of the counts rather than quietly reporting the art change as a
+ * code change. That check is also what makes a resolution bump safe: an old stamp paired
+ * with a new one says "512×512 vs 2048×2048", it does not invent a verdict.
  */
 async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry): Promise<AbAnalysis> {
   const be = base.manifest.cases.find((s) => s.id === c.id)
@@ -404,45 +420,55 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
   if (!be || !he) throw new Error(`case missing from ${be ? head.name : base.name} — rerun pnpm gen:absnapshot`)
   const bDir = `/test/ab-snapshots/${base.name}`
   const hDir = `/test/ab-snapshots/${head.name}`
-  const [bPng, hPng] = await Promise.all([
-    snapFile(SNAP_PNGS, `${bDir}/${be.png}`),
-    snapFile(SNAP_PNGS, `${hDir}/${he.png}`),
-  ])
-  if (!bPng || !hPng) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
-
-  let inputDiffers: string | undefined
-  if (be.width !== he.width || be.height !== he.height) {
-    inputDiffers = `${be.width}×${be.height} vs ${he.width}×${he.height}`
-  } else {
-    const [bb, hb] = await Promise.all([snapPngBytes(bPng), snapPngBytes(hPng)])
-    if (!sameBytes(bb, hb)) inputDiffers = 'same size, different pixels'
-  }
 
   // Same exact-serialization diff the vs-working-tree path uses: a stamp IS serializeDoc(doc)
   // at its revision and gradientId is deterministic, so identical geometry+paint serializes
-  // byte-identically and any difference is a real trace change.
-  const view = async (g: boolean) => {
-    const [bSvg, hSvg] = await Promise.all([
-      snapFile(SNAP_SVGS, `${bDir}/${g ? be.grad : be.flat}`),
-      snapFile(SNAP_SVGS, `${hDir}/${g ? he.grad : he.flat}`),
+  // byte-identically and any difference is a real trace change. A lane only one of the two
+  // stamps carries (mono, against a stamp frozen before it existed) is skipped — there is no
+  // pair to make of it.
+  const view = async (lane: AbLane) => {
+    const bf = laneFiles(be, lane.key)
+    const hf = laneFiles(he, lane.key)
+    if (!bf || !hf) return null
+    const [bSvg, hSvg, bPng, hPng] = await Promise.all([
+      snapFile(SNAP_SVGS, `${bDir}/${bf.svg}`),
+      snapFile(SNAP_SVGS, `${hDir}/${hf.svg}`),
+      snapFile(SNAP_PNGS, `${bDir}/${bf.png}`),
+      snapFile(SNAP_PNGS, `${hDir}/${hf.png}`),
     ])
-    if (!bSvg || !hSvg) return null
-    return { g, bSvg, hSvg, changed: bSvg !== hSvg }
+    if (!bSvg || !hSvg || !bPng || !hPng) return null
+    let differs: string | undefined
+    if (bf.width !== hf.width || bf.height !== hf.height) {
+      differs = `${lane.label} ${bf.width}×${bf.height} vs ${hf.width}×${hf.height}`
+    } else {
+      const [bb, hb] = await Promise.all([snapPngBytes(bPng), snapPngBytes(hPng)])
+      if (!sameBytes(bb, hb)) differs = `${lane.label}: same size, different pixels`
+    }
+    return { lane, bf, hf, bSvg, hSvg, bPng, differs, changed: bSvg !== hSvg }
   }
-  const [flat, grad] = await Promise.all([view(false), view(true)])
-  if (!flat || !grad) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
+  const lanes = (await Promise.all(AB_LANES.map(view))).filter((v) => v != null)
+  if (lanes.length === 0) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
 
-  const views = [flat, grad].filter((v) => v.changed)
-  if (views.length === 0) views.push(flat)
-  const label = (v: { g: boolean }): string => ` · gradients ${v.g ? 'on' : 'off'}`
+  // ONE mismatched lane poisons the row: the stamps do not describe the same experiment, and
+  // saying which lane drifted is what tells you whether to re-stamp or to look again.
+  const mismatched = lanes.filter((v) => v.differs)
+  const inputDiffers = mismatched.length ? mismatched.map((v) => v.differs!).join(' · ') : undefined
 
-  const pairGt = await authoredShapes(c, be.width)
-  const pairImg = bPng ? await labImageData(bPng, Math.max(be.width, be.height)) : null
-  const pInv = (svg: string): number | undefined => inventedIn(svg, pairGt, pairImg, be.width, be.height)
-  const variants: AbAnalysis['variants'] = views.flatMap((v) => [
-    { name: `${base.name}${label(v)}`, tone: 'base', svg: v.bSvg, note: `frozen ${base.manifest.rev} · ${base.manifest.date}`, invented: pInv(v.bSvg) },
-    { name: `${head.name}${label(v)}`, tone: 'shipped', svg: v.hSvg, note: `frozen ${head.manifest.rev} · ${head.manifest.date}`, invented: pInv(v.hSvg) },
-  ])
+  const views = lanes.filter((v) => v.changed)
+  if (views.length === 0) views.push(lanes[0])
+  const label = (v: { lane: AbLane }): string => ` · ${v.lane.label}`
+
+  // Authored geometry is raster-space, so it is resolved per lane now that lanes differ.
+  const variants: AbAnalysis['variants'] = []
+  for (const v of views) {
+    const gt = await authoredShapes(c, v.bf.width)
+    const img = await labImageData(v.bPng, Math.max(v.bf.width, v.bf.height))
+    const inv = (svg: string): number | undefined => inventedIn(svg, gt, img, v.bf.width, v.bf.height)
+    variants.push(
+      { name: `${base.name}${label(v)}`, tone: 'base', svg: v.bSvg, note: `frozen ${base.manifest.rev} · ${base.manifest.date}`, invented: inv(v.bSvg) },
+      { name: `${head.name}${label(v)}`, tone: 'shipped', svg: v.hSvg, note: `frozen ${head.manifest.rev} · ${head.manifest.date}`, invented: inv(v.hSvg) },
+    )
+  }
 
   const heats = inputDiffers
     ? []
@@ -451,8 +477,8 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
           views.map(async (v) => {
             if (!v.changed) return null
             const [bImg, hImg] = await Promise.all([
-              rasterizeSvgResvg(v.bSvg, be.width, { background: 'white' }),
-              rasterizeSvgResvg(v.hSvg, he.width, { background: 'white' }),
+              rasterizeSvgResvg(v.bSvg, v.bf.width, { background: 'white' }),
+              rasterizeSvgResvg(v.hSvg, v.hf.width, { background: 'white' }),
             ])
             if (bImg.width !== hImg.width || bImg.height !== hImg.height) return null
             return { label: `diff heat${label(v)}`, url: rgbaToUrl(diffHeatBuffer(bImg, hImg), bImg.width, bImg.height) }
@@ -460,18 +486,17 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
         )
       ).filter((h): h is { label: string; url: string } => h != null)
 
-  const changedIn: AbAnalysis['changedIn'] = []
-  if (flat.changed) changedIn.push('flat')
-  if (grad.changed) changedIn.push('gradients')
+  const primary = lanes[0]
+  const changedIn = lanes.filter((v) => v.changed).map((v) => v.lane.key)
   return {
-    width: be.width,
-    height: be.height,
-    srcOverride: bPng,
+    width: primary.bf.width,
+    height: primary.bf.height,
+    srcOverride: primary.bPng,
     // A row whose input moved has no meaningful verdict — leave `changed` undefined so it is
     // neither counted as changed nor claimed unchanged, and so "Changed only" keeps showing it.
     changed: inputDiffers ? undefined : changedIn.length > 0,
     changedIn: inputDiffers ? undefined : changedIn,
-    shownLanes: views.map((v) => (v.g ? 'gradients' : 'flat')),
+    shownLanes: views.map((v) => v.lane.key),
     heats,
     inputDiffers,
     variants,
@@ -484,48 +509,90 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
   const entry = snap.manifest.cases.find((s) => s.id === c.id)
   if (!entry) throw new Error(`case not in snapshot ${snap.name} — rerun pnpm gen:absnapshot`)
   const dir = `/test/ab-snapshots/${snap.name}`
-  const pngUrl = await snapFile(SNAP_PNGS, `${dir}/${entry.png}`)
-  if (!pngUrl) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
-  const image = await labImageData(pngUrl, Math.max(entry.width, entry.height))
 
-  // ONE PASS PER GRADIENT SETTING — a stamp freezes both traces per case, so both are always
-  // compared and both are candidates for the row. Nothing here depends on a toggle: §14's fix
-  // moved four FLAT traces and no gradient one, and a view whose verdict follows a control is
-  // a view that can be read wrong.
-  // "Changed" is an exact-serialization diff: the snapshot IS serializeDoc(doc) at the frozen
-  // rev (writeAbSnapshots.ts) and gradientId is deterministic, so identical geometry+paint
-  // serializes byte-identically — a difference is a real trace change, nothing cosmetic.
-  const pass = async (g: boolean) => {
-    const snapSvg = await snapFile(SNAP_SVGS, `${dir}/${g ? entry.grad : entry.flat}`)
-    if (!snapSvg) return null
-    const doc: EditableDoc = await labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: g })
-    const live = serializeDoc(doc, 2)
-    return { g, snapSvg, doc, live, changed: live !== snapSvg }
+  // ONE PASS PER LANE THE STAMP CARRIES — a stamp freezes all of them, so all of them are
+  // compared and each is a candidate for the row. Nothing here depends on a toggle: §14's
+  // fix moved four FLAT traces and no gradient one, and a view whose verdict follows a
+  // control is a view that can be read wrong. A lane the stamp predates (mono, on anything
+  // frozen before it existed) resolves to null and is skipped rather than invented.
+  //
+  // Each lane traces its OWN stored raster at its OWN size, read from the manifest — never
+  // from today's constants, which is what lets stamps frozen under one resolution rule
+  // stay comparable after it changes.
+  //
+  // "Changed" is an exact-serialization diff: the snapshot IS serializeDoc(doc) at the
+  // frozen rev (writeAbSnapshots.ts) and gradientId is deterministic, so identical
+  // geometry+paint serializes byte-identically — a difference is a real trace change,
+  // nothing cosmetic.
+  const inputs = new Map<string, Promise<ImageData>>()
+  const inputFor = (png: string, url: string, long: number): Promise<ImageData> => {
+    const hit = inputs.get(png)
+    if (hit) return hit
+    const p = labImageData(url, long)
+    inputs.set(png, p)
+    return p
   }
-  const flat = await pass(false)
-  const grad = await pass(true)
-  if (!flat || !grad) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
+  const pass = async (lane: AbLane) => {
+    const f = laneFiles(entry, lane.key)
+    if (!f) return null
+    const [snapSvg, pngUrl] = await Promise.all([
+      snapFile(SNAP_SVGS, `${dir}/${f.svg}`),
+      snapFile(SNAP_PNGS, `${dir}/${f.png}`),
+    ])
+    if (!snapSvg || !pngUrl) return null
+    const image = await inputFor(f.png, pngUrl, Math.max(f.width, f.height))
+    const doc: EditableDoc = await labTrace(image, {
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      ...lane.opts,
+      // Resolved from the SAME pixels the stamp resolved them from, so the two sides differ
+      // by code and never by a lane parameter (see AbLane.resolve).
+      ...lane.resolve?.(image),
+    })
+    const live = serializeDoc(doc, 2)
+    return { lane, f, image, pngUrl, snapSvg, doc, live, changed: live !== snapSvg }
+  }
+  // Sequential: labTrace hands off to the trace worker, and three lanes racing for it would
+  // only interleave, not finish sooner.
+  const passes: NonNullable<Awaited<ReturnType<typeof pass>>>[] = []
+  for (const lane of AB_LANES) {
+    const p = await pass(lane)
+    if (p) passes.push(p)
+  }
+  if (passes.length === 0) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
 
-  // WHAT IS ON SCREEN IS WHAT MOVED: every setting that changed gets its own snapshot /
-  // working-tree pair and its own heat, in a fixed order (flat, then gradients) so rows are
-  // comparable. A case that moved in neither shows the flat pair alone — there is nothing to
-  // locate, and duplicating it for every quiet row is noise, not information.
-  const views = [flat, grad].filter((v) => v.changed)
-  if (views.length === 0) views.push(flat)
-  const label = (v: { g: boolean }): string => ` · gradients ${v.g ? 'on' : 'off'}`
+  // WHAT IS ON SCREEN IS WHAT MOVED: every lane that changed gets its own snapshot /
+  // working-tree pair and its own heat, in AB_LANES order so rows are comparable. A case
+  // that moved in no lane shows the first one alone — there is nothing to locate, and
+  // duplicating it for every quiet row is noise, not information.
+  const views = passes.filter((v) => v.changed)
+  if (views.length === 0) views.push(passes[0])
+  const label = (v: { lane: AbLane }): string => ` · ${v.lane.label}`
 
-  const gtShapes = await authoredShapes(c, entry.width)
-  const inv = (svg: string): number | undefined => inventedIn(svg, gtShapes, image, entry.width, entry.height)
-  const variants: AbAnalysis['variants'] = views.flatMap((v) => [
-    { name: `Snapshot @ ${snap.manifest.rev}${label(v)}`, tone: 'base', svg: v.snapSvg, invented: inv(v.snapSvg) },
-    {
-      name: `Working tree${label(v)}`,
-      tone: 'shipped',
-      svg: traceSvg(v.doc, entry.width, entry.height),
-      stats: docStats(v.doc),
-      invented: inv(v.live),
-    },
-  ])
+  // Ground truth is raster-space, so it is per-LANE now that lanes can differ in size.
+  const gtAt = new Map<number, Promise<GroundShape[] | null>>()
+  const shapesFor = (width: number): Promise<GroundShape[] | null> => {
+    const hit = gtAt.get(width)
+    if (hit) return hit
+    const p = authoredShapes(c, width)
+    gtAt.set(width, p)
+    return p
+  }
+  const variants: AbAnalysis['variants'] = []
+  for (const v of views) {
+    const gt = await shapesFor(v.f.width)
+    const inv = (svg: string): number | undefined => inventedIn(svg, gt, v.image, v.f.width, v.f.height)
+    variants.push(
+      { name: `Snapshot @ ${snap.manifest.rev}${label(v)}`, tone: 'base', svg: v.snapSvg, invented: inv(v.snapSvg) },
+      {
+        name: `Working tree${label(v)}`,
+        tone: 'shipped',
+        svg: traceSvg(v.doc, v.f.width, v.f.height),
+        stats: docStats(v.doc),
+        invented: inv(v.live),
+      },
+    )
+  }
 
   // Changed views also rasterize BOTH plain-fill traces (no wireframe) on white and heat their
   // per-pixel delta, so the diff is LOCATED. A quiet view has no heat: nothing to paint.
@@ -534,8 +601,8 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
       views.map(async (v) => {
         if (!v.changed) return null
         const [snapImg, liveImg] = await Promise.all([
-          rasterizeSvgResvg(v.snapSvg, entry.width, { background: 'white' }),
-          rasterizeSvgResvg(v.live, entry.width, { background: 'white' }),
+          rasterizeSvgResvg(v.snapSvg, v.f.width, { background: 'white' }),
+          rasterizeSvgResvg(v.live, v.f.width, { background: 'white' }),
         ])
         if (snapImg.width !== liveImg.width || snapImg.height !== liveImg.height) return null
         return { label: `diff heat${label(v)}`, url: rgbaToUrl(diffHeatBuffer(snapImg, liveImg), snapImg.width, snapImg.height) }
@@ -543,21 +610,18 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
     )
   ).filter((h): h is { label: string; url: string } => h != null)
 
-  const changedIn: AbAnalysis['changedIn'] = []
-  if (flat.changed) changedIn.push('flat')
-  if (grad.changed) changedIn.push('gradients')
+  const primary = passes[0]
   return {
-    width: entry.width,
-    height: entry.height,
-    srcOverride: pngUrl,
-    changed: changedIn.length > 0,
-    changedIn,
-    shownLanes: views.map((v) => (v.g ? 'gradients' : 'flat')),
+    width: primary.f.width,
+    height: primary.f.height,
+    srcOverride: primary.pngUrl,
+    changed: passes.some((v) => v.changed),
+    changedIn: passes.filter((v) => v.changed).map((v) => v.lane.key),
+    shownLanes: views.map((v) => v.lane.key),
     heats,
     variants,
   }
 }
-
 async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<AbAnalysis> {
   // Gallery cases carry their markup (c.text); fixtures are fetched from public/.
   const svgText = c.kind === 'svg' ? (c.text ?? (await (c.file ? c.file.text() : (await fetch(c.src)).text()))) : undefined
@@ -673,7 +737,7 @@ export default function AbLab() {
         pairMode
           ? `Done — ${n} cases, snapshot ${selectedSnap!.name} @ ${selectedSnap!.manifest.rev} (${selectedSnap!.manifest.date}) vs ${vsSnap!.name} @ ${vsSnap!.manifest.rev} (${vsSnap!.manifest.date}) · both frozen, nothing traced, so the working tree cannot affect this comparison.`
           : selectedSnap
-            ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · both gradient settings compared, whichever moved is on screen · input pinned to the snapshot's stored pixels.`
+            ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · every lane it carries compared, whichever moved is on screen · each lane pinned to its own stored pixels.`
             : `Done — ${n} cases × ${VARIANTS.length} variants · gradients ${ui.gradients ? 'on' : 'off'} @ ${ui.raster}px. Drop an image anywhere to add it.`,
       deps: [ui.raster, ui.gradients, cases, ui.snapName, ui.vsName],
       // Cache corpus cases (stable `id`); skip session-dropped images (no id). BOTH snapshot
@@ -704,8 +768,12 @@ export default function AbLab() {
   // match in both is hidden.
   const shown = changedOnly ? run.results.filter((r) => r.value?.changed !== false) : run.results
   const changedN = run.results.filter((r) => r.value?.changed === true).length
-  const flatN = run.results.filter((r) => r.value?.changedIn?.includes('flat')).length
-  const gradN = run.results.filter((r) => r.value?.changedIn?.includes('gradients')).length
+  // Per-LANE counts, derived from AB_LANES so a lane added there shows up here without a
+  // second edit — the summary line used to name flat and gradients by hand.
+  const laneN = AB_LANES.map((l) => ({
+    lane: l,
+    n: run.results.filter((r) => r.value?.changedIn?.includes(l.key)).length,
+  })).filter((x) => x.n > 0)
   const unchangedN = run.results.filter((r) => r.value?.changed === false).length
   const mismatchN = run.results.filter((r) => r.value?.inputDiffers != null).length
 
@@ -851,7 +919,7 @@ export default function AbLab() {
             {changedN > 0 && (
               <span className="text-muted">
                 {' '}
-                ({flatN} flat{gradN > 0 && ` · ${gradN} with gradients`})
+                ({laneN.map((x) => `${x.n} ${x.lane.label}`).join(' · ')})
               </span>
             )}{' '}
             · {unchangedN} unchanged
@@ -877,7 +945,7 @@ export default function AbLab() {
             {changedN === 0 && unchangedN > 0 && (
               <span className="text-good">
                 {' '}
-                — {pairMode ? 'the two stamps agree' : 'working tree matches the snapshot'}, both gradient settings
+                — {pairMode ? 'the two stamps agree' : 'working tree matches the snapshot'}, every lane
               </span>
             )}
             {notInSnap > 0 && (
@@ -919,7 +987,7 @@ export default function AbLab() {
                     <span
                       className={`rounded px-1 py-0.5 text-[0.6rem] ${a.changed ? 'bg-warn/20 text-warn' : 'text-faint'}`}
                     >
-                      {a.changed ? `changed · ${a.changedIn?.join(' + ')}` : `unchanged · showing ${a.shownLanes?.join(' + ') ?? 'flat'}`}
+                      {a.changed ? `changed · ${laneLabels(a.changedIn)}` : `unchanged · showing ${laneLabels(a.shownLanes) || 'gradients off'}`}
                     </span>
                   )}
                   {c.file && (

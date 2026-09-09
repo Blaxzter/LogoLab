@@ -13,7 +13,13 @@
 // own; `--pair <base>` records the same relationship explicitly for names that do not
 // follow it ("this stamp is the after of <base>").
 //
-// TWO LANES (both from abCorpus.ts): the handcrafted ⟐ fixtures, and a slice of the ◆
+// THREE TRACE LANES per case (AB_LANES in abCorpus.ts), each at the resolution PRODUCTION
+// uses for that kind of art rather than one convenient number: flat art at the flat cap,
+// gradient/photo at the gradient cap, and MONO — which is not a subset of the colour path
+// but the complement of it (see the AB_LANES comment). Their resolutions are recorded per
+// case, so stamps frozen under the old single-resolution rule keep comparing correctly.
+//
+// TWO CASE LANES (both from abCorpus.ts): the handcrafted ⟐ fixtures, and a slice of the ◆
 // GALLERY corpus — the real brand marks the defects get reported on. The gallery lane
 // needs `npm run fetch:logos`; without it those files simply are not there and the lane
 // is skipped with a note. `--logos` overrides the curated slice for one run: `all` takes
@@ -22,13 +28,16 @@
 //
 // Writes, per case, into test/ab-snapshots/<name>/ (which is GIT-IGNORED — these are
 // local working artifacts, and the gallery lane's inputs are trademarked art):
-//   <id>.png        — THE INPUT: the exact pixels this snapshot traced (SVG cases
-//                     rasterized once by resvg at AB_SNAPSHOT_RES; PNG cases copied
-//                     verbatim). The lab traces the LIVE code from this same file,
-//                     so the two panels differ only by code revision — never by
+//   <id>.png        — THE INPUT for every lane tracing at AB_SNAPSHOT_RES: the exact
+//                     pixels this snapshot traced (SVG cases rasterized by resvg at that
+//                     width; PNG cases copied verbatim — production never upscales, so
+//                     neither does a stamp). The lab traces the LIVE code from this same
+//                     file, so the two panels differ only by code revision — never by
 //                     rasterizer (see abCorpus.ts header).
+//   <id>.r<res>.png — the same, for a lane production caps lower (the gradient lane).
 //   <id>.flat.svg   — serialized trace, gradients OFF (the flat-art default).
 //   <id>.grad.svg   — serialized trace, gradients ON.
+//   <id>.mono.svg   — serialized trace, mono (threshold → mask → crisp → beautify).
 //   manifest.json   — name, git rev (+dirty), date, resolution, case index.
 //
 // Intended workflow (also see CLAUDE.md): BEFORE a vectorizer change, freeze a baseline
@@ -48,12 +57,15 @@ import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import { serializeDoc } from '../lib/path/model.ts'
 import {
   AB_CORPUS,
+  AB_LANES,
   AB_LOGO_CASES,
   AB_SNAPSHOT_DIR,
   AB_SNAPSHOT_RES,
   conventionalPartner,
+  lanePngName,
   snapshotDirName,
   type AbCorpusCase,
+  type AbLaneKey,
   type AbSnapshotManifest,
 } from './abCorpus.ts'
 
@@ -131,48 +143,98 @@ const manifest: AbSnapshotManifest = {
   cases: [],
 }
 
+/** One rasterization of a case, shared by every lane that traces at the same resolution
+ *  (flat and mono both run at the flat cap, so the raster is decoded and stored once). */
+interface Raster {
+  bytes: Uint8Array
+  img: ReturnType<typeof decodePng>
+  file: string
+}
+
+const totalT0 = performance.now()
 for (const c of cases) {
   const src = readFileSync(join(root, c.path))
-  // The input pixels: rasterize SVG cases ONCE (transparent background — the same
-  // policy the app's own canvas rasterization uses); PNG cases pass through.
-  const pngBytes =
-    c.kind === 'svg'
-      ? new Resvg(src.toString('utf8'), {
-          fitTo: { mode: 'width', value: AB_SNAPSHOT_RES },
-          // The gallery lane composites on white, exactly as /labs/gallery does; the
-          // fixtures keep the transparent input the app's own rasterization produces.
-          ...(c.background ? { background: c.background } : {}),
-        })
-          .render()
-          .asPng()
-      : src
-  const img = decodePng(pngBytes)
 
-  const trace = async (gradients: boolean): Promise<string> =>
-    serializeDoc(
-      await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients }),
-    )
+  // The input pixels, ONE RASTER PER DISTINCT LANE RESOLUTION: rasterize SVG cases with
+  // resvg (transparent background — the same policy the app's own canvas rasterization
+  // uses); PNG cases pass through verbatim, because production never upscales a raster and
+  // a stamp must not either.
+  const rasters = new Map<number, Raster>()
+  const rasterAt = (res: number): Raster => {
+    const hit = rasters.get(res)
+    if (hit) return hit
+    const bytes: Uint8Array =
+      c.kind === 'svg'
+        ? new Resvg(src.toString('utf8'), {
+            fitTo: { mode: 'width', value: res },
+            // The gallery lane composites on white, exactly as /labs/gallery does; the
+            // fixtures keep the transparent input the app's own rasterization produces.
+            ...(c.background ? { background: c.background } : {}),
+          })
+            .render()
+            .asPng()
+        : src
+    const img = decodePng(bytes)
+    // A PNG fixture bigger than a lane's cap would be traced whole here while production
+    // downscales it first — a silent input mismatch. Both PNG fixtures are 512², well
+    // under every cap; say so rather than let a future one slip through.
+    if (c.kind === 'png' && Math.max(img.width, img.height) > res) {
+      console.log(
+        `  note: ${c.id} is ${img.width}×${img.height}, above this lane's ${res}px cap — production would downscale it, this stamp traces it whole`,
+      )
+    }
+    const raster = { bytes, img, file: lanePngName(c.id, res) }
+    rasters.set(res, raster)
+    return raster
+  }
 
   const t0 = performance.now()
-  const flat = await trace(false)
-  const grad = await trace(true)
-  writeFileSync(join(outDir, `${c.id}.png`), pngBytes)
-  writeFileSync(join(outDir, `${c.id}.flat.svg`), flat)
-  writeFileSync(join(outDir, `${c.id}.grad.svg`), grad)
+  const svgOf: Partial<Record<AbLaneKey, string>> = {}
+  const timings: string[] = []
+  for (const lane of AB_LANES) {
+    const r = rasterAt(lane.res)
+    const lt0 = performance.now()
+    svgOf[lane.key] = serializeDoc(
+      await traceImage(r.img as unknown as ImageData, {
+        ...DEFAULT_VECTORIZE_OPTIONS,
+        engine: 'planar',
+        ...lane.opts,
+        ...lane.resolve?.(r.img),
+      }),
+    )
+    timings.push(`${lane.key} @${lane.res} ${((performance.now() - lt0) / 1000).toFixed(1)}s`)
+  }
+
+  for (const r of rasters.values()) writeFileSync(join(outDir, r.file), r.bytes)
+  for (const lane of AB_LANES) writeFileSync(join(outDir, `${c.id}.${lane.key}.svg`), svgOf[lane.key]!)
+
+  // `png`/`width`/`height` describe the PRIMARY raster; a lane that traced something else
+  // records its own, and a reader resolves both through `laneFiles`.
+  const primary = rasterAt(AB_SNAPSHOT_RES)
+  const gradLane = AB_LANES.find((l) => l.key === 'grad')!
+  const gradRaster = rasterAt(gradLane.res)
   manifest.cases.push({
     id: c.id,
     name: c.name,
-    png: `${c.id}.png`,
+    png: primary.file,
     flat: `${c.id}.flat.svg`,
     grad: `${c.id}.grad.svg`,
-    width: img.width,
-    height: img.height,
+    mono: `${c.id}.mono.svg`,
+    width: primary.img.width,
+    height: primary.img.height,
+    ...(gradRaster.file !== primary.file
+      ? { gradPng: gradRaster.file, gradWidth: gradRaster.img.width, gradHeight: gradRaster.img.height }
+      : {}),
   })
-  console.log(`${c.id.padEnd(14)} ${img.width}×${img.height}  flat+grad traced in ${((performance.now() - t0) / 1000).toFixed(1)}s`)
+  console.log(
+    `${c.id.padEnd(14)} ${primary.img.width}×${primary.img.height}  ${timings.join(' · ')}  = ${((performance.now() - t0) / 1000).toFixed(1)}s`,
+  )
 }
 
 writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
-console.log(`\n${manifest.cases.length} cases snapshotted at ${manifest.rev} → ${AB_SNAPSHOT_DIR}/${name}/  (dropdown: "${name}")`)
+console.log(
+  `\n${manifest.cases.length} cases × ${AB_LANES.length} lanes (${AB_LANES.map((l) => `${l.key} @${l.res}`).join(', ')}) snapshotted at ${manifest.rev} in ${((performance.now() - totalT0) / 1000 / 60).toFixed(1)} min → ${AB_SNAPSHOT_DIR}/${name}/  (dropdown: "${name}")`,
+)
 const partner = pairArg ?? conventionalPartner(name)
 if (partner) {
   const have = existsSync(join(root, AB_SNAPSHOT_DIR, partner))

@@ -24,7 +24,14 @@ stamps against each other (nothing traced, so it does not decay as you keep work
 (the default) or any other snapshot. Don't stamp an `after-` unless you mean to keep it: a lone
 `before-` is the normal case, and the pair is for a result worth being able to re-open later.
 
-Two lanes, both in `src/devtest/abCorpus.ts`: the ⟐ **fixtures** (handcrafted, one mechanism
+Every case is traced in **three lanes** (`AB_LANES`), each at the resolution production uses
+for that art: flat at the flat cap, gradient/photo at the gradient cap, and **mono** — which
+is NOT a subset of the colour path (`mode: 'mono'` returns before segmentation and the colour
+lanes pin `engine: 'planar'`, which routes around the two modules mono is made of). The mono
+cut comes from the ink probe on the raster, not a constant, so the lane traces what a user
+actually gets. Old stamps keep working: every lane's resolution is recorded per stamp.
+
+Two case lanes, both in `src/devtest/abCorpus.ts`: the ⟐ **fixtures** (handcrafted, one mechanism
 each — good gates, weak evidence: they are "good enough" long before real art is) and a slice
 of the ◆ **gallery** corpus, the same brand marks `/labs/gallery` shows, rasterized on white
 exactly as that page does. The gallery lane needs `npm run fetch:logos`; without it the lane
