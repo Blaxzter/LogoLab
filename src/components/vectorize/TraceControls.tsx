@@ -154,10 +154,6 @@ export function TraceControlsBody({
       ? [{ from: monoGuide.deadOn, to: 255 }]
       : [{ from: 0, to: monoGuide.deadOff }]
     : undefined
-  const currentFrac = monoGuide ? (inverted ? monoGuide.fracOn : monoGuide.fracOff) : 1
-  const otherFrac = monoGuide ? (inverted ? monoGuide.fracOff : monoGuide.fracOn) : 0
-  const selectsNothing = monoGuide != null && opts.mode === 'mono' && currentFrac === 0
-  const otherSideHelps = selectsNothing && otherFrac > 0
 
   return (
     <>
@@ -228,19 +224,6 @@ export function TraceControlsBody({
                 </p>
               )}
             </Field>
-          )}
-
-          {/* Known from the probe at LOAD, before anything is traced: there is no
-              ink here at all. No setting recovers that, so say it once, plainly,
-              rather than letting every knob be tried against an empty image. */}
-          {tracing && inkPlan?.inks === 0 && (
-            <div className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-snug text-warn">
-              <AlertTriangle size={14} className="mt-px shrink-0" />
-              <span>
-                This image looks empty — every pixel matches its background, so there is
-                nothing to trace. Check the upload, or clear the background in Cleanup first.
-              </span>
-            </div>
           )}
 
           {tracing && (
@@ -337,19 +320,6 @@ export function TraceControlsBody({
                     )}
                   </Field>
 
-                  {/* The state this whole pass exists to make impossible to reach
-                      silently: the cut selects nothing, so the trace will be empty. */}
-                  {selectsNothing && (
-                    <div className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-snug text-warn">
-                      <AlertTriangle size={14} className="mt-px shrink-0" />
-                      <span>
-                        This cut selects no pixels, so the trace comes out empty.
-                        {otherSideHelps
-                          ? ' Flip Invert — the other side selects ' + pct(otherFrac) + '.'
-                          : ' Move Threshold out of the struck-out range.'}
-                      </span>
-                    </div>
-                  )}
                 </>
               )}
 

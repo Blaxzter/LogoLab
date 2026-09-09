@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+    AlertTriangle,
     Check,
     Copy,
     Download,
@@ -329,6 +330,16 @@ export function VectorizeStudio({
 
     const isVectorSource = logo.isSvg && Boolean(logo.svgText);
     const cleanFromExisting = isVectorSource && retraceVector === "clean";
+
+    /** Reset the mono cut to what the probe measured for this image. */
+    const useMeasuredCut = useCallback(() => {
+        if (!inkPlan) return;
+        setOpts((o) => ({
+            ...o,
+            threshold: inkPlan.threshold,
+            invert: inkPlan.invert,
+        }));
+    }, [inkPlan]);
     // Precision only re-runs the pipeline in clean mode (cleanSvg rounds the
     // markup); in trace mode it is applied at serialize time.
     const cleanPrecision = cleanFromExisting ? precision : -1;
@@ -802,6 +813,74 @@ export function VectorizeStudio({
         () => (derivedDoc ? docStats(derivedDoc) : null),
         [derivedDoc],
     );
+
+    /**
+     * The trace came back with nothing in it — said ON THE CANVAS, because that
+     * is where the user is looking. An empty result is not a state to hunt for in
+     * a sidebar: the blank pane IS the symptom, so the cause and the one-click fix
+     * belong on top of it. (The controls carry the preventive half — what each
+     * Invert position costs, and which cuts are dead — so this only fires when a
+     * setting slipped through anyway.)
+     */
+    const emptyNotice = useMemo((): {
+        text: string;
+        action?: { label: string; run: () => void };
+    } | null => {
+        if (busy || !derivedDoc || !stats || stats.paths > 0) return null;
+
+        // Nothing in the source to begin with; no setting recovers that.
+        if (inkPlan?.inks === 0) {
+            return {
+                text: "This image looks empty — every pixel matches its background, so there is nothing to trace.",
+            };
+        }
+
+        // A mono cut with all the ink on the wrong side of it. The probe knows
+        // which side works, so the fix is one button rather than an instruction.
+        if (opts.mode === "mono" && monoGuide) {
+            const here = opts.invert ? monoGuide.fracOn : monoGuide.fracOff;
+            const there = opts.invert ? monoGuide.fracOff : monoGuide.fracOn;
+            if (here === 0 && there > 0) {
+                return {
+                    text: `This cut selects no pixels, so nothing was traced. Inverting it selects ${
+                        there < 0.01 ? (there * 100).toFixed(1) : Math.round(there * 100)
+                    }% of the visible pixels.`,
+                    action: {
+                        label: "Flip Invert",
+                        run: () => setOpts((o) => ({ ...o, invert: !o.invert })),
+                    },
+                };
+            }
+            if (here === 0) {
+                return {
+                    text: "This threshold selects no pixels, so nothing was traced.",
+                    action: inkPlan
+                        ? { label: `Use the measured cut (${inkPlan.threshold})`, run: useMeasuredCut }
+                        : undefined,
+                };
+            }
+        }
+
+        // Everything else: say so plainly rather than guess at a cause.
+        return {
+            text: "The trace came back empty — nothing in the image matched these settings.",
+            action:
+                colorMode !== "auto"
+                    ? { label: "Let Auto decide", run: () => { setColorMode("auto"); colorModeRef.current = "auto"; applyInkDecision("auto"); } }
+                    : undefined,
+        };
+    }, [
+        busy,
+        derivedDoc,
+        stats,
+        inkPlan,
+        monoGuide,
+        opts.mode,
+        opts.invert,
+        colorMode,
+        useMeasuredCut,
+        applyInkDecision,
+    ]);
 
     // Reset the "Applied" badge whenever the output changes.
     useEffect(() => {
@@ -1440,6 +1519,37 @@ export function VectorizeStudio({
                         ) : (
                             <StagePlaceholder busy={busy} />
                         ))}
+
+                    {/* Empty-result notice, centred on the TRACED pane — in split view
+                        that is the right half, so it stays over the blank rather than
+                        straddling the seam. Not shown over "original", which has
+                        nothing to explain. */}
+                    {emptyNotice && view !== "original" && (
+                        <div
+                            className={`animate-in-fade pointer-events-none absolute inset-y-0 z-10 flex items-center justify-center p-6 ${
+                                view === "split" ? "left-1/2 right-0" : "inset-x-0"
+                            }`}
+                        >
+                            <div className="pointer-events-auto max-w-xs rounded-xl border border-warn/40 bg-surface/95 p-4 text-center shadow-lg backdrop-blur">
+                                <AlertTriangle
+                                    size={20}
+                                    className="mx-auto mb-2 text-warn"
+                                />
+                                <p className="text-xs leading-snug text-ink-2">
+                                    {emptyNotice.text}
+                                </p>
+                                {emptyNotice.action && (
+                                    <Button
+                                        variant="primary"
+                                        className="mt-3 h-8 px-3 text-xs"
+                                        onClick={emptyNotice.action.run}
+                                    >
+                                        {emptyNotice.action.label}
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Trace-in-progress overlay: a sweeping band + a status pill.
                         pointer-events-none so panning/zooming stays live (the crisp
