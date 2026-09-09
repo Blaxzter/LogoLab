@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, X } from 'lucide-react'
-import { useLogo } from '../../store'
+import { useCheckerClass, useLogo } from '../../store'
 import { Tooltip } from '../ui/Tooltip'
 import { getImageData } from '../../lib/image'
 import { analyzeImageOffThread, type OffThreadAnalysis } from '../../lib/trace/traceOffThread'
@@ -475,9 +475,12 @@ function CornerIllustration({ variant }: { variant: 'before' | 'after' }) {
 }
 
 function Visual({ label, children }: { label: string; children: ReactNode }) {
+  // The studio stage's backdrop, so a light mark stays visible here too (see
+  // PreviewCell in ControlInfoDialog for why no bg-* utility rides along).
+  const checkerClass = useCheckerClass()
   return (
     <div className="w-36">
-      <div className="checkerboard h-36 w-36 overflow-hidden rounded-lg border border-line bg-surface">{children}</div>
+      <div className={`${checkerClass} h-36 w-36 overflow-hidden rounded-lg border border-line`}>{children}</div>
       <div className="mt-1 text-center text-[10px] text-muted">{label}</div>
     </div>
   )

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ImageIcon, Loader2, X } from 'lucide-react'
-import { useLogo } from '../../store'
+import { useCheckerClass, useLogo } from '../../store'
 import { getImageData } from '../../lib/image'
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from '../../lib/trace'
 import { canTraceOffThread, traceImageOffThread } from '../../lib/trace/traceOffThread'
@@ -313,12 +313,16 @@ function PreviewCell({
   caption?: string
   children: React.ReactNode
 }) {
+  // Same backdrop as the studio stage (dark behind a light/white mark), so a white
+  // outline trace doesn't come back invisible-on-white here. No bg-* utility beside
+  // it: Tailwind's utilities layer would win over the checkerboard's own base tint.
+  const checkerClass = useCheckerClass()
   return (
     <div className="min-w-[8.5rem] flex-1">
       <ZoomSurface
         pz={pz}
         primary={primary}
-        className="checkerboard aspect-square w-full rounded-lg border border-line bg-surface"
+        className={`${checkerClass} aspect-square w-full rounded-lg border border-line`}
       >
         {children}
       </ZoomSurface>
