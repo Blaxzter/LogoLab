@@ -8,9 +8,12 @@
 // or Android or iOS collection. Doing that by hand means a raster upscale and a
 // blurry 16px favicon; doing it here runs the same tracer the app runs.
 //
-//   node src/mcp/server.ts              serve over stdio (what a client runs)
-//   node src/mcp/server.ts install      register this server with your client
-//   node src/mcp/server.ts try <image> [outDir]   one-shot local check, no client
+//   logolab                             serve over stdio (what a client runs)
+//   logolab install                     register this server with your client
+//   logolab try <image> [outDir]        one-shot local check, no client
+//
+// From a checkout that is `node src/mcp/server.ts <same args>`; published, the
+// npm bin is `logolab`, which is what `npx -y logolab` runs.
 //
 // stdout belongs to the protocol — everything human goes to stderr (see `log`).
 
@@ -24,13 +27,14 @@ import { loadSource } from './image.ts'
 import { install, isMain, parseInstallArgs } from './install.ts'
 import { presetCatalogue, PRESETS } from './presets.ts'
 import { prepareSource, prepareTraced, type PreparedLogo } from './render.ts'
-import { ensureImageData, ensureParent, humanBytes, log } from './runtime.ts'
+import { ensureImageData, ensureParent, humanBytes, log, packageVersion, runningFromSource } from './runtime.ts'
 import { splitSheet } from './sheet.ts'
 import { describeSource, planTrace, traceIcon, type TraceRequest } from './trace.ts'
 
 ensureImageData()
 
-const VERSION = '0.1.0'
+// Read from the manifest that ships, so it cannot drift from what npm serves.
+const VERSION = packageVersion()
 
 /* ------------------------------------------------------------ shared schema */
 
@@ -337,15 +341,18 @@ export function createServer(): McpServer {
 
 /* --------------------------------------------------------------------- CLI */
 
+/** How the reader invoked us, so every usage line below can be pasted as printed. */
+const CLI = runningFromSource() ? 'node src/mcp/server.ts' : 'logolab'
+
 const HELP = `LogoLab MCP server ${VERSION}
 
-  node src/mcp/server.ts                 serve over stdio (this is what an MCP client runs)
-  node src/mcp/server.ts install         register with Claude Code in the current project
+  ${CLI}                 serve over stdio (this is what an MCP client runs)
+  ${CLI} install         register with Claude Code in the current project
       --client claude|cursor|vscode|print
       --scope  project|user
       --dir    <project directory>       (project scope; default: cwd)
       --name   <server name>             (default: logolab)
-  node src/mcp/server.ts try <image> [outDir]
+  ${CLI} try <image> [outDir]
                                          trace + export a PWA set locally, no client involved
 
 Presets: ${PRESETS.map((p) => p.id).join(', ')}
@@ -353,7 +360,7 @@ Presets: ${PRESETS.map((p) => p.id).join(', ')}
 
 async function tryRun(argv: string[]): Promise<void> {
   const image = argv[0]
-  if (!image) throw new Error('usage: node src/mcp/server.ts try <image> [outDir]')
+  if (!image) throw new Error(`usage: ${CLI} try <image> [outDir]`)
   const outDir = argv[1] ?? join(process.cwd(), 'logolab-icons')
   const src = loadSource(image)
   process.stdout.write(`tracing ${src.path} …\n`)

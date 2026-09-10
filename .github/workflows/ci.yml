@@ -1,0 +1,38 @@
+# Typecheck + the full suite, on every PR and every push to main.
+#
+# This is the one that has to exist before the other two mean anything: the
+# deploy and release workflows below build from main and from tags, and neither
+# is worth much if nothing has run the tests. test/mcp-package.test.ts in
+# particular only protects the published package if something executes it.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      # The gallery A/B lane needs `pnpm fetch:logos`, which downloads brand art
+      # that is deliberately not redistributed. CI never runs it: that lane is
+      # simply empty here and the rest of the suite is unaffected.
+      - run: pnpm test

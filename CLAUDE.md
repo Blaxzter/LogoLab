@@ -1,7 +1,9 @@
 # LogoLab — working notes for agents
 
 Drop in a logo → preview in context → **vectorize** to clean SVG → export PWA icons. The
-vectorizer (raster → planar shared-edge trace) is the heart of the app: `src/lib/trace/`.
+vectorizer (raster → planar shared-edge trace) is the heart of the app: `src/lib/trace/`. It
+is also the npm package **`logolab`** — the same tracer as an MCP server — so read *The tracer
+ships TWICE* below before you call a change to it done.
 
 ## Before ANY vectorizer change: freeze an A/B snapshot
 
@@ -61,6 +63,42 @@ like a re-centred glow, which every geometry gate is blind to on gradient art, �
 Open defects + the method are tracked in ONE place:
 **`docs/vectorization-benchmarks.md` §0**, with `KNOWN_DEFECTS` in the test as the
 machine-checked status. A case not in `KNOWN_DEFECTS` must pass every applicable gate.
+
+## The tracer ships TWICE, and only one of them is automatic
+
+A tracer change reaches the website by itself — Cloudflare Workers Builds is connected to this
+repo and deploys `main`. It does **not** reach anyone running `npx -y logolab`. That is the
+same tracer, published to npm as **`logolab`** from `packages/mcp`, and it only moves when
+someone cuts a release. **A tracer change is not shipped until you release one.**
+
+`packages/mcp` has no sources of its own: it points tsc at `src/mcp/server.ts` and compiles
+whatever that reaches (`src/mcp` plus `src/lib/{trace,path,sheet,render}` — 57 files today), so
+your change is already *in* the package the moment you edit the tracer. It is just unpublished.
+
+To release: bump the version in **`packages/mcp/package.json`** — the only place it lives; the
+server reads it (`packageVersion` in `src/mcp/runtime.ts`) rather than repeating it — then
+
+```
+pnpm test
+git tag v0.1.1 && git push origin v0.1.1     # tags are signed; make it LOCALLY
+```
+
+then Releases → Draft a new release → pick the existing tag → Publish. `release.yml` does the
+rest (trusted publishing over OIDC, no npm token, provenance attached) and refuses a tag whose
+version disagrees with the manifest. Do not let the GitHub UI create the tag for you: one made
+server-side is unsigned, and the workflow verifies the signature.
+
+### `test/mcp-package.test.ts` is what stops you shipping a broken package
+
+The package's dependency list is decided by IMPORTS, in files nobody edits with npm in mind.
+Add `import { x } from 'some-package'` anywhere in the tracer's graph and the app still works,
+the checkout still works, the typecheck still passes — and `npx -y logolab` dies at runtime
+with `ERR_MODULE_NOT_FOUND`, because that package was a devDependency of the app and was never
+declared by the package that ships. The test walks the real graph (static, dynamic, and the
+lazy `createRequire` that loads the optional sharp decoder) and fails on anything undeclared,
+on a dependency version that drifts between the two manifests, and on the server's version
+being hard-coded again instead of read. **If it fails, fix the manifests — never the
+assertion.**
 
 ## Node
 

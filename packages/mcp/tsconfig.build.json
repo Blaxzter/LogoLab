@@ -1,0 +1,36 @@
+{
+  // Build config for the published `logolab` package.
+  //
+  // The server is not a copy of the tracer — it IMPORTS it, so this compiles the
+  // whole reachable graph from src/mcp/server.ts (src/mcp + src/lib/trace, path,
+  // sheet, render + two PNG helpers from src/devtest) into dist/, keeping the
+  // repo's src/ layout underneath it. `bin` therefore points at dist/mcp/server.js.
+  //
+  // Resolution is "bundler", NOT "nodenext", on purpose: the codebase writes
+  // value imports as './x.ts' but type-only imports extensionless ('../types'),
+  // and nodenext rejects the latter. Every one of those is `import type`, so it
+  // is erased before emit and never reaches Node — the mismatch is a typecheck
+  // artifact, not a runtime one. `rewriteRelativeImportExtensions` turns the
+  // './x.ts' specifiers that DO survive into './x.js'.
+  "compilerOptions": {
+    "target": "ES2022",
+    // DOM is types-only: the tracer is written against ImageData, which the
+    // server polyfills at startup (ensureImageData in src/mcp/runtime.ts).
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "rewriteRelativeImportExtensions": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
+    "moduleDetection": "force",
+    "erasableSyntaxOnly": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": false,
+    "removeComments": false,
+    "rootDir": "../../src",
+    "outDir": "./dist",
+    "types": ["node"]
+  },
+  "include": ["../../src/mcp/**/*.ts"]
+}

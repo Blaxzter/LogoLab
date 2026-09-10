@@ -5,7 +5,7 @@
 // installs the same shim (src/devtest/nodeHarness.ts); this is its twin for the
 // server, kept separate so the production entry never imports the test tree.
 
-import { existsSync, mkdirSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -35,6 +35,34 @@ export function ensureImageData(): void {
 /** The LogoLab checkout this server is running from (src/mcp → repo root). */
 export function projectRoot(): string {
   return join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+}
+
+/**
+ * True when we are running from a LogoLab checkout rather than the published
+ * package. The checkout runs `.ts` through Node's type stripping, the package
+ * runs the compiled `.js` — so the extension of THIS module is the whole test,
+ * with no filesystem probing and no build-time flag to keep in sync.
+ */
+export function runningFromSource(): boolean {
+  return fileURLToPath(import.meta.url).endsWith('.ts')
+}
+
+/**
+ * The version this server ships as — reported in the MCP handshake, `--help`
+ * and the startup log.
+ *
+ * Read, never written down twice. The catch is that "our own package.json" is
+ * two different files: `projectRoot()` is the REPO root from a checkout (whose
+ * manifest is the private app, `logolab-app`) and the PACKAGE root from the
+ * tarball. So pick the manifest that defines the published package in each
+ * layout — `packages/mcp/package.json` in a checkout, our own when installed —
+ * and both answer with the version npm would serve.
+ */
+export function packageVersion(): string {
+  const manifest = runningFromSource()
+    ? join(projectRoot(), 'packages', 'mcp', 'package.json')
+    : join(projectRoot(), 'package.json')
+  return (JSON.parse(readFileSync(manifest, 'utf8')) as { version: string }).version
 }
 
 /**

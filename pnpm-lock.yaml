@@ -76,6 +76,24 @@ importers:
         specifier: ^4.5.4
         version: 4.5.4
 
+  packages/mcp:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.30.0
+        version: 1.30.0(zod@4.5.4)
+      '@resvg/resvg-js':
+        specifier: ^2.6.2
+        version: 2.6.2
+      esm-potrace-wasm:
+        specifier: ^0.4.1
+        version: 0.4.1
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
+
 packages:
 
   '@emnapi/core@1.10.0':

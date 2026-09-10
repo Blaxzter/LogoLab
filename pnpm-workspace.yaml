@@ -1,4 +1,15 @@
+# The app is the root project; packages/mcp is the publishable `logolab` npm
+# package (the MCP server). It has no sources of its own — it COMPILES the
+# server and the tracer out of the root src/ tree, so the two can never drift.
+packages:
+  - packages/*
+
 allowBuilds:
   onnxruntime-node: true
   protobufjs: true
   sharp: true
+  # Its "build script" is `opencollective-postinstall || true` — a donation
+  # banner, nothing functional. Left as pnpm's unresolved placeholder this was a
+  # hard `ERR_PNPM_IGNORED_BUILDS` failure on any clean `--frozen-lockfile`
+  # install, which is to say: on CI, and on anyone's first clone.
+  tesseract.js: false

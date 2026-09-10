@@ -1,0 +1,142 @@
+# Publish the `logolab` package to npm, when a GitHub Release is published.
+#
+# Deliberately release-triggered rather than push-to-main: an npm version is
+# permanent, so a release has to be an explicit act. Merging to main does
+# nothing here; publishing a Release for v0.1.1 publishes 0.1.1.
+#
+# It fires on `published`, not `created`, so a DRAFT release can be written and
+# revised without shipping anything — the publish happens when you click
+# Publish release, and a draft that is never published never reaches npm.
+#
+# There is no NPM_TOKEN. This uses npm TRUSTED PUBLISHING — npm is configured to
+# trust this repository and this workflow file, and authenticates over OIDC with
+# a credential that lives for the length of one job. That is also what makes
+# --provenance meaningful: the attestation is signed by the same identity, so
+# the tarball on npm is cryptographically tied back to this run and this commit.
+#
+# One-time setup on npmjs.com (Package → Settings → Trusted publisher):
+#   organization/user: Blaxzter   repository: LogoLab
+#   workflow filename: release.yml
+#
+# Optional, to reject a tag that isn't yours — set these as repository VARIABLES
+# (Settings → Secrets and variables → Actions → Variables):
+#   RELEASE_SIGNER_EMAIL  e.g. mail@fabraham.dev
+#   RELEASE_SIGNING_KEY   the one-line contents of your signing .pub
+# Leave them unset and the check is skipped.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # required for trusted publishing + provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      # fetch-depth: 0 so the annotated tag object (and its signature) is here,
+      # not just the commit it points at. The explicit ref pins the checkout to
+      # the release's tag rather than whatever the default branch has drifted to.
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      - name: Verify the tag is signed by a trusted key
+        if: vars.RELEASE_SIGNING_KEY != ''
+        run: |
+          printf '%s %s\n' \
+            "${{ vars.RELEASE_SIGNER_EMAIL }}" \
+            "${{ vars.RELEASE_SIGNING_KEY }}" > "$RUNNER_TEMP/allowed_signers"
+          git config gpg.format ssh
+          git config gpg.ssh.allowedSignersFile "$RUNNER_TEMP/allowed_signers"
+          git verify-tag "$TAG"
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Trusted publishing needs npm >= 11.5.1. Node 24 ships something recent
+      # enough today, but pinning the floor here means a Node bump can't quietly
+      # take OIDC away and send you hunting for a token that does not exist.
+      - run: npm install -g npm@latest
+
+      - run: pnpm install --frozen-lockfile
+
+      # A tag that disagrees with the manifest publishes the wrong version under
+      # the right name, and you cannot take it back — so fail before npm is
+      # touched at all.
+      - name: Tag must match the package version
+        run: |
+          tag="${TAG#v}"
+          pkg=$(node -p "require('./packages/mcp/package.json').version")
+          echo "tag=$tag  package.json=$pkg"
+          test "$tag" = "$pkg"
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      # The last chance to find out that the tarball is wrong.
+      #
+      # Everything above this point tests the REPO. This tests the ARTIFACT: pack
+      # it, install it into an empty project the way a stranger would, and drive
+      # it over stdio. That covers the failures the repo's own tests structurally
+      # cannot see — a file missing from `files`, a bin path that resolves to
+      # nothing, a dependency that only ever worked because the workspace had it,
+      # and `packageVersion()` picking the wrong manifest in the installed layout
+      # (the unit test can only pin the checkout side of that branch).
+      #
+      # It runs BEFORE publish because npm versions are permanent: a failure here
+      # costs a red build, the same failure ten seconds later costs a burnt
+      # version number that can never be reused.
+      - name: Smoke-test the tarball before it becomes permanent
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          SMOKE: ${{ runner.temp }}/smoke
+        run: |
+          set -euo pipefail
+          export VERSION="${TAG#v}"
+          pnpm mcp:build
+          tgz=$(cd packages/mcp && npm pack --pack-destination "$RUNNER_TEMP" --json                 | node -e "process.stdin.once('data',d=>console.log(JSON.parse(d)[0].filename))")
+
+          mkdir -p "$SMOKE" && cd "$SMOKE"
+          npm init -y >/dev/null
+          npm install "$RUNNER_TEMP/$tgz"
+
+          echo "::group::reports its own version"
+          ./node_modules/.bin/logolab --help | head -1
+          ./node_modules/.bin/logolab --help | head -1 | grep -Fqx "LogoLab MCP server $VERSION"
+          echo "::endgroup::"
+
+          echo "::group::speaks MCP and offers its tools"
+          printf '%s\n%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            | ./node_modules/.bin/logolab 2>/dev/null > out.jsonl
+          node -e "
+            const lines = require('node:fs').readFileSync('out.jsonl','utf8').trim().split('\n').map(JSON.parse)
+            const info  = lines.find(m => m.id === 1).result.serverInfo
+            const tools = lines.find(m => m.id === 2).result.tools.map(t => t.name)
+            console.log(info, tools)
+            if (info.version !== process.env.VERSION) throw new Error('handshake reports ' + info.version)
+            for (const t of ['make_app_icons','trace_icon','export_icons','split_icon_sheet','inspect_icon'])
+              if (!tools.includes(t)) throw new Error('missing tool: ' + t)
+          "
+          echo "::endgroup::"
+
+      # prepublishOnly rebuilds dist/ from src/, so what ships is compiled here,
+      # in this job, from this commit — never a stale local build.
+      - name: Publish
+        run: npm publish --provenance --access public
+        working-directory: packages/mcp

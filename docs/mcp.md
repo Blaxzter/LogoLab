@@ -17,36 +17,58 @@ renders — over stdio, locally, with nothing uploaded.
 
 ## Install
 
-Needs the checkout (`pnpm install` once) and Node ≥ 22 — TypeScript runs directly,
-there is no build step.
+Published as [`logolab`](https://www.npmjs.com/package/logolab). Needs Node ≥ 22.18;
+no clone, no build, nothing global — `npx` fetches it and your client runs it.
 
 ```bash
 # Claude Code, this project only  (writes .mcp.json)
-node src/mcp/server.ts install
+npx -y logolab install
 # …or for every project
-node src/mcp/server.ts install --scope user
+npx -y logolab install --scope user
 # …or through the CLI
-claude mcp add logolab -- node /path/to/LogoLab/src/mcp/server.ts
+claude mcp add logolab -- npx -y logolab
 
 # Cursor  (writes .cursor/mcp.json)
-node src/mcp/server.ts install --client cursor
+npx -y logolab install --client cursor
 
 # VS Code  (writes .vscode/mcp.json)
-node src/mcp/server.ts install --client vscode
+npx -y logolab install --client vscode
 
 # Anything else: print the JSON and change nothing
-node src/mcp/server.ts install --client print
+npx -y logolab install --client print
 ```
 
 `--dir <path>` installs into another project; `--name <name>` renames the server.
 The app has the same thing behind a button: **Export → Do this from your editor**
-(it fills your checkout's path in for you, and Cursor gets a one-click deeplink).
+(Cursor gets a one-click deeplink).
 
 Check it without a client at all:
 
 ```bash
+npx -y logolab try ./icon.png ./out
+```
+
+### From a checkout
+
+A contributor wants their client running their working tree, not the release. The
+same commands work with the entry point in place of the package, and `install`
+notices which way it was started and writes the matching config:
+
+```bash
+node src/mcp/server.ts install     # writes {"command":"node","args":["…/src/mcp/server.ts"]}
 pnpm mcp:try public/examples/petals.png ./out
 ```
+
+TypeScript runs directly there (Node's type stripping), so there is still no build
+step in the loop. `pnpm mcp:build` compiles [`packages/mcp`](../packages/mcp) when
+you want to test the thing that actually ships.
+
+### WebP inputs
+
+The optional `sharp` decoder is an *optional peer* and is NOT installed with the
+package — it pulls a platform-specific libvips binary that dwarfs the server (an
+install goes 30 MB → 47 MB) for a format most callers never pass. If you need it:
+`npm install sharp`. PNG, JPEG, GIF, BMP and SVG need nothing.
 
 ## Tools
 
