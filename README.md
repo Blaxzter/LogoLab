@@ -119,9 +119,11 @@ The tracer and the icon exporter, exposed to your coding agent over
 [MCP](https://modelcontextprotocol.io). "Trace `icon.png` and put a PWA icon set in `public/`"
 becomes one tool call — locally, nothing uploaded.
 
+Published to npm as [`logolab`](https://www.npmjs.com/package/logolab) — no clone needed:
+
 ```bash
-node src/mcp/server.ts install          # Claude Code, this project
-node src/mcp/server.ts install --client cursor   # or Cursor / VS Code / --client print
+claude mcp add logolab -- npx -y logolab   # Claude Code
+npx -y logolab install --client cursor     # or Cursor / VS Code / --client print
 ```
 
 - `make_app_icons` (trace + export in one call), `trace_icon`, `export_icons`,
@@ -133,7 +135,8 @@ node src/mcp/server.ts install --client cursor   # or Cursor / VS Code / --clien
   back so the agent can overrule one without hand-tuning the rest.
 
 The app has a button for it: **Export → Do this from your editor**. Full reference:
-[`docs/mcp.md`](docs/mcp.md).
+[`docs/mcp.md`](docs/mcp.md); the package that ships is [`packages/mcp`](packages/mcp), which
+compiles the server and the tracer straight out of `src/` so the two cannot drift.
 
 ## 🚀 Getting started
 
@@ -144,6 +147,7 @@ pnpm build      # type-check + production build → ./dist
 pnpm preview    # preview the production build
 pnpm mcp        # run the MCP server on stdio (what an agent client launches)
 pnpm mcp:try public/examples/petals.png ./out    # trace + export once, no client needed
+pnpm mcp:build  # compile packages/mcp → the publishable `logolab` package
 ```
 
 > Uses **pnpm**, but `npm` / `yarn` work too.

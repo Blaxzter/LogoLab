@@ -5,6 +5,7 @@ import { useLogo, useStore } from './store'
 import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
+import { AgentSetupButton } from './components/AgentSetup'
 import { AppMenu } from './components/AppMenu'
 import { LabPopover } from './components/LabPopover'
 import { SupportPopover } from './components/SupportPopover'
@@ -127,6 +128,10 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
         )}
         <span className="text-xs text-faint">Runs 100% in your browser</span>
         <div className="flex items-center gap-1">
+          {/* LogoLab's MCP server. First in the cluster because it is a product
+              feature, not a meta affordance like the three that follow — and
+              because it has no other desktop home (the mobile menu has a row). */}
+          <AgentSetupButton variant="icon" />
           <ThemeToggleButton />
           <LabPopover />
           <SupportPopover />

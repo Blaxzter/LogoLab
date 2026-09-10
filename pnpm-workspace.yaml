@@ -1,4 +1,11 @@
+# The app is the root project; packages/mcp is the publishable `logolab` npm
+# package (the MCP server). It has no sources of its own — it COMPILES the
+# server and the tracer out of the root src/ tree, so the two can never drift.
+packages:
+  - packages/*
+
 allowBuilds:
   onnxruntime-node: true
   protobufjs: true
   sharp: true
+  tesseract.js: set this to true or false

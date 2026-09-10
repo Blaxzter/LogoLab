@@ -1,5 +1,5 @@
 {
-  "name": "logolab",
+  "name": "logolab-app",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -20,6 +20,8 @@
     "mcp": "node src/mcp/server.ts",
     "mcp:install": "node src/mcp/server.ts install",
     "mcp:try": "node src/mcp/server.ts try",
+    "mcp:build": "pnpm --filter logolab build",
+    "mcp:pack": "pnpm --filter logolab pack",
     "typecheck": "tsc -b --noEmit",
     "test": "node --test",
     "gen:golden": "node src/devtest/writeTraceGolden.ts",

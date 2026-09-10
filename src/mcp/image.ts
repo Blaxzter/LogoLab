@@ -176,10 +176,16 @@ export async function rasterizeSource(src: LoadedSource, maxDim: number, backgro
 }
 
 /**
- * sharp, loaded only if a format needs it. It is a devDependency (it already
- * ships as a transitive dep of the AI cutout's runtime), so a checkout that ran
- * `pnpm install` has it; a stripped install gets a message naming the fix rather
- * than a blank image.
+ * sharp, loaded only if a format needs it — WebP alone, today.
+ *
+ * It stays OPTIONAL on purpose. sharp pulls a platform-specific libvips binary
+ * that dwarfs the rest of the server (an install goes 30 MB → 47 MB) and drags
+ * in libvips/libheif advisories that have no fix, all in front of every
+ * `npx -y logolab` — for a format most callers never pass. So the published
+ * package lists it as an OPTIONAL PEER, which npm does not install on its own,
+ * and a WebP caller opts in with `npm install sharp`. A checkout has it anyway
+ * (devDependency, and a transitive dep of the AI cutout's runtime). Either way a
+ * missing sharp gets a message naming the fix rather than a blank image.
  */
 type SharpFactory = (input: Uint8Array) => {
   raw: () => { ensureAlpha: () => { toBuffer: (o: { resolveWithObject: true }) => Promise<{ data: Buffer; info: { width: number; height: number } }> } }
@@ -194,7 +200,7 @@ function loadSharp(): SharpFactory {
     }
   }
   if (!sharpCache) {
-    throw new Error('This format needs the optional `sharp` decoder. Run `pnpm install` in the LogoLab checkout, or convert the image to PNG first.')
+    throw new Error('This format (WebP) needs the optional `sharp` decoder, which is not installed. Convert the image to PNG first, or run `npm install sharp` in this project.')
   }
   return sharpCache
 }

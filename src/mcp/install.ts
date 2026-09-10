@@ -1,18 +1,22 @@
-// `node src/mcp/server.ts install` — register this server with the agent you use.
+// `logolab install` — register this server with the agent you use.
 //
 // Every client stores the same three facts (a name, a command, its arguments) in
 // a different file, so this writes the right shape into the right place and
-// leaves everything else in that file untouched. Nothing is installed globally
-// and nothing is downloaded: the "server" is this checkout.
+// leaves everything else in that file untouched.
 //
-//   node src/mcp/server.ts install                     → .mcp.json here (Claude Code, project scope)
-//   node src/mcp/server.ts install --client cursor     → .cursor/mcp.json
-//   node src/mcp/server.ts install --client vscode     → .vscode/mcp.json
-//   node src/mcp/server.ts install --scope user        → the client's user-level config
-//   node src/mcp/server.ts install --client print      → print the JSON, change nothing
+//   logolab install                     → .mcp.json here (Claude Code, project scope)
+//   logolab install --client cursor     → .cursor/mcp.json
+//   logolab install --client vscode     → .vscode/mcp.json
+//   logolab install --scope user        → the client's user-level config
+//   logolab install --client print      → print the JSON, change nothing
+//
+// The same file runs two ways, and the config it WRITES has to match the one it
+// was RUN from, or the client would launch a copy the user never chose:
+// from a checkout (`node src/mcp/server.ts`) it writes that path, and from the
+// published package it writes `npx -y logolab`. See `launchSpec`.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -30,18 +34,40 @@ export interface InstallOptions {
   name: string
 }
 
-/** Absolute path to this server's entry point. */
+/** The package name on npm. `npx -y <this>` is the install everyone else uses. */
+export const PACKAGE_NAME = 'logolab'
+
+/**
+ * True when we are running from a LogoLab checkout rather than the published
+ * package. The checkout runs `server.ts` through Node's type stripping, the
+ * package runs the compiled `server.js` — so the extension of THIS module is the
+ * whole test, with no filesystem probing and no build-time flag to keep in sync.
+ */
+export function runningFromSource(): boolean {
+  return fileURLToPath(import.meta.url).endsWith('.ts')
+}
+
+/** Absolute path to this server's entry point in a checkout (`''` when published). */
 export function serverEntry(): string {
-  return join(projectRoot(), 'src', 'mcp', 'server.ts')
+  return runningFromSource() ? join(projectRoot(), 'src', 'mcp', 'server.ts') : ''
 }
 
 /**
- * The stdio launch command every client config is a wrapper around. Plain `node`,
- * not `process.execPath`: a version manager moves the absolute path out from under
- * the config, and every client resolves `node` on PATH the same way a shell does.
+ * The stdio launch command every client config is a wrapper around.
+ *
+ * Published, that is `npx -y logolab`: no clone, no path, and the `-y` skips the
+ * prompt npx would otherwise block on with no TTY to answer it.
+ *
+ * From a checkout it is the path to the entry point, so a contributor's client
+ * runs their working tree instead of silently downloading the release. Plain
+ * `node`, not `process.execPath`: a version manager moves the absolute path out
+ * from under the config, and every client resolves `node` on PATH the way a
+ * shell does.
  */
 export function launchSpec(): { command: string; args: string[] } {
-  return { command: 'node', args: [serverEntry()] }
+  return runningFromSource()
+    ? { command: 'node', args: [serverEntry()] }
+    : { command: 'npx', args: ['-y', PACKAGE_NAME] }
 }
 
 /** Claude Code / Cursor shape. */
@@ -181,7 +207,24 @@ export function parseInstallArgs(argv: string[]): InstallOptions {
   return { client, scope, dir: flag('dir') ?? process.cwd(), name: flag('name') ?? 'logolab' }
 }
 
-/** True when this module was run directly (`node install.ts`), not imported. */
+/**
+ * True when this module was run directly, not imported.
+ *
+ * Both sides are resolved through `realpath` because an npm `bin` is a SYMLINK
+ * (`node_modules/.bin/logolab` → `../logolab/dist/mcp/server.js`): argv[1] is the
+ * link, `import.meta.url` is the target ESM already resolved, and comparing them
+ * raw makes an npx-launched server decide it was imported and exit without ever
+ * serving.
+ */
 export function isMain(url: string): boolean {
-  return process.argv[1] != null && fileURLToPath(url) === resolvePath(process.argv[1])
+  const invoked = process.argv[1]
+  if (invoked == null) return false
+  const real = (p: string): string => {
+    try {
+      return realpathSync(p)
+    } catch {
+      return p
+    }
+  }
+  return real(fileURLToPath(url)) === real(resolvePath(invoked))
 }
