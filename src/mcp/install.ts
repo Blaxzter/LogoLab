@@ -20,7 +20,7 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ensureParent, projectRoot, resolvePath } from './runtime.ts'
+import { ensureParent, projectRoot, resolvePath, runningFromSource } from './runtime.ts'
 
 export type InstallClient = 'claude' | 'cursor' | 'vscode' | 'print'
 export type InstallScope = 'project' | 'user'
@@ -36,16 +36,6 @@ export interface InstallOptions {
 
 /** The package name on npm. `npx -y <this>` is the install everyone else uses. */
 export const PACKAGE_NAME = 'logolab'
-
-/**
- * True when we are running from a LogoLab checkout rather than the published
- * package. The checkout runs `server.ts` through Node's type stripping, the
- * package runs the compiled `server.js` — so the extension of THIS module is the
- * whole test, with no filesystem probing and no build-time flag to keep in sync.
- */
-export function runningFromSource(): boolean {
-  return fileURLToPath(import.meta.url).endsWith('.ts')
-}
 
 /** Absolute path to this server's entry point in a checkout (`''` when published). */
 export function serverEntry(): string {

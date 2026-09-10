@@ -75,8 +75,8 @@ someone cuts a release. **A tracer change is not shipped until you release one.*
 whatever that reaches (`src/mcp` plus `src/lib/{trace,path,sheet,render}` — 57 files today), so
 your change is already *in* the package the moment you edit the tracer. It is just unpublished.
 
-To release: bump the version in **`packages/mcp/package.json`** and `VERSION` in
-**`src/mcp/server.ts`** (both — see below), then
+To release: bump the version in **`packages/mcp/package.json`** — the only place it lives; the
+server reads it (`packageVersion` in `src/mcp/runtime.ts`) rather than repeating it — then
 
 ```
 pnpm test
@@ -96,8 +96,9 @@ the checkout still works, the typecheck still passes — and `npx -y logolab` di
 with `ERR_MODULE_NOT_FOUND`, because that package was a devDependency of the app and was never
 declared by the package that ships. The test walks the real graph (static, dynamic, and the
 lazy `createRequire` that loads the optional sharp decoder) and fails on anything undeclared,
-on a version that drifts between the two manifests, and on a `VERSION` that no longer matches
-what ships. **If it fails, fix the manifests — never the assertion.**
+on a dependency version that drifts between the two manifests, and on the server's version
+being hard-coded again instead of read. **If it fails, fix the manifests — never the
+assertion.**
 
 ## Node
 

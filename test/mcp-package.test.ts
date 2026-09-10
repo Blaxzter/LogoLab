@@ -128,20 +128,25 @@ test('the published versions match the app’s', () => {
   }
 })
 
-// The server cannot just read its own package.json: from a checkout the nearest
-// manifest is the APP's (logolab-app), from the tarball it is the package's, and
-// those are different files with different versions. So VERSION is a constant —
-// and a constant next to a manifest is a drift waiting to happen. It is reported
-// in the MCP handshake, `--help` and the startup log, so a stale one means every
-// client is told the wrong version by a server that is otherwise correct.
-test('the version the server reports is the version that ships', () => {
-  const declared = readFileSync(ENTRY, 'utf8').match(/const VERSION = '([^']+)'/)?.[1]
+// The version is DERIVED (runtime.ts `packageVersion`), not written down a second
+// time, so this cannot drift the way a constant would. What it can still do is
+// resolve the wrong manifest: `projectRoot()` is the repo root from a checkout —
+// whose package.json is the private app — and the package root once installed.
+// This pins the checkout branch; the published branch is covered by actually
+// running the built server (see the packaging checks in the release workflow).
+test('the version the server reports is the version that ships', async () => {
+  const { packageVersion } = await import('../src/mcp/runtime.ts')
   assert.equal(
-    declared,
+    packageVersion(),
     mcpPkg.version,
-    `src/mcp/server.ts says VERSION = "${declared}" but packages/mcp/package.json ships ` +
-      `"${mcpPkg.version}". Bump both, or the published server misreports itself to every client.`,
+    'the server resolved a version that is not the one packages/mcp publishes — ' +
+      'packageVersion() is reading the wrong manifest.',
   )
+})
+
+test('the version is not hard-coded anywhere in the server', () => {
+  const hardcoded = readFileSync(ENTRY, 'utf8').match(/const VERSION = ['"][\d.]+['"]/)
+  assert.equal(hardcoded, null, 'VERSION went back to a literal; derive it from the manifest instead.')
 })
 
 test('bin points at what the build actually emits', () => {

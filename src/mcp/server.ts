@@ -24,16 +24,17 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { exportCollection, type Appearance, type ExportRequest } from './export.ts'
 import { loadSource } from './image.ts'
-import { install, isMain, parseInstallArgs, runningFromSource } from './install.ts'
+import { install, isMain, parseInstallArgs } from './install.ts'
 import { presetCatalogue, PRESETS } from './presets.ts'
 import { prepareSource, prepareTraced, type PreparedLogo } from './render.ts'
-import { ensureImageData, ensureParent, humanBytes, log } from './runtime.ts'
+import { ensureImageData, ensureParent, humanBytes, log, packageVersion, runningFromSource } from './runtime.ts'
 import { splitSheet } from './sheet.ts'
 import { describeSource, planTrace, traceIcon, type TraceRequest } from './trace.ts'
 
 ensureImageData()
 
-const VERSION = '0.1.0'
+// Read from the manifest that ships, so it cannot drift from what npm serves.
+const VERSION = packageVersion()
 
 /* ------------------------------------------------------------ shared schema */
 
