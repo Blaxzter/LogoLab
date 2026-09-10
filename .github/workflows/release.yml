@@ -87,6 +87,54 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
+      # The last chance to find out that the tarball is wrong.
+      #
+      # Everything above this point tests the REPO. This tests the ARTIFACT: pack
+      # it, install it into an empty project the way a stranger would, and drive
+      # it over stdio. That covers the failures the repo's own tests structurally
+      # cannot see — a file missing from `files`, a bin path that resolves to
+      # nothing, a dependency that only ever worked because the workspace had it,
+      # and `packageVersion()` picking the wrong manifest in the installed layout
+      # (the unit test can only pin the checkout side of that branch).
+      #
+      # It runs BEFORE publish because npm versions are permanent: a failure here
+      # costs a red build, the same failure ten seconds later costs a burnt
+      # version number that can never be reused.
+      - name: Smoke-test the tarball before it becomes permanent
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          SMOKE: ${{ runner.temp }}/smoke
+        run: |
+          set -euo pipefail
+          export VERSION="${TAG#v}"
+          pnpm mcp:build
+          tgz=$(cd packages/mcp && npm pack --pack-destination "$RUNNER_TEMP" --json                 | node -e "process.stdin.once('data',d=>console.log(JSON.parse(d)[0].filename))")
+
+          mkdir -p "$SMOKE" && cd "$SMOKE"
+          npm init -y >/dev/null
+          npm install "$RUNNER_TEMP/$tgz"
+
+          echo "::group::reports its own version"
+          ./node_modules/.bin/logolab --help | head -1
+          ./node_modules/.bin/logolab --help | head -1 | grep -Fqx "LogoLab MCP server $VERSION"
+          echo "::endgroup::"
+
+          echo "::group::speaks MCP and offers its tools"
+          printf '%s\n%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            | ./node_modules/.bin/logolab 2>/dev/null > out.jsonl
+          node -e "
+            const lines = require('node:fs').readFileSync('out.jsonl','utf8').trim().split('\n').map(JSON.parse)
+            const info  = lines.find(m => m.id === 1).result.serverInfo
+            const tools = lines.find(m => m.id === 2).result.tools.map(t => t.name)
+            console.log(info, tools)
+            if (info.version !== process.env.VERSION) throw new Error('handshake reports ' + info.version)
+            for (const t of ['make_app_icons','trace_icon','export_icons','split_icon_sheet','inspect_icon'])
+              if (!tools.includes(t)) throw new Error('missing tool: ' + t)
+          "
+          echo "::endgroup::"
+
       # prepublishOnly rebuilds dist/ from src/, so what ships is compiled here,
       # in this job, from this commit — never a stale local build.
       - name: Publish
