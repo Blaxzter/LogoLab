@@ -128,6 +128,22 @@ test('the published versions match the app’s', () => {
   }
 })
 
+// The server cannot just read its own package.json: from a checkout the nearest
+// manifest is the APP's (logolab-app), from the tarball it is the package's, and
+// those are different files with different versions. So VERSION is a constant —
+// and a constant next to a manifest is a drift waiting to happen. It is reported
+// in the MCP handshake, `--help` and the startup log, so a stale one means every
+// client is told the wrong version by a server that is otherwise correct.
+test('the version the server reports is the version that ships', () => {
+  const declared = readFileSync(ENTRY, 'utf8').match(/const VERSION = '([^']+)'/)?.[1]
+  assert.equal(
+    declared,
+    mcpPkg.version,
+    `src/mcp/server.ts says VERSION = "${declared}" but packages/mcp/package.json ships ` +
+      `"${mcpPkg.version}". Bump both, or the published server misreports itself to every client.`,
+  )
+})
+
 test('bin points at what the build actually emits', () => {
   const tsconfig = readJsonc(join(ROOT, 'packages', 'mcp', 'tsconfig.build.json'))
   const { rootDir, outDir } = tsconfig.compilerOptions
