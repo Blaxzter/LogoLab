@@ -1,0 +1,49 @@
+# Build the app and put it on Cloudflare.
+#
+# wrangler.jsonc is an assets-only Worker: no server script, it just serves
+# ./dist with an SPA fallback. So "deploy" is `pnpm build` followed by
+# `wrangler deploy`, and the only thing this workflow really buys you is that
+# the bytes going live came from a commit rather than from whatever happened to
+# be in someone's local dist/.
+#
+# NOTE: if the Worker is already connected to this repo through Cloudflare's own
+# Git integration (Workers Builds), DELETE this file — otherwise every push
+# deploys twice, and the two builds race.
+#
+# Secrets required:
+#   CLOUDFLARE_API_TOKEN   — "Edit Cloudflare Workers" template is enough
+#   CLOUDFLARE_ACCOUNT_ID  — Workers & Pages → right-hand sidebar
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never let two deploys overlap; a later push should win outright.
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

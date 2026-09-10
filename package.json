@@ -2,6 +2,7 @@
   "name": "logolab-app",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@11.10.0",
   "type": "module",
   "description": "Drop in a logo, preview it in real-world contexts, vectorize to clean SVG, and export PWA-ready icons.",
   "homepage": "https://github.com/Blaxzter/LogoLab",
