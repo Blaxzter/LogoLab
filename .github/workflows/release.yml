@@ -1,8 +1,12 @@
-# Publish the `logolab` package to npm, from a tag.
+# Publish the `logolab` package to npm, when a GitHub Release is published.
 #
-# Deliberately tag-triggered rather than push-to-main: an npm version is
-# permanent, so a release has to be an explicit act. Pushing v0.1.1 publishes
-# 0.1.1; merging to main does nothing here.
+# Deliberately release-triggered rather than push-to-main: an npm version is
+# permanent, so a release has to be an explicit act. Merging to main does
+# nothing here; publishing a Release for v0.1.1 publishes 0.1.1.
+#
+# It fires on `published`, not `created`, so a DRAFT release can be written and
+# revised without shipping anything — the publish happens when you click
+# Publish release, and a draft that is never published never reaches npm.
 #
 # There is no NPM_TOKEN. This uses npm TRUSTED PUBLISHING — npm is configured to
 # trust this repository and this workflow file, and authenticates over OIDC with
@@ -22,8 +26,8 @@
 name: Release
 
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -35,9 +39,11 @@ jobs:
     environment: release
     steps:
       # fetch-depth: 0 so the annotated tag object (and its signature) is here,
-      # not just the commit it points at.
+      # not just the commit it points at. The explicit ref pins the checkout to
+      # the release's tag rather than whatever the default branch has drifted to.
       - uses: actions/checkout@v5
         with:
+          ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
 
       - name: Verify the tag is signed by a trusted key
@@ -48,7 +54,9 @@ jobs:
             "${{ vars.RELEASE_SIGNING_KEY }}" > "$RUNNER_TEMP/allowed_signers"
           git config gpg.format ssh
           git config gpg.ssh.allowedSignersFile "$RUNNER_TEMP/allowed_signers"
-          git verify-tag "$GITHUB_REF_NAME"
+          git verify-tag "$TAG"
+        env:
+          TAG: ${{ github.event.release.tag_name }}
 
       - uses: pnpm/action-setup@v4
 
@@ -69,10 +77,12 @@ jobs:
       # touched at all.
       - name: Tag must match the package version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${TAG#v}"
           pkg=$(node -p "require('./packages/mcp/package.json').version")
           echo "tag=$tag  package.json=$pkg"
           test "$tag" = "$pkg"
+        env:
+          TAG: ${{ github.event.release.tag_name }}
 
       - run: pnpm typecheck
       - run: pnpm test
