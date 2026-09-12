@@ -40,9 +40,9 @@ export function adoptIds(doc: EditableDoc): void {
 
 export const DEFAULT_FILL = '#4f46e5'
 
-/** An empty document with a square artboard. */
-export function blankDoc(size = 512): EditableDoc {
-  return { viewBox: [0, 0, size, size], items: [] }
+/** An empty document with an artboard of the given size (square by default). */
+export function blankDoc(width = 512, height = width): EditableDoc {
+  return { viewBox: [0, 0, width, height], items: [] }
 }
 
 /** Wrap freshly-drawn subpaths as a path item. */

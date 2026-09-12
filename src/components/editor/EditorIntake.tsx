@@ -1,19 +1,25 @@
-// The editor's front door: four ways to get a document, side by side.
+// The editor's front door.
 //
 // No wizard and no modal — an editor you open "for a quick fix" must not make
-// you answer questions first, so every route is one click or one drop and the
-// blank-canvas path is pre-filled with a sane artboard.
+// you answer questions first. So the routes are ranked instead of tiled: the
+// drop zone the rest of the app uses is the whole top of the page, the two
+// routes that need something you already have sit right under it, and the two
+// that need nothing — a blank artboard, an example drawing — follow as their
+// own sections.
+//
+// Nothing here explains the canvas. Shortcuts for tools you cannot reach yet
+// are noise at the moment you are still choosing what to open; the toolbar
+// carries them where they mean something.
 
 import { useRef, useState } from 'react'
-import { ClipboardPaste, FilePlus2, FolderOpen, ImageDown, Loader2 } from 'lucide-react'
+import { ClipboardPaste, ImageDown, Loader2, PenTool, X } from 'lucide-react'
 import type { EditableDoc } from '../../lib/path/types'
 import { parseSvg } from '../../lib/path/model'
 import { useLogo } from '../../store'
 import { ActionButton } from '../ui/ActionButton'
+import { BlankArtboard } from './BlankArtboard'
+import { EditorExampleGrid } from './EditorExamples'
 import { adoptIds, blankDoc } from './editorDoc'
-
-/** Artboard presets for a blank document. */
-const SIZES = [256, 512, 1024]
 
 export interface EditorIntakeProps {
   onOpen: (doc: EditableDoc, name: string) => void
@@ -26,8 +32,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
   const [markup, setMarkup] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
-  const [size, setSize] = useState(512)
+  const [dragging, setDragging] = useState(false)
 
   /** Parse markup into a document, preserving the author's group structure. */
   const open = (svg: string, name: string) => {
@@ -42,6 +47,10 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
   }
 
   const openFile = async (file: File) => {
+    if (!/svg/i.test(file.type) && !/\.svg$/i.test(file.name)) {
+      setError('The editor works on SVG. Use Vectorize to turn a bitmap into one first.')
+      return
+    }
     setBusy(true)
     try {
       const text = await file.text()
@@ -53,31 +62,24 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
     }
   }
 
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-    const file = e.dataTransfer.files?.[0]
-    if (!file) return
-    if (!/svg/i.test(file.type) && !/\.svg$/i.test(file.name)) {
-      setError('The editor works on SVG. Use Vectorize to turn a bitmap into one first.')
-      return
-    }
-    void openFile(file)
-  }
-
   const logoIsSvg = Boolean(logo.svgText && logo.isSvg)
 
   return (
     <div
       onDragOver={(e) => {
         e.preventDefault()
-        setDragOver(true)
+        setDragging(true)
       }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={onDrop}
-      className={`canvas-ui mx-auto w-full max-w-4xl p-6 transition-colors ${dragOver ? 'bg-accent-soft/40' : ''}`}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragging(false)
+        const file = e.dataTransfer.files?.[0]
+        if (file) void openFile(file)
+      }}
+      className="canvas-ui mx-auto flex w-full max-w-4xl flex-col items-center gap-4 p-6 animate-in-fade"
     >
-      <header className="mb-6 text-center">
+      <header className="text-center">
         <h1 className="text-lg font-bold tracking-tight text-ink">SVG editor</h1>
         <p className="mt-1 text-sm text-muted">
           Draw, fix and rearrange vector artwork — nodes, shapes, layers and colour. Everything
@@ -85,166 +87,135 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
         </p>
       </header>
 
-      {error && (
-        <p className="mb-4 rounded-lg border border-line bg-surface px-3 py-2 text-center text-xs text-bad">
-          {error}
-        </p>
-      )}
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        {/* Open a file */}
-        <Card
-          icon={<FolderOpen size={20} />}
-          title="Open an SVG"
-          body="Drop a file anywhere on this page, or browse for one. Layer groups are kept."
+      {/* The primary route, and the target for a drop anywhere on this page. */}
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        className={`flex w-full flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed px-6 py-16 text-center transition-colors ${
+          dragging
+            ? 'border-accent bg-accent-soft'
+            : 'border-line-strong bg-surface-2 hover:border-faint hover:bg-surface-3'
+        }`}
+      >
+        <div
+          className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors ${
+            dragging ? 'bg-accent-soft text-accent' : 'bg-surface-3 text-muted'
+          }`}
         >
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".svg,image/svg+xml"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0]
-              if (f) void openFile(f)
-              e.target.value = ''
-            }}
-          />
-          <ActionButton
-            label="Choose file"
-            note="Opens a file picker. Only .svg files can be edited here."
-            reason={busy ? 'Still reading the last file — one moment.' : null}
-            onClick={() => fileRef.current?.click()}
-            className="btn btn-primary h-9 w-full text-sm"
-          >
-            {busy ? <Loader2 size={15} className="animate-spin" /> : 'Choose file'}
-          </ActionButton>
-        </Card>
+          {busy ? <Loader2 size={26} className="animate-spin text-accent" /> : <PenTool size={26} />}
+        </div>
+        <div>
+          <p className="text-base font-medium text-ink">
+            {dragging ? 'Drop to open it' : 'Drop an SVG to edit'}
+          </p>
+          <p className="mt-1 max-w-md text-sm text-muted">
+            Its layer groups, gradients and strokes come across as editable objects — anything this
+            editor can't model round-trips untouched.
+          </p>
+          <p className="mt-2 text-xs text-faint">
+            Drop a file or <span className="font-medium text-muted">click to browse</span> · SVG only
+          </p>
+        </div>
+      </button>
 
-        {/* Blank */}
-        <Card
-          icon={<FilePlus2 size={20} />}
-          title="Start blank"
-          body="An empty artboard to draw on."
-        >
-          <div className="mb-2 flex gap-1">
-            {SIZES.map((s) => (
-              <ActionButton
-                key={s}
-                label={`${s} × ${s} artboard`}
-                note="The viewBox the new drawing gets. It can be any size later."
-                onClick={() => setSize(s)}
-                className={`btn btn-secondary h-8 flex-1 px-1 text-xs ${size === s ? 'is-active' : ''}`}
-              >
-                {s}
-              </ActionButton>
-            ))}
-          </div>
-          <ActionButton
-            label={`New ${size} × ${size}`}
-            note="Opens an empty artboard. Press R or E and drag to draw your first shape."
-            onClick={() => onOpen(blankDoc(size), 'drawing')}
-            className="btn btn-secondary h-9 w-full text-sm"
-          >
-            New {size} × {size}
-          </ActionButton>
-        </Card>
+      {error && <p className="text-sm text-bad">{error}</p>}
 
-        {/* From the working logo */}
-        <Card
-          icon={<ImageDown size={20} />}
-          title="Edit the current logo"
-          body={
+      {/* The two routes that start from something you already have. */}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <ActionButton
+          label="Open the current logo"
+          note="Brings the logo this app is working on into the editor."
+          reason={
             logoIsSvg
-              ? 'Bring the logo this app is working on into the editor.'
+              ? null
               : logo.src
-                ? 'The loaded logo is a bitmap. Trace it on the Vectorize tab first, then it can be edited here.'
-                : 'No logo loaded yet.'
+                ? 'The loaded logo is a bitmap. Trace it on the Vectorize tab first — that produces the SVG this editor works on.'
+                : 'No logo is loaded. Drop one on the Preview tab, or open an SVG file here.'
           }
+          onClick={() =>
+            logo.svgText && open(logo.svgText, logo.fileName?.replace(/\.[^.]+$/, '') ?? 'logo')
+          }
+          className="btn btn-secondary h-9 max-w-full text-xs"
         >
-          <ActionButton
-            label="Open logo"
-            note="Brings the logo this app is working on into the editor."
-            reason={
-              logoIsSvg
-                ? null
-                : logo.src
-                  ? 'The loaded logo is a bitmap. Trace it on the Vectorize tab first — that produces the SVG this editor works on.'
-                  : 'No logo is loaded. Drop one on the Preview tab, or open an SVG file here.'
-            }
-            onClick={() => logo.svgText && open(logo.svgText, logo.fileName?.replace(/\.[^.]+$/, '') ?? 'logo')}
-            className="btn btn-secondary h-9 w-full text-sm"
-          >
-            Open logo
-          </ActionButton>
-        </Card>
-
-        {/* Paste markup */}
-        <Card
-          icon={<ClipboardPaste size={20} />}
-          title="Paste markup"
-          body="Drop in raw <svg> text — from a design tool, a codebase, anywhere."
+          <ImageDown size={15} className="shrink-0" />
+          {/* A file name can be arbitrarily long; the button is not. */}
+          <span className="truncate">
+            {logoIsSvg && logo.fileName ? `Open ${logo.fileName}` : 'Open the current logo'}
+          </span>
+        </ActionButton>
+        <ActionButton
+          label={pasting ? 'Close the paste box' : 'Paste markup'}
+          note={
+            pasting
+              ? 'Hides the box again.'
+              : "Opens a box for raw <svg> text — from a design tool, a codebase, anywhere."
+          }
+          pressed={pasting}
+          onClick={() => setPasting((v) => !v)}
+          className={`btn btn-secondary h-9 text-xs ${pasting ? 'is-active' : ''}`}
         >
-          {pasting ? (
-            <>
-              <textarea
-                value={markup}
-                onChange={(e) => setMarkup(e.target.value)}
-                placeholder="<svg viewBox=…"
-                rows={4}
-                spellCheck={false}
-                className="input mb-2 h-auto w-full resize-y py-1.5 font-mono text-[0.7rem]"
-              />
-              <ActionButton
-                label="Open markup"
-                note="Parses the text above into an editable drawing."
-                reason={markup.trim() ? null : 'The box above is empty — paste some <svg> markup into it first.'}
-                onClick={() => open(markup, 'pasted')}
-                className="btn btn-primary h-9 w-full text-sm"
-              >
-                Open markup
-              </ActionButton>
-            </>
-          ) : (
-            <ActionButton
-              label="Paste SVG"
-              note="Opens a box to paste raw <svg> text into."
-              onClick={() => setPasting(true)}
-              className="btn btn-secondary h-9 w-full text-sm"
-            >
-              Paste SVG
-            </ActionButton>
-          )}
-        </Card>
+          {pasting ? <X size={15} /> : <ClipboardPaste size={15} />}
+          Paste markup
+        </ActionButton>
       </div>
 
-      <p className="mt-6 text-center text-xs text-faint">
-        Tip: <kbd className="rounded border border-line px-1">V</kbd> move ·{' '}
-        <kbd className="rounded border border-line px-1">A</kbd> nodes ·{' '}
-        <kbd className="rounded border border-line px-1">P</kbd> pen ·{' '}
-        <kbd className="rounded border border-line px-1">R</kbd>/
-        <kbd className="rounded border border-line px-1">E</kbd> shapes · hold{' '}
-        <kbd className="rounded border border-line px-1">Space</kbd> to pan
-      </p>
+      {pasting && (
+        <div className="w-full rounded-xl border border-line bg-surface p-3">
+          <textarea
+            value={markup}
+            onChange={(e) => setMarkup(e.target.value)}
+            placeholder="<svg viewBox=…"
+            rows={5}
+            spellCheck={false}
+            autoFocus
+            className="input mb-2 h-auto w-full resize-y py-1.5 font-mono text-[0.7rem]"
+          />
+          <ActionButton
+            label="Open markup"
+            note="Parses the text above into an editable drawing."
+            reason={markup.trim() ? null : 'The box above is empty — paste some <svg> markup into it first.'}
+            onClick={() => open(markup, 'pasted')}
+            className="btn btn-primary h-9 w-full text-sm"
+          >
+            Open markup
+          </ActionButton>
+        </div>
+      )}
+
+      {/* Nothing to open: start from an empty artboard… */}
+      <Divider>Or start from a blank artboard</Divider>
+      <div className="w-full">
+        <BlankArtboard onCreate={(w, h) => onOpen(blankDoc(w, h), 'drawing')} />
+      </div>
+
+      {/* …or from a drawing that already has something to pull on. */}
+      <Divider>Or open an example</Divider>
+      <div className="w-full">
+        <EditorExampleGrid onOpen={onOpen} className="sm:grid-cols-2 lg:grid-cols-3" />
+      </div>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".svg,image/svg+xml"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) void openFile(f)
+          e.target.value = ''
+        }}
+      />
     </div>
   )
 }
 
-function Card({
-  icon, title, body, children,
-}: {
-  icon: React.ReactNode
-  title: string
-  body: string
-  children: React.ReactNode
-}) {
+/** A titled rule between two ways in — the same one the other intakes use. */
+function Divider({ children }: { children: React.ReactNode }) {
   return (
-    <section className="flex flex-col rounded-xl border border-line bg-surface p-4">
-      <span className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent">
-        {icon}
-      </span>
-      <h2 className="text-sm font-semibold text-ink">{title}</h2>
-      <p className="mb-3 mt-0.5 flex-1 text-xs text-muted">{body}</p>
-      {children}
-    </section>
+    <div className="mt-2 flex w-full items-center gap-3">
+      <span className="h-px flex-1 bg-line" />
+      <span className="text-xs font-medium uppercase tracking-wider text-faint">{children}</span>
+      <span className="h-px flex-1 bg-line" />
+    </div>
   )
 }
