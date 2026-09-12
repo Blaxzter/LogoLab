@@ -74,11 +74,34 @@ export function isLightImage(imageData: ImageData, threshold = 0.62): boolean {
 }
 
 /**
- * Decide whether a logo wants a *dark* checker behind it: true only for a
+ * Decide whether artwork wants a *dark* checker behind it: true only for a
  * light/white mark that sits on transparency — i.e. white line-art, which a
  * light checker would wash out. A light but fully-opaque image (e.g. a white
- * card) doesn't qualify: the checker barely shows through it anyway. Samples a
- * loaded same-origin <img> small; returns false on any failure.
+ * card) doesn't qualify: the checker barely shows through it anyway.
+ */
+export function prefersDarkCheckerData(imageData: ImageData): boolean {
+  const { data } = imageData
+  let lumSum = 0
+  let alphaSum = 0
+  let transparent = 0
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3]
+    if (a < 16) {
+      transparent++
+      continue
+    }
+    lumSum += ((0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255) * a
+    alphaSum += a
+  }
+  if (alphaSum === 0) return false
+  const isLight = lumSum / alphaSum > 0.62
+  const transparentFraction = transparent / (data.length / 4)
+  return isLight && transparentFraction > 0.25
+}
+
+/**
+ * `prefersDarkCheckerData` for a loaded same-origin <img>: samples it small.
+ * Returns false on any failure (a tainted canvas, no 2D context).
  */
 export function prefersDarkChecker(img: HTMLImageElement, sample = 48): boolean {
   try {
@@ -88,23 +111,38 @@ export function prefersDarkChecker(img: HTMLImageElement, sample = 48): boolean 
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
     if (!ctx) return false
     ctx.drawImage(img, 0, 0, sample, sample)
-    const { data } = ctx.getImageData(0, 0, sample, sample)
-    let lumSum = 0
-    let alphaSum = 0
-    let transparent = 0
-    for (let i = 0; i < data.length; i += 4) {
-      const a = data[i + 3]
-      if (a < 16) {
-        transparent++
-        continue
-      }
-      lumSum += ((0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255) * a
-      alphaSum += a
-    }
-    if (alphaSum === 0) return false
-    const isLight = lumSum / alphaSum > 0.62
-    const transparentFraction = transparent / (data.length / 4)
-    return isLight && transparentFraction > 0.25
+    return prefersDarkCheckerData(ctx.getImageData(0, 0, sample, sample))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Resolve `currentColor` the way the DOM does, so a rasterization agrees with
+ * what is on screen. Whole icon sets (Lucide, Feather, Heroicons) paint in
+ * nothing else: rendered inline they take the app's ink — near-white in the
+ * dark theme — while a standalone rasterization would resolve them to black
+ * and read the artwork as dark. Falls back to black, SVG's own initial value.
+ */
+function resolveCurrentColor(svgText: string): string {
+  if (!/currentcolor/i.test(svgText)) return svgText
+  let ink = '#000'
+  try {
+    ink = getComputedStyle(document.body).color || ink
+  } catch {
+    /* no DOM to ask; keep the initial value */
+  }
+  return svgText.replace(/currentColor/gi, ink)
+}
+
+/**
+ * The same decision for SVG markup — rasterizes it small first. Used when the
+ * artwork never becomes an <img>, e.g. a document opened straight into the
+ * editor. Returns false if it cannot be rasterized.
+ */
+export async function svgPrefersDarkChecker(svgText: string, sample = 64): Promise<boolean> {
+  try {
+    return prefersDarkCheckerData(await getImageData('', sample, resolveCurrentColor(svgText)))
   } catch {
     return false
   }

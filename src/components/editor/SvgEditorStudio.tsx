@@ -50,7 +50,8 @@ import { deleteNodes, moveNodes } from '../../lib/path/geometry'
 import { breakAt, joinEnds, reversePath, splitCompound, combinePaths } from '../../lib/editor/pathOps'
 import { useHistory } from '../../hooks/useHistory'
 import { usePanZoom } from '../../hooks/usePanZoom'
-import { useCheckerClass } from '../../store'
+import { svgPrefersDarkChecker } from '../../lib/image'
+import { useCheckerClass, useStore } from '../../store'
 import { ZoomControls } from '../ui/ZoomControls'
 import { CheckerToggle } from '../ui/CheckerToggle'
 import { ActionButton, isOff } from '../ui/ActionButton'
@@ -103,6 +104,7 @@ export function SvgEditorStudio({
   const [applied, setApplied] = useState(false)
   const pz = usePanZoom({ minScale: 1, maxScale: 40, zoomStep: 1.4 })
   const checkerClass = useCheckerClass()
+  const autoChecker = useStore((s) => s.autoChecker)
 
   // Seed the history once per incoming document.
   const seeded = useRef<EditableDoc | null>(null)
@@ -114,6 +116,23 @@ export function SvgEditorStudio({
     setNodeSel(new Set())
     setEnteredGroupId(null)
   }, [initialDoc, history])
+
+  // White line-art on the light checker is invisible, and the editor is reached
+  // by routes the upload path never sees (a dropped file, pasted markup, an
+  // example). So the backdrop picks its own side from the artwork on open —
+  // unless the user already flipped it by hand, which always wins. Only on
+  // open: re-deciding it mid-edit would strobe the canvas as you paint.
+  useEffect(() => {
+    // An empty artboard is no evidence either way; leave the backdrop alone.
+    if (docStats(initialDoc).paths === 0) return
+    let alive = true
+    void svgPrefersDarkChecker(serializeDoc(initialDoc)).then((dark) => {
+      if (alive) autoChecker(dark)
+    })
+    return () => {
+      alive = false
+    }
+  }, [initialDoc, autoChecker])
 
   const doc = history.value
   const previewDoc = doc ?? initialDoc

@@ -45,6 +45,11 @@ interface AppState {
     checkerUserSet: boolean;
     /** User flip — sets the backdrop and pins it for the rest of the session. */
     toggleChecker: () => void;
+    /**
+     * Auto-detected preference (a white mark wants the dark checker). Yields to
+     * a user flip, so it never fights a backdrop that was chosen by hand.
+     */
+    autoChecker: (dark: boolean) => void;
 
     setLogo: (logo: Partial<LogoAsset> & { isLight?: boolean }) => void;
     clearLogo: () => void;
@@ -109,6 +114,9 @@ export const useStore = create<AppState>((set) => ({
 
     toggleChecker: () =>
         set((s) => ({ checkerDark: !s.checkerDark, checkerUserSet: true })),
+
+    autoChecker: (dark) =>
+        set((s) => (s.checkerUserSet ? {} : { checkerDark: dark })),
 
     setLogo: ({ isLight, ...patch }) =>
         set((s) => {
