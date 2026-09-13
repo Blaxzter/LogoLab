@@ -108,7 +108,22 @@ jobs:
           set -euo pipefail
           export VERSION="${TAG#v}"
           pnpm mcp:build
-          tgz=$(cd packages/mcp && npm pack --pack-destination "$RUNNER_TEMP" --json                 | node -e "process.stdin.once('data',d=>console.log(JSON.parse(d)[0].filename))")
+          # `npm pack --json` reports the tarball it wrote, and BOTH halves of
+          # reading that have bitten: npm 12 changed the payload from an array of
+          # results to an object keyed by package name (so `[0]` is undefined),
+          # and the payload lists every packed file, so it is far larger than one
+          # stdin chunk — `once('data')` was reading a truncated prefix. Collect
+          # the whole stream, then accept either shape.
+          tgz=$(cd packages/mcp && npm pack --pack-destination "$RUNNER_TEMP" --json | node -e "
+            let out = ''
+            process.stdin.on('data', (d) => { out += d })
+            process.stdin.on('end', () => {
+              const payload = JSON.parse(out)
+              const entry = Array.isArray(payload) ? payload[0] : Object.values(payload)[0]
+              if (!entry?.filename) throw new Error('npm pack --json: no filename in ' + out.slice(0, 200))
+              console.log(entry.filename)
+            })
+          ")
 
           mkdir -p "$SMOKE" && cd "$SMOKE"
           npm init -y >/dev/null
