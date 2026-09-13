@@ -1,5 +1,42 @@
 import { NavLink } from 'react-router-dom'
 import { REPO_URL } from '../navItems'
+import { BUILD, buildTitle, hasBuildInfo, releaseDateLabel, versionLabel } from '../../lib/buildInfo'
+
+/**
+ * Which build you are looking at — the version of the tracer and the day it was
+ * built. Worth a line in the footer because the site deploys on every push to
+ * main: without it, "it still does the thing" and "your fix has not reached me
+ * yet" are indistinguishable from the outside, and a bug report cannot say which.
+ *
+ * The version links to its GitHub release, so the notes for exactly this build
+ * are one click away. Renders nothing at all when the stamp is empty (a build
+ * with no git and no manifest) rather than printing `v` and a blank date.
+ */
+function BuildStamp() {
+  if (!hasBuildInfo()) return null
+  const version = versionLabel()
+  const day = releaseDateLabel()
+  return (
+    <span className="flex items-center gap-1.5" title={buildTitle()}>
+      {version && (
+        <a
+          href={`${REPO_URL}/releases/tag/${version}`}
+          target="_blank"
+          rel="noreferrer"
+          className="transition-colors hover:text-ink"
+        >
+          {version}
+        </a>
+      )}
+      {version && day && (
+        <span aria-hidden className="opacity-50">
+          ·
+        </span>
+      )}
+      {day && <time dateTime={BUILD.date}>{day}</time>}
+    </span>
+  )
+}
 
 /**
  * Just the legally-required links, no footer chrome — for embedding in an
@@ -49,6 +86,12 @@ export function LegalFooter({ className = '' }: { className?: string }) {
       >
         GitHub
       </a>
+      {hasBuildInfo() && (
+        <>
+          <span aria-hidden className="opacity-50">·</span>
+          <BuildStamp />
+        </>
+      )}
     </footer>
   )
 }

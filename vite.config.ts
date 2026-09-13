@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -12,6 +14,39 @@ const DEV_PORT = 5646
 
 const page = (name: string) => fileURLToPath(new URL(name, import.meta.url))
 
+/**
+ * What the footer says this build IS.
+ *
+ * The version comes from `packages/mcp/package.json` because that is the one
+ * place it lives — the npm package reads it too (`packageVersion` in
+ * src/mcp/runtime.ts), and the release workflow refuses a tag that disagrees
+ * with it, so a single number covers the site and the package alike.
+ *
+ * The date and the commit come from git, which is what makes the footer useful
+ * in a bug report: "v0.1.1" alone cannot tell you whether the tab has the fix
+ * you shipped an hour ago. Everything here is best-effort — a build from a
+ * tarball or a checkout with no git has no commit to name, and the site must
+ * still build — so each lookup falls back rather than throwing.
+ */
+function buildStamp(): { version: string; date: string; commit: string } {
+  const git = (...args: string[]): string => {
+    try {
+      return execFileSync('git', args, { cwd: fileURLToPath(new URL('.', import.meta.url)) }).toString().trim()
+    } catch {
+      return ''
+    }
+  }
+  let version = ''
+  try {
+    version = (JSON.parse(readFileSync(page('packages/mcp/package.json'), 'utf8')) as { version: string }).version
+  } catch {
+    version = ''
+  }
+  // Committer date, not author date: a rebased or cherry-picked commit ships
+  // when it lands, not when it was written. ISO, so the browser can localise it.
+  return { version, date: git('log', '-1', '--format=%cI') || new Date().toISOString(), commit: git('rev-parse', '--short', 'HEAD') }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
@@ -20,6 +55,7 @@ export default defineConfig(({ command }) => ({
   // has no idea where the user cloned it, and the dialog asks instead.
   define: {
     __LOGOLAB_ROOT__: JSON.stringify(command === 'serve' ? process.cwd().replace(/\\/g, '/') : ''),
+    __LOGOLAB_BUILD__: JSON.stringify(buildStamp()),
   },
   build: {
     target: 'es2022',
