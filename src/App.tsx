@@ -7,6 +7,9 @@ import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
 import { AgentSetupButton } from './components/AgentSetup'
 import { AppMenu } from './components/AppMenu'
+import { Toasts } from './components/Toasts'
+import { SavedChip } from './components/SavedChip'
+import { InstallAppButton } from './components/PwaPrompts'
 import { LabPopover } from './components/LabPopover'
 import { SupportPopover } from './components/SupportPopover'
 import { ThemeToggleButton } from './components/ThemeToggle'
@@ -84,24 +87,46 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
   const activeLabel = TABS.find((t) => t.id === tab)?.label ?? ''
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-line bg-surface px-3 sm:px-4">
+    /*
+     * A GRID, not a flex row with justify-between.
+     *
+     * The tab nav is the thing people aim at, so its position must not be a
+     * function of what happens to be beside it. Under justify-between it was: the
+     * right cluster is much wider than the wordmark, which pushed the nav ~135px
+     * left of centre, and anything that changed the cluster's width — the Saved
+     * chip going from "Saving…" to "Saved 4 min ago", a Clear button appearing —
+     * slid the whole nav sideways under the cursor.
+     *
+     * Equal 1fr side tracks put the auto-width middle track exactly in the centre
+     * and keep it there no matter what either side does. When a side genuinely
+     * outgrows its share the track grows and the nav drifts, which is the old
+     * behaviour as a graceful floor rather than the normal case.
+     */
+    <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-line bg-surface px-3 sm:px-4">
       <div className="flex min-w-0 items-center gap-2.5">
         <BrandMark />
         {/* min-w-0 + truncate so a tight phone width shrinks the wordmark instead
             of forcing the whole header (and page) wider than the viewport. */}
         <div className="min-w-0 leading-none">
           <div className="truncate text-[0.95rem] font-bold tracking-tight text-ink">LogoLab</div>
-          {/* Below md the inline tab nav is hidden, so echo the active tab here to
-              keep a location cue; at md+ the static tagline returns. */}
+          {/* Below lg the inline tab nav is hidden, so echo the active tab here to
+              keep a location cue; at lg+ the static tagline returns. */}
           <div className="truncate text-[0.68rem] text-muted">
-            <span className="md:hidden">{activeLabel}</span>
-            <span className="hidden md:inline">preview · vectorize · export</span>
+            <span className="lg:hidden">{activeLabel}</span>
+            <span className="hidden lg:inline">preview · vectorize · export</span>
           </div>
         </div>
       </div>
 
-      {/* Desktop tab nav — replaced by the hamburger menu below md. */}
-      <nav className="hidden shrink-0 rounded-lg bg-surface-3 p-0.5 md:flex">
+      {/*
+       * Desktop tab nav — the hamburger replaces it below lg.
+       *
+       * lg, not md: at 768 the nav (599px) plus the right cluster overflowed the
+       * header by ~270px, which ate the wordmark entirely and pushed the last
+       * icons off the right edge. That was true before the Saved chip and the
+       * chip made it worse. A tablet gets the menu, which holds every tab anyway.
+       */}
+      <nav className="hidden shrink-0 rounded-lg bg-surface-3 p-0.5 lg:flex">
         {TABS.map((t) => (
           <NavLink
             key={t.id}
@@ -118,44 +143,59 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
         ))}
       </nav>
 
-      {/* Desktop right cluster — its contents move into AppMenu below md. */}
-      <div className="hidden shrink-0 items-center gap-3 md:flex">
-        {logo.src && (
-          <button onClick={clearLogo} className="btn btn-ghost h-8 gap-1.5 px-2.5 text-xs">
-            <X size={14} />
-            Clear
-          </button>
-        )}
-        <span className="text-xs text-faint">Runs 100% in your browser</span>
-        <div className="flex items-center gap-1">
-          {/* LogoLab's MCP server. First in the cluster because it is a product
-              feature, not a meta affordance like the three that follow — and
-              because it has no other desktop home (the mobile menu has a row). */}
-          <AgentSetupButton variant="icon" />
-          <ThemeToggleButton />
-          <LabPopover />
-          <SupportPopover />
-          <a
-            href={REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
-          >
-            <GithubMark />
-            <span className="sr-only">GitHub repository</span>
-          </a>
+      {/* Right cluster — its contents move into AppMenu below lg. Justified to
+          the end so the icons stay put while the Saved chip's label changes
+          width beside them. */}
+      <div className="flex items-center justify-end gap-3">
+        <div className="hidden items-center gap-3 lg:flex">
+          {logo.src && (
+            <button
+              onClick={clearLogo}
+              aria-label="Clear logo"
+              className="btn btn-ghost h-8 gap-1.5 px-2 text-xs"
+            >
+              <X size={14} />
+              {/* Label only where the row has room for it — the nav's centring
+                  budget is this cluster's width. */}
+              <span className="hidden 2xl:inline">Clear</span>
+            </button>
+          )}
+          {/* When the session was last written down. Replaces the old restore
+              BANNER, which cost every page a strip of vertical space to say
+              something that belongs in the title bar. */}
+          <SavedChip />
+          <div className="flex items-center gap-1">
+            {/* LogoLab's MCP server. First in the cluster because it is a product
+                feature, not a meta affordance like the three that follow — and
+                because it has no other desktop home (the mobile menu has a row). */}
+            {/* Only rendered while the browser is offering an install. */}
+            <InstallAppButton />
+            <AgentSetupButton variant="icon" />
+            <ThemeToggleButton />
+            <LabPopover />
+            <SupportPopover />
+            <a
+              href={REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+            >
+              <GithubMark />
+              <span className="sr-only">GitHub repository</span>
+            </a>
+          </div>
         </div>
-      </div>
 
-      {/* Mobile menu trigger (~44px target). */}
-      <button
-        type="button"
-        onClick={onOpenMenu}
-        aria-label="Open menu"
-        className="btn btn-ghost h-10 w-10 shrink-0 px-0 md:hidden"
-      >
-        <Menu size={20} />
-      </button>
+        {/* Menu trigger (~44px target). */}
+        <button
+          type="button"
+          onClick={onOpenMenu}
+          aria-label="Open menu"
+          className="btn btn-ghost h-10 w-10 shrink-0 px-0 lg:hidden"
+        >
+          <Menu size={20} />
+        </button>
+      </div>
     </header>
   )
 }
@@ -238,6 +278,7 @@ export function App() {
       <div className="flex h-full flex-col overflow-x-hidden">
         <Header onOpenMenu={() => setMenuOpen(true)} />
         <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+        <Toasts />
         <main className="min-h-0 flex-1 overflow-y-auto bg-bg">
           <Suspense fallback={<LabLoading />}>
             <Routes>
@@ -325,6 +366,7 @@ export function App() {
       {showStyling && (
         <MobileSidebarDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       )}
+      <Toasts />
       {showStyling && hasLogo && (
         <Tooltip label="Customize appearance">
           <button

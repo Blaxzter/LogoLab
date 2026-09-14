@@ -2,6 +2,8 @@ import { Bug, Coffee, Heart, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useLogo, useStore } from '../store'
 import { AgentSetupButton } from './AgentSetup'
+import { InstallAppButton } from './PwaPrompts'
+import { SavedStatusRow } from './SavedChip'
 import { Sheet } from './ui/Sheet'
 import { ThemeToggleSegmented } from './ThemeToggle'
 import { TABS, LAB_VIEWS, REPO_URL, COFFEE_URL, SPONSOR_URL, GithubMark } from './navItems'
@@ -38,6 +40,9 @@ export function AppMenu({ open, onClose }: { open: boolean; onClose: () => void 
 
         <div className="my-2 h-px bg-line" />
 
+        {/* Only rendered while the browser is offering an install. */}
+        <InstallAppButton variant="ghost" className={`${row} justify-start text-ink-2 hover:bg-surface-3`} onInstalled={onClose} />
+
         {/* LogoLab's MCP server — trace and export from a coding agent. */}
         <AgentSetupButton variant="ghost" className={`${row} justify-start`} onOpened={onClose} />
 
@@ -46,6 +51,10 @@ export function AppMenu({ open, onClose }: { open: boolean; onClose: () => void 
         <ThemeToggleSegmented />
 
         <div className="my-2 h-px bg-line" />
+
+        {/* The header's Saved chip has no room below md, so its status and its
+            one action come here instead. */}
+        <SavedStatusRow className={`${row} text-ink-2 hover:bg-surface-3`} onAct={onClose} />
 
         {logo.src && (
           <button
