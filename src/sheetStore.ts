@@ -3,8 +3,13 @@
 // Deliberately separate from `useStore` (which holds exactly ONE working logo and
 // is what Preview/Cleanup/Vectorize/Export share): a sheet is N icons, each with
 // its own trace, and pushing them through the single-logo slot one at a time is
-// what this view exists to avoid. Like `useStore` it is session-only — nothing is
-// persisted, and the pixels never leave the tab.
+// what this view exists to avoid.
+//
+// The sheet is persisted (source bytes and all N traces) into its own IndexedDB
+// slot — see `hydrate` and the subscription at the foot of this file. It is the
+// heaviest thing the app can be holding and also the most expensive to rebuild:
+// a batch trace is N traces, and re-doing it because someone refreshed is the
+// single worst thing a reload could cost. The pixels still never leave the tab.
 
 import { create } from 'zustand'
 import { DEFAULT_VECTORIZE_OPTIONS } from './lib/trace'
@@ -15,6 +20,8 @@ import type { ImageDataLike, Rect, SheetBackground, SheetGrid, TileKind } from '
 import { traceTile, planTileTrace, tileTraceInput, type SheetColorMode } from './lib/sheet/traceTile'
 import type { EditableDoc } from './lib/path/types'
 import type { VectorizeOptions } from './types'
+import { getImageData } from './lib/image'
+import { saveSlot, SLOTS, srcToBlob, type StoredSheet } from './lib/persist/session'
 
 export type TileStatus = 'idle' | 'queued' | 'tracing' | 'done' | 'error'
 
@@ -194,6 +201,17 @@ interface SheetState {
   ocr: OcrState
 
   setSource: (source: SheetSource, image: ImageDataLike) => void
+  /**
+   * Adopt a stored sheet: its source bytes, its boxes and every trace already
+   * on them. Deliberately NOT `setSource` — that one re-splits the sheet from
+   * scratch, which would throw away exactly the tiles being restored (the
+   * hand-drawn boxes, the renames, the traced documents).
+   *
+   * Async because the source has to be decoded back to pixels: every crop is cut
+   * from that raster, and storing it as well would double the slot for something
+   * one decode reproduces exactly.
+   */
+  hydrate: (stored: StoredSheet) => Promise<boolean>
   clear: () => void
   setColorMode: (mode: SheetColorMode) => void
   setHiRes: (on: boolean) => void
@@ -311,6 +329,54 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       detect: { ...DEFAULT_DETECT, mode: get().detect.mode },
     })
     get().redetect()
+  },
+
+  hydrate: async (stored) => {
+    const src = URL.createObjectURL(stored.source)
+    let image: ImageDataLike
+    try {
+      // Decoded back at exactly the size it was split at — every tile rect is
+      // in THOSE pixels, so re-deriving the cap (or letting the constant drift
+      // between releases) would slide every box off its icon.
+      image = await getImageData(src, Math.max(stored.width, stored.height), stored.svgText)
+    } catch {
+      URL.revokeObjectURL(src)
+      return false
+    }
+    // A tile caught mid-batch comes back settled, never "tracing": the worker
+    // that was running it died with the old page, and a spinner nothing is
+    // driving is worse than an honest "not traced yet".
+    const tiles = (stored.tiles as SheetIcon[]).map((t) => ({
+      ...t,
+      status: (t.doc ? 'done' : 'idle') as TileStatus,
+      progress: 0,
+      error: null,
+    }))
+    set({
+      source: {
+        src,
+        fileName: stored.fileName,
+        width: stored.width,
+        height: stored.height,
+        svgText: stored.svgText,
+        owned: true,
+      },
+      image,
+      tiles,
+      selectedId: stored.selectedId,
+      background: stored.background as SheetBackground | null,
+      grid: stored.grid as SheetGrid | null,
+      warnings: stored.warnings,
+      detect: stored.detect as SheetDetectSettings,
+      traceOptions: stored.traceOptions,
+      colorMode: stored.colorMode as SheetColorMode,
+      gradientMode: stored.gradientMode as GradientMode,
+      hiRes: stored.hiRes,
+      naming: stored.naming as SheetNaming,
+      running: false,
+      ocr: IDLE_OCR,
+    })
+    return true
   },
 
   clear: () => {
@@ -680,3 +746,78 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
 export const useSheetTiles = () => useSheetStore((s) => s.tiles)
 export const useSheetSource = () => useSheetStore((s) => s.source)
+
+/* ------------------------------------------------------------- persistence */
+
+/**
+ * The source bytes, cached by the object URL they came from. Reading them back
+ * out of a blob URL is a real copy of a multi-megapixel sheet, and the sheet's
+ * OTHER state (a box dragged, a tile traced) changes constantly while those
+ * bytes never do.
+ */
+let sourceBytes: { src: string; blob: Blob } | null = null
+
+async function persistSheet(): Promise<void> {
+  const s = useSheetStore.getState()
+  const src = s.source?.src
+  if (!src || !s.image) {
+    sourceBytes = null
+    saveSlot(SLOTS.sheet, null)
+    return
+  }
+  if (sourceBytes?.src !== src) {
+    const blob = await srcToBlob(src)
+    if (!blob) return
+    sourceBytes = { src, blob }
+  }
+  // Re-read: the sheet may have been replaced while those bytes were copied.
+  const now = useSheetStore.getState()
+  if (now.source?.src !== src) return
+  saveSlot(
+    SLOTS.sheet,
+    {
+      source: sourceBytes.blob,
+      fileName: now.source.fileName,
+      width: now.source.width,
+      height: now.source.height,
+      svgText: now.source.svgText,
+      tiles: now.tiles,
+      selectedId: now.selectedId,
+      background: now.background,
+      grid: now.grid,
+      warnings: now.warnings,
+      detect: now.detect,
+      traceOptions: now.traceOptions,
+      colorMode: now.colorMode,
+      gradientMode: now.gradientMode,
+      hiRes: now.hiRes,
+      naming: now.naming,
+    } satisfies Omit<StoredSheet, 'v'>,
+    1200,
+  )
+}
+
+useSheetStore.subscribe((s, prev) => {
+  const changed =
+    s.source !== prev.source ||
+    s.image !== prev.image ||
+    s.tiles !== prev.tiles ||
+    s.selectedId !== prev.selectedId ||
+    s.background !== prev.background ||
+    s.grid !== prev.grid ||
+    s.warnings !== prev.warnings ||
+    s.detect !== prev.detect ||
+    s.traceOptions !== prev.traceOptions ||
+    s.colorMode !== prev.colorMode ||
+    s.gradientMode !== prev.gradientMode ||
+    s.hiRes !== prev.hiRes ||
+    s.naming !== prev.naming ||
+    s.running !== prev.running
+  if (!changed) return
+  // Not during a batch: every tile's progress tick rewrites `tiles`, and each
+  // write structured-clones every document traced so far — on a 30-icon sheet
+  // that turns the run into a stutter. The run's own completion flips `running`
+  // back off, which lands here and stores the whole result in one go.
+  if (s.running) return
+  void persistSheet()
+})

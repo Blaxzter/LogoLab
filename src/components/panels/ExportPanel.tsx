@@ -12,6 +12,7 @@ import { loadRenderSource } from '../../lib/image'
 import type { RenderSource } from '../../lib/image'
 import { DEFAULT_TARGETS, MASKABLE_SAFE_DIAMETER, buildExportZip, renderIcon } from '../../lib/pwaExport'
 import { PanelEmptyState } from '../PanelEmptyState'
+import { debounce, readLocal, writeLocal } from '../../lib/persist/local'
 
 /* ----------------------------------------------------------------- constants */
 
@@ -72,6 +73,30 @@ function sameSet(a: Set<string>, b: Set<string>): boolean {
   return true
 }
 
+/* --------------------------------------------------------------- persistence */
+
+const LS_EXPORT = 'export'
+
+interface StoredExport {
+  /** Target ids the user has ticked. Ids, not the whole target list: the set of
+   *  targets is the app's (a release may add one), the selection is the user's. */
+  enabled: string[] | null
+  includeManifest: boolean
+  includeHtml: boolean
+}
+
+const storedExport = (): StoredExport =>
+  readLocal<StoredExport>(LS_EXPORT, { enabled: null, includeManifest: true, includeHtml: true })
+
+const saveExport = debounce((value: StoredExport) => writeLocal(LS_EXPORT, value), 250)
+
+/** The default targets with a remembered selection applied over them. */
+function restoredTargets(): ExportTarget[] {
+  const { enabled } = storedExport()
+  const picked = enabled ? new Set(enabled) : null
+  return DEFAULT_TARGETS.map((t) => ({ ...t, enabled: picked ? picked.has(t.id) : t.enabled }))
+}
+
 /* ----------------------------------------------------------------- component */
 
 export default function ExportPanel(): ReactNode {
@@ -79,13 +104,24 @@ export default function ExportPanel(): ReactNode {
   const app = useAppearance()
   const env = useEnv()
 
-  const [targets, setTargets] = useState<ExportTarget[]>(() => DEFAULT_TARGETS.map((t) => ({ ...t })))
-  const [includeManifest, setIncludeManifest] = useState(true)
-  const [includeHtml, setIncludeHtml] = useState(true)
+  const [targets, setTargets] = useState<ExportTarget[]>(restoredTargets)
+  const [includeManifest, setIncludeManifest] = useState(() => storedExport().includeManifest)
+  const [includeHtml, setIncludeHtml] = useState(() => storedExport().includeHtml)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const selectedCount = useMemo(() => targets.filter((t) => t.enabled).length, [targets])
+
+  // Picking an icon set is a small but fiddly decision (19 targets, five
+  // presets), and re-making it after every reload is exactly the kind of lost
+  // work this app was throwing away.
+  useEffect(() => {
+    saveExport({
+      enabled: targets.filter((t) => t.enabled).map((t) => t.id),
+      includeManifest,
+      includeHtml,
+    })
+  }, [targets, includeManifest, includeHtml])
 
   // Which preset (if any) the current selection exactly equals, so its button
   // can render as selected. The preset sets are mutually distinct, so at most

@@ -22,5 +22,9 @@ export default function VectorizePanel() {
     )
   }
 
-  return <VectorizeStudio />
+  // `persist`: this is the studio that owns the app's working logo, so its
+  // settings and traced document are the ones a reload has to bring back. The
+  // sheet's per-tile studios deliberately don't — their documents belong to the
+  // sheet store, which persists them as part of the sheet.
+  return <VectorizeStudio persist />
 }

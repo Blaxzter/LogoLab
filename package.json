@@ -27,6 +27,7 @@
     "test": "node --test",
     "gen:golden": "node src/devtest/writeTraceGolden.ts",
     "gen:absnapshot": "node src/devtest/writeAbSnapshots.ts",
+    "gen:pwaicons": "node scripts/gen-pwa-icons.mjs",
     "fetch:logos": "node scripts/fetch-logos.mjs"
   },
   "engines": {

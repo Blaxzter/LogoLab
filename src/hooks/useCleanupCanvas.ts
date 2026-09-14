@@ -87,10 +87,19 @@ export interface UseCleanupCanvasParams {
    * click position normalized (0–1) to the image — the studio adds a pin here.
    */
   onMarkerPlaced?: (nx: number, ny: number, kind: 'keep' | 'remove') => void
+  /**
+   * Un-applied pixels from a previous session, resolved once after the source
+   * decodes. The pristine snapshot still comes from the source — Reset has to
+   * mean "back to the upload", not "back to where I was before the reload" — so
+   * this replaces only the WORKING buffer, and `modified` is re-derived from it.
+   * Returning null (nothing stored, or stored for a different image) leaves the
+   * studio exactly as it behaved before.
+   */
+  seedWorking?: (() => Promise<ImageData | null>) | null
 }
 
 export function useCleanupCanvas(params: UseCleanupCanvasParams) {
-  const { pz, tool, tolerance, softness, brushSize, defringeStrength, matteOn, matteColor, onMarkerPlaced } = params
+  const { pz, tool, tolerance, softness, brushSize, defringeStrength, matteOn, matteColor, onMarkerPlaced, seedWorking } = params
 
   const logo = useLogo()
   const setProcessedLogo = useStore((s) => s.setProcessedLogo)
@@ -114,6 +123,10 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   // skips the redundant re-decode and preserves the "Applied" state. Matching on
   // the value (not a boolean) is idempotent — a re-upload never collides.
   const appliedSrcRef = useRef<string | null>(null)
+  // The restore seed, held in a ref so consuming it can't be undone by a
+  // re-render and so the decode effect doesn't re-run when the caller's closure
+  // changes identity.
+  const seedWorkingRef = useRef(seedWorking ?? null)
 
   // Brush stroke state (refs: mutated mid-drag without re-rendering).
   const paintingRef = useRef(false)
@@ -126,6 +139,10 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const strokeAffectedRef = useRef(0)
 
   const [ready, setReady] = useState(false)
+  // Bumped by every change to the working pixels. `undoLen` can't stand in for
+  // it: past HISTORY_LIMIT the stack length stops moving while the pixels keep
+  // changing, so a studio persisting on undoLen would quietly stop saving.
+  const [revision, setRevision] = useState(0)
   const [undoLen, setUndoLen] = useState(0)
   const [redoLen, setRedoLen] = useState(0)
   // True when the working pixels differ from the pristine upload. Drives the
@@ -207,12 +224,26 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     // upscaled — so a 512px SVG cleans up at 512px instead of being blown up to
     // MAX_DIM. Matches how raster sources are handled; export/vectorize still upscale.
     getImageData(logo.src, MAX_DIM, logo.isSvg ? logo.svgText : null, { upscale: false })
-      .then((data) => {
+      .then(async (data) => {
         if (cancelled) return
-        workingRef.current = data
         pristineRef.current = cloneImageData(data)
         lastKeyRef.current = sampleCornerColor(data)
-        setDims({ w: data.width, h: data.height })
+        // A restored session's un-applied pixels replace the working buffer (see
+        // `seedWorking`). Consumed once — a later source change is a NEW image
+        // and must start from that image's own pixels.
+        let working = data
+        const seedOnce = seedWorkingRef.current
+        seedWorkingRef.current = null
+        if (seedOnce) {
+          const seeded = await seedOnce().catch(() => null)
+          if (cancelled) return
+          if (seeded && seeded.width === data.width && seeded.height === data.height) {
+            working = seeded
+            setModified(true)
+          }
+        }
+        workingRef.current = working
+        setDims({ w: working.width, h: working.height })
         setReady(true)
         // Actual draw happens in the [ready] effect below, after React commits
         // the (re)mounted <canvas> — avoids drawing to a detached canvas.
@@ -316,6 +347,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     setRedoLen(0)
     setModified(true)
     setApplied(false)
+    setRevision((n) => n + 1)
   }, [])
 
   const handleUndo = useCallback(() => {
@@ -336,6 +368,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     }
     setApplied(false)
     setModified(!equalsPristine())
+    setRevision((n) => n + 1)
     setStatus('Undid last change')
   }, [redraw, equalsPristine, pz.reset, syncDims])
 
@@ -355,6 +388,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     }
     setApplied(false)
     setModified(!equalsPristine())
+    setRevision((n) => n + 1)
     setStatus('Redid change')
   }, [redraw, equalsPristine, pz.reset, syncDims])
 
@@ -681,6 +715,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     }
     setApplied(false)
     setModified(false)
+    setRevision((n) => n + 1)
     // Pre-arm the reload-effect guard with the original src so restoreOriginal's
     // src change short-circuits its re-decode (the in-memory pristine is already
     // correct) — keeps the post-Apply Reset path flicker-free like the no-Apply one.
@@ -721,6 +756,24 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     // (an undo afterwards flips `applied` off, signalling the store is stale).
     setStatus('Applied — used everywhere (previews, vectorize, export)')
   }, [bakeCanvas, setProcessedLogo])
+
+  /**
+   * The working pixels as PNG bytes — what the studio stores so an un-applied
+   * cutout survives a reload. Deliberately NOT `bakeCanvas`: the matte is a
+   * PREVIEW, and baking it in would turn a transparent cutout into a flattened
+   * one the next time the session came back.
+   */
+  const snapshotWorking = useCallback(async (): Promise<Blob | null> => {
+    const working = workingRef.current
+    if (!working) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = working.width
+    canvas.height = working.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.putImageData(working, 0, 0)
+    return canvasToBlob(canvas, 'image/png').catch(() => null)
+  }, [])
 
   const handleDownload = useCallback(async () => {
     const canvas = bakeCanvas()
@@ -850,6 +903,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     setStage,
     // Reactive state.
     ready,
+    revision,
+    snapshotWorking,
     undoLen,
     redoLen,
     modified,

@@ -9,6 +9,19 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Installable / offline (see src/pwa/). `theme_color` in the manifest is a
+         single value, but the app has two themes, so the live chrome colour is
+         set here per scheme — an installed window then matches the app instead of
+         framing a dark UI in a white title bar. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#15171d" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="LogoLab" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
     <!-- Anti-FOUC: apply the saved theme (or the OS preference for `system`)
          synchronously, before the bundle paints, so there's no flash of the
          wrong theme. Mirrors src/theme.ts; key must stay in sync with

@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Download, Loader2, MapPin, Redo2, SlidersHorizontal, Undo2 } from 'lucide-react'
-import { useCheckerClass, useLogo } from '../../store'
+import { useCheckerClass, useLogo, useStore } from '../../store'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useCleanupCanvas, type CleanupTool, type KeepRemoveMarker } from '../../hooks/useCleanupCanvas'
@@ -26,6 +26,12 @@ import { StudioTopBar, StudioActionBar, BarIconButton } from '../studio/StudioBa
 import { LegalLinksInline } from '../legal/LegalFooter'
 import { Tooltip } from '../ui/Tooltip'
 import { CleanupControls, CleanupControlsBody } from './CleanupControls'
+import {
+  cleanupSeed,
+  loadCleanupSettings,
+  saveCleanupPixels,
+  saveCleanupSettings,
+} from './cleanupSession'
 
 type ViewMode = 'split' | 'result' | 'original' | 'overlay'
 
@@ -39,28 +45,32 @@ export function CleanupStudio() {
   const checkerClass = useCheckerClass()
   const pz = usePanZoom({ maxScale: 16 })
   const isMobile = useIsMobile()
+  const assetKey = useStore((s) => s.assetKey)
 
   // ----------------------------------------------------------- studio state
-  const [viewMode, setViewMode] = useState<ViewMode>('split')
+  // Seeded from the last session (see cleanupSession.ts). Read once, in the
+  // state initializers, so the rail is already the user's on the first frame.
+  const stored = useRef(loadCleanupSettings()).current
+  const [viewMode, setViewMode] = useState<ViewMode>(stored.viewMode)
   // Below md the controls live in a bottom sheet opened from the action bar.
   const [toolsOpen, setToolsOpen] = useState(false)
-  const [tool, setTool] = useState<CleanupTool>('magic')
-  const [tolerance, setTolerance] = useState(36)
-  const [softness, setSoftness] = useState(0.25)
-  const [brushSize, setBrushSize] = useState(40)
+  const [tool, setTool] = useState<CleanupTool>(stored.tool)
+  const [tolerance, setTolerance] = useState(stored.tolerance)
+  const [softness, setSoftness] = useState(stored.softness)
+  const [brushSize, setBrushSize] = useState(stored.brushSize)
   // How hard each Magic / By color / Auto removal cleans the colored fringe off
   // soft edges (0 = off). See defringe() in bgRemove.ts.
-  const [defringeStrength, setDefringeStrength] = useState(0.7)
-  const [ghostOpacity, setGhostOpacity] = useState(60)
-  const [matteOn, setMatteOn] = useState(false)
-  const [matteColor, setMatteColor] = useState('#ffffff')
+  const [defringeStrength, setDefringeStrength] = useState(stored.defringeStrength)
+  const [ghostOpacity, setGhostOpacity] = useState(stored.ghostOpacity)
+  const [matteOn, setMatteOn] = useState(stored.matteOn)
+  const [matteColor, setMatteColor] = useState(stored.matteColor)
   // Edge-refine / trim slider values (the op runs on its own Apply button).
-  const [edgeShift, setEdgeShift] = useState(0)
-  const [feather, setFeather] = useState(2)
-  const [defringeAmt, setDefringeAmt] = useState(0.9)
-  const [trimPad, setTrimPad] = useState(8)
+  const [edgeShift, setEdgeShift] = useState(stored.edgeShift)
+  const [feather, setFeather] = useState(stored.feather)
+  const [defringeAmt, setDefringeAmt] = useState(stored.defringeAmt)
+  const [trimPad, setTrimPad] = useState(stored.trimPad)
   // Flat-recolor target for monochrome logos (Recolor → Apply).
-  const [recolorColor, setRecolorColor] = useState('#ffffff')
+  const [recolorColor, setRecolorColor] = useState(stored.recolorColor)
   // Guided pins: normalized (0–1), NOT persisted, NOT in undo. Cleared whenever
   // the working buffer changes shape (see the dims/src effects below).
   const [markers, setMarkers] = useState<KeepRemoveMarker[]>([])
@@ -70,6 +80,16 @@ export function CleanupStudio() {
   const onMarkerPlaced = useCallback((nx: number, ny: number, kind: 'keep' | 'remove') => {
     setMarkers((m) => [...m, { x: nx, y: ny, kind }])
   }, [])
+
+  // Un-applied pixels from the last session, if they belong to THIS image.
+  //
+  // Boxed so the lookup runs ONCE: `useRef(cleanupSeed(assetKey))` would keep the
+  // first result but still call cleanupSeed on every single render, and that call
+  // takes the stored record out of the boot payload — so every render after the
+  // first would be re-claiming an already-claimed slot for nothing.
+  const seedBox = useRef<{ seed: ReturnType<typeof cleanupSeed> } | null>(null)
+  if (!seedBox.current) seedBox.current = { seed: cleanupSeed(assetKey) }
+  const seedWorking = seedBox.current.seed
 
   const cleanup = useCleanupCanvas({
     pz,
@@ -81,11 +101,14 @@ export function CleanupStudio() {
     matteOn,
     matteColor,
     onMarkerPlaced,
+    seedWorking,
   })
   const {
     canvasRef,
     setStage,
     ready,
+    revision,
+    snapshotWorking,
     undoLen,
     redoLen,
     modified,
@@ -119,6 +142,51 @@ export function CleanupStudio() {
 
   const isBrush = tool === 'erase' || tool === 'restore'
   const isMarker = tool === 'keep' || tool === 'remove'
+
+  // ------------------------------------------------------------ session save
+  useEffect(() => {
+    saveCleanupSettings({
+      viewMode,
+      tool,
+      tolerance,
+      softness,
+      brushSize,
+      defringeStrength,
+      ghostOpacity,
+      matteOn,
+      matteColor,
+      edgeShift,
+      feather,
+      defringeAmt,
+      trimPad,
+      recolorColor,
+    })
+  }, [
+    viewMode,
+    tool,
+    tolerance,
+    softness,
+    brushSize,
+    defringeStrength,
+    ghostOpacity,
+    matteOn,
+    matteColor,
+    edgeShift,
+    feather,
+    defringeAmt,
+    trimPad,
+    recolorColor,
+  ])
+
+  // The cutout itself. `revision` is the hook's "the pixels moved" signal — it
+  // covers flood fills, brush strokes, the AI pass, edge refines, undo/redo and
+  // Reset alike. Gated on `ready` so the mount pass (before the source has even
+  // decoded, let alone been seeded) can't store an empty buffer over the one it
+  // is about to restore.
+  useEffect(() => {
+    if (!ready) return
+    void saveCleanupPixels(assetKey, snapshotWorking, modified)
+  }, [ready, revision, modified, assetKey, snapshotWorking])
 
   // -------------------------------------------------- marker lifecycle clears
   // The hook resets working pixels on these events but owns no marker state — so

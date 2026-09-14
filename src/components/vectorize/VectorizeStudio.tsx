@@ -57,6 +57,12 @@ import {
 } from "../../lib/ink";
 import { aiUpscale, aiUpscaleFactor } from "../../lib/aiUpscale";
 import type { VectorizeOptions } from "../../types";
+import {
+    loadStudioSeed,
+    saveStudioDoc,
+    saveStudioView,
+    type StudioSeed,
+} from "./studioSession";
 import type { DocItem, EditableDoc, NodeRef, PathItem, Vec } from "../../lib/path/types";
 import { TraceControls, TraceControlsBody } from "./TraceControls";
 import { EditorCanvas } from "./EditorCanvas";
@@ -140,6 +146,13 @@ export interface VectorizeStudioProps {
     onResult?: (result: { doc: EditableDoc; svgText: string; stats: { paths: number; nodes: number; colors: number } } | null) => void;
     /** Host chrome for the start of the toolbar (e.g. "back to all icons"). */
     leading?: ReactNode;
+    /**
+     * Remember this studio's settings and document across a reload. Only the
+     * /vectorize tab sets it: the sheet mounts one studio per tile over a
+     * document its own store already persists, and both writing to the same slot
+     * would have them overwrite each other.
+     */
+    persist?: boolean;
 }
 
 export function VectorizeStudio({
@@ -154,10 +167,23 @@ export function VectorizeStudio({
     initialDoc,
     onResult,
     leading,
+    persist = false,
 }: VectorizeStudioProps = {}) {
     const storeLogo = useLogo();
     const storeChecker = useCheckerClass();
     const setProcessedSvg = useStore((s) => s.setProcessedSvg);
+    const assetKey = useStore((s) => s.assetKey);
+
+    // The stored session, read ONCE (a ref, not an effect: the state initializers
+    // below need it during the very first render, and a claimed document must not
+    // be taken twice under StrictMode's double invocation).
+    const sessionRef = useRef<StudioSeed | undefined>(undefined);
+    if (sessionRef.current === undefined) {
+        sessionRef.current = persist
+            ? loadStudioSeed(assetKey)
+            : { view: null, doc: null, dirty: false };
+    }
+    const session = sessionRef.current;
     // The image being traced: the app's working logo unless a host passed one.
     const logo = source ?? storeLogo;
     const checkerClass = checkerClassProp ?? storeChecker;
@@ -165,25 +191,25 @@ export function VectorizeStudio({
     const isMobile = useIsMobile();
 
     const [opts, setOpts] = useState<VectorizeOptions>(
-        initialOptions ?? DEFAULT_VECTORIZE_OPTIONS,
+        initialOptions ?? session.view?.opts ?? DEFAULT_VECTORIZE_OPTIONS,
     );
     // Output coordinate precision (decimals). 3dp matches what desktop tracers
     // (Affinity/Canva) emit and preserves sub-pixel geometry when the SVG is
     // scaled past its trace resolution; the file-size cost is ~10–15% and there
     // is no visible cost at or below trace res. Not a user knob.
     const precision = 3;
-    const [forceColorOn, setForceColorOn] = useState(false);
-    const [forceColor, setForceColor] = useState("#14161c");
+    const [forceColorOn, setForceColorOn] = useState(session.view?.forceColorOn ?? false);
+    const [forceColor, setForceColor] = useState(session.view?.forceColor ?? "#14161c");
     const [showHelp, setShowHelp] = useState(false);
     const [retraceVector, setRetraceVector] = useState<"clean" | "retrace">(
-        "clean",
+        session.view?.retraceVector ?? "clean",
     );
-    const [viewMode, setViewMode] = useState<ViewMode>("split");
+    const [viewMode, setViewMode] = useState<ViewMode>(session.view?.viewMode ?? "split");
     const [tool, setTool] = useState<Tool>("pan");
     // Below md the rails live in bottom sheets opened from the action bar.
     const [traceSheetOpen, setTraceSheetOpen] = useState(false);
     const [pathsSheetOpen, setPathsSheetOpen] = useState(false);
-    const [overlayOpacity, setOverlayOpacity] = useState(60);
+    const [overlayOpacity, setOverlayOpacity] = useState(session.view?.overlayOpacity ?? 60);
     // Region markers have no separate "enable" switch: the markers ARE the feature.
     // With none placed the trace is byte-identical; placing one turns it on. The only
     // transient state is "region mode" (tool === 'mark') — click-to-place vs pan.
@@ -234,8 +260,16 @@ export function VectorizeStudio({
     // the user changes the toggle by hand so the probe never overrides them;
     // `autoGradientsSrcRef` records the image we've already decided for so we probe
     // each new image exactly once.
-    const gradientsTouchedRef = useRef(false);
+    const gradientsTouchedRef = useRef(session.view?.gradientsTouched ?? false);
     const autoGradientsSrcRef = useRef<string | null>(null);
+    /**
+     * True until the first probe after a RESTORE has run. The probes below are
+     * two things at once — a measurement (what ink is this? does it ramp?) and a
+     * default (so set the options accordingly) — and a restored session wants the
+     * first without the second: the options on screen are the user's own, and a
+     * probe overwriting them is exactly the "my settings reset themselves" bug.
+     */
+    const restoringProbeRef = useRef(Boolean(session.view));
 
     // Colour vs mono, the mono cut, and whether to invert it. `auto` asks the ink
     // probe (src/lib/ink.ts) — the same decision /sheet and the MCP server make,
@@ -243,7 +277,7 @@ export function VectorizeStudio({
     // a constant 128 and `invert` had no control (#46). A host that already
     // planned the trace (the icon sheet) passes its own mode and is left alone.
     const [colorMode, setColorMode] = useState<InkColorMode>(
-        initialOptions ? initialOptions.mode : "auto",
+        initialOptions ? initialOptions.mode : (session.view?.colorMode ?? "auto"),
     );
     // Read inside the probe effect so flipping Mode doesn't re-run (and re-decode) it.
     const colorModeRef = useRef<InkColorMode>(colorMode);
@@ -254,7 +288,7 @@ export function VectorizeStudio({
     const probePixelsRef = useRef<ImageData | null>(null);
     // Pins the force-colour toggle once the user touches it, so the ink offer
     // never overrides a deliberate choice (same contract as gradientsTouchedRef).
-    const forceColorTouchedRef = useRef(false);
+    const forceColorTouchedRef = useRef(session.view?.forceColorTouched ?? false);
 
     /**
      * Resolve colour/mono for the current image and push it into the options.
@@ -262,15 +296,19 @@ export function VectorizeStudio({
      * Called on a fresh probe and whenever Mode changes — a FORCED mono still
      * wants the measured cut and the invert flag, which is exactly what a user
      * picking "Mono" on white-on-navy art needs and never had.
+     *
+     * `apply: false` keeps only the measurement (the plan that feeds the "why"
+     * line and the mono guide) and leaves the options untouched — what a restored
+     * session wants, where the decision was already made and possibly overruled.
      */
     const applyInkDecision = useCallback(
-        (mode: InkColorMode, pixels?: ImageData | null) => {
+        (mode: InkColorMode, pixels?: ImageData | null, apply = true) => {
             const img = pixels ?? probePixelsRef.current;
             if (!img) {
                 // The probe hasn't landed yet (or the decode failed). An explicit
                 // choice still has to take effect — it just doesn't get a measured
                 // cut; Auto has nothing to decide from and waits for the probe.
-                if (mode !== "auto") {
+                if (apply && mode !== "auto") {
                     setOpts((o) => (o.mode === mode ? o : { ...o, mode }));
                 }
                 return;
@@ -279,6 +317,7 @@ export function VectorizeStudio({
                 colorMode: mode,
             });
             setInkPlan(plan);
+            if (!apply) return;
             setOpts((o) => {
                 const next = applyInkMode(o, plan);
                 // Avoid a spurious re-trace when nothing actually moved.
@@ -414,7 +453,7 @@ export function VectorizeStudio({
     // paint untouched), "flat" (also pin it to its pre-merge flat form + solid), or
     // "remove" (dissolve the section and heal its neighbours into the gap).
     const [markMode, setMarkMode] = useState<"separate" | "flat" | "remove">(
-        "separate",
+        session.view?.markMode ?? "separate",
     );
 
     const addMarker = useCallback(
@@ -665,8 +704,9 @@ export function VectorizeStudio({
         if (isVectorSource && retraceVector === "clean") return;
         if (autoGradientsSrcRef.current === src) return;
         // Fresh image: re-enable the auto-decision (a previous image's manual flip
-        // shouldn't carry over).
-        gradientsTouchedRef.current = false;
+        // shouldn't carry over). A RESTORED image is not a fresh one — its flags
+        // came back with it.
+        if (!restoringProbeRef.current) gradientsTouchedRef.current = false;
         let cancelled = false;
         void (async () => {
             try {
@@ -686,7 +726,12 @@ export function VectorizeStudio({
                 // mono cut belong), and decoding twice for that would be waste.
                 // Keep them: switching Mode by hand re-decides without re-decoding.
                 probePixelsRef.current = img;
-                applyInkDecision(colorModeRef.current, img);
+                // On a restore the probe is a measurement only — see
+                // restoringProbeRef. One pass, then it behaves normally again.
+                const restoring = restoringProbeRef.current;
+                restoringProbeRef.current = false;
+                applyInkDecision(colorModeRef.current, img, !restoring);
+                if (restoring) return;
                 const on = suggestGradients(img);
                 setOpts((o) => {
                     // Skip if the user beat the probe, or it matches the effective
@@ -716,11 +761,18 @@ export function VectorizeStudio({
     // below — it claims the gradient probe and the first debounced run so opening
     // an icon shows the batch result instantly instead of re-tracing it.
     useEffect(() => {
-        if (!initialDoc) return;
-        historyReset(initialDoc);
+        // Same contract for a RESTORED document: it was traced from these exact
+        // pixels, so showing it is both instant and correct, and re-tracing on
+        // mount would burn the seconds this is here to save.
+        const seeded = initialDoc ?? session.doc;
+        if (!seeded) return;
+        historyReset(seeded);
         skipRetraceRef.current = true;
-        gradientsTouchedRef.current = true;
-        autoGradientsSrcRef.current = logo.src;
+        // A restored doc keeps its own dirty flag: hand-edited nodes must still
+        // make a settings change warn instead of silently re-tracing over them.
+        dirtyRef.current = initialDoc ? false : session.dirty;
+        if (initialDoc) gradientsTouchedRef.current = true;
+        autoGradientsSrcRef.current = initialDoc ? logo.src : null;
         // Mount only: a later prop change means the host swapped tiles, and that
         // remounts the studio (keyed by tile id) rather than mutating this one.
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -897,6 +949,49 @@ export function VectorizeStudio({
     useEffect(() => {
         onOptionsChange?.(opts);
     }, [onOptionsChange, opts]);
+
+    /* -------------------------------------------------------- session save */
+
+    // Settings: localStorage, so they are already applied on the next mount
+    // rather than snapping in after an async read (see studioSession.ts). The
+    // two "touched" flags are refs — they only ever move together with one of
+    // the values in the dependency list, so this effect sees them fresh.
+    useEffect(() => {
+        if (!persist) return;
+        saveStudioView({
+            opts,
+            colorMode,
+            forceColorOn,
+            forceColor,
+            forceColorTouched: forceColorTouchedRef.current,
+            gradientsTouched: gradientsTouchedRef.current,
+            retraceVector,
+            viewMode,
+            overlayOpacity,
+            markMode,
+        });
+    }, [
+        persist,
+        opts,
+        colorMode,
+        forceColorOn,
+        forceColor,
+        retraceVector,
+        viewMode,
+        overlayOpacity,
+        markMode,
+    ]);
+
+    // The document: IndexedDB, keyed to the image it was traced from. Saved on
+    // the history value rather than `derivedDoc` — force-colour is a view over
+    // the document, and baking it in would make turning the toggle off unable to
+    // get the real fills back. A null doc never deletes the slot: on mount it is
+    // null for one commit before the seed lands, and deleting there would throw
+    // away the very document being restored.
+    useEffect(() => {
+        if (!persist || !doc) return;
+        saveStudioDoc(assetKey, doc, dirtyRef.current);
+    }, [persist, assetKey, doc]);
 
     // The Paths sheet is gated on `derivedDoc`; if the doc ever clears, drop the
     // open flag so the sheet can't silently re-open when a doc returns.

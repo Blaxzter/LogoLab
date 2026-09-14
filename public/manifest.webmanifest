@@ -1,0 +1,47 @@
+{
+  "id": "/",
+  "name": "LogoLab — preview & export your logo",
+  "short_name": "LogoLab",
+  "description": "Drop in a logo, preview it in real-world contexts, vectorize it to clean SVG, and export PWA-ready icons. Runs entirely in your browser.",
+  "start_url": "/preview",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "categories": ["graphics", "design", "productivity", "utilities"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    {
+      "src": "/pwa-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Vectorize a logo",
+      "short_name": "Vectorize",
+      "url": "/vectorize",
+      "icons": [{ "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Split an icon sheet",
+      "short_name": "Icon sheet",
+      "url": "/sheet",
+      "icons": [{ "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Export icons",
+      "short_name": "Export",
+      "url": "/export",
+      "icons": [{ "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}
