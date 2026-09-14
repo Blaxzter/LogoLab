@@ -114,6 +114,27 @@ icon back as its own clean SVG.
   **prefix / suffix** to every name for the export.
 - One zip: traced SVGs, cropped PNGs (paper knocked out), or both.
 
+### 💾 Installable, offline, and it remembers where you were
+LogoLab is a PWA. Install it from the address bar (or the **Install app** button in the header)
+and it runs as its own window, with no network at all.
+
+- **Offline** — the app shell, every tab, the tracer and its Web Worker, the bundled examples
+  and the device mockups are stored on install (~4 MB). What is *not* stored: the `/labs`
+  research harnesses and the optional AI models, which are 27 MB of the build and are cached
+  only if you actually open them. See [`src/pwa/`](src/pwa/).
+- **Nothing is lost on reload.** The upload, the appearance, every trace setting and region
+  marker, the traced document with your hand edits, an un-applied cleanup cutout, the whole
+  icon sheet with all of its traces, the editor's drawing and the export selection all come
+  back. Settings ride in `localStorage` (read synchronously, so they are right in the first
+  painted frame); the bytes and the documents ride in IndexedDB, read once before the first
+  render. A **Saved just now** chip in the title bar says when it last happened — or says
+  **Not saved** when the browser won't store anything (a private window, a full quota), rather
+  than claiming your work is safe when it isn't. **Start fresh** lives in that chip.
+- **Updates ask first.** A new version installs in the background and waits — it never swaps
+  the code out from under a running trace.
+
+Everything stays in the browser either way: no upload, no account, nothing leaves the tab.
+
 ### 🤖 MCP server — LogoLab from your AI agent
 The tracer and the icon exporter, exposed to your coding agent over
 [MCP](https://modelcontextprotocol.io). "Trace `icon.png` and put a PWA icon set in `public/`"
@@ -187,6 +208,9 @@ No environment variables or server routes required.
 - **onnxruntime-web** for the opt-in AI upscaler in front of the tracer (waifu2x swin_unet
   weights from the Hugging Face Hub, MIT) — not even bundled: script and WASM are loaded from
   the CDN on first use, so nothing is fetched until you switch it on.
+- A hand-written **service worker** (`src/pwa/sw.js`) rather than Workbox: the precache list
+  is decided from the chunk graph at build time (`scripts/swPlugin.ts`), because a glob would
+  make installing the app a 31 MB download of research harness and optional AI runtime.
 - Everything runs client-side via the Canvas & DOM APIs.
 
 ## 🔬 Algorithms & papers
@@ -251,6 +275,10 @@ src/
     iconSpec.ts    # icon geometry + manifest/.ico — shared by the app AND the MCP server
     image.ts       # loading, SVG rasterization, render sources
   mcp/             # the MCP server: trace + export for a coding agent (docs/mcp.md)
+  pwa/
+    sw.js          # the service worker (offline shell + runtime cache) — emitted by scripts/swPlugin.ts
+    register.ts    # registration, the update prompt, the install prompt
+  lib/persist/     # the working session: IndexedDB for bytes & documents, localStorage for settings
   hooks/
     useLiveFavicon.ts
   store.ts         # Zustand store (logo, appearance, environment, device placements)

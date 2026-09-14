@@ -81,17 +81,23 @@ export interface SvgEditorStudioProps {
   fileName?: string
   /** Leave the editor and go back to the intake screen. */
   onClose: () => void
-  /** Optional "send this back to the app" action. */
-  onApply?: (svgText: string, width: number, height: number) => void
-  applyLabel?: string
+  /**
+   * Fires whenever the document changes — including once for the document it
+   * opens with. The Editor tab writes it to IndexedDB and hands it to the app as
+   * the working logo; there is no "apply" step, and no button for one.
+   *
+   * Deliberately NOT a round trip through `initialDoc`: that prop re-seeds the
+   * history on identity change, so feeding edits back through it would wipe undo
+   * on every stroke.
+   */
+  onChange?: (doc: EditableDoc) => void
 }
 
 export function SvgEditorStudio({
   initialDoc,
   fileName = 'drawing',
   onClose,
-  onApply,
-  applyLabel = 'Use as logo',
+  onChange,
 }: SvgEditorStudioProps) {
   const history = useHistory<EditableDoc>(120)
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set())
@@ -101,7 +107,6 @@ export function SvgEditorStudio({
   const [showGrid, setShowGrid] = useState(false)
   const [penPathId, setPenPathId] = useState<string | null>(null)
   const [enteredGroupId, setEnteredGroupId] = useState<string | null>(null)
-  const [applied, setApplied] = useState(false)
   const pz = usePanZoom({ minScale: 1, maxScale: 40, zoomStep: 1.4 })
   const checkerClass = useCheckerClass()
   const autoChecker = useStore((s) => s.autoChecker)
@@ -137,6 +142,10 @@ export function SvgEditorStudio({
   const doc = history.value
   const previewDoc = doc ?? initialDoc
 
+  useEffect(() => {
+    if (doc) onChange?.(doc)
+  }, [doc, onChange])
+
   // The document, for handlers that must stay identity-stable across renders
   // (see the layers rail below) — reading a ref rather than closing over the
   // render's document is what lets them be `useCallback([])`.
@@ -147,13 +156,7 @@ export function SvgEditorStudio({
   // the methods keeps every callback built from them stable.
   const { set: historySet, commitMerged: historyMerge } = history
 
-  const commit = useCallback(
-    (next: EditableDoc) => {
-      historySet(next, true)
-      setApplied(false)
-    },
-    [historySet],
-  )
+  const commit = useCallback((next: EditableDoc) => historySet(next, true), [historySet])
   const preview = useCallback((next: EditableDoc) => historySet(next), [historySet])
 
   /**
@@ -166,10 +169,7 @@ export function SvgEditorStudio({
    */
   const selectionKey = useMemo(() => [...selection].sort().join(','), [selection])
   const commitLive = useCallback(
-    (next: EditableDoc, control: string) => {
-      historyMerge(next, `${control}:${selectionKey}`)
-      setApplied(false)
-    },
+    (next: EditableDoc, control: string) => historyMerge(next, `${control}:${selectionKey}`),
     [historyMerge, selectionKey],
   )
 
@@ -546,10 +546,6 @@ export function SvgEditorStudio({
 
   const download = () => downloadText(buildSvg(), `${fileName}.svg`, 'image/svg+xml')
   const copy = () => void navigator.clipboard?.writeText(buildSvg())
-  const apply = () => {
-    onApply?.(buildSvg(), previewDoc.viewBox[2], previewDoc.viewBox[3])
-    setApplied(true)
-  }
 
   /* ------------------------------------------------------------ render */
 
@@ -688,17 +684,6 @@ export function SvgEditorStudio({
           )}
           <CheckerToggle />
           <ZoomControls pz={pz} />
-          {onApply && (
-            <ActionButton
-              label={applyLabel}
-              note="Hand this drawing back to the app as the working logo. The editor stays open."
-              onClick={apply}
-              ariaLabel={applyLabel}
-              className="btn btn-secondary h-8 px-2.5 text-xs"
-            >
-              {applied ? 'Applied' : applyLabel}
-            </ActionButton>
-          )}
           <ActionButton
             label="Copy SVG markup"
             note="Puts the whole drawing on the clipboard as <svg> text."

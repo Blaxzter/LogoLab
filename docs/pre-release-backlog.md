@@ -58,9 +58,39 @@ checkerboard. "No shapes found — the ink may be lighter than the paper (try
 Invert), or the threshold may be cutting everything out." Cheap, and it converts
 the single worst first-run experience into a nudge.
 
-### A3. Nothing survives a reload
+### A3. Nothing survives a reload — SHIPPED 2026-09-13
 
-> Filed as [#48](https://github.com/Blaxzter/LogoLab/issues/48).
+> Filed as [#48](https://github.com/Blaxzter/LogoLab/issues/48). **Done**, together with
+> making the app installable and offline-capable (which was not on this list).
+
+**What shipped.** `src/lib/persist/` — IndexedDB for bytes and documents, localStorage for
+settings, read once in `main.tsx` before the first render so a restore has no flash of empty
+state. A reload now brings back the upload, the appearance/env/mockups, the trace options and
+region markers, the traced document with its hand edits, an un-applied cleanup cutout, the
+whole icon sheet with every tile's trace, the editor's open drawing and the export selection.
+The restore is silent and automatic — the promise is that a refresh costs nothing, and a modal
+asking permission to keep your own work is a worse version of losing it. It announces itself
+with a bottom toast that times out, and the standing surface is a **Saved just now** chip in
+the title bar: last-saved time, an honest **Not saved** when the browser refuses to store
+anything, and **Start fresh** in its popover. (A top banner was tried first and cut — it spent
+a strip of every page's vertical height, in the studios most of all, on something the user
+never asked about.)
+
+Two decisions worth keeping:
+
+- Anything derived from the working pixels carries an `assetKey`, reissued whenever those
+  pixels change, so a restored trace can never be shown over a different image.
+- A restored studio runs its probes MEASURE-ONLY on the first pass. `VectorizeStudio`'s ink
+  probe feeds the “why” line under Mode, but the rampiness probe and the ink-colour offer
+  would otherwise overwrite the settings that were just restored.
+
+Alongside it: a manifest, install icons, and a hand-written service worker whose precache list
+is computed from the chunk graph (`scripts/swPlugin.ts`, gated by
+`test/offline-precache.test.ts`) so installing the app is ~4 MB rather than the build's 31 MB.
+
+The original report follows.
+
+---
 
 `src/store.ts` is a plain zustand store with no persistence. The only thing
 written to `localStorage` in the whole product is the **theme** (`src/theme.ts`).
@@ -82,8 +112,10 @@ to a refresh is the most likely first bad review.
 
 No `ErrorBoundary` / `componentDidCatch` anywhere in `src/`. The tracer is a
 large amount of numerical code running on arbitrary user uploads; one throw in a
-render path blanks the entire app with no way back except a reload — which,
-per A3, also discards everything.
+render path blanks the entire app with no way back except a reload. Since A3 that
+reload at least costs nothing — the session comes back — but "refresh the page and
+hope" is still the only recovery on offer, and a boundary that keeps the other
+tabs alive is the actual fix.
 
 **Ask:** a route-level boundary with "Reset this panel", "Start over", and a
 "Report an issue" link that prefills the image dimensions, the options JSON and
@@ -181,7 +213,8 @@ in the app and it is currently locked behind `/labs`.
 
 There is no preset system and no "reset to defaults" anywhere in
 `TraceControls.tsx`. A user who drags four sliders into a bad place has no way
-back except reloading (which, per A3, costs them everything).
+back — and since A3 the settings are *persisted*, so a reload brings the bad
+place back with them. Getting out is now strictly a UI problem.
 
 **Ask:** *Flat icon · Line art · Illustration · Photo* as one-click bundles over
 mode/gradients/detail/fidelity/despeckle, plus **Reset to defaults**. Presets are
@@ -288,7 +321,7 @@ piece of work, highest ceiling on this list.
 
 1. **A1 + A2** — the visible-broken one, and its fix is already written in `src/lib/sheet`.
 2. **A5** — CI, before anything else moves.
-3. **A3 + A4** — persistence and the boundary; the two ways a user loses work.
+3. **A4** — the error boundary. (A3, persistence, is done: see above.)
 4. **B2** — the fidelity number and the Difference view: small, and it makes every later change reviewable *in the product*.
 5. **B1** — self-scoring Auto, built on B2's scorer.
 6. **C2 + C4 + C5** — the knobs, behind B3's presets. (C1 rejected.)

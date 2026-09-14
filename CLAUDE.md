@@ -100,6 +100,68 @@ on a dependency version that drifts between the two manifests, and on the server
 being hard-coded again instead of read. **If it fails, fix the manifests — never the
 assertion.**
 
+## The session is persisted, so studio state has TWO homes now
+
+Every studio's state used to be session-only. It isn't: a reload restores the upload, the
+appearance, the trace options and markers, the traced document (hand edits included), an
+un-applied cleanup cutout, the whole icon sheet with its traces, and the editor's drawing.
+`src/lib/persist/` owns it, and the split is by WHEN a value is needed, not by size:
+
+* **localStorage** for anything that must be right in the FIRST painted frame — the stores and
+  the studios seed their initial state from it synchronously. Async would mean rendering the
+  defaults and then snapping to the user's settings.
+* **IndexedDB** for bytes and documents. Read ONCE in `main.tsx`, before the first render, into
+  a module-level payload that panels `claim()` on mount — so a lazily-mounted studio never
+  races an async read against its own auto-trace.
+
+The header's **Saved chip** (`src/components/SavedChip.tsx`) is the standing indicator, over
+`src/lib/persist/status.ts`. It must be able to say **Not saved**: private mode, a blocked
+origin and a full quota all make persistence impossible, and a chip that keeps reading "Saved"
+through that is worse than no chip. `test/save-status.test.ts` is the gate — both of its
+failure modes (reporting saved while a newer value is still in memory, or sticking on
+"saving") look identical to the working version in a screenshot.
+
+Two things to keep in mind when touching a studio:
+
+* Anything derived from the working PIXELS is stored with `assetKey` (`src/store.ts`), which is
+  reissued whenever those pixels change. Check it before adopting a restored value, or a trace
+  ends up shown over a different image than it was cut from.
+* A restored studio must not re-run the probes that set its defaults. `VectorizeStudio` keeps
+  the ink probe (it feeds the “why” line) but runs it MEASURE-ONLY on the first pass after a
+  restore — otherwise the rampiness probe and the ink offer overwrite the user's own settings,
+  which reads as “my options reset themselves”.
+
+## The Editor tab IS the working logo — on CHANGE, never on open
+
+`EditorPanel` pushes its document into the app's logo by itself (debounced); there is no
+"Use as logo" button any more. The guard that matters is `doc !== opened`: the studio fires
+`onChange` once with the document it was seeded with, and treating that as an edit is
+destructive rather than merely redundant — round-tripping an SVG through `parseSvg` →
+`serializeDoc` yields different markup for the same drawing, so *visiting* the tab would
+reissue the working image, bump `assetKey`, and drop the trace and cleanup keyed to it.
+
+It is also what makes opening an example or a dropped SVG harmless: your logo is untouched
+until you actually change something. Don't replace that check with a text comparison against
+`logo.svgText` — that is the weaker guard already sitting underneath it, and it does not hold
+across a parse round-trip.
+
+The open drawing lives in a MODULE-level slot as well as React state. This panel is a lazy
+route, so every tab click unmounts it, and the stored session can't stand in: the boot payload
+is claim-once and the first mount already took it. Without the slot, clicking to Preview and
+back dropped the drawing and showed the intake screen.
+
+## Offline: the precache list is computed, not globbed
+
+The app is a PWA. The service worker is hand-written (`src/pwa/sw.js`) and its precache list is
+computed at build time from the chunk graph (`scripts/swPlugin.ts`): reachable from the entry,
+stopping at `src/components/labs/`, `src/devtest/` and the three optional heavyweight packages.
+A glob would precache all 31 MB — 27 MB of which is the research harness and the AI runtime that
+a user cropping a logo never opens.
+
+The walk follows imports AND **bare URL references in chunk code**, because that is how Vite
+emits a Web Worker — and the tracer runs in one. Dropping it makes “works offline” silently mean
+“works offline until you try to trace something”. `test/offline-precache.test.ts` is the gate.
+
 ## Node
 
 Node ≥ 22; TS is run directly via `node --experimental-strip-types`. `pnpm test` = full suite.
