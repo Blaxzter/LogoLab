@@ -5,6 +5,7 @@ import { useLogo, useStore } from './store'
 import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { AgentSetupButton } from './components/AgentSetup'
 import { AppMenu } from './components/AppMenu'
 import { Toasts } from './components/Toasts'
@@ -280,25 +281,29 @@ export function App() {
         <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
         <Toasts />
         <main className="min-h-0 flex-1 overflow-y-auto bg-bg">
-          <Suspense fallback={<LabLoading />}>
-            <Routes>
-              <Route path="/labs" element={<LabsIndex />} />
-              <Route path="/labs/pipeline" element={<PipelineLab />} />
-              <Route path="/labs/ab" element={<AbLab />} />
-              <Route path="/labs/workbench" element={<Workbench />} />
-              <Route path="/labs/gallery" element={<GalleryLab />} />
-              <Route path="/labs/scoreboard" element={<EngineLab />} />
-              <Route path="/labs/profiler" element={<ProfilerLab />} />
-              {/* Old routes, kept as deep-links so bookmarks survive. `golden` has no view any
-                  more — the regression gate still runs in CI, but Feature A/B already shows those
-                  exact fixtures, which is where you'd go to look at them. */}
-              <Route path="/labs/truth" element={<Navigate to="/labs/workbench?corpus=tier0" replace />} />
-              <Route path="/labs/logos" element={<Navigate to="/labs/workbench?corpus=logos" replace />} />
-              <Route path="/labs/eval" element={<Navigate to="/labs/scoreboard" replace />} />
-              <Route path="/labs/golden" element={<Navigate to="/labs/ab" replace />} />
-              <Route path="*" element={<Navigate to="/labs" replace />} />
-            </Routes>
-          </Suspense>
+          {/* One boundary for all of them — a lab is a harness, and the pathname
+              resets it so walking to another lab clears the last one's crash. */}
+          <ErrorBoundary what="this lab" resetKey={pathname}>
+            <Suspense fallback={<LabLoading />}>
+              <Routes>
+                <Route path="/labs" element={<LabsIndex />} />
+                <Route path="/labs/pipeline" element={<PipelineLab />} />
+                <Route path="/labs/ab" element={<AbLab />} />
+                <Route path="/labs/workbench" element={<Workbench />} />
+                <Route path="/labs/gallery" element={<GalleryLab />} />
+                <Route path="/labs/scoreboard" element={<EngineLab />} />
+                <Route path="/labs/profiler" element={<ProfilerLab />} />
+                {/* Old routes, kept as deep-links so bookmarks survive. `golden` has no view any
+                    more — the regression gate still runs in CI, but Feature A/B already shows those
+                    exact fixtures, which is where you'd go to look at them. */}
+                <Route path="/labs/truth" element={<Navigate to="/labs/workbench?corpus=tier0" replace />} />
+                <Route path="/labs/logos" element={<Navigate to="/labs/workbench?corpus=logos" replace />} />
+                <Route path="/labs/eval" element={<Navigate to="/labs/scoreboard" replace />} />
+                <Route path="/labs/golden" element={<Navigate to="/labs/ab" replace />} />
+                <Route path="*" element={<Navigate to="/labs" replace />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
     )
@@ -325,34 +330,80 @@ export function App() {
           }`}
         >
           {tab === 'preview' && !hasLogo && <MobileLogoIntro />}
+          {/*
+           * ONE BOUNDARY PER PANEL (components/ErrorBoundary). A throw anywhere in
+           * a render path used to unmount the whole tree and leave a blank page;
+           * per-route means a crash in the vectorizer costs you the vectorizer —
+           * the header, the loaded logo and every other tab keep working, and the
+           * panel can be remounted clean without a reload.
+           *
+           * The boundary sits OUTSIDE the Suspense on purpose. A lazy chunk that
+           * fails to load (a deploy replaced it under an open tab, or the network
+           * dropped) rejects into the nearest boundary ABOVE its Suspense — put it
+           * inside and the rejection sails past to the root and takes the whole
+           * app with it, which is what used to happen to the tab that failed.
+           *
+           * `resetKey` is NOT belt and braces. The router renders the matched
+           * route's element in the same position every time, so React reuses ONE
+           * boundary instance across all six and merely updates its props — a
+           * crash in Preview followed by a click on Cleanup showed Cleanup the
+           * preview's crash screen. The pathname is what ends the crash.
+           */}
           <Routes>
-            <Route path="/preview" element={<PreviewGrid />} />
-            <Route path="/cleanup" element={<CleanupPanel />} />
+            <Route
+              path="/preview"
+              element={
+                <ErrorBoundary what="the preview" resetKey={pathname}>
+                  <PreviewGrid />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/cleanup"
+              element={
+                <ErrorBoundary what="cleanup" resetKey={pathname}>
+                  <CleanupPanel />
+                </ErrorBoundary>
+              }
+            />
             <Route
               path="/vectorize"
               element={
-                <Suspense fallback={<PanelLoading what="the vectorizer" />}>
-                  <VectorizePanel />
-                </Suspense>
+                <ErrorBoundary what="the vectorizer" resetKey={pathname}>
+                  <Suspense fallback={<PanelLoading what="the vectorizer" />}>
+                    <VectorizePanel />
+                  </Suspense>
+                </ErrorBoundary>
               }
             />
             <Route
               path="/editor"
               element={
-                <Suspense fallback={<PanelLoading what="the editor" />}>
-                  <EditorPanel />
-                </Suspense>
+                <ErrorBoundary what="the editor" resetKey={pathname}>
+                  <Suspense fallback={<PanelLoading what="the editor" />}>
+                    <EditorPanel />
+                  </Suspense>
+                </ErrorBoundary>
               }
             />
             <Route
               path="/sheet"
               element={
-                <Suspense fallback={<PanelLoading what="the icon sheet" />}>
-                  <SheetPanel />
-                </Suspense>
+                <ErrorBoundary what="the icon sheet" resetKey={pathname}>
+                  <Suspense fallback={<PanelLoading what="the icon sheet" />}>
+                    <SheetPanel />
+                  </Suspense>
+                </ErrorBoundary>
               }
             />
-            <Route path="/export" element={<ExportPanel />} />
+            <Route
+              path="/export"
+              element={
+                <ErrorBoundary what="export" resetKey={pathname}>
+                  <ExportPanel />
+                </ErrorBoundary>
+              }
+            />
             {/* Root and any unknown path land on Preview. */}
             <Route path="/" element={<Navigate to="/preview" replace />} />
             <Route path="*" element={<Navigate to="/preview" replace />} />

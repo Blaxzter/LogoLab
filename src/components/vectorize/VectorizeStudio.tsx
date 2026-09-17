@@ -37,6 +37,7 @@ import { rasterCapFor } from "../../lib/traceCaps";
 import { hexToRgb, normalizeHex, rgbToHex } from "../../lib/colorUtils";
 import { downloadText } from "../../lib/download";
 import { cleanSvg } from "../../lib/svgClean";
+import { provideCrashContext } from "../../lib/crashContext";
 import { docStats, isStrokeOnly, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
 import { regionProvenance } from "../../lib/path/topology";
@@ -484,6 +485,27 @@ export function VectorizeStudio({
     optsRef.current = opts;
     const docRef = useRef(doc);
     docRef.current = doc;
+
+    // What this studio was working on, published for the crash screen's bug report
+    // (see lib/crashContext). It reads the REFS, not the values it closed over:
+    // the snapshot is taken at crash time and has to describe the options that were
+    // live then — which is the half of a tracer bug report nobody can reconstruct
+    // from prose. The pixels are never in it, only the image's shape.
+    useEffect(
+        () =>
+            provideCrashContext(persist ? "vectorize" : "sheet-tile", () => ({
+                source: {
+                    width: logo.naturalWidth,
+                    height: logo.naturalHeight,
+                    isSvg: logo.isSvg,
+                },
+                colorMode,
+                traced: docRef.current ? docStats(docRef.current) : null,
+                options: optsRef.current,
+            })),
+        [persist, colorMode, logo.naturalWidth, logo.naturalHeight, logo.isSvg],
+    );
+
     // Set just before an opacity-only palette edit so the auto-run effect skips the
     // (now-redundant) re-trace — the canvas was already recoloured live.
     const skipRetraceRef = useRef(false);

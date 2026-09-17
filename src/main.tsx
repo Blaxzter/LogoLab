@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import { App } from './App'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { useStore } from './store'
+import { provideCrashContext } from './lib/crashContext'
 import {
   flushSession,
   loadSession,
@@ -48,11 +50,39 @@ async function boot() {
   // a few megabytes and has no business competing with the first paint.
   registerServiceWorker()
 
+  // What a crash report says about the image, wherever in the app the crash
+  // happens (see lib/crashContext). Read through `getState` so it reports the
+  // logo that is loaded AT CRASH TIME, not the empty one this boot started with.
+  provideCrashContext('image', () => {
+    const { logo, assetKey } = useStore.getState()
+    if (!logo.src) return { loaded: false }
+    return {
+      // The pixels themselves are never in here: a bug report carries the SHAPE
+      // of the art, not the art. It is the user's logo, and it is often nobody
+      // else's to see.
+      width: logo.naturalWidth,
+      height: logo.naturalHeight,
+      type: logo.mime,
+      isSvg: logo.isSvg,
+      svgChars: logo.svgText?.length ?? null,
+      edited: Boolean(logo.src && logo.src !== logo.originalSrc),
+      assetKey,
+    }
+  })
+
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      {/*
+       * The last resort, under everything. The per-route boundaries in App.tsx
+       * cover the panels; this one covers what is outside them — the header, the
+       * sidebar, the router itself — where a throw would otherwise blank the page
+       * with no way back but a reload the user has to think of on their own.
+       */}
+      <ErrorBoundary what="LogoLab" kind="app">
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ErrorBoundary>
     </StrictMode>,
   )
 }

@@ -150,6 +150,32 @@ route, so every tab click unmounts it, and the stored session can't stand in: th
 is claim-once and the first mount already took it. Without the slot, clicking to Preview and
 back dropped the drawing and showed the intake screen.
 
+## A crash costs you ONE panel, and the report is the point
+
+There is an `ErrorBoundary` per route (`src/components/ErrorBoundary.tsx`, wired in `App.tsx`,
+plus a last-resort one at the root in `main.tsx`). Three traps, all of which look like working
+code:
+
+* **`resetKey={pathname}` is load-bearing.** The router renders whichever route matched into
+  the SAME position, so React reuses one boundary instance across every tab and only updates
+  its props. Drop the key and a crash in Preview follows you to Cleanup — a working panel
+  hidden behind a stale apology.
+* **The boundary goes OUTSIDE the `<Suspense>`**, or a chunk that fails to load rejects past
+  it to the root. That failure is reported differently on purpose (`isChunkLoadError`):
+  `React.lazy` caches the rejection, so "Reset this panel" can never fix it and the screen
+  offers a reload instead.
+* **The context is collected in `getDerivedStateFromError`** — the render phase, while the
+  crashing subtree is still mounted. `src/lib/crashContext.ts` is a registry that studios
+  publish a snapshot function into (`VectorizeStudio` publishes its live options through the
+  refs); by the time the fallback is COMMITTED those children are unmounted and every provider
+  they registered has unregistered itself, so a later read is silently empty.
+
+The report itself (`src/lib/crashReport.ts`) is pure and gated by `test/crash-report.test.ts`.
+It has a URL budget — GitHub answers a request line past ~8 kB with a 414 — and it spends that
+budget from the END, so the sections are ordered most-useful-first and it is the STACK that
+gets cut, never the options. The options are the half of a tracer bug report nobody can
+reconstruct from prose.
+
 ## Offline: the precache list is computed, not globbed
 
 The app is a PWA. The service worker is hand-written (`src/pwa/sw.js`) and its precache list is

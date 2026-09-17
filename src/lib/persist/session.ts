@@ -262,6 +262,19 @@ export function flushSession(): void {
   for (const writer of writers.values()) writer.flush()
 }
 
+/**
+ * Forget the stored session and reload onto a clean one.
+ *
+ * A reload rather than a state reset because the studios seed themselves from
+ * storage while they mount, so "fresh" has to mean a fresh boot. Shared by the
+ * Saved chip and by the crash screen's "Start over" — which is the last resort
+ * for a stored document that crashes the panel that restores it.
+ */
+export async function startFreshSession(): Promise<void> {
+  await clearSession()
+  location.reload()
+}
+
 /** Forget everything — the "start fresh" path. Theme is not ours and survives. */
 export async function clearSession(): Promise<void> {
   writers.clear()

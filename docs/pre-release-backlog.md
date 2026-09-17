@@ -106,9 +106,44 @@ in `localStorage`, restore on load with a "Restore your last session?"
 affordance. A trace can take 10 s and a node-edit session 20 minutes; losing that
 to a refresh is the most likely first bad review.
 
-### A4. No error boundary
+### A4. No error boundary — SHIPPED 2026-09-17
 
-> Filed as [#49](https://github.com/Blaxzter/LogoLab/issues/49) (bug).
+> Filed as [#49](https://github.com/Blaxzter/LogoLab/issues/49) (bug). **Done.**
+
+**What shipped.** `src/components/ErrorBoundary.tsx`, one per route (plus a last-resort one at
+the root in `main.tsx` for the header, the sidebar and the router itself). A crash now costs
+you the panel it happened in: the header, the loaded logo and every other tab keep working.
+The screen offers **Reset this panel** (remount the subtree, keep everything), **Start over**
+(`startFreshSession` — clear the stored session and reload) and **Report an issue**, a
+prefilled GitHub issue carrying the options JSON, the engine, the image's shape, the build
+stamp and the stack. Crash again straight after a reset and it says so and promotes Start
+over: that pattern is what a poisoned restored document looks like, and remounting cannot fix
+it.
+
+Three things that are less obvious than they look:
+
+- `resetKey={pathname}` on every routed boundary is load-bearing, not defensive. The router
+  renders the matched route's element into the same position every time, so React reuses ONE
+  boundary instance across all six and merely updates its props — without the key, crashing on
+  Preview and then clicking Cleanup showed Cleanup the *preview's* crash screen.
+- The boundary sits OUTSIDE each `<Suspense>`. A lazy chunk that fails to load rejects into
+  the nearest boundary ABOVE its Suspense; put it inside and the rejection sails past to the
+  root and takes the whole app with it. A chunk failure is also reported differently
+  (`isChunkLoadError`) — `React.lazy` caches the rejection, so remounting re-throws it forever
+  and only a reload can help.
+- The context comes from `lib/crashContext`, a registry a studio publishes a snapshot function
+  into while it is mounted, and the boundary collects it in `getDerivedStateFromError` — the
+  render phase, while the crashing subtree is still up. Collect it any later and the children
+  are gone, their effect cleanups have run, and the report is silently empty.
+
+`lib/crashReport.ts` is pure and gated by `test/crash-report.test.ts`: the report has a URL
+budget (GitHub answers a request line past ~8 kB with a 414), it spends that budget from the
+end so the OPTIONS survive and the stack is what gets cut, and it cannot throw on a cycle, on a
+non-Error throw or on a stack full of astral characters.
+
+The original report follows.
+
+---
 
 No `ErrorBoundary` / `componentDidCatch` anywhere in `src/`. The tracer is a
 large amount of numerical code running on arbitrary user uploads; one throw in a
@@ -321,7 +356,7 @@ piece of work, highest ceiling on this list.
 
 1. **A1 + A2** — the visible-broken one, and its fix is already written in `src/lib/sheet`.
 2. **A5** — CI, before anything else moves.
-3. **A4** — the error boundary. (A3, persistence, is done: see above.)
+3. ~~**A4** — the error boundary.~~ Done, see above. (A3, persistence, is done too.)
 4. **B2** — the fidelity number and the Difference view: small, and it makes every later change reviewable *in the product*.
 5. **B1** — self-scoring Auto, built on B2's scorer.
 6. **C2 + C4 + C5** — the knobs, behind B3's presets. (C1 rejected.)

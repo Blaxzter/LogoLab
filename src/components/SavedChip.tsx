@@ -14,7 +14,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Check, Loader2, Trash2 } from 'lucide-react'
-import { clearSession, getSaveStatus, subscribeSaveStatus } from '../lib/persist/session'
+import { getSaveStatus, startFreshSession, subscribeSaveStatus } from '../lib/persist/session'
 
 const POPOVER_W = 268
 
@@ -32,16 +32,6 @@ function ago(at: number, now: number): string {
   const minutes = Math.round(seconds / 60)
   if (minutes < 60) return `${minutes} min ago`
   return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-}
-
-/**
- * Clear the stored session and reload onto a clean one. A reload rather than a
- * state reset because the studios seed themselves from storage while mounting,
- * so "fresh" has to mean a fresh boot.
- */
-async function startFreshSession(): Promise<void> {
-  await clearSession()
-  location.reload()
 }
 
 /**
