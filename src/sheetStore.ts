@@ -21,6 +21,7 @@ import { traceTile, planTileTrace, tileTraceInput, type SheetColorMode } from '.
 import type { EditableDoc } from './lib/path/types'
 import type { VectorizeOptions } from './types'
 import { getImageData } from './lib/image'
+import { logError } from './lib/errorLog'
 import { saveSlot, SLOTS, srcToBlob, type StoredSheet } from './lib/persist/session'
 
 export type TileStatus = 'idle' | 'queued' | 'tracing' | 'done' | 'error'
@@ -708,6 +709,10 @@ export const useSheetStore = create<SheetState>((set, get) => ({
           }))
         } catch (err) {
           if (err instanceof DOMException && err.name === 'AbortError') return
+          // Logged whether or not this run is still the current one: a tile that
+          // failed and was superseded is still a tile that failed, and the
+          // session log is where a later report finds out (see lib/errorLog).
+          logError('sheet-tile', err)
           if (token === runToken) {
             get().updateTile(id, {
               status: 'error',

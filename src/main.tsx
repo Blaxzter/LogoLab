@@ -5,7 +5,8 @@ import './index.css'
 import { App } from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useStore } from './store'
-import { provideCrashContext } from './lib/crashContext'
+import { installErrorLog } from './lib/errorLog'
+import { provideReportContext } from './lib/reportContext'
 import {
   flushSession,
   loadSession,
@@ -27,6 +28,10 @@ import { registerServiceWorker } from './pwa/register'
 const RESTORE_BUDGET_MS = 2000
 
 async function boot() {
+  // Before anything else, including the restore below: an error thrown during
+  // boot is exactly the one nobody can describe afterwards (see lib/errorLog).
+  installErrorLog()
+
   const session = await Promise.race([
     loadSession().catch(() => null),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), RESTORE_BUDGET_MS)),
@@ -51,9 +56,9 @@ async function boot() {
   registerServiceWorker()
 
   // What a crash report says about the image, wherever in the app the crash
-  // happens (see lib/crashContext). Read through `getState` so it reports the
+  // happens (see lib/reportContext). Read through `getState` so it reports the
   // logo that is loaded AT CRASH TIME, not the empty one this boot started with.
-  provideCrashContext('image', () => {
+  provideReportContext('image', () => {
     const { logo, assetKey } = useStore.getState()
     if (!logo.src) return { loaded: false }
     return {

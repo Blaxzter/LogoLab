@@ -1,36 +1,51 @@
-// A crash, turned into something a stranger can act on.
+// A failure, turned into something a stranger can act on.
 //
 // The tracer is ~16k lines of numerical geometry running on whatever image a
 // user happens to drop in, and its hard cases are exactly the ones nobody can
 // reproduce from a prose bug report: "it broke on my logo" names neither the art
-// nor the twenty options that were set when it broke. So the crash screen does
-// not merely apologise — it offers a GitHub issue with the options JSON, the
-// image's shape, the build and the stack already written into it.
+// nor the twenty options that were set when it broke. So the app does not merely
+// apologise — it offers a GitHub issue with the options JSON, the image's shape,
+// the build, the recent error log and the stack already written into it.
+//
+// THREE KINDS, one shape. A `crash` is a render that threw (components/
+// ErrorBoundary). A `failure` is one that was caught and handled — a trace that
+// came back rejected, a file that would not decode — which is the far more
+// common one, because the worker path catches its own errors rather than letting
+// them reach a boundary. A `problem` has no error at all: the output is simply
+// wrong, which for a tracer is the single most valuable report there is.
 //
 // Everything here is PURE and free of React, of the DOM and of any global: the
-// build stamp, the page URL, the browser string and the context all arrive as
-// arguments. That is what lets the whole report be asserted in a node test
-// (test/crash-report.test.ts) instead of only ever being seen on the day
+// build stamp, the page URL, the browser string, the log and the context all
+// arrive as arguments. That is what lets the whole report be asserted in a node
+// test (test/issue-report.test.ts) instead of only ever being seen on the day
 // something breaks — which is the worst possible moment to discover that the
 // link came out 20 kB long and GitHub answers it with a 414.
 
 import { BUILD, buildTitle, type BuildInfo } from './buildInfo.ts'
+import { redact, type LoggedError } from './errorLog.ts'
 
-/** Everything a report is made of. Only `repoUrl`, `what` and `error` are required. */
-export interface CrashReportInput {
+/** What is being reported. Shapes the prompts, the headline and the title. */
+export type ReportKind = 'crash' | 'failure' | 'problem'
+
+/** Everything a report is made of. Only `repoUrl` and `what` are required. */
+export interface IssueReportInput {
   /** Repository the issue is filed against, e.g. `https://github.com/org/repo`. */
   repoUrl: string
-  /** What crashed, in the app's own words and lower case: `the vectorizer`. */
+  /** What it is about, lower case and in the app's own words: `the vectorizer`. */
   what: string
-  /** Whatever was thrown. Usually an Error; a stray `throw 'nope'` also lands here. */
-  error: unknown
-  /** React's `info.componentStack`, when the boundary got one. */
+  /** Defaults to `crash`. */
+  kind?: ReportKind
+  /** Whatever was thrown or rejected. Absent for a `problem`. */
+  error?: unknown
+  /** React's `info.componentStack`, when a boundary got one. */
   componentStack?: string | null
-  /** What the panels were working on — see ./crashContext. */
+  /** What the panels were working on — see ./reportContext. */
   context?: Record<string, unknown> | null
+  /** What else went wrong this session — see ./errorLog. */
+  log?: LoggedError[] | null
   /** Which build this is. Defaults to the one baked into the bundle. */
   build?: BuildInfo
-  /** `location.href` at the time of the crash. */
+  /** `location.href` at the time. */
   href?: string
   /** `navigator.userAgent`. */
   userAgent?: string
@@ -52,12 +67,12 @@ const MAX_CONTEXT_CHARS = 2400
  * GitHub answers a request line past roughly 8 kB with a 414 and no explanation,
  * which would turn "Report an issue" into a dead button at exactly the moment it
  * is needed. 6.5 kB leaves room for whatever proxy sits in between, and the
- * crash screen's Copy button still carries the untruncated report.
+ * Copy button beside every report still carries the untruncated thing.
  */
 export const URL_BUDGET = 6500
 
 const TRUNCATED =
-  '\n\n_(cut to fit the link — use "Copy report" on the crash screen for the whole thing.)_'
+  '\n\n_(cut to fit the link — use "Copy report" in the app for the whole thing.)_'
 
 /** `TypeError: x is not a function`, for anything at all that was thrown. */
 export function errorLabel(error: unknown): string {
@@ -107,11 +122,20 @@ function clip(text: string, maxLines: number): string {
   return [...lines.slice(0, maxLines), `… ${lines.length - maxLines} more`].join('\n')
 }
 
+/** `20:35:44`, in whatever the reader's browser calls that. */
+function clock(at: number): string {
+  return new Date(at).toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
 /**
  * JSON that cannot throw.
  *
  * The context is live studio state, so it can hold anything: a cycle, a typed
- * array, a BigInt. A report that dies while describing a crash leaves the user
+ * array, a BigInt. A report that dies while describing a failure leaves the user
  * with nothing, so the plain path is tried first — a sub-object referenced twice
  * is NOT a cycle and should print normally — and the ancestor-tracking replacer
  * is the fallback for when that throws.
@@ -147,10 +171,35 @@ function safeJson(value: unknown, maxChars: number): string {
   return text.length > maxChars ? `${text.slice(0, maxChars)}\n… (truncated)` : text
 }
 
-/** The issue title: what broke, and the one line that says how. */
-export function crashReportTitle(input: CrashReportInput): string {
-  const head = `Crash in ${input.what}: ${errorLabel(input.error)}`.replace(/\s+/g, ' ').trim()
-  return head.length > MAX_TITLE ? `${head.slice(0, MAX_TITLE - 1)}…` : head
+/** The issue title: what it is about, and the one line that says how. */
+export function issueReportTitle(input: IssueReportInput): string {
+  const kind = input.kind ?? 'crash'
+  const head =
+    kind === 'problem'
+      ? `Problem report: ${input.what}`
+      : kind === 'failure'
+        ? `${sentence(input.what)} failed: ${errorLabel(input.error)}`
+        : `Crash in ${input.what}: ${errorLabel(input.error)}`
+  const line = redact(head).replace(/\s+/g, ' ').trim()
+  return line.length > MAX_TITLE ? `${line.slice(0, MAX_TITLE - 1)}…` : line
+}
+
+/** The prompts at the top — the half of a report only the user can write. */
+function prompts(kind: ReportKind): string[] {
+  if (kind === 'problem') {
+    return [
+      '### What went wrong',
+      '',
+      '_Replace this line. What did the app do, and what did you expect instead? A screenshot of the traced result beats any description._',
+      '',
+    ]
+  }
+  return [
+    '### What I was doing',
+    '',
+    '_Replace this line. Even one sentence — what the image was, what you clicked — is usually the difference between a fixable report and a guess._',
+    '',
+  ]
 }
 
 /**
@@ -158,33 +207,49 @@ export function crashReportTitle(input: CrashReportInput): string {
  *
  * ORDER IS LOAD-BEARING. The link has a length budget and it is spent from the
  * END, so the sections are written most-useful-first: the prompt for the user's
- * own words, then what broke, then which build, then the options it broke on —
- * and the two stacks last, because they are the part that can run to thousands
- * of lines and the part a maintainer can most often do without.
+ * own words, then what happened, then which build, then the options it happened
+ * on, then the session's other errors — and the two stacks last, because they
+ * are the part that can run to thousands of lines and the part a maintainer can
+ * most often do without.
  */
-export function crashReportBody(input: CrashReportInput): string {
-  const { what, error, componentStack, context, build = BUILD, href, userAgent } = input
+export function issueReportBody(input: IssueReportInput): string {
+  const {
+    what,
+    kind = 'crash',
+    error,
+    componentStack,
+    context,
+    log,
+    build = BUILD,
+    href,
+    userAgent,
+  } = input
+
   const out: string[] = [
     '<!-- Filled in by LogoLab. Nothing has been sent anywhere: this is a draft only you can see until you post it. -->',
     '',
-    '### What I was doing',
-    '',
-    '_Replace this line. Even one sentence — what the image was, what you clicked — is usually the difference between a fixable report and a guess._',
-    '',
-    '### What happened',
-    '',
-    `${sentence(what)} crashed while rendering.`,
-    '',
-    '```',
-    errorLabel(error),
-    '```',
-    '',
+    ...prompts(kind),
   ]
+
+  if (kind !== 'problem') {
+    out.push(
+      '### What happened',
+      '',
+      kind === 'failure'
+        ? `${sentence(what)} reported a failure.`
+        : `${sentence(what)} crashed while rendering.`,
+      '',
+      '```',
+      redact(errorLabel(error)),
+      '```',
+      '',
+    )
+  }
 
   const where: string[] = []
   const stamp = buildTitle(build)
   if (stamp) where.push(`| Build | ${stamp} |`)
-  if (href) where.push(`| Page | ${href} |`)
+  if (href) where.push(`| Page | ${redact(href)} |`)
   if (userAgent) where.push(`| Browser | ${userAgent} |`)
   if (where.length > 0) out.push('### Where', '', '| | |', '|---|---|', ...where, '')
 
@@ -193,14 +258,32 @@ export function crashReportBody(input: CrashReportInput): string {
       '### What it was working on',
       '',
       '```json',
-      safeJson(context, MAX_CONTEXT_CHARS),
+      redact(safeJson(context, MAX_CONTEXT_CHARS)),
+      '```',
+      '',
+    )
+  }
+
+  if (log && log.length > 0) {
+    // One line each, oldest first. No stacks: twenty-five stacks would eat the
+    // whole budget to say what the section already says — WHEN things started
+    // going wrong, and whether this failure had company.
+    out.push(
+      '### Other errors this session',
+      '',
+      '```',
+      ...log.map(
+        (e) =>
+          `${clock(e.at)}  ${e.source}  ${e.message}` +
+          (e.count > 1 ? `  (×${e.count}, last ${clock(e.lastAt)})` : ''),
+      ),
       '```',
       '',
     )
   }
 
   const stack = errorStack(error)
-  if (stack) out.push('### Stack', '', '```', clip(stack, STACK_LINES), '```', '')
+  if (stack) out.push('### Stack', '', '```', redact(clip(stack, STACK_LINES)), '```', '')
 
   const component = (componentStack ?? '').trim()
   if (component) {
@@ -240,10 +323,15 @@ function fitEncoded(text: string, room: number): string {
  * The prefilled `issues/new` link. Always returns a URL GitHub will accept: the
  * body is cut to the budget rather than the link being dropped.
  */
-export function crashReportUrl(input: CrashReportInput, budget = URL_BUDGET): string {
+export function issueReportUrl(input: IssueReportInput, budget = URL_BUDGET): string {
   const head = `${input.repoUrl.replace(/\/+$/, '')}/issues/new?labels=bug&title=${encodeURIComponent(
-    crashReportTitle(input),
+    issueReportTitle(input),
   )}&body=`
-  const body = fitEncoded(crashReportBody(input), Math.max(0, budget - head.length))
+  const body = fitEncoded(issueReportBody(input), Math.max(0, budget - head.length))
   return head + encodeURIComponent(body)
+}
+
+/** Title and body together, for the clipboard — no budget, nothing cut. */
+export function issueReportText(input: IssueReportInput): string {
+  return `${issueReportTitle(input)}\n\n${issueReportBody(input)}`
 }

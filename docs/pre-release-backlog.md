@@ -131,15 +131,24 @@ Three things that are less obvious than they look:
   root and takes the whole app with it. A chunk failure is also reported differently
   (`isChunkLoadError`) — `React.lazy` caches the rejection, so remounting re-throws it forever
   and only a reload can help.
-- The context comes from `lib/crashContext`, a registry a studio publishes a snapshot function
+- The context comes from `lib/reportContext`, a registry a studio publishes a snapshot function
   into while it is mounted, and the boundary collects it in `getDerivedStateFromError` — the
   render phase, while the crashing subtree is still up. Collect it any later and the children
   are gone, their effect cleanups have run, and the report is silently empty.
 
-`lib/crashReport.ts` is pure and gated by `test/crash-report.test.ts`: the report has a URL
+`lib/issueReport.ts` is pure and gated by `test/issue-report.test.ts`: the report has a URL
 budget (GitHub answers a request line past ~8 kB with a 414), it spends that budget from the
 end so the OPTIONS survive and the stack is what gets cut, and it cannot throw on a cycle, on a
 non-Error throw or on a stack full of astral characters.
+
+**Follow-up, same day.** The crash screen turned out to be the RAREST entry point for a report:
+the tracer runs in a worker that catches its own errors, so its normal bad day is a red line in
+a status bar, not a throw. The same report now hangs off a **failure** (the vectorize status
+bar, the uploader, the sheet's failed tiles) and off a standing **"Report a problem"** in the
+support popover and the mobile menu — the "it traced and the result is wrong" case, which had
+no route at all. Every report also carries `lib/errorLog`, a 25-entry in-memory ring buffer of
+what else went wrong this session (repeats collapsed), and `redact()` keeps a `data:` URL
+quoted by an error message from carrying the user's actual art into a public issue.
 
 The original report follows.
 

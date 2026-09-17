@@ -2,13 +2,17 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Coffee, Heart } from 'lucide-react'
 import { COFFEE_URL, SPONSOR_URL, GithubMark } from './navItems'
+import { ReportIssueLink } from './ReportIssue'
 
 const POPOVER_W = 256
 
 /**
- * The header's single "support" affordance: a heart icon that pops a small card
+ * The header's single "support" affordance: a coffee icon that pops a small card
  * offering both ways to chip in — Buy Me a Coffee and GitHub Sponsors — so the
- * title bar carries one icon, not two. Portaled to <body> with fixed positioning
+ * title bar carries one icon, not two. It also carries the one route into a bug
+ * report that does NOT require something to have visibly broken first: "it
+ * traced, and the result is wrong" is the most useful report this project can
+ * get, and until this row existed it had nowhere to go. Portaled to <body> with fixed positioning
  * (so the header's own stacking/overflow can't clip it) and anchored below-right of
  * the trigger; closes on outside tap, Esc, scroll, resize — matching the
  * {@link PopoverSlider} conventions.
@@ -108,6 +112,21 @@ export function SupportPopover() {
                 <GithubMark size={16} />
                 Sponsor on GitHub
               </a>
+            </div>
+
+            <div className="mt-3 border-t border-line pt-3">
+              <ReportIssueLink
+                subject={{ what: 'LogoLab', kind: 'problem' }}
+                onClick={() => setOpen(false)}
+                className="btn btn-ghost h-9 w-full justify-start gap-2 text-sm"
+                showExternal={false}
+              >
+                Report a problem
+              </ReportIssueLink>
+              <p className="mt-1 px-1 text-[0.68rem] leading-snug text-faint">
+                Opens a prefilled issue with your settings and this build attached. Nothing is sent
+                until you post it.
+              </p>
             </div>
           </div>,
           document.body,

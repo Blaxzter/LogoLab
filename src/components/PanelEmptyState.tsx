@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useLogoUpload } from '../hooks/useLogoUpload'
 import { ExampleGrid } from './ExamplesDialog'
+import { ReportFailureLink } from './ReportIssue'
 
 /**
  * The big, full-width drop zone the Cleanup / Vectorize / Export panels show
@@ -19,7 +20,7 @@ export function PanelEmptyState({
   title: string
   subtitle: string
 }) {
-  const { handleFile, loading, error } = useLogoUpload()
+  const { handleFile, loading, error, failure } = useLogoUpload()
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -60,7 +61,15 @@ export function PanelEmptyState({
         </div>
       </button>
 
-      {error && <p className="text-sm text-bad">{error}</p>}
+      {error && (
+        <p className="flex items-center gap-2 text-sm text-bad">
+          {error}
+          {/* Only when something was actually THROWN: "please drop an image
+              file" is the user's mistake, not ours, and offering to file an
+              issue about it would be noise. */}
+          {failure != null && <ReportFailureLink what="the uploader" error={failure} />}
+        </p>
+      )}
 
       {/* No logo handy? Start from a bundled example — cards inline, no modal. */}
       <div className="w-full">

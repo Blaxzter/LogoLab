@@ -165,16 +165,43 @@ code:
   `React.lazy` caches the rejection, so "Reset this panel" can never fix it and the screen
   offers a reload instead.
 * **The context is collected in `getDerivedStateFromError`** — the render phase, while the
-  crashing subtree is still mounted. `src/lib/crashContext.ts` is a registry that studios
+  crashing subtree is still mounted. `src/lib/reportContext.ts` is a registry that studios
   publish a snapshot function into (`VectorizeStudio` publishes its live options through the
   refs); by the time the fallback is COMMITTED those children are unmounted and every provider
   they registered has unregistered itself, so a later read is silently empty.
 
-The report itself (`src/lib/crashReport.ts`) is pure and gated by `test/crash-report.test.ts`.
-It has a URL budget — GitHub answers a request line past ~8 kB with a 414 — and it spends that
-budget from the END, so the sections are ordered most-useful-first and it is the STACK that
-gets cut, never the options. The options are the half of a tracer bug report nobody can
-reconstruct from prose.
+## Filing an issue is a FEATURE, and the crash screen is its rarest entry point
+
+`src/lib/issueReport.ts` builds a prefilled GitHub issue — options JSON, engine, image shape,
+build stamp, session error log, stack — and `src/components/ReportIssue.tsx` hangs it off three
+things: a **crash** (the boundary), a **failure** (any catch that turns an error into a message
+for the user: the vectorize status bar, the uploader, the sheet's failed tiles) and a
+**problem** (the header's support popover and the mobile menu, any time — "it traced and the
+result is wrong" is the most valuable report this project gets, and it needs no failure at all).
+
+The failure lane matters more than the crash lane. The tracer runs in a WORKER that catches its
+own errors, so its normal bad day is a red line in a status bar, not a throw — for a long time
+that line was the end of the road for a bug report.
+
+Three traps here too:
+
+* **A link's href is built during RENDER, and some of these links never re-render.** The mobile
+  menu is a drawer that is translated off-screen rather than unmounted, so its href was built
+  on the app's first render — before any studio had published anything — and filed reports with
+  the settings missing. `freshHrefProps` rebuilds it on `pointerdown`/`focus`, both of which
+  beat navigation (and make "copy link address" correct too).
+* **`redact()` is not cosmetic.** An error message likes to quote the URL it failed on, and in
+  this app that URL is sometimes a `data:` URL holding the user's actual logo. Without it, a
+  decode failure would carry the user's art into a public issue tracker. A report carries the
+  SHAPE of the art and never the art.
+* **The log collapses repeats** (`src/lib/errorLog.ts`, in memory, never persisted). A retrying
+  worker can produce one error fifty times and push everything that matters out of a 25-entry
+  buffer.
+
+The report is pure and gated by `test/issue-report.test.ts` + `test/error-log.test.ts`. It has a
+URL budget — GitHub answers a request line past ~8 kB with a 414 — and it spends that budget
+from the END, so the sections are ordered most-useful-first and it is the STACK that gets cut,
+never the options. The options are the half nobody can reconstruct from prose.
 
 ## Offline: the precache list is computed, not globbed
 

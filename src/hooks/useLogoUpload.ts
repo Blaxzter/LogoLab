@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useStore } from '../store'
+import { logError } from '../lib/errorLog'
 import { loadLogoFile } from '../lib/image'
 
 /**
@@ -13,6 +14,8 @@ export function useLogoUpload() {
   const clearLogo = useStore((s) => s.clearLogo)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** The decode error itself, so "Could not read that file" can be reported. */
+  const [failure, setFailure] = useState<unknown>(null)
 
   const handleFile = useCallback(
     async (file: File | undefined | null) => {
@@ -22,13 +25,18 @@ export function useLogoUpload() {
         return
       }
       setError(null)
+      setFailure(null)
       setLoading(true)
       try {
         clearLogo()
         const patch = await loadLogoFile(file)
         setLogo(patch)
-      } catch {
+      } catch (err) {
+        // A format this browser cannot decode is the likeliest cause, and which
+        // format that was is exactly what the message cannot say.
+        logError('upload', err)
         setError('Could not read that file.')
+        setFailure(err)
       } finally {
         setLoading(false)
       }
@@ -36,5 +44,5 @@ export function useLogoUpload() {
     [clearLogo, setLogo],
   )
 
-  return { handleFile, loading, error, setError }
+  return { handleFile, loading, error, setError, failure }
 }

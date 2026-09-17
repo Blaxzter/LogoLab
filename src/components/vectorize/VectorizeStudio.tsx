@@ -37,7 +37,9 @@ import { rasterCapFor } from "../../lib/traceCaps";
 import { hexToRgb, normalizeHex, rgbToHex } from "../../lib/colorUtils";
 import { downloadText } from "../../lib/download";
 import { cleanSvg } from "../../lib/svgClean";
-import { provideCrashContext } from "../../lib/crashContext";
+import { logError } from "../../lib/errorLog";
+import { provideReportContext } from "../../lib/reportContext";
+import { ReportFailureLink } from "../ReportIssue";
 import { docStats, isStrokeOnly, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
 import { regionProvenance } from "../../lib/path/topology";
@@ -249,6 +251,11 @@ export function VectorizeStudio({
     // region painted exactly this colour so the user can locate (and then delete) it.
     const [highlightFill, setHighlightFill] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    // The error OBJECT behind that sentence. The user gets "try different
+    // settings"; a bug report needs the thing that was actually thrown, and the
+    // worker path catches its own failures — so without this, the tracer's most
+    // common failure is the one that can never be reported (see ReportIssue).
+    const [failure, setFailure] = useState<unknown>(null);
     const [copied, setCopied] = useState(false);
     const [applied, setApplied] = useState(false);
     const runIdRef = useRef(0);
@@ -487,13 +494,13 @@ export function VectorizeStudio({
     docRef.current = doc;
 
     // What this studio was working on, published for the crash screen's bug report
-    // (see lib/crashContext). It reads the REFS, not the values it closed over:
+    // (see lib/reportContext). It reads the REFS, not the values it closed over:
     // the snapshot is taken at crash time and has to describe the options that were
     // live then — which is the half of a tracer bug report nobody can reconstruct
     // from prose. The pixels are never in it, only the image's shape.
     useEffect(
         () =>
-            provideCrashContext(persist ? "vectorize" : "sheet-tile", () => ({
+            provideReportContext(persist ? "vectorize" : "sheet-tile", () => ({
                 source: {
                     width: logo.naturalWidth,
                     height: logo.naturalHeight,
@@ -587,6 +594,7 @@ export function VectorizeStudio({
         abortRef.current = controller;
         setBusy(true);
         setError(null);
+        setFailure(null);
         setStaleOpts(false); // we're applying the current settings now
         setProgress(cleanFromExisting ? "Cleaning SVG…" : "Tracing…");
         setProgressFraction(0);
@@ -668,10 +676,12 @@ export function VectorizeStudio({
         } catch (err) {
             if (err instanceof DOMException && err.name === "AbortError")
                 return;
+            logError("trace", err);
             if (runId === runIdRef.current) {
                 setError(
                     "Could not vectorize this image — try different settings or another file.",
                 );
+                setFailure(err);
             }
         } finally {
             if (runId === runIdRef.current) {
@@ -1278,6 +1288,7 @@ export function VectorizeStudio({
             window.setTimeout(() => setCopied(false), 1500);
         } catch {
             setError("Clipboard copy was blocked by the browser.");
+            setFailure(null);
         }
     };
 
@@ -1760,7 +1771,12 @@ export function VectorizeStudio({
                         </span>
                     )}
                     {error && (
-                        <span className="truncate text-bad">{error}</span>
+                        <span className="flex min-w-0 items-center gap-2 text-bad">
+                            <span className="truncate">{error}</span>
+                            {failure != null && (
+                                <ReportFailureLink what="the vectorizer" error={failure} />
+                            )}
+                        </span>
                     )}
                     <LegalLinksInline className="mx-auto shrink-0" />
                     <span className="hidden truncate sm:block">

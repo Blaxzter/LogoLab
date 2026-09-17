@@ -14,6 +14,7 @@ import { ZoomControls } from '../ui/ZoomControls'
 import { Sheet } from '../ui/Sheet'
 import { StudioActionBar, StudioTopBar } from '../studio/StudioBar'
 import { LegalLinksInline } from '../legal/LegalFooter'
+import { ReportFailureLink } from '../ReportIssue'
 import { downloadBlob } from '../../lib/download'
 import { exportName } from '../../lib/sheet'
 import { SheetControls, SheetControlsBody } from './SheetControls'
@@ -83,6 +84,9 @@ export function SheetStudio() {
 
   const traced = tiles.filter((t) => t.svg).length
   const failed = tiles.filter((t) => t.status === 'error').length
+  // The message of the first failed tile stands in for the batch in a report;
+  // the session log beside it carries every one of them with its own stack.
+  const firstFailure = tiles.find((t) => t.status === 'error')?.error
   const included = tiles.filter((t) => t.included).length
 
   const open = useCallback(
@@ -332,9 +336,21 @@ export function SheetStudio() {
 
         {/* ------------------------------------------------ status (desktop) */}
         <footer className="hidden h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted md:flex">
-          <span className="shrink-0">
+          <span className="flex shrink-0 items-center gap-2">
             {tiles.length} boxes · {included} included · {traced} traced
-            {failed > 0 ? ` · ${failed} failed` : ''}
+            {failed > 0 && (
+              <>
+                <span className="text-bad">· {failed} failed</span>
+                {/* One link for the batch rather than one per tile: the failures
+                    in a sheet are almost always the same failure N times, and a
+                    badge per tile would shout it N times. */}
+                <ReportFailureLink
+                  what="the icon sheet"
+                  error={firstFailure ?? new Error('Trace failed')}
+                  className="text-bad"
+                />
+              </>
+            )}
           </span>
           {running && (
             <span className="flex shrink-0 items-center gap-1.5 text-accent">

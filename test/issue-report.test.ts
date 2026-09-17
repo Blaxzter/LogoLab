@@ -1,47 +1,53 @@
-// The crash screen's report has to survive the crash.
+// The report has to survive the thing it is reporting.
 //
-//   node --test test/crash-report.test.ts
+//   node --test test/issue-report.test.ts
 //
-// Two things are being pinned here, and neither is visible in a screenshot of the
-// crash screen:
+// Three things are being pinned here, and none of them is visible in a
+// screenshot of the crash screen:
 //
-//   1. The LINK works. GitHub answers a request line past ~8 kB with a 414, and a
-//      React stack on a deep canvas tree is easily that long on its own — so a
+//   1. The LINK works. GitHub answers a request line past ~8 kB with a 414, and
+//      a React stack on a deep canvas tree is easily that long on its own — so a
 //      report that is merely "complete" turns "Report an issue" into a dead
-//      button on exactly the crashes worth reporting. It must cut itself down,
-//      and it must cut the STACK rather than the options, because the options are
-//      the half nobody can reconstruct from a prose bug report.
+//      button on exactly the failures worth reporting. It must cut itself down,
+//      and it must cut the STACK rather than the options, because the options
+//      are the half nobody can reconstruct from a prose bug report.
 //   2. Nothing here throws. It runs after something has already gone wrong, over
-//      live studio state that is itself suspect — a cycle, a getter that throws, a
-//      `throw 'nope'` that was never an Error. A second failure at this point puts
-//      the user back in front of the blank page the boundary exists to prevent.
+//      live studio state that is itself suspect — a cycle, a getter that throws,
+//      a `throw 'nope'` that was never an Error. A second failure at this point
+//      puts the user back in front of the blank page the boundary prevents.
+//   3. The user's ART never leaves. The app's whole pitch is that the image
+//      stays in the browser, and an error message that quotes a `data:` URL is
+//      the one path by which a report could carry the pixels to a public issue
+//      tracker without anyone intending it.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   URL_BUDGET,
-  crashReportBody,
-  crashReportTitle,
-  crashReportUrl,
   errorLabel,
   isChunkLoadError,
-  type CrashReportInput,
-} from '../src/lib/crashReport.ts'
+  issueReportBody,
+  issueReportTitle,
+  issueReportUrl,
+  type IssueReportInput,
+} from '../src/lib/issueReport.ts'
 import {
-  clearCrashContext,
-  collectCrashContext,
-  provideCrashContext,
-} from '../src/lib/crashContext.ts'
+  clearReportContext,
+  collectReportContext,
+  provideReportContext,
+} from '../src/lib/reportContext.ts'
+import { clearErrorLog, logError, recentErrors } from '../src/lib/errorLog.ts'
 
 const REPO = 'https://github.com/Blaxzter/LogoLab'
 
 /** A crash in the vectorizer, with the kind of context the studio publishes. */
-function crash(over: Partial<CrashReportInput> = {}): CrashReportInput {
+function crash(over: Partial<IssueReportInput> = {}): IssueReportInput {
   const error = new TypeError("Cannot read properties of undefined (reading 'x')")
   error.stack = `TypeError: Cannot read properties of undefined (reading 'x')\n    at planarBeautify (trace/planarBeautify.ts:412:18)\n    at traceImage (trace/index.ts:88:9)`
   return {
     repoUrl: REPO,
     what: 'the vectorizer',
+    kind: 'crash',
     error,
     componentStack: '\n    in EditorCanvas\n    in VectorizeStudio\n    in ErrorBoundary',
     context: {
@@ -60,7 +66,7 @@ function crash(over: Partial<CrashReportInput> = {}): CrashReportInput {
 /* ------------------------------------------------------------------- report */
 
 test('the report carries what a maintainer cannot guess: options, engine, image, build, stack', () => {
-  const body = crashReportBody(crash())
+  const body = issueReportBody(crash())
   assert.match(body, /"engine": "planar"/, 'the engine is the first thing asked about')
   assert.match(body, /"smoothing": 50/)
   assert.match(body, /"width": 512/)
@@ -71,7 +77,7 @@ test('the report carries what a maintainer cannot guess: options, engine, image,
 })
 
 test('the report asks for the one thing it cannot collect', () => {
-  const body = crashReportBody(crash())
+  const body = issueReportBody(crash())
   assert.match(body, /### What I was doing/)
   // And says out loud that nothing has been sent — it is a draft in the user's
   // own browser until they press the button on GitHub.
@@ -80,19 +86,67 @@ test('the report asks for the one thing it cannot collect', () => {
 
 test('the title is one readable line, capped', () => {
   assert.equal(
-    crashReportTitle(crash()),
+    issueReportTitle(crash()),
     "Crash in the vectorizer: TypeError: Cannot read properties of undefined (reading 'x')",
   )
-  const long = crashReportTitle(crash({ error: new Error('x'.repeat(400)) }))
+  const long = issueReportTitle(crash({ error: new Error('x'.repeat(400)) }))
   assert.ok(long.length <= 120, `title is ${long.length} chars`)
   assert.match(long, /…$/)
 })
 
 test('a report with no context or build still reads as a report', () => {
-  const body = crashReportBody({ repoUrl: REPO, what: 'the editor', error: new Error('boom') })
+  const body = issueReportBody({ repoUrl: REPO, what: 'the editor', error: new Error('boom') })
   assert.match(body, /The editor crashed while rendering/)
   assert.doesNotMatch(body, /### Where/, 'an empty table is worse than no table')
   assert.doesNotMatch(body, /### What it was working on/)
+})
+
+/* ------------------------------------------------------------------- kinds */
+
+test('a handled failure says so, and does not claim the app crashed', () => {
+  const input = crash({ kind: 'failure', componentStack: null })
+  assert.match(issueReportTitle(input), /^The vectorizer failed: TypeError/)
+  const body = issueReportBody(input)
+  assert.match(body, /The vectorizer reported a failure\./)
+  assert.doesNotMatch(body, /crashed while rendering/)
+  assert.match(body, /"engine": "planar"/, 'a failure carries the same options a crash does')
+})
+
+test('a problem report has no error at all, and asks what was expected instead', () => {
+  const input: IssueReportInput = {
+    repoUrl: REPO,
+    what: 'LogoLab',
+    kind: 'problem',
+    context: { vectorize: { options: { engine: 'planar' } } },
+    build: { version: '0.1.1', date: '', commit: '' },
+  }
+  assert.equal(issueReportTitle(input), 'Problem report: LogoLab')
+  const body = issueReportBody(input)
+  assert.match(body, /### What went wrong/)
+  assert.match(body, /what did you expect instead/i)
+  assert.doesNotMatch(body, /### What happened/, 'nothing threw — there is nothing to quote')
+  assert.doesNotMatch(body, /### Stack/)
+  assert.match(body, /"engine": "planar"/, 'but the settings still come along')
+})
+
+/* --------------------------------------------------------------------- log */
+
+test('the session log rides along, oldest first, with repeats collapsed', () => {
+  clearErrorLog()
+  logError('trace', new Error('worker died'))
+  logError('trace', new Error('worker died'))
+  logError('upload', new Error('decode failed'))
+  const body = issueReportBody(crash({ log: recentErrors() }))
+  assert.match(body, /### Other errors this session/)
+  assert.match(body, /trace {2}Error: worker died {2}\(×2/, 'collapsed, with a count')
+  assert.match(body, /upload {2}Error: decode failed/)
+  clearErrorLog()
+})
+
+test('an empty log is left out rather than printed as an empty block', () => {
+  clearErrorLog()
+  const body = issueReportBody(crash({ log: recentErrors() }))
+  assert.doesNotMatch(body, /### Other errors this session/)
 })
 
 /* ---------------------------------------------------------------------- URL */
@@ -100,7 +154,7 @@ test('a report with no context or build still reads as a report', () => {
 test('the link stays inside the budget however deep the stack is', () => {
   const deep = new Error('render loop')
   deep.stack = `Error: render loop\n${Array.from({ length: 4000 }, (_, i) => `    at frame${i} (chunk-9c2f.js:${i}:${i})`).join('\n')}`
-  const url = crashReportUrl(crash({ error: deep }))
+  const url = issueReportUrl(crash({ error: deep }))
   assert.ok(url.length <= URL_BUDGET, `URL is ${url.length} chars — GitHub answers that with a 414`)
   assert.ok(url.startsWith(`${REPO}/issues/new?labels=bug&title=`))
 })
@@ -114,7 +168,7 @@ test('when it has to cut, it cuts the stack and keeps the options', () => {
     { length: 40 },
     (_, i) => `    at ${'m'.repeat(300)}${i} (chunk-9c2f.js)`,
   ).join('\n')}`
-  const url = crashReportUrl(crash({ error: wide }))
+  const url = issueReportUrl(crash({ error: wide }))
   assert.ok(url.length <= URL_BUDGET, `URL is ${url.length} chars`)
   const body = decodeURIComponent(url.slice(url.indexOf('&body=') + 6))
   assert.match(body, /"engine": "planar"/, 'the options are the part worth the budget')
@@ -124,7 +178,7 @@ test('when it has to cut, it cuts the stack and keeps the options', () => {
 })
 
 test('a budget too small for anything degrades to a bare link, not a broken one', () => {
-  const url = crashReportUrl(crash(), 200)
+  const url = issueReportUrl(crash(), 200)
   assert.ok(url.length <= 200 + 40, 'the head alone is allowed to exceed a nonsense budget')
   assert.ok(url.includes('/issues/new?'), 'still a usable link')
 })
@@ -132,9 +186,29 @@ test('a budget too small for anything degrades to a bare link, not a broken one'
 test('a stack full of astral characters does not blow up the encoder', () => {
   const emoji = new Error('💥 boom')
   emoji.stack = `Error: 💥\n${'    at 🤖🤖🤖 (x.js)\n'.repeat(2000)}`
-  const url = crashReportUrl(crash({ error: emoji }))
+  const url = issueReportUrl(crash({ error: emoji }))
   assert.ok(url.length <= URL_BUDGET)
   assert.doesNotThrow(() => decodeURIComponent(url), 'a surrogate pair was cut in half')
+})
+
+/* ----------------------------------------------------------------- privacy */
+
+test("the user's image never reaches the report, however it got into the error", () => {
+  const pixels = `data:image/png;base64,${'iVBORw0KGgoAAAANS'.repeat(40)}`
+  const leaky = new Error(`Failed to decode ${pixels}`)
+  leaky.stack = `Error: Failed to decode ${pixels}\n    at loadLogoFile (lib/image.ts:12:3)`
+  const body = issueReportBody(
+    crash({
+      kind: 'failure',
+      error: leaky,
+      href: `https://logolab.pages.dev/vectorize#${pixels}`,
+      context: { image: { src: pixels, width: 512 } },
+    }),
+  )
+  assert.doesNotMatch(body, /iVBORw0KGgo/, 'base64 image bytes in a public issue')
+  assert.match(body, /data:…/, 'redacted, not silently dropped')
+  assert.match(body, /"width": 512/, 'the SHAPE of the art still goes')
+  assert.doesNotMatch(issueReportTitle(crash({ error: leaky })), /iVBORw0KGgo/)
 })
 
 /* ------------------------------------------------------ hostile input */
@@ -143,7 +217,7 @@ test('something that was never an Error still produces a report', () => {
   assert.equal(errorLabel('nope'), 'nope')
   assert.equal(errorLabel({ code: 7 }), '{"code":7}')
   assert.equal(errorLabel(undefined), 'undefined')
-  const body = crashReportBody(crash({ error: 'nope', componentStack: null }))
+  const body = issueReportBody(crash({ error: 'nope', componentStack: null }))
   assert.match(body, /nope/)
   assert.doesNotMatch(body, /### Stack/, 'a string has no stack to print')
 })
@@ -151,14 +225,14 @@ test('something that was never an Error still produces a report', () => {
 test('a cycle in the context is described, not thrown over', () => {
   const cyclic: Record<string, unknown> = { options: { engine: 'planar' } }
   cyclic.self = cyclic
-  const body = crashReportBody(crash({ context: cyclic }))
+  const body = issueReportBody(crash({ context: cyclic }))
   assert.match(body, /"engine": "planar"/)
   assert.match(body, /<circular>/)
 })
 
 test('a sub-object referenced twice is not a cycle and prints normally', () => {
   const shared = { engine: 'planar' }
-  const body = crashReportBody(crash({ context: { a: shared, b: shared } }))
+  const body = issueReportBody(crash({ context: { a: shared, b: shared } }))
   assert.equal((body.match(/"engine": "planar"/g) ?? []).length, 2)
   assert.doesNotMatch(body, /<circular>/)
 })
@@ -175,43 +249,43 @@ test('a chunk that never loaded is told apart from a crash in the code that did'
 /* ------------------------------------------------------------------ context */
 
 test('providers are collected under their own key', () => {
-  clearCrashContext()
-  provideCrashContext('image', () => ({ width: 512 }))
-  provideCrashContext('vectorize', () => ({ engine: 'planar' }))
-  assert.deepEqual(collectCrashContext(), {
+  clearReportContext()
+  provideReportContext('image', () => ({ width: 512 }))
+  provideReportContext('vectorize', () => ({ engine: 'planar' }))
+  assert.deepEqual(collectReportContext(), {
     image: { width: 512 },
     vectorize: { engine: 'planar' },
   })
-  clearCrashContext()
+  clearReportContext()
 })
 
 test('a provider that throws costs its own entry, not the whole report', () => {
-  clearCrashContext()
-  provideCrashContext('bad', () => {
+  clearReportContext()
+  provideReportContext('bad', () => {
     throw new Error('state is gone')
   })
-  provideCrashContext('good', () => ({ engine: 'planar' }))
-  const collected = collectCrashContext()
+  provideReportContext('good', () => ({ engine: 'planar' }))
+  const collected = collectReportContext()
   assert.deepEqual(collected.good, { engine: 'planar' })
   assert.match(String(collected.bad), /state is gone/)
-  clearCrashContext()
+  clearReportContext()
 })
 
 test('unregistering removes it — which is why a boundary must collect before the unmount', () => {
-  clearCrashContext()
-  const off = provideCrashContext('vectorize', () => ({ engine: 'planar' }))
+  clearReportContext()
+  const off = provideReportContext('vectorize', () => ({ engine: 'planar' }))
   off()
-  assert.deepEqual(collectCrashContext(), {})
-  clearCrashContext()
+  assert.deepEqual(collectReportContext(), {})
+  clearReportContext()
 })
 
 test('a remount does not delete the provider the newer instance just registered', () => {
   // React mounts the replacement before running the old instance's cleanup, so a
   // blind `delete` on unmount would leave the live studio unable to report.
-  clearCrashContext()
-  const off = provideCrashContext('vectorize', () => ({ instance: 'old' }))
-  provideCrashContext('vectorize', () => ({ instance: 'new' }))
+  clearReportContext()
+  const off = provideReportContext('vectorize', () => ({ instance: 'old' }))
+  provideReportContext('vectorize', () => ({ instance: 'new' }))
   off()
-  assert.deepEqual(collectCrashContext(), { vectorize: { instance: 'new' } })
-  clearCrashContext()
+  assert.deepEqual(collectReportContext(), { vectorize: { instance: 'new' } })
+  clearReportContext()
 })

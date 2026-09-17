@@ -21,24 +21,17 @@
 //     crash that comes BACK on remount, which is what a poisoned restored
 //     document looks like; promoted to the primary action once that happens.
 //   Report an issue — a prefilled GitHub issue carrying the options, the image
-//     shape, the build and the stack (see lib/crashReport). The tracer's hard
+//     shape, the build and the stack (see lib/issueReport). The tracer's hard
 //     cases are the ones nobody can reproduce from prose, so the one click that
 //     attaches the options is worth more here than anywhere else in the app.
 
 import { Component, Fragment, useState, type ErrorInfo, type ReactNode } from 'react'
-import { AlertTriangle, Bug, Check, Copy, ExternalLink, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
-import { collectCrashContext } from '../lib/crashContext'
-import {
-  crashReportBody,
-  crashReportTitle,
-  crashReportUrl,
-  errorLabel,
-  errorStack,
-  isChunkLoadError,
-  type CrashReportInput,
-} from '../lib/crashReport'
+import { AlertTriangle, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { logError } from '../lib/errorLog'
+import { collectReportContext } from '../lib/reportContext'
+import { errorLabel, errorStack, isChunkLoadError } from '../lib/issueReport'
 import { startFreshSession } from '../lib/persist/session'
-import { REPO_URL } from './navItems'
+import { CopyReportButton, ReportIssueLink, type ReportSubject } from './ReportIssue'
 
 interface Props {
   /** What is behind this boundary, lower case and in the app's own words:
@@ -61,7 +54,7 @@ interface Props {
 interface State {
   crashed: boolean
   error: unknown
-  /** Collected while the crashing subtree is still mounted — see lib/crashContext. */
+  /** Collected while the crashing subtree is still mounted — see lib/reportContext. */
   context: Record<string, unknown> | null
   componentStack: string | null
   /** Doubles as the children's key: bumping it is what remounts them. */
@@ -100,7 +93,7 @@ export class ErrorBoundary extends Component<Props, State> {
     // Collected HERE, in the render phase, and not in the fallback's own render:
     // by the time the fallback is committed the crashing children have been
     // unmounted and every context provider they registered is gone.
-    return { crashed: true, error, context: collectCrashContext() }
+    return { crashed: true, error, context: collectReportContext() }
   }
 
   static getDerivedStateFromProps(props: Props, state: State): Partial<State> | null {
@@ -121,6 +114,8 @@ export class ErrorBoundary extends Component<Props, State> {
     // React only logs caught errors to the console in development, and a crash
     // report is a lot easier to write with the real thing in front of you.
     console.error(`[LogoLab] crash in ${this.props.what}`, error, info.componentStack)
+    // Into the session log too, so a LATER report still knows this happened.
+    logError(`crash:${this.props.what}`, error)
     this.setState((s) => ({
       componentStack: info.componentStack ?? null,
       again: s.resets > 0 && Date.now() - s.resetAt < REPEAT_WINDOW_MS,
@@ -174,35 +169,15 @@ function CrashScreen({
   again: boolean
   onReset: () => void
 }) {
-  const [copied, setCopied] = useState(false)
   const [clearing, setClearing] = useState(false)
 
   // A chunk that never arrived is a different failure with a different remedy:
   // the code isn't there, so remounting re-throws the cached rejection forever.
   const chunk = isChunkLoadError(error)
 
-  const report: CrashReportInput = {
-    repoUrl: REPO_URL,
-    what,
-    error,
-    componentStack,
-    context,
-    href: typeof location === 'undefined' ? undefined : location.href,
-    userAgent: typeof navigator === 'undefined' ? undefined : navigator.userAgent,
-  }
-
-  const copyReport = async () => {
-    try {
-      await navigator.clipboard.writeText(
-        `${crashReportTitle(report)}\n\n${crashReportBody(report)}`,
-      )
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      /* clipboard blocked (permissions, insecure origin) — the details
-         block below holds the same text and can be selected by hand. */
-    }
-  }
+  // The context is the one thing NOT collected on demand: this boundary already
+  // captured it in the render phase, while the crashing subtree was still up.
+  const subject: ReportSubject = { what, kind: 'crash', error, componentStack, context }
 
   const startOver = () => {
     setClearing(true)
@@ -288,27 +263,15 @@ function CrashScreen({
             {clearing ? 'Clearing…' : 'Start over'}
           </button>
 
-          <a
-            href={crashReportUrl(report)}
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-secondary h-9 gap-2 text-sm"
-          >
-            <Bug size={15} />
-            Report an issue
-            <ExternalLink size={13} className="text-faint" />
-          </a>
+          <ReportIssueLink subject={subject} />
 
-          <button type="button" onClick={copyReport} className="btn btn-ghost h-9 gap-2 text-sm">
-            {copied ? <Check size={15} className="text-accent" /> : <Copy size={15} />}
-            {copied ? 'Copied' : 'Copy report'}
-          </button>
+          <CopyReportButton subject={subject} />
         </div>
 
         <p className="mt-3 text-[0.68rem] leading-snug text-faint">
-          The report opens a prefilled GitHub issue — the options, the image size, the build and the
-          stack, nothing else, and nothing is sent until you post it. Start over discards everything
-          stored in this browser.
+          The report opens a prefilled GitHub issue — the options, the image size, the build, this
+          session's errors and the stack, nothing else, and nothing is sent until you post it. Start
+          over discards everything stored in this browser.
         </p>
 
         <details className="mt-4 border-t border-line pt-3">
