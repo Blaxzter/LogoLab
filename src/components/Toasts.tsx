@@ -10,9 +10,11 @@
 // FAB own the corners, and a notice that is about the whole app reads better
 // where the eye already returns to. The stack is lifted clear of that bar.
 
-import { useEffect, useState, type ReactNode } from 'react'
-import { History, RefreshCw, WifiOff, X } from 'lucide-react'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { AlertTriangle, History, RefreshCw, WifiOff, X } from 'lucide-react'
 import { sessionWasRestored } from '../lib/persist/session'
+import { dismissFailure, getFailure, subscribeFailure } from '../lib/failureNotice'
+import { ReportIssueLink } from './ReportIssue'
 import { usePwa } from '../pwa/register'
 
 /** How long the restore notice stays up. It is pure information — the durable
@@ -102,9 +104,39 @@ function PwaToast() {
   )
 }
 
+/**
+ * Something failed — do you want to report it?
+ *
+ * The question, where a question belongs: in front of the user, with the button
+ * that answers it. It does NOT time out. The other two notices are news, and
+ * news can leave on its own; this one is asking something, and a question that
+ * removes itself before you have answered was never really asking. Dismiss it
+ * and that failure stays dismissed for the session (see lib/failureNotice).
+ */
+function FailureToast() {
+  const failure = useSyncExternalStore(subscribeFailure, getFailure)
+  if (!failure) return null
+  return (
+    <Toast icon={<AlertTriangle size={15} className="text-bad" />} onDismiss={dismissFailure}>
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="min-w-0">{failure.message} Report it?</span>
+        <ReportIssueLink
+          subject={{ what: failure.what, kind: 'failure', error: failure.error }}
+          className="btn btn-secondary h-7 shrink-0 gap-1.5 px-2.5 text-xs"
+          showExternal={false}
+          onClick={dismissFailure}
+        >
+          Report
+        </ReportIssueLink>
+      </span>
+    </Toast>
+  )
+}
+
 export function Toasts() {
   return (
     <div className="pointer-events-none fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 flex w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 flex-col items-center gap-2">
+      <FailureToast />
       <RestoreToast />
       <PwaToast />
     </div>

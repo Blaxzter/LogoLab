@@ -183,6 +183,17 @@ The failure lane matters more than the crash lane. The tracer runs in a WORKER t
 own errors, so its normal bad day is a red line in a status bar, not a throw — for a long time
 that line was the end of the road for a bug report.
 
+A failure also ASKS, rather than leaving a link and hoping: `src/lib/failureNotice.ts` raises a
+question into the existing bottom toast stack ("Could not vectorize this image. Report it?").
+A toast and not a modal — the user is mid-task and the app still works, so a dialog they have
+to dismiss before trying another setting would punish them for a failure that was not theirs.
+Two rules keep it from becoming noise, and both are gated by `test/failure-notice.test.ts`:
+a newer failure REPLACES the current question instead of stacking, and a DISMISSED failure
+never asks again this session (the answer was no; re-asking after every retry is how people
+learn to click a prompt away without reading it). A superseded question — a new trace started —
+clears WITHOUT being remembered as a no, because nobody answered it. The inline Report link
+stays either way.
+
 Three traps here too:
 
 * **A link's href is built during RENDER, and some of these links never re-render.** The mobile

@@ -22,6 +22,7 @@ import type { EditableDoc } from './lib/path/types'
 import type { VectorizeOptions } from './types'
 import { getImageData } from './lib/image'
 import { logError } from './lib/errorLog'
+import { raiseFailure } from './lib/failureNotice'
 import { saveSlot, SLOTS, srcToBlob, type StoredSheet } from './lib/persist/session'
 
 export type TileStatus = 'idle' | 'queued' | 'tracing' | 'done' | 'error'
@@ -718,6 +719,9 @@ export const useSheetStore = create<SheetState>((set, get) => ({
               status: 'error',
               error: err instanceof Error ? err.message : 'Trace failed',
             })
+            // One question for the batch: raiseFailure keys on what+message, so
+            // twenty tiles failing the same way ask once, not twenty times.
+            raiseFailure('the icon sheet', 'An icon in the sheet could not be traced.', err)
           }
         } finally {
           controllers.delete(id)

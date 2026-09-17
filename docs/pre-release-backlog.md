@@ -150,6 +150,13 @@ no route at all. Every report also carries `lib/errorLog`, a 25-entry in-memory 
 what else went wrong this session (repeats collapsed), and `redact()` keeps a `data:` URL
 quoted by an error message from carrying the user's actual art into a public issue.
 
+And a failure now ASKS. A red line with a small Report link beside it, at the bottom of a
+full-height studio, is not a question — so `lib/failureNotice.ts` raises one into the bottom
+toast stack ("Could not vectorize this image. Report it?"), with the button that answers it. A
+toast rather than a modal: the app still works and the user is mid-task. Asked once per
+distinct failure — dismiss it and that failure stays dismissed for the session, because
+re-asking after every retry is how a prompt becomes something people click away unread.
+
 The original report follows.
 
 ---

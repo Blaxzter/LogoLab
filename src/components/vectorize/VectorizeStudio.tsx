@@ -38,6 +38,7 @@ import { hexToRgb, normalizeHex, rgbToHex } from "../../lib/colorUtils";
 import { downloadText } from "../../lib/download";
 import { cleanSvg } from "../../lib/svgClean";
 import { logError } from "../../lib/errorLog";
+import { clearFailure, raiseFailure } from "../../lib/failureNotice";
 import { provideReportContext } from "../../lib/reportContext";
 import { ReportFailureLink } from "../ReportIssue";
 import { docStats, isStrokeOnly, parseSvg, serializeDoc } from "../../lib/path/model";
@@ -595,6 +596,9 @@ export function VectorizeStudio({
         setBusy(true);
         setError(null);
         setFailure(null);
+        // A new attempt supersedes the last one's question — without REMEMBERING
+        // the dismissal, because the user never answered it.
+        clearFailure();
         setStaleOpts(false); // we're applying the current settings now
         setProgress(cleanFromExisting ? "Cleaning SVG…" : "Tracing…");
         setProgressFraction(0);
@@ -678,10 +682,13 @@ export function VectorizeStudio({
                 return;
             logError("trace", err);
             if (runId === runIdRef.current) {
-                setError(
-                    "Could not vectorize this image — try different settings or another file.",
-                );
+                const message =
+                    "Could not vectorize this image — try different settings or another file.";
+                setError(message);
                 setFailure(err);
+                // And ASK, rather than leaving a red line at the bottom of a
+                // full-height studio and hoping it is noticed.
+                raiseFailure("the vectorizer", message, err);
             }
         } finally {
             if (runId === runIdRef.current) {

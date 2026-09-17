@@ -2,13 +2,14 @@ import { useRef, useState } from 'react'
 import { ImageUp, Loader2, X } from 'lucide-react'
 import { useCheckerClass, useLogo, useStore } from '../store'
 import { useLogoUpload } from '../hooks/useLogoUpload'
+import { ReportFailureLink } from './ReportIssue'
 import { Tooltip } from './ui/Tooltip'
 
 export function UploadDropzone() {
   const logo = useLogo()
   const clearLogo = useStore((s) => s.clearLogo)
   const checkerClass = useCheckerClass()
-  const { handleFile, loading, error } = useLogoUpload()
+  const { handleFile, loading, error, failure } = useLogoUpload()
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -82,7 +83,14 @@ export function UploadDropzone() {
           <p className="text-xs text-muted">or click to browse · PNG, SVG, JPG, WebP</p>
         </div>
       </button>
-      {error && <p className="text-xs text-bad">{error}</p>}
+      {error && (
+        <p className="flex items-center gap-2 text-xs text-bad">
+          {error}
+          {/* Same rule as the big drop zone: only when something was THROWN.
+              "Please drop an image file" is the user's mistake, not ours. */}
+          {failure != null && <ReportFailureLink what="the uploader" error={failure} />}
+        </p>
+      )}
       <input
         ref={inputRef}
         type="file"
