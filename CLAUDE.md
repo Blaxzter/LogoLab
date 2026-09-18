@@ -172,16 +172,30 @@ code:
 
 ## Filing an issue is a FEATURE, and the crash screen is its rarest entry point
 
-`src/lib/issueReport.ts` builds a prefilled GitHub issue — options JSON, engine, image shape,
-build stamp, session error log, stack — and `src/components/ReportIssue.tsx` hangs it off three
-things: a **crash** (the boundary), a **failure** (any catch that turns an error into a message
-for the user: the vectorize status bar, the uploader, the sheet's failed tiles) and a
-**problem** (the header's BUG BUTTON and the mobile menu, any time — "it traced and the result
-is wrong" is the most valuable report this project gets, and it needs no failure at all).
+`src/lib/issueReport.ts` fills in a GitHub issue FORM — `.github/ISSUE_TEMPLATE/*.yml` — and
+`src/components/ReportIssue.tsx` hangs it off four kinds: a **crash** (the boundary), a
+**failure** (any catch that turns an error into a message for the user: the vectorize status
+bar, the uploader, the sheet's failed tiles), a **problem** ("it traced and the result is
+wrong" — the most valuable report this project gets, and it needs no failure at all) and an
+**idea**, which goes to the feature form instead.
 
-The bug glyph in the header files that report in one click, with no popover in the way. The
-labs popover beside it moved to a FLASK for it: two bug icons in one header would have meant
-neither of them said anything, and "report a problem" has the better claim to the bug.
+A FORM, not a `body`. GitHub prefills a form field from a query parameter keyed by that
+field's `id`, so the machine half lands in its own Diagnostics box — `render: text`, so the
+app sends PLAIN text, not markdown — and the human boxes stay empty with their own
+placeholders. `test/issue-template.test.ts` is the gate that keeps the ids in the YAML and the
+ids in `FIELDS` from drifting: GitHub ignores a parameter matching no field, so a rename
+silently delivers an empty Diagnostics box on every report from then on.
+
+Splitting one body into several fields made `title` and the summary a FIXED head the budget
+cannot trim, so both are capped — otherwise a kilobyte-long error message pushes the link past
+the 414 limit with nothing left to cut.
+
+The header's bug button opens `components/ReportDialog`, not GitHub: which kind of thing is
+this, what to write, and a disclosure showing exactly what gets attached. Jumping straight to
+a stranger's issue tracker filed every idea as a bug and lost the people who bounced off the
+form. A crash screen and a failed trace keep their DIRECT links — they already know they are
+bugs and already hold the error. The labs popover moved to a FLASK so the bug glyph could mean
+reporting; two bug icons in one header would have meant neither of them said anything.
 
 The failure lane matters more than the crash lane. The tracer runs in a WORKER that catches its
 own errors, so its normal bad day is a red line in a status bar, not a throw — for a long time
