@@ -1,0 +1,63 @@
+name: Bug report
+description: Something is broken, or the trace came out wrong.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this.
+
+        If you got here from LogoLab's **Report a problem** button, the
+        Diagnostics box below is already filled in — settings, image shape,
+        build and the session's errors. Read it before you post; nothing has
+        been sent anywhere yet.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, and what did LogoLab do?
+      placeholder: |
+        Dropped a 512×512 PNG on Vectorize, switched Mode to Mono, and the preview went blank.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+      description: >
+        For a wrong-looking trace this is the important half — "the corners came
+        out rounded", "the inner ring disappeared". A screenshot of the result
+        beats any description, and you can paste one straight into this box.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where in the app
+      options:
+        - Vectorize (tracing)
+        - Icon sheet
+        - Cleanup (background removal)
+        - Editor
+        - Preview / Export
+        - The MCP server (npx logolab)
+        - Somewhere else / not sure
+      default: 6
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: >
+        Filled in by the app. The trace settings are the half nobody can
+        reconstruct from a description, which is why they are worth attaching.
+        Your image is never in here — only its size and format.
+      render: text
+    validations:
+      required: false

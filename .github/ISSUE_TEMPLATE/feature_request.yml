@@ -1,0 +1,56 @@
+name: Feature request
+description: Something LogoLab should do that it doesn't.
+title: "[idea] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome — especially the ones that come from an actual logo
+        you were trying to ship and couldn't.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: >
+        The problem first, the solution second. "I need a 32×32 favicon that
+        stays legible" tells us more than "add a favicon preset", because it
+        leaves room for an answer nobody had thought of yet.
+      placeholder: |
+        I'm exporting an icon set for an Android app and I keep having to re-crop by hand because…
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+      description: How you picture it working, if you have a picture of it.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app
+      options:
+        - Vectorize (tracing)
+        - Icon sheet
+        - Cleanup (background removal)
+        - Editor
+        - Preview / Export
+        - The MCP server (npx logolab)
+        - Somewhere else / a new thing
+      default: 6
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Context
+      description: Filled in by the app — which build you are on, and what you had open.
+      render: text
+    validations:
+      required: false

@@ -2,30 +2,60 @@
 //
 // The tracer is ~16k lines of numerical geometry running on whatever image a
 // user happens to drop in, and its hard cases are exactly the ones nobody can
-// reproduce from a prose bug report: "it broke on my logo" names neither the art
-// nor the twenty options that were set when it broke. So the app does not merely
-// apologise — it offers a GitHub issue with the options JSON, the image's shape,
-// the build, the recent error log and the stack already written into it.
+// reproduce from a prose bug report: "it broke on my logo" names neither the
+// art nor the twenty options that were set when it broke. So the app does not
+// merely apologise — it fills in a GitHub issue FORM with the options, the
+// image's shape, the build, the recent error log and the stack.
 //
-// THREE KINDS, one shape. A `crash` is a render that threw (components/
-// ErrorBoundary). A `failure` is one that was caught and handled — a trace that
-// came back rejected, a file that would not decode — which is the far more
-// common one, because the worker path catches its own errors rather than letting
-// them reach a boundary. A `problem` has no error at all: the output is simply
-// wrong, which for a tracer is the single most valuable report there is.
+// A FORM, not a body. `.github/ISSUE_TEMPLATE/*.yml` defines the fields and
+// GitHub prefills them from query parameters keyed by each field's `id`, so the
+// machine-collected half lands in its own Diagnostics box and the human half
+// stays an empty box with a prompt in it — rather than one wall of markdown
+// where the user has to find the line that says "replace this". The ids are
+// duplicated between the YAML and this file by necessity; `test/issue-template.
+// test.ts` is what stops them drifting apart, because GitHub silently ignores a
+// query parameter that matches no field and the box just arrives empty.
 //
-// Everything here is PURE and free of React, of the DOM and of any global: the
-// build stamp, the page URL, the browser string, the log and the context all
-// arrive as arguments. That is what lets the whole report be asserted in a node
-// test (test/issue-report.test.ts) instead of only ever being seen on the day
-// something breaks — which is the worst possible moment to discover that the
-// link came out 20 kB long and GitHub answers it with a 414.
+// FOUR KINDS. A `crash` is a render that threw (components/ErrorBoundary). A
+// `failure` is one that was caught and handled — a trace that came back
+// rejected, a file that would not decode — which is the far more common one,
+// because the worker path catches its own errors rather than letting them reach
+// a boundary. A `problem` has no error at all: the output is simply wrong,
+// which for a tracer is the single most valuable report there is. An `idea` is
+// a feature request and goes to a different form entirely.
+//
+// Everything here is PURE and free of React, of the DOM and of any global, so
+// the whole report can be asserted in a node test (test/issue-report.test.ts)
+// instead of only ever being seen on the day something breaks — which is the
+// worst possible moment to discover that the link came out 20 kB long and
+// GitHub answers it with a 414.
 
 import { BUILD, buildTitle, type BuildInfo } from './buildInfo.ts'
 import { redact, type LoggedError } from './errorLog.ts'
 
-/** What is being reported. Shapes the prompts, the headline and the title. */
-export type ReportKind = 'crash' | 'failure' | 'problem'
+/** What is being reported. Picks the form, the prompts and the title. */
+export type ReportKind = 'crash' | 'failure' | 'problem' | 'idea'
+
+/** The issue form each kind is filed through (`.github/ISSUE_TEMPLATE/`). */
+export const TEMPLATE: Record<ReportKind, string> = {
+  crash: 'bug_report.yml',
+  failure: 'bug_report.yml',
+  problem: 'bug_report.yml',
+  idea: 'feature_request.yml',
+}
+
+/**
+ * The field `id`s this file prefills, per form.
+ *
+ * GitHub keys a prefill query parameter off the field's `id`, and ignores a
+ * parameter that matches nothing — so a rename in the YAML does not break
+ * anything loudly, it just delivers an empty Diagnostics box for the rest of
+ * time. Hence the gate in test/issue-template.test.ts.
+ */
+export const FIELDS: Record<string, { summary: string; diagnostics: string }> = {
+  'bug_report.yml': { summary: 'what-happened', diagnostics: 'diagnostics' },
+  'feature_request.yml': { summary: 'problem', diagnostics: 'diagnostics' },
+}
 
 /** Everything a report is made of. Only `repoUrl` and `what` are required. */
 export interface IssueReportInput {
@@ -35,7 +65,7 @@ export interface IssueReportInput {
   what: string
   /** Defaults to `crash`. */
   kind?: ReportKind
-  /** Whatever was thrown or rejected. Absent for a `problem`. */
+  /** Whatever was thrown or rejected. Absent for a `problem` or an `idea`. */
   error?: unknown
   /** React's `info.componentStack`, when a boundary got one. */
   componentStack?: string | null
@@ -53,6 +83,16 @@ export interface IssueReportInput {
 
 /** Issue titles are one line in a list — past this they are noise. */
 const MAX_TITLE = 120
+/**
+ * How much of the error message goes in "What happened".
+ *
+ * It has to be capped, and not for tidiness: the title and this summary are the
+ * FIXED half of the URL — only Diagnostics is fitted to the budget — so an
+ * error whose message runs to kilobytes (a worker echoing a whole payload back)
+ * would push the link past GitHub's request-line limit with nothing left to
+ * cut. The full message is in the Stack section below it either way.
+ */
+const MAX_SUMMARY = 400
 /** Stack depth worth carrying. The frames that matter are at the top. */
 const STACK_LINES = 30
 const COMPONENT_STACK_LINES = 20
@@ -64,15 +104,15 @@ const MAX_CONTEXT_CHARS = 2400
 /**
  * How long the whole `issues/new` URL may get.
  *
- * GitHub answers a request line past roughly 8 kB with a 414 and no explanation,
- * which would turn "Report an issue" into a dead button at exactly the moment it
- * is needed. 6.5 kB leaves room for whatever proxy sits in between, and the
- * Copy button beside every report still carries the untruncated thing.
+ * GitHub answers a request line past roughly 8 kB with a 414 and no explanation
+ * (its own docs say so), which would turn "Report a problem" into a dead button
+ * at exactly the moment it is needed. 6.5 kB leaves room for whatever proxy
+ * sits in between, and the Copy button beside every report still carries the
+ * untruncated thing.
  */
 export const URL_BUDGET = 6500
 
-const TRUNCATED =
-  '\n\n_(cut to fit the link — use "Copy report" in the app for the whole thing.)_'
+const TRUNCATED = '\n… (cut to fit the link — use "Copy report" in the app for the whole thing.)'
 
 /** `TypeError: x is not a function`, for anything at all that was thrown. */
 export function errorLabel(error: unknown): string {
@@ -171,97 +211,31 @@ function safeJson(value: unknown, maxChars: number): string {
   return text.length > maxChars ? `${text.slice(0, maxChars)}\n… (truncated)` : text
 }
 
-/** The issue title: what it is about, and the one line that says how. */
-export function issueReportTitle(input: IssueReportInput): string {
-  const kind = input.kind ?? 'crash'
-  const head =
-    kind === 'problem'
-      ? `Problem report: ${input.what}`
-      : kind === 'failure'
-        ? `${sentence(input.what)} failed: ${errorLabel(input.error)}`
-        : `Crash in ${input.what}: ${errorLabel(input.error)}`
-  const line = redact(head).replace(/\s+/g, ' ').trim()
-  return line.length > MAX_TITLE ? `${line.slice(0, MAX_TITLE - 1)}…` : line
-}
-
-/** The prompts at the top — the half of a report only the user can write. */
-function prompts(kind: ReportKind): string[] {
-  if (kind === 'problem') {
-    return [
-      '### What went wrong',
-      '',
-      '_Replace this line. What did the app do, and what did you expect instead? A screenshot of the traced result beats any description._',
-      '',
-    ]
-  }
-  return [
-    '### What I was doing',
-    '',
-    '_Replace this line. Even one sentence — what the image was, what you clicked — is usually the difference between a fixable report and a guess._',
-    '',
-  ]
-}
-
 /**
- * The issue body, as markdown.
+ * The machine-collected half, as PLAIN TEXT.
+ *
+ * Plain, not markdown, because the Diagnostics field is `render: text` — GitHub
+ * puts the whole value in a code block, where a markdown table renders as the
+ * pipes you typed. It also removes a whole class of bug: there are no fences in
+ * here, so truncating the tail can never leave one open.
  *
  * ORDER IS LOAD-BEARING. The link has a length budget and it is spent from the
- * END, so the sections are written most-useful-first: the prompt for the user's
- * own words, then what happened, then which build, then the options it happened
- * on, then the session's other errors — and the two stacks last, because they
- * are the part that can run to thousands of lines and the part a maintainer can
- * most often do without.
+ * END, so this is written most-useful-first: which build, then the options it
+ * happened on, then the session's other errors, and the two stacks last —
+ * because they are the part that can run to thousands of lines and the part a
+ * maintainer can most often do without.
  */
-export function issueReportBody(input: IssueReportInput): string {
-  const {
-    what,
-    kind = 'crash',
-    error,
-    componentStack,
-    context,
-    log,
-    build = BUILD,
-    href,
-    userAgent,
-  } = input
+export function diagnosticsText(input: IssueReportInput): string {
+  const { error, componentStack, context, log, build = BUILD, href, userAgent } = input
+  const out: string[] = []
 
-  const out: string[] = [
-    '<!-- Filled in by LogoLab. Nothing has been sent anywhere: this is a draft only you can see until you post it. -->',
-    '',
-    ...prompts(kind),
-  ]
-
-  if (kind !== 'problem') {
-    out.push(
-      '### What happened',
-      '',
-      kind === 'failure'
-        ? `${sentence(what)} reported a failure.`
-        : `${sentence(what)} crashed while rendering.`,
-      '',
-      '```',
-      redact(errorLabel(error)),
-      '```',
-      '',
-    )
-  }
-
-  const where: string[] = []
   const stamp = buildTitle(build)
-  if (stamp) where.push(`| Build | ${stamp} |`)
-  if (href) where.push(`| Page | ${redact(href)} |`)
-  if (userAgent) where.push(`| Browser | ${userAgent} |`)
-  if (where.length > 0) out.push('### Where', '', '| | |', '|---|---|', ...where, '')
+  if (stamp) out.push(`Build     ${stamp}`)
+  if (href) out.push(`Page      ${redact(href)}`)
+  if (userAgent) out.push(`Browser   ${userAgent}`)
 
   if (context && Object.keys(context).length > 0) {
-    out.push(
-      '### What it was working on',
-      '',
-      '```json',
-      redact(safeJson(context, MAX_CONTEXT_CHARS)),
-      '```',
-      '',
-    )
+    out.push('', 'Working on', redact(safeJson(context, MAX_CONTEXT_CHARS)))
   }
 
   if (log && log.length > 0) {
@@ -269,34 +243,56 @@ export function issueReportBody(input: IssueReportInput): string {
     // whole budget to say what the section already says — WHEN things started
     // going wrong, and whether this failure had company.
     out.push(
-      '### Other errors this session',
       '',
-      '```',
+      'Other errors this session',
       ...log.map(
         (e) =>
           `${clock(e.at)}  ${e.source}  ${e.message}` +
           (e.count > 1 ? `  (×${e.count}, last ${clock(e.lastAt)})` : ''),
       ),
-      '```',
-      '',
     )
   }
 
   const stack = errorStack(error)
-  if (stack) out.push('### Stack', '', '```', redact(clip(stack, STACK_LINES)), '```', '')
+  if (stack) out.push('', 'Stack', redact(clip(stack, STACK_LINES)))
 
   const component = (componentStack ?? '').trim()
-  if (component) {
-    out.push('### Component stack', '', '```', clip(component, COMPONENT_STACK_LINES), '```', '')
-  }
+  if (component) out.push('', 'Component stack', clip(component, COMPONENT_STACK_LINES))
 
   return out.join('\n')
 }
 
-/** A cut mid-report can leave a fence open, which would code-block the rest. */
-function closeFences(text: string): string {
-  const fences = (text.match(/^```/gm) ?? []).length
-  return fences % 2 === 1 ? `${text}\n${'```'}` : text
+/**
+ * The line that goes in "What happened" — for a crash or a failure, where the
+ * app knows more than the user does. A `problem` or an `idea` leaves it EMPTY
+ * on purpose: the form's own placeholder is a better prompt than anything this
+ * file could guess, and a prefilled box is one the user has to clear first.
+ */
+export function summaryText(input: IssueReportInput): string {
+  const { what, kind = 'crash', error } = input
+  if (kind === 'problem' || kind === 'idea') return ''
+  const opener =
+    kind === 'failure'
+      ? `${sentence(what)} reported a failure:`
+      : `${sentence(what)} crashed while rendering:`
+  const label = errorLabel(error)
+  const said = label.length > MAX_SUMMARY ? `${label.slice(0, MAX_SUMMARY)}…` : label
+  return redact(`${opener}\n\n${said}\n\n`)
+}
+
+/**
+ * The issue title, or '' to let the form's own `title:` prefix stand — which is
+ * what a `problem` and an `idea` do, because only the user can title those.
+ */
+export function issueReportTitle(input: IssueReportInput): string {
+  const kind = input.kind ?? 'crash'
+  if (kind === 'problem' || kind === 'idea') return ''
+  const head =
+    kind === 'failure'
+      ? `[bug] ${sentence(input.what)} failed: ${errorLabel(input.error)}`
+      : `[bug] Crash in ${input.what}: ${errorLabel(input.error)}`
+  const line = redact(head).replace(/\s+/g, ' ').trim()
+  return line.length > MAX_TITLE ? `${line.slice(0, MAX_TITLE - 1)}…` : line
 }
 
 /**
@@ -310,28 +306,39 @@ function fitEncoded(text: string, room: number): string {
   if (encodeURIComponent(TRUNCATED).length >= room) return ''
   let cut = text
   for (let guard = 0; guard < 64 && cut.length > 0; guard++) {
-    const over = encodeURIComponent(closeFences(cut) + TRUNCATED).length - room
+    const over = encodeURIComponent(cut + TRUNCATED).length - room
     if (over <= 0) break
     cut = cut.slice(0, Math.max(0, cut.length - Math.max(1, over)))
     // Never end on half a surrogate pair: encodeURIComponent throws on a lone one.
     if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1)
   }
-  return closeFences(cut) + TRUNCATED
+  return cut + TRUNCATED
 }
 
 /**
  * The prefilled `issues/new` link. Always returns a URL GitHub will accept: the
- * body is cut to the budget rather than the link being dropped.
+ * Diagnostics field is cut to the budget rather than the link being dropped.
  */
 export function issueReportUrl(input: IssueReportInput, budget = URL_BUDGET): string {
-  const head = `${input.repoUrl.replace(/\/+$/, '')}/issues/new?labels=bug&title=${encodeURIComponent(
-    issueReportTitle(input),
-  )}&body=`
-  const body = fitEncoded(issueReportBody(input), Math.max(0, budget - head.length))
-  return head + encodeURIComponent(body)
+  const template = TEMPLATE[input.kind ?? 'crash']
+  const fields = FIELDS[template]
+  const base = `${input.repoUrl.replace(/\/+$/, '')}/issues/new`
+
+  const fixed = new URLSearchParams({ template })
+  const title = issueReportTitle(input)
+  if (title) fixed.set('title', title)
+  const summary = summaryText(input)
+  if (summary) fixed.set(fields.summary, summary)
+
+  const head = `${base}?${fixed.toString()}&${fields.diagnostics}=`
+  const diagnostics = fitEncoded(diagnosticsText(input), Math.max(0, budget - head.length))
+  return diagnostics ? head + encodeURIComponent(diagnostics) : `${base}?${fixed.toString()}`
 }
 
-/** Title and body together, for the clipboard — no budget, nothing cut. */
+/** The whole report as text, for the clipboard — no budget, nothing cut. */
 export function issueReportText(input: IssueReportInput): string {
-  return `${issueReportTitle(input)}\n\n${issueReportBody(input)}`
+  const title = issueReportTitle(input)
+  return [title, summaryText(input).trim(), diagnosticsText(input)]
+    .filter(Boolean)
+    .join('\n\n')
 }

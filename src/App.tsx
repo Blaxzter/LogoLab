@@ -6,7 +6,7 @@ import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { ReportIssueLink } from './components/ReportIssue'
+import { ReportDialog } from './components/ReportDialog'
 import { AgentSetupButton } from './components/AgentSetup'
 import { AppMenu } from './components/AppMenu'
 import { Toasts } from './components/Toasts'
@@ -82,7 +82,13 @@ function PanelLoading({ what }: { what: string }) {
   )
 }
 
-function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
+function Header({
+  onOpenMenu,
+  onReport,
+}: {
+  onOpenMenu: () => void
+  onReport: () => void
+}) {
   const logo = useLogo()
   const clearLogo = useStore((s) => s.clearLogo)
   const tab = useActiveTab()
@@ -182,25 +188,30 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
             <InstallAppButton />
             <AgentSetupButton variant="icon" />
             <ThemeToggleButton />
-            {/* One click, no popover: the prefilled issue opens with whatever
-                the studios are working on already in it (components/ReportIssue).
-                It keeps the bug glyph — the labs moved to a flask, because two
-                bugs in one header would have meant neither of them said
-                anything, and "report a problem" has the better claim to it. */}
-            <ReportIssueLink
-              subject={{ what: 'LogoLab', kind: 'problem' }}
-              tip={
+            {/* Opens the ASK, not GitHub (components/ReportDialog): which kind
+                of thing is this, what to write, what gets attached. Jumping
+                straight to a stranger's issue tracker filed every idea as a bug
+                and lost the people who bounced off the form. It keeps the bug
+                glyph — the labs moved to a flask, because two bugs in one
+                header would have meant neither of them said anything. */}
+            <Tooltip
+              label={
                 <TipLabel
                   title="Report a problem"
-                  detail="Opens a prefilled GitHub issue with your settings and this build attached. Nothing is sent until you post it."
+                  detail="A bug, or an idea. Nothing is sent until you post it."
                 />
               }
-              icon={<Bug size={18} />}
-              showExternal={false}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+              side="bottom"
             >
-              <span className="sr-only">Report a problem</span>
-            </ReportIssueLink>
+              <button
+                type="button"
+                onClick={onReport}
+                aria-label="Report a problem"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+              >
+                <Bug size={18} />
+              </button>
+            </Tooltip>
             <LabPopover />
             <SupportPopover />
             <Tooltip label="Source on GitHub" side="bottom">
@@ -269,6 +280,9 @@ export function App() {
   const logo = useLogo()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  // The standing "tell us something" flow. Lives up here because both the
+  // header's bug button and the mobile menu's row open the same dialog.
+  const [reportOpen, setReportOpen] = useState(false)
 
   // The appearance controls only exist on Preview & Export. On phones they live
   // in a slide-over that we only surface once a logo is loaded (nothing to tweak
@@ -307,8 +321,13 @@ export function App() {
   if (pathname.startsWith('/labs')) {
     return (
       <div className="flex h-full flex-col overflow-x-hidden">
-        <Header onOpenMenu={() => setMenuOpen(true)} />
-        <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+        <Header onOpenMenu={() => setMenuOpen(true)} onReport={() => setReportOpen(true)} />
+        <AppMenu
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          onReport={() => setReportOpen(true)}
+        />
+        {reportOpen && <ReportDialog onClose={() => setReportOpen(false)} />}
         <Toasts />
         <main className="min-h-0 flex-1 overflow-y-auto bg-bg">
           {/* One boundary for all of them — a lab is a harness, and the pathname
@@ -341,8 +360,13 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col overflow-x-hidden">
-      <Header onOpenMenu={() => setMenuOpen(true)} />
-      <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <Header onOpenMenu={() => setMenuOpen(true)} onReport={() => setReportOpen(true)} />
+      <AppMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onReport={() => setReportOpen(true)}
+      />
+      {reportOpen && <ReportDialog onClose={() => setReportOpen(false)} />}
       <div className="flex min-h-0 flex-1">
         {/* Inline column on desktop; a drawer (below) replaces it on mobile.
             Hidden on the Editor tab: that tool edits its OWN document, not the

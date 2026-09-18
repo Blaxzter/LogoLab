@@ -4,7 +4,6 @@ import { useLogo, useStore } from '../store'
 import { AgentSetupButton } from './AgentSetup'
 import { InstallAppButton } from './PwaPrompts'
 import { SavedStatusRow } from './SavedChip'
-import { ReportIssueLink } from './ReportIssue'
 import { Sheet } from './ui/Sheet'
 import { ThemeToggleSegmented } from './ThemeToggle'
 import { TABS, LAB_VIEWS, REPO_URL, COFFEE_URL, SPONSOR_URL, GithubMark } from './navItems'
@@ -16,7 +15,16 @@ import { TABS, LAB_VIEWS, REPO_URL, COFFEE_URL, SPONSOR_URL, GithubMark } from '
  * where the header button is otherwise hidden), the GitHub link, and the
  * "runs in your browser" note. Auto-closes on navigation.
  */
-export function AppMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AppMenu({
+  open,
+  onClose,
+  onReport,
+}: {
+  open: boolean
+  onClose: () => void
+  /** Opens the same ask the header's bug button does (components/ReportDialog). */
+  onReport: () => void
+}) {
   const logo = useLogo()
   const clearLogo = useStore((s) => s.clearLogo)
 
@@ -88,19 +96,19 @@ export function AppMenu({ open, onClose }: { open: boolean; onClose: () => void 
 
         {/* The desktop header has a bug button for this; below lg the whole
             cluster is hidden, and a bug report should not be desktop-only. */}
-        <ReportIssueLink
-          subject={{ what: 'LogoLab', kind: 'problem' }}
-          onClick={onClose}
-          showExternal={false}
-          icon={
-            <span className="grid h-5 w-5 place-items-center">
-              <Bug size={16} />
-            </span>
-          }
+        <button
+          type="button"
+          onClick={() => {
+            onClose()
+            onReport()
+          }}
           className={`${row} text-ink-2 hover:bg-surface-3`}
         >
+          <span className="grid h-5 w-5 place-items-center">
+            <Bug size={16} />
+          </span>
           Report a problem
-        </ReportIssueLink>
+        </button>
 
         {/* The desktop header's labs popover has no room here, so the harnesses
             list flat — same set, same order. */}
