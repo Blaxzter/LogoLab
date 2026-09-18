@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { FlaskConical } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { LAB_VIEWS } from './navItems'
+import { Tooltip } from './ui/Tooltip'
 
 const POPOVER_W = 320
 
@@ -58,18 +59,23 @@ export function LabPopover() {
 
   return (
     <>
-      <button
-        ref={btnRef}
-        type="button"
-        aria-label="Dev views"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-3 ${
-          open ? 'bg-surface-3 text-ink' : 'text-ink-2 hover:text-ink'
-        }`}
-      >
-        <FlaskConical size={18} />
-      </button>
+      {/* The label goes EMPTY while the popover is open — Tooltip passes its
+          child straight through then, so a bubble can't hover over the card it
+          just opened. Same trick in SupportPopover. */}
+      <Tooltip label={open ? '' : 'Dev views — the vectorizer’s harnesses'}>
+        <button
+          ref={btnRef}
+          type="button"
+          aria-label="Dev views"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-3 ${
+            open ? 'bg-surface-3 text-ink' : 'text-ink-2 hover:text-ink'
+          }`}
+        >
+          <FlaskConical size={18} />
+        </button>
+      </Tooltip>
       {open &&
         pos &&
         createPortal(

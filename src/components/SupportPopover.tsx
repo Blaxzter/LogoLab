@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Coffee, Heart } from 'lucide-react'
 import { COFFEE_URL, SPONSOR_URL, GithubMark } from './navItems'
+import { Tooltip } from './ui/Tooltip'
 
 const POPOVER_W = 256
 
@@ -59,18 +60,20 @@ export function SupportPopover() {
 
   return (
     <>
-      <button
-        ref={btnRef}
-        type="button"
-        aria-label="Support LogoLab"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-3 ${
-          open ? 'bg-surface-3 text-ink' : 'text-ink-2 hover:text-ink'
-        }`}
-      >
-        <Coffee size={18} />
-      </button>
+      <Tooltip label={open ? '' : 'Support LogoLab'}>
+        <button
+          ref={btnRef}
+          type="button"
+          aria-label="Support LogoLab"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-3 ${
+            open ? 'bg-surface-3 text-ink' : 'text-ink-2 hover:text-ink'
+          }`}
+        >
+          <Coffee size={18} />
+        </button>
+      </Tooltip>
       {open &&
         pos &&
         createPortal(

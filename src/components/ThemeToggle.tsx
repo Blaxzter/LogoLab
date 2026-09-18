@@ -31,15 +31,17 @@ export function ThemeToggleButton() {
   const Icon = ICON[mode]
   const label = `Theme: ${MODE_LABEL[mode]}. Switch to ${MODE_LABEL[NEXT[mode]]}.`
   return (
-    <button
-      type="button"
-      onClick={cycle}
-      aria-label={label}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
-    >
-      <Icon size={18} />
-      <span className="sr-only">{label}</span>
-    </button>
+    <Tooltip label={label}>
+      <button
+        type="button"
+        onClick={cycle}
+        aria-label={label}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+      >
+        <Icon size={18} />
+        <span className="sr-only">{label}</span>
+      </button>
+    </Tooltip>
   )
 }
 

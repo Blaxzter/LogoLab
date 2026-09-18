@@ -72,6 +72,25 @@
     color-scheme: light;
   }
 
+  /*
+   * A control that does something looks like one.
+   *
+   * `cursor: pointer` lived only inside `.btn`, and the header's icon controls
+   * do not use `.btn` — they carry their own `flex h-8 w-8 …`. So the two
+   * ANCHORS in that row (GitHub, Report a problem) got a pointer from the
+   * browser's own stylesheet while the five BUTTONS beside them (theme, labs,
+   * support, the Saved chip, Clear) kept the default arrow: one row of
+   * identical-looking icons, two different cursors, for a reason no user could
+   * possibly infer.
+   *
+   * Disabled is excluded on purpose — `.btn:disabled` says `not-allowed` and
+   * means it, and a control that cannot be pressed should not invite a press.
+   */
+  button:not(:disabled):not([aria-disabled='true']),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+
   /* ---------------------------------------------------------------------------
      Dark theme — "Studio neutral dark"
      Same neutral family as the light theme: cool near-black surfaces with a hair

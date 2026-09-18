@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { REPO_URL } from '../navItems'
 import { BUILD, buildTitle, hasBuildInfo, releaseDateLabel, versionLabel } from '../../lib/buildInfo'
+import { Tooltip } from '../ui/Tooltip'
 
 /**
  * Which build you are looking at — the version of the tracer and the day it was
@@ -17,24 +18,29 @@ function BuildStamp() {
   const version = versionLabel()
   const day = releaseDateLabel()
   return (
-    <span className="flex items-center gap-1.5" title={buildTitle()}>
-      {version && (
-        <a
-          href={`${REPO_URL}/releases/tag/${version}`}
-          target="_blank"
-          rel="noreferrer"
-          className="transition-colors hover:text-ink"
-        >
-          {version}
-        </a>
-      )}
-      {version && day && (
-        <span aria-hidden className="opacity-50">
-          ·
-        </span>
-      )}
-      {day && <time dateTime={BUILD.date}>{day}</time>}
-    </span>
+    // The long form is a real tooltip, not a native `title` — this was the last
+    // one left in the app, and a bubble that takes a second to appear and can't
+    // be themed is not the same affordance as the ones everywhere else.
+    <Tooltip label={buildTitle()}>
+      <span className="flex items-center gap-1.5">
+        {version && (
+          <a
+            href={`${REPO_URL}/releases/tag/${version}`}
+            target="_blank"
+            rel="noreferrer"
+            className="transition-colors hover:text-ink"
+          >
+            {version}
+          </a>
+        )}
+        {version && day && (
+          <span aria-hidden className="opacity-50">
+            ·
+          </span>
+        )}
+        {day && <time dateTime={BUILD.date}>{day}</time>}
+      </span>
+    </Tooltip>
   )
 }
 

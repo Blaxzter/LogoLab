@@ -15,6 +15,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Check, Loader2, Trash2 } from 'lucide-react'
 import { getSaveStatus, startFreshSession, subscribeSaveStatus } from '../lib/persist/session'
+import { Tooltip } from './ui/Tooltip'
 
 const POPOVER_W = 268
 
@@ -143,63 +144,72 @@ export function SavedChip({ className = '' }: { className?: string }) {
 
   return (
     <>
-      <button
-        ref={btnRef}
-        type="button"
-        aria-expanded={open}
-        aria-hidden={idle}
-        tabIndex={idle ? -1 : undefined}
-        onClick={() => setOpen((o) => !o)}
-        title={
-          status.failed
-            ? "This browser isn't letting LogoLab store anything"
-            : status.savedAt
-              ? `Last saved at ${new Date(status.savedAt).toLocaleTimeString()}`
-              : undefined
-        }
-        className={`flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs transition-colors ${
-          idle
-            ? 'invisible pointer-events-none'
+      {/* The chip's exact time was a native `title`: a slow, unstyled bubble that
+          the header's own tooltip convention had already replaced everywhere
+          else. Empty while the popover is open (Tooltip then renders the child
+          alone) and while idle, when the chip is invisible anyway. */}
+      <Tooltip
+        label={
+          idle || open
+            ? ''
             : status.failed
-              ? 'text-warn hover:bg-surface-3'
-              : open
-                ? 'bg-surface-3 text-ink-2'
-                : 'text-muted hover:bg-surface-3 hover:text-ink-2'
-        } ${className}`}
+              ? "This browser isn't letting LogoLab store anything"
+              : status.pending
+                ? 'Writing your work to this browser…'
+                : `Last saved at ${new Date(status.savedAt!).toLocaleTimeString()}`
+        }
       >
-        {status.failed ? (
-          <AlertTriangle size={13} className="shrink-0" />
-        ) : status.pending ? (
-          <Loader2 size={13} className="shrink-0 animate-spin" />
-        ) : (
-          <Check size={13} className="shrink-0 text-accent" />
-        )}
-        {/*
-          * A fixed box, sized by the browser to the longest thing that can go in
-          * it, with every state stacked in the same grid cell.
-          *
-          * Without it the chip resizes as its own text changes — Saved → Saving…
-          * → Saved 4 min ago — and since the header's tab nav is centred against
-          * the width of this cluster, the tabs slid sideways every time a save
-          * landed. A reservation rather than a hard px width so it survives a
-          * font change and a translation.
-          */}
-        <span className="grid text-left">
-          <span aria-hidden className="invisible col-start-1 row-start-1 whitespace-nowrap">
-            Not saved
+        <button
+          ref={btnRef}
+          type="button"
+          aria-expanded={open}
+          aria-hidden={idle}
+          tabIndex={idle ? -1 : undefined}
+          onClick={() => setOpen((o) => !o)}
+          className={`flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs transition-colors ${
+            idle
+              ? 'invisible pointer-events-none'
+              : status.failed
+                ? 'text-warn hover:bg-surface-3'
+                : open
+                  ? 'bg-surface-3 text-ink-2'
+                  : 'text-muted hover:bg-surface-3 hover:text-ink-2'
+          } ${className}`}
+        >
+          {status.failed ? (
+            <AlertTriangle size={13} className="shrink-0" />
+          ) : status.pending ? (
+            <Loader2 size={13} className="shrink-0 animate-spin" />
+          ) : (
+            <Check size={13} className="shrink-0 text-accent" />
+          )}
+          {/*
+            * A fixed box, sized by the browser to the longest thing that can go in
+            * it, with every state stacked in the same grid cell.
+            *
+            * Without it the chip resizes as its own text changes — Saved → Saving…
+            * → Saved 4 min ago — and since the header's tab nav is centred against
+            * the width of this cluster, the tabs slid sideways every time a save
+            * landed. A reservation rather than a hard px width so it survives a
+            * font change and a translation.
+            */}
+          <span className="grid text-left">
+            <span aria-hidden className="invisible col-start-1 row-start-1 whitespace-nowrap">
+              Not saved
+            </span>
+            <span
+              aria-hidden
+              className="invisible col-start-1 row-start-1 hidden whitespace-nowrap 2xl:block"
+            >
+              Saved 00 min ago
+            </span>
+            <span className="col-start-1 row-start-1 whitespace-nowrap">
+              {label}
+              {when && <span className="hidden 2xl:inline"> {when}</span>}
+            </span>
           </span>
-          <span
-            aria-hidden
-            className="invisible col-start-1 row-start-1 hidden whitespace-nowrap 2xl:block"
-          >
-            Saved 00 min ago
-          </span>
-          <span className="col-start-1 row-start-1 whitespace-nowrap">
-            {label}
-            {when && <span className="hidden 2xl:inline"> {when}</span>}
-          </span>
-        </span>
-      </button>
+        </button>
+      </Tooltip>
 
       {open &&
         !idle &&

@@ -28,6 +28,7 @@ import {
   type ReportKind,
 } from '../lib/issueReport'
 import { REPO_URL } from './navItems'
+import { TipLabel, Tooltip } from './ui/Tooltip'
 
 export interface ReportSubject {
   /** What it is about, lower case: `the vectorizer`. */
@@ -132,7 +133,7 @@ export function ReportIssueLink({
   className = 'btn btn-secondary h-9 gap-2 text-sm',
   children,
   icon,
-  title,
+  tip,
   showExternal = true,
   onClick,
 }: {
@@ -141,25 +142,34 @@ export function ReportIssueLink({
   children?: ReactNode
   /** Replaces the default glyph — for hosts whose rows align icons themselves. */
   icon?: ReactNode
-  /** Hover hint. An icon-only button has no visible label to read instead. */
-  title?: string
+  /**
+   * Hover hint, as a real tooltip rather than a native `title` — the bubble is
+   * themed, readable and does not wait a second and a half to appear. An
+   * icon-only trigger has no visible label to stand in for it.
+   */
+  tip?: ReactNode
   showExternal?: boolean
   onClick?: () => void
 }) {
+  // The Tooltip lives INSIDE, wrapping the anchor itself: it clones its child to
+  // attach handlers, so a caller wrapping <ReportIssueLink> would hand them to a
+  // component that never forwards them. It also composes with the handlers
+  // `freshHrefProps` already put on this element rather than replacing them.
   return (
-    <a
-      href={issueReportUrl(buildReport(subject))}
-      {...freshHrefProps(() => issueReportUrl(buildReport(subject)))}
-      target="_blank"
-      rel="noreferrer"
-      title={title}
-      onClick={onClick}
-      className={className}
-    >
-      {icon ?? <Bug size={15} className="shrink-0" />}
-      {children ?? 'Report an issue'}
-      {showExternal && <ExternalLink size={13} className="shrink-0 text-faint" />}
-    </a>
+    <Tooltip label={tip ?? ''}>
+      <a
+        href={issueReportUrl(buildReport(subject))}
+        {...freshHrefProps(() => issueReportUrl(buildReport(subject)))}
+        target="_blank"
+        rel="noreferrer"
+        onClick={onClick}
+        className={className}
+      >
+        {icon ?? <Bug size={15} className="shrink-0" />}
+        {children ?? 'Report an issue'}
+        {showExternal && <ExternalLink size={13} className="shrink-0 text-faint" />}
+      </a>
+    </Tooltip>
   )
 }
 
@@ -178,16 +188,24 @@ export function ReportFailureLink({
 }) {
   const subject: ReportSubject = { what, kind: 'failure', error }
   return (
-    <a
-      href={issueReportUrl(buildReport(subject))}
-      {...freshHrefProps(() => issueReportUrl(buildReport(subject)))}
-      target="_blank"
-      rel="noreferrer"
-      title="Open a prefilled GitHub issue with the settings and the error attached"
-      className={`inline-flex shrink-0 items-center gap-1 underline decoration-dotted underline-offset-2 transition-colors hover:text-ink ${className}`}
+    <Tooltip
+      label={
+        <TipLabel
+          title="Report this"
+          detail="Opens a prefilled GitHub issue with the settings and the error attached. Nothing is sent until you post it."
+        />
+      }
     >
-      <Bug size={12} className="shrink-0" />
-      Report
-    </a>
+      <a
+        href={issueReportUrl(buildReport(subject))}
+        {...freshHrefProps(() => issueReportUrl(buildReport(subject)))}
+        target="_blank"
+        rel="noreferrer"
+        className={`inline-flex shrink-0 items-center gap-1 underline decoration-dotted underline-offset-2 transition-colors hover:text-ink ${className}`}
+      >
+        <Bug size={12} className="shrink-0" />
+        Report
+      </a>
+    </Tooltip>
   )
 }

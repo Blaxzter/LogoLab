@@ -17,7 +17,7 @@ import { SupportPopover } from './components/SupportPopover'
 import { ThemeToggleButton } from './components/ThemeToggle'
 import { TABS, REPO_URL, GithubMark } from './components/navItems'
 import { UploadDropzone } from './components/UploadDropzone'
-import { Tooltip } from './components/ui/Tooltip'
+import { TipLabel, Tooltip } from './components/ui/Tooltip'
 import { TryExampleButton } from './components/ExamplesDialog'
 import { PreviewGrid } from './components/PreviewGrid'
 import CleanupPanel from './components/panels/CleanupPanel'
@@ -151,16 +151,18 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
       <div className="flex items-center justify-end gap-3">
         <div className="hidden items-center gap-3 lg:flex">
           {logo.src && (
-            <button
-              onClick={clearLogo}
-              aria-label="Clear logo"
-              className="btn btn-ghost h-8 gap-1.5 px-2 text-xs"
-            >
-              <X size={14} />
-              {/* Label only where the row has room for it — the nav's centring
-                  budget is this cluster's width. */}
-              <span className="hidden 2xl:inline">Clear</span>
-            </button>
+            <Tooltip label="Clear the loaded logo">
+              <button
+                onClick={clearLogo}
+                aria-label="Clear logo"
+                className="btn btn-ghost h-8 gap-1.5 px-2 text-xs"
+              >
+                <X size={14} />
+                {/* Label only where the row has room for it — the nav's centring
+                    budget is this cluster's width. */}
+                <span className="hidden 2xl:inline">Clear</span>
+              </button>
+            </Tooltip>
           )}
           {/* When the session was last written down. Replaces the old restore
               BANNER, which cost every page a strip of vertical space to say
@@ -181,7 +183,12 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
                 anything, and "report a problem" has the better claim to it. */}
             <ReportIssueLink
               subject={{ what: 'LogoLab', kind: 'problem' }}
-              title="Report a problem"
+              tip={
+                <TipLabel
+                  title="Report a problem"
+                  detail="Opens a prefilled GitHub issue with your settings and this build attached. Nothing is sent until you post it."
+                />
+              }
               icon={<Bug size={18} />}
               showExternal={false}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
@@ -190,15 +197,17 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
             </ReportIssueLink>
             <LabPopover />
             <SupportPopover />
-            <a
-              href={REPO_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
-            >
-              <GithubMark />
-              <span className="sr-only">GitHub repository</span>
-            </a>
+            <Tooltip label="Source on GitHub">
+              <a
+                href={REPO_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+              >
+                <GithubMark />
+                <span className="sr-only">GitHub repository</span>
+              </a>
+            </Tooltip>
           </div>
         </div>
 
