@@ -158,6 +158,7 @@ export function SavedChip({ className = '' }: { className?: string }) {
                 ? 'Writing your work to this browser…'
                 : `Last saved at ${new Date(status.savedAt!).toLocaleTimeString()}`
         }
+        side="bottom"
       >
         <button
           ref={btnRef}

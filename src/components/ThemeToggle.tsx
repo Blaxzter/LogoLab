@@ -31,7 +31,7 @@ export function ThemeToggleButton() {
   const Icon = ICON[mode]
   const label = `Theme: ${MODE_LABEL[mode]}. Switch to ${MODE_LABEL[NEXT[mode]]}.`
   return (
-    <Tooltip label={label}>
+    <Tooltip label={label} side="bottom">
       <button
         type="button"
         onClick={cycle}

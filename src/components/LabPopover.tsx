@@ -62,7 +62,7 @@ export function LabPopover() {
       {/* The label goes EMPTY while the popover is open — Tooltip passes its
           child straight through then, so a bubble can't hover over the card it
           just opened. Same trick in SupportPopover. */}
-      <Tooltip label={open ? '' : 'Dev views — the vectorizer’s harnesses'}>
+      <Tooltip label={open ? '' : 'Dev views — the vectorizer’s harnesses'} side="bottom">
         <button
           ref={btnRef}
           type="button"

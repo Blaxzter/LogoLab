@@ -41,7 +41,7 @@ export function InstallAppButton({
   }
 
   return (
-    <Tooltip label="Install LogoLab as an app">
+    <Tooltip label="Install LogoLab as an app" side="bottom">
       <button
         type="button"
         onClick={run}

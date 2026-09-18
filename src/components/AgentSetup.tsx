@@ -284,7 +284,7 @@ export function AgentSetupButton({
   if (variant === 'icon') {
     return (
       <>
-        <Tooltip label={AGENT_LABEL}>
+        <Tooltip label={AGENT_LABEL} side="bottom">
           <button
             type="button"
             onClick={openIt}

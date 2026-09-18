@@ -10,11 +10,10 @@ import {
 import type { ReactElement, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-export type TooltipSide = 'top' | 'bottom' | 'left' | 'right'
-type Side = TooltipSide
+import { placeTooltip, type TooltipSide } from './tooltipPlace'
 
-/** Distance in px between the trigger and the bubble. */
-const GAP = 8
+export type { TooltipSide } from './tooltipPlace'
+type Side = TooltipSide
 
 type TriggerProps = {
   ref?: unknown
@@ -93,37 +92,21 @@ export function Tooltip({
 
   useEffect(() => () => clearTimer(), [])
 
-  // Measure once mounted, then clamp inside the viewport. useLayoutEffect runs
-  // before paint, so the bubble appears already positioned (no (0,0) flash).
+  // Measure once mounted, then place it. useLayoutEffect runs before paint, so
+  // the bubble appears already positioned (no (0,0) flash).
   useLayoutEffect(() => {
     if (!open) return
     const trigger = triggerRef.current
     const tip = tipRef.current
     if (!trigger || !tip) return
-    const r = trigger.getBoundingClientRect()
-    const tw = tip.offsetWidth
-    const th = tip.offsetHeight
-    let left: number
-    let top: number
-    switch (side) {
-      case 'bottom':
-        left = r.left + r.width / 2 - tw / 2
-        top = r.bottom + GAP
-        break
-      case 'left':
-        left = r.left - GAP - tw
-        top = r.top + r.height / 2 - th / 2
-        break
-      case 'right':
-        left = r.right + GAP
-        top = r.top + r.height / 2 - th / 2
-        break
-      default:
-        left = r.left + r.width / 2 - tw / 2
-        top = r.top - GAP - th
-    }
-    left = Math.max(GAP, Math.min(left, window.innerWidth - tw - GAP))
-    top = Math.max(GAP, Math.min(top, window.innerHeight - th - GAP))
+    const { left, top } = placeTooltip(
+      side,
+      trigger.getBoundingClientRect(),
+      tip.offsetWidth,
+      tip.offsetHeight,
+      window.innerWidth,
+      window.innerHeight,
+    )
     setCoords({ left, top })
   }, [open, side, label])
 

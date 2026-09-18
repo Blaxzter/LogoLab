@@ -218,6 +218,29 @@ URL budget — GitHub answers a request line past ~8 kB with a 414 — and it sp
 from the END, so the sections are ordered most-useful-first and it is the STACK that gets cut,
 never the options. The options are the half nobody can reconstruct from prose.
 
+## Tooltips FLIP, and the header's go below
+
+`src/components/ui/Tooltip.tsx` is the app's replacement for the native `title` attribute —
+there are no `title` attributes left in the rendered DOM, and adding one back is a regression,
+not a shortcut. Two things about it are easy to get wrong:
+
+* **Placement flips, it does not clamp.** The maths is pure and lives in
+  `ui/tooltipPlace.ts` (its own `.ts`, because node strips types from `.ts` and NOT `.tsx`, so
+  anything a test must reach has to be out of the component). Clamping BOTH axes into the
+  viewport is what put a header tooltip on top of the icon it described: a control 12px from
+  the top has no room above, so the default `top` side computed a negative y and the clamp
+  pulled the bubble back down onto its own trigger. It flips along the main axis now and
+  clamps only across it. `test/tooltip-place.test.ts` is the gate.
+* **Every header tooltip passes `side="bottom"`** anyway, so the placement is the intent
+  rather than a fallback being relied on. The two popover triggers pass an EMPTY label while
+  open (Tooltip then renders its child alone), so a bubble can't hover over the card it just
+  opened.
+
+While you are in there: `cursor: pointer` is a base rule on every enabled `button` /
+`[role=button]`, not a per-component class. It used to live only in `.btn`, which the header's
+bespoke icon buttons don't use — so the anchors in that row got a pointer from the browser and
+the buttons beside them didn't.
+
 ## Offline: the precache list is computed, not globbed
 
 The app is a PWA. The service worker is hand-written (`src/pwa/sw.js`) and its precache list is

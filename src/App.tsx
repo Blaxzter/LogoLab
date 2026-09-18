@@ -147,11 +147,17 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
 
       {/* Right cluster — its contents move into AppMenu below lg. Justified to
           the end so the icons stay put while the Saved chip's label changes
-          width beside them. */}
+          width beside them.
+
+          Every tooltip in here is `side="bottom"`. There is no room above a
+          control that sits 8px from the top of the viewport, and the default
+          `top` would land the bubble on the icon it is describing. Tooltip
+          flips on its own now, but saying it here means the placement is the
+          intent rather than a fallback being relied on. */}
       <div className="flex items-center justify-end gap-3">
         <div className="hidden items-center gap-3 lg:flex">
           {logo.src && (
-            <Tooltip label="Clear the loaded logo">
+            <Tooltip label="Clear the loaded logo" side="bottom">
               <button
                 onClick={clearLogo}
                 aria-label="Clear logo"
@@ -197,7 +203,7 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
             </ReportIssueLink>
             <LabPopover />
             <SupportPopover />
-            <Tooltip label="Source on GitHub">
+            <Tooltip label="Source on GitHub" side="bottom">
               <a
                 href={REPO_URL}
                 target="_blank"

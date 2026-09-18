@@ -60,7 +60,7 @@ export function SupportPopover() {
 
   return (
     <>
-      <Tooltip label={open ? '' : 'Support LogoLab'}>
+      <Tooltip label={open ? '' : 'Support LogoLab'} side="bottom">
         <button
           ref={btnRef}
           type="button"
