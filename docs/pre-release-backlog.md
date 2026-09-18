@@ -157,6 +157,10 @@ toast rather than a modal: the app still works and the user is mid-task. Asked o
 distinct failure — dismiss it and that failure stays dismissed for the session, because
 re-asking after every retry is how a prompt becomes something people click away unread.
 
+The standing entry point is a **bug button in the header**, one click, no popover; the labs
+popover took a flask so the bug could mean reporting. (It lived inside the coffee-cup support
+popover for a few hours, which answered "where do I report this" with a donation card.)
+
 The original report follows.
 
 ---

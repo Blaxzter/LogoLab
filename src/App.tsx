@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Loader2, Menu, SlidersHorizontal, X } from 'lucide-react'
+import { Bug, Loader2, Menu, SlidersHorizontal, X } from 'lucide-react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useLogo, useStore } from './store'
 import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ReportIssueLink } from './components/ReportIssue'
 import { AgentSetupButton } from './components/AgentSetup'
 import { AppMenu } from './components/AppMenu'
 import { Toasts } from './components/Toasts'
@@ -173,6 +174,20 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
             <InstallAppButton />
             <AgentSetupButton variant="icon" />
             <ThemeToggleButton />
+            {/* One click, no popover: the prefilled issue opens with whatever
+                the studios are working on already in it (components/ReportIssue).
+                It keeps the bug glyph — the labs moved to a flask, because two
+                bugs in one header would have meant neither of them said
+                anything, and "report a problem" has the better claim to it. */}
+            <ReportIssueLink
+              subject={{ what: 'LogoLab', kind: 'problem' }}
+              title="Report a problem"
+              icon={<Bug size={18} />}
+              showExternal={false}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+            >
+              <span className="sr-only">Report a problem</span>
+            </ReportIssueLink>
             <LabPopover />
             <SupportPopover />
             <a

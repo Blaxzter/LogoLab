@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bug } from 'lucide-react'
+import { FlaskConical } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { LAB_VIEWS } from './navItems'
 
@@ -9,6 +9,9 @@ const POPOVER_W = 320
 /**
  * Header entry to the vectorizer's harnesses (see {@link LAB_VIEWS}) — lazily-loaded
  * routes under /labs, so following one is an in-app navigation, not a new tab.
+ *
+ * A FLASK, not a bug. The bug glyph beside it files a report now, and two bugs in
+ * one header would have meant neither of them said anything.
  * Positioning/dismissal mirror {@link SupportPopover}: portaled to <body> with
  * fixed coords so the header's stacking can't clip it, closing on outside tap,
  * Esc, scroll and resize.
@@ -65,7 +68,7 @@ export function LabPopover() {
           open ? 'bg-surface-3 text-ink' : 'text-ink-2 hover:text-ink'
         }`}
       >
-        <Bug size={18} />
+        <FlaskConical size={18} />
       </button>
       {open &&
         pos &&

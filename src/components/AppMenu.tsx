@@ -86,8 +86,8 @@ export function AppMenu({ open, onClose }: { open: boolean; onClose: () => void 
           View source on GitHub
         </a>
 
-        {/* The desktop's support popover carries this row; below lg there is no
-            popover, and a bug report should not be desktop-only. */}
+        {/* The desktop header has a bug button for this; below lg the whole
+            cluster is hidden, and a bug report should not be desktop-only. */}
         <ReportIssueLink
           subject={{ what: 'LogoLab', kind: 'problem' }}
           onClick={onClose}
@@ -102,7 +102,7 @@ export function AppMenu({ open, onClose }: { open: boolean; onClose: () => void 
           Report a problem
         </ReportIssueLink>
 
-        {/* The desktop header's bug popover has no room here, so the harnesses
+        {/* The desktop header's labs popover has no room here, so the harnesses
             list flat — same set, same order. */}
         <div className="my-2 h-px bg-line" />
         <div className="flex items-center gap-2 px-3 pb-1 text-[0.7rem] font-bold uppercase tracking-wider text-faint">

@@ -132,6 +132,7 @@ export function ReportIssueLink({
   className = 'btn btn-secondary h-9 gap-2 text-sm',
   children,
   icon,
+  title,
   showExternal = true,
   onClick,
 }: {
@@ -140,6 +141,8 @@ export function ReportIssueLink({
   children?: ReactNode
   /** Replaces the default glyph — for hosts whose rows align icons themselves. */
   icon?: ReactNode
+  /** Hover hint. An icon-only button has no visible label to read instead. */
+  title?: string
   showExternal?: boolean
   onClick?: () => void
 }) {
@@ -149,6 +152,7 @@ export function ReportIssueLink({
       {...freshHrefProps(() => issueReportUrl(buildReport(subject)))}
       target="_blank"
       rel="noreferrer"
+      title={title}
       onClick={onClick}
       className={className}
     >

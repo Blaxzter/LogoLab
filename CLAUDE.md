@@ -176,8 +176,12 @@ code:
 build stamp, session error log, stack — and `src/components/ReportIssue.tsx` hangs it off three
 things: a **crash** (the boundary), a **failure** (any catch that turns an error into a message
 for the user: the vectorize status bar, the uploader, the sheet's failed tiles) and a
-**problem** (the header's support popover and the mobile menu, any time — "it traced and the
-result is wrong" is the most valuable report this project gets, and it needs no failure at all).
+**problem** (the header's BUG BUTTON and the mobile menu, any time — "it traced and the result
+is wrong" is the most valuable report this project gets, and it needs no failure at all).
+
+The bug glyph in the header files that report in one click, with no popover in the way. The
+labs popover beside it moved to a FLASK for it: two bug icons in one header would have meant
+neither of them said anything, and "report a problem" has the better claim to the bug.
 
 The failure lane matters more than the crash lane. The tracer runs in a WORKER that catches its
 own errors, so its normal bad day is a red line in a status bar, not a throw — for a long time
