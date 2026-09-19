@@ -36,3 +36,16 @@ jobs:
       # that is deliberately not redistributed. CI never runs it: that lane is
       # simply empty here and the rest of the suite is unaffected.
       - run: pnpm test
+
+      # `pnpm build` is `gen-previews && tsc -b && vite build`, so it is both the
+      # fourth check and the regeneration of controlPreviews.generated.ts — which
+      # is COMMITTED as well, because the dialog imports it and a fresh checkout
+      # has to typecheck. That pair is the drift: a tracer change silently makes
+      # the committed previews show something the tracer no longer produces, and
+      # nothing noticed until someone opened the dialog. So build, then read the
+      # diff. The generator deliberately never fails the build (previews are not
+      # worth a red deploy); here the empty diff is the assertion instead.
+      - run: pnpm build
+
+      - name: Control previews match what the tracer produces
+        run: git diff --exit-code -- src/components/vectorize/controlPreviews.generated.ts
