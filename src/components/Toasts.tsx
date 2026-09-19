@@ -71,6 +71,7 @@ function RestoreToast() {
 function PwaToast() {
   const needRefresh = usePwa((s) => s.needRefresh)
   const offlineReady = usePwa((s) => s.offlineReady)
+  const updating = usePwa((s) => s.updating)
   const update = usePwa((s) => s.update)
   const dismiss = usePwa((s) => s.dismiss)
 
@@ -93,8 +94,17 @@ function PwaToast() {
       {needRefresh ? (
         <span className="flex items-center gap-2">
           A new version is ready.
-          <button type="button" onClick={update} className="btn btn-primary h-7 shrink-0 px-2.5 text-xs">
-            Reload
+          {/* The click does not reload on the spot: the waiting build has to take
+              over first, or the page comes back on the old one. That is a beat of
+              nothing happening, so the button says what it is doing — and stays
+              here, rather than the notice closing on a reload that may not come. */}
+          <button
+            type="button"
+            onClick={update}
+            disabled={updating}
+            className="btn btn-primary h-7 shrink-0 px-2.5 text-xs"
+          >
+            {updating ? 'Reloading…' : 'Reload'}
           </button>
         </span>
       ) : (

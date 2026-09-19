@@ -267,6 +267,23 @@ The walk follows imports AND **bare URL references in chunk code**, because that
 emits a Web Worker — and the tracer runs in one. Dropping it makes “works offline” silently mean
 “works offline until you try to trace something”. `test/offline-precache.test.ts` is the gate.
 
+### “A new version is ready” must end in a reload
+
+The update policy is PROMPT (`src/pwa/register.ts`), so the notice's button is the ONLY way a
+waiting build ever takes over. It cannot reload the page itself — that races the handover and
+lands back on the old build — so it asks the worker to skip waiting and reloads on
+`controllerchange`. Everything that can go wrong there looks the same from the outside: a
+button that does nothing. `src/pwa/handover.ts` owns the three rules, and
+`test/pwa-handover.test.ts` is the gate:
+
+* A first claim is **not** a reload — the first worker of all claims the page seconds after a
+  first visit, and bouncing every new visitor is not an update.
+* A handover **is** one, however long ago the page was claimed. The guard that shipped read a
+  flag captured at BOOT, when a first-time visitor has no controller yet — so for the rest of
+  that tab's life every handover was mistaken for a first install and the reload was skipped.
+* One the **user asked for** always is, even if the handover never lands: `take()` arms a
+  grace timer, because a dead button is worse than a reload onto the same build.
+
 ## Node
 
 Node ≥ 22; TS is run directly via `node --experimental-strip-types`. `pnpm test` = full suite.

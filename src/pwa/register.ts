@@ -10,6 +10,7 @@
 
 import { create } from 'zustand'
 import { flushSession } from '../lib/persist/session'
+import { watchHandover, type Handover } from './handover'
 
 /** The `beforeinstallprompt` event, which TypeScript's DOM lib doesn't model. */
 interface InstallPromptEvent extends Event {
@@ -22,6 +23,8 @@ interface PwaState {
   needRefresh: boolean
   /** The first install finished: everything the app needs is now cached. */
   offlineReady: boolean
+  /** The waiting build was asked to take over; the reload is on its way. */
+  updating: boolean
   /** The browser offered an install; null when it hasn't (or already did). */
   installPrompt: InstallPromptEvent | null
   /** Take the waiting build and reload onto it. */
@@ -35,20 +38,23 @@ interface PwaState {
 export const usePwa = create<PwaState>((set, get) => ({
   needRefresh: false,
   offlineReady: false,
+  updating: false,
   installPrompt: null,
 
   update: () => {
     // Write out anything still sitting in a debounce before the page goes.
     flushSession()
-    const waiting = registration?.waiting
-    if (!waiting) {
+    // No worker in charge of this page (dev, unsupported, blocked): there is no
+    // handover to wait for, so the button means what it says.
+    if (!handover) {
       location.reload()
       return
     }
-    // The reload happens on `controllerchange` (wired in register below) —
-    // reloading here would race the handover and land back on the old build.
-    waiting.postMessage({ type: 'SKIP_WAITING' })
-    set({ needRefresh: false })
+    // The notice STAYS until the page actually goes. Clearing it here took the
+    // only control that applies the update away from anyone whose handover did
+    // not land, which is how a stuck update looked like a button doing nothing.
+    set({ updating: true })
+    handover.take(registration?.waiting ?? null)
   },
 
   dismiss: () => set({ needRefresh: false, offlineReady: false }),
@@ -68,6 +74,7 @@ export const usePwa = create<PwaState>((set, get) => ({
 }))
 
 let registration: ServiceWorkerRegistration | null = null
+let handover: Handover | null = null
 
 /** How often an open tab re-checks for a new build. Long: this app is a tool
  *  someone keeps open for an afternoon, not a feed. */
@@ -130,16 +137,13 @@ export function registerServiceWorker(): void {
     })()
   }
 
-  // Fires once a worker takes control — including the very first install, which
-  // claims this page the moment it activates. Reloading THEN would bounce every
-  // first-time visitor for no reason, so the reload is conditional on there
-  // having been a controller to replace. Captured now, before any claim.
-  const hadController = Boolean(navigator.serviceWorker.controller)
-  let reloading = false
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController || reloading) return
-    reloading = true
-    location.reload()
+  // Who is in charge of this page, and what a change of hands means. See
+  // pwa/handover.ts — the rule it keeps (a first claim is not a reload, a
+  // handover is, and one the user asked for always is) is the whole reason the
+  // update button works.
+  handover = watchHandover({
+    container: navigator.serviceWorker,
+    reload: () => location.reload(),
   })
 
   window.addEventListener('beforeinstallprompt', (event) => {
