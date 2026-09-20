@@ -247,22 +247,37 @@ Two things this buys beyond a better first result: the choice becomes *visible
 and stable* instead of flipping with the raster (#20), and the user gets a reason
 rather than a mystery.
 
-### B2. A fidelity readout, and a Difference view
+### B2. A fidelity readout, and a Difference view — SHIPPED 2026-09-20
 
-> Filed as [#52](https://github.com/Blaxzter/LogoLab/issues/52).
+> Filed as [#52](https://github.com/Blaxzter/LogoLab/issues/52). **Done.**
 
-The stats bar says `7 paths · 44 nodes · 7 colors · 2.07 KB` — four numbers about
-*size* and none about *accuracy*. To judge whether a trace is good the user has
+The stats bar said `7 paths · 44 nodes · 7 colors · 2.07 KB` — four numbers about
+*size* and none about *accuracy*. To judge whether a trace was good the user had
 to switch to Overlay and squint at a ghost blend.
 
-`fidelity()` gives the number. `AbLab.tsx:358` `diffHeatBuffer` +
-`labs/heat.ts` already render a per-pixel disagreement heat on the shared
-cold→hot ramp — it is how tracer changes are reviewed internally.
+**What shipped.** `fidelity()` moved out of `src/devtest/metrics.ts` into
+`src/lib/render/fidelity.ts` and the status bar shows its mean **ΔE** (p95 on
+hover). Clicking that number opens **Difference**, a fifth view beside Split /
+Traced / Original / Overlay, painting per-pixel ΔE on the same cold→hot ramp
+`/labs/ab` diffs two traces with — the ramp moved to `src/lib/heat.ts` so the
+research view and the shipped one cannot drift apart.
 
-**Ask:** add ΔE to the stats bar, and a fifth view mode **Difference** beside
-Split / Traced / Original / Overlay, painting the same heat the labs use. The
-research view of "where is this trace wrong" is genuinely the most useful thing
-in the app and it is currently locked behind `/labs`.
+Four decisions worth keeping:
+
+- **One field, two answers.** The number and the heat come out of a single
+  `deltaEField` call in one worker message. Computing them separately would let
+  the bar and the picture describe the same trace differently.
+- **It runs in a worker** (`src/lib/render/fidelity.worker.ts`), because it is
+  O(w·h) per path and then O(w·h) in CIELAB, and it re-runs on every committed
+  node edit.
+- **Scored at 1024px, not at trace resolution.** `rasterizeDoc` gained a `scale`
+  so a 2048–4096px trace is measured without rasterizing 16M pixels per path;
+  halving the resolution moves the mean by ~0.005 ΔE.
+- **Scored against the source as the tracer sees it** — alpha intact, composited
+  over white inside the metric. Decoding onto white instead would report art on
+  transparency as a catastrophically wrong trace.
+
+This is the scorer B1 (self-scoring Auto) needs, so that one is now mostly UI.
 
 ### B3. Presets, and a Reset
 
@@ -377,7 +392,7 @@ piece of work, highest ceiling on this list.
 1. **A1 + A2** — the visible-broken one, and its fix is already written in `src/lib/sheet`.
 2. **A5** — CI, before anything else moves.
 3. ~~**A4** — the error boundary.~~ Done, see above. (A3, persistence, is done too.)
-4. **B2** — the fidelity number and the Difference view: small, and it makes every later change reviewable *in the product*.
+4. ~~**B2** — the fidelity number and the Difference view.~~ Done, see above.
 5. **B1** — self-scoring Auto, built on B2's scorer.
 6. **C2 + C4 + C5** — the knobs, behind B3's presets. (C1 rejected.)
 7. **D1 + D2**, then **D3** when there is appetite for a new tracer pass.

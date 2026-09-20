@@ -34,12 +34,25 @@ const FLATNESS = 0.2
 export interface RasterOptions {
   /** Opaque background composited under everything, default white. */
   background?: [number, number, number]
+  /**
+   * Output pixels per user unit (default 1 — one output pixel per viewBox unit).
+   * Below 1 the document renders SMALLER than its viewBox, which is how the
+   * studio scores a 2048px trace without rasterizing 4M pixels PER PATH (this
+   * compositor is O(w·h) per item, so the native size of a high-detail trace is
+   * seconds of work). Above 1 it renders larger — what a cleaned SVG needs, whose
+   * viewBox may be 24 units wide.
+   *
+   * Flattening tolerance scales with it, so the chord error stays FLATNESS in
+   * OUTPUT pixels either way: a downscale flattens more coarsely (and faster),
+   * an upscale more finely instead of emitting visible polygons.
+   */
+  scale?: number
 }
 
 /**
  * Rasterize a document to an RGBA buffer of `width`×`height` over an opaque
  * background. Geometry is read in viewBox coordinates: output pixel (px,py)
- * samples user-space (viewBox.minX + px + 0.5, viewBox.minY + py + 0.5).
+ * samples user-space (viewBox.minX + (px + 0.5)/scale, viewBox.minY + (py + 0.5)/scale).
  */
 export function rasterizeDoc(
   doc: EditableDoc,
@@ -49,6 +62,7 @@ export function rasterizeDoc(
 ): Uint8ClampedArray {
   const [vbx, vby] = doc.viewBox
   const bg = opts.background ?? [255, 255, 255]
+  const scale = opts.scale ?? 1
   // Straight-alpha float accumulator, initialized to the opaque background.
   const R = new Float64Array(width * height).fill(bg[0])
   const G = new Float64Array(width * height).fill(bg[1])
@@ -58,9 +72,9 @@ export function rasterizeDoc(
   for (const item of doc.items) {
     if (item.kind !== 'path' || !item.visible) continue
     cov.fill(0)
-    const polys = flattenItem(item, vbx, vby)
+    const polys = flattenItem(item, vbx, vby, scale)
     fillCoverage(polys, item.fillRule, width, height, cov)
-    compositeItem(item, vbx, vby, width, height, cov, R, G, B)
+    compositeItem(item, vbx, vby, scale, width, height, cov, R, G, B)
   }
 
   const out = new Uint8ClampedArray(width * height * 4)
@@ -78,16 +92,18 @@ export function rasterizeDoc(
 // Flattening
 // ---------------------------------------------------------------------------
 
-/** Flatten every subpath of an item to closed polygons, offset into pixel space. */
-export function flattenItem(item: PathItem, vbx: number, vby: number): Vec[][] {
+/** Flatten every subpath of an item to closed polygons, offset+scaled into pixel space. */
+export function flattenItem(item: PathItem, vbx: number, vby: number, scale = 1): Vec[][] {
   const polys: Vec[][] = []
+  // Tolerance in USER units that yields FLATNESS px of chord error after scaling.
+  const tol = FLATNESS / (scale || 1)
   for (const sp of item.subPaths) {
     if (sp.nodes.length < 2) continue
-    const poly = flattenSubPath(sp)
+    const poly = flattenSubPath(sp, tol)
     if (poly.length >= 2) {
       for (const p of poly) {
-        p.x -= vbx
-        p.y -= vby
+        p.x = (p.x - vbx) * scale
+        p.y = (p.y - vby) * scale
       }
       polys.push(poly)
     }
@@ -96,23 +112,23 @@ export function flattenItem(item: PathItem, vbx: number, vby: number): Vec[][] {
 }
 
 /** Flatten one subpath (closed implied) to a polyline of points. */
-function flattenSubPath(sp: SubPath): Vec[] {
+function flattenSubPath(sp: SubPath, tol: number): Vec[] {
   const pts: Vec[] = []
   const segCount = sp.closed ? sp.nodes.length : sp.nodes.length - 1
   pts.push({ x: sp.nodes[0].x, y: sp.nodes[0].y })
   for (let seg = 0; seg < segCount; seg++) {
     const { p0, c1, c2, p3 } = segmentControls(sp, seg)
-    flattenCubic(p0, c1, c2, p3, pts, 0)
+    flattenCubic(p0, c1, c2, p3, pts, 0, tol)
   }
   return pts
 }
 
 /** Recursive de Casteljau subdivision until the segment is flat enough. */
-function flattenCubic(p0: Vec, c1: Vec, c2: Vec, p3: Vec, out: Vec[], depth: number): void {
+function flattenCubic(p0: Vec, c1: Vec, c2: Vec, p3: Vec, out: Vec[], depth: number, tol: number): void {
   // Flatness: max distance of the control points from the chord p0→p3.
   const d1 = pointLineDist(c1, p0, p3)
   const d2 = pointLineDist(c2, p0, p3)
-  if (depth >= 16 || (d1 <= FLATNESS && d2 <= FLATNESS)) {
+  if (depth >= 16 || (d1 <= tol && d2 <= tol)) {
     out.push({ x: p3.x, y: p3.y })
     return
   }
@@ -122,8 +138,8 @@ function flattenCubic(p0: Vec, c1: Vec, c2: Vec, p3: Vec, out: Vec[], depth: num
   const p012 = mid(p01, p12)
   const p123 = mid(p12, p23)
   const m = mid(p012, p123)
-  flattenCubic(p0, p01, p012, m, out, depth + 1)
-  flattenCubic(m, p123, p23, p3, out, depth + 1)
+  flattenCubic(p0, p01, p012, m, out, depth + 1, tol)
+  flattenCubic(m, p123, p23, p3, out, depth + 1, tol)
 }
 
 const mid = (a: Vec, b: Vec): Vec => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
@@ -242,6 +258,7 @@ function compositeItem(
   item: PathItem,
   vbx: number,
   vby: number,
+  scale: number,
   width: number,
   height: number,
   cov: Float64Array,
@@ -250,7 +267,7 @@ function compositeItem(
   B: Float64Array,
 ): void {
   const fillOpacity = item.fillOpacity ?? 1
-  const paint = item.gradient ? makeGradientPaint(item.gradient, vbx, vby) : makeSolidPaint(item.fill)
+  const paint = item.gradient ? makeGradientPaint(item.gradient, vbx, vby, scale) : makeSolidPaint(item.fill)
 
   for (let py = 0; py < height; py++) {
     for (let px = 0; px < width; px++) {
@@ -276,16 +293,17 @@ function makeSolidPaint(hex: string): Paint {
   return () => [r, g, b, 1]
 }
 
-function makeGradientPaint(g: GradientFill, vbx: number, vby: number): Paint {
-  return g.type === 'linear' ? makeLinearPaint(g, vbx, vby) : makeRadialPaint(g, vbx, vby)
+function makeGradientPaint(g: GradientFill, vbx: number, vby: number, scale: number): Paint {
+  return g.type === 'linear' ? makeLinearPaint(g, vbx, vby, scale) : makeRadialPaint(g, vbx, vby, scale)
 }
 
-function makeLinearPaint(g: LinearGradient, vbx: number, vby: number): Paint {
+function makeLinearPaint(g: LinearGradient, vbx: number, vby: number, scale: number): Paint {
   // Gradient coords are user-space; convert to the same pixel space as samples.
-  const x1 = g.x1 - vbx
-  const y1 = g.y1 - vby
-  const dx = g.x2 - g.x1
-  const dy = g.y2 - g.y1
+  // `scale` is a similarity, so a ramp maps through it unchanged in shape.
+  const x1 = (g.x1 - vbx) * scale
+  const y1 = (g.y1 - vby) * scale
+  const dx = (g.x2 - g.x1) * scale
+  const dy = (g.y2 - g.y1) * scale
   const len2 = dx * dx + dy * dy || 1
   const stops = prepStops(g.stops)
   return (x, y) => {
@@ -296,12 +314,12 @@ function makeLinearPaint(g: LinearGradient, vbx: number, vby: number): Paint {
   }
 }
 
-function makeRadialPaint(g: RadialGradient, vbx: number, vby: number): Paint {
-  const cx = g.cx - vbx
-  const cy = g.cy - vby
-  const r = g.r || 1
-  const fx = (g.fx ?? g.cx) - vbx
-  const fy = (g.fy ?? g.cy) - vby
+function makeRadialPaint(g: RadialGradient, vbx: number, vby: number, scale: number): Paint {
+  const cx = (g.cx - vbx) * scale
+  const cy = (g.cy - vby) * scale
+  const r = (g.r || 1) * scale
+  const fx = ((g.fx ?? g.cx) - vbx) * scale
+  const fy = ((g.fy ?? g.cy) - vby) * scale
   const stops = prepStops(g.stops)
   const focal = Math.hypot(fx - cx, fy - cy) > 1e-6
   return (x, y) => {
@@ -423,12 +441,14 @@ export function boundaryMask(
   width: number,
   height: number,
   dilate = 1,
+  scale = 1,
 ): Uint8Array {
   const [vbx, vby] = doc.viewBox
   const mask = new Uint8Array(width * height)
   for (const item of doc.items) {
     if (item.kind !== 'path' || !item.visible) continue
-    const polys = flattenItem(item, vbx, vby)
+    // Same `scale` the render used, or the mask marks the wrong pixels.
+    const polys = flattenItem(item, vbx, vby, scale)
     for (const poly of polys) {
       const n = poly.length
       for (let i = 0; i < n; i++) {

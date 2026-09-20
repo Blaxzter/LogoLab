@@ -1,7 +1,12 @@
 /**
- * The one cold→hot ramp the labs share. `goldenView` (ΔE per pixel) and `truthView`
- * (boundary distance per sample) had a copy each, with the same stops — so the two
- * pages already read alike, they just couldn't prove it. One module now.
+ * The one cold→hot ramp this repo paints error with. `goldenView` (ΔE per pixel) and
+ * `truthView` (boundary distance per sample) had a copy each, with the same stops — so
+ * the two pages already read alike, they just couldn't prove it. One module now.
+ *
+ * It lives in `lib/` rather than under `components/labs/` because the studio's
+ * **Difference** view paints the same ramp as `/labs/ab`'s diff heat: the research view
+ * of "where is this trace wrong" and the shipped one are the same picture, and a second
+ * set of stops for the product would quietly make them two.
  *
  * `t` is a 0..1 normalized error; the caller picks the full-scale.
  */
@@ -34,4 +39,7 @@ export function heatCss(t: number): string {
 }
 
 /** The near-black the heat/overlay panels sit on, so faint dots stay visible. */
-export const HEAT_BG = '#0a0c16'
+export const HEAT_BG_RGB: [number, number, number] = [10, 12, 22]
+
+/** The same colour as CSS, for panels that style a backdrop rather than write pixels. */
+export const HEAT_BG = `#${HEAT_BG_RGB.map((c) => c.toString(16).padStart(2, '0')).join('')}`

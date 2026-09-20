@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { ZoomSurface } from '../ui/ZoomSurface'
 import { useLabZoom, useLabDark } from './LabPage'
-import { HEAT_BG } from './heat'
+import { HEAT_BG } from '../../lib/heat'
 
 /**
  * One labelled, zoomable panel — the labs' `.cell` + `.box`.

@@ -34,7 +34,7 @@ export interface StudioView {
   forceColorTouched: boolean
   gradientsTouched: boolean
   retraceVector: 'clean' | 'retrace'
-  viewMode: 'split' | 'traced' | 'original' | 'overlay'
+  viewMode: 'split' | 'traced' | 'original' | 'overlay' | 'difference'
   overlayOpacity: number
   markMode: 'separate' | 'flat' | 'remove'
 }

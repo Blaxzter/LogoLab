@@ -27,7 +27,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Upload, X } from 'lucide-react'
 import { labImageData, rasterizeSvgResvg } from './resvgRaster'
 import { rgbaToUrl } from './raster'
-import { heatColor, HEAT_BG } from './heat'
+import { heatColor, HEAT_BG, HEAT_BG_RGB } from '../../lib/heat'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { VectorizeOptions } from '../../types'
 import type { EditableDoc } from '../../lib/path/types'
@@ -368,12 +368,12 @@ function inventedNote(variants: AbAnalysis['variants'], i: number): string {
 const HEAT_SCALE = 110
 
 /** Per-pixel diff of two equal-size rasters → a heat RGBA buffer on HEAT_BG: hot where the
- *  traces disagree, the shared cold→hot ramp (heat.ts) so it reads like every other lab heat.
+ *  traces disagree, the shared cold→hot ramp (lib/heat.ts) so it reads like every other heat.
  *  Pure — no DOM — so the pixel math is testable headless; rgbaToUrl does the canvas encode. */
 function diffHeatBuffer(a: ImageData, b: ImageData): Uint8ClampedArray {
   const n = a.width * a.height
   const out = new Uint8ClampedArray(n * 4)
-  const bg = [10, 12, 22] // ~HEAT_BG, so cold pixels sit on the panel's own backdrop
+  const bg = HEAT_BG_RGB // cold pixels sit on the panel's own backdrop
   for (let i = 0; i < n; i++) {
     const o = i * 4
     const dr = a.data[o] - b.data[o]

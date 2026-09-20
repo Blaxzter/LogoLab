@@ -60,6 +60,13 @@ import {
     type InkModePlan,
 } from "../../lib/ink";
 import { aiUpscale, aiUpscaleFactor } from "../../lib/aiUpscale";
+import {
+    canScoreOffThread,
+    scoreOffThread,
+    type TraceScore,
+} from "../../lib/render/scoreOffThread";
+import { HEAT_FULL_SCALE_DE } from "../../lib/render/fidelity";
+import { heatCss } from "../../lib/heat";
 import type { VectorizeOptions } from "../../types";
 import {
     loadStudioSeed,
@@ -90,7 +97,21 @@ const DEBOUNCE_MS = 400;
  */
 const INK_IS_BLACK_LUMA = 32;
 
-type ViewMode = "split" | "traced" | "original" | "overlay";
+/**
+ * Long side of the raster the fidelity score and the Difference heat are measured
+ * on. NOT the trace resolution: that is 1024–4096 (see traceCaps), and scoring
+ * there means rasterizing up to 16M pixels PER PATH for a number three digits
+ * wide. Measured on the bundled art, halving the resolution moves the mean ΔE by
+ * ~0.005 and quartering it by ~0.07 — so a 1024px score is the same number, and
+ * plenty of resolution to see WHERE a trace went wrong.
+ */
+const SCORE_MAX_DIM = 1024;
+
+/** Settle time before a score is started. Longer than the trace debounce because
+ *  this also fires on every committed node edit, and a drag commits per frame. */
+const SCORE_DEBOUNCE_MS = 500;
+
+type ViewMode = "split" | "traced" | "original" | "overlay" | "difference";
 type Tool = "pan" | "node" | "mark";
 
 /** Human-readable byte size ('842 B' / '12.4 KB' / '1.20 MB'). */
@@ -192,6 +213,9 @@ export function VectorizeStudio({
     const logo = source ?? storeLogo;
     const checkerClass = checkerClassProp ?? storeChecker;
     const pz = usePanZoom({ maxScale: 32 });
+    // No Worker, no score — the metric is an extra, and running it on the main
+    // thread is exactly what the worker is there to prevent.
+    const canScore = canScoreOffThread();
     const isMobile = useIsMobile();
 
     const [opts, setOpts] = useState<VectorizeOptions>(
@@ -252,6 +276,13 @@ export function VectorizeStudio({
     // region painted exactly this colour so the user can locate (and then delete) it.
     const [highlightFill, setHighlightFill] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    // How far the result is from the source image, measured off-thread — the mean
+    // ΔE in the status bar and the per-pixel heat behind the Difference view, both
+    // out of ONE field so the number and the picture can never disagree.
+    const [score, setScore] = useState<TraceScore | null>(null);
+    // The source decoded once at SCORE_MAX_DIM and kept: the score re-runs on every
+    // edit, and re-decoding the image for each of them is the expensive half.
+    const scoreSourceRef = useRef<{ src: string; img: ImageData } | null>(null);
     // The error OBJECT behind that sentence. The user gets "try different
     // settings"; a bug report needs the thing that was actually thrown, and the
     // worker path catches its own failures — so without this, the tracer's most
@@ -596,6 +627,10 @@ export function VectorizeStudio({
         setBusy(true);
         setError(null);
         setFailure(null);
+        // The old number described the old document; carrying it under a fresh
+        // trace would be the one reading in that bar that isn't about what's on
+        // screen. The scoring effect starts a new one when this run lands.
+        setScore(null);
         // A new attempt supersedes the last one's question — without REMEMBERING
         // the dismissal, because the user never answered it.
         clearFailure();
@@ -977,6 +1012,74 @@ export function VectorizeStudio({
     useEffect(() => {
         setApplied(false);
     }, [svgText]);
+
+    /**
+     * Score the result against the source image.
+     *
+     * Two things about WHICH raster this measures against:
+     *
+     * - The SOURCE is decoded the same way the tracer decodes it (`getImageData`,
+     *   alpha intact) and composited over white inside the metric — not decoded
+     *   onto white here. The truth gate and the labs' fixture lane differ on
+     *   exactly this point, and scoring art-on-transparency as art-on-black would
+     *   report a wrong trace for a right one.
+     * - The DOCUMENT scored is `derivedDoc`, i.e. force-colour and all — the same
+     *   document every other number in that status bar describes. Repainting a
+     *   multicolour mark in one ink really does move it far from the original, and
+     *   saying so is the honest reading, not a bug in the metric.
+     *
+     * Skipped while a trace is running: the document is about to be replaced.
+     */
+    useEffect(() => {
+        if (busy) return; // run() cleared it; scoring a doc about to be replaced is waste
+        if (!derivedDoc || !logo.src || !canScore) {
+            setScore(null);
+            return;
+        }
+        const src = logo.src;
+        const svgSource = logo.isSvg ? logo.svgText : null;
+        let cancelled = false;
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => {
+            void (async () => {
+                try {
+                    let cached = scoreSourceRef.current;
+                    if (cached?.src !== src) {
+                        const img = await getImageData(src, SCORE_MAX_DIM, svgSource);
+                        if (cancelled) return;
+                        cached = { src, img };
+                        scoreSourceRef.current = cached;
+                    }
+                    const img = cached.img;
+                    const vbW = derivedDoc.viewBox[2];
+                    if (!(vbW > 0)) return;
+                    // The doc's viewBox is the TRACE raster (or, for a cleaned SVG,
+                    // its own user units); `scale` renders it into the score
+                    // raster's pixel space whichever it is.
+                    const next = await scoreOffThread(
+                        derivedDoc,
+                        img,
+                        img.width / vbW,
+                        controller.signal,
+                    );
+                    if (!cancelled) setScore(next);
+                } catch (err) {
+                    if (cancelled || (err instanceof DOMException && err.name === "AbortError"))
+                        return;
+                    // A score that doesn't arrive is a readout the user doesn't
+                    // get, not a failure they need told about — the trace itself
+                    // is on screen and fine.
+                    logError("fidelity", err);
+                    setScore(null);
+                }
+            })();
+        }, SCORE_DEBOUNCE_MS);
+        return () => {
+            cancelled = true;
+            controller.abort();
+            window.clearTimeout(timer);
+        };
+    }, [busy, canScore, derivedDoc, logo.src, logo.isSvg, logo.svgText]);
 
     // Report the current result / parameters to a host that is keeping them (the
     // icon sheet stores every tile's doc so it survives leaving the icon).
@@ -1397,11 +1500,16 @@ export function VectorizeStudio({
                             { value: "traced", label: "Traced" },
                             { value: "original", label: "Original" },
                             { value: "overlay", label: "Overlay" },
+                            {
+                                value: "difference",
+                                label: "Difference",
+                                title: "Where the trace disagrees with the original",
+                            },
                         ]}
                     />
                     <div
                         className={
-                            viewMode === "original"
+                            viewMode === "original" || viewMode === "difference"
                                 ? "pointer-events-none opacity-50"
                                 : ""
                         }
@@ -1521,9 +1629,16 @@ export function VectorizeStudio({
                             { value: "traced", label: "Traced" },
                             { value: "original", label: "Original" },
                             { value: "overlay", label: "Overlay" },
+                            { value: "difference", label: "Difference" },
                         ]}
                     />
-                    <div className={view === "original" ? "pointer-events-none opacity-50" : ""}>
+                    <div
+                        className={
+                            view === "original" || view === "difference"
+                                ? "pointer-events-none opacity-50"
+                                : ""
+                        }
+                    >
                         <Segmented<Tool>
                             value={tool === "mark" ? "pan" : tool}
                             onChange={setTool}
@@ -1654,6 +1769,24 @@ export function VectorizeStudio({
                         ) : (
                             <StagePlaceholder busy={busy} />
                         ))}
+                    {view === "difference" &&
+                        (score ? (
+                            <>
+                                <DiffPane pz={pz} score={score} primary />
+                                <HeatLegend score={score} />
+                            </>
+                        ) : (
+                            <StagePlaceholder
+                                busy={busy}
+                                idle={
+                                    !derivedDoc
+                                        ? "No result yet"
+                                        : canScore
+                                          ? "Measuring…"
+                                          : "This browser can't measure the difference"
+                                }
+                            />
+                        ))}
 
                     {/* Empty-result notice, centred on the TRACED pane — in split view
                         that is the right half, so it stays over the blank rather than
@@ -1761,6 +1894,26 @@ export function VectorizeStudio({
                             {stats.paths} paths · {stats.nodes} nodes ·{" "}
                             {stats.colors} colors · {formatBytes(svgBytes)}
                         </span>
+                    )}
+                    {/* The one number in this bar about ACCURACY rather than size.
+                        It is a button because the number and the Difference view
+                        are one measurement: "how far off" and "off where". */}
+                    {score && (
+                        <Tooltip
+                            label={`Mean colour difference from the original: ${score.meanDeltaE.toFixed(
+                                2,
+                            )} ΔE, with 95% of pixels under ${score.p95DeltaE.toFixed(
+                                2,
+                            )}. Below about 2.3 ΔE the eye cannot tell two colours apart. Click to see where.`}
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setViewMode("difference")}
+                                className="shrink-0 rounded px-1 py-0.5 transition-colors hover:bg-surface-3 hover:text-ink"
+                            >
+                                ΔE {score.meanDeltaE.toFixed(2)}
+                            </button>
+                        </Tooltip>
                     )}
                     {busy && (
                         <span className="flex shrink-0 items-center gap-1.5 text-accent">
@@ -2005,6 +2158,81 @@ function OriginalPane({
     );
 }
 
+/**
+ * The Difference view: per-pixel ΔE between the rendered result and the source,
+ * on the same cold→hot ramp `/labs/ab` diffs two traces with. This is the most
+ * useful picture in the repo — "where is my trace wrong" answered by looking —
+ * and until now it only existed behind `/labs`.
+ *
+ * Framed like OriginalPane (same fit box, same ZoomSurface) so switching modes
+ * doesn't move the artwork, and painted through a canvas-owned ImageData rather
+ * than `new ImageData(heat, …)`: the buffer is a plain Uint8ClampedArray, which
+ * the DOM constructor's ArrayBuffer-narrowed type rejects.
+ */
+function DiffPane({
+    pz,
+    score,
+    primary = false,
+}: {
+    pz: PanZoom;
+    score: TraceScore;
+    primary?: boolean;
+}) {
+    const fit = useFitBox(score.width, score.height);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+    useEffect(() => {
+        const cv = canvasRef.current;
+        if (!cv) return;
+        cv.width = score.width;
+        cv.height = score.height;
+        const ctx = cv.getContext("2d");
+        if (!ctx) return;
+        const id = ctx.createImageData(score.width, score.height);
+        id.data.set(score.heat);
+        ctx.putImageData(id, 0, 0);
+    }, [score]);
+
+    return (
+        <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
+            <div
+                ref={fit.parentRef}
+                className="flex h-full w-full items-center justify-center p-[6%]"
+            >
+                <canvas
+                    ref={canvasRef}
+                    className="pointer-events-none select-none"
+                    style={{ width: fit.width, height: fit.height }}
+                />
+            </div>
+        </ZoomSurface>
+    );
+}
+
+/** The heat's scale and this trace's two numbers, so "hot" is a quantity rather
+ *  than a vibe — and so the Difference view is complete on mobile, which has no
+ *  status bar to read the ΔE off. Sampled at the ramp's own seven stops, so the
+ *  CSS gradient reproduces it exactly instead of approximating it. */
+function HeatLegend({ score }: { score: TraceScore }) {
+    const ramp = Array.from({ length: 7 }, (_, i) => heatCss(i / 6)).join(", ");
+    return (
+        <div className="pointer-events-none absolute bottom-2 left-2 rounded-md border border-line bg-surface/85 px-2 py-1.5 font-mono text-[10px] tabular-nums text-muted backdrop-blur">
+            <div>
+                mean {score.meanDeltaE.toFixed(2)} · p95{" "}
+                {score.p95DeltaE.toFixed(2)}
+            </div>
+            <div className="mt-1 flex items-center gap-1.5">
+                <span>0</span>
+                <span
+                    className="h-2 w-24 rounded-sm"
+                    style={{ background: `linear-gradient(to right, ${ramp})` }}
+                />
+                <span>≥{HEAT_FULL_SCALE_DE} ΔE vs original</span>
+            </div>
+        </div>
+    );
+}
+
 function Chip({ children }: { children: React.ReactNode }) {
     return (
         <span className="pointer-events-none absolute left-2 top-2 rounded border border-line bg-surface/80 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted backdrop-blur">
@@ -2013,13 +2241,19 @@ function Chip({ children }: { children: React.ReactNode }) {
     );
 }
 
-function StagePlaceholder({ busy }: { busy: boolean }) {
+function StagePlaceholder({
+    busy,
+    idle = "No result yet",
+}: {
+    busy: boolean;
+    idle?: string;
+}) {
     return (
         <div className="flex h-full items-center justify-center">
             {busy ? (
                 <Loader2 size={22} className="animate-spin text-muted" />
             ) : (
-                <span className="text-xs text-muted">No result yet</span>
+                <span className="text-xs text-muted">{idle}</span>
             )}
         </div>
     );

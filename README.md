@@ -78,8 +78,13 @@ node editor, all client-side. The research behind each stage is in
   (shape-snapping) dials, optional **remove background**, and **region markers** to protect
   spots the auto-merge would otherwise fuse.
 - **Studio layout:** full-height workspace with **Split / Traced / Original / Overlay**
-  (ghost) views, synced pan & zoom, a paths panel (select, recolor, hide, delete) and a
-  **"How it works"** explainer that walks your image through every stage live.
+  (ghost) / **Difference** views, synced pan & zoom, a paths panel (select, recolor, hide,
+  delete) and a **"How it works"** explainer that walks your image through every stage live.
+- **See how close it is:** the status bar carries a **ΔE** readout — the mean colour
+  difference between the result and your image, the same metric the tracer's own
+  benchmarks are scored in — and clicking it opens **Difference**, a per-pixel heat map of
+  where the trace and the original disagree. "It looks about right" becomes a number and a
+  picture.
 - **Node editing, Affinity-style:** drag anchors & Bézier handles (smooth nodes mirror,
   `Alt` breaks symmetry), double-click a segment to add a node, double-click an anchor to
   toggle corner ↔ smooth, `Del` to remove, full **undo / redo**.

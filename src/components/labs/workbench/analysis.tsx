@@ -38,7 +38,7 @@ import { Badge, CaseRow, NoteBox } from '../CaseRow'
 import { GatePanel, GateTable, type GateBarRow } from '../GateTable'
 import { labImageData } from '../resvgRaster'
 import { labTrace } from '../labTrace'
-import { heatCss, HEAT_BG } from '../heat'
+import { heatCss, HEAT_BG } from '../../../lib/heat'
 import { rgbaToUrl } from '../raster'
 import type { AnalysisRowProps, WbCase } from './types'
 

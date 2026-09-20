@@ -64,6 +64,38 @@ Open defects + the method are tracked in ONE place:
 **`docs/vectorization-benchmarks.md` §0**, with `KNOWN_DEFECTS` in the test as the
 machine-checked status. A case not in `KNOWN_DEFECTS` must pass every applicable gate.
 
+## The scorer is in the PRODUCT now, and the number and the picture are one field
+
+The studio's status bar carries a **ΔE** readout and there is a fifth view mode,
+**Difference**, painting per-pixel ΔE on the same cold→hot ramp `/labs/ab` diffs two
+traces with. That has two consequences for anything you touch here:
+
+* **`fidelity()` is shipped code.** It lives in `src/lib/render/fidelity.ts`;
+  `src/devtest/metrics.ts` re-exports it (like `src/devtest/raster.ts` shims the
+  rasterizer). "1.8 ΔE" in the status bar and "1.8 ΔE" in the benchmark table have to be
+  the same claim, so do NOT give the app its own copy of the ΔE math — take
+  `deltaEField` / `deltaEStats`, which is the half `fidelity()` itself is built on.
+  `src/lib/heat.ts` is the ramp, moved out of `components/labs/` for the same reason.
+* **One `deltaEField` call answers both questions**, in one worker message
+  (`src/lib/render/fidelity.worker.ts`). Compute the heat separately and the bar and the
+  picture can describe the same trace differently — which is the one failure mode a
+  screenshot cannot show you.
+
+Three things the score gets right that are easy to undo:
+
+* **It measures against the source WITH ITS ALPHA**, composited over white inside the
+  metric. Decode the source onto white instead and art on transparency scores as a
+  catastrophically wrong trace (the truth gate and the labs' fixture lane differ on
+  exactly this point — see `docs/vectorization-benchmarks.md`).
+* **It scores `derivedDoc`** — force-colour and all — because that is the document every
+  other number in that bar describes.
+* **It scores at 1024px via `rasterizeDoc`'s `scale`**, not at trace resolution. The
+  compositor is O(w·h) PER PATH, so a 4096 high-detail trace would be seconds of work for
+  a three-digit number; halving the resolution moves the mean by ~0.005 ΔE. `scale` also
+  divides the Bézier flattening tolerance, so the chord error stays sub-pixel in OUTPUT
+  space — without that a cleaned SVG (viewBox 24 units) renders as a visible polygon and
+  the score blames the tracer for the renderer. `test/fidelity.test.ts` is the gate.
+
 ## The tracer ships TWICE, and only one of them is automatic
 
 A tracer change reaches the website by itself — Cloudflare Workers Builds is connected to this
