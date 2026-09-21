@@ -11,6 +11,7 @@
 // k-means quantization (quantize.ts) survives only as a fallback / UI palette.
 
 import type { VectorizeOptions } from '../../types'
+import { cutLuma, VISIBLE_ALPHA } from '../ink.ts'
 import type { EditableDoc, GradientFill, PathItem, RadialGradient, SubPath } from '../path/types'
 import type { TraceProgress, QuantizeResult } from './types'
 import { traceMask, type TraceMaskOptions } from './potrace.ts'
@@ -1000,10 +1001,14 @@ function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
 }
 
 /**
- * Threshold to a potrace-ready binary mask: dark opaque pixels become opaque
- * black, everything else (light or alpha < 16) opaque white. Luminance uses
- * Rec.709 weights. `invert` flips which side of the cut is ink — light art on
- * dark paper — and nothing else. The input is not mutated.
+ * Threshold to a potrace-ready binary mask: ink pixels become opaque black,
+ * everything else (paper, or alpha below VISIBLE_ALPHA) opaque white. The
+ * luminance compared is `cutLuma` (ink.ts) — Rec.709, with the pixel COMPOSITED
+ * over the paper the cut assumes — so on art over transparency this is a
+ * coverage cut at the iso-0.5 contour, not "any alpha at all is ink" (which
+ * fattened every anti-aliased stroke by a pixel). Opaque art is unchanged by
+ * the composite. `invert` flips which side of the cut is ink — light art on dark
+ * paper — and nothing else. The input is not mutated.
  */
 function thresholdToMask(img: ImageData, threshold: number, invert = false): ImageData {
   const { width, height, data } = img
@@ -1011,8 +1016,8 @@ function thresholdToMask(img: ImageData, threshold: number, invert = false): Ima
   const dst = out.data
   const cut = clamp(Math.round(threshold), 0, 255)
   for (let i = 0; i < data.length; i += 4) {
-    const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]
-    const v = data[i + 3] >= 16 && (invert ? lum > cut : lum < cut) ? 0 : 255
+    const lum = cutLuma(data, i, invert)
+    const v = data[i + 3] >= VISIBLE_ALPHA && (invert ? lum > cut : lum < cut) ? 0 : 255
     dst[i] = v
     dst[i + 1] = v
     dst[i + 2] = v
