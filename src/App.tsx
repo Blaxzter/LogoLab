@@ -4,6 +4,7 @@ import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useLogo, useStore } from './store'
 import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
+import { useMediaQuery } from './hooks/useIsMobile'
 import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ReportDialog } from './components/ReportDialog'
@@ -93,6 +94,10 @@ function Header({
   const clearLogo = useStore((s) => s.clearLogo)
   const tab = useActiveTab()
   const activeLabel = TABS.find((t) => t.id === tab)?.label ?? ''
+  // Between md and lg the tabs are icon-only, so they need the tooltip the
+  // visible label makes redundant above it. Keyed to the same 1024 as the
+  // `lg:inline` on those labels — change one and change the other.
+  const iconOnlyTabs = useMediaQuery('(max-width: 1023px)')
 
   return (
     /*
@@ -109,59 +114,86 @@ function Header({
      * and keep it there no matter what either side does. When a side genuinely
      * outgrows its share the track grows and the nav drifts, which is the old
      * behaviour as a graceful floor rather than the normal case.
+     *
+     * The three children name their columns EXPLICITLY. A grid item with
+     * `display:none` is not placed at all, so while the nav was `hidden` below its
+     * breakpoint auto-placement handed the right cluster the middle track — which
+     * is how the hamburger came to sit in the dead centre of a tablet header.
      */
     <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-line bg-surface px-3 sm:px-4">
-      <div className="flex min-w-0 items-center gap-2.5">
+      <div className="col-start-1 flex min-w-0 items-center gap-2.5">
         <BrandMark />
         {/* min-w-0 + truncate so a tight phone width shrinks the wordmark instead
             of forcing the whole header (and page) wider than the viewport. */}
         <div className="min-w-0 leading-none">
           <div className="truncate text-[0.95rem] font-bold tracking-tight text-ink">LogoLab</div>
-          {/* Below lg the inline tab nav is hidden, so echo the active tab here to
-              keep a location cue; at lg+ the static tagline returns. */}
+          {/* Below md there is no tab nav at all, so echo the active tab here to
+              keep a location cue; from md the active pill carries its own label
+              and the static tagline returns. */}
           <div className="truncate text-[0.68rem] text-muted">
-            <span className="lg:hidden">{activeLabel}</span>
-            <span className="hidden lg:inline">preview · vectorize · export</span>
+            <span className="md:hidden">{activeLabel}</span>
+            <span className="hidden md:inline">preview · vectorize · export</span>
           </div>
         </div>
       </div>
 
       {/*
-       * Desktop tab nav — the hamburger replaces it below lg.
+       * The tab nav, which COLLAPSES IN TWO STEPS rather than vanishing at one
+       * breakpoint. Widths measured on this header: the labelled nav is 599px,
+       * icon-only (with the active tab still labelled) is ~290px, and the right
+       * cluster is ~360px.
        *
-       * lg, not md: at 768 the nav (599px) plus the right cluster overflowed the
-       * header by ~270px, which ate the wordmark entirely and pushed the last
-       * icons off the right edge. That was true before the Saved chip and the
-       * chip made it worse. A tablet gets the menu, which holds every tab anyway.
+       * ≥ xl   labelled tabs + the full right cluster inline (599+360 needs 1280).
+       * lg–xl  labelled tabs; the cluster has folded into the menu (599+40 fits 1024).
+       * md–lg  icon-only tabs, except the open one, which keeps its label so the
+       *        header still says where you are (~290+40 fits 768).
+       * < md   no nav; the menu holds every tab.
+       *
+       * Each step drops the least-used half first, so a tablet keeps the thing
+       * people actually aim at instead of hiding all six tabs behind a hamburger.
        */}
-      <nav className="hidden shrink-0 rounded-lg bg-surface-3 p-0.5 lg:flex">
+      <nav aria-label="Sections" className="col-start-2 hidden shrink-0 rounded-lg bg-surface-3 p-0.5 md:flex">
         {TABS.map((t) => (
-          <NavLink
-            key={t.id}
-            to={`/${t.id}`}
-            className={({ isActive }) =>
-              `flex h-8 items-center gap-1.5 rounded-[12px] px-3 text-sm font-medium transition-all ${
-                isActive ? 'bg-surface text-ink shadow-xs' : 'text-muted hover:text-ink-2'
-              }`
-            }
-          >
-            {t.icon}
-            {t.label}
-          </NavLink>
+          // Icon-only below lg, so the name has to be reachable some other way:
+          // aria-label for assistive tech, the bubble for a pointer. Empty above
+          // lg, where Tooltip renders the link alone — a bubble that only repeats
+          // the label sitting next to it is noise.
+          <Tooltip key={t.id} label={iconOnlyTabs ? t.label : ''} side="bottom">
+            <NavLink
+              to={`/${t.id}`}
+              aria-label={t.label}
+              className={({ isActive }) =>
+                `flex h-8 items-center gap-1.5 rounded-[12px] px-2.5 text-sm font-medium transition-all lg:px-3 ${
+                  isActive ? 'bg-surface text-ink shadow-xs' : 'text-muted hover:text-ink-2'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {t.icon}
+                  {/* `hidden` removes the span from the flex row entirely, so the
+                      gap-1.5 goes with it and the pill collapses to a square. */}
+                  <span className={isActive ? undefined : 'hidden lg:inline'}>{t.label}</span>
+                </>
+              )}
+            </NavLink>
+          </Tooltip>
         ))}
       </nav>
 
-      {/* Right cluster — its contents move into AppMenu below lg. Justified to
-          the end so the icons stay put while the Saved chip's label changes
-          width beside them.
+      {/* Right cluster — its contents move into AppMenu below xl, which is the
+          FIRST thing this header gives up: a Clear button, a theme toggle and a
+          link to GitHub are all meta, and a tab is not. Justified to the end so
+          the icons stay put while the Saved chip's label changes width beside
+          them.
 
           Every tooltip in here is `side="bottom"`. There is no room above a
           control that sits 8px from the top of the viewport, and the default
           `top` would land the bubble on the icon it is describing. Tooltip
           flips on its own now, but saying it here means the placement is the
           intent rather than a fallback being relied on. */}
-      <div className="flex items-center justify-end gap-3">
-        <div className="hidden items-center gap-3 lg:flex">
+      <div className="col-start-3 flex items-center justify-end gap-3">
+        <div className="hidden items-center gap-3 xl:flex">
           {logo.src && (
             <Tooltip label="Clear the loaded logo" side="bottom">
               <button
@@ -228,15 +260,19 @@ function Header({
           </div>
         </div>
 
-        {/* Menu trigger (~44px target). */}
-        <button
-          type="button"
-          onClick={onOpenMenu}
-          aria-label="Open menu"
-          className="btn btn-ghost h-10 w-10 shrink-0 px-0 lg:hidden"
-        >
-          <Menu size={20} />
-        </button>
+        {/* Menu trigger (~44px target). `xl:hidden` has to stay in step with the
+            `hideFrom` on AppMenu's Sheet — a trigger that outlives its sheet is
+            a button that locks the page and shows nothing. */}
+        <Tooltip label="Menu" side="bottom">
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            aria-label="Open menu"
+            className="btn btn-ghost h-10 w-10 shrink-0 px-0 xl:hidden"
+          >
+            <Menu size={20} />
+          </button>
+        </Tooltip>
       </div>
     </header>
   )

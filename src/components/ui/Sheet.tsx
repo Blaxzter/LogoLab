@@ -5,22 +5,33 @@ import { X } from 'lucide-react'
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock'
 import { Tooltip } from './Tooltip'
 
+/** Written out in full so Tailwind's scanner sees each class as a literal. */
+const HIDE_FROM = { md: 'md:hidden', lg: 'lg:hidden', xl: 'xl:hidden' } as const
+
 /**
  * The single mobile overlay grammar for the whole app — a slide-over (`right`)
  * or a bottom sheet (`bottom`) with one backdrop, one z-stack, and one
  * dismiss/inert contract. Generalized from the original appearance drawer so the
  * header menu, the appearance panel, and every studio control rail share it.
  *
- * Always `md:hidden`: desktop never mounts it (the inline columns take over).
+ * `hideFrom` is the width at which desktop takes over and the sheet goes
+ * `display:none`. It MUST match the breakpoint on whatever OPENS it, and that is
+ * not a detail: while this was hard-wired to `md:hidden` the header's hamburger
+ * was already `lg:hidden`, so every press between 768 and 1024px opened a sheet
+ * the stylesheet had removed — nothing on screen, and a body left scroll-locked
+ * by the hook below, which reads as a frozen page rather than a missing menu.
+ *
  * `children` are rendered directly into the panel's flex column after the title
  * bar, so a body using the `flex-1 overflow-y-auto` + pinned-footer pattern (like
  * SidebarBody) scrolls correctly in both variants.
  */
+
 export function Sheet({
   open,
   onClose,
   title,
   side = 'right',
+  hideFrom = 'md',
   children,
   className = '',
 }: {
@@ -28,9 +39,12 @@ export function Sheet({
   onClose: () => void
   title: string
   side?: 'right' | 'bottom'
+  /** Breakpoint from which the inline desktop layout takes over. */
+  hideFrom?: keyof typeof HIDE_FROM
   children: ReactNode
   className?: string
 }) {
+  const hidden = HIDE_FROM[hideFrom]
   useBodyScrollLock(open)
 
   // Esc closes (harmless on touch; helps a11y + desktop testing).
@@ -76,7 +90,7 @@ export function Sheet({
       <div
         onClick={onClose}
         aria-hidden
-        className={`fixed inset-0 z-40 bg-ink/40 transition-opacity duration-300 md:hidden dark:bg-black/55 ${
+        className={`fixed inset-0 z-40 bg-ink/40 transition-opacity duration-300 dark:bg-black/55 ${hidden} ${
           open ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
       />
@@ -86,7 +100,7 @@ export function Sheet({
         aria-label={title}
         aria-hidden={!open}
         inert={!open}
-        className={`fixed z-50 flex flex-col border-line bg-surface shadow-xl transition-transform duration-300 ease-in-out md:hidden ${panelGeom} ${className}`}
+        className={`fixed z-50 flex flex-col border-line bg-surface shadow-xl transition-transform duration-300 ease-in-out ${hidden} ${panelGeom} ${className}`}
       >
         {isBottom && (
           <div {...dragHandlers} className="flex shrink-0 cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing">
