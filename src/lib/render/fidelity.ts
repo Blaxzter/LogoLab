@@ -137,7 +137,7 @@ export const HEAT_FULL_SCALE_DE = 25
 
 /** Below this fraction of full scale a pixel is drawn as backdrop, not as heat:
  *  sub-JND differences are noise and would fog the whole picture faintly warm. */
-const HEAT_FLOOR = 0.02
+export const HEAT_FLOOR = 0.02
 
 /**
  * Paint a ΔE field as an RGBA heat on the shared cold→hot ramp (lib/heat.ts) — the

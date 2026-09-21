@@ -66,6 +66,7 @@ import {
     type TraceScore,
 } from "../../lib/render/scoreOffThread";
 import { HEAT_FULL_SCALE_DE } from "../../lib/render/fidelity";
+import { diffPicture, probeDiff, type DiffProbe } from "../../lib/render/diffView";
 import { heatCss } from "../../lib/heat";
 import type { VectorizeOptions } from "../../types";
 import {
@@ -1781,10 +1782,7 @@ export function VectorizeStudio({
                         ))}
                     {view === "difference" &&
                         (score ? (
-                            <>
-                                <DiffPane pz={pz} score={score} primary />
-                                <HeatLegend score={score} />
-                            </>
+                            <DiffPane pz={pz} score={score} primary />
                         ) : (
                             <StagePlaceholder
                                 busy={busy}
@@ -2174,10 +2172,18 @@ function OriginalPane({
  * useful picture in the repo — "where is my trace wrong" answered by looking —
  * and until now it only existed behind `/labs`.
  *
+ * The heat is laid over a dim ghost of the source (lib/render/diffView.ts), so a
+ * hot spot has a place on the art and a right trace shows the art rather than a
+ * black square; the pointer reads the field back under the cursor. Both come out
+ * of the buffers the score itself returned, at the score's resolution — the pane
+ * measures nothing of its own.
+ *
  * Framed like OriginalPane (same fit box, same ZoomSurface) so switching modes
  * doesn't move the artwork, and painted through a canvas-owned ImageData rather
- * than `new ImageData(heat, …)`: the buffer is a plain Uint8ClampedArray, which
- * the DOM constructor's ArrayBuffer-narrowed type rejects.
+ * than `new ImageData(px, …)`: the buffer is a plain Uint8ClampedArray, which
+ * the DOM constructor's ArrayBuffer-narrowed type rejects. Once a heat pixel is
+ * wider than a screen pixel the canvas goes `pixelated`: a diff is inspected at
+ * 5×, and a bilinear smear of a one-pixel seam is the one thing it must not show.
  */
 function DiffPane({
     pz,
@@ -2190,6 +2196,15 @@ function DiffPane({
 }) {
     const fit = useFitBox(score.width, score.height);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const boxRef = useRef<HTMLDivElement | null>(null);
+    // Where the pointer is, in raster-normalized units — kept as a POSITION rather
+    // than a probe so a new score (every committed node edit) re-reads the same
+    // spot instead of blanking the readout.
+    const [cursor, setCursor] = useState<{ nx: number; ny: number } | null>(null);
+    const probe = useMemo(
+        () => (cursor ? probeDiff(score, cursor.nx, cursor.ny) : null),
+        [score, cursor],
+    );
 
     useEffect(() => {
         const cv = canvasRef.current;
@@ -2199,31 +2214,68 @@ function DiffPane({
         const ctx = cv.getContext("2d");
         if (!ctx) return;
         const id = ctx.createImageData(score.width, score.height);
-        id.data.set(score.heat);
+        id.data.set(
+            diffPicture(score.heat, score.de, score.source, score.width, score.height),
+        );
         ctx.putImageData(id, 0, 0);
     }, [score]);
 
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        const rect = boxRef.current?.getBoundingClientRect();
+        if (!rect || rect.width === 0 || rect.height === 0) return;
+        setCursor({
+            nx: (e.clientX - rect.left) / rect.width,
+            ny: (e.clientY - rect.top) / rect.height,
+        });
+    };
+
+    // Screen pixels per heat pixel: past 1 the browser's bilinear upscale would
+    // smear every one-pixel seam into a soft two-pixel one.
+    const magnified = fit.width > 0 && (pz.scale * fit.width) / score.width > 1;
+
     return (
-        <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
-            <div
-                ref={fit.parentRef}
-                className="flex h-full w-full items-center justify-center p-[6%]"
-            >
-                <canvas
-                    ref={canvasRef}
-                    className="pointer-events-none select-none"
-                    style={{ width: fit.width, height: fit.height }}
-                />
-            </div>
-        </ZoomSurface>
+        <>
+            <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
+                <div
+                    ref={fit.parentRef}
+                    className="flex h-full w-full items-center justify-center p-[6%]"
+                >
+                    <div
+                        ref={boxRef}
+                        className="relative"
+                        style={{ width: fit.width, height: fit.height }}
+                        onPointerMove={handlePointerMove}
+                        onPointerLeave={() => setCursor(null)}
+                    >
+                        <canvas
+                            ref={canvasRef}
+                            className="pointer-events-none block h-full w-full select-none"
+                            style={{ imageRendering: magnified ? "pixelated" : "auto" }}
+                        />
+                    </div>
+                </div>
+            </ZoomSurface>
+            <HeatLegend score={score} probe={probe} />
+        </>
     );
 }
 
 /** The heat's scale and this trace's two numbers, so "hot" is a quantity rather
  *  than a vibe — and so the Difference view is complete on mobile, which has no
  *  status bar to read the ΔE off. Sampled at the ramp's own seven stops, so the
- *  CSS gradient reproduces it exactly instead of approximating it. */
-function HeatLegend({ score }: { score: TraceScore }) {
+ *  CSS gradient reproduces it exactly instead of approximating it.
+ *
+ *  With a pointer over the art it also reads ONE pixel: the two colours that were
+ *  compared and their ΔE. That is what tells a hot line apart — a blend against a
+ *  solid is an edge that moved a fraction of a pixel; two solids are the wrong
+ *  colour — and the heat alone cannot. */
+function HeatLegend({
+    score,
+    probe,
+}: {
+    score: TraceScore;
+    probe: DiffProbe | null;
+}) {
     const ramp = Array.from({ length: 7 }, (_, i) => heatCss(i / 6)).join(", ");
     return (
         <div className="pointer-events-none absolute bottom-2 left-2 rounded-md border border-line bg-surface/85 px-2 py-1.5 font-mono text-[10px] tabular-nums text-muted backdrop-blur">
@@ -2239,7 +2291,28 @@ function HeatLegend({ score }: { score: TraceScore }) {
                 />
                 <span>≥{HEAT_FULL_SCALE_DE} ΔE vs original</span>
             </div>
+            {probe && (
+                <div className="mt-1 flex items-center gap-1.5">
+                    <span>
+                        {probe.x},{probe.y}
+                    </span>
+                    <Swatch rgb={probe.source} />
+                    <span>original</span>
+                    <Swatch rgb={probe.render} />
+                    <span>trace</span>
+                    <span className="text-ink-2">ΔE {probe.deltaE.toFixed(2)}</span>
+                </div>
+            )}
         </div>
+    );
+}
+
+function Swatch({ rgb }: { rgb: [number, number, number] }) {
+    return (
+        <span
+            className="inline-block h-2.5 w-2.5 rounded-sm border border-line"
+            style={{ background: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
+        />
     );
 }
 

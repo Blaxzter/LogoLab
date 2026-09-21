@@ -80,6 +80,17 @@ traces with. That has two consequences for anything you touch here:
   (`src/lib/render/fidelity.worker.ts`). Compute the heat separately and the bar and the
   picture can describe the same trace differently — which is the one failure mode a
   screenshot cannot show you.
+* **The picture is the heat over a GHOST, and the ghost is not a second measurement.**
+  `src/lib/render/diffView.ts` lays the heat over a dim greyscale ghost of the source
+  (so a hot spot has a place on the art, and a right trace shows the art instead of a
+  black square) and reads the field back under the cursor (coordinates, the two colours
+  that were compared, their ΔE). From `HEAT_OPAQUE_DE` up the picture IS the heat byte
+  for byte; below it the heat fades into the ghost in proportion to the SAME `de` the
+  numbers came from. The worker returns `de`, `render` and `source` alongside the heat
+  for exactly this — the pane paints buffers, it measures nothing. The canvas goes
+  `pixelated` once a heat pixel is wider than a screen pixel, because a diff is inspected
+  at 5× and a bilinear smear of a one-pixel seam is the one thing it must not show.
+  `test/diff-view.test.ts` is the gate.
 
 Three things the score gets right that are easy to undo:
 

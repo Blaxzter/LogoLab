@@ -277,6 +277,18 @@ Four decisions worth keeping:
   over white inside the metric. Decoding onto white instead would report art on
   transparency as a catastrophically wrong trace.
 
+**Follow-up, 2026-09-21 — the picture got a map.** The heat alone had two failure
+modes as a *picture*: a right trace was a black square (nothing to see, nothing to
+recognise), and a hot spot on a busy mark had no place on the art. It now sits over
+a dim greyscale ghost of the source (`src/lib/render/diffView.ts`), fully opaque from
+5 ΔE up and fading into the ghost below by the *same* field, so the ghost is never a
+second measurement. Hovering reads one pixel back: coordinates, the source colour and
+the trace colour that were compared, and their ΔE — which is what tells a hot line
+apart as "the edge moved a fraction of a pixel" (a blend vs a solid) or "the wrong
+colour" (two solids). Past one heat pixel per screen pixel the canvas is drawn
+`pixelated`, since a diff is inspected at 5× and a bilinear smear of a one-pixel seam
+is the one thing it must not show. `test/diff-view.test.ts` gates all three.
+
 This is the scorer B1 (self-scoring Auto) needs, so that one is now mostly UI.
 
 ### B3. Presets, and a Reset
