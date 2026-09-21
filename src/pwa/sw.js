@@ -61,6 +61,37 @@ const MAX_RUNTIME_ENTRIES = 80
  */
 const MATCH = { ignoreVary: true }
 
+/**
+ * Strip the "I followed a redirect to get here" flag off a response.
+ *
+ * This one is load-bearing, and its failure mode is the whole site rather than
+ * one asset. A navigation may only be answered with a response that was NOT
+ * redirected — hand `respondWith` a redirected one and the browser rejects it
+ * and fails the navigation outright, which the user sees as Chrome's
+ * "This site can't be reached / ERR_FAILED". Not a blank page, not a stale
+ * shell: no page at all, on every route, for as long as the worker is
+ * installed.
+ *
+ * Which is what the shell is. `SHELL` is `/index.html`, and the production host
+ * (Cloudflare Workers Assets) answers `/index.html` with a 307 to `/` — it
+ * normalises the pretty URL. So the precache fetch follows that redirect, stores
+ * a perfectly good 200 under the `/index.html` key with `redirected` set, and
+ * the navigate branch below then serves it to every navigation. Nothing is
+ * broken on the server, every asset still 200s to curl, and the build is green:
+ * the app is simply unreachable in any browser that installed the worker.
+ *
+ * Rebuilding the response through the constructor clears the flag; the bytes,
+ * status and headers are the same ones.
+ */
+async function unredirected(response) {
+  if (!response.redirected) return response
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  })
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
@@ -73,12 +104,18 @@ self.addEventListener('install', (event) => {
       await Promise.all(
         PRECACHE_URLS.map(async (url) => {
           try {
-            await cache.add(new Request(url, { cache: 'reload' }))
+            const response = await fetch(new Request(url, { cache: 'reload' }))
+            if (!response.ok) throw new Error(`precache ${url}: ${response.status}`)
+            await cache.put(url, await unredirected(response))
           } catch {
             /* skip this one; the runtime cache picks it up on first use */
           }
         }),
       )
+      // `fetch` + `put` rather than `cache.add` because of `unredirected()`:
+      // add() stores whatever the fetch ended on, redirect and all, and a
+      // redirected shell is not a response a navigation can be answered with.
+      //
       // Deliberately no skipWaiting() here: the new worker waits until the page
       // asks for it (see the SKIP_WAITING message below). Swapping the build out
       // from under a running trace — or a half-finished node edit — to save one
@@ -125,7 +162,13 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         const shell = await caches.match(SHELL, { ...MATCH, cacheName: PRECACHE })
-        if (shell) return shell
+        // `!shell.redirected` is belt and braces over the install handler, and
+        // it is the half that recovers rather than prevents: a shell cached by
+        // an OLDER worker is already on disk in the wild, and serving it is the
+        // one mistake here that takes the whole site down (see `unredirected`).
+        // Falling through to the network instead costs a returning user one
+        // request and keeps the app reachable.
+        if (shell && !shell.redirected) return shell
         try {
           return await fetch(request)
         } catch {

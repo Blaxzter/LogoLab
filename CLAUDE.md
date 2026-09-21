@@ -299,6 +299,27 @@ The walk follows imports AND **bare URL references in chunk code**, because that
 emits a Web Worker — and the tracer runs in one. Dropping it makes “works offline” silently mean
 “works offline until you try to trace something”. `test/offline-precache.test.ts` is the gate.
 
+### The shell must never be cached as a REDIRECTED response
+
+A navigation may only be answered with a response that was not redirected. Hand `respondWith`
+a redirected one and the browser does not fall back to the network — it fails the navigation,
+and every route on the origin becomes Chrome's **“This site can't be reached / ERR_FAILED”**
+for as long as the worker is installed.
+
+The shell walks straight into it. `SHELL` is `/index.html`, and **Cloudflare Workers Assets
+answers `/index.html` with a 307 to `/`** — it normalises the pretty URL. `cache.add` follows
+that redirect and stores a perfectly good 200 under the `/index.html` key with `redirected`
+set, so the navigate branch then serves an illegal response to every navigation. That shipped,
+and it took the whole site down while looking like a server problem: the origin answers 200 to
+curl on every URL, the build log is clean, and the bug is invisible to anything that is not a
+browser. So `install` fetches and `put`s a rebuilt copy (`unredirected()`), and the navigate
+branch ALSO refuses a redirected hit — that half is recovery, not prevention, for shells
+already on disk from an older worker. `test/pwa-shell-redirect.test.ts` is the gate; it drives
+the real `sw.js` against a fetch that redirects the way production does.
+
+Neither `vite dev` nor `vite preview` redirects `/index.html`, so this reproduces **only**
+against the deployed host — which is why a local check is not evidence here.
+
 ### “A new version is ready” must end in a reload
 
 The update policy is PROMPT (`src/pwa/register.ts`), so the notice's button is the ONLY way a
