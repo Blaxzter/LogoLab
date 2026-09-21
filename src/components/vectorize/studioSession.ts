@@ -33,6 +33,13 @@ export interface StudioView {
    */
   forceColorTouched: boolean
   gradientsTouched: boolean
+  /**
+   * The image (store `assetKey`) these options were decided for — by the probes
+   * or by hand on top of them. A restore only suppresses the probes while the
+   * picture on screen is this one; a fresh upload is probed like a fresh image.
+   * Absent on views stored before the field existed (see probeLedger.ts).
+   */
+  probedAssetKey?: string | null
   retraceVector: 'clean' | 'retrace'
   viewMode: 'split' | 'traced' | 'original' | 'overlay' | 'difference'
   overlayOpacity: number

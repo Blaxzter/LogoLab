@@ -159,9 +159,14 @@ Two things to keep in mind when touching a studio:
   reissued whenever those pixels change. Check it before adopting a restored value, or a trace
   ends up shown over a different image than it was cut from.
 * A restored studio must not re-run the probes that set its defaults. `VectorizeStudio` keeps
-  the ink probe (it feeds the “why” line) but runs it MEASURE-ONLY on the first pass after a
-  restore — otherwise the rampiness probe and the ink offer overwrite the user's own settings,
-  which reads as “my options reset themselves”.
+  the ink probe (it feeds the “why” line) but runs it MEASURE-ONLY on a restore — otherwise
+  the rampiness probe and the ink offer overwrite the user's own settings, which reads as
+  “my options reset themselves”. “Restore” is keyed to the IMAGE (`probedAssetKey` in the
+  stored view, `src/components/vectorize/probeLedger.ts`), not to a flag armed at mount: a
+  stored view exists after the first ever visit, and a “Clean SVG” source never probes, so a
+  mount-time flag survived an upload and handed the next image the previous image's options
+  (one-ink sheet music traced colour + gradients at 1024 while the panel said “One ink →
+  Mono”). `test/probe-ledger.test.ts` is the gate.
 
 ## The Editor tab IS the working logo — on CHANGE, never on open
 

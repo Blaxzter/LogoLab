@@ -74,6 +74,7 @@ import {
     saveStudioView,
     type StudioSeed,
 } from "./studioSession";
+import { probeShouldApply, restoredDecision } from "./probeLedger";
 import type { DocItem, EditableDoc, NodeRef, PathItem, Vec } from "../../lib/path/types";
 import { TraceControls, TraceControlsBody } from "./TraceControls";
 import { EditorCanvas } from "./EditorCanvas";
@@ -303,13 +304,19 @@ export function VectorizeStudio({
     const gradientsTouchedRef = useRef(session.view?.gradientsTouched ?? false);
     const autoGradientsSrcRef = useRef<string | null>(null);
     /**
-     * True until the first probe after a RESTORE has run. The probes below are
-     * two things at once — a measurement (what ink is this? does it ramp?) and a
-     * default (so set the options accordingly) — and a restored session wants the
-     * first without the second: the options on screen are the user's own, and a
-     * probe overwriting them is exactly the "my settings reset themselves" bug.
+     * The image (assetKey) the probes below last DECIDED for. They are two
+     * things at once — a measurement (what ink is this? does it ramp?) and a
+     * default (so set the options accordingly) — and a restored session wants
+     * the first without the second: the options on screen are the user's own,
+     * and a probe overwriting them is exactly the "my settings reset themselves"
+     * bug. Keyed to the IMAGE, not to a flag armed at mount: a stored view exists
+     * after the first ever visit, and a "Clean SVG" source never probes, so a
+     * mount-time flag survived an upload and handed the fresh image the previous
+     * image's options (see probeLedger.ts).
      */
-    const restoringProbeRef = useRef(Boolean(session.view));
+    const decidedForRef = useRef<string | null>(
+        restoredDecision(session.view),
+    );
 
     // Colour vs mono, the mono cut, and whether to invert it. `auto` asks the ink
     // probe (src/lib/ink.ts) — the same decision /sheet and the MCP server make,
@@ -780,7 +787,8 @@ export function VectorizeStudio({
         // Fresh image: re-enable the auto-decision (a previous image's manual flip
         // shouldn't carry over). A RESTORED image is not a fresh one — its flags
         // came back with it.
-        if (!restoringProbeRef.current) gradientsTouchedRef.current = false;
+        const restoring = !probeShouldApply(decidedForRef.current, assetKey);
+        if (!restoring) gradientsTouchedRef.current = false;
         let cancelled = false;
         void (async () => {
             try {
@@ -801,9 +809,9 @@ export function VectorizeStudio({
                 // Keep them: switching Mode by hand re-decides without re-decoding.
                 probePixelsRef.current = img;
                 // On a restore the probe is a measurement only — see
-                // restoringProbeRef. One pass, then it behaves normally again.
-                const restoring = restoringProbeRef.current;
-                restoringProbeRef.current = false;
+                // decidedForRef. Either way the options now stand decided for
+                // THIS image, so a later probe (a new upload) applies again.
+                decidedForRef.current = assetKey;
                 applyInkDecision(colorModeRef.current, img, !restoring);
                 if (restoring) return;
                 const on = suggestGradients(img);
@@ -825,6 +833,7 @@ export function VectorizeStudio({
         logo.src,
         logo.isSvg,
         logo.svgText,
+        assetKey,
         isVectorSource,
         retraceVector,
         applyInkDecision,
@@ -1107,6 +1116,7 @@ export function VectorizeStudio({
             forceColor,
             forceColorTouched: forceColorTouchedRef.current,
             gradientsTouched: gradientsTouchedRef.current,
+            probedAssetKey: decidedForRef.current,
             retraceVector,
             viewMode,
             overlayOpacity,
