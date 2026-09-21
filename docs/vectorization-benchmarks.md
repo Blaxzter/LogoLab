@@ -6764,3 +6764,91 @@ not up:
   inputs, with the interior as control), `--profile` (error by distance to the edge), and the
   bias/noise split — so a future reading starts from measurement rather than from this issue's
   prose.
+
+## 36. A small mono raster is enlarged by what its ink needs, and the mono cut becomes a coverage cut (2026-09-21)
+
+**One line.** A 499px PNG of a hymn (five staves, lyrics, one black ink on transparency)
+traced to a blob at 1×: every staff line melted into the note heads. The studio had no
+enlargement for a raster of that size (the sheet's rule targets 512px, so 499 gets 1×), and
+the mask it cut was 68% fatter than the picture. Two mechanisms, two fixes, one census.
+
+### 36.1 The case
+
+Stroke census on the page (vertical ink-run lengths, share by count): 87% of runs are 1px at
+499px; the same page rasterized from its SVG at 2048 reads 77% at 4px and traces perfectly.
+Bilinear enlargement before the trace, old mask, rendered back at native:
+
+| factor | staff | nodes | time (Node) |
+|---|---|---|---|
+| 1× | melted into the heads | 2273 | 5.1 s |
+| 2× | still broken | 2874 | 7.2 s |
+| 3× | clean | 4092 | 11.4 s |
+| 4× | clean | 4373 | 12.8 s |
+
+The first stroke probe then read the page's thin ink as **2px**, not 1, and picked 2× — the
+factor that had already failed. The probe was right about the mask: the PNG is black RGB on
+transparency with its anti-aliasing in ALPHA, and `thresholdToMask` counted any pixel with
+alpha ≥ 16 as ink. Measured: 36,694 ink px in the mask against 21,885 at coverage ≥ 0.5;
+thickness histogram 1822 / 24355 / 3999 (1 / 2 / 3px) against 13673 / 4368 / 565. The
+lyrics came out bold for the same reason. `cutLuma` composites the pixel over the paper the
+cut assumes (white, or black when inverted) — a half-covered black pixel reads 128, the
+mask's edge is the iso-0.5 contour, opaque pixels are untouched — and every readout that
+mirrors the mask goes through it. With the cut fixed the probe reads 1px and picks 3×:
+
+| page @499 | mask | ΔE (over white) | SSIM | nodes | time |
+|---|---|---|---|---|---|
+| 1× | alpha ≥ 16 | 8.57 | 0.769 | 2273 | 4.4 s |
+| 2× (probe read 2px) | alpha ≥ 16 | 12.21 | 0.724 | 2874 | 6.1 s |
+| 1× | coverage | 6.36 | 0.696 | 2024 | 4.7 s |
+| **3× (probe reads 1px)** | coverage | **2.62** | **0.931** | 3569 | 15.3 s |
+
+The studio's own ΔE readout agrees (2.62 at ×3). Time is the cost: a full page is 15 s in Node
+and about as long in the worker.
+
+### 36.2 The policy
+
+`monoTraceScale` (`src/lib/traceCaps.ts`), read by the studio, `planTileBase` and so the MCP
+server: the larger of the sheet's SIZE rule (toward 512px, ≤3×, §32's numbers) and a STROKE
+rule (`inkThickness`, `src/lib/strokeWidth.ts`: the min of the vertical and horizontal ink run
+through each ink pixel, the 10% quantile by pixel, enlarged toward 3px, ≤4×), capped by the
+flat raster cap, mono only, bilinear. `upscale: 'auto'` is the default; `'off'` and `'ai'`
+keep their meaning. Gate: `test/stroke-width.test.ts`.
+
+### 36.3 The census — `strokeScaleDiag`, both traces rendered back at native before scoring
+
+Gallery, 152 marks @256 and @512 (305 rows; 180 colour, 125 mono):
+
+| decision | rows | by |
+|---|---|---|
+| ×1 | 62 | — |
+| ×2 | 62 | size, all @256 |
+| ×3 | 1 | stroke — the page |
+
+Enlarged rows 63: ΔE **better 60 / worse 0 / wash 3**; mean ΔE 8.89 → 7.93, median 1.89 →
+**0.98**; SSIM mean 0.864 → 0.912, median 0.925 → 0.976; nodes ×1.38; time ×1.99. The
+stroke rule fired on none of the 152 marks at either raster — logos are thick ink; the rule is
+for line art (scores, diagrams, scans), which is where the size rule is blind. Aside, not this
+pass: `american-express` @256 reads ΔE 67 at 1× and at 2× alike — a mono decision on a mark
+that is not one ink, unchanged by anything here and worth its own look.
+
+Icon sheets, the four examples split by the production detector @2048 and @1024 (99 mono
+tiles): decisions identical to the sheet's own rule (@2048 30 ×1 / 18 ×2; @1024 12 ×2 /
+39 ×3, all by size), the stroke rule never fires, and the coverage cut is inert on opaque
+tiles — a control lane. Re-measuring the existing rule on the way: 52 better / 3 worse / 14
+wash; the one real regression is `productivity#10` @1024, a 125px tile at ×3, ΔE 6.93 →
+10.10 with SSIM up 0.024 — pre-existing, not introduced.
+
+### 36.4 Where the coverage cut shows
+
+Opaque art is byte-identical (the whole gallery lane, the truth gates, the sheet tiles). The
+A/B **mono** lane traces the fixtures on alpha, so it moves there; the frozen pair
+`before-mono-upscale` ⇄ `after-mono-upscale` in `/labs/ab` holds the diff, and the changed
+cases are listed in §36.5.
+
+### 36.5 The A/B pair, byte-compared
+
+43 cases × 3 lanes: **flat 0 changed, gradient 0 changed, mono 7 changed** — `bloom`,
+`outline`, `summit`, `aurora`, `aa-seam`, `flute-flat`, `annulus`, the fixtures whose
+anti-aliasing the mono lane sees in alpha. Every gallery case is byte-identical (rasterized on
+white). The enlargement rule cannot show in the lanes at all: they trace at the cap.
+

@@ -140,13 +140,19 @@ export interface VectorizeOptions {
    */
   traceDetail?: 'balanced' | 'high'
   /**
-   * AI super-resolution in front of the tracer (waifu2x swin_unet, lazy-loaded,
-   * in-browser). A UI-side policy like `traceDetail` — read by the vectorize
-   * studio, never inside src/lib/trace. Only acts on small rasters (see
-   * src/lib/aiUpscale.ts for the size rule); inert on SVG sources and on rasters
-   * above the size where it stops helping. Omitted ⇒ 'off'.
+   * Enlargement in front of the tracer. A UI-side policy like `traceDetail` —
+   * read by the vectorize studio, the icon sheet and the MCP server, never inside
+   * src/lib/trace.
+   *  • 'auto' (the default when omitted): a MONO raster is enlarged bilinearly
+   *    when it is small or its ink is thin — `monoTraceScale` in traceCaps.ts,
+   *    the sheet's measured rule plus a stroke-width rule, never past the flat
+   *    cap. Colour and SVG sources are left alone.
+   *  • 'ai': AI super-resolution (waifu2x swin_unet, lazy-loaded, in-browser),
+   *    small rasters only (see src/lib/aiUpscale.ts for the size rule); inert on
+   *    SVG sources and on rasters above the size where it stops helping.
+   *  • 'off': trace the raster as it is.
    */
-  upscale?: 'off' | 'ai'
+  upscale?: 'off' | 'auto' | 'ai'
   /**
    * Flat-art segmentation strategy. When gradients are OFF, the default is
    * PALETTE-FIRST (paletteSegment.ts): pick the dominant colours, snap every pixel

@@ -107,6 +107,38 @@ Three things the score gets right that are easy to undo:
   space — without that a cleaned SVG (viewBox 24 units) renders as a visible polygon and
   the score blames the tracer for the renderer. `test/fidelity.test.ts` is the gate.
 
+## A small mono raster is ENLARGED before it is traced, and the mono cut is a COVERAGE cut
+
+Two rules in `src/lib/traceCaps.ts`, next to the raster cap, decide how many pixels a mono
+trace gets — the studio, the icon sheet (`planTileBase`) and the MCP server all read the
+same `monoTraceScale`, so `upscale: 'auto'` (the default) means the same thing everywhere:
+
+* **by SIZE** — the sheet's measured rule: toward ~512px, at most 3× (54 real 170px tiles:
+  ink-area drift 0.75pp → 0.13pp, 4× no better than 3×).
+* **by STROKE** — what the size rule misses: a 499px page of sheet music is not "small", but
+  its staff lines are 1px, and at 1× they melted into the note heads. `inkThickness`
+  (`src/lib/strokeWidth.ts`) reads the thin ink's local thickness (min of the vertical and
+  horizontal run through each ink pixel, a low quantile by pixel) and enlarges it toward
+  3px, at most 4×. Measured on that page: 2× still broke the staff, 3× traced it clean.
+
+The larger wins, never past the flat cap, never for colour (palette segmentation follows
+every interpolated tone), plain bilinear (`upscaleImageData`). The census is
+`src/devtest/strokeScaleDiag.ts` — gallery @256/@512 + `--sheets` + `--png` — and it renders
+BOTH traces back at native size before scoring (render an enlarged doc into a native buffer
+and it crops). 2026-09-21: 63 gallery marks enlarged, ΔE better 60 / worse 0, median ΔE
+1.89 → 0.98. `test/stroke-width.test.ts` is the gate; the Upscale control says what Auto did.
+
+The stroke probe found a second thing: the mono mask read the RGB luma of any pixel with
+alpha ≥ 16, so on art over TRANSPARENCY (anti-aliasing carried in alpha, black RGB
+everywhere) every stroke was a pixel fatter than drawn — the page's mask held 68% more ink
+than the picture, 1px lines read 2px, lyrics came out bold. `cutLuma` (`src/lib/ink.ts`)
+composites the pixel over the paper the cut assumes (white, or black when inverted), so the
+mask's edge is the iso-0.5 coverage contour. Opaque art is byte-identical. `thresholdToMask`,
+the stroke probe and the three cut readouts (`snapCutToGap`, `cutFraction`, `inkLumaRange`)
+all go through it — a readout that disagrees with the mask by a pixel is worse than none.
+This moves the A/B **mono** lane (the fixtures trace on alpha); the pair
+`before-mono-upscale` ⇄ `after-mono-upscale` holds it.
+
 ## The tracer ships TWICE, and only one of them is automatic
 
 A tracer change reaches the website by itself — Cloudflare Workers Builds is connected to this
