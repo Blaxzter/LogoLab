@@ -1,5 +1,5 @@
 import { Circle, RotateCcw, Square, Squircle } from 'lucide-react'
-import { useAppearance, useEnv, useStore } from '../store'
+import { isDefaultAppearance, useAppearance, useEnv, useStore } from '../store'
 import { useActiveTab } from '../hooks/useActiveTab'
 import { UploadDropzone } from './UploadDropzone'
 import { TryExampleButton } from './ExamplesDialog'
@@ -222,8 +222,10 @@ function SidebarBody() {
       </div>
 
       {/* Pinned footer — Reset stays reachable no matter how far the settings scroll,
-          matching the cleanup & vectorize rails. */}
-      {showStyling && (
+          matching the cleanup & vectorize rails. It only exists once there is
+          something to undo: over untouched defaults the button can't do anything,
+          and a permanent dead control is noise at the bottom of every panel. */}
+      {showStyling && !isDefaultAppearance(app) && (
         <div className="flex shrink-0 flex-col gap-3 border-t border-line bg-surface p-4">
           <Button
             variant="ghost"

@@ -125,6 +125,23 @@ export const defaultAppearance: Appearance = {
     invert: false,
 };
 
+/**
+ * Is every appearance value still the one it shipped with? Drives whether the
+ * sidebar shows its Reset footer at all — an always-there Reset over untouched
+ * defaults is a control whose only honest state is "nothing to do".
+ *
+ * Walks the DEFAULT's keys, so a field added to {@link Appearance} is covered
+ * the moment it gets a default here, and a key left over in an older stored
+ * record (readLocal merges defaults under, it never prunes) can't make an
+ * untouched panel read as changed. Every value is a primitive, and colours
+ * arrive normalized to lowercase hex (ColorField), so a retyped "#FFFFFF"
+ * compares equal to the default rather than looking like an edit.
+ */
+export const isDefaultAppearance = (a: Appearance): boolean =>
+    (Object.keys(defaultAppearance) as (keyof Appearance)[]).every(
+        (k) => a[k] === defaultAppearance[k],
+    );
+
 export const defaultEnv: Environment = {
     theme: "light",
     pageBg: "#ffffff",
