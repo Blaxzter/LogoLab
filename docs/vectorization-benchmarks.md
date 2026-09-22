@@ -6852,3 +6852,83 @@ cases are listed in §36.5.
 anti-aliasing the mono lane sees in alpha. Every gallery case is byte-identical (rasterized on
 white). The enlargement rule cannot show in the lanes at all: they trace at the cap.
 
+## 37. One tracer: mono goes through planar, and the crisp and potrace engines are gone (2026-09-22)
+
+**One line.** `summit`'s 61° peak traced as a 4px chamfer in the mono lane and as a 0.5px apex
+in the flat lane, on the same raster. The reason was not the mask and not the blur: mono was a
+different fitter. `mode: 'mono'` returned before segmentation into the crisp mask tracer
+(`subpixel.ts` → `curveFit`), whose anchors can only sit on contour samples, whatever the
+Engine control said; the colour lanes pinned planar. Every corner, apex, junction, ring and
+sub-pixel rule since §10 lives in `planarFit`, and once §36's ink probe made Mono the default
+for one-ink art (125 of 305 gallery rows, 99 of 130 sheet tiles), most icons never reached it.
+
+### 37.1 The three engines, measured against each other
+
+| | Potrace (2003, WASM) | Crisp (per-region marching squares + curveFit) | Planar |
+|---|---|---|---|
+| reads the anti-aliasing | no — thresholds | no — blurs the BINARY mask 0.35–0.9px | yes — §15 iso-0.5 placement |
+| shared boundaries | each region alone, stacked | same | one curve per neighbour pair |
+| corners | alphamax threshold | evidence-based, anchors on the contour only | arm intersections, apex evidence, threading |
+| runtime | browser + main thread only; fails to load under Node | worker / Node | worker / Node |
+
+Eight fixtures, flat colour @2048, scored @1024 with `fidelity()`:
+
+| case | planar nodes / ΔE | crisp nodes / ΔE |
+|---|---|---|
+| summit | 9 / 0.01 | 12 / 0.07 |
+| bloom | 36 / 0.04 | 50 / **3.99** (stacked crossings, seams) |
+| aurora | 134 / 2.15 | 206 / 2.10 |
+| orbit | 50 / 0.05 | 28 / 0.07 |
+| hairlines | 114 / 0.15 | 62 / 0.30 |
+| all eight | **425 nodes, mean ΔE 0.31, 11.3 s** | 443 nodes, mean ΔE 0.85, 22.2 s |
+
+"Crisp = fewest nodes", the control's own hint, was not true in aggregate. Potrace could not
+be put in the table: `esm-potrace-wasm` uses `__dirname` in an ESM file and does not load under
+Node, so the MCP server and `npx logolab` never ran it. Nothing measured either engine — the
+truth gates, the A/B lanes and the golden corpus all run planar.
+
+### 37.2 Mono as a segmentation (`src/lib/trace/mono.ts`)
+
+The cut becomes a two-label map, ink and paper, handed to `tracePlanar` exactly as a colour
+segmentation is. Three decisions live in the module: the cut is §36's `cutLuma`; despeckle is
+the old mono contract, a loop-area floor (`turdsize`, 4px² at the default) applied to
+4-connected components of both labels, deliberately gentler than the colour path's region
+floor (a dot on an "i" at 499px is 4px²); and the source the planar passes read (§15
+sub-pixel, §18 apex evidence) is COMPOSITED over the paper the cut assumes, because on
+black-on-transparent art the raw RGB of a transparent pixel is black like the ink and the
+two-colour model degenerates to the lattice. One label cannot be carved, which is the property
+that made mono win over the colour path on shaded single-ink art (§33 / #46). The contract
+holds — one path, `#000000`, repainted by the caller — and it now carries the shared-edge
+`topology`.
+
+### 37.3 What moved
+
+| | before (crisp) | after (planar) |
+|---|---|---|
+| `summit` mono, nodes within 60px of the peak | (848.0, 704.6) d 0.6 and (844.6, 708.0) d 5.2 — a chamfer | (847.8, 703.5) d 0.5 |
+| A/B mono lane, 43 cases | — | **43 changed**; flat 0, gradient 0 |
+| mono lane path commands, sum over 43 | 11 684 | 11 349 (−3%) |
+| mono lane time, sum over 43 | 142.7 s | **42.0 s** |
+| `checker` mono @2048 | 28.3 s | 2.6 s |
+| `logo-ibm` / `peak-drop` mono | 234 / 210 | 161 / 118 |
+| the sheet-music page @499 ×3 | ΔE 2.62, SSIM 0.931, 3569 n, 15.3 s | ΔE **2.27**, SSIM **0.944**, 3762 n, **1.7 s** |
+
+Census (`strokeScaleDiag`, both traces rendered back at native): the same 124 gallery mono
+rows as §36.3, traced at native through crisp and then through planar — mean ΔE **8.41 →
+7.53**, better on **118 / worse on 1** (`american-express` @256, the mark that is not one ink,
+67.59 → 67.60), nodes 7 407 → 7 586 (+2.4%), time 11.1 s → 10.6 s. §36's enlargement rule
+re-measured on the planar mono: 224 mono rows (gallery + sheet tiles + the page), 132 enlarged,
+ΔE better **111 / worse 1 / wash 20**, SSIM 0.858 → 0.875 — the rule holds with the new fitter.
+
+Pair `before-mono-planar` ⇄ `after-mono-planar` in `/labs/ab`. Gates: `test/mono-labels.test.ts`,
+`test/harness.test.ts` (now planar), the truth gates unchanged.
+
+### 37.4 Removed with the engines
+
+`potrace.ts`, `subpixel.ts`, `layers.ts` (the V6 translucent decomposition ran only on the
+stacked path — a stacked output is a paint-order question the planar graph can answer later as
+a post-pass), the stacked assembly in `index.ts`, the Engine control and its docs entry, the
+Engine scoreboard lab and the crisp/potrace panels of the pipeline lab, the crisp devtest
+studies, the `esm-potrace-wasm` dependency, and the main-thread special case in
+`canTraceOffThread`. `VectorizeOptions.engine` stays as the single literal `'planar'`.
+
