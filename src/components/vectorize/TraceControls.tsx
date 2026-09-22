@@ -136,12 +136,10 @@ export function TraceControlsBody({
   const [infoId, setInfoId] = useState<string | null>(null)
   const info = (id: string) => () => setInfoId(id)
 
-  const engine = opts.engine ?? 'planar'
-  const engineLabel = engine === 'planar' ? 'Planar' : engine === 'crisp' ? 'Crisp' : 'Potrace'
   const detailSummary = tracing
     ? opts.mode === 'mono'
       ? `Mono · threshold ${opts.threshold}${opts.invert ? ' · inverted' : ''}`
-      : `${engineLabel} · smoothing ${opts.smoothing}`
+      : `Smoothing ${opts.smoothing}`
     : 'Cleaning SVG markup'
   const colorSummary =
     opts.mode === 'color' && opts.gradients !== false ? 'Gradients on' : 'Flat fills'
@@ -308,18 +306,6 @@ export function TraceControlsBody({
 
           {tracing && (
             <Collapsible title="Shape & detail" summary={detailSummary} defaultOpen>
-              <Field label="Engine" hint={d.engine.hint} onInfo={info('engine')}>
-                <Segmented<'planar' | 'crisp' | 'potrace'>
-                  value={engine}
-                  onChange={(v) => onPatch({ engine: v })}
-                  options={[
-                    { value: 'planar', label: 'Planar' },
-                    { value: 'crisp', label: 'Crisp' },
-                    { value: 'potrace', label: 'Potrace' },
-                  ]}
-                />
-              </Field>
-
               {showDetail && (
               <Field
                 label="Detail"

@@ -20,7 +20,7 @@
 //      cannot leave the published server pinned to the other
 //
 // It reads the graph rather than a list, so it covers dynamic imports (the mono
-// path's `await import('esm-potrace-wasm')`) and the lazy `createRequire(...)`
+// path's `await import(...)` of an optional decoder) and the lazy `createRequire(...)`
 // that loads the optional sharp decoder — the two that a static import list
 // would miss precisely because they are the ones that only fail in production.
 

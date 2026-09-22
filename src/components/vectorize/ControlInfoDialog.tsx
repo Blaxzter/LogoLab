@@ -5,8 +5,8 @@
 // lazy-imported here so it stays out of the initial bundle) on a small example
 // crafted to make that knob's effect visible. "Use my image" re-runs the same
 // variant set live on the uploaded logo via the trace worker, so the user sees
-// the effect on their own artwork. The Engine knob is live-only (Potrace can't
-// run headlessly) — it computes both engines in the browser on open.
+// the effect on their own artwork. A `liveOnly` control is computed in the
+// browser on open instead of from the precomputed spread.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -93,7 +93,7 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
         if (!logo.src) throw new Error('no upload')
         return getImageData(logo.src, LIVE_DIM, logo.isSvg ? logo.svgText : null)
       }
-      // Example source — only ever used for bundled examples (liveOnly = Engine).
+      // Example source — only ever used for bundled examples (liveOnly controls).
       if (doc.example.kind !== 'bundled') throw new Error('example has no browser source')
       return getImageData(exampleUrl(doc.example.file), LIVE_DIM, null)
     },

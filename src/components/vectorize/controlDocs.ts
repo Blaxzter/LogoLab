@@ -67,7 +67,7 @@ export const CONTROL_DOCS: ControlDoc[] = [
     label: 'Smoothing',
     hint: 'Curve fitting — higher melts detail into smooth curves.',
     blurb:
-      'How hard the tracer fits curves to the pixel edges. None hugs every pixel — lots of nodes, jagged edges kept faithfully. Medium balances clean curves against fidelity. High melts small wiggles into long, sweeping Béziers: the fewest nodes, but fine detail and subtle inflections soften. On the default Crisp engine this is gentle (a sub-pixel pre-blur); switch the Engine to Potrace for dramatic smoothing.',
+      'How hard the tracer fits curves to the pixel edges. None hugs every pixel — lots of nodes, jagged edges kept faithfully. Medium balances clean curves against fidelity. High melts small wiggles into long, sweeping Béziers: the fewest nodes, but fine detail and subtle inflections soften. It is the pre-smoothing of the pixel staircase before the fit; the fit tolerance itself stays at one pixel.',
     example: synthetic('smoothing'),
     variants: [
       { label: 'None', patch: { smoothing: 0 } },
@@ -192,20 +192,6 @@ export const CONTROL_DOCS: ControlDoc[] = [
       { label: 'Low', patch: { threshold: 80 } },
       { label: 'Mid', patch: { threshold: 128 } },
       { label: 'High', patch: { threshold: 190 } },
-    ],
-  },
-  {
-    id: 'engine',
-    label: 'Engine',
-    hint: 'Planar = clean shared edges, no overlap. Crisp = fewest nodes. Potrace = closest to the pixels.',
-    blurb:
-      'How the outline is drawn. Planar traces the colour regions as one shared boundary curve between each pair of neighbours, so the shapes tile with no overlap and no hairline colour bleed — the cleanest, most editable result. Crisp uses sub-pixel marching-squares plus Schneider Bézier fitting per region (overlapping stacked shapes): the fewest nodes, great for line-art. Potrace is Peter Selinger’s classic bilevel tracer — closest to the pixels, more nodes. Potrace runs only in the browser, so load a logo and compare on your own artwork.',
-    example: bundled('petals', 'petals.png'),
-    liveOnly: true,
-    variants: [
-      { label: 'Planar', patch: { engine: 'planar' } },
-      { label: 'Crisp', patch: { engine: 'crisp' } },
-      { label: 'Potrace', patch: { engine: 'potrace' } },
     ],
   },
 ]

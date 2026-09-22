@@ -721,8 +721,8 @@ export function VectorizeStudio({
                         setProgress("Tracing…");
                     }
                 }
-                // Crisp runs in a Web Worker (pure JS) so the UI stays responsive;
-                // potrace stays on the main thread (its WASM wrapper needs DOMParser).
+                // The tracer runs in a Web Worker (pure JS) so the UI stays responsive;
+                // `canTraceOffThread` only says no where there is no Worker at all.
                 const runTrace = canTraceOffThread(opts) ? traceImageOffThread : traceImage;
                 next = await runTrace(
                     imageData,
@@ -779,9 +779,9 @@ export function VectorizeStudio({
     // before this click (else it would fire ~DEBOUNCE_MS later and replace the doc the
     // user wanted to keep); bump the run id so any late progress / result from the
     // aborted run is ignored; abort the controller (which terminates the worker —
-    // off-thread planar/crisp traces stop instantly, even mid-segmentation; potrace and
-    // the clean-existing-SVG path run synchronously on the main thread and stop after
-    // their current step); and clear the busy UI. The previous document in history is
+    // an off-thread trace stops instantly, even mid-segmentation; the
+    // clean-existing-SVG path runs synchronously on the main thread and stops after
+    // its current step); and clear the busy UI. The previous document in history is
     // left intact — stopping means "never mind, keep what I had" — and `staleOpts` flags
     // that the shown result now lags the settings, so the controls offer a re-trace.
     // A new run starts only from a fresh opts/source change or the manual Trace button.

@@ -27,11 +27,12 @@ stamps against each other (nothing traced, so it does not decay as you keep work
 `before-` is the normal case, and the pair is for a result worth being able to re-open later.
 
 Every case is traced in **three lanes** (`AB_LANES`), each at the resolution production uses
-for that art: flat at the flat cap, gradient/photo at the gradient cap, and **mono** — which
-is NOT a subset of the colour path (`mode: 'mono'` returns before segmentation and the colour
-lanes pin `engine: 'planar'`, which routes around the two modules mono is made of). The mono
-cut comes from the ink probe on the raster, not a constant, so the lane traces what a user
-actually gets. Old stamps keep working: every lane's resolution is recorded per stamp.
+for that art: flat at the flat cap, gradient/photo at the gradient cap, and **mono** — its own
+segmentation (`src/lib/trace/mono.ts`: the ink cut as a two-label map) through the SAME
+planar fitter as the colour lanes, so a fitter change shows in all three and a cut change in
+mono alone. The mono cut comes from the ink probe on the raster, not a constant, so the lane
+traces what a user actually gets. Old stamps keep working: every lane's resolution is
+recorded per stamp.
 
 Two case lanes, both in `src/devtest/abCorpus.ts`: the ⟐ **fixtures** (handcrafted, one mechanism
 each — good gates, weak evidence: they are "good enough" long before real art is) and a slice
@@ -138,6 +139,30 @@ the stroke probe and the three cut readouts (`snapCutToGap`, `cutFraction`, `ink
 all go through it — a readout that disagrees with the mask by a pixel is worse than none.
 This moves the A/B **mono** lane (the fixtures trace on alpha); the pair
 `before-mono-upscale` ⇄ `after-mono-upscale` holds it.
+
+## There is ONE tracer, and mono goes through it
+
+Until 2026-09-22 there were three engines behind an "Engine" control — potrace (the 2003
+bilevel tracer, WASM, browser-only), "crisp" (a per-region marching-squares + `curveFit`
+tracer) and planar — and `mode: 'mono'` silently ran crisp whatever the control said. Two
+things followed from that and both are why the engines are gone: every corner, apex,
+junction, ring and sub-pixel rule since July lives in `planarFit`, and once the ink probe made
+Mono the default for one-ink art, most icons never reached it (a 61° peak traced as a 4px
+chamfer through crisp and to 0.5px through planar — §37); and the per-region tracers stacked
+overlapping shapes, so every boundary two colours share was drawn twice with a seam between
+the copies (bloom: ΔE 3.99 stacked against 0.04 planar). Measured on the eight fixtures, crisp
+was also twice as slow and not fewer nodes.
+
+So: `mono.ts` turns the cut into a two-label map (ink/paper, despeckled by component area at
+the old `turdsize` floor, and the source COMPOSITED over the paper so §15/§18 see a real ramp
+on transparent art) and hands it to `tracePlanar` like any segmentation. Mono's contract holds
+— one path, `#000000`, repainted by the caller — and it now carries the shared-edge
+`topology`. `VectorizeOptions.engine` is vestigial (`'planar'` only, kept so stored options
+parse); the stacked colour path, the V6 translucent decomposition that only ran on it, the
+`esm-potrace-wasm` dependency and the main-thread special case in `canTraceOffThread` went
+with the engines. A stacked output — regions painted over one another rather than tiled — is
+a PAINT-ORDER question the planar graph can answer later as a post-pass, not a second tracer.
+`test/mono-labels.test.ts` and `test/harness.test.ts` are the gates.
 
 ## The tracer ships TWICE, and only one of them is automatic
 
