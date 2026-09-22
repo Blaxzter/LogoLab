@@ -89,13 +89,16 @@ export interface MonoUpscalePlan {
 
 /**
  * How much to enlarge a raster before a MONO trace. 1 for colour, for an
- * explicit `upscale: 'off'` or the AI path, and when the raster already sits
- * within a factor of the cap.
+ * explicit `upscale: 'off'`, and when the raster already sits within a factor
+ * of the cap. `'ai'` is not refused here: that path is the studio's own, and
+ * when it does not apply to a raster (above its size window) the studio asks
+ * this rule instead — a refused AI request must fall back to Auto, not to
+ * nothing (measured: the page at 499px traced at 1× read ΔE 3.95 against 2.5).
  */
 export function monoTraceScale(img: ImageDataLike, opts: VectorizeOptions): MonoUpscalePlan {
   const none: MonoUpscalePlan = { scale: 1, thickness: null, room: 1, by: 'none' }
   if (opts.mode !== 'mono') return none
-  if (opts.upscale === 'off' || opts.upscale === 'ai') return none
+  if (opts.upscale === 'off') return none
   const long = Math.max(img.width, img.height)
   if (!(long > 0)) return none
   const room = Math.floor(rasterCapFor(opts) / long)

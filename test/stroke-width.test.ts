@@ -146,12 +146,14 @@ test('never past the flat cap; High detail makes room', () => {
   assert.equal(monoTraceScale(img, { ...mono, traceDetail: 'high' }).scale, 3)
 })
 
-test('colour, an explicit Off, and the AI path are left alone', () => {
+test('colour and an explicit Off are left alone; a declined AI request falls back to the rule', () => {
   const img = paper(200, 200)
   for (let y = 10; y < 200; y += 10) fill(img, 0, y, 200, 1)
   assert.equal(monoTraceScale(img, { ...mono, mode: 'color' }).scale, 1)
   assert.equal(monoTraceScale(img, { ...mono, upscale: 'off' }).scale, 1)
-  assert.equal(monoTraceScale(img, { ...mono, upscale: 'ai' }).scale, 1)
+  // The studio only asks with 'ai' when the AI path declined the raster; the
+  // answer must be Auto's, not "nothing" (a 499px page at 1× read ΔE 3.95 vs 2.5).
+  assert.equal(monoTraceScale(img, { ...mono, upscale: 'ai' }).scale, 3)
   assert.equal(monoTraceScale(img, { ...mono, upscale: 'auto' }).scale, 3)
   assert.equal(monoTraceScale(img, mono).scale, 3, 'omitted means auto')
 })

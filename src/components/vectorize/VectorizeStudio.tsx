@@ -710,6 +710,8 @@ export function VectorizeStudio({
                     // bilinearly first — the icon sheet's size rule plus a stroke
                     // rule, both measured in traceCaps.ts. 1 for colour, for Off,
                     // and when the raster already sits within a factor of the cap.
+                    // Reached with `upscale: 'ai'` too, when the AI path declined
+                    // the raster (above its size window): Auto stands in.
                     const plan = monoTraceScale(imageData, opts);
                     setAutoUpscale(plan);
                     if (plan.scale > 1) {
@@ -2145,6 +2147,11 @@ function OriginalPane({
     };
 
     const inv = pz.scale > 0 ? 1 / pz.scale : 1;
+    // Once a source pixel is wider than a screen pixel, show the pixel: the
+    // smoothed image reads as a blur that hides what the raster actually holds,
+    // and this pane exists to be compared against the trace. Same rule as the
+    // Difference view's heat canvas; `aspectW` is the source's natural width.
+    const magnified = fit.width > 0 && (pz.scale * fit.width) / aspectW > 1;
     return (
         <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
             <div
@@ -2162,6 +2169,7 @@ function OriginalPane({
                         alt=""
                         draggable={false}
                         className="pointer-events-none h-full w-full select-none"
+                        style={{ imageRendering: magnified ? "pixelated" : "auto" }}
                     />
                     {all.length > 0 &&
                         all.map((m, i) => (

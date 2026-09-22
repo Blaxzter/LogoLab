@@ -184,6 +184,10 @@ export function TraceControlsBody({
   const upscaleHint = (() => {
     if (upscaleWhy) return upscaleWhy
     if (upscaleMode === 'off') return 'Traced at its own size — no enlargement.'
+    if (upscaleMode === 'ai' && sourceMaxDim != null && !aiCanBite)
+      return `AI enlarges rasters up to ${AI_UPSCALE_MAX_PX}px; at ${sourceMaxDim}px it stands aside and Auto's rule applies${
+        autoUpscale && autoUpscale.scale > 1 ? ` (this image was enlarged ×${autoUpscale.scale} bilinearly)` : ''
+      }.`
     if (upscaleMode === 'ai')
       return `AI enlarges a small raster ×${sourceMaxDim ? aiUpscaleFactor(sourceMaxDim) || 2 : '2–4'} before tracing (waifu2x, in your browser: ~17–19 MB once, a few seconds per trace). Measured: cleaner corners and fewer nodes than tracing it small.`
     if (opts.mode !== 'mono')
