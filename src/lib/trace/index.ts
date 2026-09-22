@@ -24,7 +24,8 @@ import { decomposeTranslucent, type Decomposition } from './layers.ts'
 import { uniteBackgroundGradient, type BackgroundUnion } from './backgroundLayer.ts'
 import { rasterizeDoc } from '../render/raster.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
-import { tracePlanar } from './planarAssemble.ts'
+import { tracePlanar, type PlanarTrace } from './planarAssemble.ts'
+import { monoLabels, MONO_INK } from './mono.ts'
 import { type PlanarFitOptions, DEFAULT_PLANAR_FIT, FLAT_LINE_COST } from './planarFit.ts'
 import { planarBeautify } from './planarBeautify.ts'
 import { weldConvergedJunctions } from './planarReseat.ts'
@@ -371,22 +372,62 @@ export async function traceImage(
   // before items are assembled. fidelity ≤ 0 makes it a no-op (raw trace).
   const beautifyOpts = beautifyOptionsFor(options)
 
+  // Edge-level beautify + the converged-junction weld, shared by the mono and
+  // colour planar paths. Phase 6: snap shared edges to circles/ellipses/lines ONCE
+  // (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a no-op, so the
+  // unbeautified planar output is byte-identical. The co-circular arc snap (§1d)
+  // can be turned off via planarFit.arcSnap (Test view baseline). §10.4 second half
+  // — fuse junction pairs the re-seat converged (a rasterized degree-4 crossing =
+  // two degree-3 junctions + a micro-edge; once re-seated onto the true crossing
+  // they are ONE authored point) — runs here, not inside planarBeautify:
+  // contracting the micro-edge rewrites the region loops, and beautify treats
+  // `loopsByLabel` as read-only. Everything downstream reads them AFTER this.
+  const fitOpts = planarFitOptionsFor(options)
+  const finishPlanar = (trace: PlanarTrace) => {
+    let reseated: ReadonlySet<number> = new Set<number>()
+    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, {
+      arcSnap: fitOpts.arcSnap,
+      localScaleK: fitOpts.localScaleK,
+      cornerVeto: fitOpts.cornerVeto,
+      chainArcs: fitOpts.chainArcs,
+      reseat: fitOpts.junctionReseat,
+      width,
+      height,
+      onReseat: (m) => { reseated = m },
+      onChord: fitOpts.onChord,
+      onReseatVerdict: fitOpts.onReseatVerdict,
+      reseatTune: fitOpts.reseatTune,
+      onArcLoop: fitOpts.onArcLoop,
+    })
+    weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, width, height, reseated)
+    return { topology, edges: edgeMap(topology) }
+  }
+
   if (options.mode === 'mono') {
-    const traced = await traceOne(thresholdToMask(imageData, options.threshold, options.invert === true))
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError') // parity with the colour path's checkpoints
-    const [subPaths] = beautify([traced], beautifyOpts)
+    // One ink on paper: a two-label segmentation (mono.ts) through the SAME planar
+    // fitter as colour — one label cannot be carved, and the fitter is the one every
+    // corner/apex/junction/circle rule was built into. The result keeps mono's
+    // contract: one path, painted #000000 (the caller repaints it with the probed
+    // ink), plus the shared-edge topology so its nodes are jointly editable.
+    onProgress?.({ phase: 'segment', fraction: 0.3, label: 'Cutting the ink' })
+    const seg = monoLabels(imageData, options.threshold, options.invert === true, maskOpts.turdsize)
+    stage('segment')
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    onPlanarLabels?.({ labels: seg.labels, width, height })
+    onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END, label: 'Tracing shapes' })
+    const trace = tracePlanar(seg.labels, width, height, fitOpts, seg.palette, seg.image)
+    stage('trace')
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const { topology, edges } = finishPlanar(trace)
+    stage('beautify')
+    const loops = trace.loopsByLabel.get(MONO_INK) ?? []
+    const subPaths = materializeRegion(loops, edges)
     const items: PathItem[] = []
     if (subPaths.length > 0) {
-      items.push({
-        kind: 'path',
-        id: 'trace-0',
-        fill: '#000000',
-        fillRule,
-        subPaths,
-        visible: true,
-      })
+      items.push({ kind: 'path', id: 'trace-0', fill: '#000000', fillRule, loops, subPaths, visible: true })
     }
-    return { viewBox: [0, 0, width, height], items }
+    stage('materialize')
+    return { viewBox: [0, 0, width, height], items, topology }
   }
 
   // Stage 1 — segmentation. Two paths:
@@ -572,7 +613,6 @@ export async function traceImage(
     }
     const labels = bgUnion ? bgUnion.labels : healed
     onPlanarLabels?.({ labels, width, height })
-    const fitOpts = planarFitOptionsFor(options)
     // The palette rides along for the §14 contrast rank only: it lets the fit tell a
     // posterization band seam (weak) from a real logo edge (strong) so the weak one
     // stops aiming the strong one. Geometry-only when omitted.
@@ -583,33 +623,7 @@ export async function traceImage(
     // healed boundaries the image no longer witnesses).
     const trace = tracePlanar(labels, width, height, fitOpts, q.palette, imageData)
     stage('trace') // includes the flat-art prep above (bg detect / remove-heal / heal-spikes)
-    // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
-    // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a
-    // no-op, so the unbeautified planar output is byte-identical. The co-circular
-    // arc snap (§1d) can be turned off via planarFit.arcSnap (Test view baseline).
-    let reseated: ReadonlySet<number> = new Set<number>()
-    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, {
-      arcSnap: fitOpts.arcSnap,
-      localScaleK: fitOpts.localScaleK,
-      cornerVeto: fitOpts.cornerVeto,
-      chainArcs: fitOpts.chainArcs,
-      reseat: fitOpts.junctionReseat,
-      width,
-      height,
-      onReseat: (m) => { reseated = m },
-      onChord: fitOpts.onChord,
-      onReseatVerdict: fitOpts.onReseatVerdict,
-      reseatTune: fitOpts.reseatTune,
-      onArcLoop: fitOpts.onArcLoop,
-    })
-    // §10.4 second half — fuse junction pairs the re-seat converged (a rasterized
-    // degree-4 crossing = two degree-3 junctions + a micro-edge; once re-seated
-    // onto the true crossing they are ONE authored point). Runs here, not inside
-    // planarBeautify: contracting the micro-edge rewrites the region loops, and
-    // beautify treats `loopsByLabel` as read-only. Both structures are owned by
-    // this trace pass, and everything below reads them AFTER this line.
-    weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, width, height, reseated)
-    const edges = edgeMap(topology)
+    const { topology, edges } = finishPlanar(trace)
     stage('beautify')
     let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
     // Background removal drops the pre-union `bg` (byte-identical to before when no union
