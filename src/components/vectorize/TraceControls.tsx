@@ -291,8 +291,10 @@ export function TraceControlsBody({
                     ? 'Nothing but background found — tracing in colour.'
                     : inkPlan.mode === 'mono'
                       ? `One ink${inkPlan.invert ? ', lighter than the background' : ''} → Mono, cut at ${inkPlan.threshold}${
-                          inkPlan.invert ? ' and inverted' : ''
-                        }${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
+                          inkPlan.hairlines && inkPlan.hairlines.cut !== inkPlan.hairlines.from
+                            ? ` (raised from ${inkPlan.hairlines.from} to keep hairlines)`
+                            : ''
+                        }${inkPlan.invert ? ' and inverted' : ''}${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
                       : inkPlan.inks === 1
                         ? // One ink, but not far enough from the background in
                           // luminance for a cut to separate them — which is the

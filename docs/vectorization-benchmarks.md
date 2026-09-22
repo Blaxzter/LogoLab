@@ -6932,3 +6932,83 @@ Engine scoreboard lab and the crisp/potrace panels of the pipeline lab, the cris
 studies, the `esm-potrace-wasm` dependency, and the main-thread special case in
 `canTraceOffThread`. `VectorizeOptions.engine` stays as the single literal `'planar'`.
 
+## 38. The mono cut follows the thin ink (2026-09-22)
+
+**One line.** At 949% the page traced through §37's planar mono still had beads on its staff
+lines where the barlines cross them, and no barlines. The midpoint cut is the 50% coverage
+contour — the geometrically right edge for any stroke a pixel wide or more — and a 0.6px
+barline never reaches 50%, except where it crosses a staff line and the coverages add. The
+user's diagnosis was the right one: it depends on the threshold. This section measures what
+the threshold should be, and whether the raster can say so itself.
+
+### 38.1 Phase 0 — the SSIM-optimal cut, judged against the vector
+
+`src/devtest/hairlineCutDiag.ts`: two synthetic pages (staff lines at 0.45 / 0.6 / 0.9 units,
+a diagram of 0.5–1.2-unit strokes, both with filled shapes and text), the hymn page and the
+`hairlines` fixture, rasterized on transparency at 400 / 499 / 600 / 800 px (a user's PNG),
+enlarged by the production Auto factor, traced at every cut from 128 to 200, each trace
+rendered at the enlarged size and scored with `fidelity()` against the SVG ITSELF rendered
+there on white. The truth is the vector, not the blurry PNG — the earlier montage judged
+against the PNG put the hymn's optimum at 160; against the page it is 144, and the gain is a
+third of what the PNG suggested. Beside each row the RIDGE statistic at the native raster:
+pixels darker than both neighbours across some direction by 10 luma (a thick stroke's interior
+is flat and its edge a monotonic ramp, so only sub-pixel strokes are ridges), and of those the
+ones at or above the cut — the ink the cut loses — as a share of the ink.
+
+| case | raster | lost share | lost-luma p50 | best cut | SSIM at best / at 128 |
+|---|---|---|---|---|---|
+| synth-staff | 400 / 499 / 600 / 800 | 63 / 57 / 24 / 3.4% | 166 / 161 / 171 / 191 | 168 / 168 / 168 / 152 | .918/.876 · .938/.910 · .952/.940 · .965/.947 |
+| synth-diagram | 400 / 499 / 600 / 800 | 28 / 19 / 8.9 / 3.5% | 166 / 158 / 159 / 151 | 168 / 168 / 160 / 152 | .969/.948 · .974/.965 · .987/.981 · .992/.990 |
+| hymn | 400 / 499 / 600 / 800 | 31 / 7.0 / 5.6 / 2.5% | 145 / 191 / 191 / 191 | 160 / 144 / 152 / 128 | .877/.799 · .924/.918 · .938/.932 · .923/.923 |
+| hairlines | 400 / 499 / 600 | 0.6 / 5.3 / 0.2% | — | 144 / 136 / 144 | .969/.952 · — · — |
+
+Two readings fell before any code moved. A quantile of the lost ridges' darkness — the first
+draft — is the wrong estimator: on the hymn the faint text hairlines outnumber the darker
+barlines and drag every quantile to 191, which the montage had already shown as bold; the
+optimum does not follow p50 (145 → 160 but 191 → 144). And the optimum is not a constant
+either: it tracks the SHARE, ~168 when a quarter or more of the ink is sub-pixel, ~152 at
+3–6%, the midpoint at 2.5%.
+
+### 38.2 The rule, scored against the curves
+
+Candidate rules evaluated on the 15 rows' SSIM curves (nearest sampled cut), mean loss
+against the per-row optimum:
+
+| rule | mean SSIM | mean loss vs oracle | worst row |
+|---|---|---|---|
+| midpoint (before) | 0.9347 | 0.0167 | hymn@400 −0.078 |
+| fixed 160 when share ≥ 3% | 0.9461 | 0.0053 | synth-staff@400 −0.018 |
+| step: 3% → 152, 15% → 168 | 0.9488 | 0.0026 | hairlines@400 −0.016 |
+| linear +40·min(1, share/0.2) | 0.9469 | 0.0045 | hairlines@400 −0.016 |
+| **sqrt: +40·√min(1, share/0.3)**, gate 2% | **0.9495** | **0.0032** | hairlines@400 −0.016 |
+| oracle | 0.9514 | 0 | — |
+
+`hairlineRaise` (strokeWidth.ts): nothing under a 2% share, then 40 luma × √(share/0.3),
+capped, scaled by the ink-to-paper span; `hairlineCut` reads the share and `decideInkMode`
+applies it after the midpoint / gap placement, in the mono decision the studio, the sheet and
+the MCP server share. The gate comes from the control: across 152 gallery marks @256 and
+@512 the highest share is 1.24% (`boeing-wm`) and 1.07% (`chanel`), and a sweep of those two
+against their own vectors reads a raise as a wash or a hair worse (boeing 0.811 → 0.808 at
+132), so nothing in the gallery moves. The `InkModePlan` carries the read (`hairlines`) and
+the Mode line says "cut at 147 (raised from 128 to keep hairlines)".
+
+What the rule picks on the calibration rows, and what that scores (the raise is applied on
+top of the probe's placement, so a page with grey ink starts higher): synth-staff 168 / 168 /
+164 (SSIM .900 / .929 / .951), synth-diagram 167 / 160 / 150 (.968 / .972 / .985), hymn
+168 / 147 / 145 (.87 / .919 / .930). The real page at 499 is the weakest row: 0.919 against
+0.918 at the midpoint, a wash by the number, with the barlines drawn where before they were
+beads. At 400 it is worth 0.08 of SSIM.
+
+**Where it shows, and where it does not.** A/B pair `before-hairline-cut` ⇄
+`after-hairline-cut`: **0 of 43 cases changed in any lane** — at the 2048 cap nothing has a
+2% sub-pixel share, which is the point. The census (raster-scored, §36.3's rows): 221 of 224
+mono rows byte-identical; the three that moved are `ibm` @256 (raster ΔE 1.57 → 1.68, the
+cut raised a little for its thin strokes), `productivity#02` @1024 (2.94 → 2.80) and the page
+(4.02 → 4.10 against its own blurry PNG, a wash against its vector — above). Time unchanged.
+
+### 38.3 What this is not
+
+A centreline stroke for line art. Staff lines, stems and barlines as stroked paths with a
+measured width, note heads as fills — the right output for sheet music and diagrams, and a
+project of its own. This section only moves a threshold that was already the user's to move.
+
