@@ -1121,6 +1121,69 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       return svg(body.join(''))
     },
   },
+  {
+    // SMALL-DISC LADDER (planarFit `discExplainsLoop`, 2026-09-23). The ±win chord reading
+    // minted 2–5 corners on the staircase of any disc under r ≈ 6px, so sheet music's
+    // i-dots and repeat dots traced as lumpy polygons while their 13px neighbours were
+    // round — a phase lottery. The veto that fixes it is a §9.8 hazard (a small square is
+    // radially close to a circle), so this rack shows BOTH sides in one picture: the disc
+    // rows should be round from the smallest rung, the polygon rows should keep every
+    // corner they had.
+    //
+    // Sized for the A/B lanes, NOT the truth gate: 12 rungs 0.625–4 units are 5–32px at
+    // the flat/mono cap (2048, 8×) and 2.5–16px on the gradient lane (1024). The truth
+    // gate reads this viewBox @512, where the rack would be 1.25–8px — below what its
+    // corner and region gates are calibrated for — so it is deliberately not registered
+    // there. Each shape gets two rows at different sub-pixel phases, because the defect
+    // was phase-dependent: one row alone can land on a lucky phase and look fixed.
+    name: 'dot-ladder',
+    note: 'discs vs squares/diamonds/triangles 5–32px @2048 — the small-disc corner veto, both sides',
+    make: () => {
+      const f3 = (v: number): string => v.toFixed(3)
+      const SIZES = [0.625, 0.75, 0.875, 1, 1.125, 1.25, 1.5, 1.75, 2, 2.5, 3, 4]
+      const PITCH_X = 20
+      const PITCH_Y = 23
+      const ORIGIN_X = 14
+      const ORIGIN_Y = 18
+      /** Regular n-gon of circumradius r about (cx,cy), first vertex at angle `rot`. */
+      const ngon = (cx: number, cy: number, r: number, n: number, rot: number, fill: string): string => {
+        const pts: string[] = []
+        for (let k = 0; k < n; k++) {
+          const a = rot + (2 * Math.PI * k) / n
+          pts.push(`${f3(cx + r * Math.cos(a))},${f3(cy + r * Math.sin(a))}`)
+        }
+        return `<polygon points="${pts.join(' ')}" fill="${fill}"/>`
+      }
+      // `s` is the shape's WIDTH in units (disc diameter, square side); triangles use it as
+      // the circumdiameter. Each row alternates ink so neighbouring rows read apart.
+      const SHAPES: { fill: string; draw: (cx: number, cy: number, s: number, fill: string) => string }[] = [
+        { fill: INK, draw: (cx, cy, s, fill) => `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(s / 2)}" fill="${fill}"/>` },
+        { fill: RED, draw: (cx, cy, s, fill) => ngon(cx, cy, s / Math.SQRT2, 4, Math.PI / 4, fill) },
+        { fill: NAVY, draw: (cx, cy, s, fill) => ngon(cx, cy, s / Math.SQRT2, 4, 0, fill) },
+        { fill: INK, draw: (cx, cy, s, fill) => ngon(cx, cy, s / Math.SQRT2, 4, Math.PI / 4 + (20 * Math.PI) / 180, fill) },
+        { fill: RED, draw: (cx, cy, s, fill) => ngon(cx, cy, s / 2, 3, -Math.PI / 2, fill) },
+      ]
+      // Sub-pixel phases in UNITS: at 8 px/unit these are ~0.3 / ~0.6 px, and the per-column
+      // drift below walks each row through the rest of the pixel.
+      const PHASES: [number, number][] = [
+        [0.04, 0.02],
+        [0.075, 0.09],
+      ]
+      const body: string[] = [`<rect width="${V}" height="${V}" fill="${WHITE}"/>`]
+      let row = 0
+      for (const shape of SHAPES) {
+        for (const [px, py] of PHASES) {
+          SIZES.forEach((s, col) => {
+            const cx = ORIGIN_X + col * PITCH_X + px + col * 0.017
+            const cy = ORIGIN_Y + row * PITCH_Y + py + col * 0.011
+            body.push(shape.draw(cx, cy, s, shape.fill))
+          })
+          row++
+        }
+      }
+      return svg(body.join(''))
+    },
+  },
 ]
 
 // --- emit -------------------------------------------------------------------
