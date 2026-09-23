@@ -1,6 +1,6 @@
 {
   "name": "logolab",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP server for LogoLab: trace an image to a clean SVG and export a full app-icon set, locally, from your coding agent.",
   "keywords": [
     "mcp",
