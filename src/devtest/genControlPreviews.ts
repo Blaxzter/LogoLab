@@ -105,7 +105,7 @@ const manifest: Record<string, ControlPreview> = {}
 for (const doc of CONTROL_DOCS) {
   if (doc.liveOnly) continue
   const { img, inputSvg } = resolveExample(doc.example)
-  const base = { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'crisp' as const, ...doc.baseOpts }
+  const base = { ...DEFAULT_VECTORIZE_OPTIONS, ...doc.baseOpts }
   const variants: PreviewVariant[] = []
   for (const v of doc.variants) {
     const traced = await traceImage(img as unknown as ImageData, { ...base, ...v.patch })

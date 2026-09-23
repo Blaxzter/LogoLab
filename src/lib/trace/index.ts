@@ -1,30 +1,27 @@
-// Raster → vector tracing engine (V2, structure-first — plan §3): Mumford–Shah
-// smoothness segmentation → per-macro-region paint-model ladder → stacked per-
-// region binary masks → tracer per mask → EditableDoc.
+// Raster → vector tracing engine (structure-first — plan §3): segmentation into
+// a label map (Mumford–Shah smoothness for gradient art, palette-first for flat
+// art, a two-label ink/paper cut for mono) → per-region paint-model ladder →
+// ONE planar shared-edge trace of the label map → EditableDoc.
 //
 // The order is INVERTED from the old posterize-then-mend pipeline: regions are
-// found by smoothness FIRST (segment.ts), each region's paint (solid / linear /
-// radial gradient) is fitted SECOND (gradient.ts fitPaintLadder), and geometry is
-// traced LAST — once per region. Masks are still STACKED (each layer also covers
-// everything painted above it) so adjacent regions overlap instead of abutting,
-// which kills the hairline gaps a naive per-region trace leaves between regions.
+// found FIRST (segment.ts / paletteSegment.ts / mono.ts), each region's paint
+// (solid / linear / radial gradient) is fitted SECOND (gradient.ts
+// fitPaintLadder), and geometry is traced LAST — every boundary once, shared by
+// both regions (planarAssemble.ts), so regions tile with no overlap and no seam.
+// The stacked per-region mask tracers that preceded it (crisp, potrace) were
+// removed on 2026-09-22 (docs/vectorization-benchmarks.md §37).
 // k-means quantization (quantize.ts) survives only as a fallback / UI palette.
 
 import type { VectorizeOptions } from '../../types'
-import { cutLuma, VISIBLE_ALPHA } from '../ink.ts'
 import type { EditableDoc, GradientFill, PathItem, RadialGradient, SubPath } from '../path/types'
 import type { TraceProgress, QuantizeResult } from './types'
-import { traceMask, type TraceMaskOptions } from './potrace.ts'
-import { traceMaskCrisp, type CrispOptions } from './subpixel.ts'
 import { segmentImage, DEFAULT_SEGMENT_OPTIONS, type SegmentOptions } from './segment.ts'
 import { segmentFlatPalette, type PaletteSegmentOptions } from './paletteSegment.ts'
 import { fitPaintLadder, type PaintLadderResult, type RegionSamples } from './gradient.ts'
-import { beautify, DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
-import { decomposeTranslucent, type Decomposition } from './layers.ts'
+import { DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
 import { uniteBackgroundGradient, type BackgroundUnion } from './backgroundLayer.ts'
-import { rasterizeDoc } from '../render/raster.ts'
-import { srgbToLab, deltaE76 } from './lab.ts'
-import { tracePlanar } from './planarAssemble.ts'
+import { tracePlanar, type PlanarTrace } from './planarAssemble.ts'
+import { monoLabels, MONO_INK } from './mono.ts'
 import { type PlanarFitOptions, DEFAULT_PLANAR_FIT, FLAT_LINE_COST } from './planarFit.ts'
 import { planarBeautify } from './planarBeautify.ts'
 import { weldConvergedJunctions } from './planarReseat.ts'
@@ -63,21 +60,6 @@ const PROGRESS_PAINT_END = 0.88
  *  count or over-posterizing. Schild ≈ 7 colours; the Headphones illustration ≥ 16. */
 const FLAT_PALETTE_MIN_COVERAGE = 0.7
 const FLAT_PALETTE_MAX_COLORS = 14
-
-/** Map the user smoothing dial (0–100) onto the crisp tracer's tunables. */
-function crispOptionsFor(smoothing: number, turdsize: number): CrispOptions {
-  const s = smoothing / 100
-  return {
-    smooth: 0.35 + s * 0.55, // coverage blur: 0.35 → 0.9 px (gentle: keep thin features)
-    turdsize,
-    // Curve-fit tolerance ε. The paper uses 1.5 px uniformly; we run 1.0 px,
-    // the one measured deviation: at 1.5 the looser cubic fit regressed nebula's
-    // smooth-gradient region (SSIM 0.9782→0.9758, meanΔE 2.95→3.00) below V4
-    // parity, while 1.0 holds nebula/petals exactly AND keeps the node-count win.
-    // Corner placement is evidence-based (curveFit), independent of this value.
-    keyEpsilon: 1.0,
-  }
-}
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n))
 
@@ -341,29 +323,14 @@ export async function traceImage(
   const mark = (): void => {
     if (onStage) stageAt = performance.now()
   }
-  const smoothing = clamp(options.smoothing, 0, 100)
   const despeckle = clamp(options.despeckle, 0, 100)
-  const maskOpts: TraceMaskOptions = {
-    turdsize: Math.max(1, Math.round((despeckle / 100) ** 2 * 64)),
-    alphamax: 0.2 + (smoothing / 100) * 1.13,
-    opttolerance: 0.2 + (smoothing / 100) * 0.6,
-  }
-
-  // Tracer backend: 'planar' (shared-edge subdivision; the default for color) /
-  // 'crisp' (sub-pixel per-region curves) / 'potrace' (bilevel WASM). The latter
-  // two consume the same black-on-white masks; planar has its own geometry path.
-  const engine = options.engine ?? 'planar'
-  const crispOpts = crispOptionsFor(smoothing, maskOpts.turdsize)
-  // Both engines now fill nonzero. The crisp tracer used to fill even-odd, which
-  // XORs two near-coincident simplified contours into hairline background slivers
-  // (the "cracks"); its loops are now oriented for nonzero (orientForNonzero), so
-  // holes still render correctly without the seam mechanism.
+  // Mono despeckle: the loop-area floor (px²) the old mask tracers took as
+  // `turdsize`, now applied to the two-label map (mono.ts). From 1 px², growing
+  // quadratically, so the dial's low end is gentle; the colour path has its own,
+  // steeper region floor (minRegionAreaFor).
+  const turdsize = Math.max(1, Math.round((despeckle / 100) ** 2 * 64))
+  // Planar regions tile and their loops are oriented for nonzero.
   const fillRule: 'nonzero' | 'evenodd' = 'nonzero'
-  // Mask tracing (mono mode + the crisp/potrace color path). 'planar' has its own
-  // geometry path below and never reaches here for color; for mono it falls back
-  // to the crisp mask tracer.
-  const traceOne = (mask: ImageData): Promise<SubPath[]> =>
-    engine === 'potrace' ? traceMask(mask, maskOpts) : Promise.resolve(traceMaskCrisp(mask, crispOpts))
 
   // Stage 3 beautify (plan §3.3): a pure post-pass that snaps traced contours to
   // perfect circles/ellipses/lines and reconciles concentric/equal shapes, gated
@@ -371,22 +338,62 @@ export async function traceImage(
   // before items are assembled. fidelity ≤ 0 makes it a no-op (raw trace).
   const beautifyOpts = beautifyOptionsFor(options)
 
+  // Edge-level beautify + the converged-junction weld, shared by the mono and
+  // colour planar paths. Phase 6: snap shared edges to circles/ellipses/lines ONCE
+  // (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a no-op, so the
+  // unbeautified planar output is byte-identical. The co-circular arc snap (§1d)
+  // can be turned off via planarFit.arcSnap (Test view baseline). §10.4 second half
+  // — fuse junction pairs the re-seat converged (a rasterized degree-4 crossing =
+  // two degree-3 junctions + a micro-edge; once re-seated onto the true crossing
+  // they are ONE authored point) — runs here, not inside planarBeautify:
+  // contracting the micro-edge rewrites the region loops, and beautify treats
+  // `loopsByLabel` as read-only. Everything downstream reads them AFTER this.
+  const fitOpts = planarFitOptionsFor(options)
+  const finishPlanar = (trace: PlanarTrace) => {
+    let reseated: ReadonlySet<number> = new Set<number>()
+    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, {
+      arcSnap: fitOpts.arcSnap,
+      localScaleK: fitOpts.localScaleK,
+      cornerVeto: fitOpts.cornerVeto,
+      chainArcs: fitOpts.chainArcs,
+      reseat: fitOpts.junctionReseat,
+      width,
+      height,
+      onReseat: (m) => { reseated = m },
+      onChord: fitOpts.onChord,
+      onReseatVerdict: fitOpts.onReseatVerdict,
+      reseatTune: fitOpts.reseatTune,
+      onArcLoop: fitOpts.onArcLoop,
+    })
+    weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, width, height, reseated)
+    return { topology, edges: edgeMap(topology) }
+  }
+
   if (options.mode === 'mono') {
-    const traced = await traceOne(thresholdToMask(imageData, options.threshold, options.invert === true))
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError') // parity with the colour path's checkpoints
-    const [subPaths] = beautify([traced], beautifyOpts)
+    // One ink on paper: a two-label segmentation (mono.ts) through the SAME planar
+    // fitter as colour — one label cannot be carved, and the fitter is the one every
+    // corner/apex/junction/circle rule was built into. The result keeps mono's
+    // contract: one path, painted #000000 (the caller repaints it with the probed
+    // ink), plus the shared-edge topology so its nodes are jointly editable.
+    onProgress?.({ phase: 'segment', fraction: 0.3, label: 'Cutting the ink' })
+    const seg = monoLabels(imageData, options.threshold, options.invert === true, turdsize)
+    stage('segment')
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    onPlanarLabels?.({ labels: seg.labels, width, height })
+    onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END, label: 'Tracing shapes' })
+    const trace = tracePlanar(seg.labels, width, height, fitOpts, seg.palette, seg.image)
+    stage('trace')
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const { topology, edges } = finishPlanar(trace)
+    stage('beautify')
+    const loops = trace.loopsByLabel.get(MONO_INK) ?? []
+    const subPaths = materializeRegion(loops, edges)
     const items: PathItem[] = []
     if (subPaths.length > 0) {
-      items.push({
-        kind: 'path',
-        id: 'trace-0',
-        fill: '#000000',
-        fillRule,
-        subPaths,
-        visible: true,
-      })
+      items.push({ kind: 'path', id: 'trace-0', fill: '#000000', fillRule, loops, subPaths, visible: true })
     }
-    return { viewBox: [0, 0, width, height], items }
+    stage('materialize')
+    return { viewBox: [0, 0, width, height], items, topology }
   }
 
   // Stage 1 — segmentation. Two paths:
@@ -471,37 +478,6 @@ export async function traceImage(
   stage('paint')
   onProgress?.({ phase: 'paint', fraction: PROGRESS_SEGMENT_END, label: gradientsOn ? 'Fitting colours' : 'Preparing shapes' })
 
-  // V6 — translucent layer decomposition (plan §9). Only ATTEMPTED when the user
-  // has opted into recovering overlaps (markers or Region detail) and gradients
-  // are on; with neither, the default corpus output is byte-identical (the attempt
-  // is skipped, so nothing downstream can change). When attempted it still no-ops
-  // unless the segmentation actually has overlap-shaped regions AND the translucent
-  // model beats the opaque one (decomposeTranslucent returns null otherwise). Uses
-  // the FULL-region samples as its gate set — the glow-stack methodology.
-  let decomposition: Decomposition | null = null
-  const wantsDecomp =
-    engine !== 'planar' &&
-    gradientsOn &&
-    options.layeredDecomposition !== false &&
-    !options.removeBackground &&
-    ((options.markers?.length ?? 0) > 0 || (options.regionDetail ?? 0) > 0)
-  if (wantsDecomp && fullSamples) {
-    decomposition = decomposeTranslucent(q.labels, width, height, q.palette, q.counts, fullSamples)
-  }
-
-  // Trace every layer first, collecting its raw subpaths + paint metadata, so the
-  // beautify pass can run its cross-shape relation solver (concentric centres,
-  // equal radii, …) over ALL loops at once rather than one layer in isolation.
-  interface Layer {
-    id: string
-    subPaths: SubPath[]
-    fill: string
-    gradient?: GradientFill
-    /** Glow overlays painted above this region's base (model 'glow', §3.2.4). */
-    overlays?: RadialGradient[]
-    /** Translucent fill opacity (V6 decomposition shapes); omitted ⇒ opaque. */
-    fillOpacity?: number
-  }
   /** Copy a region's fitted paint (solid / gradient / glow base+overlays) onto a layer. */
   const applyPaint = (layer: { gradient?: GradientFill; overlays?: RadialGradient[] }, paint: PaintLadderResult | null): void => {
     if (!paint) return
@@ -520,297 +496,116 @@ export async function traceImage(
   // jointly editable (the doc carries the edge graph as `topology`; each region's
   // `subPaths` is the derived render/hit cache). No loop-beautify (it moves loops
   // independently and would desync shared edges); per-region paint is reused.
-  if (engine === 'planar') {
-    onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END, label: 'Tracing shapes' })
-    // "Remove & heal" markers dissolve a marked section and grow its neighbours into
-    // the gap. Background is detected first (from the ORIGINAL labels) so it can be
-    // both excluded as a fill source and dropped from the paint order below.
-    const bg = options.removeBackground ? detectBorderBackground(q.labels, width, height, q.palette.length) : -1
-    const removed = applyRemoveMarkers(options, q.labels, width, height, bg)
-    // Flat-art only: heal pixels grouped into the wrong region at a soft multi-colour
-    // junction — e.g. a dark-background wedge poking into a continuous two-colour
-    // stroke (the schild shield tip). Skipped when gradients are on (a gradient
-    // region's pixels legitimately stray from the region mean, so the colour test
-    // doesn't apply) AND when the user LOCKED a palette: there is no mis-grouping to
-    // heal — every pixel is already its nearest locked colour by construction, so the
-    // contract is exactly "snap to nearest given colour", nothing more. No mislabeled
-    // pixels ⇒ returns the input ⇒ byte-identical.
-    const healed =
-      gradientsOn || usedLockedPalette
-        ? removed
-        : healColorSpikes(removed, imageData.data, width, height, q.palette)
-    // EXPERIMENTAL background layer separation (backgroundGradient, gradients OFF):
-    // the border-seeded band-set that ONE gradient explains is relabeled into a
-    // single region painted with that fitted gradient — the background becomes one
-    // uninterrupted layer, so band↔band boundaries and the band junctions that
-    // split a foreground outline (the ring "pull") never reach the tracer.
-    // Null / flag off ⇒ byte-identical passthrough.
-    //
-    // COMPOSES with removeBackground: the union is the better background DETECTOR (a
-    // posterized ramp is one background, not N bands), so with both flags on we delete
-    // the whole united set rather than the single border-majority band. The label to
-    // drop is therefore computed on the FINAL map (`dropped`, below) — not from `bg`,
-    // which was detected on `q.labels` before the union relabeled its members to a seed
-    // re-detected on `healed`.
-    let bgUnion: BackgroundUnion | null = null
-    if (!gradientsOn && options.backgroundGradient) {
-      const bgSeed = detectBorderBackground(healed, width, height, q.palette.length)
-      if (bgSeed >= 0) {
-        // Remove-markers relabel pixels but the raster keeps the DISSOLVED object's
-        // colours, so sampling them feeds a ghost tint into the union's gradient fit and
-        // its render gate. Exclude exactly the pixels the markers moved. No remove
-        // markers ⇒ `removed` IS `q.labels` ⇒ no mask ⇒ byte-identical.
-        const dissolved = removed === q.labels ? undefined : changedMask(q.labels, removed)
-        const unionSamples = fullRegionSamples(healed, imageData.data, width, q.palette.length, 6000, dissolved)
-        // A FLAT marker ("keep this region flat") pins its label out of the union, so
-        // an explicitly-flat region is never absorbed into the background gradient —
-        // even where the gradient could explain it. Computed on `healed` (the map the
-        // union runs on) so the label ids line up. No flat markers ⇒ empty ⇒ no-op.
-        const pinned = flatMarkerLabels(options, healed, width, height)
-        bgUnion = uniteBackgroundGradient(healed, width, height, bgSeed, unionSamples, q.palette, pinned)
-      }
+  onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END, label: 'Tracing shapes' })
+  // "Remove & heal" markers dissolve a marked section and grow its neighbours into
+  // the gap. Background is detected first (from the ORIGINAL labels) so it can be
+  // both excluded as a fill source and dropped from the paint order below.
+  const bg = options.removeBackground ? detectBorderBackground(q.labels, width, height, q.palette.length) : -1
+  const removed = applyRemoveMarkers(options, q.labels, width, height, bg)
+  // Flat-art only: heal pixels grouped into the wrong region at a soft multi-colour
+  // junction — e.g. a dark-background wedge poking into a continuous two-colour
+  // stroke (the schild shield tip). Skipped when gradients are on (a gradient
+  // region's pixels legitimately stray from the region mean, so the colour test
+  // doesn't apply) AND when the user LOCKED a palette: there is no mis-grouping to
+  // heal — every pixel is already its nearest locked colour by construction, so the
+  // contract is exactly "snap to nearest given colour", nothing more. No mislabeled
+  // pixels ⇒ returns the input ⇒ byte-identical.
+  const healed =
+    gradientsOn || usedLockedPalette
+      ? removed
+      : healColorSpikes(removed, imageData.data, width, height, q.palette)
+  // EXPERIMENTAL background layer separation (backgroundGradient, gradients OFF):
+  // the border-seeded band-set that ONE gradient explains is relabeled into a
+  // single region painted with that fitted gradient — the background becomes one
+  // uninterrupted layer, so band↔band boundaries and the band junctions that
+  // split a foreground outline (the ring "pull") never reach the tracer.
+  // Null / flag off ⇒ byte-identical passthrough.
+  //
+  // COMPOSES with removeBackground: the union is the better background DETECTOR (a
+  // posterized ramp is one background, not N bands), so with both flags on we delete
+  // the whole united set rather than the single border-majority band. The label to
+  // drop is therefore computed on the FINAL map (`dropped`, below) — not from `bg`,
+  // which was detected on `q.labels` before the union relabeled its members to a seed
+  // re-detected on `healed`.
+  let bgUnion: BackgroundUnion | null = null
+  if (!gradientsOn && options.backgroundGradient) {
+    const bgSeed = detectBorderBackground(healed, width, height, q.palette.length)
+    if (bgSeed >= 0) {
+      // Remove-markers relabel pixels but the raster keeps the DISSOLVED object's
+      // colours, so sampling them feeds a ghost tint into the union's gradient fit and
+      // its render gate. Exclude exactly the pixels the markers moved. No remove
+      // markers ⇒ `removed` IS `q.labels` ⇒ no mask ⇒ byte-identical.
+      const dissolved = removed === q.labels ? undefined : changedMask(q.labels, removed)
+      const unionSamples = fullRegionSamples(healed, imageData.data, width, q.palette.length, 6000, dissolved)
+      // A FLAT marker ("keep this region flat") pins its label out of the union, so
+      // an explicitly-flat region is never absorbed into the background gradient —
+      // even where the gradient could explain it. Computed on `healed` (the map the
+      // union runs on) so the label ids line up. No flat markers ⇒ empty ⇒ no-op.
+      const pinned = flatMarkerLabels(options, healed, width, height)
+      bgUnion = uniteBackgroundGradient(healed, width, height, bgSeed, unionSamples, q.palette, pinned)
     }
-    const labels = bgUnion ? bgUnion.labels : healed
-    onPlanarLabels?.({ labels, width, height })
-    const fitOpts = planarFitOptionsFor(options)
-    // The palette rides along for the §14 contrast rank only: it lets the fit tell a
-    // posterization band seam (weak) from a real logo edge (strong) so the weak one
-    // stops aiming the strong one. Geometry-only when omitted.
-    // The source raster rides along for §15's sub-pixel edge placement: the chains are
-    // displaced from the integer crack lattice onto the AA's iso-0.5 crossing before the
-    // fit (planarSubpixel.ts). Guards inside the pass fall back to the lattice wherever
-    // the local two-colour model does not hold (junction neighbourhoods, thin features,
-    // healed boundaries the image no longer witnesses).
-    const trace = tracePlanar(labels, width, height, fitOpts, q.palette, imageData)
-    stage('trace') // includes the flat-art prep above (bg detect / remove-heal / heal-spikes)
-    // Phase 6 — edge-level beautify: snap shared edges to circles/ellipses/lines
-    // ONCE (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a
-    // no-op, so the unbeautified planar output is byte-identical. The co-circular
-    // arc snap (§1d) can be turned off via planarFit.arcSnap (Test view baseline).
-    let reseated: ReadonlySet<number> = new Set<number>()
-    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, {
-      arcSnap: fitOpts.arcSnap,
-      localScaleK: fitOpts.localScaleK,
-      cornerVeto: fitOpts.cornerVeto,
-      chainArcs: fitOpts.chainArcs,
-      reseat: fitOpts.junctionReseat,
-      width,
-      height,
-      onReseat: (m) => { reseated = m },
-      onChord: fitOpts.onChord,
-      onReseatVerdict: fitOpts.onReseatVerdict,
-      reseatTune: fitOpts.reseatTune,
-      onArcLoop: fitOpts.onArcLoop,
-    })
-    // §10.4 second half — fuse junction pairs the re-seat converged (a rasterized
-    // degree-4 crossing = two degree-3 junctions + a micro-edge; once re-seated
-    // onto the true crossing they are ONE authored point). Runs here, not inside
-    // planarBeautify: contracting the micro-edge rewrites the region loops, and
-    // beautify treats `loopsByLabel` as read-only. Both structures are owned by
-    // this trace pass, and everything below reads them AFTER this line.
-    weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, width, height, reseated)
-    const edges = edgeMap(topology)
-    stage('beautify')
-    let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
-    // Background removal drops the pre-union `bg` (byte-identical to before when no union
-    // ran) AND, when the union ran, every label it swallowed — of which only `seed` still
-    // exists in the map. Covering both makes the drop correct whether or not the union's
-    // seed (re-detected on `healed`) agrees with `bg` (detected on `q.labels`).
-    if (options.removeBackground) {
-      const dropped = new Set<number>(bg !== -1 ? [bg] : [])
-      if (bgUnion) for (const l of bgUnion.set) dropped.add(l)
-      order = order.filter((l) => !dropped.has(l))
-    }
-    const items: PathItem[] = []
-    let traced = 0
-    let lastTracePct = -1
-    for (const label of order) {
-      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-      const pct = Math.floor((++traced / order.length) * 100)
-      if (pct > lastTracePct) {
-        lastTracePct = pct
-        onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * (traced / order.length), label: 'Tracing shapes' })
-      }
-      const loops = trace.loopsByLabel.get(label)!
-      const subPaths = materializeRegion(loops, edges)
-      if (subPaths.length === 0) continue
-      const c = q.palette[label]
-      const paint: { gradient?: GradientFill; overlays?: RadialGradient[] } = {}
-      applyPaint(paint, labelPaint[label])
-      const base: PathItem = { kind: 'path', id: 'trace-' + label, fill: rgbToHex(c.r, c.g, c.b), fillRule, loops, subPaths, visible: true }
-      if (paint.gradient) base.gradient = paint.gradient
-      // Background layer separation: the united band-set renders as ONE region
-      // carrying the gradient fitted over the union (its palette hex stays as the
-      // fallback fill/swatch).
-      if (bgUnion && label === bgUnion.seed) base.gradient = bgUnion.gradient
-      // Flat palette path may tag a region with an alpha (its alpha mode, or a locked
-      // RGBA swatch) — paint it translucent. Planar regions tile without overlap, so a
-      // single fill-opacity composites correctly against the background. Opaque (a≥255
-      // / undefined) ⇒ no fill-opacity ⇒ byte-identical to before.
-      if (c.a !== undefined && c.a < 255) base.fillOpacity = c.a / 255
-      items.push(base)
-      if (paint.overlays) {
-        paint.overlays.forEach((ov, k) => {
-          items.push({ kind: 'path', id: `trace-${label}-glow-${k}`, fill: rgbToHex(c.r, c.g, c.b), fillRule, subPaths: cloneSubPaths(subPaths), gradient: ov, visible: true })
-        })
-      }
-    }
-    stage('materialize')
-    return { viewBox: [0, 0, width, height], items, topology }
   }
-
-  // Beautify (cross-shape relation solver over ALL loops) + assemble bottom-up.
-  // A glow region emits its opaque base then one translucent overlay item per
-  // radial glow (sharing the beautified geometry); a V6 translucent shape emits a
-  // single fillOpacity item. Pure given `layers`, so both candidate stacks
-  // (opaque / translucent) assemble through the same path.
-  const assemble = (layers: Layer[]): EditableDoc => {
-    const beautified = beautify(
-      layers.map((l) => l.subPaths),
-      beautifyOpts,
-    )
-    const items: PathItem[] = []
-    layers.forEach((layer, i) => {
-      const base: PathItem = {
-        kind: 'path',
-        id: layer.id,
-        fill: layer.fill,
-        fillRule,
-        subPaths: beautified[i],
-        visible: true,
-      }
-      if (layer.gradient) base.gradient = layer.gradient
-      if (layer.fillOpacity !== undefined && layer.fillOpacity < 1) base.fillOpacity = layer.fillOpacity
-      items.push(base)
-      if (layer.overlays) {
-        layer.overlays.forEach((ov, k) => {
-          items.push({
-            kind: 'path',
-            id: `${layer.id}-glow-${k}`,
-            fill: layer.fill,
-            fillRule,
-            subPaths: cloneSubPaths(beautified[i]),
-            gradient: ov,
-            visible: true,
-          })
-        })
-      }
-    })
-    return { viewBox: [0, 0, width, height], items }
+  const labels = bgUnion ? bgUnion.labels : healed
+  onPlanarLabels?.({ labels, width, height })
+  // The palette rides along for the §14 contrast rank only: it lets the fit tell a
+  // posterization band seam (weak) from a real logo edge (strong) so the weak one
+  // stops aiming the strong one. Geometry-only when omitted.
+  // The source raster rides along for §15's sub-pixel edge placement: the chains are
+  // displaced from the integer crack lattice onto the AA's iso-0.5 crossing before the
+  // fit (planarSubpixel.ts). Guards inside the pass fall back to the lattice wherever
+  // the local two-colour model does not hold (junction neighbourhoods, thin features,
+  // healed boundaries the image no longer witnesses).
+  const trace = tracePlanar(labels, width, height, fitOpts, q.palette, imageData)
+  stage('trace') // includes the flat-art prep above (bg detect / remove-heal / heal-spikes)
+  const { topology, edges } = finishPlanar(trace)
+  stage('beautify')
+  let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
+  // Background removal drops the pre-union `bg` (byte-identical to before when no union
+  // ran) AND, when the union ran, every label it swallowed — of which only `seed` still
+  // exists in the map. Covering both makes the drop correct whether or not the union's
+  // seed (re-detected on `healed`) agrees with `bg` (detected on `q.labels`).
+  if (options.removeBackground) {
+    const dropped = new Set<number>(bg !== -1 ? [bg] : [])
+    if (bgUnion) for (const l of bgUnion.set) dropped.add(l)
+    order = order.filter((l) => !dropped.has(l))
   }
-
-  // Default path: largest region at the bottom; each layer's mask is its own
-  // region flooded through CONNECTED higher-rank pixels, so it overlaps only the
-  // shapes stacked directly against it (the overlap that seals anti-alias seams)
-  // without re-tracing spatially-disjoint shapes as hidden islands.
-  const buildOpaqueLayers = async (): Promise<Layer[]> => {
-    const layers: Layer[] = []
-    let paintOrder = q.palette.map((_, i) => i)
-    if (options.removeBackground) {
-      const bg = detectBorderBackground(q.labels, width, height, q.palette.length)
-      if (bg !== -1) paintOrder = paintOrder.filter((i) => i !== bg)
+  const items: PathItem[] = []
+  let traced = 0
+  let lastTracePct = -1
+  for (const label of order) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const pct = Math.floor((++traced / order.length) * 100)
+    if (pct > lastTracePct) {
+      lastTracePct = pct
+      onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * (traced / order.length), label: 'Tracing shapes' })
     }
-    const rank = new Int32Array(q.palette.length).fill(-1)
-    paintOrder.forEach((label, i) => {
-      rank[label] = i
-    })
-    const total = paintOrder.length
-    for (let i = 0; i < total; i++) {
-      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-      onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * ((i + 1) / total), label: `Tracing layer ${i + 1}/${total}` })
-      const subPaths = await traceOne(stackedMask(q.labels, width, height, rank, i))
-      if (subPaths.length > 0) {
-        const label = paintOrder[i]
-        const { r, g, b } = q.palette[label]
-        const layer: Layer = { id: 'trace-' + i, subPaths, fill: rgbToHex(r, g, b) }
-        applyPaint(layer, labelPaint[label])
-        layers.push(layer)
-      }
-      await new Promise((r) => setTimeout(r))
+    const loops = trace.loopsByLabel.get(label)!
+    const subPaths = materializeRegion(loops, edges)
+    if (subPaths.length === 0) continue
+    const c = q.palette[label]
+    const paint: { gradient?: GradientFill; overlays?: RadialGradient[] } = {}
+    applyPaint(paint, labelPaint[label])
+    const base: PathItem = { kind: 'path', id: 'trace-' + label, fill: rgbToHex(c.r, c.g, c.b), fillRule, loops, subPaths, visible: true }
+    if (paint.gradient) base.gradient = paint.gradient
+    // Background layer separation: the united band-set renders as ONE region
+    // carrying the gradient fitted over the union (its palette hex stays as the
+    // fallback fill/swatch).
+    if (bgUnion && label === bgUnion.seed) base.gradient = bgUnion.gradient
+    // Flat palette path may tag a region with an alpha (its alpha mode, or a locked
+    // RGBA swatch) — paint it translucent. Planar regions tile without overlap, so a
+    // single fill-opacity composites correctly against the background. Opaque (a≥255
+    // / undefined) ⇒ no fill-opacity ⇒ byte-identical to before.
+    if (c.a !== undefined && c.a < 255) base.fillOpacity = c.a / 255
+    items.push(base)
+    if (paint.overlays) {
+      paint.overlays.forEach((ov, k) => {
+        items.push({ kind: 'path', id: `trace-${label}-glow-${k}`, fill: rgbToHex(c.r, c.g, c.b), fillRule, subPaths: cloneSubPaths(subPaths), gradient: ov, visible: true })
+      })
     }
-    return layers
   }
-
-  // V6 path: background full-bleed base, any unrelated opaque region above it, then
-  // the recovered TRANSLUCENT shapes (each the cleaned UNION mask of its label set)
-  // in stacking order — the renderer blends them exactly as the source does.
-  const buildDecompLayers = async (dec: Decomposition): Promise<Layer[]> => {
-    const layers: Layer[] = []
-    const consumed = new Set(dec.consumed)
-    const bgLabel = dec.background
-    const others: number[] = []
-    for (let l = 0; l < q.palette.length; l++) {
-      if (l === bgLabel || consumed.has(l) || (q.counts[l] ?? 0) === 0) continue
-      others.push(l)
-    }
-    const shapesSorted = [...dec.shapes].sort((a, b) => a.order - b.order)
-    const total = 1 + others.length + shapesSorted.length
-    let li = 0
-    const pushTraced = async (layer: Omit<Layer, 'subPaths'>, mask: ImageData): Promise<void> => {
-      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-      onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * ((li + 1) / total), label: `Tracing layer ${li + 1}/${total}` })
-      li++
-      const subPaths = await traceOne(mask)
-      if (subPaths.length > 0) layers.push({ ...layer, subPaths })
-      await new Promise((r) => setTimeout(r))
-    }
-    const bgCol = q.palette[bgLabel]
-    const bgLayer: Omit<Layer, 'subPaths'> = { id: 'trace-bg', fill: rgbToHex(bgCol.r, bgCol.g, bgCol.b) }
-    applyPaint(bgLayer, labelPaint[bgLabel])
-    await pushTraced(bgLayer, maskFromLabels(q.labels, width, height, (l) => l >= 0))
-    for (const l of others) {
-      const c = q.palette[l]
-      const opLayer: Omit<Layer, 'subPaths'> = { id: 'trace-op-' + l, fill: rgbToHex(c.r, c.g, c.b) }
-      applyPaint(opLayer, labelPaint[l])
-      await pushTraced(opLayer, maskFromLabels(q.labels, width, height, (x) => x === l))
-    }
-    // The union mask is CLEANED (largest connected component + filled holes) so
-    // watershed stray pixels don't fragment the disk or corrupt beautify's circle
-    // snap.
-    for (const shape of shapesSorted) {
-      const set = new Set(shape.labels)
-      await pushTraced(
-        { id: 'trace-layer-' + shape.order, fill: shape.color, fillOpacity: shape.alpha },
-        maskFromLabels(q.labels, width, height, (l) => set.has(l), true),
-      )
-    }
-    return layers
-  }
-
-  // When a decomposition is proposed, RENDER both candidate docs and keep the
-  // translucent one ONLY if it beats the opaque rendering on mean CIE76 ΔE — the
-  // V4 glow-stack discipline, but measured on the REAL render because the analytic
-  // per-region residual is anti-correlated with reality here (the opaque bands'
-  // damage is in tracing thin overlap lenses, which a per-pixel region-mean model
-  // cannot see). Same rasterizer the harness scores with ⇒ the gate measures what
-  // ships. Falls back to the byte-identical opaque output when it doesn't win.
-  if (decomposition) {
-    const transDoc = assemble(await buildDecompLayers(decomposition))
-    const opaqueDoc = assemble(await buildOpaqueLayers())
-    const transDE = meanRenderDeltaE(transDoc, imageData, width, height)
-    const opaqueDE = meanRenderDeltaE(opaqueDoc, imageData, width, height)
-    if (transDE <= opaqueDE - DECOMP_WIN_MARGIN) return transDoc
-    return opaqueDoc
-  }
-
-  return assemble(await buildOpaqueLayers())
+  stage('materialize')
+  return { viewBox: [0, 0, width, height], items, topology }
 }
-
-/** Mean full-image CIE76 ΔE of a doc's render vs the source (the V6 render gate). */
-function meanRenderDeltaE(doc: EditableDoc, source: ImageData, width: number, height: number): number {
-  const render = rasterizeDoc(doc, width, height)
-  const src = source.data
-  let sum = 0
-  const n = width * height
-  for (let i = 0; i < n; i++) {
-    const o = i * 4
-    sum += deltaE76(srgbToLab(src[o], src[o + 1], src[o + 2]), srgbToLab(render[o], render[o + 1], render[o + 2]))
-  }
-  return n > 0 ? sum / n : Infinity
-}
-
-/** Translucent decomposition must beat opaque by at least this mean CIE76 ΔE. */
-const DECOMP_WIN_MARGIN = 0.1
 
 /** 1 wherever `after` moved a pixel to a different label than `before` — i.e. the
  *  pixels a remove-marker dissolve reassigned, whose raster RGB still belongs to the
@@ -1001,32 +796,6 @@ function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
 }
 
 /**
- * Threshold to a potrace-ready binary mask: ink pixels become opaque black,
- * everything else (paper, or alpha below VISIBLE_ALPHA) opaque white. The
- * luminance compared is `cutLuma` (ink.ts) — Rec.709, with the pixel COMPOSITED
- * over the paper the cut assumes — so on art over transparency this is a
- * coverage cut at the iso-0.5 contour, not "any alpha at all is ink" (which
- * fattened every anti-aliased stroke by a pixel). Opaque art is unchanged by
- * the composite. `invert` flips which side of the cut is ink — light art on dark
- * paper — and nothing else. The input is not mutated.
- */
-function thresholdToMask(img: ImageData, threshold: number, invert = false): ImageData {
-  const { width, height, data } = img
-  const out = new ImageData(width, height)
-  const dst = out.data
-  const cut = clamp(Math.round(threshold), 0, 255)
-  for (let i = 0; i < data.length; i += 4) {
-    const lum = cutLuma(data, i, invert)
-    const v = data[i + 3] >= VISIBLE_ALPHA && (invert ? lum > cut : lum < cut) ? 0 : 255
-    dst[i] = v
-    dst[i + 1] = v
-    dst[i + 2] = v
-    dst[i + 3] = 255
-  }
-  return out
-}
-
-/**
  * Detect a solid background layer: the most frequent label along the 1px
  * border ring, but only when opaque pixels cover at least half the ring.
  * An image already floating on transparency returns -1 (nothing to remove).
@@ -1067,152 +836,4 @@ function detectBorderBackground(
     }
   }
   return best
-}
-
-/**
- * Build a binary trace mask (black = keep) from a label predicate — used by the
- * V6 decomposition path to trace a translucent shape's UNION mask (all its label
- * set) or a full-bleed background (`l >= 0`), independent of the stacked-rank
- * paint order the opaque path uses. When `clean` is set, the mask is reduced to
- * its largest 4-connected component with internal holes filled — the marker
- * watershed scatters a few boundary pixels into neighbour territory, and those
- * disconnected stray islands would otherwise corrupt the circle/ellipse fit in
- * beautify (measured: they pushed a fitted circle's bbox ~100px off). A
- * translucent shape is one connected blob, so its true geometry is the largest
- * component; cleaning lets beautify snap it to a perfect circle.
- */
-function maskFromLabels(
-  labels: Int32Array,
-  width: number,
-  height: number,
-  keep: (label: number) => boolean,
-  clean = false,
-): ImageData {
-  const out = new ImageData(width, height)
-  const dst = out.data
-  const black = new Uint8Array(labels.length)
-  for (let i = 0; i < labels.length; i++) black[i] = keep(labels[i]) ? 1 : 0
-  const kept = clean ? largestComponentFilled(black, width, height) : black
-  for (let i = 0; i < labels.length; i++) {
-    const v = kept[i] ? 0 : 255
-    const o = i * 4
-    dst[o] = v
-    dst[o + 1] = v
-    dst[o + 2] = v
-    dst[o + 3] = 255
-  }
-  return out
-}
-
-/**
- * Largest 4-connected component of a binary mask, with internal holes filled.
- * Drops disconnected stray islands (watershed mislabels) and patches AA gaps
- * inside the blob, so a translucent shape's union mask becomes one clean region.
- */
-function largestComponentFilled(black: Uint8Array, width: number, height: number): Uint8Array {
-  const n = black.length
-  const comp = new Int32Array(n).fill(-1)
-  const stack: number[] = []
-  let bestId = -1
-  let bestSize = 0
-  let nextId = 0
-  for (let s = 0; s < n; s++) {
-    if (!black[s] || comp[s] !== -1) continue
-    const id = nextId++
-    let size = 0
-    stack.length = 0
-    stack.push(s)
-    comp[s] = id
-    while (stack.length) {
-      const p = stack.pop()!
-      size++
-      const x = p % width
-      const y = (p / width) | 0
-      if (x > 0 && black[p - 1] && comp[p - 1] === -1) { comp[p - 1] = id; stack.push(p - 1) }
-      if (x + 1 < width && black[p + 1] && comp[p + 1] === -1) { comp[p + 1] = id; stack.push(p + 1) }
-      if (y > 0 && black[p - width] && comp[p - width] === -1) { comp[p - width] = id; stack.push(p - width) }
-      if (y + 1 < height && black[p + width] && comp[p + width] === -1) { comp[p + width] = id; stack.push(p + width) }
-    }
-    if (size > bestSize) { bestSize = size; bestId = id }
-  }
-  const keep = new Uint8Array(n)
-  if (bestId < 0) return keep
-  for (let i = 0; i < n; i++) if (comp[i] === bestId) keep[i] = 1
-  // Fill holes: flood the OUTSIDE (non-kept reachable from the border), then any
-  // non-kept pixel not reached is an interior hole → fill it.
-  const outside = new Uint8Array(n)
-  stack.length = 0
-  const pushOutside = (i: number) => { if (!keep[i] && !outside[i]) { outside[i] = 1; stack.push(i) } }
-  for (let x = 0; x < width; x++) { pushOutside(x); pushOutside((height - 1) * width + x) }
-  for (let y = 0; y < height; y++) { pushOutside(y * width); pushOutside(y * width + width - 1) }
-  while (stack.length) {
-    const p = stack.pop()!
-    const x = p % width
-    const y = (p / width) | 0
-    if (x > 0) pushOutside(p - 1)
-    if (x + 1 < width) pushOutside(p + 1)
-    if (y > 0) pushOutside(p - width)
-    if (y + 1 < height) pushOutside(p + width)
-  }
-  for (let i = 0; i < n; i++) if (!keep[i] && !outside[i]) keep[i] = 1
-  return keep
-}
-
-/**
- * Build the stacked binary mask for one layer. The seed is this layer's own
- * region (rank === layer); from there we flood through CONNECTED higher-rank
- * pixels (rank > layer), so the mask absorbs only the shapes stacked directly
- * against this region — the overlap that keeps adjacent regions from meeting at
- * a hairline seam. Higher-rank shapes that are spatially DISJOINT from this
- * region (e.g. a document's corner fold floating inside an unrelated rim layer)
- * are left out: the old "every pixel of rank ≥ layer" rule re-traced them as
- * hidden islands in every layer beneath them — invisible in the render (painted
- * over) but real geometry that cluttered the node editor and bloated the export.
- * Dropping them is render-safe: every point under a disjoint island is already
- * fully covered by the lower-rank layers painted before this one.
- */
-function stackedMask(
-  labels: Int32Array,
-  width: number,
-  height: number,
-  rank: Int32Array,
-  layer: number,
-): ImageData {
-  const n = labels.length
-  const keep = new Uint8Array(n)
-  const stack: number[] = []
-  for (let i = 0; i < n; i++) {
-    const l = labels[i]
-    if (l >= 0 && rank[l] === layer) {
-      keep[i] = 1
-      stack.push(i)
-    }
-  }
-  const visit = (q: number): void => {
-    const l = labels[q]
-    if (!keep[q] && l >= 0 && rank[l] >= layer) {
-      keep[q] = 1
-      stack.push(q)
-    }
-  }
-  while (stack.length) {
-    const p = stack.pop()!
-    const x = p % width
-    const y = (p / width) | 0
-    if (x > 0) visit(p - 1)
-    if (x + 1 < width) visit(p + 1)
-    if (y > 0) visit(p - width)
-    if (y + 1 < height) visit(p + width)
-  }
-  const out = new ImageData(width, height)
-  const dst = out.data
-  for (let i = 0; i < n; i++) {
-    const v = keep[i] ? 0 : 255
-    const o = i * 4
-    dst[o] = v
-    dst[o + 1] = v
-    dst[o + 2] = v
-    dst[o + 3] = 255
-  }
-  return out
 }

@@ -124,13 +124,12 @@ export interface VectorizeOptions {
    */
   gradients?: boolean
   /**
-   * Tracer backend. 'planar' = the shared-edge planar subdivision (default for
-   * color): adjacent regions share one boundary curve, so there is no overlap
-   * and no hairline seam, and shared boundaries are jointly editable. 'crisp' =
-   * sub-pixel marching-squares + Schneider Bézier fitting per region (overlapping
-   * stacked masks). 'potrace' = the classic bilevel WASM tracer.
+   * Vestigial: the planar shared-edge tracer is the only engine. The crisp and
+   * potrace mask tracers were removed on 2026-09-22 (docs §37) — every region's
+   * boundary is traced once and shared with its neighbour. The field stays so
+   * stored options and the diagnostics' option literals keep parsing.
    */
-  engine?: 'potrace' | 'crisp' | 'planar'
+  engine?: 'planar'
   /**
    * Trace detail / resolution preset. 'balanced' (default) uses the adaptive cap
    * (flat art 2048, gradient/photo 1024). 'high' raises the FLAT cap to 4096 for

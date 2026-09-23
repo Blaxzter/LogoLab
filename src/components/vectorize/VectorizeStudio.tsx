@@ -710,6 +710,8 @@ export function VectorizeStudio({
                     // bilinearly first — the icon sheet's size rule plus a stroke
                     // rule, both measured in traceCaps.ts. 1 for colour, for Off,
                     // and when the raster already sits within a factor of the cap.
+                    // Reached with `upscale: 'ai'` too, when the AI path declined
+                    // the raster (above its size window): Auto stands in.
                     const plan = monoTraceScale(imageData, opts);
                     setAutoUpscale(plan);
                     if (plan.scale > 1) {
@@ -721,8 +723,8 @@ export function VectorizeStudio({
                         setProgress("Tracing…");
                     }
                 }
-                // Crisp runs in a Web Worker (pure JS) so the UI stays responsive;
-                // potrace stays on the main thread (its WASM wrapper needs DOMParser).
+                // The tracer runs in a Web Worker (pure JS) so the UI stays responsive;
+                // `canTraceOffThread` only says no where there is no Worker at all.
                 const runTrace = canTraceOffThread(opts) ? traceImageOffThread : traceImage;
                 next = await runTrace(
                     imageData,
@@ -779,9 +781,9 @@ export function VectorizeStudio({
     // before this click (else it would fire ~DEBOUNCE_MS later and replace the doc the
     // user wanted to keep); bump the run id so any late progress / result from the
     // aborted run is ignored; abort the controller (which terminates the worker —
-    // off-thread planar/crisp traces stop instantly, even mid-segmentation; potrace and
-    // the clean-existing-SVG path run synchronously on the main thread and stop after
-    // their current step); and clear the busy UI. The previous document in history is
+    // an off-thread trace stops instantly, even mid-segmentation; the
+    // clean-existing-SVG path runs synchronously on the main thread and stops after
+    // its current step); and clear the busy UI. The previous document in history is
     // left intact — stopping means "never mind, keep what I had" — and `staleOpts` flags
     // that the shown result now lags the settings, so the controls offer a re-trace.
     // A new run starts only from a fresh opts/source change or the manual Trace button.
@@ -2145,6 +2147,11 @@ function OriginalPane({
     };
 
     const inv = pz.scale > 0 ? 1 / pz.scale : 1;
+    // Once a source pixel is wider than a screen pixel, show the pixel: the
+    // smoothed image reads as a blur that hides what the raster actually holds,
+    // and this pane exists to be compared against the trace. Same rule as the
+    // Difference view's heat canvas; `aspectW` is the source's natural width.
+    const magnified = fit.width > 0 && (pz.scale * fit.width) / aspectW > 1;
     return (
         <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
             <div
@@ -2162,6 +2169,7 @@ function OriginalPane({
                         alt=""
                         draggable={false}
                         className="pointer-events-none h-full w-full select-none"
+                        style={{ imageRendering: magnified ? "pixelated" : "auto" }}
                     />
                     {all.length > 0 &&
                         all.map((m, i) => (

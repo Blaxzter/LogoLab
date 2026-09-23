@@ -136,12 +136,10 @@ export function TraceControlsBody({
   const [infoId, setInfoId] = useState<string | null>(null)
   const info = (id: string) => () => setInfoId(id)
 
-  const engine = opts.engine ?? 'planar'
-  const engineLabel = engine === 'planar' ? 'Planar' : engine === 'crisp' ? 'Crisp' : 'Potrace'
   const detailSummary = tracing
     ? opts.mode === 'mono'
       ? `Mono · threshold ${opts.threshold}${opts.invert ? ' · inverted' : ''}`
-      : `${engineLabel} · smoothing ${opts.smoothing}`
+      : `Smoothing ${opts.smoothing}`
     : 'Cleaning SVG markup'
   const colorSummary =
     opts.mode === 'color' && opts.gradients !== false ? 'Gradients on' : 'Flat fills'
@@ -186,6 +184,10 @@ export function TraceControlsBody({
   const upscaleHint = (() => {
     if (upscaleWhy) return upscaleWhy
     if (upscaleMode === 'off') return 'Traced at its own size — no enlargement.'
+    if (upscaleMode === 'ai' && sourceMaxDim != null && !aiCanBite)
+      return `AI enlarges rasters up to ${AI_UPSCALE_MAX_PX}px; at ${sourceMaxDim}px it stands aside and Auto's rule applies${
+        autoUpscale && autoUpscale.scale > 1 ? ` (this image was enlarged ×${autoUpscale.scale} bilinearly)` : ''
+      }.`
     if (upscaleMode === 'ai')
       return `AI enlarges a small raster ×${sourceMaxDim ? aiUpscaleFactor(sourceMaxDim) || 2 : '2–4'} before tracing (waifu2x, in your browser: ~17–19 MB once, a few seconds per trace). Measured: cleaner corners and fewer nodes than tracing it small.`
     if (opts.mode !== 'mono')
@@ -293,8 +295,10 @@ export function TraceControlsBody({
                     ? 'Nothing but background found — tracing in colour.'
                     : inkPlan.mode === 'mono'
                       ? `One ink${inkPlan.invert ? ', lighter than the background' : ''} → Mono, cut at ${inkPlan.threshold}${
-                          inkPlan.invert ? ' and inverted' : ''
-                        }${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
+                          inkPlan.hairlines && inkPlan.hairlines.cut !== inkPlan.hairlines.from
+                            ? ` (raised from ${inkPlan.hairlines.from} to keep hairlines)`
+                            : ''
+                        }${inkPlan.invert ? ' and inverted' : ''}${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
                       : inkPlan.inks === 1
                         ? // One ink, but not far enough from the background in
                           // luminance for a cut to separate them — which is the
@@ -308,18 +312,6 @@ export function TraceControlsBody({
 
           {tracing && (
             <Collapsible title="Shape & detail" summary={detailSummary} defaultOpen>
-              <Field label="Engine" hint={d.engine.hint} onInfo={info('engine')}>
-                <Segmented<'planar' | 'crisp' | 'potrace'>
-                  value={engine}
-                  onChange={(v) => onPatch({ engine: v })}
-                  options={[
-                    { value: 'planar', label: 'Planar' },
-                    { value: 'crisp', label: 'Crisp' },
-                    { value: 'potrace', label: 'Potrace' },
-                  ]}
-                />
-              </Field>
-
               {showDetail && (
               <Field
                 label="Detail"

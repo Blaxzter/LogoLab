@@ -55,12 +55,6 @@ export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.
     icon: <Images size={15} />,
   },
   {
-    to: '/labs/scoreboard',
-    label: 'Engine scoreboard',
-    blurb: 'potrace vs crisp: ΔE, SSIM, seam, node counts, runtime, determinism.',
-    icon: <Gauge size={15} />,
-  },
-  {
     to: '/labs/profiler',
     label: 'Profiler',
     blurb: 'Where the trace spends its time, and what each optional feature would cost to enable.',

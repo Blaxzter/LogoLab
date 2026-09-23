@@ -6,7 +6,7 @@
 // merged away), which is why the overlaps don't render. Per case, left to right:
 //
 //   source → Mumford–Shah smoothed → discontinuity map 𝒟 → segmentation (false-coloured, then
-//   the actual region fills) → per-region paint models → the final crisp & potrace traces.
+//   the actual region fills) → per-region paint models → the final planar trace.
 
 import { useMemo } from 'react'
 import { labImageData } from './resvgRaster'
@@ -64,8 +64,7 @@ interface Stages {
   segments: string
   fills: string
   paints: Paint[]
-  crisp: string
-  potrace: string
+  final: string
 }
 
 const hex = (r: number, g: number, b: number): string =>
@@ -87,17 +86,10 @@ async function analyze(c: Case): Promise<Stages> {
     const [r, g, b] = p.solid
     return { hex: hex(r, g, b), model: p.model, px: seg.counts[label] ?? 0, residual: p.residualOklab }
   })
-  // Stages 3–4 — the final traces. Crisp goes to a worker; potrace can't (DOMParser + WASM).
-  // The stage panels above stay on the main thread: they need segmentImage's intermediate
-  // by-products, which the worker protocol doesn't hand back.
-  const crisp = serializeDoc(
-    await labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'crisp', gradients: true }),
-    2,
-  )
-  const potrace = serializeDoc(
-    await labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'potrace', gradients: true }),
-    2,
-  )
+  // Stage 3 — the final trace, in a worker. The stage panels above stay on the main
+  // thread: they need segmentImage's intermediate by-products, which the worker
+  // protocol doesn't hand back.
+  const final = serializeDoc(await labTrace(image, { ...DEFAULT_VECTORIZE_OPTIONS, gradients: true }), 2)
 
   return {
     width: w,
@@ -109,8 +101,7 @@ async function analyze(c: Case): Promise<Stages> {
     segments: rgbaToUrl(segmentsToRgba(seg.labels, w, h), w, h),
     fills: rgbaToUrl(regionFillsToRgba(seg.labels, seg.palette, w, h), w, h),
     paints,
-    crisp,
-    potrace,
+    final,
   }
 }
 
@@ -171,11 +162,8 @@ export default function PipelineLab() {
               <img src={s.fills} alt="" />
             </Panel>
             <PaintModels paints={s.paints} />
-            <Panel label="6 · crisp" note="final" aspect={aspect}>
-              <RawArt html={s.crisp} />
-            </Panel>
-            <Panel label="6 · potrace" note="final" aspect={aspect}>
-              <RawArt html={s.potrace} />
+            <Panel label="6 · planar" note="final" aspect={aspect}>
+              <RawArt html={s.final} />
             </Panel>
           </CaseRow>
         )

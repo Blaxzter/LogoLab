@@ -58,10 +58,9 @@ const PipelineLab = lazy(() => import('./components/labs/PipelineLab'))
 const AbLab = lazy(() => import('./components/labs/AbLab'))
 // The Workbench asks ONE question — "is the trace correct against the art that made the pixels?" —
 // of a switchable corpus. What can't be asked of every corpus lives in its own lab: raster-only art
-// in the Gallery (just look) and Feature A/B (compare revisions), potrace vs crisp in EngineLab.
+// in the Gallery (just look) and Feature A/B (compare revisions).
 const Workbench = lazy(() => import('./components/labs/workbench/Workbench'))
 const GalleryLab = lazy(() => import('./components/labs/GalleryLab'))
-const EngineLab = lazy(() => import('./components/labs/EngineLab'))
 const ProfilerLab = lazy(() => import('./components/labs/ProfilerLab'))
 
 function LabLoading() {
@@ -376,7 +375,6 @@ export function App() {
                 <Route path="/labs/ab" element={<AbLab />} />
                 <Route path="/labs/workbench" element={<Workbench />} />
                 <Route path="/labs/gallery" element={<GalleryLab />} />
-                <Route path="/labs/scoreboard" element={<EngineLab />} />
                 <Route path="/labs/profiler" element={<ProfilerLab />} />
                 {/* Old routes, kept as deep-links so bookmarks survive. `golden` has no view any
                     more — the regression gate still runs in CI, but Feature A/B already shows those

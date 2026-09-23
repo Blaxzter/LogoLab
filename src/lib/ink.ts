@@ -19,6 +19,7 @@
 // Everything in this file is pure: no DOM, no Node APIs, plain pixels in.
 
 import { deltaE76, srgbToLab, type Lab } from './trace/lab.ts'
+import { hairlineCut, type HairlineRead } from './strokeWidth.ts'
 import type { VectorizeOptions } from '../types'
 
 /** Anything shaped like a browser `ImageData` (the Node harness decodes into this too). */
@@ -471,6 +472,13 @@ export interface InkModePlan {
   inks: number
   /** The probe itself, for callers that want to explain more than `inks`. */
   probe: InkProbe
+  /**
+   * What the thin-ink read did to the cut (strokeWidth.ts `hairlineCut`): the
+   * cut it started from, the share of sub-pixel ridge ink that cut was losing,
+   * and where those ridges sit. `cut !== from` means the cut was raised for
+   * hairlines. Null in colour mode.
+   */
+  hairlines: HairlineRead | null
 }
 
 /**
@@ -498,7 +506,7 @@ export function decideInkMode(
   const wantMono =
     settings.colorMode === 'mono' || (settings.colorMode === 'auto' && (probe.mono || probe.monoInverted))
   if (!wantMono) {
-    return { mode: 'color', threshold: fallbackThreshold, invert: false, recolor: null, inks: probe.inks, probe }
+    return { mode: 'color', threshold: fallbackThreshold, invert: false, recolor: null, inks: probe.inks, probe, hairlines: null }
   }
 
   // What the cut has to clear the ink AGAINST.
@@ -520,17 +528,22 @@ export function decideInkMode(
   // A FORCED mono gets it too — without it a white glyph on navy comes back as
   // the paper traced around a hole.
   const invert = probe.inkLuma != null && probe.inkLuma > against
+  // …and on a TRANSPARENT ground, leave the cut where the branch above aimed
+  // it: alpha is what separates the art there, so the luminance cut is only
+  // required to stay clear of the ink, and a "gap" between tones of the ink is
+  // not somewhere it should be pulled.
+  const placed = opaqueGround ? snapCutToGap(pixels, midpoint, invert) : midpoint
+  // Then let the thin ink have its say: strokes thinner than a pixel never reach
+  // the midpoint's 50% coverage and would vanish (strokeWidth.ts, hairlineCut).
+  const hairlines = hairlineCut(pixels, placed, invert, probe.inkLuma == null ? 255 : Math.abs(against - probe.inkLuma))
   return {
     mode: 'mono',
-    // …and on a TRANSPARENT ground, leave the cut where the branch above aimed
-    // it: alpha is what separates the art there, so the luminance cut is only
-    // required to stay clear of the ink, and a "gap" between tones of the ink is
-    // not somewhere it should be pulled.
-    threshold: opaqueGround ? snapCutToGap(pixels, midpoint, invert) : midpoint,
+    threshold: hairlines.cut,
     invert,
     recolor: probe.dominant,
     inks: probe.inks,
     probe,
+    hairlines,
   }
 }
 

@@ -9,7 +9,7 @@
 //                fills as RGBA buffers) + paint models + the final SVG — for the
 //                user-facing "How it works" explainer, so it no longer freezes.
 //
-// Potrace stays on the main thread (esm-potrace-wasm needs DOMParser); the caller
+// (The potrace engine that had to stay on the main thread is gone.) The caller
 // dispatches the pure-JS engines (planar, crisp) here.
 
 import { traceImage, segmentOptionsFor } from './index.ts'
