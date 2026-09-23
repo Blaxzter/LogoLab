@@ -29,6 +29,7 @@ import {
     polygonArea,
 } from "../../lib/editor/hitTest";
 import { HitPath, ItemsView, pathD, visiblePaths } from "../vector/DocRender";
+import { anchorMarksD, handleDotsD, nearestGrab, spokesD } from "./nodeOverlay";
 import {
     insertNode,
     moveHandle,
@@ -562,12 +563,23 @@ export function EditorCanvas({
 
     // --- anchors & handles -------------------------------------------------------
 
-    const handleGrabPointerDown = (e: React.PointerEvent<SVGGElement>) => {
-        if (e.button !== 0 || !e.isPrimary || !selectedItem) return;
-        const t = e.target as Element;
-        const nodeKey = t.getAttribute("data-node");
-        const handleKey = t.getAttribute("data-handle");
-        if (!nodeKey && !handleKey) return;
+    /** The anchor / handle dot under a client point, as a nodeOverlay grab key. */
+    const grabAt = (clientX: number, clientY: number): string | null => {
+        if (!selectedItem) return null;
+        const pt = toVb(clientX, clientY);
+        if (!pt) return null;
+        return nearestGrab(selectedItem, pt, (8 * HIT) / liveScale());
+    };
+
+    // Capture phase on the svg: a grab beats the path body and the marquee
+    // underneath it, as the old per-node hit circles did by sitting on top.
+    const handleGrabPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+        if (!interactive || e.button !== 0 || !e.isPrimary || !selectedItem) return;
+        const key = grabAt(e.clientX, e.clientY);
+        if (!key) return;
+        const isHandle = key.split(":").length === 3;
+        const nodeKey = isHandle ? null : key;
+        const handleKey = isHandle ? key : null;
         e.stopPropagation();
         const pt = toVb(e.clientX, e.clientY);
         if (!pt) return;
@@ -657,6 +669,11 @@ export function EditorCanvas({
     // --- drag tracking on the svg root (pointer capture retargets here) ----------
 
     const handleSvgPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+        // --- anchor / handle hover (node tool, nothing in flight) ---
+        if (interactive && selectedItem && !dragRef.current && !marqueeRef.current) {
+            const k = grabAt(e.clientX, e.clientY);
+            if (k !== hoveredKey) setHoveredKey(k);
+        }
         // --- region hover-highlight (mark tool) ---
         if (marking) {
             // A ghost marker rides the pointer (the crosshair is hidden), so the user
@@ -947,7 +964,11 @@ export function EditorCanvas({
                             marking
                                 ? "cursor-none"
                                 : interactive
-                                  ? "cursor-crosshair"
+                                  ? hoveredKey
+                                      ? hoveredKey.split(":").length === 3
+                                          ? "cursor-crosshair"
+                                          : "cursor-move"
+                                      : "cursor-crosshair"
                                   : ""
                         }
                         style={{
@@ -957,6 +978,7 @@ export function EditorCanvas({
                             // Node + mark modes capture pointer events on the svg.
                             pointerEvents: interactive || marking ? undefined : "none",
                         }}
+                        onPointerDownCapture={handleGrabPointerDown}
                         onPointerDown={handleSvgPointerDown}
                         onPointerMove={handleSvgPointerMove}
                         onPointerUp={handleSvgPointerUp}
@@ -965,6 +987,7 @@ export function EditorCanvas({
                             if (hoverLabel !== null) setHoverLabel(null);
                             if (removeHoverD !== null) setRemoveHoverD(null);
                             if (hoverPt !== null) setHoverPt(null);
+                            if (hoveredKey !== null && !dragRef.current) setHoveredKey(null);
                         }}
                         onDoubleClick={handleSvgDoubleClick}
                     >
@@ -1011,194 +1034,18 @@ export function EditorCanvas({
                             </g>
                         )}
 
-                        {/* Selection overlay: outline + handle spokes/dots + anchors.
-                            All widths/radii go through r() so they stay a constant
-                            screen size at every zoom (the markers' convention) — the
-                            CSS zoom transform would otherwise fatten a plain stroke. */}
+                        {/* Selection overlay: outline + handle spokes/dots + anchors,
+                            drawn as a few BATCHED paths (see nodeOverlay.ts) — one
+                            element per node was 27k elements on a 3000-node trace.
+                            Grabbing is geometric (nearestGrab), so there are no
+                            per-node hit targets either. */}
                         {selectedItem && fit.width > 0 && (
-                            <g style={{ pointerEvents: "none" }}>
-                                {/* White halo under the accent line keeps the outline
-                                    legible even when the path's own colour is the accent. */}
-                                <path
-                                    d={pathD(selectedItem)}
-                                    fill="none"
-                                    stroke={HALO}
-                                    strokeOpacity={0.85}
-                                    strokeWidth={r(3.5)}
-                                    strokeLinejoin="round"
-                                />
-                                <path
-                                    d={pathD(selectedItem)}
-                                    fill="none"
-                                    stroke={ACCENT}
-                                    strokeWidth={r(1.5)}
-                                    strokeLinejoin="round"
-                                />
-                                {selectedItem.subPaths.map((sp, sub) =>
-                                    sp.nodes.map((node, idx) => {
-                                        const key = `${sub}:${idx}`;
-                                        const isSel = selectedNodes.has(key);
-                                        const isHover = hoveredKey === key;
-                                        const hoverIn =
-                                            hoveredKey === `${sub}:${idx}:in`;
-                                        const hoverOut =
-                                            hoveredKey === `${sub}:${idx}:out`;
-                                        // Selected anchors use a warm fill (not the
-                                        // accent) so they stay visible sitting on the
-                                        // accent-coloured outline.
-                                        const anchorFill = isSel
-                                            ? ACCENT_SEL
-                                            : HALO;
-                                        const anchorStroke = isSel
-                                            ? HALO
-                                            : isHover
-                                              ? ACCENT_SEL
-                                              : ACCENT;
-                                        const anchorW = r(isHover ? 1.6 : 1.2);
-                                        return (
-                                            <g key={key}>
-                                                {node.hIn && (
-                                                    <line
-                                                        x1={node.x}
-                                                        y1={node.y}
-                                                        x2={node.hIn.x}
-                                                        y2={node.hIn.y}
-                                                        stroke={ACCENT}
-                                                        strokeOpacity={0.55}
-                                                        strokeWidth={r(1)}
-                                                    />
-                                                )}
-                                                {node.hOut && (
-                                                    <line
-                                                        x1={node.x}
-                                                        y1={node.y}
-                                                        x2={node.hOut.x}
-                                                        y2={node.hOut.y}
-                                                        stroke={ACCENT}
-                                                        strokeOpacity={0.55}
-                                                        strokeWidth={r(1)}
-                                                    />
-                                                )}
-                                                {node.hIn && (
-                                                    <circle
-                                                        cx={node.hIn.x}
-                                                        cy={node.hIn.y}
-                                                        r={r(hoverIn ? 4.25 : 3.25)}
-                                                        fill={
-                                                            hoverIn
-                                                                ? ACCENT_SEL
-                                                                : HALO
-                                                        }
-                                                        stroke={ACCENT}
-                                                        strokeWidth={r(1.2)}
-                                                    />
-                                                )}
-                                                {node.hOut && (
-                                                    <circle
-                                                        cx={node.hOut.x}
-                                                        cy={node.hOut.y}
-                                                        r={r(hoverOut ? 4.25 : 3.25)}
-                                                        fill={
-                                                            hoverOut
-                                                                ? ACCENT_SEL
-                                                                : HALO
-                                                        }
-                                                        stroke={ACCENT}
-                                                        strokeWidth={r(1.2)}
-                                                    />
-                                                )}
-                                                {node.kind === "smooth" ? (
-                                                    <circle
-                                                        cx={node.x}
-                                                        cy={node.y}
-                                                        r={r(
-                                                            isHover ? 4.75 : 3.75,
-                                                        )}
-                                                        fill={anchorFill}
-                                                        stroke={anchorStroke}
-                                                        strokeWidth={anchorW}
-                                                    />
-                                                ) : (
-                                                    <rect
-                                                        x={
-                                                            node.x -
-                                                            r(isHover ? 4.5 : 3.5)
-                                                        }
-                                                        y={
-                                                            node.y -
-                                                            r(isHover ? 4.5 : 3.5)
-                                                        }
-                                                        width={r(isHover ? 9 : 7)}
-                                                        height={r(isHover ? 9 : 7)}
-                                                        fill={anchorFill}
-                                                        stroke={anchorStroke}
-                                                        strokeWidth={anchorW}
-                                                    />
-                                                )}
-                                            </g>
-                                        );
-                                    }),
-                                )}
-                            </g>
-                        )}
-
-                        {/* Invisible grab targets over anchors & handle dots (node tool). */}
-                        {interactive && selectedItem && fit.width > 0 && (
-                            <g
-                                onPointerDown={handleGrabPointerDown}
-                                onPointerOver={(e) => {
-                                    const t = e.target as Element;
-                                    const k =
-                                        t.getAttribute("data-node") ??
-                                        t.getAttribute("data-handle");
-                                    if (k) setHoveredKey(k);
-                                }}
-                                onPointerOut={() => setHoveredKey(null)}
-                            >
-                                {selectedItem.subPaths.map((sp, sub) =>
-                                    sp.nodes.map((node, idx) => (
-                                        <g key={`${sub}:${idx}`}>
-                                            {node.hIn && (
-                                                <circle
-                                                    cx={node.hIn.x}
-                                                    cy={node.hIn.y}
-                                                    r={r(8 * HIT)}
-                                                    fill="none"
-                                                    data-handle={`${sub}:${idx}:in`}
-                                                    style={{
-                                                        pointerEvents: "all",
-                                                        cursor: "crosshair",
-                                                    }}
-                                                />
-                                            )}
-                                            {node.hOut && (
-                                                <circle
-                                                    cx={node.hOut.x}
-                                                    cy={node.hOut.y}
-                                                    r={r(8 * HIT)}
-                                                    fill="none"
-                                                    data-handle={`${sub}:${idx}:out`}
-                                                    style={{
-                                                        pointerEvents: "all",
-                                                        cursor: "crosshair",
-                                                    }}
-                                                />
-                                            )}
-                                            <circle
-                                                cx={node.x}
-                                                cy={node.y}
-                                                r={r(8 * HIT)}
-                                                fill="none"
-                                                data-node={`${sub}:${idx}`}
-                                                style={{
-                                                    pointerEvents: "all",
-                                                    cursor: "move",
-                                                }}
-                                            />
-                                        </g>
-                                    )),
-                                )}
-                            </g>
+                            <NodeOverlay
+                                item={selectedItem}
+                                scale={screenScale}
+                                selectedNodes={selectedNodes}
+                                hoveredKey={interactive ? hoveredKey : null}
+                            />
                         )}
 
                         {/* Marquee selection rectangle */}
@@ -1344,3 +1191,86 @@ export function EditorCanvas({
         </ZoomSurface>
     );
 }
+
+/**
+ * The selected path's edit overlay. Every width and radius is a constant SCREEN
+ * size, so the geometry depends on `scale` (px per viewBox unit) — which a pan
+ * does not change, so a pan re-renders none of this. The bulk layer is every
+ * node in its resting style; selected and hovered nodes are drawn again on top,
+ * which keeps a hover from rebuilding the 3000-node strings underneath it.
+ */
+const NodeOverlay = memo(function NodeOverlay({
+    item,
+    scale,
+    selectedNodes,
+    hoveredKey,
+}: {
+    item: PathItem;
+    scale: number;
+    selectedNodes: ReadonlySet<string>;
+    hoveredKey: string | null;
+}) {
+    const r = (px: number) => px / scale;
+    const spokes = useMemo(() => spokesD(item), [item]);
+    const base = useMemo(() => {
+        const a = anchorMarksD(item, 3.75 / scale, 3.5 / scale);
+        return { ...a, dots: handleDotsD(item, 3.25 / scale) };
+    }, [item, scale]);
+    const sel = useMemo(
+        () =>
+            selectedNodes.size > 0
+                ? anchorMarksD(item, 3.75 / scale, 3.5 / scale, selectedNodes)
+                : null,
+        [item, scale, selectedNodes],
+    );
+
+    // Hover: one anchor or one handle dot, drawn larger on top.
+    let hover: React.ReactNode = null;
+    if (hoveredKey) {
+        const [subS, idxS, which] = hoveredKey.split(":");
+        const node = item.subPaths[Number(subS)]?.nodes[Number(idxS)];
+        if (node && which) {
+            const h = which === "in" ? node.hIn : node.hOut;
+            if (h)
+                hover = (
+                    <circle
+                        cx={h.x}
+                        cy={h.y}
+                        r={r(4.25)}
+                        fill={ACCENT_SEL}
+                        stroke={ACCENT}
+                        strokeWidth={r(1.2)}
+                    />
+                );
+        } else if (node) {
+            const isSel = selectedNodes.has(hoveredKey);
+            const one = new Set([hoveredKey]);
+            const m = anchorMarksD(item, r(4.75), r(4.5), one);
+            hover = (
+                <path
+                    d={m.smooth + m.corner}
+                    fill={isSel ? ACCENT_SEL : HALO}
+                    stroke={isSel ? HALO : ACCENT_SEL}
+                    strokeWidth={r(1.6)}
+                />
+            );
+        }
+    }
+
+    const d = pathD(item);
+    return (
+        <g style={{ pointerEvents: "none" }}>
+            {/* White halo under the accent line keeps the outline legible even
+                when the path's own colour is the accent. */}
+            <path d={d} fill="none" stroke={HALO} strokeOpacity={0.85} strokeWidth={r(3.5)} strokeLinejoin="round" />
+            <path d={d} fill="none" stroke={ACCENT} strokeWidth={r(1.5)} strokeLinejoin="round" />
+            {spokes && <path d={spokes} fill="none" stroke={ACCENT} strokeOpacity={0.55} strokeWidth={r(1)} />}
+            {base.dots && <path d={base.dots} fill={HALO} stroke={ACCENT} strokeWidth={r(1.2)} />}
+            <path d={base.smooth + base.corner} fill={HALO} stroke={ACCENT} strokeWidth={r(1.2)} />
+            {/* Selected anchors use a warm fill (not the accent) so they stay
+                visible sitting on the accent-coloured outline. */}
+            {sel && <path d={sel.smooth + sel.corner} fill={ACCENT_SEL} stroke={HALO} strokeWidth={r(1.2)} />}
+            {hover}
+        </g>
+    );
+});
