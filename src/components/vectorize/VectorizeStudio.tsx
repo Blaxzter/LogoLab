@@ -33,7 +33,12 @@ import { CheckerToggle } from "../ui/CheckerToggle";
 import { Segmented } from "../ui/controls";
 import { Button } from "../ui/Button";
 import { getImageData } from "../../lib/image";
-import { rasterCapFor } from "../../lib/traceCaps";
+import {
+    monoTraceScale,
+    rasterCapFor,
+    type MonoUpscalePlan,
+} from "../../lib/traceCaps";
+import { toImageData, upscaleImageData } from "../../lib/sheet/crop";
 import { hexToRgb, normalizeHex, rgbToHex } from "../../lib/colorUtils";
 import { downloadText } from "../../lib/download";
 import { cleanSvg } from "../../lib/svgClean";
@@ -290,6 +295,9 @@ export function VectorizeStudio({
     // worker path catches its own failures — so without this, the tracer's most
     // common failure is the one that can never be reported (see ReportIssue).
     const [failure, setFailure] = useState<unknown>(null);
+    // What Auto enlargement did on the last run, so the Upscale control can say
+    // "×3 — its strokes are 1px" instead of leaving the user to guess.
+    const [autoUpscale, setAutoUpscale] = useState<MonoUpscalePlan | null>(null);
     const [copied, setCopied] = useState(false);
     const [applied, setApplied] = useState(false);
     const runIdRef = useRef(0);
@@ -676,6 +684,7 @@ export function VectorizeStudio({
                 // tracer sees, so the doc comes back in the enlarged pixel space —
                 // markers are normalized and the overlay fits by aspect, so nothing
                 // downstream cares. See src/lib/aiUpscale.ts for the size rule.
+                setAutoUpscale(null);
                 const upscaleBy = opts.upscale === "ai" && !logo.isSvg
                     ? aiUpscaleFactor(Math.max(imageData.width, imageData.height))
                     : 0;
@@ -696,9 +705,26 @@ export function VectorizeStudio({
                     );
                     if (runId !== runIdRef.current) return;
                     setProgress("Tracing…");
+                } else if (!logo.isSvg) {
+                    // Auto: a small or thin-stroked MONO raster is enlarged
+                    // bilinearly first — the icon sheet's size rule plus a stroke
+                    // rule, both measured in traceCaps.ts. 1 for colour, for Off,
+                    // and when the raster already sits within a factor of the cap.
+                    // Reached with `upscale: 'ai'` too, when the AI path declined
+                    // the raster (above its size window): Auto stands in.
+                    const plan = monoTraceScale(imageData, opts);
+                    setAutoUpscale(plan);
+                    if (plan.scale > 1) {
+                        setProgress(`Enlarging ×${plan.scale}…`);
+                        // Yield so the label paints before the synchronous resample.
+                        await new Promise((r) => setTimeout(r));
+                        if (runId !== runIdRef.current) return;
+                        imageData = toImageData(upscaleImageData(imageData, plan.scale));
+                        setProgress("Tracing…");
+                    }
                 }
-                // Crisp runs in a Web Worker (pure JS) so the UI stays responsive;
-                // potrace stays on the main thread (its WASM wrapper needs DOMParser).
+                // The tracer runs in a Web Worker (pure JS) so the UI stays responsive;
+                // `canTraceOffThread` only says no where there is no Worker at all.
                 const runTrace = canTraceOffThread(opts) ? traceImageOffThread : traceImage;
                 next = await runTrace(
                     imageData,
@@ -755,9 +781,9 @@ export function VectorizeStudio({
     // before this click (else it would fire ~DEBOUNCE_MS later and replace the doc the
     // user wanted to keep); bump the run id so any late progress / result from the
     // aborted run is ignored; abort the controller (which terminates the worker —
-    // off-thread planar/crisp traces stop instantly, even mid-segmentation; potrace and
-    // the clean-existing-SVG path run synchronously on the main thread and stop after
-    // their current step); and clear the busy UI. The previous document in history is
+    // an off-thread trace stops instantly, even mid-segmentation; the
+    // clean-existing-SVG path runs synchronously on the main thread and stops after
+    // its current step); and clear the busy UI. The previous document in history is
     // left intact — stopping means "never mind, keep what I had" — and `staleOpts` flags
     // that the shown result now lags the settings, so the controls offer a re-trace.
     // A new run starts only from a fresh opts/source change or the manual Trace button.
@@ -1448,6 +1474,7 @@ export function VectorizeStudio({
         opts,
         sourceMaxDim:
             Math.max(logo.naturalWidth ?? 0, logo.naturalHeight ?? 0) || undefined,
+        autoUpscale,
         onPatch: (p: Partial<VectorizeOptions>) => {
             // A hand-flip of the gradients toggle pins it: the content probe must
             // not override a deliberate user choice for this image.
@@ -2120,6 +2147,11 @@ function OriginalPane({
     };
 
     const inv = pz.scale > 0 ? 1 / pz.scale : 1;
+    // Once a source pixel is wider than a screen pixel, show the pixel: the
+    // smoothed image reads as a blur that hides what the raster actually holds,
+    // and this pane exists to be compared against the trace. Same rule as the
+    // Difference view's heat canvas; `aspectW` is the source's natural width.
+    const magnified = fit.width > 0 && (pz.scale * fit.width) / aspectW > 1;
     return (
         <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
             <div
@@ -2137,6 +2169,7 @@ function OriginalPane({
                         alt=""
                         draggable={false}
                         className="pointer-events-none h-full w-full select-none"
+                        style={{ imageRendering: magnified ? "pixelated" : "auto" }}
                     />
                     {all.length > 0 &&
                         all.map((m, i) => (

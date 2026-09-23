@@ -15,7 +15,15 @@ import type { InkColorMode, InkModePlan } from '../../lib/ink'
 import { CONTROL_DOCS_BY_ID } from './controlDocs'
 import { ControlInfoDialog } from './ControlInfoDialog'
 import { AI_UPSCALE_MAX_PX, aiUpscaleFactor } from '../../lib/aiUpscale'
-import { RASTER_MAX_DIM, RASTER_MAX_DIM_FLAT, RASTER_MAX_DIM_HIGH } from '../../lib/traceCaps'
+import {
+  MONO_TARGET_STROKE_PX,
+  RASTER_MAX_DIM,
+  RASTER_MAX_DIM_FLAT,
+  RASTER_MAX_DIM_HIGH,
+  TRACE_TARGET_PX,
+  rasterCapFor,
+  type MonoUpscalePlan,
+} from '../../lib/traceCaps'
 
 export interface TraceControlsProps {
   /** The upload is an SVG, so "clean existing markup" is an option. */
@@ -26,6 +34,8 @@ export interface TraceControlsProps {
   onPatch: (patch: Partial<VectorizeOptions>) => void
   /** Longest side of the source image (px), for the Detail preset's effect hint. */
   sourceMaxDim?: number
+  /** What Auto enlargement decided on the last run (null before one, or on the AI path). */
+  autoUpscale?: MonoUpscalePlan | null
   /** Colour-vs-mono choice: `auto` defers to the ink probe (src/lib/ink.ts). */
   colorMode: InkColorMode
   onColorMode: (m: InkColorMode) => void
@@ -99,6 +109,7 @@ export function TraceControlsBody({
   opts,
   onPatch,
   sourceMaxDim,
+  autoUpscale,
   colorMode,
   onColorMode,
   inkPlan,
@@ -125,12 +136,10 @@ export function TraceControlsBody({
   const [infoId, setInfoId] = useState<string | null>(null)
   const info = (id: string) => () => setInfoId(id)
 
-  const engine = opts.engine ?? 'planar'
-  const engineLabel = engine === 'planar' ? 'Planar' : engine === 'crisp' ? 'Crisp' : 'Potrace'
   const detailSummary = tracing
     ? opts.mode === 'mono'
       ? `Mono · threshold ${opts.threshold}${opts.invert ? ' · inverted' : ''}`
-      : `${engineLabel} · smoothing ${opts.smoothing}`
+      : `Smoothing ${opts.smoothing}`
     : 'Cleaning SVG markup'
   const colorSummary =
     opts.mode === 'color' && opts.gradients !== false ? 'Gradients on' : 'Flat fills'
@@ -156,12 +165,43 @@ export function TraceControlsBody({
       : null
   const showDetail = detailWhy == null || (opts.traceDetail ?? 'balanced') !== 'balanced'
 
+  // Upscale has two live positions with different reach: Auto enlarges MONO art
+  // when the cap leaves room for a factor of 2; AI enlarges small rasters of any
+  // mode. Inert only when neither can bite on this image.
+  const cap = rasterCapFor(opts)
+  const room = sourceMaxDim ? Math.floor(cap / sourceMaxDim) : 0
+  const autoCanBite = opts.mode === 'mono' && room >= 2
+  const aiCanBite = sourceMaxDim != null && aiUpscaleFactor(sourceMaxDim) > 0
   const upscaleWhy = isVectorSource
     ? 'SVG sources rasterize at full detail already — there is nothing to enlarge.'
-    : sourceMaxDim != null && !aiUpscaleFactor(sourceMaxDim)
-      ? `Your image is ${sourceMaxDim}px, above the ${AI_UPSCALE_MAX_PX}px where enlarging stops paying for itself.`
-      : null
-  const showUpscale = upscaleWhy == null || (opts.upscale ?? 'off') !== 'off'
+    : sourceMaxDim == null || autoCanBite || aiCanBite
+      ? null
+      : opts.mode === 'mono'
+        ? `Your image is ${sourceMaxDim}px on its longest side — within a factor of the ${cap}px cap, so there is no room to enlarge it.`
+        : `Auto enlarges mono art only, and at ${sourceMaxDim}px your image is above the ${AI_UPSCALE_MAX_PX}px where AI enlargement stops paying for itself. Switch Mode to Mono and Auto applies.`
+  const upscaleMode = opts.upscale ?? 'auto'
+  const showUpscale = upscaleWhy == null || upscaleMode !== 'auto'
+  const upscaleHint = (() => {
+    if (upscaleWhy) return upscaleWhy
+    if (upscaleMode === 'off') return 'Traced at its own size — no enlargement.'
+    if (upscaleMode === 'ai' && sourceMaxDim != null && !aiCanBite)
+      return `AI enlarges rasters up to ${AI_UPSCALE_MAX_PX}px; at ${sourceMaxDim}px it stands aside and Auto's rule applies${
+        autoUpscale && autoUpscale.scale > 1 ? ` (this image was enlarged ×${autoUpscale.scale} bilinearly)` : ''
+      }.`
+    if (upscaleMode === 'ai')
+      return `AI enlarges a small raster ×${sourceMaxDim ? aiUpscaleFactor(sourceMaxDim) || 2 : '2–4'} before tracing (waifu2x, in your browser: ~17–19 MB once, a few seconds per trace). Measured: cleaner corners and fewer nodes than tracing it small.`
+    if (opts.mode !== 'mono')
+      return 'Auto enlarges mono art only — colour segmentation follows every interpolated tone. AI is the option for a small colour raster.'
+    if (!autoUpscale)
+      return `Auto enlarges a mono raster before tracing when it is small (toward ${TRACE_TARGET_PX}px) or its strokes are thin (toward ${MONO_TARGET_STROKE_PX}px) — plain bilinear, never past the cap.`
+    if (autoUpscale.scale > 1)
+      return autoUpscale.by === 'stroke'
+        ? `Auto enlarged this image ×${autoUpscale.scale} before tracing: its thin strokes are ${autoUpscale.thickness}px, and the tracer wants about ${MONO_TARGET_STROKE_PX}px.`
+        : `Auto enlarged this image ×${autoUpscale.scale} before tracing: at ${sourceMaxDim}px it is small, and small rasters trace better toward ${TRACE_TARGET_PX}px.`
+    if (autoUpscale.room < 2)
+      return `Auto traced this image as it is: at ${sourceMaxDim}px it sits within a factor of the ${cap}px cap.`
+    return `Auto traced this image as it is: its strokes are ${autoUpscale.thickness ?? '—'}px, thick enough for the tracer.`
+  })()
 
   const inert: { label: string; why: string }[] = []
   if (!tracing) {
@@ -181,7 +221,7 @@ export function TraceControlsBody({
         why: 'The two halves of the mono black/white cut: where it falls, and which side of it becomes solid. Switch Mode to Mono.',
       })
     if (detailWhy && !showDetail) inert.push({ label: 'Detail — Balanced / High', why: detailWhy })
-    if (upscaleWhy && !showUpscale) inert.push({ label: 'Upscale — AI', why: upscaleWhy })
+    if (upscaleWhy && !showUpscale) inert.push({ label: 'Upscale — Auto / AI', why: upscaleWhy })
   }
 
   // Mono cut consequences (#47). The cut is the one control that can silently
@@ -255,8 +295,10 @@ export function TraceControlsBody({
                     ? 'Nothing but background found — tracing in colour.'
                     : inkPlan.mode === 'mono'
                       ? `One ink${inkPlan.invert ? ', lighter than the background' : ''} → Mono, cut at ${inkPlan.threshold}${
-                          inkPlan.invert ? ' and inverted' : ''
-                        }${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
+                          inkPlan.hairlines && inkPlan.hairlines.cut !== inkPlan.hairlines.from
+                            ? ` (raised from ${inkPlan.hairlines.from} to keep hairlines)`
+                            : ''
+                        }${inkPlan.invert ? ' and inverted' : ''}${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
                       : inkPlan.inks === 1
                         ? // One ink, but not far enough from the background in
                           // luminance for a cut to separate them — which is the
@@ -270,18 +312,6 @@ export function TraceControlsBody({
 
           {tracing && (
             <Collapsible title="Shape & detail" summary={detailSummary} defaultOpen>
-              <Field label="Engine" hint={d.engine.hint} onInfo={info('engine')}>
-                <Segmented<'planar' | 'crisp' | 'potrace'>
-                  value={engine}
-                  onChange={(v) => onPatch({ engine: v })}
-                  options={[
-                    { value: 'planar', label: 'Planar' },
-                    { value: 'crisp', label: 'Crisp' },
-                    { value: 'potrace', label: 'Potrace' },
-                  ]}
-                />
-              </Field>
-
               {showDetail && (
               <Field
                 label="Detail"
@@ -302,18 +332,13 @@ export function TraceControlsBody({
               )}
 
               {showUpscale && (
-              <Field
-                label="Upscale"
-                hint={
-                  upscaleWhy ??
-                  `AI enlarges a small raster ×${sourceMaxDim ? aiUpscaleFactor(sourceMaxDim) || 2 : '2–4'} before tracing (waifu2x, in your browser: ~17–19 MB once, a few seconds per trace). Measured: cleaner corners and fewer nodes than tracing it small.`
-                }
-              >
-                <Segmented<'off' | 'ai'>
-                  value={opts.upscale ?? 'off'}
+              <Field label="Upscale" hint={upscaleHint}>
+                <Segmented<'off' | 'auto' | 'ai'>
+                  value={upscaleMode}
                   onChange={(v) => onPatch({ upscale: v })}
                   options={[
                     { value: 'off', label: 'Off' },
+                    { value: 'auto', label: 'Auto' },
                     { value: 'ai', label: 'AI' },
                   ]}
                 />

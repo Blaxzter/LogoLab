@@ -16,10 +16,9 @@ import type { VectorizeOptions } from '../../types'
  * runs it somewhere the UI isn't. Verified against the blessed golden records and the
  * ground-truth gates after the switch.
  *
- * Potrace is the one engine that CANNOT go off-thread (it needs DOMParser + WASM the worker
- * lacks), so `canTraceOffThread` sends it back to the main thread. That is why the Eval lab,
- * which scores potrace by design, still blocks — and why this decision lives here rather than
- * being re-made at each call site.
+ * `canTraceOffThread` is still consulted so an environment without Workers (tests, a
+ * headless run) falls back to the main thread — the decision lives here rather than being
+ * re-made at each call site.
  */
 export function labTrace(image: ImageData, options: VectorizeOptions): Promise<EditableDoc> {
   return canTraceOffThread(options)

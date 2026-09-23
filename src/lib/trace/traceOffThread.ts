@@ -8,11 +8,12 @@ import type { EditableDoc } from '../path/types'
 import type { VectorizeOptions } from '../../types'
 import type { TraceProgress } from './types'
 
-/** True when this engine/environment can run off the main thread. Crisp and
- *  planar are pure JS (worker-safe); only potrace needs DOMParser/WASM the worker
+/** True when this environment can run the trace off the main thread. The tracer
+ *  is pure JS (worker-safe); potrace, which needed DOMParser/WASM the worker
  *  lacks, so it alone stays on the main thread. */
 export function canTraceOffThread(options: VectorizeOptions): boolean {
-  return options.engine !== 'potrace' && typeof Worker !== 'undefined'
+  void options
+  return typeof Worker !== 'undefined'
 }
 
 export function traceImageOffThread(

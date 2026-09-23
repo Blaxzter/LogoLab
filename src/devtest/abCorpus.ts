@@ -147,7 +147,7 @@ export const AB_LOGO_CASES: AbCorpusCase[] = AB_LOGOS.map((l) => ({
  * the Step-3c merge, so tracing it larger buys minutes and nothing else.
  *
  * MONO IS ITS OWN LANE, not a subset of the flat one. `mode: 'mono'` returns from traceImage
- * before segmentation: threshold → mask → traceMaskCrisp (subpixel.ts) → beautify
+ * before segmentation: threshold → a two-label map (mono.ts) → the planar tracer
  * (beautify.ts). The colour lanes pin `engine: 'planar'`, whose geometry path routes around
  * BOTH of those modules — so the two files mono is made of were the two a stamp never
  * executed, and a mono-side change showed up as an all-green corpus.

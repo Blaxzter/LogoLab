@@ -4,8 +4,13 @@
 // the tracer and a Worker and so is browser-only.)
 
 import { decideInkMode, type InkColorMode } from '../ink.ts'
+import { monoTraceScale, traceScale } from '../traceCaps.ts'
 import type { ImageDataLike, SheetBackground } from './types'
 import type { VectorizeOptions } from '../../types'
+
+// The size rule lived here first; it moved next to the raster cap so the studio
+// and the MCP server enlarge a small mono raster exactly as the sheet does.
+export { traceScale }
 
 /** How the sheet decides colour vs mono: per tile, or forced. The decision
  *  itself is `decideInkMode` (src/lib/ink.ts) — shared with the studio. */
@@ -31,34 +36,6 @@ export function tileSmoothing(base: number, longSide: number): number {
   if (base <= 0) return 0
   const scaled = (base * longSide) / SMOOTHING_REFERENCE_PX
   return Math.round(Math.min(base, Math.max(MIN_SMOOTHING, scaled)))
-}
-
-/** Working resolution a tile is traced at (long side, px). */
-const TRACE_TARGET_PX = 512
-/** Beyond this the extra pixels stop paying for themselves (measured). */
-const MAX_TRACE_SCALE = 3
-
-/**
- * How much to enlarge a tile before tracing.
- *
- * Anti-aliasing encodes sub-pixel coverage that a pixel-lattice tracer cannot use
- * at 1:1. Measured over 54 real 170px tiles, rendering each result back down to
- * native for a fair comparison:
- *
- *   1×  ink-area drift 0.75pp, 4 tiles visibly wrong, 75 nodes, SSIM 0.864,  44ms
- *   2×                  0.41pp, 2 tiles,             102 nodes, SSIM 0.930,  77ms
- *   3×                  0.13pp, 0 tiles,             118 nodes, SSIM 0.946, 112ms
- *   4×                  0.14pp, 0 tiles,             135 nodes, SSIM 0.951, 142ms
- *
- * 4× buys nothing over 3×, so the target is ~512px and the factor is capped at 3.
- * (An earlier measurement said upscaling was catastrophic — that was an artifact:
- * `rasterizeDoc` renders one viewBox unit per output pixel, so scoring an enlarged
- * doc in a native-size buffer silently CROPPED it. Render at the doc's own size
- * and box-average down before comparing.)
- */
-export function traceScale(longSide: number): number {
-  if (longSide <= 0) return 1
-  return Math.max(1, Math.min(MAX_TRACE_SCALE, Math.round(TRACE_TARGET_PX / longSide)))
 }
 
 export interface TileBasePlan {
@@ -95,11 +72,16 @@ export function planTileBase(
 
   const long = Math.max(pixels.width, pixels.height)
   // Enlarging pays off for the MONO path, where a finer lattice buys sub-pixel
-  // threshold placement. The colour path gains accuracy too, but at a price no
+  // threshold placement — by the tile's size (toward ~512px) and by the thickness
+  // of its thin ink (toward ~3px), whichever asks for more; see traceCaps.ts for
+  // both measurements. The colour path gains accuracy too, but at a price no
   // icon wants: measured on the same tiles, colour at 4× went from 93 to 1465
   // nodes and 69ms to 1193ms — the palette segmentation follows every
   // interpolated tone. So colour stays native.
-  const scale = settings.hiRes !== false && wantMono ? traceScale(long) : 1
+  const scale =
+    settings.hiRes !== false && wantMono
+      ? monoTraceScale(pixels, { ...base, mode: 'mono', threshold: ink.threshold, invert: ink.invert }).scale
+      : 1
   const opts: VectorizeOptions = {
     // Smoothing follows the raster the tracer will actually see, so the two
     // scale corrections compose instead of fighting: at 3× a 170px tile gets

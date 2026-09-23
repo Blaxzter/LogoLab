@@ -1,11 +1,9 @@
 // Headless evaluation harness (plan §5/§6 V0). Traces the PNG corpus with the
-// pure crisp engine, scores it against the source, and gates two invariants:
+// planar tracer, scores it against the source, and gates two invariants:
 //   1. determinism — a byte-identical re-run (the seeded-PRNG fix), and
 //   2. finite, in-range fidelity metrics with at least one emitted path.
 //
-// The full scoreboard (both engines, all numbers) is written by
-// src/devtest/runBaseline.ts and rendered visually in /labs/eval (EvalLab); this
-// test is the CI guardrail.
+// This test is the CI guardrail; the per-case numbers live in the labs.
 //
 //   node --test test/harness.test.ts
 
@@ -29,20 +27,20 @@ function gateRow(name: string, row: { determinism: string; paths: number; l1Lab:
 }
 
 for (const c of PNG_CORPUS) {
-  test(`harness: ${c.name} (crisp) is deterministic with finite metrics`, async () => {
+  test(`harness: ${c.name} (planar) is deterministic with finite metrics`, async () => {
     const img = loadPng(c.path)
-    const row = await score(c.name, 'crisp', img, () =>
-      traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'crisp', gradients: true }),
+    const row = await score(c.name, 'planar', img, () =>
+      traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, gradients: true }),
     )
     gateRow(c.name, row)
   })
 }
 
 for (const c of SYNTHETIC_CORPUS) {
-  test(`harness: ${c.name} (crisp, synthetic) is deterministic with finite metrics`, async () => {
+  test(`harness: ${c.name} (planar, synthetic) is deterministic with finite metrics`, async () => {
     const src: SourceImage = syntheticSource(c)
-    const row = await score(c.name, 'crisp', src, () =>
-      traceImage(src as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'crisp', gradients: true }),
+    const row = await score(c.name, 'planar', src, () =>
+      traceImage(src as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, gradients: true }),
     )
     gateRow(c.name, row)
     // Corner-preservation guard (the Stage-A headline): the sharp-cornered mountain

@@ -14,9 +14,6 @@ importers:
       '@resvg/resvg-wasm':
         specifier: ^2.6.2
         version: 2.6.2
-      esm-potrace-wasm:
-        specifier: ^0.4.1
-        version: 0.4.1
       jszip:
         specifier: ^3.10.1
         version: 3.10.1
@@ -84,9 +81,6 @@ importers:
       '@resvg/resvg-js':
         specifier: ^2.6.2
         version: 2.6.2
-      esm-potrace-wasm:
-        specifier: ^0.4.1
-        version: 0.4.1
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
@@ -789,9 +783,6 @@ packages:
   escape-string-regexp@4.0.0:
     resolution: {integrity: sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==}
     engines: {node: '>=10'}
-
-  esm-potrace-wasm@0.4.1:
-    resolution: {integrity: sha512-XLVQ7zRm0tFeiMnEX4wQJBjGlIVYyvlD98caDtR/sQoL27y+M1Q5oy8+EmIyLZQ+2vPTygEkg3aa0EeYoj8gww==}
 
   etag@1.8.1:
     resolution: {integrity: sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==}
@@ -1977,8 +1968,6 @@ snapshots:
   escape-html@1.0.3: {}
 
   escape-string-regexp@4.0.0: {}
-
-  esm-potrace-wasm@0.4.1: {}
 
   etag@1.8.1: {}
 

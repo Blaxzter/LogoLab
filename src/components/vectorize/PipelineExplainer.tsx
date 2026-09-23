@@ -61,7 +61,7 @@ export function PipelineExplainer({
         const image = await getImageData(logo.src!, ANALYZE_DIM, logo.isSvg ? logo.svgText : null)
         // Cheap + pure — the same probe that seeds the gradients toggle on load.
         setDetect({ ramp: analyzeRampiness(image), hist: colorHistogram(image) })
-        const result = await analyzeImageOffThread(image, { ...opts, engine: 'crisp' }, controller.signal)
+        const result = await analyzeImageOffThread(image, opts, controller.signal)
         setAnalysis(result)
       } catch (e) {
         if (e instanceof DOMException && e.name === 'AbortError') return
@@ -124,7 +124,6 @@ function Steps({
 }) {
   const { width, height, regionCount, paints } = a
   const gradientsOn = opts.gradients !== false
-  const engineLabel = opts.engine === 'potrace' ? 'Potrace' : 'Crisp'
   const fidelity = opts.fidelity ?? 1.5
   const markerCount = opts.markers?.length ?? 0
 
@@ -218,7 +217,7 @@ function Steps({
       <Step
         n={5}
         title="Trace clean outlines, then tidy them"
-        controls={[`Engine: ${engineLabel}`, `Smoothing ${opts.smoothing}`, `Despeckle ${opts.despeckle}`, `Fidelity ${fidelity}px`]}
+        controls={[`Smoothing ${opts.smoothing}`, `Despeckle ${opts.despeckle}`, `Fidelity ${fidelity}px`]}
         body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass (Fidelity) snaps near-circles, near-lines and shared centres to perfect shapes. The Engine control chooses how the outline is drawn: Crisp (the default) gives the fewest, cleanest nodes; Potrace sticks closest to the original pixels. Result with your settings: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
       >
         <Visual label="Vector result">

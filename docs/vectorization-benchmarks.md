@@ -6764,3 +6764,251 @@ not up:
   inputs, with the interior as control), `--profile` (error by distance to the edge), and the
   bias/noise split — so a future reading starts from measurement rather than from this issue's
   prose.
+
+## 36. A small mono raster is enlarged by what its ink needs, and the mono cut becomes a coverage cut (2026-09-21)
+
+**One line.** A 499px PNG of a hymn (five staves, lyrics, one black ink on transparency)
+traced to a blob at 1×: every staff line melted into the note heads. The studio had no
+enlargement for a raster of that size (the sheet's rule targets 512px, so 499 gets 1×), and
+the mask it cut was 68% fatter than the picture. Two mechanisms, two fixes, one census.
+
+### 36.1 The case
+
+Stroke census on the page (vertical ink-run lengths, share by count): 87% of runs are 1px at
+499px; the same page rasterized from its SVG at 2048 reads 77% at 4px and traces perfectly.
+Bilinear enlargement before the trace, old mask, rendered back at native:
+
+| factor | staff | nodes | time (Node) |
+|---|---|---|---|
+| 1× | melted into the heads | 2273 | 5.1 s |
+| 2× | still broken | 2874 | 7.2 s |
+| 3× | clean | 4092 | 11.4 s |
+| 4× | clean | 4373 | 12.8 s |
+
+The first stroke probe then read the page's thin ink as **2px**, not 1, and picked 2× — the
+factor that had already failed. The probe was right about the mask: the PNG is black RGB on
+transparency with its anti-aliasing in ALPHA, and `thresholdToMask` counted any pixel with
+alpha ≥ 16 as ink. Measured: 36,694 ink px in the mask against 21,885 at coverage ≥ 0.5;
+thickness histogram 1822 / 24355 / 3999 (1 / 2 / 3px) against 13673 / 4368 / 565. The
+lyrics came out bold for the same reason. `cutLuma` composites the pixel over the paper the
+cut assumes (white, or black when inverted) — a half-covered black pixel reads 128, the
+mask's edge is the iso-0.5 contour, opaque pixels are untouched — and every readout that
+mirrors the mask goes through it. With the cut fixed the probe reads 1px and picks 3×:
+
+| page @499 | mask | ΔE (over white) | SSIM | nodes | time |
+|---|---|---|---|---|---|
+| 1× | alpha ≥ 16 | 8.57 | 0.769 | 2273 | 4.4 s |
+| 2× (probe read 2px) | alpha ≥ 16 | 12.21 | 0.724 | 2874 | 6.1 s |
+| 1× | coverage | 6.36 | 0.696 | 2024 | 4.7 s |
+| **3× (probe reads 1px)** | coverage | **2.62** | **0.931** | 3569 | 15.3 s |
+
+The studio's own ΔE readout agrees (2.62 at ×3). Time is the cost: a full page is 15 s in Node
+and about as long in the worker.
+
+### 36.2 The policy
+
+`monoTraceScale` (`src/lib/traceCaps.ts`), read by the studio, `planTileBase` and so the MCP
+server: the larger of the sheet's SIZE rule (toward 512px, ≤3×, §32's numbers) and a STROKE
+rule (`inkThickness`, `src/lib/strokeWidth.ts`: the min of the vertical and horizontal ink run
+through each ink pixel, the 10% quantile by pixel, enlarged toward 3px, ≤4×), capped by the
+flat raster cap, mono only, bilinear. `upscale: 'auto'` is the default; `'off'` and `'ai'`
+keep their meaning. Gate: `test/stroke-width.test.ts`.
+
+### 36.3 The census — `strokeScaleDiag`, both traces rendered back at native before scoring
+
+Gallery, 152 marks @256 and @512 (305 rows; 180 colour, 125 mono):
+
+| decision | rows | by |
+|---|---|---|
+| ×1 | 62 | — |
+| ×2 | 62 | size, all @256 |
+| ×3 | 1 | stroke — the page |
+
+Enlarged rows 63: ΔE **better 60 / worse 0 / wash 3**; mean ΔE 8.89 → 7.93, median 1.89 →
+**0.98**; SSIM mean 0.864 → 0.912, median 0.925 → 0.976; nodes ×1.38; time ×1.99. The
+stroke rule fired on none of the 152 marks at either raster — logos are thick ink; the rule is
+for line art (scores, diagrams, scans), which is where the size rule is blind. Aside, not this
+pass: `american-express` @256 reads ΔE 67 at 1× and at 2× alike — a mono decision on a mark
+that is not one ink, unchanged by anything here and worth its own look.
+
+Icon sheets, the four examples split by the production detector @2048 and @1024 (99 mono
+tiles): decisions identical to the sheet's own rule (@2048 30 ×1 / 18 ×2; @1024 12 ×2 /
+39 ×3, all by size), the stroke rule never fires, and the coverage cut is inert on opaque
+tiles — a control lane. Re-measuring the existing rule on the way: 52 better / 3 worse / 14
+wash; the one real regression is `productivity#10` @1024, a 125px tile at ×3, ΔE 6.93 →
+10.10 with SSIM up 0.024 — pre-existing, not introduced.
+
+### 36.4 Where the coverage cut shows
+
+Opaque art is byte-identical (the whole gallery lane, the truth gates, the sheet tiles). The
+A/B **mono** lane traces the fixtures on alpha, so it moves there; the frozen pair
+`before-mono-upscale` ⇄ `after-mono-upscale` in `/labs/ab` holds the diff, and the changed
+cases are listed in §36.5.
+
+### 36.5 The A/B pair, byte-compared
+
+43 cases × 3 lanes: **flat 0 changed, gradient 0 changed, mono 7 changed** — `bloom`,
+`outline`, `summit`, `aurora`, `aa-seam`, `flute-flat`, `annulus`, the fixtures whose
+anti-aliasing the mono lane sees in alpha. Every gallery case is byte-identical (rasterized on
+white). The enlargement rule cannot show in the lanes at all: they trace at the cap.
+
+## 37. One tracer: mono goes through planar, and the crisp and potrace engines are gone (2026-09-22)
+
+**One line.** `summit`'s 61° peak traced as a 4px chamfer in the mono lane and as a 0.5px apex
+in the flat lane, on the same raster. The reason was not the mask and not the blur: mono was a
+different fitter. `mode: 'mono'` returned before segmentation into the crisp mask tracer
+(`subpixel.ts` → `curveFit`), whose anchors can only sit on contour samples, whatever the
+Engine control said; the colour lanes pinned planar. Every corner, apex, junction, ring and
+sub-pixel rule since §10 lives in `planarFit`, and once §36's ink probe made Mono the default
+for one-ink art (125 of 305 gallery rows, 99 of 130 sheet tiles), most icons never reached it.
+
+### 37.1 The three engines, measured against each other
+
+| | Potrace (2003, WASM) | Crisp (per-region marching squares + curveFit) | Planar |
+|---|---|---|---|
+| reads the anti-aliasing | no — thresholds | no — blurs the BINARY mask 0.35–0.9px | yes — §15 iso-0.5 placement |
+| shared boundaries | each region alone, stacked | same | one curve per neighbour pair |
+| corners | alphamax threshold | evidence-based, anchors on the contour only | arm intersections, apex evidence, threading |
+| runtime | browser + main thread only; fails to load under Node | worker / Node | worker / Node |
+
+Eight fixtures, flat colour @2048, scored @1024 with `fidelity()`:
+
+| case | planar nodes / ΔE | crisp nodes / ΔE |
+|---|---|---|
+| summit | 9 / 0.01 | 12 / 0.07 |
+| bloom | 36 / 0.04 | 50 / **3.99** (stacked crossings, seams) |
+| aurora | 134 / 2.15 | 206 / 2.10 |
+| orbit | 50 / 0.05 | 28 / 0.07 |
+| hairlines | 114 / 0.15 | 62 / 0.30 |
+| all eight | **425 nodes, mean ΔE 0.31, 11.3 s** | 443 nodes, mean ΔE 0.85, 22.2 s |
+
+"Crisp = fewest nodes", the control's own hint, was not true in aggregate. Potrace could not
+be put in the table: `esm-potrace-wasm` uses `__dirname` in an ESM file and does not load under
+Node, so the MCP server and `npx logolab` never ran it. Nothing measured either engine — the
+truth gates, the A/B lanes and the golden corpus all run planar.
+
+### 37.2 Mono as a segmentation (`src/lib/trace/mono.ts`)
+
+The cut becomes a two-label map, ink and paper, handed to `tracePlanar` exactly as a colour
+segmentation is. Three decisions live in the module: the cut is §36's `cutLuma`; despeckle is
+the old mono contract, a loop-area floor (`turdsize`, 4px² at the default) applied to
+4-connected components of both labels, deliberately gentler than the colour path's region
+floor (a dot on an "i" at 499px is 4px²); and the source the planar passes read (§15
+sub-pixel, §18 apex evidence) is COMPOSITED over the paper the cut assumes, because on
+black-on-transparent art the raw RGB of a transparent pixel is black like the ink and the
+two-colour model degenerates to the lattice. One label cannot be carved, which is the property
+that made mono win over the colour path on shaded single-ink art (§33 / #46). The contract
+holds — one path, `#000000`, repainted by the caller — and it now carries the shared-edge
+`topology`.
+
+### 37.3 What moved
+
+| | before (crisp) | after (planar) |
+|---|---|---|
+| `summit` mono, nodes within 60px of the peak | (848.0, 704.6) d 0.6 and (844.6, 708.0) d 5.2 — a chamfer | (847.8, 703.5) d 0.5 |
+| A/B mono lane, 43 cases | — | **43 changed**; flat 0, gradient 0 |
+| mono lane path commands, sum over 43 | 11 684 | 11 349 (−3%) |
+| mono lane time, sum over 43 | 142.7 s | **42.0 s** |
+| `checker` mono @2048 | 28.3 s | 2.6 s |
+| `logo-ibm` / `peak-drop` mono | 234 / 210 | 161 / 118 |
+| the sheet-music page @499 ×3 | ΔE 2.62, SSIM 0.931, 3569 n, 15.3 s | ΔE **2.27**, SSIM **0.944**, 3762 n, **1.7 s** |
+
+Census (`strokeScaleDiag`, both traces rendered back at native): the same 124 gallery mono
+rows as §36.3, traced at native through crisp and then through planar — mean ΔE **8.41 →
+7.53**, better on **118 / worse on 1** (`american-express` @256, the mark that is not one ink,
+67.59 → 67.60), nodes 7 407 → 7 586 (+2.4%), time 11.1 s → 10.6 s. §36's enlargement rule
+re-measured on the planar mono: 224 mono rows (gallery + sheet tiles + the page), 132 enlarged,
+ΔE better **111 / worse 1 / wash 20**, SSIM 0.858 → 0.875 — the rule holds with the new fitter.
+
+Pair `before-mono-planar` ⇄ `after-mono-planar` in `/labs/ab`. Gates: `test/mono-labels.test.ts`,
+`test/harness.test.ts` (now planar), the truth gates unchanged.
+
+### 37.4 Removed with the engines
+
+`potrace.ts`, `subpixel.ts`, `layers.ts` (the V6 translucent decomposition ran only on the
+stacked path — a stacked output is a paint-order question the planar graph can answer later as
+a post-pass), the stacked assembly in `index.ts`, the Engine control and its docs entry, the
+Engine scoreboard lab and the crisp/potrace panels of the pipeline lab, the crisp devtest
+studies, the `esm-potrace-wasm` dependency, and the main-thread special case in
+`canTraceOffThread`. `VectorizeOptions.engine` stays as the single literal `'planar'`.
+
+## 38. The mono cut follows the thin ink (2026-09-22)
+
+**One line.** At 949% the page traced through §37's planar mono still had beads on its staff
+lines where the barlines cross them, and no barlines. The midpoint cut is the 50% coverage
+contour — the geometrically right edge for any stroke a pixel wide or more — and a 0.6px
+barline never reaches 50%, except where it crosses a staff line and the coverages add. The
+user's diagnosis was the right one: it depends on the threshold. This section measures what
+the threshold should be, and whether the raster can say so itself.
+
+### 38.1 Phase 0 — the SSIM-optimal cut, judged against the vector
+
+`src/devtest/hairlineCutDiag.ts`: two synthetic pages (staff lines at 0.45 / 0.6 / 0.9 units,
+a diagram of 0.5–1.2-unit strokes, both with filled shapes and text), the hymn page and the
+`hairlines` fixture, rasterized on transparency at 400 / 499 / 600 / 800 px (a user's PNG),
+enlarged by the production Auto factor, traced at every cut from 128 to 200, each trace
+rendered at the enlarged size and scored with `fidelity()` against the SVG ITSELF rendered
+there on white. The truth is the vector, not the blurry PNG — the earlier montage judged
+against the PNG put the hymn's optimum at 160; against the page it is 144, and the gain is a
+third of what the PNG suggested. Beside each row the RIDGE statistic at the native raster:
+pixels darker than both neighbours across some direction by 10 luma (a thick stroke's interior
+is flat and its edge a monotonic ramp, so only sub-pixel strokes are ridges), and of those the
+ones at or above the cut — the ink the cut loses — as a share of the ink.
+
+| case | raster | lost share | lost-luma p50 | best cut | SSIM at best / at 128 |
+|---|---|---|---|---|---|
+| synth-staff | 400 / 499 / 600 / 800 | 63 / 57 / 24 / 3.4% | 166 / 161 / 171 / 191 | 168 / 168 / 168 / 152 | .918/.876 · .938/.910 · .952/.940 · .965/.947 |
+| synth-diagram | 400 / 499 / 600 / 800 | 28 / 19 / 8.9 / 3.5% | 166 / 158 / 159 / 151 | 168 / 168 / 160 / 152 | .969/.948 · .974/.965 · .987/.981 · .992/.990 |
+| hymn | 400 / 499 / 600 / 800 | 31 / 7.0 / 5.6 / 2.5% | 145 / 191 / 191 / 191 | 160 / 144 / 152 / 128 | .877/.799 · .924/.918 · .938/.932 · .923/.923 |
+| hairlines | 400 / 499 / 600 | 0.6 / 5.3 / 0.2% | — | 144 / 136 / 144 | .969/.952 · — · — |
+
+Two readings fell before any code moved. A quantile of the lost ridges' darkness — the first
+draft — is the wrong estimator: on the hymn the faint text hairlines outnumber the darker
+barlines and drag every quantile to 191, which the montage had already shown as bold; the
+optimum does not follow p50 (145 → 160 but 191 → 144). And the optimum is not a constant
+either: it tracks the SHARE, ~168 when a quarter or more of the ink is sub-pixel, ~152 at
+3–6%, the midpoint at 2.5%.
+
+### 38.2 The rule, scored against the curves
+
+Candidate rules evaluated on the 15 rows' SSIM curves (nearest sampled cut), mean loss
+against the per-row optimum:
+
+| rule | mean SSIM | mean loss vs oracle | worst row |
+|---|---|---|---|
+| midpoint (before) | 0.9347 | 0.0167 | hymn@400 −0.078 |
+| fixed 160 when share ≥ 3% | 0.9461 | 0.0053 | synth-staff@400 −0.018 |
+| step: 3% → 152, 15% → 168 | 0.9488 | 0.0026 | hairlines@400 −0.016 |
+| linear +40·min(1, share/0.2) | 0.9469 | 0.0045 | hairlines@400 −0.016 |
+| **sqrt: +40·√min(1, share/0.3)**, gate 2% | **0.9495** | **0.0032** | hairlines@400 −0.016 |
+| oracle | 0.9514 | 0 | — |
+
+`hairlineRaise` (strokeWidth.ts): nothing under a 2% share, then 40 luma × √(share/0.3),
+capped, scaled by the ink-to-paper span; `hairlineCut` reads the share and `decideInkMode`
+applies it after the midpoint / gap placement, in the mono decision the studio, the sheet and
+the MCP server share. The gate comes from the control: across 152 gallery marks @256 and
+@512 the highest share is 1.24% (`boeing-wm`) and 1.07% (`chanel`), and a sweep of those two
+against their own vectors reads a raise as a wash or a hair worse (boeing 0.811 → 0.808 at
+132), so nothing in the gallery moves. The `InkModePlan` carries the read (`hairlines`) and
+the Mode line says "cut at 147 (raised from 128 to keep hairlines)".
+
+What the rule picks on the calibration rows, and what that scores (the raise is applied on
+top of the probe's placement, so a page with grey ink starts higher): synth-staff 168 / 168 /
+164 (SSIM .900 / .929 / .951), synth-diagram 167 / 160 / 150 (.968 / .972 / .985), hymn
+168 / 147 / 145 (.87 / .919 / .930). The real page at 499 is the weakest row: 0.919 against
+0.918 at the midpoint, a wash by the number, with the barlines drawn where before they were
+beads. At 400 it is worth 0.08 of SSIM.
+
+**Where it shows, and where it does not.** A/B pair `before-hairline-cut` ⇄
+`after-hairline-cut`: **0 of 43 cases changed in any lane** — at the 2048 cap nothing has a
+2% sub-pixel share, which is the point. The census (raster-scored, §36.3's rows): 221 of 224
+mono rows byte-identical; the three that moved are `ibm` @256 (raster ΔE 1.57 → 1.68, the
+cut raised a little for its thin strokes), `productivity#02` @1024 (2.94 → 2.80) and the page
+(4.02 → 4.10 against its own blurry PNG, a wash against its vector — above). Time unchanged.
+
+### 38.3 What this is not
+
+A centreline stroke for line art. Staff lines, stems and barlines as stroked paths with a
+measured width, note heads as fills — the right output for sheet music and diagrams, and a
+project of its own. This section only moves a threshold that was already the user's to move.
+

@@ -12,6 +12,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   cutFraction,
+  cutLuma,
   decideInkMode,
   inkLumaRange,
   monoThreshold,
@@ -478,4 +479,41 @@ test('snapCutToGap refuses a move that would ink almost everything', () => {
   const asked = 60
   const got = snapCutToGap(img, asked, false)
   assert.ok(cutFraction(img, got, false) < 0.9, `moved to ${got}, which inks everything`)
+})
+
+/* ------------------------------------------ the cut is a COVERAGE cut on alpha */
+
+// Art over transparency carries its anti-aliasing in alpha: black RGB everywhere,
+// alpha ramping at the edge. A cut that read the RGB luma alone counted every
+// pixel with any alpha at all as ink, so a 1px staff line came out 2px and lyrics
+// bold (a 499px page of sheet music held 68% more ink in its mask than it drew).
+// `cutLuma` composites the pixel over the paper the cut assumes, so the mask's
+// edge is the iso-0.5 coverage contour — the line an opaque rendering puts it on.
+
+test('cutLuma: opaque pixels untouched; alpha composites over white (off) or black (on)', () => {
+  const px = new Uint8ClampedArray([0, 0, 0, 255, 0, 0, 0, 128, 255, 255, 255, 128, 60, 60, 60, 0])
+  assert.equal(cutLuma(px, 0, false), 0)
+  assert.equal(cutLuma(px, 0, true), 0)
+  assert.ok(Math.abs(cutLuma(px, 4, false) - 127) < 1, 'half-covered black over white reads mid-grey')
+  assert.equal(cutLuma(px, 4, true), 0, 'and over black it is black')
+  assert.ok(Math.abs(cutLuma(px, 8, true) - 128) < 1, 'half-covered white over black reads mid-grey')
+  assert.ok(Math.abs(cutLuma(px, 8, false) - 255) < 0.01)
+})
+
+test('a 1px black line anti-aliased in alpha stays 1px in the mask', () => {
+  // 40 rows: a line drawn at a half-pixel offset — two rows at alpha 128 each would be
+  // ONE row of coverage; here row 10 is solid and rows 9 and 11 carry alpha 40 (16%).
+  const w = 40
+  const h = 40
+  const data = new Uint8ClampedArray(w * h * 4) // transparent black
+  for (let x = 0; x < w; x++) {
+    data[(10 * w + x) * 4 + 3] = 255
+    data[(9 * w + x) * 4 + 3] = 40
+    data[(11 * w + x) * 4 + 3] = 40
+  }
+  const img: ImageDataLike = { width: w, height: h, data }
+  assert.equal(cutFraction(img, 128, false), 1 / 3, 'of the 3 visible rows only the solid one is ink')
+  const range = inkLumaRange(img)!
+  assert.equal(range.min, 0)
+  assert.ok(range.max < 60, 'inverted, the faint rows read near black over black paper')
 })

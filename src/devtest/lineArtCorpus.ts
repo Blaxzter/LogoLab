@@ -9,7 +9,7 @@
 //
 // `summit` is the Stage-A headline (a sharp-cornered mountain mark): the crisp
 // tracer used to round its corners (browser seam 93). Building it here lets
-// `npm test` and runBaseline gate the corner-preservation fix without a browser.
+// `npm test` (test/harness.test.ts) gates the corner-preservation fix without a browser.
 
 import type { EditableDoc, PathItem, SubPath } from '../lib/path/types.ts'
 import { ellipseSubPaths } from '../lib/path/model.ts'

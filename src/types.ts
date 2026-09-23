@@ -124,13 +124,12 @@ export interface VectorizeOptions {
    */
   gradients?: boolean
   /**
-   * Tracer backend. 'planar' = the shared-edge planar subdivision (default for
-   * color): adjacent regions share one boundary curve, so there is no overlap
-   * and no hairline seam, and shared boundaries are jointly editable. 'crisp' =
-   * sub-pixel marching-squares + Schneider Bézier fitting per region (overlapping
-   * stacked masks). 'potrace' = the classic bilevel WASM tracer.
+   * Vestigial: the planar shared-edge tracer is the only engine. The crisp and
+   * potrace mask tracers were removed on 2026-09-22 (docs §37) — every region's
+   * boundary is traced once and shared with its neighbour. The field stays so
+   * stored options and the diagnostics' option literals keep parsing.
    */
-  engine?: 'potrace' | 'crisp' | 'planar'
+  engine?: 'planar'
   /**
    * Trace detail / resolution preset. 'balanced' (default) uses the adaptive cap
    * (flat art 2048, gradient/photo 1024). 'high' raises the FLAT cap to 4096 for
@@ -140,13 +139,19 @@ export interface VectorizeOptions {
    */
   traceDetail?: 'balanced' | 'high'
   /**
-   * AI super-resolution in front of the tracer (waifu2x swin_unet, lazy-loaded,
-   * in-browser). A UI-side policy like `traceDetail` — read by the vectorize
-   * studio, never inside src/lib/trace. Only acts on small rasters (see
-   * src/lib/aiUpscale.ts for the size rule); inert on SVG sources and on rasters
-   * above the size where it stops helping. Omitted ⇒ 'off'.
+   * Enlargement in front of the tracer. A UI-side policy like `traceDetail` —
+   * read by the vectorize studio, the icon sheet and the MCP server, never inside
+   * src/lib/trace.
+   *  • 'auto' (the default when omitted): a MONO raster is enlarged bilinearly
+   *    when it is small or its ink is thin — `monoTraceScale` in traceCaps.ts,
+   *    the sheet's measured rule plus a stroke-width rule, never past the flat
+   *    cap. Colour and SVG sources are left alone.
+   *  • 'ai': AI super-resolution (waifu2x swin_unet, lazy-loaded, in-browser),
+   *    small rasters only (see src/lib/aiUpscale.ts for the size rule); inert on
+   *    SVG sources and on rasters above the size where it stops helping.
+   *  • 'off': trace the raster as it is.
    */
-  upscale?: 'off' | 'ai'
+  upscale?: 'off' | 'auto' | 'ai'
   /**
    * Flat-art segmentation strategy. When gradients are OFF, the default is
    * PALETTE-FIRST (paletteSegment.ts): pick the dominant colours, snap every pixel

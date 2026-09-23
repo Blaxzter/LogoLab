@@ -19,6 +19,7 @@
 // Everything in this file is pure: no DOM, no Node APIs, plain pixels in.
 
 import { deltaE76, srgbToLab, type Lab } from './trace/lab.ts'
+import { hairlineCut, type HairlineRead } from './strokeWidth.ts'
 import type { VectorizeOptions } from '../types'
 
 /** Anything shaped like a browser `ImageData` (the Node harness decodes into this too). */
@@ -363,15 +364,45 @@ const GAP_PROBE_RADIUS = 4
  *  square — refuse it and keep the cut where it was. */
 const DEGENERATE_SOLID = 0.9
 
-/** Rec.709 luma histogram of the VISIBLE pixels — the same weights and the same
- *  `alpha >= 16` gate as `thresholdToMask`, so the bins are the mask's own. */
-function lumaHistogram(img: ImageDataLike): { bins: Float64Array; visible: number } {
+/* ------------------------------------------------ what a mono cut looks at */
+
+/** Below this alpha a pixel is not there at all — invisible to the cut and to every
+ *  readout that mirrors it. */
+export const VISIBLE_ALPHA = 16
+
+/**
+ * The luminance a mono cut compares for pixel `i`: its Rec.709 luma, COMPOSITED
+ * over the paper the cut assumes — white when the ink is the dark side, black
+ * when `invert` makes it the light side. Opaque pixels are untouched.
+ *
+ * This is what makes the cut a COVERAGE cut on art over transparency. Such art
+ * carries its anti-aliasing in alpha (black RGB everywhere, alpha ramping at the
+ * edge), and a cut that read the RGB luma alone counted every pixel with any
+ * alpha at all as ink — a 1px staff line became 2px, lyrics came out bold, and a
+ * page of sheet music at 499px held 68% more ink in its mask than it drew.
+ * Composited, a half-covered black pixel reads 128: the mask's edge is the
+ * iso-0.5 coverage contour, the same line an opaque rendering puts it on.
+ *
+ * `thresholdToMask` (trace/index.ts), `inkMask` (strokeWidth.ts) and the three
+ * readouts below all go through here, so they cannot disagree by a pixel.
+ */
+export function cutLuma(d: Uint8ClampedArray, i: number, invert: boolean): number {
+  const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
+  const a = d[i + 3]
+  if (a === 255) return lum
+  const k = a / 255
+  return invert ? lum * k : lum * k + 255 * (1 - k)
+}
+
+/** Histogram of what the cut sees over the VISIBLE pixels — `cutLuma`, so the bins
+ *  are the mask's own. */
+function lumaHistogram(img: ImageDataLike, invert: boolean): { bins: Float64Array; visible: number } {
   const bins = new Float64Array(256)
   const d = img.data
   let visible = 0
   for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] < 16) continue
-    bins[Math.round(0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2])]++
+    if (d[i + 3] < VISIBLE_ALPHA) continue
+    bins[Math.round(cutLuma(d, i, invert))]++
     visible++
   }
   return { bins, visible }
@@ -389,7 +420,7 @@ function lumaHistogram(img: ImageDataLike): { bins: Float64Array; visible: numbe
  * fixtures, `radial-glow` — has no gap anywhere and keeps the cut it had.
  */
 export function snapCutToGap(img: ImageDataLike, cut: number, invert: boolean): number {
-  const { bins, visible } = lumaHistogram(img)
+  const { bins, visible } = lumaHistogram(img, invert)
   if (visible === 0) return cut
 
   let onCut = 0
@@ -441,6 +472,13 @@ export interface InkModePlan {
   inks: number
   /** The probe itself, for callers that want to explain more than `inks`. */
   probe: InkProbe
+  /**
+   * What the thin-ink read did to the cut (strokeWidth.ts `hairlineCut`): the
+   * cut it started from, the share of sub-pixel ridge ink that cut was losing,
+   * and where those ridges sit. `cut !== from` means the cut was raised for
+   * hairlines. Null in colour mode.
+   */
+  hairlines: HairlineRead | null
 }
 
 /**
@@ -468,7 +506,7 @@ export function decideInkMode(
   const wantMono =
     settings.colorMode === 'mono' || (settings.colorMode === 'auto' && (probe.mono || probe.monoInverted))
   if (!wantMono) {
-    return { mode: 'color', threshold: fallbackThreshold, invert: false, recolor: null, inks: probe.inks, probe }
+    return { mode: 'color', threshold: fallbackThreshold, invert: false, recolor: null, inks: probe.inks, probe, hairlines: null }
   }
 
   // What the cut has to clear the ink AGAINST.
@@ -490,17 +528,22 @@ export function decideInkMode(
   // A FORCED mono gets it too — without it a white glyph on navy comes back as
   // the paper traced around a hole.
   const invert = probe.inkLuma != null && probe.inkLuma > against
+  // …and on a TRANSPARENT ground, leave the cut where the branch above aimed
+  // it: alpha is what separates the art there, so the luminance cut is only
+  // required to stay clear of the ink, and a "gap" between tones of the ink is
+  // not somewhere it should be pulled.
+  const placed = opaqueGround ? snapCutToGap(pixels, midpoint, invert) : midpoint
+  // Then let the thin ink have its say: strokes thinner than a pixel never reach
+  // the midpoint's 50% coverage and would vanish (strokeWidth.ts, hairlineCut).
+  const hairlines = hairlineCut(pixels, placed, invert, probe.inkLuma == null ? 255 : Math.abs(against - probe.inkLuma))
   return {
     mode: 'mono',
-    // …and on a TRANSPARENT ground, leave the cut where the branch above aimed
-    // it: alpha is what separates the art there, so the luminance cut is only
-    // required to stay clear of the ink, and a "gap" between tones of the ink is
-    // not somewhere it should be pulled.
-    threshold: opaqueGround ? snapCutToGap(pixels, midpoint, invert) : midpoint,
+    threshold: hairlines.cut,
     invert,
     recolor: probe.dominant,
     inks: probe.inks,
     probe,
+    hairlines,
   }
 }
 
@@ -516,10 +559,11 @@ export function decideInkMode(
 /**
  * Fraction of the image's VISIBLE pixels a mono cut turns solid, in [0,1].
  *
- * Mirrors `thresholdToMask` exactly — same Rec.709 weights, same `alpha >= 16`
- * gate, same strict comparison — because a readout that disagreed with the mask
- * by even one pixel at the boundary would be worse than no readout. One O(pixels)
- * pass; ~1.5 ms on a 512px raster, so it is fine to recompute while dragging.
+ * Mirrors `thresholdToMask` exactly — the same `cutLuma`, the same visibility
+ * gate, the same strict comparison — because a readout that disagreed with the
+ * mask by even one pixel at the boundary would be worse than no readout. One
+ * O(pixels) pass; ~1.5 ms on a 512px raster, so it is fine to recompute while
+ * dragging.
  */
 export function cutFraction(img: ImageDataLike, cut: number, invert = false): number {
   const d = img.data
@@ -527,9 +571,9 @@ export function cutFraction(img: ImageDataLike, cut: number, invert = false): nu
   let visible = 0
   let solid = 0
   for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] < 16) continue
+    if (d[i + 3] < VISIBLE_ALPHA) continue
     visible++
-    const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
+    const lum = cutLuma(d, i, invert)
     if (invert ? lum > c : lum < c) solid++
   }
   return visible === 0 ? 0 : solid / visible
@@ -542,7 +586,9 @@ export function cutFraction(img: ImageDataLike, cut: number, invert = false): nu
  * With the cut OFF the ink is what falls BELOW it, so any cut at or under `min`
  * selects nothing; with it ON the ink is what rises above, so any cut at or over
  * `max` selects nothing. Those are the dead zones the Threshold slider shades.
- * Null when the image has no visible pixels at all.
+ * Each end is read the way that Invert position reads the pixels (`cutLuma`:
+ * over white for OFF, over black for ON), so the zones are the mask's own on art
+ * over transparency too. Null when the image has no visible pixels at all.
  */
 export function inkLumaRange(img: ImageDataLike): { min: number; max: number; visible: number } | null {
   const d = img.data
@@ -550,11 +596,12 @@ export function inkLumaRange(img: ImageDataLike): { min: number; max: number; vi
   let max = -Infinity
   let visible = 0
   for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] < 16) continue
+    if (d[i + 3] < VISIBLE_ALPHA) continue
     visible++
-    const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
-    if (lum < min) min = lum
-    if (lum > max) max = lum
+    const off = cutLuma(d, i, false)
+    const on = cutLuma(d, i, true)
+    if (off < min) min = off
+    if (on > max) max = on
   }
   return visible === 0 ? null : { min, max, visible }
 }
