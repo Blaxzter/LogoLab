@@ -264,29 +264,35 @@ gradient-aware Image Trace.
 ```
 src/
   components/
-    scenes/        # preview mockups (DeviceMock, DesktopBrowser, AppStoreListing, …)
-    panels/        # CleanupPanel, VectorizePanel, ExportPanel
+    shell/         # app chrome: header menu, sidebar, saved chip, toasts, popovers, install prompts
+    intake/        # upload dropzone, examples dialog, the empty-panel state
+    report/        # error boundary + issue reporting UI
+    panels/        # one per route: PreviewGrid, CleanupPanel, VectorizePanel, ExportPanel, …
+    scenes/        # preview mockups (DeviceMock, DesktopBrowser, AppStoreListing, …) + LogoMark,
+                   #   the single source of truth for rendering a logo (card/shape/tint)
     vectorize/     # the vectorize studio (EditorCanvas node editor, paths panel, controls)
+    editor/ sheet/ cleanup/   # the other studios
+    labs/          # research views over the tracer (/labs/*) — never precached
     ui/            # Button + form controls
-    LogoMark.tsx   # the single source of truth for rendering a logo (card/shape/tint)
   lib/
-    bgRemove.ts    # flood-fill / color-key removal + erase/restore brushes
-    aiRemove.ts    # lazy in-browser AI cutout (Transformers.js · RMBG-1.4)
-    aiUpscale.ts   # lazy in-browser AI upscaler in front of the tracer (ONNX Runtime Web · waifu2x)
-    trace/         # potrace tracing pipeline (quantize → stacked masks → potrace WASM)
+    trace/         # the planar vectorizer (segmentation → shared-edge graph → fit → beautify)
+    traceInput/    # what the tracer is fed: ink/mono decision, stroke probe, raster caps, AI upscaler
     path/          # editable vector model: SVG/path-d parser, serializer, Bézier node ops
-    svgClean.ts    # SVG path rounding / optimization
-    pwaExport.ts   # icon rendering (canvas), zip bundling
-    iconSpec.ts    # icon geometry + manifest/.ico — shared by the app AND the MCP server
+    render/        # document rasterizer + the ΔE fidelity score
+    cleanup/       # flood-fill / color-key removal, lazy in-browser AI cutout (RMBG-1.4)
+    export/        # icon geometry + manifest/.ico (shared with the MCP server), canvas export, SVG cleanup
+    report/        # error log, failure toasts, GitHub issue reports
+    persist/       # the working session: IndexedDB for bytes & documents, localStorage for settings
+    png/           # dependency-free PNG decode/encode (used by the MCP server)
     image.ts       # loading, SVG rasterization, render sources
+  state/           # Zustand stores (logo, appearance, environment, device placements; the icon sheet)
   mcp/             # the MCP server: trace + export for a coding agent (docs/mcp.md)
   pwa/
     sw.js          # the service worker (offline shell + runtime cache) — emitted by scripts/swPlugin.ts
     register.ts    # registration, the update prompt, the install prompt
-  lib/persist/     # the working session: IndexedDB for bytes & documents, localStorage for settings
   hooks/
-    useLiveFavicon.ts
-  store.ts         # Zustand store (logo, appearance, environment, device placements)
+bench/             # research harness: corpora, diagnostics, scoring, A/B + golden snapshot writers
+test/              # node --test suites (truth gate, regression, unit tests)
 public/mockups/    # device frames + screenshots used by the device previews
 public/examples/   # built-in sample logos for the "Try an example" gallery
 public/examples/sheets/  # example icon sheets for the Icon sheet tab (Gemini output, re-encoded as WebP)

@@ -172,8 +172,9 @@ same tracer, published to npm as **`logolab`** from `packages/mcp`, and it only 
 someone cuts a release. **A tracer change is not shipped until you release one.**
 
 `packages/mcp` has no sources of its own: it points tsc at `src/mcp/server.ts` and compiles
-whatever that reaches (`src/mcp` plus `src/lib/{trace,path,sheet,render}` — 57 files today), so
-your change is already *in* the package the moment you edit the tracer. It is just unpublished.
+whatever that reaches (`src/mcp` plus `src/lib/{trace,path,sheet,png,traceInput}`,
+`src/lib/export/iconSpec.ts` and a couple of shared helpers — 55 files today; never `bench/`),
+so your change is already *in* the package the moment you edit the tracer. It is just unpublished.
 
 To release: bump the version in **`packages/mcp/package.json`** — the only place it lives; the
 server reads it (`packageVersion` in `src/mcp/runtime.ts`) rather than repeating it — then
