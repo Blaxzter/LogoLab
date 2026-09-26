@@ -4,7 +4,6 @@
 //   node --max-old-space-size=6144 ... kinkDiag.ts --logos                  # the whole gallery
 //   node --experimental-strip-types src/devtest/kinkDiag.ts --case chupa-chups --list
 //   --res N (default 512)   --fit k=v   --win P (authored window, px)   --list (per-site dump)
-//   --compare   run BOTH arms of `cornerTurnEvidence` and diff the counts
 //
 // WHY. `cornersRecovered` counts AUTHORED corners the trace reproduced. It has no
 // precision term at all, so INVENTING a corner is free by it — and a corner invented
@@ -297,64 +296,48 @@ PROBE ${name}: nearest traced sharp corner to (${PROBE[0]},${PROBE[1]}) is (${f(
 // ---------------------------------------------------------------------------
 // `--gate`: the SHIPPED metric (`geomScore.inventedCorners`, via scoreGeometry) over the
 // gated corpus, each tier-0 case in ITS OWN lane, so the numbers are the ones CI will see.
-// `--logos` scores the gallery flat instead. `--compare` runs both arms of a flag.
+// `--logos` scores the gallery flat instead.
 //   node --experimental-strip-types src/devtest/kinkDiag.ts --gate
-//   node --max-old-space-size=6144 ... kinkDiag.ts --gate --logos --compare
+//   node --max-old-space-size=6144 ... kinkDiag.ts --gate --logos
 // ---------------------------------------------------------------------------
 if (argv.includes('--gate')) {
   const { scoreGeometry } = await import('./geomScore.ts')
   const { TRUTH_CORPUS } = await import('./truthCorpus.ts')
   interface Row { name: string; gradients: boolean; invented: number; worst: number }
-  const arms: [string, Record<string, number | boolean>][] = argv.includes('--compare')
-    ? [['OFF', { cornerTurnEvidence: false }], ['ON', { cornerTurnEvidence: true }]]
-    : [['', parseFit(flag('--fit') ?? '')]]
+  const fit = parseFit(flag('--fit') ?? '')
   const targets: { name: string; svg: string; gradients: boolean }[] = argv.includes('--logos')
     ? readdirSync(join(root, 'examples', 'logos'))
         .filter((x) => x.endsWith('.svg'))
         .map((x) => ({ name: x.replace(/\.svg$/, ''), svg: `examples/logos/${x}`, gradients: false }))
     : TRUTH_CORPUS.filter((c) => c.tier === 0).map((c) => ({ name: c.name, svg: c.svg, gradients: c.gradients !== false }))
-  const byArm = new Map<string, Row[]>()
-  for (const [arm, fit] of arms) {
-    const rows: Row[] = []
-    for (const t of targets) {
-      let text
-      try { text = readFileSync(join(root, t.svg), 'utf8') } catch { continue }
-      let gtDoc
-      try { gtDoc = parseGroundTruth(text) } catch { continue }
-      if (unscorable(gtDoc)) continue
-      let img
-      try {
-        img = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-      } catch { continue }
-      const doc = await traceImage(img as unknown as ImageData, {
-        ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: t.gradients, planarFit: fit,
-      })
-      const sc = scoreGeometry(toRasterSpace(gtDoc, img.width), doc, img.width, img.height, img)
-      rows.push({ name: t.name, gradients: t.gradients, invented: sc.cornersInvented, worst: sc.worstInventedExcess })
-    }
-    byArm.set(arm, rows)
+  const base: Row[] = []
+  for (const t of targets) {
+    let text
+    try { text = readFileSync(join(root, t.svg), 'utf8') } catch { continue }
+    let gtDoc
+    try { gtDoc = parseGroundTruth(text) } catch { continue }
+    if (unscorable(gtDoc)) continue
+    let img
+    try {
+      img = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+    } catch { continue }
+    const doc = await traceImage(img as unknown as ImageData, {
+      ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: t.gradients, planarFit: fit,
+    })
+    const sc = scoreGeometry(toRasterSpace(gtDoc, img.width), doc, img.width, img.height, img)
+    base.push({ name: t.name, gradients: t.gradients, invented: sc.cornersInvented, worst: sc.worstInventedExcess })
   }
-  const base = byArm.get(arms[0][0])!
-  const other = arms.length > 1 ? byArm.get(arms[1][0])! : null
   console.log(`\nINVENTED CORNERS @${RES} over ${base.length} cases  (excess ≥ ${40}°)`)
-  console.log(`  ${'case'.padEnd(30)}${'lane'.padStart(6)}${arms.length > 1 ? '     OFF      ON     delta' : '  invented    worst'}`)
+  console.log(`  ${'case'.padEnd(30)}${'lane'.padStart(6)}  invented    worst`)
   let total = 0
-  let totalOther = 0
-  for (let i = 0; i < base.length; i++) {
-    const r = base[i]
+  for (const r of base) {
     total += r.invented
-    if (other) {
-      const o = other[i]
-      totalOther += o.invented
-      if (r.invented === 0 && o.invented === 0) continue
-      const d = o.invented - r.invented
-      console.log(`  ${r.name.padEnd(30)}${(r.gradients ? 'grad' : 'flat').padStart(6)}${String(r.invented).padStart(8)}${String(o.invented).padStart(8)}${((d > 0 ? '+' : '') + d).padStart(10)}`)
-    } else if (r.invented > 0) {
+    if (r.invented > 0) {
       console.log(`  ${r.name.padEnd(30)}${(r.gradients ? 'grad' : 'flat').padStart(6)}${String(r.invented).padStart(10)}${f(r.worst).padStart(9)}`)
     }
   }
   const dirty = base.filter((r) => r.invented > 0).length
-  console.log(`\n  total ${total} invented over ${dirty} of ${base.length} cases` + (other ? `  →  ${totalOther} over ${other.filter((r) => r.invented > 0).length}` : ''))
+  console.log(`\n  total ${total} invented over ${dirty} of ${base.length} cases`)
   const p90 = [...base.map((r) => r.invented)].sort((a, b) => a - b)[Math.floor(base.length * 0.9)]
   console.log(`  per-case invented: p50 ${[...base.map((r) => r.invented)].sort((a, b) => a - b)[base.length >> 1]}  p90 ${p90}  max ${Math.max(...base.map((r) => r.invented))}`)
   process.exit(0)
@@ -380,9 +363,7 @@ if (CASE) {
     cases.push([file.replace(/\.svg$/, ''), readFileSync(join(EDGE, file), 'utf8')])
 }
 
-const FITS: [string, Record<string, number | boolean>][] = argv.includes('--compare')
-  ? [['reading OFF', { cornerTurnEvidence: false }], ['reading ON', { cornerTurnEvidence: true }]]
-  : [['', parseFit(flag('--fit') ?? '')]]
+const FITS: [string, Record<string, number | boolean>][] = [['', parseFit(flag('--fit') ?? '')]]
 
 const BANDS = [-180, -20, -10, 0, 10, 20, 30, 45, 60, 90, 181]
 
