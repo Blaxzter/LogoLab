@@ -1,19 +1,16 @@
-// Junction refinement for the planar tracer — an EXPERIMENTAL alternative to the
-// co-circular arc snap (planarBeautify §1d) for the ring "pull"/kink where a third
-// region T-junctions into a smooth boundary. Off by default (`refineJunctions`);
-// wire it on via `planarFit.refineJunctions` (the Test view drives this for A/B).
+// Optional junction refinement for the planar tracer (`refineJunctions`, off by
+// default): an alternative to the co-circular arc snap in planarBeautify for the kink
+// where a third region T-junctions into a smooth boundary.
 //
-// Two moves, both keyed on the raw junction geometry (NOT on co-circularity):
-//   1. subpixelJunctions — place each junction Vertex at the least-squares
+// Two moves, both keyed on the raw junction geometry rather than on co-circularity:
+//   1. subpixelJunctions — place each junction vertex at the least-squares
 //      intersection of its incident edge arms instead of the integer lattice corner.
-//   2. smoothThroughJunctions — where a REGION traverses two edges straight through a
+//   2. smoothThroughJunctions — where a region traverses two edges straight through a
 //      junction (small turn), rotate their shared-endpoint handles to one common
 //      tangent so the boundary is G¹.
 //
-// NOTE (measured, kept for the record): on a synthetic ring this removes far less
-// kink than the co-circular snap and the sub-pixel move can re-fit an arc WORSE; on
-// the corpus it moved petals/headphones seam. Retained behind the flag so the Test
-// view can show the trade rather than assert it. Pure & deterministic.
+// It removes less kink than the arc snap and can re-fit an arc worse, which is why it
+// stays opt-in. Pure and deterministic.
 
 import type { EdgeRef, SharedEdge, Vec } from '../path/types'
 import type { PlanarEdge, PlanarNetwork } from './planarNetwork.ts'
@@ -47,8 +44,8 @@ function armPoints(e: PlanarEdge, atStart: boolean): Vec[] {
  * Sub-pixel position for every junction corner: the point minimising the summed
  * squared distance to its incident edge arms' lines (2×2 normal equations). Falls
  * back to the integer lattice corner when ill-conditioned (<2 usable arms, near-
- * parallel) or the solution runs away. Returns cornerIndex → position for EVERY
- * junction.
+ * parallel) or the solution lands more than MAX_DISP px away. Returns
+ * cornerIndex → position for every junction.
  */
 export function subpixelJunctions(net: PlanarNetwork, cw: number): Map<number, Vec> {
   const incident = new Map<number, { e: PlanarEdge; atStart: boolean }[]>()
@@ -140,7 +137,7 @@ interface Pair {
 }
 
 /**
- * Make boundaries a region traverses STRAIGHT through a junction meet G¹. Discovers
+ * Make boundaries a region traverses straight through a junction meet G¹. Discovers
  * pairs from the assembled loops (consecutive edges of a region turning
  * < STRAIGHT_TURN_DEG at their shared junction) so only real continuations smooth,
  * then rotates each pair's shared-endpoint handles to one common tangent. Mutates

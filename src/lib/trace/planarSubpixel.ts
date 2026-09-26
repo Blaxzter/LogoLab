@@ -1,49 +1,36 @@
-// SUB-PIXEL EDGE PLACEMENT for the planar tracer (§0 #8, benchmarks §15).
+// Sub-pixel edge placement for the planar tracer.
 //
-// The planar engine samples every boundary on the INTEGER crack lattice between label
-// regions, so its geometry is quantized before anything is fitted: measured, the raw
-// chains sit a CONSTANT ~0.224px from the authored geometry at every resolution — the
-// quantization floor of integer-lattice sampling — and the fit only reproduces it
-// ("fit adds" ≤ 1.0×, §15.3). The sub-pixel information exists in the anti-aliasing;
-// this pass reads it.
+// The network samples every boundary on the integer crack lattice, so its geometry is
+// quantized before anything is fitted (a raw chain sits ~0.22px from the true edge at
+// any resolution, and the fit cannot do better than its input). The sub-pixel
+// information is in the anti-aliasing; this pass reads it.
 //
-// WHY THIS SHAPE — the shared-edge constraint. The CRISP engine (subpixel.ts) already
-// places vertices at true iso-0.5 crossings, but its coverage field is per-region mask;
-// two neighbouring regions each get their own contour and nothing makes them agree. The
-// planar structure solves that BY CONSTRUCTION: each boundary is stored ONCE
-// (PlanarEdge.pts) and referenced by both regions, so displacing the stored chain — the
-// same move §14's threadJunctions makes for junction positions — keeps adjacent regions
-// byte-coincident with no reconciliation step at all.
+// Each boundary is stored once (PlanarEdge.pts) and referenced by both regions, so
+// displacing the stored chain keeps adjacent regions byte-coincident with no
+// reconciliation step.
 //
-// THE ESTIMATOR, per interior chain point:
-//   1. local left-normal n from the chain tangent (left = e.left's side, matching
-//      stepLabels' convention in planarNetwork.ts);
-//   2. two FAR anchors at ±FAR px along n — expected to be PURE region colour. Both are
-//      verified against the LABEL MAP: the pixel containing each anchor must carry the
-//      edge's own left/right label, else the point is left on the lattice. This one
-//      guard covers junction neighbourhoods (a third region inside the window), thin
-//      features (the opposite wall inside the window) and the image border, without
-//      special-casing any of them;
-//   3. the local contrast axis is farL − farR — LOCAL, not the palette entry, so shaded
-//      fills and posterization bands measure their own contrast (§14 reads the palette
-//      because it needs a global weak/strong CLASSIFICATION; this pass only needs the
-//      direction to project onto);
-//   4. coverage f(s) = ⟨I(s) − farR, axis⟩ / |axis|² along n — f(−FAR) = 0, f(+FAR) = 1
-//      by construction — and the edge is the f = 0.5 crossing, found by linear
-//      interpolation between the bracketing samples (the marching-squares move, applied
-//      on the shared chain);
-//   5. guards, each of which leaves the point ON the lattice rather than guessing:
-//      weak contrast (the axis is too short for f to be signal), an unexplainable near
-//      sample (its colour is far from the [farR, farL] segment — a third colour is
+// The estimator, per interior chain point:
+//   1. local left normal n from the chain tangent (left = e.left's side, matching
+//      stepLabels in planarNetwork.ts);
+//   2. two anchors at ±FAR px along n, expected to be pure region colour. The pixel
+//      containing each must carry the edge's own left/right label, else the point
+//      stays on the lattice. This single check covers junction neighbourhoods, thin
+//      features (the opposite wall inside the window) and the image border;
+//   3. the contrast axis is farL − farR, measured locally rather than from the palette,
+//      so shaded fills and posterization bands use their own contrast;
+//   4. coverage f(s) = ⟨I(s) − farR, axis⟩ / |axis|² along n, so f(−FAR) = 0 and
+//      f(+FAR) = 1, and the edge is the f = 0.5 crossing, linearly interpolated
+//      between the bracketing samples;
+//   5. guards, each of which leaves the point on the lattice rather than guessing:
+//      weak contrast, a near sample far from the [farR, farL] segment (a third colour
 //      leaking in), a non-monotone profile (not a single edge), and a displacement
-//      beyond MAX_DISP (a 1px-AA crack cannot honestly move further; a larger answer
-//      means the model does not apply here).
+//      beyond MAX_DISP (the model does not apply).
 //
-// An EXACT axis-aligned edge yields f(−NEAR) = 0, f(+NEAR) = 1 and the interpolated
-// crossing lands at δ = 0 precisely — pixel-exact art (checker) is untouched, in float
-// as well as in spirit.
+// An exact axis-aligned edge yields f(−NEAR) = 0, f(+NEAR) = 1 and δ = 0 exactly, so
+// pixel-exact art is untouched.
 //
-// Pure & deterministic: reads the image and label map, writes nothing, no PRNG/Date.
+// Pure and deterministic: reads the image and label map, writes nothing.
+// Design notes and measurements: docs/vectorization-benchmarks.md.
 
 import type { Vec } from '../path/types'
 import { EXT, type PlanarEdge, type PlanarNetwork } from './planarNetwork.ts'
@@ -54,52 +41,42 @@ export interface SourceImage {
   height: number
 }
 
-/** Distance (px) of the pure-colour anchors along the normal. Far enough that a 1px AA
- *  ramp has decayed (±1.75 clears the ~1px resvg ramp with margin), near enough that the
- *  label guard still protects thin features (a 2px bar keeps its anchors inside). */
+/** Distance (px) of the pure-colour anchors along the normal. Far enough that a ~1px AA
+ *  ramp has decayed, near enough that the label guard still protects thin features (a
+ *  2px bar keeps its anchors inside). */
 const FAR = 1.75
 /** Distance (px) of the blend samples that bracket the crack. */
 const NEAR = 0.5
-/** Accept threshold for the recovered offset. A crack separates two differently-labelled
- *  pixels, so the true iso-crossing of a ~1px AA ramp lies within ~±0.75px of it; an
- *  estimate beyond that is a model failure (wide blur, shading), not a measurement. */
+/** Accept threshold for the recovered offset. The iso-crossing of a ~1px AA ramp lies
+ *  within ~±0.75px of the crack; an estimate beyond that is a model failure (wide blur,
+ *  shading), not a measurement. */
 const MAX_DISP = 0.75
-/** Minimum |farL − farR| (RGB euclidean). Below this the projection axis is noise —
- *  ~ΔE 5, the same order as §14's weak-seam floor. */
+/** Minimum |farL − farR| (RGB euclidean), about ΔE 5. Below this the projection axis
+ *  is noise. */
 const MIN_CONTRAST = 12
-/** Max distance of a near sample from its projection onto the [farR, farL] segment.
- *  A genuine coverage blend lies ON the segment (the §9.5 blend-line model, eps 10);
- *  beyond this a third colour is present and the estimate would be polluted. */
+/** Max distance of a near sample from its projection onto the [farR, farL] segment. A
+ *  genuine coverage blend lies on the segment; beyond this a third colour is present. */
 const RESIDUAL_MAX = 16
 /**
- * ANCHOR FLATNESS: |I(±FAR) − I(±(FAR+1))| must stay under this (RGB euclidean), or the
- * anchor sits in a RAMP, not in flat region colour, and the whole profile is polluted.
- * The label guard alone cannot catch this: inside a ~3.5px bar the anchor at 1.75px
- * carries the bar's label but never its pure colour (the opposite wall's AA reaches it),
- * so both walls' iso estimates bias INWARD and the bar narrows — measured @256 on
- * bar-caps, where three narrowed bars tripped the area guard into the staircase
- * fallback (parsimony 5.99×), and on annulus, whose ring interiors are similarly
- * pinched between walls at coarse rasters. A genuine flat anchor reads ~0 here; a
- * shallow authored gradient reads a few RGB per px and stays under the tolerance. */
+ * Anchor flatness: |I(±FAR) − I(±(FAR+1))| must stay under this (RGB euclidean), or the
+ * anchor sits in a ramp rather than flat region colour. The label guard cannot catch
+ * this: inside a ~3.5px bar the anchor carries the bar's label but not its pure colour
+ * (the opposite wall's AA reaches it), so both walls' estimates bias inward and the bar
+ * narrows. A flat anchor reads ~0; a shallow authored gradient stays under the limit. */
 const ANCHOR_FLAT_MAX = 10
 /** f must not step backwards by more than this between successive samples — a
  *  non-monotone profile is not a single edge crossing. */
 const MONO_EPS = 0.15
 /**
- * CORNER SELF-GUARD. The AA iso-line ROUNDS every corner (shaves a tip, fills a root),
- * so a displaced chain curves smoothly into an apex and the fit faithfully melts it —
- * measured twice: gear-teeth's 67.3° roots fell 28→6 recovered, and the gallery
- * witnesses' small letterform corners fell 87.8% → 75.6% recovered @512 even with a
- * detector-driven guard, because a corner with ~3px arms reads far below any windowed
- * turn threshold on the LATTICE chain (§10.6's window-dilution regime). The displaced
- * chain does not have that problem: its staircase noise is gone, so a high local turn ON
- * THE DISPLACED CHAIN is a real corner at ANY feature size. Where the turn over ±TURN_WIN
- * displaced steps exceeds TURN_MAX, the chain reverts to the lattice for ±TURN_GUARD
- * steps — the fitters then see the exact staircase they were calibrated on there, and the
- * corner machinery (detect / snap-to-arms) behaves as before this pass existed.
- * TURN_MAX 35°: a genuine circle only reaches 33° at r ≈ 7px (turn ≈ 2·win/r), so real
- * small discs keep their displacement; anything sharper than ~35° is not an arc the
- * fitters would keep smooth anyway. */
+ * Corner self-guard. The AA iso-line rounds every corner (shaves a tip, fills a root),
+ * so a displaced chain curves smoothly into an apex and the fit would melt it. On the
+ * lattice chain a corner with short arms reads below any windowed turn threshold, but
+ * the displaced chain has no staircase noise, so a high local turn there is a real
+ * corner at any feature size. Where the turn over ±TURN_WIN displaced steps exceeds
+ * TURN_MAX_DEG, the chain reverts to the lattice for ±TURN_GUARD steps, so the corner
+ * detector and arm snap see the staircase they were calibrated on.
+ * 35°: a circle only reaches that turn at r ≈ 7px (turn ≈ 2·win/r), so real small discs
+ * keep their displacement. */
 const TURN_WIN = 4
 const TURN_MAX_DEG = 35
 const TURN_GUARD = 5
@@ -142,12 +119,13 @@ export type SubpixelDiag = (r: SubpixelDiagRecord) => void
 /**
  * Compute sub-pixel positions for every edge chain in the network. Returns edgeId →
  * displaced pts (same length, same indices — corner indices detected on the raw chain
- * remain valid). Open-edge ENDPOINTS are never displaced: junction placement is its own
- * problem (§14 thread / §0 #15), and the assemble step pins them to the junction vertex.
- * Chains the estimator declines are returned as-is (the caller can use identity).
+ * remain valid). Open-edge endpoints are never displaced: junction placement is handled
+ * by planarThread, and assembly pins them to the junction vertex. Chains with no moved
+ * point are absent from the map.
  *
  * `diag` is an optional observational sink (one record per interior point); it never
- * changes what the pass does.
+ * changes what the pass does. `windowGuard` leaves points whose sample window would be
+ * clamped at the canvas edge on the lattice.
  */
 export function subpixelEdgeChains(
   net: PlanarNetwork,
@@ -158,7 +136,7 @@ export function subpixelEdgeChains(
 ): Map<number, Vec[]> {
   const { width: w, height: h, data } = image
   const labelAt = (x: number, y: number): number => {
-    // The pixel containing continuous point (x, y); lattice corners sit BETWEEN pixels,
+    // The pixel containing continuous point (x, y); lattice corners sit between pixels,
     // but every sampled point is ±FAR/±NEAR off the corner along a non-degenerate
     // normal, so the floor is well-defined where it matters.
     const xi = Math.floor(x)
@@ -188,20 +166,16 @@ export function subpixelEdgeChains(
   }
 
   /**
-   * TRUNCATED WINDOW (issue #9). Every sample this estimator takes lies on the normal at
-   * ±NEAR, ±FAR and ±(FAR+1), and `bilin` CLAMPS anything off the pixel-centre grid instead
-   * of reporting that it had no data. Near the canvas edge that silently changes what the
-   * guards mean, in both directions: the contrast test compares two anchors that have
-   * clamped toward the same border pixels and refuses a real edge, while the anchor-flatness
-   * test compares a clamped anchor against a clamped probe, reads ~0, and PASSES an anchor
-   * that never reached pure region colour — the one thing it exists to catch. Measured on
-   * the fixtures: flat-left/flat-right fire at 1–2% within 3px of the edge against 5%/3% in
-   * the interior, and `contrast` at 30% against 8%.
+   * Truncated window. Every sample lies on the normal at ±NEAR, ±FAR and ±(FAR+1), and
+   * `bilin` clamps anything off the pixel-centre grid instead of reporting missing data.
+   * Near the canvas edge that silently changes what the guards mean: the contrast test
+   * compares two anchors clamped toward the same border pixels and refuses a real edge,
+   * while the flatness test compares a clamped anchor against a clamped probe, reads ~0,
+   * and passes an anchor that never reached pure colour.
    *
-   * The samples are colinear, so the two extremes bracket the rest and one convex test on
-   * each end covers the whole window. A point without a full window has no profile to read,
-   * which is the same reason an EXT-sided chain never enters this pass at all — so it takes
-   * the same answer: stay on the lattice.
+   * The samples are colinear, so testing the two extremes covers the whole window. A
+   * point without a full window has no profile to read and stays on the lattice, like an
+   * EXT-sided chain.
    */
   const supported = (x: number, y: number): boolean =>
     x >= 0.5 && y >= 0.5 && x <= w - 0.5 && y <= h - 0.5
@@ -257,7 +231,7 @@ export function subpixelEdgeChains(
         continue
       }
 
-      // Far anchors must land in their OWN region's pixels — the one guard that covers
+      // Far anchors must land in their own region's pixels — the one guard that covers
       // junction neighbourhoods, thin features and the border alike.
       if (labelAt(p.x + FAR * nx, p.y + FAR * ny) !== e.left) {
         say('label-left')
@@ -364,8 +338,8 @@ export function subpixelEdgeChains(
 }
 
 /** The corner self-guard (see TURN_MAX_DEG above): measure the local turn on the
- *  DISPLACED chain and revert to the lattice around every corner-sharp zone. Returns the
- *  reverted indices (for the diagnostics; the caller ignores them otherwise). */
+ *  displaced chain and revert to the lattice around every corner-sharp zone. Returns the
+ *  reverted indices, for diagnostics. */
 function revertCorners(displaced: Vec[], lattice: Vec[], closed: boolean): number[] {
   const n = displaced.length
   if (n < 2 * TURN_WIN + 1) return []
