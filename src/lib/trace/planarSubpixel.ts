@@ -82,7 +82,7 @@ const TURN_MAX_DEG = 35
 const TURN_GUARD = 5
 
 /** Why one chain point did or did not move — the per-point outcome the diagnostics
- *  (src/devtest/counterDiag.ts) tabulate. Purely observational: the pass behaves
+ *  (bench/counterDiag.ts) tabulate. Purely observational: the pass behaves
  *  identically whether or not a sink is attached. */
 export type SubpixelOutcome =
   | 'moved'

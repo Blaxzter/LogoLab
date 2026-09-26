@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
 import { detectLoopCorners, discExplainsLoop, DEFAULT_PLANAR_FIT } from '../src/lib/trace/planarFit.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import type { Vec } from '../src/lib/path/types'

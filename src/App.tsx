@@ -29,7 +29,7 @@ import { LegalFooter } from './components/legal/LegalFooter'
 
 // Heavy routes are lazy so the landing bundle stays small: the SVG editor, the
 // two tabs that pull in the tracer (they share its chunk), and the labs, which
-// also pull in the devtest scoring modules.
+// also pull in the bench scoring modules.
 const EditorPanel = lazy(() => import('./components/panels/EditorPanel'))
 
 const VectorizePanel = lazy(() => import('./components/panels/VectorizePanel'))

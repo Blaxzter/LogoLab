@@ -1,11 +1,11 @@
-// Unit tests for the harness metrics (src/devtest/metrics.ts).
+// Unit tests for the harness metrics (bench/metrics.ts).
 //
 //   node --test test/metrics.test.ts
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fidelity, usefulness, hashDoc } from '../src/devtest/metrics.ts'
-import { rasterizeDoc } from '../src/devtest/raster.ts'
+import { fidelity, usefulness, hashDoc } from '../bench/metrics.ts'
+import { rasterizeDoc } from '../bench/raster.ts'
 import type { EditableDoc, PathItem, SubPath } from '../src/lib/path/types.ts'
 
 function solidBuf(w: number, h: number, r: number, g: number, b: number): Uint8ClampedArray {

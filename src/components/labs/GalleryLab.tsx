@@ -5,14 +5,14 @@
 // the whole brand-logo set (most marks use strokes/filters/clips, so their visible boundary isn't
 // their path geometry and svgGround refuses to score them) and anything you drop in.
 //
-// The logo SVGs load via import.meta.glob (see ../../devtest/logoCorpus): the corpus is full after
+// The logo SVGs load via import.meta.glob (see ../../bench/logoCorpus): the corpus is full after
 // `npm run fetch:logos` and shows an empty-state hint in any build that didn't fetch them.
 
 import { useMemo, useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { EditableDoc } from '../../lib/path/types'
-import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE } from '../../devtest/logoCorpus'
+import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE } from '../../../bench/logoCorpus'
 import { LabPage, LabCheck, LabField } from './LabPage'
 import { Tooltip } from '../ui/Tooltip'
 import { Panel, RawArt } from './Panel'

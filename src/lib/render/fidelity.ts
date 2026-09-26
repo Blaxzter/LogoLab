@@ -6,7 +6,7 @@
 // which catches cracks and patch seams a mean averages away).
 //
 // This is the single implementation for both the studio's ΔE readout and the
-// benchmark harness (src/devtest/metrics.ts re-exports it). Don't give the app
+// benchmark harness (bench/metrics.ts re-exports it). Don't give the app
 // its own copy of the ΔE math: the studio uses `deltaEField` + `deltaEStats`,
 // the harness layers SSIM and seams on the same field.
 //

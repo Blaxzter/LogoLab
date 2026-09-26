@@ -3,7 +3,7 @@
 // `snapCornerToArms` keeps the raw lattice vertex when a corner's arms are too short to fit
 // a line worth trusting (§10.6). That rule was written as `SNAP_GAP + 4` STEPS of window —
 // "3 censored + 4 samples" under the fixed 3-px gap of the day — and swept upward only.
-// The paired per-corner census (src/devtest/cornerScaleDiag.ts, benchmarks §31) measured
+// The paired per-corner census (bench/cornerScaleDiag.ts, benchmarks §31) measured
 // the other side on the driver at the lab raster: with `armGap` censoring one step on a
 // short arm, the bypass was refusing an intersection CLOSER to the authored corner than
 // the vertex it kept on 6 of 8 gear-teeth corners. The floor is now SHORT_ARM_SAMPLES = 5
@@ -21,12 +21,12 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
-import { decodePng } from '../src/devtest/png.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
+import { decodePng } from '../src/lib/png/decode.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import type { ApexDiagRecord } from '../src/lib/trace/planarFit.ts'
-import { parseGroundTruth, toRasterSpace } from '../src/devtest/svgGround.ts'
-import { sharpCorners, makeVisibleAt, scoreGeometry, CORNER_MIN_EDGE, type Corner } from '../src/devtest/geomScore.ts'
+import { parseGroundTruth, toRasterSpace } from '../bench/svgGround.ts'
+import { sharpCorners, makeVisibleAt, scoreGeometry, CORNER_MIN_EDGE, type Corner } from '../bench/geomScore.ts'
 import type { EditableDoc, SubPath } from '../src/lib/path/types.ts'
 
 ensureImageData()

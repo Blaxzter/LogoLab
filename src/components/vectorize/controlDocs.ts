@@ -3,7 +3,7 @@
 // its info dialog renders.
 //
 // Framework-free (type-only imports) so the build-time preview generator
-// (src/devtest/genControlPreviews.ts) and ControlInfoDialog share the same
+// (bench/genControlPreviews.ts) and ControlInfoDialog share the same
 // descriptors.
 
 import type { VectorizeOptions } from '../../types'
@@ -11,7 +11,7 @@ import type { VectorizeOptions } from '../../types'
 /** A bundled example the headless generator can rebuild without a browser. */
 export type ExampleKey = 'bloom' | 'nebula' | 'petals'
 
-/** A synthesized demo scene (see src/devtest/previewScenes.ts). */
+/** A synthesized demo scene (see bench/previewScenes.ts). */
 export type SceneName = 'smoothing' | 'despeckle' | 'fidelity' | 'threshold' | 'overlaps'
 
 /**

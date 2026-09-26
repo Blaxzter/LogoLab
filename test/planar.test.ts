@@ -5,7 +5,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
 import { tracePlanar } from '../src/lib/trace/planarAssemble.ts'
 import { buildPlanarNetwork } from '../src/lib/trace/planarNetwork.ts'
 import { detectCorners, detectLoopCorners, presmooth, fitOpenArc, DEFAULT_PLANAR_FIT } from '../src/lib/trace/planarFit.ts'

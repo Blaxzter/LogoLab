@@ -32,7 +32,7 @@ guardrails):
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **CLOSED — not planned** (2026-08-23). The turn IS under-read on the lattice (§21, unretracted: `detectCorners` reads two chords ±4 POINTS on the integer staircase, and recovery falls from 96.3% at 90–105° of authored turn to **55.1%** at 60–65°). The ISSUE is what closed, on four grounds: its target metric is corner RECALL, which has no precision term — so “find more corners” and “invent corners” are the same instruction, and §22 optimising it produced visible kinks; a missed 60° corner is a gentle bend drawn as a gentle curve while an invented one is a visible kink, so it spends the detector's budget on the invisible direction; row #16 shows the tracer already errs the OTHER way on the SAME knob (12 invented corners on art with none), so the two rows pulled one lever in opposite directions; and the framing was refuted twice (§21's seam truncation, §22's reading) with a named witness authored at exactly 60.0° — the detector's bar AND the scorer's bar — which no reading can reliably clear. The one defensible remnant is `gear-teeth` **53/60**, where the corners are unambiguous (67.3° roots on a mechanical shape); it carries on as a narrow case, not a corpus-wide detector change | `corner-turns` (tier 0, gated — kept: an authored-turn sweep is a good corner-recall case regardless); `gear-teeth` 53/60 | the cliff, unchanged and still measurable with `needleDiag --turns` / `turnDiag` | **§21**, **§22**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23) (closed not-planned). **Corner work continues at row #16** |
-| 16 | **The trace INVENTS corners on smooth art** — sharp nodes the authored geometry does not contain, on ellipse ends and straight→arc blends. Newly VISIBLE rather than newly introduced: `cornersRecovered` is a recall number with no precision term, so this was free by every gate here until §23 built `cornersInvented`. It is the measured form of “every nice radius has a kink in it”, and it is why §22 was rejected on sight after passing CI. The metric asks a like-for-like question at the corner's own scale — the traced node's C⁰ kink minus the AUTHORED boundary's turn over ±1px — and exempts the four places a trace is right to corner (canvas border, occluded boundary, traced junctions of degree ≥3, authored crossings) | `smooth-radii` (tier 0, **gated**, authored for this: art with NO corners at all — ellipses 1:1→1:8 in both orientations, rounded rects at 2/3/5/8/12px radii, curvature-ramp eggs) | **12** invented on a case with zero authored corners; corpus-wide over the 23 gated tier-0 cases, flat lane: p50 0, p90 2, max 12, **18 over 3 cases** (`smooth-radii` 12, `hairlines` 4, `peak-drop` 2). The rejected §22 reading takes `smooth-radii` to **18** | **§23**; instrument `src/devtest/kinkDiag.ts` (`--gate`, `--probe x,y`, `--compare`). Gate scope today: FLAT art, @512 only — gradient banding and the halved radii at @256 are each their own calibration (§23.3) |
+| 16 | **The trace INVENTS corners on smooth art** — sharp nodes the authored geometry does not contain, on ellipse ends and straight→arc blends. Newly VISIBLE rather than newly introduced: `cornersRecovered` is a recall number with no precision term, so this was free by every gate here until §23 built `cornersInvented`. It is the measured form of “every nice radius has a kink in it”, and it is why §22 was rejected on sight after passing CI. The metric asks a like-for-like question at the corner's own scale — the traced node's C⁰ kink minus the AUTHORED boundary's turn over ±1px — and exempts the four places a trace is right to corner (canvas border, occluded boundary, traced junctions of degree ≥3, authored crossings) | `smooth-radii` (tier 0, **gated**, authored for this: art with NO corners at all — ellipses 1:1→1:8 in both orientations, rounded rects at 2/3/5/8/12px radii, curvature-ramp eggs) | **12** invented on a case with zero authored corners; corpus-wide over the 23 gated tier-0 cases, flat lane: p50 0, p90 2, max 12, **18 over 3 cases** (`smooth-radii` 12, `hairlines` 4, `peak-drop` 2). The rejected §22 reading takes `smooth-radii` to **18** | **§23**; instrument `bench/kinkDiag.ts` (`--gate`, `--probe x,y`, `--compare`). Gate scope today: FLAT art, @512 only — gradient banding and the halved radii at @256 are each their own calibration (§23.3) |
 | 18 | **Near-colour flats fused into a gentle "ramp"** (gradient lane) — the residue of §26. Two flat objects whose colours differ by a small Oklab step are still unioned by the Step-3c field merge and painted as one shallow gradient, because at the veto's window scale (1/24 of the fitted axis) a step of ≤ 0.09 is indistinguishable from a real steep ramp piece: the honest reunites in gradient-authoring art reach 0.078 (`logo-firefox`), the fakes in this family read 0.019–0.086, and the census found no scale-W separation. §26 raised the catch rate of the flat∪flat fusion family from 0 to 41 of 60 labelled rows; these are the 19 it does not reach. The product exposure is bounded: `suggestGradients` keeps flat art out of the lane, so this is the mixed-art case only | `flute-flat` (A/B fixture lane, ungated: 16 of its 19 flat∪flat unions read ≤ 0.080), `logo-chrome` (gallery, 0.086), `seam-corner` (0.030), `bloom` (0.019) | fakes 0.019–0.086 vs the real maximum 0.078 — no threshold separates them | **§26.6**; instrument `stepRampDiag --census` (labelled by the SOURCE's authored paint) |
 | 17 | **A circle's whole boundary sits off its authored radius by a near-constant amount** — a BIAS, not a wobble: the trace is perfectly round and in the wrong place. Found by §24's circle lens on the day it landed, and only because that lens reports the mean residual SEPARATELY from the spread — the raw p95 reads 0.81 and looks exactly like the ring wobble, while the co-circularity spread is 0.03. Every other gate is blind: 0.8px is far inside chamfer/p95, and the shape is still round, so no corner or region lens sees it either. NOT a size law and not yet explained — the two worst circles are the same size and disagree in SIGN. Untouched by §24, whose family pass only reaches circles cut into arcs | `acute-counter` (tier 0, gated, passes — the gate is on spread, not bias) | seven authored circles read |bias| 0.09–**0.79**px: r=40.5 at **−0.79** (traced inside) against r=39.5 at **+0.19** (outside) and r=58.6 at +0.16 | **§24.3**, **§25.3**; instrument `ringDiag --circles` (the `bias` column, and since §25 the `centre` / `round` columns — a circle in the wrong PLACE is a third term `spread` folds in, and on `olympic-rings` it is now the whole residue: measured identical under an algebraic and a geometric fit, so the evidence is displaced and no estimator recovers it) |
 | 19 | **The junction re-seat moves a junction AWAY from its authored crossing** — the residue of §29 after the through-pair veto: 16 of 62 gallery re-seats on scorable crossings (128 marks, 512/1024/2048) still land further from the crossing than the lattice corner they left. Three mechanisms, none of them the certification constant issue #39 was filed on: a cap-skip that drops a REAL short terminal (an authored r=6 curve, 11.6 px at 1024) and extrapolates the line beyond it to the junction — audit recipe 10, `CAP_MAX`'s zero-margin populations; two huge-radius circle arms (r≈535 × r≈1104) whose intersection is ill-conditioned; and stub arms of 8 native px paired at a 14° angle. Visible on the mark at 1×: the junction sits 1.8–3.1 px off a crossing the lattice had within 0.3 | `logo-brave-browser` @512 (258,474) and @1024 (259,474) artwork px (gallery, ungated — the §29 gate covers the witness junction only); the answer sheet is `authoredCrossings` | 3.12 px off vs 0.29 lattice (C+C @512); 1.78 vs 0.18 (cap-skip @1024); gallery-wide 16 / 62 | **§29.4**; instruments `reseatDiag --lanes` (census, `--json`) and `reseatSelect --worse` (offline, per pair) |
@@ -45,7 +45,7 @@ guardrails):
 The issues were filed 2026-08-04/05, **before** §15, §17, §18, §19, §20 and §23 shipped.
 §16 is the precedent for doing this first: §0 #14 had already been fixed by §15 and nobody
 noticed until it was re-measured. Every claim below was re-run against the current tree;
-the instruments named are new and live in `src/devtest/`.
+the instruments named are new and live in `bench/`.
 
 | issue | premise | verdict |
 |---|---|---|
@@ -102,8 +102,8 @@ shows before trusting the issue's framing** — the named witness is mid-pack he
 
 **New instruments** (all purely diagnostic; two production out-sinks, `onChord` and
 `onArcLoop`, are undefined in production and the passes are byte-identical without them):
-`src/devtest/borderDiag.ts` (#9), `src/devtest/ringDiag.ts` (#10),
-`src/devtest/chordDiag.ts` (#14). `threadDiag` already covered #14's THROUGH_SPAN witness.
+`bench/borderDiag.ts` (#9), `bench/ringDiag.ts` (#10),
+`bench/chordDiag.ts` (#14). `threadDiag` already covered #14's THROUGH_SPAN witness.
 New corpus case `shaded-ink` (#15, tier 0, gated, in `KNOWN_DEFECTS` at 512 **and** 256).
 
 Recently closed: **two absolute-px constants compared against spans of art** (issue #14,
@@ -294,7 +294,7 @@ UNDISCOVERED members the new lane's calibration sweep caught: `parachute` 9/10 a
 nothing below 512 was gated, so the family had no red number to beat — the @256 lane
 (`LOWRES_CORPUS`/`LOWRES_TOL` in truthCorpus.ts, `truth @256:` tests, tolerances
 calibrated at 256 the §9.6/§10.3 way) and the per-stage instrument
-(`src/devtest/lowresDiag.ts`) landed before any fix. The measured histogram then
+(`bench/lowresDiag.ts`) landed before any fix. The measured histogram then
 FALSIFIED the written hypothesis — the absolute share/area floors were the proximate
 killer for NONE of the four drivers. Four mechanisms, four fixes: (a) k-means starves
 a small colour cloud of a centroid at 256², so two authored colours share ONE cluster
@@ -446,7 +446,7 @@ Worse, raster fidelity is *structurally blind* to a dropped region. `bloom` scor
 0.9922 / meanΔE 0.11 — near perfect — while silently dropping two of its seven composited
 regions. A small, low-contrast region merged into its neighbour costs almost nothing in
 mean ΔE while destroying the topology. See `docs/labs.md` (the `/labs/truth` view) and
-`src/devtest/truthCorpus.ts`.
+`bench/truthCorpus.ts`.
 
 ---
 
@@ -469,7 +469,7 @@ distance varies wildly depending on the sampling pattern"*, and vector-supervise
 that regress the GT's own parameterization score **better** on Chamfer while looking
 **worse**. This is the field's stated justification for retreating to raster metrics.
 
-**How `src/devtest/geomScore.ts` answers it** (do not regress this):
+**How `bench/geomScore.ts` answers it** (do not regress this):
 - query points are resampled at a **fixed arc-length spacing**, never per-node and never
   uniform-in-*t*, so point density depends only on curve length — not on where the tracer
   chose to put nodes;
@@ -603,7 +603,7 @@ NonCommercial *and* ShareAlike. Also: every SVG is resized to 200×200 and rewri
 
 | Tier | Source | Licence | Purpose |
 |---|---|---|---|
-| **0 — the gate** ✅ **BUILT** | **our handcrafted cases** (`src/devtest/genEdgeCases.ts` → `TRUTH_CORPUS`) | ours | Each isolates a *named* failure mode of **this** tracer (bg-gradient reunification, colour-class DELETE risk, junction weld). **No public corpus covers these.** |
+| **0 — the gate** ✅ **BUILT** | **our handcrafted cases** (`bench/genEdgeCases.ts` → `TRUTH_CORPUS`) | ours | Each isolates a *named* failure mode of **this** tracer (bg-gradient reunification, colour-class DELETE risk, junction weld). **No public corpus covers these.** |
 | **1 — gradients** ✅ **BUILT — see §8** | **Fluent Emoji "Color"**, **109 vendored** of 1,595 triaged | **MIT** | The only authored gradient GT that exists. Flat variants give a free A/B. |
 | **2 — flat twins** ✅ **BUILT — see §9** | **Fluent Emoji "Flat"**, the 106 tier-1 A/B controls promoted to scored cases | **MIT** | Region recovery + boundary on flat multi-region art — the product's actual shape. |
 | **3 — multi-colour flat** | **Twemoji** (jdecked fork), ~200–300 | **CC-BY 4.0** | Region topology, holes, authored fill ΔE. Needs an `ATTRIBUTION` file. |
@@ -623,7 +623,7 @@ CC-BY needs an ATTRIBUTION file — all fine. **Anything `-SA` or `-NC` stays ou
   this is a pnpm workspace and npm chokes on the `workspace:` protocol.)
 - **`model.parseSvg` is unusable for GT**: it needs `DOMParser` (absent in Node) *and* it
   routes gradient-filled shapes into `RawItem`s that the rasterizer skips — lossy in exactly
-  the dimension we want to score. Hence `src/devtest/svgGround.ts`.
+  the dimension we want to score. Hence `bench/svgGround.ts`.
 - **Counts are not comparable; boundaries are.** An authored primitive count ≠ the region
   count a planar tracer should recover. `bloom` is 3 translucent circles → **7** composited
   regions (correctly). `nebula` is 4 paths of which 2 share a fill → **3** merged paths
@@ -688,8 +688,8 @@ the corpus corrected it) is itself a finding:
 
 ## 8. Tier 1 (Fluent Emoji "Color") — built, and what it found
 
-**Built:** `src/devtest/vendorFluentEmoji.ts` (vendor + triage) → `public/corpus/fluent/`
-(109 Color SVGs + 106 Flat twins + `NOTICE` + `manifest.json`) → `src/devtest/fluentCorpus.ts`
+**Built:** `bench/vendorFluentEmoji.ts` (vendor + triage) → `public/corpus/fluent/`
+(109 Color SVGs + 106 Flat twins + `NOTICE` + `manifest.json`) → `bench/fluentCorpus.ts`
 (generated) → spread into `TRUTH_CORPUS`. Pinned at `microsoft/fluentui-emoji@62ecdc0d`.
 Browse at `/labs/truth` (Set → *Tier 1*); CI gates a 10-case slice (`test/truth-gate.test.ts`).
 
@@ -751,7 +751,7 @@ sub-pixel — is exactly why §9.8 also added the **corner-recovery gate**.
 
 ### 8.3 The flat↔gradient A/B — the experiment nobody could run
 
-`src/devtest/fluentAbRun.ts`, 106 matched pairs @ 512px. The same glyph, authored flat and
+`bench/fluentAbRun.ts`, 106 matched pairs @ 512px. The same glyph, authored flat and
 authored with gradients, same rasterizer, same tracer, same scorer:
 
 | | gradient (Color) | flat | |
@@ -810,7 +810,7 @@ says which one it was held to, and tier 0's numbers are **unchanged**:
 | tier 0 (crisp flat) | 1.0px | 2.5px | 3.0× |
 | tier 1 (soft gradient) | 6.0px | 60.0px | 5.0× |
 
-Tier 1's are **measured** (`src/devtest/calibrateTier1.ts` prints the distribution), set just
+Tier 1's are **measured** (`bench/calibrateTier1.ts` prints the distribution), set just
 above the corpus p90. They are **"do not get worse" numbers, not "this is correct" numbers** —
 a green tier-1 gate does *not* mean the tracer is good at gradient art. Every one of them
 should come **down** as §8.5 is fixed. The limits are px **at 512px**: the same trace scores
@@ -1131,7 +1131,7 @@ massively (visible-only corpus max chamfer 0.48 vs the current TIER_TOL[2] of 3.
 deletions with their real-but-small residuals re-filed as sub-tolerance defects like
 §0 #7. Pending that decision, the scorer, the tolerances, KNOWN_DEFECTS and the tracer
 are all byte-identical to a218d31; the probes (`probeMissed.ts`, `probeOcclusion.ts`,
-`probeRenderCheck.ts`) stay in `src/devtest/` as the measurement record.
+`probeRenderCheck.ts`) stay in `bench/` as the measurement record.
 
 One implication worth carrying forward: §0 #10's tier-1 numbers (`speaker-low-volume`
 ~17px missed) rest on §8.4's CORPUS-MEAN 1.9% — which does not rule out per-case
@@ -1365,7 +1365,7 @@ on hand, no distance transform, no chicken-and-egg. The gate `maxRadialDev ≤ f
 `maxRadialDev ≤ min(fidelity, k·r)`, so a big disc keeps the full 1.5px budget and a tiny one
 must fit within a fraction of its own size. Behind `PlanarFitOptions.localScaleK` (0 = off =
 byte-identical); the §9.8 corner-turn veto is exposed as `cornerVeto` so the two mechanisms can
-be A/B'd head-to-head. `src/devtest/scaleRelSweep.ts` is the sweep harness;
+be A/B'd head-to-head. `bench/scaleRelSweep.ts` is the sweep harness;
 `test/planar-scale-fidelity.test.ts` pins the discrimination property.
 
 **Subsumption — §10's central claim, CONFIRMED (`checker` @512, corner-turn veto turned OFF):**
@@ -1388,7 +1388,7 @@ below the absolute budget only when `k·r < fid`, i.e. radius < `fid/k` ≈ 15px
 genuine circle in the corpus is larger, so the scale term never binds on them. The mechanism is
 invisible to everything except sub-15px round-ish shapes — exactly the population §9.8 named.
 
-**Where it GREIFT — two constructed cases (`src/devtest/scaleRelDemo.ts`), one of them viewable:**
+**Where it GREIFT — two constructed cases (`bench/scaleRelDemo.ts`), one of them viewable:**
 
 - *Substitution (veto OFF).* A field of small SQUARES beside small CIRCLES. With the §9.8 veto
   turned off the tracer has no guard: **9/9 squares round to blobs**. Scale-relative ε alone puts
@@ -1806,7 +1806,7 @@ one §10.5 predicted; the histogram below is why the diagnosis pass ran before a
 ### 10.6 gear-teeth closes: one definition of sharp + a scale-aware corner snap (2026-07-28)
 
 **The diagnosis falsified §10.5's mechanism.** Instrumenting every stage on the gear loop
-(`src/devtest/gearDiag.ts`, kept as the repro artifact) gave the histogram — of the 39
+(`bench/gearDiag.ts`, kept as the repro artifact) gave the histogram — of the 39
 lost corners: **32 never detected**, **0 lost to cluster fusion or the 5px apex-merge**
 (mergeDist 2/3/5 byte-identical apex sets at the old threshold), **0 ε-melted after
 detection**, **7 misplaced by the snap** (apex evidence 0.2–1.3px from authored, fitted
@@ -2033,7 +2033,7 @@ flats survive at exactly α140. Corpus: A/B vs `before-feather` **0/42 variant f
 changed**; suite green (281 tests incl. the new `test/palette-feather.test.ts`, which
 pins the discrimination BOTH ways — the feather fixture documents that colour and
 alpha must be decorrelated, and that a constant-colour rim manufactures flat-interior
-`real` evidence from its own sub-α-mask neighbours). `src/devtest/featherDiag.ts` is
+`real` evidence from its own sub-α-mask neighbours). `bench/featherDiag.ts` is
 the calibration instrument (per-cluster table + fix simulation on repro & control).
 
 **Open risks (named at ship).** (a) A genuinely AUTHORED soft glow/drop-shadow over
@@ -2082,7 +2082,7 @@ let the failures land red).
 
 ### 12.2 Phase 0 — the instrument, and the histogram that killed the hypothesis
 
-`src/devtest/lowresDiag.ts` (gearDiag's recipe one stage earlier) replays
+`bench/lowresDiag.ts` (gearDiag's recipe one stage earlier) replays
 `segmentFlatPalette` tap by tap — assign / blends / share / mode / restore / despeckle /
 heal — then the doc build (fit → beautify → weld → materialize), and reports per authored
 colour the fraction of its pixels still labelled within ΔE 4 (the region gate's own
@@ -2328,7 +2328,7 @@ accepted ("I don't expect a gradient"); what is not acceptable is the banding da
 logo's real edges.
 
 **The contrast spectrum is cleanly bimodal.** Per shared edge, ΔE76 between the two regions
-that own it (`src/devtest/bandPullDiag.ts`, derived post-hoc from the doc's own topology):
+that own it (`bench/bandPullDiag.ts`, derived post-hoc from the doc's own topology):
 
 ```
 posterization band seams:  ΔE  2.7 – 10.2
@@ -2339,7 +2339,7 @@ Nothing in between. So "prefer the high-contrast boundary" is not a heuristic on
 it is a clean separation, and 13 T-junctions have a band edge landing on real edges.
 
 **Measured, against the authored path data** (`affinity-designer.svg` is 1020 bytes of plain
-`d` attributes, so the truth is exact rather than sampled — `src/devtest/apexProbe.ts`):
+`d` attributes, so the truth is exact rather than sampled — `bench/apexProbe.ts`):
 
 | | flat trace | gradients ON (no band junctions) |
 |---|---|---|
@@ -2375,7 +2375,7 @@ correction is 0.5–1px.
   the band would be missing from the trace entirely and the case would go red for a known,
   unrelated reason. Measured: 4 fills instead of 5, p95 25.7px.)
 - **Nor does a ramp version, nor sub-pixel phase.** Same geometry over a linear ramp, swept
-  across 10 sub-pixel phases against a no-bands control (`src/devtest/bandCrossProbe.ts`):
+  across 10 sub-pixel phases against a no-bands control (`bench/bandCrossProbe.ts`):
   worst flank deviation **none 0.82 / flat bands 0.83 / ramp 0.94** — the control reaches the
   same magnitude. Whatever the extra ingredient in the real mark is, it is not "bands crossing
   a bar", and it is not phase alone.
@@ -2437,7 +2437,7 @@ pass is fully gated and the refactor it rides on is exact.
 
 ### 14.3 Calibration, and the three things that died on the way
 
-`src/devtest/threadDiag.ts` prints what the rank sees per junction — the ΔE census, the arm
+`bench/threadDiag.ts` prints what the rank sees per junction — the ΔE census, the arm
 lengths, the through-fit residual against one line and one circle, the chord turn, and the
 verdict. Every gate below is read off that table, not assumed.
 
@@ -2508,7 +2508,7 @@ each against tolerances calibrated at THAT raster, in that raster's pixels. Both
 and structurally blind to the question "is this the same shape at two sizes?": a tracer
 whose geometry is chosen by the lattice passes all of them, at every size, forever.
 
-`src/devtest/scaleScore.ts` (the arithmetic) + `scaleDiag.ts` (the CLI) close it. Each
+`bench/scaleScore.ts` (the arithmetic) + `scaleDiag.ts` (the CLI) close it. Each
 case is traced at 256/512/1024; every lane's doc is affine-scaled into the FINEST lane's
 space (exact on Bézier control points — nothing resampled or re-fitted) and scored there
 against the authored SVG, with the reference raster driving the §9.6 visibility filter.
@@ -2684,11 +2684,11 @@ Instagram wordmark loses the thin white gap at the top of its counter: the froze
 notch at the same place. Attribution was clean by construction — `before-subpixel` differs
 from the working tree only by the §15 pass.
 
-**Phase 0, the instrument.** `src/devtest/counterDiag.ts` — per-point displacement dump for a
+**Phase 0, the instrument.** `bench/counterDiag.ts` — per-point displacement dump for a
 chosen ROI (reading `planarSubpixel`'s own observational hook, so there is no second copy of
 the estimator), the tangent-pin candidates that fired there, and the INTERIOR white run per
 raster row measured three ways in the same units: source raster, trace with the pass off,
-trace with the pass on. `src/devtest/pinDiag.ts` histograms the pin across a corpus.
+trace with the pass on. `bench/pinDiag.ts` histograms the pin across a corpus.
 
 **The measured cause — and it is NOT the ranked hypothesis.** The issue ranked the anchor
 sampling geometry inside a converging wedge first (suspect 1). The dump refutes it: in the
@@ -2789,7 +2789,7 @@ gate first — and following that order is what turned up the surprise.
 
 ### 16.1 The instrument first, and what it measured
 
-`src/devtest/lowresDiag.ts` gains two things, both extensions of what was already there:
+`bench/lowresDiag.ts` gains two things, both extensions of what was already there:
 
 - the doc-level autopsy runs for **every** authored colour, not only the ones
   `scoreRegions` already calls missing, and reports **ink** — source px vs rendered px of
@@ -2919,7 +2919,7 @@ HEAD: 7/7 and **98.3%** (640 of 651).
 ### 16.4 After (the numbers), and the residue
 
 Zero files under `src/lib/**` changed — the tracer is byte-identical, so the A/B corpus
-cannot have moved and no snapshot needed judging. What changed is `src/devtest`, the gate,
+cannot have moved and no snapshot needed judging. What changed is `bench`, the gate,
 and one labs gate-row renderer.
 
 - Suite **347 → 354 pass / 2 skip** (+7, the new lane); truth gate 55 → 62 tests.
@@ -2939,7 +2939,7 @@ reproduces it today (the one production `tracePlanar` call always passes the ima
 a defect needs a case that reproduces it. The repro, for whoever meets it again:
 
 ```
-node --experimental-strip-types src/devtest/lowresDiag.ts fluent-beverage-box-flat \
+node --experimental-strip-types bench/lowresDiag.ts fluent-beverage-box-flat \
   --res 512 --fit subpixelEdges=false
 ```
 
@@ -3160,7 +3160,7 @@ witness (`logo-instagram`'s script 'a', @512, user-reported twice) put the count
 
 ### 18.1 Phase 0: the instrument, and the two hypotheses it killed
 
-`src/devtest/apexDiag.ts` — an observational sink in the fit (`PlanarFitOptions.apexDiag`,
+`bench/apexDiag.ts` — an observational sink in the fit (`PlanarFitOptions.apexDiag`,
 the `pinDiag` pattern) joined to the source raster. Per reconstructed apex it walks the ray
 from the lattice vertex to the apex and recovers the OWN region's coverage α by projecting
 the sampled colour onto the own↔other line **in sRGB** (where the rasterizer composited it;
@@ -3209,7 +3209,7 @@ rule) — below ~6px of width a lens's tips erode faster than its arms converge.
 
 ### 18.3 The rule, and the sweep that chose it
 
-`src/devtest/apexSweep.ts` sweeps both terms against BOTH sides at once — the authored-tip
+`bench/apexSweep.ts` sweeps both terms against BOTH sides at once — the authored-tip
 error on `acute-counter`, and corner recall on every control whose recall this snap buys.
 
 **The control side does not constrain the choice at all**: `sharp-star` 11/11, `gear-teeth`
@@ -3312,7 +3312,7 @@ notch by two bent chords (bows 0.90/0.77).
 
 ### 19.1 Phase 0: the instrument, and what it ruled out
 
-`src/devtest/needleDiag.ts` — locate (hot-sample clustering over the geomScore
+`bench/needleDiag.ts` — locate (hot-sample clustering over the geomScore
 diagnostics), attribute (a fit-flag matrix, §16's `lowresDiag --fit` shape), inspect
 (label-map and crop-sheet panels, per-apex records via the §18 `apexDiag` sink), and
 census (all 128 svgGround-scorable gallery marks @512 flat, every apex record joined to
@@ -3818,7 +3818,7 @@ and was caught by eye.
   plus four smooth discs. It reproduces the defect §21 measured on a committed case for the
   first time (164/172 recovered, all eight misses at 61–69°), and it stands on its own as a
   corner-recall case. **Its smooth control is now known to be insufficient** — see 22.5.
-- **`src/devtest/turnDiag.ts`**: the reader census. It evaluates any candidate turn reading
+- **`bench/turnDiag.ts`**: the reader census. It evaluates any candidate turn reading
   at every authored corner it can locate on the lattice, without touching the tracer, and
   it is what priced chord-vs-least-squares-vs-evidence-bounded, replacement-vs-promotion,
   and the arm gap. `--at X,Y` is the single-site autopsy.
@@ -4434,7 +4434,7 @@ through-pair, for free. Five saturated rings on white have no weak edge anywhere
 has zero candidates and 0 of 46 junctions move. The open question is which pairing is right
 when three or four EQUALLY STRONG arms meet.
 
-`src/devtest/xingDiag.ts` answers it: at every junction, enumerate every pairing, score each
+`bench/xingDiag.ts` answers it: at every junction, enumerate every pairing, score each
 by §14's own chord turn, take the matching tangent continuity picks (straightest first, each
 arm used once), and compare with GROUND TRUTH — which arms lie on the same authored circle.
 `olympic-rings` is stroked so `svgGround` refuses it; its circles are read off the `<circle>`
@@ -4588,7 +4588,7 @@ labels (how `profileCliff` went wrong, §10.3). Both were followed and both paid
 A read-only observer (`SegmentOptions.onPair`, threaded through a `segment` override on
 `VectorizeOptions` — the `planarFit` idiom) now reports all four terms for every evaluation
 that ran, computed in full past the short-circuit, and one record per accepted merge in
-merge order. `src/devtest/stepRampDiag.ts` is the consumer. With the observer set the output
+merge order. `bench/stepRampDiag.ts` is the consumer. With the observer set the output
 is byte-identical (66 of 66 stamp SVGs `cmp`-equal to `before-stepramp`).
 
 On `olympic-rings` @512 on white (24 fine segments, so the candidate gate is off and every
@@ -4791,7 +4791,7 @@ pixel to whichever side it is nearer, so across the label boundary the SOURCE co
 jumps by at least half the two colours' distance (a pixel-aligned seam: the whole distance).
 That is not a calibration, it is what "nearest" means. Two shading tones meet through a
 ramp: the boundary falls at the ramp's midpoint and the source pixels either side of it
-differ by one 8-bit level. `src/devtest/softPairDiag.ts` measures it per adjacent pair of
+differ by one 8-bit level. `bench/softPairDiag.ts` measures it per adjacent pair of
 `quantize` clusters — the step |src(p) − src(q)| relative to the pair's modal-colour
 distance, over every 4-adjacent pixel pair straddling the boundary, as a HARD share (step
 ≥ ½ · distance) and a median — on the raw labels, before any cleanup moves a pixel.
@@ -4929,7 +4929,7 @@ This section is that census, what it did to both hypotheses, and the two fixes i
 
 ### 28.1 `THROUGH_SPAN` — the paired census, and the two written hypotheses it killed
 
-**The instrument.** `src/devtest/threadScaleDiag.ts`. `threadDiag` prints one raster's
+**The instrument.** `bench/threadScaleDiag.ts`. `threadDiag` prints one raster's
 verdicts, and the junction POPULATION differs per raster (16/34/24/30 on the Affinity mark),
 so its rates were never a paired comparison. The new census traces one authored case at
 256/512/1024/2048 through the production flat path up to the survey, keys every junction
@@ -5247,7 +5247,7 @@ the estimators before the selector, §28's lesson.
 
 ### 29.1 The answer sheet, and what it said about the witness
 
-`src/devtest/authoredCrossings.ts`: a re-seat junction is where two authored outlines cross,
+`bench/authoredCrossings.ts`: a re-seat junction is where two authored outlines cross,
 so the crossing point is computable from the SVG. Every authored subpath (`svgGround`, in
 512-artwork px) is flattened to 0.02 px and intersected with every other one (spatial hash,
 touching corners within 0.15 px count as a T, crossings within 0.5 px are one point); each
@@ -5423,7 +5423,7 @@ histogram says something else.
 
 ### 30.1 The histogram: the displacement survives at 256 at the same share as at 1024
 
-`src/devtest/subpixelScaleDiag.ts` — counterDiag's hook (`SubpixelDiag`, the pass's own
+`bench/subpixelScaleDiag.ts` — counterDiag's hook (`SubpixelDiag`, the pass's own
 observational sink, so there is no second estimator to drift from the shipped one), every
 chain point, per lane. The estimator's outcomes are the pass's; the corner self-guard fires
 AFTER the estimate and is counted on its own.
@@ -5586,7 +5586,7 @@ is the paired census, what it did to each recipe, and the one selector it caught
 
 ### 31.1 The instrument: a census keyed on authored corners
 
-`src/devtest/cornerScaleDiag.ts`. Band seams could not be paired on a real mark (§28.1);
+`bench/cornerScaleDiag.ts`. Band seams could not be paired on a real mark (§28.1);
 authored corners can — `geomScore.sharpCorners` on the SVG gives the same corner at every
 raster, so the key is the corner's position in 512-px artwork space and the gallery pairs
 too. For one case at 256/512/1024/2048 the production flat path runs with three
@@ -5870,7 +5870,7 @@ count what was invented.
 
 ### 32.1 The instrument
 
-`src/devtest/upscaleDiag.ts`, two lanes, one roster.
+`bench/upscaleDiag.ts`, two lanes, one roster.
 
 **The roster.** Plain: `none`, `bilinear{2,3,4}` (the sheet's own `upscaleImageData`),
 `lanczos{2,3,4}` (Lanczos-3, because the issue asked). AI, every one running on
@@ -6208,7 +6208,7 @@ the production code path below.
 
 ### 33.2 The instrument: `floorDiag.ts`
 
-`src/devtest/floorDiag.ts` answers both questions per raster, on three lanes (`--lane
+`bench/floorDiag.ts` answers both questions per raster, on three lanes (`--lane
 tier2` = the seven cases of the @256 and @512 region lanes; `tier0` = the 22 flat tier-0
 fixtures; `gallery` = every mark in `examples/logos/`, rasterized on white at `--res`).
 
@@ -6943,7 +6943,7 @@ the threshold should be, and whether the raster can say so itself.
 
 ### 38.1 Phase 0 — the SSIM-optimal cut, judged against the vector
 
-`src/devtest/hairlineCutDiag.ts`: two synthetic pages (staff lines at 0.45 / 0.6 / 0.9 units,
+`bench/hairlineCutDiag.ts`: two synthetic pages (staff lines at 0.45 / 0.6 / 0.9 units,
 a diagram of 0.5–1.2-unit strokes, both with filled shapes and text), the hymn page and the
 `hairlines` fixture, rasterized on transparency at 400 / 499 / 600 / 800 px (a user's PNG),
 enlarged by the production Auto factor, traced at every cut from 128 to 200, each trace

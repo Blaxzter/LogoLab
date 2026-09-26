@@ -43,8 +43,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
-import { measureScale, SCALE_CORPUS, SCALE_DRIFT_MAX, SCALE_SIGNAL_FLOOR } from '../src/devtest/scaleScore.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
+import { measureScale, SCALE_CORPUS, SCALE_DRIFT_MAX, SCALE_SIGNAL_FLOOR } from '../bench/scaleScore.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')

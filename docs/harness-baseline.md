@@ -5,7 +5,7 @@ diff against this. Captured 2026-06-12 on branch `feat/vectorize-structure-first
 
 ## How to reproduce
 
-- **Headless (crisp engine, CI-gated):** `node src/devtest/runBaseline.ts` →
+- **Headless (crisp engine, CI-gated):** `node bench/runBaseline.ts` →
   rewrites `docs/harness-baseline.json` and prints the table. `npm test` runs
   `test/harness.test.ts`, which asserts determinism + finite metrics on the same
   corpus.
@@ -39,7 +39,7 @@ diff against this. Captured 2026-06-12 on branch `feat/vectorize-structure-first
 
 ## Baseline (512², `colors:8`, `gradients:on`, default smoothing/despeckle)
 
-Headless crisp, final seam metric (`node src/devtest/runBaseline.ts` at commit
+Headless crisp, final seam metric (`node bench/runBaseline.ts` at commit
 eff497d):
 
 | image  | engine | L1 Lab | meanΔE | P95 ΔE | SSIM   | seam max | seam P99.5 | paths | nodes | grad | det  |

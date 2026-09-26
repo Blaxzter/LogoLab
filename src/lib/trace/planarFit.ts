@@ -109,11 +109,11 @@ export interface PlanarFitOptions {
    */
   pinCornerTangents?: boolean
   /** Diagnostic sink, called once per tangent-pin candidate with the rotation the pin
-   *  wants and how straight the arm is (`src/devtest/pinDiag.ts`). Never changes the fit. */
+   *  wants and how straight the arm is (`bench/pinDiag.ts`). Never changes the fit. */
   pinDiag?: PinDiag
   /** Diagnostic sink, called once per corner the apex snap considers: where the lattice
    *  put it, where the arm intersection wants it, which rule decided, and the arm evidence
-   *  (`src/devtest/apexDiag.ts`). Never changes the fit. */
+   *  (`bench/apexDiag.ts`). Never changes the fit. */
   apexDiag?: ApexDiag
   /** Diagnostic overrides for corner-detection constants; each defaults to the module
    *  constant it names. Production never sets them. */
@@ -179,16 +179,16 @@ export interface PlanarFitOptions {
    *  reads smooth. */
   arcPinTurnMinDeg?: number
   /** Diagnostic sink: one record per candidate the occluder-chord pass weighed, with the
-   *  value each gate saw (`src/devtest/chordDiag.ts`). */
+   *  value each gate saw (`bench/chordDiag.ts`). */
   onChord?: import('./planarReseat.ts').ChordObserver
   /** Diagnostic sink: one record per degree-3 junction the re-seat weighed — each arm's
-   *  verdict, the winning pair, the move (`src/devtest/reseatDiag.ts`). */
+   *  verdict, the winning pair, the move (`bench/reseatDiag.ts`). */
   onReseatVerdict?: import('./planarReseat.ts').ReseatObserver
   /** Diagnostic overrides for the re-seat's arm-certification constants; every field
    *  defaults to the constant. */
   reseatTune?: import('./planarReseat.ts').ReseatTune
   /** Diagnostic sink: one record per region loop the co-circular arc snap weighed,
-   *  naming the gate that declined it (`src/devtest/ringDiag.ts`). */
+   *  naming the gate that declined it (`bench/ringDiag.ts`). */
   onArcLoop?: import('./planarBeautify.ts').ArcLoopObserver
 }
 
@@ -829,7 +829,7 @@ export type ApexOutcome =
   | 'past-evidence' //  it ran past the coverage the raster carries
   | 'cap' //            placed by the cap resolver (arm ∩ cap-chord), not the apex snap
 
-/** One corner the apex snap considered (`src/devtest/apexDiag.ts`). Observational only.
+/** One corner the apex snap considered (`bench/apexDiag.ts`). Observational only.
  *  See PlanarFitOptions.apexDiag. */
 export interface ApexDiagRecord {
   /** Shared-edge id. Attached by assemblePlanar — the fitter does not know it. */
@@ -1715,7 +1715,7 @@ const PIN_ROTATE_MAX_DEG = 30
  */
 const PIN_CURVE_BASIS = 4 / 9
 
-/** One tangent-pin candidate (`src/devtest/pinDiag.ts`). Observational only.
+/** One tangent-pin candidate (`bench/pinDiag.ts`). Observational only.
  *  See PlanarFitOptions.pinDiag. */
 export interface PinDiagRecord {
   /** Apex position. */

@@ -9,10 +9,10 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ensureImageData, loadPng, PNG_CORPUS } from '../src/devtest/nodeHarness.ts'
-import { SYNTHETIC_CORPUS, syntheticSource } from '../src/devtest/lineArtCorpus.ts'
+import { ensureImageData, loadPng, PNG_CORPUS } from '../bench/nodeHarness.ts'
+import { SYNTHETIC_CORPUS, syntheticSource } from '../bench/lineArtCorpus.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
-import { score, type SourceImage } from '../src/devtest/scoreboard.ts'
+import { score, type SourceImage } from '../bench/scoreboard.ts'
 
 ensureImageData()
 

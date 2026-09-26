@@ -179,7 +179,7 @@ export interface VectorizeOptions {
   /** Advanced override of the flat-palette segmenter's tunables (flat art only), merged over the defaults. */
   paletteSegment?: Partial<import('./lib/trace/paletteSegment').PaletteSegmentOptions>
   /**
-   * Advanced override of the smoothness segmenter's tunables and its devtest
+   * Advanced override of the smoothness segmenter's tunables and its bench
    * observer (`onPair`), merged last over the dial-derived options. Gradients-on
    * path only.
    */

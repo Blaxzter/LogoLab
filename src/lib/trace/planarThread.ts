@@ -274,7 +274,7 @@ function centroid(pts: Vec[]): Vec {
 /**
  * Survey every junction: which incident boundaries are real edges, which are band
  * seams, whether the real ones continue through, and where the fit puts the junction.
- * The tracer moves exactly the junctions this marks `linked`; `src/devtest/threadDiag.ts`
+ * The tracer moves exactly the junctions this marks `linked`; `bench/threadDiag.ts`
  * prints these same rows.
  */
 export function surveyJunctions(

@@ -221,7 +221,7 @@ Every piece needed to do better already exists and is already pure:
 | piece | where | note |
 |---|---|---|
 | render a traced doc to pixels | `src/lib/render/raster.ts` `rasterizeDoc` | pure, deterministic, identical in Node and browser — by design |
-| score render vs source | `src/devtest/metrics.ts` `fidelity()` | meanΔE / p95ΔE / SSIM / boundary-seam. Header says it: *"All pure: no DOM, no Node APIs"*. 461 lines + an 86-line `color.ts`, importing only `lib/path` |
+| score render vs source | `bench/metrics.ts` `fidelity()` | meanΔE / p95ΔE / SSIM / boundary-seam. Header says it: *"All pure: no DOM, no Node APIs"*. 461 lines + an 86-line `color.ts`, importing only `lib/path` |
 | parsimony | `src/lib/path/model.ts` `docStats` | already displayed in the stats bar |
 | pick mono/invert/threshold | `src/lib/sheet/inkProbe.ts` + `plan.ts` | see A1 |
 | run N traces off-thread | `traceOffThread.ts` | one worker per call, abortable |
@@ -255,7 +255,7 @@ The stats bar said `7 paths · 44 nodes · 7 colors · 2.07 KB` — four numbers
 *size* and none about *accuracy*. To judge whether a trace was good the user had
 to switch to Overlay and squint at a ghost blend.
 
-**What shipped.** `fidelity()` moved out of `src/devtest/metrics.ts` into
+**What shipped.** `fidelity()` moved out of `bench/metrics.ts` into
 `src/lib/render/fidelity.ts` and the status bar shows its mean **ΔE** (p95 on
 hover). Clicking that number opens **Difference**, a fifth view beside Split /
 Traced / Original / Overlay, painting per-pixel ΔE on the same cold→hot ramp
@@ -324,7 +324,7 @@ is the decision the user actually has. Kept here so it is not re-proposed.
 Smoothing (0–100) maps onto blur and turd size; it is not the fit tolerance.
 The fit ε is `planarFit.keyEpsilon` — the lever §30 and §35 both identify as the
 live one (tightening 1.0 → 0.35 takes interior error 0.09 → 0.04) — and it is
-reachable only from `src/devtest/crispnessStudy.ts`.
+reachable only from `bench/crispnessStudy.ts`.
 
 **Ask:** expose ε as **"Curve tolerance"**, or invert it into a **node budget**
 ("simplify until ≤ N nodes"), which is what an icon author actually wants to say.

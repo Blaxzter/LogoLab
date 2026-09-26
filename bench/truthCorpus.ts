@@ -1,0 +1,923 @@
+// The GROUND-TRUTH corpus + its gates, in a form BOTH the Node gate and the browser view
+// import — the same trick traceCorpus.ts plays, and for the same reason: a view that
+// re-declares the case list can silently drift from what actually gets scored.
+//
+// ---------------------------------------------------------------------------
+// How this differs from GOLDEN_CORPUS, and why it exists
+//
+// GOLDEN_CORPUS traces PNGs and compares the result to the tracer's OWN previous output.
+// It can tell you something CHANGED. It cannot tell you anything is WRONG — and because
+// its gates are ±12% bands around whatever was last blessed, it actively FORBIDS large
+// improvements (dropping headphones-flat below 8,476 nodes fails the build, no matter how
+// much better the output is).
+//
+// This corpus inverts that. The source of truth is the authored SVG that PRODUCED the
+// pixels, so every gate is an ABSOLUTE distance from correct — 0px boundary error,
+// parsimony 1.0, every region recovered. Improvements move numbers DOWN and nothing needs
+// re-blessing. Nothing here reads test/golden/trace-baseline.json.
+//
+// ---------------------------------------------------------------------------
+// TIERS
+//
+//   0  our handcrafted cases — each isolates a NAMED failure mode of this tracer.
+//   1  Microsoft Fluent Emoji "Color" (MIT) — authored multi-stop gradient art, the only
+//      such ground truth that exists. Generated into ./fluentCorpus.ts by
+//      bench/vendorFluentEmoji.ts, which triages 1,595 candidates and vendors only the
+//      109 whose visible boundary svgGround can actually reproduce.
+//   2  the SAME Fluent glyphs authored FLAT — tier 1's `flatSvg` controls promoted to scored
+//      cases in their own right. This is the tier that matters for the PRODUCT (flat logo
+//      art), and it is where `regions recovered` actually runs: that gate is inapplicable on
+//      all 109 gradient cases, so before this tier it measured 12 cases; now ~118.
+//
+// ONE list, both tiers, both consumers (the Node CLI and /labs/truth). A sibling array would
+// have to be threaded through every filter, every gate and every view separately, and the
+// first one anybody forgot would drift — which is the exact failure this file exists to
+// prevent. `tier` gives the split for free.
+// ---------------------------------------------------------------------------
+
+import { FLUENT_CORPUS } from './fluentCorpus.ts'
+
+/** One ground-truth case: an authored SVG we rasterize, trace, and score against itself. */
+// The band's own geometry (its half-width and the PARALLEL cut) belongs to the measurement
+// and lives with it in geomScore; BAND_MIN_N and BAND_FLOOR are read here because they are
+// the GATE's policy. The Workbench lab already imports both modules, so this costs no bundle.
+import { BAND_MIN_N, BAND_FLOOR } from './geomScore.ts'
+
+export interface TruthCase {
+  name: string
+  /** Repo-relative path to the authored SVG. */
+  svg: string
+  /** What this case is FOR — the failure mode it is meant to catch. */
+  note: string
+  /** Trace with gradient fitting on? (Flat art is scored with it off.) */
+  gradients: boolean
+  /**
+   * 0 = our handcrafted cases; 1 = Fluent Emoji "Color" (MIT); 2 = the same Fluent glyphs
+   * authored FLAT. The tier picks the TOLERANCES (see TIER_TOL) — soft-edged authored
+   * gradient art is not gradeable at thresholds calibrated on crisp flat art, and pretending
+   * otherwise would either fail tier 1 for being itself or quietly weaken tier 0.
+   */
+  tier: 0 | 1 | 2
+  /**
+   * Run in CI? Tracing is seconds per case, so the gate is a small fixed subset and the LAB
+   * browses the rest. A truth gate that takes ten minutes gets switched off, and a gate that
+   * is off is not a gate.
+   */
+  gated?: boolean
+  /**
+   * The same glyph, authored FLAT — the control for the flat↔gradient A/B
+   * (bench/fluentAbRun.ts). Tier 1 only.
+   */
+  flatSvg?: string
+  /**
+   * INK FAMILIES — groups of raster colours that are ONE authored ink's shading tones (§27,
+   * issue #15). `scoreRegions` reads regions off the RASTER, so a shaded shape's plateaus
+   * read as separate colour-regions and a trace that correctly paints the shape ONE flat
+   * colour would be scored as dropping the other tones. Listing the tones here (the
+   * authored gradient's stops — the answer sheet, not a tolerance) makes the family one
+   * region: recovered when the trace paints it within ΔE 4 of any member, and every raster
+   * colour on a ramp between members belongs to it. A colour NOT in any family is scored
+   * exactly as before, so a case can carry a shaded ink and a distinct-colour control side
+   * by side (`shaded-ink` does).
+   */
+  inkFamilies?: string[][]
+}
+
+/**
+ * TIER 0 — the handcrafted edge cases are the heart of this: each one isolates a named
+ * failure mode of THIS tracer, which no public corpus does. bloom / nebula / petals / aurora
+ * are the authored SVGs we happen to already own — note these are the SAME artworks whose
+ * PNGs the old golden traces, except here we score against the vector art instead of against
+ * the tracer's memory of itself.
+ *
+ * aurora is authored with STROKES: a stroked element's visible boundary is the outline of the
+ * stroke, not its centerline, and svgGround refuses to guess at that — so it reports as
+ * unscorable. (cross-bars, annulus and hairlines were re-authored as fills in genEdgeCases.ts
+ * and are now scored.)
+ *
+ * `checker` was unscorable for the same KIND of reason, found while building tier 1: its two
+ * rects were `fill="url(#pattern)"`, so the visible boundary was the pattern's tiling, not the
+ * rects. It used to be scored against those two rects and "failed" at 26.7px chamfer /
+ * parsimony 32× — a tracer that correctly recovered the checkerboard was being charged with
+ * inventing it. That was a bug in the ANSWER SHEET, not in the tracer. Re-authored 2026-07-15
+ * as 896 explicit filled squares (patterns are to fills what strokes are to fills — see
+ * genEdgeCases.ts), it is scorable and passes every gate (0.38px chamfer @512).
+ */
+export const TRUTH_CORPUS: TruthCase[] = [
+  // --- the tracer's own hard problems -------------------------------------------------
+  { name: 'bg-ramp', svg: 'public/examples/edge-cases/bg-ramp.svg', note: 'posterized ramp — background reunification', gradients: true, tier: 0 },
+  { name: 'bg-ramp-twin', svg: 'public/examples/edge-cases/bg-ramp-twin.svg', note: 'shape sharing a band colour — the colour-class DELETE risk', gradients: true, tier: 0 },
+  { name: 'gradient-flat', svg: 'public/examples/edge-cases/gradient-flat.svg', note: 'gradient bg + crisp flats — the render gate must not absorb them', gradients: true, tier: 0 },
+  { name: 'radial-glow', svg: 'public/examples/edge-cases/radial-glow.svg', note: 'radial vignette — 2-D gradient paint model', gradients: true, tier: 0 },
+
+  // --- classic tracer failure modes ---------------------------------------------------
+  { name: 'concentric', svg: 'public/examples/edge-cases/concentric.svg', note: 'concentric rings — circle snap, equal-radius solver', gradients: false, tier: 0 },
+  { name: 'sharp-star', svg: 'public/examples/edge-cases/sharp-star.svg', note: 'sharp points — corner preservation', gradients: false, tier: 0 },
+  { name: 'aa-seam', svg: 'public/examples/edge-cases/aa-seam.svg', note: 'soft diagonal between flats — the AA sliver', gradients: false, tier: 0 },
+  { name: 'checker', svg: 'public/examples/edge-cases/checker.svg', note: 'fine checkerboard — high-frequency aliasing', gradients: false, tier: 0 },
+  { name: 'overlap', svg: 'public/examples/edge-cases/overlap.svg', note: 'translucent discs — layer decomposition', gradients: false, tier: 0 },
+  // The §10 DRIVER, authored deliberately red (2026-07-21): tooth chords ≥ 7.5px @512 (above
+  // the CORNER_MIN_EDGE grading floor, cleanly resolved) but corner spacing 7.5–12.5px — inside
+  // the wash zone of the fit's fixed ±4px corner window, so most corners melt while boundary
+  // stays sub-tolerance (0.22/0.78). Only the distance-blind corner gate sees it. localScaleK
+  // does not move it (it gates the SNAPS; this loss is in the FIT) — the case exists to demand
+  // the scale-aware fit ε / detector windows of §10's open half.
+  { name: 'gear-teeth', svg: 'public/examples/edge-cases/gear-teeth.svg', note: 'small sharp teeth + large smooth disc — scale-blind fit ε / corner window (§10.5)', gradients: false, tier: 0 },
+  // The §0 #6b driver, authored deliberately red (2026-07-28, the gear-teeth §10.5 pattern):
+  // butt-capped 7px bars at the AA phases where the cap corners bevel/blunt away — measured
+  // 30/43 = 69.8% corner recall at HEAD (< 80%) while every boundary gate stays green. The
+  // regime was located by a real-pipeline sweep (capDiag.ts): 7px = CORNER_MIN_EDGE, the
+  // narrowest gradeable cap; w8+ is phase-robust and the in-case w8/w10 controls must stay
+  // green through any fix. See genEdgeCases.ts for the per-bar (angle, phase) cells.
+  { name: 'bar-caps', svg: 'public/examples/edge-cases/bar-caps.svg', note: 'butt-capped 7px bars at AA-losing phases — cap corner recall (§0 #6b)', gradients: false, tier: 0 },
+  // The CONTRAST-RANK driver (user-reported 2026-07-30, /labs/gallery on the Affinity mark).
+  // A weak colour boundary (ΔE 2.7–7.5) terminating on a strong one (ΔE 47–58) splits the
+  // strong edge and pins it at a junction placed by the weak evidence: the bar's flanks tilt
+  // and the plate's arc kinks where it joins its straight sides. Authored FLAT so the bands
+  // are IN the answer sheet — the ramp art that exposed it cannot be scored at all (§13's
+  // "the defect exists only on the path nothing measures"). The control square is crossed by
+  // nothing and must stay green. genEdgeCases.ts documents the rack.
+  { name: 'band-cross', svg: 'public/examples/edge-cases/band-cross.svg', note: 'weak boundaries landing on strong edges — contrast-ranked junctions', gradients: false, tier: 0 },
+
+  // Issue #17's driver, authored deliberately red (the gear-teeth §10.5 / bar-caps §0 #6b
+  // pattern). An ACUTE LENS counter has two CURVED arms; the apex snap fits a straight line
+  // to each over [3..14]px and intersects them, and on a curved arm that line is a chord
+  // leaning inward — the crossing lands px past the real tip, inside solid ink. Measured at
+  // authoring (apexDiag.ts): 7 of 15 reconstructions overshoot the raster's own coverage by
+  // > 2px, worst 6.47px. The bottom row is the CONTROL that makes the case a test rather
+  // than a target: eroded ink spikes whose reconstruction is RIGHT (overshoot −1.08px, i.e.
+  // still inside the evidence), so "stop reconstructing" cannot pass this case.
+  { name: 'acute-counter', svg: 'public/examples/edge-cases/acute-counter.svg', note: 'acute lens counters — apex reconstructed past the ink (#17)', gradients: false, tier: 0 },
+
+  // Issue #7's driver (the mastercard "needle"), authored deliberately red. A letterform
+  // join's corner has CURVED arms but is NOT acute; the apex snap's straight arm line is a
+  // chord of the curve, and the chord intersection slides ALONG the other arm (a white
+  // needle into the 'e' stems) or off the crotch bisector — under §18's 2.5px floor, or
+  // with the reach probe blinded by the AA fringe of the edge the ray runs along.
+  // genEdgeCases.ts documents the rack; test/planar-needle.test.ts is the mechanism gate.
+  { name: 'letter-joins', svg: 'public/examples/edge-cases/letter-joins.svg', note: 'letterform joins — curved-arm corner apex displacement (#7)', gradients: false, tier: 0 },
+  // The SAME art traced with gradients ON — the step-ramp gate (§26). Flat art in the
+  // gradient lane is the shape of the product's mixed case (real ramps + flat objects, where
+  // gradients are correctly on and the flats must stay flat): the Step-3c field merge used
+  // to fuse this case's BACKGROUND and a LETTER — two disjoint flats — into one region
+  // painted with a linear "gradient" that is a step, and every geometry gate is blind to it
+  // (the fused region still traces the letter's outline as a hole). Only the render-vs-
+  // source paint gate sees it: p95 18.6 against 8.0 on the pre-§26 tracer, 0.00 after. The
+  // gate ran only on gradients:false rows before, so the red number existed and was never
+  // pointed at; this row points it. Region/corner/circle recovery are n/a here by the
+  // gradient-lane rule (flatArt false) — the flat row above keeps those.
+  { name: 'letter-joins-grad', svg: 'public/examples/edge-cases/letter-joins.svg', note: 'the same letterforms, gradients ON — two flats fused into one step "gradient" (§26)', gradients: true, tier: 0 },
+
+  // Issue #8's driver (the ibm mark's dropped ▼), authored deliberately red. A small solid
+  // feature isolated by the art's own white gaps forms its own connected component; when
+  // that component lands under the palette path's per-component `minRegionArea` floor,
+  // despeckleComponents dissolves it into the background and a whole region is lost. The
+  // reporting mark is private-corpus and cannot gate CI, so the rack sweeps component area
+  // ACROSS the floor: peaks of ~20/30/40/48 px² @512 (below the default 50px floor) plus a
+  // ~64px² in-case CONTROL that is recovered either way, in two rows at a half-pixel phase
+  // offset and two palette colours. Measured at authoring: 8 of 10 peaks dropped whole,
+  // missedMax 19.50px, while chamfer/p95 stay at 0.32/0.11 — only region recovery and the
+  // corner count see it. The bottom-third shallow AA seam is the OTHER control: it is the
+  // shrapnel the floor exists to sweep up, and it gates the fix's false-positive side
+  // through node parsimony. genEdgeCases.ts documents the rack.
+  { name: 'peak-drop', svg: 'public/examples/edge-cases/peak-drop.svg', note: 'small isolated features under the despeckle area floor (#8)', gradients: false, tier: 0 },
+
+  // Issue #23's driver: a corner authored ABOVE the 60° sharp bar that the detector's ±4-
+  // POINT chord reading UNDER-reads on the integer lattice, so it is never classified and
+  // never reaches the corner fit. The reporting witness (`affinity-designer.svg`'s Λ apex)
+  // is private-corpus and ungated, and the census behind §21 showed the defect is a
+  // threshold CLIFF rather than one site — 96.3% of authored corners recovered at 90-105°
+  // of turn, 55.1% at 60-65° — so the rack sweeps AUTHORED TURN across the cliff: 61 / 65 /
+  // 69 / 73 / 77 / 81 / 100°, eight bisector rotations each, every cell at its own
+  // quarter-unit AA phase. Every cell is a circular sector, so the swept angle is carried
+  // by exactly one corner (the apex) while the two arm ends turn exactly 90° in every cell
+  // — the rack's own control, in the band that already recovers. Four plain discs along the
+  // bottom row gate the FALSE-POSITIVE side: reading the turn over a longer span is how a
+  // small circle starts reading as a corner. Measured at authoring: 164/172 authored
+  // corners, the eight misses all at 61-69°. genEdgeCases.ts documents the rack.
+  //
+  // The FIX this was authored for was built and REJECTED (§22): reading the turn from
+  // fitted arm evidence recovers the rack (164 -> 169/172) and +54 corners across the
+  // gallery, and puts a visible KINK in smooth boundary everywhere. The rack stays in the
+  // corpus on its own merits — an authored-turn sweep is a good corner-recall case at any
+  // resolution, and it is the only GATED witness for the residue in §0 #15.
+  // §23's precision fixture: art with NO CORNERS AT ALL, so every sharp corner the trace
+  // asserts on it is invented by construction and `cornersInvented` reads as a plain count.
+  // It exists because the corpus could not gate §22's defect: the smooth control that change
+  // was calibrated against is four plain DISCS, and a disc cannot exhibit it. The sites a bad
+  // corner reading kinks are ELLIPSE ENDS and straight→arc BLENDS — where the art turns
+  // 12–45° per ±1px but never discontinuously — so the rack is built from exactly those:
+  // ellipses at aspect 1:1 → 1:8 in both orientations, rounded rectangles with 2 / 3 / 5 / 8 /
+  // 12 px corner radii (and narrow twins whose two blends nearly meet), and curvature-ramp
+  // eggs. Measured at authoring: the shipped tracer invents 11 corners here and the rejected
+  // §22 reading invents 18, so the case has teeth in both directions. genEdgeCases.ts
+  // documents the rack.
+  { name: 'smooth-radii', svg: 'public/examples/edge-cases/smooth-radii.svg', note: 'no authored corners at all — the corner-precision gate (#23)', gradients: false, tier: 0 },
+
+  { name: 'corner-turns', svg: 'public/examples/edge-cases/corner-turns.svg', note: 'authored-turn sweep across the corner detector’s bar (#23)', gradients: false, tier: 0 },
+  { name: 'shaded-ink', svg: 'public/examples/edge-cases/shaded-ink.svg', note: 'one ink with soft shading — the colour path carves it (#15); carries its own ΔE 4.63 distinct-colour control', gradients: false, tier: 0, gated: true,
+    // The three tones the shaded shapes are authored with (genEdgeCases.ts): one ink. The
+    // control pair (#4a6aa8 / #5670a8) is deliberately NOT listed — it must stay two regions.
+    inkFamilies: [['#15251b', '#0f1c13', '#050f06']] },
+  // The §0 #10 driver, authored deliberately RED (2026-09-03). The reported witness
+  // `logo-olympic-rings` is authored with strokes and svgGround refuses it, so the defect
+  // has never had a number; this is the same mechanism as filled annuli at the witness's
+  // own scale (r 72px / band 16px @512 vs 73.7 / 14.2). A ring cut by a crossing leaves a
+  // "C" whose ONE boundary loop runs outer arc → cap → inner arc → cap, so the §1d
+  // co-circular snap is asked to fit points from two concentric circles to one circle and
+  // cannot. The fourth ring is the same ring untouched — an in-case control that must stay
+  // circular through any change here.
+  { name: 'ring-cross', svg: 'public/examples/edge-cases/ring-cross.svg', note: 'interlocking annuli — co-circular arc snap across crossings (#10)', gradients: false, tier: 0, gated: true },
+  // The §0 #9 driver, authored 2026-09-07 for the BORDER lane. Every other case here keeps
+  // its art clear of the frame, so the one zone the scorer has always excluded had no gated
+  // case at all — the same "author one first" the #15 premise re-check demanded. Its top fan
+  // and middle fan are the SAME four stems at the same four angles, one flush on y=0 and one
+  // in open canvas, so the band-vs-interior ratio compares the tracer against itself on
+  // identical geometry rather than against a different piece of art. genEdgeCases.ts has the
+  // rack and the two rules the geometry obeys.
+  { name: 'border-cross', svg: 'public/examples/edge-cases/border-cross.svg', note: 'art meeting the canvas edge at four angles, with an interior twin fan as the control (#9)', gradients: false, tier: 0, gated: true },
+
+  // --- authored art we already own ----------------------------------------------------
+  // All under public/ so the deployed view can fetch them — Vite's dev server also serves
+  // the project root, which hid the fact that examples/*.svg would 404 in a real build.
+  { name: 'bloom', svg: 'public/examples/bloom.svg', note: 'translucent circles — 7 composited regions from 3 shapes', gradients: false, tier: 0 },
+  { name: 'nebula', svg: 'public/examples/nebula.svg', note: 'nested opaque shapes, two sharing a fill', gradients: false, tier: 0 },
+  { name: 'petals', svg: 'public/examples/petals.svg', note: 'flat multi-region art', gradients: false, tier: 0 },
+  { name: 'aurora', svg: 'public/examples/aurora.svg', note: 'posterized diagonal ramp — jagged band boundaries', gradients: false, tier: 0 },
+
+  // --- unscorable today: authored with strokes (see the note above) --------------------
+  { name: 'cross-bars', svg: 'public/examples/edge-cases/cross-bars.svg', note: 'crossing bars — junction weld', gradients: false, tier: 0 },
+  { name: 'annulus', svg: 'public/examples/edge-cases/annulus.svg', note: 'rings with a hole — winding + alpha', gradients: false, tier: 0 },
+  { name: 'hairlines', svg: 'public/examples/edge-cases/hairlines.svg', note: 'sub-pixel strokes — thin-feature preservation', gradients: false, tier: 0 },
+
+  // --- TIER 1 — Fluent Emoji "Color" (MIT), generated; see ./fluentCorpus.ts ------------
+  ...FLUENT_CORPUS,
+
+  // --- TIER 2 — the same Fluent glyphs authored FLAT, derived (not duplicated) from
+  // FLUENT_CORPUS so the pairing can never drift. Until now these 106 files were only the
+  // `flatSvg` controls of the tier-1 A/B (fluentAbRun.ts) — never scored on their own, which
+  // left `regions recovered` (the dropped-region gate, the failure raster fidelity is
+  // structurally blind to) running on just the 12 flat tier-0 cases. Flat multi-region art is
+  // exactly what the product traces, so the flat twins are scored in their own right:
+  // `gradients: false`, region recovery applicable, boundary limits measured on THIS
+  // population (TIER_TOL[2] — see calibrateTier2.ts).
+  ...FLUENT_CORPUS.filter((c) => c.flatSvg).map(
+    (c): TruthCase => ({
+      name: `${c.name}-flat`,
+      svg: c.flatSvg!,
+      note: `${c.note.split(' — ')[0]} — authored flat twin`,
+      gradients: false,
+      tier: 2,
+      // No flatSvg back-reference: the lab's A/B traces `flatSvg` with gradients OFF, which
+      // would silently mis-trace the gradient original if it were pointed at here.
+    }),
+  ),
+]
+
+/** Only the cases of one tier. */
+export const tierCases = (tier: 0 | 1 | 2): TruthCase[] => TRUTH_CORPUS.filter((c) => c.tier === tier)
+
+/**
+ * What CI runs. Tier 0 in full (16 cases — it is the tracer's own failure-mode suite and
+ * every case there is load-bearing), plus a small fixed slice of tier 1. The other ~99
+ * gradient cases and the 106 tier-2 flat twins are browse-only in /labs/truth: a gate slow
+ * enough to be annoying gets switched off, and a gate that is off is not a gate.
+ */
+export const GATED_CORPUS: TruthCase[] = TRUTH_CORPUS.filter((c) => c.gated ?? c.tier === 0)
+
+/** Trace the same art at several raster sizes: a tracer whose GEOMETRY changes with input
+ *  resolution is fragile, and only a resolution-independent source can reveal that. */
+export const TRUTH_RESOLUTIONS = [256, 512, 1024]
+
+/**
+ * ABSOLUTE gates — the value at which a case is WRONG, not the value at which it CHANGED.
+ *
+ * These are first-cut and deliberately visible in the view so they can be calibrated
+ * against real cases rather than guessed at in the dark. Unlike traceCorpus.TOL there is no
+ * "golden" term anywhere: a tracer that improves simply moves further inside them.
+ */
+export const TRUTH_TOL: TruthTol = {
+  /** Mean symmetric boundary distance (px). Sub-pixel is the bar for authored flat art. */
+  chamfer: 1.0,
+  /** 95th-percentile boundary distance (px) — the gating number; max is too brittle. */
+  p95: 2.5,
+  /** Node density relative to the artist's. 3× is generous; 10× is staircasing. */
+  parsimony: 3.0,
+}
+
+export interface TruthTol {
+  chamfer: number
+  p95: number
+  parsimony: number
+}
+
+/**
+ * PER-TIER tolerances. TRUTH_TOL was calibrated on crisp, handcrafted FLAT art, and tier 1 is
+ * not that: Fluent's Color glyphs are soft-edged authored gradient art, drawn at 32 units and
+ * rasterized up, where a "boundary" between two gradient stops is a ramp several pixels wide
+ * rather than a step. Holding them to tier 0's thresholds would fail them for being what they
+ * are — and widening TRUTH_TOL to make them pass would silently weaken the 16 cases tier 0
+ * depends on. So the tiers get their own numbers, and the view SAYS which it applied.
+ *
+ * Tier 1's values are MEASURED, not guessed — `node --experimental-strip-types
+ * bench/calibrateTier1.ts` prints the distribution they come from (109 cases @ 512px).
+ * Each limit sits just above the corpus p90, which makes tier 1 a CATASTROPHE gate: it trips
+ * when the tracer falls off a cliff, and it deliberately leaves ~10% of the corpus failing
+ * TODAY, because those cases are real defects and hiding them behind a generous threshold
+ * would defeat the point of having built the corpus.
+ *
+ * ⚠ These are "do not get worse" numbers, NOT "this is correct" numbers. Do not read a green
+ * tier-1 gate as "the tracer is good at gradient art". It is not, yet:
+ *
+ *   • the tracer finds the authored SILHOUETTE very well — `missedMean` is sub-pixel on 45 of
+ *     109 cases (black-circle: 0.18px);
+ *   • almost all of the boundary error is INVENTED interior structure — it bands a smooth
+ *     multi-gradient stack into regions that do not exist. black-circle is ONE circle painted
+ *     with five stacked translucent gradients; the tracer emits THREE paths and 31px of
+ *     invented edge. That is the tier-1 work item, and it is what drives the ugly p95 limit
+ *     below.
+ *   • a second, distinct failure: speaker-low-volume / chart-decreasing MISS ~16px of
+ *     genuinely visible authored boundary (verified visible — only 1.9% of authored boundary
+ *     in this corpus is occluded, so this is the tracer, not a phantom edge in the GT).
+ *
+ * Every one of these limits should come DOWN as those two defects are fixed.
+ */
+export const TIER_TOL: Record<0 | 1 | 2, TruthTol> = {
+  0: TRUTH_TOL,
+  1: {
+    // observed p50 1.35 · p90 4.51 · max 15.74 (black-circle) — visible-only, 2026-07-15
+    // (pre-§9.6: p50 1.87 · p90 5.65; occlusion exclusion moved tier 1 only modestly, as
+    // §8.4's 1.9% predicted). Limits deliberately kept: catastrophe bounds, not targets.
+    chamfer: 6.0,
+    // observed p50 12.39 · p75 27.16 · p90 42.33 · max 160.90 (black-circle). Yes, this is a
+    // terrible-looking limit. It is honest: p95 on gradient art is dominated by the invented
+    // interior edges above, and setting it tight would paint the whole corpus red without
+    // telling anyone anything they cannot already see in `missed` vs `invented`.
+    p95: 60.0,
+    // observed p50 1.23 · p90 3.03 · max 4.88. NOTE: parsimony is nearly FINE at tier 0's 3×
+    // (97/109 pass) — the tracer spends FEWER nodes than the artist (mean 151 vs 252). The
+    // assumption that emoji drawn at 32 units would make any tracer look profligate was wrong.
+    parsimony: 5.0,
+  },
+  // MEASURED on the 106 flat twins @ 512px (calibrateTier2.ts) with the same recipe as
+  // tier 1: boundary limits just above the corpus p90, parsimony just above the corpus max.
+  // Same caveat too — "do not get worse" numbers, NOT "this is correct" numbers.
+  //
+  // What the calibration found on landing — and what became of it:
+  //   • REGION RECOVERY, the zero-tolerance gate, failed 15 of 106 cases — 22 regions
+  //     dropped, ΔE up to 115.2 (pencil's #402a32 graphite tip painted #f92f60 eraser-pink).
+  //     Root cause was dropMinorColors dissolving small-but-real palette entries by share
+  //     alone; FIXED 2026-07-15 by flat-interior protection (paletteSegment.ts) — now 1
+  //     drop in 106 (flute, ΔE 4.5, a quantize MERGE_DISTANCE artifact). See
+  //     docs/vectorization-benchmarks.md §9.1/§9.4.
+  //   • the tracer INVENTS almost nothing on flat art (spurious p95 0.33px) but appeared to
+  //     MISS real boundary (missed p90 5.43px, max 20.1px — taco). That was the answer
+  //     sheet, not the tracer: the flat twins are authored with heavy overdraw, and the
+  //     missed side was counting authored outline OCCLUDED behind later-painted shapes
+  //     (taco: 45.5% of its outline). Since 2026-07-15 the scorer excludes invisible
+  //     boundary (geomScore.makeVisibleAt, §9.6) and the limits below are RE-CALIBRATED on
+  //     the visible-only distribution — ~6–30× tighter, and for the first time meaningful:
+  //     the whole corpus now sits inside tier 0's own limits.
+  2: {
+    // observed (visible-only, 2026-07-15): p50 0.22 · p90 0.31 · p95 0.34 · max 0.48 (violin)
+    chamfer: 0.35,
+    // observed (visible-only, 2026-07-15): p50 0.62 · p90 1.02 · p95 1.22 · max 2.47 (mate)
+    p95: 1.2,
+    // observed p50 0.83 · p90 1.40 · max 4.23 (baguette-bread) — the tracer is usually MORE
+    // economical than the artist on these (p50 below 1×). Untouched by the §9.6 change (the
+    // visibility filter only drops QUERY samples; nodes and lengths stay whole).
+    parsimony: 4.5,
+  },
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * The LOW-RESOLUTION lane (§0 #6/#11)
+ *
+ * The main gate runs @512 and has to (its limits are in PIXELS, calibrated at that
+ * raster) — which left everything below 512 ungated, and the scale-blindness family
+ * invisible: the segmentation floors are absolute pixel counts, so a region that
+ * survives @512 falls under them @256. This lane runs a fixed case set at LOWRES_RES
+ * with its OWN calibrated tolerances (LOWRES_TOL). The @512 numbers are not shared and
+ * not widened.
+ *
+ * Case selection (calibrateLowres.ts, 2026-07-28 — tier 0 in full + all 106 flat twins
+ * swept @256):
+ *  • all of tier 0 — the failure-mode suite graded at the resolution it was blind at.
+ *    The sweep found exactly one tier-0 failure: `hairlines` (chamfer 0.93 / p95 9.69).
+ *  • the three tier-2 cases the sweep caught dropping regions @256 — every one passes
+ *    @512 (tier 2 is 437/437 there, §9.7), so each is a pure low-res driver:
+ *      fluent-flute-flat        8/9  — #974827 176px painted #893925, ΔE 8.0 (§0 #11)
+ *      fluent-parachute-flat    9/10 — #00a6ed  99px painted #5092ff, ΔE 28.7
+ *      fluent-beverage-box-flat 6/7  — #d3f093 481px painted #c3ef3c, ΔE 36.4 (p95 8.24)
+ *  • four healthy tier-2 CONTROLS pinning the calibrated tail, so a fix for the drivers
+ *    cannot silently push the healthy population out: fluent-pencil-flat (the §9.4
+ *    protected-tip case — its small dark tip must keep surviving @256 too),
+ *    fluent-rugby-football-flat (p95 tail 2.53), fluent-nazar-amulet-flat (chamfer tail
+ *    0.60), fluent-violin-flat.
+ *
+ * No tier-1 cases: gradient art is scoring infrastructure, not the product target, and
+ * no low-res gradient defect is on the books to drive a lane entry.
+ *
+ * The CORNER gate is tier-0-only in this lane (the test passes gtCorners: undefined for
+ * tier 2). Tier-2 corner recall is ungated at EVERY resolution today, and it measures
+ * poorly at both (flute-flat: 3/10 @256, 0/9 @512 — Fluent art is drawn at 32 units, so
+ * its "corners" are tiny rounded features at any raster). Gating it for the first time
+ * inside the low-res lane would misattribute a resolution-INDEPENDENT behaviour to the
+ * low-res family; if tier-2 corners ever get gated, that is its own calibration.
+ */
+export const LOWRES_RES = 256
+
+const LOWRES_TIER2 = [
+  'fluent-flute-flat',
+  'fluent-parachute-flat',
+  'fluent-beverage-box-flat',
+  'fluent-pencil-flat',
+  'fluent-rugby-football-flat',
+  'fluent-nazar-amulet-flat',
+  'fluent-violin-flat',
+]
+
+/**
+ * Tier-0 cases the @256 lane CANNOT score, and why — an exclusion, not a defect list.
+ *
+ * `peak-drop` (#8) is calibrated against an ABSOLUTE pixel floor (`minRegionArea`, 50px²
+ * at the default Despeckle dial), so its features are authored to straddle that floor at
+ * the @512 raster: 20–64 px² there. Quartering the raster quarters nothing — it sixteenths
+ * the AREA, putting the whole rack at 5–16 px², under the floor with no evidence on any
+ * side of it. At that size the floor's verdict is not even wrong: a 5px² component has no
+ * flat interior to read, so there is nothing for the mechanism under test to decide. A
+ * fixture cannot straddle an absolute floor at two rasters two octaves apart, and listing
+ * it in KNOWN_DEFECTS_LOWRES would be worse than excluding it — a listed case only has to
+ * fail SOMETHING, so it would go blind to real @256 regressions of everything else it draws.
+ */
+const LOWRES_TIER0_UNSCORABLE = ['peak-drop']
+
+/** Cases whose §23 per-case allowance applies (see INVENTED_ALLOWED). */
+export const inventedMaxFor = (name: string): number | undefined => INVENTED_ALLOWED[name]
+
+/** Cases whose §24 per-case allowance applies (see CIRCLE_SPREAD_ALLOWED). */
+export const circleSpreadMaxFor = (name: string): number | undefined => CIRCLE_SPREAD_ALLOWED[name]
+
+export const LOWRES_CORPUS: TruthCase[] = [
+  ...TRUTH_CORPUS.filter((c) => c.tier === 0 && !LOWRES_TIER0_UNSCORABLE.includes(c.name)),
+  ...TRUTH_CORPUS.filter((c) => LOWRES_TIER2.includes(c.name)),
+]
+
+/*
+ * ---------------------------------------------------------------------------
+ * The TIER-2 REGION lane @512 (§0 #14)
+ *
+ * The hole this closes is stated plainly in §12.4: "Tier 2 being ungated in CI is how a
+ * 2-region regression survived five commits unnoticed." Tier 2 is browse-only @512 by
+ * design (106 cases is too slow to gate, and a gate that is off is not a gate), and the
+ * @256 lane added in §12 gates these same seven cases — but only at 256. #14 lived in
+ * the gap: `fluent-beverage-box-flat`'s `#990838` collapsed to a sliver @512 while @256
+ * stayed green, and nothing in CI was looking.
+ *
+ * WHY REGION + INK ONLY, and no boundary numbers. TIER_TOL[2] is a calibrated
+ * CATASTROPHE gate that deliberately leaves ~10% of the twins red (§9.6's recipe: limits
+ * just above the corpus p90), and beverage-box's own p95 sits in that tail at 1.28 vs
+ * 1.20. Gating boundary here would therefore need either a KNOWN_DEFECTS entry — which
+ * would make this lane BLIND to #14's return, since a listed case only has to fail
+ * SOMETHING — or a second, looser p95 limit at the same resolution as TIER_TOL[2],
+ * which is the tolerance-widening this corpus exists to prevent. Region recovery and ink
+ * need no tolerance argument at all: one is zero-tolerance, the other is a ratio with a
+ * 1.6× margin over the whole healthy population (INK_MIN). So the lane gates exactly the
+ * two things #14 broke, and the boundary numbers stay where they were calibrated.
+ *
+ * Case selection: the SAME seven tier-2 cases the @256 lane runs — three region-fragile
+ * drivers (flute, parachute, beverage-box) and four healthy controls (pencil, rugby-
+ * football, nazar-amulet, violin). They were chosen in §12.1 by sweeping all 106 twins
+ * for region loss; that is the same question this lane asks, so the selection carries
+ * over unchanged rather than being re-argued.
+ */
+export const TIER2_REGION_RES = 512
+
+export const TIER2_REGION_CORPUS: TruthCase[] = TRUTH_CORPUS.filter((c) => LOWRES_TIER2.includes(c.name))
+
+/**
+ * Tolerances for the @256 lane — MEASURED (calibrateLowres.ts, 2026-07-28), not copied.
+ *
+ * Tier 0 @256 (16 scorable cases, `hairlines` excluded as the known failure): chamfer
+ * max 0.46 (cross-bars), p95 max 1.10 (gear-teeth), parsimony max 1.77 (cross-bars).
+ * The @512 limits hold with ≥ 2× margin over that healthy population, so the lane keeps
+ * the same absolute numbers — the same strictness in px, arrived at from @256 data, not
+ * inherited. hairlines fails at 9.69 p95 (8.8× the healthy max).
+ *
+ * Tier 2 @256 (106 cases, the three droppers excluded): chamfer max 0.60
+ * (nazar-amulet), p95 max 2.53 (rugby-football), parsimony max 1.43. Limits sit ~1.6×
+ * above the healthy max — beverage-box's 8.24 p95 lands 2× outside. NOT tier 2's @512
+ * numbers (0.35/1.2): at 256 the same authored art carries 2× the relative AA and the
+ * whole population shifts up; holding the lane to @512's limits would fail 11 healthy
+ * twins for being traced at 256.
+ *
+ * The paint gate's constants (PAINT_MEAN_MAX/PAINT_P95_MAX) are shared: measured @256
+ * healthy values 1.06–1.23 mean / 2.11–2.44 p95 (vs limits 3.0/8.0, ≥ 2.4× margin) —
+ * ΔE is the same scale at every raster size.
+ */
+export const LOWRES_TOL: Record<0 | 1 | 2, TruthTol> = {
+  0: { chamfer: 1.0, p95: 2.5, parsimony: 3.0 },
+  1: TIER_TOL[1], // no tier-1 case in the lane; present so the type stays total
+  2: { chamfer: 1.0, p95: 4.0, parsimony: 3.0 },
+}
+
+export interface TruthGate {
+  key: string
+  label: string
+  rule: string
+  value: number
+  limit: number
+  /** False ⇒ this gate has nothing to measure on this case. Render as n/a, NOT as a pass. */
+  applicable: boolean
+  pass: boolean
+  /** Fraction of the allowance unused: 1 = perfect, 0 = at the limit, <0 = failing. */
+  headroom: number
+  digits: number
+}
+
+/**
+ * Corner-recovery gate calibration. Only applied to flat art with at least this many VISIBLE
+ * authored corners — below that there is too little corner evidence to grade (a mostly-round
+ * glyph), so the gate reports n/a rather than a noisy pass/fail. The recall floor is a
+ * CATASTROPHE bound like the tier limits: a correct trace reproduces ~all authored corners
+ * (checker: 99%), and only a gross rounding — a checker cell melted to a blob (§0 #7),
+ * dropping the fine quadrant's corners — falls below it.
+ *
+ * 10, not 12: sharp-star — the corpus's CORNER-PRESERVATION case — has exactly 10 visible
+ * authored corners (5 tips + 5 notches), and at 12 the one gate built for its failure mode
+ * reported n/a while every tip traced as a beveled cap (§10.2). A 10-corner star is not
+ * "mostly-round art"; the count floor only needs to exclude glyphs whose corner evidence is
+ * genuinely too thin to grade.
+ */
+const CORNER_MIN_COUNT = 10
+const CORNER_RECALL_MIN = 0.8
+/**
+ * §23 — the PRECISION half of corner scoring. `cornersRecovered` is a recall number with no
+ * precision term, so INVENTING a corner is free by it; §22 is the worked example of a change
+ * that was green on every gate here and put a visible C⁰ kink in smooth boundary across
+ * ordinary art. `geomScore.inventedCorners` counts sharp corners the trace asserts that the
+ * art does not have, after exempting the four places a trace is RIGHT to corner (the canvas
+ * border, occluded boundary, traced junctions, authored crossings).
+ *
+ * ZERO TOLERANCE, like the region gate, and for the same reason: a corner the art does not
+ * contain is a bug, not a budget. Measured over the gated tier-0 corpus on the shipped
+ * tracer, p50 and p90 are both 0 and only three cases are non-zero at all — they are listed
+ * in KNOWN_DEFECTS with their counts, so CI breaks both when a new case invents one and when
+ * a listed one stops.
+ */
+const INVENTED_MAX = 0
+
+/**
+ * Cases that already invent corners on the SHIPPED tracer, with the count measured at
+ * authoring. This is a per-case allowance rather than a KNOWN_DEFECTS entry on purpose:
+ * KNOWN_DEFECTS is keyed by CASE, so listing these three would switch off every OTHER gate
+ * on them — and `peak-drop` was made green by §20 the week before, `hairlines` carries the
+ * thin-feature gates, and `smooth-radii` is the fixture this metric exists for. The header
+ * of test/truth-gate.test.ts is right that a recorded NUMBER is worse than a recorded
+ * boolean; the alternative here is worse still, so the numbers are named, explained, and
+ * can only come down. Each is a live entry in §0's defect list, not an accepted state.
+ */
+const INVENTED_ALLOWED: Record<string, number> = {
+  // The rack's own control: the shallow ~1.8° AA seam it draws to exercise the despeckle
+  // floor's false-positive side. The trace facets that staircase into two hard nodes.
+  'peak-drop': 2,
+  // Sub-pixel bars — the cap corners of a 0.5–6px stroke, where the raster genuinely cannot
+  // resolve the round end. Already the corpus's hardest thin-feature case.
+  hairlines: 4,
+  // The precision fixture itself, and the number that makes §0's new row real: on art with
+  // NO authored corners at all, the shipped tracer asserts 12 of them — the 1:8 ellipse
+  // ends and the 2px-radius rounded corners. This is the defect the metric was built to
+  // see, measured on a case authored to hold still while it is fixed.
+  'smooth-radii': 12,
+}
+
+/**
+ * §24 — CIRCLE RECOVERY (issue #10). A boundary the artist drew as ONE circle must come back
+ * as that circle, whether or not other shapes cut it into arcs. `geomScore.circleRecovery`
+ * finds the authored circles in the ground truth and measures the traced boundary's radial
+ * residual against each, then reports the p95 of that residual with the circle's own MEAN
+ * residual removed — "did the arc stay on one circle", which is exactly what §1d's
+ * co-circular arc snap promises and the only question this gate asks.
+ *
+ * WHY THE EXISTING GATES CANNOT ASK IT. `chamfer`/`p95` average over the whole document, so
+ * a defect living on the few arcs around a crossing is diluted by every correct pixel
+ * elsewhere — `ring-cross` reads 0.10 / 0.51 against limits of 1.0 / 2.5 while its rings
+ * visibly wobble. `cornersInvented` exempts traced junctions and authored crossings, which
+ * is precisely where this lives. `hausdorff` sees the excursion but has no notion of the
+ * right answer, so it cannot be gated tightly. A circle DOES have an exact answer, and that
+ * is what makes the residual attributable.
+ *
+ * CALIBRATED @512 on 2026-09-03 (`ringDiag --circles --corpus`, 13 flat tier-0 cases with
+ * authored circles). The corpus split into two populations with an order of magnitude
+ * between them, which is where the limit goes:
+ *
+ *   circles the snap CAN fit      corner-turns 0.01 · aa-seam 0.02 · smooth-radii 0.03 ·
+ *                                 gear-teeth 0.03 · acute-counter 0.03 · annulus 0.04 ·
+ *                                 concentric 0.07 · band-cross 0.08
+ *   circles CUT INTO ARCS         overlap 0.38 · ring-cross 0.78 · letter-joins 0.81 ·
+ *                                 bloom 0.84 · shaded-ink 1.16
+ *
+ * 0.25 sits 3× above the clean maximum and 1.5× below the lowest defect — an absolute "this
+ * is wrong" bound, not a drift band.
+ *
+ * §24's family pass then closed three of the five: ring-cross 0.78 → 0.07, bloom
+ * 0.84 → 0.12, overlap 0.38 → 0.03, with every clean case unmoved. What is left is not the
+ * crossing mechanism at all — see CIRCLE_SPREAD_ALLOWED.
+ *
+ * @512 ONLY, for §23's reason: every radius in the corpus halves at 256, so the same
+ * relative error is half the pixels there and the limit would be a different calibration.
+ *
+ * NOT gated: the companion `bias` (a circle traced uniformly too small or too large).
+ * De-biasing is what makes this gate answer ONE question — and it immediately paid for
+ * itself: `acute-counter` reads a raw p95 of 0.81 that is entirely bias (its 40px circle
+ * comes back 0.79px undersized, p50 ≈ p95 ≈ |bias|) and a spread of 0.03. Rolling the two
+ * together would have let a fix for either claim the other's ground. The bias number is a
+ * real, previously unmeasured defect and is its own §0 row, not this one.
+ */
+const CIRCLE_SPREAD_MAX = 0.25
+
+/**
+ * Cases that still exceed it, measured after §24. A per-case allowance rather than a
+ * KNOWN_DEFECTS entry for INVENTED_ALLOWED's reason: KNOWN_DEFECTS is keyed by CASE, and
+ * listing these would switch off every other gate on art that is otherwise green. Values
+ * are the measurement rounded up to the next 0.05, and can only come down.
+ *
+ * `bloom` (0.84 → 0.12) and `overlap` (0.38 → 0.03) were listed here for one commit and
+ * were closed by the family pass, which is the outcome the entries predicted.
+ */
+const CIRCLE_SPREAD_ALLOWED: Record<string, number> = {
+  // NOT the crossing mechanism, despite reading like it. This case's three bowls are each
+  // ONE CLOSED edge, so they never reach §1d at all — `ringDiag` counts 18 single-edge
+  // loops and not one candidate — and §24's family pass groups OPEN arcs, so it cannot
+  // reach them either. What declines here is 1a's own disc snap: a bowl with a join in it
+  // turns sharply, the corner veto refuses to round it (rightly — it would eat the join),
+  // and the arc is then fitted freehand and wobbles 0.81px. A circle interrupted by a
+  // CORNER rather than by a crossing is its own row and its own fix.
+  'letter-joins': 0.85,
+}
+
+/**
+ * Paint-fidelity gate calibration (GRADIENT tier 0 only): the traced doc is RENDERED
+ * (scoreboard.scoreDoc → the harness rasterizer) and compared against the source raster,
+ * mean / p95 CIE76 ΔE over all pixels. This is the gate §10.3's radial-glow regression
+ * proved missing: on gradient art every other gate scores boundary GEOMETRY — and
+ * radial-glow's authored geometry is just the canvas frame — so its re-centred,
+ * ring-banded glow (a pure PAINT failure, caused by a merge-ORDER change re-striding the
+ * samples Stage 2 fits on) kept every gate green and was caught only by eye in /labs/ab.
+ *
+ * Calibrated @512 on 2026-07-21 — healthy tracer: bg-ramp 1.05/1.80, bg-ramp-twin
+ * 1.12/2.15, gradient-flat 1.34/3.47, radial-glow 1.12/2.22 (mean/p95). The regressed
+ * tracer (the jump veto without its flat-flank condition, the exact state the user saw):
+ * radial-glow 9.14/23.95. The limits sit ~2× above the healthy maximum and ~3× below the
+ * failure — absolute "this is wrong" bounds, not drift bands.
+ *
+ * Tier 0 only: tier 1's soft multi-gradient paint is a known, deliberately-deprioritised
+ * defect family (§0 #9/#10) whose paint numbers are not yet calibrated; gating it here
+ * would paint the slice red without new information. Flat art is excluded because region
+ * recovery + boundary + palette already pin its paint.
+ */
+const PAINT_MEAN_MAX = 3.0
+const PAINT_P95_MAX = 8.0
+
+/**
+ * INK-KEPT floor (flat art): the fraction of a region's colour AREA the trace still
+ * paints (geomScore.scoreRegions.worstInk — rendered px / source px, both at ΔE ≤ 4).
+ *
+ * The gate §0 #14 proved missing on the *other* side of region recovery. That defect was
+ * not a dropped region: the `#990838` doc item existed, carried the right fill, and had
+ * pinched to a 77px² sliver of a 651px region (13.5% ink). Recovery caught it only
+ * because the median flips once MORE THAN HALF the region is gone; a region pinched to
+ * 45% keeps its median, and every boundary number stays sub-tolerance because the
+ * boundary that IS traced is traced accurately. Ink degrades continuously, so it sees
+ * the collapse coming.
+ *
+ * MEASURED (calibrateLowres.ts, 2026-08-06) — worst ink per case over the healthy
+ * population, at both resolutions and both tiers:
+ *   tier 2 @512 (106 twins): min 89.8% (ginger-root) · p05 93.7% · p50 99.7%
+ *   tier 2 @256 (106 twins): min 81.7% (donkey)      · p05 86.5% · p50 99.1%
+ *   tier 0 + controls @512:  min 93.4% (flute)       · p50 99.4%
+ *   tier 0 + controls @256:  min 86.1% (flute)       · p50 98.9%
+ * The §0 #14 collapse measures 13.5%. 0.5 sits 1.6× below the healthiest-worst case and
+ * 3.7× above the defect — a catastrophe bound like the paint gate's, not a drift band.
+ * A RATIO, so unlike every boundary limit it is resolution-free and shared by all lanes.
+ */
+const INK_MIN = 0.5
+
+/**
+ * Evaluate every gate for one scored case. Pure arithmetic — no assertions.
+ *
+ * Two gates can be INAPPLICABLE rather than passing, and saying so is the whole point:
+ *
+ *  • boundary gates need `samples > 0`. bg-ramp is a single full-canvas rect, so its entire
+ *    authored outline is the canvas border, which border-exclusion drops — leaving nothing
+ *    to compare. Reported naively that is `mean([]) === 0`, i.e. a PERFECT boundary score
+ *    for having measured nothing.
+ *  • region recovery needs FLAT art. On gradient art the flat-region count is an artifact of
+ *    8-bit quantisation (bg-ramp "has" 69 regions), so a tracer that correctly fits one
+ *    gradient looks like it dropped 60.
+ *  • corner recovery needs FLAT art with enough authored corners — see CORNER_MIN_COUNT.
+ *
+ * A gate that silently passes because it had nothing to check is worse than no gate at all,
+ * so those come back `applicable: false` and callers must render them as n/a — never as ✓.
+ */
+/**
+ * BORDER BAND (§34, issue #9) — how much worse a case is allowed to be where its art meets
+ * the canvas edge than it is in its own interior.
+ *
+ * Shaped exactly like the §15 scale gate (`coarse ≤ 2.0 · max(fine, 0.15) ref-px`) and for
+ * the same reason: the raw band figure is not comparable between cases (art busy at the edge
+ * reads worse for reasons that are not defects), and a bare ratio explodes when the
+ * denominator is near-perfect. So the bar is relative, with a floor.
+ *
+ * WHY 2.0, and what it costs. The border genuinely carries less evidence than the interior —
+ * the AA profile is truncated by the crop and the sub-pixel estimator's window hangs off the
+ * raster — so some elevation is expected and a bar of 1.0 would be wrong. 2.0 is where the
+ * measurement puts the line: every flat gated fixture that reaches the edge passes it today
+ * (`letter-joins` 2.37× is the tightest at 0.20 against a 0.30 limit, then `aa-seam` 1.71×,
+ * `wedge-counter` 1.23×, `border-cross` 1.20×, `hairlines` 0.73×, `seam-corner` 0.71×), and
+ * the two worst marks in the 152-logo gallery FAIL it (`langchain` 0.41 vs 0.34, `boeing-wm`
+ * 0.54 vs 0.50). A bar no real art can fail is not a bar; this one separates.
+ *
+ * FLAT ART ONLY, like the region / ink / invented gates. On gradient art traced flat the
+ * interior chamfer is 22–90px of posterization banding, and a ratio over that denominator is
+ * not a number about the border.
+ */
+export const BORDER_RATIO_MAX = 2.0
+
+export function evaluateTruthGates(s: {
+  samples: number
+  chamfer: number
+  p95: number
+  parsimony: number
+  trueRegions: number
+  recovered: number
+  /** VISIBLE authored sharp corners and how many the trace reproduced (geomScore). Omitted
+   *  ⇒ the corner gate reports n/a (a caller that has not measured them). */
+  gtCorners?: number
+  cornersRecovered?: number
+  /** Sharp corners the trace asserts that the art does not have (geomScore.cornersInvented).
+   *  Omitted ⇒ the precision gate reports n/a. */
+  cornersInvented?: number
+  /** Per-case allowance for the above — see INVENTED_ALLOWED. */
+  inventedMax?: number
+  /** Authored circles found (geomScore.circleRecovery.circles) and the worst per-circle
+   *  co-circularity spread. Omitted, or 0 circles ⇒ the circle gate reports n/a. */
+  circles?: number
+  circleSpread?: number
+  /** Per-case allowance for the above — see CIRCLE_SPREAD_ALLOWED. */
+  circleSpreadMax?: number
+  /** Render-vs-source mean / p95 CIE76 ΔE (scoreboard.scoreDoc: meanDeltaE / p95DeltaE).
+   *  Omitted ⇒ the paint gates report n/a (a caller that has not rendered the trace).
+   *  Only consulted on GRADIENT tier-0 cases — see PAINT_MEAN_MAX. */
+  paintMean?: number
+  paintP95?: number
+  /** Worst per-region ink kept (geomScore.scoreRegions.worstInk). Omitted ⇒ the ink gate
+   *  reports n/a (a caller that has not rendered the trace). Flat art only — see INK_MIN. */
+  worstInk?: number
+  /** §34 border band (geomScore.scoreBorderBand): the band chamfer, the same case's interior
+   *  chamfer, and how many transversal samples backed it. Omitted, or fewer than BAND_MIN_N
+   *  samples ⇒ the border gate reports n/a — most cases keep their art clear of the frame. */
+  borderChamfer?: number
+  borderInterior?: number
+  borderSamples?: number
+  /** False for gradient cases — see above. */
+  flatArt: boolean
+  /** Picks the tolerances (TIER_TOL). Defaults to tier 0, whose numbers are unchanged. */
+  tier?: 0 | 1 | 2
+  /** Override the tier's boundary tolerances — the @256 lane passes LOWRES_TOL[tier]
+   *  here (its limits are calibrated at ITS raster; TIER_TOL's are @512-only). */
+  tol?: TruthTol
+}): TruthGate[] {
+  const tol = s.tol ?? TIER_TOL[s.tier ?? 0]
+  const hasBoundary = s.samples > 0
+  const gtCorners = s.gtCorners ?? 0
+  const cornersRecovered = s.cornersRecovered ?? 0
+  const cornerApplicable = s.flatArt && gtCorners >= CORNER_MIN_COUNT
+  const cornerRecall = gtCorners > 0 ? cornersRecovered / gtCorners : 1
+  const paintApplicable =
+    !s.flatArt && (s.tier ?? 0) === 0 && s.paintMean !== undefined && s.paintP95 !== undefined
+  const upper = (key: string, label: string, value: number, limit: number, digits: number, applicable = hasBoundary): TruthGate => ({
+    key, label, rule: `≤ ${limit}`, value, limit,
+    applicable,
+    pass: applicable ? value <= limit : true,
+    headroom: !applicable ? 1 : limit > 0 ? (limit - value) / limit : value <= 0 ? 1 : -1,
+    digits,
+  })
+
+  // §24 — circle recovery. Flat art only (a gradient boundary is a ramp, not a step) and
+  // only where the art HAS an authored circle; the per-case allowance is CIRCLE_SPREAD_MAX
+  // unless CIRCLE_SPREAD_ALLOWED names the case.
+  const circleApplicable = s.flatArt && (s.circles ?? 0) > 0 && s.circleSpread !== undefined
+
+  // §34 — the border band. Applicable only where the art actually reaches the canvas edge
+  // with enough transversal boundary to mean anything; `annulus` read 2197× off TWO samples
+  // before the floor existed, which is the `samples === 0` trap this corpus keeps re-learning.
+  const borderApplicable =
+    s.flatArt &&
+    s.borderChamfer !== undefined &&
+    s.borderInterior !== undefined &&
+    Number.isFinite(s.borderInterior) &&
+    (s.borderSamples ?? 0) >= BAND_MIN_N
+  const borderLimit = BORDER_RATIO_MAX * Math.max(s.borderInterior ?? 0, BAND_FLOOR)
+
+  return [
+    upper('chamfer', 'boundary mean', s.chamfer, tol.chamfer, 2),
+    // §34 — fidelity WHERE THE ART MEETS THE FRAME, the zone scoreGeometry excludes by
+    // construction (collectBoundary drops every query within BORDER_EPS of the canvas rect,
+    // both sides, because the traced background frame has no authored counterpart). That
+    // exclusion is right and stays; what this adds back is only the TRANSVERSAL part of the
+    // band — boundary descending INTO the edge, which does have authored truth. Before it,
+    // border-edge fidelity was ungated on every case, every tier and every resolution, and
+    // a defect there could only be seen by eye: the same "no red number to beat" hole that
+    // let the §12 low-res family and the §15 scale family live for months.
+    upper('border', 'border band ÷ interior', s.borderChamfer ?? 0, borderLimit, 2, borderApplicable),
+    upper('p95', 'boundary p95', s.p95, tol.p95, 2),
+    upper('parsimony', 'node economy', s.parsimony, tol.parsimony, 1),
+    // §24 — a boundary the artist drew as one circle must come back as that circle, even
+    // where crossings cut it into arcs. The only gate that can see the ring wobble (#10):
+    // every distance gate averages it away and the corner gates exempt the junctions.
+    upper('circleSpread', 'circle recovery', s.circleSpread ?? 0, s.circleSpreadMax ?? CIRCLE_SPREAD_MAX, 2, circleApplicable),
+    // Render-vs-source paint fidelity — the gate that would have caught radial-glow's
+    // re-centred glow (§10.3): a pure PAINT failure is invisible to every geometry
+    // gate on gradient art, where region/corner recovery are n/a by construction.
+    upper('paintMean', 'paint mean ΔE', s.paintMean ?? 0, PAINT_MEAN_MAX, 2, paintApplicable),
+    upper('paintP95', 'paint p95 ΔE', s.paintP95 ?? 0, PAINT_P95_MAX, 2, paintApplicable),
+    {
+      // Zero tolerance. A region present in the art and absent from the trace is a bug, and
+      // it is the exact failure raster fidelity cannot see: merging a small low-contrast
+      // region into its neighbour barely moves ΔE or SSIM while destroying the topology.
+      // (bloom drops two overlap lenses this way and the old golden passes it.)
+      key: 'regions',
+      label: 'regions recovered',
+      rule: 'all',
+      value: s.trueRegions - s.recovered,
+      limit: 0,
+      applicable: s.flatArt,
+      pass: !s.flatArt || s.recovered >= s.trueRegions,
+      headroom: !s.flatArt || s.recovered >= s.trueRegions ? 1 : -1,
+      digits: 0,
+    },
+    {
+      // A region can be RECOVERED and still be mostly gone: recovery is a median at the
+      // region's own pixels, so it only flips past 50% loss, and boundary error stays
+      // sub-tolerance because the surviving boundary is traced accurately. §0 #14 is the
+      // case — a 634px region pinched to a 77px² sliver whose doc item still carried the
+      // right fill. This gate asks the area question directly.
+      key: 'ink',
+      label: 'ink kept (worst region)',
+      rule: `≥ ${Math.round(INK_MIN * 100)}%`,
+      value: s.worstInk ?? 1,
+      limit: INK_MIN,
+      applicable: s.flatArt && s.worstInk !== undefined,
+      pass: !(s.flatArt && s.worstInk !== undefined) || s.worstInk >= INK_MIN,
+      headroom:
+        !(s.flatArt && s.worstInk !== undefined) ? 1 : (s.worstInk - INK_MIN) / (1 - INK_MIN),
+      digits: 2,
+    },
+    {
+      // §23, the PRECISION half of the corner question, and the gate that would have caught
+      // §22 before it reached a review. Recall says a corner was LOST; nothing said one was
+      // INVENTED, so a change that kinked smooth boundary all over the corpus scored as a
+      // clean win (+54 recovered corners) while chamfer moved in the third decimal. Zero
+      // tolerance: a corner the art does not contain is a bug, not a budget.
+      key: 'invented',
+      label: 'corners invented',
+      rule: `≤ ${s.inventedMax ?? INVENTED_MAX}`,
+      value: s.cornersInvented ?? 0,
+      limit: s.inventedMax ?? INVENTED_MAX,
+      // FLAT art only, the same scoping the region and ink gates use. On gradient art the
+      // trace's regions are posterization bands whose corners are a property of the banding,
+      // not of the authored outline, and the junction exemption does not fully model them —
+      // measured, five tier-1 cases report 1–3. Gating that for the first time here would
+      // misattribute a banding question to a corner-precision one; it is named in §23.3
+      // instead.
+      applicable: s.flatArt && s.cornersInvented !== undefined,
+      pass: !(s.flatArt && s.cornersInvented !== undefined) || s.cornersInvented <= (s.inventedMax ?? INVENTED_MAX),
+      headroom: !(s.flatArt && s.cornersInvented !== undefined) || s.cornersInvented <= (s.inventedMax ?? INVENTED_MAX) ? 1 : -1,
+      digits: 0,
+    },
+    {
+      // Zero-distance defect: the tracer keeps every region and every boundary within
+      // tolerance yet ROUNDS the shape — a fine checkerboard's cells melt from squares to
+      // blobs (§0 #7). chamfer/p95 cannot see it (a corner rounded at 8px scale moves the
+      // boundary < 1px) and region recovery cannot (the colour and topology are intact). The
+      // authored corners simply stop being corners. This gate catches exactly that: the
+      // fraction of visible authored corners the trace still renders sharp.
+      key: 'corners',
+      label: 'corners recovered',
+      rule: `≥ ${Math.round(CORNER_RECALL_MIN * 100)}%`,
+      value: gtCorners - cornersRecovered,
+      limit: Math.floor(gtCorners * (1 - CORNER_RECALL_MIN)),
+      applicable: cornerApplicable,
+      pass: !cornerApplicable || cornerRecall >= CORNER_RECALL_MIN,
+      headroom: !cornerApplicable ? 1 : (cornerRecall - CORNER_RECALL_MIN) / (1 - CORNER_RECALL_MIN),
+      digits: 0,
+    },
+  ]
+}
+
+/** Dev-server URL for a case's SVG (Vite serves public/ at /, project root at its own path). */
+export function truthUrl(c: TruthCase): string {
+  return c.svg.startsWith('public/') ? `/${c.svg.slice('public/'.length)}` : `/${c.svg}`
+}

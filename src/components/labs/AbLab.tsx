@@ -10,7 +10,7 @@
 //  • VS SNAPSHOT — the working-tree DEFAULT trace against the output frozen by
 //    `pnpm gen:absnapshot` at an earlier revision (test/ab-snapshots/). Both panels trace
 //    the snapshot's OWN stored pixels, so the delta is code, never rasterizer — the input
-//    contract lives in src/devtest/abCorpus.ts, which also owns the shared case list.
+//    contract lives in bench/abCorpus.ts, which also owns the shared case list.
 //  • SNAPSHOT vs SNAPSHOT — two frozen stamps against each other, nothing traced at all.
 //    The workflow CLAUDE.md prescribes produces exactly this: freeze `before-x`, change the
 //    tracer, freeze `after-x`. Those two are a SET, and until this mode existed the `after-`
@@ -43,8 +43,8 @@ import {
   type AbLane,
   type AbLaneKey,
   type AbSnapshotManifest,
-} from '../../devtest/abCorpus'
-import { LOGO_CORPUS } from '../../devtest/logoCorpus'
+} from '../../../bench/abCorpus'
+import { LOGO_CORPUS } from '../../../bench/logoCorpus'
 import { fnv1a } from './engineFingerprint'
 import { LabPage, LabCheck, LabSelect } from './LabPage'
 import { Panel, RawArt } from './Panel'
@@ -55,8 +55,8 @@ import { useLabRun } from './useLabRun'
 import { labTrace } from './labTrace'
 import { docStats, traceSvg } from './wire'
 import { serializeDoc, parseSvg } from '../../lib/path/model'
-import { parseGroundTruth, toRasterSpace, unscorable, type GroundShape } from '../../devtest/svgGround'
-import { inventedCorners, makeVisibleAt } from '../../devtest/geomScore'
+import { parseGroundTruth, toRasterSpace, unscorable, type GroundShape } from '../../../bench/svgGround'
+import { inventedCorners, makeVisibleAt } from '../../../bench/geomScore'
 
 // The frozen comparison targets, bundled like GoldenLab's fixtures (they live outside
 // public/, so fetching would 404 in a build). Each snapshot is a SUBDIR under
@@ -191,7 +191,7 @@ const VARIANTS: Variant[] = [
 ]
 
 // The variant SET is part of what the cache key must cover: ENGINE_HASH fingerprints the
-// tracer + scoring source (src/lib, src/devtest) but NOT this file, so adding a column or
+// tracer + scoring source (src/lib, bench) but NOT this file, so adding a column or
 // retuning a flag here would otherwise serve a stale cached analysis (missing the new column,
 // or the old localScaleK). Fold a hash of the variant definitions into the options key so any
 // edit above invalidates just the AB variant cache.
@@ -218,9 +218,9 @@ interface AbCase {
   background?: string
 }
 
-// The case list is OWNED by src/devtest/abCorpus.ts — the same list the snapshot
+// The case list is OWNED by bench/abCorpus.ts — the same list the snapshot
 // writer traces, so the two consumers cannot drift. The handcrafted ⟐ edge cases
-// are authored as SVG (src/devtest/genEdgeCases.ts), so the raster switch
+// are authored as SVG (bench/genEdgeCases.ts), so the raster switch
 // re-rasterizes each at any size: same vector content, varying resolution.
 const FIXTURES: AbCase[] = AB_CORPUS.map((c) => ({ id: c.id, name: c.name, kind: c.kind, src: abUrl(c.path) }))
 
@@ -1136,7 +1136,7 @@ function AbAbout() {
         rampiness probe choosing per image). Both are stamped, so neither is lost. Those files are
         gitignored (trademarks); run{' '}
         <code>npm run fetch:logos</code> to fill the lane, edit <code>AB_LOGOS</code> in
-        src/devtest/abCorpus.ts to change which marks it carries, or pass{' '}
+        bench/abCorpus.ts to change which marks it carries, or pass{' '}
         <code>--logos all</code> / <code>--logos a,b</code> to the snapshot writer for a one-off.
         Snapshots are <b>never committed</b> — they are local working artifacts, and this lane
         traces art that must not be redistributed.

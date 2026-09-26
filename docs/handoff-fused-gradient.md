@@ -202,5 +202,5 @@ across olympic's. Measuring at the gap, on input pixels, is a different question
 | the merge | `src/lib/trace/segment.ts` — Step-3c field merge, `evalPair`, `unwitnessedJump`, `solidResidual`, `FLAT_FLANK_RES`, `DEFAULT_SEGMENT_OPTIONS.maxUnwitnessedJump` |
 | the scope switch | `src/lib/trace/index.ts` `segmentOptionsFor` — the veto is AUTO-path only; Region detail > 0 or keep-separate markers disable it |
 | the auto-default | `src/lib/trace/rampiness.ts` — `suggestGradients`, why flat art never reaches this in the app |
-| the paint gate | `src/devtest/truthCorpus.ts` — `PAINT_MEAN_MAX` 3.0 / `PAINT_P95_MAX` 8.0, gradient tier-0 only |
+| the paint gate | `bench/truthCorpus.ts` — `PAINT_MEAN_MAX` 3.0 / `PAINT_P95_MAX` 8.0, gradient tier-0 only |
 | the record | `docs/vectorization-benchmarks.md` §10.3 (the veto and the reverted `profileCliff`), §0 #9 |

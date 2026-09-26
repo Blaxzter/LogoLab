@@ -121,7 +121,7 @@ export interface SegmentOptions {
    * computed in full even where the condition short-circuits so the caller can see
    * which term decided, and once per accepted merge, in merge order. Read-only: the
    * result is identical with or without an observer. Used by
-   * `src/devtest/stepRampDiag.ts`.
+   * `bench/stepRampDiag.ts`.
    */
   onPair?: MergePairObserver
 }

@@ -10,7 +10,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
 import { tracePlanar } from '../src/lib/trace/planarAssemble.ts'
 import { planarBeautify } from '../src/lib/trace/planarBeautify.ts'
 import { materializeRegion, reverseEdgeNodes } from '../src/lib/path/topology.ts'

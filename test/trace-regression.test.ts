@@ -17,8 +17,8 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
-import { hashDoc } from '../src/devtest/metrics.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
+import { hashDoc } from '../bench/metrics.ts'
 import { traceImage } from '../src/lib/trace/index.ts'
 import {
   GOLDEN_CORPUS,
@@ -27,7 +27,7 @@ import {
   recordCase,
   loadGolden,
   geomSignature,
-} from '../src/devtest/traceGolden.ts'
+} from '../bench/traceGolden.ts'
 
 ensureImageData()
 

@@ -35,11 +35,11 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
-import { decodePng } from '../src/devtest/png.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
+import { decodePng } from '../src/lib/png/decode.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'
-import { srgbToLab, deltaE76 } from '../src/devtest/color.ts'
+import { srgbToLab, deltaE76 } from '../bench/color.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')

@@ -2,7 +2,7 @@
 //
 // The tracer is pure TypeScript and runs anywhere, but it constructs
 // `new ImageData(w, h)` for its masks — a browser global. The headless harness
-// installs the same shim (src/devtest/nodeHarness.ts); this is its twin for the
+// installs the same shim (bench/nodeHarness.ts); this is its twin for the
 // server, kept separate so the production entry never imports the test tree.
 
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'

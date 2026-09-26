@@ -10,7 +10,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
 import { uniteBackgroundGradient } from '../src/lib/trace/backgroundLayer.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import type { RegionSamples } from '../src/lib/trace/gradient.ts'

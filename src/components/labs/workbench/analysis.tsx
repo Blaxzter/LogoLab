@@ -10,9 +10,9 @@
 // every number here can be located on the image and argued with.
 //
 // TRUST PROPERTIES — the reason this view is worth looking at:
-//   • the case lists, trace options and gates come from ../../../devtest/truthCorpus.ts — the SAME
+//   • the case lists, trace options and gates come from ../../../bench/truthCorpus.ts — the SAME
 //     module the Node runner (groundTruthRun.ts) imports;
-//   • the metrics come from ../../../devtest/geomScore.ts — the SAME functions that runner calls;
+//   • the metrics come from ../../../bench/geomScore.ts — the SAME functions that runner calls;
 //   • the rasterizer is the SAME: @resvg/resvg-wasm, the WASM build of the exact Rust engine the
 //     Node runner uses via @resvg/resvg-js. Verified byte-identical (0 differing pixels).
 // Nothing is re-implemented here; this file only DRAWS what those modules return.
@@ -21,7 +21,7 @@ import { useMemo } from 'react'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../../lib/trace'
 import { serializeDoc } from '../../../lib/path/model'
 import type { EditableDoc, SubPath } from '../../../lib/path/types'
-import { parseGroundTruth, toRasterSpace, unscorable } from '../../../devtest/svgGround'
+import { parseGroundTruth, toRasterSpace, unscorable } from '../../../../bench/svgGround'
 import {
   scoreGeometry,
   scoreRegions,
@@ -29,9 +29,9 @@ import {
   type GeomScore,
   type RegionScore,
   type DistPoint,
-} from '../../../devtest/geomScore'
-import { scoreDoc } from '../../../devtest/scoreboard'
-import { TIER_TOL, evaluateTruthGates, inventedMaxFor } from '../../../devtest/truthCorpus'
+} from '../../../../bench/geomScore'
+import { scoreDoc } from '../../../../bench/scoreboard'
+import { TIER_TOL, evaluateTruthGates, inventedMaxFor } from '../../../../bench/truthCorpus'
 import { Panel, RawArt } from '../Panel'
 import { traceSvg, subPathsWire } from '../wire'
 import { Badge, CaseRow, NoteBox } from '../CaseRow'

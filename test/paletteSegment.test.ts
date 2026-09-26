@@ -6,7 +6,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
 import { compressRoutes, segmentFlatPalette } from '../src/lib/trace/paletteSegment.ts'
 import { traceImage } from '../src/lib/trace/index.ts'
 

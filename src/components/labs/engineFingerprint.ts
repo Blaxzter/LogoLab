@@ -11,10 +11,10 @@
 // constant. The raw source lands only in the lazy lab chunk (every lab is a React.lazy route),
 // so the product bundle a visitor downloads is untouched.
 //
-// Scope is a deliberate SUPERSET — all of src/lib + src/devtest + the lab view layer, not just
+// Scope is a deliberate SUPERSET — all of src/lib + bench + the lab view layer, not just
 // src/lib/trace: over-broad invalidation merely recomputes occasionally, but a MISSED
 // invalidation serves a stale result, the one unacceptable outcome. So we err toward hashing too
-// much. (src/devtest carries the scoring — geomScore, scoreboard, truthCorpus — whose output the
+// much. (bench carries the scoring — geomScore, scoreboard, truthCorpus — whose output the
 // labs also cache.)
 //
 // src/components/labs is in scope because the cached value is not just the raw trace/score: the
@@ -27,7 +27,7 @@
 
 const SOURCES = {
   ...import.meta.glob('/src/lib/**/*.ts', { query: '?raw', import: 'default', eager: true }),
-  ...import.meta.glob('/src/devtest/**/*.ts', { query: '?raw', import: 'default', eager: true }),
+  ...import.meta.glob('/bench/**/*.ts', { query: '?raw', import: 'default', eager: true }),
   ...import.meta.glob('/src/components/labs/**/*.{ts,tsx}', {
     query: '?raw',
     import: 'default',
@@ -35,7 +35,7 @@ const SOURCES = {
   }),
 } as Record<string, string>
 
-/** FNV-1a over a string → 8 hex chars. The same hash devtest/metrics.ts uses for `hashDoc`. */
+/** FNV-1a over a string → 8 hex chars. The same hash bench/metrics.ts uses for `hashDoc`. */
 export function fnv1a(str: string): string {
   let h = 0x811c9dc5
   for (let i = 0; i < str.length; i++) {

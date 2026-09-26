@@ -24,7 +24,7 @@ import {
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { docStats } from '../src/lib/path/model.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'
-import { ensureImageData, loadPng } from '../src/devtest/nodeHarness.ts'
+import { ensureImageData, loadPng } from '../bench/nodeHarness.ts'
 
 // The mono path builds its mask with `new ImageData(w, h)`.
 ensureImageData()

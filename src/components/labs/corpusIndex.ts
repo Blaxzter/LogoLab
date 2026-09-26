@@ -21,8 +21,8 @@
 // labs will show you `bloom`, and never wrong about whether `bloom` exists.
 
 import { CORPORA } from './workbench/corpora'
-import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE } from '../../devtest/logoCorpus'
-import { AB_CORPUS, AB_LOGO_CASES } from '../../devtest/abCorpus'
+import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE } from '../../../bench/logoCorpus'
+import { AB_CORPUS, AB_LOGO_CASES } from '../../../bench/abCorpus'
 import type { LabSearchState } from './useLabSearch'
 
 /** One searchable corpus, somewhere in the labs. */

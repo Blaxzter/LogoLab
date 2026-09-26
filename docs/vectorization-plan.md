@@ -479,18 +479,18 @@ Notes:
 
 **What shipped**
 - Pure, environment-agnostic scoreboard (runs identically in Node and the browser):
-  - `src/devtest/color.ts` — sRGB→CIELAB (D65) + CIE76 ΔE + Rec.709 luma.
-  - `src/devtest/raster.ts` — EditableDoc → RGBA rasterizer (cubic flatten →
+  - `bench/color.ts` — sRGB→CIELAB (D65) + CIE76 ΔE + Rec.709 luma.
+  - `bench/raster.ts` — EditableDoc → RGBA rasterizer (cubic flatten →
     scanline fill with nonzero/evenodd + 4× AA → solid/linear/radial paint eval →
     painter's-order composite over white) + a boundary mask for the seam metric.
     We rasterize the doc model directly rather than parsing serialized SVG, so the
     harness needs no DOM/canvas and runs headless.
-  - `src/devtest/metrics.ts` — L1 CIELAB, mean/P95 CIE76 ΔE, Wang-SSIM (11×11
+  - `bench/metrics.ts` — L1 CIELAB, mean/P95 CIE76 ΔE, Wang-SSIM (11×11
     Gaussian on luma), boundary-normal seam max/P99.5, path/node/gradient counts,
     and an FNV-1a hash of the canonical doc for the determinism check.
-  - `src/devtest/scoreboard.ts` — `score()` traces twice (byte-identical re-run
+  - `bench/scoreboard.ts` — `score()` traces twice (byte-identical re-run
     check), rasterizes once, returns one row.
-  - `src/devtest/png.ts` (Node `node:zlib`) + `src/devtest/nodeHarness.ts`
+  - `src/lib/png/decode.ts` (Node `node:zlib`) + `bench/nodeHarness.ts`
     (ImageData polyfill + corpus loader) for the headless side.
   - `test/harness.test.ts` gates determinism + finite metrics on the PNG corpus;
     `test/color|raster|metrics.test.ts` unit-test the pure math.
@@ -906,7 +906,7 @@ the inner fitter:
   `fitClosedLoop`; `detectCorners`/`sharpestVertex`/`fitArc`/`rdpClosed` and the old
   Schneider block are deleted. `orientForNonzero` now tests loop nesting + winding on the
   FLATTENED curve, not the sparse anchor polygon (see deviations — this fixes a crack).
-- `src/devtest/lineArtCorpus.ts` (new): summit (sharp mountain), orbit (ring/annulus) and
+- `bench/lineArtCorpus.ts` (new): summit (sharp mountain), orbit (ring/annulus) and
   bloom rebuilt from the doc model + rasterized, so the corner-preservation case gates
   `npm test` (harness.test.ts asserts summit seam < 3). `runBaseline` scores them too.
 - `TraceControls.tsx`: engine hint corrected (crisp = lowest node count + sharp corners;
@@ -1310,7 +1310,7 @@ even though it's a trace input, not an edit action.
   opens a plain-language explanation plus a before/after spread (None/Medium/High, Off/On…)
   with node counts, a synced pan/zoom across all cells (reuses `usePanZoom`/`ZoomSurface`),
   and a "My image" tab that re-runs the variant set live on the upload via the trace worker.
-- **Build-time previews, no drift** (`devtest/genControlPreviews.ts`, `previewScenes.ts`,
+- **Build-time previews, no drift** (`bench/genControlPreviews.ts`, `previewScenes.ts`,
   `components/vectorize/controlDocs.ts` → generated `controlPreviews.generated.ts`): a Node
   script runs the REAL `traceImage` over bundled examples + purpose-built synthetic scenes,
   once per variant, and emits the SVGs. Deterministic (seeded scenes), lazy-loaded chunk,

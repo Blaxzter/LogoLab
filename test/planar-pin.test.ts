@@ -11,7 +11,7 @@
 //
 // The witness (a script 'a' whose counter wedge pinches out at the top): 29.3° of rotation
 // on a 26.0px handle moved the control point 13.1px, the bowl's crown sagged ~2px, and the
-// white gap at the top of the counter closed. The corpus-wide histogram (src/devtest/
+// white gap at the top of the counter closed. The corpus-wide histogram (bench/
 // pinDiag.ts) put that one pin 3.6× beyond every other applied pin in tier 0 + the gallery
 // witnesses, which is what makes a bound on the handle-tip movement the right guard.
 //

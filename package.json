@@ -15,7 +15,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "gen:previews": "node src/devtest/genControlPreviews.ts",
+    "gen:previews": "node bench/genControlPreviews.ts",
     "build": "node scripts/gen-previews.mjs && tsc -b && vite build",
     "preview": "vite preview",
     "mcp": "node src/mcp/server.ts",
@@ -28,8 +28,8 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "test": "node --test",
-    "gen:golden": "node src/devtest/writeTraceGolden.ts",
-    "gen:absnapshot": "node src/devtest/writeAbSnapshots.ts",
+    "gen:golden": "node bench/writeTraceGolden.ts",
+    "gen:absnapshot": "node bench/writeAbSnapshots.ts",
     "gen:pwaicons": "node scripts/gen-pwa-icons.mjs",
     "fetch:logos": "node scripts/fetch-logos.mjs"
   },

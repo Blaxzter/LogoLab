@@ -1,10 +1,10 @@
-// Unit tests for the pure EditableDoc rasterizer (src/devtest/raster.ts).
+// Unit tests for the pure EditableDoc rasterizer (bench/raster.ts).
 //
 //   node --test test/raster.test.ts
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { rasterizeDoc, boundaryMask, parseHex } from '../src/devtest/raster.ts'
+import { rasterizeDoc, boundaryMask, parseHex } from '../bench/raster.ts'
 import type { EditableDoc, PathItem, SubPath } from '../src/lib/path/types.ts'
 
 /** A closed rectangle subpath with straight (null-handle) edges. */

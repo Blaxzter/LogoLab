@@ -34,7 +34,7 @@ mono alone. The mono cut comes from the ink probe on the raster, not a constant,
 traces what a user actually gets. Old stamps keep working: every lane's resolution is
 recorded per stamp.
 
-Two case lanes, both in `src/devtest/abCorpus.ts`: the ⟐ **fixtures** (handcrafted, one mechanism
+Two case lanes, both in `bench/abCorpus.ts`: the ⟐ **fixtures** (handcrafted, one mechanism
 each — good gates, weak evidence: they are "good enough" long before real art is) and a slice
 of the ◆ **gallery** corpus, the same brand marks `/labs/gallery` shows, rasterized on white
 exactly as that page does. The gallery lane needs `npm run fetch:logos`; without it the lane
@@ -72,7 +72,7 @@ The studio's status bar carries a **ΔE** readout and there is a fifth view mode
 traces with. That has two consequences for anything you touch here:
 
 * **`fidelity()` is shipped code.** It lives in `src/lib/render/fidelity.ts`;
-  `src/devtest/metrics.ts` re-exports it (like `src/devtest/raster.ts` shims the
+  `bench/metrics.ts` re-exports it (like `bench/raster.ts` shims the
   rasterizer). "1.8 ΔE" in the status bar and "1.8 ΔE" in the benchmark table have to be
   the same claim, so do NOT give the app its own copy of the ΔE math — take
   `deltaEField` / `deltaEStats`, which is the half `fidelity()` itself is built on.
@@ -124,7 +124,7 @@ same `monoTraceScale`, so `upscale: 'auto'` (the default) means the same thing e
 
 The larger wins, never past the flat cap, never for colour (palette segmentation follows
 every interpolated tone), plain bilinear (`upscaleImageData`). The census is
-`src/devtest/strokeScaleDiag.ts` — gallery @256/@512 + `--sheets` + `--png` — and it renders
+`bench/strokeScaleDiag.ts` — gallery @256/@512 + `--sheets` + `--png` — and it renders
 BOTH traces back at native size before scoring (render an enlarged doc into a native buffer
 and it crops). 2026-09-21: 63 gallery marks enlarged, ΔE better 60 / worse 0, median ΔE
 1.89 → 0.98. `test/stroke-width.test.ts` is the gate; the Upscale control says what Auto did.
@@ -364,7 +364,7 @@ the buttons beside them didn't.
 
 The app is a PWA. The service worker is hand-written (`src/pwa/sw.js`) and its precache list is
 computed at build time from the chunk graph (`scripts/swPlugin.ts`): reachable from the entry,
-stopping at `src/components/labs/`, `src/devtest/` and the three optional heavyweight packages.
+stopping at `src/components/labs/`, `bench/` and the three optional heavyweight packages.
 A glob would precache all 31 MB — 27 MB of which is the research harness and the AI runtime that
 a user cropping a logo never opens.
 

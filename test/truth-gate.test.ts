@@ -35,12 +35,12 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
-import { decodePng } from '../src/devtest/png.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
+import { decodePng } from '../src/lib/png/decode.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
-import { parseGroundTruth, toRasterSpace, unscorable } from '../src/devtest/svgGround.ts'
-import { scoreGeometry, scoreRegions, circleRecovery, scoreBorderBand, makeVisibleAt } from '../src/devtest/geomScore.ts'
-import { scoreDoc } from '../src/devtest/scoreboard.ts'
+import { parseGroundTruth, toRasterSpace, unscorable } from '../bench/svgGround.ts'
+import { scoreGeometry, scoreRegions, circleRecovery, scoreBorderBand, makeVisibleAt } from '../bench/geomScore.ts'
+import { scoreDoc } from '../bench/scoreboard.ts'
 import {
   GATED_CORPUS,
   LOWRES_CORPUS,
@@ -53,7 +53,7 @@ import {
   evaluateTruthGates,
   type TruthCase,
   type TruthTol,
-} from '../src/devtest/truthCorpus.ts'
+} from '../bench/truthCorpus.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')

@@ -12,9 +12,9 @@
 // them. Brand logos that svgGround can't read are in the Gallery.
 
 import type { ReactNode } from 'react'
-import { TRUTH_CORPUS, truthUrl, type TruthCase } from '../../../devtest/truthCorpus'
-import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE, type LogoCase } from '../../../devtest/logoCorpus'
-import { parseGroundTruth, unscorable } from '../../../devtest/svgGround'
+import { TRUTH_CORPUS, truthUrl, type TruthCase } from '../../../../bench/truthCorpus'
+import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE, type LogoCase } from '../../../../bench/logoCorpus'
+import { parseGroundTruth, unscorable } from '../../../../bench/svgGround'
 import { NoteBox } from '../CaseRow'
 import type { CorpusSource, WbCase } from './types'
 
