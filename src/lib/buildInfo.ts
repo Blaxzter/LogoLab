@@ -1,14 +1,9 @@
-// What this build is, for the footer to say out loud.
+// Build identity shown in the footer, injected by vite.config.ts as
+// `__LOGOLAB_BUILD__` (the commit and date come from git, not from any file).
+// The version is read from packages/mcp/package.json so the site and the npm
+// package report the same tracer version.
 //
-// Injected by vite.config.ts (`__LOGOLAB_BUILD__`) rather than imported, because
-// two of the three values do not exist in the source at all: the commit and its
-// date are properties of the checkout being built, not of any file in it. The
-// version DOES live in a file — packages/mcp/package.json, the one place it is
-// written — and is read there so the site and the npm package can never disagree
-// about which tracer this is.
-//
-// Every field is best-effort at build time (a tarball has no git), so every one
-// can arrive empty and the UI has to cope. `hasBuildInfo` is that check.
+// Every field may be empty (e.g. a build without git); `hasBuildInfo` checks.
 
 declare const __LOGOLAB_BUILD__: { version: string; date: string; commit: string }
 
@@ -32,9 +27,8 @@ export const hasBuildInfo = (b: BuildInfo = BUILD): boolean => Boolean(b.version
 export const versionLabel = (b: BuildInfo = BUILD): string => (b.version ? `v${b.version}` : '')
 
 /**
- * The build date as a short, localised day — `13 Sep 2026` in en-GB, `13. Sept.
- * 2026` in de-DE. Empty when the date is missing or unparseable, so a bad stamp
- * degrades to showing just the version rather than `Invalid Date`.
+ * The build date as a short localised day (`13 Sep 2026` in en-GB). Empty when
+ * missing or unparseable, never `Invalid Date`.
  */
 export function releaseDateLabel(b: BuildInfo = BUILD, locale?: string): string {
   if (!b.date) return ''
@@ -43,7 +37,7 @@ export function releaseDateLabel(b: BuildInfo = BUILD, locale?: string): string 
   return at.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-/** The long form, for the `title` tooltip — says which half is which. */
+/** The long form (version, date and commit) for a tooltip. */
 export function buildTitle(b: BuildInfo = BUILD, locale?: string): string {
   const parts: string[] = []
   if (b.version) parts.push(`LogoLab ${versionLabel(b)}`)

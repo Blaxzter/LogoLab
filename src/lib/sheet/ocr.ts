@@ -1,25 +1,19 @@
-// Reading a caption's text out of its pixels — Tesseract.js, loaded on demand.
+// Reading a caption's text out of its pixels with Tesseract.js, loaded on demand.
 //
-// Browser-only (Worker, canvas, network), and deliberately NOT re-exported from
-// the sheet barrel, same as traceTile.ts: the Node tests import the pairing and
-// the preprocessing from captions.ts without dragging an OCR engine in.
-//
-// Tesseract.js is a dynamic import, so its client never touches the initial
-// bundle; the engine itself — worker script, WASM core (~4 MB) and the English
-// model (~2 MB) — comes from the library's CDN defaults on first use, and the
-// model is cached in IndexedDB by the library. Nothing of the sheet leaves the
-// tab: the pixels go to a Worker on this page, not to a server.
+// Browser-only and not re-exported from the sheet barrel, so Node tests can
+// import captions.ts without an OCR engine. Tesseract.js is a dynamic import;
+// the engine and English model come from the CDN on first use (cached in
+// IndexedDB by the library). Recognition runs in a local Worker; no pixels
+// leave the tab.
 
 import { imageDataToCanvas } from '../image'
 import { toImageData } from './crop.ts'
 import type { ImageDataLike } from './types'
 
 /**
- * The "fast" integer models — a fifth of the standard download. Measured on the
- * 28 captions of the two captioned example sheets at 2048, 1024 and 768px: every
- * one read correctly at ≥ 90% confidence (with the denoise in `prepareCaption`).
- * The standard set was no better on them, and the "best" set needs the non-SIMD
- * core (it aborts on a missing DotProduct symbol in the SIMD build).
+ * The "fast" integer models: a fifth of the standard download and accurate
+ * enough for captions. Don't switch to the "best" set: it aborts on the SIMD
+ * core (missing DotProduct symbol).
  */
 const TESSDATA_URL = 'https://tessdata.projectnaptha.com/4.0.0_fast'
 
@@ -74,20 +68,16 @@ async function createReader(): Promise<CaptionReader> {
       for (const fn of loadListeners) fn(fraction)
     },
   })
-  // A caption IS one line of text. Page-layout analysis on a 200px crop only
-  // invents columns and paragraphs around it.
+  // A caption is one line; page-layout analysis would only invent structure.
   await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE })
 
   let queue: Promise<unknown> = Promise.resolve()
   return {
     read(pixels) {
       const job = queue.then(async () => {
-        // The worker takes encoded bytes, not raw pixels — PNG is lossless and
-        // a caption crop is tiny, so the round trip costs nothing visible.
-        // Encoded SYNCHRONOUSLY on purpose: `canvas.toBlob` hands its result to
-        // a task Chrome throttles to once a second in a background tab, and a
-        // 16-caption run measured 1000ms per caption that way against 1–2ms
-        // here — the user is likely to switch tabs while an engine downloads.
+        // The worker takes encoded bytes. Encode synchronously: don't use
+        // `canvas.toBlob`, whose callback Chrome throttles to once a second in a
+        // background tab, stalling every caption.
         const url = imageDataToCanvas(toImageData(pixels)).toDataURL('image/png')
         const { data } = await worker.recognize(url)
         return { text: data.text.replace(/\s+/g, ' ').trim(), confidence: data.confidence }

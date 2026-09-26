@@ -1,24 +1,17 @@
-// How thick is the ink? — the number that decides whether a small mono raster
-// needs more pixels before it is traced.
+// Ink thickness: decides whether a mono raster needs enlarging before tracing,
+// and whether the mono cut should be raised for sub-pixel strokes.
 //
-// The tracer places every edge to a roughly constant accuracy in NATIVE pixels
-// (§30 of docs/vectorization-benchmarks.md), so a 1px stroke is a feature the
-// lattice cannot hold: at 1× the threshold either drops it or fuses it with its
-// neighbour (a page of sheet music traced at 499px lost every staff line into
-// the note heads). Bilinear enlargement recovers the sub-pixel edge that the
-// anti-aliasing encodes — measured on that page, 3× brought the staff back
-// clean while 2× still broke it — but enlarging costs the square of the factor,
-// so the factor should follow what the art needs, not the raster's size alone.
+// Edge placement is accurate to a roughly constant fraction of a native pixel,
+// so 1px strokes get dropped or fused with their neighbours at 1×. Bilinear
+// enlargement recovers the sub-pixel edge the anti-aliasing encodes, but costs
+// the square of the factor, so the factor follows the art's thinnest ink.
 //
-// The measure: for every ink pixel, the shorter of the vertical and horizontal
-// ink runs through it — a stroke's local thickness, independent of its length.
-// The distribution is weighted by pixels, and the reported thickness is a LOW
-// quantile of it: the thinnest ink that still carries a meaningful share of the
-// picture drives the decision, while a few specks of dust do not. A 45° stroke
-// reads √2 too thick, which errs toward enlarging less, never more.
+// Measure: per ink pixel, the shorter of its vertical and horizontal ink runs
+// (local stroke thickness). The reported thickness is a low pixel-weighted
+// quantile, so the thin ink drives the decision but a few specks do not. A 45°
+// stroke reads √2 too thick, which errs toward enlarging less.
 //
-// Pure pixels in, one number out; mirrors the tracer's own mono cut so the
-// thickness is that of the mask the tracer will actually see.
+// Pure. Uses the tracer's own mono cut, so it measures the mask the tracer sees.
 
 import { cutLuma, VISIBLE_ALPHA, type ImageDataLike } from './ink.ts'
 
@@ -27,9 +20,8 @@ const THICKNESS_CAP = 64
 
 /**
  * Share of the ink (by pixel) that a thin feature must carry to set the
- * thickness. Low on purpose: enlarging never made a trace worse in any
- * measurement here (the sheet's 3× is a strict improvement on 170px tiles) and
- * the raster cap bounds its cost, so the only ink worth ignoring is dust.
+ * thickness. Low on purpose: enlarging does not hurt traces and the raster cap
+ * bounds its cost, so only dust should be ignored.
  */
 export const THIN_INK_SHARE = 0.1
 
@@ -131,31 +123,17 @@ export function thicknessAt(histogram: Uint32Array, inkPixels: number, quantile:
 
 /* ---------------------------------------------------- the cut follows the thin ink */
 
-// The midpoint cut is the 50% coverage contour: the geometrically right edge for
-// any stroke a pixel wide or more, and a bias on every edge if it is moved. But a
-// stroke THINNER than a pixel never reaches 50% coverage — a 0.6px barline peaks at
-// ~40% — so at the midpoint it does not exist, except where it crosses another
-// stroke and the coverages add up (the "beads" on a staff line).
+// The midpoint cut is the 50% coverage contour: the right edge for any stroke
+// at least a pixel wide. A stroke thinner than a pixel never reaches 50%
+// coverage, so at the midpoint it vanishes except where it crosses another.
 //
-// The raster can tell us: a sub-pixel stroke is a RIDGE, a pixel darker than both
-// its neighbours across some direction by a margin. A thick stroke's interior is
-// flat and its anti-aliased edge is a monotonic ramp — neither is a ridge — so the
-// ridge pixels are the centres of thin strokes and nothing else. Those at or above
-// the cut are the ink the cut LOSES, and their share of the picture is the number
-// the rule reads.
-//
-// WHAT the rule reads it into was measured, not reasoned (docs §38, `hairlineCutDiag`:
-// two synthetic pages, a page of sheet music and the `hairlines` fixture at 400–800px,
-// every cut from 128 to 200, each trace scored against the page's own VECTOR). The
-// SSIM-optimal cut is NOT a quantile of the lost ridges' darkness — on the real page
-// the faint text hairlines outnumber the darker barlines and drag every quantile up
-// to 191, which the eye rejects as bold. It tracks the SHARE: ~168 when a quarter or
-// more of the ink is sub-pixel, ~152 at 3–6%, the midpoint at 2.5%. A square root of
-// the share, capped, reproduces the optimum to within 0.011 SSIM on every row (mean
-// loss 0.0022 against 0.0167 for the midpoint). The gate keeps logos where they are:
-// the highest share on 152 gallery marks @256/@512 is 1.2% (`boeing-wm`, `chanel`), and
-// on those two a raise measured a wash or a hair worse against their own vectors, so
-// the gate sits above them at 2% — which costs nothing on the calibration rows.
+// A sub-pixel stroke shows up as a ridge: a pixel darker than both neighbours
+// across some direction. Thick strokes have flat interiors and monotonic edges,
+// so ridges are thin-stroke centres only. Ridges on the paper side of the cut
+// are ink the cut loses, and their share of the ink sets how far the cut is
+// raised: the square root of the share, capped (see docs/vectorization-
+// benchmarks.md for the calibration). Below `HAIRLINE_MIN_SHARE` the cut is left
+// alone, which keeps ordinary logos at the midpoint.
 
 /** A ridge must be darker than both neighbours across it by this much (luma). */
 export const HAIRLINE_RIDGE_MARGIN = 10
@@ -179,7 +157,7 @@ export interface HairlineRead {
   ridgeLuma: number | null
 }
 
-/** The raise, in luma, for a lost-ridge share — the measured curve. */
+/** The raise, in luma, for a lost-ridge share. */
 export function hairlineRaise(lostShare: number, span = 255): number {
   if (lostShare < HAIRLINE_MIN_SHARE) return 0
   return Math.round(HAIRLINE_MAX_RAISE * span * Math.sqrt(Math.min(1, lostShare / HAIRLINE_FULL_SHARE)))

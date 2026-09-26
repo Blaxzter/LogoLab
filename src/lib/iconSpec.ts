@@ -1,12 +1,9 @@
-// Icon geometry + web-asset spec — the part of the export pipeline that is PURE.
+// Icon geometry and web-asset spec: the pure part of the export pipeline.
 //
-// Two renderers draw the same icon: the browser's canvas one (pwaExport.ts) and
-// the MCP server's headless SVG/resvg one (src/mcp/render.ts). If each carried
-// its own copy of the layout math they would drift, and a maskable icon exported
-// by an agent would clip where the one exported from the UI does not. So the math
-// — safe zone, contain-fit, corner radius — and the text assets (manifest, <head>
-// snippet, .ico container) live HERE, with no DOM, no canvas and no zip, so Node
-// can import the module directly. pwaExport.ts re-exports what the UI already used.
+// Two renderers draw the same icon: the browser canvas (pwaExport.ts) and the
+// MCP server's headless resvg (src/mcp/render.ts). Don't give either its own
+// copy of the layout math: they would drift and a maskable icon would clip in
+// one but not the other. No DOM, canvas or zip here, so Node can import it.
 
 import type { ExportTarget, IconShape, RenderIconOptions } from '../types'
 
@@ -56,22 +53,19 @@ export const DEFAULT_TARGETS: ExportTarget[] = [
 /* ------------------------------------------------------- maskable safe zone */
 
 /**
- * Android's adaptive-icon mask keeps only the centre **72dp of 108dp** — a
- * circle of 66.7% diameter. The web maskable spec talks about an "~80% safe
- * zone", but 66.7% is what actually survives once Chrome installs the PNG as a
- * WebAPK, so that is the number we design to.
+ * Android's adaptive-icon mask keeps only the centre 72dp of 108dp, a circle of
+ * 66.7% diameter. The web spec's "~80% safe zone" is not what survives once
+ * Chrome installs the PNG as a WebAPK, so we design to 66.7%.
  */
 export const MASKABLE_SAFE_DIAMETER = 72 / 108
 
 /**
- * Smallest padding that keeps a *square* content box inside that *circle*. The
- * logo is drawn `contain` inside a square inset box, so art that reaches its
- * bounding-box corners sits at the box's half-DIAGONAL, not its half-width:
+ * Smallest padding that keeps a square content box inside that circle. Art
+ * reaching the box corners sits at the half-diagonal, not the half-width:
  *
  *     S·√2 / 2 ≤ R    ⇒    padding = (1 − D·√½) / 2
  *
- * 26.4% at D = 66.7% (and still 21.7% against the spec's 80%, so the old 18%
- * floor was short even against the number it was aiming at).
+ * (26.4% at D = 66.7%.)
  */
 export const MASKABLE_MIN_PADDING_PCT = ((1 - MASKABLE_SAFE_DIAMETER * Math.SQRT1_2) / 2) * 100
 
@@ -123,7 +117,7 @@ export function iconLayout(opts: RenderIconOpts, srcW: number, srcH: number): Ic
   if (maskable && background === 'transparent') background = '#ffffff'
 
   // Safe-zone inset. Maskable needs a larger margin so content stays within
-  // Android's centre safe CIRCLE (see MASKABLE_PADDING_FLOOR_PCT).
+  // Android's centre safe circle (see MASKABLE_PADDING_FLOOR_PCT).
   const effPaddingPct = maskable ? Math.max(opts.paddingPct, MASKABLE_PADDING_FLOOR_PCT) : opts.paddingPct
   const inset = (size * effPaddingPct) / 100
   const box = Math.max(0, (size - inset * 2) * scale)
@@ -137,10 +131,9 @@ export function iconLayout(opts: RenderIconOpts, srcW: number, srcH: number): Ic
     if (ar >= 1) ch = box / ar
     else cw = box * ar
     if (maskable) {
-      // The padding floor sets the default, but `scale` (up to 120%) multiplies
-      // into the box and can push the corners back out of the mask — so enforce
-      // the safe circle on the FITTED rect: its half-diagonal has to fit inside.
-      // Fitted, not the square box, so wide/tall art is not over-shrunk.
+      // `scale` (up to 120%) can push the corners back out of the mask, so
+      // enforce the safe circle on the fitted rect's half-diagonal (the fitted
+      // rect, not the square box, so wide or tall art is not over-shrunk).
       const limit = (MASKABLE_SAFE_DIAMETER * size) / 2
       const half = Math.hypot(cw, ch) / 2
       if (half > limit) {

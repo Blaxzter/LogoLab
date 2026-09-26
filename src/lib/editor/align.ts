@@ -1,10 +1,7 @@
 // Align and distribute a selection.
 //
-// Both operate on each selected item's own bounding box and move it bodily —
-// nothing is scaled, so aligning never deforms artwork. With a single item
-// selected the reference is the artboard (aligning one shape to the canvas is
-// the common case and there is nothing else to align it to); with several, the
-// reference is the selection's own union box.
+// Items are moved bodily by their own bounding boxes, never scaled. A single
+// item aligns to the artboard; several align to their union box.
 
 import type { DocItem, EditableDoc } from '../path/types.ts'
 import { isGroup, topLevelSelection } from '../path/docTree.ts'
@@ -68,8 +65,8 @@ export function alignItems(
 
 /**
  * Space the selection evenly between the two extremes, which stay put.
- * Distributes the GAPS, not the centres — evenly-spaced centres leave visually
- * uneven gaps as soon as the items differ in size, which they almost always do.
+ * Distributes the gaps, not the centres, so differently sized items look
+ * evenly spaced.
  */
 export function distributeItems(
   doc: EditableDoc,

@@ -1,24 +1,16 @@
 // The working session: what the app remembers across a reload.
 //
-// The contract is "a refresh costs you nothing". A trace on a large flat source
-// takes seconds and a node-editing session takes minutes; before this, both went
-// away on F5, along with the upload, the appearance, the sheet and the export
-// selection. The only thing that survived was the theme.
+// Where a slice lives depends on when it is needed:
+//  - localStorage (./local): anything that must be right in the first painted
+//    frame (appearance, trace options, export selection). Stores seed from it
+//    synchronously, so defaults never flash before the user's settings.
+//  - IndexedDB: bytes and documents (the upload, traced docs, the sheet, the
+//    cleanup canvas). Read once in main.tsx before the first render into a
+//    module-level payload that panels `claim()` synchronously on mount, so a
+//    lazily mounted studio never races an async read against its auto-trace.
 //
-// WHERE a slice lives follows from WHEN it is needed:
-//
-//   • localStorage — anything that must be right in the FIRST painted frame.
-//     Appearance, trace options, export selection: the stores seed themselves
-//     from it synchronously in `create()`, so there is no frame of defaults
-//     snapping to the user's settings. Handled in ./local.
-//   • IndexedDB — bytes and documents. The upload, the traced EditableDocs, the
-//     sheet's source image, the cleanup canvas. Read ONCE at boot (`loadSession`
-//     in main.tsx, before the first render) into a module-level object that
-//     panels claim synchronously on mount, so a lazily-mounted studio never has
-//     to race an async read against its own auto-trace.
-//
-// Nothing here throws. Every store and read is best-effort: private mode, a full
-// quota and a blocked origin all just mean the session doesn't come back.
+// Nothing here throws: private mode, a full quota or a blocked origin just
+// mean the session doesn't come back.
 
 import type { EditableDoc } from '../path/types'
 import type { VectorizeOptions } from '../../types'
@@ -26,14 +18,12 @@ import { idbClear, idbDelete, idbGetMany, idbSet } from './idb'
 import { clearLocal, debounce } from './local'
 import { markArmed, markRestored, markSettled, resetSaveStatus } from './status'
 
-// Re-exported so the UI has ONE persistence entry point rather than reaching
-// past this module into its internals.
+// Re-exported so the UI has a single persistence entry point.
 export { getSaveStatus, subscribeSaveStatus, type SaveStatus } from './status'
 
 /**
- * Bumped when a stored shape changes incompatibly. Everything with a different
- * stamp is ignored (and overwritten on the next save), so an old record can
- * never be read as a new one.
+ * Bump when a stored shape changes incompatibly. Records with a different
+ * stamp are ignored and overwritten on the next save.
  */
 const SESSION_VERSION = 1
 
@@ -51,8 +41,7 @@ export type Slot = (typeof SLOTS)[keyof typeof SLOTS]
 
 interface Stamped {
   v: number
-  /** When this slot was written (epoch ms) — what the Saved chip reports after a
-   *  reload, so the indicator describes the DATA's age rather than the tab's. */
+  /** When this slot was written (epoch ms); the Saved chip shows it after a reload. */
   t?: number
 }
 
@@ -66,16 +55,13 @@ export interface LogoMeta {
 
 /** The upload, as bytes plus the metadata the store keeps beside it. */
 export interface StoredLogo extends Stamped {
-  /** Identifies the WORKING image; slices derived from it store the same key. */
+  /** Identifies the working image; slices derived from it store the same key. */
   assetKey: string
   fileName: string | null
   /** The pristine upload. */
   original: Blob
   originalMeta: LogoMeta
-  /**
-   * The working image when it is no longer the upload — a cleanup result, an
-   * applied trace. Null means the working image IS the original.
-   */
+  /** The working image when it differs from the upload (cleanup result, applied trace); null otherwise. */
   working: Blob | null
   workingMeta: LogoMeta | null
 }
@@ -94,19 +80,16 @@ export interface StoredVectorize extends Stamped {
   dirty: boolean
 }
 
-/** The SVG editor's open document. Tab-local by design, and not the app's logo. */
+/** The SVG editor's open document. */
 export interface StoredEditor extends Stamped {
   doc: EditableDoc
   name: string
 }
 
 /**
- * Un-applied cleanup pixels, keyed to the image they were cut from.
- *
- * The guided keep/remove PINS are not here, on purpose: they are a transient
- * affordance over a change that is already baked into these pixels (the studio
- * itself drops them on every buffer reshape), so restoring them would put
- * markers back over work they no longer describe.
+ * Un-applied cleanup pixels, keyed to the image they were cut from. The
+ * keep/remove pins are deliberately not stored: their effect is already baked
+ * into these pixels.
  */
 export interface StoredCleanup extends Stamped {
   assetKey: string
@@ -115,13 +98,9 @@ export interface StoredCleanup extends Stamped {
 }
 
 /**
- * The icon sheet: its source bytes and every tile, traces included. The decoded
- * ImageData is NOT stored — it is megabytes of pixels that re-derive from the
- * source blob in one decode, and storing it would double the slot for nothing.
- *
- * The tile and settings shapes are the sheet store's own; they are typed loosely
- * here so the boot path doesn't drag that whole vocabulary in, and the store
- * validates what it takes back.
+ * The icon sheet: source bytes and every tile, traces included. The decoded
+ * pixels are not stored; they come back from one decode of the source.
+ * Tile and settings shapes belong to the sheet store and are typed loosely here.
  */
 export interface StoredSheet extends Stamped {
   source: Blob
@@ -131,7 +110,7 @@ export interface StoredSheet extends Stamped {
   svgText: string | null
   tiles: unknown[]
   selectedId: string | null
-  /** Detection OUTPUT, kept so a restore doesn't have to re-split the sheet. */
+  /** Detection output, kept so a restore doesn't re-split the sheet. */
   background: unknown
   grid: unknown
   warnings: string[]
@@ -165,7 +144,7 @@ const EMPTY: RestoredSession = {
 let restored: RestoredSession = EMPTY
 let didRestore = false
 
-/** True when the boot read actually found work to bring back (drives the banner). */
+/** True when the boot read found work to bring back. */
 export function sessionWasRestored(): boolean {
   return didRestore
 }
@@ -175,10 +154,7 @@ function stamped<T extends Stamped>(value: unknown): T | null {
   return (value as Stamped).v === SESSION_VERSION ? (value as T) : null
 }
 
-/**
- * Read every slot in one transaction. Called once from main.tsx BEFORE the first
- * render — see the module header for why the panels want it synchronous after.
- */
+/** Read every slot in one transaction. Called once from main.tsx before the first render. */
 export async function loadSession(): Promise<RestoredSession> {
   const rows = await idbGetMany(Object.values(SLOTS))
   restored = {
@@ -190,9 +166,7 @@ export async function loadSession(): Promise<RestoredSession> {
     cleanup: stamped<StoredCleanup>(rows.get(SLOTS.cleanup)),
   }
   didRestore = Boolean(restored.logo || restored.editor || restored.sheet)
-  // The newest slot dates the session as a whole: the chip should say when the
-  // work was last written, and one slot being older than another is an artifact
-  // of which studio was touched last, not of when "the session" was saved.
+  // The newest slot dates the session as a whole.
   const newest = Math.max(
     0,
     ...Object.values(restored).map((slot) => (slot as Stamped | null)?.t ?? 0),
@@ -208,8 +182,7 @@ export function restoredSession(): RestoredSession {
 
 /**
  * Take a slice and clear it from the boot payload, so a studio that remounts
- * later in the session starts from live state instead of re-seeding the document
- * the user has since moved past.
+ * later starts from live state instead of the stale restored document.
  */
 export function claim<K extends keyof RestoredSession>(key: K): RestoredSession[K] {
   const value = restored[key]
@@ -220,11 +193,8 @@ export function claim<K extends keyof RestoredSession>(key: K): RestoredSession[
 /* ------------------------------------------------------------------ writing */
 
 /**
- * One debounced writer per slot. Per-slot rather than one session document
- * because the slots change at wildly different rates and sizes: a node drag
- * rewrites the vectorize doc continuously while the upload's bytes have not
- * moved since the file was dropped, and re-storing megabytes of source image on
- * every node nudge is exactly the stall this is meant to prevent.
+ * One debounced writer per slot, since slots change at very different rates
+ * and sizes (a node drag must not re-store the source image).
  */
 const writers = new Map<Slot, ReturnType<typeof debounce<[unknown]>>>()
 
@@ -232,9 +202,8 @@ function writerFor(slot: Slot, ms: number) {
   let writer = writers.get(slot)
   if (!writer) {
     writer = debounce<[unknown]>((value) => {
-      // Read the armed count BEFORE the write, not after: anything armed while
-      // this one is in flight is a newer value, and the status has to keep
-      // saying "saving" for it. See lib/persist/status.ts.
+      // Take the armed count before the write: anything armed while it is in
+      // flight is newer, and the status must keep saying "saving" for it.
       const upTo = markArmed(slot)
       void idbSet(slot, value).then((ok) => markSettled(slot, upTo, ok))
     }, ms)
@@ -250,32 +219,28 @@ export function saveSlot(slot: Slot, value: object | null, ms = 500): void {
     void idbDelete([slot])
     return
   }
-  // Armed here as well as at write time, so the status turns to "saving" the
-  // moment an edit lands rather than a debounce later — which is exactly the
-  // window a user watching the chip would most want to see covered.
+  // Armed here as well as at write time, so the status turns to "saving" as
+  // soon as an edit lands rather than after the debounce.
   markArmed(slot)
   writerFor(slot, ms)({ ...value, v: SESSION_VERSION, t: Date.now() })
 }
 
-/** Push every pending write out now — the page is hiding and may not come back. */
+/** Write every pending slot now; the page is hiding and may not come back. */
 export function flushSession(): void {
   for (const writer of writers.values()) writer.flush()
 }
 
 /**
- * Forget the stored session and reload onto a clean one.
- *
- * A reload rather than a state reset because the studios seed themselves from
- * storage while they mount, so "fresh" has to mean a fresh boot. Shared by the
- * Saved chip and by the crash screen's "Start over" — which is the last resort
- * for a stored document that crashes the panel that restores it.
+ * Forget the stored session and reload. A reload, not a state reset, because
+ * the studios seed themselves from storage on mount. Also the crash screen's
+ * "Start over", for a stored document that crashes the panel restoring it.
  */
 export async function startFreshSession(): Promise<void> {
   await clearSession()
   location.reload()
 }
 
-/** Forget everything — the "start fresh" path. Theme is not ours and survives. */
+/** Forget the stored session. The theme is stored separately and survives. */
 export async function clearSession(): Promise<void> {
   writers.clear()
   restored = EMPTY
@@ -287,12 +252,7 @@ export async function clearSession(): Promise<void> {
 
 /* ------------------------------------------------------------------ helpers */
 
-/**
- * The bytes behind a `src`, whatever kind of URL it is. The store holds object
- * URLs for uploads and traced SVGs, data URLs for cleanup results, and plain
- * paths for the bundled examples; `fetch` reads all three, and an object URL
- * never leaves the tab so there is no request here in any real sense.
- */
+/** The bytes behind a `src`: object URL, data URL or plain path all work with `fetch`. */
 export async function srcToBlob(src: string): Promise<Blob | null> {
   try {
     const response = await fetch(src)
@@ -304,10 +264,9 @@ export async function srcToBlob(src: string): Promise<Blob | null> {
 }
 
 /**
- * A fresh identity for the working image. Slices derived from the pixels (the
- * trace, the cleanup buffer) record the key they were made from and are dropped
- * when it no longer matches — which is what stops a restored document from being
- * shown over a different image than it was traced from.
+ * A fresh identity for the working image. Derived slices record the key they
+ * were made from and are dropped when it no longer matches, so a restored
+ * trace is never shown over a different image.
  */
 export function newAssetKey(): string {
   try {
@@ -318,15 +277,13 @@ export function newAssetKey(): string {
 }
 
 /**
- * Ask the browser to keep this origin's storage out of the eviction pool. Best
- * effort and silent: Chrome grants it once the app is installed or sufficiently
- * engaged, Firefox prompts, Safari ignores it. Without it a "nothing is lost"
- * promise is only true until the device runs low on disk.
+ * Ask the browser to exempt this origin's storage from eviction. Best effort;
+ * browsers differ in whether they grant, prompt or ignore it.
  */
 export function requestPersistentStorage(): void {
   try {
     void navigator.storage?.persist?.()
   } catch {
-    /* not supported — the session is still stored, just evictable */
+    /* not supported: the session is still stored, just evictable */
   }
 }

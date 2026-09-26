@@ -1,10 +1,8 @@
 // Primitive shape construction for the SVG editor's draw tools.
 //
-// Everything returns SubPath[] in absolute viewBox units — the editor has no
-// "rect object" that later becomes a path, because a second representation is a
-// second thing to keep in sync and the model is already cubic-only. A rectangle
-// drawn here is a path from the moment it exists, so node editing, boolean-free
-// path ops and export all work on it with no conversion step.
+// Everything returns SubPath[] in absolute viewBox units. There are no
+// parametric shape objects: a drawn shape is a path from the start, so node
+// editing, path ops and export need no conversion step.
 
 import type { SubPath, Vec } from '../path/types.ts'
 import { ellipseSubPaths } from '../path/model.ts'
@@ -27,8 +25,7 @@ export function rectShape(a: Vec, b: Vec, radius = 0): SubPath[] {
   const h = y1 - y0
   if (w <= 0 || h <= 0) return []
 
-  // Clamp to half the short side, matching SVG's own rx/ry clamping — a radius
-  // larger than that has no meaning and would fold the corners through itself.
+  // Clamp to half the short side, matching SVG's rx/ry clamping.
   const r = Math.max(0, Math.min(radius, Math.min(w, h) / 2))
   if (r === 0) {
     return [

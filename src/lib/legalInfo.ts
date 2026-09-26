@@ -1,18 +1,13 @@
 /**
- * Operator details for the Impressum / Datenschutz pages.
+ * Operator details for the Impressum / Datenschutz pages, injected at build
+ * time from environment variables so they stay out of the git repo.
+ *  - Locally: a gitignored `.env.local` (see `.env.example`).
+ *  - On deploy: Cloudflare → Workers & Pages → logo-lab → Settings → Build → Variables.
  *
- * These are injected at BUILD time from environment variables so your real
- * name / address / contact never live in the (public) git repo or its history.
- *  - Locally: put them in a gitignored `.env.local` (see `.env.example`).
- *  - On deploy: set them in Cloudflare → Workers & Pages → logo-lab → Settings → Build → Variables.
+ * An Impressum must be publicly visible, so these values still ship in the
+ * page and the JS bundle; this is not a place for secrets.
  *
- * IMPORTANT: an Impressum is legally required to be PUBLICLY VISIBLE, so these
- * values still appear on the deployed page (and in the shipped JS bundle). This
- * only keeps them out of the source repository — it does not hide them from
- * site visitors, and is not a place for true secrets.
- *
- * When the env vars are unset (e.g. a contributor's local build), obvious
- * `[PLACEHOLDER]` fallbacks render instead, and the "draft" notice stays
+ * When unset, `[PLACEHOLDER]` fallbacks render and the draft notice stays
  * visible (see `legalInfoComplete`).
  */
 const env = import.meta.env
@@ -23,7 +18,7 @@ export const legalInfo = {
   city: env.VITE_LEGAL_CITY || '[POSTAL CODE] [CITY]',
   country: env.VITE_LEGAL_COUNTRY || 'Germany',
   email: env.VITE_LEGAL_EMAIL || '[YOUR-EMAIL]',
-  /** Optional — render the phone line only when set. */
+  /** Optional; the phone line renders only when set. */
   phone: env.VITE_LEGAL_PHONE || '',
 }
 

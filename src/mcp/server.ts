@@ -2,11 +2,9 @@
 // LogoLab as an MCP server: the vectorizer and the icon exporter, exposed to
 // whatever agent is holding the image.
 //
-// The flow it exists for: a model generates an icon (a 1024px PNG with soft
-// edges and a JPEG-ish halo), and something has to turn that into an app icon
-// set — a clean SVG, then favicons, PWA icons, a maskable pair, a .ico, a Tauri
-// or Android or iOS collection. Doing that by hand means a raster upscale and a
-// blurry 16px favicon; doing it here runs the same tracer the app runs.
+// Typical flow: a model generates an icon (a soft-edged 1024px PNG) and this
+// turns it into a clean SVG, then favicons, PWA icons, a maskable pair, a .ico,
+// or a Tauri / Android / iOS collection, using the same tracer as the app.
 //
 //   logolab                             serve over stdio (what a client runs)
 //   logolab install                     register this server with your client
@@ -15,7 +13,7 @@
 // From a checkout that is `node src/mcp/server.ts <same args>`; published, the
 // npm bin is `logolab`, which is what `npx -y logolab` runs.
 //
-// stdout belongs to the protocol — everything human goes to stderr (see `log`).
+// stdout belongs to the protocol; everything human goes to stderr (see `log`).
 
 import { writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, relative } from 'node:path'

@@ -123,15 +123,11 @@ export function floodRemove(img: ImageData, sx: number, sy: number, opts: Remove
 }
 
 /**
- * Contiguous magic-wand restore: the inverse of `floodRemove`. Floods from
- * (sx,sy) over the PRISTINE `source` color at the seed, writing `source` RGBA
- * back into `img` for connected pixels within tolerance (feathering alpha at the
- * tolerance band via `keepFactor`). Mutates `img`. Returns pixels affected.
- *
- * Keying off `source` instead of the working image is what lets the flood bridge
- * already-transparent working pixels — the mirror of floodRemove's "pass through
- * transparent" rule — so a previously-erased region can be brought back wholesale.
- * Returns 0 if `source` dimensions don't match `img`.
+ * Contiguous magic-wand restore, the inverse of `floodRemove`: floods over the
+ * pristine `source` from (sx,sy) and writes `source` RGBA back into `img` for
+ * connected pixels within tolerance, feathering alpha at the band. Keying off
+ * `source` lets the flood cross already-erased pixels. Mutates `img`; returns
+ * pixels affected, or 0 if the dimensions don't match.
  */
 export function floodRestore(
   img: ImageData,
@@ -186,8 +182,8 @@ export function floodRestore(
 }
 
 /**
- * Global color key: clear EVERY pixel within tolerance of `key`, anywhere in
- * the image (not just connected). Mutates `img`. Returns pixels affected.
+ * Global color key: clear every pixel within tolerance of `key`, connected or
+ * not. Mutates `img`. Returns pixels affected.
  */
 export function removeColor(img: ImageData, key: RGB, opts: RemoveOptions): number {
   const { data } = img
@@ -231,20 +227,14 @@ export function autoRemove(
 }
 
 /**
- * Suppress the colored "fringe" a removed background leaves on soft edges.
+ * Suppress the colored fringe a removed background leaves on soft edges.
  *
- * After a cut, anti-aliased edge pixels keep the RGB of their original blend
- * with the background, so a white logo lifted off a purple field is left with a
- * purple halo — and you can't recover white from a pixel that simply *is*
- * purple (an earlier RGB-nudging version did nothing for exactly that reason).
- *
- * So we *bleed the neighboring solid foreground color outward* instead: every
- * semi-transparent pixel takes on the average color of the opaque (`>= SOLID`
- * alpha) pixels within `R`, blended by `amount`. Alpha is left untouched, so the
- * soft edge and the cutout shape are preserved — only the leftover color cast is
- * overwritten with the real foreground color. Isolated translucent specks with
- * no solid neighbor fall back to pushing their RGB away from `key` (the removed
- * background color; corner color when omitted).
+ * Anti-aliased edge pixels keep the RGB of their blend with the old background,
+ * and that colour cannot be un-mixed from the pixel alone. So each
+ * semi-transparent pixel takes the average colour of the solid pixels within
+ * `R` instead, blended by `amount`; alpha is untouched, so the soft edge
+ * survives. Specks with no solid neighbour are pushed away from `key` (the
+ * removed colour; corner colour when omitted).
  *
  * `amount` 0 = off, 1 = full. Mutates `img`.
  */
@@ -296,33 +286,20 @@ export function defringe(img: ImageData, key?: RGB, amount = 1): void {
 }
 
 /**
- * Suppress the thin anti-aliasing "seam" left where two separately-removed
- * background regions meet.
+ * Suppress the thin anti-aliasing seam left where two separately removed
+ * background regions meet. Their blended transition pixels fall outside the
+ * tolerance of both keys, and raising the tolerance would let the flood bleed
+ * into the logo, so seams are closed structurally instead.
  *
- * A flood/color remove keys off ONE color and hard-stops at `tolerance`, so the
- * blended transition pixels between, say, a removed white field and a removed
- * black field land beyond tolerance of BOTH keys and survive as a 1–2px opaque
- * ridge. No tolerance setting captures them: raise it enough to swallow the
- * mid-tones and the contiguous flood bleeds straight across the edge into the
- * logo. So we close them structurally instead.
+ * A pixel is a seam when it is opaque, sits in an opaque run no wider than
+ * `maxWidth` along some axis (H, V or a diagonal) with removed pixels on both
+ * flanks, and its colour is a near-linear blend of those two flanks. The blend
+ * test spares genuine thin foreground lines, which have their own colour; an
+ * edge against kept foreground has a solid flank and never qualifies. Matches
+ * fade in proportion to how cleanly they blend.
  *
- * A pixel is a seam iff it is (near-)opaque AND sits in an opaque run no wider
- * than `maxWidth` px along some axis whose two flanking pixels are BOTH already
- * removed (non-opaque) — a thin sliver bridging two cut regions — AND its color
- * is a near-linear blend of those two flanking pixels' (retained) RGB. That last
- * test is the safety net: a genuine thin foreground line is its own color, not a
- * blend of the backgrounds on either side, so it is spared; and an edge against
- * KEPT foreground has a solid flank on one side, so it never qualifies at all.
- * Matching slivers fade toward transparent in proportion to how cleanly they
- * blend.
- *
- * Meant to run after each flood/color/auto remove (like `defringe`), BEFORE
- * defringe so the flank colors it samples are still the raw background. It only
- * acts once both neighbouring regions are gone, so the first click is a no-op
- * and the second closes the seam. Mutates `img`; returns pixels changed.
- *
- * The four axes (H, V, and both diagonals) cover any seam orientation — a ╲ seam
- * is the one crossed by the ╱ diagonal, etc.
+ * Run after each remove and before `defringe`, so the flank colours are still
+ * the raw background. Mutates `img`; returns pixels changed.
  */
 export function closeSeams(img: ImageData, maxWidth = 3, seamTol = 48): number {
   const { width: w, height: h, data } = img
@@ -343,9 +320,8 @@ export function closeSeams(img: ImageData, maxWidth = 3, seamTol = 48): number {
       const idx = y * w + x
       if (sa[idx] < SOLID) continue // only solid pixels can be a leftover seam
 
-      // Thinnest opaque run through this pixel that ends in a removed (non-solid)
-      // flank on BOTH sides within maxWidth. Record those two flanks as the
-      // candidate background colors A (neg end) and B (pos end).
+      // Thinnest opaque run through this pixel with a removed flank on both
+      // sides within maxWidth; the flanks are background colours A and B.
       let best = Infinity
       let aIdx = -1
       let bIdx = -1
@@ -423,27 +399,17 @@ export function closeSeams(img: ImageData, maxWidth = 3, seamTol = 48): number {
 }
 
 /**
- * Remove small "islands" of leftover pixels stranded in already-removed
- * territory — the specks and hairline crumbs a flood drops when the background
- * is noisy or softly anti-aliased.
+ * Remove small islands of leftover pixels stranded in removed territory: the
+ * specks and crumbs a flood leaves on a noisy or softly anti-aliased background.
  *
- * A single global tolerance can't be both tight enough to spare the logo and
- * loose enough to catch every pixel of a noisy near-solid field (an AI icon's
- * "black" backdrop is really black-plus-noise), so the flood leaves scattered
- * dots — and a soft cut leaves faint, partly-transparent crumbs. All of it sits
- * fully surrounded by removed pixels: background residue, not logo. We label
- * connected VISIBLE components (8-connected; alpha >= `visible`, so a half-faded
- * speck still counts) and clear one when ANY of:
- *   • size <= `hardIsland` — a blob that tiny, fully marooned, is never logo;
- *   • size <= `maxIsland` AND its average color is within `keyTol` of the removed
- *     background touching it — a near-background noise dot;
- *   • it's a hairline (bbox min dimension <= 2) up to `hairMax` px — a stranded
- *     1–2px streak, which a real foreground line never is (those connect to the
- *     body, making the component far larger than any of these caps).
- *
- * The size caps are the safety net: the logo body and anything attached to it is
- * one big component and is never touched, whatever its color. Mutates `img`;
- * returns pixels cleared.
+ * Labels 8-connected visible components (alpha >= `visible`) that touch removed
+ * pixels and clears one when any of:
+ *   - size <= `hardIsland`;
+ *   - size <= `maxIsland` and its mean colour is within `keyTol` of the removed
+ *     background around it;
+ *   - it is a hairline (bbox min dimension <= 2) of at most `hairMax` px.
+ * The logo body and anything attached to it form one large component and are
+ * never touched. Mutates `img`; returns pixels cleared.
  */
 export function despeckle(
   img: ImageData,
@@ -462,9 +428,8 @@ export function despeckle(
 
   for (let start = 0; start < n; start++) {
     if (seen[start] || data[start * 4 + 3] < visible) continue
-    // Flood this connected visible component (8-connected). Keep the cell list
-    // only while it's still small enough to clear; past `cap` we just finish
-    // labelling so the component isn't rescanned, then bail.
+    // Flood this component. The cell list is kept only while it is small enough
+    // to clear; past `cap` labelling continues so it isn't rescanned.
     let cells: number[] | null = []
     let size = 0
     let sr = 0
@@ -621,13 +586,11 @@ export function brushStamp(
 }
 
 /**
- * Stamp the brush along the segment from (x0,y0) to (x1,y1), spacing the stamps
- * densely enough (¼ radius) that a fast drag leaves a continuous stroke instead
- * of a dotted trail. Mutates `img`. Returns total pixels changed.
+ * Stamp the brush along (x0,y0)→(x1,y1) at ¼-radius spacing so a fast drag
+ * leaves a continuous stroke. Mutates `img`; returns pixels changed.
  *
- * The loop starts at i=1 (not 0): the start point was already stamped by the
- * previous stamp/stroke (caller advances its "last point" to each endpoint), so
- * re-stamping it would double-apply the feather at every segment seam.
+ * The start point is skipped: the previous stamp already covered it, and
+ * re-stamping would double the feather at every segment seam.
  */
 export function brushStroke(
   img: ImageData,
@@ -656,17 +619,12 @@ export function brushStroke(
 /* ----------------------------------------------------------- edge refinement */
 
 /**
- * Color-carrying dilate of the matte: grows the opaque region outward by
- * `radius` px (local MAX over a (2*radius+1) window, separable H then V) — but
- * each pixel it reveals also inherits the RGBA of the most-opaque pixel it grew
- * from, so the *foreground* color extends outward instead of exposing the stale
- * background color still sitting under the transparent pixels. A pure alpha
- * dilate would leave that background RGB in place and paint a colored ring; this
- * carries the arg-max pixel's color through both passes so it doesn't. Pixels
- * that already hold the local-max alpha keep their own color (ties don't steal).
- * The alpha result is identical to a plain max-dilate, so soft edges survive.
- * Mutates `img`. `radius` is an integer ≥ 0 (a no-op at 0). Returns pixels whose
- * alpha changed.
+ * Colour-carrying dilate of the matte: grows the opaque region by `radius` px
+ * (separable local max), and each revealed pixel takes the RGBA of the pixel it
+ * grew from. A plain alpha dilate would expose the stale background RGB under
+ * transparent pixels as a coloured ring. Ties keep their own colour; the alpha
+ * result equals a plain max-dilate. Mutates `img`; no-op at radius 0. Returns
+ * pixels whose alpha changed.
  */
 export function growMatte(img: ImageData, radius: number): number {
   const r = Math.floor(radius)
@@ -853,9 +811,8 @@ export function alphaBounds(
   threshold = 1,
 ): { x: number; y: number; w: number; h: number } | null {
   const { width: w, height: h, data } = img
-  // Clamp to >=1: a 0 threshold makes `alpha >= threshold` match fully-transparent
-  // pixels, which would return the whole frame for an empty cutout and break the
-  // documented "null when fully transparent" contract.
+  // Clamp to >= 1, or a 0 threshold matches transparent pixels and an empty
+  // cutout returns the whole frame instead of null.
   const t = Math.max(1, threshold)
   let minX = w
   let minY = h
@@ -927,11 +884,9 @@ export function compositeOver(img: ImageData, hex: string): ImageData {
 
 /**
  * Flat-recolor the cutout: set every non-transparent pixel's RGB to `hex`,
- * leaving alpha exactly as-is. Turns monochrome art a single clean color and —
- * because it ignores alpha entirely — also overwrites any opaque background rim
- * a cut left behind, which the alpha-aware edge tools (defringe/grow) can't
- * reach. Flattens all color, so it's only for single-color art. `hex` is parsed
- * via `hexToRgb` (falls back to white). Mutates `img`; returns pixels changed.
+ * leaving alpha as-is. For single-colour art; it also overwrites an opaque
+ * background rim the alpha-aware edge tools cannot reach. `hex` falls back to
+ * white. Mutates `img`; returns pixels changed.
  */
 export function recolor(img: ImageData, hex: string): number {
   const { data } = img

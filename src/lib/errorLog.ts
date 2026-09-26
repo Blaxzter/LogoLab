@@ -1,19 +1,9 @@
-// What ELSE went wrong, and when.
+// A small in-memory ring buffer of recent errors, included in issue reports so
+// a report shows what else failed earlier in the session. Never persisted and
+// never sent on its own.
 //
-// A report that carries only the error in front of you describes the symptom.
-// The cause is often something that failed half a minute earlier and was handled
-// politely: a decode that fell back, a worker that died and was restarted, a
-// rejected promise nobody awaited. None of that reaches a bug report today — it
-// reaches the console, which nobody opens and nobody can paste from a phone.
-//
-// So: a small ring buffer, in memory only. It is never persisted (a session is
-// not a debugging archive, and a crash that survives a reload should be
-// reproduced, not remembered) and it is never sent anywhere on its own — it is
-// one section of a report the user reads before posting.
-//
-// Repeats COLLAPSE. A render loop or a retrying worker can produce the same
-// error fifty times in a second, and fifty copies of one line would push
-// everything that matters out of a 25-entry buffer.
+// Repeats collapse into one counted entry: a retrying worker can raise the same
+// error dozens of times and would otherwise flush everything else out.
 
 /** One thing that went wrong, possibly several times. */
 export interface LoggedError {
@@ -28,7 +18,6 @@ export interface LoggedError {
   count: number
 }
 
-/** Enough to cover a session's worth of trouble, few enough to fit in a report. */
 const MAX_ENTRIES = 25
 /** A bundled error message can carry an entire minified expression. */
 const MAX_MESSAGE = 300
@@ -36,13 +25,10 @@ const MAX_MESSAGE = 300
 let entries: LoggedError[] = []
 
 /**
- * Anything that looks like inline data, gone.
- *
- * An error message can quote the URL it failed on, and in this app that URL is
- * sometimes a `data:` URL holding the user's actual image. The promise the crash
- * screen makes is that a report carries the SHAPE of the art and never the art;
- * this is where that promise would otherwise leak. Object URLs are meaningless
- * outside the tab but they are noise, so they shrink too.
+ * Strips inline data from text bound for a public issue. Not cosmetic: error
+ * messages quote the URL they failed on, which can be a `data:` URL holding the
+ * user's logo. Reports must carry the art's shape, never the art. `blob:` URLs
+ * are shortened as noise.
  */
 export function redact(text: string): string {
   return text
@@ -65,9 +51,8 @@ function label(error: unknown): string {
 }
 
 /**
- * Record something that went wrong. Call it from every catch that currently
- * turns an error into a friendly string — the friendly string is what the user
- * needs and this is what the maintainer needs, and they are not the same thing.
+ * Record an error. Call it from every catch that turns an error into a
+ * user-facing message, so the raw error still reaches reports.
  */
 export function logError(source: string, error: unknown): void {
   const text = redact(label(error))
@@ -76,8 +61,7 @@ export function logError(source: string, error: unknown): void {
 
   const seen = entries.findIndex((e) => e.source === source && e.message === message)
   if (seen >= 0) {
-    // Move it to the end as well as counting it: "most recent" is what the
-    // report prints last and what a reader looks at first.
+    // Move it to the end so the log stays ordered by most recent occurrence.
     const [existing] = entries.splice(seen, 1)
     existing.count += 1
     existing.lastAt = now
@@ -99,16 +83,11 @@ export function clearErrorLog(): void {
 }
 
 /**
- * Listen for what never reaches a `catch`: an error that escaped every handler,
- * a promise nobody awaited, and a resource that failed to load.
+ * Log what never reaches a `catch`: uncaught errors, unhandled rejections and
+ * failed resource loads. A resource failure arrives as an `error` event with no
+ * error object, so it is named from its element instead.
  *
- * That last one shares the `error` event with the first, and it arrives with no
- * `error` object at all — it is how a failed chunk, a missing WASM binary or a
- * blocked model download shows up, which are three of this app's more confusing
- * failures, so it is worth naming properly rather than logging an empty string.
- *
- * Returns the uninstall function. Called once from main.tsx, before the app
- * renders, so the log covers the boot too.
+ * Returns the uninstall function. Called from main.tsx before the first render.
  */
 export function installErrorLog(): () => void {
   const onError = (event: ErrorEvent) => {
@@ -122,8 +101,7 @@ export function installErrorLog(): () => void {
   }
   const onRejection = (event: PromiseRejectionEvent) => logError('promise', event.reason)
 
-  // Capture phase: a resource error does not bubble, so a listener on the window
-  // only sees it on the way down.
+  // Capture phase: resource errors do not bubble.
   addEventListener('error', onError, true)
   addEventListener('unhandledrejection', onRejection)
   return () => {

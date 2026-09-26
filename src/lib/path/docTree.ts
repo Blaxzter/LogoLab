@@ -1,18 +1,13 @@
 // Group-aware traversal and structural editing of an EditableDoc.
 //
-// `doc.items` is a TREE once groups exist, but almost every consumer in this
-// codebase (the tracer's metrics, the labs, rasterization, docStats) only wants
-// the paintable leaves in paint order and has no interest in the folder
-// structure. So the split here is deliberate:
+// `doc.items` is a tree once groups exist, but most consumers (metrics,
+// rasterization, docStats) only want the paintable leaves:
+//   leafItems()  — what renders, flattened, in paint order.
+//   walkItems()  — the tree, groups included, for the layers panel and
+//                  structural edits.
 //
-//   leafItems()  — what renders, flattened, in paint order. The old meaning of
-//                  `doc.items` for code written before groups existed.
-//   walkItems()  — the tree, groups included, for the layers panel and anything
-//                  doing structural work.
-//
-// Everything is immutable: a structural edit returns a new spine (only the
-// groups on the path to the change are rebuilt) so React identity checks and
-// the undo history keep working. Untouched subtrees are shared by reference.
+// Everything is immutable: an edit rebuilds only the groups on the path to the
+// change and shares untouched subtrees, so identity checks and undo work.
 
 import type { DocItem, EditableDoc, GroupItem, PathItem, RawItem } from './types.ts'
 
@@ -209,13 +204,10 @@ function clampIndex(i: number, len: number): number {
 }
 
 /**
- * Collect `ids` into a new group.
- *
- * The group lands where the FRONTMOST member was, in that member's parent —
- * which is the only placement that preserves what the user sees: grouping must
- * never change paint order, and the frontmost member is the one whose depth the
- * whole group inherits. Members are stacked in their original relative order.
- * Ids nested inside another selected id are skipped (the ancestor takes them).
+ * Collect `ids` into a new group. The group lands where the frontmost member
+ * was, in that member's parent, so grouping never changes what the user sees.
+ * Members keep their relative order; ids nested inside another selected id are
+ * skipped (the ancestor takes them).
  */
 export function groupItems(
   items: readonly DocItem[],
@@ -278,15 +270,13 @@ export function ungroup(items: readonly DocItem[], groupId: string): DocItem[] |
 }
 
 /**
- * Move `ids` to a paint-order insertion point — what a layers-panel drag does.
+ * Move `ids` to a paint-order insertion point (a layers-panel drag). Returns
+ * null when the move is impossible (a group into its own subtree) or a no-op,
+ * so it doesn't cost an empty undo step.
  *
- * Returns null when the move is impossible or pointless: dropping a group into
- * its own subtree, or landing exactly where the items already are (which would
- * otherwise cost an undo step that visibly does nothing).
- *
- * The subtlety is the index. It is quoted against the ORIGINAL tree, but the
- * insert happens after the movers have been pulled out — so every mover that
- * sat before the target inside the same parent has shifted it down by one.
+ * `index` refers to the original tree; since the movers are removed before the
+ * insert, each mover that sat before the target in the same parent shifts it
+ * down by one.
  */
 export function moveItems(
   items: readonly DocItem[],

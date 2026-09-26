@@ -1,19 +1,11 @@
-// A tiny key→value store over IndexedDB, for the parts of a working session that
-// are too big for localStorage: the uploaded bytes, the traced documents, the
-// sheet's source image.
+// A small key-value store over IndexedDB for session data too big for
+// localStorage (uploaded bytes, traced documents, the sheet's source).
 //
-// Deliberately NOT the labs' `labCache` (components/labs/labCache.ts). That one
-// is a content-addressed *cache* — every key carries the engine fingerprint and a
-// sweep drops anything from an older one, because a stale trace there is wrong.
-// This is the opposite contract: a handful of named slots holding the user's own
-// work, which must survive an engine change (their hand-edited nodes are not
-// invalidated by a tracer release). Same 40 lines of IDB boilerplate, opposite
-// lifetime — sharing one module would mean sharing the sweep.
+// Not shared with the labs' `labCache`: that cache is swept whenever the tracer
+// changes, while these slots hold the user's own work and must survive a
+// tracer release.
 //
-// Everything degrades to a no-op rather than throwing: private-mode Safari, a
-// blocked origin and a full quota all show up here, and none of them is a reason
-// for the app to stop working. A session that cannot be saved is just a session
-// that does not come back.
+// Every operation degrades to a no-op instead of throwing.
 
 const DB_NAME = 'logolab-session'
 const STORE = 'state'
@@ -41,14 +33,14 @@ function openDb(): Promise<IDBDatabase | null> {
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => resolve(null)
-    // A second tab holding an older version open blocks the upgrade forever;
-    // resolve null instead of hanging the boot read behind it.
+    // Another tab holding an older version blocks the upgrade indefinitely;
+    // resolve null instead of hanging the boot read.
     req.onblocked = () => resolve(null)
   })
   return dbPromise
 }
 
-/** Read several keys in ONE transaction — the shape the boot restore wants. */
+/** Read several keys in one transaction. */
 export async function idbGetMany(keys: readonly string[]): Promise<Map<string, unknown>> {
   const out = new Map<string, unknown>()
   const db = await openDb()
@@ -73,9 +65,8 @@ export async function idbGetMany(keys: readonly string[]): Promise<Map<string, u
 }
 
 /**
- * Write one slot. Resolves `false` when the value could not be stored — a quota
- * overrun or a value structured-clone refuses (a live ImageBitmap, a function on
- * a doc) — so a caller can drop the slot instead of retrying it forever.
+ * Write one slot. Resolves `false` when the value could not be stored (quota,
+ * or a value structured clone rejects).
  */
 export async function idbSet(key: string, value: unknown): Promise<boolean> {
   const db = await openDb()
@@ -109,7 +100,7 @@ export async function idbDelete(keys: readonly string[]): Promise<void> {
   })
 }
 
-/** Drop every stored slot (the "start fresh" path). */
+/** Drop every stored slot (start fresh). */
 export async function idbClear(): Promise<void> {
   const db = await openDb()
   if (!db) return

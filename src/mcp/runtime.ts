@@ -39,9 +39,8 @@ export function projectRoot(): string {
 
 /**
  * True when we are running from a LogoLab checkout rather than the published
- * package. The checkout runs `.ts` through Node's type stripping, the package
- * runs the compiled `.js` — so the extension of THIS module is the whole test,
- * with no filesystem probing and no build-time flag to keep in sync.
+ * package: the checkout runs `.ts` through Node's type stripping, the package
+ * runs compiled `.js`, so this module's own extension decides.
  */
 export function runningFromSource(): boolean {
   return fileURLToPath(import.meta.url).endsWith('.ts')
@@ -51,12 +50,10 @@ export function runningFromSource(): boolean {
  * The version this server ships as — reported in the MCP handshake, `--help`
  * and the startup log.
  *
- * Read, never written down twice. The catch is that "our own package.json" is
- * two different files: `projectRoot()` is the REPO root from a checkout (whose
- * manifest is the private app, `logolab-app`) and the PACKAGE root from the
- * tarball. So pick the manifest that defines the published package in each
- * layout — `packages/mcp/package.json` in a checkout, our own when installed —
- * and both answer with the version npm would serve.
+ * Read from the manifest, never hard-coded (test/mcp-package.test.ts enforces
+ * this). From a checkout `projectRoot()` is the repo root, whose manifest is the
+ * private app, so read `packages/mcp/package.json` there and our own manifest
+ * when installed; both give the version npm serves.
  */
 export function packageVersion(): string {
   const manifest = runningFromSource()
@@ -99,7 +96,7 @@ export function ensureParent(file: string): string {
 }
 
 /**
- * Log to STDERR, never stdout: stdout is the MCP framing channel and one stray
+ * Log to stderr, never stdout: stdout is the MCP framing channel and one stray
  * `console.log` corrupts the stream.
  */
 export function log(...parts: unknown[]): void {

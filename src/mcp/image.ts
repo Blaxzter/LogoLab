@@ -1,19 +1,18 @@
 // Reading pixels in, and writing pixels out, without a browser.
 //
-// The app gets both from canvas. Here the decoder is picked PER FORMAT, and
-// deterministically — the same file must trace the same way on every machine:
+// The app gets both from canvas. Here the decoder is picked per format, and
+// deterministically, so the same file traces the same way on every machine:
 //
-//   PNG            the harness's own decoder (exact, no re-encode round trip),
-//                  falling back to resvg for the interlaced ones it refuses
+//   PNG            the harness's own decoder, falling back to resvg for the
+//                  interlaced files it refuses
 //   JPEG/GIF/BMP   resvg, by wrapping the bytes in a one-element `<image>` SVG
-//   WebP           sharp — resvg's image reader does not know the format, and
-//                  silently renders NOTHING rather than failing (which is how
-//                  this was found: the repo's own example sheets are WebP)
+//   WebP           sharp. Don't route WebP through resvg: it does not know the
+//                  format and silently renders nothing instead of failing.
 //   SVG            resvg, rendered at the resolution the tracer asked for
 //
-// Downscaling to the trace cap is the repo's box-average `downscaleImageData`,
-// not resvg's sampler: an area average is what the sheet path was measured on,
-// and a bilinear tap at 4:1 would alias the anti-aliasing the tracer reads.
+// Downscaling to the trace cap uses the box-average `downscaleImageData`, not
+// resvg's sampler: a bilinear tap at 4:1 would alias the anti-aliasing the
+// tracer reads.
 
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -176,16 +175,13 @@ export async function rasterizeSource(src: LoadedSource, maxDim: number, backgro
 }
 
 /**
- * sharp, loaded only if a format needs it — WebP alone, today.
+ * sharp, loaded only when a format needs it (currently WebP only).
  *
- * It stays OPTIONAL on purpose. sharp pulls a platform-specific libvips binary
- * that dwarfs the rest of the server (an install goes 30 MB → 47 MB) and drags
- * in libvips/libheif advisories that have no fix, all in front of every
- * `npx -y logolab` — for a format most callers never pass. So the published
- * package lists it as an OPTIONAL PEER, which npm does not install on its own,
- * and a WebP caller opts in with `npm install sharp`. A checkout has it anyway
- * (devDependency, and a transitive dep of the AI cutout's runtime). Either way a
- * missing sharp gets a message naming the fix rather than a blank image.
+ * It is an optional peer dependency of the published package: its platform
+ * libvips binary would dominate every `npx -y logolab` install for a format
+ * most callers never pass. A WebP caller opts in with `npm install sharp`; a
+ * missing sharp throws a message naming that fix rather than yielding a blank
+ * image.
  */
 type SharpFactory = (input: Uint8Array) => {
   raw: () => { ensureAlpha: () => { toBuffer: (o: { resolveWithObject: true }) => Promise<{ data: Buffer; info: { width: number; height: number } }> } }

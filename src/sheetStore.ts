@@ -1,15 +1,9 @@
 // State for the icon-sheet splitter.
 //
-// Deliberately separate from `useStore` (which holds exactly ONE working logo and
-// is what Preview/Cleanup/Vectorize/Export share): a sheet is N icons, each with
-// its own trace, and pushing them through the single-logo slot one at a time is
-// what this view exists to avoid.
-//
-// The sheet is persisted (source bytes and all N traces) into its own IndexedDB
-// slot — see `hydrate` and the subscription at the foot of this file. It is the
-// heaviest thing the app can be holding and also the most expensive to rebuild:
-// a batch trace is N traces, and re-doing it because someone refreshed is the
-// single worst thing a reload could cost. The pixels still never leave the tab.
+// Separate from `useStore`, which holds the single working logo: a sheet is N
+// icons, each with its own trace. The sheet (source bytes and every trace) is
+// persisted to its own IndexedDB slot, because a batch trace is expensive to
+// redo after a reload.
 
 import { create } from 'zustand'
 import { DEFAULT_VECTORIZE_OPTIONS } from './lib/trace'
@@ -47,11 +41,10 @@ export interface SheetIcon {
   /** Per-icon trace overrides; null ⇒ follow the sheet's defaults. */
   opts: VectorizeOptions | null
   /**
-   * What the last run actually traced with, after the per-tile colour/mono and
-   * gradient decisions. Opening the icon in the studio has to start from THIS,
-   * not from the sheet defaults — otherwise the editor shows one set of controls
-   * over a document traced with another, and the first tweak silently re-traces
-   * the icon a different way.
+   * The options the last run actually used, after the per-tile colour/mono and
+   * gradient decisions. The studio must open with these, not the sheet
+   * defaults, or its controls won't match the document and the first tweak
+   * re-traces the icon differently.
    */
   resolved: VectorizeOptions | null
   /** The user renamed it — a re-detect must not overwrite that. */
@@ -132,10 +125,8 @@ export interface SheetNaming {
 }
 
 /**
- * Captions are read by default: a captioned sheet is the normal case, and the
- * caption IS the name the user would type. The engine (~5 MB, cached after the
- * first time) is only fetched when a loaded sheet actually has captions to read
- * — a plain sheet costs nothing.
+ * Captions are read by default, since the caption is usually the name the user
+ * wants. The OCR engine is only fetched when a sheet actually has captions.
  */
 export const DEFAULT_NAMING: SheetNaming = { prefix: '', suffix: '', fromCaptions: true }
 
@@ -157,9 +148,9 @@ export interface OcrState {
 const IDLE_OCR: OcrState = { status: 'idle', progress: 0, done: 0, total: 0, error: null }
 
 /**
- * Sheet tiles carry the paper colour around their icon, so the tracer's own
- * background drop is on by default — it removes the background LABEL during the
- * trace, which is cleaner than knocking pixels out first (no fringe to defringe).
+ * Sheet tiles carry the paper colour around their icon, so the tracer's
+ * background removal is on by default. Dropping the background region during
+ * the trace leaves no fringe, unlike knocking pixels out beforehand.
  */
 export const DEFAULT_SHEET_TRACE: VectorizeOptions = {
   ...DEFAULT_VECTORIZE_OPTIONS,
@@ -176,22 +167,20 @@ interface SheetState {
   detect: SheetDetectSettings
   traceOptions: VectorizeOptions
   /**
-   * Colour vs mono, decided per tile by default. Sheet icons are usually ONE ink
-   * on paper, and the colour path splits that ink's shading into separate palette
-   * entries — which carves the shapes. See planTileTrace.
+   * Colour vs mono, decided per tile by default. Sheet icons are usually one ink
+   * on paper, and the colour path would split that ink's shading into separate
+   * regions. See planTileTrace.
    */
   colorMode: SheetColorMode
   /**
-   * Trace small crops enlarged (~512px long side). Anti-aliasing carries
-   * sub-pixel edge information a 170px lattice cannot use — measured over 54
-   * tiles: ink-area drift 0.75pp → 0.13pp, SSIM 0.864 → 0.946, at ~2.5× the
-   * trace time and +57% nodes. See `traceScale`.
+   * Trace small crops enlarged (toward ~512px long side) so the tracer can use
+   * the sub-pixel edge information in the anti-aliasing. See `traceScale`.
    */
   hiRes: boolean
   /**
-   * Gradient fitting is a per-IMAGE decision and a sheet's tiles differ, so the
-   * default probes each crop. Forcing it is still worth offering: an icon set is
-   * usually flat on purpose, and "flat" also picks the palette-first segmenter.
+   * Gradient fitting is decided per crop by default. Forcing "flat" is useful
+   * because icon sets are usually flat on purpose, and it also selects the
+   * palette-first segmenter.
    */
   gradientMode: GradientMode
   tiles: SheetIcon[]
@@ -204,14 +193,10 @@ interface SheetState {
 
   setSource: (source: SheetSource, image: ImageDataLike) => void
   /**
-   * Adopt a stored sheet: its source bytes, its boxes and every trace already
-   * on them. Deliberately NOT `setSource` — that one re-splits the sheet from
-   * scratch, which would throw away exactly the tiles being restored (the
-   * hand-drawn boxes, the renames, the traced documents).
-   *
-   * Async because the source has to be decoded back to pixels: every crop is cut
-   * from that raster, and storing it as well would double the slot for something
-   * one decode reproduces exactly.
+   * Adopt a stored sheet with its boxes and traces. Not `setSource`: that
+   * re-splits from scratch and would discard the restored tiles. Async because
+   * the stored source bytes are decoded back to pixels rather than storing the
+   * raster too.
    */
   hydrate: (stored: StoredSheet) => Promise<boolean>
   clear: () => void
@@ -268,10 +253,8 @@ function blankTile(id: string, name: string, rect: Rect, kind: TileKind): SheetI
 }
 
 /**
- * OCR results by caption ink box. A re-detect rebuilds every tile, but the
- * captions it finds are the same pixels — reading them again would be a second
- * or two of pointless work every time a detection slider moves. Cleared with
- * the sheet.
+ * OCR results by caption ink box, so a re-detect (which rebuilds every tile)
+ * does not re-read unchanged captions. Cleared with the sheet.
  */
 const captionCache = new Map<string, CaptionRead>()
 const captionKey = (r: Rect) => `${r.x}:${r.y}:${r.w}:${r.h}`
@@ -287,8 +270,7 @@ function autoName(tile: Pick<SheetIcon, 'caption'>, index: number, stem: string,
   return defaultTileName(index, stem)
 }
 
-/** How many tiles trace at once. Each one is a dedicated Worker holding a full
- *  copy of its pixels, so this is a real resource decision, not a formality. */
+/** How many tiles trace at once. Each one is a dedicated Worker holding its own copy of the pixels. */
 function concurrency(): number {
   const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4
   return Math.max(1, Math.min(4, cores - 1))
@@ -326,8 +308,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       background: null,
       warnings: [],
       ocr: IDLE_OCR,
-      // A fresh sheet gets fresh detection defaults; the previous sheet's tuned
-      // threshold rarely transfers, and a stale one looks like a broken detector.
+      // A new sheet starts from default detection settings; a previous sheet's
+      // tuned threshold rarely transfers.
       detect: { ...DEFAULT_DETECT, mode: get().detect.mode },
     })
     get().redetect()
@@ -337,17 +319,15 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     const src = URL.createObjectURL(stored.source)
     let image: ImageDataLike
     try {
-      // Decoded back at exactly the size it was split at — every tile rect is
-      // in THOSE pixels, so re-deriving the cap (or letting the constant drift
-      // between releases) would slide every box off its icon.
+      // Decode at exactly the stored size: every tile rect is in those pixels,
+      // and re-deriving the cap could slide every box off its icon.
       image = await getImageData(src, Math.max(stored.width, stored.height), stored.svgText)
     } catch {
       URL.revokeObjectURL(src)
       return false
     }
-    // A tile caught mid-batch comes back settled, never "tracing": the worker
-    // that was running it died with the old page, and a spinner nothing is
-    // driving is worse than an honest "not traced yet".
+    // A tile caught mid-batch comes back settled, not "tracing": its worker
+    // died with the old page.
     const tiles = (stored.tiles as SheetIcon[]).map((t) => ({
       ...t,
       status: (t.doc ? 'done' : 'idle') as TileStatus,
@@ -418,8 +398,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       tiles: s.tiles.map((t) => (t.doc && !t.opts ? { ...t, stale: true } : t)),
     })),
 
-  // The control moves NOW and the sheet re-splits a beat later: detection is
-  // ~70ms on a 4MP sheet, which is fine once and awful once per slider tick.
+  // Update the control immediately and debounce the re-split, which is too
+  // slow to run on every slider tick.
   patchDetect: (patch) => {
     set((s) => ({ detect: { ...s.detect, ...patch } }))
     if (redetectTimer !== null) clearTimeout(redetectTimer)
@@ -436,8 +416,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     // The tiles a caption run is naming are about to be replaced.
     ocrToken++
 
-    // Renamed tiles keep their name by POSITION — the boxes themselves are
-    // recomputed from scratch, so identity by id is meaningless across a re-run.
+    // Renamed tiles keep their name by position: boxes are recomputed from
+    // scratch, so ids do not survive a re-run.
     const keptNames = new Map<number, string>()
     previous.forEach((t, i) => {
       if (t.renamed) keptNames.set(i, t.name)
@@ -471,9 +451,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       uniform: detect.uniform,
     })
     const visible = result.tiles.filter((t) => (detect.keepLabels ? t.kind !== 'noise' : t.kind === 'icon'))
-    // Every icon learns which caption is its own now, whether or not the
-    // captions are going to be read — the pairing is free, and it is what the
-    // naming toggle acts on later.
+    // Pair every icon with its caption even if captions are not read now; the
+    // naming toggle uses the pairing later.
     const captions = matchCaptions(result.tiles, result.grid)
     const tiles = visible.map((t, i) => {
       const match = captions.get(t.id)
@@ -584,8 +563,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   setTraceOptions: (patch) =>
     set((s) => ({
       traceOptions: { ...s.traceOptions, ...patch },
-      // Say the shown traces are out of date rather than silently re-tracing N
-      // icons — a batch re-trace is seconds of work and the user's call.
+      // Mark shown traces stale instead of re-tracing N icons automatically;
+      // a batch re-trace is the user's call.
       tiles: s.tiles.map((t) => (t.doc && !t.opts ? { ...t, stale: true } : t)),
     })),
 
@@ -596,8 +575,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     set((s) => ({
       tiles: s.tiles.map((t) =>
         t.id === id
-          ? // A moved box invalidates its trace — keep the doc on screen but mark
-            // it as no longer matching the crop.
+          ? // A moved box invalidates its trace: keep the doc but mark it stale.
             { ...t, rect, manual: true, stale: Boolean(t.doc) }
           : t,
       ),
@@ -698,10 +676,9 @@ export const useSheetStore = create<SheetState>((set, get) => ({
                     stats: result.stats,
                     error: null,
                     stale: false,
-                    // `opts` stays null for a tile that follows the sheet defaults
-                    // (that is what makes a defaults change mark it stale);
-                    // `resolved` records what this run actually used, which is what
-                    // the single-icon editor has to open with.
+                    // `opts` stays null for a tile following the sheet defaults
+                    // (so a defaults change marks it stale); `resolved` is what
+                    // this run used and what the studio opens with.
                     opts: t.opts,
                     resolved: opts,
                   }
@@ -710,17 +687,16 @@ export const useSheetStore = create<SheetState>((set, get) => ({
           }))
         } catch (err) {
           if (err instanceof DOMException && err.name === 'AbortError') return
-          // Logged whether or not this run is still the current one: a tile that
-          // failed and was superseded is still a tile that failed, and the
-          // session log is where a later report finds out (see lib/errorLog).
+          // Logged even if this run was superseded, so a later issue report
+          // still sees the failure.
           logError('sheet-tile', err)
           if (token === runToken) {
             get().updateTile(id, {
               status: 'error',
               error: err instanceof Error ? err.message : 'Trace failed',
             })
-            // One question for the batch: raiseFailure keys on what+message, so
-            // twenty tiles failing the same way ask once, not twenty times.
+            // raiseFailure keys on what+message, so many tiles failing the
+            // same way ask only once.
             raiseFailure('the icon sheet', 'An icon in the sheet could not be traced.', err)
           }
         } finally {
@@ -759,10 +735,8 @@ export const useSheetSource = () => useSheetStore((s) => s.source)
 /* ------------------------------------------------------------- persistence */
 
 /**
- * The source bytes, cached by the object URL they came from. Reading them back
- * out of a blob URL is a real copy of a multi-megapixel sheet, and the sheet's
- * OTHER state (a box dragged, a tile traced) changes constantly while those
- * bytes never do.
+ * The source bytes, cached by object URL: reading a blob URL back is a full
+ * copy, and the rest of the sheet state changes far more often than the source.
  */
 let sourceBytes: { src: string; blob: Blob } | null = null
 
@@ -823,10 +797,9 @@ useSheetStore.subscribe((s, prev) => {
     s.naming !== prev.naming ||
     s.running !== prev.running
   if (!changed) return
-  // Not during a batch: every tile's progress tick rewrites `tiles`, and each
-  // write structured-clones every document traced so far — on a 30-icon sheet
-  // that turns the run into a stutter. The run's own completion flips `running`
-  // back off, which lands here and stores the whole result in one go.
+  // Skip saves during a batch: every progress tick rewrites `tiles`, and each
+  // save structured-clones every traced document. The run's end flips
+  // `running` off, which saves the whole result once.
   if (s.running) return
   void persistSheet()
 })

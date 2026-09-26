@@ -43,37 +43,28 @@ interface AppState {
     /** Snapshot of the original asset metadata (set on upload, used by Reset). */
     originalMeta: OriginalMeta | null;
     /**
-     * Identity of the WORKING image, regenerated every time those pixels change
-     * (upload, cleanup Apply, trace Apply, Reset). Work derived from the image —
-     * the vectorize document, the un-applied cleanup buffer — is persisted with
-     * the key it was made from, so a restore can tell "this trace belongs to the
-     * picture on screen" from "this trace belongs to whatever was here before".
+     * Identity of the working image, reissued whenever its pixels change
+     * (upload, cleanup Apply, trace Apply, Reset). Anything derived from the
+     * image is persisted with this key; check it before adopting a restored
+     * value, or a trace ends up shown over a different image than it was cut
+     * from.
      */
     assetKey: string;
     appearance: Appearance;
     env: Environment;
 
-    /**
-     * Transparency-checkerboard backdrop shared by every preview (cleanup,
-     * vectorize, export…). `true` = the dark checker. Global and session-lived so
-     * a flip in one view sticks everywhere.
-     */
+    /** Transparency checkerboard shared by every preview; `true` = dark. */
     checkerDark: boolean;
     /** True once the user flipped it by hand, so auto-detect stops overriding. */
     checkerUserSet: boolean;
     /** User flip — sets the backdrop and pins it for the rest of the session. */
     toggleChecker: () => void;
-    /**
-     * Auto-detected preference (a white mark wants the dark checker). Yields to
-     * a user flip, so it never fights a backdrop that was chosen by hand.
-     */
+    /** Auto-detected preference (a white mark wants the dark checker); ignored after a user flip. */
     autoChecker: (dark: boolean) => void;
 
     /**
-     * Adopt the bytes the boot read brought back (see lib/persist/session.ts).
-     * Called once from main.tsx BEFORE the first render, so a restored logo is
-     * on screen in the first frame rather than appearing a moment after an
-     * empty state. A no-op when there was nothing stored.
+     * Adopt the restored session (lib/persist/session.ts). Called once from
+     * main.tsx before the first render, so a restored logo is in the first frame.
      */
     hydrate: (session: RestoredSession) => void;
 
@@ -126,16 +117,10 @@ export const defaultAppearance: Appearance = {
 };
 
 /**
- * Is every appearance value still the one it shipped with? Drives whether the
- * sidebar shows its Reset footer at all — an always-there Reset over untouched
- * defaults is a control whose only honest state is "nothing to do".
- *
- * Walks the DEFAULT's keys, so a field added to {@link Appearance} is covered
- * the moment it gets a default here, and a key left over in an older stored
- * record (readLocal merges defaults under, it never prunes) can't make an
- * untouched panel read as changed. Every value is a primitive, and colours
- * arrive normalized to lowercase hex (ColorField), so a retyped "#FFFFFF"
- * compares equal to the default rather than looking like an edit.
+ * Whether every appearance value equals its default (hides the sidebar's
+ * Reset). Iterates the default's keys so stale keys in an older stored record
+ * are ignored. Colours are normalized to lowercase hex upstream, so a plain
+ * `===` is enough.
  */
 export const isDefaultAppearance = (a: Appearance): boolean =>
     (Object.keys(defaultAppearance) as (keyof Appearance)[]).every(
@@ -155,10 +140,8 @@ export const defaultMockups: Record<DeviceId, MockPlacement> = {
 };
 
 /**
- * Rebuild the working logo from the bytes the boot read brought back (see
- * lib/persist/session.ts). Object URLs are minted here and live as long as the
- * tab, exactly like the ones an upload creates — the blobs themselves stay in
- * IndexedDB, so this costs a URL, not a copy.
+ * Rebuild the working logo from the restored bytes. The object URLs live as
+ * long as the tab, like the ones an upload creates.
  */
 function restoreLogo(stored: StoredLogo | null): Pick<
     AppState,
@@ -183,8 +166,7 @@ function restoreLogo(stored: StoredLogo | null): Pick<
                 naturalHeight: meta.naturalHeight,
             },
             originalMeta: { ...stored.originalMeta, fileName: stored.fileName },
-            // The restored pixels ARE the ones the stored trace was cut from, so
-            // the key comes back with them rather than being reissued.
+            // Same pixels the stored trace was cut from, so keep the key.
             assetKey: stored.assetKey,
         };
     } catch {
@@ -192,8 +174,7 @@ function restoreLogo(stored: StoredLogo | null): Pick<
     }
 }
 
-/** Icon placements come back synchronously from localStorage; the custom
- *  screenshot BYTES are IndexedDB's job and land later, in `hydrate`. */
+/** Icon placements, synchronously from localStorage; custom screenshots come from IndexedDB in `hydrate`. */
 function storedPlacements(): Record<DeviceId, MockPlacement> {
     const placements = readLocal(LS_MOCKUPS, defaultMockups);
     return {
@@ -207,9 +188,8 @@ function withShots(
     mockups: Record<DeviceId, MockPlacement>,
     stored: StoredMockShots | null,
 ): Record<DeviceId, MockPlacement> {
-    // Same object back when there is nothing to apply, so a restore with no
-    // custom screenshots is a true no-op rather than a new object that wakes
-    // every mockup subscriber and writes the defaults back out.
+    // Return the same object when there is nothing to apply, so subscribers
+    // aren't woken and nothing is written back.
     if (!stored?.ios && !stored?.android) return mockups
     const shot = (blob: Blob | null | undefined): string | null => {
         try {
@@ -236,9 +216,8 @@ export const useStore = create<AppState>((set) => ({
         set((s) => {
             const logo = restoreLogo(session.logo);
             const mockups = withShots(s.mockups, session.mockShots);
-            // Seed the "what is already stored" signatures, so the subscription
-            // below doesn't answer this restore by copying the same bytes
-            // straight back into IndexedDB.
+            // Seed the stored signatures so the subscription below doesn't
+            // write the just-restored bytes straight back.
             storedLogoSig = logo.logo.originalSrc
                 ? `${logo.assetKey}|${logo.logo.originalSrc}|${logo.logo.src ?? ""}`
                 : "";
@@ -266,15 +245,13 @@ export const useStore = create<AppState>((set) => ({
                       fileName: logo.fileName,
                   }
                 : s.originalMeta;
-            // On a fresh upload, default the checker to whatever keeps the mark
-            // visible (dark behind a light/white logo) — unless the user has
-            // already chosen a side this session.
+            // On a fresh upload, pick the checker that keeps the mark visible,
+            // unless the user already chose one.
             const autoChecker =
                 patch.originalSrc && !s.checkerUserSet && isLight !== undefined
                     ? { checkerDark: isLight }
                     : null;
-            // Only a fresh upload is a new image; a metadata-only patch leaves
-            // the pixels (and anything derived from them) alone.
+            // Only a fresh upload is a new image; a metadata-only patch keeps the key.
             const assetKey = patch.originalSrc ? newAssetKey() : s.assetKey;
             return { logo, originalMeta, assetKey, ...autoChecker };
         }),
@@ -349,8 +326,7 @@ export const useStore = create<AppState>((set) => ({
             ) {
                 URL.revokeObjectURL(s.logo.src);
             }
-            // Restore src AND the original metadata (Apply may have rewritten
-            // isSvg/svgText/mime/dimensions to the processed PNG's values).
+            // Restore the original metadata too; Apply may have rewritten it.
             return {
                 logo: {
                     ...s.logo,
@@ -403,10 +379,9 @@ export const useCheckerClass = () =>
 
 /* ------------------------------------------------------------- persistence */
 
-// Settings ride in localStorage so they are already correct in the first painted
-// frame (see lib/persist/local.ts); the pixels ride in IndexedDB. Writes are
-// debounced because every one of these changes from a slider drag — one write per
-// pointer move would put a synchronous stringify on the drag's hot path.
+// Settings go to localStorage so they are correct in the first painted frame;
+// pixels go to IndexedDB. Writes are debounced because these change on every
+// slider move.
 const saveAppearance = debounce((a: Appearance) => writeLocal(LS_APPEARANCE, a), 250);
 const saveEnv = debounce((e: Environment) => writeLocal(LS_ENV, e), 250);
 const saveChecker = debounce(
@@ -414,8 +389,8 @@ const saveChecker = debounce(
         writeLocal(LS_CHECKER, { checkerDark: dark, checkerUserSet: userSet }),
     250,
 );
-// Placements only: a `shot` is an object URL, which means nothing after a reload.
-// Its BYTES go to IndexedDB below.
+// Placements only: a `shot` object URL is meaningless after a reload; its bytes
+// go to IndexedDB below.
 const savePlacements = debounce((mockups: Record<DeviceId, MockPlacement>) => {
     writeLocal(LS_MOCKUPS, {
         ios: { x: mockups.ios.x, y: mockups.ios.y, size: mockups.ios.size },
@@ -428,10 +403,9 @@ const savePlacements = debounce((mockups: Record<DeviceId, MockPlacement>) => {
 }, 250);
 
 /**
- * The last logo we stored, as "which key, which two URLs". Reading the bytes
- * back out of an object URL is a real copy, so it must happen when the IMAGE
- * changes and not when a caption or a checker flag does — and a stale signature
- * is also how a slow read knows a newer one has overtaken it.
+ * Signature (key + both URLs) of the last stored logo. Copying bytes out of an
+ * object URL is expensive, so it only happens when the image changes; a changed
+ * signature also tells a slow read that a newer write overtook it.
  */
 let storedLogoSig = "";
 
@@ -439,10 +413,8 @@ async function persistLogo(s: AppState): Promise<void> {
     if (!s.logo.originalSrc) {
         storedLogoSig = "";
         saveSlot(SLOTS.logo, null);
-        // Clear means clear: the trace and the un-applied cutout were cut from
-        // pixels that no longer exist. The assetKey check would stop them being
-        // restored anyway, but leaving megabytes of orphaned work in the user's
-        // storage after they asked for it to go is not the promise this makes.
+        // Clearing the logo also drops the work derived from it, rather than
+        // leaving orphaned data in storage.
         saveSlot(SLOTS.vectorize, null);
         saveSlot(SLOTS.cleanup, null);
         return;
@@ -455,7 +427,7 @@ async function persistLogo(s: AppState): Promise<void> {
     if (!original) return;
     const isProcessed = Boolean(s.logo.src && s.logo.src !== s.logo.originalSrc);
     const working = isProcessed ? await srcToBlob(s.logo.src!) : null;
-    // A newer image landed while we were reading — that write owns the slot now.
+    // A newer image landed while we were reading; that write owns the slot.
     if (sig !== storedLogoSig) return;
 
     const meta = s.originalMeta;

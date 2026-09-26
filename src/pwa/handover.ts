@@ -1,18 +1,14 @@
-// The handover: a waiting build takes control of the page, and the page reloads
-// onto it.
+// The handover: a waiting build takes control of the page and the page reloads
+// onto it. Kept apart from register.ts (which reads `import.meta.env`) so node
+// tests can reach it.
 //
-// Its own module, apart from the registration in register.ts, for the reason
-// ui/tooltipPlace.ts is: register.ts is browser wiring and reads
-// `import.meta.env`, which node cannot evaluate, so anything a test must reach
-// has to be out of it. And this earns a test more than most things do — every
-// way it can fail looks identical from the outside: a button that does nothing.
+// Don't just call `location.reload()` on click: reloading before the new worker
+// takes control races the handover and lands back on the old build. The click
+// asks the worker to skip waiting and the reload fires on `controllerchange`,
+// with a grace timer as a backstop.
 //
-// Why the reload is not simply `location.reload()` on the click: the waiting
-// worker has to take over FIRST. Reloading while the old worker is still in
-// charge races the handover and lands the user back on the build they just
-// asked to leave. So the click asks the worker to skip waiting, and the reload
-// rides on `controllerchange` — with a timer underneath it, because a handover
-// that never lands must not be the end of the road.
+// Rules: the very first claim of a page is not a reload; any later handover
+// is; and one the user asked for always ends in a reload.
 
 /** The half of a `ServiceWorker` this needs: something to ask. */
 interface Skippable {
@@ -33,10 +29,8 @@ export interface HandoverDeps {
 }
 
 /**
- * How long a handover the user ASKED for is given before the page reloads
- * anyway. Long enough that the ordinary path (activate, claim, reload) always
- * wins the race; short enough that a browser which drops the message costs a
- * few seconds rather than the whole point of the notice.
+ * How long a user-requested handover may take before the page reloads anyway.
+ * Long enough for the normal activate/claim path to win.
  */
 export const HANDOVER_GRACE_MS = 3000
 
@@ -48,13 +42,11 @@ export interface Handover {
 export function watchHandover({ container, reload, schedule }: HandoverDeps): Handover {
   const later = schedule ?? ((fn: () => void, ms: number) => void setTimeout(fn, ms))
 
-  // LIVE, not a snapshot. A first visit starts with no controller and gains one
-  // the moment that first worker claims the page — so a flag captured at boot
-  // says "there was never a controller" for the rest of the tab's life, and the
-  // next handover, the one the user actually clicked for, is then mistaken for a
-  // first install and skipped. That is the bug this module was extracted for.
+  // Tracked live, not captured once at boot: a first visit gains a controller
+  // later, and a boot-time flag would mistake every later handover for a first
+  // install and skip the reload.
   let controlled = Boolean(container.controller)
-  // The user asked. Whatever the controller history says, this ends in a reload.
+  // The user asked: this ends in a reload regardless of controller history.
   let asked = false
   let reloading = false
 
@@ -67,24 +59,20 @@ export function watchHandover({ container, reload, schedule }: HandoverDeps): Ha
   container.addEventListener('controllerchange', () => {
     const replaced = controlled
     controlled = true
-    // The very first worker claims the page as soon as it activates. Reloading
-    // THEN would bounce every first-time visitor for no reason.
+    // Don't reload on the first claim, or every first-time visitor bounces.
     if (replaced || asked) go()
   })
 
   return {
     take(waiting) {
       asked = true
-      // Nothing waiting — the notice was stale, or the worker went away. A plain
-      // reload is then the honest thing: it is what the button promised.
+      // Nothing waiting (stale notice): just reload.
       if (!waiting) {
         go()
         return
       }
       waiting.postMessage({ type: 'SKIP_WAITING' })
-      // The backstop. If the handover lands, `controllerchange` has already
-      // reloaded and this finds `reloading` set; if it never lands, the user
-      // still gets the reload they clicked for instead of a dead button.
+      // Backstop: if the handover never lands, reload anyway.
       later(go, HANDOVER_GRACE_MS)
     },
   }
