@@ -1,14 +1,11 @@
 // What the vectorize studio remembers across a reload.
 //
-// Split the way the rest of the session is (see lib/persist/session.ts): the
-// settings go to localStorage because the studio reads them synchronously while
-// mounting, and the DOCUMENT goes to IndexedDB because it is the expensive part
-// — a trace is seconds of work and a node-editing pass is minutes of it.
+// Settings go to localStorage because the studio reads them synchronously while
+// mounting; the document goes to IndexedDB (see lib/persist/session.ts).
 //
 // The document is stored with the `assetKey` of the image it was traced from, so
 // a restore can tell whether it still belongs to the picture on screen. Without
-// that check, uploading a new logo and reloading would show last week's trace
-// over this week's art.
+// that check a new upload plus a reload would show the old trace over new art.
 
 import type { EditableDoc } from '../../lib/path/types'
 import type { VectorizeOptions } from '../../types'
@@ -25,19 +22,16 @@ export interface StudioView {
   forceColorOn: boolean
   forceColor: string
   /**
-   * Whether the user has touched force-colour / gradients by hand. Persisted
-   * alongside the values because the studio's two auto-probes (the ink offer and
-   * the rampiness probe) re-run on the restored image and would otherwise
-   * overwrite a deliberate choice with their own — the probes are suppressed by
-   * these flags, not by the values.
+   * Whether the user has set force-colour / gradients by hand. The auto-probes
+   * are suppressed by these flags, not by the values, so a deliberate choice
+   * survives a probe re-run.
    */
   forceColorTouched: boolean
   gradientsTouched: boolean
   /**
-   * The image (store `assetKey`) these options were decided for — by the probes
-   * or by hand on top of them. A restore only suppresses the probes while the
-   * picture on screen is this one; a fresh upload is probed like a fresh image.
-   * Absent on views stored before the field existed (see probeLedger.ts).
+   * The image (store `assetKey`) these options were decided for. A restore only
+   * suppresses the probes while this image is on screen (see probeLedger.ts).
+   * Absent on older stored views.
    */
   probedAssetKey?: string | null
   retraceVector: 'clean' | 'retrace'
@@ -77,10 +71,9 @@ export const saveStudioView = debounce((view: StudioView) => {
 }, 300)
 
 /**
- * Store the document. The debounce is longer than the other slots': this fires
- * on every frame of a node drag, and each write structured-clones the whole
- * document. A second of lag costs nothing (a `pagehide` flushes it) and keeps
- * the drag smooth on a doc with thousands of nodes.
+ * Store the document. The debounce is longer than the other slots' because this
+ * fires on every frame of a node drag and each write structured-clones the whole
+ * document; `pagehide` flushes any pending write.
  */
 export function saveStudioDoc(
   assetKey: string,

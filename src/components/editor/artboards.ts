@@ -1,11 +1,9 @@
 // Artboard sizes for a new blank drawing.
 //
-// The document model has no unit system — a viewBox is bare numbers (see
-// lib/path/types.ts), and `serializeDoc` writes no width/height attributes. So
-// a "paper" preset can only mean one thing honestly: the size in CSS pixels
-// that PRINTS as that sheet, i.e. the millimetres converted at 96 dpi, which is
-// the ratio a browser fixes between a user unit and a physical inch. A4 is then
-// 794 × 1123, and anything laid out on it comes out at 210 × 297 mm.
+// The document model has no units (a viewBox is bare numbers and `serializeDoc`
+// writes no width/height), so a paper preset is the size in CSS pixels that
+// prints as that sheet: millimetres converted at the browser's fixed 96 dpi.
+// A4 becomes 794 × 1123.
 
 /** The browser's fixed user-unit-to-inch ratio. */
 const DPI = 96
@@ -47,15 +45,14 @@ export const PAPER_PRESETS: ArtboardPreset[] = [
 export const MIN_ARTBOARD = 16
 export const MAX_ARTBOARD = 8192
 
-/** A preset matches the current size in EITHER orientation. */
+/** A preset matches the current size in either orientation. */
 export function presetMatches(p: ArtboardPreset, width: number, height: number): boolean {
   return (p.width === width && p.height === height) || (p.width === height && p.height === width)
 }
 
 /**
- * What a size IS, next to the numbers themselves — so it never repeats them.
- * A paper preset is worth naming ("A4 portrait"); a square one is already its
- * own measurement, and says only that it is square.
+ * A label shown next to the dimensions, so it never repeats them: paper sizes
+ * are named ("A4 portrait"), anything else just gets its orientation.
  */
 export function describeArtboard(width: number, height: number): string {
   const shape = width === height ? 'Square' : width > height ? 'Landscape' : 'Portrait'

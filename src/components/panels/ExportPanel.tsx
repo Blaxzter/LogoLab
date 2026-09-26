@@ -112,9 +112,7 @@ export default function ExportPanel(): ReactNode {
 
   const selectedCount = useMemo(() => targets.filter((t) => t.enabled).length, [targets])
 
-  // Picking an icon set is a small but fiddly decision (19 targets, five
-  // presets), and re-making it after every reload is exactly the kind of lost
-  // work this app was throwing away.
+  // The target selection is persisted so it survives a reload.
   useEffect(() => {
     saveExport({
       enabled: targets.filter((t) => t.enabled).map((t) => t.id),
@@ -366,10 +364,8 @@ function PreviewGrid({
   }, [src, svgText])
 
   return (
-    // Flex-wrap (not a fixed 3-col grid) so each tile keeps its true pixel size
-    // and flows to the next row instead of overflowing the narrow 320px panel.
-    // Natural packing groups the tiny favicons, then the app icons, then the
-    // 512 + maskable pair.
+    // Flex-wrap (not a fixed grid) so each tile keeps its true pixel size and
+    // wraps instead of overflowing the narrow panel.
     <div className="flex flex-wrap content-center justify-center gap-3">
       {PREVIEW_TILES.map((tile, i) => (
         <PreviewTile

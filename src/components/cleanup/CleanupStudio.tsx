@@ -1,14 +1,14 @@
-// The cleanup studio: a full-height workspace wiring the background-removal hot
-// path (useCleanupCanvas) to a Vectorize-style shell. Left rail = removal tools,
-// center = toolbar + pan/zoom stage (split / result / original / overlay views)
-// + status bar. The painting <canvas> stays ALWAYS MOUNTED across view modes —
-// unmounting it zeroes getBoundingClientRect().width and breaks the imgCoords
-// painting math on return — so non-result views just hide it with classes.
+// The cleanup studio: useCleanupCanvas wired to a Vectorize-style shell. Left
+// rail = removal tools, center = toolbar + pan/zoom stage (split / result /
+// original / overlay) + status bar.
 //
-// Guided keep/remove markers are studio state (normalized 0–1, not persisted,
-// not in undo); the hook only flood-restores/removes the region and tells us
-// where via onMarkerPlaced. We clear them whenever the working buffer changes
-// shape (source swap, Reset, Apply, and any crop/undo that resizes dims).
+// Don't unmount the painting <canvas> when switching views: an unmounted canvas
+// reports a 0-width rect and breaks the imgCoords painting math on return, so
+// non-result views hide it with classes instead.
+//
+// Keep/remove markers are studio state; the hook reports placements via
+// onMarkerPlaced, and the pins are cleared whenever the working buffer changes
+// (source swap, Reset, Apply, AI, or a resize).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Download, Loader2, MapPin, Redo2, SlidersHorizontal, Undo2 } from 'lucide-react'
@@ -71,8 +71,7 @@ export function CleanupStudio() {
   const [trimPad, setTrimPad] = useState(stored.trimPad)
   // Flat-recolor target for monochrome logos (Recolor → Apply).
   const [recolorColor, setRecolorColor] = useState(stored.recolorColor)
-  // Guided pins: normalized (0–1), NOT persisted, NOT in undo. Cleared whenever
-  // the working buffer changes shape (see the dims/src effects below).
+  // Guided pins: normalized (0–1), not persisted, not in undo.
   const [markers, setMarkers] = useState<KeepRemoveMarker[]>([])
 
   const clearMarkers = useCallback(() => setMarkers([]), [])
@@ -81,12 +80,9 @@ export function CleanupStudio() {
     setMarkers((m) => [...m, { x: nx, y: ny, kind }])
   }, [])
 
-  // Un-applied pixels from the last session, if they belong to THIS image.
-  //
-  // Boxed so the lookup runs ONCE: `useRef(cleanupSeed(assetKey))` would keep the
-  // first result but still call cleanupSeed on every single render, and that call
-  // takes the stored record out of the boot payload — so every render after the
-  // first would be re-claiming an already-claimed slot for nothing.
+  // Un-applied pixels from the last session, if they belong to this image.
+  // Boxed so cleanupSeed runs once: `useRef(cleanupSeed(assetKey))` would still
+  // call it (and claim from the boot payload) on every render.
   const seedBox = useRef<{ seed: ReturnType<typeof cleanupSeed> } | null>(null)
   if (!seedBox.current) seedBox.current = { seed: cleanupSeed(assetKey) }
   const seedWorking = seedBox.current.seed
@@ -178,30 +174,25 @@ export function CleanupStudio() {
     recolorColor,
   ])
 
-  // The cutout itself. `revision` is the hook's "the pixels moved" signal — it
-  // covers flood fills, brush strokes, the AI pass, edge refines, undo/redo and
-  // Reset alike. Gated on `ready` so the mount pass (before the source has even
-  // decoded, let alone been seeded) can't store an empty buffer over the one it
-  // is about to restore.
+  // The cutout itself, saved on every `revision` bump. Gated on `ready` so the
+  // mount pass can't store an empty buffer over the one it is about to restore.
   useEffect(() => {
     if (!ready) return
     void saveCleanupPixels(assetKey, snapshotWorking, modified)
   }, [ready, revision, modified, assetKey, snapshotWorking])
 
   // -------------------------------------------------- marker lifecycle clears
-  // The hook resets working pixels on these events but owns no marker state — so
-  // the pins must be dropped here, or they'd float over a different image.
+  // The hook owns no marker state, so pins are dropped here whenever the pixels
+  // are replaced; otherwise they'd float over a different image.
   useEffect(() => {
     clearMarkers()
   }, [logo.src, clearMarkers])
-  // Any dims change (crop, differently-sized undo/redo) invalidates the pins'
-  // image-space meaning enough that the cleanest contract is to clear them.
+  // A dims change (crop, differently-sized undo/redo) invalidates pin positions.
   const dimsKey = dims ? `${dims.w}x${dims.h}` : 'none'
   useEffect(() => {
     clearMarkers()
   }, [dimsKey, clearMarkers])
 
-  // Reset/Apply both call into the hook; wrap them to also drop the pins.
   const onReset = useCallback(() => {
     clearMarkers()
     handleReset()
@@ -232,9 +223,8 @@ export function CleanupStudio() {
   const onAutoTrim = useCallback(() => autoTrim(trimPad), [autoTrim, trimPad])
 
   // ----------------------------------------------------------- matte display
-  // The canvas shows the matte behind its own transparent pixels; clearing the
-  // backgroundColor reveals the stage checkerboard again. Re-applied whenever
-  // the canvas (re)mounts on reload, hence the `ready` dependency.
+  // The matte is the canvas's backgroundColor; clearing it shows the stage
+  // checkerboard. `ready` re-applies it when the canvas remounts.
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -263,8 +253,7 @@ export function CleanupStudio() {
 
   /* -------------------------------------------------------------- subviews */
 
-  // The always-mounted painting canvas. Visibility is toggled by the caller via
-  // `hidden`; never conditionally unmounted (a 0-width rect breaks imgCoords).
+  // The always-mounted painting canvas (see the header on why it never unmounts).
   const canvasEl = (
     <canvas
       ref={canvasRef}
@@ -288,8 +277,7 @@ export function CleanupStudio() {
       style={{
         width: 'auto',
         height: 'auto',
-        // Crisp, blocky pixels when magnified past fit (so you can nudge
-        // individual edge pixels); smooth interpolation when fit/zoomed out.
+        // Pixelated when magnified so individual edge pixels are visible.
         imageRendering: pz.scale > 1 ? 'pixelated' : 'auto',
         touchAction: 'none',
       }}
@@ -442,19 +430,15 @@ export function CleanupStudio() {
         </StudioTopBar>
 
         {/* -------------------------------------------------------- stage */}
-        {/* Layered, NOT branched: the source pane(s) sit underneath a single
-            always-mounted canvas host. Toggling the host's visibility per view
-            keeps the painting <canvas> mounted (an unmounted canvas reports a
-            0-width rect and breaks imgCoords on return). */}
+        {/* Layered, not branched, so the painting canvas stays mounted in every view. */}
         <div
           ref={setStage}
           className={`relative min-h-0 flex-1 overflow-hidden ${checkerClass} ${
             isMarker ? 'ring-2 ring-inset ring-emerald-400/70' : ''
           }`}
         >
-          {/* Source pane: the original image fitted into a centered box. Occupies
-              the LEFT half in split, the whole stage in original. Hidden in result;
-              in overlay it's drawn as a ghost INSIDE the canvas host instead. */}
+          {/* Source pane: left half in split, whole stage in original. In overlay
+              the source is drawn as a ghost inside the canvas host instead. */}
           {(view === 'split' || view === 'original') && (
             <div
               data-zoom-pane
@@ -472,9 +456,6 @@ export function CleanupStudio() {
             </div>
           )}
 
-          {/* The single canvas mount — the live result. Covers the RIGHT half in
-              split, the whole stage otherwise; hidden (kept mounted) in original.
-              In overlay it also stacks the ghost source under the canvas. */}
           <CanvasHost
             half={view === 'split'}
             hidden={canvasHidden}
@@ -488,8 +469,7 @@ export function CleanupStudio() {
             {canvasEl}
           </CanvasHost>
 
-          {/* First-decode affordance: the always-mounted canvas is blank until the
-              source finishes decoding, so without this the stage reads as empty. */}
+          {/* The canvas is blank until the first decode finishes. */}
           {!ready && !aiBusy && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 text-sm text-muted">
               <Loader2 size={16} className="animate-spin" /> Loading image…
@@ -504,8 +484,7 @@ export function CleanupStudio() {
             </div>
           )}
 
-          {/* Marker-active cue: keep/remove is armed from the rail, so this on-stage
-              banner makes it obvious the canvas is now click-to-seed. */}
+          {/* Tells the user the canvas is now click-to-place a marker. */}
           {isMarker && !aiBusy && (
             <div className="animate-in-fade pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2">
               <span
@@ -621,12 +600,10 @@ function toolStatusHint(tool: CleanupTool): string {
 }
 
 /**
- * Hosts the single always-mounted painting canvas, centered. Covers the right
- * half of the stage in split view, the whole stage otherwise. Hidden — not
- * unmounted — in original view so the painting rect never collapses to zero
- * width. In overlay it stacks the ghost source under the canvas; in split it
- * carries the "Result" chip. Marker pins ride in the canvas's own box so they
- * counter-scale with the same transform the canvas does.
+ * Hosts the always-mounted painting canvas: right half in split, whole stage
+ * otherwise, hidden (not unmounted) in original. In overlay it stacks the ghost
+ * source under the canvas. Marker pins ride in the canvas's own box so they
+ * share its transform.
  */
 function CanvasHost({
   half,

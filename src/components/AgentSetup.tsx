@@ -4,18 +4,12 @@ import { Bot, Check, Copy, ExternalLink, Terminal, X } from 'lucide-react'
 import { Tooltip } from './ui/Tooltip'
 
 /**
- * "Use LogoLab from your AI agent" — the install surface for the MCP server,
+ * "Use LogoLab from your AI agent": install instructions for the MCP server,
  * published to npm as `logolab` (source in src/mcp, packaged by packages/mcp).
  *
- * A web page cannot install anything on your machine, so this does the two
- * things it honestly can: it hands you the exact one-line command for your
- * client, and for Cursor it opens the install deeplink, which IS one click.
- *
- * Every command here is the SAME for every visitor — `npx -y logolab` needs no
- * clone and no path, which is why this dialog has no "where did you put it?"
- * field any more. The one exception is at the bottom: a dev server knows it is
- * a checkout, and offers to point the client at that working tree instead of
- * the release.
+ * Shows the one-line install command per client, plus Cursor's install
+ * deeplink. On a dev server it also offers a command that runs the local
+ * checkout instead of the published release.
  */
 
 const PACKAGE = 'logolab'
@@ -98,7 +92,7 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
     return `cursor://anysphere.cursor-deeplink/mcp/install?name=${PACKAGE}&config=${encodeURIComponent(b64)}`
   }, [])
 
-  /** A checkout can run its OWN tree instead of the published release. */
+  /** Dev only: run this checkout's tree instead of the published release. */
   const checkoutCmd = BUILT_IN_ROOT
     ? `claude mcp add ${PACKAGE} -- node ${q(`${BUILT_IN_ROOT.replace(/[\\/]+$/, '')}/src/mcp/server.ts`)}`
     : ''
@@ -232,8 +226,6 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
             </p>
           </div>
 
-          {/* Only a dev server can offer this: it IS a checkout, and a contributor
-              wants their client running that tree rather than the npm release. */}
           {checkoutCmd && (
             <div className="border-t border-line pt-4">
               <p className="text-xs text-muted">
@@ -255,16 +247,8 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
 const AGENT_LABEL = 'Use from your AI agent'
 
 /**
- * The button that opens it.
- *
- * Three shapes for three homes: `icon` in the desktop header (its own affordance,
- * always reachable), `ghost` as a row in the mobile menu, `secondary` as the wide
- * button in the Export panel.
- *
- * The header is the one that matters. This used to live ONLY in the Export panel,
- * which meant a desktop user had to load a logo and open the right tab to find
- * out the MCP server exists — hidden behind the browser workflow it is the
- * alternative to. It is reachable now with no logo and on every tab.
+ * Opens the dialog. `icon` for the desktop header, `ghost` for the mobile menu,
+ * `secondary` for the Export panel.
  */
 export function AgentSetupButton({
   variant = 'secondary',

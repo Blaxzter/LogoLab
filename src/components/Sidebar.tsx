@@ -21,10 +21,8 @@ const SHAPE_LABEL: Record<IconShape, string> = {
 }
 
 /**
- * The sidebar's scrollable controls + pinned Reset footer. Shared verbatim by the
- * desktop {@link Sidebar} column and the mobile {@link MobileSidebarDrawer} so the
- * two never drift. Fills its parent (the parent sets the width); on desktop that's
- * a fixed 320px shell, in the drawer it's the full slide-over.
+ * Scrollable controls plus a pinned Reset footer, shared by the desktop
+ * {@link Sidebar} and the mobile {@link MobileSidebarDrawer}. Fills its parent.
  */
 function SidebarBody() {
   const tab = useActiveTab()
@@ -34,10 +32,8 @@ function SidebarBody() {
   const setEnv = useStore((s) => s.setEnv)
   const resetAppearance = useStore((s) => s.resetAppearance)
 
-  // Only Preview and Export consume the appearance/branding controls. Cleanup
-  // and Vectorize work on the raw pixels and read nothing but the logo, so their
-  // styling controls would be inert — hide them there. The Logo section stays in
-  // every view (you load / swap / pick an example from it everywhere).
+  // Only Preview and Export use the appearance/branding controls; the Logo
+  // section is shown everywhere.
   const isPreview = tab === 'preview'
   const showStyling = isPreview || tab === 'export'
 
@@ -47,8 +43,7 @@ function SidebarBody() {
     { value: 'square', label: <Square size={15} />, title: 'Square' },
   ]
 
-  // One-line glances for each collapsed section — same convention the cleanup &
-  // vectorize rails use so the panel stays readable while folded.
+  // One-line summaries shown on collapsed sections.
   const sizeSummary = `${Math.round(app.scale * 100)}% scale · ${app.padding}% pad`
   const cardSummary =
     app.cardColor === 'transparent'
@@ -65,10 +60,7 @@ function SidebarBody() {
 
   return (
     <>
-      {/* Scrollable settings — the Reset footer below stays pinned, mirroring the
-          cleanup & vectorize rails. */}
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
-        {/* Logo — needed in every view, so it stays open at the top (not folded). */}
         <section className="flex flex-col gap-3">
           <SectionTitle>Logo</SectionTitle>
           <UploadDropzone />
@@ -77,7 +69,6 @@ function SidebarBody() {
 
         {showStyling && (
           <>
-            {/* Size & spacing */}
             <Collapsible title="Size & spacing" summary={sizeSummary} defaultOpen>
               <Field label="Logo scale">
                 <Slider
@@ -99,7 +90,6 @@ function SidebarBody() {
               </Field>
             </Collapsible>
 
-            {/* Background card */}
             <Collapsible title="Background card" summary={cardSummary} defaultOpen>
               {/* "Draw card in flat contexts" only affects the Preview scenes. */}
               {isPreview && (
@@ -153,7 +143,6 @@ function SidebarBody() {
               )}
             </Collapsible>
 
-            {/* Recolor */}
             <Collapsible title="Recolor" summary={recolorSummary}>
               <Field
                 label="Recolor logo"
@@ -181,8 +170,8 @@ function SidebarBody() {
               />
             </Collapsible>
 
-            {/* Environment (Preview) / Branding (Export). Theme & page background only
-                drive the Preview scenes; the brand name also names the PWA manifest. */}
+            {/* Theme and page background only drive the Preview scenes; the brand
+                name also names the PWA manifest. */}
             <Collapsible title={isPreview ? 'Environment' : 'Branding'} summary={envSummary}>
               {isPreview && (
                 <Field label="Preview theme">
@@ -221,10 +210,7 @@ function SidebarBody() {
         )}
       </div>
 
-      {/* Pinned footer — Reset stays reachable no matter how far the settings scroll,
-          matching the cleanup & vectorize rails. It only exists once there is
-          something to undo: over untouched defaults the button can't do anything,
-          and a permanent dead control is noise at the bottom of every panel. */}
+      {/* Pinned Reset footer, shown only when the appearance differs from the defaults. */}
       {showStyling && !isDefaultAppearance(app) && (
         <div className="flex shrink-0 flex-col gap-3 border-t border-line bg-surface p-4">
           <Button
@@ -249,9 +235,7 @@ function SidebarBody() {
  */
 export function Sidebar({ className = '' }: { className?: string }) {
   const tab = useActiveTab()
-  // Cleanup, Vectorize & Icon sheet don't use any sidebar controls (and load
-  // their images from their own empty state), so the whole panel slides away
-  // there for a roomier canvas.
+  // These tabs have their own rails and don't use the sidebar.
   const collapsed = tab === 'cleanup' || tab === 'vectorize' || tab === 'sheet'
 
   return (
@@ -263,9 +247,7 @@ export function Sidebar({ className = '' }: { className?: string }) {
         collapsed ? 'border-r-0' : 'border-r'
       } ${className}`}
     >
-      {/* Fixed-width inner so content doesn't reflow while the panel clips it
-          during the collapse transition. Width matches the cleanup & vectorize
-          rails (320px). */}
+      {/* Fixed-width inner so content doesn't reflow during the collapse transition. */}
       <div className="flex h-full w-[320px] flex-col">
         <SidebarBody />
       </div>
@@ -274,10 +256,8 @@ export function Sidebar({ className = '' }: { className?: string }) {
 }
 
 /**
- * Mobile slide-over holding the same appearance controls. Rendered only for the
- * Preview & Export tabs (and only opened once a logo exists — see {@link App}),
- * so phones get the full-width preview and reach the controls on demand. Shares
- * the app-wide {@link Sheet} chrome (backdrop, z-stack, inert, scroll-lock).
+ * Mobile slide-over with the same controls. Rendered only for Preview and Export
+ * (and opened only once a logo exists — see {@link App}).
  */
 export function MobileSidebarDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (

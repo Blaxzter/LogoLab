@@ -4,23 +4,17 @@ import { BUILD, buildTitle, hasBuildInfo, releaseDateLabel, versionLabel } from 
 import { Tooltip } from '../ui/Tooltip'
 
 /**
- * Which build you are looking at — the version of the tracer and the day it was
- * built. Worth a line in the footer because the site deploys on every push to
- * main: without it, "it still does the thing" and "your fix has not reached me
- * yet" are indistinguishable from the outside, and a bug report cannot say which.
- *
- * The version links to its GitHub release, so the notes for exactly this build
- * are one click away. Renders nothing at all when the stamp is empty (a build
- * with no git and no manifest) rather than printing `v` and a blank date.
+ * Which build you are looking at: tracer version and build date. The site
+ * deploys on every push to main, so this lets a user (and a bug report) say
+ * which build they have. The version links to its GitHub release. Renders
+ * nothing when the stamp is empty rather than printing `v` and a blank date.
  */
 function BuildStamp() {
   if (!hasBuildInfo()) return null
   const version = versionLabel()
   const day = releaseDateLabel()
   return (
-    // The long form is a real tooltip, not a native `title` — this was the last
-    // one left in the app, and a bubble that takes a second to appear and can't
-    // be themed is not the same affordance as the ones everywhere else.
+    // A themed Tooltip, not a native `title`, like every other hint in the app.
     <Tooltip label={buildTitle()}>
       <span className="flex items-center gap-1.5">
         {version && (

@@ -1,14 +1,9 @@
-// Ready-made drawings for the editor's empty state — the same cards the logo
-// panels and the icon sheet show, so the three front doors read as one thing.
+// Ready-made drawings for the editor's empty state, using the same cards as the
+// other intakes.
 //
-// The pick lands in the EDITOR only: it is parsed straight into an editable
-// document and never touches the app's working logo, because opening something
-// to look at its nodes must not replace what you were preparing on the other
-// tabs.
-//
-// They are the bundled example logos, chosen for what each one gives you to
-// edit — a flat mark, a stack of translucent shapes, strokes, a gradient — since
-// the editor's jobs are nodes, paint and layer order, not tracing.
+// A pick opens in the editor only; it doesn't replace the working logo until
+// it is edited. Each example is chosen for something to edit (flat shapes,
+// translucency, strokes, a gradient).
 
 import { useCallback, useState } from 'react'
 import type { EditableDoc } from '../../lib/path/types'

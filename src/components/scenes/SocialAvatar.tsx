@@ -4,7 +4,7 @@ import { useAppearance, useEnv } from '../../store'
 import { hexToRgb } from '../../lib/colorUtils'
 
 /**
- * Social profile mock (X / Mastodon flavor) that stress-tests the CIRCULAR
+ * Social profile mock (X / Mastodon flavor) that stress-tests the circular
  * avatar crop. A gradient cover banner, a large circular avatar overlapping it,
  * profile metadata + Follow button, and one example post row below. The page
  * chrome flips light/dark via env.theme.

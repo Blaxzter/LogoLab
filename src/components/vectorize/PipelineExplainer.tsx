@@ -1,9 +1,7 @@
-// "How it works" — a user-facing teaching overlay that runs the CURRENT uploaded
-// image through the structure-first vectorize pipeline WITH THE USER'S CURRENT
-// settings, and shows each stage with a plain-language explanation. The analysis
-// runs OFF the main thread (the trace worker's 'analyze' job) so opening it never
-// freezes the UI, and its stages honour the same options as the real trace (so the
-// region count matches the output). Linked from the vectorize view.
+// "How it works": a teaching overlay that runs the current image through the
+// vectorize pipeline with the user's current settings and explains each stage.
+// The analysis runs in the trace worker ('analyze' job) with the same options as
+// the real trace, so its region count matches the output.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -45,7 +43,7 @@ export function PipelineExplainer({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Analyse the current image with the current settings, OFF the main thread.
+  // Analyse the current image with the current settings in the worker.
   const optsKey = JSON.stringify(opts)
   useEffect(() => {
     setAnalysis(null)
@@ -311,10 +309,9 @@ function colorHistogram(img: ImageData, bins = 64): ColorHistogram {
   return { r, g, b, bins, max }
 }
 
-/** The auto-gradients decision, made visible. Gradients turn ON only when BOTH a
- *  gentle slope is present AND the palette is spread — so a flat logo with soft
- *  (anti-aliased) edges, which reads "rampy" but is a few dominant colours, stays
- *  OFF. Both signals are shown with their verdicts so a surprising call is legible. */
+/** The auto-gradients decision, made visible. Gradients turn on only when a gentle
+ *  slope is present and the palette is spread, so a flat logo with anti-aliased
+ *  edges stays off. Both signals are shown with their verdicts. */
 function GradientDetection({
   ramp,
   hist,
@@ -388,8 +385,8 @@ function Signal({ ok }: { ok: boolean }) {
   )
 }
 
-/** Three overlaid per-channel area plots — the classic RGB colour histogram, on a
- *  LOG scale so a dominant colour (e.g. a black background) doesn't flatten every
+/** Three overlaid per-channel area plots (an RGB histogram) on a log scale so a
+ *  dominant colour (e.g. a black background) doesn't flatten every
  *  other peak into the baseline. */
 function HistogramChart({ hist }: { hist: ColorHistogram }) {
   const { r, g, b, bins, max } = hist

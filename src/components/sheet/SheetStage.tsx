@@ -2,9 +2,9 @@
 //
 // This is where you check the split and fix it: click a box to select, drag it or
 // its corners to adjust, drag on empty paper (in Draw mode) to add one the
-// detector missed. Boxes are stored in SHEET pixels and drawn in percentages, so
-// they ride the pan/zoom for free — but their outlines and handles counter-scale
-// by `--pz-scale`, or they'd balloon into slabs at 8×.
+// detector missed. Boxes are stored in sheet pixels and drawn in percentages, so
+// they follow pan/zoom for free; outlines and handles counter-scale by
+// `--pz-scale` so they stay thin at high zoom.
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Trash2 } from 'lucide-react'

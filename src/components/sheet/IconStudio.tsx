@@ -56,10 +56,9 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
   )
 
   /**
-   * The studio runs its OWN trace whenever a control moves, so it has to start
-   * from the same pixels the batch used — the enlarged crop. Handing it the
-   * native crop instead would quietly re-trace the icon at lower quality the
-   * moment the user touched a slider.
+   * The studio re-traces whenever a control moves, so it must start from the
+   * same pixels the batch used — the enlarged crop. The native crop would
+   * re-trace the icon at lower quality as soon as a slider moved.
    */
   const plan = useMemo(
     () => planTileTrace(pixels, tile.opts ?? traceOptions, { colorMode, gradientMode, background: sheetBackground, hiRes }),
@@ -78,8 +77,8 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
     let cancelled = false
     void (async () => {
       try {
-        // `toImageData` is not decoration: the crop is a plain {width,height,data},
-        // and putImageData rejects anything that is not a real ImageData.
+        // The crop is a plain {width,height,data}; putImageData needs a real
+        // ImageData.
         const blob = await canvasToBlob(imageDataToCanvas(toImageData(traceInput)), 'image/png')
         if (cancelled) return
         url = URL.createObjectURL(blob)
@@ -102,10 +101,9 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
   }, [traceInput, fileStem])
 
   /**
-   * What goes back to the sheet. A mono trace comes back black; the batch
-   * repaints a tile that follows the sheet defaults in the ink the probe saw,
-   * and the studio's result gets the same treatment — otherwise opening a white
-   * glyph would hand it back to the grid black.
+   * What goes back to the sheet. A mono trace comes back black; like the batch,
+   * repaint it in the ink the probe saw, or a white glyph opened here would
+   * return to the grid black.
    */
   const keep = useCallback(
     (r: { doc: EditableDoc; svgText: string; stats: SheetIcon['stats'] }) => {
@@ -151,10 +149,9 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
   )
 
   /**
-   * The controls must describe the document on screen. A batch run decides colour
-   * vs mono PER TILE, so the sheet defaults are not what this icon was traced
-   * with — open on the resolved options (or, for a tile the batch never reached,
-   * on the same decision the batch would make).
+   * The controls must describe the document on screen. The batch decides colour
+   * vs mono per tile, so open on this tile's resolved options (or, for a tile
+   * the batch never reached, on the decision the batch would make).
    */
   const initialOptions = useMemo(() => tile.opts ?? tile.resolved ?? plan.opts, [tile.id, plan])
 

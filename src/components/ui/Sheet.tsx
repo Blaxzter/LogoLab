@@ -9,21 +9,16 @@ import { Tooltip } from './Tooltip'
 const HIDE_FROM = { md: 'md:hidden', lg: 'lg:hidden', xl: 'xl:hidden' } as const
 
 /**
- * The single mobile overlay grammar for the whole app — a slide-over (`right`)
- * or a bottom sheet (`bottom`) with one backdrop, one z-stack, and one
- * dismiss/inert contract. Generalized from the original appearance drawer so the
- * header menu, the appearance panel, and every studio control rail share it.
+ * The app's mobile overlay: a slide-over (`right`) or bottom sheet (`bottom`)
+ * with a shared backdrop, z-stack and dismiss/inert behaviour. Used by the
+ * header menu, the appearance panel and the studio control rails.
  *
- * `hideFrom` is the width at which desktop takes over and the sheet goes
- * `display:none`. It MUST match the breakpoint on whatever OPENS it, and that is
- * not a detail: while this was hard-wired to `md:hidden` the header's hamburger
- * was already `lg:hidden`, so every press between 768 and 1024px opened a sheet
- * the stylesheet had removed — nothing on screen, and a body left scroll-locked
- * by the hook below, which reads as a frozen page rather than a missing menu.
+ * `hideFrom` is the breakpoint where the sheet goes `display:none`. It must
+ * match the breakpoint of whatever opens it; otherwise the trigger opens an
+ * invisible sheet and the body stays scroll-locked.
  *
- * `children` are rendered directly into the panel's flex column after the title
- * bar, so a body using the `flex-1 overflow-y-auto` + pinned-footer pattern (like
- * SidebarBody) scrolls correctly in both variants.
+ * `children` go straight into the panel's flex column below the title bar, so a
+ * `flex-1 overflow-y-auto` body with a pinned footer scrolls correctly.
  */
 
 export function Sheet({
@@ -47,7 +42,7 @@ export function Sheet({
   const hidden = HIDE_FROM[hideFrom]
   useBodyScrollLock(open)
 
-  // Esc closes (harmless on touch; helps a11y + desktop testing).
+  // Escape closes.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -62,8 +57,8 @@ export function Sheet({
     ? `inset-x-0 bottom-0 max-h-[85vh] w-full rounded-t-2xl border-t ${open ? 'translate-y-0' : 'translate-y-full'}`
     : `inset-y-0 right-0 h-full w-[min(20rem,86vw)] border-l ${open ? 'translate-x-0' : 'translate-x-full'}`
 
-  // Swipe-down-to-dismiss for the bottom sheet, armed only from the grab handle /
-  // title bar so it never fights the scrollable body.
+  // Swipe down to dismiss the bottom sheet, armed only from the handle and title
+  // bar so it doesn't fight the scrollable body.
   const dragStart = useRef<number | null>(null)
   const dragHandlers = isBottom
     ? {
@@ -82,9 +77,8 @@ export function Sheet({
       }
     : {}
 
-  // Portal to <body> so a transformed ancestor (e.g. a studio's animate-in-fade,
-  // or a parent sheet's slide transform) can't become the containing block and
-  // trap these fixed overlays inside its box.
+  // Portal to <body> so a transformed ancestor can't become the containing block
+  // for these fixed overlays.
   return createPortal(
     <>
       <div

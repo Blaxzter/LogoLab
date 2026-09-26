@@ -44,7 +44,7 @@ export function usePanZoom(opts: PanZoomOptions = {}) {
   const clampXY = (scale: number, x: number, y: number, w: number, h: number) => {
     // The content is anchored at the box's top-left (transform-origin: 0 0) and
     // scaled, so it overflows down/right only. Keeping it covering the box means
-    // the translation lives in [-(overflow), 0] per axis — NOT symmetric around 0.
+    // the translation lives in [-(overflow), 0] per axis, not symmetric around 0.
     // (At scale 1 this pins to 0; the centred view sits at the range's midpoint.)
     const ox = Math.max(0, w * scale - w)
     const oy = Math.max(0, h * scale - h)
@@ -103,11 +103,10 @@ export function usePanZoom(opts: PanZoomOptions = {}) {
   const contentStyle = {
     transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
     transformOrigin: '0 0',
-    // Live zoom, exposed as a CSS variable so overlays inside the scaled content can
-    // counter-scale to a CONSTANT screen size. `scale()` above magnifies every stroke,
-    // and `vector-effect: non-scaling-stroke` only cancels the SVG's own CTM, not this
-    // ancestor transform — so the labs' node wireframe divides its width by this var
-    // (`stroke-width: calc(N / var(--pz-scale))`) to stay the same size at any zoom.
+    // Live zoom as a CSS variable so overlays inside the scaled content can
+    // counter-scale to a constant screen size. `vector-effect: non-scaling-stroke`
+    // does not undo an ancestor `scale()`, so use
+    // `stroke-width: calc(N / var(--pz-scale))` instead.
     '--pz-scale': transform.scale,
   } as CSSProperties
 

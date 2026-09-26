@@ -88,8 +88,7 @@ export function UploadDropzone() {
       {error && (
         <p className="flex items-center gap-2 text-xs text-bad">
           {error}
-          {/* Same rule as the big drop zone: only when something was THROWN.
-              "Please drop an image file" is the user's mistake, not ours. */}
+          {/* Only for thrown errors, not validation messages. */}
           {failure != null && <ReportFailureLink what="the uploader" error={failure} />}
         </p>
       )}

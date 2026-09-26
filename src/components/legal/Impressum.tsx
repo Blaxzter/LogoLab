@@ -1,10 +1,9 @@
 /*
  * Impressum (legal notice) — required under § 5 DDG for German operators.
  *
- * ⚠️ BEFORE DEPLOY: replace every [PLACEHOLDER] with your real details. A
- * ladungsfähige Anschrift (a real postal address where legal mail can be
- * served — no P.O. box) is mandatory. Have the final text sanity-checked by
- * a generator (e.g. eRecht24, datenschutz-generator.de) or a lawyer.
+ * Before deploying, replace every [PLACEHOLDER] with real details. A
+ * ladungsfähige Anschrift (a postal address where legal mail can be served,
+ * no P.O. box) is mandatory.
  */
 import { LegalShell } from './LegalShell'
 import { legalInfo, legalInfoComplete } from '../../lib/legalInfo'

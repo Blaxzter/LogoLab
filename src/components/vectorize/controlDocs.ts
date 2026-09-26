@@ -1,11 +1,10 @@
-// Single source of truth for the vectorize control documentation: each tuning
-// knob's short hint, long explanation, the bundled example that best shows it
-// off, and the before/after variant spread to render in its info dialog.
+// Documentation for the vectorize controls: each knob's short hint, long
+// explanation, the example that best shows it, and the before/after variants
+// its info dialog renders.
 //
-// Deliberately framework-free (only a type-only import) so BOTH the Node
-// build-time preview generator (src/devtest/genControlPreviews.ts) and the
-// in-browser ControlInfoDialog import the exact same descriptors — the labels,
-// example choice and option values can never drift between them.
+// Framework-free (type-only imports) so the build-time preview generator
+// (src/devtest/genControlPreviews.ts) and ControlInfoDialog share the same
+// descriptors.
 
 import type { VectorizeOptions } from '../../types'
 
@@ -47,8 +46,8 @@ export interface ControlDoc {
   /** The before/after spread rendered in the dialog. */
   variants: ControlVariant[]
   /**
-   * Potrace can't run headlessly (WASM + DOMParser), so the Engine dialog has
-   * no precomputed grid — it compares live in the browser instead.
+   * No precomputed grid: the dialog traces the variants live in the browser
+   * when it opens.
    */
   liveOnly?: boolean
   /**

@@ -6,12 +6,8 @@ export const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'preview', label: 'Preview', icon: <Eye size={15} /> },
   { id: 'cleanup', label: 'Cleanup', icon: <Eraser size={15} /> },
   { id: 'vectorize', label: 'Vectorize', icon: <Wand2 size={15} /> },
-  // The general-purpose vector editor. It sits after Vectorize because that is
-  // where its input usually comes from, but unlike every other tab it does NOT
-  // work on the app's logo — it opens whatever you give it (see EditorPanel).
+  // Standalone vector editor; opens any SVG, not just the app's logo (see EditorPanel).
   { id: 'editor', label: 'Editor', icon: <PenTool size={15} /> },
-  // A sheet is many logos at once, so it sits apart from the single-logo flow —
-  // after the vectorizer it feeds, before the export it ends in.
   { id: 'sheet', label: 'Icon sheet', icon: <LayoutGrid size={15} /> },
   { id: 'export', label: 'Export', icon: <Download size={15} /> },
 ]
@@ -19,15 +15,13 @@ export const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 export const REPO_URL = 'https://github.com/Blaxzter/LogoLab'
 
 /**
- * The vectorizer's harnesses — lazily-loaded React routes under `/labs` (see the
- * `<Suspense>` block in App.tsx; the chunks they pull in, tracer + scoring modules
- * included, stay out of the main bundle).
+ * The vectorizer's harnesses: lazily loaded routes under `/labs` (see App.tsx),
+ * kept out of the main bundle. Listed here so the header popover, the mobile
+ * menu and the labs index show the same set.
  *
- * ONE LAB, ONE QUESTION. The Workbench asks "is the trace correct?" of a switchable corpus
- * and never changes shape; anything that can't be asked of every corpus is its own lab
- * instead. (They were briefly a corpus × lens matrix — the available comparisons mutated
- * when you switched corpus, so the view's meaning changed under you. Don't do that again.)
- * Kept here so the header popover, the mobile menu and the labs index list the same set.
+ * Each lab answers one question. The Workbench asks "is the trace correct?" of
+ * a switchable corpus and keeps the same shape for every corpus; anything that
+ * doesn't apply to every corpus gets its own lab.
  */
 export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.ReactNode }[] = [
   {

@@ -1,12 +1,9 @@
-// The vectorize studio: a full-height workspace wiring the trace engine to an
-// editable vector document. Left rail = trace parameters, center = toolbar +
-// pan/zoom stage (split / traced / original / overlay views) + status bar,
-// right rail = per-path list. The traced doc lives in undo/redo history; node
-// edits flow back from the canvas as live previews + committed steps.
+// The vectorize studio: trace controls (left rail), a pan/zoom stage with
+// split / traced / original / overlay / difference views and a status bar, and
+// the per-path list (right rail). The traced doc lives in undo/redo history.
 //
-// It traces THE app's working logo by default and needs no props for that. Every
-// binding to the global store is also a prop, so the same studio — not a fork of
-// it — edits one cropped tile of an icon sheet (see components/sheet).
+// Traces the app's working logo by default. Every store binding is also a prop,
+// so the icon sheet reuses the same studio to edit one tile.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -97,20 +94,15 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 const DEBOUNCE_MS = 400;
 
 /**
- * Above this Rec.709 luma the probed ink is plainly not black, so a mono trace
- * (which always comes back #000) is repainted with the ink's real colour by
- * default. Below it the two agree closely enough that switching the recolor on
- * would only add a control the user has to reason about.
+ * Above this Rec.709 luma the probed ink is clearly not black, so a mono trace
+ * (always #000) is repainted with the ink's colour by default.
  */
 const INK_IS_BLACK_LUMA = 32;
 
 /**
- * Long side of the raster the fidelity score and the Difference heat are measured
- * on. NOT the trace resolution: that is 1024–4096 (see traceCaps), and scoring
- * there means rasterizing up to 16M pixels PER PATH for a number three digits
- * wide. Measured on the bundled art, halving the resolution moves the mean ΔE by
- * ~0.005 and quartering it by ~0.07 — so a 1024px score is the same number, and
- * plenty of resolution to see WHERE a trace went wrong.
+ * Long side of the raster the fidelity score and Difference heat are measured
+ * on. Deliberately below the trace resolution (1024–4096): rasterizing costs
+ * O(pixels) per path, and scoring at 1024px barely moves the mean ΔE.
  */
 const SCORE_MAX_DIM = 1024;
 
@@ -169,9 +161,8 @@ export interface VectorizeStudioProps {
     initialOptions?: VectorizeOptions;
     onOptionsChange?: (opts: VectorizeOptions) => void;
     /**
-     * A document that was already traced for this source. Seeds the editor and
-     * suppresses the mount re-trace — the host (icon sheet) traced it in a batch
-     * and re-tracing on open would be seconds of work for the same result.
+     * A document already traced for this source (e.g. by the icon sheet's batch).
+     * Seeds the editor and skips the re-trace on mount.
      */
     initialDoc?: EditableDoc | null;
     /** Fires whenever the traced/edited document changes, so a host can keep it. */
@@ -179,10 +170,9 @@ export interface VectorizeStudioProps {
     /** Host chrome for the start of the toolbar (e.g. "back to all icons"). */
     leading?: ReactNode;
     /**
-     * Remember this studio's settings and document across a reload. Only the
-     * /vectorize tab sets it: the sheet mounts one studio per tile over a
-     * document its own store already persists, and both writing to the same slot
-     * would have them overwrite each other.
+     * Persist this studio's settings and document across a reload. Only the
+     * /vectorize tab sets it; the sheet persists its tiles itself, and two studios
+     * writing the same slot would overwrite each other.
      */
     persist?: boolean;
 }
@@ -206,9 +196,9 @@ export function VectorizeStudio({
     const setProcessedSvg = useStore((s) => s.setProcessedSvg);
     const assetKey = useStore((s) => s.assetKey);
 
-    // The stored session, read ONCE (a ref, not an effect: the state initializers
-    // below need it during the very first render, and a claimed document must not
-    // be taken twice under StrictMode's double invocation).
+    // The stored session, read once into a ref: the state initializers need it on
+    // the first render, and a claimed document must not be claimed twice under
+    // StrictMode's double invocation.
     const sessionRef = useRef<StudioSeed | undefined>(undefined);
     if (sessionRef.current === undefined) {
         sessionRef.current = persist
@@ -220,18 +210,15 @@ export function VectorizeStudio({
     const logo = source ?? storeLogo;
     const checkerClass = checkerClassProp ?? storeChecker;
     const pz = usePanZoom({ maxScale: 32 });
-    // No Worker, no score — the metric is an extra, and running it on the main
-    // thread is exactly what the worker is there to prevent.
+    // No Worker, no score: running it on the main thread would block the UI.
     const canScore = canScoreOffThread();
     const isMobile = useIsMobile();
 
     const [opts, setOpts] = useState<VectorizeOptions>(
         initialOptions ?? session.view?.opts ?? DEFAULT_VECTORIZE_OPTIONS,
     );
-    // Output coordinate precision (decimals). 3dp matches what desktop tracers
-    // (Affinity/Canva) emit and preserves sub-pixel geometry when the SVG is
-    // scaled past its trace resolution; the file-size cost is ~10–15% and there
-    // is no visible cost at or below trace res. Not a user knob.
+    // Output coordinate precision (decimals). 3dp preserves sub-pixel geometry when
+    // the SVG is scaled past its trace resolution. Not a user knob.
     const precision = 3;
     const [forceColorOn, setForceColorOn] = useState(session.view?.forceColorOn ?? false);
     const [forceColor, setForceColor] = useState(session.view?.forceColor ?? "#14161c");
@@ -245,9 +232,8 @@ export function VectorizeStudio({
     const [traceSheetOpen, setTraceSheetOpen] = useState(false);
     const [pathsSheetOpen, setPathsSheetOpen] = useState(false);
     const [overlayOpacity, setOverlayOpacity] = useState(session.view?.overlayOpacity ?? 60);
-    // Region markers have no separate "enable" switch: the markers ARE the feature.
-    // With none placed the trace is byte-identical; placing one turns it on. The only
-    // transient state is "region mode" (tool === 'mark') — click-to-place vs pan.
+    // Markers have no enable switch: with none placed the trace is unchanged. The
+    // only transient state is placement mode (tool === 'mark').
 
     const history = useHistory<EditableDoc>();
     const doc = history.value;
@@ -268,8 +254,8 @@ export function VectorizeStudio({
     // arm the "re-trace discards edits" notice instead of re-tracing.
     const dirtyRef = useRef(false);
     const [staleEdits, setStaleEdits] = useState(false);
-    // Settings changed since the last COMPLETED trace but not yet applied — armed when
-    // a trace is Stopped mid-flight (the shown result then lags the controls).
+    // Settings changed since the last completed trace but not applied: set when a
+    // trace is stopped mid-flight.
     const [staleOpts, setStaleOpts] = useState(false);
 
     const [busy, setBusy] = useState(false);
@@ -283,17 +269,14 @@ export function VectorizeStudio({
     // region painted exactly this colour so the user can locate (and then delete) it.
     const [highlightFill, setHighlightFill] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    // How far the result is from the source image, measured off-thread — the mean
-    // ΔE in the status bar and the per-pixel heat behind the Difference view, both
-    // out of ONE field so the number and the picture can never disagree.
+    // Distance from the source, measured off-thread. The status-bar mean ΔE and the
+    // Difference heat come from one field so they can't disagree.
     const [score, setScore] = useState<TraceScore | null>(null);
     // The source decoded once at SCORE_MAX_DIM and kept: the score re-runs on every
     // edit, and re-decoding the image for each of them is the expensive half.
     const scoreSourceRef = useRef<{ src: string; img: ImageData } | null>(null);
-    // The error OBJECT behind that sentence. The user gets "try different
-    // settings"; a bug report needs the thing that was actually thrown, and the
-    // worker path catches its own failures — so without this, the tracer's most
-    // common failure is the one that can never be reported (see ReportIssue).
+    // The error object behind the status message, kept for bug reports: the worker
+    // catches its own failures, so otherwise there would be nothing to attach.
     const [failure, setFailure] = useState<unknown>(null);
     // What Auto enlargement did on the last run, so the Upscale control can say
     // "×3 — its strokes are 1px" instead of leaving the user to guess.
@@ -305,33 +288,25 @@ export function VectorizeStudio({
     // Pending debounced auto-run timer, shared so Stop can cancel it (otherwise a
     // re-trace armed just before Stop fires ~DEBOUNCE_MS later and clobbers the doc).
     const autoRunTimerRef = useRef<number | null>(null);
-    // Auto-default for the "fit smooth gradients" toggle, derived from image
-    // content (flat art ⇒ off, real ramps ⇒ on). `gradientsTouchedRef` flips once
-    // the user changes the toggle by hand so the probe never overrides them;
-    // `autoGradientsSrcRef` records the image we've already decided for so we probe
-    // each new image exactly once.
+    // Auto-default for the gradients toggle from image content (flat ⇒ off, ramps
+    // ⇒ on). `gradientsTouchedRef` pins a manual choice; `autoGradientsSrcRef`
+    // ensures each image is probed once.
     const gradientsTouchedRef = useRef(session.view?.gradientsTouched ?? false);
     const autoGradientsSrcRef = useRef<string | null>(null);
     /**
-     * The image (assetKey) the probes below last DECIDED for. They are two
-     * things at once — a measurement (what ink is this? does it ramp?) and a
-     * default (so set the options accordingly) — and a restored session wants
-     * the first without the second: the options on screen are the user's own,
-     * and a probe overwriting them is exactly the "my settings reset themselves"
-     * bug. Keyed to the IMAGE, not to a flag armed at mount: a stored view exists
-     * after the first ever visit, and a "Clean SVG" source never probes, so a
-     * mount-time flag survived an upload and handed the fresh image the previous
-     * image's options (see probeLedger.ts).
+     * The image (assetKey) the probes below last decided options for. On a restore
+     * the probes only measure, so they don't reset the user's options. Keyed to the
+     * image, not a mount flag: a "Clean SVG" source never probes, so a mount flag
+     * would survive an upload and hand the new image the old image's options
+     * (see probeLedger.ts).
      */
     const decidedForRef = useRef<string | null>(
         restoredDecision(session.view),
     );
 
-    // Colour vs mono, the mono cut, and whether to invert it. `auto` asks the ink
-    // probe (src/lib/ink.ts) — the same decision /sheet and the MCP server make,
-    // and the reason white line-art in Mono used to trace to nothing: the cut was
-    // a constant 128 and `invert` had no control (#46). A host that already
-    // planned the trace (the icon sheet) passes its own mode and is left alone.
+    // Colour vs mono, the mono cut, and invert. `auto` asks the ink probe
+    // (src/lib/ink.ts), the same decision /sheet and the MCP server make. A host
+    // that already planned the trace (the icon sheet) passes its own mode.
     const [colorMode, setColorMode] = useState<InkColorMode>(
         initialOptions ? initialOptions.mode : (session.view?.colorMode ?? "auto"),
     );
@@ -348,22 +323,18 @@ export function VectorizeStudio({
 
     /**
      * Resolve colour/mono for the current image and push it into the options.
+     * Called on a fresh probe and whenever Mode changes: a forced Mono still wants
+     * the measured cut and invert flag.
      *
-     * Called on a fresh probe and whenever Mode changes — a FORCED mono still
-     * wants the measured cut and the invert flag, which is exactly what a user
-     * picking "Mono" on white-on-navy art needs and never had.
-     *
-     * `apply: false` keeps only the measurement (the plan that feeds the "why"
-     * line and the mono guide) and leaves the options untouched — what a restored
-     * session wants, where the decision was already made and possibly overruled.
+     * `apply: false` only records the measurement (for the "why" line and the mono
+     * guide) and leaves the options alone, as a restored session needs.
      */
     const applyInkDecision = useCallback(
         (mode: InkColorMode, pixels?: ImageData | null, apply = true) => {
             const img = pixels ?? probePixelsRef.current;
             if (!img) {
-                // The probe hasn't landed yet (or the decode failed). An explicit
-                // choice still has to take effect — it just doesn't get a measured
-                // cut; Auto has nothing to decide from and waits for the probe.
+                // No probe result yet (or the decode failed). An explicit choice still
+                // applies, without a measured cut; Auto waits for the probe.
                 if (apply && mode !== "auto") {
                     setOpts((o) => (o.mode === mode ? o : { ...o, mode }));
                 }
@@ -383,10 +354,8 @@ export function VectorizeStudio({
                     ? o
                     : next;
             });
-            // A mono trace comes back #000. The probe knows the ink's real colour,
-            // so seed the recolor field with it, and switch it on when the ink is
-            // plainly not black — a white glyph on navy is the case that matters,
-            // and painting it black would be wrong rather than merely different.
+            // A mono trace comes back #000. Seed the recolor with the ink's real colour,
+            // and turn it on when the ink is clearly not black (e.g. white on navy).
             if (plan.recolor && !forceColorTouchedRef.current) {
                 setForceColor(plan.recolor);
                 setForceColorOn(
@@ -398,12 +367,9 @@ export function VectorizeStudio({
     );
 
     /**
-     * What the current mono cut actually admits — the numbers that let the panel
-     * show a blank BEFORE it happens instead of explaining it afterwards (#47).
-     *
-     * Keyed on `inkPlan` on purpose: it is set from exactly the pixels in
-     * `probePixelsRef` and in the same call, so it is the honest cache key for a
-     * ref the memo cannot otherwise observe.
+     * What the current mono cut admits, so the panel can show an empty result
+     * before it happens. Keyed on `inkPlan` because it is set from the same pixels
+     * as `probePixelsRef`, which the memo can't observe directly.
      */
     const monoGuide = useMemo(() => {
         const img = probePixelsRef.current;
@@ -411,11 +377,10 @@ export function VectorizeStudio({
         const range = inkLumaRange(img);
         if (!range) return null;
         return {
-            // Cuts that select nothing. With Invert off the ink is what falls
-            // BELOW the cut, so anything at or under the darkest pixel is dead;
-            // with it on the ink rises above, so anything at or over the lightest
-            // is. The "everything solid" end is deliberately NOT marked — on art
-            // over transparency that is the silhouette, which is a real result.
+            // Cuts that select nothing: with Invert off the ink is below the cut, so cuts
+            // at or under the darkest pixel are dead; with it on, cuts at or over the
+            // lightest. The all-solid end isn't marked: on art over transparency that is
+            // the silhouette, a real result.
             deadOff: Math.floor(range.min),
             deadOn: Math.ceil(range.max),
             fracOff: cutFraction(img, opts.threshold, false),
@@ -473,10 +438,9 @@ export function VectorizeStudio({
         [historySet],
     );
 
-    // The canvas renders (and edits) the force-colored derived doc, but only
-    // ever changes geometry/structure — restore the base fills (and gradients)
-    // before storing, so toggling force color off never reveals baked-in
-    // overrides or drops a fitted gradient.
+    // The canvas edits the force-coloured derived doc, but only its geometry.
+    // Restore the base fills and gradients before storing so turning force colour
+    // off never reveals baked-in overrides.
     const mergeFills = useCallback(
         (edited: EditableDoc): EditableDoc => {
             if (!forceColorOn || !doc) return edited;
@@ -499,10 +463,9 @@ export function VectorizeStudio({
 
     /* ------------------------------------------------------- region markers */
 
-    // Markers (segmentation seeds) live in `opts.markers` so they flow straight
-    // into the trace and the explainer, survive a re-trace (run() only resets the
-    // doc, never opts), and serialize through the worker unchanged. Normalized
-    // [0,1] coords ⇒ resolution-independent.
+    // Markers live in `opts.markers` so they flow into the trace and explainer,
+    // survive a re-trace and pass through the worker. Coordinates are normalized
+    // to [0,1].
     const markers = useMemo(() => opts.markers ?? [], [opts.markers]);
 
     // Which kind of marker a click drops: "separate" (keep the region distinct, its
@@ -541,11 +504,9 @@ export function VectorizeStudio({
     const docRef = useRef(doc);
     docRef.current = doc;
 
-    // What this studio was working on, published for the crash screen's bug report
-    // (see lib/reportContext). It reads the REFS, not the values it closed over:
-    // the snapshot is taken at crash time and has to describe the options that were
-    // live then — which is the half of a tracer bug report nobody can reconstruct
-    // from prose. The pixels are never in it, only the image's shape.
+    // Published for the crash screen's bug report (lib/reportContext). Reads the
+    // refs, not closed-over values, so the snapshot taken at crash time describes
+    // the options live then. Never includes pixels, only the image's shape.
     useEffect(
         () =>
             provideReportContext(persist ? "vectorize" : "sheet-tile", () => ({
@@ -565,15 +526,10 @@ export function VectorizeStudio({
     // (now-redundant) re-trace — the canvas was already recoloured live.
     const skipRetraceRef = useRef(false);
 
-    // Lock / edit / clear the flat-art palette (right rail). An array locks it (every
-    // pixel snaps to the nearest of these colours, with each one's opacity); null
-    // reverts to fully automatic extraction.
-    //
-    // A change that ONLY moves swatch OPACITIES (same colours + count) can never move
-    // a region boundary, so we recolour the matching paths' fill-opacity LIVE and skip
-    // the re-trace — dragging an opacity slider updates the canvas instantly with no
-    // trace lag. Hue / add / remove change the pixel assignment, so they fall through
-    // to the debounced re-trace.
+    // Lock / edit / clear the flat-art palette. An array locks it; null reverts to
+    // automatic extraction. An opacity-only change can't move a region boundary, so
+    // the matching paths' fill-opacity is updated live and the re-trace skipped;
+    // hue / add / remove fall through to the debounced re-trace.
     const handlePaletteChange = useCallback(
         (palette: { r: number; g: number; b: number; a?: number }[] | null) => {
             const old = optsRef.current.palette ?? null;
@@ -611,8 +567,8 @@ export function VectorizeStudio({
         [historySet],
     );
 
-    // Region markers only apply to colour tracing — leaving that mode exits the
-    // placement tool (the master switch + markers persist for when you return).
+    // Markers only apply to colour tracing; leaving that mode exits the placement
+    // tool (the markers persist).
     useEffect(() => {
         const colorTrace =
             (!isVectorSource || retraceVector === "retrace") &&
@@ -643,12 +599,10 @@ export function VectorizeStudio({
         setBusy(true);
         setError(null);
         setFailure(null);
-        // The old number described the old document; carrying it under a fresh
-        // trace would be the one reading in that bar that isn't about what's on
-        // screen. The scoring effect starts a new one when this run lands.
+        // Drop the old score; the scoring effect starts a new one when this run lands.
         setScore(null);
-        // A new attempt supersedes the last one's question — without REMEMBERING
-        // the dismissal, because the user never answered it.
+        // A new attempt clears the previous failure prompt without recording it as
+        // dismissed, since the user never answered it.
         clearFailure();
         setStaleOpts(false); // we're applying the current settings now
         setProgress(cleanFromExisting ? "Cleaning SVG…" : "Tracing…");
@@ -669,21 +623,19 @@ export function VectorizeStudio({
                 next = parseSvg(cleaned.svg);
                 if (!next) throw new Error("SVG could not be parsed");
             } else {
-                // Gradient/photo colour art keeps the 1024 cap (Step-3c cost);
-                // everything else (mono, or flat colour with gradients OFF) traces
-                // at full res for Affinity-grade crispness. The user "Detail" preset
-                // lifts the flat cap to 4096 ("High"); gradient/photo is unaffected.
+                // Gradient/photo colour art keeps the 1024 cap (the gradient merge is
+                // costly); mono and flat colour trace at full resolution. The Detail preset
+                // lifts the flat cap to 4096.
                 let imageData = await getImageData(
                     logo.src,
                     rasterCapFor(opts),
                     logo.isSvg ? logo.svgText : null,
                 );
                 if (runId !== runIdRef.current) return;
-                // Opt-in AI super-resolution on SMALL rasters only (SVG sources are
-                // rasterized at full detail already): the model output is what the
-                // tracer sees, so the doc comes back in the enlarged pixel space —
-                // markers are normalized and the overlay fits by aspect, so nothing
-                // downstream cares. See src/lib/aiUpscale.ts for the size rule.
+                // Opt-in AI super-resolution for small rasters only (SVG sources are already
+                // rasterized at full detail). The doc comes back in the enlarged pixel space;
+                // markers are normalized and the overlay fits by aspect, so nothing downstream
+                // cares. Size rule: src/lib/aiUpscale.ts.
                 setAutoUpscale(null);
                 const upscaleBy = opts.upscale === "ai" && !logo.isSvg
                     ? aiUpscaleFactor(Math.max(imageData.width, imageData.height))
@@ -706,12 +658,10 @@ export function VectorizeStudio({
                     if (runId !== runIdRef.current) return;
                     setProgress("Tracing…");
                 } else if (!logo.isSvg) {
-                    // Auto: a small or thin-stroked MONO raster is enlarged
-                    // bilinearly first — the icon sheet's size rule plus a stroke
-                    // rule, both measured in traceCaps.ts. 1 for colour, for Off,
-                    // and when the raster already sits within a factor of the cap.
-                    // Reached with `upscale: 'ai'` too, when the AI path declined
-                    // the raster (above its size window): Auto stands in.
+                    // Auto: a small or thin-stroked mono raster is enlarged bilinearly
+                    // first (size and stroke rules in traceCaps.ts). Factor 1 for colour,
+                    // Off, or when the raster is already near the cap. Also reached with
+                    // `upscale: 'ai'` when the AI path declined the raster.
                     const plan = monoTraceScale(imageData, opts);
                     setAutoUpscale(plan);
                     if (plan.scale > 1) {
@@ -755,8 +705,7 @@ export function VectorizeStudio({
                     "Could not vectorize this image — try different settings or another file.";
                 setError(message);
                 setFailure(err);
-                // And ASK, rather than leaving a red line at the bottom of a
-                // full-height studio and hoping it is noticed.
+                // Also ask whether to report it; the status line alone is easy to miss.
                 raiseFailure("the vectorizer", message, err);
             }
         } finally {
@@ -777,16 +726,11 @@ export function VectorizeStudio({
         handleSelectPath,
     ]);
 
-    // User-initiated cancel of an in-flight trace. Cancel any debounced auto-run armed
-    // before this click (else it would fire ~DEBOUNCE_MS later and replace the doc the
-    // user wanted to keep); bump the run id so any late progress / result from the
-    // aborted run is ignored; abort the controller (which terminates the worker —
-    // an off-thread trace stops instantly, even mid-segmentation; the
-    // clean-existing-SVG path runs synchronously on the main thread and stops after
-    // its current step); and clear the busy UI. The previous document in history is
-    // left intact — stopping means "never mind, keep what I had" — and `staleOpts` flags
-    // that the shown result now lags the settings, so the controls offer a re-trace.
-    // A new run starts only from a fresh opts/source change or the manual Trace button.
+    // Cancel an in-flight trace: clear any pending debounced auto-run (it would
+    // otherwise replace the doc shortly after), bump the run id so late results are
+    // ignored, abort the worker, and clear the busy UI. The previous document stays;
+    // `staleOpts` marks the result as lagging the settings so the controls offer a
+    // re-trace.
     const stop = useCallback(() => {
         if (autoRunTimerRef.current !== null) {
             window.clearTimeout(autoRunTimerRef.current);
@@ -801,19 +745,16 @@ export function VectorizeStudio({
         setStaleOpts(true);
     }, []);
 
-    // Auto-default the "fit smooth gradients" toggle from image content: flat
-    // colour art turns it OFF (nothing to fit, and it sidesteps the gradient
-    // field-merge), real ramps leave it ON. A SUGGESTION only — a manual flip
-    // (gradientsTouchedRef) is never overridden, and each image is probed once.
+    // Auto-default the gradients toggle from image content: flat art ⇒ off, real
+    // ramps ⇒ on. Only a suggestion: a manual flip is never overridden, and each
+    // image is probed once.
     useEffect(() => {
         const src = logo.src;
         if (!src) return;
         // Cleaned vector sources don't run the tracer, so the toggle is moot.
         if (isVectorSource && retraceVector === "clean") return;
         if (autoGradientsSrcRef.current === src) return;
-        // Fresh image: re-enable the auto-decision (a previous image's manual flip
-        // shouldn't carry over). A RESTORED image is not a fresh one — its flags
-        // came back with it.
+        // Fresh image: re-enable the auto-decision. A restored image keeps its flags.
         const restoring = !probeShouldApply(decidedForRef.current, assetKey);
         if (!restoring) gradientsTouchedRef.current = false;
         let cancelled = false;
@@ -824,20 +765,16 @@ export function VectorizeStudio({
                     512,
                     logo.isSvg ? logo.svgText : null,
                 );
-                // Claim AFTER the decode, not before — under StrictMode the effect
-                // runs twice; claiming before the await would let the cancelled first
-                // run mark the image "done" so the second (live) run bails and nothing
-                // applies. Here the cancelled run never claims, the live one does.
+                // Claim after the decode, not before: under StrictMode the effect runs
+                // twice, and claiming before the await would let the cancelled first run
+                // mark the image done so the live run applies nothing.
                 if (cancelled || gradientsTouchedRef.current) return;
                 autoGradientsSrcRef.current = src; // probe once per image
-                // The ink probe rides the SAME decode — it asks a different
-                // question of the same pixels (how many inks, and where does a
-                // mono cut belong), and decoding twice for that would be waste.
-                // Keep them: switching Mode by hand re-decides without re-decoding.
+                // The ink probe reuses the same decode; the pixels are kept so a manual
+                // Mode change can re-decide without decoding again.
                 probePixelsRef.current = img;
-                // On a restore the probe is a measurement only — see
-                // decidedForRef. Either way the options now stand decided for
-                // THIS image, so a later probe (a new upload) applies again.
+                // On a restore the probe only measures (see decidedForRef). Either way the
+                // options now stand decided for this image, so a new upload probes afresh.
                 decidedForRef.current = assetKey;
                 applyInkDecision(colorModeRef.current, img, !restoring);
                 if (restoring) return;
@@ -866,14 +803,11 @@ export function VectorizeStudio({
         applyInkDecision,
     ]);
 
-    // Adopt a document the host already traced for this exact source (the icon
-    // sheet traces every tile in a batch). Runs once, before the auto-run effect
-    // below — it claims the gradient probe and the first debounced run so opening
-    // an icon shows the batch result instantly instead of re-tracing it.
+    // Adopt a document the host already traced for this source (the icon sheet
+    // traces tiles in a batch). Runs before the auto-run effect and claims the
+    // gradient probe and first run, so opening an icon doesn't re-trace it.
     useEffect(() => {
-        // Same contract for a RESTORED document: it was traced from these exact
-        // pixels, so showing it is both instant and correct, and re-tracing on
-        // mount would burn the seconds this is here to save.
+        // Same for a restored document: it was traced from these pixels.
         const seeded = initialDoc ?? session.doc;
         if (!seeded) return;
         historyReset(seeded);
@@ -929,10 +863,9 @@ export function VectorizeStudio({
         };
     }, [doc, forceColorOn, forceColor]);
 
-    // Auto-extracted flat palette: the distinct SOLID fills of the current trace, in
-    // paint order, carrying each region's alpha (from fill-opacity). Seeds + previews
-    // the editable palette (flat path). Derived from the BASE doc (not the force-colored
-    // one), and skips gradient items.
+    // Auto-extracted flat palette: the distinct solid fills of the base doc (not the
+    // force-coloured one) in paint order, with alpha from fill-opacity. Gradient
+    // items are skipped. Seeds the palette editor.
     const autoPalette = useMemo(() => {
         if (!doc) return [];
         const seen = new Set<string>();
@@ -977,12 +910,9 @@ export function VectorizeStudio({
     );
 
     /**
-     * The trace came back with nothing in it — said ON THE CANVAS, because that
-     * is where the user is looking. An empty result is not a state to hunt for in
-     * a sidebar: the blank pane IS the symptom, so the cause and the one-click fix
-     * belong on top of it. (The controls carry the preventive half — what each
-     * Invert position costs, and which cuts are dead — so this only fires when a
-     * setting slipped through anyway.)
+     * The trace came back empty: explain it on the canvas, where the user is
+     * looking, with a one-click fix when there is one. The controls already flag
+     * dead settings; this covers what slips through.
      */
     const emptyNotice = useMemo((): {
         text: string;
@@ -1052,19 +982,13 @@ export function VectorizeStudio({
     /**
      * Score the result against the source image.
      *
-     * Two things about WHICH raster this measures against:
+     * - The source is decoded like the tracer decodes it (`getImageData`, alpha
+     *   intact) and composited over white inside the metric. Don't decode it onto a
+     *   backdrop here, or art on transparency scores a correct trace as wrong.
+     * - The scored document is `derivedDoc` (force colour included), the same doc
+     *   the rest of the status bar describes.
      *
-     * - The SOURCE is decoded the same way the tracer decodes it (`getImageData`,
-     *   alpha intact) and composited over white inside the metric — not decoded
-     *   onto white here. The truth gate and the labs' fixture lane differ on
-     *   exactly this point, and scoring art-on-transparency as art-on-black would
-     *   report a wrong trace for a right one.
-     * - The DOCUMENT scored is `derivedDoc`, i.e. force-colour and all — the same
-     *   document every other number in that status bar describes. Repainting a
-     *   multicolour mark in one ink really does move it far from the original, and
-     *   saying so is the honest reading, not a bug in the metric.
-     *
-     * Skipped while a trace is running: the document is about to be replaced.
+     * Skipped while a trace is running.
      */
     useEffect(() => {
         if (busy) return; // run() cleared it; scoring a doc about to be replaced is waste
@@ -1089,9 +1013,8 @@ export function VectorizeStudio({
                     const img = cached.img;
                     const vbW = derivedDoc.viewBox[2];
                     if (!(vbW > 0)) return;
-                    // The doc's viewBox is the TRACE raster (or, for a cleaned SVG,
-                    // its own user units); `scale` renders it into the score
-                    // raster's pixel space whichever it is.
+                    // The doc's viewBox is the trace raster (or a cleaned SVG's own units);
+                    // `scale` renders it into the score raster's pixel space either way.
                     const next = await scoreOffThread(
                         derivedDoc,
                         img,
@@ -1102,9 +1025,7 @@ export function VectorizeStudio({
                 } catch (err) {
                     if (cancelled || (err instanceof DOMException && err.name === "AbortError"))
                         return;
-                    // A score that doesn't arrive is a readout the user doesn't
-                    // get, not a failure they need told about — the trace itself
-                    // is on screen and fine.
+                    // A failed score just means no readout; the trace itself is fine.
                     logError("fidelity", err);
                     setScore(null);
                 }
@@ -1130,10 +1051,9 @@ export function VectorizeStudio({
 
     /* -------------------------------------------------------- session save */
 
-    // Settings: localStorage, so they are already applied on the next mount
-    // rather than snapping in after an async read (see studioSession.ts). The
-    // two "touched" flags are refs — they only ever move together with one of
-    // the values in the dependency list, so this effect sees them fresh.
+    // Settings go to localStorage so they apply synchronously on the next mount.
+    // The two "touched" flags are refs; they only change alongside a value in the
+    // dependency list, so this effect sees them fresh.
     useEffect(() => {
         if (!persist) return;
         saveStudioView({
@@ -1161,12 +1081,10 @@ export function VectorizeStudio({
         markMode,
     ]);
 
-    // The document: IndexedDB, keyed to the image it was traced from. Saved on
-    // the history value rather than `derivedDoc` — force-colour is a view over
-    // the document, and baking it in would make turning the toggle off unable to
-    // get the real fills back. A null doc never deletes the slot: on mount it is
-    // null for one commit before the seed lands, and deleting there would throw
-    // away the very document being restored.
+    // The document goes to IndexedDB, keyed to its source image. Save the history
+    // value, not `derivedDoc`: force colour is a view, and baking it in would lose
+    // the real fills. Don't delete the slot on a null doc: it is null for one
+    // commit on mount before the seed lands.
     useEffect(() => {
         if (!persist || !doc) return;
         saveStudioDoc(assetKey, doc, dirtyRef.current);
@@ -1180,9 +1098,8 @@ export function VectorizeStudio({
 
     /* ------------------------------------------------------------ keyboard */
 
-    // Window-level, so it works wherever the pointer is — which means a studio
-    // that is mounted but not in charge must stand down, or two of them would
-    // both undo on one Ctrl+Z.
+    // Window-level, so a studio that is mounted but not in charge must stand down,
+    // or two studios would both undo on one Ctrl+Z.
     useEffect(() => {
         if (!active) return;
         const onKey = (e: KeyboardEvent) => {
@@ -1261,10 +1178,9 @@ export function VectorizeStudio({
                                 setSelectedNodes(new Set());
                                 return;
                             }
-                            // Nothing was thinnable (the selection is a whole blob's
-                            // junctions, which can't be deleted without unwelding the
-                            // graph) → dissolve that blob and heal it instead of doing
-                            // nothing. The selected nodes' subpath index IS the loop.
+                            // Nothing thinnable (the selection is a blob's junctions, which can't
+                            // be deleted without unwelding the graph): dissolve that blob and heal
+                            // it instead. The selected nodes' subpath index is the loop.
                             const sub = refs[0]?.sub ?? 0;
                             if (applyHeal(removeRegionSection(doc, item.id, sub)))
                                 return;
@@ -1287,12 +1203,11 @@ export function VectorizeStudio({
                         handleSelectPath(null);
                     }
                 } else {
-                    // Planar region, no nodes selected: dissolve the ONE section the
-                    // user clicked to select it and heal the gap into the neighbour
-                    // (live graph edit, undoable) — instead of tearing a transparent
-                    // hole by dropping every blob of the colour. Needs the in-region
-                    // seed from that selecting click; falls back to the whole-item
-                    // delete when the region is non-planar or the seed is stale.
+                    // Planar region, no nodes selected: dissolve the one section the user
+                    // clicked and heal the gap into its neighbour, instead of deleting every
+                    // blob of that colour. Needs the seed from the selecting click; falls back
+                    // to deleting the whole item when the region is non-planar or the seed is
+                    // stale.
                     const seed =
                         seedRef.current?.id === item.id
                             ? seedRef.current.pt
@@ -1367,9 +1282,8 @@ export function VectorizeStudio({
                 ...doc,
                 items: doc.items.map((it) => {
                     if (it.id !== id || it.kind !== "path") return it;
-                    // A stroke-only path's visible colour IS its stroke, so the
-                    // swatch has to write there — assigning `fill` would leave
-                    // it `none` and the recolor would silently do nothing.
+                    // A stroke-only path's visible colour is its stroke; writing `fill`
+                    // would do nothing.
                     if (isStrokeOnly(it)) {
                         return { ...it, stroke: { ...it.stroke!, color: fill } };
                     }
@@ -1420,9 +1334,8 @@ export function VectorizeStudio({
     const onApply = () => {
         if (!svgText || !derivedDoc) return;
         const [, , w, h] = derivedDoc.viewBox;
-        // Default sink: become the app's working logo. A host (icon sheet) passes
-        // its own, because replacing the logo would destroy the sheet the crop
-        // came from.
+        // Default: become the app's working logo. The icon sheet passes its own sink,
+        // since replacing the logo would destroy the sheet.
         (onApplyProp ?? setProcessedSvg)(svgText, w, h);
         setApplied(true);
     };
@@ -1823,10 +1736,8 @@ export function VectorizeStudio({
                             />
                         ))}
 
-                    {/* Empty-result notice, centred on the TRACED pane — in split view
-                        that is the right half, so it stays over the blank rather than
-                        straddling the seam. Not shown over "original", which has
-                        nothing to explain. */}
+                    {/* Empty-result notice, centred on the traced pane (the right half in
+                        split view). Not shown over "original". */}
                     {emptyNotice && view !== "original" && (
                         <div
                             className={`animate-in-fade pointer-events-none absolute inset-y-0 z-10 flex items-center justify-center p-6 ${
@@ -1854,9 +1765,8 @@ export function VectorizeStudio({
                         </div>
                     )}
 
-                    {/* Trace-in-progress overlay: a sweeping band + a status pill.
-                        pointer-events-none so panning/zooming stays live (the crisp
-                        trace runs off-thread) and the CSS sweep stays smooth. */}
+                    {/* Trace-in-progress overlay. pointer-events-none keeps pan/zoom live
+                        while the trace runs off-thread. */}
                     {busy && (
                         <div className="animate-in-fade pointer-events-none absolute inset-0 overflow-hidden">
                             {progressFraction <= 0 && <div className="trace-sweep" />}
@@ -1891,8 +1801,7 @@ export function VectorizeStudio({
                         </div>
                     )}
 
-                    {/* Marking-active cue: marking is armed from the sidebar, so this
-                        on-stage banner makes it obvious the canvas is now clickable. */}
+                    {/* On-stage cue that the canvas is in marker-placement mode. */}
                     {tool === "mark" && !busy && (
                         <div className="animate-in-fade pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2">
                             <span
@@ -1930,9 +1839,8 @@ export function VectorizeStudio({
                             {stats.colors} colors · {formatBytes(svgBytes)}
                         </span>
                     )}
-                    {/* The one number in this bar about ACCURACY rather than size.
-                        It is a button because the number and the Difference view
-                        are one measurement: "how far off" and "off where". */}
+                    {/* The accuracy readout. A button because it and the Difference view
+                        are the same measurement. */}
                     {score && (
                         <Tooltip
                             label={`Mean colour difference from the original: ${score.meanDeltaE.toFixed(
@@ -2087,13 +1995,10 @@ const MARKER_HALO = "#ffffff";
 const MARKER_HIT_PX = 11;
 
 /**
- * The original image in the same centered-fit framing as the editor canvas,
- * so split view shows pixel-identical composition on both sides. With the Mark
- * tool active it ALSO accepts region markers (you place them where the overlap
- * is actually visible — on the source — not only on the traced result), mapping
- * the click to the same NORMALIZED [0,1] image coords the editor canvas uses, so
- * the two stay in lock-step. Pins counter-scale by the zoom so they stay a
- * constant screen size, like the editor's.
+ * The original image in the same centred-fit framing as the editor canvas, so
+ * split view lines up. With the Mark tool active it also accepts markers, mapped
+ * to the same normalized [0,1] coords the editor uses. Pins counter-scale by the
+ * zoom to stay a constant screen size.
  */
 function OriginalPane({
     pz,
@@ -2147,10 +2052,9 @@ function OriginalPane({
     };
 
     const inv = pz.scale > 0 ? 1 / pz.scale : 1;
-    // Once a source pixel is wider than a screen pixel, show the pixel: the
-    // smoothed image reads as a blur that hides what the raster actually holds,
-    // and this pane exists to be compared against the trace. Same rule as the
-    // Difference view's heat canvas; `aspectW` is the source's natural width.
+    // Once a source pixel is wider than a screen pixel, render it pixelated: a
+    // smoothed image would hide what the raster holds. Same rule as the Difference
+    // heat; `aspectW` is the source's natural width.
     const magnified = fit.width > 0 && (pz.scale * fit.width) / aspectW > 1;
     return (
         <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
@@ -2201,22 +2105,16 @@ function OriginalPane({
 
 /**
  * The Difference view: per-pixel ΔE between the rendered result and the source,
- * on the same cold→hot ramp `/labs/ab` diffs two traces with. This is the most
- * useful picture in the repo — "where is my trace wrong" answered by looking —
- * and until now it only existed behind `/labs`.
+ * on the same cold→hot ramp /labs/ab uses.
  *
- * The heat is laid over a dim ghost of the source (lib/render/diffView.ts), so a
- * hot spot has a place on the art and a right trace shows the art rather than a
- * black square; the pointer reads the field back under the cursor. Both come out
- * of the buffers the score itself returned, at the score's resolution — the pane
- * measures nothing of its own.
+ * The heat is laid over a dim ghost of the source (lib/render/diffView.ts) and
+ * the pointer reads the field back under the cursor. Everything comes from the
+ * buffers the score returned; this pane measures nothing itself.
  *
- * Framed like OriginalPane (same fit box, same ZoomSurface) so switching modes
- * doesn't move the artwork, and painted through a canvas-owned ImageData rather
- * than `new ImageData(px, …)`: the buffer is a plain Uint8ClampedArray, which
- * the DOM constructor's ArrayBuffer-narrowed type rejects. Once a heat pixel is
- * wider than a screen pixel the canvas goes `pixelated`: a diff is inspected at
- * 5×, and a bilinear smear of a one-pixel seam is the one thing it must not show.
+ * Framed like OriginalPane so switching modes doesn't move the art. Painted via
+ * a canvas-owned ImageData because the DOM `ImageData` constructor's type
+ * rejects a plain Uint8ClampedArray. Goes `pixelated` once a heat pixel is wider
+ * than a screen pixel, so a one-pixel seam isn't smeared.
  */
 function DiffPane({
     pz,
@@ -2230,9 +2128,8 @@ function DiffPane({
     const fit = useFitBox(score.width, score.height);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const boxRef = useRef<HTMLDivElement | null>(null);
-    // Where the pointer is, in raster-normalized units — kept as a POSITION rather
-    // than a probe so a new score (every committed node edit) re-reads the same
-    // spot instead of blanking the readout.
+    // Pointer position in raster-normalized units, not a sampled value, so a new
+    // score re-reads the same spot instead of blanking the readout.
     const [cursor, setCursor] = useState<{ nx: number; ny: number } | null>(null);
     const probe = useMemo(
         () => (cursor ? probeDiff(score, cursor.nx, cursor.ny) : null),
@@ -2293,15 +2190,11 @@ function DiffPane({
     );
 }
 
-/** The heat's scale and this trace's two numbers, so "hot" is a quantity rather
- *  than a vibe — and so the Difference view is complete on mobile, which has no
- *  status bar to read the ΔE off. Sampled at the ramp's own seven stops, so the
- *  CSS gradient reproduces it exactly instead of approximating it.
- *
- *  With a pointer over the art it also reads ONE pixel: the two colours that were
- *  compared and their ΔE. That is what tells a hot line apart — a blend against a
- *  solid is an edge that moved a fraction of a pixel; two solids are the wrong
- *  colour — and the heat alone cannot. */
+/** The heat's scale and this trace's numbers (the only ΔE readout on mobile,
+ *  which has no status bar). Sampled at the ramp's seven stops so the CSS
+ *  gradient matches exactly. With a pointer over the art it also shows that
+ *  pixel's two colours and their ΔE, which tells an edge that moved slightly
+ *  apart from a wrong colour. */
 function HeatLegend({
     score,
     probe,

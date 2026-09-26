@@ -1,10 +1,7 @@
 // "Start blank": pick an artboard, get an empty document.
 //
-// One piece of state — the width and the height — and every control writes it.
-// The presets are shortcuts into that pair, orientation only reorders it, and
-// the two fields are the same numbers typed by hand, so no control here can
-// disagree with another. The preview and the button both spell the result out,
-// so the artboard is readable before you commit to it.
+// Every control writes the same width/height pair (presets set it, orientation
+// swaps it, the fields type it), so they can't disagree.
 
 import { useState } from 'react'
 import { FilePlus2, RectangleHorizontal, RectangleVertical } from 'lucide-react'
@@ -32,8 +29,7 @@ const parseEdge = (text: string): number | null => {
 }
 
 export function BlankArtboard({ onCreate }: BlankArtboardProps) {
-  // Kept as text so a half-typed number ("12" on the way to "1200") is not
-  // snapped out from under the cursor; the parsed pair is what everything reads.
+  // Kept as text so a half-typed number isn't clamped mid-typing.
   const [wText, setWText] = useState('512')
   const [hText, setHText] = useState('512')
 
@@ -207,9 +203,7 @@ function PresetRow({
 }
 
 /**
- * The artboard's shape, to scale, on the transparency checker — the app's
- * chosen one, so this is the empty canvas you are about to be looking at
- * rather than a generic rectangle.
+ * The artboard's shape, to scale, on the app's transparency checker.
  */
 function ArtboardPreview({ width, height }: { width: number | null; height: number | null }) {
   const checkerClass = useCheckerClass()

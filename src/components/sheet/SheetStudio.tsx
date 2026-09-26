@@ -341,9 +341,8 @@ export function SheetStudio() {
             {failed > 0 && (
               <>
                 <span className="text-bad">· {failed} failed</span>
-                {/* One link for the batch rather than one per tile: the failures
-                    in a sheet are almost always the same failure N times, and a
-                    badge per tile would shout it N times. */}
+                {/* One link for the batch, not one per tile: a sheet's failures
+                    are usually the same failure repeated. */}
                 <ReportFailureLink
                   what="the icon sheet"
                   error={firstFailure ?? new Error('Trace failed')}

@@ -1,28 +1,12 @@
 // The Editor tab: intake until a document is open, then the full-height studio.
 //
-// The open document lives here rather than in the global store because the two
-// are not the same thing — the editor opens on a dropped SVG, pasted markup, a
-// blank artboard or an example just as readily as on your logo. It survives a
-// RELOAD through its own IndexedDB slot: a drawing is the most expensive thing
-// in the app to lose and the least reproducible, since nothing else in the
-// session can re-derive it.
+// The open document is kept here, not in the global store, because the editor
+// can open things other than the logo (a dropped SVG, pasted markup, a blank
+// artboard, an example). It persists across reloads in its own IndexedDB slot.
 //
-// WHAT IT DRAWS IS THE LOGO. There used to be a "Use as logo" button and no
-// other connection, which meant you could draw for ten minutes, switch to
-// Preview, and find it empty with nothing on screen explaining why. So the
-// document flows into the working logo by itself, debounced, and the button is
-// gone.
-//
-// The rule is CHANGES, not opening. Opening is not an edit, and treating it as
-// one was actively destructive: round-tripping your logo through parse →
-// serialize produces different markup for the same drawing, so merely visiting
-// this tab reissued the working image and invalidated the trace and the cleanup
-// buffer keyed to it. It also means browsing an example or a dropped SVG leaves
-// your logo alone until you actually touch something — which is the whole of the
-// "could this silently replace my logo?" worry, gone without a mode to explain.
-//
-// Two more guards: an EMPTY artboard is a place to draw rather than a logo, and
-// markup identical to what is already the working image is skipped.
+// Edits flow into the working logo automatically (debounced). Only changes do,
+// never opening: see the `doc !== opened` guard in `onChange`. Empty artboards
+// and markup identical to the current logo are skipped as well.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditableDoc } from '../../lib/path/types'
@@ -33,40 +17,31 @@ import { claim, saveSlot, SLOTS, type StoredEditor } from '../../lib/persist/ses
 import { EditorIntake } from '../editor/EditorIntake'
 import { SvgEditorStudio } from '../editor/SvgEditorStudio'
 
-/** The document the studio OPENS with. Edits flow out through `onChange`, not by
- *  rewriting this — the studio re-seeds its history (and drops undo) whenever
- *  `initialDoc` changes identity, so it has to stay the same object while open. */
+/** The document the studio opens with. Edits flow out through `onChange`; keep
+ *  this object stable while open, because the studio re-seeds its history (and
+ *  drops undo) whenever `initialDoc` changes identity. */
 type OpenDoc = { doc: EditableDoc; name: string }
 
-/**
- * Long enough that a node drag is one apply rather than sixty. Serializing
- * rebuilds the `d` of every path in the drawing and the working image is a fresh
- * blob each time, so this runs on the pause, not on the gesture.
- */
+/** Debounce for pushing edits into the logo, so a node drag is one apply rather
+ *  than one per pointer move (each apply reserializes every path). */
 const APPLY_MS = 500
 
 /**
- * The open drawing, for as long as the tab is alive.
+ * The open drawing, kept at module scope as well as in React state.
  *
- * This panel is a lazy ROUTE: switching to Preview unmounts it and switching
- * back mounts a new one, so React state alone loses the document on every tab
- * click — and the stored session is no help, because the boot payload is
- * claim-once and was already taken by the first mount. The result was an editor
- * that dropped your drawing and showed the intake screen every time you looked
- * at another tab.
- *
- * Module scope rather than a store because it is exactly as long-lived as this
- * module: cleared on close, replaced on open, gone when the tab is.
+ * This panel is a lazy route, so every tab switch unmounts it, and the stored
+ * session can't stand in: the boot payload is claim-once and the first mount
+ * already took it. Without this slot, leaving the tab and coming back would drop
+ * the drawing and show the intake screen.
  */
 let session: OpenDoc | null = null
 
 export default function EditorPanel() {
-  // Claimed in the render body, not an effect: the studio must mount with the
-  // document already in hand, and claiming is idempotent here — StrictMode's
-  // second pass reuses this ref rather than taking a second, empty read.
+  // Claimed during render so the studio mounts with the document in hand; the
+  // ref makes it idempotent under StrictMode's double render.
   const restored = useRef<StoredEditor | null | undefined>(undefined)
   if (restored.current === undefined) {
-    // The live document wins: it is this one with the edits made since.
+    // The in-memory document wins: it includes the edits made since.
     restored.current = session
       ? ({ doc: session.doc, name: session.name } as StoredEditor)
       : claim('editor')
@@ -75,7 +50,7 @@ export default function EditorPanel() {
   const [open, setOpenState] = useState<OpenDoc | null>(() =>
     restored.current ? { doc: restored.current.doc, name: restored.current.name } : null,
   )
-  // Every change to what's open is mirrored, so the next mount finds it.
+  // Mirrored into the module slot so the next mount finds it.
   const setOpen = useCallback((next: OpenDoc | null) => {
     session = next
     setOpenState(next)
@@ -84,39 +59,39 @@ export default function EditorPanel() {
 
   const applyToLogo = useRef(
     debounce((doc: EditableDoc) => {
-      // An artboard with nothing on it is a place to draw, not a logo.
+      // An empty artboard is a place to draw, not a logo.
       if (docStats(doc).paths === 0) return
       const svgText = serializeDoc(doc, 2)
-      // Byte-identical to the working image: nothing to do. A weaker guard than
-      // the opened-document check below — the same drawing serializes differently
-      // after a parse round-trip — but it costs nothing and catches the rest.
+      // Cheap secondary check only; it can't replace the `doc !== opened` guard
+      // because the same drawing serializes differently after a parse round-trip.
       if (useStore.getState().logo.svgText === svgText) return
       setProcessedSvg(svgText, doc.viewBox[2], doc.viewBox[3])
     }, APPLY_MS),
   ).current
 
-  // Nothing is in flight after the tab goes away, and a pending apply that lands
-  // against an unmounted panel would be a surprise edit to the logo.
+  // Apply any pending edit on unmount rather than letting it land later.
   useEffect(() => () => applyToLogo.flush(), [applyToLogo])
 
   const name = open?.name ?? 'drawing'
-  // The document the studio was seeded with. `onChange` fires once with this
-  // exact object before any edit; that firing is an OPEN, not a change.
+  // The document the studio was seeded with; `onChange` fires once with this
+  // exact object before any edit.
   const opened = open?.doc ?? null
   const onChange = useCallback(
     (doc: EditableDoc) => {
-      // Track the edits, not just the document it opened with — coming back to
-      // the tab should land on the drawing as you left it.
       session = { doc, name }
       saveSlot(SLOTS.editor, { doc, name } satisfies Omit<StoredEditor, 'v'>, 900)
+      // Don't treat the initial seed firing as an edit: a parseSvg → serializeDoc
+      // round-trip yields different markup for the same drawing, so applying it
+      // would reissue the working image, bump `assetKey` and drop the trace and
+      // cleanup keyed to it. Don't swap this for a text comparison against
+      // `logo.svgText` either; that doesn't survive the round-trip.
       if (doc !== opened) applyToLogo(doc)
     },
     [name, opened, applyToLogo],
   )
 
-  // Closing is an explicit "I'm done with this drawing", so it drops the slot —
-  // keeping it would re-open a document the user just dismissed. The logo it
-  // produced stays: it is the working image now, not the editor's to take back.
+  // Closing drops the stored drawing so it doesn't reopen; the logo it produced
+  // stays as the working image.
   const close = useCallback(() => {
     saveSlot(SLOTS.editor, null)
     setOpen(null)
@@ -126,9 +101,9 @@ export default function EditorPanel() {
     return <EditorIntake onOpen={(doc, openName) => setOpen({ doc, name: openName })} />
   }
 
-  // Rendered as the route's DIRECT child, with no wrapper — the studio sizes
-  // itself against <main> (h-full + shrink-0), and an intervening flex-1 box
-  // makes its height negotiable, which the canvas's ResizeObserver then fights.
+  // Rendered as the route's direct child with no wrapper: the studio sizes itself
+  // against <main>, and an intervening flex box makes its height negotiable,
+  // which the canvas's ResizeObserver then fights.
   return (
     <SvgEditorStudio
       initialDoc={open.doc}

@@ -1,14 +1,5 @@
-// The app's transient notices, in one bottom stack.
-//
-// They live at the bottom, out of the layout, because none of them is about the
-// document on screen and the studios are full-height tools — a strip across the
-// top pushes the canvas down for something the user did not ask about. One
-// container rather than each notice positioning itself, so a session restore and
-// a pending update stack instead of landing on top of each other.
-//
-// Bottom CENTRE at every width: the studios' bottom action bar and the Customize
-// FAB own the corners, and a notice that is about the whole app reads better
-// where the eye already returns to. The stack is lifted clear of that bar.
+// The app's transient notices, stacked in one container at the bottom centre,
+// out of the layout, lifted clear of the studios' bottom action bar.
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { AlertTriangle, History, RefreshCw, WifiOff, X } from 'lucide-react'
@@ -17,8 +8,7 @@ import { dismissFailure, getFailure, subscribeFailure } from '../lib/failureNoti
 import { ReportIssueLink } from './ReportIssue'
 import { usePwa } from '../pwa/register'
 
-/** How long the restore notice stays up. It is pure information — the durable
- *  control over the stored session is the header's Saved chip. */
+/** How long informational notices stay up. */
 const RESTORE_MS = 9000
 
 function Toast({
@@ -50,8 +40,7 @@ function Toast({
 }
 
 function RestoreToast() {
-  // Read once, at mount: the flag is about this page load, and the toast should
-  // leave on its own timer rather than blink out from under a later change.
+  // Read once at mount: the flag describes this page load.
   const [show, setShow] = useState(sessionWasRestored)
 
   useEffect(() => {
@@ -75,9 +64,8 @@ function PwaToast() {
   const update = usePwa((s) => s.update)
   const dismiss = usePwa((s) => s.dismiss)
 
-  // "Installed" is news, not a task: it times out like the restore notice. The
-  // update notice does NOT — it carries the only control that applies it, and
-  // taking that away after nine seconds would strand the new build.
+  // "Installed" times out. The update notice must not: its button is the only way
+  // the waiting build takes over.
   useEffect(() => {
     if (!offlineReady || needRefresh) return
     const id = setTimeout(dismiss, RESTORE_MS)
@@ -94,10 +82,8 @@ function PwaToast() {
       {needRefresh ? (
         <span className="flex items-center gap-2">
           A new version is ready.
-          {/* The click does not reload on the spot: the waiting build has to take
-              over first, or the page comes back on the old one. That is a beat of
-              nothing happening, so the button says what it is doing — and stays
-              here, rather than the notice closing on a reload that may not come. */}
+          {/* The reload waits for the new worker to take over (otherwise the page
+              comes back on the old build), so the button shows progress meanwhile. */}
           <button
             type="button"
             onClick={update}
@@ -115,13 +101,8 @@ function PwaToast() {
 }
 
 /**
- * Something failed — do you want to report it?
- *
- * The question, where a question belongs: in front of the user, with the button
- * that answers it. It does NOT time out. The other two notices are news, and
- * news can leave on its own; this one is asking something, and a question that
- * removes itself before you have answered was never really asking. Dismiss it
- * and that failure stays dismissed for the session (see lib/failureNotice).
+ * "Something failed — report it?" Doesn't time out, since it asks a question.
+ * A dismissed failure stays dismissed for the session (see lib/failureNotice).
  */
 function FailureToast() {
   const failure = useSyncExternalStore(subscribeFailure, getFailure)

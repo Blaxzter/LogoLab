@@ -1,15 +1,7 @@
 // The editor's front door.
 //
-// No wizard and no modal — an editor you open "for a quick fix" must not make
-// you answer questions first. So the routes are ranked instead of tiled: the
-// drop zone the rest of the app uses is the whole top of the page, the two
-// routes that need something you already have sit right under it, and the two
-// that need nothing — a blank artboard, an example drawing — follow as their
-// own sections.
-//
-// Nothing here explains the canvas. Shortcuts for tools you cannot reach yet
-// are noise at the moment you are still choosing what to open; the toolbar
-// carries them where they mean something.
+// Routes in order of prominence: the drop zone, then paste / file for things
+// you already have, then a blank artboard and the example drawings.
 
 import { useRef, useState } from 'react'
 import { ClipboardPaste, ImageDown, Loader2, PenTool, X } from 'lucide-react'

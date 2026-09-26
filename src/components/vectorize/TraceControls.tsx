@@ -1,9 +1,7 @@
-// Left rail of the vectorize studio: trace parameters grouped into collapsible
-// sections (Shape & detail / Color & background) to keep the panel uncluttered,
-// plus the pinned Trace button. Every tuning knob carries a short hint and an (i)
-// that opens a per-control teaching dialog (ControlInfoDialog). Pure controlled
-// UI — all trace state lives in VectorizeStudio; only the "which info dialog is
-// open" state is local.
+// Left rail of the vectorize studio: trace parameters in collapsible sections
+// plus the pinned Trace button. Each knob has a hint and an (i) that opens
+// ControlInfoDialog. Controlled UI: trace state lives in VectorizeStudio; only
+// the open info dialog is local.
 
 import { useState } from 'react'
 import { Wand2, HelpCircle, AlertTriangle, MapPin, X } from 'lucide-react'
@@ -42,15 +40,14 @@ export interface TraceControlsProps {
   /** What the ink probe last saw, so Auto can say what it decided and why. */
   inkPlan: InkModePlan | null
   /**
-   * What the CURRENT mono cut admits, so Threshold and Invert can show their own
-   * consequence. A control that can silently reach a state producing nothing is
-   * the defect (#47); this is what makes that state visible on the control.
-   * Null outside mono, or before the probe lands.
+   * What the current mono cut admits, so Threshold and Invert can show which
+   * settings would trace nothing before the user picks them. Null outside mono
+   * or before the probe lands.
    */
   monoGuide: {
-    /** Cuts at or below this select nothing with Invert OFF. */
+    /** Cuts at or below this select nothing with Invert off. */
     deadOff: number
-    /** Cuts at or above this select nothing with Invert ON. */
+    /** Cuts at or above this select nothing with Invert on. */
     deadOn: number
     /** Fraction of visible pixels each Invert position admits at this cut. */
     fracOff: number
@@ -84,8 +81,8 @@ export interface TraceControlsProps {
 
 const d = CONTROL_DOCS_BY_ID
 
-/** A fraction as a percentage, keeping one decimal while it is still visible —
- *  "0.4%" is a thin hairline that traces; rounding it to "0%" would be a lie. */
+/** A fraction as a percentage, keeping one decimal for small values: "0.4%" is a
+ *  hairline that still traces, and "0%" would misreport it. */
 function pct(f: number): string {
   if (f === 0) return '0%'
   if (f < 0.01) return `${(f * 100).toFixed(1)}%`
@@ -144,19 +141,12 @@ export function TraceControlsBody({
   const colorSummary =
     opts.mode === 'color' && opts.gradients !== false ? 'Gradients on' : 'Flat fills'
 
-  // WHAT DOES NOT APPLY TO THIS IMAGE, AND WHY.
-  //
-  // A control that cannot bite is worse than absent: it invites a setting that
-  // silently does nothing. But hiding it outright is its own defect — you go
-  // looking for "Threshold", it is not there, and the panel never says why. So an
-  // inert control folds into ONE collapsed list that names it, gives the reason,
-  // and says what would bring it back. The exception is a control that is inert
-  // but NOT at its default (an `upscale: 'ai'` carried over from a smaller image):
-  // that one stays in place, because a setting has to stay reachable to be undone.
-  //
-  // The rules live where the behaviour does — traceCaps.ts for the Detail cap,
-  // aiUpscale.ts for the upscaler's size window — so these reasons cannot drift
-  // from what the pipeline actually does.
+  // Controls that have no effect on this image fold into one collapsed list that
+  // names each and says why, rather than silently doing nothing or vanishing.
+  // An inert control that is not at its default (e.g. `upscale: 'ai'` carried over
+  // from a smaller image) stays in place so the setting can still be undone.
+  // The rules come from traceCaps.ts and aiUpscale.ts, so the reasons match what
+  // the pipeline does.
   const flatArt = opts.mode === 'mono' || opts.gradients === false
   const detailWhy = !flatArt
     ? `High only lifts the cap for flat art; gradient and photo colour stays at ${RASTER_MAX_DIM}px so the region merge cannot bog down. Turn Gradients off, or switch to Mono, and it applies.`
@@ -165,9 +155,8 @@ export function TraceControlsBody({
       : null
   const showDetail = detailWhy == null || (opts.traceDetail ?? 'balanced') !== 'balanced'
 
-  // Upscale has two live positions with different reach: Auto enlarges MONO art
-  // when the cap leaves room for a factor of 2; AI enlarges small rasters of any
-  // mode. Inert only when neither can bite on this image.
+  // Auto enlarges mono art when the cap leaves room for a factor of 2; AI enlarges
+  // small rasters in any mode. Upscale is inert only when neither applies.
   const cap = rasterCapFor(opts)
   const room = sourceMaxDim ? Math.floor(cap / sourceMaxDim) : 0
   const autoCanBite = opts.mode === 'mono' && room >= 2
@@ -224,12 +213,9 @@ export function TraceControlsBody({
     if (upscaleWhy && !showUpscale) inert.push({ label: 'Upscale — Auto / AI', why: upscaleWhy })
   }
 
-  // Mono cut consequences (#47). The cut is the one control that can silently
-  // yield NOTHING — a single global threshold with all the ink on one side of it.
-  // Rather than explain the blank afterwards, price both Invert positions and
-  // strike out the cuts that cannot work, so it is visible before it is chosen.
-  // The dead span is drawn, never enforced: the estimate behind it can be wrong on
-  // unusual art, so the override stays reachable.
+  // The mono cut can yield nothing when all the ink sits on one side of it. Show
+  // what both Invert positions admit and mark the dead cuts up front. The dead
+  // span is drawn, not enforced: the estimate can be wrong on unusual art.
   const inverted = opts.invert === true
   const deadCuts = monoGuide
     ? inverted
@@ -239,7 +225,7 @@ export function TraceControlsBody({
 
   return (
     <>
-      {/* Scrollable settings — the action below stays pinned so it can't scroll away. */}
+      {/* Scrollable settings; the action below stays pinned. */}
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink">Vectorize</h2>
@@ -287,8 +273,7 @@ export function TraceControlsBody({
                   { value: 'mono', label: 'Mono' },
                 ]}
               />
-              {/* What Auto decided, in the probe's own terms. A choice the user
-                  can't see is a choice they can't overrule. */}
+              {/* What Auto decided and why, so the user can overrule it. */}
               {colorMode === 'auto' && inkPlan && (
                 <p className="text-xs leading-snug text-muted">
                   {inkPlan.inks === 0
@@ -300,9 +285,8 @@ export function TraceControlsBody({
                             : ''
                         }${inkPlan.invert ? ' and inverted' : ''}${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
                       : inkPlan.inks === 1
-                        ? // One ink, but not far enough from the background in
-                          // luminance for a cut to separate them — which is the
-                          // normal case for art on transparency.
+                        ? // One ink, too close to the background in luminance
+                          // for a cut (common for art on transparency).
                           'One ink, too close to the background to cut → Color.'
                         : `${inkPlan.inks} inks → Color.`}
                 </p>
@@ -357,17 +341,16 @@ export function TraceControlsBody({
                     />
                   </Field>
 
-                  {/* The other half of a mono cut: WHICH side of it becomes solid.
-                      Without this, light art on a dark ground traces to nothing —
-                      every pixel of it sits above the cut. */}
+                  {/* Which side of the cut becomes solid. Light art on a dark ground
+                      needs this, or it traces to nothing. */}
                   <Field label="Invert" hint={d.invert.hint} onInfo={info('invert')}>
                     <Toggle
                       checked={opts.invert === true}
                       onChange={(v) => onPatch({ invert: v })}
                       label="Light ink on a dark ground"
                     />
-                    {/* Both positions, priced. The whole point of #47: you can see
-                        which one selects nothing WITHOUT having to pick it first. */}
+                    {/* What both positions admit, so an empty one is visible before
+                        it is picked. */}
                     {monoGuide && (
                       <p className="text-xs leading-snug text-muted tabular-nums">
                         At this cut — off takes{' '}
@@ -431,8 +414,7 @@ export function TraceControlsBody({
                     : undefined
               }
             >
-              {/* No master switch — the markers ARE the feature: with none placed the
-                  trace is byte-identical, and placing one turns it on. */}
+              {/* No master switch: with no markers placed the trace is unchanged. */}
               <p className="text-xs leading-snug text-muted">
                 Seed the segmentation per spot: keep a region <em>separate</em> from its
                 neighbour, paint it one <em>flat</em> colour, or <em>remove</em> it and heal
@@ -459,10 +441,9 @@ export function TraceControlsBody({
                   : 'Markers stay active while you pan, zoom and edit. Turn on to place more.'}
               </p>
 
-              {/* Marker kind: a click drops this type. "Separate" keeps the
-                  region distinct (paint untouched); "Flat" also pins it to one
-                  solid colour (its pre-merge form), not a fitted gradient;
-                  "Remove" dissolves the section and heals the neighbours in. */}
+              {/* Marker kind a click drops: Separate keeps the region distinct,
+                  Flat also pins it to one solid colour, Remove dissolves it into
+                  its neighbours. */}
               <div className="grid grid-cols-3 gap-1 rounded-lg border border-line p-1">
                 {(
                   [
@@ -544,8 +525,7 @@ export function TraceControlsBody({
             </Field>
           </Collapsible>
 
-          {/* The options this image has no use for — named, explained, and one
-              click away, instead of simply missing from the panel. */}
+          {/* Options that don't apply to this image, with the reason. */}
           {inert.length > 0 && (
             <Collapsible
               title="Looking for another option?"
@@ -573,7 +553,7 @@ export function TraceControlsBody({
           </div>
         </div>
 
-        {/* Pinned action footer — always visible no matter how far the settings scroll. */}
+        {/* Pinned action footer. */}
         <div className="flex shrink-0 flex-col gap-3 border-t border-line bg-surface p-4">
           {(staleEdits || staleOpts) && (
             <div className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-snug text-warn">

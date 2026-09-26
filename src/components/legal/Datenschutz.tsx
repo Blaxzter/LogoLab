@@ -3,7 +3,7 @@
  *
  * The actual text lives in `datenschutz.generated.html` (imported raw) so you
  * can paste the output from datenschutz-generator.de straight in, instead of
- * porting it to JSX. Personal data is NOT baked into that file — it uses
+ * porting it to JSX. Personal data is not baked into that file — it uses
  * {{NAME}} / {{STREET}} / {{CITY}} / {{COUNTRY}} / {{EMAIL}} / {{PHONE}} tokens
  * that are filled at build time from the VITE_LEGAL_* env vars (see legalInfo.ts
  * and .env.example), so your address stays out of the public repo.

@@ -29,7 +29,7 @@ export async function readSheetFile(file: File): Promise<SheetIntake> {
     source: {
       src: loaded.src,
       fileName: loaded.fileName ?? file.name,
-      // The sheet's coordinate space is the DECODED raster, not the file's
+      // The sheet's coordinate space is the decoded raster, not the file's
       // natural size — every tile rect is in these pixels.
       width: image.width,
       height: image.height,
@@ -46,8 +46,8 @@ export function isImageFile(file: File): boolean {
 
 /**
  * Knock the sheet's paper colour out of a crop: flood from the four corners (so
- * a white shape INSIDE the icon survives), then tidy the halo the flood leaves
- * behind. Exactly the sequence the Cleanup studio's one-click Auto runs.
+ * a white shape inside the icon survives), then tidy the halo the flood leaves
+ * behind. Same sequence as the Cleanup studio's one-click Auto.
  */
 export function knockoutBackground(tile: ImageDataLike, tolerance = 32, softness = 0.35): ImageData {
   // cloneImageData constructs a real ImageData, which is what the bgRemove passes

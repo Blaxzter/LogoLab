@@ -1,6 +1,5 @@
-// Fit-to-container sizing hook for the vectorize canvas. Kept in its own module
-// (not in EditorCanvas.tsx) so that the component file exports only components —
-// a non-component export there breaks React Fast Refresh ("consistent exports").
+// Fit-to-container sizing hook for the vectorize canvas. Kept out of
+// EditorCanvas.tsx so that file exports only components (Fast Refresh).
 
 import { useEffect, useRef, useState } from "react";
 

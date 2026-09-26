@@ -108,11 +108,10 @@ export function Slider({
   onChange: (v: number) => void
   format?: (v: number) => string
   /**
-   * Sub-ranges (in value units) where this control cannot produce a usable
-   * result — drawn as struck-out track rather than plain track, so a setting that
-   * is guaranteed to do nothing looks wrong before it is chosen. The handle is
-   * NOT clamped out of them: on unusual art the estimate that produced them can
-   * be wrong, and the override has to stay reachable.
+   * Sub-ranges (in value units) where this control can't produce a usable
+   * result, drawn as struck-out track. The handle is not clamped out of them:
+   * the estimate behind them can be wrong on unusual art, so the value must
+   * stay reachable.
    */
   dead?: { from: number; to: number }[]
 }) {

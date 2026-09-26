@@ -8,14 +8,12 @@ import { Tooltip } from './ui/Tooltip'
 const POPOVER_W = 320
 
 /**
- * Header entry to the vectorizer's harnesses (see {@link LAB_VIEWS}) — lazily-loaded
- * routes under /labs, so following one is an in-app navigation, not a new tab.
+ * Header entry to the vectorizer's harnesses (see {@link LAB_VIEWS}), lazily
+ * loaded routes under /labs. Uses a flask icon because the bug icon beside it
+ * means "report a problem".
  *
- * A FLASK, not a bug. The bug glyph beside it files a report now, and two bugs in
- * one header would have meant neither of them said anything.
- * Positioning/dismissal mirror {@link SupportPopover}: portaled to <body> with
- * fixed coords so the header's stacking can't clip it, closing on outside tap,
- * Esc, scroll and resize.
+ * Portalled to <body> with fixed coords so the header can't clip it; closes on
+ * outside tap, Escape, scroll and resize.
  */
 export function LabPopover() {
   const [open, setOpen] = useState(false)
@@ -59,9 +57,7 @@ export function LabPopover() {
 
   return (
     <>
-      {/* The label goes EMPTY while the popover is open — Tooltip passes its
-          child straight through then, so a bubble can't hover over the card it
-          just opened. Same trick in SupportPopover. */}
+      {/* Empty label while open, so no bubble hovers over the card it just opened. */}
       <Tooltip label={open ? '' : 'Dev views — the vectorizer’s harnesses'} side="bottom">
         <button
           ref={btnRef}

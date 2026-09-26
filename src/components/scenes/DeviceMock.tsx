@@ -232,7 +232,7 @@ export function DeviceMock({ id }: { id: DeviceId }) {
         style={{ background: 'linear-gradient(160deg,#f3f4f7,#e8eaef)', minHeight: 360 }}
       >
         <div className="relative" style={{ height: 420, maxWidth: '100%', aspectRatio: String(aspect) }}>
-          {/* Screenshot screen (BEHIND the frame) */}
+          {/* Screenshot screen (behind the frame) */}
           <div
             ref={screenRef}
             className="absolute select-none overflow-hidden"
@@ -298,7 +298,7 @@ export function DeviceMock({ id }: { id: DeviceId }) {
             )}
           </div>
 
-          {/* Device frame ON TOP (screen knocked out, notch/bezel kept) */}
+          {/* Device frame on top (screen knocked out, notch/bezel kept) */}
           {useFrame && frame && (
             <img
               src={frame.src}

@@ -1,16 +1,13 @@
-// Editable flat-art palette for the vectorize studio (lives in the right rail,
-// below the Paths list). The flat (gradients-off) tracer reduces the art to a
-// small set of dominant colours (paletteSegment.ts); this surfaces that palette
-// so the user can take it over: eyedrop a colour from the image, tweak a hex, set
-// an opacity, add a missed colour, or remove one (its areas merge into the nearest
-// remaining colour). A locked palette flows into the tracer as `opts.palette` —
-// every pixel snaps to the nearest of THESE colours, the user owns the count (the
-// automatic ≤14-colour / coverage gates are bypassed), and each swatch's opacity
-// paints its region's `fill-opacity` (planar engine).
+// Editable flat-art palette in the vectorize studio's right rail. The flat
+// (gradients-off) tracer reduces the art to a few dominant colours
+// (paletteSegment.ts); this lets the user take that palette over: eyedrop, edit a
+// hex, set an opacity, add or remove a colour (removed areas merge into the
+// nearest remaining one).
 //
-// Default stays fully automatic: until the user clicks "Edit", `opts.palette` is
-// undefined and the colours are extracted + snapped to true design hex (and each
-// region's alpha mode) by the pipeline. An optional reveal — colours only, no chrome.
+// A locked palette reaches the tracer as `opts.palette`: every pixel snaps to the
+// nearest of these colours, the automatic colour-count gates are bypassed, and
+// each swatch's opacity becomes its region's `fill-opacity`. Until the user clicks
+// "Edit", `opts.palette` is undefined and extraction is fully automatic.
 
 import { useState } from 'react'
 import { Pipette, Plus, RotateCcw, X } from 'lucide-react'
@@ -206,9 +203,9 @@ function SwatchRow({
   const rgb6 = rgbToHex(value)
   const a = value.a ?? 255
   const [text, setText] = useState(rgb6)
-  // Resync the hex field when the RGB changes (e.g. removing a swatch shifts colours
-  // up a row). Done in render — not an effect — so the well and the field never
-  // disagree for a frame; an alpha-only change leaves rgb6 (and the field) untouched.
+  // Resync the hex field when the RGB changes (e.g. a removal shifts colours up a
+  // row). Done in render, not an effect, so the well and field never disagree for
+  // a frame; an alpha-only change leaves the field untouched.
   const [lastRgb, setLastRgb] = useState(rgb6)
   if (rgb6 !== lastRgb) {
     setLastRgb(rgb6)
