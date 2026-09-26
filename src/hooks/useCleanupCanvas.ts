@@ -9,56 +9,44 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLogo, useStore } from '../state/store'
 import { canvasToBlob, getImageData } from '../lib/image'
 import {
-  alphaBounds,
   autoRemove,
   brushStamp,
   brushStroke,
   cloneImageData,
-  closeSeams,
-  colorAt,
-  despeckle,
   compositeOver,
   cropPad,
   defringe,
-  featherAlpha,
-  floodRemove,
-  floodRestore,
-  growMatte,
-  recolor,
-  removeColor,
   sampleCornerColor,
-  shrinkMatte,
   type BrushMode,
   type RemoveOptions,
 } from '../lib/cleanup/bgRemove'
 import { aiRemoveBackground } from '../lib/cleanup/aiRemove'
+import {
+  aiProgressLabel,
+  applyClickTool,
+  clickToolStatus,
+  edgeOps,
+  finishRemoval,
+  imageDataEqual,
+  imageDataToCanvas,
+  isFormField,
+  trimBounds,
+  type CleanupTool,
+  type EdgeOp,
+  type KeepRemoveMarker,
+} from '../lib/cleanup/cleanupOps'
 import { downloadBlob } from '../lib/export/download'
 import type { PanZoom } from './usePanZoom'
 import { usePinchZoom } from './usePinchZoom'
+import { useUndoShortcuts } from './useUndoShortcuts'
+
+export type { CleanupTool, KeepRemoveMarker }
 
 // Longest-side cap for the working buffer. AI logo generators commonly emit ~2K,
 // so a lower cap would discard source resolution before any edit. The AI alpha
 // mask is computed at the model's 1024 and upscaled to fit (see aiRemove.ts).
 const MAX_DIM = 2048
 const HISTORY_LIMIT = 30
-
-/**
- * The active painting/marker tool.
- * - 'magic'   — contiguous flood-remove from the clicked pixel.
- * - 'color'   — global color-key remove of the clicked color.
- * - 'erase'   — soft brush that rubs out alpha (drag).
- * - 'restore' — soft brush that paints the pristine pixels back (drag).
- * - 'keep'    — guided marker: flood-restore the clicked region (one history step).
- * - 'remove'  — guided marker: flood-remove the clicked region (one history step).
- */
-export type CleanupTool = 'magic' | 'color' | 'erase' | 'restore' | 'keep' | 'remove'
-
-/**
- * A guided keep/remove pin, stored normalized (0–1) to the image so it survives
- * a crop. The pin list is studio state (not persisted, not in undo); the type
- * lives here because it is the hook's vocabulary.
- */
-export type KeepRemoveMarker = { x: number; y: number; kind: 'keep' | 'remove' }
 
 export interface UseCleanupCanvasParams {
   pz: PanZoom
@@ -284,11 +272,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   // Hold Space to pan. Only the flag is armed here; the drag itself runs in the
   // canvas pointer handlers so it composes with painting.
   useEffect(() => {
-    const formish = (t: EventTarget | null) =>
-      t instanceof HTMLElement &&
-      (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')
     const down = (e: KeyboardEvent) => {
-      if (e.code !== 'Space' || e.repeat || formish(e.target)) return
+      if (e.code !== 'Space' || e.repeat || isFormField(e.target)) return
       spaceHeldRef.current = true
       setSpacePan(true)
       const tag = (e.target as HTMLElement | null)?.tagName
@@ -308,16 +293,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   }, [])
 
   /** True when the working pixels are byte-identical to the pristine upload. */
-  const equalsPristine = useCallback(() => {
-    const w = workingRef.current
-    const p = pristineRef.current
-    if (!w || !p) return true
-    if (w.width !== p.width || w.height !== p.height) return false
-    const a = w.data
-    const b = p.data
-    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
-    return true
-  }, [])
+  const equalsPristine = useCallback(() => imageDataEqual(workingRef.current, pristineRef.current), [])
 
   /**
    * Commit a completed change to history. `pre` is the snapshot taken before the
@@ -376,31 +352,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     setStatus('Redid change')
   }, [redraw, equalsPristine, pz.reset, syncDims])
 
-  // Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z or Ctrl+Y to redo (panel only).
-  useEffect(() => {
-    if (!ready) return
-    const onKey = (e: KeyboardEvent) => {
-      if (aiBusy || !(e.ctrlKey || e.metaKey)) return
-      // Don't hijack the browser's native undo while the user is typing in a
-      // text field (the always-mounted Sidebar has hex / brand-name inputs).
-      const t = e.target
-      if (
-        t instanceof HTMLElement &&
-        (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')
-      )
-        return
-      const k = e.key.toLowerCase()
-      if (k === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        handleUndo()
-      } else if ((k === 'z' && e.shiftKey) || k === 'y') {
-        e.preventDefault()
-        handleRedo()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [ready, aiBusy, handleUndo, handleRedo])
+  useUndoShortcuts(ready, aiBusy, handleUndo, handleRedo)
 
   /** Map a pointer event to floating-point image coordinates (and refresh scale). */
   const imgCoords = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -462,47 +414,15 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         const iy = Math.floor(p.y)
         if (ix < 0 || iy < 0 || ix >= working.width || iy >= working.height) return
         const pre = cloneImageData(working)
-
-        if (tool === 'keep') {
-          const pristine = pristineRef.current
-          const affected = pristine ? floodRestore(working, pristine, ix, iy, opts) : 0
-          if (affected > 0) {
-            commit(pre)
-            redraw()
-            onMarkerPlaced?.(ix / working.width, iy / working.height, 'keep')
-            setStatus(`Kept ${affected.toLocaleString()} px (restored region)`)
-          } else {
-            setStatus('Nothing to restore there — raise tolerance or pick a clearer spot.')
-          }
-          return
-        }
-
-        // magic / remove: contiguous flood-remove at the pixel; remove == magic
-        // but seeded by a marker. color: global color key.
-        const key = colorAt(working, ix, iy)
-        lastKeyRef.current = key
-        const affected =
-          tool === 'color' ? removeColor(working, key, opts) : floodRemove(working, ix, iy, opts)
+        // Keep restores from the pristine pixels; the rest key the clicked color.
+        const { affected, key } = applyClickTool(tool, working, pristineRef.current, ix, iy, opts, defringeStrength)
+        if (key) lastKeyRef.current = key
         if (affected > 0) {
-          // Close the AA seam where this cut meets an already-removed region and
-          // wipe specks the flood stranded. Both run before defringe so they
-          // sample the raw background colors.
-          closeSeams(working)
-          despeckle(working)
-          if (defringeStrength > 0) defringe(working, key, defringeStrength)
           commit(pre)
           redraw()
-          if (tool === 'remove') {
-            onMarkerPlaced?.(ix / working.width, iy / working.height, 'remove')
-            setStatus(`Removed ${affected.toLocaleString()} px (marker region)`)
-          } else {
-            setStatus(
-              `Removed ${affected.toLocaleString()} px (${tool === 'magic' ? 'contiguous' : 'by color'})`,
-            )
-          }
-        } else {
-          setStatus('Nothing within tolerance there — try raising tolerance.')
+          if (tool === 'keep' || tool === 'remove') onMarkerPlaced?.(ix / working.width, iy / working.height, tool)
         }
+        setStatus(clickToolStatus(tool, affected))
         return
       }
 
@@ -615,9 +535,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     const { color, affected } = autoRemove(working, opts)
     lastKeyRef.current = color
     if (affected > 0) {
-      closeSeams(working)
-      despeckle(working)
-      if (defringeStrength > 0) defringe(working, color, defringeStrength)
+      finishRemoval(working, color, defringeStrength)
       commit(pre)
       redraw()
       setStatus(`Auto-removed corner background — ${affected.toLocaleString()} px`)
@@ -638,11 +556,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         // The device is confirmed only once a backend produced a result; capture
         // it for the status line and the persisted `aiDevice`.
         if (p.device) device = p.device
-        setAiStatus(
-          p.phase === 'download'
-            ? `Downloading model${p.percent != null ? ` — ${p.percent}%` : '…'}`
-            : 'Removing background…',
-        )
+        setAiStatus(aiProgressLabel(p))
       })
       // The image was swapped or reset mid-run (the reload effect installs a new
       // pristine snapshot): drop the result rather than apply it to another image.
@@ -702,14 +616,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const bakeCanvas = useCallback((): HTMLCanvasElement | null => {
     const working = workingRef.current
     if (!working) return null
-    const out = matteOn ? compositeOver(working, matteColor) : working
-    const canvas = document.createElement('canvas')
-    canvas.width = out.width
-    canvas.height = out.height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return null
-    ctx.putImageData(out, 0, 0)
-    return canvas
+    return imageDataToCanvas(matteOn ? compositeOver(working, matteColor) : working)
   }, [matteOn, matteColor])
 
   const handleApply = useCallback(() => {
@@ -734,12 +641,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const snapshotWorking = useCallback(async (): Promise<Blob | null> => {
     const working = workingRef.current
     if (!working) return null
-    const canvas = document.createElement('canvas')
-    canvas.width = working.width
-    canvas.height = working.height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return null
-    ctx.putImageData(working, 0, 0)
+    const canvas = imageDataToCanvas(working)
+    if (!canvas) return null
     return canvasToBlob(canvas, 'image/png').catch(() => null)
   }, [])
 
@@ -753,79 +656,30 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
 
   /**
    * Run an in-place pixel op as a single history step (committed only if it
-   * changed anything). `run` returns the affected-pixel count.
+   * changed anything). `op.run` returns the affected-pixel count.
    */
   const oneShot = useCallback(
-    (run: (working: ImageData) => number, label: (affected: number) => string, empty: string) => {
+    (op: EdgeOp) => {
       const working = workingRef.current
       if (!working || aiBusy) return
       const pre = cloneImageData(working)
-      const affected = run(working)
+      const affected = op.run(working, lastKeyRef.current)
       if (affected > 0) {
         commit(pre)
         redraw()
-        setStatus(label(affected))
+        setStatus(op.label(affected))
       } else {
-        setStatus(empty)
+        setStatus(op.empty)
       }
     },
     [aiBusy, commit, redraw],
   )
 
-  const growEdge = useCallback(
-    (radius: number) =>
-      oneShot(
-        (w) => growMatte(w, radius),
-        (n) => `Grew the edge by ${radius}px — ${n.toLocaleString()} px`,
-        'Edge already filled — nothing to grow.',
-      ),
-    [oneShot],
-  )
-
-  const shrinkEdge = useCallback(
-    (radius: number) =>
-      oneShot(
-        (w) => shrinkMatte(w, radius),
-        (n) => `Shrank the edge by ${radius}px — ${n.toLocaleString()} px`,
-        'Nothing to shrink — the edge is already tight.',
-      ),
-    [oneShot],
-  )
-
-  const featherEdge = useCallback(
-    (radius: number) =>
-      oneShot(
-        (w) => featherAlpha(w, radius),
-        (n) => `Feathered the edge by ${radius}px — ${n.toLocaleString()} px`,
-        'Nothing to feather.',
-      ),
-    [oneShot],
-  )
-
-  const defringeMore = useCallback(
-    (amount: number) =>
-      oneShot(
-        (w) => {
-          // defringe doesn't report a count; treat any semi-transparent edge as
-          // a change so the step commits (the op is a near-no-op otherwise).
-          defringe(w, lastKeyRef.current ?? undefined, amount)
-          return alphaBounds(w) ? 1 : 0
-        },
-        () => `Defringed the edges (strength ${amount.toFixed(1)})`,
-        'Nothing to defringe — no soft edges.',
-      ),
-    [oneShot],
-  )
-
-  const recolorAll = useCallback(
-    (hex: string) =>
-      oneShot(
-        (w) => recolor(w, hex),
-        (n) => `Recolored ${n.toLocaleString()} px to ${hex}`,
-        'Nothing to recolor — the cutout is empty.',
-      ),
-    [oneShot],
-  )
+  const growEdge = useCallback((radius: number) => oneShot(edgeOps.grow(radius)), [oneShot])
+  const shrinkEdge = useCallback((radius: number) => oneShot(edgeOps.shrink(radius)), [oneShot])
+  const featherEdge = useCallback((radius: number) => oneShot(edgeOps.feather(radius)), [oneShot])
+  const defringeMore = useCallback((amount: number) => oneShot(edgeOps.defringe(amount)), [oneShot])
+  const recolorAll = useCallback((hex: string) => oneShot(edgeOps.recolor(hex)), [oneShot])
 
   /**
    * Auto-trim transparent margins to the alpha bbox, padded by `pad` px. Crops the
@@ -836,18 +690,12 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     (pad: number) => {
       const working = workingRef.current
       if (!working || aiBusy) return
-      const bounds = alphaBounds(working)
-      if (!bounds) {
+      const bounds = trimBounds(working, pad)
+      if (bounds === 'empty') {
         setStatus('Nothing to trim — the image is fully transparent.')
         return
       }
-      if (
-        pad === 0 &&
-        bounds.x === 0 &&
-        bounds.y === 0 &&
-        bounds.w === working.width &&
-        bounds.h === working.height
-      ) {
+      if (bounds === 'tight') {
         setStatus('Nothing to trim — already cropped tight.')
         return
       }
