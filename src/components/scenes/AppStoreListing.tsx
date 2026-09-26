@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import type { CSSProperties } from 'react'
-import { LogoMark } from '../LogoMark'
+import { LogoMark } from './LogoMark'
 import { useAppearance, useEnv } from '../../state/store'
 import { hexToRgb } from '../../lib/colorUtils'
 

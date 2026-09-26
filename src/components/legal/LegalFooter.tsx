@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { REPO_URL } from '../navItems'
+import { REPO_URL } from '../shell/navItems'
 import { BUILD, buildTitle, hasBuildInfo, releaseDateLabel, versionLabel } from '../../lib/buildInfo'
 import { Tooltip } from '../ui/Tooltip'
 

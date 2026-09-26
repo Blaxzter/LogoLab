@@ -5,7 +5,7 @@
 
 import { useCallback, useState } from 'react'
 import { useSheetStore } from '../../state/sheetStore'
-import { ExampleCard } from '../ExamplesDialog'
+import { ExampleCard } from '../intake/ExamplesDialog'
 import { readSheetFile } from './sheetIo'
 
 interface SheetExample {

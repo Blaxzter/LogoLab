@@ -1,6 +1,6 @@
 // "Report an issue" links and buttons, shared by every entry point:
 //
-//   a crash        components/ErrorBoundary
+//   a crash        components/report/ErrorBoundary
 //   a failure      anywhere a catch turns an error into a message for the user
 //   a problem      the header: "it traced, and the result is wrong"
 //
@@ -9,16 +9,16 @@
 
 import { useState, type ReactNode } from 'react'
 import { Bug, Check, Copy, ExternalLink } from 'lucide-react'
-import { recentErrors } from '../lib/errorLog'
-import { collectReportContext } from '../lib/reportContext'
+import { recentErrors } from '../../lib/errorLog'
+import { collectReportContext } from '../../lib/reportContext'
 import {
   issueReportText,
   issueReportUrl,
   type IssueReportInput,
   type ReportKind,
-} from '../lib/issueReport'
-import { REPO_URL } from './navItems'
-import { TipLabel, Tooltip } from './ui/Tooltip'
+} from '../../lib/issueReport'
+import { REPO_URL } from '../shell/navItems'
+import { TipLabel, Tooltip } from '../ui/Tooltip'
 
 export interface ReportSubject {
   /** What it is about, lower case: `the vectorizer`. */

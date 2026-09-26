@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
-import { useLogoUpload } from '../hooks/useLogoUpload'
+import { useLogoUpload } from '../../hooks/useLogoUpload'
 import { ExampleGrid } from './ExamplesDialog'
-import { ReportFailureLink } from './ReportIssue'
+import { ReportFailureLink } from '../report/ReportIssue'
 
 /**
  * The big, full-width drop zone the Cleanup / Vectorize / Export panels show

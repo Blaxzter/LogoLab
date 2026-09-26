@@ -55,7 +55,7 @@ export default defineConfig(({ command }) => ({
   // preview build tested on this host can't go on serving its precache over the
   // dev server.
   plugins: [react(), tailwindcss(), serviceWorker()],
-  // The MCP install dialog (src/components/AgentSetup.tsx) prints a command that
+  // The MCP install dialog (src/components/shell/AgentSetup.tsx) prints a command that
   // names this checkout. `vite dev` IS the checkout, so fill it in; a hosted build
   // has no idea where the user cloned it, and the dialog asks instead.
   define: {
@@ -67,7 +67,7 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       // Single entry. The vectorizer's harnesses used to be standalone HTML pages here;
       // they are now lazily-loaded React routes under /labs (LAB_VIEWS in
-      // src/components/navItems.tsx, wired up in App.tsx). React.lazy keeps them out of the
+      // src/components/shell/navItems.tsx, wired up in App.tsx). React.lazy keeps them out of the
       // main bundle just as separate entries did — the corpora, the scoring modules and the
       // fixtures they import all land in their own chunks.
       input: { index: page('index.html') },

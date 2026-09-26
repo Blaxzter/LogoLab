@@ -6,8 +6,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Check, Loader2, Trash2 } from 'lucide-react'
-import { getSaveStatus, startFreshSession, subscribeSaveStatus } from '../lib/persist/session'
-import { Tooltip } from './ui/Tooltip'
+import { getSaveStatus, startFreshSession, subscribeSaveStatus } from '../../lib/persist/session'
+import { Tooltip } from '../ui/Tooltip'
 
 const POPOVER_W = 268
 

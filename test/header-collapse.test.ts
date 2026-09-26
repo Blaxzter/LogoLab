@@ -25,7 +25,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const APP = readFileSync('src/App.tsx', 'utf8')
-const MENU = readFileSync('src/components/AppMenu.tsx', 'utf8')
+const MENU = readFileSync('src/components/shell/AppMenu.tsx', 'utf8')
 const SHEET = readFileSync('src/components/ui/Sheet.tsx', 'utf8')
 
 /** The element bearing `aria-label="Open menu"`, with its className. */

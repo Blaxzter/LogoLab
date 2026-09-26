@@ -3,7 +3,7 @@
 
 import { ImageOff } from 'lucide-react'
 import { useLogo } from '../../state/store'
-import { PanelEmptyState } from '../PanelEmptyState'
+import { PanelEmptyState } from '../intake/PanelEmptyState'
 import { VectorizeStudio } from '../vectorize/VectorizeStudio'
 
 export default function VectorizePanel() {

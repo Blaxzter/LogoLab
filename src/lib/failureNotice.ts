@@ -1,5 +1,5 @@
 // A handled failure (e.g. a rejected trace) asks the user whether to report
-// it, as a toast in the bottom stack (components/Toasts) rather than a modal,
+// it, as a toast in the bottom stack (components/shell/Toasts) rather than a modal,
 // since the app still works and the user is mid-task.
 //
 // Rules that keep it from becoming noise:

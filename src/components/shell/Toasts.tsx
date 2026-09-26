@@ -3,10 +3,10 @@
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { AlertTriangle, History, RefreshCw, WifiOff, X } from 'lucide-react'
-import { sessionWasRestored } from '../lib/persist/session'
-import { dismissFailure, getFailure, subscribeFailure } from '../lib/failureNotice'
-import { ReportIssueLink } from './ReportIssue'
-import { usePwa } from '../pwa/register'
+import { sessionWasRestored } from '../../lib/persist/session'
+import { dismissFailure, getFailure, subscribeFailure } from '../../lib/failureNotice'
+import { ReportIssueLink } from '../report/ReportIssue'
+import { usePwa } from '../../pwa/register'
 
 /** How long informational notices stay up. */
 const RESTORE_MS = 9000

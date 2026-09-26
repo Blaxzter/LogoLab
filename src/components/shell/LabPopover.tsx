@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { FlaskConical } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { LAB_VIEWS } from './navItems'
-import { Tooltip } from './ui/Tooltip'
+import { Tooltip } from '../ui/Tooltip'
 
 const POPOVER_W = 320
 

@@ -4,7 +4,7 @@
 
 import { Eraser } from 'lucide-react'
 import { useLogo } from '../../state/store'
-import { PanelEmptyState } from '../PanelEmptyState'
+import { PanelEmptyState } from '../intake/PanelEmptyState'
 import { CleanupStudio } from '../cleanup/CleanupStudio'
 
 export default function CleanupPanel() {

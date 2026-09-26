@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
-import { useAppearance, useLogo } from '../state/store'
-import type { IconShape } from '../types'
+import { useAppearance, useLogo } from '../../state/store'
+import type { IconShape } from '../../types'
 
 export interface LogoMarkProps {
   /** Box size in px (square). */

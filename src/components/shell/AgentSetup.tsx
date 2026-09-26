@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bot, Check, Copy, ExternalLink, Terminal, X } from 'lucide-react'
-import { Tooltip } from './ui/Tooltip'
+import { Tooltip } from '../ui/Tooltip'
 
 /**
  * "Use LogoLab from your AI agent": install instructions for the MCP server,

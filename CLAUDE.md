@@ -214,7 +214,7 @@ un-applied cleanup cutout, the whole icon sheet with its traces, and the editor'
   a module-level payload that panels `claim()` on mount — so a lazily-mounted studio never
   races an async read against its own auto-trace.
 
-The header's **Saved chip** (`src/components/SavedChip.tsx`) is the standing indicator, over
+The header's **Saved chip** (`src/components/shell/SavedChip.tsx`) is the standing indicator, over
 `src/lib/persist/status.ts`. It must be able to say **Not saved**: private mode, a blocked
 origin and a full quota all make persistence impossible, and a chip that keeps reading "Saved"
 through that is worse than no chip. `test/save-status.test.ts` is the gate — both of its
@@ -257,7 +257,7 @@ back dropped the drawing and showed the intake screen.
 
 ## A crash costs you ONE panel, and the report is the point
 
-There is an `ErrorBoundary` per route (`src/components/ErrorBoundary.tsx`, wired in `App.tsx`,
+There is an `ErrorBoundary` per route (`src/components/report/ErrorBoundary.tsx`, wired in `App.tsx`,
 plus a last-resort one at the root in `main.tsx`). Three traps, all of which look like working
 code:
 
@@ -278,7 +278,7 @@ code:
 ## Filing an issue is a FEATURE, and the crash screen is its rarest entry point
 
 `src/lib/issueReport.ts` fills in a GitHub issue FORM — `.github/ISSUE_TEMPLATE/*.yml` — and
-`src/components/ReportIssue.tsx` hangs it off four kinds: a **crash** (the boundary), a
+`src/components/report/ReportIssue.tsx` hangs it off four kinds: a **crash** (the boundary), a
 **failure** (any catch that turns an error into a message for the user: the vectorize status
 bar, the uploader, the sheet's failed tiles), a **problem** ("it traced and the result is
 wrong" — the most valuable report this project gets, and it needs no failure at all) and an
@@ -295,7 +295,7 @@ Splitting one body into several fields made `title` and the summary a FIXED head
 cannot trim, so both are capped — otherwise a kilobyte-long error message pushes the link past
 the 414 limit with nothing left to cut.
 
-The header's bug button opens `components/ReportDialog`, not GitHub: which kind of thing is
+The header's bug button opens `components/report/ReportDialog`, not GitHub: which kind of thing is
 this, what to write, and a disclosure showing exactly what gets attached. Jumping straight to
 a stranger's issue tracker filed every idea as a bug and lost the people who bounced off the
 form. A crash screen and a failed trace keep their DIRECT links — they already know they are

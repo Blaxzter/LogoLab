@@ -12,7 +12,7 @@ same corpora, same gates, same numbers, wearing the app's design system.
 | `/labs/gallery` | `GalleryLab` | How does the tracer render art it can't be scored on? |
 | `/labs/scoreboard` | `EngineLab` | potrace vs crisp: ΔE / SSIM / seam / determinism. |
 
-Everything lives in `src/components/labs/`. `LAB_VIEWS` in `src/components/navItems.tsx` is the
+Everything lives in `src/components/labs/`. `LAB_VIEWS` in `src/components/shell/navItems.tsx` is the
 one list the header popover, the mobile menu and the labs index all read.
 
 ## ONE LAB, ONE QUESTION — and the corpus × lens mistake

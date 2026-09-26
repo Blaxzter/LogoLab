@@ -1,7 +1,7 @@
 import { Monitor, Moon, Sun } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useTheme, type ThemeMode } from '../theme'
-import { Tooltip } from './ui/Tooltip'
+import { useTheme, type ThemeMode } from '../../theme'
+import { Tooltip } from '../ui/Tooltip'
 
 const ICON: Record<ThemeMode, LucideIcon> = {
   light: Sun,

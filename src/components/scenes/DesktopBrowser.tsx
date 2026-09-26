@@ -1,5 +1,5 @@
 import { useAppearance, useEnv } from '../../state/store'
-import { LogoMark } from '../LogoMark'
+import { LogoMark } from './LogoMark'
 
 /**
  * Full-width desktop website mock inside a browser window chrome.

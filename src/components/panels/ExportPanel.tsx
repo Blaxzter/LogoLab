@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Download, ImageOff, Package, Sparkles, Layers } from 'lucide-react'
-import { AgentSetupButton } from '../AgentSetup'
+import { AgentSetupButton } from '../shell/AgentSetup'
 import { useAppearance, useCheckerClass, useEnv, useLogo } from '../../state/store'
 import type { ExportTarget, RenderIconOptions } from '../../types'
 import { Toggle } from '../ui/controls'
@@ -11,7 +11,7 @@ import { downloadBlob } from '../../lib/download'
 import { loadRenderSource } from '../../lib/image'
 import type { RenderSource } from '../../lib/image'
 import { DEFAULT_TARGETS, MASKABLE_SAFE_DIAMETER, buildExportZip, renderIcon } from '../../lib/pwaExport'
-import { PanelEmptyState } from '../PanelEmptyState'
+import { PanelEmptyState } from '../intake/PanelEmptyState'
 import { debounce, readLocal, writeLocal } from '../../lib/persist/local'
 
 /* ----------------------------------------------------------------- constants */

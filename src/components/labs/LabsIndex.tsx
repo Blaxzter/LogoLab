@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { LAB_VIEWS } from '../navItems'
+import { LAB_VIEWS } from '../shell/navItems'
 
 /** The labs' landing page: what each harness answers, and why you'd open it. */
 export default function LabsIndex() {

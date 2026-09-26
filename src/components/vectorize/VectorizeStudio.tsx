@@ -42,7 +42,7 @@ import { cleanSvg } from "../../lib/svgClean";
 import { logError } from "../../lib/errorLog";
 import { clearFailure, raiseFailure } from "../../lib/failureNotice";
 import { provideReportContext } from "../../lib/reportContext";
-import { ReportFailureLink } from "../ReportIssue";
+import { ReportFailureLink } from "../report/ReportIssue";
 import { docStats, isStrokeOnly, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
 import { regionProvenance } from "../../lib/path/topology";

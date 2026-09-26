@@ -1,12 +1,12 @@
 import { Circle, RotateCcw, Square, Squircle } from 'lucide-react'
-import { isDefaultAppearance, useAppearance, useEnv, useStore } from '../state/store'
-import { useActiveTab } from '../hooks/useActiveTab'
-import { UploadDropzone } from './UploadDropzone'
-import { TryExampleButton } from './ExamplesDialog'
-import { Collapsible, ColorField, Field, Segmented, Slider, TextField, Toggle } from './ui/controls'
-import { Button } from './ui/Button'
-import { Sheet } from './ui/Sheet'
-import type { IconShape } from '../types'
+import { isDefaultAppearance, useAppearance, useEnv, useStore } from '../../state/store'
+import { useActiveTab } from '../../hooks/useActiveTab'
+import { UploadDropzone } from '../intake/UploadDropzone'
+import { TryExampleButton } from '../intake/ExamplesDialog'
+import { Collapsible, ColorField, Field, Segmented, Slider, TextField, Toggle } from '../ui/controls'
+import { Button } from '../ui/Button'
+import { Sheet } from '../ui/Sheet'
+import type { IconShape } from '../../types'
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (

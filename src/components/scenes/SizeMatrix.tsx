@@ -1,4 +1,4 @@
-import { LogoMark } from '../LogoMark'
+import { LogoMark } from './LogoMark'
 import { useAppearance } from '../../state/store'
 
 /**

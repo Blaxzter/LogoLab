@@ -15,10 +15,10 @@
 
 import { Component, Fragment, useState, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
-import { logError } from '../lib/errorLog'
-import { collectReportContext } from '../lib/reportContext'
-import { errorLabel, errorStack, isChunkLoadError } from '../lib/issueReport'
-import { startFreshSession } from '../lib/persist/session'
+import { logError } from '../../lib/errorLog'
+import { collectReportContext } from '../../lib/reportContext'
+import { errorLabel, errorStack, isChunkLoadError } from '../../lib/issueReport'
+import { startFreshSession } from '../../lib/persist/session'
 import { CopyReportButton, ReportIssueLink, type ReportSubject } from './ReportIssue'
 
 interface Props {

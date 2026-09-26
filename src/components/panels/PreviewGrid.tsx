@@ -1,13 +1,13 @@
 import type { ComponentType } from 'react'
-import { useLogo } from '../state/store'
-import PhoneHomeIOS from './scenes/PhoneHomeIOS'
-import PhoneHomeAndroid from './scenes/PhoneHomeAndroid'
-import SplashScreen from './scenes/SplashScreen'
-import DesktopBrowser from './scenes/DesktopBrowser'
-import BrowserTabs from './scenes/BrowserTabs'
-import SizeMatrix from './scenes/SizeMatrix'
-import AppStoreListing from './scenes/AppStoreListing'
-import SocialAvatar from './scenes/SocialAvatar'
+import { useLogo } from '../../state/store'
+import PhoneHomeIOS from '../scenes/PhoneHomeIOS'
+import PhoneHomeAndroid from '../scenes/PhoneHomeAndroid'
+import SplashScreen from '../scenes/SplashScreen'
+import DesktopBrowser from '../scenes/DesktopBrowser'
+import BrowserTabs from '../scenes/BrowserTabs'
+import SizeMatrix from '../scenes/SizeMatrix'
+import AppStoreListing from '../scenes/AppStoreListing'
+import SocialAvatar from '../scenes/SocialAvatar'
 
 interface SceneDef {
   id: string

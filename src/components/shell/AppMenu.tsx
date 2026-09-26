@@ -1,10 +1,10 @@
 import { Bug, Coffee, Heart, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
-import { useLogo, useStore } from '../state/store'
+import { useLogo, useStore } from '../../state/store'
 import { AgentSetupButton } from './AgentSetup'
 import { InstallAppButton } from './PwaPrompts'
 import { SavedStatusRow } from './SavedChip'
-import { Sheet } from './ui/Sheet'
+import { Sheet } from '../ui/Sheet'
 import { ThemeToggleSegmented } from './ThemeToggle'
 import { TABS, LAB_VIEWS, REPO_URL, COFFEE_URL, SPONSOR_URL, GithubMark } from './navItems'
 
@@ -22,7 +22,7 @@ export function AppMenu({
 }: {
   open: boolean
   onClose: () => void
-  /** Opens the same ask the header's bug button does (components/ReportDialog). */
+  /** Opens the same ask the header's bug button does (components/report/ReportDialog). */
   onReport: () => void
 }) {
   const logo = useLogo()

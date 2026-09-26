@@ -1,5 +1,5 @@
 import { useAppearance, useEnv } from '../../state/store'
-import { LogoMark } from '../LogoMark'
+import { LogoMark } from './LogoMark'
 import { bestTextColor } from '../../lib/colorUtils'
 
 /**

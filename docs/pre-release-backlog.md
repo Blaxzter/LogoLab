@@ -110,7 +110,7 @@ to a refresh is the most likely first bad review.
 
 > Filed as [#49](https://github.com/Blaxzter/LogoLab/issues/49) (bug). **Done.**
 
-**What shipped.** `src/components/ErrorBoundary.tsx`, one per route (plus a last-resort one at
+**What shipped.** `src/components/report/ErrorBoundary.tsx`, one per route (plus a last-resort one at
 the root in `main.tsx` for the header, the sidebar and the router itself). A crash now costs
 you the panel it happened in: the header, the loaded logo and every other tab keep working.
 The screen offers **Reset this panel** (remount the subtree, keep everything), **Start over**

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, Shapes, X } from 'lucide-react'
-import { useStore } from '../state/store'
-import { loadLogoFile, prefersDarkChecker } from '../lib/image'
-import { Tooltip } from './ui/Tooltip'
+import { useStore } from '../../state/store'
+import { loadLogoFile, prefersDarkChecker } from '../../lib/image'
+import { Tooltip } from '../ui/Tooltip'
 
 interface Example {
   /** File under public/examples/. */

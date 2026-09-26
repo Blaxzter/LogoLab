@@ -8,7 +8,7 @@
 import { useCallback, useState } from 'react'
 import type { EditableDoc } from '../../lib/path/types'
 import { parseSvg } from '../../lib/path/model'
-import { ExampleCard } from '../ExamplesDialog'
+import { ExampleCard } from '../intake/ExamplesDialog'
 import { adoptIds } from './editorDoc'
 
 interface EditorExample {
