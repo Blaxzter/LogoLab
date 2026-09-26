@@ -129,8 +129,9 @@ function Steps({
     <div className="flex flex-col gap-6">
       {opts.mode === 'mono' && (
         <p className="rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-xs leading-snug text-ink-2">
-          You're in <b>Mono</b> mode — it simply thresholds the image to one black shape. The colour-grouping stages
-          below show how <b>Color</b> mode works; your actual result in step 5 is the mono shape.
+          You're in <b>Mono</b> mode — the image is cut at one threshold into ink and paper, and that two-region map
+          goes through the same outline tracer as colour. The colour-grouping stages below show how <b>Color</b> mode
+          works; your actual result in step 5 is the mono shape.
         </p>
       )}
 
@@ -184,10 +185,6 @@ function Steps({
           gradientsOn
             ? ' (Coloured tags below show what each region matched.)'
             : ' Gradients are off, so every region here is a single flat colour.'
-        }${
-          markerCount > 0
-            ? ' Where you’ve marked overlapping translucent shapes, the recovered exclusive + overlap regions are checked against a stack of see-through shapes (a few circles at one opacity over the background): if that stack reproduces the colours better than the opaque pieces, it replaces them — so 3 overlapping translucent circles come out as 3 editable see-through circles, not 7 opaque puzzle-pieces.'
-            : ''
         }`}
       >
         {detect && <GradientDetection ramp={detect.ramp} hist={detect.hist} gradientsOn={gradientsOn} />}
@@ -216,7 +213,7 @@ function Steps({
         n={5}
         title="Trace clean outlines, then tidy them"
         controls={[`Smoothing ${opts.smoothing}`, `Despeckle ${opts.despeckle}`, `Fidelity ${fidelity}px`]}
-        body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass (Fidelity) snaps near-circles, near-lines and shared centres to perfect shapes. The Engine control chooses how the outline is drawn: Crisp (the default) gives the fewest, cleanest nodes; Potrace sticks closest to the original pixels. Result with your settings: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
+        body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass (Fidelity) snaps near-circles, near-lines and shared centres to perfect shapes. Result with your settings: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
       >
         <Visual label="Vector result">
           <div className="h-full w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: a.svg }} />
@@ -226,8 +223,8 @@ function Steps({
       <Step
         n={6}
         title="Keep peaks sharp, heal the seams"
-        controls={['Planar engine', 'automatic']}
-        body="The default Planar engine traces every shared boundary once — so neighbouring shapes meet exactly, with no seam or overlap — then does two finishing touches. Sharp features (a mountain's peak, a V-valley, a frame corner) are found on the raw outline and snapped to their exact sub-pixel point, so they stay crisp instead of being rounded into a soft bevel. And where two colours meet through a soft, blurry edge, stray boundary pixels whose colour clearly belongs to one side are healed back to it — so a continuous stroke doesn't pick up a thin background notch at the junction. Both run automatically (no knob)."
+        controls={['automatic']}
+        body="The tracer draws every boundary two regions share once — so neighbouring shapes meet exactly, with no seam or overlap — then does two finishing touches. Sharp features (a mountain's peak, a V-valley, a frame corner) are found on the raw outline and snapped to their exact sub-pixel point, so they stay crisp instead of being rounded into a soft bevel. And where two colours meet through a soft, blurry edge, stray boundary pixels whose colour clearly belongs to one side are healed back to it — so a continuous stroke doesn't pick up a thin background notch at the junction. Both run automatically (no knob)."
       >
         <Visual label="Before">
           <CornerIllustration variant="before" />
@@ -240,8 +237,7 @@ function Steps({
       <p className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
         Tip: if overlapping or finely-detailed areas don't come through, it's usually step 3 — those areas merged
         into a neighbouring region before they could become their own shape. Raise <b>Region detail</b> or place
-        <b> Mark</b> seeds to keep them; once the overlaps survive, step 4 can rebuild see-through shapes as editable
-        translucent layers.
+        <b> Mark</b> seeds to keep them.
       </p>
 
       <References />
@@ -249,22 +245,18 @@ function Steps({
   )
 }
 
-/** Links to the algorithms the two engines are built on. */
+/** Links to the algorithms the tracer is built on. */
 function References() {
   return (
     <div className="border-t border-line pt-4 text-xs leading-relaxed text-ink-2">
       <div className="mb-1 font-semibold text-ink">The research behind it</div>
       <ul className="flex flex-col gap-1">
         <li>
-          The structure-first pipeline and the <b>Crisp</b> engine follow Adobe's{' '}
+          The structure-first pipeline and the shared-boundary tracer follow Adobe's{' '}
           <ResearchLink href="https://research.adobe.com/publication/image-vectorization-via-gradient-reconstruction/">
             Image Vectorization via Gradient Reconstruction
           </ResearchLink>{' '}
           (Eurographics 2025), with Schneider's classic Bézier curve fitting (Graphics Gems) at its core.
-        </li>
-        <li>
-          The <b>Potrace</b> engine is Peter Selinger's{' '}
-          <ResearchLink href="https://potrace.sourceforge.net/">Potrace</ResearchLink> polygon-tracing algorithm.
         </li>
       </ul>
     </div>
@@ -452,7 +444,7 @@ function Step({
   )
 }
 
-/** A static before/after of the Planar engine's finishing pass: rounded peaks + a
+/** A static before/after of the tracer's finishing pass: rounded peaks + a
  *  thin background notch at a seam (before) vs sharp peaks + a clean seam (after). */
 function CornerIllustration({ variant }: { variant: 'before' | 'after' }) {
   return (
