@@ -1,36 +1,32 @@
-// Structure-first smoothness segmentation (Stage 1 of the V2 vectorizer — plan
-// §3.1 / §4.1–4.2, blueprint paper §3.1–3.2 + Supplement Algorithms 1–2).
+// Structure-first smoothness segmentation (reference paper §3.1–3.2 and its
+// Supplement Algorithms 1–2). Used for gradient art; flat art goes through
+// paletteSegment.ts.
 //
-// Replaces the V1 posterize-then-mend path (k-means bands → union-refit). Order:
-//
-//   1. Mumford–Shah smoothing  → smoothed u + discontinuity map 𝒟  (mumfordShah.ts)
-//   2. Colour-difference merge  → fine segments S₀ of the SMOOTH pixels (𝒟̄), by
+//   1. Mumford–Shah smoothing: smoothed u + discontinuity map 𝒟 (mumfordShah.ts).
+//   2. Colour-difference merge: fine segments S₀ of the smooth pixels (𝒟̄), by
 //      agglomerative CIELAB merging with τ_s = 10 (Supplement Alg 1).
-//   3. Discontinuity-aware merge → macro-regions: a GLOBAL greedy union-fit merge
-//      (two segments merge iff one gradient explains their union in Oklab) gated by
-//      two vetoes —
-//        • edge veto 𝒜 (eq 3): pairs facing each other across 𝒟 (opposite sides
-//          within σ = 5 px, facing density > τ_a = 0.25) are must-stay-separate —
-//          this is the principled fix for V1's latent flat-colour bridging across a
-//          true edge;
-//        • profile-gap veto: a union whose colour profile is bimodal (a wide empty
-//          span along the fitted axis) is two distinct flats, not one field — so a
-//          blue and a red shape never fuse into a fake ramp even when non-adjacent.
-//      The global (non-adjacent) merge is what reunites a background that 𝒟 has
-//      split — e.g. nebula's field outside the ring and in the ring's hole — into
-//      ONE gradient region, while the edge veto keeps the ring itself separate.
-//   4. Anti-aliased 𝒟 pixels  → flooded into the neighbouring macro-region whose
-//      mean colour best matches (the §3.4 convex-combination test, approximated by
-//      nearest fill), so the output label map is complete.
-//   5. Small-region merge (opt-in, `minRegionArea` from the Despeckle dial) →
-//      absorb every macro-region below the area threshold into its nearest-colour
-//      neighbour, so anti-alias / colour-ramp TRANSITION SLIVERS don't survive as
-//      their own tiny shapes. Engine-agnostic (runs here, before tracing); 0 ⇒ off
-//      (byte-identical). User-marked regions are protected from being absorbed.
+//   3. Discontinuity-aware merge into macro-regions: a global greedy union-fit
+//      merge (two segments merge iff one gradient explains their union in Oklab),
+//      subject to vetoes:
+//        - edge veto 𝒜 (eq 3): pairs facing each other across 𝒟 (opposite sides
+//          within σ px, facing density > τ_a) must stay separate, so flat colours
+//          never bridge a true edge;
+//        - profile-gap veto: a union whose colour profile has a wide empty span
+//          along the fitted axis is two distinct flats, not one field;
+//        - unwitnessed-jump veto (see `maxUnwitnessedJump`).
+//      Because the merge is global, it can reunite a background that 𝒟 split
+//      (e.g. the field outside a ring and inside its hole) into one gradient
+//      region, while the edge veto keeps the ring itself separate.
+//   4. Anti-aliased 𝒟 pixels are flooded into the neighbouring macro-region whose
+//      mean colour matches best, so the label map is complete.
+//   5. Optional small-region merge (`minRegionArea`): regions below the area
+//      threshold are absorbed into their nearest-colour neighbour, so AA and ramp
+//      transition slivers don't survive as tiny shapes. User-marked regions are
+//      protected.
 //
 // Output is QuantizeResult-shaped (labels / palette / counts, largest region
-// first) so the existing stacked-mask tracer consumes it unchanged. Pure and
-// deterministic (no PRNG, fixed scan orders): runs under `node --test`.
+// first). Deterministic: no PRNG, fixed scan orders.
+// Design notes and measurements: docs/vectorization-benchmarks.md.
 
 import type { PaletteColor, QuantizeResult } from './types'
 import { solveMumfordShah, DEFAULT_MS_OPTIONS, type MumfordShahOptions, type MumfordShahResult } from './mumfordShah.ts'
@@ -56,113 +52,84 @@ export interface SegmentOptions {
   maxProfileGap: number
   /**
    * Reject a union whose fitted gradient makes an Oklab colour jump larger than
-   * this across a SAMPLE-FREE stretch of its parameter t (an "unwitnessed
-   * jump"). This is the step-fit veto: a multi-stop gradient can explain
-   * {big flat region} ∪ {small far-away flat-ish sliver} almost perfectly as a
-   * step function — flat, jump, flat — with an RMS residual BELOW the honest
-   * adjacent merge's (a real ramp carries curvature; a step of two flats is
-   * exact), so greedy hands e.g. a gradient background's corner band to a WHITE
-   * shape's colour class (the nebula-png / gradient-flat corner sliver, painted
-   * flat mid-gradient) — or fuses two DISJOINT flat objects into one region wearing
-   * a step "gradient" (olympic's blue ∪ green rings, letter-joins' background ∪
-   * letter; §26). The step's signature is that its entire contrast sits at a point
-   * of the fitted parameter t that NO sample explains: the samples on either side,
-   * each extrapolated along their own colour trend in t, do not meet there. A
-   * genuine smooth field's two sides always meet (that is what smooth means), and
-   * a genuine reunite (nebula's field outside the ring re-joining the hole)
-   * OVERLAPS in t. NOT the reverted profileCliff veto: that measured contrast at
-   * the pair's colour seam (inverted between real bg-reunite and fake, see §0
-   * history); this measures the step the FITTED MODEL asserts between adjacent
-   * samples along its own axis, at sample resolution. The §10.3 form of this
-   * measurement binned t into 24 and only looked across EMPTY bins, and the
-   * greedy min-residual search over pairs × fit types × radial centres reliably
-   * found a parametrization whose sample-free stretch was narrower than a bin
-   * (olympic's accepted blue∪green: a radial with the two flats meeting at t
-   * 0.479→0.521, no empty bin, jump read 0.000) — §26. Calibrated on the /labs/ab
-   * corpus labelled by the SOURCE's authored paint (§26.2): every accepted
-   * flat∪flat fusion of distinct objects reads 0.13–1.00 except two near-colour
-   * families (chrome 0.086, flute's ΔE-4.5 flats ≤ 0.080); every honest reunite in
-   * gradient-authoring art reads ≤ 0.078 (firefox), posterized bands ≤ 0.009.
-   * The veto fires only when the FLAT-FLANK condition also holds — one of the
-   * two groups is itself a near-flat colour block (see FLAT_FLANK_RES): pieces of
-   * a smooth field can jump across a gap their own interior trend explains, and
-   * blocking those merely reorders the merge sequence, perturbing the strided
-   * sample stream and thus the fitted paint (radial-glow's re-centred glow,
-   * §10.3). Effectively disabled at ≥ 1.2 (the Oklab ΔE ceiling).
+   * this across a sample-free stretch of its parameter t (an "unwitnessed jump").
+   *
+   * A multi-stop gradient can explain two disjoint flats almost perfectly as a
+   * step function (flat, jump, flat), often with a lower residual than an honest
+   * ramp merge, so without this veto the greedy merge fuses distinct objects into
+   * one region wearing a step "gradient". A step's signature is that its whole
+   * contrast sits at a point of t no sample explains: the samples on either side,
+   * each extrapolated along its own colour trend in t, do not meet there. A
+   * genuine smooth field's two sides do meet, and a genuine reunite overlaps in t.
+   * The jump is measured between adjacent samples at sample resolution; binning t
+   * would miss a step placed inside one bin.
+   *
+   * The veto fires only when one of the two groups is itself near-flat (see
+   * FLAT_FLANK_RES): pieces of a smooth field may jump across a gap their own
+   * trend explains, and blocking those only reorders the merge sequence, which
+   * perturbs the strided samples and thus the fitted paint. Values ≥ 1.2 (the
+   * Oklab ΔE ceiling) disable it.
    */
   maxUnwitnessedJump: number
   /**
-   * Run Step 3c, the global gradient-explained union-fit merge. Its job is to fuse
-   * the colour-difference bands of a smooth ramp back into ONE gradient region so
-   * Stage 2 can paint it as a single gradient. When the user has gradients OFF that
-   * region would instead be flattened to its MEAN colour (a wide ramp → muddy
-   * average), so we skip the merge: the Step-2 bands survive and posterize into
-   * several flat regions. Default true (byte-identical to before). */
+   * Run Step 3c, the global gradient-explained union-fit merge, which fuses the
+   * colour-difference bands of a smooth ramp back into one gradient region. With
+   * gradients off that region would be flattened to its mean colour, so the merge
+   * is skipped and the Step-2 bands posterize into several flat regions.
+   * Default true. */
   mergeGradients: boolean
   /** Cap on samples per segment fed to a union fit (perf; deterministic stride). */
   sampleCap: number
   /**
-   * Step-3c candidate gate, in Oklab ΔE — the fix for complex photos freezing on
-   * "analyzing colors". It engages ONLY once the fine-segment count exceeds
-   * GATE_MIN_SEGMENTS (small gradient art stays fully un-gated, byte-identical, so its
-   * non-adjacent field reunites are untouched). When engaged, a segment pair reaches
-   * the expensive gradient fit only if the groups are ADJACENT, OR (when meanGate > 0)
-   * their mean colours are within meanGate. Adjacency alone fuses every contiguous
-   * ramp; the optional mean clause additionally re-joins NON-adjacent same-mean pieces
-   * (a background a discontinuity split) — but measured on real photos that clause both
-   * SLOWS the merge ~10–80× (clusters of similar-mean but distinct objects each pay a
-   * fit) and slightly WORSENS fidelity (distant pieces forced into one stretched
-   * gradient), so it defaults OFF (0 ⇒ adjacency-only). Raise it to trade speed for
-   * recovering non-adjacent reunites on large smooth art. Only consulted when
-   * `mergeGradients` is on.
+   * Step-3c candidate gate, in Oklab ΔE. Bounds the O(S²) pair fits on complex
+   * images. It engages only once the fine-segment count exceeds GATE_MIN_SEGMENTS
+   * (small art stays ungated, keeping its non-adjacent reunites). When engaged, a
+   * pair reaches the gradient fit only if the groups are adjacent or, when
+   * meanGate > 0, their mean colours are within meanGate. The mean clause re-joins
+   * non-adjacent same-mean pieces but is much slower on photos and tends to force
+   * distant pieces into one stretched gradient, so it defaults off (0 ⇒
+   * adjacency only). Only consulted when `mergeGradients` is on.
    */
   meanGate: number
   /**
    * Minimum macro-region area (opaque px). After segmentation, any region smaller
-   * than this is absorbed into the adjacent region whose mean colour is closest —
-   * so anti-alias / colour-ramp TRANSITION SLIVERS don't survive as their own tiny
-   * shapes (the user-reported "miniature regions in colour transitions"). Engine-
-   * agnostic: it runs in segmentation, so crisp / potrace / planar all benefit.
-   * 0 ⇒ disabled (byte-identical to before). Driven by the Despeckle dial.
+   * than this is absorbed into the adjacent region whose mean colour is closest,
+   * so AA and colour-ramp transition slivers don't survive as tiny shapes.
+   * 0 ⇒ disabled. Driven by the Despeckle setting.
    */
   minRegionArea: number
   /**
-   * "Flat" region markers in NORMALIZED [0,1] coords — DISTINCT from `markers`. Each
-   * flat marker's PRE-merge fine segment is EXCLUDED from the Step-3c gradient field
-   * merge, so it survives as its own region instead of being fused into a (often
-   * nonsensical) gradient with its neighbours. The exclusion happens before the Step-4
-   * anti-alias flood, so the flood settles the region's boundary on the true colour
-   * edge — clean geometry, and a SINGLE marker suffices. Painted solid downstream
-   * (index.ts). Omitted / empty ⇒ no effect. Fixed input order.
+   * Flat region markers in normalized [0,1] coords (distinct from `markers`). Each
+   * flat marker's pre-merge fine segment is excluded from the Step-3c gradient
+   * merge, so it survives as its own region instead of being fused into a gradient
+   * with its neighbours. The exclusion happens before the Step-4 anti-alias flood,
+   * so the region's boundary settles on the true colour edge and a single marker
+   * suffices. Painted solid downstream (index.ts). Processed in input order.
    */
   flatMarkers?: { x: number; y: number }[]
   /**
-   * User-placed region markers in NORMALIZED [0,1] image coordinates (converted
-   * to pixels here against the image's own width/height, so they are correct at
-   * any raster resolution). Marker-watershed constraint: each marker seeds a
-   * distinct region; two segments carrying DIFFERENT markers must never merge
-   * (vetoed in BOTH merge steps — the colour-difference seeded growth and the
-   * global union-fit), and a marked segment is exempt from being absorbed away.
-   * Omitted / empty ⇒ no behaviour change (byte-identical output). Processed in
-   * fixed input order so the veto is deterministic.
+   * User-placed region markers in normalized [0,1] image coordinates (converted
+   * to pixels against the image's own size, so they hold at any resolution). Each
+   * marker seeds a distinct region: two segments carrying different markers never
+   * merge (vetoed in both merge steps), and a marked segment is never absorbed.
+   * Processed in input order so the veto is deterministic.
    */
   markers?: { x: number; y: number }[]
   /**
-   * Devtest observer for the Step-3c merge. Called once per pair evaluation that actually
-   * RAN (a cache miss in evalPair) with all four terms of the acceptance condition —
-   * computed in full even where the condition short-circuited, because an instrument
-   * that names only the first failing gate cannot say which one is load-bearing (§24.1)
-   * — and once per ACCEPTED merge, in merge order. Read-only: the extra terms come from
-   * the same pure functions on the same inputs, so a trace with the observer set is
-   * byte-identical to one without. `src/devtest/stepRampDiag.ts` is the consumer.
+   * Diagnostic observer for the Step-3c merge. Called once per pair evaluation that
+   * ran (a cache miss in evalPair) with all four terms of the acceptance condition,
+   * computed in full even where the condition short-circuits so the caller can see
+   * which term decided, and once per accepted merge, in merge order. Read-only: the
+   * result is identical with or without an observer. Used by
+   * `src/devtest/stepRampDiag.ts`.
    */
   onPair?: MergePairObserver
 }
 
 /**
- * One Step-3c event for `SegmentOptions.onPair`: a pair EVALUATION (`kind: 'eval'`,
+ * One Step-3c event for `SegmentOptions.onPair`: a pair evaluation (`kind: 'eval'`,
  * every cache-miss call of evalPair, whether or not it reached the fit) or an accepted
- * MERGE (`kind: 'merged'`, the global-min pair of one sweep, fused into group `c`).
+ * merge (`kind: 'merged'`, the global-min pair of one sweep, fused into group `c`).
  */
 export interface MergePairRecord {
   kind: 'eval' | 'merged'
@@ -170,7 +137,7 @@ export interface MergePairRecord {
   gi: number
   gj: number
   /** Fine-segment members of each side, and each side's opaque pixel count + mean sRGB
-   *  (over EVERY pixel of the members, not the strided sample). */
+   *  (over every pixel of the members, not the strided sample). */
   membersI: number[]
   membersJ: number[]
   pxI: number
@@ -191,8 +158,8 @@ export interface MergePairRecord {
   fitType?: 'linear' | 'radial'
   stops?: number
   fit?: GradientFill
-  /** Sample count per bin of the fitted parameter t (the 24 bins profileGap reads, and
-   *  the §10.3 jump veto read before §26) — shows whether the two sides ABUT in t. */
+  /** Sample count per bin of the fitted parameter t (the bins profileGap reads);
+   *  shows whether the two sides abut in t. */
   bins?: number[]
   /** Where along t the `jump` sits, and the widest sample-free stretch of t strictly
    *  inside the union's own [tmin, tmax] (fraction of [0,1]). */
@@ -224,10 +191,9 @@ export const DEFAULT_SEGMENT_OPTIONS: SegmentOptions = {
 const NO_PROTECTED: ReadonlySet<number> = new Set<number>()
 
 /**
- * Fine-segment count above which the Step-3c candidate gate switches on. Below it the
- * un-gated all-pairs merge is already fast (a handful of segments), and skipping the
- * gate keeps simple art byte-identical to before — only complex images (the photos
- * that froze on "analyzing colors") pay the O(S²) fit burst the gate removes.
+ * Fine-segment count above which the Step-3c candidate gate switches on. Below it
+ * the ungated all-pairs merge is already fast, and simple art keeps its
+ * non-adjacent reunites.
  */
 const GATE_MIN_SEGMENTS = 64
 
@@ -237,18 +203,16 @@ export interface SegmentResult extends QuantizeResult {
   /** Number of fine segments S₀ before discontinuity-aware merging. */
   fineSegments: number
   /**
-   * Per-pixel PRE-merge region id — the fine segments (S₀) as they stand BEFORE
-   * the Step-3c gradient field-merge fuses them into macro-regions. −1 for
-   * anti-aliased / transparent pixels. This is the "region detection before the
-   * macro field merging": the editor highlights these on hover, and the user
-   * picks one to keep flat. (`labels` is the final, post-merge map.)
+   * Per-pixel pre-merge region id: the fine segments (S₀) before the Step-3c
+   * gradient merge fuses them into macro-regions. −1 for anti-aliased /
+   * transparent pixels. The editor highlights these on hover so the user can
+   * pick one to keep flat. (`labels` is the final, post-merge map.)
    */
   preMergeLabels: Int32Array
   /**
-   * Per macro-region (parallel to `palette`/`counts`), the SMOOTH-pixel samples
-   * used for the merge — anti-aliased 𝒟 pixels excluded — so Stage 2 fits its
-   * paint model on clean colours (this is what makes the §3.3 boundary-distance
-   * weighting unnecessary: the boundary AA pixels were never sampled).
+   * Per macro-region (parallel to `palette`/`counts`), the smooth-pixel samples
+   * used for the merge, anti-aliased 𝒟 pixels excluded, so the paint model is fit
+   * on clean colours without boundary-distance weighting.
    */
   regionSamples: RegionSamples[]
 }
@@ -256,12 +220,10 @@ export interface SegmentResult extends QuantizeResult {
 const clamp255 = (n: number): number => Math.max(0, Math.min(255, Math.round(n)))
 
 /**
- * How far (Chebyshev px) a marker may snap to reach a smooth pixel: a FRACTION of the
- * image, because markers arrive in normalized coordinates — the same hand-placed marker
- * must reach the same artwork at every raster. Was an absolute 64px (issue #14's ART
- * list): 12.5% of the image at the lab's 512, 3% at the app's 2048, so a marker that
- * snapped in the lab silently no-op'd on export. 1/8 keeps 512 byte-identical; the floor
- * is a sensor number (a discontinuity band is a few px wide at any raster).
+ * How far (Chebyshev px) a marker may snap to reach a smooth pixel. A fraction of the
+ * image, because markers arrive in normalized coordinates and the same marker must
+ * reach the same artwork at every resolution. The floor is in pixels because a
+ * discontinuity band is a few px wide at any resolution.
  */
 export const MARKER_SNAP_FRAC = 1 / 8
 export const MARKER_SNAP_MIN = 8
@@ -270,12 +232,10 @@ export function markerSnapRadius(w: number, h: number): number {
 }
 
 /**
- * Nearest SMOOTH pixel to (px,py) by an expanding Chebyshev-ring scan (fixed
- * order ⇒ deterministic). Returns its index, or −1 if the image has none within
- * range. A marker dropped on a discontinuity / transparent pixel snaps to the
- * closest real segment instead of being lost; rings are scanned out to a bound
- * (`markerSnapRadius`) so a wildly-misplaced marker degrades to a no-op rather
- * than a full sweep.
+ * Nearest smooth pixel to (px,py) by an expanding Chebyshev-ring scan (fixed
+ * order ⇒ deterministic). Returns its index, or −1 if none is within
+ * `markerSnapRadius`. A marker dropped on a discontinuity or transparent pixel
+ * snaps to the closest real segment; a badly misplaced one becomes a no-op.
  */
 function nearestSmoothPixel(smooth: Uint8Array, w: number, h: number, px: number, py: number): number {
   if (smooth[py * w + px]) return py * w + px
@@ -301,10 +261,9 @@ function nearestSmoothPixel(smooth: Uint8Array, w: number, h: number, px: number
 
 /**
  * Segment an image into smooth macro-regions. See module header. `onProgress` (if
- * given) reports a fraction in [0,1] of the segmentation work plus a short label —
- * the Step-3c gradient merge is the long pole on complex images, so it reports per-
- * batch there so the studio's bar keeps moving. Pure-progress only: it never changes
- * the result, so determinism holds.
+ * given) reports a fraction in [0,1] of the work plus a short label; the Step-3c
+ * merge, the slowest step on complex images, reports per batch. Progress reporting
+ * never affects the result.
  */
 export function segmentImage(
   img: { width: number; height: number; data: Uint8ClampedArray },
@@ -319,8 +278,7 @@ export function segmentImage(
   const ms = solveMumfordShah(img, opts.ms)
   const { discontinuity: disc, opaque, cutH, cutV } = ms
 
-  // Per-pixel CIELAB of the SMOOTHED image (segmentation colour) — eq uses the
-  // smooth solution so AA/noise doesn't fragment a region.
+  // Per-pixel CIELAB of the smoothed image, so AA and noise don't fragment a region.
   const labL = new Float64Array(n)
   const labA = new Float64Array(n)
   const labB = new Float64Array(n)
@@ -355,27 +313,20 @@ export function segmentImage(
   }
 
   // --- User markers → seed pixels ---------------------------------------------
-  // Each marker (normalised [0,1], fixed input order) claims the nearest SMOOTH
-  // pixel; duplicate / unreachable seeds are dropped so the set is deterministic.
-  // The two kinds act DIFFERENTLY:
+  // Each marker (normalised [0,1], input order) claims the nearest smooth pixel;
+  // duplicate and unreachable seeds are dropped. The two kinds act differently:
   //
-  //   • keep-separate `markers` → SEEDED REGION GROWING split (markerControlledSplit
-  //     below): a macro-region holding ≥2 of them is partitioned by growing a sub-
-  //     region from each, the boundary settling on the colour RIDGE between them.
-  //     This recovers a translucent overlap whose colour is within τ_s of the shape
-  //     beneath it (their means merge, so an exclusion can't tell them apart, but the
-  //     seeded growth still finds the step). Needs ≥2 — one front has nothing to
+  //   - keep-separate `markers` drive a seeded region-growing split
+  //     (markerControlledSplit below): a macro-region holding ≥2 of them is
+  //     partitioned by growing a sub-region from each, the boundary settling on the
+  //     colour ridge between them. This recovers a translucent overlap whose colour
+  //     is within τ_s of the shape beneath it. Needs ≥2 seeds to have anything to
   //     grow against.
   //
-  //   • `flatMarkers` → EXCLUSION from the Step-3c field merge (flatPinned, below):
-  //     the marker's fine segment is forbidden from fusing into a macro-region, so it
-  //     survives as its own region. Because this happens BEFORE the Step-4 anti-alias
-  //     flood, the flood then assigns the boundary AA to the nearest colour and the
-  //     region's edge lands on the true colour edge — clean geometry, and a SINGLE
-  //     marker is enough. This is the fix for "the merger fused a red sliver into the
-  //     white and fit a nonsense ring gradient": the sliver becomes its own flat red.
-  //
-  // With no markers nothing here changes the output (byte-identical).
+  //   - `flatMarkers` exclude their fine segment from the Step-3c merge
+  //     (flatPinned, below), so it survives as its own region. Because this happens
+  //     before the Step-4 anti-alias flood, the region's edge lands on the true
+  //     colour edge and a single marker is enough.
   const splitSeeds: number[] = []
   const flatSeeds: number[] = []
   const usedSeed = new Set<number>()
@@ -421,10 +372,9 @@ export function segmentImage(
   }
 
   report(0.2, 'Finding regions')
-  // Loop to a TRUE fixpoint (Supplement Alg 1). Termination is guaranteed: every
-  // productive pass calls unite() at least once, strictly reducing the live
-  // segment count (bounded by n), so a pass with no merge ends it — no fixed cap
-  // (a cap could silently under-merge a long serpentine ramp and is unnecessary).
+  // Loop to a true fixpoint (Supplement Alg 1). Terminates because every productive
+  // pass strictly reduces the live segment count. Don't add an iteration cap: it
+  // could silently under-merge a long serpentine ramp.
   for (;;) {
     let changed = false
     for (let y = 0; y < h; y++) {
@@ -473,10 +423,9 @@ export function segmentImage(
     return fallbackSingleRegion(img, ms)
   }
 
-  // Flat-marker pins: the fine segment id under each flat marker. These are excluded
-  // from the Step-3c field merge (evalPair, below), so each stays its own region in
-  // its pre-merge flat form. Held out BEFORE the Step-4 flood so the AA settles on
-  // the true colour edge. Empty without flat markers ⇒ the merge proceeds unchanged.
+  // Flat-marker pins: the fine segment id under each flat marker, excluded from the
+  // Step-3c merge (evalPair, below) so each stays its own region. Held out before
+  // the Step-4 flood so the AA settles on the true colour edge.
   const flatPinned = new Set<number>()
   for (const seed of flatSeeds) {
     const s = segOf[seed]
@@ -486,17 +435,15 @@ export function segmentImage(
   report(0.35, 'Detecting edges')
   // --- Step 3a: discontinuity relation 𝒜 (eq 3) -------------------------------
   // For each 𝒟 pixel and each of 3 axes (→, ↓, ↘), find the nearest smooth
-  // segment within σ on each side. A pair seen on OPPOSITE sides is a "facing"
+  // segment within σ on each side. A pair seen on opposite sides is a "facing"
   // observation; any pair seen near the same 𝒟 pixel is a "touch". A pair whose
-  // facing/touch ratio exceeds τ_a is must-stay-separate.
+  // facing/touch ratio exceeds τ_a must stay separate.
   //
-  // NOTE on calibration: `facing` is tallied per-AXIS (a pixel facing the same
-  // pair across →, ↓ and ↘ counts up to 3×) while `touch` is per-PIXEL, so the
-  // ratio f/t is intentionally NOT the paper's normalized [0,1] density — it is
-  // weighted toward firing the veto. That bias is the SAFE direction: an
-  // over-eager edge veto keeps a true edge separate (the plan's §3.2 failure mode
-  // to avoid is the opposite — greedy merging BRIDGING a real edge). τ_a is held
-  // at the paper's 0.25 but its effective scale differs by this per-axis weighting.
+  // `facing` is tallied per axis (up to 3× per pixel) while `touch` is per pixel,
+  // so f/t is not the paper's normalized [0,1] density: it is deliberately biased
+  // toward firing the veto. That is the safe direction, since the failure to avoid
+  // is a greedy merge bridging a real edge. τ_a keeps the paper's 0.25, but its
+  // effective scale differs by this weighting.
   const facing = new Map<number, number>()
   const touch = new Map<number, number>()
   const pairKey = (a: number, b: number): number => (a < b ? a * S + b : b * S + a)
@@ -547,8 +494,8 @@ export function segmentImage(
   }
 
   report(0.42, 'Sampling colours')
-  // --- Step 3b: gather per-segment samples (ORIGINAL colours) ------------------
-  // Also accumulate each segment's exact colour SUM (every pixel, not the strided
+  // --- Step 3b: gather per-segment samples (original colours) ------------------
+  // Also accumulate each segment's exact colour sum (every pixel, not the strided
   // sample) so Step-3c's candidate gate compares true region means.
   const segSamples: RegionSamples[] = []
   const segSumR = new Float64Array(S)
@@ -580,23 +527,18 @@ export function segmentImage(
     }
   }
 
-  // --- Step 3c: global greedy union-fit merge with both vetoes -----------------
-  // Merge the globally-cheapest qualifying (non-vetoed, low-residual, unimodal) pair
-  // until none qualifies. Groups carry STABLE ids (never reused) so a pairwise
-  // candidate cache survives across merges: only the merged group's row is recomputed.
-  // The SELECTION — global-min residual, ties broken by scan position — is byte-for-
-  // byte the original, so corpus output is stable. The additions are pure cost cuts:
-  //   • CANDIDATE GATE (`meanGate`, only once S exceeds GATE_MIN_SEGMENTS — i.e. the
-  //     complex images that froze) — a pair reaches the expensive gradient fit only
-  //     when the groups are ADJACENT or their mean colours are within meanGate. It
-  //     covers every DESIRABLE merge (adjacent ramp bands; non-adjacent SAME-mean
-  //     field pieces) while the ~S²/2 fit burst collapses to the eligible few. NOTE
-  //     it is NOT a superset of what un-gated global-min can select: the step-fit
-  //     degeneracy (see maxUnwitnessedJump) let the un-gated scan pick non-adjacent
-  //     DIFFERENT-mean pairs — pairs this gate would rightly refuse (§10.3).
-  //   • INDEXED cache invalidation — each merge drops only the two retired groups'
-  //     cache rows via a per-group key index, instead of sweeping the whole cache
-  //     (the old `[...cache.keys()]` spread was itself O(S²) per merge).
+  // --- Step 3c: global greedy union-fit merge with the vetoes ------------------
+  // Merge the globally cheapest qualifying pair (not vetoed, low residual, no
+  // profile gap, no unwitnessed jump) until none qualifies; ties break by scan
+  // position. Groups carry stable ids (never reused) so the pairwise candidate cache
+  // survives across merges and only the merged group's row is recomputed. Two cost
+  // cuts that don't change which pair wins among eligible ones:
+  //   - Candidate gate (see `meanGate`; only once S exceeds GATE_MIN_SEGMENTS): a
+  //     pair reaches the gradient fit only when the groups are adjacent or, if
+  //     enabled, mean-near. This covers the desirable merges (adjacent ramp bands,
+  //     same-mean field pieces) and turns the ~S²/2 fit burst into a few fits.
+  //   - Indexed cache invalidation: each merge drops only the two retired groups'
+  //     rows via a per-group key index instead of sweeping the whole cache.
   const members = new Map<number, number[]>()
   const samples = new Map<number, RegionSamples>()
   const alive: number[] = []
@@ -607,16 +549,14 @@ export function segmentImage(
   }
   let nextId = S
 
-  // Gradients OFF ⇒ skip the merge entirely: leave the Step-2 colour-difference
-  // bands as the macro-regions so a smooth ramp posterizes into flats instead of
-  // fusing into one region that Stage 2 would then average to a muddy mean colour.
+  // Gradients off ⇒ skip the merge: the Step-2 bands stay as the macro-regions, so
+  // a smooth ramp posterizes into flats instead of being averaged to one mean colour.
   if (opts.mergeGradients) {
     const gated = S > GATE_MIN_SEGMENTS
     const useMean = gated && opts.meanGate > 0 && Number.isFinite(opts.meanGate)
 
-    // Per-group adjacency (always, when gated) + running colour means (only for the
-    // optional mean clause). Built lazily so the common adjacency-only path pays
-    // nothing for the means it never reads.
+    // Per-group adjacency (when gated) and running colour means (only for the
+    // optional mean clause, so the adjacency-only path doesn't pay for them).
     const groupAdj = new Map<number, Set<number>>()
     const gSumR = new Map<number, number>()
     const gSumG = new Map<number, number>()
@@ -649,9 +589,8 @@ export function segmentImage(
       meanCache.set(gid, m)
       return m
     }
-    // Gate: adjacent OR (optionally) mean-near. Un-gated (small S) ⇒ every pair is
-    // eligible, exactly the original all-pairs search. The mean clause is evaluated
-    // only when enabled, so adjacency-only never pays for an Oklab distance.
+    // Gate: adjacent or (optionally) mean-near. Ungated (small S) ⇒ every pair is
+    // eligible.
     const gateEligible = (gi: number, gj: number): boolean =>
       !gated || groupAdj.get(gi)!.has(gj) || (useMean && oklabDeltaE(meanOk(gi), meanOk(gj)) <= opts.meanGate)
 
@@ -669,11 +608,9 @@ export function segmentImage(
       for (const a of mi) for (const b of mj) if (vetoed.has(pairKey(a, b))) return true
       return false
     }
-    // A flat-pinned segment never merges (it stays its own region). Its group id equals
-    // the segment id and is never retired — a vetoed group is never the merge target —
-    // so the singleton check stays valid; freshly-merged groups get ids ≥ S, never pinned.
-    // Observer support (SegmentOptions.onPair). `describe` is only ever called when an
-    // observer is set, so the default path pays nothing and stays byte-identical.
+    // A flat-pinned segment never merges. Its group id equals the segment id and is
+    // never retired, so checking pinned ids stays valid; merged groups get ids ≥ S.
+    // `describe` supports the onPair observer and is only called when one is set.
     const onPair = opts.onPair
     const describe = (g: number): { members: number[]; px: number; mean: [number, number, number] } => {
       const m = members.get(g)!
@@ -693,8 +630,8 @@ export function segmentImage(
       const k = ckey(gi, gj)
       if (cache.has(k)) return cache.get(k)!
       let result: { res: number; samples: RegionSamples } | null = null
-      // The same predicate chain as before, unrolled so an observer can learn WHICH
-      // link stopped a pair (identical evaluation order and short-circuiting).
+      // The predicate chain is unrolled so an observer can learn which link stopped
+      // a pair; evaluation order and short-circuiting are unchanged.
       let reached: MergePairRecord['reached'] = 'evaluated'
       let fit: ReturnType<typeof fitBestGradient> = null
       let union: RegionSamples | null = null
@@ -711,16 +648,11 @@ export function segmentImage(
           fit.oklabResidual <= opts.mergeTol &&
           profileGap(fit.gradient, union) <= opts.maxProfileGap &&
           (unwitnessedJump(fit.gradient, union) <= opts.maxUnwitnessedJump ||
-            // FLAT-FLANK CONDITION: an unwitnessed jump is fatal only when one of
-            // the pair is itself a (near-)flat colour block — a flat block has no
-            // interior colour trend that could ever bridge the gap, so the step is
-            // pure invention (measured flat sides of the true pastes: ≤ 0.0055).
-            // When BOTH sides carry interior spread they are pieces of a smooth
-            // field whose union the samples genuinely trend across (radial-glow /
-            // bg-ramp accepted-merge minima: ≥ 0.0156), and vetoing them would not
-            // even change topology — just reorder the merges, which perturbs the
-            // strided sample stream and thus the FITTED PAINT (radial-glow's glow
-            // re-centred off a different sample subset; user-reported, §10.3).
+            // Flat-flank condition: an unwitnessed jump is fatal only when one side
+            // is a near-flat colour block, which has no interior trend that could
+            // bridge the gap. When both sides carry interior spread they are pieces
+            // of a smooth field, and vetoing them would only reorder the merges,
+            // perturbing the strided samples and thus the fitted paint.
             Math.min(solidResidual(samples.get(gi)!), solidResidual(samples.get(gj)!)) > FLAT_FLANK_RES)
         ) {
           result = { res: fit.oklabResidual, samples: union }
@@ -771,8 +703,8 @@ export function segmentImage(
           if (cand && (!best || cand.res < best.res)) {
             best = { i: alive[a], j: alive[b], samples: cand.samples, res: cand.res }
           }
-          // Creep the bar through the cold first scan (the long pole) so it never
-          // freezes; the `seeding` guard makes this zero-overhead once cached.
+          // Advance the bar through the cold first scan (the slow part); the
+          // `seeding` guard keeps later scans free of this check.
           if (seeding && (++seedEvals & 8191) === 0) {
             report(0.45 + 0.1 * Math.min(1, (2 * seedEvals) / (A0 * A0)), 'Merging regions')
           }
@@ -828,8 +760,8 @@ export function segmentImage(
         gSumR.delete(best.i); gSumG.delete(best.i); gSumB.delete(best.i); gCnt.delete(best.i); meanCache.delete(best.i)
         gSumR.delete(best.j); gSumG.delete(best.j); gSumB.delete(best.j); gCnt.delete(best.j); meanCache.delete(best.j)
       }
-      // Retire the two merged groups: drop them from `alive`, invalidate ONLY their
-      // cache rows (same keys the old whole-cache sweep removed ⇒ identical state).
+      // Retire the two merged groups: drop them from `alive` and invalidate their
+      // cache rows.
       alive.splice(alive.indexOf(best.j), 1)
       alive.splice(alive.indexOf(best.i), 1)
       for (const g of [best.i, best.j]) {
@@ -862,8 +794,8 @@ export function segmentImage(
   report(0.92, 'Filling edges')
   // --- Step 4: flood 𝒟 (anti-aliased) pixels into the best-matching neighbour ---
   // groupId per pixel: smooth pixels inherit their segment's group; 𝒟 pixels are
-  // assigned by repeated nearest-neighbour passes, choosing the adjacent group
-  // whose mean ORIGINAL colour best matches the pixel (the §3.4 convex-combo test,
+  // assigned by repeated passes, choosing the adjacent group whose mean original
+  // colour best matches the pixel (the paper's convex-combination test,
   // approximated by nearest fill). Means are accumulated as pixels are assigned.
   const groupId = new Int32Array(n).fill(-1)
   const gSumR = new Float64Array(G)
@@ -927,11 +859,10 @@ export function segmentImage(
     if (assignedThisPass === 0) break // no opaque pixel borders an assigned one
   }
 
-  // Any opaque pixel STILL unassigned is an isolated all-𝒟 component — a thin mark
-  // on transparency whose every pixel is a discontinuity (no smooth seed), which
-  // the flood can never reach. Seed each 4-connected such component as its OWN
-  // macro-region so the feature survives, instead of being emitted as the
-  // transparent sentinel −1 (which the stacked-mask tracer drops as a hole).
+  // Any opaque pixel still unassigned belongs to an isolated all-𝒟 component (a
+  // thin mark on transparency whose every pixel is a discontinuity), which the
+  // flood can never reach. Seed each 4-connected such component as its own
+  // macro-region so the feature survives instead of being labelled transparent.
   const extra: { sumR: number; sumG: number; sumB: number; cnt: number; xs: number[]; ys: number[]; rs: number[]; gs: number[]; bs: number[] }[] = []
   const stack: number[] = []
   for (let i = 0; i < n; i++) {
@@ -957,23 +888,18 @@ export function segmentImage(
   }
 
   // --- Marker-controlled split (seeded region growing) ------------------------
-  // Any macro-region that ended up containing ≥2 markers is partitioned by growing
-  // a sub-region out from each marker (Adams–Bischof seeded region growing on the
-  // ORIGINAL-colour Lab, confined to that region's pixels), so the boundary settles
-  // on the colour RIDGE between the marked sub-regions. This recovers a translucent
-  // overlap cleanly from the shape beneath it at the DEFAULT detail, even though
-  // their mean colours merge. No-marker runs skip this entirely and take the exact
-  // existing assembly below (byte-identical output).
+  // Any macro-region containing ≥2 markers is partitioned by growing a sub-region
+  // from each marker (seeded region growing on original-colour Lab, confined to
+  // that region), so the boundary settles on the colour ridge between them. This
+  // separates a translucent overlap from the shape beneath it even though their
+  // mean colours merged. Runs without markers skip this and the assembly below.
   if (hasMarkers) {
-    // Flat markers already separated their regions by exclusion above; keep-separate
-    // markers split here. Only build the original-colour Lab + run the split when
-    // there are keep-separate seeds.
+    // Flat markers already separated their regions by exclusion; keep-separate
+    // markers split here.
     let groupCount = G + extra.length
     if (splitSeeds.length > 0) {
-      // Grow on ORIGINAL-colour Lab, not the MS-smoothed Lab: smoothing erases the
-      // subtle overlap edges (they fall below its threshold), which would leave the
-      // ridge fuzzy and the split boundary off the true edge (a seam). The original
-      // colour keeps the step sharp so the boundary settles exactly on it.
+      // Grow on original-colour Lab, not the smoothed Lab: smoothing erases subtle
+      // overlap edges, which would put the split boundary off the true edge.
       const oL = new Float64Array(n)
       const oA = new Float64Array(n)
       const oB = new Float64Array(n)
@@ -1004,15 +930,14 @@ export function segmentImage(
   }
 
   // --- Small-region merge (despeckle): absorb sub-threshold slivers into their
-  // nearest-colour neighbour. Only diverges from the exact existing assembly when
-  // a merge actually fires; otherwise the no-marker path stays byte-identical. ---
+  // nearest-colour neighbour. Falls through to the assembly below when nothing merged.
   if (opts.minRegionArea > 0) {
     const merged = mergeSmallRegions(groupId, G + extra.length, n, w, h, data, opts.minRegionArea, NO_PROTECTED)
     if (merged.changed) return { ...assembleFromGroupId(groupId, merged.count, n, w, data, smooth, ms, S, opts.sampleCap), preMergeLabels: segOf }
   }
 
   // --- Assemble QuantizeResult over all macro-regions (smooth groups + isolated
-  // 𝒟 components), sorted by pixel count desc (largest = bottom full-bleed layer).
+  // 𝒟 components), sorted by pixel count desc.
   const GG = G + extra.length
   const cntOf = (gi: number): number => (gi < G ? gCnt[gi] : extra[gi - G].cnt)
   const sumOf = (gi: number): [number, number, number] =>
@@ -1044,13 +969,11 @@ export function segmentImage(
 }
 
 // ---------------------------------------------------------------------------
-// Marker-controlled seeded region growing — the split that makes user markers
-// recover translucent overlaps cleanly. Adams & Bischof (1994): grow each seed's
-// region by repeatedly claiming the unassigned boundary pixel most similar to a
-// region's running mean (a priority queue), so the boundary settles on the colour
-// RIDGE between regions — works even when the regions' mean colours are within the
-// global merge threshold and the step is subtle (the translucent-overlap case),
-// and at the default detail (no global τ_s drop, no fragmentation).
+// Marker-controlled seeded region growing (Adams & Bischof, 1994): grow each
+// seed's region by repeatedly claiming the unassigned boundary pixel most similar
+// to a region's running mean (a priority queue), so the boundary settles on the
+// colour ridge between regions. Works even when the regions' mean colours are
+// within the global merge threshold and the step is subtle.
 // ---------------------------------------------------------------------------
 
 /**
@@ -1224,13 +1147,12 @@ const MAX_MERGE_PASSES = 64
 
 /**
  * Absorb every macro-region smaller than `minArea` opaque pixels into an adjacent
- * region, so anti-alias / colour-ramp transition SLIVERS don't survive as their
- * own tiny shapes. Each small region is merged into the neighbour whose mean
- * ORIGINAL colour is closest — preferring a neighbour that is itself ≥ minArea, so
- * slivers collapse into real shapes rather than chaining through each other — which
- * minimises the recolour error the merge introduces. `protected` groups (user
- * markers) are never absorbed, though they may absorb. Mutates `groupId` in place
- * (relabelled then COMPACTED to 0..count-1) and returns the new group count +
+ * region, so AA and colour-ramp transition slivers don't survive as tiny shapes.
+ * Each small region is merged into the neighbour whose mean original colour is
+ * closest, preferring a neighbour that is itself ≥ minArea so slivers collapse
+ * into real shapes rather than chaining through each other. `protectedGroups`
+ * (user markers) are never absorbed, though they may absorb. Mutates `groupId` in
+ * place (relabelled, then compacted to 0..count-1) and returns the new count and
  * whether anything changed. Deterministic: small groups scanned in ascending id,
  * target ties broken by shared-boundary length then id; iterates to a fixpoint.
  */
@@ -1375,13 +1297,11 @@ function mergeSmallRegions(
 }
 
 /**
- * Build a SegmentResult straight from a per-pixel `groupId` labelling (used by the
- * marker-split path). Palette = mean ORIGINAL colour over each group's opaque
- * pixels; regionSamples = original colours of each group's SMOOTH pixels (or, for a
- * group with no smooth pixels — an isolated all-𝒟 mark — all its opaque pixels),
- * strided. Groups are ranked by pixel count desc (largest = bottom layer), matching
- * the default assembly. Only reached when markers are present (the no-marker path
- * keeps its exact existing assembly, so its output stays byte-identical).
+ * Build a SegmentResult from a per-pixel `groupId` labelling (used after marker
+ * splits and small-region merges). Palette = mean original colour over each
+ * group's opaque pixels; regionSamples = original colours of each group's smooth
+ * pixels (or all its opaque pixels for an isolated all-𝒟 mark), strided. Groups
+ * are ranked by pixel count desc, matching the default assembly.
  */
 function assembleFromGroupId(
   groupId: Int32Array,
@@ -1461,13 +1381,10 @@ function assembleFromGroupId(
 }
 
 /**
- * A group whose samples sit within this RMS Oklab ΔE of their own mean is a FLAT
- * colour block for the unwitnessed-jump veto's flat-flank condition. Measured
- * 2026-07-21 (docs §10.3): the true step-pastes' flat sides are ≤ 0.0055
- * (gradient-flat's white circle 0.0000 / corner sliver 0.0048, nebula-png white
- * 0.0000 / sliver 0.0055, hairlines bg + bars 0.0000); the honest smooth-field
- * pairs' minimum sides are ≥ 0.0156 (radial-glow) / 0.0190 (bg-ramp). 0.008
- * sits in the ~3× gap between the populations.
+ * A group whose samples sit within this RMS Oklab ΔE of their own mean is a flat
+ * colour block for the unwitnessed-jump veto's flat-flank condition. Flat sides of
+ * real step fusions read near 0, pieces of smooth fields roughly twice this or
+ * more; the threshold sits in the gap between them.
  */
 const FLAT_FLANK_RES = 0.008
 
@@ -1500,24 +1417,23 @@ function solidResidual(s: RegionSamples): number {
 }
 
 /**
- * The colour jump a fitted gradient asserts that NO sample witnesses (see
+ * The colour jump a fitted gradient asserts that no sample witnesses (see
  * SegmentOptions.maxUnwitnessedJump): the largest Oklab ΔE, over every boundary
  * between consecutive samples along the gradient's own parameter t, between the
  * two sides' colour trends extrapolated to that boundary. Each side is a window
  * of width W = 1/24 in t; its trend is the least-squares line of Oklab against t
  * over the window (the plain mean when the window is too small or has no spread
- * in t). A smooth ramp's two trends meet at every boundary — steep or shallow —
- * so it reads ≈ 0; two flats of different colour meet nowhere, so the fit's step
+ * in t). A smooth ramp's two trends meet at every boundary, steep or shallow, so
+ * it reads ≈ 0; two flats of different colour meet nowhere, so the fit's step
  * between them reads its full contrast whatever axis the fit chose. Measured at
- * sample resolution on purpose: the §10.3 form binned t into 24 and only looked
- * across EMPTY bins, and was blind to any step narrower than a bin (§26).
+ * sample resolution: a binned version would miss a step narrower than a bin.
  */
 function unwitnessedJump(g: GradientFill, s: RegionSamples): number {
   return unwitnessedStep(g, s).jump
 }
 
 /** unwitnessedJump with its location (`at`, in t) and the widest sample-free stretch of
- *  t strictly inside the union's own range — the observer's extras. */
+ *  t strictly inside the union's own range (reported to the observer). */
 function unwitnessedStep(g: GradientFill, s: RegionSamples): { jump: number; at: number; holeT: number } {
   const n = s.n
   if (n < 2) return { jump: 0, at: 0, holeT: 0 }
@@ -1548,7 +1464,7 @@ function unwitnessedStep(g: GradientFill, s: RegionSamples): { jump: number; at:
     P[8][k + 1] = P[8][k] + tk * o[2]
   }
   const W = 1 / 24
-  // Linear trend of the sorted window [a,b) evaluated at tb — the mean when the
+  // Linear trend of the sorted window [a,b) evaluated at tb; the mean when the
   // window has < 3 samples or no spread in t.
   const extrap = (a: number, b: number, tb: number): Oklab => {
     const c = P[0][b] - P[0][a] || 1
@@ -1587,7 +1503,7 @@ function unwitnessedStep(g: GradientFill, s: RegionSamples): { jump: number; at:
 }
 
 /** Observer-only: sample count per t-bin of a fitted gradient over a sample set (the
- *  24 bins profileGap reads, and the pre-§26 jump veto read). */
+ *  bins profileGap reads). */
 function tBins(g: GradientFill, s: RegionSamples, bins = 24): number[] {
   const cnt = new Array<number>(bins).fill(0)
   for (let i = 0; i < s.n; i++) {

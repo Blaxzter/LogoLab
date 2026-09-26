@@ -1,10 +1,9 @@
-// CIELAB (D65) + CIE76 ΔE for the structure-first segmenter.
+// CIELAB (D65) and CIE76 ΔE for the segmenter.
 //
-// The blueprint paper specifies its colour-difference segmentation and AA-merge
-// thresholds (τ_s = 10) in CIELAB, so the segmenter measures colour distance in
-// CIELAB to match. (The paint-model FIT quality stays in Oklab — see oklab.ts —
-// matching V1's selection thresholds; the two spaces serve different stages.)
-// Pure, deterministic, no DOM — runs under `node --test`.
+// The segmentation and anti-aliasing merge thresholds (τ_s = 10) come from the
+// reference paper, which states them in CIELAB, so the segmenter measures colour
+// distance there. Paint-model fit quality is measured in Oklab (oklab.ts); the
+// two spaces serve different stages.
 
 export type Lab = [number, number, number]
 
