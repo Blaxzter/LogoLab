@@ -330,7 +330,12 @@ test('planar-edit: real traced quadrants — moving the degree-4 centre junction
   }
   let centre = -1
   let best = 0
-  for (const [v, d] of degree) if (d > best) ((best = d), (centre = v))
+  for (const [v, d] of degree) {
+    if (d > best) {
+      best = d
+      centre = v
+    }
+  }
   assert.ok(best >= 4, `expected a degree-≥4 junction, got ${best}`)
 
   const v0 = doc.topology!.vertices.find((v) => v.id === centre)!

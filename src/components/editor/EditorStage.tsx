@@ -259,13 +259,6 @@ export function EditorStage({
 
   const box = useMemo(() => selectionBox(doc.items, selection), [doc.items, selection])
 
-  /** The one path node-editing applies to, when exactly one path is selected. */
-  const activePath = useMemo((): PathItem | null => {
-    if (selection.size !== 1) return null
-    const item = findItem(doc.items, [...selection][0])
-    return item && item.kind === 'path' ? item : null
-  }, [doc.items, selection])
-
   /** Paths whose nodes the node tool shows: the selection, or all when empty. */
   const nodePaths = useMemo((): PathItem[] => {
     if (tool !== 'node') return []
@@ -287,7 +280,7 @@ export function EditorStage({
 
   const buildShape = useCallback(
     (a: Vec, b: Vec, shift: boolean): PathItem | null => {
-      let pa = a
+      const pa = a
       let pb = b
       if (shift && tool !== 'line') {
         // Constrain to a square box, keeping the drag's direction.
@@ -698,7 +691,6 @@ export function EditorStage({
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!gesture) return
     e.stopPropagation()
-    const p = toDoc(e)
     try {
       e.currentTarget.releasePointerCapture(e.pointerId)
     } catch {

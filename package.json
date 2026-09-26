@@ -24,6 +24,9 @@
     "mcp:build": "pnpm --filter logolab build",
     "mcp:pack": "pnpm --filter logolab pack",
     "typecheck": "tsc -b --noEmit",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "test": "node --test",
     "gen:golden": "node src/devtest/writeTraceGolden.ts",
     "gen:absnapshot": "node src/devtest/writeAbSnapshots.ts",
@@ -45,6 +48,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.3.0",

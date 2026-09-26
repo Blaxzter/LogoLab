@@ -128,7 +128,7 @@ for (const file of SVGS) {
     }
     rows.push({ name, res: S, k, stats, best, bestSsim, at128, curve: curve.join(' ') })
     process.stdout.write(
-      `${name.padEnd(14)} @${String(S).padStart(3)} ×${k}  midpoint ${ink.threshold}  ink ${stats.ink}  ridges ${stats.ridges}  lost ${stats.lost} (${(100 * stats.lostShare).toFixed(1)}%)  lost-luma p25/50/75/90 ${stats.p.map((v) => (isNaN(v) ? '—' : v.toFixed(0))).join('/')}  → best cut ${best} (ssim ${bestSsim.toFixed(3)} vs ${at128.toFixed(3)} @128)\n`,
+      `${name.padEnd(14)} @${String(S).padStart(3)} ×${k}  midpoint ${ink.threshold}  ink ${stats.ink}  ridges ${stats.ridges}  lost ${stats.lost} (${(100 * stats.lostShare).toFixed(1)}%)  lost-luma p25/50/75/90 ${stats.p.map((v) => (Number.isNaN(v) ? '—' : v.toFixed(0))).join('/')}  → best cut ${best} (ssim ${bestSsim.toFixed(3)} vs ${at128.toFixed(3)} @128)\n`,
     )
     process.stdout.write(`    ${rows[rows.length - 1].curve}\n`)
   }
@@ -146,7 +146,7 @@ if (GALLERY > 0) {
       if (ink.mode !== 'mono') continue
       const st = ridgeStats(px, ink.threshold, ink.invert)
       if (shown++ < 12 || st.lostShare > 0.01)
-        process.stdout.write(`gallery ${f.replace(/\.svg$/, '').padEnd(24)} @${S}  ink ${st.ink}  ridges ${st.ridges}  lost ${st.lost} (${(100 * st.lostShare).toFixed(2)}%)  p50 ${isNaN(st.p[1]) ? '—' : st.p[1].toFixed(0)}\n`)
+        process.stdout.write(`gallery ${f.replace(/\.svg$/, '').padEnd(24)} @${S}  ink ${st.ink}  ridges ${st.ridges}  lost ${st.lost} (${(100 * st.lostShare).toFixed(2)}%)  p50 ${Number.isNaN(st.p[1]) ? '—' : st.p[1].toFixed(0)}\n`)
     }
   }
 }

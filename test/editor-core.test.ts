@@ -30,7 +30,6 @@ import {
   scaleFromGrip,
   selectionBox,
   transformItem,
-  transformItems,
   uniformScale,
   translation,
 } from '../src/lib/editor/transform.ts'

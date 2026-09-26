@@ -1,4 +1,4 @@
-import { Columns2, Download, Eraser, Eye, FlaskConical, Gauge, Images, Layers, LayoutGrid, PenTool, Timer, Wand2 } from 'lucide-react'
+import { Columns2, Download, Eraser, Eye, FlaskConical, Images, Layers, LayoutGrid, PenTool, Timer, Wand2 } from 'lucide-react'
 import type { Tab } from '../store'
 
 /** The panel tabs — shared by the desktop header nav and the mobile menu. */

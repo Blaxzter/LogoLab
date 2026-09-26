@@ -215,7 +215,6 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
     ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: GRADIENTS, planarFit: fit,
   })
   const docSets = doc.items.flatMap((it) => (it.kind === 'path' ? it.subPaths : [])) as SubPath[]
-  const gtSets = gt.flatMap((s) => s.subPaths)
 
   const bandPts: BandSample[] = []
   const band = scoreBorderBand(gt, [docSets], w, h, vis, (q) => bandPts.push(q), KEEP_OFF)

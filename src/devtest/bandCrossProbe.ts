@@ -96,7 +96,7 @@ for (const [tag, markup] of [['flat', FLAT], ['ramp', RAMP]] as Array<[string, s
 const L = dist(F0, F1)
 const ux = (F1.x - F0.x) / L
 const uy = (F1.y - F0.y) / L
-let worst = { flat: 0, ramp: 0 }
+const worst = { flat: 0, ramp: 0 }
 for (let s = 10; s <= L - 10; s += 10) {
   const q = { x: F0.x + ux * s, y: F0.y + uy * s }
   const cell = (tag: 'flat' | 'ramp') => {

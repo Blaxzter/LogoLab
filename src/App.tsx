@@ -196,6 +196,7 @@ function Header({
           {logo.src && (
             <Tooltip label="Clear the loaded logo" side="bottom">
               <button
+                type="button"
                 onClick={clearLogo}
                 aria-label="Clear logo"
                 className="btn btn-ghost h-8 gap-1.5 px-2 text-xs"
@@ -509,6 +510,7 @@ export function App() {
       {showStyling && hasLogo && (
         <Tooltip label="Customize appearance">
           <button
+            type="button"
             onClick={() => setDrawerOpen(true)}
             className="btn btn-primary bottom-safe fixed right-5 z-30 h-12 gap-2 rounded-full px-5 shadow-lg md:hidden"
           >

@@ -113,7 +113,7 @@ export function Sheet({
         >
           <span className="text-sm font-semibold text-ink">{title}</span>
           <Tooltip label="Close">
-            <button onClick={onClose} aria-label="Close" className="btn btn-ghost h-9 w-9 px-0">
+            <button type="button" onClick={onClose} aria-label="Close" className="btn btn-ghost h-9 w-9 px-0">
               <X size={18} />
             </button>
           </Tooltip>

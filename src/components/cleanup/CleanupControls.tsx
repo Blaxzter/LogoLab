@@ -5,7 +5,6 @@
 // controlled UI: every bit of cleanup state lives in CleanupStudio; only the
 // "which info hint is open" state is local. Mirrors TraceControls' structure.
 
-import { useState } from 'react'
 import { Bot, Loader2, MapPin, RotateCcw, Sparkles, Wand2, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { ColorField, Collapsible, Field, Segmented, Slider, Toggle } from '../ui/controls'

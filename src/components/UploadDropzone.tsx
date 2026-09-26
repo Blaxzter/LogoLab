@@ -27,6 +27,7 @@ export function UploadDropzone() {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => inputRef.current?.click()}
           className="btn btn-ghost h-8 px-2 text-xs"
         >
@@ -34,6 +35,7 @@ export function UploadDropzone() {
         </button>
         <Tooltip label="Remove logo">
           <button
+            type="button"
             onClick={clearLogo}
             aria-label="Remove logo"
             className="btn btn-ghost h-8 w-8 px-0"

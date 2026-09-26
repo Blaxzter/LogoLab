@@ -790,9 +790,9 @@ export function featherAlpha(img: ImageData, radius: number): number {
   if (r <= 0) return 0
   const { width: w, height: h, data } = img
   // Work on a copy of the alpha plane; settle three box passes, then write back.
-  let a = new Float32Array(w * h)
+  const a = new Float32Array(w * h)
   for (let i = 0, o = 3; i < a.length; i++, o += 4) a[i] = data[o]
-  let tmp = new Float32Array(w * h)
+  const tmp = new Float32Array(w * h)
   for (let pass = 0; pass < 3; pass++) {
     boxBlurH(a, tmp, w, h, r)
     boxBlurV(tmp, a, w, h, r)

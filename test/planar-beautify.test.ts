@@ -15,7 +15,6 @@ import { moveEdgeNode } from '../src/lib/path/topologyEdit.ts'
 import type { EdgeRef, EditableDoc, PathItem, PathNode, SharedEdge, Topology, Vertex } from '../src/lib/path/types.ts'
 
 const OPTS = { ...DEFAULT_BEAUTIFY_OPTIONS }
-const NEAR = 1e-9
 
 const pn = (x: number, y: number, hIn: PathNode['hIn'] = null, hOut: PathNode['hOut'] = null): PathNode => ({ x, y, hIn, hOut, kind: 'corner' })
 

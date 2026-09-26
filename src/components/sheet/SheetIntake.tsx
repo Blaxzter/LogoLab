@@ -40,7 +40,7 @@ export function SheetIntake() {
   }
 
   /** Take whatever is already loaded on the other tabs as the sheet. */
-  const useCurrentLogo = async () => {
+  const openCurrentLogo = async () => {
     if (!logo.src) return
     setError(null)
     setLoading(true)
@@ -111,7 +111,7 @@ export function SheetIntake() {
       {error && <p className="text-sm text-bad">{error}</p>}
 
       {logo.src && (
-        <button type="button" onClick={() => void useCurrentLogo()} className="btn btn-secondary h-9 text-xs">
+        <button type="button" onClick={() => void openCurrentLogo()} className="btn btn-secondary h-9 text-xs">
           Use the loaded image ({logo.fileName ?? 'current logo'})
         </button>
       )}

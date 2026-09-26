@@ -168,20 +168,6 @@ const promote = (a: Reader, b: Reader): Reader => ({
   },
 })
 
-/** The one-sided promotion, but only OFFERED to a candidate the chord already reads within
- *  `reachDeg` of the bar — a work bound and a blast-radius bound at once: a vertex the
- *  chord reads flat can never be promoted, whatever the arms say. */
-const gated = (a: Reader, b: Reader, reachDeg: number): Reader => ({
-  name: `gated${reachDeg}(${b.name})`,
-  read: (pts, i, closed) => {
-    const x = a.read(pts, i, closed)
-    if (x === null) return null
-    if (x < THR - reachDeg) return x
-    const y = b.read(pts, i, closed)
-    return y === null ? x : Math.max(x, y)
-  },
-})
-
 const READERS: Reader[] = [
   chord(4),
   chord(6),

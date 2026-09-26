@@ -365,7 +365,6 @@ for (const b of bars) {
     // walk the run containing i1 (if any) and print its profile
     let profile = ''
     let runLen = 0
-    let apexInRun = ''
     if (r1 >= 0) {
       let s = i1
       while (runId[wrap(s - 1)] === r1) s = wrap(s - 1)
@@ -375,7 +374,6 @@ for (const b of bars) {
         const t = (Math.acos(Math.max(-1, Math.min(1, cosArr[wrap(i)]))) * 180) / Math.PI
         const isApex = st.apexIdx.includes(wrap(i))
         turns.push(`${isApex ? '*' : ''}${t.toFixed(0)}`)
-        if (isApex) apexInRun += ` apex@${wrap(i)}(${f(pts[wrap(i)].x, 1)},${f(pts[wrap(i)].y, 1)})`
         runLen++
         i = wrap(i + 1)
       }

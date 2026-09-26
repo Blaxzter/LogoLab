@@ -65,7 +65,6 @@ const flag = (n: string): string | null => {
 const RES = Number(flag('--res') ?? 512)
 const WIN = Number(flag('--win') ?? 1)
 const LIST = argv.includes('--list')
-const LIST_MIN = Number(flag('--min') ?? 30)
 /** `--probe x,y`: everything about the traced sharp corner nearest (x,y). */
 const PROBE = (flag('--probe') ?? '').split(',').map(Number).filter(Number.isFinite)
 /** The A/B view shows BOTH lanes and the reading moves both; `--gradients` scores the

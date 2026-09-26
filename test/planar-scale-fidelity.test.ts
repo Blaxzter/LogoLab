@@ -21,7 +21,7 @@ import assert from 'node:assert/strict'
 import { tracePlanar } from '../src/lib/trace/planarAssemble.ts'
 import { planarBeautify, type SnapOptions } from '../src/lib/trace/planarBeautify.ts'
 import { DEFAULT_BEAUTIFY_OPTIONS } from '../src/lib/trace/beautify.ts'
-import type { EdgeRef, PathNode } from '../src/lib/path/types.ts'
+import type { PathNode } from '../src/lib/path/types.ts'
 
 const OPTS = { ...DEFAULT_BEAUTIFY_OPTIONS } // fidelity 1.5
 
