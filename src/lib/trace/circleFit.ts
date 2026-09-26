@@ -1,5 +1,5 @@
-// Primitive-fit math shared by the loop-level `beautify.ts` and the edge-level
-// `planarBeautify.ts` (and the junction re-seat): circle / ellipse fits, kappa-Bézier
+// Primitive-fit math for the edge-level `planarBeautify.ts` (and the junction
+// re-seat): circle / ellipse fits, kappa-Bézier
 // emit, single-linkage clustering, and the concentric / equal-radius relation solver.
 //
 // Pure and deterministic (fixed sample and scan orders).
