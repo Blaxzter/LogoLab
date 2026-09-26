@@ -9,11 +9,11 @@
 // Tolerances are in viewBox units, already divided by the zoom by the caller,
 // so a grab radius stays constant in screen pixels.
 
-import type { DocItem, PathItem, SubPath, Vec } from '../path/types.ts'
+import type { DocItem, EditableDoc, GroupItem, PathItem, SubPath, Vec } from '../path/types.ts'
 import { cubicAt, nearestPointOnItem, segmentControls, segmentCount } from '../path/geometry.ts'
-import { isGroup } from '../path/docTree.ts'
-import type { Box } from './transform.ts'
-import { itemBox } from './transform.ts'
+import { findItem, isGroup } from '../path/docTree.ts'
+import type { Box, Grip } from './transform.ts'
+import { GRIPS, gripPoint, itemBox } from './transform.ts'
 
 /** Which part of a path the pointer landed on. */
 export type HitKind = 'handle' | 'anchor' | 'segment' | 'fill'
@@ -351,4 +351,49 @@ export function marqueeNodes(item: PathItem, box: Box): string[] {
     }
   }
   return keys
+}
+
+/* ------------------------------------------------------ transform box */
+
+/** The transform-box grip within `tol` of the point, nearest first. */
+export function hitGrip(box: Box, p: Vec, tol: number): Grip | null {
+  let best: Grip | null = null
+  let bestD = tol
+  for (const g of GRIPS) {
+    const gp = gripPoint(box, g)
+    const d = Math.hypot(gp.x - p.x, gp.y - p.y)
+    if (d <= bestD) {
+      bestD = d
+      best = g
+    }
+  }
+  return best
+}
+
+/** Whether the point is on the rotation grip, `offset` above the box's top edge. */
+export function hitRotate(box: Box, p: Vec, tol: number, offset: number): boolean {
+  const c = { x: box.x + box.w / 2, y: box.y - offset }
+  return Math.hypot(c.x - p.x, c.y - p.y) <= tol
+}
+
+/* ------------------------------------------------------ entered groups */
+
+/** Which id a click resolves to, given whether a group has been entered. */
+export function resolveTarget(
+  doc: EditableDoc,
+  hit: { id: string; leafId: string },
+  enteredGroupId: string | null,
+): string {
+  if (enteredGroupId === null) return hit.id
+  const entered = findItem(doc.items, enteredGroupId)
+  if (entered && isGroup(entered) && containsId(entered, hit.leafId)) return hit.leafId
+  return hit.id
+}
+
+function containsId(group: GroupItem, id: string): boolean {
+  for (const c of group.children) {
+    if (c.id === id) return true
+    if (isGroup(c) && containsId(c, id)) return true
+  }
+  return false
 }

@@ -113,3 +113,14 @@ export function boxRadius(a: Vec, b: Vec): { center: Vec; radius: number } {
     radius: Math.min(Math.abs(b.x - a.x), Math.abs(b.y - a.y)) / 2,
   }
 }
+
+/** Shift snaps a line to the nearest 45°, keeping its length. */
+export function constrainLine(a: Vec, b: Vec): Vec {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.hypot(dx, dy)
+  if (len === 0) return b
+  const step = Math.PI / 4
+  const t = Math.round(Math.atan2(dy, dx) / step) * step
+  return { x: a.x + Math.cos(t) * len, y: a.y + Math.sin(t) * len }
+}
