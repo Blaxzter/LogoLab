@@ -6,29 +6,9 @@
 // so the icon sheet reuses the same studio to edit one tile.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-    AlertTriangle,
-    Check,
-    Copy,
-    Download,
-    Hand,
-    Layers,
-    Loader2,
-    MapPin,
-    MousePointer2,
-    Redo2,
-    SlidersHorizontal,
-    Undo2,
-    X,
-} from "lucide-react";
 import { useCheckerClass, useLogo, useStore } from "../../state/store";
-import { usePanZoom, type PanZoom } from "../../hooks/usePanZoom";
+import { usePanZoom } from "../../hooks/usePanZoom";
 import { useHistory } from "../../hooks/useHistory";
-import { ZoomSurface } from "../ui/ZoomSurface";
-import { ZoomControls } from "../ui/ZoomControls";
-import { CheckerToggle } from "../ui/CheckerToggle";
-import { Segmented } from "../ui/controls";
-import { Button } from "../ui/Button";
 import { getImageData } from "../../lib/image";
 import {
     monoTraceScale,
@@ -42,7 +22,6 @@ import { cleanSvg } from "../../lib/export/svgClean";
 import { logError } from "../../lib/report/errorLog";
 import { clearFailure, raiseFailure } from "../../lib/report/failureNotice";
 import { provideReportContext } from "../../lib/report/reportContext";
-import { ReportFailureLink } from "../report/ReportIssue";
 import { docStats, isStrokeOnly, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
 import { regionProvenance } from "../../lib/path/topology";
@@ -67,9 +46,6 @@ import {
     scoreOffThread,
     type TraceScore,
 } from "../../lib/render/scoreOffThread";
-import { HEAT_FULL_SCALE_DE } from "../../lib/render/fidelity";
-import { diffPicture, probeDiff, type DiffProbe } from "../../lib/render/diffView";
-import { heatCss } from "../../lib/heat";
 import type { VectorizeOptions } from "../../types";
 import {
     loadStudioSeed,
@@ -80,16 +56,15 @@ import {
 import { probeShouldApply, restoredDecision } from "./probeLedger";
 import type { DocItem, EditableDoc, NodeRef, PathItem, Vec } from "../../lib/path/types";
 import { TraceControls, TraceControlsBody } from "./TraceControls";
-import { EditorCanvas } from "./EditorCanvas";
-import { useFitBox } from "./useFitBox";
 import { PathsPanel, PathsPanelBody } from "./PathsPanel";
 import { PipelineExplainer } from "./PipelineExplainer";
 import { Sheet } from "../ui/Sheet";
-import { PopoverSlider } from "../ui/PopoverSlider";
-import { StudioTopBar, StudioActionBar, BarIconButton } from "../studio/StudioBar";
-import { LegalLinksInline } from "../legal/LegalFooter";
-import { Tooltip } from "../ui/Tooltip";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import type { Tool, ViewMode } from "./studio/types";
+import { StudioToolbar } from "./studio/StudioToolbar";
+import { StudioMobileActionBar, StudioMobileTopBar } from "./studio/StudioMobileBars";
+import { StudioStage } from "./studio/StudioStage";
+import { StudioStatusBar } from "./studio/StudioStatusBar";
 
 const DEBOUNCE_MS = 400;
 
@@ -109,17 +84,6 @@ const SCORE_MAX_DIM = 1024;
 /** Settle time before a score is started. Longer than the trace debounce because
  *  this also fires on every committed node edit, and a drag commits per frame. */
 const SCORE_DEBOUNCE_MS = 500;
-
-type ViewMode = "split" | "traced" | "original" | "overlay" | "difference";
-type Tool = "pan" | "node" | "mark";
-
-/** Human-readable byte size ('842 B' / '12.4 KB' / '1.20 MB'). */
-function formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    const kb = bytes / 1024;
-    if (kb < 1024) return `${kb.toFixed(kb < 10 ? 2 : 1)} KB`;
-    return `${(kb / 1024).toFixed(2)} MB`;
-}
 
 function parseNodeKey(key: string): NodeRef {
     const [sub, idx] = key.split(":").map(Number);
@@ -1440,488 +1404,99 @@ export function VectorizeStudio({
             <TraceControls {...traceProps} />
 
             <div className="flex min-w-0 flex-1 flex-col">
-                {/* ------------------------------------------ toolbar (desktop) */}
-                <div className="hidden h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 md:flex">
-                    {leading}
-                    <Segmented<ViewMode>
-                        value={viewMode}
-                        onChange={setViewMode}
-                        options={[
-                            { value: "split", label: "Split" },
-                            { value: "traced", label: "Traced" },
-                            { value: "original", label: "Original" },
-                            { value: "overlay", label: "Overlay" },
-                            {
-                                value: "difference",
-                                label: "Difference",
-                                title: "Where the trace disagrees with the original",
-                            },
-                        ]}
-                    />
-                    <div
-                        className={
-                            viewMode === "original" || viewMode === "difference"
-                                ? "pointer-events-none opacity-50"
-                                : ""
-                        }
-                    >
-                        <Segmented<Tool>
-                            value={tool}
-                            onChange={setTool}
-                            options={[
-                                {
-                                    value: "pan",
-                                    title: "Pan & zoom (V)",
-                                    label: (
-                                        <>
-                                            <Hand size={13} /> Pan
-                                        </>
-                                    ),
-                                },
-                                {
-                                    value: "node",
-                                    title: "Edit nodes (A)",
-                                    label: (
-                                        <>
-                                            <MousePointer2 size={13} /> Edit
-                                        </>
-                                    ),
-                                },
-                            ]}
-                        />
-                    </div>
-                    {opts.mode === "color" &&
-                        (!isVectorSource || retraceVector === "retrace") &&
-                        markers.length > 0 && (
-                            <span className="flex items-center gap-1.5 text-xs text-muted tabular-nums">
-                                <MapPin size={12} className="text-emerald-500" />
-                                {markers.length} marker
-                                {markers.length === 1 ? "" : "s"}
-                            </span>
-                        )}
-                    <ToolButton
-                        title="Undo (Ctrl+Z)"
-                        onClick={undo}
-                        disabled={!canUndo}
-                    >
-                        <Undo2 size={15} />
-                    </ToolButton>
-                    <ToolButton
-                        title="Redo (Ctrl+Shift+Z)"
-                        onClick={redo}
-                        disabled={!canRedo}
-                    >
-                        <Redo2 size={15} />
-                    </ToolButton>
-                    {viewMode === "overlay" && (
-                        <label className="flex items-center gap-2 text-xs text-muted">
-                            Ghost
-                            <input
-                                type="range"
-                                min={0}
-                                max={100}
-                                value={overlayOpacity}
-                                onChange={(e) =>
-                                    setOverlayOpacity(Number(e.target.value))
-                                }
-                                className="h-1.5 w-28 cursor-pointer appearance-none rounded-full bg-line-strong"
-                            />
-                        </label>
-                    )}
-                    <div className="ml-auto flex items-center gap-2">
-                        <ZoomControls pz={pz} />
-                        <CheckerToggle />
-                        <span className="h-5 w-px bg-line" aria-hidden />
-                        <Button
-                            variant="primary"
-                            className="h-8 px-3 text-xs"
-                            icon={applied ? <Check size={14} /> : undefined}
-                            onClick={onApply}
-                            disabled={!svgText}
-                        >
-                            {applied
-                                ? (appliedLabel ?? "Applied") + " \u2713"
-                                : (applyLabel ?? "Apply to logo")}
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            className="h-8 px-3 text-xs"
-                            icon={<Download size={14} />}
-                            onClick={onDownload}
-                            disabled={!svgText}
-                        >
-                            Download SVG
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            className="h-8 px-3 text-xs"
-                            icon={
-                                copied ? (
-                                    <Check size={14} />
-                                ) : (
-                                    <Copy size={14} />
-                                )
-                            }
-                            onClick={() => void onCopy()}
-                            disabled={!svgText}
-                        >
-                            {copied ? "Copied" : "Copy"}
-                        </Button>
-                    </div>
-                </div>
+                <StudioToolbar
+                    leading={leading}
+                    viewMode={viewMode}
+                    setViewMode={setViewMode}
+                    tool={tool}
+                    setTool={setTool}
+                    opts={opts}
+                    isVectorSource={isVectorSource}
+                    retraceVector={retraceVector}
+                    markers={markers}
+                    undo={undo}
+                    redo={redo}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                    overlayOpacity={overlayOpacity}
+                    setOverlayOpacity={setOverlayOpacity}
+                    pz={pz}
+                    applied={applied}
+                    applyLabel={applyLabel}
+                    appliedLabel={appliedLabel}
+                    onApply={onApply}
+                    onDownload={onDownload}
+                    copied={copied}
+                    onCopy={onCopy}
+                    svgText={svgText}
+                />
 
-                {/* ------------------------------------------- top strip (mobile) */}
-                <StudioTopBar>
-                    {leading}
-                    <Segmented<ViewMode>
-                        value={view}
-                        onChange={setViewMode}
-                        options={[
-                            { value: "traced", label: "Traced" },
-                            { value: "original", label: "Original" },
-                            { value: "overlay", label: "Overlay" },
-                            { value: "difference", label: "Difference" },
-                        ]}
-                    />
-                    <div
-                        className={
-                            view === "original" || view === "difference"
-                                ? "pointer-events-none opacity-50"
-                                : ""
-                        }
-                    >
-                        <Segmented<Tool>
-                            value={tool === "mark" ? "pan" : tool}
-                            onChange={setTool}
-                            options={[
-                                {
-                                    value: "pan",
-                                    title: "Pan & zoom",
-                                    label: (
-                                        <>
-                                            <Hand size={13} /> Pan
-                                        </>
-                                    ),
-                                },
-                                {
-                                    value: "node",
-                                    title: "Edit nodes",
-                                    label: (
-                                        <>
-                                            <MousePointer2 size={13} /> Edit
-                                        </>
-                                    ),
-                                },
-                            ]}
-                        />
-                    </div>
-                    <BarIconButton title="Undo" onClick={undo} disabled={!canUndo}>
-                        <Undo2 size={17} />
-                    </BarIconButton>
-                    <BarIconButton title="Redo" onClick={redo} disabled={!canRedo}>
-                        <Redo2 size={17} />
-                    </BarIconButton>
-                    {view === "overlay" && (
-                        <PopoverSlider
-                            title="Ghost opacity"
-                            value={overlayOpacity}
-                            min={0}
-                            max={100}
-                            onChange={setOverlayOpacity}
-                            valueText={`${overlayOpacity}%`}
-                            placement="bottom"
-                            className="shrink-0"
-                        >
-                            Ghost
-                        </PopoverSlider>
-                    )}
-                    <div className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">
-                        <ZoomControls pz={pz} />
-                        <BarIconButton title="Copy SVG" onClick={() => void onCopy()} disabled={!svgText}>
-                            {copied ? <Check size={17} /> : <Copy size={17} />}
-                        </BarIconButton>
-                        <BarIconButton title="Download SVG" onClick={onDownload} disabled={!svgText}>
-                            <Download size={17} />
-                        </BarIconButton>
-                    </div>
-                </StudioTopBar>
+                <StudioMobileTopBar
+                    leading={leading}
+                    view={view}
+                    setViewMode={setViewMode}
+                    tool={tool}
+                    setTool={setTool}
+                    undo={undo}
+                    redo={redo}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                    overlayOpacity={overlayOpacity}
+                    setOverlayOpacity={setOverlayOpacity}
+                    pz={pz}
+                    copied={copied}
+                    onCopy={onCopy}
+                    onDownload={onDownload}
+                    svgText={svgText}
+                />
 
-                {/* -------------------------------------------------------- stage */}
-                <div
-                    className={`relative min-h-0 flex-1 ${checkerClass} ${
-                        tool === "mark"
-                            ? "ring-2 ring-inset ring-emerald-400/70"
-                            : ""
-                    }`}
-                >
-                    {view === "split" && (
-                        <div className="grid h-full grid-cols-2">
-                            <div className="relative h-full min-w-0 border-r border-line">
-                                <OriginalPane
-                                    pz={pz}
-                                    src={logo.src}
-                                    aspectW={logo.naturalWidth || 1}
-                                    aspectH={logo.naturalHeight || 1}
-                                    primary
-                                    markers={markers}
-                                    marking={tool === "mark"}
-                                    onAddMarker={addMarker}
-                                    onRemoveMarker={removeMarker}
-                                />
-                                <Chip>Original</Chip>
-                            </div>
-                            <div className="relative h-full min-w-0">
-                                {derivedDoc ? (
-                                    <EditorCanvas
-                                        {...canvasShared}
-                                        doc={derivedDoc}
-                                    />
-                                ) : (
-                                    <StagePlaceholder busy={busy} />
-                                )}
-                                <Chip>Traced</Chip>
-                            </div>
-                        </div>
-                    )}
-                    {view === "traced" &&
-                        (derivedDoc ? (
-                            <EditorCanvas
-                                {...canvasShared}
-                                doc={derivedDoc}
-                                primary
-                            />
-                        ) : (
-                            <StagePlaceholder busy={busy} />
-                        ))}
-                    {view === "original" && (
-                        <OriginalPane
-                            pz={pz}
-                            src={logo.src}
-                            aspectW={logo.naturalWidth || 1}
-                            aspectH={logo.naturalHeight || 1}
-                            primary
-                            markers={markers}
-                            marking={tool === "mark"}
-                            onAddMarker={addMarker}
-                            onRemoveMarker={removeMarker}
-                        />
-                    )}
-                    {view === "overlay" &&
-                        (derivedDoc ? (
-                            <EditorCanvas
-                                {...canvasShared}
-                                doc={derivedDoc}
-                                primary
-                                underlay={{
-                                    src: logo.src,
-                                    opacity: overlayOpacity / 100,
-                                }}
-                            />
-                        ) : (
-                            <StagePlaceholder busy={busy} />
-                        ))}
-                    {view === "difference" &&
-                        (score ? (
-                            <DiffPane pz={pz} score={score} primary />
-                        ) : (
-                            <StagePlaceholder
-                                busy={busy}
-                                idle={
-                                    !derivedDoc
-                                        ? "No result yet"
-                                        : canScore
-                                          ? "Measuring…"
-                                          : "This browser can't measure the difference"
-                                }
-                            />
-                        ))}
+                <StudioStage
+                    view={view}
+                    checkerClass={checkerClass}
+                    tool={tool}
+                    setTool={setTool}
+                    markMode={markMode}
+                    pz={pz}
+                    logo={{ src: logo.src, naturalWidth: logo.naturalWidth, naturalHeight: logo.naturalHeight }}
+                    markers={markers}
+                    addMarker={addMarker}
+                    removeMarker={removeMarker}
+                    canvasShared={canvasShared}
+                    derivedDoc={derivedDoc}
+                    busy={busy}
+                    progress={progress}
+                    progressFraction={progressFraction}
+                    stop={stop}
+                    overlayOpacity={overlayOpacity}
+                    score={score}
+                    canScore={canScore}
+                    emptyNotice={emptyNotice}
+                />
 
-                    {/* Empty-result notice, centred on the traced pane (the right half in
-                        split view). Not shown over "original". */}
-                    {emptyNotice && view !== "original" && (
-                        <div
-                            className={`animate-in-fade pointer-events-none absolute inset-y-0 z-10 flex items-center justify-center p-6 ${
-                                view === "split" ? "left-1/2 right-0" : "inset-x-0"
-                            }`}
-                        >
-                            <div className="pointer-events-auto max-w-xs rounded-xl border border-warn/40 bg-surface/95 p-4 text-center shadow-lg backdrop-blur">
-                                <AlertTriangle
-                                    size={20}
-                                    className="mx-auto mb-2 text-warn"
-                                />
-                                <p className="text-xs leading-snug text-ink-2">
-                                    {emptyNotice.text}
-                                </p>
-                                {emptyNotice.action && (
-                                    <Button
-                                        variant="primary"
-                                        className="mt-3 h-8 px-3 text-xs"
-                                        onClick={emptyNotice.action.run}
-                                    >
-                                        {emptyNotice.action.label}
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                <StudioStatusBar
+                    stats={stats}
+                    svgBytes={svgBytes}
+                    score={score}
+                    setViewMode={setViewMode}
+                    busy={busy}
+                    progress={progress}
+                    stop={stop}
+                    error={error}
+                    failure={failure}
+                    tool={tool}
+                />
 
-                    {/* Trace-in-progress overlay. pointer-events-none keeps pan/zoom live
-                        while the trace runs off-thread. */}
-                    {busy && (
-                        <div className="animate-in-fade pointer-events-none absolute inset-0 overflow-hidden">
-                            {progressFraction <= 0 && <div className="trace-sweep" />}
-                            <div className="absolute left-1/2 top-3 w-64 max-w-[80%] -translate-x-1/2">
-                                <div className="pointer-events-auto rounded-xl border border-line bg-surface/90 px-3 py-2 shadow-sm backdrop-blur">
-                                    <div className="flex items-center gap-2 text-xs font-medium text-accent">
-                                        <Loader2 size={13} className="shrink-0 animate-spin" />
-                                        <span className="min-w-0 flex-1 truncate">{progress || "Tracing…"}</span>
-                                        {progressFraction > 0 && (
-                                            <span className="shrink-0 tabular-nums text-ink-2">
-                                                {Math.round(progressFraction * 100)}%
-                                            </span>
-                                        )}
-                                        <button
-                                            type="button"
-                                            onClick={stop}
-                                            className="-mr-1 flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-ink-2 transition-colors hover:bg-surface-3 hover:text-bad"
-                                            title="Stop tracing (keeps the current result)"
-                                        >
-                                            <X size={12} />
-                                            Stop
-                                        </button>
-                                    </div>
-                                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-3">
-                                        <div
-                                            className={`h-full rounded-full bg-accent ${progressFraction > 0 ? "transition-[width] duration-200 ease-out" : "animate-pulse"}`}
-                                            style={{ width: `${Math.max(5, Math.round(progressFraction * 100))}%` }}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* On-stage cue that the canvas is in marker-placement mode. */}
-                    {tool === "mark" && !busy && (
-                        <div className="animate-in-fade pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2">
-                            <span
-                                className={`flex items-center gap-2 rounded-full border bg-surface/90 px-3 py-1 text-xs font-medium shadow-sm backdrop-blur ${
-                                    markMode === "flat"
-                                        ? "border-amber-400/50 text-amber-600 dark:text-amber-400"
-                                        : markMode === "remove"
-                                          ? "border-rose-400/50 text-rose-600 dark:text-rose-400"
-                                          : "border-emerald-400/50 text-emerald-600 dark:text-emerald-400"
-                                }`}
-                            >
-                                <MapPin size={13} />
-                                {markMode === "flat"
-                                    ? "Click a region to paint it one flat colour"
-                                    : markMode === "remove"
-                                      ? "Click a section to remove it and heal the neighbours in"
-                                      : "Click a region to keep it as its own shape"}
-                                <button
-                                    type="button"
-                                    onClick={() => setTool("pan")}
-                                    className="pointer-events-auto -mr-1 ml-1 rounded-full px-2 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
-                                >
-                                    Done
-                                </button>
-                            </span>
-                        </div>
-                    )}
-                </div>
-
-                {/* ------------------------------------------ status bar (desktop) */}
-                <footer className="hidden h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted md:flex">
-                    {stats && (
-                        <span className="shrink-0">
-                            {stats.paths} paths · {stats.nodes} nodes ·{" "}
-                            {stats.colors} colors · {formatBytes(svgBytes)}
-                        </span>
-                    )}
-                    {/* The accuracy readout. A button because it and the Difference view
-                        are the same measurement. */}
-                    {score && (
-                        <Tooltip
-                            label={`Mean colour difference from the original: ${score.meanDeltaE.toFixed(
-                                2,
-                            )} ΔE, with 95% of pixels under ${score.p95DeltaE.toFixed(
-                                2,
-                            )}. Below about 2.3 ΔE the eye cannot tell two colours apart. Click to see where.`}
-                        >
-                            <button
-                                type="button"
-                                onClick={() => setViewMode("difference")}
-                                className="shrink-0 rounded px-1 py-0.5 transition-colors hover:bg-surface-3 hover:text-ink"
-                            >
-                                ΔE {score.meanDeltaE.toFixed(2)}
-                            </button>
-                        </Tooltip>
-                    )}
-                    {busy && (
-                        <span className="flex shrink-0 items-center gap-1.5 text-accent">
-                            <Loader2 size={12} className="animate-spin" />
-                            {progress || "Tracing…"}
-                            <button
-                                type="button"
-                                onClick={stop}
-                                className="ml-0.5 flex items-center gap-0.5 rounded px-1 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-bad"
-                                title="Stop tracing (keeps the current result)"
-                            >
-                                <X size={11} />
-                                Stop
-                            </button>
-                        </span>
-                    )}
-                    {error && (
-                        <span className="flex min-w-0 items-center gap-2 text-bad">
-                            <span className="truncate">{error}</span>
-                            {failure != null && (
-                                <ReportFailureLink what="the vectorizer" error={failure} />
-                            )}
-                        </span>
-                    )}
-                    <LegalLinksInline className="mx-auto shrink-0" />
-                    <span className="hidden truncate sm:block">
-                        {tool === "node"
-                            ? "Drag anchors · double-click segment to add a node · Del removes"
-                            : tool === "mark"
-                              ? "Click to keep a region as its own shape · click a marker to remove · mark both sides of an overlap"
-                              : "Scroll to zoom · drag to pan"}
-                    </span>
-                </footer>
-
-                {/* ----------------------------------------- action bar (mobile) */}
-                <StudioActionBar>
-                    <Button
-                        variant="secondary"
-                        className="h-10"
-                        icon={<SlidersHorizontal size={16} />}
-                        onClick={() => setTraceSheetOpen(true)}
-                    >
-                        Trace
-                    </Button>
-                    {derivedDoc && (
-                        <Button
-                            variant="secondary"
-                            className="h-10"
-                            icon={<Layers size={16} />}
-                            onClick={() => setPathsSheetOpen(true)}
-                        >
-                            {`Paths${stats ? ` (${stats.paths})` : ""}`}
-                        </Button>
-                    )}
-                    <div className="flex-1" />
-                    <Button
-                        variant="primary"
-                        className="h-10"
-                        icon={applied ? <Check size={16} /> : undefined}
-                        onClick={onApply}
-                        disabled={!svgText}
-                    >
-                        {applied ? (appliedLabel ?? "Applied") : (applyLabel ?? "Apply")}
-                    </Button>
-                </StudioActionBar>
+                <StudioMobileActionBar
+                    setTraceSheetOpen={setTraceSheetOpen}
+                    setPathsSheetOpen={setPathsSheetOpen}
+                    derivedDoc={derivedDoc}
+                    stats={stats}
+                    applied={applied}
+                    applyLabel={applyLabel}
+                    appliedLabel={appliedLabel}
+                    onApply={onApply}
+                    svgText={svgText}
+                />
             </div>
 
             {/* Desktop right rail — hidden below md; its body shows in the Paths sheet. */}
@@ -1981,315 +1556,5 @@ export function VectorizeStudio({
                 />
             )}
         </div>
-    );
-}
-
-/* ------------------------------------------------------------ subcomponents */
-
-/** Region-marker glyph colour (emerald) + halo, matching EditorCanvas. */
-const MARKER_FILL = "#10b981";
-const FLAT_MARKER_FILL = "#f59e0b"; // amber — "flat colour" markers
-const REMOVE_MARKER_FILL = "#f43f5e"; // rose — "remove & heal" markers
-const MARKER_HALO = "#ffffff";
-/** Screen-px radius for clicking an existing marker to remove it. */
-const MARKER_HIT_PX = 11;
-
-/**
- * The original image in the same centred-fit framing as the editor canvas, so
- * split view lines up. With the Mark tool active it also accepts markers, mapped
- * to the same normalized [0,1] coords the editor uses. Pins counter-scale by the
- * zoom to stay a constant screen size.
- */
-function OriginalPane({
-    pz,
-    src,
-    aspectW,
-    aspectH,
-    primary = false,
-    markers,
-    marking = false,
-    onAddMarker,
-    onRemoveMarker,
-}: {
-    pz: PanZoom;
-    src: string;
-    aspectW: number;
-    aspectH: number;
-    primary?: boolean;
-    markers?: { x: number; y: number; flat?: boolean; remove?: boolean }[];
-    marking?: boolean;
-    onAddMarker?: (x: number, y: number) => void;
-    onRemoveMarker?: (index: number) => void;
-}) {
-    const fit = useFitBox(aspectW, aspectH);
-    const boxRef = useRef<HTMLDivElement | null>(null);
-    const all = markers ?? [];
-
-    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-        if (!marking || e.button !== 0) return;
-        const rect = boxRef.current?.getBoundingClientRect();
-        if (!rect || rect.width === 0 || rect.height === 0) return;
-        e.stopPropagation(); // don't let ZoomSurface treat this as a pan
-        // Click an existing pin (within a screen-px tolerance) → remove; else add.
-        let hit = -1;
-        let bestD = MARKER_HIT_PX;
-        for (let i = 0; i < all.length; i++) {
-            const px = rect.left + all[i].x * rect.width;
-            const py = rect.top + all[i].y * rect.height;
-            const d = Math.hypot(px - e.clientX, py - e.clientY);
-            if (d <= bestD) {
-                bestD = d;
-                hit = i;
-            }
-        }
-        if (hit >= 0) {
-            onRemoveMarker?.(hit);
-            return;
-        }
-        const nx = (e.clientX - rect.left) / rect.width;
-        const ny = (e.clientY - rect.top) / rect.height;
-        if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) onAddMarker?.(nx, ny);
-    };
-
-    const inv = pz.scale > 0 ? 1 / pz.scale : 1;
-    // Once a source pixel is wider than a screen pixel, render it pixelated: a
-    // smoothed image would hide what the raster holds. Same rule as the Difference
-    // heat; `aspectW` is the source's natural width.
-    const magnified = fit.width > 0 && (pz.scale * fit.width) / aspectW > 1;
-    return (
-        <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
-            <div
-                ref={fit.parentRef}
-                className="flex h-full w-full items-center justify-center p-[6%]"
-            >
-                <div
-                    ref={boxRef}
-                    className="relative"
-                    style={{ width: fit.width, height: fit.height, cursor: marking ? "crosshair" : undefined }}
-                    onPointerDown={handlePointerDown}
-                >
-                    <img
-                        src={src}
-                        alt=""
-                        draggable={false}
-                        className="pointer-events-none h-full w-full select-none"
-                        style={{ imageRendering: magnified ? "pixelated" : "auto" }}
-                    />
-                    {all.length > 0 &&
-                        all.map((m, i) => (
-                            <div
-                                key={i}
-                                className="pointer-events-none absolute"
-                                style={{
-                                    left: `${m.x * 100}%`,
-                                    top: `${m.y * 100}%`,
-                                    width: 14,
-                                    height: 14,
-                                    borderRadius: m.flat ? "3px" : "9999px",
-                                    background: m.remove
-                                        ? REMOVE_MARKER_FILL
-                                        : m.flat
-                                          ? FLAT_MARKER_FILL
-                                          : MARKER_FILL,
-                                    border: `2px solid ${MARKER_HALO}`,
-                                    boxShadow: "0 0 0 1px rgba(0,0,0,.25)",
-                                    transform: `translate(-50%, -50%) scale(${inv})`,
-                                }}
-                            />
-                        ))}
-                </div>
-            </div>
-        </ZoomSurface>
-    );
-}
-
-/**
- * The Difference view: per-pixel ΔE between the rendered result and the source,
- * on the same cold→hot ramp /labs/ab uses.
- *
- * The heat is laid over a dim ghost of the source (lib/render/diffView.ts) and
- * the pointer reads the field back under the cursor. Everything comes from the
- * buffers the score returned; this pane measures nothing itself.
- *
- * Framed like OriginalPane so switching modes doesn't move the art. Painted via
- * a canvas-owned ImageData because the DOM `ImageData` constructor's type
- * rejects a plain Uint8ClampedArray. Goes `pixelated` once a heat pixel is wider
- * than a screen pixel, so a one-pixel seam isn't smeared.
- */
-function DiffPane({
-    pz,
-    score,
-    primary = false,
-}: {
-    pz: PanZoom;
-    score: TraceScore;
-    primary?: boolean;
-}) {
-    const fit = useFitBox(score.width, score.height);
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const boxRef = useRef<HTMLDivElement | null>(null);
-    // Pointer position in raster-normalized units, not a sampled value, so a new
-    // score re-reads the same spot instead of blanking the readout.
-    const [cursor, setCursor] = useState<{ nx: number; ny: number } | null>(null);
-    const probe = useMemo(
-        () => (cursor ? probeDiff(score, cursor.nx, cursor.ny) : null),
-        [score, cursor],
-    );
-
-    useEffect(() => {
-        const cv = canvasRef.current;
-        if (!cv) return;
-        cv.width = score.width;
-        cv.height = score.height;
-        const ctx = cv.getContext("2d");
-        if (!ctx) return;
-        const id = ctx.createImageData(score.width, score.height);
-        id.data.set(
-            diffPicture(score.heat, score.de, score.source, score.width, score.height),
-        );
-        ctx.putImageData(id, 0, 0);
-    }, [score]);
-
-    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-        const rect = boxRef.current?.getBoundingClientRect();
-        if (!rect || rect.width === 0 || rect.height === 0) return;
-        setCursor({
-            nx: (e.clientX - rect.left) / rect.width,
-            ny: (e.clientY - rect.top) / rect.height,
-        });
-    };
-
-    // Screen pixels per heat pixel: past 1 the browser's bilinear upscale would
-    // smear every one-pixel seam into a soft two-pixel one.
-    const magnified = fit.width > 0 && (pz.scale * fit.width) / score.width > 1;
-
-    return (
-        <>
-            <ZoomSurface pz={pz} primary={primary} className="h-full w-full">
-                <div
-                    ref={fit.parentRef}
-                    className="flex h-full w-full items-center justify-center p-[6%]"
-                >
-                    <div
-                        ref={boxRef}
-                        className="relative"
-                        style={{ width: fit.width, height: fit.height }}
-                        onPointerMove={handlePointerMove}
-                        onPointerLeave={() => setCursor(null)}
-                    >
-                        <canvas
-                            ref={canvasRef}
-                            className="pointer-events-none block h-full w-full select-none"
-                            style={{ imageRendering: magnified ? "pixelated" : "auto" }}
-                        />
-                    </div>
-                </div>
-            </ZoomSurface>
-            <HeatLegend score={score} probe={probe} />
-        </>
-    );
-}
-
-/** The heat's scale and this trace's numbers (the only ΔE readout on mobile,
- *  which has no status bar). Sampled at the ramp's seven stops so the CSS
- *  gradient matches exactly. With a pointer over the art it also shows that
- *  pixel's two colours and their ΔE, which tells an edge that moved slightly
- *  apart from a wrong colour. */
-function HeatLegend({
-    score,
-    probe,
-}: {
-    score: TraceScore;
-    probe: DiffProbe | null;
-}) {
-    const ramp = Array.from({ length: 7 }, (_, i) => heatCss(i / 6)).join(", ");
-    return (
-        <div className="pointer-events-none absolute bottom-2 left-2 rounded-md border border-line bg-surface/85 px-2 py-1.5 font-mono text-[10px] tabular-nums text-muted backdrop-blur">
-            <div>
-                mean {score.meanDeltaE.toFixed(2)} · p95{" "}
-                {score.p95DeltaE.toFixed(2)}
-            </div>
-            <div className="mt-1 flex items-center gap-1.5">
-                <span>0</span>
-                <span
-                    className="h-2 w-24 rounded-sm"
-                    style={{ background: `linear-gradient(to right, ${ramp})` }}
-                />
-                <span>≥{HEAT_FULL_SCALE_DE} ΔE vs original</span>
-            </div>
-            {probe && (
-                <div className="mt-1 flex items-center gap-1.5">
-                    <span>
-                        {probe.x},{probe.y}
-                    </span>
-                    <Swatch rgb={probe.source} />
-                    <span>original</span>
-                    <Swatch rgb={probe.render} />
-                    <span>trace</span>
-                    <span className="text-ink-2">ΔE {probe.deltaE.toFixed(2)}</span>
-                </div>
-            )}
-        </div>
-    );
-}
-
-function Swatch({ rgb }: { rgb: [number, number, number] }) {
-    return (
-        <span
-            className="inline-block h-2.5 w-2.5 rounded-sm border border-line"
-            style={{ background: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
-        />
-    );
-}
-
-function Chip({ children }: { children: React.ReactNode }) {
-    return (
-        <span className="pointer-events-none absolute left-2 top-2 rounded border border-line bg-surface/80 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted backdrop-blur">
-            {children}
-        </span>
-    );
-}
-
-function StagePlaceholder({
-    busy,
-    idle = "No result yet",
-}: {
-    busy: boolean;
-    idle?: string;
-}) {
-    return (
-        <div className="flex h-full items-center justify-center">
-            {busy ? (
-                <Loader2 size={22} className="animate-spin text-muted" />
-            ) : (
-                <span className="text-xs text-muted">{idle}</span>
-            )}
-        </div>
-    );
-}
-
-function ToolButton({
-    title,
-    onClick,
-    disabled,
-    children,
-}: {
-    title: string;
-    onClick: () => void;
-    disabled?: boolean;
-    children: React.ReactNode;
-}) {
-    return (
-        <Tooltip label={title}>
-            <button
-                type="button"
-                aria-label={title}
-                onClick={onClick}
-                disabled={disabled}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-                {children}
-            </button>
-        </Tooltip>
     );
 }
