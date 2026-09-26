@@ -8,7 +8,7 @@
 import type { EdgeRef, PathNode, SharedEdge, Vec, Vertex } from '../path/types'
 import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
 import { buildPlanarNetwork, EXT, type PlanarNetwork } from './planarNetwork.ts'
-import { detectCorners, detectLoopCorners, discExplainsLoop, turnReadOf, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type ApexReach, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import { detectCorners, detectLoopCorners, discExplainsLoop, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type ApexReach, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
 import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
 import { subpixelEdgeChains, type SourceImage } from './planarSubpixel.ts'
@@ -187,7 +187,7 @@ export function assemblePlanar(
     // Sharp corners are found on the raw staircase and pinned through pre-smoothing
     // so a point isn't melted into a curve before the fitter sees it.
     let nodes: PathNode[]
-    const corners = detectCorners(latticePts, opts.cornerTurnDeg, e.closed, opts.cornerWindow, turnReadOf(opts))
+    const corners = detectCorners(latticePts, opts.cornerTurnDeg, e.closed, opts.cornerWindow)
     // Two chains coexist. Corner detection and the area guard read `latticePts`, since
     // their thresholds are calibrated on the integer staircase; the fit reads `pts`,
     // the sub-pixel displaced chain. The displacement preserves indices, so corners
@@ -225,7 +225,7 @@ export function assemblePlanar(
       // A closed loop with ≥2 sharp corners is fitted corner-first (snap each corner to
       // its sub-pixel arm intersection, then fit the arcs between them) so the apex is
       // an exact node, not a beveled pair. Otherwise the smooth closed-loop fitter runs.
-      let loopCorners = detectLoopCorners(latticePts, opts.cornerTurnDeg, opts.cornerWindow, opts.cornerMerge, turnReadOf(opts))
+      let loopCorners = detectLoopCorners(latticePts, opts.cornerTurnDeg, opts.cornerWindow, opts.cornerMerge)
       // A small disc's staircase reads as a few false corners; when one circle explains
       // the loop better than those corners' straight arms, it is fitted smooth and the
       // pins are dropped with the corners (see discExplainsLoop).

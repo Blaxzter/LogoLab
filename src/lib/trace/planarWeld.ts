@@ -1,39 +1,30 @@
-// Junction-cluster weld machinery — since 2026-07-21 consumed ONLY by the §10.4
-// evidence-gated converged-pair weld (planarReseat.weldConvergedJunctions), via the
-// `eligible` filter. The old per-trace blanket flag (`PlanarFitOptions.weldJunctions`,
-// contract EVERY ≤radius micro-edge, off by default) was REMOVED the same day:
-// re-measured against the §10.4 tracer it newly crossed two tier-2 gates
-// (peanuts/custard boundary) and DEGRADED its own target cases (bloom p95 0.41→0.63,
-// overlap 0.41→0.46) — running before the junction re-seat, its blind centroid
-// fusion preempts the primitive-intersection correction that now handles crossings
-// better. docs/vectorization-benchmarks.md §10.4 has the numbers; §9.3 has the
-// original beverage-box case for why bare shortness was never enough evidence.
+// Junction-cluster weld, used by the evidence-gated converged-pair weld
+// (planarReseat.weldConvergedJunctions) through the `eligible` filter.
 //
-// The physics is unchanged: a degree-4 crossing in the source (bloom's X, two
-// boundaries crossing at a point) almost never rasterizes to ONE degree-4 lattice
-// corner — AA + posterization split it into 2+ near-coincident degree-3 junctions
-// joined by 1–3px micro-edges (and an occluded crossing is *structurally* a tiny
-// quad of degree-3 Ts). The planar graph traces those micro-edges faithfully, so
-// the crossing renders as a tiny jog/notch that pops at zoom, and the vertices that
-// "should" be one point never merge.
+// A degree-4 crossing in the source (two boundaries crossing at a point) almost
+// never rasterizes to one degree-4 lattice corner: anti-aliasing and posterization
+// split it into two or more near-coincident degree-3 junctions joined by 1–3px
+// micro-edges (an occluded crossing is structurally a tiny quad of degree-3 Ts). The
+// planar graph traces those micro-edges faithfully, so the crossing renders as a
+// small jog that shows at zoom. Shortness alone is not enough evidence to weld —
+// hence the caller's filter.
 //
-// `weldJunctionClusters` contracts every OPEN edge whose two endpoints are distinct
-// junction vertices and whose fitted arc is no longer than the weld radius (further
-// narrowed by `eligible` when given):
+// `weldJunctionClusters` contracts every open edge whose two endpoints are distinct
+// junction vertices and whose fitted arc is no longer than the weld radius:
 //  • the endpoint vertices union into a cluster; each cluster fuses into its
 //    lowest-id vertex, placed at the cluster centroid;
 //  • every surviving incident edge re-anchors on the fused vertex (terminal anchor
-//    moved, handles carried by the same delta — the shiftNodeTo pattern), so the
-//    graph stays welded and both regions on each edge stay byte-coincident;
+//    moved, handles carried by the same delta), so the graph stays welded and both
+//    regions on each edge stay byte-coincident;
 //  • the contracted micro-edges are dropped from the edge table and excised from
-//    every region loop; loops emptied by the excision (micro-faces — e.g. the
-//    occlusion quad itself) are dropped, and their label vanishes if that was its
-//    last loop. Neighbouring refs then chain endpoint-coincident through the fused
-//    vertex, so materializeLoop merges them into ONE anchor at the crossing.
+//    every region loop; loops emptied by the excision (micro-faces such as the
+//    occlusion quad) are dropped, and their label vanishes if that was its last
+//    loop. Neighbouring refs then chain endpoint-coincident through the fused vertex,
+//    so materializeLoop merges them into one anchor at the crossing.
 //
-// Mutates vertices/edges/loops in place (the §10.4 caller owns all three).
-// Deterministic: candidates scan in edge order, clusters fuse to the lowest vertex
-// id, centroid is an unweighted mean over member ids ascending.
+// Mutates vertices/edges/loops in place. Deterministic: candidates scan in edge
+// order, clusters fuse to the lowest vertex id, the centroid is an unweighted mean
+// over member ids ascending.
 
 import type { EdgeRef, PathNode, SharedEdge, Vertex } from '../path/types'
 import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
@@ -79,10 +70,9 @@ export interface WeldResult {
  * Contract micro-edges between near-coincident junction vertices. Mutates
  * `vertices`, `edges` and `loopsByLabel` in place; returns what moved (empty
  * result = graph untouched). `width`/`height` are the image bounds — a fused cluster
- * that includes a frame junction is kept ON that frame edge so the boundary stays
- * full-bleed. `eligible` optionally narrows the candidate set beyond shortness
- * (the §10.4 converged-pair weld passes a re-seat-evidence filter); omitted ⇒
- * every short-enough micro-edge is a candidate (the experimental blanket weld).
+ * that includes a frame junction is kept on that frame edge so the boundary stays
+ * full-bleed. `eligible` optionally narrows the candidate set beyond shortness; when
+ * omitted, every short-enough micro-edge is a candidate.
  */
 export function weldJunctionClusters(
   vertices: Vertex[],
@@ -143,26 +133,19 @@ export function weldJunctionClusters(
     if (!arr) clusters.set(r, (arr = []))
     arr.push(v)
   }
-  // Fuse a cluster ONLY when it is a tight local knot (a rasterized crossing). The
-  // union-find is transitive over ≤radius micro-edges, so a noisy/textured patch —
-  // where junctions sit within radius all across it — would otherwise chain into ONE
-  // cluster and collapse a whole region to a point, dragging even border vertices to
-  // the centroid. Bounding the cluster's pairwise SPAN keeps the weld a local crossing
-  // merge; an over-spread cluster is left untouched (its micro-edges survive), the safe
-  // pre-weld fallback.
+  // Fuse a cluster only when it is a tight local knot (a rasterized crossing). The
+  // union-find is transitive over ≤radius micro-edges, so in a noisy patch where
+  // junctions sit within radius all across it, the whole patch would chain into one
+  // cluster and collapse a region to a point. Bounding the cluster's pairwise span
+  // keeps the weld local; an over-spread cluster is left untouched.
   const spanCap = radius * 2
-  // A cluster whose fusion would pinch together the two endpoints of a LONG edge is
-  // not a rasterized crossing — it is the NECK of a lollipop: a region attached to
-  // the graph through one narrow gap, whose outline runs junction-to-junction the
-  // long way round (beverage-box-flat's straw: 129px outline over a 2.8px neck @256,
-  // 5.6px @512 — the §10.4 weld deleted the whole region at BOTH resolutions, §12).
-  // Contracting the neck then either deletes the outline from every loop (the old
-  // removal — the region silently vanishes from the doc, since index.ts skips a
-  // label whose loops are gone) or drags both of its ends onto one point (a pinch
-  // that collapses the region to a sliver). Neither is a weld; skip fusing the
-  // cluster and leave its micro-edges as real edges — the same safe fallback the
-  // over-spread rule above uses. A true crossing is unaffected: its second edge
-  // between the fused pair is itself micro (§10.4's lens tips).
+  // A cluster whose fusion would pinch together the two endpoints of a long edge is
+  // not a crossing but the neck of a lollipop: a region attached to the graph through
+  // one narrow gap, whose outline runs junction-to-junction the long way round.
+  // Contracting the neck would either delete that outline from every loop (the region
+  // silently vanishes) or drag both of its ends onto one point. Leave such a cluster
+  // unfused. A true crossing is unaffected: its second edge between the fused pair is
+  // itself micro.
   const rootOf = new Map<number, number>()
   for (const v of parent.keys()) rootOf.set(v, find(v))
   const poisoned = new Set<number>()
@@ -191,7 +174,7 @@ export function weldJunctionClusters(
     if (span > spanCap) continue // too spread to be a single crossing — leave it
     let cx = sx / live.length
     let cy = sy / live.length
-    // A cluster that includes a frame junction stays ON the frame: moving it inward
+    // A cluster that includes a frame junction stays on the frame: moving it inward
     // would pull the region's boundary off the image edge, opening a sliver gap where
     // it should bleed to the border. Clamp each axis to any frame edge a member sits on.
     for (const v of live) {
@@ -211,8 +194,8 @@ export function weldJunctionClusters(
       sv.y = cy
     }
   }
-  // Contract only the micro-edges inside a FUSED cluster; those in a rejected
-  // (over-spread) cluster stay as real edges, so a noisy patch is left as-is.
+  // Contract only the micro-edges inside a fused cluster; those in a rejected
+  // cluster stay as real edges.
   for (const e of candidates) if (fusedRoots.has(find(e.startVertex!))) removedEdges.add(e.id)
   if (fused.size === 0) return { fused, removedEdges }
 
@@ -223,13 +206,11 @@ export function weldJunctionClusters(
   for (const e of edges) {
     if (removedEdges.has(e.id)) continue
     if (!e.closed) {
-      // An edge whose BOTH endpoints fuse into the SAME survivor collapses to a
-      // self-loop (start===end — a zero-length degenerate when it had no interior).
-      // Contract it too, exactly like a micro-edge: leaving a start===end open edge
-      // in the graph would strand snapCoCircularLoops (it keys arcs on the endpoints)
-      // and the node editor. Excised from every loop below. Only MICRO edges can
-      // reach this branch: a cluster that would pinch a LONG edge's endpoints
-      // together is a lollipop neck and its fuse was vetoed above (`poisoned`).
+      // An edge whose both endpoints fuse into the same survivor collapses to a
+      // degenerate self-loop. Contract it like a micro-edge: a start===end open edge
+      // would strand snapCoCircularLoops (it keys arcs on the endpoints) and the node
+      // editor. Only micro-edges reach this branch, since a cluster that would pinch
+      // a long edge was vetoed above (`poisoned`).
       const sFused = e.startVertex != null && fused.has(e.startVertex)
       const eFused = e.endVertex != null && fused.has(e.endVertex)
       if ((sFused || eFused) && survivorOf(e.startVertex) === survivorOf(e.endVertex)) {

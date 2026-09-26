@@ -206,8 +206,7 @@ if (argv.includes('--turns')) {
       (c) => vis({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || vis({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
     )
     if (!gtc.length) continue
-    // `--fit k=v` rides along so the SAME census can be run on both arms of a change
-    // (§22 measured its before/after here, `--fit cornerTurnEvidence=false` vs default).
+    // `--fit k=v` rides along so the same census can be run on both arms of a change.
     const doc = await traceImage(raster as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, planarFit: FIT })
     const docC = sharpCorners(
       doc.items.flatMap((it) => (it.kind === 'path' ? [it.subPaths] : [])).flat().map((sp) => [sp]),

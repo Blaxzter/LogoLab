@@ -1,17 +1,17 @@
-// Phase 1 of the planar-subdivision tracer (plan §Phase 1): extract the boundary
-// network of the segmentation label map as a planar graph on the pixel-corner
-// lattice. Every boundary between two regions becomes ONE edge (a chain of unit
-// "crack" segments between two junctions, or a pure closed loop), carrying the
-// ordered label pair on its two sides. Phase 2 fits each edge once; Phase 3
-// assembles regions from shared edges so adjacent regions are byte-coincident.
+// First stage of the planar tracer: extract the boundary network of a label map as
+// a planar graph on the pixel-corner lattice. Every boundary between two regions
+// becomes one edge (a chain of unit "crack" segments between two junctions, or a
+// closed loop) carrying the ordered label pair on its two sides. The fitter then
+// fits each edge once, and regions are assembled from shared edges, so adjacent
+// regions are byte-coincident.
 //
 // Lattice: corners at integer (cx,cy), cx∈0..w, cy∈0..h, indexed cy*(w+1)+cx.
-// A "crack" is the unit lattice segment between two 4-adjacent pixels of
-// different labels; out-of-bounds AND transparent (label -1) collapse to one
-// exterior label EXT so border-touching and floating regions both close.
+// A crack is the unit lattice segment between two 4-adjacent pixels of different
+// labels; out-of-bounds and transparent (label -1) collapse to one exterior label
+// EXT so border-touching and floating regions both close.
 // Directions: 0=E(+x) 1=S(+y) 2=W(-x) 3=N(-y) (screen coords, y down).
 //
-// Pure & deterministic: integer keys, fixed scan orders, no PRNG/Date.
+// Pure and deterministic: integer keys, fixed scan orders.
 
 import type { Vec } from '../path/types'
 
