@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom'
-import type { Tab } from '../store'
+import type { Tab } from '../state/store'
 
 /** The panel tabs — each maps 1:1 to a top-level route segment. */
 const TAB_SET = new Set<Tab>(['preview', 'cleanup', 'vectorize', 'editor', 'sheet', 'export'])

@@ -4,9 +4,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Grid2x2, Layers, Loader2, MousePointer2, Play, Scissors, SlidersHorizontal, Square } from 'lucide-react'
-import { useCheckerClass } from '../../store'
+import { useCheckerClass } from '../../state/store'
 import { usePanZoom } from '../../hooks/usePanZoom'
-import { useSheetStore } from '../../sheetStore'
+import { useSheetStore } from '../../state/sheetStore'
 import { Button } from '../ui/Button'
 import { Segmented } from '../ui/controls'
 import { CheckerToggle } from '../ui/CheckerToggle'

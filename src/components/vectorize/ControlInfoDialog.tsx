@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ImageIcon, Loader2, X } from 'lucide-react'
-import { useCheckerClass, useLogo } from '../../store'
+import { useCheckerClass, useLogo } from '../../state/store'
 import { getImageData } from '../../lib/image'
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from '../../lib/trace'
 import { canTraceOffThread, traceImageOffThread } from '../../lib/trace/traceOffThread'

@@ -6,7 +6,7 @@
 // useHistory, because each entry is a whole buffer and needs the cap.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLogo, useStore } from '../store'
+import { useLogo, useStore } from '../state/store'
 import { canvasToBlob, getImageData } from '../lib/image'
 import {
   alphaBounds,

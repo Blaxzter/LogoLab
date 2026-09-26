@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { Appearance, Environment, LogoAsset } from "./types";
-import { debounce, readLocal, writeLocal } from "./lib/persist/local";
+import type { Appearance, Environment, LogoAsset } from "../types";
+import { debounce, readLocal, writeLocal } from "../lib/persist/local";
 import {
     newAssetKey,
     saveSlot,
@@ -9,7 +9,7 @@ import {
     type RestoredSession,
     type StoredLogo,
     type StoredMockShots,
-} from "./lib/persist/session";
+} from "../lib/persist/session";
 
 export type Tab =
     | "preview"

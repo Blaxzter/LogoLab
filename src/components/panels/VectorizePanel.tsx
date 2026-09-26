@@ -2,7 +2,7 @@
 // vectorize studio.
 
 import { ImageOff } from 'lucide-react'
-import { useLogo } from '../../store'
+import { useLogo } from '../../state/store'
 import { PanelEmptyState } from '../PanelEmptyState'
 import { VectorizeStudio } from '../vectorize/VectorizeStudio'
 

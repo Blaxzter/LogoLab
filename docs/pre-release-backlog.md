@@ -92,7 +92,7 @@ The original report follows.
 
 ---
 
-`src/store.ts` is a plain zustand store with no persistence. The only thing
+`src/state/store.ts` is a plain zustand store with no persistence. The only thing
 written to `localStorage` in the whole product is the **theme** (`src/theme.ts`).
 Reload and you lose: the logo, every trace setting, every region marker, every
 hand-edited node, the appearance/mockup state, and the export selection.

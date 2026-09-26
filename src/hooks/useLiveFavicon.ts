@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useAppearance, useLogo } from '../store'
+import { useAppearance, useLogo } from '../state/store'
 import { loadRenderSource } from '../lib/image'
 import { renderIcon } from '../lib/pwaExport'
 

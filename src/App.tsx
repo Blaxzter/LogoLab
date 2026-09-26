@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Bug, Loader2, Menu, SlidersHorizontal, X } from 'lucide-react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useLogo, useStore } from './store'
+import { useLogo, useStore } from './state/store'
 import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { useMediaQuery } from './hooks/useIsMobile'

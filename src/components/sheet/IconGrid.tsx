@@ -8,7 +8,7 @@ import { memo, useEffect, useMemo, useRef } from 'react'
 import { AlertTriangle, Check, Download, Loader2, Pencil, ScanText, Type } from 'lucide-react'
 import { cleanAffix, cropTile, exportName, toImageData, type ImageDataLike, type Rect } from '../../lib/sheet'
 import { downloadText } from '../../lib/download'
-import { CAPTION_UNSURE_BELOW, type SheetIcon, type SheetNaming } from '../../sheetStore'
+import { CAPTION_UNSURE_BELOW, type SheetIcon, type SheetNaming } from '../../state/sheetStore'
 
 export interface IconGridProps {
   image: ImageDataLike

@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import { Loader2, Play, RefreshCw, Square, Trash2, Download } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Collapsible, Field, Segmented, Slider, TextField, Toggle } from '../ui/controls'
-import { CAPTION_UNSURE_BELOW } from '../../sheetStore'
+import { CAPTION_UNSURE_BELOW } from '../../state/sheetStore'
 import type {
   DetectMode,
   GradientMode,
@@ -16,7 +16,7 @@ import type {
   SheetIcon,
   SheetNaming,
   SheetSource,
-} from '../../sheetStore'
+} from '../../state/sheetStore'
 import type { SheetColorMode } from '../../lib/sheet/traceTile'
 import { cleanAffix, exportName } from '../../lib/sheet'
 import type { SheetGrid } from '../../lib/sheet'

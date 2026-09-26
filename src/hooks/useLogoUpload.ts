@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useStore } from '../store'
+import { useStore } from '../state/store'
 import { logError } from '../lib/errorLog'
 import { clearFailure, raiseFailure } from '../lib/failureNotice'
 import { provideReportContext } from '../lib/reportContext'

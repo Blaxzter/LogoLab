@@ -1,5 +1,5 @@
 import { Columns2, Download, Eraser, Eye, FlaskConical, Images, Layers, LayoutGrid, PenTool, Timer, Wand2 } from 'lucide-react'
-import type { Tab } from '../store'
+import type { Tab } from '../state/store'
 
 /** The panel tabs — shared by the desktop header nav and the mobile menu. */
 export const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [

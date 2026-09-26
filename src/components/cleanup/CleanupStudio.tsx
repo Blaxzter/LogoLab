@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Download, Loader2, MapPin, Redo2, SlidersHorizontal, Undo2 } from 'lucide-react'
-import { useCheckerClass, useLogo, useStore } from '../../store'
+import { useCheckerClass, useLogo, useStore } from '../../state/store'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useCleanupCanvas, type CleanupTool, type KeepRemoveMarker } from '../../hooks/useCleanupCanvas'

@@ -1,5 +1,5 @@
 import { Circle, RotateCcw, Square, Squircle } from 'lucide-react'
-import { isDefaultAppearance, useAppearance, useEnv, useStore } from '../store'
+import { isDefaultAppearance, useAppearance, useEnv, useStore } from '../state/store'
 import { useActiveTab } from '../hooks/useActiveTab'
 import { UploadDropzone } from './UploadDropzone'
 import { TryExampleButton } from './ExamplesDialog'

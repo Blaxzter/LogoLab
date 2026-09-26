@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, X } from 'lucide-react'
-import { useCheckerClass, useLogo } from '../../store'
+import { useCheckerClass, useLogo } from '../../state/store'
 import { Tooltip } from '../ui/Tooltip'
 import { getImageData } from '../../lib/image'
 import { analyzeImageOffThread, type OffThreadAnalysis } from '../../lib/trace/traceOffThread'

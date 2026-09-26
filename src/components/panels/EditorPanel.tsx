@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditableDoc } from '../../lib/path/types'
 import { docStats, serializeDoc } from '../../lib/path/model'
-import { useStore } from '../../store'
+import { useStore } from '../../state/store'
 import { debounce } from '../../lib/persist/local'
 import { claim, saveSlot, SLOTS, type StoredEditor } from '../../lib/persist/session'
 import { EditorIntake } from '../editor/EditorIntake'

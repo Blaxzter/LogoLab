@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { LogoMark } from '../LogoMark'
-import { useAppearance, useEnv } from '../../store'
+import { useAppearance, useEnv } from '../../state/store'
 
 /**
  * BrowserTabs — a browser tab-strip + address bar mock that stress-tests

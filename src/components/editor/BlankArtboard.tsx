@@ -5,7 +5,7 @@
 
 import { useState } from 'react'
 import { FilePlus2, RectangleHorizontal, RectangleVertical } from 'lucide-react'
-import { useCheckerClass } from '../../store'
+import { useCheckerClass } from '../../state/store'
 import { ActionButton } from '../ui/ActionButton'
 import {
   MAX_ARTBOARD,

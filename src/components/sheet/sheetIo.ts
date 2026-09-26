@@ -8,7 +8,7 @@ import { autoRemove, cloneImageData, defringe, despeckle } from '../../lib/bgRem
 import { canvasToBlob, getImageData, imageDataToCanvas, loadLogoFile } from '../../lib/image'
 import { toImageData } from '../../lib/sheet'
 import type { ImageDataLike } from '../../lib/sheet'
-import type { SheetIcon, SheetSource } from '../../sheetStore'
+import type { SheetIcon, SheetSource } from '../../state/sheetStore'
 
 /**
  * Long side the sheet is decoded at. A sheet is a mosaic — the per-icon crop is

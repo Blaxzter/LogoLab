@@ -6,8 +6,8 @@
 
 import { useRef, useState } from 'react'
 import { Loader2, LayoutGrid } from 'lucide-react'
-import { useLogo } from '../../store'
-import { useSheetStore } from '../../sheetStore'
+import { useLogo } from '../../state/store'
+import { useSheetStore } from '../../state/sheetStore'
 import { getImageData } from '../../lib/image'
 import { isImageFile, readSheetFile, SHEET_MAX_DIM } from './sheetIo'
 import { SheetExampleGrid } from './SheetExamples'

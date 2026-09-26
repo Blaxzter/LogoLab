@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { ImageUp, Loader2, X } from 'lucide-react'
-import { useCheckerClass, useLogo, useStore } from '../store'
+import { useCheckerClass, useLogo, useStore } from '../state/store'
 import { useLogoUpload } from '../hooks/useLogoUpload'
 import { ReportFailureLink } from './ReportIssue'
 import { Tooltip } from './ui/Tooltip'

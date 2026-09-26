@@ -297,7 +297,7 @@ Real device-frame PNGs have an opaque black screen, so LogoLab detects the scree
 (flood-fill from the center), **knocks it out** so the screenshot shows through, renders the
 **bezel on top**, and draws a synthetic notch / punch-hole. Your logo is overlaid as a
 draggable, resizable app icon. Drop in any frame + screenshot and it adapts — tune the
-default icon placement in `defaultMockups` (`src/store.ts`).
+default icon placement in `defaultMockups` (`src/state/store.ts`).
 
 ## 📄 License
 

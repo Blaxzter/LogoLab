@@ -51,7 +51,7 @@ import { breakAt, joinEnds, reversePath, splitCompound, combinePaths } from '../
 import { useHistory } from '../../hooks/useHistory'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import { svgPrefersDarkChecker } from '../../lib/image'
-import { useCheckerClass, useStore } from '../../store'
+import { useCheckerClass, useStore } from '../../state/store'
 import { ZoomControls } from '../ui/ZoomControls'
 import { CheckerToggle } from '../ui/CheckerToggle'
 import { ActionButton, isOff } from '../ui/ActionButton'

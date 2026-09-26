@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import { App } from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { useStore } from './store'
+import { useStore } from './state/store'
 import { installErrorLog } from './lib/errorLog'
 import { provideReportContext } from './lib/reportContext'
 import {

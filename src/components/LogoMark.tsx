@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { useAppearance, useLogo } from '../store'
+import { useAppearance, useLogo } from '../state/store'
 import type { IconShape } from '../types'
 
 export interface LogoMarkProps {

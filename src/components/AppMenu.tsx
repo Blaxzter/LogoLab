@@ -1,6 +1,6 @@
 import { Bug, Coffee, Heart, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
-import { useLogo, useStore } from '../store'
+import { useLogo, useStore } from '../state/store'
 import { AgentSetupButton } from './AgentSetup'
 import { InstallAppButton } from './PwaPrompts'
 import { SavedStatusRow } from './SavedChip'

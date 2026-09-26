@@ -21,7 +21,7 @@ import {
     Undo2,
     X,
 } from "lucide-react";
-import { useCheckerClass, useLogo, useStore } from "../../store";
+import { useCheckerClass, useLogo, useStore } from "../../state/store";
 import { usePanZoom, type PanZoom } from "../../hooks/usePanZoom";
 import { useHistory } from "../../hooks/useHistory";
 import { ZoomSurface } from "../ui/ZoomSurface";

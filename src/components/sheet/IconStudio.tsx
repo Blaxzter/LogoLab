@@ -14,8 +14,8 @@ import { canvasToBlob, imageDataToCanvas } from '../../lib/image'
 import { cropTile, exportName, toImageData, type ImageDataLike } from '../../lib/sheet'
 import { planTileTrace, repaintDoc, TILE_PRECISION, tileTraceInput } from '../../lib/sheet/traceTile'
 import { serializeDoc } from '../../lib/path/model'
-import { useStore } from '../../store'
-import { useSheetStore, type SheetIcon } from '../../sheetStore'
+import { useStore } from '../../state/store'
+import { useSheetStore, type SheetIcon } from '../../state/sheetStore'
 import type { EditableDoc } from '../../lib/path/types'
 
 /** How long the studio's live edits settle before they are written back. */

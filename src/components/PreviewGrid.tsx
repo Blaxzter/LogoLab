@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { useLogo } from '../store'
+import { useLogo } from '../state/store'
 import PhoneHomeIOS from './scenes/PhoneHomeIOS'
 import PhoneHomeAndroid from './scenes/PhoneHomeAndroid'
 import SplashScreen from './scenes/SplashScreen'

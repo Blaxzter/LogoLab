@@ -223,7 +223,7 @@ failure modes (reporting saved while a newer value is still in memory, or sticki
 
 Two things to keep in mind when touching a studio:
 
-* Anything derived from the working PIXELS is stored with `assetKey` (`src/store.ts`), which is
+* Anything derived from the working PIXELS is stored with `assetKey` (`src/state/store.ts`), which is
   reissued whenever those pixels change. Check it before adopting a restored value, or a trace
   ends up shown over a different image than it was cut from.
 * A restored studio must not re-run the probes that set its defaults. `VectorizeStudio` keeps

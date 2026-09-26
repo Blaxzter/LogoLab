@@ -4,7 +4,7 @@
 // each exercises a different part of the splitter.
 
 import { useCallback, useState } from 'react'
-import { useSheetStore } from '../../sheetStore'
+import { useSheetStore } from '../../state/sheetStore'
 import { ExampleCard } from '../ExamplesDialog'
 import { readSheetFile } from './sheetIo'
 

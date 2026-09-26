@@ -12,7 +12,7 @@ import { ZoomSurface } from '../ui/ZoomSurface'
 import { useFitBox } from '../vectorize/useFitBox'
 import type { PanZoom } from '../../hooks/usePanZoom'
 import type { Rect } from '../../lib/sheet'
-import type { SheetIcon, SheetSource } from '../../sheetStore'
+import type { SheetIcon, SheetSource } from '../../state/sheetStore'
 
 type Corner = 'nw' | 'ne' | 'sw' | 'se'
 

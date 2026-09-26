@@ -1,5 +1,5 @@
 import { LogoMark } from '../LogoMark'
-import { useAppearance } from '../../store'
+import { useAppearance } from '../../state/store'
 
 /**
  * SizeMatrix — a scalability board. The logo is rendered at a fixed ladder of
