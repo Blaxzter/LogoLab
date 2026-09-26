@@ -60,7 +60,9 @@ export function useInkDecision({
    * `apply: false` only records the measurement (for the "why" line and the mono
    * guide) and leaves the options alone, as a restored session needs.
    */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the setters are the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setForceColor): a state setter, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setForceColorOn): a state setter, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setOpts): a state setter, stable
   const applyInkDecision = useCallback((mode: InkColorMode, pixels?: ImageData | null, apply = true) => {
     const img = pixels ?? probePixelsRef.current
     if (!img) {
@@ -114,7 +116,7 @@ export function useInkDecision({
   }, [inkPlan, opts.mode, opts.threshold])
 
   /** Reset the mono cut to what the probe measured for this image. */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: setOpts is the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setOpts): a state setter, stable
   const useMeasuredCut = useCallback(() => {
     if (!inkPlan) return
     setOpts((o) => ({

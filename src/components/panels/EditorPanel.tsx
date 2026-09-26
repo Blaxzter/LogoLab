@@ -93,7 +93,7 @@ export default function EditorPanel() {
   const close = useCallback(() => {
     saveSlot(SLOTS.editor, null)
     setOpen(null)
-  }, [])
+  }, [setOpen])
 
   if (!open) {
     return <EditorIntake onOpen={(doc, openName) => setOpen({ doc, name: openName })} />

@@ -5,7 +5,7 @@
 // History is its own capped stack of full ImageData snapshots rather than
 // useHistory, because each entry is a whole buffer and needs the cap.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLogo, useStore } from '../state/store'
 import { canvasToBlob, getImageData } from '../lib/image'
 import {
@@ -156,7 +156,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null)
 
   const isBrush = tool === 'erase' || tool === 'restore'
-  const opts: RemoveOptions = { tolerance, softness }
+  // Memoized so the tool callbacks below keep their identity between renders.
+  const opts: RemoveOptions = useMemo(() => ({ tolerance, softness }), [tolerance, softness])
 
   // Two-finger pinch-zoom + pan on touch. One finger always drives the active
   // tool (paint/flood/marker); a second finger turns the gesture into navigation.

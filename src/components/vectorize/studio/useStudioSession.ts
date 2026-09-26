@@ -54,7 +54,9 @@ export function useSessionSave({
   // Settings go to localStorage so they apply synchronously on the next mount.
   // The two "touched" flags are refs; they only change alongside a value in the
   // dependency list, so this effect sees them fresh.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the refs are the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(decidedForRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(forceColorTouchedRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(gradientsTouchedRef.current): a ref, read when the code runs
   useEffect(() => {
     if (!persist) return
     saveStudioView({
@@ -76,7 +78,7 @@ export function useSessionSave({
   // value, not `derivedDoc`: force colour is a view, and baking it in would lose
   // the real fills. Don't delete the slot on a null doc: it is null for one
   // commit on mount before the seed lands.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: dirtyRef is the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(dirtyRef.current): a ref, read when the code runs
   useEffect(() => {
     if (!persist || !doc) return
     saveStudioDoc(assetKey, doc, dirtyRef.current)

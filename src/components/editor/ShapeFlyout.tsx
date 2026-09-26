@@ -63,6 +63,7 @@ export function ShapeFlyout({
     menuRef.current?.focus()
   }, [open, shown])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(pick): only calls setters and the parent's memoized pickTool
   useEffect(() => {
     if (!open) return
     const onDown = (e: PointerEvent) => {

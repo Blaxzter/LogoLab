@@ -60,10 +60,10 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
    * same pixels the batch used — the enlarged crop. The native crop would
    * re-trace the icon at lower quality as soon as a slider moved.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: planned once per opened tile; later control changes must not re-plan it
   const plan = useMemo(
     () =>
       planTileTrace(pixels, tile.opts ?? traceOptions, { colorMode, gradientMode, background: sheetBackground, hiRes }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [pixels, tile.id],
   )
   const traceInput = useMemo(() => tileTraceInput(pixels, plan.scale), [pixels, plan.scale])
@@ -154,6 +154,7 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
    * vs mono per tile, so open on this tile's resolved options (or, for a tile
    * the batch never reached, on the decision the batch would make).
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seeds the controls once per tile; the user's later edits must not reset them
   const initialOptions = useMemo(() => tile.opts ?? tile.resolved ?? plan.opts, [tile.id, plan])
 
   /** Push this icon into the app's working logo, for the Cleanup / Export tabs. */

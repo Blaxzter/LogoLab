@@ -233,7 +233,6 @@ function cropPlanes(x: Float32Array, W: number, H: number, l: number, t: number,
   return out
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any
 
 /** onnxruntime-node ships with @huggingface/transformers; pnpm hides it under .pnpm. */

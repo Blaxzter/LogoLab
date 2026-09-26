@@ -35,7 +35,15 @@ export function useContentProbe({
   // Auto-default the gradients toggle from image content: flat art ⇒ off, real
   // ramps ⇒ on. Only a suggestion: a manual flip is never overridden, and each
   // image is probed once.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the refs and setOpts are the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(autoGradientsSrcRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(colorModeRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(gradientsTouchedRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setOpts): a state setter, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(gradientsTouchedRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(probePixelsRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(decidedForRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(autoGradientsSrcRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(decidedForRef): a ref, read when the code runs
   useEffect(() => {
     const src = logo.src
     if (!src) return

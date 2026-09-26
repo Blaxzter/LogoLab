@@ -32,7 +32,7 @@ export function useMarkers({
   // "remove" (dissolve the section and heal its neighbours into the gap).
   const [markMode, setMarkMode] = useState<MarkMode>(session.view?.markMode ?? 'separate')
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: setOpts is the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setOpts): a state setter, stable
   const addMarker = useCallback(
     (x: number, y: number) => {
       const m = markMode === 'flat' ? { x, y, flat: true } : markMode === 'remove' ? { x, y, remove: true } : { x, y }
@@ -40,14 +40,15 @@ export function useMarkers({
     },
     [markMode],
   )
-  // biome-ignore lint/correctness/useExhaustiveDependencies: setOpts is the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setOpts): a state setter, stable
   const removeMarker = useCallback((index: number) => {
     setOpts((o) => ({
       ...o,
       markers: (o.markers ?? []).filter((_, i) => i !== index),
     }))
   }, [])
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the setters are the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setTool): a state setter, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setOpts): a state setter, stable
   const clearMarkers = useCallback(() => {
     setTool('pan')
     setOpts((o) => (o.markers && o.markers.length ? { ...o, markers: [] } : o))
@@ -55,7 +56,7 @@ export function useMarkers({
 
   // Markers only apply to colour tracing; leaving that mode exits the placement
   // tool (the markers persist).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: setTool is the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setTool): a state setter, stable
   useEffect(() => {
     const colorTrace = (!isVectorSource || retraceVector === 'retrace') && opts.mode === 'color'
     if (!colorTrace && tool === 'mark') setTool('pan')

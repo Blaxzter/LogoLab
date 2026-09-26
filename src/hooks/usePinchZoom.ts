@@ -47,6 +47,7 @@ export function usePinchZoom(pz: PanZoom, boxFor?: (e: React.PointerEvent) => DO
   }, [])
 
   /** @returns true when the move was consumed by a pinch (host should not pan/paint). */
+  // biome-ignore lint/correctness/useExhaustiveDependencies(box): reads boxRef, which always holds the latest boxFor
   const move = useCallback(
     (e: React.PointerEvent): boolean => {
       if (e.pointerType !== 'touch' || !pts.current.has(e.pointerId)) return false

@@ -233,6 +233,8 @@ const TileCanvas = memo(function TileCanvas({
   className?: string
 }) {
   const ref = useRef<HTMLCanvasElement | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies(rect.h): keyed on the rect's values so a new rect object with the same box doesn't re-crop
+  // biome-ignore lint/correctness/useExhaustiveDependencies(rect): keyed on the rect's values so a new rect object with the same box doesn't re-crop
   const pixels = useMemo(
     () =>
       cropTile(

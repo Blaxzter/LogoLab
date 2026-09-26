@@ -148,7 +148,6 @@ function loadWorker(options: { precache: string[]; fetch: (request: Request) => 
       new target(typeof input === 'string' ? new URL(input, 'https://logolab.test').href : input, init),
   })
 
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   new Function('self', 'caches', 'fetch', 'Request', source)(self, cachesApi, fetchImpl, ScopedRequest)
 
   return {

@@ -45,7 +45,9 @@ export function useEmptyNotice({
    * looking, with a one-click fix when there is one. The controls already flag
    * dead settings; this covers what slips through.
    */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the setters and colorModeRef are the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(colorModeRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setColorMode): a state setter, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setOpts): a state setter, stable
   return useMemo((): EmptyNotice | null => {
     if (busy || !derivedDoc || !stats || stats.paths > 0) return null
 

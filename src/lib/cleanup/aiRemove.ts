@@ -61,7 +61,6 @@ export async function pickDevice(): Promise<Device> {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type LoadedModel = { model: any; processor: any }
 
 // Cache the load promise per device so a failed webgpu attempt doesn't poison a
@@ -79,7 +78,6 @@ function loadModel(device: Device, onProgress?: (p: AiProgress) => void) {
       // Progress arrives per file, several files in parallel; aggregate bytes
       // across all of them so the bar never jumps backwards.
       const seen = new Map<string, { loaded: number; total: number }>()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const progress_callback = (p: any) => {
         if (p?.status !== 'progress') return
         if (typeof p.loaded === 'number' && typeof p.total === 'number' && p.total > 0) {
@@ -101,7 +99,6 @@ function loadModel(device: Device, onProgress?: (p: AiProgress) => void) {
       }
       const [model, processor] = await Promise.all([
         AutoModel.from_pretrained(MODEL_ID, {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           config: { model_type: 'custom' } as any,
           // Pin the backend + precision explicitly: letting Transformers.js
           // auto-select silently chose a broken WebGPU path on Apple Silicon.
@@ -110,7 +107,6 @@ function loadModel(device: Device, onProgress?: (p: AiProgress) => void) {
           progress_callback,
         }),
         AutoProcessor.from_pretrained(MODEL_ID, {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           config: PROCESSOR_CONFIG as any,
           progress_callback,
         }),
@@ -133,9 +129,7 @@ function loadModel(device: Device, onProgress?: (p: AiProgress) => void) {
  * results.
  */
 async function runInference(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   model: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   processor: any,
   img: ImageData,
   onProgress?: (p: AiProgress) => void,

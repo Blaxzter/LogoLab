@@ -133,7 +133,7 @@ export function useLabRun<C, R>(
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the caller supplies the dependency list (opts.deps)
   }, opts.deps)
 
   return { results, pending, running, status, progress: { done: results.length, total: cases.length, cached } }

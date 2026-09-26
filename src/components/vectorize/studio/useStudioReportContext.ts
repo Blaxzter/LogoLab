@@ -24,7 +24,8 @@ export function useStudioReportContext({
   // Published for the crash screen's bug report (lib/report/reportContext). Reads the
   // refs, not closed-over values, so the snapshot taken at crash time describes
   // the options live then. Never includes pixels, only the image's shape.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the refs are the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(optsRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(docRef.current): a ref, read when the code runs
   useEffect(
     () =>
       provideReportContext(persist ? 'vectorize' : 'sheet-tile', () => ({

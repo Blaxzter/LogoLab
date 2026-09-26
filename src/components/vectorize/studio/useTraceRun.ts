@@ -68,7 +68,10 @@ export function useTraceRun({
   // re-trace armed just before Stop fires ~DEBOUNCE_MS later and clobbers the doc).
   const autoRunTimerRef = useRef<number | null>(null)
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the setters, dirtyRef and precision are the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(precision): a constant
+  // biome-ignore lint/correctness/useExhaustiveDependencies(dirtyRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setScore): a state setter, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setSelectedNodes): a state setter, stable
   const run = useCallback(async () => {
     if (!logo.src) return
     const runId = ++runIdRef.current
@@ -210,7 +213,9 @@ export function useTraceRun({
 
   // Auto-run (debounced) whenever the source or parameters change — unless
   // the user has hand-edited paths, in which case their edits win.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the refs are the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(skipRetraceRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(skipRetraceRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(dirtyRef.current): a ref, read when the code runs
   useEffect(() => {
     // An opacity-only palette edit already recoloured the canvas live (geometry
     // is unchanged), so the trace would be wasted work — skip this one run.

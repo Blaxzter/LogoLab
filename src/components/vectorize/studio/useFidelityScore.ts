@@ -46,7 +46,7 @@ export function useFidelityScore({
    *
    * Skipped while a trace is running.
    */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: setScore is the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setScore): a state setter, stable
   useEffect(() => {
     if (busy) return // run() cleared it; scoring a doc about to be replaced is waste
     if (!derivedDoc || !logo.src || !canScore) {

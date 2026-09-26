@@ -245,6 +245,7 @@ export function VectorizeStudio({
   // Adopt a document the host already traced for this source (the icon sheet
   // traces tiles in a batch). Runs before the auto-run effect and claims the
   // gradient probe and first run, so opening an icon doesn't re-trace it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only: another tile remounts the studio (keyed by tile id)
   useEffect(() => {
     // Same for a restored document: it was traced from these pixels.
     const seeded = initialDoc ?? session.doc
@@ -258,7 +259,6 @@ export function VectorizeStudio({
     autoGradientsSrcRef.current = initialDoc ? logo.src : null
     // Mount only: a later prop change means the host swapped tiles, and that
     // remounts the studio (keyed by tile id) rather than mutating this one.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const {

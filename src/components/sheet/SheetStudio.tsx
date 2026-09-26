@@ -132,7 +132,7 @@ export function SheetStudio() {
     setOpenId(null)
   }
 
-  const onExport = async () => {
+  const onExport = useCallback(async () => {
     if (!image) return
     setExporting(true)
     try {
@@ -150,7 +150,7 @@ export function SheetStudio() {
     } finally {
       setExporting(false)
     }
-  }
+  }, [image, exportPng, exportSvg, transparentPng, source])
 
   const controlProps = useMemo(
     () => ({
@@ -193,8 +193,6 @@ export function SheetStudio() {
       onReplace: () => replaceInput.current?.click(),
       onClear: clear,
     }),
-    // onExport closes over the export toggles, which are all in the dep list.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       detect,
       grid,
@@ -211,7 +209,19 @@ export function SheetStudio() {
       exportPng,
       transparentPng,
       exporting,
-      source,
+      onExport,
+      // Store actions: stable for the store's lifetime.
+      patchDetect,
+      setTraceOptions,
+      setColorMode,
+      setHiRes,
+      setGradientMode,
+      setNaming,
+      readCaptions,
+      traceAll,
+      stopAll,
+      setAllIncluded,
+      clear,
     ],
   )
 

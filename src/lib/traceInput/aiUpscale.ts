@@ -56,9 +56,7 @@ const CACHE_NAME = 'logolab-models'
 const ORT_WEB_VERSION = '1.26.0-dev.20260416-b7804b056c'
 const ORT_CDN = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_WEB_VERSION}/dist/`
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ort = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Session = any
 
 let ortPromise: Promise<Ort> | null = null

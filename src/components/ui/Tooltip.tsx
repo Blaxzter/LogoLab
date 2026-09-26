@@ -61,6 +61,7 @@ export function Tooltip({
     }
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(clearTimer): clears a ref-held timer; its identity is irrelevant
   const show = useCallback(
     (immediate = false) => {
       clearTimer()
@@ -70,12 +71,14 @@ export function Tooltip({
     [delay],
   )
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(clearTimer): clears a ref-held timer; its identity is irrelevant
   const hide = useCallback(() => {
     clearTimer()
     setOpen(false)
     setCoords(null)
   }, [])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(clearTimer): clears a ref-held timer; its identity is irrelevant
   useEffect(() => () => clearTimer(), [])
 
   // Layout effect so the bubble is positioned before paint (no flash at 0,0).

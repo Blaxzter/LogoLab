@@ -30,7 +30,7 @@ export function useDocEdits({
   selectedPathRef: RefObject<string | null>
   handleSelectPath: (id: string | null) => void
 }) {
-  // biome-ignore lint/correctness/useExhaustiveDependencies: dirtyRef is the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(dirtyRef): a ref, read when the code runs
   const commitDoc = useCallback(
     (d: EditableDoc) => {
       historySet(d, true)
@@ -63,7 +63,10 @@ export function useDocEdits({
   // automatic extraction. An opacity-only change can't move a region boundary, so
   // the matching paths' fill-opacity is updated live and the re-trace skipped;
   // hue / add / remove fall through to the debounced re-trace.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the refs and setOpts are the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(docRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setOpts): a state setter, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(optsRef.current.palette): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(skipRetraceRef): a ref, read when the code runs
   const handlePaletteChange = useCallback(
     (palette: { r: number; g: number; b: number; a?: number }[] | null) => {
       const old = optsRef.current.palette ?? null
@@ -101,7 +104,7 @@ export function useDocEdits({
   )
 
   const handleCanvasChange = useCallback((d: EditableDoc) => historySet(mergeFills(d)), [historySet, mergeFills])
-  // biome-ignore lint/correctness/useExhaustiveDependencies: dirtyRef is the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(dirtyRef): a ref, read when the code runs
   const handleCanvasCommit = useCallback(
     (d: EditableDoc) => {
       historySet(mergeFills(d), true)
@@ -143,7 +146,7 @@ export function useDocEdits({
     [doc, commitDoc],
   )
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: selectedPathRef is the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(selectedPathRef.current): a ref, read when the code runs
   const handleDeleteItem = useCallback(
     (id: string) => {
       if (!doc) return

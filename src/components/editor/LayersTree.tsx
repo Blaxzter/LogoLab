@@ -104,6 +104,8 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
     if (to) propsRef.current.onMove(state.ids, to)
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(endDrag): only touches refs and state setters
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setDragState): only touches refs and state setters
   const startDrag = useCallback((id: string, e: React.PointerEvent) => {
     e.preventDefault()
     e.stopPropagation()

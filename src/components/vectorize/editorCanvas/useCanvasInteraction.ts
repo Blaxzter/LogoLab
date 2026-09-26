@@ -161,6 +161,7 @@ export function useCanvasInteraction({
   // Escape mid-drag cancels: restore the pre-gesture doc, never commit. The
   // capture-phase listener runs before (and suppresses) the studio's own
   // Escape handling, so a cancel doesn't also clear the selection.
+  // biome-ignore lint/correctness/useExhaustiveDependencies(endDrag): only touches refs
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return

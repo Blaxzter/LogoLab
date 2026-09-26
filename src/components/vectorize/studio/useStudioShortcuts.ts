@@ -58,7 +58,10 @@ export function useStudioShortcuts({
 }) {
   // Window-level, so a studio that is mounted but not in charge must stand down,
   // or two studios would both undo on one Ctrl+Z.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the setters and seedRef are the studio's, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(seedRef.current.pt): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setSelectedNodes): a state setter, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(seedRef.current?.id): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setTool): a state setter, stable
   useEffect(() => {
     if (!active) return
     const onKey = (e: KeyboardEvent) => {
