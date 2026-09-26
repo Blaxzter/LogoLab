@@ -55,7 +55,7 @@ const countCorners = (nodes: PathNode[]) => nodes.filter((n) => n.kind === 'corn
 // Key vertices
 // ---------------------------------------------------------------------------
 
-test('keyVertexIndices keeps a square\'s four corners (and nothing on its edges)', () => {
+test("keyVertexIndices keeps a square's four corners (and nothing on its edges)", () => {
   const sq = samplePolygon([
     [10, 10],
     [90, 10],

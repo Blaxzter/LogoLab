@@ -37,23 +37,7 @@ function byteLength(s: string): number {
 
 /** Tags whose geometry numbers (in d/points/coords) we round. */
 const SHAPE_TAGS = ['path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse', 'line']
-const COORD_ATTRS = [
-  'd',
-  'points',
-  'x',
-  'y',
-  'x1',
-  'y1',
-  'x2',
-  'y2',
-  'cx',
-  'cy',
-  'r',
-  'rx',
-  'ry',
-  'width',
-  'height',
-]
+const COORD_ATTRS = ['d', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height']
 
 const FLOAT_RE = /-?\d*\.\d+(?:e[-+]?\d+)?/gi
 
@@ -199,7 +183,10 @@ function shapeSpan(el: Element, area: number): number {
     const nums = d.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi)?.map(Number) ?? []
     for (let i = 0; i + 1 < nums.length; i += 2) consider(nums[i], nums[i + 1])
   } else if (tag === 'polygon' || tag === 'polyline') {
-    const pts = (el.getAttribute('points') || '').split(/[\s,]+/).map(Number).filter(Number.isFinite)
+    const pts = (el.getAttribute('points') || '')
+      .split(/[\s,]+/)
+      .map(Number)
+      .filter(Number.isFinite)
     for (let i = 0; i + 1 < pts.length; i += 2) consider(pts[i], pts[i + 1])
   } else if (tag === 'rect') {
     const x = parseFloat(el.getAttribute('x') || '0')
@@ -279,7 +266,10 @@ export function cleanSvg(svg: string, opts: CleanOptions): CleanResult {
         // Drop any conflicting inline fill in style.
         const style = el.getAttribute('style')
         if (style && /fill\s*:/i.test(style)) {
-          const next = style.replace(/(?:^|;)\s*fill\s*:[^;]*/gi, '').replace(/^;+/, '').trim()
+          const next = style
+            .replace(/(?:^|;)\s*fill\s*:[^;]*/gi, '')
+            .replace(/^;+/, '')
+            .trim()
           if (next) el.setAttribute('style', next)
           else el.removeAttribute('style')
         }

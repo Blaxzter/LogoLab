@@ -74,14 +74,9 @@ export function Collapsible({
       >
         <span className="flex min-w-0 flex-col">
           <span className="text-sm font-medium text-ink">{title}</span>
-          {summary && !open && (
-            <span className="truncate text-[11px] text-muted">{summary}</span>
-          )}
+          {summary && !open && <span className="truncate text-[11px] text-muted">{summary}</span>}
         </span>
-        <ChevronDown
-          size={16}
-          className={`shrink-0 text-muted transition-transform ${open ? 'rotate-180' : ''}`}
-        />
+        <ChevronDown size={16} className={`shrink-0 text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && <div className="flex flex-col gap-5 border-t border-line px-3 py-4">{children}</div>}
     </div>
@@ -144,9 +139,7 @@ export function Slider({
         style={trackStyle}
         className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-line-strong"
       />
-      <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-ink-2">
-        {display}
-      </span>
+      <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-ink-2">{display}</span>
     </div>
   )
 }
@@ -207,9 +200,7 @@ export function Segmented<T extends string>({
               type="button"
               onClick={() => onChange(opt.value)}
               className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[12px] px-2 text-xs font-medium transition-all ${
-                active
-                  ? 'bg-surface text-ink shadow-xs'
-                  : 'text-muted hover:text-ink-2'
+                active ? 'bg-surface text-ink shadow-xs' : 'text-muted hover:text-ink-2'
               }`}
             >
               {opt.label}

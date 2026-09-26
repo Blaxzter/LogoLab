@@ -226,18 +226,13 @@ export function snapBoxDelta(
 
 /** Constrain a delta to the dominant axis (Shift-drag). */
 export function axisLock(delta: Vec): Vec {
-  return Math.abs(delta.x) >= Math.abs(delta.y)
-    ? { x: delta.x, y: 0 }
-    : { x: 0, y: delta.y }
+  return Math.abs(delta.x) >= Math.abs(delta.y) ? { x: delta.x, y: 0 } : { x: 0, y: delta.y }
 }
 
 /**
  * Arrow-key step: 1 unit, Shift = 10×, Alt = 0.1×.
  */
-export function nudgeStep(
-  base: number,
-  mods: { shift?: boolean; alt?: boolean },
-): number {
+export function nudgeStep(base: number, mods: { shift?: boolean; alt?: boolean }): number {
   if (mods.shift) return base * 10
   if (mods.alt) return base / 10
   return base

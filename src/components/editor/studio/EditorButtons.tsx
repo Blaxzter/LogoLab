@@ -6,14 +6,10 @@ import { TOOL_ICON } from '../toolIcons'
 
 /** One segmented group of tool buttons. */
 export function ToolPill({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-0.5 rounded-lg bg-surface-3 p-0.5">{children}</div>
-  )
+  return <div className="flex items-center gap-0.5 rounded-lg bg-surface-3 p-0.5">{children}</div>
 }
 
-export function ToolBtn({
-  id, tool, onPick,
-}: { id: EditorTool; tool: EditorTool; onPick: (t: EditorTool) => void }) {
+export function ToolBtn({ id, tool, onPick }: { id: EditorTool; tool: EditorTool; onPick: (t: EditorTool) => void }) {
   const def = toolDef(id)
   return (
     <ActionButton
@@ -36,7 +32,12 @@ export function Divider() {
 }
 
 export function BarBtn({
-  label, note, onClick, reason, active, children,
+  label,
+  note,
+  onClick,
+  reason,
+  active,
+  children,
 }: {
   label: string
   note?: string
@@ -69,8 +70,16 @@ export function BarBtn({
 }
 
 export function MiniBtn({
-  label, note, onClick, reason,
-}: { label: string; note?: string; onClick: () => void; reason?: string | null }) {
+  label,
+  note,
+  onClick,
+  reason,
+}: {
+  label: string
+  note?: string
+  onClick: () => void
+  reason?: string | null
+}) {
   // `.btn` handles its own disabled styling via `aria-disabled` (index.css).
   return (
     <ActionButton

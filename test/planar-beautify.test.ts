@@ -16,7 +16,13 @@ import type { EdgeRef, EditableDoc, PathItem, PathNode, SharedEdge, Topology, Ve
 
 const OPTS = { ...DEFAULT_BEAUTIFY_OPTIONS }
 
-const pn = (x: number, y: number, hIn: PathNode['hIn'] = null, hOut: PathNode['hOut'] = null): PathNode => ({ x, y, hIn, hOut, kind: 'corner' })
+const pn = (x: number, y: number, hIn: PathNode['hIn'] = null, hOut: PathNode['hOut'] = null): PathNode => ({
+  x,
+  y,
+  hIn,
+  hOut,
+  kind: 'corner',
+})
 
 /** A filled disc of label 1 in a field of label 0. */
 function disc(w: number, h: number, cx: number, cy: number, r: number): Int32Array {
@@ -87,7 +93,8 @@ const centreOf = (nodes: PathNode[]): { cx: number; cy: number } => ({
 // --- 1a/coincidence: disc edge → circle, both regions follow ----------------
 
 test('planar-beautify: disc edge snaps to a 4-node circle; both regions coincident', () => {
-  const W = 40, H = 40
+  const W = 40,
+    H = 40
   const trace = tracePlanar(disc(W, H, 20, 20, 12), W, H)
   const edgeId = sharedEdgeId(trace.loopsByLabel)
 
@@ -184,7 +191,10 @@ test('planar-beautify: concentric disc edges are aligned to a common centre', ()
   // …and the concentric solver pulled them to one shared centre.
   const c0 = centreOf(topo.edges[0].nodes)
   const c1 = centreOf(topo.edges[1].nodes)
-  assert.ok(Math.abs(c0.cx - c1.cx) < 1e-6 && Math.abs(c0.cy - c1.cy) < 1e-6, `centres ${JSON.stringify(c0)} vs ${JSON.stringify(c1)}`)
+  assert.ok(
+    Math.abs(c0.cx - c1.cx) < 1e-6 && Math.abs(c0.cy - c1.cy) < 1e-6,
+    `centres ${JSON.stringify(c0)} vs ${JSON.stringify(c1)}`,
+  )
   // Distinct radii (|12-6| exceeds the relation window) are NOT reconciled.
   const r0 = Math.max(...topo.edges[0].nodes.map((n) => Math.abs(n.x - c0.cx)))
   const r1 = Math.max(...topo.edges[1].nodes.map((n) => Math.abs(n.x - c1.cx)))
@@ -210,7 +220,8 @@ test('planar-beautify: deterministic (twice → identical topology)', () => {
 // --- Phase 5 editing still operates coherently on the beautified graph -------
 
 test('planar-beautify: dragging a node on a beautified shared edge moves both regions', () => {
-  const W = 40, H = 40
+  const W = 40,
+    H = 40
   const trace = tracePlanar(disc(W, H, 20, 20, 12), W, H)
   const edgeId = sharedEdgeId(trace.loopsByLabel)
   const topo = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, OPTS)

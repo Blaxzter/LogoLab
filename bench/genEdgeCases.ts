@@ -57,9 +57,11 @@ function star(cx: number, cy: number, R: number, r: number, n = 5): string {
 
 /** The rectangle a butt-capped stroke of width `w` along (x1,y1)→(x2,y2) actually paints. */
 function thickLine(x1: number, y1: number, x2: number, y2: number, w: number): string {
-  const dx = x2 - x1, dy = y2 - y1
+  const dx = x2 - x1,
+    dy = y2 - y1
   const len = Math.hypot(dx, dy) || 1
-  const px = (-dy / len) * (w / 2), py = (dx / len) * (w / 2)
+  const px = (-dy / len) * (w / 2),
+    py = (dx / len) * (w / 2)
   const p = (x: number, y: number): string => `${x.toFixed(2)},${y.toFixed(2)}`
   return [p(x1 + px, y1 + py), p(x2 + px, y2 + py), p(x2 - px, y2 - py), p(x1 - px, y1 - py)].join(' ')
 }
@@ -123,7 +125,10 @@ const CASES: { name: string; note: string; make: () => string }[] = [
     make: () => {
       const ws = [3, 2, 1.5, 1, 0.75, 0.5, 0.25]
       const bars = ws
-        .map((w, i) => { const cx = V * (0.12 + i * 0.11); return `<rect x="${(cx - w / 2).toFixed(2)}" y="25.6" width="${w}" height="204.8" fill="${INK}"/>` })
+        .map((w, i) => {
+          const cx = V * (0.12 + i * 0.11)
+          return `<rect x="${(cx - w / 2).toFixed(2)}" y="25.6" width="${w}" height="204.8" fill="${INK}"/>`
+        })
         .join('')
       const diag = `<polygon points="${thickLine(76.8, 0, 179.2, 256, 1)}" fill="${rgb(180, 40, 60)}"/>`
       return svg(`<rect width="${V}" height="${V}" fill="${WHITE}"/>${bars}${diag}`)
@@ -199,7 +204,9 @@ const CASES: { name: string; note: string; make: () => string }[] = [
         for (let j = 0; j < ny; j++)
           for (let i = 0; i < nx; i++)
             if ((i + j) % 2 === 0)
-              parts.push(`<rect x="${(b.x0 + i * b.s).toFixed(1)}" y="${(y0 + j * b.s).toFixed(1)}" width="${b.s}" height="${b.s}" fill="${INK}"/>`)
+              parts.push(
+                `<rect x="${(b.x0 + i * b.s).toFixed(1)}" y="${(y0 + j * b.s).toFixed(1)}" width="${b.s}" height="${b.s}" fill="${INK}"/>`,
+              )
       }
       return svg(parts.join(''))
     },
@@ -227,7 +234,10 @@ const CASES: { name: string; note: string; make: () => string }[] = [
   {
     name: 'sharp-star',
     note: 'sharp-pointed star → corner detection (points must stay sharp)',
-    make: () => svg(`<rect width="${V}" height="${V}" fill="${WHITE}"/><polygon points="${star(128, 128, 115, 36)}" fill="${NAVY}"/>`),
+    make: () =>
+      svg(
+        `<rect width="${V}" height="${V}" fill="${WHITE}"/><polygon points="${star(128, 128, 115, 36)}" fill="${NAVY}"/>`,
+      ),
   },
   {
     name: 'annulus',
@@ -385,8 +395,7 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       // Plate: three sharp corners + ONE quarter arc (r28) at the bottom-left, which
       // boundary C crosses ~4px below its start. Sharp corners: bar 4 + square 4 + plate 3
       // = 11, over the corner gate's CORNER_MIN_COUNT of 10, so that gate stays applicable.
-      const plate =
-        `<path d="M140,165 H240 V245 H168 A28,28 0 0,1 140,217 Z" fill="${DEEP}"/>`
+      const plate = `<path d="M140,165 H240 V245 H168 A28,28 0 0,1 140,217 Z" fill="${DEEP}"/>`
       return svg(
         `<rect width="${V}" height="${V}" fill="${B1}"/>` +
           below(62, 96, B2) + // boundary A
@@ -712,9 +721,12 @@ const CASES: { name: string; note: string; make: () => string }[] = [
         `<rect width="${V}" height="${V}" fill="${WHITE}"/>` +
           // Row 1 — D-counters at the witness's own scale (mastercard's 'e' eye is
           // 26×9 units @512-for-2) with per-cell rotation phases.
-          `<rect x="14" y="18" width="72" height="46" fill="${INK}"/>` + dseg(50, 52, 26, 9, 0) +
-          `<rect x="100" y="18" width="72" height="46" fill="${INK}"/>` + dseg(136, 52, 34, 12, 9) +
-          `<rect x="186" y="18" width="60" height="46" fill="${INK}"/>` + dseg(216, 52, 20, 8, 31) +
+          `<rect x="14" y="18" width="72" height="46" fill="${INK}"/>` +
+          dseg(50, 52, 26, 9, 0) +
+          `<rect x="100" y="18" width="72" height="46" fill="${INK}"/>` +
+          dseg(136, 52, 34, 12, 9) +
+          `<rect x="186" y="18" width="60" height="46" fill="${INK}"/>` +
+          dseg(216, 52, 20, 8, 31) +
           // Row 2 — disc-union crotches, ink interior angles ~94°/77°/89°.
           lensPair(52, 130, 30, 22, 0) +
           lensPair(140, 130, 24, 15, 17) +
@@ -775,7 +787,12 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       // palette entries rather than only on the ink↔paper pair. The bars are deliberately
       // SHORT: a rack padded with long straight edges measures its padding — the boundary
       // percentiles have to be dominated by the features under test for them to gate.
-      const ROWS: [number, string, number][] = [[12, INK, 0], [56, GOLD, 0.25], [100, INK, 0.5], [144, GOLD, 0.75]]
+      const ROWS: [number, string, number][] = [
+        [12, INK, 0],
+        [56, GOLD, 0.25],
+        [100, INK, 0.5],
+        [144, GOLD, 0.75],
+      ]
       return svg(
         `<rect width="${V}" height="${V}" fill="${WHITE}"/>` +
           ROWS.map(([y, fill, ph]) => AREAS.map((a, i) => cell(8 + i * 49, y, a, fill, ph)).join('')).join('') +
@@ -944,11 +961,15 @@ const CASES: { name: string; note: string; make: () => string }[] = [
         const rx = 20
         const ry = 20 / a
         const cx = 24 + i * 40 + (i % 4) / 4
-        body.push(`<ellipse cx="${f3(cx)}" cy="${f3(28 + (i % 3) / 4)}" rx="${rx}" ry="${f3(ry)}" fill="${i % 2 ? INK : RED}"/>`)
+        body.push(
+          `<ellipse cx="${f3(cx)}" cy="${f3(28 + (i % 3) / 4)}" rx="${rx}" ry="${f3(ry)}" fill="${i % 2 ? INK : RED}"/>`,
+        )
         // …and the same aspect ratios rotated a quarter turn, so the tight end is scanned
         // along the other lattice axis (the under-read §21 measured is orientation-dependent,
         // and so is anything that replaces it).
-        body.push(`<ellipse cx="${f3(24 + i * 40 + (i % 3) / 4)}" cy="${f3(76 + (i % 4) / 4)}" rx="${f3(ry)}" ry="${rx}" fill="${i % 2 ? RED : INK}"/>`)
+        body.push(
+          `<ellipse cx="${f3(24 + i * 40 + (i % 3) / 4)}" cy="${f3(76 + (i % 4) / 4)}" rx="${f3(ry)}" ry="${rx}" fill="${i % 2 ? RED : INK}"/>`,
+        )
       })
       // Row 3–4: rounded rectangles, corner radius 1 → 6 units (2 → 12 px @512).
       const RADII = [1, 1.5, 2.5, 4, 6]
@@ -1157,10 +1178,16 @@ const CASES: { name: string; note: string; make: () => string }[] = [
       // `s` is the shape's WIDTH in units (disc diameter, square side); triangles use it as
       // the circumdiameter. Each row alternates ink so neighbouring rows read apart.
       const SHAPES: { fill: string; draw: (cx: number, cy: number, s: number, fill: string) => string }[] = [
-        { fill: INK, draw: (cx, cy, s, fill) => `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(s / 2)}" fill="${fill}"/>` },
+        {
+          fill: INK,
+          draw: (cx, cy, s, fill) => `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(s / 2)}" fill="${fill}"/>`,
+        },
         { fill: RED, draw: (cx, cy, s, fill) => ngon(cx, cy, s / Math.SQRT2, 4, Math.PI / 4, fill) },
         { fill: NAVY, draw: (cx, cy, s, fill) => ngon(cx, cy, s / Math.SQRT2, 4, 0, fill) },
-        { fill: INK, draw: (cx, cy, s, fill) => ngon(cx, cy, s / Math.SQRT2, 4, Math.PI / 4 + (20 * Math.PI) / 180, fill) },
+        {
+          fill: INK,
+          draw: (cx, cy, s, fill) => ngon(cx, cy, s / Math.SQRT2, 4, Math.PI / 4 + (20 * Math.PI) / 180, fill),
+        },
         { fill: RED, draw: (cx, cy, s, fill) => ngon(cx, cy, s / 2, 3, -Math.PI / 2, fill) },
       ]
       // Sub-pixel phases in UNITS: at 8 px/unit these are ~0.3 / ~0.6 px, and the per-column

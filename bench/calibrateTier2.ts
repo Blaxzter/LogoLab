@@ -37,7 +37,12 @@ const cases = tierCases(2)
 console.log(`calibrating tier 2: ${cases.length} cases @ ${RES}px\n`)
 
 interface Row {
-  name: string; chamfer: number; p95: number; parsimony: number; gtNodes: number; docNodes: number
+  name: string
+  chamfer: number
+  p95: number
+  parsimony: number
+  gtNodes: number
+  docNodes: number
   /** GT → trace: authored boundary the tracer MISSED. */
   missed: number
   /** trace → GT: boundary the tracer INVENTED. */
@@ -50,17 +55,33 @@ for (const c of cases) {
   const svg = readFileSync(join(root, c.svg), 'utf8')
   const gt = parseGroundTruth(svg)
   const why = unscorable(gt)
-  if (why) { console.log(`  ⨯ ${c.name} — ${why}`); continue }
+  if (why) {
+    console.log(`  ⨯ ${c.name} — ${why}`)
+    continue
+  }
 
   const png = new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng()
   const img = decodePng(png)
-  const doc = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false })
+  const doc = await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+  })
   const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
-  if (g.samples === 0) { console.log(`  · ${c.name} — no interior boundary, skipped`); continue }
+  if (g.samples === 0) {
+    console.log(`  · ${c.name} — no interior boundary, skipped`)
+    continue
+  }
 
   rows.push({
-    name: c.name, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
-    gtNodes: g.gtNodes, docNodes: g.docNodes, missed: g.missedMean, spurious: g.spuriousMean,
+    name: c.name,
+    chamfer: g.chamfer,
+    p95: g.p95,
+    parsimony: g.parsimony,
+    gtNodes: g.gtNodes,
+    docNodes: g.docNodes,
+    missed: g.missedMean,
+    spurious: g.spuriousMean,
     regions: scoreRegions(img, doc),
   })
   process.stdout.write(`\r  traced ${rows.length}/${cases.length}`)
@@ -79,24 +100,30 @@ const totalRec = rows.reduce((s, r) => s + r.regions.recovered, 0)
 
 console.log(`━━━ REGION RECOVERY (${rows.length} flat cases @ ${RES}px) ━━━\n`)
 console.log(`  cases with every region recovered: ${rows.length - dropped.length}/${rows.length}`)
-console.log(`  regions recovered overall:         ${totalRec}/${totalTrue} (${((totalRec / totalTrue) * 100).toFixed(1)}%)`)
+console.log(
+  `  regions recovered overall:         ${totalRec}/${totalTrue} (${((totalRec / totalTrue) * 100).toFixed(1)}%)`,
+)
 console.log(`  regions dropped overall:           ${totalTrue - totalRec}\n`)
 
 if (dropped.length) {
   console.log(`  the ${dropped.length} failing cases, worst first (every dropped region listed):`)
   for (const r of [...dropped].sort(
-    (a, b) => (b.regions.trueRegions - b.regions.recovered) - (a.regions.trueRegions - a.regions.recovered),
+    (a, b) => b.regions.trueRegions - b.regions.recovered - (a.regions.trueRegions - a.regions.recovered),
   )) {
     console.log(`  ✗ ${short(r.name).padEnd(30)} ${r.regions.recovered}/${r.regions.trueRegions} recovered`)
     for (const m of r.regions.missing) {
-      console.log(`        ${m.hex} (${String(m.areaPx).padStart(6)}px) — trace paints ${m.paintedHex} there, ΔE ${m.deltaE.toFixed(1)}`)
+      console.log(
+        `        ${m.hex} (${String(m.areaPx).padStart(6)}px) — trace paints ${m.paintedHex} there, ΔE ${m.deltaE.toFixed(1)}`,
+      )
     }
   }
   const des = dropped.flatMap((r) => r.regions.missing.map((m) => m.deltaE)).filter(Number.isFinite)
   const areas = dropped.flatMap((r) => r.regions.missing.map((m) => m.areaPx))
   const sorted = (xs: number[]) => [...xs].sort((a, b) => a - b)
   const q = (xs: number[], p: number) => sorted(xs)[Math.min(xs.length - 1, Math.floor(p * xs.length))]
-  console.log(`\n  dropped-region ΔE (truth vs what the trace painted): p50 ${q(des, 0.5).toFixed(1)} · p90 ${q(des, 0.9).toFixed(1)} · max ${Math.max(...des).toFixed(1)}`)
+  console.log(
+    `\n  dropped-region ΔE (truth vs what the trace painted): p50 ${q(des, 0.5).toFixed(1)} · p90 ${q(des, 0.9).toFixed(1)} · max ${Math.max(...des).toFixed(1)}`,
+  )
   console.log(`  dropped-region area (px): p50 ${q(areas, 0.5)} · p90 ${q(areas, 0.9)} · max ${Math.max(...areas)}`)
 }
 
@@ -109,11 +136,18 @@ const pct = (xs: number[], p: number): number => {
   return s[Math.min(s.length - 1, Math.floor(p * s.length))]
 }
 
-const report = (key: 'chamfer' | 'p95' | 'parsimony' | 'missed' | 'spurious', tier0: number | null, unit: string, cands: number[]): void => {
+const report = (
+  key: 'chamfer' | 'p95' | 'parsimony' | 'missed' | 'spurious',
+  tier0: number | null,
+  unit: string,
+  cands: number[],
+): void => {
   const xs = rows.map((r) => r[key])
   const q = (p: number) => pct(xs, p).toFixed(2)
   console.log(`── ${key} ${'─'.repeat(60 - key.length)}`)
-  console.log(`   p10 ${q(0.1)}  p50 ${q(0.5)}  p75 ${q(0.75)}  p90 ${q(0.9)}  p95 ${q(0.95)}  max ${Math.max(...xs).toFixed(2)} ${unit}`)
+  console.log(
+    `   p10 ${q(0.1)}  p50 ${q(0.5)}  p75 ${q(0.75)}  p90 ${q(0.9)}  p95 ${q(0.95)}  max ${Math.max(...xs).toFixed(2)} ${unit}`,
+  )
   const under = (t: number) => `${rows.filter((r) => r[key] <= t).length}/${rows.length}`
   if (tier0 !== null) console.log(`   tier-0 limit ${tier0}${unit}: ${under(tier0)} cases would pass`)
   const worst = [...rows].sort((a, b) => b[key] - a[key]).slice(0, 3)

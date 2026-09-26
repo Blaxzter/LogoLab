@@ -29,7 +29,12 @@ import { ensureImageData } from '../bench/nodeHarness.ts'
 import { decodePng } from '../src/lib/png/decode.ts'
 import { tracePlanar } from '../src/lib/trace/planarAssemble.ts'
 import { planarBeautify, type SnapOptions } from '../src/lib/trace/planarBeautify.ts'
-import { reseatJunctions, weldConvergedJunctions, type ChordCandidate, type ReseatVerdict } from '../src/lib/trace/planarReseat.ts'
+import {
+  reseatJunctions,
+  weldConvergedJunctions,
+  type ChordCandidate,
+  type ReseatVerdict,
+} from '../src/lib/trace/planarReseat.ts'
 import { parseGroundTruth, toRasterSpace } from '../bench/svgGround.ts'
 import { authoredCrossings, nearestCrossing } from '../bench/authoredCrossings.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
@@ -39,13 +44,17 @@ import type { EdgeRef, SharedEdge, Topology, Vec, Vertex } from '../src/lib/path
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-const W = 512, H = 512
+const W = 512,
+  H = 512
 const OPTS: BeautifyOptions = { fidelity: 1.5, relationFrac: 0.1, hvAngleDeg: 0 }
 
 // gradient-flat's geometry @512: disc c=(174,256) r=76; occluder line
 // (200,174)→(348,338) — centre distance 74.2, sagitta ~1.8px, 12° incidence.
-const CX = 174, CY = 256, R = 76
-const LA = { x: 200, y: 174 }, LB = { x: 348, y: 338 }
+const CX = 174,
+  CY = 256,
+  R = 76
+const LA = { x: 200, y: 174 },
+  LB = { x: 348, y: 338 }
 const LLEN = Math.hypot(LB.x - LA.x, LB.y - LA.y)
 const LD = { x: (LB.x - LA.x) / LLEN, y: (LB.y - LA.y) / LLEN }
 /** Signed distance to the occluder line (+ = dark side) / param along it (px). */
@@ -54,7 +63,8 @@ const lineT = (x: number, y: number): number => (x - LA.x) * LD.x + (y - LA.y) *
 /** True line×circle junctions (the answer sheet). */
 function trueJunctions(): [Vec, Vec] {
   const t0 = (CX - LA.x) * LD.x + (CY - LA.y) * LD.y
-  const fx = LA.x + t0 * LD.x, fy = LA.y + t0 * LD.y
+  const fx = LA.x + t0 * LD.x,
+    fy = LA.y + t0 * LD.y
   const h = Math.sqrt(R * R - ((CX - fx) ** 2 + (CY - fy) ** 2))
   return [
     { x: fx - h * LD.x, y: fy - h * LD.y },
@@ -74,7 +84,8 @@ function occludedDisc(annex: number): Int32Array {
   const t2 = lineT(J2.x, J2.y)
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
-      const px = x + 0.5, py = y + 0.5
+      const px = x + 0.5,
+        py = y + 0.5
       const dark = lineDist(px, py) >= 0
       const disc = Math.hypot(px - CX, py - CY) <= R
       let l = dark ? 2 : disc ? 1 : 0
@@ -96,7 +107,10 @@ function nearestVertex(topo: Topology, p: Vec): { v: Vec; d: number } {
   let bd = Infinity
   for (const v of topo.vertices) {
     const d = Math.hypot(v.x - p.x, v.y - p.y)
-    if (d < bd) { bd = d; best = v }
+    if (d < bd) {
+      bd = d
+      best = v
+    }
   }
   return { v: best, d: bd }
 }
@@ -106,10 +120,13 @@ function nearestVertex(topo: Topology, p: Vec): { v: Vec; d: number } {
 function maxLineDevInZone(e: SharedEdge, zone0: number, zone1: number): number {
   let maxD = 0
   for (let s = 0; s + 1 < e.nodes.length; s++) {
-    const p = e.nodes[s], q = e.nodes[s + 1]
-    const c1 = p.hOut ?? p, c2 = q.hIn ?? q
+    const p = e.nodes[s],
+      q = e.nodes[s + 1]
+    const c1 = p.hOut ?? p,
+      c2 = q.hIn ?? q
     for (let k = 0; k <= 24; k++) {
-      const t = k / 24, u = 1 - t
+      const t = k / 24,
+        u = 1 - t
       const x = u * u * u * p.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * q.x
       const y = u * u * u * p.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * q.y
       const lt = lineT(x, y)
@@ -129,10 +146,14 @@ function occluderEdge(topo: Topology): SharedEdge {
   for (const e of topo.edges) {
     if (e.closed || e.nodes.length < 2) continue
     if (!e.nodes.every((nd) => Math.abs(lineDist(nd.x, nd.y)) < 6)) continue
-    const a = e.nodes[0], b = e.nodes[e.nodes.length - 1]
+    const a = e.nodes[0],
+      b = e.nodes[e.nodes.length - 1]
     const span = Math.hypot(a.x - b.x, a.y - b.y)
     const nearJ2 = Math.hypot(a.x - J2.x, a.y - J2.y) < 15 || Math.hypot(b.x - J2.x, b.y - J2.y) < 15
-    if (nearJ2 && span > bestSpan) { best = e; bestSpan = span }
+    if (nearJ2 && span > bestSpan) {
+      best = e
+      bestSpan = span
+    }
   }
   assert.ok(best, 'found the occluder edge')
   return best!
@@ -151,8 +172,14 @@ test('reseat: a slid junction returns to the fitted-primitive intersection', () 
   // noise (it slides along both primitives — invisible), so the hard assertions
   // are lying ON the line and ON the circle; the distance bound is looser.
   const fixed = nearestVertex(on, J2)
-  assert.ok(fixed.d < 3.5, `re-seated junction near the true crossing (${fixed.d.toFixed(2)}px, was ${slid.d.toFixed(2)}px)`)
-  assert.ok(Math.abs(lineDist(fixed.v.x, fixed.v.y)) < 0.8, `…on the occluder line (${lineDist(fixed.v.x, fixed.v.y).toFixed(2)}px)`)
+  assert.ok(
+    fixed.d < 3.5,
+    `re-seated junction near the true crossing (${fixed.d.toFixed(2)}px, was ${slid.d.toFixed(2)}px)`,
+  )
+  assert.ok(
+    Math.abs(lineDist(fixed.v.x, fixed.v.y)) < 0.8,
+    `…on the occluder line (${lineDist(fixed.v.x, fixed.v.y).toFixed(2)}px)`,
+  )
   const rdev = Math.hypot(fixed.v.x - CX, fixed.v.y - CY) - R
   assert.ok(Math.abs(rdev) < 0.8, `…on the circle (${rdev.toFixed(2)}px)`)
 })
@@ -168,7 +195,10 @@ test('reseat: the occluder line stays straight through the crossing (no pull), c
   const bentDev = maxLineDevInZone(occluderEdge(off), zone0, zone1)
   const straightDev = maxLineDevInZone(occluderEdge(on), zone0, zone1)
   assert.ok(bentDev > 1.5, `without re-seat the line bends into the disc (${bentDev.toFixed(2)}px)`)
-  assert.ok(straightDev < 0.9, `with re-seat it stays straight (${straightDev.toFixed(2)}px, was ${bentDev.toFixed(2)}px)`)
+  assert.ok(
+    straightDev < 0.9,
+    `with re-seat it stays straight (${straightDev.toFixed(2)}px, was ${bentDev.toFixed(2)}px)`,
+  )
 
   // The disc|dark chord between the junctions: exactly two nodes, straight, on the line.
   const chord = on.edges.find((e) => {
@@ -209,13 +239,24 @@ test('reseat: gradient-flat @2048 — the occluder chord is straightened at the 
   // The census the fix was measured on: three edges reach the chord gate (the chord and
   // the disc's two arcs between the same junctions); the arcs are refused on deviation.
   const chord = seen.filter((c) => c.sameLine && c.maxDev <= 2.5)
-  assert.equal(chord.length, 1, `exactly one collinear, in-tolerance candidate (${seen.map((c) => `${c.len.toFixed(0)}px→${c.verdict}`).join(', ')})`)
+  assert.equal(
+    chord.length,
+    1,
+    `exactly one collinear, in-tolerance candidate (${seen.map((c) => `${c.len.toFixed(0)}px→${c.verdict}`).join(', ')})`,
+  )
   assert.ok(chord[0].len > 100, `the authored chord is ~131px at 2048 (${chord[0].len.toFixed(1)})`)
-  assert.equal(chord[0].verdict, 'straightened', `chord len ${chord[0].len.toFixed(1)}px with arms ${chord[0].armA.toFixed(0)}/${chord[0].armB.toFixed(0)} must straighten`)
+  assert.equal(
+    chord[0].verdict,
+    'straightened',
+    `chord len ${chord[0].len.toFixed(1)}px with arms ${chord[0].armA.toFixed(0)}/${chord[0].armB.toFixed(0)} must straighten`,
+  )
 
   // And the doc shows it: a straight segment between two nodes at the chord's authored
   // ends — (218.1,194)/(240.1,218.4) @512, ×4 — with no handles between them.
-  const ends = [{ x: 872.4, y: 776.0 }, { x: 960.4, y: 873.6 }]
+  const ends = [
+    { x: 872.4, y: 776.0 },
+    { x: 960.4, y: 873.6 },
+  ]
   let straight = false
   for (const it of doc.items) {
     if (it.kind !== 'path') continue
@@ -226,7 +267,8 @@ test('reseat: gradient-flat @2048 — the occluder chord is straightened at the 
         const b = sp.nodes[(i + 1) % n]
         if (i === n - 1 && !sp.closed) break
         const hit = (p: Vec, q: Vec): boolean => Math.hypot(p.x - q.x, p.y - q.y) < 4
-        if (((hit(a, ends[0]) && hit(b, ends[1])) || (hit(a, ends[1]) && hit(b, ends[0]))) && !a.hOut && !b.hIn) straight = true
+        if (((hit(a, ends[0]) && hit(b, ends[1])) || (hit(a, ends[1]) && hit(b, ends[0]))) && !a.hOut && !b.hIn)
+          straight = true
       }
     }
   }
@@ -262,7 +304,8 @@ test('reseat: a terminal arc re-emit never laps the fitted circle (mangled-cap h
   // occluder line passes through H=P(3°) at 20° to the tangent, its straight run
   // stopping 4px short of the vertex (the bent cap the re-seat repairs). The
   // corrected vertex is H: the terminal re-emit spans P(1°)→P(3°) — 2°, not 358°.
-  const O = { x: 200, y: 200 }, R2 = 80
+  const O = { x: 200, y: 200 },
+    R2 = 80
   const P = (deg: number): Vec => ({
     x: O.x + R2 * Math.cos((deg * Math.PI) / 180),
     y: O.y + R2 * Math.sin((deg * Math.PI) / 180),
@@ -287,7 +330,10 @@ test('reseat: a terminal arc re-emit never laps the fitted circle (mangled-cap h
   // §29's through-pair veto reads the three arms' directions: the line and its continuation
   // are the through-boundary here, so the arc×line pair is a crossing and stays eligible.
   const perp = { x: -dir.y, y: dir.x }
-  const stub = (t: number, off: number): Vec => ({ x: Vold.x + t * dir.x + off * perp.x, y: Vold.y + t * dir.y + off * perp.y })
+  const stub = (t: number, off: number): Vec => ({
+    x: Vold.x + t * dir.x + off * perp.x,
+    y: Vold.y + t * dir.y + off * perp.y,
+  })
   const vertices: Vertex[] = [
     { id: 0, x: Vold.x, y: Vold.y },
     { id: 1, ...P(31) },
@@ -297,7 +343,13 @@ test('reseat: a terminal arc re-emit never laps the fitted circle (mangled-cap h
   const edges: SharedEdge[] = [
     { id: 0, closed: false, startVertex: 1, endVertex: 0, nodes: arcNodes }, // circle arm + mangled cap
     { id: 1, closed: false, startVertex: 2, endVertex: 0, nodes: [corner(at(-100)), corner(at(-9)), corner(Vold)] }, // line arm + bent cap
-    { id: 2, closed: false, startVertex: 0, endVertex: 3, nodes: [corner(Vold), corner(stub(4, 0.5)), corner(stub(7, 1.5))] }, // kinked stub: no primitive
+    {
+      id: 2,
+      closed: false,
+      startVertex: 0,
+      endVertex: 3,
+      nodes: [corner(Vold), corner(stub(4, 0.5)), corner(stub(7, 1.5))],
+    }, // kinked stub: no primitive
   ]
 
   const { moved } = reseatJunctions(edges, vertices, W, H)
@@ -368,8 +420,7 @@ test('weld: fuses ONLY the re-seat-converged pair; an untouched micro-edge survi
   assert.ok(!vertices.some((v) => v.id === 1), 'the fused-away vertex is pruned')
   assert.ok(!edges.some((e) => e.id === 0), 'the converged micro-edge is contracted')
   // …and excised from every loop.
-  for (const loopSet of loops.values())
-    for (const loop of loopSet) assert.ok(loop.every((r) => r.edge !== 0))
+  for (const loopSet of loops.values()) for (const loop of loopSet) assert.ok(loop.every((r) => r.edge !== 0))
   // Incident edges re-anchor on the fused vertex.
   const e1 = edges.find((e) => e.id === 1)!
   assert.equal(e1.startVertex, 0)
@@ -378,7 +429,10 @@ test('weld: fuses ONLY the re-seat-converged pair; an untouched micro-edge survi
   assert.equal(e3.endVertex, 0)
   assert.ok(Math.abs(e3.nodes[1].x - 100.6) < 1e-9)
   // The equally-short but NON-converged pair v2/v3 is untouched.
-  assert.ok(edges.some((e) => e.id === 2), 'no re-seat evidence ⇒ the micro-edge survives')
+  assert.ok(
+    edges.some((e) => e.id === 2),
+    'no re-seat evidence ⇒ the micro-edge survives',
+  )
   assert.ok(vertices.some((v) => v.id === 2) && vertices.some((v) => v.id === 3))
 })
 
@@ -426,22 +480,42 @@ async function braveJunction(res: number): Promise<{ lat: number; placed: number
     .map((v) => {
       const lat = Math.hypot(v.x - cx, v.y - cy) / s
       const placed = v.reason === 'moved' ? Math.hypot(v.tx - cx, v.ty - cy) / s : lat
-      const kind = v.pair ? v.arms.filter((_, i) => v.pair!.includes(i)).map((a) => (a.kind === 'line' ? 'L' : 'C')).sort().join('+') : 'none'
+      const kind = v.pair
+        ? v.arms
+            .filter((_, i) => v.pair!.includes(i))
+            .map((a) => (a.kind === 'line' ? 'L' : 'C'))
+            .sort()
+            .join('+')
+        : 'none'
       return { lat, placed, reason: v.reason, kind }
     })
 }
 
-test('reseat: brave-browser @512 — the notch×seam junction is not moved AWAY from the authored crossing (issue #39)', { skip: !HAVE_BRAVE && 'examples/logos absent (npm run fetch:logos)' }, async () => {
+test('reseat: brave-browser @512 — the notch×seam junction is not moved AWAY from the authored crossing (issue #39)', {
+  skip: !HAVE_BRAVE && 'examples/logos absent (npm run fetch:logos)',
+}, async () => {
   const at = await braveJunction(512)
   assert.ok(at.length >= 1, 'the pass weighs a junction at the crossing')
   for (const j of at) {
-    assert.ok(j.placed <= j.lat + 0.1, `placement ${j.placed.toFixed(2)} px off the authored crossing, the lattice corner was ${j.lat.toFixed(2)} (${j.reason}, ${j.kind})`)
-    assert.ok(j.placed <= 0.75, `placement ${j.placed.toFixed(2)} px off the authored crossing (${j.reason}, ${j.kind})`)
+    assert.ok(
+      j.placed <= j.lat + 0.1,
+      `placement ${j.placed.toFixed(2)} px off the authored crossing, the lattice corner was ${j.lat.toFixed(2)} (${j.reason}, ${j.kind})`,
+    )
+    assert.ok(
+      j.placed <= 0.75,
+      `placement ${j.placed.toFixed(2)} px off the authored crossing (${j.reason}, ${j.kind})`,
+    )
   }
 })
 
-test('reseat: brave-browser @2048 — the same junction still lands on the crossing (issue #39 tripwire)', { skip: !HAVE_BRAVE && 'examples/logos absent (npm run fetch:logos)' }, async () => {
+test('reseat: brave-browser @2048 — the same junction still lands on the crossing (issue #39 tripwire)', {
+  skip: !HAVE_BRAVE && 'examples/logos absent (npm run fetch:logos)',
+}, async () => {
   const at = await braveJunction(2048)
   assert.ok(at.length >= 1, 'the pass weighs a junction at the crossing')
-  for (const j of at) assert.ok(j.placed <= 0.25, `placement ${j.placed.toFixed(2)} px off the authored crossing (${j.reason}, ${j.kind})`)
+  for (const j of at)
+    assert.ok(
+      j.placed <= 0.25,
+      `placement ${j.placed.toFixed(2)} px off the authored crossing (${j.reason}, ${j.kind})`,
+    )
 })

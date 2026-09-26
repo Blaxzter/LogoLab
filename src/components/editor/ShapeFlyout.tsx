@@ -54,7 +54,12 @@ export function ShapeFlyout({
       left: Math.max(8, Math.min(b.left, window.innerWidth - MENU_W - 8)),
       top: b.bottom + 6,
     })
-    setCursor(Math.max(0, SHAPE_TOOLS.findIndex((t) => t.id === shown)))
+    setCursor(
+      Math.max(
+        0,
+        SHAPE_TOOLS.findIndex((t) => t.id === shown),
+      ),
+    )
     menuRef.current?.focus()
   }, [open, shown])
 
@@ -130,7 +135,9 @@ export function ShapeFlyout({
         >
           {TOOL_ICON[def.id]}
         </ActionButton>
-        <Tooltip label={<TipLabel title="Shape tools" detail="Pick a different shape. Each one keeps its own letter key." />}>
+        <Tooltip
+          label={<TipLabel title="Shape tools" detail="Pick a different shape. Each one keeps its own letter key." />}
+        >
           <button
             type="button"
             aria-label="Shape tools"

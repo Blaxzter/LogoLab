@@ -51,7 +51,10 @@ const LOGOS = Number(flag('--logos') ?? 0)
 const AT = (flag('--at') ?? '').split(',').map(Number).filter(Number.isFinite)
 const f = (v: number, d = 1): string => v.toFixed(d)
 
-interface Vec { x: number; y: number }
+interface Vec {
+  x: number
+  y: number
+}
 const deg = (c: number): number => (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI
 
 // --- the candidate readers -------------------------------------------------
@@ -202,7 +205,11 @@ const READERS: Reader[] = [
 ]
 
 // --- one case ---------------------------------------------------------------
-interface TrueRec { mark: string; authored: number; reads: (number | null)[] }
+interface TrueRec {
+  mark: string
+  authored: number
+  reads: (number | null)[]
+}
 
 const trueRecs: TrueRec[] = []
 /** Per reader: how many NMS'd sites ≥ THR are NOT explained by an authored corner. */
@@ -267,15 +274,19 @@ async function runCase(mark: string, text: string): Promise<void> {
     const e = net.edges[bE]
     console.log(`
 ${mark} @${RES}: nearest lattice point to (${AT[0]},${AT[1]}) is edge ${bE} index ${bI} of ${e.pts.length} (closed=${e.closed}), ${f(bD, 2)}px away`)
-    const near = gtc
-      .map((c) => ({ c, d: Math.hypot(c.x - AT[0], c.y - AT[1]) }))
-      .sort((a, b) => a.d - b.d)[0]
-    if (near) console.log(`  nearest authored corner: (${f(near.c.x, 2)},${f(near.c.y, 2)}) turn ${f(deg(near.c.itx * near.c.otx + near.c.ity * near.c.oty), 1)} deg, ${f(near.d, 2)}px away`)
+    const near = gtc.map((c) => ({ c, d: Math.hypot(c.x - AT[0], c.y - AT[1]) })).sort((a, b) => a.d - b.d)[0]
+    if (near)
+      console.log(
+        `  nearest authored corner: (${f(near.c.x, 2)},${f(near.c.y, 2)}) turn ${f(deg(near.c.itx * near.c.otx + near.c.ity * near.c.oty), 1)} deg, ${f(near.d, 2)}px away`,
+      )
     for (let o = -3; o <= 3; o++) {
-      const i = e.closed ? ((bI + o) % e.pts.length + e.pts.length) % e.pts.length : bI + o
+      const i = e.closed ? (((bI + o) % e.pts.length) + e.pts.length) % e.pts.length : bI + o
       if (i < 0 || i >= e.pts.length) continue
       const vals = READERS.map((r) => r.read(e.pts as Vec[], i, e.closed))
-      console.log(`  i${o >= 0 ? '+' : ''}${o} (${e.pts[i].x},${e.pts[i].y})  ` + READERS.map((r, k) => `${r.name}=${vals[k] === null ? '--' : f(vals[k] as number, 1)}`).join('  '))
+      console.log(
+        `  i${o >= 0 ? '+' : ''}${o} (${e.pts[i].x},${e.pts[i].y})  ` +
+          READERS.map((r, k) => `${r.name}=${vals[k] === null ? '--' : f(vals[k] as number, 1)}`).join('  '),
+      )
     }
     return
   }
@@ -330,7 +341,18 @@ ${mark} @${RES}: nearest lattice point to (${AT[0]},${AT[1]}) is edge ${bE} inde
 }
 
 // --- corpus -----------------------------------------------------------------
-const WATCHLIST = ['sharp-star', 'gear-teeth', 'bar-caps', 'checker', 'band-cross', 'letter-joins', 'acute-counter', 'peak-drop', 'seam-corner', 'wedge-counter']
+const WATCHLIST = [
+  'sharp-star',
+  'gear-teeth',
+  'bar-caps',
+  'checker',
+  'band-cross',
+  'letter-joins',
+  'acute-counter',
+  'peak-drop',
+  'seam-corner',
+  'wedge-counter',
+]
 const cases: [string, string][] = []
 const CASE = flag('--case')
 if (argv.includes('--all')) {
@@ -343,16 +365,32 @@ if (argv.includes('--all')) {
 }
 if (LOGOS > 0) {
   const dir = join(root, 'examples', 'logos')
-  for (const file of readdirSync(dir).filter((x) => x.endsWith('.svg')).slice(0, LOGOS))
+  for (const file of readdirSync(dir)
+    .filter((x) => x.endsWith('.svg'))
+    .slice(0, LOGOS))
     cases.push([file.replace(/\.svg$/, ''), readFileSync(join(dir, file), 'utf8')])
 }
 for (const [n, t] of cases) await runCase(n, t)
 
 // --- report -----------------------------------------------------------------
-console.log(`\nTURN READERS @${RES} flat  —  ${sites} authored corners located on the lattice, over ${cases.length} case(s)`)
+console.log(
+  `\nTURN READERS @${RES} flat  —  ${sites} authored corners located on the lattice, over ${cases.length} case(s)`,
+)
 console.log(`  bar = ${THR} deg. cell = (reader reads >= bar) / (authored corners in the band).\n`)
-const BANDS: [number, number][] = [[60, 65], [65, 70], [70, 75], [75, 80], [80, 90], [90, 105], [105, 120], [120, 180]]
-const head = `  ${'reader'.padEnd(16)}` + BANDS.map(([lo, hi]) => `${lo}-${hi}`.padStart(9)).join('') + `${'all'.padStart(9)}${'minted'.padStart(9)}`
+const BANDS: [number, number][] = [
+  [60, 65],
+  [65, 70],
+  [70, 75],
+  [75, 80],
+  [80, 90],
+  [90, 105],
+  [105, 120],
+  [120, 180],
+]
+const head =
+  `  ${'reader'.padEnd(16)}` +
+  BANDS.map(([lo, hi]) => `${lo}-${hi}`.padStart(9)).join('') +
+  `${'all'.padStart(9)}${'minted'.padStart(9)}`
 console.log(head)
 console.log('  ' + '-'.repeat(head.length))
 READERS.forEach((r, ri) => {
@@ -364,13 +402,17 @@ READERS.forEach((r, ri) => {
   })
   const all = trueRecs.filter((t) => t.authored >= THR && t.reads[ri] !== null)
   const allK = all.filter((t) => (t.reads[ri] as number) >= THR).length
-  console.log(`  ${r.name.padEnd(16)}${cells.join('')}${`${allK}/${all.length}`.padStart(9)}${String(minted[ri]).padStart(9)}`)
+  console.log(
+    `  ${r.name.padEnd(16)}${cells.join('')}${`${allK}/${all.length}`.padStart(9)}${String(minted[ri]).padStart(9)}`,
+  )
 })
 
 // The SET DIFFERENCE against the shipped reader — a replacement is only safe if what it
 // gains dwarfs what it drops, and a net count hides a swap.
 console.log(`\n  vs the shipped reader (chord4), on authored corners >= ${THR} deg:`)
-console.log(`  ${'reader'.padEnd(16)}${'gained'.padStart(9)}${'LOST'.padStart(9)}${'net'.padStart(9)}${'d-minted'.padStart(10)}`)
+console.log(
+  `  ${'reader'.padEnd(16)}${'gained'.padStart(9)}${'LOST'.padStart(9)}${'net'.padStart(9)}${'d-minted'.padStart(10)}`,
+)
 READERS.forEach((r, ri) => {
   if (ri === 0) return
   let gained = 0
@@ -383,11 +425,15 @@ READERS.forEach((r, ri) => {
     if (b >= THR && a < THR) gained++
     if (a >= THR && b < THR) lost++
   }
-  console.log(`  ${r.name.padEnd(16)}${String(gained).padStart(9)}${String(lost).padStart(9)}${String(gained - lost).padStart(9)}${String(minted[ri] - minted[0]).padStart(10)}`)
+  console.log(
+    `  ${r.name.padEnd(16)}${String(gained).padStart(9)}${String(lost).padStart(9)}${String(gained - lost).padStart(9)}${String(minted[ri] - minted[0]).padStart(10)}`,
+  )
 })
 
 console.log(`\n  reading error (measured - authored, deg) at authored corners >= ${THR} deg:`)
-console.log(`  ${'reader'.padEnd(16)}${'mean'.padStart(9)}${'p50'.padStart(9)}${'p10'.padStart(9)}${'p90'.padStart(9)}${'worst under'.padStart(13)}`)
+console.log(
+  `  ${'reader'.padEnd(16)}${'mean'.padStart(9)}${'p50'.padStart(9)}${'p10'.padStart(9)}${'p90'.padStart(9)}${'worst under'.padStart(13)}`,
+)
 READERS.forEach((r, ri) => {
   const errs = trueRecs
     .filter((t) => t.authored >= THR && t.reads[ri] !== null)
@@ -396,5 +442,7 @@ READERS.forEach((r, ri) => {
   if (!errs.length) return
   const q = (p: number): number => errs[Math.min(errs.length - 1, Math.floor(p * errs.length))]
   const mean = errs.reduce((a, b) => a + b, 0) / errs.length
-  console.log(`  ${r.name.padEnd(16)}${f(mean).padStart(9)}${f(q(0.5)).padStart(9)}${f(q(0.1)).padStart(9)}${f(q(0.9)).padStart(9)}${f(errs[0]).padStart(13)}`)
+  console.log(
+    `  ${r.name.padEnd(16)}${f(mean).padStart(9)}${f(q(0.5)).padStart(9)}${f(q(0.1)).padStart(9)}${f(q(0.9)).padStart(9)}${f(errs[0]).padStart(13)}`,
+  )
 })

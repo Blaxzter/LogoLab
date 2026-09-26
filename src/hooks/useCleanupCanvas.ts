@@ -80,7 +80,18 @@ export interface UseCleanupCanvasParams {
 }
 
 export function useCleanupCanvas(params: UseCleanupCanvasParams) {
-  const { pz, tool, tolerance, softness, brushSize, defringeStrength, matteOn, matteColor, onMarkerPlaced, seedWorking } = params
+  const {
+    pz,
+    tool,
+    tolerance,
+    softness,
+    brushSize,
+    defringeStrength,
+    matteOn,
+    matteColor,
+    onMarkerPlaced,
+    seedWorking,
+  } = params
 
   const logo = useLogo()
   const setProcessedLogo = useStore((s) => s.setProcessedLogo)
@@ -239,9 +250,12 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     if (ready) redraw()
   }, [ready, redraw])
 
-  useEffect(() => () => {
-    if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
-  }, [])
+  useEffect(
+    () => () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+    },
+    [],
+  )
 
   const setStage = useCallback(
     (el: HTMLDivElement | null) => {
@@ -433,18 +447,23 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       paintingRef.current = true
       lastPtRef.current = p
       const src = tool === 'restore' ? pristineRef.current : undefined
-      strokeAffectedRef.current += brushStamp(
-        working,
-        p.x,
-        p.y,
-        brushSize / 2,
-        1 - softness,
-        tool as BrushMode,
-        src,
-      )
+      strokeAffectedRef.current += brushStamp(working, p.x, p.y, brushSize / 2, 1 - softness, tool as BrushMode, src)
       scheduleRedraw()
     },
-    [aiBusy, tool, opts, defringeStrength, brushSize, softness, imgCoords, commit, redraw, scheduleRedraw, onMarkerPlaced, pinch],
+    [
+      aiBusy,
+      tool,
+      opts,
+      defringeStrength,
+      brushSize,
+      softness,
+      imgCoords,
+      commit,
+      redraw,
+      scheduleRedraw,
+      onMarkerPlaced,
+      pinch,
+    ],
   )
 
   const handlePointerMove = useCallback(

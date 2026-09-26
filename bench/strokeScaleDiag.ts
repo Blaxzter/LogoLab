@@ -66,7 +66,12 @@ interface Score {
   ms: number
 }
 
-async function scoreTrace(px: ImageDataLike, opts: VectorizeOptions, k: number, recolor: string | null): Promise<Score> {
+async function scoreTrace(
+  px: ImageDataLike,
+  opts: VectorizeOptions,
+  k: number,
+  recolor: string | null,
+): Promise<Score> {
   const t0 = Date.now()
   const input = k > 1 ? upscaleImageData(px, k) : px
   const traced = await traceImage(toImageData(input), opts)
@@ -78,13 +83,24 @@ async function scoreTrace(px: ImageDataLike, opts: VectorizeOptions, k: number, 
   return { meanDeltaE: f.meanDeltaE, ssim: f.ssim, nodes: docStats(doc).nodes, ms }
 }
 
-async function census(name: string, res: number, px: ImageDataLike, rows: Row[], tally: Record<string, number>): Promise<void> {
+async function census(
+  name: string,
+  res: number,
+  px: ImageDataLike,
+  rows: Row[],
+  tally: Record<string, number>,
+): Promise<void> {
   const ink = decideInkMode(px, 128, { colorMode: 'auto' })
   if (ink.mode !== 'mono') {
     tally.colour = (tally.colour ?? 0) + 1
     return
   }
-  const opts: VectorizeOptions = { ...DEFAULT_VECTORIZE_OPTIONS, mode: 'mono', threshold: ink.threshold, invert: ink.invert }
+  const opts: VectorizeOptions = {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    mode: 'mono',
+    threshold: ink.threshold,
+    invert: ink.invert,
+  }
   const t = inkThickness(px, opts.threshold, opts.invert === true)
   const plan = monoTraceScale(px, opts)
   const row: Row = {
@@ -102,7 +118,10 @@ async function census(name: string, res: number, px: ImageDataLike, rows: Row[],
     if (plan.scale > 1) row.scaled = await scoreTrace(px, opts, plan.scale, ink.recolor)
   }
   rows.push(row)
-  const f = (s?: Score) => (s ? `ΔE ${s.meanDeltaE.toFixed(2)} ssim ${s.ssim.toFixed(3)} ${String(s.nodes).padStart(5)}n ${String(s.ms).padStart(5)}ms` : '—')
+  const f = (s?: Score) =>
+    s
+      ? `ΔE ${s.meanDeltaE.toFixed(2)} ssim ${s.ssim.toFixed(3)} ${String(s.nodes).padStart(5)}n ${String(s.ms).padStart(5)}ms`
+      : '—'
   process.stdout.write(
     `${name.padEnd(28)} @${String(res).padStart(4)} ${String(px.width).padStart(4)}×${String(px.height).padEnd(4)} ` +
       `t[${row.thickness.join('/')}] ×${plan.scale} ${plan.by.padEnd(6)} | native ${f(row.native)} | scaled ${f(row.scaled)}\n`,
@@ -148,7 +167,9 @@ for (const p of PNGS) {
 // (the size /sheet looked bad at, where the sheet's own ×3 rule was measured).
 if (SHEETS) {
   const sheetsDir = join(process.cwd(), 'public', 'examples', 'sheets')
-  for (const file of readdirSync(sheetsDir).filter((f) => f.endsWith('.webp')).sort()) {
+  for (const file of readdirSync(sheetsDir)
+    .filter((f) => f.endsWith('.webp'))
+    .sort()) {
     const full = await rasterizeSource(loadSource(join(sheetsDir, file)), 8192)
     for (const res of SHEET_RES) {
       const sheet = downscaleImageData(full, res)
@@ -167,7 +188,12 @@ if (SHEETS) {
 // ------------------------------------------------------------------ summary
 const scaled = rows.filter((r) => r.native && r.scaled)
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN)
-process.stdout.write(`\ndecisions: ${Object.entries(tally).sort().map(([k, v]) => `${k}=${v}`).join('  ')}  (mono rows ${rows.length})\n`)
+process.stdout.write(
+  `\ndecisions: ${Object.entries(tally)
+    .sort()
+    .map(([k, v]) => `${k}=${v}`)
+    .join('  ')}  (mono rows ${rows.length})\n`,
+)
 if (scaled.length) {
   const de = (r: Row) => r.scaled!.meanDeltaE - r.native!.meanDeltaE
   const ss = (r: Row) => r.scaled!.ssim - r.native!.ssim
@@ -181,5 +207,7 @@ if (scaled.length) {
       `time ×${mean(scaled.map((r) => r.scaled!.ms / Math.max(1, r.native!.ms))).toFixed(2)}\n`,
   )
   const worst = [...scaled].sort((a, b) => de(b) - de(a)).slice(0, 5)
-  process.stdout.write(`worst by ΔE: ${worst.map((r) => `${r.name}@${r.res} ${de(r) >= 0 ? '+' : ''}${de(r).toFixed(3)} (ssim ${ss(r) >= 0 ? '+' : ''}${ss(r).toFixed(3)})`).join(', ')}\n`)
+  process.stdout.write(
+    `worst by ΔE: ${worst.map((r) => `${r.name}@${r.res} ${de(r) >= 0 ? '+' : ''}${de(r).toFixed(3)} (ssim ${ss(r) >= 0 ? '+' : ''}${ss(r).toFixed(3)})`).join(', ')}\n`,
+  )
 }

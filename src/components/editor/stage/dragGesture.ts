@@ -2,7 +2,14 @@
 
 import type { EditableDoc, Vec } from '../../../lib/path/types'
 import { findItem } from '../../../lib/path/docTree'
-import { angleOf, rotateAbout, scaleFromGrip, snapAngle, transformItems, translation } from '../../../lib/editor/transform'
+import {
+  angleOf,
+  rotateAbout,
+  scaleFromGrip,
+  snapAngle,
+  transformItems,
+  translation,
+} from '../../../lib/editor/transform'
 import { axisLock, snapBoxDelta, snapPoint, type SnapConfig } from '../../../lib/editor/snapping'
 import { dragSegment, translateSegment } from '../../../lib/editor/segmentDrag'
 import { applyNodeMove, replaceIn } from '../../../lib/editor/nodeEdit'
@@ -37,29 +44,21 @@ export function dragGesture(
     case 'move': {
       let delta = { x: p.x - gesture.start.x, y: p.y - gesture.start.y }
       if (e.shiftKey) delta = axisLock(delta)
-      const snapped = e.metaKey || e.ctrlKey
-        ? { delta, x: null, y: null }
-        : snapBoxDelta(gesture.box, delta, gesture.targets, snap)
+      const snapped =
+        e.metaKey || e.ctrlKey ? { delta, x: null, y: null } : snapBoxDelta(gesture.box, delta, gesture.targets, snap)
       setGuides({ x: snapped.x, y: snapped.y })
-      const moved =
-        gesture.moved || Math.hypot(delta.x, delta.y) > r(DRAG_THRESHOLD_PX)
+      const moved = gesture.moved || Math.hypot(delta.x, delta.y) > r(DRAG_THRESHOLD_PX)
       if (moved !== gesture.moved) setGesture({ ...gesture, moved })
       if (!moved) break
       onDocChange({
         ...gesture.base,
-        items: transformItems(
-          gesture.base.items,
-          selection,
-          translation(snapped.delta.x, snapped.delta.y),
-        ),
+        items: transformItems(gesture.base.items, selection, translation(snapped.delta.x, snapped.delta.y)),
       })
       break
     }
 
     case 'grip': {
-      const target = e.metaKey || e.ctrlKey
-        ? p
-        : snapPoint(p, gesture.targets, snap).point
+      const target = e.metaKey || e.ctrlKey ? p : snapPoint(p, gesture.targets, snap).point
       const m = scaleFromGrip(gesture.box, gesture.grip, target, {
         uniform: e.shiftKey,
         fromCenter: e.altKey,

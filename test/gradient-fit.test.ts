@@ -46,11 +46,7 @@ const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax -
 
 /** Roughly-equal hex colors (per-channel tolerance, default 12/255). */
 function assertColorNear(got: string, want: string, tol = 12, msg = '') {
-  const p = (s: string) => [
-    parseInt(s.slice(1, 3), 16),
-    parseInt(s.slice(3, 5), 16),
-    parseInt(s.slice(5, 7), 16),
-  ]
+  const p = (s: string) => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)]
   const a = p(got)
   const b = p(want)
   for (let i = 0; i < 3; i++) {
@@ -172,7 +168,17 @@ test('too few samples → solid (never gradient)', () => {
 
 test('gradientToSvgDef emits valid linear/radial markup', () => {
   const lin = gradientToSvgDef(
-    { type: 'linear', x1: 0, y1: 0, x2: 100, y2: 0, stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }] },
+    {
+      type: 'linear',
+      x1: 0,
+      y1: 0,
+      x2: 100,
+      y2: 0,
+      stops: [
+        { offset: 0, color: '#000000' },
+        { offset: 1, color: '#ffffff' },
+      ],
+    },
     'grad-x',
   )
   assert.match(lin, /<linearGradient id="grad-x" gradientUnits="userSpaceOnUse"/)
@@ -180,7 +186,16 @@ test('gradientToSvgDef emits valid linear/radial markup', () => {
   assert.match(lin, /<stop offset="1" stop-color="#ffffff"\/>/)
 
   const rad = gradientToSvgDef(
-    { type: 'radial', cx: 50, cy: 50, r: 25, stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#00ff00' }] },
+    {
+      type: 'radial',
+      cx: 50,
+      cy: 50,
+      r: 25,
+      stops: [
+        { offset: 0, color: '#ff0000' },
+        { offset: 1, color: '#00ff00' },
+      ],
+    },
     'grad-y',
   )
   assert.match(rad, /<radialGradient id="grad-y"[^>]*cx="50"[^>]*r="25"/)

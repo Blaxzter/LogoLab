@@ -29,18 +29,12 @@ export function duplicateSelected(
   selection: ReadonlySet<string>,
 ): { doc: EditableDoc; ids: Set<string> } | null {
   const top = topLevelSelection(doc.items, selection)
-  const originals = top
-    .map((id) => findItem(doc.items, id))
-    .filter((it): it is DocItem => it !== null)
+  const originals = top.map((id) => findItem(doc.items, id)).filter((it): it is DocItem => it !== null)
   if (originals.length === 0) return null
   const copies = duplicateItems(originals)
   const offset = Math.max(doc.viewBox[2], doc.viewBox[3]) * 0.02
   const ids = new Set(copies.map((c) => c.id))
-  const items = transformItems(
-    [...doc.items, ...copies],
-    ids,
-    translation(offset, offset),
-  )
+  const items = transformItems([...doc.items, ...copies], ids, translation(offset, offset))
   return { doc: { ...doc, items }, ids }
 }
 
@@ -140,8 +134,6 @@ export function combineSelected(
   const merged = combinePaths(paths as never)
   if (!merged) return null
   const keep = new Set(paths.slice(1).map((p) => p.id))
-  const items = removeItems(doc.items, keep).map((it) =>
-    it.id === merged.id ? merged : it,
-  )
+  const items = removeItems(doc.items, keep).map((it) => (it.id === merged.id ? merged : it))
   return { doc: { ...doc, items }, id: merged.id }
 }

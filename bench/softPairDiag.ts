@@ -60,7 +60,11 @@ type Img = { width: number; height: number; data: Uint8ClampedArray }
 function rasterize(path: string): Img {
   if (path.endsWith('.png')) return decodePng(readFileSync(path)) as unknown as Img
   const svg = readFileSync(path, 'utf8')
-  return decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, ...(TRANSPARENT ? {} : { background: 'white' }) }).render().asPng()) as unknown as Img
+  return decodePng(
+    new Resvg(svg, { fitTo: { mode: 'width', value: RES }, ...(TRANSPARENT ? {} : { background: 'white' }) })
+      .render()
+      .asPng(),
+  ) as unknown as Img
 }
 
 const hex = (k: number): string => '#' + k.toString(16).padStart(6, '0')
@@ -102,17 +106,28 @@ function measure(img: Img): Report {
       hist[l].set(k, (hist[l].get(k) ?? 0) + 1)
       if (x > 0 && y > 0 && x < w - 1 && y < h - 1) {
         if (
-          rgbAt(i - w - 1) === k && rgbAt(i - w) === k && rgbAt(i - w + 1) === k &&
-          rgbAt(i - 1) === k && rgbAt(i + 1) === k &&
-          rgbAt(i + w - 1) === k && rgbAt(i + w) === k && rgbAt(i + w + 1) === k
-        ) flat[l]++
+          rgbAt(i - w - 1) === k &&
+          rgbAt(i - w) === k &&
+          rgbAt(i - w + 1) === k &&
+          rgbAt(i - 1) === k &&
+          rgbAt(i + 1) === k &&
+          rgbAt(i + w - 1) === k &&
+          rgbAt(i + w) === k &&
+          rgbAt(i + w + 1) === k
+        )
+          flat[l]++
       }
     }
   }
   const mode = new Int32Array(K)
   for (let l = 0; l < K; l++) {
-    let bk = -1, bc = 0
-    for (const [k, c] of hist[l]) if (c > bc || (c === bc && k < bk)) { bc = c; bk = k }
+    let bk = -1,
+      bc = 0
+    for (const [k, c] of hist[l])
+      if (c > bc || (c === bc && k < bk)) {
+        bc = c
+        bk = k
+      }
     mode[l] = bk
   }
   const d2 = (p: number, r: number): number => {
@@ -123,12 +138,27 @@ function measure(img: Img): Report {
   }
   const pairs = new Map<number, PairStat>()
   const visit = (i: number, j: number): void => {
-    const a = q.labels[i], b = q.labels[j]
+    const a = q.labels[i],
+      b = q.labels[j]
     if (a < 0 || b < 0 || a === b) return
-    const lo = Math.min(a, b), hi = Math.max(a, b)
+    const lo = Math.min(a, b),
+      hi = Math.max(a, b)
     const key = lo * K + hi
     let s = pairs.get(key)
-    if (!s) pairs.set(key, (s = { a: lo, b: hi, n: 0, hard: 0, hist: new Int32Array(BINS), nInt: 0, hardInt: 0, histInt: new Int32Array(BINS) }))
+    if (!s)
+      pairs.set(
+        key,
+        (s = {
+          a: lo,
+          b: hi,
+          n: 0,
+          hard: 0,
+          hist: new Int32Array(BINS),
+          nInt: 0,
+          hardInt: 0,
+          histInt: new Int32Array(BINS),
+        }),
+      )
     const dist2 = d2(mode[lo], mode[hi])
     const step2 = d2(rgbAt(i), rgbAt(j))
     s.n++
@@ -145,10 +175,15 @@ function measure(img: Img): Report {
     }
   }
   function within(i: number, a: number, b: number): boolean {
-    const x = i % w, y = (i / w) | 0
+    const x = i % w,
+      y = (i / w) | 0
     const ok = (l: number): boolean => l === a || l === b
-    return (x === 0 || ok(q.labels[i - 1])) && (x === w - 1 || ok(q.labels[i + 1])) &&
-      (y === 0 || ok(q.labels[i - w])) && (y === h - 1 || ok(q.labels[i + w]))
+    return (
+      (x === 0 || ok(q.labels[i - 1])) &&
+      (x === w - 1 || ok(q.labels[i + 1])) &&
+      (y === 0 || ok(q.labels[i - w])) &&
+      (y === h - 1 || ok(q.labels[i + w]))
+    )
   }
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -175,19 +210,29 @@ const medianOf = (h: Int32Array, n: number): number => {
 function printOne(title: string, rep: Report): void {
   console.log(`\n━━━ ${title} @ ${RES}px ━━━ ${rep.palette.length} clusters\n`)
   console.log('  CLUSTERS (mode hex, px, flat-interior px):')
-  rep.palette.forEach((p, l) => console.log(`    [${String(l).padStart(2)}] ${hex(p.mode)}  n=${String(p.count).padStart(7)}  flat=${String(p.flat).padStart(6)}`))
+  rep.palette.forEach((p, l) =>
+    console.log(
+      `    [${String(l).padStart(2)}] ${hex(p.mode)}  n=${String(p.count).padStart(7)}  flat=${String(p.flat).padStart(6)}`,
+    ),
+  )
   console.log('\n  ADJACENT PAIRS (boundary pixel pairs n ≥ ' + MIN_N + '):')
   console.log('     a    b   modeA    modeB      ΔE    RGB      n   hard%  median │   nInt  hardI%  medI   verdict')
   for (const p of rep.pairs) {
     if (p.n < MIN_N) continue
-    const A = rep.palette[p.a].mode, B = rep.palette[p.b].mode
+    const A = rep.palette[p.a].mode,
+      B = rep.palette[p.b].mode
     const de = deltaE76(labOf(A), labOf(B))
-    const rgb = Math.sqrt(((A >> 16 & 255) - (B >> 16 & 255)) ** 2 + ((A >> 8 & 255) - (B >> 8 & 255)) ** 2 + ((A & 255) - (B & 255)) ** 2)
+    const rgb = Math.sqrt(
+      (((A >> 16) & 255) - ((B >> 16) & 255)) ** 2 +
+        (((A >> 8) & 255) - ((B >> 8) & 255)) ** 2 +
+        ((A & 255) - (B & 255)) ** 2,
+    )
     const hardShare = p.hard / p.n
     const med = medianOf(p.hist, p.n)
     const hardI = p.nInt > 0 ? p.hardInt / p.nInt : NaN
     const medI = p.nInt > 0 ? medianOf(p.histInt, p.nInt) : NaN
-    const verdict = p.nInt < MIN_N ? '(no interior boundary)' : hardI < 0.25 ? 'SOFT — a ramp' : hardI < 0.6 ? 'mixed' : 'edge'
+    const verdict =
+      p.nInt < MIN_N ? '(no interior boundary)' : hardI < 0.25 ? 'SOFT — a ramp' : hardI < 0.6 ? 'mixed' : 'edge'
     console.log(
       `    ${String(p.a).padStart(2)}   ${String(p.b).padStart(2)}  ${hex(A)}  ${hex(B)}  ${de.toFixed(2).padStart(6)}  ${rgb.toFixed(1).padStart(5)}  ${String(p.n).padStart(6)}  ${(hardShare * 100).toFixed(0).padStart(5)}%  ${med.toFixed(2).padStart(6)} │ ${String(p.nInt).padStart(6)}  ${(hardI * 100).toFixed(0).padStart(5)}%  ${medI.toFixed(2).padStart(5)}   ${verdict}`,
     )
@@ -206,7 +251,9 @@ function censusCases(): { name: string; path: string; gradients: number; lane: s
   }
   const logos = join(root, 'examples', 'logos')
   if (existsSync(logos)) {
-    for (const f of readdirSync(logos).filter((f) => f.endsWith('.svg')).sort()) {
+    for (const f of readdirSync(logos)
+      .filter((f) => f.endsWith('.svg'))
+      .sort()) {
       const p = join(logos, f)
       out.push({ name: f.replace(/\.svg$/, ''), path: p, gradients: gradCount(p), lane: 'gallery' })
     }
@@ -216,7 +263,24 @@ function censusCases(): { name: string; path: string; gradients: number; lane: s
 
 if (CENSUS) {
   const cases = censusCases()
-  type Row = { case: string; lane: string; gradients: number; A: number; B: number; de: number; n: number; hard: number; med: number; flatA: number; flatB: number; nInt: number; hardI: number; medI: number; cntA: number; cntB: number }
+  type Row = {
+    case: string
+    lane: string
+    gradients: number
+    A: number
+    B: number
+    de: number
+    n: number
+    hard: number
+    med: number
+    flatA: number
+    flatB: number
+    nInt: number
+    hardI: number
+    medI: number
+    cntA: number
+    cntB: number
+  }
   const rows: Row[] = []
   let images = 0
   for (const c of cases) {
@@ -230,26 +294,51 @@ if (CENSUS) {
     images++
     for (const p of rep.pairs) {
       if (p.nInt < MIN_N) continue
-      const A = rep.palette[p.a], B = rep.palette[p.b]
+      const A = rep.palette[p.a],
+        B = rep.palette[p.b]
       rows.push({
-        case: c.name, lane: c.lane, gradients: c.gradients, A: A.mode, B: B.mode,
-        de: deltaE76(labOf(A.mode), labOf(B.mode)), n: p.n, hard: p.hard / p.n, med: medianOf(p.hist, p.n),
-        flatA: A.flat, flatB: B.flat, nInt: p.nInt, hardI: p.hardInt / p.nInt, medI: medianOf(p.histInt, p.nInt),
-        cntA: A.count, cntB: B.count,
+        case: c.name,
+        lane: c.lane,
+        gradients: c.gradients,
+        A: A.mode,
+        B: B.mode,
+        de: deltaE76(labOf(A.mode), labOf(B.mode)),
+        n: p.n,
+        hard: p.hard / p.n,
+        med: medianOf(p.hist, p.n),
+        flatA: A.flat,
+        flatB: B.flat,
+        nInt: p.nInt,
+        hardI: p.hardInt / p.nInt,
+        medI: medianOf(p.histInt, p.nInt),
+        cntA: A.count,
+        cntB: B.count,
       })
     }
   }
-  console.log(`\n━━━ SOFT-PAIR CENSUS @ ${RES}px — ${images} images, ${rows.length} adjacent pairs with INTERIOR boundary n ≥ ${MIN_N} ━━━\n`)
-  console.log('  INTERIOR HARD-SHARE HISTOGRAM (share of interior boundary pixel pairs whose source step ≥ ½ the pair distance):')
+  console.log(
+    `\n━━━ SOFT-PAIR CENSUS @ ${RES}px — ${images} images, ${rows.length} adjacent pairs with INTERIOR boundary n ≥ ${MIN_N} ━━━\n`,
+  )
+  console.log(
+    '  INTERIOR HARD-SHARE HISTOGRAM (share of interior boundary pixel pairs whose source step ≥ ½ the pair distance):',
+  )
   const edges = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0001]
   for (let i = 0; i + 1 < edges.length; i++) {
     const inBin = rows.filter((r) => r.hardI >= edges[i] && r.hardI < edges[i + 1])
     if (!inBin.length) continue
     const noGrad = inBin.filter((r) => r.gradients === 0).length
-    console.log(`    ${(edges[i] * 100).toFixed(0).padStart(3)}–${Math.min(100, edges[i + 1] * 100).toFixed(0).padStart(3)}%  ${'█'.repeat(Math.min(70, inBin.length))} ${inBin.length}  (no-gradient sources: ${noGrad})`)
+    console.log(
+      `    ${(edges[i] * 100).toFixed(0).padStart(3)}–${Math.min(100, edges[i + 1] * 100)
+        .toFixed(0)
+        .padStart(3)}%  ${'█'.repeat(Math.min(70, inBin.length))} ${inBin.length}  (no-gradient sources: ${noGrad})`,
+    )
   }
-  console.log('\n  EVERY PAIR UNDER 60% INTERIOR-HARD (grad = gradients the SOURCE SVG authors; a no-gradient source cannot hold a ramp):')
-  console.log('    case                       lane     grad   A        B          ΔE   nInt  hardI%  medI │ all-n  hard%   cntA/flatA        cntB/flatB')
+  console.log(
+    '\n  EVERY PAIR UNDER 60% INTERIOR-HARD (grad = gradients the SOURCE SVG authors; a no-gradient source cannot hold a ramp):',
+  )
+  console.log(
+    '    case                       lane     grad   A        B          ΔE   nInt  hardI%  medI │ all-n  hard%   cntA/flatA        cntB/flatB',
+  )
   for (const r of rows.filter((r) => r.hardI < 0.6).sort((x, y) => x.hardI - y.hardI)) {
     console.log(
       `    ${r.case.padEnd(26)} ${r.lane.padEnd(8)} ${String(r.gradients).padStart(4)}   ${hex(r.A)}  ${hex(r.B)}  ${r.de.toFixed(1).padStart(6)}  ${String(r.nInt).padStart(5)}  ${(r.hardI * 100).toFixed(0).padStart(5)}%  ${r.medI.toFixed(2).padStart(5)} │ ${String(r.n).padStart(5)}  ${(r.hard * 100).toFixed(0).padStart(4)}%   ${String(r.cntA).padStart(7)}/${String(r.flatA).padEnd(7)}  ${String(r.cntB).padStart(7)}/${String(r.flatB).padEnd(7)}`,
@@ -261,7 +350,15 @@ if (CENSUS) {
   // modes. A subtle shading of one ink is a short chain of small diameter; a gradient traced
   // flat is a long chain spanning tens of ΔE. The diameter distribution is the calibration.
   const SOFT_MAX = Number(arg('--soft')) || 0.1
-  type Comp = { case: string; lane: string; gradients: number; members: number[]; diameter: number; px: number; flat: number }
+  type Comp = {
+    case: string
+    lane: string
+    gradients: number
+    members: number[]
+    diameter: number
+    px: number
+    flat: number
+  }
   const comps: Comp[] = []
   for (const c of cases) {
     const inCase = rows.filter((r) => r.case === c.name && r.hardI <= SOFT_MAX)
@@ -275,7 +372,8 @@ if (CENSUS) {
     const union = (a: number, b: number): void => {
       if (!parent.has(a)) parent.set(a, a)
       if (!parent.has(b)) parent.set(b, b)
-      const ra = find(a), rb = find(b)
+      const ra = find(a),
+        rb = find(b)
       if (ra !== rb) parent.set(ra, rb)
     }
     for (const r of inCase) union(r.A, r.B)
@@ -298,13 +396,19 @@ if (CENSUS) {
         for (let j = i + 1; j < members.length; j++)
           diameter = Math.max(diameter, deltaE76(labOf(members[i]), labOf(members[j])))
       comps.push({
-        case: c.name, lane: c.lane, gradients: c.gradients, members, diameter,
+        case: c.name,
+        lane: c.lane,
+        gradients: c.gradients,
+        members,
+        diameter,
         px: members.reduce((s, m) => s + (info.get(m)?.cnt ?? 0), 0),
         flat: members.reduce((s, m) => s + (info.get(m)?.flat ?? 0), 0),
       })
     }
   }
-  console.log(`\n  SOFT COMPONENTS (pairs with interior hard share ≤ ${SOFT_MAX}, chained) — ${comps.length} components, sorted by DIAMETER (max pairwise ΔE of member modes):`)
+  console.log(
+    `\n  SOFT COMPONENTS (pairs with interior hard share ≤ ${SOFT_MAX}, chained) — ${comps.length} components, sorted by DIAMETER (max pairwise ΔE of member modes):`,
+  )
   console.log('    case                       lane     grad  size  diameter       px     flat  members')
   for (const c of comps.sort((x, y) => x.diameter - y.diameter)) {
     console.log(
@@ -316,19 +420,36 @@ if (CENSUS) {
   for (let i = 0; i + 1 < dEdges.length; i++) {
     const inBin = comps.filter((c) => c.diameter >= dEdges[i] && c.diameter < dEdges[i + 1])
     if (!inBin.length) continue
-    console.log(`    ${String(dEdges[i]).padStart(3)}–${dEdges[i + 1] > 1e8 ? '∞' : String(dEdges[i + 1]).padEnd(3)}  ${'█'.repeat(Math.min(70, inBin.length))} ${inBin.length}   ${inBin.map((c) => c.case).filter((v, i, a) => a.indexOf(v) === i).join(', ')}`)
+    console.log(
+      `    ${String(dEdges[i]).padStart(3)}–${dEdges[i + 1] > 1e8 ? '∞' : String(dEdges[i + 1]).padEnd(3)}  ${'█'.repeat(Math.min(70, inBin.length))} ${inBin.length}   ${inBin
+        .map((c) => c.case)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .join(', ')}`,
+    )
   }
 } else {
   const path = CASE
     ? join(root, 'public', 'examples', 'edge-cases', `${CASE}.svg`)
     : FILE
-      ? FILE.includes('/') ? join(root, FILE) : join(root, 'examples', 'logos', FILE)
+      ? FILE.includes('/')
+        ? join(root, FILE)
+        : join(root, 'examples', 'logos', FILE)
       : join(root, 'public', 'examples', 'edge-cases', 'shaded-ink.svg')
   const img = rasterize(path)
   printOne(CASE ?? FILE ?? 'shaded-ink', measure(img))
   // What the shipped rule (shadingFuse.ts) actually fuses on this input.
   const q = quantize(img as unknown as ImageData, MAX_COLORS, MIN_REGION_AREA)
   const { groups } = fuseShadingTones(img, q)
-  console.log(`
-  fuseShadingTones: ${groups.length} group(s) fused` + (groups.length ? ' — ' + groups.map((g) => '[' + g.map((i) => `${i}:${q.palette[i].r},${q.palette[i].g},${q.palette[i].b}`).join(' ') + ']').join(' ') : ''))
+  console.log(
+    `
+  fuseShadingTones: ${groups.length} group(s) fused` +
+      (groups.length
+        ? ' — ' +
+          groups
+            .map(
+              (g) => '[' + g.map((i) => `${i}:${q.palette[i].r},${q.palette[i].g},${q.palette[i].b}`).join(' ') + ']',
+            )
+            .join(' ')
+        : ''),
+  )
 }

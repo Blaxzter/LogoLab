@@ -157,10 +157,7 @@ async function runInference(
 
   // output[0] is a [1, H, W] foreground-probability map; scale to 0–255 and
   // resize back to the original resolution → a single-channel alpha mask.
-  const mask = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(
-    img.width,
-    img.height,
-  )
+  const mask = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(img.width, img.height)
 
   const out = new ImageData(new Uint8ClampedArray(img.data), img.width, img.height)
   const m = mask.data as Uint8Array | Uint8ClampedArray
@@ -180,10 +177,7 @@ async function runInference(
  * inference too, because WebGPU can load and then fail during the forward pass;
  * `onProgress` reports the device only once it has produced a result.
  */
-export async function aiRemoveBackground(
-  img: ImageData,
-  onProgress?: (p: AiProgress) => void,
-): Promise<ImageData> {
+export async function aiRemoveBackground(img: ImageData, onProgress?: (p: AiProgress) => void): Promise<ImageData> {
   const picked = await pickDevice()
   // Always end on wasm (the correctness fallback); skip the duplicate when the
   // probe already chose wasm.

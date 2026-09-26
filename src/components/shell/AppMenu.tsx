@@ -54,7 +54,11 @@ export function AppMenu({
         </div>
 
         {/* Only rendered while the browser is offering an install. */}
-        <InstallAppButton variant="ghost" className={`${row} justify-start text-ink-2 hover:bg-surface-3`} onInstalled={onClose} />
+        <InstallAppButton
+          variant="ghost"
+          className={`${row} justify-start text-ink-2 hover:bg-surface-3`}
+          onInstalled={onClose}
+        />
 
         <AgentSetupButton variant="ghost" className={`${row} justify-start`} onOpened={onClose} />
 

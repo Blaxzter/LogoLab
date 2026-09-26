@@ -273,7 +273,8 @@ const rawOnnx = (name: string): Upscaler => {
     async load() {
       ort = await loadOrt()
       const path = join(MODELS_DIR, m.file)
-      if (!existsSync(path)) throw new Error(`${name}: ${path} missing — see the MODELS note at the top of upscaleDiag.ts`)
+      if (!existsSync(path))
+        throw new Error(`${name}: ${path} missing — see the MODELS note at the top of upscaleDiag.ts`)
       sess = await ort.InferenceSession.create(path, { executionProviders: ['cpu'], logSeverityLevel: 3 })
     },
     async run(img) {
@@ -327,7 +328,8 @@ const hfPipeline = (name: string): Upscaler => {
       const { width: W, height: H } = img
       const planes = toPlanes(img)
       const rgb = new Uint8Array(W * H * 3)
-      for (let i = 0; i < W * H; i++) for (let c = 0; c < 3; c++) rgb[i * 3 + c] = Math.round(planes[c * W * H + i] * 255)
+      for (let i = 0; i < W * H; i++)
+        for (let c = 0; c < 3; c++) rgb[i * 3 + c] = Math.round(planes[c * W * H + i] * 255)
       const out = await pipe(new RawImage(rgb, W, H, 3))
       // The processor pads to the window size; the output is larger than k·W then. Crop.
       const k = m.factor
@@ -390,7 +392,8 @@ const nodesOf = (doc: EditableDoc): number => {
   for (const it of doc.items) if (it.kind === 'path') for (const sp of it.subPaths) n += sp.nodes.length
   return n
 }
-const pathsOf = (doc: EditableDoc): number => doc.items.filter((it) => it.kind === 'path' && it.visible !== false).length
+const pathsOf = (doc: EditableDoc): number =>
+  doc.items.filter((it) => it.kind === 'path' && it.visible !== false).length
 const f2 = (v: number): string => (Number.isFinite(v) ? v.toFixed(2) : '—')
 const pad = (s: string | number, n: number): string => String(s).padStart(n)
 const padr = (s: string | number, n: number): string => String(s).padEnd(n)
@@ -436,14 +439,18 @@ async function runFixtures(ups: Upscaler[]): Promise<FixtureRow[]> {
       console.log(`${c.name}: not scorable — ${why}`)
       continue
     }
-    const refImg = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: REF }, background: 'white' }).render().asPng())
+    const refImg = decodePng(
+      new Resvg(svg, { fitTo: { mode: 'width', value: REF }, background: 'white' }).render().asPng(),
+    )
     const gtRef = toRasterSpace(gt, refImg.width)
     console.log(`\n## ${c.name}`)
     console.log(
       `${padr('res', 4)} ${padr('upscaler', 20)} ${pad('in', 5)} ${pad('chamfer', 8)} ${pad('p95', 7)} ${pad('pars', 6)} ${pad('corners', 8)} ${pad('invent', 7)} ${pad('regions', 8)} ${pad('nodes', 6)} ${pad('paths', 6)} ${pad('up ms', 7)} ${pad('trace', 7)}`,
     )
     for (const res of RES) {
-      const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng())
+      const img = decodePng(
+        new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng(),
+      )
       for (const up of ups) {
         const t0 = performance.now()
         const input = await up.run(img)
@@ -481,9 +488,15 @@ async function runFixtures(ups: Upscaler[]): Promise<FixtureRow[]> {
         rows.push(row)
         if (dumpDir) {
           mkdirSync(dumpDir, { recursive: true })
-          writeFileSync(join(dumpDir, `${c.name}-${res}-${up.name}-in.png`), encodePng(input.data, input.width, input.height))
+          writeFileSync(
+            join(dumpDir, `${c.name}-${res}-${up.name}-in.png`),
+            encodePng(input.data, input.width, input.height),
+          )
           const render = rasterizeDoc(doc, input.width, input.height)
-          writeFileSync(join(dumpDir, `${c.name}-${res}-${up.name}-out.png`), encodePng(render, input.width, input.height))
+          writeFileSync(
+            join(dumpDir, `${c.name}-${res}-${up.name}-out.png`),
+            encodePng(render, input.width, input.height),
+          )
         }
         console.log(
           `${padr(res, 4)} ${padr(up.name, 20)} ${pad(input.width, 5)} ${pad(f2(g.chamfer), 8)} ${pad(f2(g.p95), 7)} ${pad(f2(g.parsimony), 6)} ${pad(`${g.cornersRecovered}/${g.gtCorners}`, 8)} ${pad(g.cornersInvented, 7)} ${pad(`${r.recovered}/${r.trueRegions}`, 8)} ${pad(row.docNodes, 6)} ${pad(row.docPaths, 6)} ${pad(upMs, 7)} ${pad(traceMs, 7)}`,
@@ -542,7 +555,16 @@ function boundaryOf(mask: Uint8Array, W: number, H: number): Uint8Array {
     for (let x = 0; x < W; x++) {
       const i = y * W + x
       if (!mask[i]) continue
-      if (x === 0 || y === 0 || x === W - 1 || y === H - 1 || !mask[i - 1] || !mask[i + 1] || !mask[i - W] || !mask[i + W])
+      if (
+        x === 0 ||
+        y === 0 ||
+        x === W - 1 ||
+        y === H - 1 ||
+        !mask[i - 1] ||
+        !mask[i + 1] ||
+        !mask[i - W] ||
+        !mask[i + W]
+      )
         b[i] = 1
     }
   return b
@@ -593,14 +615,23 @@ async function traceSmallTile(
   small: ImageDataLike,
   bg: SheetBackground,
   up: Upscaler,
-): Promise<{ doc: EditableDoc; input: ImageDataLike; plan: ReturnType<typeof planTileBase>; upMs: number; traceMs: number }> {
+): Promise<{
+  doc: EditableDoc
+  input: ImageDataLike
+  plan: ReturnType<typeof planTileBase>
+  upMs: number
+  traceMs: number
+}> {
   const base: VectorizeOptions = { ...DEFAULT_VECTORIZE_OPTIONS, removeBackground: true }
   const plan = planTileBase(small, base, { colorMode: 'auto', background: bg, hiRes: false })
   const long = Math.max(small.width, small.height)
   let opts: VectorizeOptions = { ...plan.opts, smoothing: tileSmoothing(base.smoothing, long * up.factor) }
   if (plan.color) {
     try {
-      opts = { ...opts, gradients: suggestGradients(new ImageData(new Uint8ClampedArray(small.data), small.width, small.height)) }
+      opts = {
+        ...opts,
+        gradients: suggestGradients(new ImageData(new Uint8ClampedArray(small.data), small.width, small.height)),
+      }
     } catch {
       /* keep the default */
     }

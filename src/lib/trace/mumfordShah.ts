@@ -157,16 +157,28 @@ export function solveMumfordShah(img: RgbaImage, opts: MumfordShahOptions = DEFA
       let sb = Ib[i]
       let wsum = 1
       if (x > 0 && !cutH[i - 1] && opaque[i - 1]) {
-        sr += alpha * ur[i - 1]; sg += alpha * ug[i - 1]; sb += alpha * ub[i - 1]; wsum += alpha
+        sr += alpha * ur[i - 1]
+        sg += alpha * ug[i - 1]
+        sb += alpha * ub[i - 1]
+        wsum += alpha
       }
       if (x + 1 < w && !cutH[i] && opaque[i + 1]) {
-        sr += alpha * ur[i + 1]; sg += alpha * ug[i + 1]; sb += alpha * ub[i + 1]; wsum += alpha
+        sr += alpha * ur[i + 1]
+        sg += alpha * ug[i + 1]
+        sb += alpha * ub[i + 1]
+        wsum += alpha
       }
       if (y > 0 && !cutV[i - w] && opaque[i - w]) {
-        sr += alpha * ur[i - w]; sg += alpha * ug[i - w]; sb += alpha * ub[i - w]; wsum += alpha
+        sr += alpha * ur[i - w]
+        sg += alpha * ug[i - w]
+        sb += alpha * ub[i - w]
+        wsum += alpha
       }
       if (y + 1 < h && !cutV[i] && opaque[i + w]) {
-        sr += alpha * ur[i + w]; sg += alpha * ug[i + w]; sb += alpha * ub[i + w]; wsum += alpha
+        sr += alpha * ur[i + w]
+        sg += alpha * ug[i + w]
+        sb += alpha * ub[i + w]
+        wsum += alpha
       }
       const inv = 1 / wsum
       ur[i] = sr * inv

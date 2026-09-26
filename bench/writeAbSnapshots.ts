@@ -91,7 +91,9 @@ const logosArg = argv.includes('--logos') ? (argv[argv.indexOf('--logos') + 1] ?
 // the two as one entry even when the names are outside the before-/after- convention.
 const pairArg = argv.includes('--pair') ? snapshotDirName(argv[argv.indexOf('--pair') + 1] ?? '') : null
 if (pairArg && !existsSync(join(root, AB_SNAPSHOT_DIR, pairArg))) {
-  console.log(`  note: --pair ${pairArg} does not exist under ${AB_SNAPSHOT_DIR}/ — recording it anyway (stamp it and the pair appears)`)
+  console.log(
+    `  note: --pair ${pairArg} does not exist under ${AB_SNAPSHOT_DIR}/ — recording it anyway (stamp it and the pair appears)`,
+  )
 }
 const outDir = join(root, AB_SNAPSHOT_DIR, name)
 mkdirSync(outDir, { recursive: true })

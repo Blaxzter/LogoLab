@@ -97,7 +97,9 @@ export function scaleDoc(doc: EditableDoc, s: number): EditableDoc {
   return {
     viewBox: [doc.viewBox[0] * s, doc.viewBox[1] * s, doc.viewBox[2] * s, doc.viewBox[3] * s],
     items: doc.items.map((it) =>
-      it.kind === 'path' ? { ...it, loops: undefined, subPaths: transformSubPaths(it.subPaths, [s, 0, 0, s, 0, 0]) } : it,
+      it.kind === 'path'
+        ? { ...it, loops: undefined, subPaths: transformSubPaths(it.subPaths, [s, 0, 0, s, 0, 0]) }
+        : it,
     ),
   }
 }
@@ -154,20 +156,31 @@ export async function measureScale(
   const gt = parseGroundTruth(svg)
   const why = unscorable(gt)
 
-  const refImg = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: REF }, background: 'white' }).render().asPng())
+  const refImg = decodePng(
+    new Resvg(svg, { fitTo: { mode: 'width', value: REF }, background: 'white' }).render().asPng(),
+  )
   const gtRef = why ? [] : toRasterSpace(gt, refImg.width)
 
   const lanes: ScaleLane[] = []
   const scaled: EditableDoc[] = []
   for (const res of RES) {
-    const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng())
+    const img = decodePng(
+      new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng(),
+    )
     let raw: { labels: Int32Array; width: number; height: number } | null = null
     const t0 = process.hrtime.bigint()
     const doc = await traceImage(
       img as unknown as ImageData,
       { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: opts.gradients },
-      undefined, undefined, undefined, undefined,
-      opts.lattice ? (l) => { raw = l } : undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      opts.lattice
+        ? (l) => {
+            raw = l
+          }
+        : undefined,
     )
     const ms = Number(process.hrtime.bigint() - t0) / 1e6
 
@@ -182,7 +195,13 @@ export async function measureScale(
     let lat: { chamfer: number; p95: number } | null = null
     if (raw && !why) {
       const rr = raw as { labels: Int32Array; width: number; height: number }
-      const lg = scoreGeometry(gtRef, scaleDoc(latticeDoc(rr.labels, rr.width, rr.height), s), refImg.width, refImg.height, refImg)
+      const lg = scoreGeometry(
+        gtRef,
+        scaleDoc(latticeDoc(rr.labels, rr.width, rr.height), s),
+        refImg.width,
+        refImg.height,
+        refImg,
+      )
       lat = { chamfer: lg.chamfer, p95: lg.p95 }
     }
 
@@ -191,12 +210,21 @@ export async function measureScale(
 
     lanes.push({
       res,
-      chamfer: g?.chamfer ?? NaN, p95: g?.p95 ?? NaN, worst: g?.hausdorff ?? NaN,
-      missedMean: g?.missedMean ?? NaN, spuriousMean: g?.spuriousMean ?? NaN,
-      parsimony: g?.parsimony ?? NaN, docNodes: g?.docNodes ?? docNodes, samples: g?.samples ?? 0,
-      latChamfer: lat?.chamfer ?? NaN, latP95: lat?.p95 ?? NaN,
-      gtCorners: gNative?.gtCorners ?? 0, cornersRecovered: gNative?.cornersRecovered ?? 0,
-      trueRegions: r?.trueRegions ?? 0, recovered: r?.recovered ?? 0, missing: r?.missing ?? [],
+      chamfer: g?.chamfer ?? NaN,
+      p95: g?.p95 ?? NaN,
+      worst: g?.hausdorff ?? NaN,
+      missedMean: g?.missedMean ?? NaN,
+      spuriousMean: g?.spuriousMean ?? NaN,
+      parsimony: g?.parsimony ?? NaN,
+      docNodes: g?.docNodes ?? docNodes,
+      samples: g?.samples ?? 0,
+      latChamfer: lat?.chamfer ?? NaN,
+      latP95: lat?.p95 ?? NaN,
+      gtCorners: gNative?.gtCorners ?? 0,
+      cornersRecovered: gNative?.cornersRecovered ?? 0,
+      trueRegions: r?.trueRegions ?? 0,
+      recovered: r?.recovered ?? 0,
+      missing: r?.missing ?? [],
       ms,
     })
   }

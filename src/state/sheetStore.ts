@@ -387,14 +387,12 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     })),
 
   // Resolution changes every tile's trace, hand-tuned ones included.
-  setHiRes: (on) =>
-    set((s) => ({ hiRes: on, tiles: s.tiles.map((t) => (t.doc ? { ...t, stale: true } : t)) })),
+  setHiRes: (on) => set((s) => ({ hiRes: on, tiles: s.tiles.map((t) => (t.doc ? { ...t, stale: true } : t)) })),
 
   setGradientMode: (mode) =>
     set((s) => ({
       gradientMode: mode,
-      traceOptions:
-        mode === 'auto' ? s.traceOptions : { ...s.traceOptions, gradients: mode === 'rich' },
+      traceOptions: mode === 'auto' ? s.traceOptions : { ...s.traceOptions, gradients: mode === 'rich' },
       tiles: s.tiles.map((t) => (t.doc && !t.opts ? { ...t, stale: true } : t)),
     })),
 
@@ -523,7 +521,11 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     } catch (err) {
       if (token === ocrToken) {
         set((s) => ({
-          ocr: { ...s.ocr, status: 'error', error: err instanceof Error ? err.message : 'Could not load the OCR engine' },
+          ocr: {
+            ...s.ocr,
+            status: 'error',
+            error: err instanceof Error ? err.message : 'Could not load the OCR engine',
+          },
         }))
       }
       return
@@ -541,7 +543,9 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         read = await reader.read(prepareCaption(image, ink, background))
       } catch (err) {
         if (token === ocrToken) {
-          set((s) => ({ ocr: { ...s.ocr, status: 'error', error: err instanceof Error ? err.message : 'Reading a caption failed' } }))
+          set((s) => ({
+            ocr: { ...s.ocr, status: 'error', error: err instanceof Error ? err.message : 'Reading a caption failed' },
+          }))
         }
         return
       }
@@ -568,8 +572,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       tiles: s.tiles.map((t) => (t.doc && !t.opts ? { ...t, stale: true } : t)),
     })),
 
-  updateTile: (id, patch) =>
-    set((s) => ({ tiles: s.tiles.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
+  updateTile: (id, patch) => set((s) => ({ tiles: s.tiles.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
 
   setTileRect: (id, rect) =>
     set((s) => ({
@@ -608,9 +611,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     const { image, tiles, background } = get()
     const tile = tiles.find((t) => t.id === id)
     if (!image || !tile) return null
-    const fill = background && !background.transparent
-      ? { r: background.r, g: background.g, b: background.b, a: 255 }
-      : null
+    const fill =
+      background && !background.transparent ? { r: background.r, g: background.g, b: background.b, a: 255 } : null
     return cropTile(image, tile.rect, fill)
   },
 
@@ -625,9 +627,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
     set((s) => ({
       running: true,
-      tiles: s.tiles.map((t) =>
-        queue.includes(t.id) ? { ...t, status: 'queued', progress: 0, error: null } : t,
-      ),
+      tiles: s.tiles.map((t) => (queue.includes(t.id) ? { ...t, status: 'queued', progress: 0, error: null } : t)),
     }))
 
     let cursor = 0

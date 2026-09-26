@@ -187,10 +187,7 @@ export function serviceWorker(): Plugin {
       const template = readFileSync(here('../src/pwa/sw.js'), 'utf8')
       const source = template
         .replace(/^const BUILD = '__BUILD_ID__'$/m, `const BUILD = ${JSON.stringify(buildId)}`)
-        .replace(
-          /^const PRECACHE_URLS = __PRECACHE__$/m,
-          `const PRECACHE_URLS = ${JSON.stringify(urls, null, 2)}`,
-        )
+        .replace(/^const PRECACHE_URLS = __PRECACHE__$/m, `const PRECACHE_URLS = ${JSON.stringify(urls, null, 2)}`)
       if (source.includes('__BUILD_ID__') || source.includes('__PRECACHE__')) {
         this.error('service worker: a placeholder declaration in src/pwa/sw.js was not substituted')
       }

@@ -65,11 +65,36 @@ interface Feature {
   opts?: Partial<VectorizeOptions>
 }
 const FEATURES: Feature[] = [
-  { label: 'localScaleK = 0.15', note: '§10.1 scale-relative snap ε', defaultOn: false, planarFit: { localScaleK: 0.15 } },
-  { label: 'refineJunctions', note: 'sub-pixel + G¹ junction weld (§9.3)', defaultOn: false, planarFit: { refineJunctions: true } },
-  { label: 'junctionReseat', note: '§10.4 junction re-seat + converged-pair weld — ships ON; cost of keeping it', defaultOn: true, planarFit: { junctionReseat: false } },
-  { label: 'arcSnap (co-circular)', note: 'ring arc snap — ships ON; cost of keeping it', defaultOn: true, planarFit: { arcSnap: false } },
-  { label: 'cornerVeto (§9.8)', note: 'corner-turn veto — ships ON; cost of keeping it', defaultOn: true, planarFit: { cornerVeto: false } },
+  {
+    label: 'localScaleK = 0.15',
+    note: '§10.1 scale-relative snap ε',
+    defaultOn: false,
+    planarFit: { localScaleK: 0.15 },
+  },
+  {
+    label: 'refineJunctions',
+    note: 'sub-pixel + G¹ junction weld (§9.3)',
+    defaultOn: false,
+    planarFit: { refineJunctions: true },
+  },
+  {
+    label: 'junctionReseat',
+    note: '§10.4 junction re-seat + converged-pair weld — ships ON; cost of keeping it',
+    defaultOn: true,
+    planarFit: { junctionReseat: false },
+  },
+  {
+    label: 'arcSnap (co-circular)',
+    note: 'ring arc snap — ships ON; cost of keeping it',
+    defaultOn: true,
+    planarFit: { arcSnap: false },
+  },
+  {
+    label: 'cornerVeto (§9.8)',
+    note: 'corner-turn veto — ships ON; cost of keeping it',
+    defaultOn: true,
+    planarFit: { cornerVeto: false },
+  },
 ]
 
 interface Prof {
@@ -97,7 +122,10 @@ async function analyze(c: Case, raster: number, gradients: boolean, runs: number
   const svgText = c.kind === 'svg' ? await (await fetch(c.src)).text() : undefined
   const image = await labImageData(c.src, raster, svgText)
   const base: VectorizeOptions = { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients }
-  const configs: VectorizeOptions[] = [base, ...FEATURES.map((f) => ({ ...base, ...(f.opts ?? {}), planarFit: { ...(f.planarFit ?? {}) } }))]
+  const configs: VectorizeOptions[] = [
+    base,
+    ...FEATURES.map((f) => ({ ...base, ...(f.opts ?? {}), planarFit: { ...(f.planarFit ?? {}) } })),
+  ]
 
   for (const cfg of configs) await traceImage(image, cfg) // warm-up each config once (JIT + first-touch)
 
@@ -106,7 +134,11 @@ async function analyze(c: Case, raster: number, gradients: boolean, runs: number
   for (let r = 0; r < runs; r++) {
     for (let ci = 0; ci < configs.length; ci++) {
       const stages: Record<string, number> | undefined = ci === 0 ? {} : undefined
-      const sink = stages ? (n: string, x: number) => { stages[n] = (stages[n] ?? 0) + x } : undefined
+      const sink = stages
+        ? (n: string, x: number) => {
+            stages[n] = (stages[n] ?? 0) + x
+          }
+        : undefined
       const t0 = performance.now()
       await traceImage(image, configs[ci], undefined, undefined, undefined, sink)
       const dt = performance.now() - t0
@@ -139,13 +171,22 @@ const ms = (v: number): string => (v >= 100 ? v.toFixed(0) : v.toFixed(1))
 /** A horizontal stacked bar of stage durations, widths proportional to the case total. */
 function StageBar({ stages, total }: { stages: { key: string; ms: number }[]; total: number }) {
   const summed = stages.reduce((s, x) => s + x.ms, 0)
-  const segs = [...stages.map((s) => ({ ...STAGES.find((d) => d.key === s.key)!, ms: s.ms })), { ...OTHER, ms: Math.max(0, total - summed) }]
+  const segs = [
+    ...stages.map((s) => ({ ...STAGES.find((d) => d.key === s.key)!, ms: s.ms })),
+    { ...OTHER, ms: Math.max(0, total - summed) },
+  ]
   return (
     <div className="flex h-5 w-full overflow-hidden rounded bg-line-strong" role="img" aria-label="stage timing">
       {segs.map((s) => {
         const pct = total > 0 ? (s.ms / total) * 100 : 0
         if (pct < 0.4) return null
-        return <div key={s.key} title={`${s.label} · ${ms(s.ms)}ms · ${pct.toFixed(0)}%`} style={{ width: `${pct}%`, background: s.color }} />
+        return (
+          <div
+            key={s.key}
+            title={`${s.label} · ${ms(s.ms)}ms · ${pct.toFixed(0)}%`}
+            style={{ width: `${pct}%`, background: s.color }}
+          />
+        )
       })}
     </div>
   )
@@ -161,7 +202,8 @@ export default function ProfilerLab() {
 
   const run = useLabRun(cases, (c) => analyze(c, ui.raster, ui.gradients, ui.runs), {
     label: (c) => `Profiling ${c.name}`,
-    done: (n) => `Done — ${n} cases · best of ${ui.runs} interleaved runs @ ${ui.raster}px · gradients ${ui.gradients ? 'on' : 'off'}. Timing is noisy; read the shape, not the last digit.`,
+    done: (n) =>
+      `Done — ${n} cases · best of ${ui.runs} interleaved runs @ ${ui.raster}px · gradients ${ui.gradients ? 'on' : 'off'}. Timing is noisy; read the shape, not the last digit.`,
     deps: [ui.raster, ui.gradients, ui.runs, ui.nonce, cases],
     // Cached like the other labs (ENGINE_HASH + settings), so reopening is instant. The `nonce`
     // (bumped by Re-measure, persisted so a reopen shows your LAST reading) rotates the key to
@@ -177,7 +219,10 @@ export default function ProfilerLab() {
 
   // Aggregate: sum every stage + total across finished cases → the corpus-wide breakdown.
   const agg = useMemo(() => {
-    const stages = STAGES.map((s) => ({ key: s.key, ms: done.reduce((a, p) => a + (p.stages.find((x) => x.key === s.key)?.ms ?? 0), 0) }))
+    const stages = STAGES.map((s) => ({
+      key: s.key,
+      ms: done.reduce((a, p) => a + (p.stages.find((x) => x.key === s.key)?.ms ?? 0), 0),
+    }))
     const total = done.reduce((a, p) => a + p.total, 0)
     const features = FEATURES.map((f) => {
       const cost = done.reduce((a, p) => a + (p.features.find((x) => x.label === f.label)?.cost ?? 0), 0)
@@ -210,8 +255,19 @@ export default function ProfilerLab() {
       controls={
         <>
           <LabCheck label="Gradients" checked={ui.gradients} onChange={(gradients) => setUi({ gradients })} />
-          <LabSelect label="Input px" value={ui.raster} onChange={(raster) => setUi({ raster })} options={[256, 512, 768].map((s) => ({ value: s, label: `${s}px` }))} />
-          <LabSelect label="Runs" hint="Interleaved rounds; the fastest (min) of each config is reported. More = steadier, slower." value={ui.runs} onChange={(runs) => setUi({ runs })} options={[3, 5, 9].map((s) => ({ value: s, label: `${s}×` }))} />
+          <LabSelect
+            label="Input px"
+            value={ui.raster}
+            onChange={(raster) => setUi({ raster })}
+            options={[256, 512, 768].map((s) => ({ value: s, label: `${s}px` }))}
+          />
+          <LabSelect
+            label="Runs"
+            hint="Interleaved rounds; the fastest (min) of each config is reported. More = steadier, slower."
+            value={ui.runs}
+            onChange={(runs) => setUi({ runs })}
+            options={[3, 5, 9].map((s) => ({ value: s, label: `${s}×` }))}
+          />
           <button
             type="button"
             onClick={() => setUi({ nonce: ui.nonce + 1 })}
@@ -228,8 +284,15 @@ export default function ProfilerLab() {
       <div className="mx-auto flex max-w-[1000px] flex-col gap-8 px-4 py-4">
         {allCached && (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-2 text-xs text-muted">
-            <span>Cached reading — the tracer source is unchanged since these were measured, so nothing re-ran. Timings are a past sample.</span>
-            <button type="button" onClick={() => setUi({ nonce: ui.nonce + 1 })} className="btn btn-secondary ml-auto h-6 gap-1 px-2 text-[0.7rem]">
+            <span>
+              Cached reading — the tracer source is unchanged since these were measured, so nothing re-ran. Timings are
+              a past sample.
+            </span>
+            <button
+              type="button"
+              onClick={() => setUi({ nonce: ui.nonce + 1 })}
+              className="btn btn-secondary ml-auto h-6 gap-1 px-2 text-[0.7rem]"
+            >
               <RotateCw size={11} />
               Re-measure fresh
             </button>
@@ -238,7 +301,9 @@ export default function ProfilerLab() {
         {/* ── Section 1 — pipeline stage breakdown ──────────────────────────────── */}
         <section>
           <h2 className="mb-1 text-sm font-semibold text-ink">Where the default pipeline spends its time</h2>
-          <p className="mb-3 text-xs text-muted">Stage durations from each case's fastest run, one bar per case. Hover a segment for its ms.</p>
+          <p className="mb-3 text-xs text-muted">
+            Stage durations from each case's fastest run, one bar per case. Hover a segment for its ms.
+          </p>
           <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[0.7rem] text-muted">
             {[...STAGES, OTHER].map((s) => (
               <span key={s.key} className="inline-flex items-center gap-1.5">
@@ -271,7 +336,11 @@ export default function ProfilerLab() {
                 {r.error && <p className="text-[0.7rem] text-warn">{r.error}</p>}
               </div>
             ))}
-            {run.pending && <div className="rounded-lg border border-dashed border-line bg-surface p-2.5 text-xs text-muted">Profiling {run.pending.name}…</div>}
+            {run.pending && (
+              <div className="rounded-lg border border-dashed border-line bg-surface p-2.5 text-xs text-muted">
+                Profiling {run.pending.name}…
+              </div>
+            )}
           </div>
         </section>
 
@@ -279,7 +348,9 @@ export default function ProfilerLab() {
         <section>
           <h2 className="mb-1 text-sm font-semibold text-ink">What each optional feature costs</h2>
           <p className="mb-3 text-xs text-muted">
-            Added ms per trace (best of {ui.runs} interleaved runs), summed across the {cases.length} case{cases.length === 1 ? '' : 's'} — so “enable it by default?” is a measured call. A flag that ships ON is timed by turning it OFF.
+            Added ms per trace (best of {ui.runs} interleaved runs), summed across the {cases.length} case
+            {cases.length === 1 ? '' : 's'} — so “enable it by default?” is a measured call. A flag that ships ON is
+            timed by turning it OFF.
           </p>
           <div className="overflow-x-auto rounded-lg border border-line-strong bg-surface">
             <table className="w-full text-xs tabular-nums">
@@ -300,8 +371,12 @@ export default function ProfilerLab() {
                         <div className="font-mono text-ink">{f.label}</div>
                         <div className="text-[0.68rem] text-faint">{f.note}</div>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-ink">{agg.total > 0 ? (f.cost >= 0 ? '+' : '') + ms(f.cost) : '—'}</td>
-                      <td className="px-3 py-2 text-right font-mono text-muted">{agg.total > 0 ? (f.pct >= 0 ? '+' : '') + f.pct.toFixed(1) + '%' : '—'}</td>
+                      <td className="px-3 py-2 text-right font-mono text-ink">
+                        {agg.total > 0 ? (f.cost >= 0 ? '+' : '') + ms(f.cost) : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-muted">
+                        {agg.total > 0 ? (f.pct >= 0 ? '+' : '') + f.pct.toFixed(1) + '%' : '—'}
+                      </td>
                       <td className={`px-3 py-2 ${v.tone}`}>{agg.total > 0 ? v.text : '—'}</td>
                     </tr>
                   )
@@ -310,7 +385,8 @@ export default function ProfilerLab() {
             </table>
           </div>
           <p className="mt-2 text-[0.68rem] text-faint">
-            A negative cost means removing the feature was measured as SLOWER — i.e. it’s inside the noise floor. Sub-1% rows are effectively free.
+            A negative cost means removing the feature was measured as SLOWER — i.e. it’s inside the noise floor. Sub-1%
+            rows are effectively free.
           </p>
         </section>
       </div>
@@ -329,12 +405,12 @@ function ProfilerAbout() {
         <code>junctionReseat</code> / <code>arcSnap</code> / the <code>cornerVeto</code>) is a number, not a guess.
       </p>
       <p className="max-w-[96ch]">
-        Every figure is the BEST (min) of the chosen number of INTERLEAVED runs after a warm-up, traced on the main thread
-        (the clock brackets compute, not the worker round-trip). Min, because GC and background load only ever add time;
-        interleaving baseline and features cancels slow drift, so a free flag reads as ~0, not noise. JS timing is still
-        noisy — read the shape and the order of magnitude, not the last digit; bump <b>Runs</b> to 9× for a steadier
-        reading. Results ARE cached (keyed by tracer version + settings) so reopening is instant — a banner flags when
-        you're seeing a past reading, and <b>Re-measure</b> takes a fresh one.
+        Every figure is the BEST (min) of the chosen number of INTERLEAVED runs after a warm-up, traced on the main
+        thread (the clock brackets compute, not the worker round-trip). Min, because GC and background load only ever
+        add time; interleaving baseline and features cancels slow drift, so a free flag reads as ~0, not noise. JS
+        timing is still noisy — read the shape and the order of magnitude, not the last digit; bump <b>Runs</b> to 9×
+        for a steadier reading. Results ARE cached (keyed by tracer version + settings) so reopening is instant — a
+        banner flags when you're seeing a past reading, and <b>Re-measure</b> takes a fresh one.
       </p>
     </>
   )

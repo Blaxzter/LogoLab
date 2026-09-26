@@ -165,11 +165,7 @@ function CrashScreen({
     void startFreshSession()
   }
 
-  const details = [
-    errorLabel(error),
-    errorStack(error),
-    componentStack ? `\nComponent stack:${componentStack}` : '',
-  ]
+  const details = [errorLabel(error), errorStack(error), componentStack ? `\nComponent stack:${componentStack}` : '']
     .filter(Boolean)
     .join('\n')
 
@@ -187,24 +183,24 @@ function CrashScreen({
             <p className="mt-1.5 text-sm leading-relaxed text-muted">
               {chunk ? (
                 <>
-                  The code for this tab couldn't be downloaded — usually a new version was deployed
-                  while this page was open, or the connection dropped. Reloading fetches it again.
+                  The code for this tab couldn't be downloaded — usually a new version was deployed while this page was
+                  open, or the connection dropped. Reloading fetches it again.
                 </>
               ) : again ? (
                 <>
-                  It crashed again as soon as it came back, so whatever is wrong is in the state
-                  being restored, not in the panel. Starting over clears the saved session — logo,
-                  traces and edits — and reloads onto a clean app.
+                  It crashed again as soon as it came back, so whatever is wrong is in the state being restored, not in
+                  the panel. Starting over clears the saved session — logo, traces and edits — and reloads onto a clean
+                  app.
                 </>
               ) : kind === 'app' ? (
                 <>
-                  Your saved session is untouched: the logo, the traces and the edits are still
-                  stored in this browser and come back on their own.
+                  Your saved session is untouched: the logo, the traces and the edits are still stored in this browser
+                  and come back on their own.
                 </>
               ) : (
                 <>
-                  The rest of LogoLab is still running — your logo and the other tabs are untouched.
-                  Resetting gives this panel a clean start and keeps everything else.
+                  The rest of LogoLab is still running — your logo and the other tabs are untouched. Resetting gives
+                  this panel a clean start and keeps everything else.
                 </>
               )}
             </p>
@@ -236,9 +232,7 @@ function CrashScreen({
             type="button"
             onClick={startOver}
             disabled={clearing}
-            className={`btn h-9 gap-2 text-sm disabled:opacity-60 ${
-              again ? 'btn-primary' : 'btn-secondary'
-            }`}
+            className={`btn h-9 gap-2 text-sm disabled:opacity-60 ${again ? 'btn-primary' : 'btn-secondary'}`}
           >
             <Trash2 size={15} />
             {clearing ? 'Clearing…' : 'Start over'}
@@ -250,9 +244,9 @@ function CrashScreen({
         </div>
 
         <p className="mt-3 text-[0.68rem] leading-snug text-faint">
-          The report opens a prefilled GitHub issue — the options, the image size, the build, this
-          session's errors and the stack, nothing else, and nothing is sent until you post it. Start
-          over discards everything stored in this browser.
+          The report opens a prefilled GitHub issue — the options, the image size, the build, this session's errors and
+          the stack, nothing else, and nothing is sent until you post it. Start over discards everything stored in this
+          browser.
         </p>
 
         <details className="mt-4 border-t border-line pt-3">

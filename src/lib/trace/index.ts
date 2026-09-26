@@ -65,12 +65,7 @@ const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.m
  * already keeps a flat-marked section out of the field merge, so the label is that
  * section's own region; forcing solid paint keeps it from becoming a subtle gradient.)
  */
-function flatMarkerLabels(
-  options: VectorizeOptions,
-  labels: Int32Array,
-  width: number,
-  height: number,
-): Set<number> {
+function flatMarkerLabels(options: VectorizeOptions, labels: Int32Array, width: number, height: number): Set<number> {
   const out = new Set<number>()
   for (const m of options.markers ?? []) {
     if (!m.flat) continue
@@ -212,7 +207,12 @@ export function healColorSpikes(
         if (dist2(o, palette[L]) <= T2) continue // matches its own region — keep
         let bestB = -1
         let bestD = T2
-        const nb = [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, y > 0 ? i - width : -1, y < height - 1 ? i + width : -1]
+        const nb = [
+          x > 0 ? i - 1 : -1,
+          x < width - 1 ? i + 1 : -1,
+          y > 0 ? i - width : -1,
+          y < height - 1 ? i + width : -1,
+        ]
         for (const q of nb) {
           if (q < 0) continue
           const B = cur[q]
@@ -320,20 +320,27 @@ export async function traceImage(
   const fitOpts = planarFitOptionsFor(options)
   const finishPlanar = (trace: PlanarTrace) => {
     let reseated: ReadonlySet<number> = new Set<number>()
-    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, {
-      arcSnap: fitOpts.arcSnap,
-      localScaleK: fitOpts.localScaleK,
-      cornerVeto: fitOpts.cornerVeto,
-      chainArcs: fitOpts.chainArcs,
-      reseat: fitOpts.junctionReseat,
-      width,
-      height,
-      onReseat: (m) => { reseated = m },
-      onChord: fitOpts.onChord,
-      onReseatVerdict: fitOpts.onReseatVerdict,
-      reseatTune: fitOpts.reseatTune,
-      onArcLoop: fitOpts.onArcLoop,
-    })
+    const topology = planarBeautify(
+      { vertices: trace.vertices, edges: trace.edges },
+      trace.loopsByLabel,
+      beautifyOpts,
+      {
+        arcSnap: fitOpts.arcSnap,
+        localScaleK: fitOpts.localScaleK,
+        cornerVeto: fitOpts.cornerVeto,
+        chainArcs: fitOpts.chainArcs,
+        reseat: fitOpts.junctionReseat,
+        width,
+        height,
+        onReseat: (m) => {
+          reseated = m
+        },
+        onChord: fitOpts.onChord,
+        onReseatVerdict: fitOpts.onReseatVerdict,
+        reseatTune: fitOpts.reseatTune,
+        onArcLoop: fitOpts.onArcLoop,
+      },
+    )
     weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, width, height, reseated)
     return { topology, edges: edgeMap(topology) }
   }
@@ -393,7 +400,8 @@ export async function traceImage(
     // segmenter instead; a locked palette bypasses both gates. Richness is read from
     // fp.dominantColors, not fp.palette.length: blend cleanup can shrink a photo's
     // palette under the ceiling, and the gate must count what the image contains.
-    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.dominantColors > FLAT_PALETTE_MAX_COLORS)) fp = null
+    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.dominantColors > FLAT_PALETTE_MAX_COLORS))
+      fp = null
     usedLockedPalette = fp != null && locked != null
   }
   if (fp) {
@@ -403,7 +411,9 @@ export async function traceImage(
     const seg = segmentImage(
       imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
       segmentOptionsFor(options),
-      onProgress ? (f, label) => onProgress({ phase: 'segment', fraction: f * PROGRESS_SEGMENT_END, label }) : undefined,
+      onProgress
+        ? (f, label) => onProgress({ phase: 'segment', fraction: f * PROGRESS_SEGMENT_END, label })
+        : undefined,
     )
     q = { palette: seg.palette, labels: seg.labels, counts: seg.counts }
     preMergeLabels = seg.preMergeLabels
@@ -434,10 +444,17 @@ export async function traceImage(
     )
   }
   stage('paint')
-  onProgress?.({ phase: 'paint', fraction: PROGRESS_SEGMENT_END, label: gradientsOn ? 'Fitting colours' : 'Preparing shapes' })
+  onProgress?.({
+    phase: 'paint',
+    fraction: PROGRESS_SEGMENT_END,
+    label: gradientsOn ? 'Fitting colours' : 'Preparing shapes',
+  })
 
   /** Copy a region's fitted paint (solid / gradient / glow base+overlays) onto a layer. */
-  const applyPaint = (layer: { gradient?: GradientFill; overlays?: RadialGradient[] }, paint: PaintLadderResult | null): void => {
+  const applyPaint = (
+    layer: { gradient?: GradientFill; overlays?: RadialGradient[] },
+    paint: PaintLadderResult | null,
+  ): void => {
     if (!paint) return
     if (paint.model === 'glow' && paint.glow) {
       layer.gradient = paint.glow.base
@@ -460,9 +477,7 @@ export async function traceImage(
   // Heal mis-grouped pixels (see healColorSpikes). Skipped for gradient art, and for
   // a locked palette, where every pixel is by construction its nearest locked colour.
   const healed =
-    gradientsOn || usedLockedPalette
-      ? removed
-      : healColorSpikes(removed, imageData.data, width, height, q.palette)
+    gradientsOn || usedLockedPalette ? removed : healColorSpikes(removed, imageData.data, width, height, q.palette)
   // Experimental background layer separation (backgroundGradient, gradients off):
   // the border-seeded set of bands that one gradient explains is relabeled into a
   // single region painted with that gradient, so band boundaries and the junctions
@@ -513,7 +528,11 @@ export async function traceImage(
     const pct = Math.floor((++traced / order.length) * 100)
     if (pct > lastTracePct) {
       lastTracePct = pct
-      onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * (traced / order.length), label: 'Tracing shapes' })
+      onProgress?.({
+        phase: 'trace',
+        fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * (traced / order.length),
+        label: 'Tracing shapes',
+      })
     }
     const loops = trace.loopsByLabel.get(label)!
     const subPaths = materializeRegion(loops, edges)
@@ -521,7 +540,15 @@ export async function traceImage(
     const c = q.palette[label]
     const paint: { gradient?: GradientFill; overlays?: RadialGradient[] } = {}
     applyPaint(paint, labelPaint[label])
-    const base: PathItem = { kind: 'path', id: 'trace-' + label, fill: rgbToHex(c.r, c.g, c.b), fillRule, loops, subPaths, visible: true }
+    const base: PathItem = {
+      kind: 'path',
+      id: 'trace-' + label,
+      fill: rgbToHex(c.r, c.g, c.b),
+      fillRule,
+      loops,
+      subPaths,
+      visible: true,
+    }
     if (paint.gradient) base.gradient = paint.gradient
     // The united background renders as one region carrying the union's gradient
     // (its palette hex stays as the fallback fill/swatch).
@@ -533,7 +560,15 @@ export async function traceImage(
     items.push(base)
     if (paint.overlays) {
       paint.overlays.forEach((ov, k) => {
-        items.push({ kind: 'path', id: `trace-${label}-glow-${k}`, fill: rgbToHex(c.r, c.g, c.b), fillRule, subPaths: cloneSubPaths(subPaths), gradient: ov, visible: true })
+        items.push({
+          kind: 'path',
+          id: `trace-${label}-glow-${k}`,
+          fill: rgbToHex(c.r, c.g, c.b),
+          fillRule,
+          subPaths: cloneSubPaths(subPaths),
+          gradient: ov,
+          visible: true,
+        })
       })
     }
   }
@@ -659,8 +694,7 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
   const mergeGradients = options.gradients !== false
   // Despeckle → minimum region area (segment.ts mergeSmallRegions); 0 ⇒ no merge.
   const minRegionArea = minRegionAreaFor(options.despeckle ?? 0)
-  const needsOverride =
-    d !== 0 || !mergeGradients || minRegionArea !== DEFAULT_SEGMENT_OPTIONS.minRegionArea
+  const needsOverride = d !== 0 || !mergeGradients || minRegionArea !== DEFAULT_SEGMENT_OPTIONS.minRegionArea
   // The unwitnessed-jump merge veto (segment.ts) applies to automatic segmentation
   // only. With Region detail raised or keep-separate markers, the legacy merge is
   // kept: the marker split relies on an overlap first fusing into its shape's class
@@ -713,12 +747,7 @@ function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
  * border ring, but only when opaque pixels cover at least half the ring.
  * An image already floating on transparency returns -1 (nothing to remove).
  */
-function detectBorderBackground(
-  labels: Int32Array,
-  width: number,
-  height: number,
-  paletteSize: number,
-): number {
+function detectBorderBackground(labels: Int32Array, width: number, height: number, paletteSize: number): number {
   if (paletteSize === 0) return -1
   const counts = new Array<number>(paletteSize).fill(0)
   let ringTotal = 0

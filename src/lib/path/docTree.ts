@@ -141,10 +141,7 @@ export function replaceItem(items: readonly DocItem[], id: string, next: DocItem
 }
 
 /** Map over every leaf, leaving group structure intact. Identity-stable. */
-export function mapLeaves(
-  items: readonly DocItem[],
-  fn: (item: DocItem) => DocItem,
-): DocItem[] {
+export function mapLeaves(items: readonly DocItem[], fn: (item: DocItem) => DocItem): DocItem[] {
   let changed = false
   const out = items.map((it) => {
     if (isGroup(it)) {
@@ -262,9 +259,7 @@ export function ungroup(items: readonly DocItem[], groupId: string): DocItem[] |
   const at = findParent(items, groupId)
   if (!at) return null
   // A hidden group hid its children; ungrouping must not silently reveal them.
-  const kids = group.visible
-    ? group.children
-    : group.children.map((c) => ({ ...c, visible: false }))
+  const kids = group.visible ? group.children : group.children.map((c) => ({ ...c, visible: false }))
   const stripped = removeItems(items, new Set([groupId]))
   return insertItems(stripped, at.parent?.id ?? null, at.index, kids)
 }
@@ -306,8 +301,7 @@ export function moveItems(
     .filter((it): it is DocItem => it !== null)
   if (picked.length === 0) return null
 
-  const siblings =
-    to.parentId === null ? items : (findItem(items, to.parentId) as GroupItem).children
+  const siblings = to.parentId === null ? items : (findItem(items, to.parentId) as GroupItem).children
   const shift = siblings.filter((c, i) => i < to.index && moving.has(c.id)).length
   const next = insertItems(removeItems(items, moving), to.parentId, to.index - shift, picked)
   return treeSig(next) === treeSig(items) ? null : next
@@ -321,10 +315,7 @@ function treeSig(items: readonly DocItem[]): string {
 }
 
 /** Selected ids with any that are nested inside another selected id dropped. */
-export function topLevelSelection(
-  items: readonly DocItem[],
-  ids: ReadonlySet<string>,
-): string[] {
+export function topLevelSelection(items: readonly DocItem[], ids: ReadonlySet<string>): string[] {
   return [...ids].filter((id) => !ancestorsOf(items, id).some((g) => ids.has(g.id)))
 }
 
@@ -340,9 +331,7 @@ export function reorderItems(
 ): DocItem[] {
   const reorderList = (list: readonly DocItem[]): DocItem[] => {
     const sel = list.map((it, i) => (ids.has(it.id) ? i : -1)).filter((i) => i >= 0)
-    let out = list.map((it) =>
-      isGroup(it) ? withChildren(it, reorderList(it.children)) : it,
-    )
+    let out = list.map((it) => (isGroup(it) ? withChildren(it, reorderList(it.children)) : it))
     if (sel.length === 0) return sameOrShared(list, out)
 
     const picked = sel.map((i) => out[i])

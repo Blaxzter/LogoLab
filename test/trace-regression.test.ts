@@ -20,14 +20,7 @@ import assert from 'node:assert/strict'
 import { ensureImageData } from '../bench/nodeHarness.ts'
 import { hashDoc } from '../bench/metrics.ts'
 import { traceImage } from '../src/lib/trace/index.ts'
-import {
-  GOLDEN_CORPUS,
-  caseAvailable,
-  loadCase,
-  recordCase,
-  loadGolden,
-  geomSignature,
-} from '../bench/traceGolden.ts'
+import { GOLDEN_CORPUS, caseAvailable, loadCase, recordCase, loadGolden, geomSignature } from '../bench/traceGolden.ts'
 
 ensureImageData()
 
@@ -61,10 +54,7 @@ for (const c of GOLDEN_CORPUS) {
       rec.meanDeltaE <= g.meanDeltaE + TOL.meanDeltaE,
       `${c.name}: meanΔE ${rec.meanDeltaE} > golden ${g.meanDeltaE} + ${TOL.meanDeltaE}`,
     )
-    assert.ok(
-      rec.ssim >= g.ssim - TOL.ssim,
-      `${c.name}: SSIM ${rec.ssim} < golden ${g.ssim} − ${TOL.ssim}`,
-    )
+    assert.ok(rec.ssim >= g.ssim - TOL.ssim, `${c.name}: SSIM ${rec.ssim} < golden ${g.ssim} − ${TOL.ssim}`)
     assert.ok(
       rec.seamMax <= g.seamMax + TOL.seamMax,
       `${c.name}: seam ${rec.seamMax} > golden ${g.seamMax} + ${TOL.seamMax}`,
@@ -103,7 +93,7 @@ for (const c of GOLDEN_CORPUS) {
     if (rec.hash !== g.hash || rec.geomSig !== g.geomSig) {
       console.log(
         `  ↳ ${c.name}: output changed (hash ${g.hash}→${rec.hash}, geom ${g.geomSig}→${rec.geomSig}). ` +
-        `Expected on intentional changes — run \`npm run gen:golden\` to bless.`,
+          `Expected on intentional changes — run \`npm run gen:golden\` to bless.`,
       )
     }
   })
@@ -120,5 +110,8 @@ for (const c of GOLDEN_CORPUS) {
 function within(name: string, label: string, got: number, want: number): void {
   const lo = Math.floor(want * (1 - TOL.countRatio))
   const hi = Math.ceil(want * (1 + TOL.countRatio))
-  assert.ok(got >= lo && got <= hi, `${name}: ${label} ${got} outside golden ${want} ±${TOL.countRatio * 100}% [${lo}, ${hi}]`)
+  assert.ok(
+    got >= lo && got <= hi,
+    `${name}: ${label} ${got} outside golden ${want} ±${TOL.countRatio * 100}% [${lo}, ${hi}]`,
+  )
 }

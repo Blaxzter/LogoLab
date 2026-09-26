@@ -46,10 +46,13 @@ test('every icon gets the caption under it; the title belongs to nobody', () => 
   for (const [iconId, capId] of captionOf) {
     const m = matches.get(iconId)
     assert.ok(m, `${iconId} should have a caption`)
-    assert.deepEqual(m.labels.map((l) => l.id), [capId])
+    assert.deepEqual(
+      m.labels.map((l) => l.id),
+      [capId],
+    )
   }
   const claimed = new Set([...matches.values()].flatMap((m) => m.labels.map((l) => l.id)))
-  assert.ok(!claimed.has('title'), 'the title spans the row and is no icon\'s caption')
+  assert.ok(!claimed.has('title'), "the title spans the row and is no icon's caption")
 })
 
 test('a caption between two rows goes to the icon above it, never the one below', () => {
@@ -57,8 +60,14 @@ test('a caption between two rows goes to the icon above it, never the one below'
   const matches = matchCaptions(tiles, grid)
   // Row 0's captions sit 20px above row 1's icons — closer than row 1's own
   // captions are, if "distance" were the only rule.
-  assert.deepEqual(matches.get('icon-10')!.labels.map((l) => l.id), ['cap-10'])
-  assert.deepEqual(matches.get('icon-00')!.labels.map((l) => l.id), ['cap-00'])
+  assert.deepEqual(
+    matches.get('icon-10')!.labels.map((l) => l.id),
+    ['cap-10'],
+  )
+  assert.deepEqual(
+    matches.get('icon-00')!.labels.map((l) => l.id),
+    ['cap-00'],
+  )
 })
 
 test('pairs without a grid too', () => {
@@ -66,7 +75,10 @@ test('pairs without a grid too', () => {
   const matches = matchCaptions(tiles, null)
   assert.equal(matches.size, 6)
   for (const [iconId, capId] of captionOf) {
-    assert.deepEqual(matches.get(iconId)!.labels.map((l) => l.id), [capId])
+    assert.deepEqual(
+      matches.get(iconId)!.labels.map((l) => l.id),
+      [capId],
+    )
   }
 })
 
@@ -81,7 +93,10 @@ test('a two-line caption is stitched back into one', () => {
   const matches = matchCaptions(tiles, null)
   const m = matches.get('icon')
   assert.ok(m)
-  assert.deepEqual(m.labels.map((l) => l.id), ['line-1', 'line-2'])
+  assert.deepEqual(
+    m.labels.map((l) => l.id),
+    ['line-1', 'line-2'],
+  )
   assert.deepEqual(m.ink, { x: 105, y: 220, w: 90, h: 46 })
 })
 
@@ -102,7 +117,12 @@ test('an icon with nothing under it gets no caption; nothing above counts', () =
 
 // ---------------------------------------------------------------- detector
 
-function sheet(w: number, h: number, bg: [number, number, number, number], boxes: { x: number; y: number; w: number; h: number }[]): ImageDataLike {
+function sheet(
+  w: number,
+  h: number,
+  bg: [number, number, number, number],
+  boxes: { x: number; y: number; w: number; h: number }[],
+): ImageDataLike {
   const data = new Uint8ClampedArray(w * h * 4)
   for (let i = 0; i < w * h; i++) data.set(bg, i * 4)
   for (const s of boxes) {
@@ -202,6 +222,10 @@ test('prepareCaption pads the crop and enlarges a small caption', () => {
   assert.equal(out.width, (20 + 16) * 3)
   assert.equal(out.height, (14 + 16) * 3)
   // A caption already at the target size is left alone.
-  const big = prepareCaption(sheet(200, 120, [255, 255, 255, 255], [{ x: 20, y: 20, w: 100, h: 50 }]), { x: 20, y: 20, w: 100, h: 50 }, paper(255, 255, 255))
+  const big = prepareCaption(
+    sheet(200, 120, [255, 255, 255, 255], [{ x: 20, y: 20, w: 100, h: 50 }]),
+    { x: 20, y: 20, w: 100, h: 50 },
+    paper(255, 255, 255),
+  )
   assert.equal(big.height, 50 + 2 * 30)
 })

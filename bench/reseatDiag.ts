@@ -121,7 +121,8 @@ if (TUNE_ARG) {
 
 const EDGE = join(root, 'public', 'examples', 'edge-cases')
 const cases: [string, string, boolean][] = []
-const readLogo = (name: string): string => readFileSync(join(root, 'examples', 'logos', `${name.replace(/\.svg$/, '')}.svg`), 'utf8')
+const readLogo = (name: string): string =>
+  readFileSync(join(root, 'examples', 'logos', `${name.replace(/\.svg$/, '')}.svg`), 'utf8')
 if (CASE) {
   const alt = join(EDGE, `${CASE}.svg`)
   try {
@@ -130,7 +131,9 @@ if (CASE) {
     cases.push([CASE, readLogo(CASE), GRADIENTS])
   }
 } else if (LOGOS != null) {
-  const names = LOGOS ? LOGOS.split(',') : readdirSync(join(root, 'examples', 'logos')).filter((x) => x.endsWith('.svg'))
+  const names = LOGOS
+    ? LOGOS.split(',')
+    : readdirSync(join(root, 'examples', 'logos')).filter((x) => x.endsWith('.svg'))
   for (const n of names) cases.push([n.replace(/\.svg$/, ''), readLogo(n), false])
 } else {
   // The §10.4 driver (MS lane), and the flat-lane fixtures with authored crossings.
@@ -144,8 +147,15 @@ if (CASE) {
   }
 }
 
-async function run(text: string, res: number, gradients: boolean, tune: ReseatTune | undefined): Promise<ReseatVerdict[]> {
-  const raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng())
+async function run(
+  text: string,
+  res: number,
+  gradients: boolean,
+  tune: ReseatTune | undefined,
+): Promise<ReseatVerdict[]> {
+  const raster = decodePng(
+    new Resvg(text, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng(),
+  )
   const seen: ReseatVerdict[] = []
   await traceImage(raster as unknown as ImageData, {
     ...DEFAULT_VECTORIZE_OPTIONS,
@@ -285,7 +295,10 @@ function score(lane: string, res: number, v: ReseatVerdict, xs: Crossing[] | nul
     err,
     placed: v.reason === 'moved' ? err : latErr,
     alt: cross ? altErrors(v, s, cross) : null,
-    ...(() => { const u = pairUnc(v); return { unc: u.unc, pairDeg: u.deg } })(),
+    ...(() => {
+      const u = pairUnc(v)
+      return { unc: u.unc, pairDeg: u.deg }
+    })(),
   }
 }
 
@@ -345,7 +358,9 @@ const armStr = (v: ReseatVerdict, s: number): string =>
   v.arms
     .map((a, i) => {
       const chosen = v.pair?.includes(i) ? '*' : ' '
-      const alt = a.alt ? ` [l${f(a.alt.line?.dev ?? NaN, 2)} c${f(a.alt.circle?.dev ?? NaN, 2)}r${f((a.alt.circle?.prim.c?.r ?? NaN) / s, 0)}]` : ''
+      const alt = a.alt
+        ? ` [l${f(a.alt.line?.dev ?? NaN, 2)} c${f(a.alt.circle?.dev ?? NaN, 2)}r${f((a.alt.circle?.prim.c?.r ?? NaN) / s, 0)}]`
+        : ''
       if (a.kind === 'line') return `${chosen}L${f(a.conf / s, 0)}${a.skipCap ? 'c' : ''}${alt}`
       if (a.kind === 'circle') return `${chosen}C${f(a.conf / s, 0)}r${f(a.r / s, 0)}${a.skipCap ? 'c' : ''}${alt}`
       return `${chosen}–(${a.why.replace(/ \| cap-skipped.*/, '').slice(0, 24)})${alt}`
@@ -381,7 +396,22 @@ interface LaneRes {
 const CURVE_R_MAX = 200
 const mean = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN)
 const max = (xs: number[]): number => (xs.length ? Math.max(...xs) : NaN)
-const emptyLane = (): LaneRes => ({ weighed: 0, moved: 0, matched: 0, movedUnmatched: 0, errs: [], lats: [], worse: 0, better: 0, overUnc: { worse: 0, better: 0, same: 0 }, underUnc: { worse: 0, better: 0, same: 0 }, placed: [], bestAlt: [], claims: { L: 0, C: 0, none: 0, arms: 0 }, cert: { line: { L: 0, C: 0, none: 0 }, curve: { L: 0, C: 0, none: 0 }, flat: { L: 0, C: 0, none: 0 } } })
+const emptyLane = (): LaneRes => ({
+  weighed: 0,
+  moved: 0,
+  matched: 0,
+  movedUnmatched: 0,
+  errs: [],
+  lats: [],
+  worse: 0,
+  better: 0,
+  overUnc: { worse: 0, better: 0, same: 0 },
+  underUnc: { worse: 0, better: 0, same: 0 },
+  placed: [],
+  bestAlt: [],
+  claims: { L: 0, C: 0, none: 0, arms: 0 },
+  cert: { line: { L: 0, C: 0, none: 0 }, curve: { L: 0, C: 0, none: 0 }, flat: { L: 0, C: 0, none: 0 } },
+})
 const addLane = (a: LaneRes, b: LaneRes): void => {
   a.weighed += b.weighed
   a.moved += b.moved
@@ -449,7 +479,20 @@ for (const [name, text, gradients] of cases) {
         if (v.reason === 'border') continue
         const c = score(lane.name, res, v, xs)
         cells.push(c)
-        if (JSON_OUT) dump.push({ case: name, ...c, cross: c.cross ? { x: c.cross.x, y: c.cross.y, a: boundaryLabel(c.cross.a), b: boundaryLabel(c.cross.b), angleDeg: c.cross.angleDeg } : null })
+        if (JSON_OUT)
+          dump.push({
+            case: name,
+            ...c,
+            cross: c.cross
+              ? {
+                  x: c.cross.x,
+                  y: c.cross.y,
+                  a: boundaryLabel(c.cross.a),
+                  b: boundaryLabel(c.cross.b),
+                  angleDeg: c.cross.angleDeg,
+                }
+              : null,
+          })
         r.weighed++
         v.arms.forEach((a, i) => {
           r.claims.arms++
@@ -481,10 +524,18 @@ for (const [name, text, gradients] of cases) {
   }
 
   const rows = pair(cells)
-  console.log(`\n━━━ ${name}${gradients ? '  [gradients]' : '  [flat]'} — ${xs ? `${xs.length} authored crossings` : `NO answer sheet (${refusal})`} · ${rows.length} junction rows${xs ? `, ${rows.filter((r) => r.cross).length} on a crossing` : ''} ━━━`)
+  console.log(
+    `\n━━━ ${name}${gradients ? '  [gradients]' : '  [flat]'} — ${xs ? `${xs.length} authored crossings` : `NO answer sheet (${refusal})`} · ${rows.length} junction rows${xs ? `, ${rows.filter((r) => r.cross).length} on a crossing` : ''} ━━━`,
+  )
   console.log(laneHeader())
-  for (const lane of lanes) for (const res of RESOLUTIONS) console.log(laneLine(`${lane.name}@${res}`, perLane.get(`${lane.name}@${res}`)!))
-  if (xs && VERBOSE) for (const lane of lanes) for (const res of RESOLUTIONS) console.log(`    ${`${lane.name}@${res}`.padEnd(14)} arms on an authored (L/C/–): ${certStr(perLane.get(`${lane.name}@${res}`)!)}`)
+  for (const lane of lanes)
+    for (const res of RESOLUTIONS) console.log(laneLine(`${lane.name}@${res}`, perLane.get(`${lane.name}@${res}`)!))
+  if (xs && VERBOSE)
+    for (const lane of lanes)
+      for (const res of RESOLUTIONS)
+        console.log(
+          `    ${`${lane.name}@${res}`.padEnd(14)} arms on an authored (L/C/–): ${certStr(perLane.get(`${lane.name}@${res}`)!)}`,
+        )
 
   // Pair-KIND flips per lane (the §28.6 count), and rows worth printing.
   const flips = new Set<Row>()
@@ -507,8 +558,12 @@ for (const [name, text, gradients] of cases) {
       `    ${VERBOSE ? 'every junction row' : `${flips.size} pair-KIND flip(s), ${worseRows.length} row(s) moved AWAY from the crossing`} — err = target→crossing, lat = lattice→crossing (artwork px); alt = where line×line / circle×line / circle×circle / the best pair of UNGATED estimators would land; arms: *chosen, L/C = line/circle (fitted px, r = radius, c = cap skipped), – = refused (why), [l c r] = ungated line dev · circle dev · radius`,
     )
     for (const r of show) {
-      const head = r.cross ? `crossing @(${f(r.ax, 0)},${f(r.ay, 0)})  ${crossStr(r.cross)}` : `junction @(${f(r.ax, 0)},${f(r.ay, 0)})  (no authored crossing within reach)`
-      console.log(`      ${head}${flips.has(r) ? '  ← pair kind flips' : ''}${worseRows.includes(r) ? '  ← moved AWAY' : ''}`)
+      const head = r.cross
+        ? `crossing @(${f(r.ax, 0)},${f(r.ay, 0)})  ${crossStr(r.cross)}`
+        : `junction @(${f(r.ax, 0)},${f(r.ay, 0)})  (no authored crossing within reach)`
+      console.log(
+        `      ${head}${flips.has(r) ? '  ← pair kind flips' : ''}${worseRows.includes(r) ? '  ← moved AWAY' : ''}`,
+      )
       for (const lane of lanes)
         for (const res of RESOLUTIONS) {
           const cs = r.cells.filter((c) => c.lane === lane.name && c.res === res)
@@ -519,7 +574,9 @@ for (const [name, text, gradients] of cases) {
           }
           for (const c of cs) {
             const s = res / REF
-            const alt = c.alt ? `alt LL ${f(c.alt.LL, 2)} CL ${f(c.alt.CL, 2)} CC ${f(c.alt.CC, 2)} best ${f(c.alt.best, 2)} (${c.alt.bestName})` : ''
+            const alt = c.alt
+              ? `alt LL ${f(c.alt.LL, 2)} CL ${f(c.alt.CL, 2)} CC ${f(c.alt.CC, 2)} best ${f(c.alt.best, 2)} (${c.alt.bestName})`
+              : ''
             console.log(
               `        ${tag}${String(res).padStart(5)}  ${kindOf(c.v).padEnd(5)} ${c.v.reason.padEnd(14)} move ${f(c.v.move / s, 2).padStart(5)}  err ${f(c.err, 2).padStart(5)}  lat ${f(c.latErr, 2).padStart(5)}  unc ${f(c.unc, 2)}n/${f(c.v.move, 2)}n @${f(c.pairDeg, 0)}°${c.v.vetoed ? `  veto ${c.v.vetoed.join('+')}` : ''}  ${alt}`,
             )
@@ -533,15 +590,22 @@ for (const [name, text, gradients] of cases) {
 if (cases.length > 1) {
   console.log(`\n━━━ FOLD — ${cases.length} cases, ${casesScored} with an answer sheet ━━━`)
   console.log(laneHeader())
-  for (const lane of lanes) for (const res of RESOLUTIONS) console.log(laneLine(`${lane.name}@${res}`, totals.get(`${lane.name}@${res}`)!))
-  console.log(`    arms on an authored boundary, certified L/C/– (line = authored straight; curve = local r ≤ ${CURVE_R_MAX} artwork px; flat = r > ${CURVE_R_MAX}; crossings ≥ 20° only):`)
-  for (const lane of lanes) for (const res of RESOLUTIONS) console.log(`      ${`${lane.name}@${res}`.padEnd(14)} ${certStr(totals.get(`${lane.name}@${res}`)!)}`)
+  for (const lane of lanes)
+    for (const res of RESOLUTIONS) console.log(laneLine(`${lane.name}@${res}`, totals.get(`${lane.name}@${res}`)!))
+  console.log(
+    `    arms on an authored boundary, certified L/C/– (line = authored straight; curve = local r ≤ ${CURVE_R_MAX} artwork px; flat = r > ${CURVE_R_MAX}; crossings ≥ 20° only):`,
+  )
+  for (const lane of lanes)
+    for (const res of RESOLUTIONS)
+      console.log(`      ${`${lane.name}@${res}`.padEnd(14)} ${certStr(totals.get(`${lane.name}@${res}`)!)}`)
   console.log(`    pair-KIND flips: ${lanes.map((l) => `${l.name} ${kindFlipTotal.get(l.name) ?? 0}`).join(' · ')}`)
   console.log(`    moved cells by move vs the pair's uncertainty (worse / better / same than the lattice):`)
   for (const lane of lanes)
     for (const res of RESOLUTIONS) {
       const r = totals.get(`${lane.name}@${res}`)!
-      console.log(`      ${`${lane.name}@${res}`.padEnd(14)} move > unc: ${r.overUnc.worse} / ${r.overUnc.better} / ${r.overUnc.same}    move ≤ unc: ${r.underUnc.worse} / ${r.underUnc.better} / ${r.underUnc.same}`)
+      console.log(
+        `      ${`${lane.name}@${res}`.padEnd(14)} move > unc: ${r.overUnc.worse} / ${r.overUnc.better} / ${r.overUnc.same}    move ≤ unc: ${r.underUnc.worse} / ${r.underUnc.better} / ${r.underUnc.same}`,
+      )
     }
 }
 if (JSON_OUT) writeFileSync(JSON_OUT, JSON.stringify(dump))

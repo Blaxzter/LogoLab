@@ -85,8 +85,11 @@ const logoCases = (): Case[] => {
     return []
   }
   const arg = flag('--logos')
-  const wanted = arg === 'all' ? onDisk.map((f) => f.replace(/\.svg$/, '')) : arg ? arg.split(',').map((s) => s.trim()) : WITNESSES
-  return wanted.filter((w) => onDisk.includes(`${w}.svg`)).map((w) => ({ name: w, svg: `examples/logos/${w}.svg`, gradients: false }))
+  const wanted =
+    arg === 'all' ? onDisk.map((f) => f.replace(/\.svg$/, '')) : arg ? arg.split(',').map((s) => s.trim()) : WITNESSES
+  return wanted
+    .filter((w) => onDisk.includes(`${w}.svg`))
+    .map((w) => ({ name: w, svg: `examples/logos/${w}.svg`, gradients: false }))
 }
 /** The A/B-lane fixtures (genEdgeCases → public/examples/edge-cases/), which are not in
  *  TRUTH_CORPUS — `wedge-counter` is the converging-counter anatomy this issue is about. */
@@ -126,7 +129,8 @@ interface Scored {
   otherHex: string
 }
 
-const q = (xs: number[], p: number): number => (xs.length ? xs.slice().sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))] : NaN)
+const q = (xs: number[], p: number): number =>
+  xs.length ? xs.slice().sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))] : NaN
 const f2 = (v: number): string => (Number.isFinite(v) ? v.toFixed(2) : ' n/a').padStart(6)
 
 /** Grand joint histogram: overshoot (rows) × tip angle (cols). */
@@ -138,7 +142,9 @@ const byCase = new Map<string, Scored[]>()
 
 for (const res of RES) {
   console.log(`\n=== ${res}px ===`)
-  console.log('case                corners  recon  short  cap  veto |  scored  moved p50/p90/max   reach p50   over p50/p90/max   over>1px')
+  console.log(
+    'case                corners  recon  short  cap  veto |  scored  moved p50/p90/max   reach p50   over p50/p90/max   over>1px',
+  )
   for (const c of cases) {
     const svg = readFileSync(join(root, c.svg), 'utf8')
     const png = new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng()
@@ -274,13 +280,23 @@ for (const res of RES) {
         `${f2(q(moved, 0.5))}/${f2(q(moved, 0.9))}/${f2(Math.max(0, ...moved))}   ${f2(q(reach, 0.5))}   ` +
         `${f2(q(over, 0.5))}/${f2(q(over, 0.9))}/${f2(Math.max(0, ...over))}${String(over1).padStart(10)}`,
     )
-    if (nSkipOwners + nSkipSep > 0) console.log(`${''.padEnd(18)}  (unscored: ${nSkipOwners} not a 2-solid-fill edge, ${nSkipSep} own/other ΔE < ${MIN_SEP})`)
+    if (nSkipOwners + nSkipSep > 0)
+      console.log(
+        `${''.padEnd(18)}  (unscored: ${nSkipOwners} not a 2-solid-fill edge, ${nSkipSep} own/other ΔE < ${MIN_SEP})`,
+      )
 
     byCase.set(`${c.name}@${res}`, scored)
-    for (const s of scored) grand.set(`${bucket(s.over, OVER_EDGES)}:${bucket(s.r.tipDeg, TIP_EDGES)}`, (grand.get(`${bucket(s.over, OVER_EDGES)}:${bucket(s.r.tipDeg, TIP_EDGES)}`) ?? 0) + 1)
+    for (const s of scored)
+      grand.set(
+        `${bucket(s.over, OVER_EDGES)}:${bucket(s.r.tipDeg, TIP_EDGES)}`,
+        (grand.get(`${bucket(s.over, OVER_EDGES)}:${bucket(s.r.tipDeg, TIP_EDGES)}`) ?? 0) + 1,
+      )
 
     if (TOP) {
-      const top = scored.slice().sort((a, b) => b.over - a.over).slice(0, TOP)
+      const top = scored
+        .slice()
+        .sort((a, b) => b.over - a.over)
+        .slice(0, TOP)
       for (const s of top)
         console.log(
           `    apex (${s.r.ax.toFixed(2)},${s.r.ay.toFixed(2)}) ← lattice (${s.r.cx.toFixed(1)},${s.r.cy.toFixed(1)})  ` +

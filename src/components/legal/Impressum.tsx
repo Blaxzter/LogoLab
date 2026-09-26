@@ -45,49 +45,47 @@ export default function Impressum() {
         <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noreferrer">
           https://ec.europa.eu/consumers/odr
         </a>
-        . We are neither obligated nor willing to participate in dispute resolution
-        proceedings before a consumer arbitration board (§ 36 VSBG).
+        . We are neither obligated nor willing to participate in dispute resolution proceedings before a consumer
+        arbitration board (§ 36 VSBG).
       </p>
 
       <hr />
 
       <h2>Liability for content</h2>
       <p>
-        As a service provider we are responsible for our own content on these pages under the
-        general laws (§ 7 (1) DDG). Under §§ 8 to 10 DDG, however, we are not obligated to monitor
-        transmitted or stored third-party information, or to investigate circumstances that indicate
-        illegal activity. Obligations to remove or block the use of information under the general
-        laws remain unaffected. Liability in this regard is only possible from the point in time at
-        which a concrete infringement of the law becomes known. Upon notification of such
-        violations, we will remove the content immediately.
+        As a service provider we are responsible for our own content on these pages under the general laws (§ 7 (1)
+        DDG). Under §§ 8 to 10 DDG, however, we are not obligated to monitor transmitted or stored third-party
+        information, or to investigate circumstances that indicate illegal activity. Obligations to remove or block the
+        use of information under the general laws remain unaffected. Liability in this regard is only possible from the
+        point in time at which a concrete infringement of the law becomes known. Upon notification of such violations,
+        we will remove the content immediately.
       </p>
 
       <h2>Liability for links</h2>
       <p>
-        Our offer contains links to external third-party websites over whose content we have no
-        influence. Therefore we cannot assume any liability for this external content. The
-        respective provider or operator of the linked pages is always responsible for their content.
-        The linked pages were checked for possible legal violations at the time of linking; no
-        illegal content was discernible at that time. Should we become aware of any infringements,
-        we will remove such links immediately.
+        Our offer contains links to external third-party websites over whose content we have no influence. Therefore we
+        cannot assume any liability for this external content. The respective provider or operator of the linked pages
+        is always responsible for their content. The linked pages were checked for possible legal violations at the time
+        of linking; no illegal content was discernible at that time. Should we become aware of any infringements, we
+        will remove such links immediately.
       </p>
 
       <h2>Copyright</h2>
       <p>
-        The content created by the operator on these pages is subject to German copyright law.
-        LogoLab itself is open-source software, released under the MIT License; see the{' '}
+        The content created by the operator on these pages is subject to German copyright law. LogoLab itself is
+        open-source software, released under the MIT License; see the{' '}
         <a href="https://github.com/Blaxzter/LogoLab" target="_blank" rel="noreferrer">
           GitHub repository
         </a>{' '}
-        for the licence terms. Images and logos that <strong>you</strong> load into the app remain
-        your property and are processed only in your browser.
+        for the licence terms. Images and logos that <strong>you</strong> load into the app remain your property and are
+        processed only in your browser.
       </p>
 
       {!legalInfoComplete && (
         <p className="note">
-          Draft template — operator details come from the <code>VITE_LEGAL_*</code> build
-          environment variables (see <code>.env.example</code>); set them in the Cloudflare Workers Builds settings
-          before publishing, and have the text reviewed.
+          Draft template — operator details come from the <code>VITE_LEGAL_*</code> build environment variables (see{' '}
+          <code>.env.example</code>); set them in the Cloudflare Workers Builds settings before publishing, and have the
+          text reviewed.
         </p>
       )}
     </LegalShell>

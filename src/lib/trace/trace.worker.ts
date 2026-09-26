@@ -69,7 +69,13 @@ self.onmessage = async (e: MessageEvent<Req>) => {
     )
     if (preMerge) {
       const pm = preMerge as { labels: Int32Array; width: number; height: number }
-      self.postMessage({ type: 'result', doc, preMergeLabels: pm.labels, preMergeWidth: pm.width, preMergeHeight: pm.height })
+      self.postMessage({
+        type: 'result',
+        doc,
+        preMergeLabels: pm.labels,
+        preMergeWidth: pm.width,
+        preMergeHeight: pm.height,
+      })
     } else {
       self.postMessage({ type: 'result', doc })
     }

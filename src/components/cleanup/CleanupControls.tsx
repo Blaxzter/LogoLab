@@ -159,9 +159,7 @@ export function CleanupControlsBody({
   const removeSummary = isRemove
     ? `${tool === 'magic' ? 'Magic' : 'By color'} · tolerance ${tolerance}`
     : `Tolerance ${tolerance}`
-  const brushSummary = isBrush
-    ? `${tool === 'erase' ? 'Erase' : 'Restore'} · ${brushSize}px`
-    : `Brush ${brushSize}px`
+  const brushSummary = isBrush ? `${tool === 'erase' ? 'Erase' : 'Restore'} · ${brushSize}px` : `Brush ${brushSize}px`
   const markerSummary = markerTotal > 0 ? `${keepCount} keep · ${removeCount} remove` : undefined
 
   return (
@@ -192,12 +190,10 @@ export function CleanupControlsBody({
               {aiBusy ? aiStatus || 'Working…' : 'AI auto-remove'}
             </Button>
             <p className="text-[0.7rem] leading-snug text-faint">
-              AI handles tricky backgrounds & holes the flood misses. First run downloads a model
-              (~few sec), then it’s cached & offline.
+              AI handles tricky backgrounds & holes the flood misses. First run downloads a model (~few sec), then it’s
+              cached & offline.
             </p>
-            {aiDevice && !aiBusy && (
-              <p className="text-[0.7rem] leading-snug text-muted">AI ready ({aiDevice})</p>
-            )}
+            {aiDevice && !aiBusy && <p className="text-[0.7rem] leading-snug text-muted">AI ready ({aiDevice})</p>}
           </div>
         </Collapsible>
 
@@ -205,11 +201,7 @@ export function CleanupControlsBody({
         <Collapsible title="Manual remove" summary={removeSummary} defaultOpen>
           <Field label="Tool">
             {/* `value={tool}` highlights nothing while a brush/marker is active. */}
-            <Segmented<RemoveTool>
-              value={tool as RemoveTool}
-              onChange={onToolChange}
-              options={REMOVE_TOOLS}
-            />
+            <Segmented<RemoveTool> value={tool as RemoveTool} onChange={onToolChange} options={REMOVE_TOOLS} />
             <p className="mt-1.5 text-xs leading-snug text-muted">
               {toolHint(isRemove ? (tool as ManualTool) : 'magic')}
             </p>
@@ -284,11 +276,7 @@ export function CleanupControlsBody({
         <Collapsible title="Touch-up brush" summary={brushSummary}>
           <Field label="Brush">
             {/* `value={tool}` highlights nothing while a remove/marker tool is active. */}
-            <Segmented<BrushTool>
-              value={tool as BrushTool}
-              onChange={onToolChange}
-              options={BRUSH_TOOLS}
-            />
+            <Segmented<BrushTool> value={tool as BrushTool} onChange={onToolChange} options={BRUSH_TOOLS} />
             <p className="mt-1.5 text-xs leading-snug text-muted">
               {toolHint(isBrush ? (tool as ManualTool) : 'erase')}
             </p>
@@ -311,10 +299,7 @@ export function CleanupControlsBody({
 
         {/* --------------------------------------------------- edge refine */}
         <Collapsible title="Edge refine" summary="Grow · feather · defringe">
-          <Field
-            label="Shrink ↔ Grow"
-            hint="Tighten (negative) or fill out (positive) the cutout edge, then Apply."
-          >
+          <Field label="Shrink ↔ Grow" hint="Tighten (negative) or fill out (positive) the cutout edge, then Apply.">
             <Slider
               value={edgeShift}
               min={-16}
@@ -346,10 +331,7 @@ export function CleanupControlsBody({
             </Button>
           </Field>
 
-          <Field
-            label="Defringe strength"
-            hint="Pull leftover background color out of the soft edge, then Apply."
-          >
+          <Field label="Defringe strength" hint="Pull leftover background color out of the soft edge, then Apply.">
             <Slider
               value={Math.round(defringeAmt * 100)}
               min={0}
@@ -393,22 +375,13 @@ export function CleanupControlsBody({
           <Field label="Padding" hint="Transparent margin kept around the trimmed cutout.">
             <Slider value={trimPad} min={0} max={128} unit="px" onChange={onTrimPad} />
           </Field>
-          <Button
-            variant="secondary"
-            icon={<Wand2 size={15} />}
-            onClick={onAutoTrim}
-            disabled={aiBusy || !ready}
-            block
-          >
+          <Button variant="secondary" icon={<Wand2 size={15} />} onClick={onAutoTrim} disabled={aiBusy || !ready} block>
             Auto-trim & pad
           </Button>
         </Collapsible>
 
         {/* ----------------------------------------------- background fill */}
-        <Collapsible
-          title="Background fill"
-          summary={matteOn ? `Matte ${matteColor}` : 'Transparent'}
-        >
+        <Collapsible title="Background fill" summary={matteOn ? `Matte ${matteColor}` : 'Transparent'}>
           <Field
             label="Matte color"
             hint="Preview the cutout over a solid color — baked into Apply / Download when on."
@@ -426,8 +399,8 @@ export function CleanupControlsBody({
 
         <div className="mt-auto border-t border-line pt-4">
           <p className="text-[0.7rem] leading-relaxed text-faint">
-            Try AI or Auto first, then touch up with Erase / Restore. Space- or middle-drag to pan ·
-            scroll to zoom · ⌘Z to undo.
+            Try AI or Auto first, then touch up with Erase / Restore. Space- or middle-drag to pan · scroll to zoom · ⌘Z
+            to undo.
           </p>
         </div>
       </div>

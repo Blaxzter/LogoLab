@@ -183,7 +183,16 @@ export function fitOpenArc(densePts: Vec[], opts: PlanarFitOptions): PathNode[] 
       if (len === 1) {
         const ld = lineDeviation(arc)
         if (ld.maxDev <= eps) {
-          byStart[a].push({ a, len, line: true, startCont: 0, endCont: 0, cost: opts.lineCost + delta * ld.sqErr, c1: arc[0], c2: arc[arc.length - 1] })
+          byStart[a].push({
+            a,
+            len,
+            line: true,
+            startCont: 0,
+            endCont: 0,
+            cost: opts.lineCost + delta * ld.sqErr,
+            c1: arc[0],
+            c2: arc[arc.length - 1],
+          })
         }
       }
       const freeStart = unit(sub(dense[fromIdx + 1], dense[fromIdx]))
@@ -204,7 +213,16 @@ export function fitOpenArc(densePts: Vec[], opts: PlanarFitOptions): PathNode[] 
           const fit = fitSingleCubic(arc, sd, ed)
           if (fit.maxDev > eps) continue
           anyFit = true
-          byStart[a].push({ a, len, line: false, startCont: sc, endCont: ec, cost: opts.cubicCost + delta * fit.sqErr + interG1, c1: fit.c1, c2: fit.c2 })
+          byStart[a].push({
+            a,
+            len,
+            line: false,
+            startCont: sc,
+            endCont: ec,
+            cost: opts.cubicCost + delta * fit.sqErr + interG1,
+            c1: fit.c1,
+            c2: fit.c2,
+          })
         }
       }
       if (!anyFit && len > 1) break
@@ -216,7 +234,10 @@ export function fitOpenArc(densePts: Vec[], opts: PlanarFitOptions): PathNode[] 
   // starts C⁰, the last ends C⁰.
   const INF = Infinity
   const cost: number[][] = Array.from({ length: m }, () => [INF, INF])
-  const back: ({ from: number; fromCont: Cont; cand: Candidate } | null)[][] = Array.from({ length: m }, () => [null, null])
+  const back: ({ from: number; fromCont: Cont; cand: Candidate } | null)[][] = Array.from({ length: m }, () => [
+    null,
+    null,
+  ])
   cost[0][0] = 0
   for (let p = 0; p < m - 1; p++) {
     for (const tin of [0, 1] as Cont[]) {

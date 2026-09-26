@@ -50,9 +50,7 @@ export function PropertiesRail({
     <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto border-l border-line bg-surface lg:flex">
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-line px-3">
         <h3 className="field-label">Properties</h3>
-        {selection.size > 0 && (
-          <span className="text-[0.68rem] text-faint">{selectedCount} selected</span>
-        )}
+        {selection.size > 0 && <span className="text-[0.68rem] text-faint">{selectedCount} selected</span>}
       </div>
       <Inspector
         doc={previewDoc}

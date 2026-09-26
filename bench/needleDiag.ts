@@ -94,31 +94,52 @@ if (argv.includes('--census')) {
   for (const file of marks) {
     const text = readFileSync(join(dir, file), 'utf8')
     let g
-    try { g = parseGroundTruth(text) } catch { continue }
+    try {
+      g = parseGroundTruth(text)
+    } catch {
+      continue
+    }
     if (unscorable(g)) continue
     let raster
     try {
-      raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-    } catch { continue }
+      raster = decodePng(
+        new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng(),
+      )
+    } catch {
+      continue
+    }
     scorable++
     const sh = toRasterSpace(g, raster.width)
     const vis = makeVisibleAt(raster)
-    const corners = sharpCorners(sh.map((s) => s.subPaths), CORNER_MIN_EDGE).filter(
-      (c) => vis({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || vis({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
-    )
+    const corners = sharpCorners(
+      sh.map((s) => s.subPaths),
+      CORNER_MIN_EDGE,
+    ).filter((c) => vis({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || vis({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }))
     const recs: ApexDiagRecord[] = []
-    await traceImage(
-      raster as unknown as ImageData,
-      { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, planarFit: { apexDiag: (r: ApexDiagRecord) => { recs.push(r) } } },
-    )
+    await traceImage(raster as unknown as ImageData, {
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: false,
+      planarFit: {
+        apexDiag: (r: ApexDiagRecord) => {
+          recs.push(r)
+        },
+      },
+    })
     for (const r of recs) {
       let best: Corner | null = null
       let bd = R_JOIN
       for (const c of corners) {
         const d = Math.hypot(c.x - r.cx, c.y - r.cy)
-        if (d < bd) { bd = d; best = c }
+        if (d < bd) {
+          bd = d
+          best = c
+        }
       }
-      if (!best) { unjoined[r.outcome] = (unjoined[r.outcome] ?? 0) + 1; continue }
+      if (!best) {
+        unjoined[r.outcome] = (unjoined[r.outcome] ?? 0) + 1
+        continue
+      }
       joined.push({
         mark: file.replace(/\.svg$/, ''),
         r,
@@ -127,7 +148,9 @@ if (argv.includes('--census')) {
       })
     }
   }
-  console.log(`\n━━━ census @${RES} flat: ${scorable}/${marks.length} marks scorable, ${joined.length} apex records joined to an authored corner (≤${R_JOIN}px) ━━━`)
+  console.log(
+    `\n━━━ census @${RES} flat: ${scorable}/${marks.length} marks scorable, ${joined.length} apex records joined to an authored corner (≤${R_JOIN}px) ━━━`,
+  )
   console.log(`unjoined (no authored corner within ${R_JOIN}px): ${JSON.stringify(unjoined)}`)
 
   const rec = joined.filter((j) => j.r.outcome === 'reconstructed')
@@ -141,7 +164,10 @@ if (argv.includes('--census')) {
   console.log(`bucket        |    n | mean apex | mean lattice | mean Δ(apex−lattice) | worse-than-lattice`)
   for (const [name, test] of buckets) {
     const g = rec.filter((j) => test(Math.max(j.r.inBow, j.r.outBow)))
-    if (!g.length) { console.log(`${name} |    0 |`); continue }
+    if (!g.length) {
+      console.log(`${name} |    0 |`)
+      continue
+    }
     const ma = g.reduce((s, j) => s + j.errApex, 0) / g.length
     const ml = g.reduce((s, j) => s + j.errLattice, 0) / g.length
     const worse = g.filter((j) => j.errApex > j.errLattice + 0.25).length
@@ -159,17 +185,25 @@ if (argv.includes('--census')) {
   const byOutcome = new Map<string, Joined[]>()
   for (const j of refusals) {
     const a = byOutcome.get(j.r.outcome)
-    if (a) a.push(j); else byOutcome.set(j.r.outcome, [j])
+    if (a) a.push(j)
+    else byOutcome.set(j.r.outcome, [j])
   }
-  console.log(`\nREFUSALS holding a lattice vertex at an authored corner (errLattice = the cost of not reconstructing):`)
+  console.log(
+    `\nREFUSALS holding a lattice vertex at an authored corner (errLattice = the cost of not reconstructing):`,
+  )
   for (const [o, g] of byOutcome) {
     const ml = g.reduce((s, j) => s + j.errLattice, 0) / g.length
     const far = g.filter((j) => j.errLattice > 1.5).length
     console.log(`  ${o.padEnd(13)} n ${String(g.length).padStart(4)}  mean errLattice ${f(ml)}  >1.5px: ${far}`)
   }
   console.log(`\nworst 10 short-arm refusals (by errLattice):`)
-  for (const j of refusals.filter((j) => j.r.outcome === 'short-arm').sort((a, b) => b.errLattice - a.errLattice).slice(0, 10))
-    console.log(`  ${j.mark.padEnd(22)} (${f(j.r.cx, 1)},${f(j.r.cy, 1)})  errL ${f(j.errLattice, 2)}  spans ${j.r.inSpan}/${j.r.outSpan}`)
+  for (const j of refusals
+    .filter((j) => j.r.outcome === 'short-arm')
+    .sort((a, b) => b.errLattice - a.errLattice)
+    .slice(0, 10))
+    console.log(
+      `  ${j.mark.padEnd(22)} (${f(j.r.cx, 1)},${f(j.r.cy, 1)})  errL ${f(j.errLattice, 2)}  spans ${j.r.inSpan}/${j.r.outSpan}`,
+    )
   process.exit(0)
 }
 
@@ -187,29 +221,50 @@ if (argv.includes('--census')) {
 if (argv.includes('--turns')) {
   const { readdirSync } = await import('node:fs')
   const dir = join(root, 'examples', 'logos')
-  interface Rec { mark: string; turn: number; hit: boolean }
+  interface Rec {
+    mark: string
+    turn: number
+    hit: boolean
+  }
   const recs: Rec[] = []
   let marks = 0
   for (const file of readdirSync(dir).filter((f) => f.endsWith('.svg'))) {
     const text = readFileSync(join(dir, file), 'utf8')
     let g
-    try { g = parseGroundTruth(text) } catch { continue }
+    try {
+      g = parseGroundTruth(text)
+    } catch {
+      continue
+    }
     if (unscorable(g)) continue
     let raster
     try {
-      raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-    } catch { continue }
+      raster = decodePng(
+        new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng(),
+      )
+    } catch {
+      continue
+    }
     marks++
     const sh = toRasterSpace(g, raster.width)
     const vis = makeVisibleAt(raster)
-    const gtc = sharpCorners(sh.map((s) => s.subPaths), CORNER_MIN_EDGE).filter(
-      (c) => vis({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || vis({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
-    )
+    const gtc = sharpCorners(
+      sh.map((s) => s.subPaths),
+      CORNER_MIN_EDGE,
+    ).filter((c) => vis({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || vis({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }))
     if (!gtc.length) continue
     // `--fit k=v` rides along so the same census can be run on both arms of a change.
-    const doc = await traceImage(raster as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, planarFit: FIT })
+    const doc = await traceImage(raster as unknown as ImageData, {
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: false,
+      planarFit: FIT,
+    })
     const docC = sharpCorners(
-      doc.items.flatMap((it) => (it.kind === 'path' ? [it.subPaths] : [])).flat().map((sp) => [sp]),
+      doc.items
+        .flatMap((it) => (it.kind === 'path' ? [it.subPaths] : []))
+        .flat()
+        .map((sp) => [sp]),
       0,
     )
     for (const c of gtc) {
@@ -218,16 +273,30 @@ if (argv.includes('--turns')) {
       recs.push({ mark: file.replace(/\.svg$/, ''), turn, hit })
     }
   }
-  console.log(`\n━━━ AUTHORED-TURN vs RECOVERY @${RES} flat ━━━  ${recs.length} visible authored corners over ${marks} marks`)
+  console.log(
+    `\n━━━ AUTHORED-TURN vs RECOVERY @${RES} flat ━━━  ${recs.length} visible authored corners over ${marks} marks`,
+  )
   console.log(`  (cornerTurnDeg = ${DEFAULT_PLANAR_FIT.cornerTurnDeg}°, and the scorer's own sharp bar is 60°)\n`)
-  const BANDS: [number, number][] = [[60, 65], [65, 70], [70, 75], [75, 80], [80, 90], [90, 105], [105, 120], [120, 150], [150, 180]]
+  const BANDS: [number, number][] = [
+    [60, 65],
+    [65, 70],
+    [70, 75],
+    [75, 80],
+    [80, 90],
+    [90, 105],
+    [105, 120],
+    [120, 150],
+    [150, 180],
+  ]
   console.log(`  authored turn      n   recovered      rate`)
   for (const [lo, hi] of BANDS) {
     const g = recs.filter((r) => r.turn >= lo && r.turn < hi)
     if (!g.length) continue
     const k = g.filter((r) => r.hit).length
     const bar = '█'.repeat(Math.round((k / g.length) * 30))
-    console.log(`  ${String(lo).padStart(3)}–${String(hi).padEnd(4)}    ${String(g.length).padStart(5)}   ${String(k).padStart(5)}   ${((k / g.length) * 100).toFixed(1).padStart(6)}%  ${bar}`)
+    console.log(
+      `  ${String(lo).padStart(3)}–${String(hi).padEnd(4)}    ${String(g.length).padStart(5)}   ${String(k).padStart(5)}   ${((k / g.length) * 100).toFixed(1).padStart(6)}%  ${bar}`,
+    )
   }
   process.exit(0)
 }
@@ -239,7 +308,10 @@ if (argv.includes('--turns')) {
 // buys (acute-counter's §18 numbers, the corner watchlist), in one table.
 // ---------------------------------------------------------------------------
 if (argv.includes('--sweep')) {
-  interface Variant { label: string; fit: Record<string, unknown> }
+  interface Variant {
+    label: string
+    fit: Record<string, unknown>
+  }
   const VARIANTS: Variant[] = [
     { label: 'baseline (arcArms off)', fit: { arcArms: false } },
     { label: 'tangent (defaults)', fit: {} },
@@ -259,16 +331,31 @@ if (argv.includes('--sweep')) {
     const a = (rot * Math.PI) / 180
     return { x: (cx + x * Math.cos(a) - y * Math.sin(a)) * S, y: (cy + x * Math.sin(a) + y * Math.cos(a)) * S }
   }
-  for (const [cx, cy, c2, , rot] of [[50, 52, 26, 9, 0], [136, 52, 34, 12, 9], [216, 52, 20, 8, 31]] as const)
+  for (const [cx, cy, c2, , rot] of [
+    [50, 52, 26, 9, 0],
+    [136, 52, 34, 12, 9],
+    [216, 52, 20, 8, 31],
+  ] as const)
     for (const sx of [-1, 1]) JOINS.push(rotP((sx * c2) / 2, 0, cx, cy, rot))
-  for (const [cx, cy, r2, dc, rot] of [[52, 130, 30, 22, 0], [140, 130, 24, 15, 17], [216, 130, 20, 14, 43]] as const) {
+  for (const [cx, cy, r2, dc, rot] of [
+    [52, 130, 30, 22, 0],
+    [140, 130, 24, 15, 17],
+    [216, 130, 20, 14, 43],
+  ] as const) {
     const yc = Math.sqrt(r2 * r2 - dc * dc)
     for (const sy of [-1, 1]) JOINS.push(rotP(0, sy * yc, cx, cy, rot))
   }
   // The straight-arm controls that must not move: spike apex + square-notch inner corners.
-  const CONTROL_PTS: Vec2[] = [{ x: 24 * S, y: 236 * S }, { x: 145 * S, y: 214 * S }, { x: 157 * S, y: 214 * S }]
+  const CONTROL_PTS: Vec2[] = [
+    { x: 24 * S, y: 236 * S },
+    { x: 145 * S, y: 214 * S },
+    { x: 157 * S, y: 214 * S },
+  ]
 
-  interface Vec2 { x: number; y: number }
+  interface Vec2 {
+    x: number
+    y: number
+  }
   const rasterFor = (name: string): ReturnType<typeof decodePng> => {
     const p = name.includes('/') ? name : `public/examples/edge-cases/${name}.svg`
     const t = readFileSync(join(root, p.endsWith('.svg') ? p : `${p}.svg`), 'utf8')
@@ -279,24 +366,49 @@ if (argv.includes('--sweep')) {
   for (const n of ['letter-joins', 'acute-counter', ...CONTROLS]) rasters.set(n, rasterFor(n))
   // The @256 lane: acute-counter is gated there and the parabola draft regressed it
   // (p95 2.13 → 3.44) — every variant reports it.
-  const AC256 = decodePng(new Resvg(readFileSync(join(root, 'public/examples/edge-cases/acute-counter.svg'), 'utf8'), { fitTo: { mode: 'width', value: 256 }, background: 'white' }).render().asPng())
-  rasters.set('mastercard', decodePng(new Resvg(readFileSync(join(root, 'examples/logos/mastercard.svg'), 'utf8'), { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng()))
+  const AC256 = decodePng(
+    new Resvg(readFileSync(join(root, 'public/examples/edge-cases/acute-counter.svg'), 'utf8'), {
+      fitTo: { mode: 'width', value: 256 },
+      background: 'white',
+    })
+      .render()
+      .asPng(),
+  )
+  rasters.set(
+    'mastercard',
+    decodePng(
+      new Resvg(readFileSync(join(root, 'examples/logos/mastercard.svg'), 'utf8'), {
+        fitTo: { mode: 'width', value: RES },
+        background: 'white',
+      })
+        .render()
+        .asPng(),
+    ),
+  )
 
   const gtFor = (p: string): ReturnType<typeof toRasterSpace> => {
     const t = readFileSync(join(root, p), 'utf8')
-    return toRasterSpace(parseGroundTruth(t), rasters.get(p.includes('logos') ? 'mastercard' : p.replace(/^public\/examples\/edge-cases\//, '').replace(/\.svg$/, ''))!.width)
+    return toRasterSpace(
+      parseGroundTruth(t),
+      rasters.get(
+        p.includes('logos') ? 'mastercard' : p.replace(/^public\/examples\/edge-cases\//, '').replace(/\.svg$/, ''),
+      )!.width,
+    )
   }
 
   const traceWith = async (name: string, fit: Record<string, unknown>): Promise<EditableDoc> => {
     const img2 = rasters.get(name)!
     return traceImage(img2 as unknown as ImageData, {
-      ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false,
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: false,
       planarFit: fit,
     })
   }
   const cornerNodes = (doc2: EditableDoc): Vec2[] => {
     const out: Vec2[] = []
-    for (const e of (doc2 as unknown as { topology?: { edges: { nodes: { kind: string; x: number; y: number }[] }[] } }).topology?.edges ?? [])
+    for (const e of (doc2 as unknown as { topology?: { edges: { nodes: { kind: string; x: number; y: number }[] }[] } })
+      .topology?.edges ?? [])
       for (const nd of e.nodes) if (nd.kind === 'corner') out.push({ x: nd.x, y: nd.y })
     return out
   }
@@ -313,7 +425,13 @@ if (argv.includes('--sweep')) {
     const ljCorners = cornerNodes(ljDoc)
     const errs = JOINS.map((p) => nearest(ljCorners, p))
     const ctl = CONTROL_PTS.map((p) => nearest(ljCorners, p))
-    const ljScore = scoreGeometry(gtFor('public/examples/edge-cases/letter-joins.svg'), ljDoc, rasters.get('letter-joins')!.width, rasters.get('letter-joins')!.height, rasters.get('letter-joins')!)
+    const ljScore = scoreGeometry(
+      gtFor('public/examples/edge-cases/letter-joins.svg'),
+      ljDoc,
+      rasters.get('letter-joins')!.width,
+      rasters.get('letter-joins')!.height,
+      rasters.get('letter-joins')!,
+    )
 
     // mastercard: corner recall + the three needle-site ROI maxima.
     const mcDoc = await traceWith('mastercard', v.fit)
@@ -321,7 +439,8 @@ if (argv.includes('--sweep')) {
     const mcScore = scoreGeometry(gtFor('examples/logos/mastercard.svg'), mcDoc, mcImg.width, mcImg.height, mcImg)
     const roiMax = (x0: number, y0: number, x1: number, y1: number, side: 'docPoints' | 'gtPoints'): number => {
       let m = 0
-      for (const p of mcScore.diagnostics[side]) if (p.x >= x0 && p.y >= y0 && p.x <= x1 && p.y <= y1 && p.d > m) m = p.d
+      for (const p of mcScore.diagnostics[side])
+        if (p.x >= x0 && p.y >= y0 && p.x <= x1 && p.y <= y1 && p.d > m) m = p.d
       return m
     }
 
@@ -329,8 +448,13 @@ if (argv.includes('--sweep')) {
     const acDoc = await traceWith('acute-counter', v.fit)
     const acCorners = cornerNodes(acDoc)
     const acUnits: [number, number, number, number, number][] = [
-      [46, 46, 48, 32, 0], [128, 46, 40, 38, 23], [210, 46, 34, 44, 47],
-      [46.5, 128.5, 30, 38, 11], [128.5, 128.5, 24, 44, 67], [210.5, 128.5, 20, 56, 90], [210, 210, 30, 96, 31],
+      [46, 46, 48, 32, 0],
+      [128, 46, 40, 38, 23],
+      [210, 46, 34, 44, 47],
+      [46.5, 128.5, 30, 38, 11],
+      [128.5, 128.5, 24, 44, 67],
+      [210.5, 128.5, 20, 56, 90],
+      [210, 210, 30, 96, 31],
     ]
     let acSum = 0
     let acWorst = 0
@@ -345,13 +469,23 @@ if (argv.includes('--sweep')) {
         acWorst = Math.max(acWorst, d)
       }
     }
-    for (const [sx2, sy2] of [[24, 200], [24, 232]] as const) spikeWorst = Math.max(spikeWorst, nearest(acCorners, { x: sx2 * S, y: sy2 * S }))
+    for (const [sx2, sy2] of [
+      [24, 200],
+      [24, 232],
+    ] as const)
+      spikeWorst = Math.max(spikeWorst, nearest(acCorners, { x: sx2 * S, y: sy2 * S }))
 
     // acute-counter @256: boundary p95 + corner recall (the gated lane).
     const ac256Doc = await traceImage(AC256 as unknown as ImageData, {
-      ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, planarFit: v.fit,
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: false,
+      planarFit: v.fit,
     })
-    const ac256Gt = toRasterSpace(parseGroundTruth(readFileSync(join(root, 'public/examples/edge-cases/acute-counter.svg'), 'utf8')), AC256.width)
+    const ac256Gt = toRasterSpace(
+      parseGroundTruth(readFileSync(join(root, 'public/examples/edge-cases/acute-counter.svg'), 'utf8')),
+      AC256.width,
+    )
     const ac256 = scoreGeometry(ac256Gt, ac256Doc, AC256.width, AC256.height, AC256)
 
     // Watchlist recall — must match baseline exactly.
@@ -365,12 +499,17 @@ if (argv.includes('--sweep')) {
 
     console.log(`\n■ ${v.label}`)
     console.log(
-      `  letter-joins: Σjoin ${f(errs.reduce((s2, e) => s2 + e, 0), 2)} worst ${f(Math.max(...errs), 2)}  ctrlWorst ${f(Math.max(...ctl), 2)}  corners ${ljScore.cornersRecovered}/${ljScore.gtCorners}  chamfer ${f(ljScore.chamfer, 4)} p95 ${f(ljScore.p95, 3)} missedMax ${f(ljScore.missedMax, 2)}`,
+      `  letter-joins: Σjoin ${f(
+        errs.reduce((s2, e) => s2 + e, 0),
+        2,
+      )} worst ${f(Math.max(...errs), 2)}  ctrlWorst ${f(Math.max(...ctl), 2)}  corners ${ljScore.cornersRecovered}/${ljScore.gtCorners}  chamfer ${f(ljScore.chamfer, 4)} p95 ${f(ljScore.p95, 3)} missedMax ${f(ljScore.missedMax, 2)}`,
     )
     console.log(
       `  mastercard:   corners ${mcScore.cornersRecovered}/${mcScore.gtCorners}  chamfer ${f(mcScore.chamfer, 4)} p95 ${f(mcScore.p95, 3)}  eNeedle ${f(roiMax(240, 366, 275, 376, 'docPoints'), 2)}  mCrotch ${f(roiMax(55, 352, 68, 365, 'gtPoints'), 2)}  spurMax ${f(mcScore.spuriousMax, 2)}`,
     )
-    console.log(`  acute-counter: Σtip ${f(acSum, 1)} worst ${f(acWorst, 2)} spikeWorst ${f(spikeWorst, 2)}  | @256 p95 ${f(ac256.p95, 3)} corners ${ac256.cornersRecovered}/${ac256.gtCorners}`)
+    console.log(
+      `  acute-counter: Σtip ${f(acSum, 1)} worst ${f(acWorst, 2)} spikeWorst ${f(spikeWorst, 2)}  | @256 p95 ${f(ac256.p95, 3)} corners ${ac256.cornersRecovered}/${ac256.gtCorners}`,
+    )
     console.log(`  watchlist: ${recalls.join('  ')}`)
   }
   process.exit(0)
@@ -378,9 +517,14 @@ if (argv.includes('--sweep')) {
 
 const svgPath = CASE.includes('/')
   ? CASE
-  : [`examples/logos/${CASE}.svg`, `public/examples/edge-cases/${CASE}.svg`].find((p) => {
-      try { readFileSync(join(root, p)); return true } catch { return false }
-    }) ?? `examples/logos/${CASE}.svg`
+  : ([`examples/logos/${CASE}.svg`, `public/examples/edge-cases/${CASE}.svg`].find((p) => {
+      try {
+        readFileSync(join(root, p))
+        return true
+      } catch {
+        return false
+      }
+    }) ?? `examples/logos/${CASE}.svg`)
 
 const svgText = readFileSync(join(root, svgPath), 'utf8')
 const gt = parseGroundTruth(svgText)
@@ -403,7 +547,13 @@ async function trace(fitOver: Record<string, number | boolean>): Promise<Editabl
       gradients: GRADIENTS,
       ...(DESPECKLE !== null && DESPECKLE !== '' ? { despeckle: Number(DESPECKLE) } : {}),
       planarFit: {
-        ...(argv.includes('--apex') ? { apexDiag: (r: ApexDiagRecord) => { APEX.push(r) } } : {}),
+        ...(argv.includes('--apex')
+          ? {
+              apexDiag: (r: ApexDiagRecord) => {
+                APEX.push(r)
+              },
+            }
+          : {}),
         ...fitOver,
       },
     },
@@ -411,14 +561,24 @@ async function trace(fitOver: Record<string, number | boolean>): Promise<Editabl
     undefined,
     undefined,
     undefined,
-    (l) => { LABELS = l },
+    (l) => {
+      LABELS = l
+    },
   )
 }
 
 // ---------------------------------------------------------------------------
 // Hot-sample clustering: union points within LINK px, report per cluster.
 // ---------------------------------------------------------------------------
-interface Cluster { n: number; maxd: number; sumd: number; x0: number; y0: number; x1: number; y1: number }
+interface Cluster {
+  n: number
+  maxd: number
+  sumd: number
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
 const LINK = 4
 function clusters(pts: DistPoint[], floor: number): Cluster[] {
   const hot = pts.filter((p) => p.d >= floor)
@@ -428,10 +588,12 @@ function clusters(pts: DistPoint[], floor: number): Cluster[] {
   hot.forEach((p, i) => {
     const k = `${Math.floor(p.x / LINK)},${Math.floor(p.y / LINK)}`
     const a = grid.get(k)
-    if (a) a.push(i); else grid.set(k, [i])
+    if (a) a.push(i)
+    else grid.set(k, [i])
   })
   hot.forEach((p, i) => {
-    const gx = Math.floor(p.x / LINK), gy = Math.floor(p.y / LINK)
+    const gx = Math.floor(p.x / LINK),
+      gy = Math.floor(p.y / LINK)
     for (let dx = -1; dx <= 1; dx++)
       for (let dy = -1; dy <= 1; dy++)
         for (const j of grid.get(`${gx + dx},${gy + dy}`) ?? []) {
@@ -446,15 +608,18 @@ function clusters(pts: DistPoint[], floor: number): Cluster[] {
     const c = by.get(r)
     if (!c) by.set(r, { n: 1, maxd: p.d, sumd: p.d, x0: p.x, y0: p.y, x1: p.x, y1: p.y })
     else {
-      c.n++; c.maxd = Math.max(c.maxd, p.d); c.sumd += p.d
-      c.x0 = Math.min(c.x0, p.x); c.y0 = Math.min(c.y0, p.y)
-      c.x1 = Math.max(c.x1, p.x); c.y1 = Math.max(c.y1, p.y)
+      c.n++
+      c.maxd = Math.max(c.maxd, p.d)
+      c.sumd += p.d
+      c.x0 = Math.min(c.x0, p.x)
+      c.y0 = Math.min(c.y0, p.y)
+      c.x1 = Math.max(c.x1, p.x)
+      c.y1 = Math.max(c.y1, p.y)
     }
   })
   return [...by.values()].sort((a, b) => b.maxd - a.maxd)
 }
-const box = (c: Cluster): string =>
-  `[${f(c.x0, 1)},${f(c.y0, 1)} → ${f(c.x1, 1)},${f(c.y1, 1)}]`
+const box = (c: Cluster): string => `[${f(c.x0, 1)},${f(c.y0, 1)} → ${f(c.x1, 1)},${f(c.y1, 1)}]`
 
 // ---------------------------------------------------------------------------
 // The default run: score, clusters, unmatched corners.
@@ -465,15 +630,18 @@ const fitNote = Object.keys(FIT).length ? `  [fit ${flag('--fit')}]` : ''
 console.log(`\n━━━ ${CASE} @${RES} ${GRADIENTS ? 'gradients' : 'flat'}${fitNote} ━━━`)
 console.log(
   `chamfer ${f(score.chamfer, 4)}  p95 ${f(score.p95)}  spuriousMax ${f(score.spuriousMax)}  missedMax ${f(score.missedMax)}` +
-  `  corners ${score.cornersRecovered}/${score.gtCorners}  nodes ${score.docNodes}  paths ${score.docPaths}`,
+    `  corners ${score.cornersRecovered}/${score.gtCorners}  nodes ${score.docNodes}  paths ${score.docPaths}`,
 )
 
 // Unmatched authored corners — the 48/49 lead.
 const visible = makeVisibleAt(img)
-const gtCornerVis = sharpCorners(shapes.map((s) => s.subPaths), CORNER_MIN_EDGE).filter(
-  (c) => visible({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || visible({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
+const gtCornerVis = sharpCorners(
+  shapes.map((s) => s.subPaths),
+  CORNER_MIN_EDGE,
+).filter((c) => visible({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || visible({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }))
+const docSets: SubPath[][] = doc.items.flatMap((it) =>
+  it.kind === 'path' && it.visible !== false ? [it.subPaths] : [],
 )
-const docSets: SubPath[][] = doc.items.flatMap((it) => (it.kind === 'path' && it.visible !== false ? [it.subPaths] : []))
 const docCorners = sharpCorners(docSets)
 const unmatched = gtCornerVis.filter(
   (g) => !docCorners.some((p) => (p.x - g.x) ** 2 + (p.y - g.y) ** 2 <= CORNER_MATCH_R * CORNER_MATCH_R),
@@ -523,8 +691,7 @@ if (ROI.length === 4 && !argv.includes('--matrix')) {
     it.subPaths.forEach((sp2, si) => {
       sp2.nodes.forEach((n, ni) => {
         if (!inRoi(n.x, n.y)) return
-        const h = (p: { x: number; y: number } | null | undefined): string =>
-          p ? `(${f(p.x, 1)},${f(p.y, 1)})` : '—'
+        const h = (p: { x: number; y: number } | null | undefined): string => (p ? `(${f(p.x, 1)},${f(p.y, 1)})` : '—')
         console.log(
           `  i${ii}/s${si}/n${ni}  (${f(n.x, 2)}, ${f(n.y, 2)})  hIn ${h(n.hIn)}  hOut ${h(n.hOut)}  fill ${String((it as { fill?: unknown }).fill ?? '?')}`,
         )
@@ -540,9 +707,9 @@ if (argv.includes('--apex') && ROI.length === 4) {
   for (const r of APEX.filter((r) => inRoi(r.cx, r.cy) || inRoi(r.ax, r.ay))) {
     console.log(
       `  (${f(r.cx, 2)},${f(r.cy, 2)}) → (${f(r.ax, 2)},${f(r.ay, 2)})  ${r.outcome.padEnd(13)}` +
-      ` moved ${f(r.moved, 2)}  allow ${f(r.allow, 2)}  tip ${f(r.tipDeg, 1)}°  spans ${r.inSpan}/${r.outSpan}` +
-      `  bows ${f(r.inBow, 2)}/${f(r.outBow, 2)}  chords ${f(r.inChord, 1)}/${f(r.outChord, 1)}  n ${r.inN}/${r.outN}  reach ${f(r.reach, 2)}` +
-      `  kinds ${r.inKind ?? '?'}/${r.outKind ?? '?'}`,
+        ` moved ${f(r.moved, 2)}  allow ${f(r.allow, 2)}  tip ${f(r.tipDeg, 1)}°  spans ${r.inSpan}/${r.outSpan}` +
+        `  bows ${f(r.inBow, 2)}/${f(r.outBow, 2)}  chords ${f(r.inChord, 1)}/${f(r.outChord, 1)}  n ${r.inN}/${r.outN}  reach ${f(r.reach, 2)}` +
+        `  kinds ${r.inKind ?? '?'}/${r.outKind ?? '?'}`,
     )
   }
 }
@@ -581,7 +748,8 @@ if (argv.includes('--matrix')) {
 // ---------------------------------------------------------------------------
 if (PNG) {
   if (ROI.length !== 4) throw new Error('--png needs --roi x0,y0,x1,y1')
-  const X0 = Math.max(0, Math.floor(ROI[0])), Y0 = Math.max(0, Math.floor(ROI[1]))
+  const X0 = Math.max(0, Math.floor(ROI[0])),
+    Y0 = Math.max(0, Math.floor(ROI[1]))
   const CW = Math.min(img.width, Math.ceil(ROI[2])) - X0
   const CH = Math.min(img.height, Math.ceil(ROI[3])) - Y0
   const Z = Math.max(2, Math.min(16, Math.floor(560 / Math.max(CW, CH))))
@@ -591,11 +759,17 @@ if (PNG) {
       for (let x = 0; x < CW * Z; x++) {
         const s = ((Y0 + Math.floor(y / Z)) * w + X0 + Math.floor(x / Z)) * 4
         const d = (y * CW * Z + x) * 4
-        o[d] = rgba[s]; o[d + 1] = rgba[s + 1]; o[d + 2] = rgba[s + 2]; o[d + 3] = 255
+        o[d] = rgba[s]
+        o[d + 1] = rgba[s + 1]
+        o[d + 2] = rgba[s + 2]
+        o[d + 3] = 255
       }
     return o
   }
-  const panels = [crop(img.data, img.width), crop(rasterizeDoc(doc, img.width, img.height, { background: [255, 255, 255] }), img.width)]
+  const panels = [
+    crop(img.data, img.width),
+    crop(rasterizeDoc(doc, img.width, img.height, { background: [255, 255, 255] }), img.width),
+  ]
   // `--labels`: insert the LABEL MAP between source and trace — is the notch already
   // gone before anything is fitted, or did the fit lose it?
   if (argv.includes('--labels') && LABELS) {
@@ -604,8 +778,11 @@ if (PNG) {
     for (let i = 0; i < L.width * L.height; i++) {
       const v = L.labels[i]
       // Hash the label id into a stable, distinguishable colour.
-      const h = ((v * 2654435761) >>> 0)
-      lab[i * 4] = 64 + (h & 0x7f); lab[i * 4 + 1] = 64 + ((h >> 7) & 0x7f); lab[i * 4 + 2] = 64 + ((h >> 14) & 0x7f); lab[i * 4 + 3] = 255
+      const h = (v * 2654435761) >>> 0
+      lab[i * 4] = 64 + (h & 0x7f)
+      lab[i * 4 + 1] = 64 + ((h >> 7) & 0x7f)
+      lab[i * 4 + 2] = 64 + ((h >> 14) & 0x7f)
+      lab[i * 4 + 3] = 255
     }
     panels.splice(1, 0, crop(lab, L.width))
   }
@@ -619,7 +796,10 @@ if (PNG) {
       for (let x = 0; x < CW * Z; x++) {
         const s = (y * CW * Z + x) * 4
         const d = (y * W + ox + x) * 4
-        sheet[d] = p[s]; sheet[d + 1] = p[s + 1]; sheet[d + 2] = p[s + 2]; sheet[d + 3] = 255
+        sheet[d] = p[s]
+        sheet[d + 1] = p[s + 1]
+        sheet[d + 2] = p[s + 2]
+        sheet[d + 3] = 255
       }
   })
   writeFileSync(PNG, encodePng(sheet, W, H))

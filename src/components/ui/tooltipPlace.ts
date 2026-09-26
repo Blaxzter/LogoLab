@@ -75,4 +75,3 @@ export function placeTooltip(
   }
   return { side: placed, left, top }
 }
-

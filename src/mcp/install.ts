@@ -97,7 +97,8 @@ function mergeInto(file: string, key: string, entry: Record<string, unknown>): {
 export function configPath(client: InstallClient, scope: InstallScope, dir: string): string {
   const home = homedir()
   if (client === 'claude') return scope === 'user' ? join(home, '.claude.json') : join(dir, '.mcp.json')
-  if (client === 'cursor') return scope === 'user' ? join(home, '.cursor', 'mcp.json') : join(dir, '.cursor', 'mcp.json')
+  if (client === 'cursor')
+    return scope === 'user' ? join(home, '.cursor', 'mcp.json') : join(dir, '.cursor', 'mcp.json')
   return scope === 'user' ? join(home, '.vscode', 'mcp.json') : join(dir, '.vscode', 'mcp.json')
 }
 

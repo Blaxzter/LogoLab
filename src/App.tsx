@@ -63,13 +63,7 @@ function PanelLoading({ what }: { what: string }) {
   )
 }
 
-function Header({
-  onOpenMenu,
-  onReport,
-}: {
-  onOpenMenu: () => void
-  onReport: () => void
-}) {
+function Header({ onOpenMenu, onReport }: { onOpenMenu: () => void; onReport: () => void }) {
   const logo = useLogo()
   const clearLogo = useStore((s) => s.clearLogo)
   const tab = useActiveTab()
@@ -170,10 +164,7 @@ function Header({
                 attached, rather than linking straight to GitHub. */}
             <Tooltip
               label={
-                <TipLabel
-                  title="Report a problem"
-                  detail="A bug, or an idea. Nothing is sent until you post it."
-                />
+                <TipLabel title="Report a problem" detail="A bug, or an idea. Nothing is sent until you post it." />
               }
               side="bottom"
             >
@@ -264,8 +255,7 @@ export function App() {
 
   // Full-height studios show the legal links in their desktop status bar, so
   // the footer is hidden there on desktop.
-  const isStudio =
-    tab === 'cleanup' || tab === 'vectorize' || tab === 'sheet' || tab === 'editor'
+  const isStudio = tab === 'cleanup' || tab === 'vectorize' || tab === 'sheet' || tab === 'editor'
 
   // Close overlays on any navigation (including Back), and the appearance
   // drawer when its trigger disappears.
@@ -290,11 +280,7 @@ export function App() {
     return (
       <div className="flex h-full flex-col overflow-x-hidden">
         <Header onOpenMenu={() => setMenuOpen(true)} onReport={() => setReportOpen(true)} />
-        <AppMenu
-          open={menuOpen}
-          onClose={() => setMenuOpen(false)}
-          onReport={() => setReportOpen(true)}
-        />
+        <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} onReport={() => setReportOpen(true)} />
         {reportOpen && <ReportDialog onClose={() => setReportOpen(false)} />}
         <Toasts />
         <main className="min-h-0 flex-1 overflow-y-auto bg-bg">
@@ -325,11 +311,7 @@ export function App() {
   return (
     <div className="flex h-full flex-col overflow-x-hidden">
       <Header onOpenMenu={() => setMenuOpen(true)} onReport={() => setReportOpen(true)} />
-      <AppMenu
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        onReport={() => setReportOpen(true)}
-      />
+      <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} onReport={() => setReportOpen(true)} />
       {reportOpen && <ReportDialog onClose={() => setReportOpen(false)} />}
       <div className="flex min-h-0 flex-1">
         {/* Inline on desktop, a drawer on mobile. Hidden on the Editor tab,
@@ -418,9 +400,7 @@ export function App() {
       </div>
 
       {/* Mobile appearance drawer and its button, on tabs with controls once a logo is loaded. */}
-      {showStyling && (
-        <MobileSidebarDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-      )}
+      {showStyling && <MobileSidebarDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />}
       <Toasts />
       {showStyling && hasLogo && (
         <Tooltip label="Customize appearance">

@@ -16,16 +16,10 @@ function SizeCell({ size, kind }: { size: number; kind: RowKind }) {
   const app = useAppearance()
   return (
     <div className="flex flex-col items-center gap-2">
-      <div
-        className="grid place-items-center"
-        style={{ width: 128, height: 128 }}
-      >
+      <div className="grid place-items-center" style={{ width: 128, height: 128 }}>
         <LogoMark size={size} showCard={app.cardInFlat} placeholder />
       </div>
-      <span
-        className="font-mono text-[11px] tabular-nums"
-        style={{ color: kind === 'dark' ? '#9aa3b2' : '#8b93a3' }}
-      >
+      <span className="font-mono text-[11px] tabular-nums" style={{ color: kind === 'dark' ? '#9aa3b2' : '#8b93a3' }}>
         {size}px
       </span>
     </div>
@@ -40,9 +34,7 @@ function SwatchRow({ kind }: { kind: RowKind }) {
       style={{
         backgroundColor: isDark ? '#14161c' : '#ffffff',
         borderColor: isDark ? '#2a2d36' : '#e6e8ec',
-        boxShadow: isDark
-          ? 'inset 0 1px 0 rgba(255,255,255,0.04)'
-          : 'inset 0 1px 0 rgba(255,255,255,0.6)',
+        boxShadow: isDark ? 'inset 0 1px 0 rgba(255,255,255,0.04)' : 'inset 0 1px 0 rgba(255,255,255,0.6)',
       }}
     >
       <div className="mb-4 flex items-center gap-2">
@@ -74,8 +66,7 @@ export default function SizeMatrix() {
     <div
       className="flex w-full flex-col gap-4 p-5"
       style={{
-        background:
-          'radial-gradient(120% 80% at 50% 0%, #fafbfc 0%, #f2f3f5 100%)',
+        background: 'radial-gradient(120% 80% at 50% 0%, #fafbfc 0%, #f2f3f5 100%)',
       }}
     >
       <SwatchRow kind="light" />

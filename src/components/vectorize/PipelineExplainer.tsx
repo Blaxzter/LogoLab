@@ -70,20 +70,35 @@ export function PipelineExplainer({
   }, [logo.src, logo.isSvg, logo.svgText, optsKey, opts])
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="How vectorize works">
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm dark:bg-black/55" />
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="How vectorize works"
+    >
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/40 backdrop-blur-sm dark:bg-black/55"
+      />
 
       <div className="panel animate-in-fade relative z-10 flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden">
         <div className="flex items-start justify-between border-b border-line p-5">
           <div>
             <h2 className="text-base font-semibold text-ink">How vectorize works</h2>
             <p className="mt-1 text-sm text-muted">
-              Your image, walked through the stages — with your current settings — that turn pixels into clean,
-              editable vector shapes.
+              Your image, walked through the stages — with your current settings — that turn pixels into clean, editable
+              vector shapes.
             </p>
           </div>
           <Tooltip label="Close">
-            <button type="button" onClick={onClose} aria-label="Close" className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0"
+            >
               <X size={16} />
             </button>
           </Tooltip>
@@ -199,8 +214,14 @@ function Steps({
               const model = p?.model ?? 'solid'
               const [sr, sg, sb] = p?.solid ?? [200, 200, 200]
               return (
-                <span key={i} className="flex items-center gap-1 rounded-md border border-line bg-surface-2 px-1.5 py-0.5 text-[10px] text-ink-2">
-                  <span className="h-3 w-3 rounded-sm" style={{ background: rgb(sr, sg, sb), outline: `1px solid ${rgb(r, g, b)}` }} />
+                <span
+                  key={i}
+                  className="flex items-center gap-1 rounded-md border border-line bg-surface-2 px-1.5 py-0.5 text-[10px] text-ink-2"
+                >
+                  <span
+                    className="h-3 w-3 rounded-sm"
+                    style={{ background: rgb(sr, sg, sb), outline: `1px solid ${rgb(r, g, b)}` }}
+                  />
                   {model}
                 </span>
               )
@@ -235,8 +256,8 @@ function Steps({
       </Step>
 
       <p className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
-        Tip: if overlapping or finely-detailed areas don't come through, it's usually step 3 — those areas merged
-        into a neighbouring region before they could become their own shape. Raise <b>Region detail</b> or place
+        Tip: if overlapping or finely-detailed areas don't come through, it's usually step 3 — those areas merged into a
+        neighbouring region before they could become their own shape. Raise <b>Region detail</b> or place
         <b> Mark</b> seeds to keep them.
       </p>
 
@@ -265,7 +286,12 @@ function References() {
 
 function ResearchLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-2 hover:text-accent-hover">
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="text-accent underline underline-offset-2 hover:text-accent-hover"
+    >
       {children}
     </a>
   )
@@ -341,7 +367,8 @@ function GradientDetection({
           <div className="mt-1 text-[10px] leading-snug text-muted">
             Colour histogram (R/G/B, log scale). <Signal ok={ramp.paletteSpread} />{' '}
             <b className="text-ink-2">{ramp.distinctColors}</b> main colour{ramp.distinctColors === 1 ? '' : 's'}, top 8
-            cover <b className="text-ink-2">{coverPct}%</b> ({ramp.paletteSpread ? `spread, ≤${coverMaxPct}%` : `concentrated, >${coverMaxPct}% ⇒ flat`}).
+            cover <b className="text-ink-2">{coverPct}%</b> (
+            {ramp.paletteSpread ? `spread, ≤${coverMaxPct}%` : `concentrated, >${coverMaxPct}% ⇒ flat`}).
           </div>
         </div>
         <div className="min-w-[180px] flex-1">
@@ -350,7 +377,11 @@ function GradientDetection({
               className={`h-full rounded ${ramp.slopePresent ? 'bg-accent' : 'bg-ink/30'}`}
               style={{ width: `${Math.min(100, Math.max(pct, pct > 0 ? 1 : 0))}%` }}
             />
-            <div className="absolute inset-y-0 w-0.5 bg-ink/70" style={{ left: `${thrPct}%` }} title={`threshold ${thrPct}%`} />
+            <div
+              className="absolute inset-y-0 w-0.5 bg-ink/70"
+              style={{ left: `${thrPct}%` }}
+              title={`threshold ${thrPct}%`}
+            />
           </div>
           <div className="mt-1 text-[10px] leading-snug text-muted">
             <Signal ok={ramp.slopePresent} /> <b className="text-ink-2">Rampiness {pct.toFixed(1)}%</b> of the interior
@@ -372,9 +403,7 @@ function GradientDetection({
 
 /** Tiny ✓ / ✗ chip telling whether one signal points at "gradient". */
 function Signal({ ok }: { ok: boolean }) {
-  return (
-    <span className={ok ? 'font-semibold text-accent' : 'font-semibold text-muted'}>{ok ? '✓' : '✗'}</span>
-  )
+  return <span className={ok ? 'font-semibold text-accent' : 'font-semibold text-muted'}>{ok ? '✓' : '✗'}</span>
 }
 
 /** Three overlaid per-channel area plots (an RGB histogram) on a log scale so a
@@ -395,7 +424,11 @@ function HistogramChart({ hist }: { hist: ColorHistogram }) {
     return `${d} L${W} ${H} Z`
   }
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-14 w-full rounded border border-line bg-surface" preserveAspectRatio="none">
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="h-14 w-full rounded border border-line bg-surface"
+      preserveAspectRatio="none"
+    >
       <path d={area(r)} fill="rgb(239,68,68)" fillOpacity="0.45" />
       <path d={area(g)} fill="rgb(34,197,94)" fillOpacity="0.45" />
       <path d={area(b)} fill="rgb(59,130,246)" fillOpacity="0.45" />

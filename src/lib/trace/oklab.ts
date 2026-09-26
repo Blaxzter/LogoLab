@@ -41,13 +41,6 @@ export function oklabDeltaE(a: Oklab, b: Oklab): number {
 }
 
 /** ΔE between two sRGB triples (0–255), measured in Oklab. */
-export function srgbDeltaEOk(
-  r1: number,
-  g1: number,
-  b1: number,
-  r2: number,
-  g2: number,
-  b2: number,
-): number {
+export function srgbDeltaEOk(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
   return oklabDeltaE(srgbToOklab(r1, g1, b1), srgbToOklab(r2, g2, b2))
 }

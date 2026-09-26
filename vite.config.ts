@@ -32,7 +32,9 @@ const page = (name: string) => fileURLToPath(new URL(name, import.meta.url))
 function buildStamp(): { version: string; date: string; commit: string } {
   const git = (...args: string[]): string => {
     try {
-      return execFileSync('git', args, { cwd: fileURLToPath(new URL('.', import.meta.url)) }).toString().trim()
+      return execFileSync('git', args, { cwd: fileURLToPath(new URL('.', import.meta.url)) })
+        .toString()
+        .trim()
     } catch {
       return ''
     }
@@ -45,7 +47,11 @@ function buildStamp(): { version: string; date: string; commit: string } {
   }
   // Committer date, not author date: a rebased or cherry-picked commit ships
   // when it lands, not when it was written. ISO, so the browser can localise it.
-  return { version, date: git('log', '-1', '--format=%cI') || new Date().toISOString(), commit: git('rev-parse', '--short', 'HEAD') }
+  return {
+    version,
+    date: git('log', '-1', '--format=%cI') || new Date().toISOString(),
+    commit: git('rev-parse', '--short', 'HEAD'),
+  }
 }
 
 // https://vite.dev/config/
@@ -92,15 +98,7 @@ export default defineConfig(({ command }) => ({
     watch: {
       // Don't watch/reload on test & screenshot artifacts or dropped-in image
       // assets (binary files can be locked mid-write and crash the watcher).
-      ignored: [
-        '**/.playwright-mcp/**',
-        '**/assets/**',
-        '**/*.png',
-        '**/*.webp',
-        '**/*.yml',
-        '**/*.log',
-        '**/dist/**',
-      ],
+      ignored: ['**/.playwright-mcp/**', '**/assets/**', '**/*.png', '**/*.webp', '**/*.yml', '**/*.log', '**/dist/**'],
     },
   },
 }))

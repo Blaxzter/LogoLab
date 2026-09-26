@@ -21,9 +21,7 @@ export function reverseSubPath(sp: SubPath): SubPath {
 
 /** Reverse one subpath of an item (or every subpath when `sub` is null). */
 export function reversePath(item: PathItem, sub: number | null = null): PathItem {
-  const subPaths = item.subPaths.map((sp, i) =>
-    sub === null || i === sub ? reverseSubPath(sp) : sp,
-  )
+  const subPaths = item.subPaths.map((sp, i) => (sub === null || i === sub ? reverseSubPath(sp) : sp))
   return { ...item, subPaths, loops: undefined }
 }
 
@@ -47,11 +45,7 @@ export function openSubPathAt(item: PathItem, sub: number, idx: number): PathIte
   const n = sp.nodes.length
   const rotated = Array.from({ length: n }, (_, i) => sp.nodes[(idx + i) % n])
   const first = rotated[0]
-  const nodes = [
-    { ...first, hIn: null },
-    ...rotated.slice(1),
-    { ...first, hOut: null },
-  ]
+  const nodes = [{ ...first, hIn: null }, ...rotated.slice(1), { ...first, hOut: null }]
   const subPaths = item.subPaths.slice()
   subPaths[sub] = { nodes, closed: false }
   return { ...item, subPaths, loops: undefined }

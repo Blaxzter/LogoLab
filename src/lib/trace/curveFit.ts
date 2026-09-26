@@ -711,10 +711,7 @@ function generateBezier(d: Vec[], u: number[], tHat1: Vec, tHat2: Vec): Bezier {
   const n = d.length
   const A: [Vec, Vec][] = []
   for (let i = 0; i < n; i++) {
-    A.push([
-      scale(tHat1, 3 * u[i] * (1 - u[i]) * (1 - u[i])),
-      scale(tHat2, 3 * u[i] * u[i] * (1 - u[i])),
-    ])
+    A.push([scale(tHat1, 3 * u[i] * (1 - u[i]) * (1 - u[i])), scale(tHat2, 3 * u[i] * u[i] * (1 - u[i]))])
   }
   let c00 = 0
   let c01 = 0
@@ -798,7 +795,10 @@ function bezierAt(b: Bezier, t: number): Vec {
 }
 function bezier2At(p: Vec[], t: number): Vec {
   const mt = 1 - t
-  return { x: mt * mt * p[0].x + 2 * mt * t * p[1].x + t * t * p[2].x, y: mt * mt * p[0].y + 2 * mt * t * p[1].y + t * t * p[2].y }
+  return {
+    x: mt * mt * p[0].x + 2 * mt * t * p[1].x + t * t * p[2].x,
+    y: mt * mt * p[0].y + 2 * mt * t * p[1].y + t * t * p[2].y,
+  }
 }
 function bezier1At(p: Vec[], t: number): Vec {
   return { x: (1 - t) * p[0].x + t * p[1].x, y: (1 - t) * p[0].y + t * p[1].y }

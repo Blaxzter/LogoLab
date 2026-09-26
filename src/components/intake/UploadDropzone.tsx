@@ -16,7 +16,9 @@ export function UploadDropzone() {
   if (logo.src) {
     return (
       <div className="panel flex items-center gap-3 p-3">
-        <div className={`${checkerClass} flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line`}>
+        <div
+          className={`${checkerClass} flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line`}
+        >
           <img src={logo.src} alt="" className="h-full w-full object-contain p-1" />
         </div>
         <div className="min-w-0 flex-1">
@@ -26,20 +28,11 @@ export function UploadDropzone() {
             {logo.isSvg ? '' : ' px'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="btn btn-ghost h-8 px-2 text-xs"
-        >
+        <button type="button" onClick={() => inputRef.current?.click()} className="btn btn-ghost h-8 px-2 text-xs">
           Replace
         </button>
         <Tooltip label="Remove logo">
-          <button
-            type="button"
-            onClick={clearLogo}
-            aria-label="Remove logo"
-            className="btn btn-ghost h-8 w-8 px-0"
-          >
+          <button type="button" onClick={clearLogo} aria-label="Remove logo" className="btn btn-ghost h-8 w-8 px-0">
             <X size={15} />
           </button>
         </Tooltip>

@@ -128,7 +128,9 @@ function strokedCircles(svg: string, res: number): GtCircle[] {
     const before = svg.slice(0, m.index)
     // stroke-width may be inherited from an ancestor <g>; the innermost declaration before
     // the element is enough for this corpus's flat one-group files.
-    const sw = attr('stroke-width') ? Number(attr('stroke-width')) : Number([...before.matchAll(/stroke-width="([\d.]+)"/g)].pop()?.[1] ?? 0)
+    const sw = attr('stroke-width')
+      ? Number(attr('stroke-width'))
+      : Number([...before.matchAll(/stroke-width="([\d.]+)"/g)].pop()?.[1] ?? 0)
     const cx = Number(attr('cx') ?? 0) * k
     const cy = Number(attr('cy') ?? 0) * k
     const r = Number(attr('r') ?? 0) * k
@@ -167,7 +169,11 @@ function buildNet(res: number): { net: PlanarNetwork; contrast: Float64Array } {
     minRegionArea: Math.max(24, Math.round(0.25 * 0.25 * 800)),
     regionEvidence: true,
   }
-  const fp = segmentFlatPalette(img as unknown as { width: number; height: number; data: Uint8ClampedArray }, paletteOpts, undefined)
+  const fp = segmentFlatPalette(
+    img as unknown as { width: number; height: number; data: Uint8ClampedArray },
+    paletteOpts,
+    undefined,
+  )
   const labels = healColorSpikes(fp.labels, img.data as unknown as Uint8ClampedArray, img.width, img.height, fp.palette)
   const net = buildPlanarNetwork(labels, img.width, img.height)
   return { net, contrast: edgeContrast(net, fp.palette) }
@@ -432,7 +438,9 @@ if (argv.includes('--corpus')) {
   console.log(`\n━━━ EXPOSURE @${RES} — junctions a rank-with-margin rule would chain (margin ≥ ${MARGIN}°) ━━━`)
   console.log(`  'usable' drops canvas-clip and short-arm (< ${MIN_ARM}px) junctions; 'GT ok' scores the CHOSEN`)
   console.log(`  MATCHING against the co-circular one, where the art authors circles at all.\n`)
-  console.log(`  ${'case'.padEnd(22)}${'jn'.padStart(5)}${'usable'.padStart(8)}${'chained'.padStart(9)}${'GT ok'.padStart(9)}${'minMargin'.padStart(11)}`)
+  console.log(
+    `  ${'case'.padEnd(22)}${'jn'.padStart(5)}${'usable'.padStart(8)}${'chained'.padStart(9)}${'GT ok'.padStart(9)}${'minMargin'.padStart(11)}`,
+  )
   let gOk = 0
   let gAll = 0
   for (const c of GATED_CORPUS.filter((x) => x.tier === 0 && !x.gradients)) {
@@ -462,12 +470,16 @@ if (argv.includes('--corpus')) {
 
 for (const RES of SCALES) {
   const { jns, gts, net } = survey(RES)
-  console.log(`\n━━━ ${CASE ?? FILE} @ ${RES}px ━━━ ${net.edges.length} edges, ${net.junctions.length} junctions, span ${SPAN}px\n`)
+  console.log(
+    `\n━━━ ${CASE ?? FILE} @ ${RES}px ━━━ ${net.edges.length} edges, ${net.junctions.length} junctions, span ${SPAN}px\n`,
+  )
 
   if (SCALES.length === 1) {
     console.log('  AUTHORED CIRCLES (raster space — a stroked circle authors two):')
     for (let i = 0; i < gts.length; i++)
-      console.log(`    #${String(i).padStart(2)}  ${gts[i].ring.padEnd(9)} ${gts[i].side.padEnd(6)} c=(${f(gts[i].cx, 1)},${f(gts[i].cy, 1)})  r=${f(gts[i].r, 2)}`)
+      console.log(
+        `    #${String(i).padStart(2)}  ${gts[i].ring.padEnd(9)} ${gts[i].side.padEnd(6)} c=(${f(gts[i].cx, 1)},${f(gts[i].cy, 1)})  r=${f(gts[i].r, 2)}`,
+      )
 
     console.log('\n  JUNCTIONS of degree ≥3 — every pairing, straightest first (turn 0° = runs straight through)')
     for (const j of jns) {
@@ -485,14 +497,20 @@ for (const RES of SCALES) {
         console.log('      arm  edge  ΔE     armPx   authored circle (mean resid)')
         for (let a = 0; a < j.arms.length; a++) {
           const m = j.arms[a]
-          const g = m.gt >= 0 ? `#${m.gt} ${gts[m.gt].ring} ${gts[m.gt].side}  (${f(m.gtDev)}px)` : `none (nearest ${f(m.gtDev)}px)`
-          console.log(`      ${String(a).padStart(3)}  ${String(m.edge).padStart(4)}  ${Number.isFinite(m.de) ? f(m.de, 1).padStart(5) : '    ∞'}  ${f(m.len, 1).padStart(6)}   ${g}`)
+          const g =
+            m.gt >= 0
+              ? `#${m.gt} ${gts[m.gt].ring} ${gts[m.gt].side}  (${f(m.gtDev)}px)`
+              : `none (nearest ${f(m.gtDev)}px)`
+          console.log(
+            `      ${String(a).padStart(3)}  ${String(m.edge).padStart(4)}  ${Number.isFinite(m.de) ? f(m.de, 1).padStart(5) : '    ∞'}  ${f(m.len, 1).padStart(6)}   ${g}`,
+          )
         }
       }
       console.log('      pair    turn°   lineDev  circDev   §14 gates')
       for (const p of j.pairs) {
         const dev = Math.min(p.lineDev, p.circleDev)
-        const gate = p.turn <= THROUGH_TURN_DEG ? (dev <= THROUGH_DEV ? 'through ✓' : `dev ${f(dev)} > ${THROUGH_DEV}`) : 'corner'
+        const gate =
+          p.turn <= THROUGH_TURN_DEG ? (dev <= THROUGH_DEV ? 'through ✓' : `dev ${f(dev)} > ${THROUGH_DEV}`) : 'corner'
         console.log(
           `      ${p.i}+${p.j}   ${f(p.turn, 1).padStart(6)}   ${f(p.lineDev).padStart(6)}   ${f(p.circleDev).padStart(6)}   ${gate.padEnd(16)}` +
             `${j.chosen.includes(p) ? ' ← chose' : ''}${p.isGt ? ' GT' : ''}`,
@@ -510,11 +528,19 @@ for (const RES of SCALES) {
   const gtTurns = usable.flatMap((j) => j.pairs.filter((p) => p.isGt).map((p) => p.turn)).sort((a, b) => a - b)
   const offTurns = usable.flatMap((j) => j.pairs.filter((p) => !p.isGt).map((p) => p.turn)).sort((a, b) => a - b)
   const q = (a: number[], t: number): number => a[Math.min(a.length - 1, Math.floor(t * a.length))]
-  console.log(`\n  ══ @${RES}: ${jns.length} junctions deg≥3 — ${usable.length} usable (${clip.length} canvas-clip, ${short.length} short-arm set aside)`)
+  console.log(
+    `\n  ══ @${RES}: ${jns.length} junctions deg≥3 — ${usable.length} usable (${clip.length} canvas-clip, ${short.length} short-arm set aside)`,
+  )
   console.log(`     CHOSEN MATCHING CORRECT:      ${right.length}/${usable.length}`)
-  console.log(`     margin over the straightest REJECTED pair:  MIN ${f(margins[0], 1)}°  p50 ${f(q(margins, 0.5), 1)}°`)
-  console.log(`     true continuation turn°:  min ${f(gtTurns[0], 1)}  p50 ${f(q(gtTurns, 0.5), 1)}  MAX ${f(gtTurns[gtTurns.length - 1], 1)}`)
-  console.log(`     real corner       turn°:  MIN ${f(offTurns[0], 1)}  p50 ${f(q(offTurns, 0.5), 1)}  max ${f(offTurns[offTurns.length - 1], 1)}`)
+  console.log(
+    `     margin over the straightest REJECTED pair:  MIN ${f(margins[0], 1)}°  p50 ${f(q(margins, 0.5), 1)}°`,
+  )
+  console.log(
+    `     true continuation turn°:  min ${f(gtTurns[0], 1)}  p50 ${f(q(gtTurns, 0.5), 1)}  MAX ${f(gtTurns[gtTurns.length - 1], 1)}`,
+  )
+  console.log(
+    `     real corner       turn°:  MIN ${f(offTurns[0], 1)}  p50 ${f(q(offTurns, 0.5), 1)}  max ${f(offTurns[offTurns.length - 1], 1)}`,
+  )
   const sep = offTurns[0] - gtTurns[gtTurns.length - 1]
   console.log(
     `     separation: ${f(sep, 1)}°` +
@@ -533,9 +559,12 @@ for (const RES of SCALES) {
   console.log(
     `     ${net.edges.filter((e) => !e.closed && e.left !== EXT && e.right !== EXT).length} interior open edges → ${chains.length} chains (${multi.length} of more than one edge)`,
   )
-  console.log(`     ${'chain'.padStart(6)}${'edges'.padStart(7)}${'pts'.padStart(6)}${'sweep°'.padStart(9)}${'fitted r'.padStart(10)}${'authored'.padStart(26)}${'meanDev'.padStart(9)}`)
+  console.log(
+    `     ${'chain'.padStart(6)}${'edges'.padStart(7)}${'pts'.padStart(6)}${'sweep°'.padStart(9)}${'fitted r'.padStart(10)}${'authored'.padStart(26)}${'meanDev'.padStart(9)}`,
+  )
   for (const c of chains.slice().sort((a, b) => b.sweep - a.sweep)) {
-    const g = c.gt >= 0 && c.gtDev <= GT_BAND ? `#${c.gt} ${gts[c.gt].ring} ${gts[c.gt].side}` : 'not on an authored circle'
+    const g =
+      c.gt >= 0 && c.gtDev <= GT_BAND ? `#${c.gt} ${gts[c.gt].ring} ${gts[c.gt].side}` : 'not on an authored circle'
     console.log(
       `     ${String(chains.indexOf(c)).padStart(6)}${String(c.edges.length).padStart(7)}${String(c.pts.length).padStart(6)}` +
         `${f(c.sweep, 0).padStart(9)}${f(c.fit ? c.fit.r : NaN, 2).padStart(10)}${g.padStart(26)}${f(c.gtDev).padStart(9)}`,
@@ -584,7 +613,9 @@ for (const RES of SCALES) {
     return c
   }
   console.log(`\n  ── PER AUTHORED CIRCLE — the union of its chains, fitted two ways`)
-  console.log(`     ${'authored'.padStart(24)}${'chains'.padStart(8)}${'cover°'.padStart(8)}${'Kåsa |Δc|'.padStart(11)}${'Δr'.padStart(8)}${'geo |Δc|'.padStart(10)}${'Δr'.padStart(8)}`)
+  console.log(
+    `     ${'authored'.padStart(24)}${'chains'.padStart(8)}${'cover°'.padStart(8)}${'Kåsa |Δc|'.padStart(11)}${'Δr'.padStart(8)}${'geo |Δc|'.padStart(10)}${'Δr'.padStart(8)}`,
+  )
   for (let g = 0; g < gts.length; g++) {
     const mine = chains.filter((c) => c.gt === g && c.gtDev <= GT_BAND)
     if (!mine.length) continue
@@ -593,15 +624,21 @@ for (const RES of SCALES) {
     const gg = geo(pts)
     const cover = mine.reduce((s, c) => s + c.sweep, 0)
     const e = (c: Circ | null): string =>
-      c ? `${f(Math.hypot(c.cx - gts[g].cx, c.cy - gts[g].cy)).padStart(11)}${f(c.r - gts[g].r).padStart(8)}` : '     —         —  '
-    console.log(`     ${`#${g} ${gts[g].ring} ${gts[g].side}`.padStart(24)}${String(mine.length).padStart(8)}${f(cover, 0).padStart(8)}${e(k)}${e(gg)}`)
+      c
+        ? `${f(Math.hypot(c.cx - gts[g].cx, c.cy - gts[g].cy)).padStart(11)}${f(c.r - gts[g].r).padStart(8)}`
+        : '     —         —  '
+    console.log(
+      `     ${`#${g} ${gts[g].ring} ${gts[g].side}`.padStart(24)}${String(mine.length).padStart(8)}${f(cover, 0).padStart(8)}${e(k)}${e(gg)}`,
+    )
   }
 
   const onCircle = chains.filter((c) => c.gtDev <= GT_BAND)
   const perGt = new Map<number, number>()
   for (const c of onCircle) perGt.set(c.gt, (perGt.get(c.gt) ?? 0) + 1)
   console.log(`\n     chains lying on ONE authored circle: ${onCircle.length}/${chains.length}`)
-  console.log(`     authored circles delivered by exactly ONE chain: ${[...perGt.values()].filter((v) => v === 1).length} of ${gts.length}`)
+  console.log(
+    `     authored circles delivered by exactly ONE chain: ${[...perGt.values()].filter((v) => v === 1).length} of ${gts.length}`,
+  )
   // The conditioning claim. §24.8's whole blocker is that a short arc's own circle fit is
   // noise; if chaining does not fix THAT, it has not touched the problem.
   const good = multi.filter((c) => c.gtDev <= GT_BAND)

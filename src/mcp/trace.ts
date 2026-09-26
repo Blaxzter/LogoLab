@@ -113,7 +113,10 @@ export async function planTrace(
   })
 
   const opts = plan.opts
-  const scaled = plan.scale > 1 ? { width: pixels.width * plan.scale, height: pixels.height * plan.scale } : { width: pixels.width, height: pixels.height }
+  const scaled =
+    plan.scale > 1
+      ? { width: pixels.width * plan.scale, height: pixels.height * plan.scale }
+      : { width: pixels.width, height: pixels.height }
   const report: TracePlanReport = {
     mode: opts.mode,
     gradients: opts.gradients !== false,
@@ -144,7 +147,9 @@ function summarize(
       ? `mono (${inks === 1 ? 'one ink' : `${inks} inks`} on paper${opts.invert ? ', light-on-dark so the cut is inverted' : ''}, cut at ${opts.threshold})`
       : `colour (${inks} inks), gradients ${opts.gradients === false ? 'off — flat fills' : 'on — real SVG ramps'}`,
   )
-  bits.push(`traced at ${traced.width}×${traced.height}${scale > 1 ? ` (source enlarged ×${scale} for sub-pixel edges)` : ''}`)
+  bits.push(
+    `traced at ${traced.width}×${traced.height}${scale > 1 ? ` (source enlarged ×${scale} for sub-pixel edges)` : ''}`,
+  )
   if (src.kind === 'svg') bits.push('source is already vector — it was rasterized and re-traced')
   return bits.join('; ')
 }

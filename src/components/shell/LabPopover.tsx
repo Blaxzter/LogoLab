@@ -85,8 +85,7 @@ export function LabPopover() {
             <div className="px-2 pb-1.5 pt-1">
               <div className="text-sm font-semibold text-ink">Under the hood</div>
               <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                The harnesses the vectorizer is built and tested against — they run the real tracer,
-                right here.
+                The harnesses the vectorizer is built and tested against — they run the real tracer, right here.
               </p>
             </div>
             <div className="flex flex-col">
@@ -102,9 +101,7 @@ export function LabPopover() {
                   </span>
                   <span className="min-w-0">
                     <span className="block text-[0.8rem] font-medium text-ink">{v.label}</span>
-                    <span className="mt-0.5 block text-[0.7rem] leading-snug text-muted">
-                      {v.blurb}
-                    </span>
+                    <span className="mt-0.5 block text-[0.7rem] leading-snug text-muted">{v.blurb}</span>
                   </span>
                 </Link>
               ))}

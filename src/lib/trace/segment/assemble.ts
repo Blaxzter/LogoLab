@@ -114,6 +114,13 @@ export function fallbackSingleRegion(
     c++
   }
   const palette: PaletteColor[] = [{ r: clamp255(r / (c || 1)), g: clamp255(g / (c || 1)), b: clamp255(b / (c || 1)) }]
-  const empty: RegionSamples = { xs: new Float64Array(0), ys: new Float64Array(0), rs: new Float64Array(0), gs: new Float64Array(0), bs: new Float64Array(0), n: 0 }
+  const empty: RegionSamples = {
+    xs: new Float64Array(0),
+    ys: new Float64Array(0),
+    rs: new Float64Array(0),
+    gs: new Float64Array(0),
+    bs: new Float64Array(0),
+    n: 0,
+  }
   return { palette, labels, counts: [c], ms, fineSegments: 1, regionSamples: [empty], preMergeLabels: labels }
 }

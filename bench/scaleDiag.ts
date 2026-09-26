@@ -106,7 +106,11 @@ function logoCases(): Case[] {
   }
   const arg = flag('--logos')
   const wanted =
-    arg === 'all' ? onDisk.map((f) => f.replace(/\.svg$/, '')) : arg ? arg.split(',').map((s) => s.trim().replace(/\.svg$/, '')) : WITNESSES
+    arg === 'all'
+      ? onDisk.map((f) => f.replace(/\.svg$/, ''))
+      : arg
+        ? arg.split(',').map((s) => s.trim().replace(/\.svg$/, ''))
+        : WITNESSES
   const out: Case[] = []
   for (const w of wanted) {
     if (!onDisk.includes(`${w}.svg`)) {
@@ -126,12 +130,19 @@ const cases: Case[] = argv.includes('--logos')
     ? tierCases(2).map(fromTruth)
     : tierCases(0).map(fromTruth)
 
-console.log(`cross-resolution consistency — ${cases.length} case(s) @ ${RES.join('/')}px, scored in ${REF}px reference space\n`)
+console.log(
+  `cross-resolution consistency — ${cases.length} case(s) @ ${RES.join('/')}px, scored in ${REF}px reference space\n`,
+)
 
 const rows: ScaleResult[] = []
 for (const c of cases) {
-  const r = await measureScale(c.name, join(root, c.svg), { gradients: c.gradients, resolutions: RES, lattice: LATTICE })
-  if (r.noAnswerSheet) console.log(`  ~ ${c.name} — no answer sheet (${r.noAnswerSheet.split(' — ')[0]}); self-consistency only`)
+  const r = await measureScale(c.name, join(root, c.svg), {
+    gradients: c.gradients,
+    resolutions: RES,
+    lattice: LATTICE,
+  })
+  if (r.noAnswerSheet)
+    console.log(`  ~ ${c.name} — no answer sheet (${r.noAnswerSheet.split(' — ')[0]}); self-consistency only`)
   rows.push(r)
   if (process.stdout.isTTY) process.stdout.write(`\r${' '.repeat(50)}\r`)
 }
@@ -170,14 +181,15 @@ for (const row of rows) {
     row.noAnswerSheet
       ? `    → self ${row.selfChamfer.toFixed(3)} / ${row.selfP95.toFixed(3)} px  (@${RES[0]} vs @${REF}; ideal 0.000)`
       : `    → drift ${row.drift.toFixed(2)}× chamfer, ${row.p95Drift.toFixed(2)}× p95 over a ${row.ratio}× lattice` +
-        `   ·   self ${row.selfChamfer.toFixed(3)} / ${row.selfP95.toFixed(3)} px`,
+          `   ·   self ${row.selfChamfer.toFixed(3)} / ${row.selfP95.toFixed(3)} px`,
   )
   for (const l of row.lanes) {
     // Capped: a posterized ramp traced flat reports every 8-bit band as a lost "region"
     // (aurora: 80+ @1024), a known artifact of the metric on ramp art rather than a finding
     // — see geomScore.scoreRegions' FLAT ART ONLY warning. The count in the table is the
     // number; this list only exists to LOCATE a real drop.
-    for (const m of l.missing.slice(0, 4)) console.log(`      ✗ @${l.res}: ${m.hex} (${m.areaPx}px) painted ${m.paintedHex}, ΔE ${m.deltaE.toFixed(1)}`)
+    for (const m of l.missing.slice(0, 4))
+      console.log(`      ✗ @${l.res}: ${m.hex} (${m.areaPx}px) painted ${m.paintedHex}, ΔE ${m.deltaE.toFixed(1)}`)
     if (l.missing.length > 4) console.log(`      … +${l.missing.length - 4} more @${l.res}`)
   }
   console.log()
@@ -191,7 +203,9 @@ const scored = rows.filter((r) => Number.isFinite(r.drift) && r.lanes[0].samples
 scored.sort((a, b) => b.drift - a.drift)
 
 console.log(`━━━ RANKED BY SCALE DRIFT (${scored.length} scorable) ━━━`)
-console.log(`  1.00 = the trace is a function of the ARTWORK.  ${(REF / RES[0]).toFixed(2)} = a function of the LATTICE.\n`)
+console.log(
+  `  1.00 = the trace is a function of the ARTWORK.  ${(REF / RES[0]).toFixed(2)} = a function of the LATTICE.\n`,
+)
 console.log(
   `  ${'case'.padEnd(26)} ${'drift'.padStart(6)} ${'p95Δ'.padStart(6)} ${`ch@${RES[0]}`.padStart(8)} ${`ch@${REF}`.padStart(8)}` +
     ` ${'self'.padStart(7)} ${'nodes'.padStart(11)}`,
@@ -205,7 +219,9 @@ for (const r of scored) {
       ` ${`${n0}→${n1}`.padStart(11)}`,
   )
 }
-console.log(`\n  median drift ${med(scored.map((r) => r.drift)).toFixed(2)}×   ·   ideal 1.00   ·   pure-lattice ${(REF / RES[0]).toFixed(2)}`)
+console.log(
+  `\n  median drift ${med(scored.map((r) => r.drift)).toFixed(2)}×   ·   ideal 1.00   ·   pure-lattice ${(REF / RES[0]).toFixed(2)}`,
+)
 
 // ---------------------------------------------------------------------------
 // ATTRIBUTION — is the error IN THE SAMPLES, or added by the fit?
@@ -218,7 +234,9 @@ if (LATTICE) {
       `  samples are quantized to the integer crack lattice, this is a CONSTANT — the same\n` +
       `  fraction of a pixel at every resolution — and the drift above follows from it.\n`,
   )
-  console.log(`  ${'case'.padEnd(20)}` + RES.map((r) => `  lattice/px @${String(r).padStart(4)}`).join('') + `   fit adds (mean)`)
+  console.log(
+    `  ${'case'.padEnd(20)}` + RES.map((r) => `  lattice/px @${String(r).padStart(4)}`).join('') + `   fit adds (mean)`,
+  )
   const perRes: number[][] = RES.map(() => [])
   for (const r of scored) {
     const cells: string[] = []
@@ -238,7 +256,8 @@ if (LATTICE) {
     console.log(`  ${r.name.padEnd(20)}${cells.join('')}   ${(addsSum / addsN).toFixed(2)}×`)
   }
   console.log(
-    `\n  median lattice error, in the lane's OWN pixels: ` + perRes.map((xs, i) => `@${RES[i]} ${med(xs).toFixed(3)}px`).join('   ·   '),
+    `\n  median lattice error, in the lane's OWN pixels: ` +
+      perRes.map((xs, i) => `@${RES[i]} ${med(xs).toFixed(3)}px`).join('   ·   '),
   )
   console.log(
     `  A CONSTANT here is the quantization floor of integer-lattice sampling, measured. A\n` +
@@ -271,13 +290,20 @@ console.log(`\n━━━ STRUCTURE vs RESOLUTION (recovery at each lane's own ra
 // trueRegions is not the same at every lane is not measuring regions.
 const stableRegions = (r: ScaleResult): boolean => new Set(r.lanes.map((l) => l.trueRegions)).size === 1
 const rampish = rows.filter((r) => !stableRegions(r)).map((r) => r.name)
-if (rampish.length) console.log(`  (regions exclude ramp art whose band count itself moves with resolution: ${rampish.join(', ')})\n`)
+if (rampish.length)
+  console.log(`  (regions exclude ramp art whose band count itself moves with resolution: ${rampish.join(', ')})\n`)
 for (const res of RES) {
-  let regOk = 0, regTot = 0, cOk = 0, cTot = 0
+  let regOk = 0,
+    regTot = 0,
+    cOk = 0,
+    cTot = 0
   for (const r of rows) {
     const l = r.lanes.find((x) => x.res === res)
     if (!l) continue
-    if (stableRegions(r)) { regOk += l.recovered; regTot += l.trueRegions }
+    if (stableRegions(r)) {
+      regOk += l.recovered
+      regTot += l.trueRegions
+    }
     cOk += l.cornersRecovered
     cTot += l.gtCorners
   }

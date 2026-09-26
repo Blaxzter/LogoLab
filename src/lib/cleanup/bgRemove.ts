@@ -129,13 +129,7 @@ export function floodRemove(img: ImageData, sx: number, sy: number, opts: Remove
  * `source` lets the flood cross already-erased pixels. Mutates `img`; returns
  * pixels affected, or 0 if the dimensions don't match.
  */
-export function floodRestore(
-  img: ImageData,
-  source: ImageData,
-  sx: number,
-  sy: number,
-  opts: RemoveOptions,
-): number {
+export function floodRestore(img: ImageData, source: ImageData, sx: number, sy: number, opts: RemoveOptions): number {
   const { width: w, height: h, data } = img
   if (source.width !== w || source.height !== h) return 0
   if (sx < 0 || sy < 0 || sx >= w || sy >= h) return 0
@@ -208,10 +202,7 @@ export function removeColor(img: ImageData, key: RGB, opts: RemoveOptions): numb
  * from all four corners (handles vignettes better than a single flood).
  * Mutates `img`. Returns { color, affected }.
  */
-export function autoRemove(
-  img: ImageData,
-  opts: RemoveOptions,
-): { color: RGB; affected: number } {
+export function autoRemove(img: ImageData, opts: RemoveOptions): { color: RGB; affected: number } {
   const color = sampleCornerColor(img)
   const { width: w, height: h } = img
   let affected = 0
@@ -411,13 +402,7 @@ export function closeSeams(img: ImageData, maxWidth = 3, seamTol = 48): number {
  * The logo body and anything attached to it form one large component and are
  * never touched. Mutates `img`; returns pixels cleared.
  */
-export function despeckle(
-  img: ImageData,
-  maxIsland = 24,
-  keyTol = 110,
-  hardIsland = 4,
-  hairMax = 64,
-): number {
+export function despeckle(img: ImageData, maxIsland = 24, keyTol = 110, hardIsland = 4, hairMax = 64): number {
   const { width: w, height: h, data } = img
   const visible = 16 // alpha at/above which a pixel is part of an island
   const cap = Math.max(maxIsland, hairMax) // largest component we still track to clear
@@ -456,7 +441,8 @@ export function despeckle(
       sg += data[o + 1]
       sb += data[o + 2]
       if (cells) {
-        if (size > cap) cells = null // too big to be residue — stop tracking
+        if (size > cap)
+          cells = null // too big to be residue — stop tracking
         else cells.push(idx)
       }
       const x = idx % w
@@ -493,8 +479,7 @@ export function despeckle(
     if (!cells || bn === 0) continue
     const minDim = Math.min(maxX - minX + 1, maxY - minY + 1)
     const nearBg =
-      size <= maxIsland &&
-      colorDistance(sr / size, sg / size, sb / size, br / bn, bg / bn, bb / bn) <= keyTol
+      size <= maxIsland && colorDistance(sr / size, sg / size, sb / size, br / bn, bg / bn, bb / bn) <= keyTol
     const isHairline = minDim <= 2 && size <= hairMax
     if (size > hardIsland && !nearBg && !isHairline) continue
     for (const idx of cells) {
@@ -577,8 +562,7 @@ export function brushStamp(
         data[o + 1] = Math.round(g0 + (src[o + 1] - g0) * t)
         data[o + 2] = Math.round(b0 + (src[o + 2] - b0) * t)
         data[o + 3] = Math.round(a0 + (src[o + 3] - a0) * t)
-        if (data[o] !== r0 || data[o + 1] !== g0 || data[o + 2] !== b0 || data[o + 3] !== a0)
-          affected++
+        if (data[o] !== r0 || data[o + 1] !== g0 || data[o + 2] !== b0 || data[o + 3] !== a0) affected++
       }
     }
   }
@@ -806,10 +790,7 @@ function boxBlurV(src: Float32Array, dst: Float32Array, w: number, h: number, r:
  * alpha ≥ `threshold`. Returns null when the image is fully transparent (nothing
  * to crop to). Does not mutate `img`.
  */
-export function alphaBounds(
-  img: ImageData,
-  threshold = 1,
-): { x: number; y: number; w: number; h: number } | null {
+export function alphaBounds(img: ImageData, threshold = 1): { x: number; y: number; w: number; h: number } | null {
   const { width: w, height: h, data } = img
   // Clamp to >= 1, or a 0 threshold matches transparent pixels and an empty
   // cutout returns the whole frame instead of null.
@@ -838,11 +819,7 @@ export function alphaBounds(
  * blitted at offset (pad, pad). `bounds` is clamped to the image first, so an
  * out-of-range box still yields a valid buffer. Does not mutate `img`.
  */
-export function cropPad(
-  img: ImageData,
-  bounds: { x: number; y: number; w: number; h: number },
-  pad = 0,
-): ImageData {
+export function cropPad(img: ImageData, bounds: { x: number; y: number; w: number; h: number }, pad = 0): ImageData {
   const { width: iw, height: ih, data } = img
   // Clamp the requested rect to the image so the blit can't read out of bounds.
   const bx = Math.max(0, Math.min(iw, bounds.x))

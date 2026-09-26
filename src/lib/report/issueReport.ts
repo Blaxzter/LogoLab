@@ -121,9 +121,7 @@ function sentence(what: string): string {
 
 /** Long lines shortened, deep stacks cut to the frames anyone reads. */
 function clip(text: string, maxLines: number): string {
-  const lines = text
-    .split('\n')
-    .map((line) => (line.length > MAX_LINE ? `${line.slice(0, MAX_LINE)}…` : line))
+  const lines = text.split('\n').map((line) => (line.length > MAX_LINE ? `${line.slice(0, MAX_LINE)}…` : line))
   if (lines.length <= maxLines) return lines.join('\n')
   return [...lines.slice(0, maxLines), `… ${lines.length - maxLines} more`].join('\n')
 }
@@ -201,8 +199,7 @@ export function diagnosticsText(input: IssueReportInput): string {
       'Other errors this session',
       ...log.map(
         (e) =>
-          `${clock(e.at)}  ${e.source}  ${e.message}` +
-          (e.count > 1 ? `  (×${e.count}, last ${clock(e.lastAt)})` : ''),
+          `${clock(e.at)}  ${e.source}  ${e.message}` + (e.count > 1 ? `  (×${e.count}, last ${clock(e.lastAt)})` : ''),
       ),
     )
   }
@@ -224,9 +221,7 @@ export function summaryText(input: IssueReportInput): string {
   const { what, kind = 'crash', error } = input
   if (kind === 'problem' || kind === 'idea') return ''
   const opener =
-    kind === 'failure'
-      ? `${sentence(what)} reported a failure:`
-      : `${sentence(what)} crashed while rendering:`
+    kind === 'failure' ? `${sentence(what)} reported a failure:` : `${sentence(what)} crashed while rendering:`
   const label = errorLabel(error)
   const said = label.length > MAX_SUMMARY ? `${label.slice(0, MAX_SUMMARY)}…` : label
   return redact(`${opener}\n\n${said}\n\n`)
@@ -289,7 +284,5 @@ export function issueReportUrl(input: IssueReportInput, budget = URL_BUDGET): st
 /** The whole report as text, for the clipboard — no budget, nothing cut. */
 export function issueReportText(input: IssueReportInput): string {
   const title = issueReportTitle(input)
-  return [title, summaryText(input).trim(), diagnosticsText(input)]
-    .filter(Boolean)
-    .join('\n\n')
+  return [title, summaryText(input).trim(), diagnosticsText(input)].filter(Boolean).join('\n\n')
 }

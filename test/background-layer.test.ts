@@ -100,7 +100,10 @@ test('bands of a posterized ramp merge; a distinct disc survives', () => {
     else assert.equal(union!.labels[i], 0)
   }
   // the input map was not mutated
-  assert.ok(labels.some((l) => l > 0 && l < BANDS), 'input labels untouched')
+  assert.ok(
+    labels.some((l) => l > 0 && l < BANDS),
+    'input labels untouched',
+  )
 })
 
 test('a large grown union does not DILUTE-absorb a small distinct candidate', () => {
@@ -110,7 +113,9 @@ test('a large grown union does not DILUTE-absorb a small distinct candidate', ()
   // large. A union-wide mean would drown the patch's error and absorb it — and with
   // removeBackground composed in, DELETE it. This is also the palette-path colour-class
   // risk in miniature: a foreground component whose error a big background hides.
-  const W2 = 128, H2 = 64, N = 8
+  const W2 = 128,
+    H2 = 64,
+    N = 8
   const labels = new Int32Array(W2 * H2)
   const src = new Float64Array(W2 * H2 * 3)
   for (let y = 0; y < H2; y++)
@@ -131,16 +136,34 @@ test('a large grown union does not DILUTE-absorb a small distinct candidate', ()
   const sums = Array.from({ length: N + 1 }, () => ({ r: 0, g: 0, b: 0, n: 0 }))
   for (let i = 0; i < labels.length; i++) {
     const s = sums[labels[i]]
-    s.r += src[i * 3]; s.g += src[i * 3 + 1]; s.b += src[i * 3 + 2]; s.n++
+    s.r += src[i * 3]
+    s.g += src[i * 3 + 1]
+    s.b += src[i * 3 + 2]
+    s.n++
   }
   const palette = sums.map((s) => ({ r: s.r / s.n, g: s.g / s.n, b: s.b / s.n }))
   const samples: RegionSamples[] = sums.map((_, l) => {
-    const xs: number[] = [], ys: number[] = [], rs: number[] = [], gs: number[] = [], bs: number[] = []
+    const xs: number[] = [],
+      ys: number[] = [],
+      rs: number[] = [],
+      gs: number[] = [],
+      bs: number[] = []
     for (let i = 0; i < labels.length; i++) {
       if (labels[i] !== l) continue
-      xs.push(i % W2); ys.push((i / W2) | 0); rs.push(src[i * 3]); gs.push(src[i * 3 + 1]); bs.push(src[i * 3 + 2])
+      xs.push(i % W2)
+      ys.push((i / W2) | 0)
+      rs.push(src[i * 3])
+      gs.push(src[i * 3 + 1])
+      bs.push(src[i * 3 + 2])
     }
-    return { xs: Float64Array.from(xs), ys: Float64Array.from(ys), rs: Float64Array.from(rs), gs: Float64Array.from(gs), bs: Float64Array.from(bs), n: xs.length }
+    return {
+      xs: Float64Array.from(xs),
+      ys: Float64Array.from(ys),
+      rs: Float64Array.from(rs),
+      gs: Float64Array.from(gs),
+      bs: Float64Array.from(bs),
+      n: xs.length,
+    }
   })
   const union = uniteBackgroundGradient(labels, W2, H2, 0, samples, palette)
   assert.ok(union, 'the ramp bands still merge')
@@ -247,10 +270,16 @@ function rampImage(shape = true, w = 128, h = 96): { width: number; height: numb
 }
 
 /** The stops of the one gradient-painted (background) item. */
-function bgStops(doc: { items: { kind: string; gradient?: { stops: { color: string }[] } }[] }): [number, number, number][] {
+function bgStops(doc: {
+  items: { kind: string; gradient?: { stops: { color: string }[] } }[]
+}): [number, number, number][] {
   const bg = doc.items.find((i) => i.kind === 'path' && i.gradient)
   assert.ok(bg?.gradient, 'the background united into a gradient region')
-  return bg.gradient.stops.map((s) => [parseInt(s.color.slice(1, 3), 16), parseInt(s.color.slice(3, 5), 16), parseInt(s.color.slice(5, 7), 16)])
+  return bg.gradient.stops.map((s) => [
+    parseInt(s.color.slice(1, 3), 16),
+    parseInt(s.color.slice(3, 5), 16),
+    parseInt(s.color.slice(5, 7), 16),
+  ])
 }
 
 const flatBase = { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar' as const, gradients: false }
@@ -278,7 +307,10 @@ test('removeBackground × backgroundGradient: the whole united background is dro
   // band), so `both` ships far fewer items than `removed`. The foreground green shape
   // survives, and there is no orphaned union gradient painted behind.
   assert.ok(both.items.length < removed.items.length, 'the union drops the whole background, not one band')
-  assert.ok(both.items.some((i) => i.kind === 'path' && i.fill === '#00dc00'), 'the foreground shape survives')
+  assert.ok(
+    both.items.some((i) => i.kind === 'path' && i.fill === '#00dc00'),
+    'the foreground shape survives',
+  )
   // The candidate-only render gate (backgroundLayer.ts) judges each band on ITS OWN
   // pixels, not the whole grown union — so a band the fitted gradient cannot render
   // within tolerance is NOT diluted into the large background and silently deleted.
@@ -297,7 +329,11 @@ test('a removed object does not tint the background gradient fit', async () => {
   // very same ramp traced with no stripe at all.
   const ref = bgStops(await traceImage(rampImage(false), { ...flatBase, backgroundGradient: true }))
   const got = bgStops(
-    await traceImage(rampImage(true), { ...flatBase, backgroundGradient: true, markers: [{ x: 0.5, y: 0.5, remove: true }] }),
+    await traceImage(rampImage(true), {
+      ...flatBase,
+      backgroundGradient: true,
+      markers: [{ x: 0.5, y: 0.5, remove: true }],
+    }),
   )
   assert.equal(got.length, ref.length, 'same stop count')
   // Order-insensitive: the fitted gradient VECTOR may point either way along the ramp,
@@ -305,6 +341,9 @@ test('a removed object does not tint the background gradient fit', async () => {
   // pixels moves an endpoint by ~100/255 per channel; an honest fit lands within a few.
   for (const r of ref) {
     const nearest = Math.min(...got.map((g) => Math.max(...r.map((c, k) => Math.abs(c - g[k])))))
-    assert.ok(nearest <= 8, `stop rgb(${r}) has no counterpart within 8/255 (nearest ${nearest}) — the removed object leaked into the fit`)
+    assert.ok(
+      nearest <= 8,
+      `stop rgb(${r}) has no counterpart within 8/255 (nearest ${nearest}) — the removed object leaked into the fit`,
+    )
   }
 })

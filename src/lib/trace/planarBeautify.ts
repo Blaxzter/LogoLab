@@ -33,7 +33,13 @@ import {
 } from './circleFit.ts'
 
 const cloneVec = (v: Vec | null): Vec | null => (v ? { x: v.x, y: v.y } : null)
-const cloneNode = (n: PathNode): PathNode => ({ x: n.x, y: n.y, hIn: cloneVec(n.hIn), hOut: cloneVec(n.hOut), kind: n.kind })
+const cloneNode = (n: PathNode): PathNode => ({
+  x: n.x,
+  y: n.y,
+  hIn: cloneVec(n.hIn),
+  hOut: cloneVec(n.hOut),
+  kind: n.kind,
+})
 const cloneEdge = (e: SharedEdge): SharedEdge => ({ ...e, nodes: e.nodes.map(cloneNode) })
 
 /**
@@ -313,7 +319,15 @@ export function planarBeautify(
   // straight cut through a disc (a "D"), and 1d must not absorb them into a circle.
   let chordEdges: ReadonlySet<number> = new Set<number>()
   if (snap.reseat ?? true) {
-    const r = reseatJunctions(edges, vertices, snap.width, snap.height, snap.onChord, snap.onReseatVerdict, snap.reseatTune)
+    const r = reseatJunctions(
+      edges,
+      vertices,
+      snap.width,
+      snap.height,
+      snap.onChord,
+      snap.onReseatVerdict,
+      snap.reseatTune,
+    )
     chordEdges = r.chords
     snap.onReseat?.(r.moved)
   }
@@ -323,7 +337,19 @@ export function planarBeautify(
   // arcs share the circle's tangent at every junction instead of meeting at a kink.
   // Edges it snaps skip the per-edge 1a/1b passes below.
   const arcSnapped = arcSnap
-    ? snapCoCircularLoops(edges, vertices, loopsByLabel, fid, localScaleK, cornerVeto, chordEdges, snap.onArcLoop, snap.chainArcs ?? true, snap.width, snap.height)
+    ? snapCoCircularLoops(
+        edges,
+        vertices,
+        loopsByLabel,
+        fid,
+        localScaleK,
+        cornerVeto,
+        chordEdges,
+        snap.onArcLoop,
+        snap.chainArcs ?? true,
+        snap.width,
+        snap.height,
+      )
     : new Set<number>()
 
   const discCircles: DiscCircle[] = []
@@ -340,7 +366,12 @@ export function planarBeautify(
       const cornered = cornerVeto && maxTurnRad(raw) >= CORNER_TURN
 
       const circle = fitCircle(raw)
-      if (!cornered && circle && circle.r > 2 * fid && maxRadialDev(raw, circle) <= effFidelity(fid, circle.r, localScaleK)) {
+      if (
+        !cornered &&
+        circle &&
+        circle.r > 2 * fid &&
+        maxRadialDev(raw, circle) <= effFidelity(fid, circle.r, localScaleK)
+      ) {
         e.nodes = makeCircleSubPath(circle.cx, circle.cy, circle.r, positive).nodes
         discCircles.push({ edgeIdx: i, positive, cx: circle.cx, cy: circle.cy, r: circle.r, raw })
         continue
@@ -351,8 +382,11 @@ export function planarBeautify(
       // ellipse bulging into space the polygon never visits (see maxEllipseToPolyDev).
       const ellFid = ell ? effFidelity(fid, Math.min(ell.rx, ell.ry), localScaleK) : fid
       if (
-        !cornered && ell && Math.min(ell.rx, ell.ry) > 2 * fid &&
-        maxEllipseDev(raw, ell) <= ellFid && maxEllipseToPolyDev(raw, ell) <= ellFid
+        !cornered &&
+        ell &&
+        Math.min(ell.rx, ell.ry) > 2 * fid &&
+        maxEllipseDev(raw, ell) <= ellFid &&
+        maxEllipseToPolyDev(raw, ell) <= ellFid
       ) {
         e.nodes = makeEllipseSubPath(ell.cx, ell.cy, ell.rx, ell.ry, positive).nodes
       }
@@ -404,8 +438,14 @@ function shiftNodeTo(n: PathNode, x: number, y: number): void {
   const dy = y - n.y
   n.x = x
   n.y = y
-  if (n.hIn) { n.hIn.x += dx; n.hIn.y += dy }
-  if (n.hOut) { n.hOut.x += dx; n.hOut.y += dy }
+  if (n.hIn) {
+    n.hIn.x += dx
+    n.hIn.y += dy
+  }
+  if (n.hOut) {
+    n.hOut.x += dx
+    n.hOut.y += dy
+  }
 }
 
 /** One family candidate: a run of one or more open edges fitted as one arc. */
@@ -646,7 +686,10 @@ function snapCoCircularLoops(
   const claimVertex = (vid: number | null | undefined, c: Circle): void => {
     if (vid == null || vid < 0) return
     const list = vertCircle.get(vid)
-    if (!list) { vertCircle.set(vid, [c]); return }
+    if (!list) {
+      vertCircle.set(vid, [c])
+      return
+    }
     // Same circle twice (two arcs of one ring meeting) adds nothing.
     if (list.some((o) => o === c || (Math.abs(o.r - c.r) < 1e-6 && Math.hypot(o.cx - c.cx, o.cy - c.cy) < 1e-6))) return
     list.push(c)
@@ -658,31 +701,55 @@ function snapCoCircularLoops(
       const openEdges = loop.filter((ref) => byId.get(ref.edge)?.closed === false).length
       const say = (verdict: ArcLoopRecord['verdict'], r = NaN, radialDev = NaN, budget = NaN, turnDeg = NaN): void =>
         onArcLoop?.({ label, edges: loop.length, openEdges, r, radialDev, budget, turnDeg, verdict })
-      if (loop.length < 2) { say('single-edge-loop'); continue } // a single closed-loop edge is a disc — 1a's job
+      if (loop.length < 2) {
+        say('single-edge-loop')
+        continue
+      } // a single closed-loop edge is a disc — 1a's job
       // A loop carrying a re-seated occluder chord is a disc cut by a line (a "D");
       // snapping it to one circle would absorb the chord into the arc.
-      if (loop.some((ref) => chordEdges.has(ref.edge))) { say('carries-chord'); continue }
+      if (loop.some((ref) => chordEdges.has(ref.edge))) {
+        say('carries-chord')
+        continue
+      }
       let ok = true
       let hasOpen = false
       const raw: Vec[] = []
       for (const ref of loop) {
         const e = byId.get(ref.edge)
-        if (!e || e.nodes.length < 2) { ok = false; break }
+        if (!e || e.nodes.length < 2) {
+          ok = false
+          break
+        }
         if (!e.closed) hasOpen = true
         const arc = ref.reversed ? reverseEdgeNodes(e.nodes) : e.nodes
         for (const p of flatten({ nodes: arc, closed: e.closed })) raw.push(p)
       }
-      if (!ok || !hasOpen || raw.length < 8) { say(ok && !hasOpen ? 'no-open-edge' : 'too-few-points'); continue }
+      if (!ok || !hasOpen || raw.length < 8) {
+        say(ok && !hasOpen ? 'no-open-edge' : 'too-few-points')
+        continue
+      }
       // A loop that turns a sharp corner is a polygon, not a ring. See CORNER_TURN.
       const turn = maxTurnRad(raw)
       const turnDeg = (turn * 180) / Math.PI
-      if (cornerVeto && turn >= CORNER_TURN) { say('corner-veto', NaN, NaN, NaN, turnDeg); continue }
+      if (cornerVeto && turn >= CORNER_TURN) {
+        say('corner-veto', NaN, NaN, NaN, turnDeg)
+        continue
+      }
       const c = fitCircle(raw)
-      if (!c) { say('circle-fit-failed', NaN, NaN, NaN, turnDeg); continue }
+      if (!c) {
+        say('circle-fit-failed', NaN, NaN, NaN, turnDeg)
+        continue
+      }
       const dev = maxRadialDev(raw, c)
       const budget = effFidelity(fid, c.r, localScaleK)
-      if (c.r <= 2 * fid) { say('radius-too-small', c.r, dev, budget, turnDeg); continue }
-      if (dev > budget) { say('dev-exceeds-budget', c.r, dev, budget, turnDeg); continue }
+      if (c.r <= 2 * fid) {
+        say('radius-too-small', c.r, dev, budget, turnDeg)
+        continue
+      }
+      if (dev > budget) {
+        say('dev-exceeds-budget', c.r, dev, budget, turnDeg)
+        continue
+      }
       say('snapped', c.r, dev, budget, turnDeg)
       for (const ref of loop) {
         const e = byId.get(ref.edge)!
@@ -719,7 +786,9 @@ function snapCoCircularLoops(
   }
   // Join arcs that continue one another first, so clustering sees chain fits rather than
   // poorly conditioned fragment fits.
-  const cands = chainArcs ? throughChains(perEdge, edges, vertices, fid, localScaleK, width, height, onArcLoop) : perEdge
+  const cands = chainArcs
+    ? throughChains(perEdge, edges, vertices, fid, localScaleK, width, height, onArcLoop)
+    : perEdge
   // Seed and grow, widest arc first, against the family's own refit rather than pairwise
   // (cx, cy, r) comparisons: a short arc's fit is poorly conditioned, while a refit over
   // several arcs is conditioned by their combined sweep and improves each round.
@@ -740,9 +809,10 @@ function snapCoCircularLoops(
         // Round 0 has only the seed's own circle, so it groups on a loose (centre, radius)
         // proxy. From round 1 the family circle is the refit and the test is whether the
         // candidate's polyline lies within budget of it. Members can leave as well as join.
-        const byRadius = round === 0
-          ? Math.abs(cands[j].c.r - cf.r) <= tol && Math.hypot(cands[j].c.cx - cf.cx, cands[j].c.cy - cf.cy) <= tol
-          : Math.abs(cands[j].c.r - cf.r) <= tol + budget && maxRadialDev(cands[j].pts, cf) <= budget
+        const byRadius =
+          round === 0
+            ? Math.abs(cands[j].c.r - cf.r) <= tol && Math.hypot(cands[j].c.cx - cf.cx, cands[j].c.cy - cf.cy) <= tol
+            : Math.abs(cands[j].c.r - cf.r) <= tol + budget && maxRadialDev(cands[j].pts, cf) <= budget
         // Alternatively the candidate lies on the family circle and sweeps far enough for
         // that to be evidence, since its own radius estimate is the least reliable input.
         // The sweep condition is required: two crossing circles stay within budget of each
@@ -773,7 +843,10 @@ function snapCoCircularLoops(
         // Only members that joined by agreeing on radius are checked: for a member admitted
         // geometrically, its own circle is the worse estimate and not a fair baseline.
         if (!credible.has(k)) return true
-        return maxRadialDev(cands[k].pts, cf) <= Math.max(FAMILY_WORSEN_K * maxRadialDev(cands[k].pts, cands[k].c), FAMILY_WORSEN_FLOOR)
+        return (
+          maxRadialDev(cands[k].pts, cf) <=
+          Math.max(FAMILY_WORSEN_K * maxRadialDev(cands[k].pts, cands[k].c), FAMILY_WORSEN_FLOOR)
+        )
       })
       if (keep.length === group.length) break
       group = keep
@@ -844,7 +917,10 @@ function snapCoCircularLoops(
         const x = circleIntersectNear(circles[a], circles[b], v)
         if (!x) continue
         const d = Math.hypot(x.x - v.x, x.y - v.y)
-        if (d < bestD) { bestD = d; best = x }
+        if (d < bestD) {
+          bestD = d
+          best = x
+        }
       }
     }
     if (best && bestD <= JUNCTION_XING_MAX_MOVE) {

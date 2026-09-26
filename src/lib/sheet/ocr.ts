@@ -30,7 +30,12 @@ export interface CaptionReader {
 }
 
 /** What the engine load reports, in order — mapped onto one 0–1 fraction. */
-const LOAD_STAGES = ['loading tesseract core', 'initializing tesseract', 'loading language traineddata', 'initialized api']
+const LOAD_STAGES = [
+  'loading tesseract core',
+  'initializing tesseract',
+  'loading language traineddata',
+  'initialized api',
+]
 
 export function captionOcrSupported(): boolean {
   return typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined'

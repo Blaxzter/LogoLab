@@ -24,15 +24,7 @@ export type ActionReasons = ReturnType<typeof actionReasons>
  * Drives both the disabled state and its tooltip, so the two can't disagree.
  * Each reason says what would make the action available.
  */
-export function actionReasons({
-  canUndo,
-  canRedo,
-  selection,
-  nodeSel,
-  selectedCount,
-  sel,
-  activePath,
-}: ActionState) {
+export function actionReasons({ canUndo, canRedo, selection, nodeSel, selectedCount, sel, activePath }: ActionState) {
   const nothing = 'Nothing is selected — click a shape on the canvas or a row in the layers list.'
   const onePath =
     selection.size === 0

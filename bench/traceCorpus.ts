@@ -47,17 +47,48 @@ export interface GoldenCase {
  * (same fixture, slow-gated) still pins Step-3c perf + fidelity on complex input.
  */
 export const GOLDEN_CORPUS: GoldenCase[] = [
-  { name: 'nebula', path: 'public/examples/nebula.png', maxDim: 0, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true } },
-  { name: 'petals', path: 'public/examples/petals.png', maxDim: 0, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true } },
-  { name: 'schild-flat', path: 'examples/test-files/schild.png', maxDim: 512, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false } },
-  { name: 'headphones-grad', path: 'examples/test-files/Headphones.png', maxDim: 512, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true }, slow: true },
+  {
+    name: 'nebula',
+    path: 'public/examples/nebula.png',
+    maxDim: 0,
+    options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true },
+  },
+  {
+    name: 'petals',
+    path: 'public/examples/petals.png',
+    maxDim: 0,
+    options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true },
+  },
+  {
+    name: 'schild-flat',
+    path: 'examples/test-files/schild.png',
+    maxDim: 512,
+    options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false },
+  },
+  {
+    name: 'headphones-grad',
+    path: 'examples/test-files/Headphones.png',
+    maxDim: 512,
+    options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true },
+    slow: true,
+  },
   // Junction-quality guards (gradients OFF — the flat/posterized regime): bloom's
   // translucent-circle crossings are the degree-4 cluster case, aurora's posterized
   // diagonal ramp is the jagged band-boundary case. Fixtures are the example SVGs
   // pre-rasterized to 512px (test/fixtures/) since the node harness has no SVG
   // rasterizer.
-  { name: 'bloom-flat', path: 'test/fixtures/bloom-512.png', maxDim: 0, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false } },
-  { name: 'aurora-flat', path: 'test/fixtures/aurora-512.png', maxDim: 0, options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false } },
+  {
+    name: 'bloom-flat',
+    path: 'test/fixtures/bloom-512.png',
+    maxDim: 0,
+    options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false },
+  },
+  {
+    name: 'aurora-flat',
+    path: 'test/fixtures/aurora-512.png',
+    maxDim: 0,
+    options: { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false },
+  },
 ]
 
 /** Compact, comparable record for one traced case. */
@@ -95,19 +126,35 @@ export function downscale(img: RgbaImage, maxDim: number): RgbaImage {
   const { width: w, height: h, data } = img
   const scale = Math.min(1, maxDim / Math.max(w, h))
   if (scale >= 1) return img
-  const nw = Math.max(1, Math.round(w * scale)), nh = Math.max(1, Math.round(h * scale))
+  const nw = Math.max(1, Math.round(w * scale)),
+    nh = Math.max(1, Math.round(h * scale))
   const out = new Uint8ClampedArray(nw * nh * 4)
-  for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) {
-    const sx0 = Math.floor((x / nw) * w), sx1 = Math.max(sx0 + 1, Math.floor(((x + 1) / nw) * w))
-    const sy0 = Math.floor((y / nh) * h), sy1 = Math.max(sy0 + 1, Math.floor(((y + 1) / nh) * h))
-    let r = 0, g = 0, b = 0, a = 0, n = 0
-    for (let sy = sy0; sy < sy1; sy++) for (let sx = sx0; sx < sx1; sx++) {
-      const o = (sy * w + sx) * 4
-      r += data[o]; g += data[o + 1]; b += data[o + 2]; a += data[o + 3]; n++
+  for (let y = 0; y < nh; y++)
+    for (let x = 0; x < nw; x++) {
+      const sx0 = Math.floor((x / nw) * w),
+        sx1 = Math.max(sx0 + 1, Math.floor(((x + 1) / nw) * w))
+      const sy0 = Math.floor((y / nh) * h),
+        sy1 = Math.max(sy0 + 1, Math.floor(((y + 1) / nh) * h))
+      let r = 0,
+        g = 0,
+        b = 0,
+        a = 0,
+        n = 0
+      for (let sy = sy0; sy < sy1; sy++)
+        for (let sx = sx0; sx < sx1; sx++) {
+          const o = (sy * w + sx) * 4
+          r += data[o]
+          g += data[o + 1]
+          b += data[o + 2]
+          a += data[o + 3]
+          n++
+        }
+      const o = (y * nw + x) * 4
+      out[o] = r / n
+      out[o + 1] = g / n
+      out[o + 2] = b / n
+      out[o + 3] = a / n
     }
-    const o = (y * nw + x) * 4
-    out[o] = r / n; out[o + 1] = g / n; out[o + 2] = b / n; out[o + 3] = a / n
-  }
   return { width: nw, height: nh, data: out }
 }
 
@@ -200,35 +247,71 @@ const clampHead = (h: number): number => (Number.isFinite(h) ? h : 1)
 
 /** Evaluate every HARD gate of the regression test for one case. Pure arithmetic —
  *  no assertions, no side effects; it just reports where the value sits. */
-export function evaluateGates(g: GoldenRecord, cur: {
-  meanDeltaE: number
-  ssim: number
-  seamMax: number
-  paths: number
-  nodes: number
-  junctionClusters: number
-  jaggedness: number
-}): GateRow[] {
+export function evaluateGates(
+  g: GoldenRecord,
+  cur: {
+    meanDeltaE: number
+    ssim: number
+    seamMax: number
+    paths: number
+    nodes: number
+    junctionClusters: number
+    jaggedness: number
+  },
+): GateRow[] {
   const rows: GateRow[] = []
 
-  const upper = (key: string, label: string, rule: string, value: number, golden: number, limit: number, digits: number): void => {
+  const upper = (
+    key: string,
+    label: string,
+    rule: string,
+    value: number,
+    golden: number,
+    limit: number,
+    digits: number,
+  ): void => {
     const allowance = limit - golden
     rows.push({
-      key, label, rule, value, golden, limit, pass: value <= limit,
+      key,
+      label,
+      rule,
+      value,
+      golden,
+      limit,
+      pass: value <= limit,
       headroom: clampHead(allowance > 0 ? (limit - value) / allowance : value <= limit ? 1 : -1),
-      slack: limit - value, oneSided: true, allowance, digits,
+      slack: limit - value,
+      oneSided: true,
+      allowance,
+      digits,
     })
   }
 
-  upper('meanDeltaE', 'mean ΔE', `≤ g + ${TOL.meanDeltaE}`, cur.meanDeltaE, g.meanDeltaE, g.meanDeltaE + TOL.meanDeltaE, 3)
+  upper(
+    'meanDeltaE',
+    'mean ΔE',
+    `≤ g + ${TOL.meanDeltaE}`,
+    cur.meanDeltaE,
+    g.meanDeltaE,
+    g.meanDeltaE + TOL.meanDeltaE,
+    3,
+  )
 
   // SSIM is a FLOOR, not a ceiling — higher is better, so the allowance runs downward.
   const ssimFloor = g.ssim - TOL.ssim
   rows.push({
-    key: 'ssim', label: 'SSIM', rule: `≥ g − ${TOL.ssim}`, value: cur.ssim, golden: g.ssim, limit: ssimFloor,
+    key: 'ssim',
+    label: 'SSIM',
+    rule: `≥ g − ${TOL.ssim}`,
+    value: cur.ssim,
+    golden: g.ssim,
+    limit: ssimFloor,
     pass: cur.ssim >= ssimFloor,
     headroom: clampHead((cur.ssim - ssimFloor) / TOL.ssim),
-    slack: cur.ssim - ssimFloor, oneSided: true, allowance: TOL.ssim, digits: 4,
+    slack: cur.ssim - ssimFloor,
+    oneSided: true,
+    allowance: TOL.ssim,
+    digits: 4,
   })
 
   upper('seamMax', 'seam max', `≤ g + ${TOL.seamMax}`, cur.seamMax, g.seamMax, g.seamMax + TOL.seamMax, 2)
@@ -242,9 +325,20 @@ export function evaluateGates(g: GoldenRecord, cur: {
     const limit = nearHi ? hi : lo
     const allowance = Math.abs(limit - golden)
     rows.push({
-      key, label, rule: `within ±${TOL.countRatio * 100}%`, value, golden, limit, lo, hi, pass,
+      key,
+      label,
+      rule: `within ±${TOL.countRatio * 100}%`,
+      value,
+      golden,
+      limit,
+      lo,
+      hi,
+      pass,
       headroom: clampHead(allowance > 0 ? Math.abs(limit - value) / allowance : pass ? 1 : -1),
-      slack: Math.abs(limit - value), oneSided: false, allowance, digits: 0,
+      slack: Math.abs(limit - value),
+      oneSided: false,
+      allowance,
+      digits: 0,
     })
   }
   band('paths', 'paths', cur.paths, g.paths)
@@ -253,10 +347,18 @@ export function evaluateGates(g: GoldenRecord, cur: {
   // Zero-tolerance: a cluster that appears on art that had none is a real regression.
   const gc = g.junctionClusters ?? 0
   rows.push({
-    key: 'junctionClusters', label: 'junction clusters', rule: '≤ g (zero tolerance)',
-    value: cur.junctionClusters, golden: gc, limit: gc, pass: cur.junctionClusters <= gc,
+    key: 'junctionClusters',
+    label: 'junction clusters',
+    rule: '≤ g (zero tolerance)',
+    value: cur.junctionClusters,
+    golden: gc,
+    limit: gc,
+    pass: cur.junctionClusters <= gc,
     headroom: cur.junctionClusters <= gc ? (gc === 0 ? 1 : (gc - cur.junctionClusters) / gc) : -1,
-    slack: gc - cur.junctionClusters, oneSided: true, allowance: 0, digits: 0,
+    slack: gc - cur.junctionClusters,
+    oneSided: true,
+    allowance: 0,
+    digits: 0,
   })
 
   // NOTE the ADDITIVE +0.2 on top of the ×1.15 — on a case whose golden jaggedness is

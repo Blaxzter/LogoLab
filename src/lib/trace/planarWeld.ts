@@ -169,7 +169,8 @@ export function weldJunctionClusters(
     for (let i = 0; i < live.length; i++) {
       sx += live[i].x
       sy += live[i].y
-      for (let j = i + 1; j < live.length; j++) span = Math.max(span, Math.hypot(live[i].x - live[j].x, live[i].y - live[j].y))
+      for (let j = i + 1; j < live.length; j++)
+        span = Math.max(span, Math.hypot(live[i].x - live[j].x, live[i].y - live[j].y))
     }
     if (span > spanCap) continue // too spread to be a single crossing — leave it
     let cx = sx / live.length
@@ -200,8 +201,7 @@ export function weldJunctionClusters(
   if (fused.size === 0) return { fused, removedEdges }
 
   // --- drop the contracted micro-edges, re-anchor every survivor on the fused vertex
-  const survivorOf = (v: number | null | undefined): number | null =>
-    v == null ? null : fused.get(v) ?? v
+  const survivorOf = (v: number | null | undefined): number | null => (v == null ? null : (fused.get(v) ?? v))
   let w = 0
   for (const e of edges) {
     if (removedEdges.has(e.id)) continue

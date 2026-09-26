@@ -218,8 +218,10 @@ export function armTangent(sm: Vec[], line: { c: Vec; d: Vec }, phiMinDeg: numbe
 
 /** Intersection candidates (0–2) of two arm primitives, each a line or a circle. */
 export function armIntersections(
-  aLine: { c: Vec; d: Vec }, aCirc: ArmCircle | null,
-  bLine: { c: Vec; d: Vec }, bCirc: ArmCircle | null,
+  aLine: { c: Vec; d: Vec },
+  aCirc: ArmCircle | null,
+  bLine: { c: Vec; d: Vec },
+  bCirc: ArmCircle | null,
 ): Vec[] {
   const circleLine = (circ: ArmCircle, line: { c: Vec; d: Vec }): Vec[] => {
     const t0 = (circ.cx - line.c.x) * line.d.x + (circ.cy - line.c.y) * line.d.y

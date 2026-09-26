@@ -66,7 +66,17 @@ export function pinHandle(node: PathNode, which: 'hIn' | 'hOut', arm: ArmFit, ep
   // says the disagreement matters at this handle's reach.
   const shift = 2 * len * Math.sin((rotDeg * Math.PI) / 360)
   const applied = cos >= Math.cos((PIN_ROTATE_MAX_DEG * Math.PI) / 180) && PIN_CURVE_BASIS * shift <= eps
-  diag?.({ x: node.x, y: node.y, side: which === 'hIn' ? 'in' : 'out', rotDeg, bow: arm.bow, chord: arm.chord, n: arm.n, handle: len, applied })
+  diag?.({
+    x: node.x,
+    y: node.y,
+    side: which === 'hIn' ? 'in' : 'out',
+    rotDeg,
+    bow: arm.bow,
+    chord: arm.chord,
+    n: arm.n,
+    handle: len,
+    applied,
+  })
   if (!applied) return
   node[which] = { x: node.x + len * sx, y: node.y + len * sy }
 }

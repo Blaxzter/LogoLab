@@ -187,7 +187,10 @@ export function hairlineCut(img: ImageDataLike, from: number, invert: boolean, s
     for (let x = 1; x < W - 1; x++) {
       const i = y * W + x
       const v = d[i]
-      if (v < cutD) { ink++; continue }
+      if (v < cutD) {
+        ink++
+        continue
+      }
       if (v >= HAIRLINE_FAINT) continue
       const m = v + HAIRLINE_RIDGE_MARGIN
       if (

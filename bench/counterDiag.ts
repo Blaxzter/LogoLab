@@ -53,7 +53,9 @@ const logo = flag('--logo')
 const svgArg = flag('--svg')
 const svgPath = svgArg ? svgArg : logo ? `examples/logos/${logo.replace(/\.svg$/, '')}.svg` : null
 if (!svgPath) {
-  console.log('usage: counterDiag.ts (--logo <name> | --svg <path>) [--roi x,y,w,h] [--res 512] [--gradients] [--ascii]')
+  console.log(
+    'usage: counterDiag.ts (--logo <name> | --svg <path>) [--roi x,y,w,h] [--res 512] [--gradients] [--ascii]',
+  )
   if (logo === '') {
     const dir = join(root, 'examples', 'logos')
     try {
@@ -227,7 +229,9 @@ for (let y = ROI.y; y < ROI.y + ROI.h; y++) {
   const off = runOn(rOff, y)
   const on = runOn(rOn, y)
   const mark = on === 0 && off > 0 ? '   <- ON closed it' : off === 0 && on > 0 ? '   <- OFF closed it' : ''
-  console.log(`  ${String(y).padStart(4)}  ${String(s).padStart(6)}  ${String(off).padStart(11)}  ${String(on).padStart(10)}${mark}`)
+  console.log(
+    `  ${String(y).padStart(4)}  ${String(s).padStart(6)}  ${String(off).padStart(11)}  ${String(on).padStart(10)}${mark}`,
+  )
 }
 
 // --- the fitted nodes each side put inside the ROI ------------------------------------

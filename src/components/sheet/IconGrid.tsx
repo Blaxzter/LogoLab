@@ -102,7 +102,12 @@ function IconCard({
         {traced ? (
           <img src={svgDataUrl(traced)} alt="" className="absolute inset-0 h-full w-full object-contain p-2" />
         ) : (
-          <TileCanvas image={image} rect={tile.rect} background={background} className="absolute inset-0 h-full w-full object-contain" />
+          <TileCanvas
+            image={image}
+            rect={tile.rect}
+            background={background}
+            className="absolute inset-0 h-full w-full object-contain"
+          />
         )}
 
         <span className="absolute left-1.5 top-1.5 rounded bg-ink/55 px-1.5 py-0.5 font-mono text-[0.6rem] tabular-nums text-white">

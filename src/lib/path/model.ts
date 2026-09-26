@@ -504,7 +504,10 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
   let viewBox: [number, number, number, number] | null = null
   const vbAttr = root.getAttribute('viewBox')
   if (vbAttr) {
-    const p = vbAttr.trim().split(/[\s,]+/).map(Number)
+    const p = vbAttr
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number)
     if (p.length === 4 && p.every(Number.isFinite) && p[2] > 0 && p[3] > 0) {
       viewBox = [p[0], p[1], p[2], p[3]]
     }
@@ -644,7 +647,10 @@ function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void 
         if (!subPaths || subPaths.length === 0) continue
         const gradient = resolveGradientFill(gradEl, w.gradients, subPathsTightBounds(subPaths), shapeCtx.transform)
         if (gradient) {
-          const item = makePathItem(w.nextId(), subPaths, { ...shapeCtx, fill: representativeStopColor(gradient.stops) })
+          const item = makePathItem(w.nextId(), subPaths, {
+            ...shapeCtx,
+            fill: representativeStopColor(gradient.stops),
+          })
           item.gradient = gradient
           w.items.push(item)
           w.consumedGradients.add(gradId)
@@ -969,7 +975,10 @@ export function ellipseSubPaths(cx: number, cy: number, rx: number, ry: number):
 }
 
 function pointsSubPaths(el: Element, closed: boolean): SubPath[] | null {
-  const parts = (el.getAttribute('points') ?? '').trim().split(/[\s,]+/).filter(Boolean)
+  const parts = (el.getAttribute('points') ?? '')
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean)
   const pts: Vec[] = []
   for (let k = 0; k + 1 < parts.length; k += 2) {
     const px = Number(parts[k])

@@ -56,10 +56,38 @@ function summitDoc(): EditableDoc {
 function orbitDoc(): EditableDoc {
   const annulus: SubPath[] = [ellipseSubPaths(256, 256, 165, 165)![0], ellipseSubPaths(256, 256, 135, 135)![0]]
   const items: PathItem[] = [
-    { kind: 'path', id: 'bg', fill: '#0e7490', fillRule: 'nonzero', subPaths: [polygon([[0, 0], [512, 0], [512, 512], [0, 512]])], visible: true },
+    {
+      kind: 'path',
+      id: 'bg',
+      fill: '#0e7490',
+      fillRule: 'nonzero',
+      subPaths: [
+        polygon([
+          [0, 0],
+          [512, 0],
+          [512, 512],
+          [0, 512],
+        ]),
+      ],
+      visible: true,
+    },
     { kind: 'path', id: 'ring', fill: '#ffffff', fillRule: 'evenodd', subPaths: annulus, visible: true },
-    { kind: 'path', id: 'dot', fill: '#ffffff', fillRule: 'nonzero', subPaths: [ellipseSubPaths(256, 256, 50, 50)![0]], visible: true },
-    { kind: 'path', id: 'node', fill: '#ffffff', fillRule: 'nonzero', subPaths: [ellipseSubPaths(256, 106, 28, 28)![0]], visible: true },
+    {
+      kind: 'path',
+      id: 'dot',
+      fill: '#ffffff',
+      fillRule: 'nonzero',
+      subPaths: [ellipseSubPaths(256, 256, 50, 50)![0]],
+      visible: true,
+    },
+    {
+      kind: 'path',
+      id: 'node',
+      fill: '#ffffff',
+      fillRule: 'nonzero',
+      subPaths: [ellipseSubPaths(256, 106, 28, 28)![0]],
+      visible: true,
+    },
   ]
   return { viewBox: [0, 0, 512, 512], items }
 }

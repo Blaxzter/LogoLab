@@ -59,11 +59,17 @@ export function mergeSmallRegions(
         if (g < 0) continue
         if (x + 1 < w) {
           const r = groupId[i + 1]
-          if (r >= 0 && r !== g) { bump(g, r); bump(r, g) }
+          if (r >= 0 && r !== g) {
+            bump(g, r)
+            bump(r, g)
+          }
         }
         if (y + 1 < h) {
           const d = groupId[i + w]
-          if (d >= 0 && d !== g) { bump(g, d); bump(d, g) }
+          if (d >= 0 && d !== g) {
+            bump(g, d)
+            bump(d, g)
+          }
         }
       }
     }

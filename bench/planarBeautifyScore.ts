@@ -14,22 +14,27 @@ ensureImageData()
  *  shapes edge-beautify should collapse to clean circles / straight edges. */
 function geometric(w = 128, h = 128): DecodedImage {
   const data = new Uint8ClampedArray(w * h * 4)
-  const cx = w / 2, cy = h / 2
+  const cx = w / 2,
+    cy = h / 2
   const put = (i: number, r: number, g: number, b: number) => {
-    data[i * 4] = r; data[i * 4 + 1] = g; data[i * 4 + 2] = b; data[i * 4 + 3] = 255
+    data[i * 4] = r
+    data[i * 4 + 1] = g
+    data[i * 4 + 2] = b
+    data[i * 4 + 3] = 255
   }
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const i = y * w + x
-    const d = Math.hypot(x - cx, y - cy)
-    // background
-    put(i, 245, 245, 245)
-    // square band in a corner
-    if (x > 12 && x < 44 && y > 12 && y < 44) put(i, 30, 120, 200)
-    // outer ring
-    if (d < 52 && d > 38) put(i, 220, 60, 60)
-    // inner disc
-    if (d < 26) put(i, 250, 200, 40)
-  }
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x
+      const d = Math.hypot(x - cx, y - cy)
+      // background
+      put(i, 245, 245, 245)
+      // square band in a corner
+      if (x > 12 && x < 44 && y > 12 && y < 44) put(i, 30, 120, 200)
+      // outer ring
+      if (d < 52 && d > 38) put(i, 220, 60, 60)
+      // inner disc
+      if (d < 26) put(i, 250, 200, 40)
+    }
   return { width: w, height: h, data }
 }
 
@@ -50,7 +55,7 @@ for (const { name, img } of cases) {
     const det = hashDoc(doc) === hashDoc(doc2) ? 'det✓' : 'det✗'
     console.log(
       `${name.padEnd(8)} ${String(fidelity).padEnd(8)} ${s.meanDeltaE.toFixed(2).padStart(6)} ${s.ssim.toFixed(4)} ` +
-      `${s.seamMax.toFixed(1).padStart(7)} ${s.seamP995.toFixed(1).padStart(8)} ${String(s.paths).padStart(5)} ${String(s.nodes).padStart(6)}   ${det}`,
+        `${s.seamMax.toFixed(1).padStart(7)} ${s.seamP995.toFixed(1).padStart(8)} ${String(s.paths).padStart(5)} ${String(s.nodes).padStart(6)}   ${det}`,
     )
   }
 }

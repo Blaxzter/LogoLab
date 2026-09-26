@@ -21,15 +21,7 @@ import { makePath } from '../editorDoc'
 import type { EditorTool } from '../tools'
 import { dragGesture } from './dragGesture'
 import type { Gesture, Guides } from './gesture'
-import {
-  ANCHOR_PX,
-  GRIP_PX,
-  HANDLE_PX,
-  HIT,
-  ITEM_TOL_PX,
-  ROTATE_OFFSET_PX,
-  SEGMENT_PX,
-} from './stageConstants'
+import { ANCHOR_PX, GRIP_PX, HANDLE_PX, HIT, ITEM_TOL_PX, ROTATE_OFFSET_PX, SEGMENT_PX } from './stageConstants'
 
 export interface StageGestureInput {
   doc: EditableDoc
@@ -311,8 +303,7 @@ export function useStageGestures({
         // Grips first, matching pointerdown: they can sit on the artwork, and
         // the cursor must show what a press would actually do.
         const grip = box ? hitGrip(box, p, r(GRIP_PX * HIT)) : null
-        const onRotate =
-          box && !grip && hitRotate(box, p, r(GRIP_PX * HIT), r(ROTATE_OFFSET_PX))
+        const onRotate = box && !grip && hitRotate(box, p, r(GRIP_PX * HIT), r(ROTATE_OFFSET_PX))
         setHoverGrip(grip ?? (onRotate ? 'rotate' : null))
         if (grip || onRotate) {
           if (hoverId) setHoverId(null)

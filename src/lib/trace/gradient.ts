@@ -115,7 +115,13 @@ interface ProfilePt {
 }
 
 /** Mean colour per non-empty bin of t∈[0,1]; endpoints pinned to 0 and 1. */
-function binnedProfile(param: Float64Array, rs: Float64Array, gs: Float64Array, bs: Float64Array, n: number): ProfilePt[] {
+function binnedProfile(
+  param: Float64Array,
+  rs: Float64Array,
+  gs: Float64Array,
+  bs: Float64Array,
+  n: number,
+): ProfilePt[] {
   const sr = new Float64Array(PROFILE_BINS)
   const sg = new Float64Array(PROFILE_BINS)
   const sb = new Float64Array(PROFILE_BINS)
@@ -180,7 +186,13 @@ function rdpProfile(pts: ProfilePt[], tol: number): ProfilePt[] {
 }
 
 /** Stops from a per-sample parameter array (binned profile → Oklab RDP). */
-function stopsAlong(param: Float64Array, rs: Float64Array, gs: Float64Array, bs: Float64Array, n: number): GradientStop[] {
+function stopsAlong(
+  param: Float64Array,
+  rs: Float64Array,
+  gs: Float64Array,
+  bs: Float64Array,
+  n: number,
+): GradientStop[] {
   const profile = rdpProfile(binnedProfile(param, rs, gs, bs, n), STOP_OKLAB_TOL)
   if (profile.length < 2) {
     const c = profile[0] ?? { r: 0, g: 0, b: 0 }
@@ -224,15 +236,7 @@ const hexToRgb3 = (hex: string): [number, number, number] => [
  * a fit's measured residual matches what the renderer paints. With the focal at
  * the centre it reduces to `distance/r`.
  */
-export function radialParamT(
-  cx: number,
-  cy: number,
-  r: number,
-  fx: number,
-  fy: number,
-  x: number,
-  y: number,
-): number {
+export function radialParamT(cx: number, cy: number, r: number, fx: number, fy: number, x: number, y: number): number {
   const rr = r || 1
   if (Math.hypot(fx - cx, fy - cy) <= 1e-6) return clamp01(Math.hypot(x - cx, y - cy) / rr)
   // Largest ω with P on the circle centred F+ω(C−F) of radius ω·r (the SVG focal
@@ -305,10 +309,7 @@ export function modelResidualOklab(g: GradientFill, s: RegionSamples): number {
  * gradient are in the same space as the input `xs`/`ys` (the tracing pipeline
  * works in pixel == viewBox space).
  */
-export function fitRegionFill(
-  s: RegionSamples,
-  opts: GradientFitOptions = DEFAULT_GRADIENT_FIT,
-): FitResult {
+export function fitRegionFill(s: RegionSamples, opts: GradientFitOptions = DEFAULT_GRADIENT_FIT): FitResult {
   const { xs, ys, rs, gs, bs, n } = s
 
   // --- solid (mean) ---------------------------------------------------------
@@ -365,11 +366,7 @@ export function fitRegionFill(
     if (radial && radial.residual < (best?.residual ?? Infinity)) {
       best = { residual: radial.residual, gradient: radial.gradient, kind: 'radial' }
     }
-    if (
-      best &&
-      best.residual <= opts.maxGradResidual &&
-      best.residual <= solidResidual * opts.improveFraction
-    ) {
+    if (best && best.residual <= opts.maxGradResidual && best.residual <= solidResidual * opts.improveFraction) {
       result.kind = best.kind
       result.gradient = best.gradient
     }
@@ -500,14 +497,30 @@ export function fitPaintLadder(
   let mx = 0
   let my = 0
   for (let i = 0; i < n; i++) {
-    mr += rs[i]; mg += gs[i]; mb += bs[i]; mx += xs[i]; my += ys[i]
+    mr += rs[i]
+    mg += gs[i]
+    mb += bs[i]
+    mx += xs[i]
+    my += ys[i]
   }
-  if (n > 0) { mr /= n; mg /= n; mb /= n; mx /= n; my /= n }
+  if (n > 0) {
+    mr /= n
+    mg /= n
+    mb /= n
+    mx /= n
+    my /= n
+  }
   const solid: [number, number, number] = [mr, mg, mb]
   const solidRes = n > 0 ? solidResidualOklab(s, mr, mg, mb) : 0
 
   if (n < opts.minSamples || solidRes < opts.flatResidual) {
-    return { model: 'solid', gradient: null, solid, residualOklab: solidRes, debug: { solidRes, linearRes: Infinity, radialRes: Infinity, anisotropy: 0 } }
+    return {
+      model: 'solid',
+      gradient: null,
+      solid,
+      residualOklab: solidRes,
+      debug: { solidRes, linearRes: Infinity, radialRes: Infinity, anisotropy: 0 },
+    }
   }
 
   const linear = fitLinear(s, mx, my, mr, mg, mb)
@@ -529,7 +542,12 @@ export function fitPaintLadder(
     // Keep this a soft preference: dropping linear outright can leave a worse
     // solid on a linearly shaded region. On a 1-D field the radial pays the +1.
     const twoD = anisotropy > opts.anisotropy2D
-    cands.push({ model: 'radial', gradient: radial.gradient, res: radRes, complexity: radial.gradient.stops.length + (twoD ? 0 : 1) })
+    cands.push({
+      model: 'radial',
+      gradient: radial.gradient,
+      res: radRes,
+      complexity: radial.gradient.stops.length + (twoD ? 0 : 1),
+    })
   }
 
   // MDL: cost = Oklab residual + λ·#params, with λ sized so complexity only breaks
@@ -586,14 +604,7 @@ interface LinearFit {
  * channel mean), then the structure tensor of the three channel gradients gives
  * the dominant ramp axis. Stops are the fitted colors at the axis extremes.
  */
-function fitLinear(
-  s: RegionSamples,
-  mx: number,
-  my: number,
-  mr: number,
-  mg: number,
-  mb: number,
-): LinearFit | null {
+function fitLinear(s: RegionSamples, mx: number, my: number, mr: number, mg: number, mb: number): LinearFit | null {
   const { xs, ys, rs, gs, bs, n } = s
 
   let Sxx = 0
@@ -886,7 +897,10 @@ export function fitGlowStack(
 
   // Region extent caps a glow's sigma (a "blob" wider than the region is just the
   // base trend, not a localized glow).
-  let bbMinX = Infinity, bbMinY = Infinity, bbMaxX = -Infinity, bbMaxY = -Infinity
+  let bbMinX = Infinity,
+    bbMinY = Infinity,
+    bbMaxX = -Infinity,
+    bbMaxY = -Infinity
   for (let i = 0; i < fit.n; i++) {
     if (fit.xs[i] < bbMinX) bbMinX = fit.xs[i]
     if (fit.xs[i] > bbMaxX) bbMaxX = fit.xs[i]
@@ -946,13 +960,21 @@ function fitOverlayAt(
   const C: [number, number, number] = [rs[peak], gs[peak], bs[peak]]
 
   // Per-sample alpha + distance² for the falloff regression.
-  let sw = 0, sX = 0, sY = 0, sXX = 0, sXY = 0 // weighted sums for ln(α) ~ a + b·d²
+  let sw = 0,
+    sX = 0,
+    sY = 0,
+    sXX = 0,
+    sXY = 0 // weighted sums for ln(α) ~ a + b·d²
   let strong = 0
   for (let i = 0; i < n; i++) {
     const [cr, cg, cb] = sampleGlowStack({ base, overlays }, xs[i], ys[i])
     // remaining error and the available "glow direction" (C − composite).
-    const er = rs[i] - cr, eg = gs[i] - cg, eb = bs[i] - cb
-    const dr = C[0] - cr, dg = C[1] - cg, db = C[2] - cb
+    const er = rs[i] - cr,
+      eg = gs[i] - cg,
+      eb = bs[i] - cb
+    const dr = C[0] - cr,
+      dg = C[1] - cg,
+      db = C[2] - cb
     const denom = dr * dr + dg * dg + db * db
     if (denom < 1e-6) continue
     let a = (er * dr + eg * dg + eb * db) / denom
@@ -961,7 +983,11 @@ function fitOverlayAt(
     const d2 = (xs[i] - cx) ** 2 + (ys[i] - cy) ** 2
     const w = a // weight by alpha so the bright core drives the fit
     const ln = Math.log(a)
-    sw += w; sX += w * d2; sY += w * ln; sXX += w * d2 * d2; sXY += w * d2 * ln
+    sw += w
+    sX += w * d2
+    sY += w * ln
+    sXX += w * d2 * d2
+    sXY += w * d2 * ln
   }
   if (strong < 16) return null // not a real blob, just noise
   const det = sw * sXX - sX * sX
@@ -1022,9 +1048,7 @@ export function gradientToSvgDef(g: GradientFill, id: string, precision = 2): st
       '</linearGradient>'
     )
   }
-  let attrs =
-    `id="${id}" gradientUnits="userSpaceOnUse" ` +
-    `cx="${p(g.cx)}" cy="${p(g.cy)}" r="${p(g.r)}"`
+  let attrs = `id="${id}" gradientUnits="userSpaceOnUse" ` + `cx="${p(g.cx)}" cy="${p(g.cy)}" r="${p(g.r)}"`
   if (g.fx !== undefined && g.fy !== undefined) attrs += ` fx="${p(g.fx)}" fy="${p(g.fy)}"`
   return `<radialGradient ${attrs}>${stopsMarkup(g.stops)}</radialGradient>`
 }

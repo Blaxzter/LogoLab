@@ -20,16 +20,22 @@ import type { SubPath, Topology, Vec } from '../src/lib/path/types.ts'
 
 ensureImageData()
 
-const W = 240, H = 240, CX = 120, CY = 120, R = 84, r = 48
+const W = 240,
+  H = 240,
+  CX = 120,
+  CY = 120,
+  R = 84,
+  r = 48
 const OPTS: BeautifyOptions = { fidelity: 1.5, relationFrac: 0.1, hvAngleDeg: 0 }
 
 /** A white ring (label 0) over `nbands` diagonal colour bands (labels ≥1). */
 function ringOverBands(nbands: number): Int32Array {
   const labels = new Int32Array(W * H)
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const d = Math.hypot(x - CX, y - CY)
-    labels[y * W + x] = d >= r && d <= R ? 0 : Math.floor(((x + y) / (W + H)) * nbands) + 1
-  }
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const d = Math.hypot(x - CX, y - CY)
+      labels[y * W + x] = d >= r && d <= R ? 0 : Math.floor(((x + y) / (W + H)) * nbands) + 1
+    }
   return labels
 }
 
@@ -49,9 +55,15 @@ function maxKink(poly: Vec[]): number {
   const expected = 360 / n
   let k = 0
   for (let i = 0; i < n; i++) {
-    const a = poly[(i - 1 + n) % n], b = poly[i], c = poly[(i + 1) % n]
-    const d1x = b.x - a.x, d1y = b.y - a.y, d2x = c.x - b.x, d2y = c.y - b.y
-    const l1 = Math.hypot(d1x, d1y) || 1, l2 = Math.hypot(d2x, d2y) || 1
+    const a = poly[(i - 1 + n) % n],
+      b = poly[i],
+      c = poly[(i + 1) % n]
+    const d1x = b.x - a.x,
+      d1y = b.y - a.y,
+      d2x = c.x - b.x,
+      d2y = c.y - b.y
+    const l1 = Math.hypot(d1x, d1y) || 1,
+      l2 = Math.hypot(d2x, d2y) || 1
     const cos = Math.max(-1, Math.min(1, (d1x * d2x + d1y * d2y) / (l1 * l2)))
     k = Math.max(k, (Math.acos(cos) * 180) / Math.PI - expected)
   }

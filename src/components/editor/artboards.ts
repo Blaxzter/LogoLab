@@ -27,17 +27,41 @@ export interface ArtboardPreset {
 
 /** Square artboards: what an icon or a logo is actually drawn on. */
 export const SQUARE_PRESETS: ArtboardPreset[] = [
-  { id: 'sq256', label: '256', note: 'A small icon — the size a favicon or a toolbar glyph ends up at.', width: 256, height: 256 },
-  { id: 'sq512', label: '512', note: 'The usual app-icon master. Big enough to draw on, small enough to reason about.', width: 512, height: 512 },
+  {
+    id: 'sq256',
+    label: '256',
+    note: 'A small icon — the size a favicon or a toolbar glyph ends up at.',
+    width: 256,
+    height: 256,
+  },
+  {
+    id: 'sq512',
+    label: '512',
+    note: 'The usual app-icon master. Big enough to draw on, small enough to reason about.',
+    width: 512,
+    height: 512,
+  },
   { id: 'sq1024', label: '1024', note: 'A large master — iOS ships its icon at this size.', width: 1024, height: 1024 },
 ]
 
 /** Paper artboards, portrait. Units print as the named sheet at 96 dpi. */
 export const PAPER_PRESETS: ArtboardPreset[] = [
   { id: 'a5', label: 'A5', note: '148 × 210 mm — half an A4.', width: mm(148), height: mm(210) },
-  { id: 'a4', label: 'A4', note: '210 × 297 mm — the standard sheet outside North America.', width: mm(210), height: mm(297) },
+  {
+    id: 'a4',
+    label: 'A4',
+    note: '210 × 297 mm — the standard sheet outside North America.',
+    width: mm(210),
+    height: mm(297),
+  },
   { id: 'a3', label: 'A3', note: '297 × 420 mm — a poster, or two A4s side by side.', width: mm(297), height: mm(420) },
-  { id: 'letter', label: 'Letter', note: '8.5 × 11 in — the standard sheet in North America.', width: inch(8.5), height: inch(11) },
+  {
+    id: 'letter',
+    label: 'Letter',
+    note: '8.5 × 11 in — the standard sheet in North America.',
+    width: inch(8.5),
+    height: inch(11),
+  },
   { id: 'legal', label: 'Legal', note: '8.5 × 14 in — a long US sheet.', width: inch(8.5), height: inch(14) },
 ]
 

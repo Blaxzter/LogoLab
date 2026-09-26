@@ -51,7 +51,10 @@ console.log('  variant           corner          mean    swing     max   at')
 
 for (const [label, over] of VARIANTS) {
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, ...over,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    ...over,
   })
   const pts: Vec[] = []
   for (const e of doc.topology?.edges ?? []) {
@@ -118,7 +121,10 @@ for (const [tag, c] of CORNERS) {
     for (let r = 40; r < 60; r += 0.05) {
       const v0 = lum(img.data, c.x + ca * (r - 0.05), c.y + sa * (r - 0.05)) - 160
       const v1 = lum(img.data, c.x + ca * r, c.y + sa * r) - 160
-      if (v0 * v1 < 0) { found = r; break }
+      if (v0 * v1 < 0) {
+        found = r
+        break
+      }
     }
     out.push(`${a}°:${Number.isNaN(found) ? ' —  ' : found.toFixed(2)}`)
   }

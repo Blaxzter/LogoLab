@@ -109,12 +109,24 @@ export function Inspector({
     <div className="flex flex-col gap-4 p-3">
       <Section title="Arrange">
         <div className="grid grid-cols-6 gap-1">
-          <AlignBtn label="Align left" note={ALIGN_REF} onClick={() => onAlign('left')}><AlignStartVertical size={14} /></AlignBtn>
-          <AlignBtn label="Centre horizontally" note={ALIGN_REF} onClick={() => onAlign('hcenter')}><AlignCenterVertical size={14} /></AlignBtn>
-          <AlignBtn label="Align right" note={ALIGN_REF} onClick={() => onAlign('right')}><AlignEndVertical size={14} /></AlignBtn>
-          <AlignBtn label="Align top" note={ALIGN_REF} onClick={() => onAlign('top')}><AlignStartHorizontal size={14} /></AlignBtn>
-          <AlignBtn label="Centre vertically" note={ALIGN_REF} onClick={() => onAlign('vcenter')}><AlignCenterHorizontal size={14} /></AlignBtn>
-          <AlignBtn label="Align bottom" note={ALIGN_REF} onClick={() => onAlign('bottom')}><AlignEndHorizontal size={14} /></AlignBtn>
+          <AlignBtn label="Align left" note={ALIGN_REF} onClick={() => onAlign('left')}>
+            <AlignStartVertical size={14} />
+          </AlignBtn>
+          <AlignBtn label="Centre horizontally" note={ALIGN_REF} onClick={() => onAlign('hcenter')}>
+            <AlignCenterVertical size={14} />
+          </AlignBtn>
+          <AlignBtn label="Align right" note={ALIGN_REF} onClick={() => onAlign('right')}>
+            <AlignEndVertical size={14} />
+          </AlignBtn>
+          <AlignBtn label="Align top" note={ALIGN_REF} onClick={() => onAlign('top')}>
+            <AlignStartHorizontal size={14} />
+          </AlignBtn>
+          <AlignBtn label="Centre vertically" note={ALIGN_REF} onClick={() => onAlign('vcenter')}>
+            <AlignCenterHorizontal size={14} />
+          </AlignBtn>
+          <AlignBtn label="Align bottom" note={ALIGN_REF} onClick={() => onAlign('bottom')}>
+            <AlignEndHorizontal size={14} />
+          </AlignBtn>
         </div>
         <div className="mt-1 grid grid-cols-6 gap-1">
           <AlignBtn
@@ -153,10 +165,32 @@ export function Inspector({
       {box && (
         <Section title="Geometry">
           <div className="grid grid-cols-2 gap-2">
-            <NumField label="X" tip="Left edge of the selection, in artboard units." value={box.x} onCommit={(v) => onGeometry({ x: v })} />
-            <NumField label="Y" tip="Top edge of the selection, in artboard units." value={box.y} onCommit={(v) => onGeometry({ y: v })} />
-            <NumField label="W" tip="Width. Resizes from the left edge, so X stays put." value={box.w} min={0.01} onCommit={(v) => onGeometry({ w: v })} />
-            <NumField label="H" tip="Height. Resizes from the top edge, so Y stays put." value={box.h} min={0.01} onCommit={(v) => onGeometry({ h: v })} />
+            <NumField
+              label="X"
+              tip="Left edge of the selection, in artboard units."
+              value={box.x}
+              onCommit={(v) => onGeometry({ x: v })}
+            />
+            <NumField
+              label="Y"
+              tip="Top edge of the selection, in artboard units."
+              value={box.y}
+              onCommit={(v) => onGeometry({ y: v })}
+            />
+            <NumField
+              label="W"
+              tip="Width. Resizes from the left edge, so X stays put."
+              value={box.w}
+              min={0.01}
+              onCommit={(v) => onGeometry({ w: v })}
+            />
+            <NumField
+              label="H"
+              tip="Height. Resizes from the top edge, so Y stays put."
+              value={box.h}
+              min={0.01}
+              onCommit={(v) => onGeometry({ h: v })}
+            />
           </div>
         </Section>
       )}
@@ -303,8 +337,12 @@ function StrokeSection({
               >
                 <svg width="34" height="8" aria-hidden>
                   <line
-                    x1="1" y1="4" x2="33" y2="4"
-                    stroke="currentColor" strokeWidth="2"
+                    x1="1"
+                    y1="4"
+                    x2="33"
+                    y2="4"
+                    stroke="currentColor"
+                    strokeWidth="2"
                     strokeDasharray={dash.length ? dash.join(' ') : undefined}
                     strokeLinecap="round"
                   />
@@ -407,7 +445,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function AlignBtn({
-  label, note, onClick, reason, children,
+  label,
+  note,
+  onClick,
+  reason,
+  children,
 }: {
   label: string
   note?: string
@@ -432,7 +474,11 @@ function AlignBtn({
 }
 
 function ColorWell({
-  value, onChange, label, note, reason,
+  value,
+  onChange,
+  label,
+  note,
+  reason,
 }: {
   value: string
   onChange: (v: string) => void
@@ -448,27 +494,27 @@ function ColorWell({
   // and the picker's bubbled focus.
   return (
     <Tooltip label={<TipLabel title={none ? `${label} — none` : label} detail={off ? reason : note} />}>
-    <span
-      className={`relative h-8 w-8 shrink-0 overflow-hidden rounded-md ring-1 ring-line-strong ${
-        none ? 'checkerboard' : ''
-      } ${off ? 'opacity-40' : ''}`}
-    >
-      {none ? (
-        <svg viewBox="0 0 32 32" className="absolute inset-0 h-full w-full" aria-hidden>
-          <line x1="4" y1="28" x2="28" y2="4" stroke="#d6453d" strokeWidth="3" />
-        </svg>
-      ) : (
-        <span className="absolute inset-0" style={{ backgroundColor: value }} />
-      )}
-      <input
-        type="color"
-        value={normalizeHex(value) ?? '#000000'}
-        aria-disabled={off || undefined}
-        onChange={off ? undefined : (e) => onChange(e.target.value)}
-        className={`absolute inset-0 opacity-0 ${off ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-        aria-label={label}
-      />
-    </span>
+      <span
+        className={`relative h-8 w-8 shrink-0 overflow-hidden rounded-md ring-1 ring-line-strong ${
+          none ? 'checkerboard' : ''
+        } ${off ? 'opacity-40' : ''}`}
+      >
+        {none ? (
+          <svg viewBox="0 0 32 32" className="absolute inset-0 h-full w-full" aria-hidden>
+            <line x1="4" y1="28" x2="28" y2="4" stroke="#d6453d" strokeWidth="3" />
+          </svg>
+        ) : (
+          <span className="absolute inset-0" style={{ backgroundColor: value }} />
+        )}
+        <input
+          type="color"
+          value={normalizeHex(value) ?? '#000000'}
+          aria-disabled={off || undefined}
+          onChange={off ? undefined : (e) => onChange(e.target.value)}
+          className={`absolute inset-0 opacity-0 ${off ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+          aria-label={label}
+        />
+      </span>
     </Tooltip>
   )
 }
@@ -503,8 +549,18 @@ function HexField({ value, onCommit, tip }: { value: string; onCommit: (v: strin
 }
 
 function NumField({
-  label, value, onCommit, min, tip,
-}: { label: string; value: number; onCommit: (v: number) => void; min?: number; tip: string }) {
+  label,
+  value,
+  onCommit,
+  min,
+  tip,
+}: {
+  label: string
+  value: number
+  onCommit: (v: number) => void
+  min?: number
+  tip: string
+}) {
   const shown = String(Number(value.toFixed(2)))
   const [draft, setDraft] = useState(shown)
   useEffect(() => setDraft(shown), [shown])
@@ -541,8 +597,18 @@ function NumField({
 }
 
 function SliderRow({
-  label, tip, note, value, onChange,
-}: { label: string; tip: string; note: string; value: number; onChange: (v: number) => void }) {
+  label,
+  tip,
+  note,
+  value,
+  onChange,
+}: {
+  label: string
+  tip: string
+  note: string
+  value: number
+  onChange: (v: number) => void
+}) {
   return (
     <label className="flex items-center gap-2">
       <span className="w-14 shrink-0 text-[0.7rem] text-muted">{label}</span>
@@ -563,7 +629,10 @@ function SliderRow({
 }
 
 function SegRow({
-  label, value, options, onChange,
+  label,
+  value,
+  options,
+  onChange,
 }: {
   label: string
   value: string

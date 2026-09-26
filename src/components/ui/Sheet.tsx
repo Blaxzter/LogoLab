@@ -97,7 +97,10 @@ export function Sheet({
         className={`fixed z-50 flex flex-col border-line bg-surface shadow-xl transition-transform duration-300 ease-in-out ${hidden} ${panelGeom} ${className}`}
       >
         {isBottom && (
-          <div {...dragHandlers} className="flex shrink-0 cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing">
+          <div
+            {...dragHandlers}
+            className="flex shrink-0 cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing"
+          >
             <span aria-hidden className="h-1 w-9 rounded-full bg-line-strong" />
           </div>
         )}

@@ -165,7 +165,11 @@ export interface ReseatArmAlt {
   circle: { prim: ReseatPrim; dev: number } | null
   /** The same two fits with the terminal segment excluded (null when the arm has one
    *  segment) — what the cap-skip branch would see, regardless of `CAP_MAX`. */
-  noCap: { len: number; line: { prim: ReseatPrim; dev: number } | null; circle: { prim: ReseatPrim; dev: number } | null } | null
+  noCap: {
+    len: number
+    line: { prim: ReseatPrim; dev: number } | null
+    circle: { prim: ReseatPrim; dev: number } | null
+  } | null
 }
 
 /**
@@ -327,9 +331,14 @@ function evalArm(pts: Vec[], len: number, cfg: Cfg): { prim: Prim | null; why: s
 function altFits(pts: Vec[], len: number): { line: ReseatArmAlt['line']; circle: ReseatArmAlt['circle'] } {
   if (pts.length < 2) return { line: null, circle: null }
   const l = armLine(pts)
-  const line = { prim: { kind: 'line' as const, a: l.c, d: l.d, conf: len, skipCap: false }, dev: lineMaxDev(pts, l.c, l.d) }
+  const line = {
+    prim: { kind: 'line' as const, a: l.c, d: l.d, conf: len, skipCap: false },
+    dev: lineMaxDev(pts, l.c, l.d),
+  }
   const c = fitCircle(pts)
-  const circle = c ? { prim: { kind: 'circle' as const, c, conf: len, skipCap: false }, dev: maxRadialDev(pts, c) } : null
+  const circle = c
+    ? { prim: { kind: 'circle' as const, c, conf: len, skipCap: false }, dev: maxRadialDev(pts, c) }
+    : null
   return { line, circle }
 }
 
@@ -686,14 +695,29 @@ export function reseatJunctions(
     if (!ends || ends.length !== 3) continue
     const at = { x: v.x, y: v.y }
     if (width != null && height != null && (v.x <= 1 || v.y <= 1 || v.x >= width - 1 || v.y >= height - 1)) {
-      onVerdict?.({ vertex: v.id, ...at, arms: [], pair: null, vetoed: null, tx: NaN, ty: NaN, move: 0, reason: 'border' })
+      onVerdict?.({
+        vertex: v.id,
+        ...at,
+        arms: [],
+        pair: null,
+        vetoed: null,
+        tx: NaN,
+        ty: NaN,
+        move: 0,
+        reason: 'border',
+      })
       continue
     }
 
     // Fresh primitives per vertex (an earlier re-seat may have touched an edge).
     const armV = ends.map((end) => endPrimitive(end.e, end.atEnd, cfg, onVerdict != null))
     const prims = armV.map((a) => a.prim)
-    const verdict = (pair: [number, number] | null, H: Vec | null, move: number, reason: ReseatVerdict['reason']): void =>
+    const verdict = (
+      pair: [number, number] | null,
+      H: Vec | null,
+      move: number,
+      reason: ReseatVerdict['reason'],
+    ): void =>
       onVerdict?.({
         vertex: v.id,
         ...at,
@@ -825,7 +849,16 @@ export function reseatJunctions(
       ),
     )
     if (!sameLine) {
-      onChord?.({ edgeId: e.id, len, maxDev: NaN, sameLine: false, verdict: tooLong ? 'too-long' : 'not-collinear', armA, armB, profile: [] })
+      onChord?.({
+        edgeId: e.id,
+        len,
+        maxDev: NaN,
+        sameLine: false,
+        verdict: tooLong ? 'too-long' : 'not-collinear',
+        armA,
+        armB,
+        profile: [],
+      })
       continue
     }
     // The edge's own fit must sit near the chord, so a genuinely different boundary
@@ -888,8 +921,14 @@ export function weldConvergedJunctions(
   moved: ReadonlySet<number>,
 ): void {
   if (moved.size === 0) return
-  weldJunctionClusters(vertices, edges, loopsByLabel, width, height, RESEAT_WELD_LEN, (e) =>
-    (e.startVertex != null && moved.has(e.startVertex)) || (e.endVertex != null && moved.has(e.endVertex)),
+  weldJunctionClusters(
+    vertices,
+    edges,
+    loopsByLabel,
+    width,
+    height,
+    RESEAT_WELD_LEN,
+    (e) => (e.startVertex != null && moved.has(e.startVertex)) || (e.endVertex != null && moved.has(e.endVertex)),
   )
 }
 

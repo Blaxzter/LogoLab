@@ -104,7 +104,10 @@ export function resolvePresets(req: ExportRequest): Preset[] {
   const out: Preset[] = []
   for (const id of ids) {
     const preset = presetById(id)
-    if (!preset) throw new Error(`Unknown preset "${id}". Available: ${['pwa', 'favicon', 'web', 'tauri', 'electron', 'android', 'ios', 'extension'].join(', ')}`)
+    if (!preset)
+      throw new Error(
+        `Unknown preset "${id}". Available: ${['pwa', 'favicon', 'web', 'tauri', 'electron', 'android', 'ios', 'extension'].join(', ')}`,
+      )
     out.push(preset)
   }
   if (req.sizes?.length) out.push(customPreset(req.sizes))
@@ -184,7 +187,9 @@ function readme(appName: string, presets: Preset[], app: Appearance, files: Writ
   lines.push('')
   lines.push('## Appearance')
   lines.push('')
-  lines.push(`- card: ${app.background === 'transparent' ? 'transparent (the source art, full bleed)' : `${app.background}, ${app.shape}${app.shape === 'rounded' ? ` @ ${app.radiusPct}% radius` : ''}`}`)
+  lines.push(
+    `- card: ${app.background === 'transparent' ? 'transparent (the source art, full bleed)' : `${app.background}, ${app.shape}${app.shape === 'rounded' ? ` @ ${app.radiusPct}% radius` : ''}`}`,
+  )
   lines.push(`- safe-zone padding ${app.paddingPct}%, logo scale ${app.scale}`)
   if (app.tintColor) lines.push(`- tinted ${app.tintColor}`)
   lines.push('')

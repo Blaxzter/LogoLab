@@ -33,12 +33,24 @@ import { solveMumfordShah } from './mumfordShah.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
 import { srgbToOklab, oklabDeltaE, type Oklab } from './oklab.ts'
 import { fitBestGradient, type RegionSamples } from './gradient.ts'
-import { DEFAULT_SEGMENT_OPTIONS, type SegmentOptions, type SegmentResult, type MergePairRecord } from './segment/options.ts'
+import {
+  DEFAULT_SEGMENT_OPTIONS,
+  type SegmentOptions,
+  type SegmentResult,
+  type MergePairRecord,
+} from './segment/options.ts'
 import { clamp255, strideSamples, strideConcat } from './segment/samples.ts'
 import { nearestSmoothPixel, markerControlledSplit } from './segment/markers.ts'
 import { mergeSmallRegions } from './segment/smallRegions.ts'
 import { assembleFromGroupId, fallbackSingleRegion } from './segment/assemble.ts'
-import { FLAT_FLANK_RES, solidResidual, unwitnessedJump, unwitnessedStep, tBins, profileGap } from './segment/gradientVeto.ts'
+import {
+  FLAT_FLANK_RES,
+  solidResidual,
+  unwitnessedJump,
+  unwitnessedStep,
+  tBins,
+  profileGap,
+} from './segment/gradientVeto.ts'
 
 export { DEFAULT_SEGMENT_OPTIONS } from './segment/options.ts'
 export type { SegmentOptions, MergePairRecord, MergePairObserver, SegmentResult } from './segment/options.ts'
@@ -367,13 +379,30 @@ export function segmentImage(
           const i = y * w + x
           const a = segOf[i]
           if (a < 0) continue
-          if (x + 1 < w) { const b = segOf[i + 1]; if (b >= 0 && b !== a) { fineAdj[a].add(b); fineAdj[b].add(a) } }
-          if (y + 1 < h) { const b = segOf[i + w]; if (b >= 0 && b !== a) { fineAdj[a].add(b); fineAdj[b].add(a) } }
+          if (x + 1 < w) {
+            const b = segOf[i + 1]
+            if (b >= 0 && b !== a) {
+              fineAdj[a].add(b)
+              fineAdj[b].add(a)
+            }
+          }
+          if (y + 1 < h) {
+            const b = segOf[i + w]
+            if (b >= 0 && b !== a) {
+              fineAdj[a].add(b)
+              fineAdj[b].add(a)
+            }
+          }
         }
       }
       for (let id = 0; id < S; id++) {
         groupAdj.set(id, new Set(fineAdj[id]))
-        if (useMean) { gSumR.set(id, segSumR[id]); gSumG.set(id, segSumG[id]); gSumB.set(id, segSumB[id]); gCnt.set(id, segCnt[id]) }
+        if (useMean) {
+          gSumR.set(id, segSumR[id])
+          gSumG.set(id, segSumG[id])
+          gSumB.set(id, segSumB[id])
+          gCnt.set(id, segCnt[id])
+        }
       }
     }
     const meanOk = (gid: number): Oklab => {
@@ -474,7 +503,14 @@ export function segmentImage(
           solidI: fit ? solidResidual(samples.get(gi)!) : NaN,
           solidJ: fit ? solidResidual(samples.get(gj)!) : NaN,
           ...(fit && union && step
-            ? { fitType: fit.gradient.type, stops: fit.gradient.stops.length, fit: fit.gradient, bins: tBins(fit.gradient, union), jumpT: step.at, holeT: step.holeT }
+            ? {
+                fitType: fit.gradient.type,
+                stops: fit.gradient.stops.length,
+                fit: fit.gradient,
+                bins: tBins(fit.gradient, union),
+                jumpT: step.at,
+                holeT: step.holeT,
+              }
             : {}),
           accepted: result !== null,
         })
@@ -541,10 +577,15 @@ export function segmentImage(
         for (const nb of groupAdj.get(best.j)!) if (nb !== best.i) adjC.add(nb)
         for (const nb of adjC) {
           const s = groupAdj.get(nb)
-          if (s) { s.delete(best.i); s.delete(best.j); s.add(c) }
+          if (s) {
+            s.delete(best.i)
+            s.delete(best.j)
+            s.add(c)
+          }
         }
         groupAdj.set(c, adjC)
-        groupAdj.delete(best.i); groupAdj.delete(best.j)
+        groupAdj.delete(best.i)
+        groupAdj.delete(best.j)
       }
       if (useMean) {
         // c's running colour sums add; drop the retired groups' means.
@@ -552,8 +593,16 @@ export function segmentImage(
         gSumG.set(c, gSumG.get(best.i)! + gSumG.get(best.j)!)
         gSumB.set(c, gSumB.get(best.i)! + gSumB.get(best.j)!)
         gCnt.set(c, gCnt.get(best.i)! + gCnt.get(best.j)!)
-        gSumR.delete(best.i); gSumG.delete(best.i); gSumB.delete(best.i); gCnt.delete(best.i); meanCache.delete(best.i)
-        gSumR.delete(best.j); gSumG.delete(best.j); gSumB.delete(best.j); gCnt.delete(best.j); meanCache.delete(best.j)
+        gSumR.delete(best.i)
+        gSumG.delete(best.i)
+        gSumB.delete(best.i)
+        gCnt.delete(best.i)
+        meanCache.delete(best.i)
+        gSumR.delete(best.j)
+        gSumG.delete(best.j)
+        gSumB.delete(best.j)
+        gCnt.delete(best.j)
+        meanCache.delete(best.j)
       }
       // Retire the two merged groups: drop them from `alive` and invalidate their
       // cache rows.
@@ -658,26 +707,65 @@ export function segmentImage(
   // thin mark on transparency whose every pixel is a discontinuity), which the
   // flood can never reach. Seed each 4-connected such component as its own
   // macro-region so the feature survives instead of being labelled transparent.
-  const extra: { sumR: number; sumG: number; sumB: number; cnt: number; xs: number[]; ys: number[]; rs: number[]; gs: number[]; bs: number[] }[] = []
+  const extra: {
+    sumR: number
+    sumG: number
+    sumB: number
+    cnt: number
+    xs: number[]
+    ys: number[]
+    rs: number[]
+    gs: number[]
+    bs: number[]
+  }[] = []
   const stack: number[] = []
   for (let i = 0; i < n; i++) {
     if (!opaque[i] || groupId[i] >= 0) continue
     const gid = G + extra.length
-    const grp = { sumR: 0, sumG: 0, sumB: 0, cnt: 0, xs: [] as number[], ys: [] as number[], rs: [] as number[], gs: [] as number[], bs: [] as number[] }
+    const grp = {
+      sumR: 0,
+      sumG: 0,
+      sumB: 0,
+      cnt: 0,
+      xs: [] as number[],
+      ys: [] as number[],
+      rs: [] as number[],
+      gs: [] as number[],
+      bs: [] as number[],
+    }
     groupId[i] = gid
     stack.length = 0
     stack.push(i)
     while (stack.length) {
       const p = stack.pop()!
       const o = p * 4
-      grp.sumR += data[o]; grp.sumG += data[o + 1]; grp.sumB += data[o + 2]; grp.cnt++
-      grp.xs.push(p % w); grp.ys.push((p / w) | 0); grp.rs.push(data[o]); grp.gs.push(data[o + 1]); grp.bs.push(data[o + 2])
+      grp.sumR += data[o]
+      grp.sumG += data[o + 1]
+      grp.sumB += data[o + 2]
+      grp.cnt++
+      grp.xs.push(p % w)
+      grp.ys.push((p / w) | 0)
+      grp.rs.push(data[o])
+      grp.gs.push(data[o + 1])
+      grp.bs.push(data[o + 2])
       const px = p % w
       const py = (p / w) | 0
-      if (px > 0 && opaque[p - 1] && groupId[p - 1] < 0) { groupId[p - 1] = gid; stack.push(p - 1) }
-      if (px < w - 1 && opaque[p + 1] && groupId[p + 1] < 0) { groupId[p + 1] = gid; stack.push(p + 1) }
-      if (py > 0 && opaque[p - w] && groupId[p - w] < 0) { groupId[p - w] = gid; stack.push(p - w) }
-      if (py < h - 1 && opaque[p + w] && groupId[p + w] < 0) { groupId[p + w] = gid; stack.push(p + w) }
+      if (px > 0 && opaque[p - 1] && groupId[p - 1] < 0) {
+        groupId[p - 1] = gid
+        stack.push(p - 1)
+      }
+      if (px < w - 1 && opaque[p + 1] && groupId[p + 1] < 0) {
+        groupId[p + 1] = gid
+        stack.push(p + 1)
+      }
+      if (py > 0 && opaque[p - w] && groupId[p - w] < 0) {
+        groupId[p - w] = gid
+        stack.push(p - w)
+      }
+      if (py < h - 1 && opaque[p + w] && groupId[p + w] < 0) {
+        groupId[p + w] = gid
+        stack.push(p + w)
+      }
     }
     extra.push(grp)
   }
@@ -721,14 +809,21 @@ export function segmentImage(
       }
       groupCount = mergeSmallRegions(groupId, groupCount, n, w, h, data, opts.minRegionArea, protectedGroups).count
     }
-    return { ...assembleFromGroupId(groupId, groupCount, n, w, data, smooth, ms, S, opts.sampleCap), preMergeLabels: segOf }
+    return {
+      ...assembleFromGroupId(groupId, groupCount, n, w, data, smooth, ms, S, opts.sampleCap),
+      preMergeLabels: segOf,
+    }
   }
 
   // --- Small-region merge (despeckle): absorb sub-threshold slivers into their
   // nearest-colour neighbour. Falls through to the assembly below when nothing merged.
   if (opts.minRegionArea > 0) {
     const merged = mergeSmallRegions(groupId, G + extra.length, n, w, h, data, opts.minRegionArea, NO_PROTECTED)
-    if (merged.changed) return { ...assembleFromGroupId(groupId, merged.count, n, w, data, smooth, ms, S, opts.sampleCap), preMergeLabels: segOf }
+    if (merged.changed)
+      return {
+        ...assembleFromGroupId(groupId, merged.count, n, w, data, smooth, ms, S, opts.sampleCap),
+        preMergeLabels: segOf,
+      }
   }
 
   // --- Assemble QuantizeResult over all macro-regions (smooth groups + isolated
@@ -740,7 +835,14 @@ export function segmentImage(
   const samplesOf = (gi: number): RegionSamples =>
     gi < G
       ? groupSampleList[gi]
-      : strideSamples(extra[gi - G].xs, extra[gi - G].ys, extra[gi - G].rs, extra[gi - G].gs, extra[gi - G].bs, opts.sampleCap)
+      : strideSamples(
+          extra[gi - G].xs,
+          extra[gi - G].ys,
+          extra[gi - G].rs,
+          extra[gi - G].gs,
+          extra[gi - G].bs,
+          opts.sampleCap,
+        )
 
   const order = Array.from({ length: GG }, (_, gi) => gi).sort((a, b) => cntOf(b) - cntOf(a))
   const rank = new Int32Array(GG)

@@ -110,9 +110,7 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
         const out: PreviewVariant[] = []
         for (const v of doc.variants) {
           const opts = { ...base, ...v.patch }
-          const traced = await (canTraceOffThread(opts)
-            ? traceImageOffThread(image, opts)
-            : traceImage(image, opts))
+          const traced = await (canTraceOffThread(opts) ? traceImageOffThread(image, opts) : traceImage(image, opts))
           if (runId !== runIdRef.current) return
           const stats = docStats(traced)
           out.push({ label: v.label, svg: serializeDoc(traced), paths: stats.paths, nodes: stats.nodes })
@@ -146,7 +144,7 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
   if (!doc) return null
 
   const usingLive = source === 'upload' || doc.liveOnly
-  const variants: PreviewVariant[] | null = usingLive ? liveResults : preview?.variants ?? null
+  const variants: PreviewVariant[] | null = usingLive ? liveResults : (preview?.variants ?? null)
   const loading = usingLive ? liveBusy : !preview
 
   // The "input" thumbnail reflecting the current source.
@@ -173,7 +171,12 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
       aria-modal="true"
       aria-label={`About ${doc.label}`}
     >
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm dark:bg-black/55" />
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/40 backdrop-blur-sm dark:bg-black/55"
+      />
 
       <div
         ref={panelRef}
@@ -216,9 +219,7 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
                     My image
                   </SourceTab>
                 </div>
-                {!hasUpload && (
-                  <span className="text-xs text-muted">Load a logo to preview on your own image.</span>
-                )}
+                {!hasUpload && <span className="text-xs text-muted">Load a logo to preview on your own image.</span>}
               </>
             )}
             {liveBusy && (

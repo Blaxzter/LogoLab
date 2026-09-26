@@ -65,7 +65,12 @@ export function subpixelJunctions(net: PlanarNetwork, cw: number): Map<number, V
   for (const c of net.junctions) {
     const cx = c % cw
     const cy = (c / cw) | 0
-    let m00 = 0, m01 = 0, m11 = 0, b0 = 0, b1 = 0, used = 0
+    let m00 = 0,
+      m01 = 0,
+      m11 = 0,
+      b0 = 0,
+      b1 = 0,
+      used = 0
     for (const { e, atStart } of incident.get(c) ?? []) {
       const ap = armPoints(e, atStart)
       if (ap.length < MIN_ARM_PTS) continue

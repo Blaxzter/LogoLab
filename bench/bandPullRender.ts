@@ -51,7 +51,10 @@ const crop = (rgba: Uint8ClampedArray | Uint8Array, w: number): Uint8ClampedArra
       const sy = Y0 + Math.floor(y / Z)
       const s = (sy * w + sx) * 4
       const d = (y * CW * Z + x) * 4
-      o[d] = rgba[s]; o[d + 1] = rgba[s + 1]; o[d + 2] = rgba[s + 2]; o[d + 3] = 255
+      o[d] = rgba[s]
+      o[d + 1] = rgba[s + 1]
+      o[d + 2] = rgba[s + 2]
+      o[d + 3] = 255
     }
   return o
 }
@@ -62,7 +65,10 @@ for (const name of picked) {
   const over = VARIANTS[name]
   if (!over) throw new Error(`unknown variant ${name} (have: ${Object.keys(VARIANTS).join(', ')})`)
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, ...over,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    ...over,
   })
   panels.push(crop(rasterizeDoc(doc, img.width, img.height, { background: [255, 255, 255] }), img.width))
   labels.push(name)
@@ -78,7 +84,10 @@ panels.forEach((p, i) => {
     for (let x = 0; x < CW * Z; x++) {
       const s = (y * CW * Z + x) * 4
       const d = (y * W + ox + x) * 4
-      sheet[d] = p[s]; sheet[d + 1] = p[s + 1]; sheet[d + 2] = p[s + 2]; sheet[d + 3] = 255
+      sheet[d] = p[s]
+      sheet[d + 1] = p[s + 1]
+      sheet[d + 2] = p[s + 2]
+      sheet[d + 3] = 255
     }
 })
 writeFileSync(OUT, encodePng(sheet, W, H))

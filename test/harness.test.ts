@@ -16,7 +16,10 @@ import { score, type SourceImage } from '../bench/scoreboard.ts'
 
 ensureImageData()
 
-function gateRow(name: string, row: { determinism: string; paths: number; l1Lab: number; meanDeltaE: number; ssim: number }) {
+function gateRow(
+  name: string,
+  row: { determinism: string; paths: number; l1Lab: number; meanDeltaE: number; ssim: number },
+) {
   assert.equal(row.determinism, 'pass', 'same input + settings must yield a byte-identical doc')
   assert.ok(row.paths > 0, 'produced at least one path')
   assert.ok(

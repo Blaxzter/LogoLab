@@ -5,15 +5,7 @@
 // (see GroupItem). The exception is a RawItem, whose markup is opaque: its
 // affine composes onto the captured `transform` string.
 
-import type {
-  Affine,
-  DocItem,
-  GradientFill,
-  PathItem,
-  Stroke,
-  SubPath,
-  Vec,
-} from '../path/types.ts'
+import type { Affine, DocItem, GradientFill, PathItem, Stroke, SubPath, Vec } from '../path/types.ts'
 import {
   affineScale,
   affineToString,
@@ -49,14 +41,7 @@ export function scaleAbout(origin: Vec, sx: number, sy: number): Affine {
 export function rotateAbout(origin: Vec, angle: number): Affine {
   const c = Math.cos(angle)
   const s = Math.sin(angle)
-  return [
-    c,
-    s,
-    -s,
-    c,
-    origin.x - c * origin.x + s * origin.y,
-    origin.y - s * origin.x - c * origin.y,
-  ]
+  return [c, s, -s, c, origin.x - c * origin.x + s * origin.y, origin.y - s * origin.x - c * origin.y]
 }
 
 /** Mirror across the box's vertical (axis 'x') or horizontal ('y') midline. */
@@ -128,11 +113,7 @@ export function transformItem(item: DocItem, m: Affine): DocItem {
 }
 
 /** Apply an affine to every listed id (and everything inside those groups). */
-export function transformItems(
-  items: readonly DocItem[],
-  ids: ReadonlySet<string>,
-  m: Affine,
-): DocItem[] {
+export function transformItems(items: readonly DocItem[], ids: ReadonlySet<string>, m: Affine): DocItem[] {
   return items.map((it) => {
     if (ids.has(it.id)) return transformItem(it, m)
     if (isGroup(it)) {
@@ -197,21 +178,36 @@ export function gripPoint(box: Box, grip: Grip): Vec {
   const right = box.x + box.w
   const bottom = box.y + box.h
   switch (grip) {
-    case 'nw': return { x: box.x, y: box.y }
-    case 'n': return { x: midX, y: box.y }
-    case 'ne': return { x: right, y: box.y }
-    case 'e': return { x: right, y: midY }
-    case 'se': return { x: right, y: bottom }
-    case 's': return { x: midX, y: bottom }
-    case 'sw': return { x: box.x, y: bottom }
-    case 'w': return { x: box.x, y: midY }
+    case 'nw':
+      return { x: box.x, y: box.y }
+    case 'n':
+      return { x: midX, y: box.y }
+    case 'ne':
+      return { x: right, y: box.y }
+    case 'e':
+      return { x: right, y: midY }
+    case 'se':
+      return { x: right, y: bottom }
+    case 's':
+      return { x: midX, y: bottom }
+    case 'sw':
+      return { x: box.x, y: bottom }
+    case 'w':
+      return { x: box.x, y: midY }
   }
 }
 
 /** The point a grip drag holds fixed — the opposite corner/edge. */
 export function gripAnchor(box: Box, grip: Grip): Vec {
   const opposite: Record<Grip, Grip> = {
-    nw: 'se', n: 's', ne: 'sw', e: 'w', se: 'nw', s: 'n', sw: 'ne', w: 'e',
+    nw: 'se',
+    n: 's',
+    ne: 'sw',
+    e: 'w',
+    se: 'nw',
+    s: 'n',
+    sw: 'ne',
+    w: 'e',
   }
   return gripPoint(box, opposite[grip])
 }
@@ -232,16 +228,9 @@ export interface ScaleGripOptions {
  * The affine for dragging `grip` from its home position to `to`. Edge grips
  * scale one axis, corner grips both; dragging past the anchor mirrors.
  */
-export function scaleFromGrip(
-  box: Box,
-  grip: Grip,
-  to: Vec,
-  opts: ScaleGripOptions = {},
-): Affine {
+export function scaleFromGrip(box: Box, grip: Grip, to: Vec, opts: ScaleGripOptions = {}): Affine {
   const minScale = opts.minScale ?? 1e-3
-  const origin = opts.fromCenter
-    ? { x: box.x + box.w / 2, y: box.y + box.h / 2 }
-    : gripAnchor(box, grip)
+  const origin = opts.fromCenter ? { x: box.x + box.w / 2, y: box.y + box.h / 2 } : gripAnchor(box, grip)
   const from = gripPoint(box, grip)
 
   const spanX = from.x - origin.x

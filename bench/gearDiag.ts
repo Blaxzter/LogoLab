@@ -54,9 +54,19 @@ const VIS_SAME = 2
  *  when within 3px (lattice corner vs authored apex can differ ~1px + AA shift). */
 const DETECT_R = 3
 
-interface Corner { x: number; y: number; itx: number; ity: number; otx: number; oty: number }
+interface Corner {
+  x: number
+  y: number
+  itx: number
+  ity: number
+  otx: number
+  oty: number
+}
 
-function pickCtrl(at: { x: number; y: number }, ...cands: ({ x: number; y: number } | null | undefined)[]): { x: number; y: number } {
+function pickCtrl(
+  at: { x: number; y: number },
+  ...cands: ({ x: number; y: number } | null | undefined)[]
+): { x: number; y: number } {
   for (const c of cands) if (c && Math.hypot(c.x - at.x, c.y - at.y) >= 1e-6) return c
   return at
 }
@@ -83,12 +93,17 @@ function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
         if (li < minEdge || lo2 < minEdge) continue
         const tin = pickCtrl(cur, cur.hIn, prev.hOut, prev)
         const tout = pickCtrl(cur, cur.hOut, next.hIn, next)
-        let ix = cur.x - tin.x, iy = cur.y - tin.y
-        let ox = tout.x - cur.x, oy = tout.y - cur.y
+        let ix = cur.x - tin.x,
+          iy = cur.y - tin.y
+        let ox = tout.x - cur.x,
+          oy = tout.y - cur.y
         const ln = Math.hypot(ix, iy)
         const lt = Math.hypot(ox, oy)
         if (ln < 1e-6 || lt < 1e-6) continue
-        ix /= ln; iy /= ln; ox /= lt; oy /= lt
+        ix /= ln
+        iy /= ln
+        ox /= lt
+        oy /= lt
         if (ix * ox + iy * oy <= cosMax) out.push({ x: cur.x, y: cur.y, itx: ix, ity: iy, otx: ox, oty: oy })
       }
     }
@@ -96,10 +111,15 @@ function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
   return out
 }
 
-function makeVisibleAt(raster: { width: number; height: number; data: Uint8ClampedArray }): (q: { x: number; y: number; tx: number; ty: number }) => boolean {
+function makeVisibleAt(raster: {
+  width: number
+  height: number
+  data: Uint8ClampedArray
+}): (q: { x: number; y: number; tx: number; ty: number }) => boolean {
   const { width, height, data } = raster
   const at = (x: number, y: number): number => {
-    const xi = Math.round(x), yi = Math.round(y)
+    const xi = Math.round(x),
+      yi = Math.round(y)
     if (xi < 0 || yi < 0 || xi >= width || yi >= height) return -1
     const o = (yi * width + xi) * 4
     return (data[o] << 16) | (data[o + 1] << 8) | data[o + 2]
@@ -164,7 +184,10 @@ const shapes = toRasterSpace(parseGroundTruth(svg), img.width)
 const visible = makeVisibleAt(img)
 
 // GT corners per shape (rect / circle / polygon), scorer rules: minEdge 7 + visibility.
-interface GtCorner extends Corner { shape: string; kind: 'canvas' | 'tip' | 'root' }
+interface GtCorner extends Corner {
+  shape: string
+  kind: 'canvas' | 'tip' | 'root'
+}
 const GEAR_C = { x: 156, y: 344 } // authored (78,172) ×2
 const gtCorners: GtCorner[] = []
 for (const s of shapes) {
@@ -180,7 +203,9 @@ for (const s of shapes) {
 const gearGt = gtCorners.filter((c) => c.shape === 'polygon')
 const canvasGt = gtCorners.filter((c) => c.shape !== 'polygon')
 console.log(`GT corners (scorer's reader, minEdge=${CORNER_MIN_EDGE}, visible): total ${gtCorners.length}`)
-console.log(`  gear polygon: ${gearGt.length} (tips ${gearGt.filter((c) => c.kind === 'tip').length}, roots ${gearGt.filter((c) => c.kind === 'root').length}), canvas rect: ${canvasGt.length}`)
+console.log(
+  `  gear polygon: ${gearGt.length} (tips ${gearGt.filter((c) => c.kind === 'tip').length}, roots ${gearGt.filter((c) => c.kind === 'root').length}), canvas rect: ${canvasGt.length}`,
+)
 
 // Authored chord lengths (feature size at the teeth) from consecutive gear GT vertices.
 {
@@ -188,16 +213,24 @@ console.log(`  gear polygon: ${gearGt.length} (tips ${gearGt.filter((c) => c.kin
   const chords: number[] = []
   for (let i = 0; i < poly.length; i++) chords.push(dist(poly[i], poly[(i + 1) % poly.length]))
   chords.sort((a, b) => a - b)
-  console.log(`  gear chords @${RES}: min ${f(chords[0])} median ${f(chords[chords.length >> 1])} max ${f(chords[chords.length - 1])} px  (disc r=124, gear rTip=56 rRoot=44, tooth height 12)`)
+  console.log(
+    `  gear chords @${RES}: min ${f(chords[0])} median ${f(chords[chords.length >> 1])} max ${f(chords[chords.length - 1])} px  (disc r=124, gear rTip=56 rRoot=44, tooth height 12)`,
+  )
 }
 
 // AUTHORED turn angle at each GT corner (from the scorer's own tangents) — how the
 // geometry compares to the detector's cornerTurnDeg=70 and the scorer's 60° floor.
 {
-  const turnOf = (c: Corner): number => (Math.acos(Math.max(-1, Math.min(1, c.itx * c.otx + c.ity * c.oty))) * 180) / Math.PI
+  const turnOf = (c: Corner): number =>
+    (Math.acos(Math.max(-1, Math.min(1, c.itx * c.otx + c.ity * c.oty))) * 180) / Math.PI
   for (const kind of ['tip', 'root'] as const) {
-    const ts = gearGt.filter((c) => c.kind === kind).map(turnOf).sort((a, b) => a - b)
-    console.log(`  authored turn (${kind}s): min ${f(ts[0], 1)}° median ${f(ts[ts.length >> 1], 1)}° max ${f(ts[ts.length - 1], 1)}°   [detector needs >70°, scorer grades ≥60°]`)
+    const ts = gearGt
+      .filter((c) => c.kind === kind)
+      .map(turnOf)
+      .sort((a, b) => a - b)
+    console.log(
+      `  authored turn (${kind}s): min ${f(ts[0], 1)}° median ${f(ts[ts.length >> 1], 1)}° max ${f(ts[ts.length - 1], 1)}°   [detector needs >70°, scorer grades ≥60°]`,
+    )
   }
 }
 
@@ -212,8 +245,14 @@ const paletteOpts = {
   minRegionArea: Math.max(24, Math.round(0.25 * 0.25 * 800)),
   regionEvidence: true,
 }
-const fp = segmentFlatPalette(img as unknown as { width: number; height: number; data: Uint8ClampedArray }, paletteOpts, undefined)
-console.log(`\nsegmentFlatPalette: ${fp.palette.length} colours, flatCoverage ${f(fp.flatCoverage, 3)}, dominantColors ${fp.dominantColors} (kept: ${fp.flatCoverage >= 0.7 && fp.dominantColors <= 14})`)
+const fp = segmentFlatPalette(
+  img as unknown as { width: number; height: number; data: Uint8ClampedArray },
+  paletteOpts,
+  undefined,
+)
+console.log(
+  `\nsegmentFlatPalette: ${fp.palette.length} colours, flatCoverage ${f(fp.flatCoverage, 3)}, dominantColors ${fp.dominantColors} (kept: ${fp.flatCoverage >= 0.7 && fp.dominantColors <= 14})`,
+)
 const labels = healColorSpikes(fp.labels, img.data as unknown as Uint8ClampedArray, img.width, img.height, fp.palette)
 
 // Ink label = palette entry nearest the authored INK rgb(26,26,34).
@@ -222,14 +261,19 @@ let inkLabel = 0
   let best = Infinity
   fp.palette.forEach((c, i) => {
     const d = (c.r - 26) ** 2 + (c.g - 26) ** 2 + (c.b - 34) ** 2
-    if (d < best) { best = d; inkLabel = i }
+    if (d < best) {
+      best = d
+      inkLabel = i
+    }
   })
 }
 
 const net = buildPlanarNetwork(labels, img.width, img.height)
 const gearEdges = net.edges.filter((e) => e.closed && (e.left === inkLabel || e.right === inkLabel))
 const gearOpenEdges = net.edges.filter((e) => !e.closed && (e.left === inkLabel || e.right === inkLabel))
-console.log(`planar network: ${net.edges.length} edges, ${net.junctions.length} junctions; ink label ${inkLabel} → ${gearEdges.length} closed loop(s) + ${gearOpenEdges.length} open edge(s)`)
+console.log(
+  `planar network: ${net.edges.length} edges, ${net.junctions.length} junctions; ink label ${inkLabel} → ${gearEdges.length} closed loop(s) + ${gearOpenEdges.length} open edge(s)`,
+)
 const loop = gearEdges.reduce((a, b) => (a.pts.length >= b.pts.length ? a : b))
 const pts = loop.pts
 console.log(`gear loop: ${pts.length} staircase pts (perimeter ≈ ${pts.length}px crack steps)`)
@@ -255,11 +299,16 @@ const apexPts = apexIdx.map((i) => pts[i])
   for (let k = 0; k < apexIdx.length; k++) {
     const a = apexIdx[k]
     const b = apexIdx[(k + 1) % apexIdx.length]
-    arcs.push(((b - a) % pts.length + pts.length) % pts.length)
+    arcs.push((((b - a) % pts.length) + pts.length) % pts.length)
   }
   arcs.sort((x, y) => x - y)
-  console.log(`\nStage A: ${rawSet.size} raw sharp vertices   Stage B: ${apexIdx.length} apexes (of ${gearGt.length} true corners)`)
-  if (arcs.length > 0) console.log(`  inter-apex staircase arcs: min ${arcs[0]} median ${arcs[arcs.length >> 1]} max ${arcs[arcs.length - 1]} steps`)
+  console.log(
+    `\nStage A: ${rawSet.size} raw sharp vertices   Stage B: ${apexIdx.length} apexes (of ${gearGt.length} true corners)`,
+  )
+  if (arcs.length > 0)
+    console.log(
+      `  inter-apex staircase arcs: min ${arcs[0]} median ${arcs[arcs.length >> 1]} max ${arcs[arcs.length - 1]} steps`,
+    )
 }
 
 // Stage C — the exact per-edge fit assemblePlanar runs for this loop.
@@ -269,11 +318,17 @@ else fitNodes = fitLoopEdge(presmooth(pts, fitOpts.smoothPasses, false, rawSet),
 const rawArea = Math.abs(polySignedArea(pts))
 const fitArea = Math.abs(polySignedArea(flattenNodes(fitNodes)))
 const areaGuardTripped = rawArea >= 4 && fitArea < rawArea * 0.75
-console.log(`Stage C: fitCorneredLoop → ${fitNodes.length} nodes; area ${f(fitArea, 0)}/${f(rawArea, 0)} (guard tripped: ${areaGuardTripped})`)
+console.log(
+  `Stage C: fitCorneredLoop → ${fitNodes.length} nodes; area ${f(fitArea, 0)}/${f(rawArea, 0)} (guard tripped: ${areaGuardTripped})`,
+)
 const fitCornerPts = sharpCorners([[{ nodes: fitNodes, closed: true }]])
 
 // FINAL — the real full pipeline (fit + beautify + reseat + weld), scorer-matched.
-const doc = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false })
+const doc = await traceImage(img as unknown as ImageData, {
+  ...DEFAULT_VECTORIZE_OPTIONS,
+  engine: 'planar',
+  gradients: false,
+})
 const docSets: SubPath[][] = []
 for (const item of doc.items) {
   if (item.kind !== 'path' || item.visible === false) continue
@@ -281,12 +336,21 @@ for (const item of doc.items) {
 }
 const docCorners = sharpCorners(docSets)
 const recoveredAll = gtCorners.filter((g) => nearest(g, docCorners) <= CORNER_MATCH_R)
-console.log(`FINAL doc: ${docCorners.length} sharp corners; scorer match: ${pct(recoveredAll.length, gtCorners.length)}  [gate measured 21/60]`)
+console.log(
+  `FINAL doc: ${docCorners.length} sharp corners; scorer match: ${pct(recoveredAll.length, gtCorners.length)}  [gate measured 21/60]`,
+)
 
 // ---------------------------------------------------------------------------
 // 4. per-corner attribution + histogram
 // ---------------------------------------------------------------------------
-interface Verdict { g: GtCorner; dA: number; dB: number; dC: number; dF: number; fate: string }
+interface Verdict {
+  g: GtCorner
+  dA: number
+  dB: number
+  dC: number
+  dF: number
+  fate: string
+}
 const verdicts: Verdict[] = gtCorners.map((g) => {
   const dA = g.shape === 'polygon' ? nearest(g, rawPts) : NaN
   const dB = g.shape === 'polygon' ? nearest(g, apexPts) : NaN
@@ -309,9 +373,13 @@ for (const [fate, n] of [...hist.entries()].sort()) console.log(`  ${fate.padEnd
 
 // Where the survivors live.
 const surv = verdicts.filter((v) => v.fate === 'RECOVERED')
-console.log(`\nsurvivors by location: canvas ${surv.filter((v) => v.g.kind === 'canvas').length}, gear tips ${surv.filter((v) => v.g.kind === 'tip').length}, gear roots ${surv.filter((v) => v.g.kind === 'root').length}`)
+console.log(
+  `\nsurvivors by location: canvas ${surv.filter((v) => v.g.kind === 'canvas').length}, gear tips ${surv.filter((v) => v.g.kind === 'tip').length}, gear roots ${surv.filter((v) => v.g.kind === 'root').length}`,
+)
 const lostGear = verdicts.filter((v) => v.g.shape === 'polygon' && v.fate !== 'RECOVERED')
-console.log(`lost gear corners by kind: tips ${lostGear.filter((v) => v.g.kind === 'tip').length}, roots ${lostGear.filter((v) => v.g.kind === 'root').length}`)
+console.log(
+  `lost gear corners by kind: tips ${lostGear.filter((v) => v.g.kind === 'tip').length}, roots ${lostGear.filter((v) => v.g.kind === 'root').length}`,
+)
 
 // Stage-by-stage survival on the gear only (independent of final attribution).
 const gearV = verdicts.filter((v) => v.g.shape === 'polygon')
@@ -324,7 +392,9 @@ console.log(`  F final doc:    ${pct(gearV.filter((v) => v.dF <= CORNER_MATCH_R)
 // Detail dump of the lost corners (positions + per-stage distances).
 console.log('\nlost corners detail (x,y kind | dA dB dC dF):')
 for (const v of verdicts.filter((x) => x.fate !== 'RECOVERED')) {
-  console.log(`  (${f(v.g.x, 1)},${f(v.g.y, 1)}) ${v.g.kind.padEnd(6)} | A ${f(v.dA, 1)}  B ${f(v.dB, 1)}  C ${f(v.dC, 1)}  F ${f(v.dF, 1)}  → ${v.fate}`)
+  console.log(
+    `  (${f(v.g.x, 1)},${f(v.g.y, 1)}) ${v.g.kind.padEnd(6)} | A ${f(v.dA, 1)}  B ${f(v.dB, 1)}  C ${f(v.dC, 1)}  F ${f(v.dF, 1)}  → ${v.fate}`,
+  )
 }
 
 // MEASURED window-turn at each GT corner: what the ±win cos test actually reads on
@@ -333,19 +403,26 @@ for (const v of verdicts.filter((x) => x.fate !== 'RECOVERED')) {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
   const measuredTurn = (i: number, win: number): number => {
-    const a = pts[wrap(i - win)], b = pts[i], c = pts[wrap(i + win)]
+    const a = pts[wrap(i - win)],
+      b = pts[i],
+      c = pts[wrap(i + win)]
     const inD = { x: b.x - a.x, y: b.y - a.y }
     const outD = { x: c.x - b.x, y: c.y - b.y }
-    const li = Math.hypot(inD.x, inD.y), lo = Math.hypot(outD.x, outD.y)
+    const li = Math.hypot(inD.x, inD.y),
+      lo = Math.hypot(outD.x, outD.y)
     if (li < 1e-9 || lo < 1e-9) return 0
     const cos = (inD.x * outD.x + inD.y * outD.y) / (li * lo)
     return (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI
   }
   const nearestIdx = (g: { x: number; y: number }): number => {
-    let bi = 0, bd = Infinity
+    let bi = 0,
+      bd = Infinity
     for (let i = 0; i < n; i++) {
       const d = dist(g, pts[i])
-      if (d < bd) { bd = d; bi = i }
+      if (d < bd) {
+        bd = d
+        bi = i
+      }
     }
     return bi
   }
@@ -376,7 +453,9 @@ for (const v of verdicts.filter((x) => x.fate !== 'RECOVERED')) {
     console.log('\nstage-C loss anatomy (dNode = nearest fitted anchor of ANY kind):')
     for (const v of cLost) {
       const dNode = nearest(v.g, fitNodes)
-      console.log(`  (${f(v.g.x, 1)},${f(v.g.y, 1)}) ${v.g.kind}: apex evidence ${f(v.dB, 1)}px → sharp node ${f(v.dC, 1)}px, any node ${f(dNode, 1)}px  ⇒ ${v.dC < 6 ? 'MISPLACED (snap moved the apex)' : 'MELTED'}`)
+      console.log(
+        `  (${f(v.g.x, 1)},${f(v.g.y, 1)}) ${v.g.kind}: apex evidence ${f(v.dB, 1)}px → sharp node ${f(v.dC, 1)}px, any node ${f(dNode, 1)}px  ⇒ ${v.dC < 6 ? 'MISPLACED (snap moved the apex)' : 'MELTED'}`,
+      )
     }
   }
 }
@@ -393,7 +472,9 @@ for (const win of [2, 3, 4]) {
     const hit = gearGt.filter((g) => nearest(g, aPts) <= DETECT_R).length
     // spurious = apexes not within DETECT_R of any GT gear corner
     const spur = aPts.filter((p) => nearest(p, gearGt) > DETECT_R).length
-    console.log(`  ${String(win).padStart(3)}  ${String(md).padStart(5)} | ${String(idx.length).padStart(6)}  ${pct(hit, gearGt.length).padStart(13)}  ${String(spur).padStart(8)}`)
+    console.log(
+      `  ${String(win).padStart(3)}  ${String(md).padStart(5)} | ${String(idx.length).padStart(6)}  ${pct(hit, gearGt.length).padStart(13)}  ${String(spur).padStart(8)}`,
+    )
   }
 }
 
@@ -413,9 +494,14 @@ let discPts: Vec[] = []
   let best = Infinity
   fp.palette.forEach((c, i) => {
     const d = (c.r - 32) ** 2 + (c.g - 46) ** 2 + (c.b - 120) ** 2
-    if (d < best) { best = d; navyLabel = i }
+    if (d < best) {
+      best = d
+      navyLabel = i
+    }
   })
-  const discLoop = net.edges.filter((e) => e.closed && (e.left === navyLabel || e.right === navyLabel)).reduce((a, b) => (a.pts.length >= b.pts.length ? a : b), { pts: [] as Vec[] } as (typeof net.edges)[0])
+  const discLoop = net.edges
+    .filter((e) => e.closed && (e.left === navyLabel || e.right === navyLabel))
+    .reduce((a, b) => (a.pts.length >= b.pts.length ? a : b), { pts: [] as Vec[] } as (typeof net.edges)[0])
   discPts = discLoop.pts
 }
 
@@ -432,7 +518,9 @@ for (const turn of [55, 60, 65, 70]) {
     const roots = gearGt.filter((g) => g.kind === 'root' && nearest(g, aPts) <= DETECT_R).length
     const spur = aPts.filter((p) => nearest(p, gearGt) > DETECT_R).length
     const disc = discPts.length > 0 ? detectLoopCorners(discPts, turn, win, 5).length : -1
-    console.log(`  ${String(turn).padStart(5)}  ${String(win).padStart(3)} | ${String(idx.length).padStart(6)}  ${String(tips).padStart(5)}/28    ${String(roots).padStart(5)}/28  ${String(spur).padStart(8)}  ${String(disc).padStart(8)}`)
+    console.log(
+      `  ${String(turn).padStart(5)}  ${String(win).padStart(3)} | ${String(idx.length).padStart(6)}  ${String(tips).padStart(5)}/28    ${String(roots).padStart(5)}/28  ${String(spur).padStart(8)}  ${String(disc).padStart(8)}`,
+    )
   }
 }
 console.log(`\ndisc control: loop ${discPts.length} pts (smooth circle, r=124) — discApex column above must stay 0`)
@@ -444,7 +532,13 @@ console.log(`\ndisc control: loop ${discPts.length} pts (smooth circle, r=124) �
 // ---------------------------------------------------------------------------
 console.log('\n=== WHAT-IF: detector settings → unchanged fitCorneredLoop → scorer match ===')
 console.log('  turn°  win | apexes  fitNodes  sharp  gearHit(2.5px)  tips  roots  gear+canvas')
-for (const [turn, win] of [[70, 4], [60, 3], [60, 4], [55, 3], [60, 5]] as [number, number][]) {
+for (const [turn, win] of [
+  [70, 4],
+  [60, 3],
+  [60, 4],
+  [55, 3],
+  [60, 5],
+] as [number, number][]) {
   const idx = detectLoopCorners(pts, turn, win, 5)
   if (idx.length < 2) continue
   const nodes = fitCorneredLoop(pts, idx, fitOpts)
@@ -453,7 +547,9 @@ for (const [turn, win] of [[70, 4], [60, 3], [60, 4], [55, 3], [60, 5]] as [numb
   const roots = gearGt.filter((g) => g.kind === 'root' && nearest(g, sharp) <= CORNER_MATCH_R).length
   const hit = tips + roots
   const total = hit + 4 // canvas rect corners recovered by the bg region in the real pipeline
-  console.log(`  ${String(turn).padStart(5)}  ${String(win).padStart(3)} | ${String(idx.length).padStart(6)}  ${String(nodes.length).padStart(8)}  ${String(sharp.length).padStart(5)}  ${pct(hit, 56).padStart(14)}  ${String(tips).padStart(4)}  ${String(roots).padStart(5)}  ${pct(total, 60).padStart(12)}${total >= 48 ? '  ← would PASS gate' : ''}`)
+  console.log(
+    `  ${String(turn).padStart(5)}  ${String(win).padStart(3)} | ${String(idx.length).padStart(6)}  ${String(nodes.length).padStart(8)}  ${String(sharp.length).padStart(5)}  ${pct(hit, 56).padStart(14)}  ${String(tips).padStart(4)}  ${String(roots).padStart(5)}  ${pct(total, 60).padStart(12)}${total >= 48 ? '  ← would PASS gate' : ''}`,
+  )
 }
 
 // Snap displacement stats under the best detector setting: how far does
@@ -468,5 +564,7 @@ for (const [turn, win] of [[70, 4], [60, 3], [60, 4], [55, 3], [60, 5]] as [numb
     .map((x) => x.d)
     .sort((a, b) => a - b)
   console.log(`\nsnap displacement @60°/win3 (authored corner → nearest fitted sharp node, <8px):`)
-  console.log(`  n=${ds.length}  min ${f(ds[0], 2)}  median ${f(ds[ds.length >> 1], 2)}  p90 ${f(ds[Math.floor(ds.length * 0.9)], 2)}  max ${f(ds[ds.length - 1], 2)}  (scorer R=${CORNER_MATCH_R})`)
+  console.log(
+    `  n=${ds.length}  min ${f(ds[0], 2)}  median ${f(ds[ds.length >> 1], 2)}  p90 ${f(ds[Math.floor(ds.length * 0.9)], 2)}  max ${f(ds[ds.length - 1], 2)}  (scorer R=${CORNER_MATCH_R})`,
+  )
 }

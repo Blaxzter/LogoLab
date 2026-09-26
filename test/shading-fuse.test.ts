@@ -45,7 +45,9 @@ function makeImage(w: number, h: number, fill: (x: number, y: number) => Rgb): I
 }
 
 const lerp = (a: Rgb, b: Rgb, t: number): Rgb => [
-  Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t),
+  Math.round(a[0] + (b[0] - a[0]) * t),
+  Math.round(a[1] + (b[1] - a[1]) * t),
+  Math.round(a[2] + (b[2] - a[2]) * t),
 ]
 const de = (a: Rgb, b: Rgb): number => deltaE76(srgbToLab(...a), srgbToLab(...b))
 
@@ -60,7 +62,8 @@ function twoTone(a: Rgb, b: Rgb, ramp: number): Img {
   return makeImage(160, 96, (x, y) => {
     if (x < 16 || x >= 144 || y < 16 || y >= 80) return WHITE
     const u = x - 16 // 0..127 across the block
-    const x0 = 64 - ramp / 2, x1 = 64 + ramp / 2
+    const x0 = 64 - ramp / 2,
+      x1 = 64 + ramp / 2
     if (u < x0) return a
     if (u >= x1) return b
     return lerp(a, b, (u - x0) / Math.max(1, ramp))
@@ -81,8 +84,12 @@ test('two tones joined by a soft ramp fuse into ONE entry', () => {
   for (let y = 16; y < 80; y++) for (let x = 16; x < 144; x++) inkLabels.add(fused.labels[y * 160 + x])
   assert.equal(inkLabels.size, 1, `ink should be one label, got ${[...inkLabels].join(',')}`)
   // Counts still sum to the opaque pixel total and the palette is count-descending.
-  assert.equal(fused.counts.reduce((s, c) => s + c, 0), 160 * 96)
-  for (let i = 1; i < fused.counts.length; i++) assert.ok(fused.counts[i - 1] >= fused.counts[i], 'counts must stay descending')
+  assert.equal(
+    fused.counts.reduce((s, c) => s + c, 0),
+    160 * 96,
+  )
+  for (let i = 1; i < fused.counts.length; i++)
+    assert.ok(fused.counts[i - 1] >= fused.counts[i], 'counts must stay descending')
 })
 
 test('the SAME two tones meeting at a crisp seam stay TWO entries (byte-identical no-op)', () => {
@@ -91,13 +98,15 @@ test('the SAME two tones meeting at a crisp seam stay TWO entries (byte-identica
   const { q: out, groups } = fuseShadingTones(img, q)
   assert.equal(groups.length, 0)
   assert.equal(out, q, 'a no-op must return the very same object')
-  const left = q.labels[48 * 160 + 40], right = q.labels[48 * 160 + 120]
+  const left = q.labels[48 * 160 + 40],
+    right = q.labels[48 * 160 + 120]
   assert.notEqual(left, right, 'the two authored tones must keep separate labels')
 })
 
 test('a soft chain spanning more than SHADE_SPAN is a gradient, not a shading — untouched', () => {
   // Same layout, a wide ramp between two colours far apart in ΔE (well over the cap).
-  const A: Rgb = [30, 60, 200], B: Rgb = [220, 60, 90]
+  const A: Rgb = [30, 60, 200],
+    B: Rgb = [220, 60, 90]
   assert.ok(de(A, B) > SHADE_SPAN * 2, 'precondition: the pair must span far more than SHADE_SPAN')
   const img = twoTone(A, B, 96)
   const q = flatQuantize(img)
@@ -130,7 +139,10 @@ async function fillsOf(over: Record<string, unknown>): Promise<string[]> {
   const svg = readFileSync(FIXTURE, 'utf8')
   const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, paletteSegment: over,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    paletteSegment: over,
   })
   const fills: string[] = []
   for (const it of doc.items) if (it.kind === 'path' && it.visible !== false) fills.push(it.fill.toLowerCase())
@@ -151,10 +163,16 @@ const isInk = (f: string): boolean => {
 test('shaded-ink: the fusion OFF carves the ink into several fills; ON paints it as ONE', async () => {
   const off = await fillsOf({ shadingFuse: false })
   const on = await fillsOf({})
-  const inkOff = new Set(off.filter(isInk)), inkOn = new Set(on.filter(isInk))
-  assert.ok(inkOff.size >= 2, `precondition: with the fusion off the ink must be carved into ≥ 2 tones (got ${[...inkOff].join(',')})`)
+  const inkOff = new Set(off.filter(isInk)),
+    inkOn = new Set(on.filter(isInk))
+  assert.ok(
+    inkOff.size >= 2,
+    `precondition: with the fusion off the ink must be carved into ≥ 2 tones (got ${[...inkOff].join(',')})`,
+  )
   assert.equal(inkOn.size, 1, `with the fusion on the ink must be ONE fill (got ${[...inkOn].join(',')})`)
   // The ΔE 4.63 distinct-colour control survives BOTH ways — the fusion cannot buy the ink
   // by merging the pair the issue said must not merge.
-  for (const fills of [off, on]) for (const c of CONTROL) assert.ok(fills.includes(c), `control ${c} must be traced verbatim (fills: ${fills.join(',')})`)
+  for (const fills of [off, on])
+    for (const c of CONTROL)
+      assert.ok(fills.includes(c), `control ${c} must be traced verbatim (fills: ${fills.join(',')})`)
 })

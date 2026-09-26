@@ -162,14 +162,27 @@ export default function ExportPanel(): ReactNode {
         includeHtml,
         svgText: logo.isSvg ? logo.svgText : null,
       })
-      const safeName = (env.brandName.trim() || 'app').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      const safeName = (env.brandName.trim() || 'app')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
       downloadBlob(blob, `${safeName || 'app'}-icons.zip`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Export failed')
     } finally {
       setBusy(false)
     }
-  }, [logo.src, logo.isSvg, logo.svgText, selectedCount, targets, baseOpts, env.brandName, includeManifest, includeHtml])
+  }, [
+    logo.src,
+    logo.isSvg,
+    logo.svgText,
+    selectedCount,
+    targets,
+    baseOpts,
+    env.brandName,
+    includeManifest,
+    includeHtml,
+  ])
 
   /* -------------------------------------------------------------- empty state */
 
@@ -192,8 +205,8 @@ export default function ExportPanel(): ReactNode {
       <header className="mb-6">
         <h1 className="text-lg font-semibold text-ink">Export icons</h1>
         <p className="mt-1 text-sm text-muted">
-          Generate a production-ready favicon &amp; PWA icon set. Icon look follows the sidebar appearance
-          (card color, shape, radius, padding, scale &amp; tint).
+          Generate a production-ready favicon &amp; PWA icon set. Icon look follows the sidebar appearance (card color,
+          shape, radius, padding, scale &amp; tint).
         </p>
       </header>
 
@@ -281,9 +294,9 @@ export default function ExportPanel(): ReactNode {
               </label>
             </div>
             <p className="mt-3 rounded-md bg-surface-3 px-3 py-2 text-xs leading-snug text-muted">
-              Maskable icons are drawn full-bleed and opaque with an enlarged safe-zone so Android can crop them
-              to any shape without clipping your mark. The dashed circle in the preview is that crop — the centre
-              66% Android guarantees, a circle rather than a square.
+              Maskable icons are drawn full-bleed and opaque with an enlarged safe-zone so Android can crop them to any
+              shape without clipping your mark. The dashed circle in the preview is that crop — the centre 66% Android
+              guarantees, a circle rather than a square.
             </p>
           </section>
         </div>
@@ -299,15 +312,9 @@ export default function ExportPanel(): ReactNode {
               <CheckerToggle />
             </div>
 
-            <PreviewGrid
-              src={logo.src}
-              svgText={logo.isSvg ? logo.svgText : null}
-              baseOpts={baseOpts}
-            />
+            <PreviewGrid src={logo.src} svgText={logo.isSvg ? logo.svgText : null} baseOpts={baseOpts} />
 
-            {error && (
-              <p className="rounded-md bg-[color:var(--color-bad)]/8 px-3 py-2 text-xs text-bad">{error}</p>
-            )}
+            {error && <p className="rounded-md bg-[color:var(--color-bad)]/8 px-3 py-2 text-xs text-bad">{error}</p>}
 
             <Button
               variant="primary"

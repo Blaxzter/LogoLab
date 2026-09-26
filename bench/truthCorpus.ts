@@ -105,31 +105,97 @@ export interface TruthCase {
  */
 export const TRUTH_CORPUS: TruthCase[] = [
   // --- the tracer's own hard problems -------------------------------------------------
-  { name: 'bg-ramp', svg: 'public/examples/edge-cases/bg-ramp.svg', note: 'posterized ramp — background reunification', gradients: true, tier: 0 },
-  { name: 'bg-ramp-twin', svg: 'public/examples/edge-cases/bg-ramp-twin.svg', note: 'shape sharing a band colour — the colour-class DELETE risk', gradients: true, tier: 0 },
-  { name: 'gradient-flat', svg: 'public/examples/edge-cases/gradient-flat.svg', note: 'gradient bg + crisp flats — the render gate must not absorb them', gradients: true, tier: 0 },
-  { name: 'radial-glow', svg: 'public/examples/edge-cases/radial-glow.svg', note: 'radial vignette — 2-D gradient paint model', gradients: true, tier: 0 },
+  {
+    name: 'bg-ramp',
+    svg: 'public/examples/edge-cases/bg-ramp.svg',
+    note: 'posterized ramp — background reunification',
+    gradients: true,
+    tier: 0,
+  },
+  {
+    name: 'bg-ramp-twin',
+    svg: 'public/examples/edge-cases/bg-ramp-twin.svg',
+    note: 'shape sharing a band colour — the colour-class DELETE risk',
+    gradients: true,
+    tier: 0,
+  },
+  {
+    name: 'gradient-flat',
+    svg: 'public/examples/edge-cases/gradient-flat.svg',
+    note: 'gradient bg + crisp flats — the render gate must not absorb them',
+    gradients: true,
+    tier: 0,
+  },
+  {
+    name: 'radial-glow',
+    svg: 'public/examples/edge-cases/radial-glow.svg',
+    note: 'radial vignette — 2-D gradient paint model',
+    gradients: true,
+    tier: 0,
+  },
 
   // --- classic tracer failure modes ---------------------------------------------------
-  { name: 'concentric', svg: 'public/examples/edge-cases/concentric.svg', note: 'concentric rings — circle snap, equal-radius solver', gradients: false, tier: 0 },
-  { name: 'sharp-star', svg: 'public/examples/edge-cases/sharp-star.svg', note: 'sharp points — corner preservation', gradients: false, tier: 0 },
-  { name: 'aa-seam', svg: 'public/examples/edge-cases/aa-seam.svg', note: 'soft diagonal between flats — the AA sliver', gradients: false, tier: 0 },
-  { name: 'checker', svg: 'public/examples/edge-cases/checker.svg', note: 'fine checkerboard — high-frequency aliasing', gradients: false, tier: 0 },
-  { name: 'overlap', svg: 'public/examples/edge-cases/overlap.svg', note: 'translucent discs — layer decomposition', gradients: false, tier: 0 },
+  {
+    name: 'concentric',
+    svg: 'public/examples/edge-cases/concentric.svg',
+    note: 'concentric rings — circle snap, equal-radius solver',
+    gradients: false,
+    tier: 0,
+  },
+  {
+    name: 'sharp-star',
+    svg: 'public/examples/edge-cases/sharp-star.svg',
+    note: 'sharp points — corner preservation',
+    gradients: false,
+    tier: 0,
+  },
+  {
+    name: 'aa-seam',
+    svg: 'public/examples/edge-cases/aa-seam.svg',
+    note: 'soft diagonal between flats — the AA sliver',
+    gradients: false,
+    tier: 0,
+  },
+  {
+    name: 'checker',
+    svg: 'public/examples/edge-cases/checker.svg',
+    note: 'fine checkerboard — high-frequency aliasing',
+    gradients: false,
+    tier: 0,
+  },
+  {
+    name: 'overlap',
+    svg: 'public/examples/edge-cases/overlap.svg',
+    note: 'translucent discs — layer decomposition',
+    gradients: false,
+    tier: 0,
+  },
   // The §10 DRIVER, authored deliberately red (2026-07-21): tooth chords ≥ 7.5px @512 (above
   // the CORNER_MIN_EDGE grading floor, cleanly resolved) but corner spacing 7.5–12.5px — inside
   // the wash zone of the fit's fixed ±4px corner window, so most corners melt while boundary
   // stays sub-tolerance (0.22/0.78). Only the distance-blind corner gate sees it. localScaleK
   // does not move it (it gates the SNAPS; this loss is in the FIT) — the case exists to demand
   // the scale-aware fit ε / detector windows of §10's open half.
-  { name: 'gear-teeth', svg: 'public/examples/edge-cases/gear-teeth.svg', note: 'small sharp teeth + large smooth disc — scale-blind fit ε / corner window (§10.5)', gradients: false, tier: 0 },
+  {
+    name: 'gear-teeth',
+    svg: 'public/examples/edge-cases/gear-teeth.svg',
+    note: 'small sharp teeth + large smooth disc — scale-blind fit ε / corner window (§10.5)',
+    gradients: false,
+    tier: 0,
+  },
   // The §0 #6b driver, authored deliberately red (2026-07-28, the gear-teeth §10.5 pattern):
   // butt-capped 7px bars at the AA phases where the cap corners bevel/blunt away — measured
   // 30/43 = 69.8% corner recall at HEAD (< 80%) while every boundary gate stays green. The
   // regime was located by a real-pipeline sweep (capDiag.ts): 7px = CORNER_MIN_EDGE, the
   // narrowest gradeable cap; w8+ is phase-robust and the in-case w8/w10 controls must stay
   // green through any fix. See genEdgeCases.ts for the per-bar (angle, phase) cells.
-  { name: 'bar-caps', svg: 'public/examples/edge-cases/bar-caps.svg', note: 'butt-capped 7px bars at AA-losing phases — cap corner recall (§0 #6b)', gradients: false, tier: 0 },
+  {
+    name: 'bar-caps',
+    svg: 'public/examples/edge-cases/bar-caps.svg',
+    note: 'butt-capped 7px bars at AA-losing phases — cap corner recall (§0 #6b)',
+    gradients: false,
+    tier: 0,
+  },
   // The CONTRAST-RANK driver (user-reported 2026-07-30, /labs/gallery on the Affinity mark).
   // A weak colour boundary (ΔE 2.7–7.5) terminating on a strong one (ΔE 47–58) splits the
   // strong edge and pins it at a junction placed by the weak evidence: the bar's flanks tilt
@@ -137,7 +203,13 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // are IN the answer sheet — the ramp art that exposed it cannot be scored at all (§13's
   // "the defect exists only on the path nothing measures"). The control square is crossed by
   // nothing and must stay green. genEdgeCases.ts documents the rack.
-  { name: 'band-cross', svg: 'public/examples/edge-cases/band-cross.svg', note: 'weak boundaries landing on strong edges — contrast-ranked junctions', gradients: false, tier: 0 },
+  {
+    name: 'band-cross',
+    svg: 'public/examples/edge-cases/band-cross.svg',
+    note: 'weak boundaries landing on strong edges — contrast-ranked junctions',
+    gradients: false,
+    tier: 0,
+  },
 
   // Issue #17's driver, authored deliberately red (the gear-teeth §10.5 / bar-caps §0 #6b
   // pattern). An ACUTE LENS counter has two CURVED arms; the apex snap fits a straight line
@@ -147,7 +219,13 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // > 2px, worst 6.47px. The bottom row is the CONTROL that makes the case a test rather
   // than a target: eroded ink spikes whose reconstruction is RIGHT (overshoot −1.08px, i.e.
   // still inside the evidence), so "stop reconstructing" cannot pass this case.
-  { name: 'acute-counter', svg: 'public/examples/edge-cases/acute-counter.svg', note: 'acute lens counters — apex reconstructed past the ink (#17)', gradients: false, tier: 0 },
+  {
+    name: 'acute-counter',
+    svg: 'public/examples/edge-cases/acute-counter.svg',
+    note: 'acute lens counters — apex reconstructed past the ink (#17)',
+    gradients: false,
+    tier: 0,
+  },
 
   // Issue #7's driver (the mastercard "needle"), authored deliberately red. A letterform
   // join's corner has CURVED arms but is NOT acute; the apex snap's straight arm line is a
@@ -155,7 +233,13 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // needle into the 'e' stems) or off the crotch bisector — under §18's 2.5px floor, or
   // with the reach probe blinded by the AA fringe of the edge the ray runs along.
   // genEdgeCases.ts documents the rack; test/planar-needle.test.ts is the mechanism gate.
-  { name: 'letter-joins', svg: 'public/examples/edge-cases/letter-joins.svg', note: 'letterform joins — curved-arm corner apex displacement (#7)', gradients: false, tier: 0 },
+  {
+    name: 'letter-joins',
+    svg: 'public/examples/edge-cases/letter-joins.svg',
+    note: 'letterform joins — curved-arm corner apex displacement (#7)',
+    gradients: false,
+    tier: 0,
+  },
   // The SAME art traced with gradients ON — the step-ramp gate (§26). Flat art in the
   // gradient lane is the shape of the product's mixed case (real ramps + flat objects, where
   // gradients are correctly on and the flats must stay flat): the Step-3c field merge used
@@ -166,7 +250,13 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // gate ran only on gradients:false rows before, so the red number existed and was never
   // pointed at; this row points it. Region/corner/circle recovery are n/a here by the
   // gradient-lane rule (flatArt false) — the flat row above keeps those.
-  { name: 'letter-joins-grad', svg: 'public/examples/edge-cases/letter-joins.svg', note: 'the same letterforms, gradients ON — two flats fused into one step "gradient" (§26)', gradients: true, tier: 0 },
+  {
+    name: 'letter-joins-grad',
+    svg: 'public/examples/edge-cases/letter-joins.svg',
+    note: 'the same letterforms, gradients ON — two flats fused into one step "gradient" (§26)',
+    gradients: true,
+    tier: 0,
+  },
 
   // Issue #8's driver (the ibm mark's dropped ▼), authored deliberately red. A small solid
   // feature isolated by the art's own white gaps forms its own connected component; when
@@ -180,7 +270,13 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // corner count see it. The bottom-third shallow AA seam is the OTHER control: it is the
   // shrapnel the floor exists to sweep up, and it gates the fix's false-positive side
   // through node parsimony. genEdgeCases.ts documents the rack.
-  { name: 'peak-drop', svg: 'public/examples/edge-cases/peak-drop.svg', note: 'small isolated features under the despeckle area floor (#8)', gradients: false, tier: 0 },
+  {
+    name: 'peak-drop',
+    svg: 'public/examples/edge-cases/peak-drop.svg',
+    note: 'small isolated features under the despeckle area floor (#8)',
+    gradients: false,
+    tier: 0,
+  },
 
   // Issue #23's driver: a corner authored ABOVE the 60° sharp bar that the detector's ±4-
   // POINT chord reading UNDER-reads on the integer lattice, so it is never classified and
@@ -212,13 +308,32 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // eggs. Measured at authoring: the shipped tracer invents 11 corners here and the rejected
   // §22 reading invents 18, so the case has teeth in both directions. genEdgeCases.ts
   // documents the rack.
-  { name: 'smooth-radii', svg: 'public/examples/edge-cases/smooth-radii.svg', note: 'no authored corners at all — the corner-precision gate (#23)', gradients: false, tier: 0 },
+  {
+    name: 'smooth-radii',
+    svg: 'public/examples/edge-cases/smooth-radii.svg',
+    note: 'no authored corners at all — the corner-precision gate (#23)',
+    gradients: false,
+    tier: 0,
+  },
 
-  { name: 'corner-turns', svg: 'public/examples/edge-cases/corner-turns.svg', note: 'authored-turn sweep across the corner detector’s bar (#23)', gradients: false, tier: 0 },
-  { name: 'shaded-ink', svg: 'public/examples/edge-cases/shaded-ink.svg', note: 'one ink with soft shading — the colour path carves it (#15); carries its own ΔE 4.63 distinct-colour control', gradients: false, tier: 0, gated: true,
+  {
+    name: 'corner-turns',
+    svg: 'public/examples/edge-cases/corner-turns.svg',
+    note: 'authored-turn sweep across the corner detector’s bar (#23)',
+    gradients: false,
+    tier: 0,
+  },
+  {
+    name: 'shaded-ink',
+    svg: 'public/examples/edge-cases/shaded-ink.svg',
+    note: 'one ink with soft shading — the colour path carves it (#15); carries its own ΔE 4.63 distinct-colour control',
+    gradients: false,
+    tier: 0,
+    gated: true,
     // The three tones the shaded shapes are authored with (genEdgeCases.ts): one ink. The
     // control pair (#4a6aa8 / #5670a8) is deliberately NOT listed — it must stay two regions.
-    inkFamilies: [['#15251b', '#0f1c13', '#050f06']] },
+    inkFamilies: [['#15251b', '#0f1c13', '#050f06']],
+  },
   // The §0 #10 driver, authored deliberately RED (2026-09-03). The reported witness
   // `logo-olympic-rings` is authored with strokes and svgGround refuses it, so the defect
   // has never had a number; this is the same mechanism as filled annuli at the witness's
@@ -227,7 +342,14 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // co-circular snap is asked to fit points from two concentric circles to one circle and
   // cannot. The fourth ring is the same ring untouched — an in-case control that must stay
   // circular through any change here.
-  { name: 'ring-cross', svg: 'public/examples/edge-cases/ring-cross.svg', note: 'interlocking annuli — co-circular arc snap across crossings (#10)', gradients: false, tier: 0, gated: true },
+  {
+    name: 'ring-cross',
+    svg: 'public/examples/edge-cases/ring-cross.svg',
+    note: 'interlocking annuli — co-circular arc snap across crossings (#10)',
+    gradients: false,
+    tier: 0,
+    gated: true,
+  },
   // The §0 #9 driver, authored 2026-09-07 for the BORDER lane. Every other case here keeps
   // its art clear of the frame, so the one zone the scorer has always excluded had no gated
   // case at all — the same "author one first" the #15 premise re-check demanded. Its top fan
@@ -235,20 +357,63 @@ export const TRUTH_CORPUS: TruthCase[] = [
   // in open canvas, so the band-vs-interior ratio compares the tracer against itself on
   // identical geometry rather than against a different piece of art. genEdgeCases.ts has the
   // rack and the two rules the geometry obeys.
-  { name: 'border-cross', svg: 'public/examples/edge-cases/border-cross.svg', note: 'art meeting the canvas edge at four angles, with an interior twin fan as the control (#9)', gradients: false, tier: 0, gated: true },
+  {
+    name: 'border-cross',
+    svg: 'public/examples/edge-cases/border-cross.svg',
+    note: 'art meeting the canvas edge at four angles, with an interior twin fan as the control (#9)',
+    gradients: false,
+    tier: 0,
+    gated: true,
+  },
 
   // --- authored art we already own ----------------------------------------------------
   // All under public/ so the deployed view can fetch them — Vite's dev server also serves
   // the project root, which hid the fact that examples/*.svg would 404 in a real build.
-  { name: 'bloom', svg: 'public/examples/bloom.svg', note: 'translucent circles — 7 composited regions from 3 shapes', gradients: false, tier: 0 },
-  { name: 'nebula', svg: 'public/examples/nebula.svg', note: 'nested opaque shapes, two sharing a fill', gradients: false, tier: 0 },
+  {
+    name: 'bloom',
+    svg: 'public/examples/bloom.svg',
+    note: 'translucent circles — 7 composited regions from 3 shapes',
+    gradients: false,
+    tier: 0,
+  },
+  {
+    name: 'nebula',
+    svg: 'public/examples/nebula.svg',
+    note: 'nested opaque shapes, two sharing a fill',
+    gradients: false,
+    tier: 0,
+  },
   { name: 'petals', svg: 'public/examples/petals.svg', note: 'flat multi-region art', gradients: false, tier: 0 },
-  { name: 'aurora', svg: 'public/examples/aurora.svg', note: 'posterized diagonal ramp — jagged band boundaries', gradients: false, tier: 0 },
+  {
+    name: 'aurora',
+    svg: 'public/examples/aurora.svg',
+    note: 'posterized diagonal ramp — jagged band boundaries',
+    gradients: false,
+    tier: 0,
+  },
 
   // --- unscorable today: authored with strokes (see the note above) --------------------
-  { name: 'cross-bars', svg: 'public/examples/edge-cases/cross-bars.svg', note: 'crossing bars — junction weld', gradients: false, tier: 0 },
-  { name: 'annulus', svg: 'public/examples/edge-cases/annulus.svg', note: 'rings with a hole — winding + alpha', gradients: false, tier: 0 },
-  { name: 'hairlines', svg: 'public/examples/edge-cases/hairlines.svg', note: 'sub-pixel strokes — thin-feature preservation', gradients: false, tier: 0 },
+  {
+    name: 'cross-bars',
+    svg: 'public/examples/edge-cases/cross-bars.svg',
+    note: 'crossing bars — junction weld',
+    gradients: false,
+    tier: 0,
+  },
+  {
+    name: 'annulus',
+    svg: 'public/examples/edge-cases/annulus.svg',
+    note: 'rings with a hole — winding + alpha',
+    gradients: false,
+    tier: 0,
+  },
+  {
+    name: 'hairlines',
+    svg: 'public/examples/edge-cases/hairlines.svg',
+    note: 'sub-pixel strokes — thin-feature preservation',
+    gradients: false,
+    tier: 0,
+  },
 
   // --- TIER 1 — Fluent Emoji "Color" (MIT), generated; see ./fluentCorpus.ts ------------
   ...FLUENT_CORPUS,
@@ -795,10 +960,20 @@ export function evaluateTruthGates(s: {
   const cornersRecovered = s.cornersRecovered ?? 0
   const cornerApplicable = s.flatArt && gtCorners >= CORNER_MIN_COUNT
   const cornerRecall = gtCorners > 0 ? cornersRecovered / gtCorners : 1
-  const paintApplicable =
-    !s.flatArt && (s.tier ?? 0) === 0 && s.paintMean !== undefined && s.paintP95 !== undefined
-  const upper = (key: string, label: string, value: number, limit: number, digits: number, applicable = hasBoundary): TruthGate => ({
-    key, label, rule: `≤ ${limit}`, value, limit,
+  const paintApplicable = !s.flatArt && (s.tier ?? 0) === 0 && s.paintMean !== undefined && s.paintP95 !== undefined
+  const upper = (
+    key: string,
+    label: string,
+    value: number,
+    limit: number,
+    digits: number,
+    applicable = hasBoundary,
+  ): TruthGate => ({
+    key,
+    label,
+    rule: `≤ ${limit}`,
+    value,
+    limit,
     applicable,
     pass: applicable ? value <= limit : true,
     headroom: !applicable ? 1 : limit > 0 ? (limit - value) / limit : value <= 0 ? 1 : -1,
@@ -837,7 +1012,14 @@ export function evaluateTruthGates(s: {
     // §24 — a boundary the artist drew as one circle must come back as that circle, even
     // where crossings cut it into arcs. The only gate that can see the ring wobble (#10):
     // every distance gate averages it away and the corner gates exempt the junctions.
-    upper('circleSpread', 'circle recovery', s.circleSpread ?? 0, s.circleSpreadMax ?? CIRCLE_SPREAD_MAX, 2, circleApplicable),
+    upper(
+      'circleSpread',
+      'circle recovery',
+      s.circleSpread ?? 0,
+      s.circleSpreadMax ?? CIRCLE_SPREAD_MAX,
+      2,
+      circleApplicable,
+    ),
     // Render-vs-source paint fidelity — the gate that would have caught radial-glow's
     // re-centred glow (§10.3): a pure PAINT failure is invisible to every geometry
     // gate on gradient art, where region/corner recovery are n/a by construction.
@@ -871,8 +1053,7 @@ export function evaluateTruthGates(s: {
       limit: INK_MIN,
       applicable: s.flatArt && s.worstInk !== undefined,
       pass: !(s.flatArt && s.worstInk !== undefined) || s.worstInk >= INK_MIN,
-      headroom:
-        !(s.flatArt && s.worstInk !== undefined) ? 1 : (s.worstInk - INK_MIN) / (1 - INK_MIN),
+      headroom: !(s.flatArt && s.worstInk !== undefined) ? 1 : (s.worstInk - INK_MIN) / (1 - INK_MIN),
       digits: 2,
     },
     {
@@ -894,7 +1075,10 @@ export function evaluateTruthGates(s: {
       // instead.
       applicable: s.flatArt && s.cornersInvented !== undefined,
       pass: !(s.flatArt && s.cornersInvented !== undefined) || s.cornersInvented <= (s.inventedMax ?? INVENTED_MAX),
-      headroom: !(s.flatArt && s.cornersInvented !== undefined) || s.cornersInvented <= (s.inventedMax ?? INVENTED_MAX) ? 1 : -1,
+      headroom:
+        !(s.flatArt && s.cornersInvented !== undefined) || s.cornersInvented <= (s.inventedMax ?? INVENTED_MAX)
+          ? 1
+          : -1,
       digits: 0,
     },
     {

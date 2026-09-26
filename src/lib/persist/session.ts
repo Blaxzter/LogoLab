@@ -167,10 +167,7 @@ export async function loadSession(): Promise<RestoredSession> {
   }
   didRestore = Boolean(restored.logo || restored.editor || restored.sheet)
   // The newest slot dates the session as a whole.
-  const newest = Math.max(
-    0,
-    ...Object.values(restored).map((slot) => (slot as Stamped | null)?.t ?? 0),
-  )
+  const newest = Math.max(0, ...Object.values(restored).map((slot) => (slot as Stamped | null)?.t ?? 0))
   if (newest > 0) markRestored(newest)
   return restored
 }

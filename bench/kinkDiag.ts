@@ -87,17 +87,27 @@ const NEAR = 2.0
 /** Two authored subpaths this close are crossing; the silhouette may corner there. */
 const CROSS = 1.6
 
-interface Sample { x: number; y: number; tx: number; ty: number }
-interface Chain { pts: Sample[]; closed: boolean; shape: number }
+interface Sample {
+  x: number
+  y: number
+  tx: number
+  ty: number
+}
+interface Chain {
+  pts: Sample[]
+  closed: boolean
+  shape: number
+}
 
 /** Uniform-arc-length resample of one authored subpath, with tangents. */
 function chainOf(sp: SubPath, shape: number): Chain | null {
   const poly = flattenSubPath(sp)
   if (poly.length < 2) return null
   const closed = sp.closed !== false
-  const pts = closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
-    ? [...poly, poly[0]]
-    : poly
+  const pts =
+    closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+      ? [...poly, poly[0]]
+      : poly
   const out: Sample[] = []
   let carry = 0
   for (let i = 1; i < pts.length; i++) {
@@ -142,7 +152,16 @@ const BORDER_EPS = 1.5
 const JUNCTION_R = 1.6
 
 type Verdict = 'invented' | 'explained' | 'crossing' | 'off-boundary' | 'occluded' | 'border' | 'junction' | 'curved'
-interface Site { x: number; y: number; tracedTurn: number; dist: number; authored: number; traced: number; excess: number; verdict: Verdict }
+interface Site {
+  x: number
+  y: number
+  tracedTurn: number
+  dist: number
+  authored: number
+  traced: number
+  excess: number
+  verdict: Verdict
+}
 
 async function analyse(name: string, text: string, fit: Record<string, number | boolean>): Promise<Site[] | null> {
   let gtDoc
@@ -169,10 +188,16 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
   })
   if (!chains.length) return null
   // Authored sharp corners with NO minEdge: any authored kink explains a traced one.
-  const gtCorners: Corner[] = sharpCorners(gt.map((s) => s.subPaths), 0)
+  const gtCorners: Corner[] = sharpCorners(
+    gt.map((s) => s.subPaths),
+    0,
+  )
 
   const doc = await traceImage(raster as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: GRADIENTS, planarFit: fit,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: GRADIENTS,
+    planarFit: fit,
   })
   const docSets = doc.items.flatMap((it) => (it.kind === 'path' ? it.subPaths : [])) as SubPath[]
   const docPolys = docSets.map((sp) => flattenSubPath(sp))
@@ -203,7 +228,11 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
     let n = 0
     for (const poly of docPolys) {
       for (const q of poly) {
-        if (Math.abs(q.x - x) <= JUNCTION_R && Math.abs(q.y - y) <= JUNCTION_R && Math.hypot(q.x - x, q.y - y) <= JUNCTION_R) {
+        if (
+          Math.abs(q.x - x) <= JUNCTION_R &&
+          Math.abs(q.y - y) <= JUNCTION_R &&
+          Math.hypot(q.x - x, q.y - y) <= JUNCTION_R
+        ) {
           n++
           break
         }
@@ -211,7 +240,10 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
     }
     return n
   }
-  const traced = sharpCorners(docSets.map((sp) => [sp]), 0)
+  const traced = sharpCorners(
+    docSets.map((sp) => [sp]),
+    0,
+  )
   // sharpCorners reports both sides of a shared edge; one physical corner, two records.
   const uniq: Corner[] = []
   for (const c of traced) if (!uniq.some((u) => Math.hypot(u.x - c.x, u.y - c.y) <= 0.35)) uniq.push(c)
@@ -221,7 +253,10 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
     let bd = Infinity
     for (const c of uniq) {
       const d = Math.hypot(c.x - PROBE[0], c.y - PROBE[1])
-      if (d < bd) { bd = d; bc = c }
+      if (d < bd) {
+        bd = d
+        bc = c
+      }
     }
     if (bc) {
       const kink = (Math.acos(Math.max(-1, Math.min(1, bc.itx * bc.otx + bc.ity * bc.oty))) * 180) / Math.PI
@@ -229,11 +264,16 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
 PROBE ${name}: nearest traced sharp corner to (${PROBE[0]},${PROBE[1]}) is (${f(bc.x, 2)}, ${f(bc.y, 2)}), ${f(bd, 2)}px away, kink ${f(kink)}deg`)
       const n2 = nearestOn(chains, bc.x, bc.y)
       if (n2) {
-        console.log(`  nearest AUTHORED sample: (${f(n2.ch.pts[n2.i].x, 2)}, ${f(n2.ch.pts[n2.i].y, 2)}) on shape ${n2.ch.shape}, ${f(n2.d, 2)}px away, chain len ${n2.ch.pts.length} closed=${n2.ch.closed}`)
-        for (const w of [1, 2, 3, 5, 8]) console.log(`    authored window turn +-${w}px: ${f(windowTurn(n2.ch, n2.i, w))}deg`)
+        console.log(
+          `  nearest AUTHORED sample: (${f(n2.ch.pts[n2.i].x, 2)}, ${f(n2.ch.pts[n2.i].y, 2)}) on shape ${n2.ch.shape}, ${f(n2.d, 2)}px away, chain len ${n2.ch.pts.length} closed=${n2.ch.closed}`,
+        )
+        for (const w of [1, 2, 3, 5, 8])
+          console.log(`    authored window turn +-${w}px: ${f(windowTurn(n2.ch, n2.i, w))}deg`)
       }
       const g = gtCorners.map((q) => Math.hypot(q.x - bc.x, q.y - bc.y)).sort((a, b) => a - b)[0]
-      console.log(`  nearest AUTHORED sharp corner: ${g === undefined ? 'none' : f(g, 2) + 'px'}   traced degree ${tracedDegree(bc.x, bc.y)}`)
+      console.log(
+        `  nearest AUTHORED sharp corner: ${g === undefined ? 'none' : f(g, 2) + 'px'}   traced degree ${tracedDegree(bc.x, bc.y)}`,
+      )
     }
     return null
   }
@@ -261,8 +301,13 @@ PROBE ${name}: nearest traced sharp corner to (${PROBE[0]},${PROBE[1]}) is (${f(
     }
     const tracedTurn = (Math.acos(Math.max(-1, Math.min(1, c.itx * c.otx + c.ity * c.oty))) * 180) / Math.PI
     const site: Site = {
-      x: c.x, y: c.y, tracedTurn, dist: best.d,
-      authored: NaN, traced: tracedTurn, excess: NaN,
+      x: c.x,
+      y: c.y,
+      tracedTurn,
+      dist: best.d,
+      authored: NaN,
+      traced: tracedTurn,
+      excess: NaN,
       verdict: 'off-boundary',
     }
     if (c.x < BORDER_EPS || c.y < BORDER_EPS || c.x > raster.width - BORDER_EPS || c.y > raster.height - BORDER_EPS) {
@@ -302,26 +347,48 @@ PROBE ${name}: nearest traced sharp corner to (${PROBE[0]},${PROBE[1]}) is (${f(
 if (argv.includes('--gate')) {
   const { scoreGeometry } = await import('./geomScore.ts')
   const { TRUTH_CORPUS } = await import('./truthCorpus.ts')
-  interface Row { name: string; gradients: boolean; invented: number; worst: number }
+  interface Row {
+    name: string
+    gradients: boolean
+    invented: number
+    worst: number
+  }
   const fit = parseFit(flag('--fit') ?? '')
   const targets: { name: string; svg: string; gradients: boolean }[] = argv.includes('--logos')
     ? readdirSync(join(root, 'examples', 'logos'))
         .filter((x) => x.endsWith('.svg'))
         .map((x) => ({ name: x.replace(/\.svg$/, ''), svg: `examples/logos/${x}`, gradients: false }))
-    : TRUTH_CORPUS.filter((c) => c.tier === 0).map((c) => ({ name: c.name, svg: c.svg, gradients: c.gradients !== false }))
+    : TRUTH_CORPUS.filter((c) => c.tier === 0).map((c) => ({
+        name: c.name,
+        svg: c.svg,
+        gradients: c.gradients !== false,
+      }))
   const base: Row[] = []
   for (const t of targets) {
     let text
-    try { text = readFileSync(join(root, t.svg), 'utf8') } catch { continue }
+    try {
+      text = readFileSync(join(root, t.svg), 'utf8')
+    } catch {
+      continue
+    }
     let gtDoc
-    try { gtDoc = parseGroundTruth(text) } catch { continue }
+    try {
+      gtDoc = parseGroundTruth(text)
+    } catch {
+      continue
+    }
     if (unscorable(gtDoc)) continue
     let img
     try {
       img = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-    } catch { continue }
+    } catch {
+      continue
+    }
     const doc = await traceImage(img as unknown as ImageData, {
-      ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: t.gradients, planarFit: fit,
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: t.gradients,
+      planarFit: fit,
     })
     const sc = scoreGeometry(toRasterSpace(gtDoc, img.width), doc, img.width, img.height, img)
     base.push({ name: t.name, gradients: t.gradients, invented: sc.cornersInvented, worst: sc.worstInventedExcess })
@@ -332,13 +399,17 @@ if (argv.includes('--gate')) {
   for (const r of base) {
     total += r.invented
     if (r.invented > 0) {
-      console.log(`  ${r.name.padEnd(30)}${(r.gradients ? 'grad' : 'flat').padStart(6)}${String(r.invented).padStart(10)}${f(r.worst).padStart(9)}`)
+      console.log(
+        `  ${r.name.padEnd(30)}${(r.gradients ? 'grad' : 'flat').padStart(6)}${String(r.invented).padStart(10)}${f(r.worst).padStart(9)}`,
+      )
     }
   }
   const dirty = base.filter((r) => r.invented > 0).length
   console.log(`\n  total ${total} invented over ${dirty} of ${base.length} cases`)
   const p90 = [...base.map((r) => r.invented)].sort((a, b) => a - b)[Math.floor(base.length * 0.9)]
-  console.log(`  per-case invented: p50 ${[...base.map((r) => r.invented)].sort((a, b) => a - b)[base.length >> 1]}  p90 ${p90}  max ${Math.max(...base.map((r) => r.invented))}`)
+  console.log(
+    `  per-case invented: p50 ${[...base.map((r) => r.invented)].sort((a, b) => a - b)[base.length >> 1]}  p90 ${p90}  max ${Math.max(...base.map((r) => r.invented))}`,
+  )
   process.exit(0)
 }
 
@@ -375,30 +446,46 @@ for (const [label, fit] of FITS) {
   }
   const onBoundary = all.filter((r) => r.s.verdict !== 'off-boundary')
   const candidates = onBoundary.filter((r) => r.s.verdict === 'curved')
-  console.log(`\n━━━ INVENTED-CORNER CENSUS @${RES} flat${label ? `  [${label}]` : ''} ━━━  ${cases.length} cases, ${all.length} traced sharp corners`)
+  console.log(
+    `\n━━━ INVENTED-CORNER CENSUS @${RES} flat${label ? `  [${label}]` : ''} ━━━  ${cases.length} cases, ${all.length} traced sharp corners`,
+  )
   const by = (v: Verdict): number => all.filter((r) => r.s.verdict === v).length
   console.log(`  off authored boundary (>${NEAR}px, = spuriousMax's job) ${by('off-boundary')}`)
   console.log(`  on the canvas BORDER (framing, not art) ${by('border')}   occluded ${by('occluded')}`)
-  console.log(`  at an authored CROSSING ${by('crossing')}   at a traced JUNCTION ${by('junction')}   explained by an authored corner ${by('explained')}`)
+  console.log(
+    `  at an authored CROSSING ${by('crossing')}   at a traced JUNCTION ${by('junction')}   explained by an authored corner ${by('explained')}`,
+  )
   console.log(`  ON smooth-or-curved authored boundary, unexplained: ${candidates.length}\n`)
   console.log(`  EXCESS turn (traced − authored) over ±${WIN}px      n`)
   for (let i = 0; i < BANDS.length - 1; i++) {
     const g = candidates.filter((r) => r.s.excess >= BANDS[i] && r.s.excess < BANDS[i + 1])
     if (!g.length) continue
-    console.log(`  ${String(BANDS[i]).padStart(5)}..${String(BANDS[i + 1]).padEnd(5)} ${String(g.length).padStart(6)}   ${'█'.repeat(Math.min(60, g.length))}`)
+    console.log(
+      `  ${String(BANDS[i]).padStart(5)}..${String(BANDS[i + 1]).padEnd(5)} ${String(g.length).padStart(6)}   ${'█'.repeat(Math.min(60, g.length))}`,
+    )
   }
   for (const thr of [20, 30, 40, 50, 60]) {
     const hits = candidates.filter((r) => r.s.excess >= thr)
     const marks = new Set(hits.map((r) => r.mark))
-    console.log(`    excess ≥ ${String(thr).padStart(2)}°: ${String(hits.length).padStart(5)} invented over ${marks.size} of ${cases.length} cases`)
+    console.log(
+      `    excess ≥ ${String(thr).padStart(2)}°: ${String(hits.length).padStart(5)} invented over ${marks.size} of ${cases.length} cases`,
+    )
   }
   if (LIST) {
     const worst = candidates.filter((r) => r.s.authored < 30).sort((a, b) => a.s.authored - b.s.authored)
     console.log(`\n  sites with authored window turn < 30°:`)
     for (const r of worst.slice(0, 40))
-      console.log(`    ${r.mark.padEnd(24)} (${f(r.s.x)}, ${f(r.s.y)})  traced turn ${f(r.s.tracedTurn)}°  authored ${f(r.s.authored)}°  ${f(r.s.dist, 2)}px off`)
+      console.log(
+        `    ${r.mark.padEnd(24)} (${f(r.s.x)}, ${f(r.s.y)})  traced turn ${f(r.s.tracedTurn)}°  authored ${f(r.s.authored)}°  ${f(r.s.dist, 2)}px off`,
+      )
     const per = new Map<string, number>()
     for (const r of worst) per.set(r.mark, (per.get(r.mark) ?? 0) + 1)
-    console.log(`\n  per case (<30°):  ` + [...per.entries()].sort((a, b) => b[1] - a[1]).map(([m, n]) => `${m} ${n}`).join('  '))
+    console.log(
+      `\n  per case (<30°):  ` +
+        [...per.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([m, n]) => `${m} ${n}`)
+          .join('  '),
+    )
   }
 }

@@ -90,17 +90,31 @@ function despeckleComponents(
     while (stack.length) {
       const p = stack.pop()!
       pixels.push(p)
-      const x = p % w, y = (p / w) | 0
-      if (x > 0 && comp[p - 1] === -1 && out[p - 1] === lab) { comp[p - 1] = cid; stack.push(p - 1) }
-      if (x < w - 1 && comp[p + 1] === -1 && out[p + 1] === lab) { comp[p + 1] = cid; stack.push(p + 1) }
-      if (y > 0 && comp[p - w] === -1 && out[p - w] === lab) { comp[p - w] = cid; stack.push(p - w) }
-      if (y < h - 1 && comp[p + w] === -1 && out[p + w] === lab) { comp[p + w] = cid; stack.push(p + w) }
+      const x = p % w,
+        y = (p / w) | 0
+      if (x > 0 && comp[p - 1] === -1 && out[p - 1] === lab) {
+        comp[p - 1] = cid
+        stack.push(p - 1)
+      }
+      if (x < w - 1 && comp[p + 1] === -1 && out[p + 1] === lab) {
+        comp[p + 1] = cid
+        stack.push(p + 1)
+      }
+      if (y > 0 && comp[p - w] === -1 && out[p - w] === lab) {
+        comp[p - w] = cid
+        stack.push(p - w)
+      }
+      if (y < h - 1 && comp[p + w] === -1 && out[p + w] === lab) {
+        comp[p + w] = cid
+        stack.push(p + w)
+      }
     }
     if (pixels.length < minArea && !(evidence && hasFlatInterior(pixels, lab, w, h, evidence))) {
       // Majority bordering label (≠ lab, ≥ 0); fall back to leaving it if isolated.
       const border = new Map<number, number>()
       for (const p of pixels) {
-        const x = p % w, y = (p / w) | 0
+        const x = p % w,
+          y = (p / w) | 0
         const nb = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1]
         for (const q of nb) {
           if (q < 0) continue
@@ -109,8 +123,13 @@ function despeckleComponents(
           border.set(l, (border.get(l) ?? 0) + 1)
         }
       }
-      let best = -1, bestC = 0
-      for (const [l, c] of border) if (c > bestC) { bestC = c; best = l }
+      let best = -1,
+        bestC = 0
+      for (const [l, c] of border)
+        if (c > bestC) {
+          bestC = c
+          best = l
+        }
       if (best >= 0) for (const p of pixels) out[p] = best
     }
     cid++
@@ -145,14 +164,21 @@ function hasFlatInterior(
   const key = (c.r << 16) | (c.g << 8) | c.b
   const rgbAt = (i: number): number => (data[i * 4] << 16) | (data[i * 4 + 1] << 8) | data[i * 4 + 2]
   for (const i of pixels) {
-    const x = i % w, y = (i / w) | 0
+    const x = i % w,
+      y = (i / w) | 0
     if (x < 1 || y < 1 || x > w - 2 || y > h - 2) continue
     if (
       rgbAt(i) === key &&
-      rgbAt(i - w - 1) === key && rgbAt(i - w) === key && rgbAt(i - w + 1) === key &&
-      rgbAt(i - 1) === key && rgbAt(i + 1) === key &&
-      rgbAt(i + w - 1) === key && rgbAt(i + w) === key && rgbAt(i + w + 1) === key
-    ) return true
+      rgbAt(i - w - 1) === key &&
+      rgbAt(i - w) === key &&
+      rgbAt(i - w + 1) === key &&
+      rgbAt(i - 1) === key &&
+      rgbAt(i + 1) === key &&
+      rgbAt(i + w - 1) === key &&
+      rgbAt(i + w) === key &&
+      rgbAt(i + w + 1) === key
+    )
+      return true
   }
   return false
 }
@@ -179,10 +205,16 @@ function flatInteriorCounts(
       if (l < 0) continue
       const k = rgbAt(i)
       if (
-        rgbAt(i - w - 1) === k && rgbAt(i - w) === k && rgbAt(i - w + 1) === k &&
-        rgbAt(i - 1) === k && rgbAt(i + 1) === k &&
-        rgbAt(i + w - 1) === k && rgbAt(i + w) === k && rgbAt(i + w + 1) === k
-      ) counts[l]++
+        rgbAt(i - w - 1) === k &&
+        rgbAt(i - w) === k &&
+        rgbAt(i - w + 1) === k &&
+        rgbAt(i - 1) === k &&
+        rgbAt(i + 1) === k &&
+        rgbAt(i + w - 1) === k &&
+        rgbAt(i + w) === k &&
+        rgbAt(i + w + 1) === k
+      )
+        counts[l]++
     }
   }
   return counts
@@ -199,11 +231,15 @@ const BLEND_LINE_EPS = 10
 /** Squared RGB distance from colour c to the segment a—b (not the infinite line:
  *  clamping makes "near an endpoint" read as "near that colour"). */
 function segDist2(c: PaletteColor, a: PaletteColor, b: PaletteColor): number {
-  const abr = b.r - a.r, abg = b.g - a.g, abb = b.b - a.b
+  const abr = b.r - a.r,
+    abg = b.g - a.g,
+    abb = b.b - a.b
   const len2 = abr * abr + abg * abg + abb * abb
   let t = len2 > 0 ? ((c.r - a.r) * abr + (c.g - a.g) * abg + (c.b - a.b) * abb) / len2 : 0
   t = Math.max(0, Math.min(1, t))
-  const dr = c.r - (a.r + t * abr), dg = c.g - (a.g + t * abg), db = c.b - (a.b + t * abb)
+  const dr = c.r - (a.r + t * abr),
+    dg = c.g - (a.g + t * abg),
+    db = c.b - (a.b + t * abb)
   return dr * dr + dg * dg + db * db
 }
 
@@ -239,7 +275,10 @@ function regionAlphaStats(
     const n = total[l]
     if (n === 0) return { mode: 255, modeShare: 1, std: 0 }
     const h = hist[l]
-    let mode = 255, modeC = 0, sum = 0, sum2 = 0
+    let mode = 255,
+      modeC = 0,
+      sum = 0,
+      sum2 = 0
     for (let a = 0; a < 256; a++) {
       const c = h[a]
       if (c === 0) continue
@@ -305,7 +344,9 @@ function classifyBlends(
   const blend = new Array<boolean>(palette.length).fill(false)
   const routeTo = new Int32Array(palette.length).fill(-1)
   const d2 = (a: PaletteColor, b: PaletteColor): number => {
-    const dr = a.r - b.r, dg = a.g - b.g, db = a.b - b.b
+    const dr = a.r - b.r,
+      dg = a.g - b.g,
+      db = a.b - b.b
     return dr * dr + dg * dg + db * db
   }
   for (let i = 0; i < palette.length; i++) {
@@ -316,13 +357,15 @@ function classifyBlends(
           const d = segDist2(palette[i], palette[accepted[a]], palette[accepted[b]])
           if (d <= eps2 && d < bestD) {
             bestD = d
-            const ia = accepted[a], ib = accepted[b]
+            const ia = accepted[a],
+              ib = accepted[b]
             routeTo[i] = d2(palette[i], palette[ia]) <= d2(palette[i], palette[ib]) ? ia : ib
           }
         }
       }
       if (routeTo[i] < 0 && feather[i]) {
-        let best = -1, bd = Infinity
+        let best = -1,
+          bd = Infinity
         for (const a of accepted) {
           const d = d2(palette[i], palette[a])
           if (d < bd) {
@@ -356,7 +399,8 @@ function classifyBlends(
           const d = segDist2(palette[i], palette[live[a]], palette[live[b]])
           if (d <= eps2 && d < bestD) {
             bestD = d
-            const ia = live[a], ib = live[b]
+            const ia = live[a],
+              ib = live[b]
             route = d2(palette[i], palette[ia]) <= d2(palette[i], palette[ib]) ? ia : ib
           }
         }
@@ -429,9 +473,12 @@ function edgeFractions(labels: Int32Array, w: number, h: number, paletteLen: num
       if (l < 0) continue
       total[l]++
       if (
-        (x > 0 && labels[i - 1] !== l) || (x < w - 1 && labels[i + 1] !== l) ||
-        (y > 0 && labels[i - w] !== l) || (y < h - 1 && labels[i + w] !== l)
-      ) edge[l]++
+        (x > 0 && labels[i - 1] !== l) ||
+        (x < w - 1 && labels[i + 1] !== l) ||
+        (y > 0 && labels[i - w] !== l) ||
+        (y < h - 1 && labels[i + w] !== l)
+      )
+        edge[l]++
     }
   }
   const out = new Float64Array(paletteLen)
@@ -503,15 +550,27 @@ function restoreErasedComponents(
       const p = stack.pop()!
       pixels.push(p)
       if (post[p] === lab) kept++
-      const x = p % w, y = (p / w) | 0
-      const x0 = x > 0, x1 = x < w - 1, y0 = y > 0, y1 = y < h - 1
+      const x = p % w,
+        y = (p / w) | 0
+      const x0 = x > 0,
+        x1 = x < w - 1,
+        y0 = y > 0,
+        y1 = y < h - 1
       const nb = [
-        x0 ? p - 1 : -1, x1 ? p + 1 : -1, y0 ? p - w : -1, y1 ? p + w : -1,
-        x0 && y0 ? p - w - 1 : -1, x1 && y0 ? p - w + 1 : -1,
-        x0 && y1 ? p + w - 1 : -1, x1 && y1 ? p + w + 1 : -1,
+        x0 ? p - 1 : -1,
+        x1 ? p + 1 : -1,
+        y0 ? p - w : -1,
+        y1 ? p + w : -1,
+        x0 && y0 ? p - w - 1 : -1,
+        x1 && y0 ? p - w + 1 : -1,
+        x0 && y1 ? p + w - 1 : -1,
+        x1 && y1 ? p + w + 1 : -1,
       ]
       for (const q of nb) {
-        if (q >= 0 && comp[q] === -1 && pre[q] === lab) { comp[q] = cid; stack.push(q) }
+        if (q >= 0 && comp[q] === -1 && pre[q] === lab) {
+          comp[q] = cid
+          stack.push(q)
+        }
       }
     }
     if (kept <= pixels.length * RESTORE_MAX_SURVIVAL && pixels.length >= minArea) {
@@ -524,7 +583,9 @@ function restoreErasedComponents(
       // the component's mean: it is the same feature's blend shade, so this widens
       // the stroke toward its true footprint. An axis-aligned bar has no diagonal
       // steps, so this is a no-op there.
-      let mr = 0, mg = 0, mb = 0
+      let mr = 0,
+        mg = 0,
+        mb = 0
       for (const p of pixels) {
         mr += data[p * 4]
         mg += data[p * 4 + 1]
@@ -534,11 +595,14 @@ function restoreErasedComponents(
       mg /= pixels.length
       mb /= pixels.length
       const d2mean = (p: number): number => {
-        const dr = data[p * 4] - mr, dg = data[p * 4 + 1] - mg, db = data[p * 4 + 2] - mb
+        const dr = data[p * 4] - mr,
+          dg = data[p * 4 + 1] - mg,
+          db = data[p * 4 + 2] - mb
         return dr * dr + dg * dg + db * db
       }
       for (const p of pixels) {
-        const x = p % w, y = (p / w) | 0
+        const x = p % w,
+          y = (p / w) | 0
         if (y >= h - 1) continue
         for (const dx of [-1, 1]) {
           const qx = x + dx
@@ -613,22 +677,31 @@ function assignNearest(
       labels[i] = -1
       continue
     }
-    const r = data[o], g = data[o + 1], b = data[o + 2], a = data[o + 3]
+    const r = data[o],
+      g = data[o + 1],
+      b = data[o + 2],
+      a = data[o + 3]
     let minD = Infinity
     for (let c = 0; c < palette.length; c++) {
-      const dr = r - palette[c].r, dg = g - palette[c].g, db = b - palette[c].b
+      const dr = r - palette[c].r,
+        dg = g - palette[c].g,
+        db = b - palette[c].b
       const d = dr * dr + dg * dg + db * db
       rgbD[c] = d
       if (d < minD) minD = d
     }
     // Among the RGB-nearest entries (exact ties from duplicate-RGB swatches), the one
     // whose alpha is closest to the pixel's wins; otherwise the single nearest hue.
-    let best = 0, bestAlphaD = Infinity
+    let best = 0,
+      bestAlphaD = Infinity
     for (let c = 0; c < palette.length; c++) {
       if (rgbD[c] !== minD) continue
       const da = a - pa[c]
       const ad = da * da
-      if (ad < bestAlphaD) { bestAlphaD = ad; best = c }
+      if (ad < bestAlphaD) {
+        bestAlphaD = ad
+        best = c
+      }
     }
     labels[i] = best
   }
@@ -651,7 +724,8 @@ function regionAlphaModes(labels: Int32Array, data: Uint8ClampedArray, paletteLe
     h.set(a, (h.get(a) ?? 0) + 1)
   }
   return hist.map((h) => {
-    let bestA = 255, bestC = 0
+    let bestA = 255,
+      bestC = 0
     for (const [a, c] of h) {
       if (c > bestC || (c === bestC && a < bestA)) {
         bestC = c
@@ -693,7 +767,8 @@ function snapPaletteToModes(
     h.set(key, (h.get(key) ?? 0) + 1)
   }
   return palette.map((c, l) => {
-    let bestKey = -1, bestCount = 0
+    let bestKey = -1,
+      bestCount = 0
     for (const [key, count] of hist[l]) {
       if (count > bestCount || (count === bestCount && key < bestKey)) {
         bestCount = count
@@ -732,7 +807,9 @@ export function segmentFlatPalette(
     // User-locked palette: no clustering; assign every pixel to the nearest of the
     // user's colours (RGBA) and keep them exactly as given. Opaque entries omit
     // `a` so they serialize without a redundant fill-opacity.
-    palette = locked.map((c) => (c.a !== undefined && c.a < 255 ? { r: c.r, g: c.g, b: c.b, a: c.a } : { r: c.r, g: c.g, b: c.b }))
+    palette = locked.map((c) =>
+      c.a !== undefined && c.a < 255 ? { r: c.r, g: c.g, b: c.b, a: c.a } : { r: c.r, g: c.g, b: c.b },
+    )
     labels = assignNearest(img, palette)
     dominantColors = palette.length // the user owns the count; the caller's gates are bypassed anyway
   } else {
@@ -759,9 +836,14 @@ export function segmentFlatPalette(
     //    ≥ minRegionArea times is kept even under minShare.
     const flat = flatInteriorCounts(img, q.labels, q.palette.length)
     const real = Array.from(flat, (c) => c >= opts.minRegionArea)
-    const edgy = Array.from(edgeFractions(q.labels, img.width, img.height, q.palette.length), (f) => f >= EDGE_LOCAL_MIN)
+    const edgy = Array.from(
+      edgeFractions(q.labels, img.width, img.height, q.palette.length),
+      (f) => f >= EDGE_LOCAL_MIN,
+    )
     const alphaStats = regionAlphaStats(q.labels, img.data, q.palette.length)
-    const feather = alphaStats.map((s) => s.mode < 255 && s.std >= FEATHER_ALPHA_STD && s.modeShare <= FEATHER_MODE_SHARE)
+    const feather = alphaStats.map(
+      (s) => s.mode < 255 && s.std >= FEATHER_ALPHA_STD && s.modeShare <= FEATHER_MODE_SHARE,
+    )
     const { blend, routeTo } = classifyBlends(q.palette, real, edgy, feather)
     const modal = modalColorCounts(q.labels, img.data, q.palette.length)
     // Richness for the caller's flat-vs-rich test: survivors under share/real
@@ -801,14 +883,17 @@ export function segmentFlatPalette(
   // photo tones miss; flat interiors hit. Measured on the post-drop labels, before
   // boundary cleanup and before the mode snap, so the flat-vs-photo threshold
   // applies to centroids.
-  let opaque = 0, flat = 0
+  let opaque = 0,
+    flat = 0
   for (let i = 0; i < labels.length; i++) {
     const l = labels[i]
     if (l < 0) continue
     opaque++
     const o = i * 4
     const c = palette[l]
-    const dr = img.data[o] - c.r, dg = img.data[o + 1] - c.g, db = img.data[o + 2] - c.b
+    const dr = img.data[o] - c.r,
+      dg = img.data[o + 1] - c.g,
+      db = img.data[o + 2] - c.b
     if (dr * dr + dg * dg + db * db <= FLAT_TIGHT2) flat++
   }
   const flatCoverage = opaque > 0 ? flat / opaque : 0

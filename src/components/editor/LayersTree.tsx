@@ -6,27 +6,10 @@
 // row stays a click target for selection and double-click renaming.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ChevronDown,
-  ChevronRight,
-  Eye,
-  EyeOff,
-  Folder,
-  GripVertical,
-  Lock,
-  Square,
-  Trash2,
-} from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, GripVertical, Lock, Square, Trash2 } from 'lucide-react'
 import type { DocItem, EditableDoc, PathItem } from '../../lib/path/types'
 import { isGroup } from '../../lib/path/docTree'
-import {
-  dropSpot,
-  edgeAt,
-  layerRows,
-  rowsBetween,
-  type DropEdge,
-  type DropSpot,
-} from '../../lib/editor/layerRows'
+import { dropSpot, edgeAt, layerRows, rowsBetween, type DropEdge, type DropSpot } from '../../lib/editor/layerRows'
 import { itemLabel } from './editorDoc'
 import { PathView } from '../vector/DocRender'
 import { itemBox } from '../../lib/editor/transform'
@@ -156,12 +139,7 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
       const sc = scrollerRef.current
       if (!sc) return
       const b = sc.getBoundingClientRect()
-      velRef.current =
-        ev.clientY < b.top + EDGE_PX
-          ? -EDGE_SPEED
-          : ev.clientY > b.bottom - EDGE_PX
-            ? EDGE_SPEED
-            : 0
+      velRef.current = ev.clientY < b.top + EDGE_PX ? -EDGE_SPEED : ev.clientY > b.bottom - EDGE_PX ? EDGE_SPEED : 0
     }
     const onUp = () => endDrag(true)
     const onCancel = () => endDrag(false)
@@ -287,7 +265,11 @@ const LayerRowView = memo(function LayerRowView({
       {over === 'above' && <DropLine side="top" depth={depth} />}
       {over === 'below' && <DropLine side="bottom" depth={depth} />}
 
-      <Tooltip label={<TipLabel title="Drag to reorder" detail="Drop between rows to restack, or onto a group to move it inside." />}>
+      <Tooltip
+        label={
+          <TipLabel title="Drag to reorder" detail="Drop between rows to restack, or onto a group to move it inside." />
+        }
+      >
         <button
           type="button"
           aria-label="Reorder layer"
@@ -307,17 +289,17 @@ const LayerRowView = memo(function LayerRowView({
             />
           }
         >
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.stopPropagation()
-            onToggleExpanded(item.id)
-          }}
-          className="flex h-4 w-4 shrink-0 items-center justify-center text-faint hover:text-ink"
-          aria-label={item.expanded === false ? 'Expand group' : 'Collapse group'}
-        >
-          {item.expanded === false ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-        </button>
+          <button
+            type="button"
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              onToggleExpanded(item.id)
+            }}
+            className="flex h-4 w-4 shrink-0 items-center justify-center text-faint hover:text-ink"
+            aria-label={item.expanded === false ? 'Expand group' : 'Collapse group'}
+          >
+            {item.expanded === false ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+          </button>
         </Tooltip>
       ) : (
         <span className="w-4 shrink-0" />
@@ -350,7 +332,14 @@ const LayerRowView = memo(function LayerRowView({
         <span className="min-w-0 flex-1 truncate">{itemLabel(item, number)}</span>
       )}
 
-      <Tooltip label={<TipLabel title={item.visible ? 'Hide layer' : 'Show layer'} detail="Hidden layers stay in the file but are left out of the export." />}>
+      <Tooltip
+        label={
+          <TipLabel
+            title={item.visible ? 'Hide layer' : 'Show layer'}
+            detail="Hidden layers stay in the file but are left out of the export."
+          />
+        }
+      >
         <button
           type="button"
           onPointerDown={(e) => {

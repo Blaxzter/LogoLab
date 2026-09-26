@@ -44,12 +44,19 @@ const S = RES / 256
 
 /** acute-counter's lens cells: [cx, cy, R, tipDeg, rotDeg] — genEdgeCases' own numbers. */
 const UNITS: [number, number, number, number, number][] = [
-  [46, 46, 48, 32, 0], [128, 46, 40, 38, 23], [210, 46, 34, 44, 47],
-  [46.5, 128.5, 30, 38, 11], [128.5, 128.5, 24, 44, 67], [210.5, 128.5, 20, 56, 90],
+  [46, 46, 48, 32, 0],
+  [128, 46, 40, 38, 23],
+  [210, 46, 34, 44, 47],
+  [46.5, 128.5, 30, 38, 11],
+  [128.5, 128.5, 24, 44, 67],
+  [210.5, 128.5, 20, 56, 90],
   [210, 210, 30, 96, 31],
 ]
 /** …and its eroded ink spikes, whose apexes are authored exactly. */
-const SPIKES: [number, number][] = [[24, 200], [24, 232]]
+const SPIKES: [number, number][] = [
+  [24, 200],
+  [24, 232],
+]
 
 /** h = 2R·sin(tip/2); the two tips sit ±h/2 along the cell's rotated local y axis. */
 const LENS_TIPS: Vec[] = []
@@ -64,10 +71,14 @@ const IMG = decodePng(new Resvg(SVG, { fitTo: { mode: 'width', value: RES }, bac
 
 async function cornersOf(over: Record<string, unknown>): Promise<Vec[]> {
   const doc = await traceImage(IMG as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, planarFit: over,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    planarFit: over,
   })
   const out: Vec[] = []
-  for (const e of doc.topology?.edges ?? []) for (const n of e.nodes) if (n.kind === 'corner') out.push({ x: n.x, y: n.y })
+  for (const e of doc.topology?.edges ?? [])
+    for (const n of e.nodes) if (n.kind === 'corner') out.push({ x: n.x, y: n.y })
   return out
 }
 const nearest = (cs: Vec[], p: Vec): number => {
@@ -87,9 +98,15 @@ test('apex: acute counter tips stop overshooting into their own ink', async () =
   // sit well clear of those so ordinary fit drift cannot flip the gate, while the
   // pre-§18 tracer misses both by a wide margin.
   assert.ok(sum(off) > 40, `precondition: the pre-§18 tracer should be far off (Σ was ${sum(off).toFixed(1)}px)`)
-  assert.ok(Math.max(...off) > 5, `precondition: the pre-§18 worst tip should be > 5px (was ${Math.max(...off).toFixed(2)}px)`)
+  assert.ok(
+    Math.max(...off) > 5,
+    `precondition: the pre-§18 worst tip should be > 5px (was ${Math.max(...off).toFixed(2)}px)`,
+  )
   assert.ok(sum(on) < 30, `Σ over the 14 authored lens tips is ${sum(on).toFixed(1)}px (was ${sum(off).toFixed(1)})`)
-  assert.ok(Math.max(...on) < 3.5, `the worst lens tip is ${Math.max(...on).toFixed(2)}px off (was ${Math.max(...off).toFixed(2)})`)
+  assert.ok(
+    Math.max(...on) < 3.5,
+    `the worst lens tip is ${Math.max(...on).toFixed(2)}px off (was ${Math.max(...off).toFixed(2)})`,
+  )
 })
 
 test('apex: an ERODED spike keeps its reconstruction', async () => {
@@ -99,7 +116,10 @@ test('apex: an ERODED spike keeps its reconstruction', async () => {
   for (let i = 0; i < SPIKE_TIPS.length; i++) {
     const b = nearest(OFF, SPIKE_TIPS[i])
     const a = nearest(ON, SPIKE_TIPS[i])
-    assert.ok(a <= b + 0.25, `spike ${i} lost its reconstruction: ${b.toFixed(2)}px → ${a.toFixed(2)}px off its authored apex`)
+    assert.ok(
+      a <= b + 0.25,
+      `spike ${i} lost its reconstruction: ${b.toFixed(2)}px → ${a.toFixed(2)}px off its authored apex`,
+    )
   }
 })
 
@@ -136,7 +156,10 @@ test('apex: the error is no longer an OVERSHOOT past the tip', async () => {
   // own resolution, not slack in it — the bound is on the overshoot past the RASTER's
   // evidence (2.5px), and the evidence itself stops a little inside the authored tip,
   // since the last sub-pixel sliver of an acute counter carries no measurable coverage.
-  assert.ok(worstOff > 4, `precondition: the pre-§18 tracer overshoots a tip by > 4px (worst was ${worstOff.toFixed(2)}px)`)
+  assert.ok(
+    worstOff > 4,
+    `precondition: the pre-§18 tracer overshoots a tip by > 4px (worst was ${worstOff.toFixed(2)}px)`,
+  )
   assert.ok(
     worstOn < 3.0,
     `a counter tip is still fitted ${worstOn.toFixed(2)}px PAST its authored apex (pre-§18: ${worstOff.toFixed(2)}px)`,

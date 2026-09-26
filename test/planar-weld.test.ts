@@ -153,7 +153,8 @@ test('weld keeps a fused frame crossing ON the image border', () => {
   // crossing junctions are (6,0) and (7,0) ON the frame plus (6,1) just inside. Fusing
   // them must keep the survivor on the top edge (y=0); the naive centroid (y≈0.33) would
   // pull the boundary off the frame and open a sliver gap where it should bleed.
-  const w = 12, h = 12
+  const w = 12,
+    h = 12
   const labels = new Int32Array(w * h)
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
@@ -178,7 +179,8 @@ test('weld caps cluster span: a noisy patch is not collapsed, frame vertices sta
   // clusters and collapses the whole patch to a handful of points (dragging border
   // vertices to the centre). The cap keeps the weld local, so an over-spread noise
   // cluster is left untouched.
-  const w = 16, h = 16
+  const w = 16,
+    h = 16
   const labels = new Int32Array(w * h)
   let s = 1
   for (let i = 0; i < w * h; i++) {
@@ -188,7 +190,10 @@ test('weld caps cluster span: a noisy patch is not collapsed, frame vertices sta
   const base = weldedTrace(labels, w, h, 0)
   const welded = weldedTrace(labels, w, h, 3)
   // not collapsed: the vast majority of vertices survive (a runaway weld would leave <10)
-  assert.ok(welded.vertices.length >= base.vertices.length * 0.5, `weld collapsed the patch (${base.vertices.length}→${welded.vertices.length})`)
+  assert.ok(
+    welded.vertices.length >= base.vertices.length * 0.5,
+    `weld collapsed the patch (${base.vertices.length}→${welded.vertices.length})`,
+  )
   // no frame vertex is pulled off the border
   const onBorder = (vx: number, vy: number) => vx <= 1e-9 || vy <= 1e-9 || vx >= w - 1e-9 || vy >= h - 1e-9
   const baseById = new Map(base.vertices.map((v) => [v.id, v]))
@@ -197,7 +202,8 @@ test('weld caps cluster span: a noisy patch is not collapsed, frame vertices sta
     if (bv && onBorder(bv.x, bv.y)) assert.ok(onBorder(wv.x, wv.y), `frame vertex ${wv.id} pulled off the border`)
   }
   // the weld induces no self-loops (non-closed edge with start===end)
-  const selfLoops = (t: PlanarTrace) => t.edges.filter((e) => !e.closed && e.startVertex != null && e.startVertex === e.endVertex).length
+  const selfLoops = (t: PlanarTrace) =>
+    t.edges.filter((e) => !e.closed && e.startVertex != null && e.startVertex === e.endVertex).length
   assert.ok(selfLoops(welded) <= selfLoops(base), 'weld introduced a self-loop edge')
   assertLoopsClosed(welded)
   assertWelded(welded)

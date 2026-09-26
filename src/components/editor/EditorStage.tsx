@@ -120,8 +120,7 @@ export function EditorStage({
     return out
   }, [tool, selection, doc.items])
 
-  const isDrawTool =
-    tool === 'rect' || tool === 'ellipse' || tool === 'line' || tool === 'polygon' || tool === 'star'
+  const isDrawTool = tool === 'rect' || tool === 'ellipse' || tool === 'line' || tool === 'polygon' || tool === 'star'
 
   /* ------------------------------------------------------- shape build */
 
@@ -157,10 +156,8 @@ export function EditorStage({
 
   /* ---------------------------------------------------------- rendering */
 
-  const marqueeBox =
-    gesture?.kind === 'marquee' ? boxFromPoints(gesture.start, gesture.current) : null
-  const drawPreview =
-    gesture?.kind === 'draw' ? buildShape(gesture.start, gesture.current, false) : null
+  const marqueeBox = gesture?.kind === 'marquee' ? boxFromPoints(gesture.start, gesture.current) : null
+  const drawPreview = gesture?.kind === 'draw' ? buildShape(gesture.start, gesture.current, false) : null
 
   const cursor =
     spaceHeld || tool === 'pan'
@@ -179,10 +176,7 @@ export function EditorStage({
     <div ref={parentRef} className="relative h-full w-full">
       <ZoomSurface pz={pz} primary className="h-full w-full">
         <div className="flex h-full w-full items-center justify-center">
-          <div
-            className={`relative shadow-sm ${checkerClass}`}
-            style={{ width: boxW || 1, height: boxH || 1 }}
-          >
+          <div className={`relative shadow-sm ${checkerClass}`} style={{ width: boxW || 1, height: boxH || 1 }}>
             <svg
               ref={svgRef}
               viewBox={`${vx} ${vy} ${vw} ${vh}`}
@@ -217,22 +211,12 @@ export function EditorStage({
                   <SelectionOutline key={id} doc={doc} id={id} width={r(1.25)} color={ACCENT} />
                 ))}
 
-                {tool === 'select' && box && !gesture && (
-                  <TransformBox box={box} r={r} />
-                )}
-                {tool === 'select' && box && gesture?.kind === 'move' && (
-                  <TransformBox box={box} r={r} />
-                )}
+                {tool === 'select' && box && !gesture && <TransformBox box={box} r={r} />}
+                {tool === 'select' && box && gesture?.kind === 'move' && <TransformBox box={box} r={r} />}
 
                 {tool === 'node' &&
                   nodePaths.map((path) => (
-                    <NodeOverlay
-                      key={path.id}
-                      path={path}
-                      nodeSel={nodeSel}
-                      r={r}
-                      penTip={penPathId === path.id}
-                    />
+                    <NodeOverlay key={path.id} path={path} nodeSel={nodeSel} r={r} penTip={penPathId === path.id} />
                   ))}
 
                 {drawPreview && (

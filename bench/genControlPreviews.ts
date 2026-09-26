@@ -45,7 +45,11 @@ function downscale(img: Img, maxDim: number): Img {
     for (let x = 0; x < w; x++) {
       const x0 = Math.floor(x * sx)
       const x1 = Math.max(x0 + 1, Math.min(width, Math.floor((x + 1) * sx)))
-      let r = 0, g = 0, b = 0, a = 0, n = 0
+      let r = 0,
+        g = 0,
+        b = 0,
+        a = 0,
+        n = 0
       for (let yy = y0; yy < y1; yy++) {
         for (let xx = x0; xx < x1; xx++) {
           const i = (yy * width + xx) * 4
@@ -113,9 +117,7 @@ for (const doc of CONTROL_DOCS) {
     variants.push({ label: v.label, svg: serializeDoc(traced), paths: stats.paths, nodes: stats.nodes })
   }
   manifest[doc.id] = { ...(inputSvg ? { inputSvg } : {}), variants }
-  console.log(
-    `  ${doc.id.padEnd(14)} ${variants.map((v) => `${v.label}=${v.paths}p/${v.nodes}n`).join('  ')}`,
-  )
+  console.log(`  ${doc.id.padEnd(14)} ${variants.map((v) => `${v.label}=${v.paths}p/${v.nodes}n`).join('  ')}`)
 }
 
 const header =

@@ -75,11 +75,7 @@ export const saveStudioView = debounce((view: StudioView) => {
  * fires on every frame of a node drag and each write structured-clones the whole
  * document; `pagehide` flushes any pending write.
  */
-export function saveStudioDoc(
-  assetKey: string,
-  doc: EditableDoc | null,
-  dirty: boolean,
-): void {
+export function saveStudioDoc(assetKey: string, doc: EditableDoc | null, dirty: boolean): void {
   if (!doc) {
     saveSlot(SLOTS.vectorize, null)
     return

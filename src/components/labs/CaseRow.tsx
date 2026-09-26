@@ -66,9 +66,7 @@ const BADGE_TONE: Record<BadgeTone, string> = {
 
 export function Badge({ tone = 'neutral', children }: { tone?: BadgeTone; children: ReactNode }) {
   return (
-    <span
-      className={`rounded px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide ${BADGE_TONE[tone]}`}
-    >
+    <span className={`rounded px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide ${BADGE_TONE[tone]}`}>
       {children}
     </span>
   )
@@ -98,13 +96,7 @@ export function PendingRow({ title, note }: { title: string; note?: ReactNode })
 
 /** A boxed note under a row. `bad` = this case cannot be scored; `warn` = a caveat;
  *  `ok` = a reassurance; `info` = a diagnostic that is explicitly NOT a gate. */
-export function NoteBox({
-  tone,
-  children,
-}: {
-  tone: 'ok' | 'warn' | 'bad' | 'info'
-  children: ReactNode
-}) {
+export function NoteBox({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'info'; children: ReactNode }) {
   const cls = {
     ok: 'border-good/30 bg-good/8 text-good',
     warn: 'border-warn/30 bg-warn/8 text-warn',

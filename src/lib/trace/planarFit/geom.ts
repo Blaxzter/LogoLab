@@ -68,7 +68,13 @@ export function fitCircle(pts: Vec[]): { cx: number; cy: number; r: number } | n
   }
   mx /= n
   my /= n
-  let uu = 0, vv = 0, uv = 0, uuu = 0, vvv = 0, uvv = 0, vuu = 0
+  let uu = 0,
+    vv = 0,
+    uv = 0,
+    uuu = 0,
+    vvv = 0,
+    uvv = 0,
+    vuu = 0
   for (const p of pts) {
     const u = p.x - mx
     const v = p.y - my

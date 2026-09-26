@@ -63,10 +63,14 @@ export function buildPlanarNetwork(labels: Int32Array, width: number, height: nu
   // Is there a crack leaving corner (cx,cy) in direction d?
   const crackInDir = (cx: number, cy: number, d: number): boolean => {
     switch (d) {
-      case 0: return crackE(cx, cy)
-      case 1: return crackS(cx, cy)
-      case 2: return crackE(cx - 1, cy)
-      default: return crackS(cx, cy - 1)
+      case 0:
+        return crackE(cx, cy)
+      case 1:
+        return crackS(cx, cy)
+      case 2:
+        return crackE(cx - 1, cy)
+      default:
+        return crackS(cx, cy - 1)
     }
   }
   const degree = (cx: number, cy: number): number =>
@@ -78,10 +82,14 @@ export function buildPlanarNetwork(labels: Int32Array, width: number, height: nu
   // Labels to the left / right of a unit step from (cx,cy) in direction d.
   const stepLabels = (cx: number, cy: number, d: number): { left: number; right: number } => {
     switch (d) {
-      case 0: return { left: labelAt(cx, cy - 1), right: labelAt(cx, cy) } // E
-      case 1: return { left: labelAt(cx, cy), right: labelAt(cx - 1, cy) } // S
-      case 2: return { left: labelAt(cx - 1, cy), right: labelAt(cx - 1, cy - 1) } // W
-      default: return { left: labelAt(cx - 1, cy - 1), right: labelAt(cx, cy - 1) } // N
+      case 0:
+        return { left: labelAt(cx, cy - 1), right: labelAt(cx, cy) } // E
+      case 1:
+        return { left: labelAt(cx, cy), right: labelAt(cx - 1, cy) } // S
+      case 2:
+        return { left: labelAt(cx - 1, cy), right: labelAt(cx - 1, cy - 1) } // W
+      default:
+        return { left: labelAt(cx - 1, cy - 1), right: labelAt(cx, cy - 1) } // N
     }
   }
 
@@ -90,10 +98,14 @@ export function buildPlanarNetwork(labels: Int32Array, width: number, height: nu
   const consumedS = new Uint8Array((width + 1) * height) // S-crack at (cx,cy): cy*(width+1)+cx
   const crackKey = (cx: number, cy: number, d: number): { arr: Uint8Array; i: number } => {
     switch (d) {
-      case 0: return { arr: consumedE, i: cy * width + cx }
-      case 2: return { arr: consumedE, i: cy * width + (cx - 1) }
-      case 1: return { arr: consumedS, i: cy * cw + cx }
-      default: return { arr: consumedS, i: (cy - 1) * cw + cx }
+      case 0:
+        return { arr: consumedE, i: cy * width + cx }
+      case 2:
+        return { arr: consumedE, i: cy * width + (cx - 1) }
+      case 1:
+        return { arr: consumedS, i: cy * cw + cx }
+      default:
+        return { arr: consumedS, i: (cy - 1) * cw + cx }
     }
   }
   const isConsumed = (cx: number, cy: number, d: number): boolean => {
@@ -193,7 +205,17 @@ export function buildPlanarNetwork(labels: Int32Array, width: number, height: nu
       if (next < 0) break
       d = next
     }
-    return { id: nextId++, pts, startV: -1, endV: -1, left: first.left, right: first.right, dirStart: d0, dirEnd, closed: true }
+    return {
+      id: nextId++,
+      pts,
+      startV: -1,
+      endV: -1,
+      left: first.left,
+      right: first.right,
+      dirStart: d0,
+      dirEnd,
+      closed: true,
+    }
   }
 
   // Vertical cracks then horizontal, fixed order, seeding any still unconsumed.

@@ -45,7 +45,9 @@ test('axis-aligned black square covers exactly 1/4 of a 40² canvas', () => {
 })
 
 test('even-odd compound path leaves an inner hole', () => {
-  const d = doc(40, 40, [pathItem('donut', [rect(0, 0, 40, 40), rect(12, 12, 16, 16)], '#000000', { fillRule: 'evenodd' })])
+  const d = doc(40, 40, [
+    pathItem('donut', [rect(0, 0, 40, 40), rect(12, 12, 16, 16)], '#000000', { fillRule: 'evenodd' }),
+  ])
   const px = rasterizeDoc(d, 40, 40)
   assert.deepEqual(at(px, 40, 20, 20), [255, 255, 255], 'hole shows background')
   assert.deepEqual(at(px, 40, 4, 20), [0, 0, 0], 'ring is filled')
@@ -63,7 +65,17 @@ test('painter order: a top layer paints over the bottom', () => {
 
 test('linear gradient ramps black→white left to right', () => {
   const g: PathItem = pathItem('grad', [rect(0, 0, 100, 10)], '#000000', {
-    gradient: { type: 'linear', x1: 0, y1: 5, x2: 100, y2: 5, stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }] },
+    gradient: {
+      type: 'linear',
+      x1: 0,
+      y1: 5,
+      x2: 100,
+      y2: 5,
+      stops: [
+        { offset: 0, color: '#000000' },
+        { offset: 1, color: '#ffffff' },
+      ],
+    },
   })
   const px = rasterizeDoc(doc(100, 10, [g]), 100, 10)
   const left = at(px, 100, 2, 5)[0]
@@ -76,7 +88,16 @@ test('linear gradient ramps black→white left to right', () => {
 
 test('centered radial gradient: white center → blue rim', () => {
   const g: PathItem = pathItem('rad', [rect(0, 0, 64, 64)], '#ffffff', {
-    gradient: { type: 'radial', cx: 32, cy: 32, r: 32, stops: [{ offset: 0, color: '#ffffff' }, { offset: 1, color: '#0000ff' }] },
+    gradient: {
+      type: 'radial',
+      cx: 32,
+      cy: 32,
+      r: 32,
+      stops: [
+        { offset: 0, color: '#ffffff' },
+        { offset: 1, color: '#0000ff' },
+      ],
+    },
   })
   const px = rasterizeDoc(doc(64, 64, [g]), 64, 64)
   const center = at(px, 64, 32, 32)
@@ -88,13 +109,26 @@ test('centered radial gradient: white center → blue rim', () => {
 test('per-stop opacity lets the background show through', () => {
   // A full-bleed red rect whose gradient fades to fully transparent at offset 1.
   const g: PathItem = pathItem('fade', [rect(0, 0, 100, 10)], '#ff0000', {
-    gradient: { type: 'linear', x1: 0, y1: 5, x2: 100, y2: 5, stops: [{ offset: 0, color: '#ff0000', opacity: 1 }, { offset: 1, color: '#ff0000', opacity: 0 }] },
+    gradient: {
+      type: 'linear',
+      x1: 0,
+      y1: 5,
+      x2: 100,
+      y2: 5,
+      stops: [
+        { offset: 0, color: '#ff0000', opacity: 1 },
+        { offset: 1, color: '#ff0000', opacity: 0 },
+      ],
+    },
   })
   const px = rasterizeDoc(doc(100, 10, [g]), 100, 10)
   const opaqueEnd = at(px, 100, 1, 5)
   assert.ok(opaqueEnd[0] === 255 && opaqueEnd[1] < 8 && opaqueEnd[2] < 8, `opaque end ~red, got ${opaqueEnd}`)
   const farRight = at(px, 100, 99, 5)
-  assert.ok(farRight[0] > 250 && farRight[1] > 250 && farRight[2] > 250, `transparent end shows white bg, got ${farRight}`)
+  assert.ok(
+    farRight[0] > 250 && farRight[1] > 250 && farRight[2] > 250,
+    `transparent end shows white bg, got ${farRight}`,
+  )
 })
 
 test('boundaryMask marks pixels along a shape edge', () => {

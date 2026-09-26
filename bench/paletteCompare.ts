@@ -44,7 +44,10 @@ async function main() {
   }
   const target = { width: DIM, height: DIM, data: src2048 }
 
-  for (const [id, flatPalette] of [['smooth-MS', false], ['palette-first', true]] as const) {
+  for (const [id, flatPalette] of [
+    ['smooth-MS', false],
+    ['palette-first', true],
+  ] as const) {
     const opts = {
       ...DEFAULT_VECTORIZE_OPTIONS,
       engine: 'planar' as const,
@@ -65,7 +68,7 @@ async function main() {
     }
     console.log(
       `${id.padEnd(14)} fills=${String(fills.length).padStart(2)} paths=${String(doc.items.length).padStart(3)} ` +
-      `ΔE=${score.meanDeltaE.toFixed(3)} ssim=${score.ssim.toFixed(4)} nodes=${score.nodes} ${(Buffer.byteLength(svg) / 1024).toFixed(1)}kB`,
+        `ΔE=${score.meanDeltaE.toFixed(3)} ssim=${score.ssim.toFixed(4)} nodes=${score.nodes} ${(Buffer.byteLength(svg) / 1024).toFixed(1)}kB`,
     )
     console.log(`  fills: ${fills.sort().join(' ')}`)
   }

@@ -79,10 +79,7 @@ export function LogoMark({
   const hasLogo = Boolean(logo.src)
 
   return (
-    <div
-      className={`relative flex shrink-0 items-center justify-center ${className}`}
-      style={cardStyle}
-    >
+    <div className={`relative flex shrink-0 items-center justify-center ${className}`} style={cardStyle}>
       {hasLogo ? (
         app.tintEnabled ? (
           <span

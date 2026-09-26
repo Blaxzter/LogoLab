@@ -89,7 +89,8 @@ export function estimateBackground(img: ImageDataLike, threshold: number): Paper
   for (let i = 0; i < rs.length; i++) {
     // rs/gs/bs are sorted by now, so this compares the distributions rather
     // than individual samples.
-    if (Math.abs(rs[i] - r) <= threshold && Math.abs(gs[i] - g) <= threshold && Math.abs(bs[i] - b) <= threshold) agree++
+    if (Math.abs(rs[i] - r) <= threshold && Math.abs(gs[i] - g) <= threshold && Math.abs(bs[i] - b) <= threshold)
+      agree++
   }
   const transparent = a < 16
 
@@ -259,9 +260,7 @@ export function probeInk(img: ImageDataLike, bg: PaperColor, threshold = INK_THR
   // alpha and were already dropped by the `< 200` test above.
   const paperLab = bg.transparent ? null : srgbToLab(bg.r, bg.g, bg.b)
   const distinct = inks.filter(
-    (k) =>
-      k === top ||
-      (k.n >= inkPixels * MIN_INK_SHARE && (paperLab == null || !onRamp(k.lab, paperLab, top.lab))),
+    (k) => k === top || (k.n >= inkPixels * MIN_INK_SHARE && (paperLab == null || !onRamp(k.lab, paperLab, top.lab))),
   )
   const inkLuma = luma(top.r, top.g, top.b)
   return {
@@ -277,7 +276,10 @@ export function probeInk(img: ImageDataLike, bg: PaperColor, threshold = INK_THR
 }
 
 function hex(r: number, g: number, b: number): string {
-  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')
+  const c = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16)
+      .padStart(2, '0')
   return `#${c(r)}${c(g)}${c(b)}`
 }
 
@@ -452,7 +454,15 @@ export function decideInkMode(
   const wantMono =
     settings.colorMode === 'mono' || (settings.colorMode === 'auto' && (probe.mono || probe.monoInverted))
   if (!wantMono) {
-    return { mode: 'color', threshold: fallbackThreshold, invert: false, recolor: null, inks: probe.inks, probe, hairlines: null }
+    return {
+      mode: 'color',
+      threshold: fallbackThreshold,
+      invert: false,
+      recolor: null,
+      inks: probe.inks,
+      probe,
+      hairlines: null,
+    }
   }
 
   // What the cut separates the ink from: normally the paper. On a transparent
@@ -462,8 +472,7 @@ export function decideInkMode(
   // plain midpoint. Alpha already separates the art there, so aim the cut at the
   // far end of the range instead.
   const opaqueGround = paper != null && !paper.transparent
-  const against =
-    opaqueGround || probe.inkLuma == null ? probe.paperLuma : probe.inkLuma >= 128 ? 0 : 255
+  const against = opaqueGround || probe.inkLuma == null ? probe.paperLuma : probe.inkLuma >= 128 ? 0 : 255
 
   const midpoint = monoThreshold({ inkLuma: probe.inkLuma, paperLuma: against }, fallbackThreshold)
   // Light ink on a dark ground: flip the cut. A forced mono needs this too, or a

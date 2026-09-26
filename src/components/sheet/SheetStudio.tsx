@@ -113,7 +113,8 @@ export function SheetStudio() {
     if (openTile || view !== 'sheet') return
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
-      if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return
+      if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)))
+        return
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
         e.preventDefault()
         removeTile(selectedId)
@@ -194,7 +195,24 @@ export function SheetStudio() {
     }),
     // onExport closes over the export toggles, which are all in the dep list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [detect, grid, warnings, tiles, traceOptions, colorMode, hiRes, gradientMode, naming, ocr, running, exportSvg, exportPng, transparentPng, exporting, source],
+    [
+      detect,
+      grid,
+      warnings,
+      tiles,
+      traceOptions,
+      colorMode,
+      hiRes,
+      gradientMode,
+      naming,
+      ocr,
+      running,
+      exportSvg,
+      exportPng,
+      transparentPng,
+      exporting,
+      source,
+    ],
   )
 
   if (!source || !image) return null
@@ -226,8 +244,22 @@ export function SheetStudio() {
             value={view}
             onChange={setView}
             options={[
-              { value: 'icons', label: <><Grid2x2 size={13} /> Icons ({tiles.length})</> },
-              { value: 'sheet', label: <><Layers size={13} /> Sheet</> },
+              {
+                value: 'icons',
+                label: (
+                  <>
+                    <Grid2x2 size={13} /> Icons ({tiles.length})
+                  </>
+                ),
+              },
+              {
+                value: 'sheet',
+                label: (
+                  <>
+                    <Layers size={13} /> Sheet
+                  </>
+                ),
+              },
             ]}
           />
           {view === 'sheet' ? (
@@ -235,8 +267,24 @@ export function SheetStudio() {
               value={draw ? 'draw' : 'select'}
               onChange={(v) => setDraw(v === 'draw')}
               options={[
-                { value: 'select', title: 'Select & adjust boxes', label: <><MousePointer2 size={13} /> Select</> },
-                { value: 'draw', title: 'Drag on the sheet to add a box', label: <><Scissors size={13} /> Draw</> },
+                {
+                  value: 'select',
+                  title: 'Select & adjust boxes',
+                  label: (
+                    <>
+                      <MousePointer2 size={13} /> Select
+                    </>
+                  ),
+                },
+                {
+                  value: 'draw',
+                  title: 'Drag on the sheet to add a box',
+                  label: (
+                    <>
+                      <Scissors size={13} /> Draw
+                    </>
+                  ),
+                },
               ]}
             />
           ) : (
@@ -255,7 +303,12 @@ export function SheetStudio() {
             <CheckerToggle />
             <span className="h-5 w-px bg-line" aria-hidden />
             {running ? (
-              <Button variant="secondary" className="h-8 px-3 text-xs" icon={<Square size={13} />} onClick={() => stopAll()}>
+              <Button
+                variant="secondary"
+                className="h-8 px-3 text-xs"
+                icon={<Square size={13} />}
+                onClick={() => stopAll()}
+              >
                 Stop
               </Button>
             ) : (

@@ -34,7 +34,10 @@ function concat(parts: Uint8Array[]): Uint8Array {
   for (const p of parts) total += p.length
   const out = new Uint8Array(total)
   let o = 0
-  for (const p of parts) { out.set(p, o); o += p.length }
+  for (const p of parts) {
+    out.set(p, o)
+    o += p.length
+  }
   return out
 }
 

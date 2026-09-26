@@ -46,7 +46,10 @@ const NOCHAIN = argv.includes('--nochain')
 const CASE = argv.indexOf('--case') >= 0 ? argv[argv.indexOf('--case') + 1] : 'olympic-rings'
 const f = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d) : '   —  ')
 
-const file = [join(root, 'examples', 'logos', `${CASE}.svg`), join(root, 'public', 'examples', 'edge-cases', `${CASE}.svg`)].find((p) => {
+const file = [
+  join(root, 'examples', 'logos', `${CASE}.svg`),
+  join(root, 'public', 'examples', 'edge-cases', `${CASE}.svg`),
+].find((p) => {
   try {
     readFileSync(p)
     return true
@@ -113,7 +116,8 @@ function armCircle(e: SharedEdge, atEnd: boolean): { i: number; dev: number; len
     const seg = Math.hypot(b.x - a.x, b.y - a.y)
     for (let t = 0; t < seg; t += 0.5) {
       const s0 = acc + t
-      if (s0 >= ARM_NEAR && s0 <= ARM_FAR) pts.push({ x: a.x + ((b.x - a.x) * t) / seg, y: a.y + ((b.y - a.y) * t) / seg })
+      if (s0 >= ARM_NEAR && s0 <= ARM_FAR)
+        pts.push({ x: a.x + ((b.x - a.x) * t) / seg, y: a.y + ((b.y - a.y) * t) / seg })
     }
     acc += seg
     if (acc > ARM_FAR) break
@@ -150,7 +154,9 @@ const vById = new Map(topo.vertices.map((v) => [v.id, v]))
 
 console.log(`\n━━━ CROSSING CORNER ANGLES — ${CASE} @${RES}${NOCHAIN ? '  NO-CHAIN (§24)' : '  §25 chained'} ━━━`)
 console.log(`  ${circles.length} authored circles, ${topo.edges.length} edges, ${topo.vertices.length} vertices\n`)
-console.log(`  ${'crossing'.padStart(18)}${'authored°'.padStart(11)}${'traced°'.padStart(10)}${'err'.padStart(8)}   arms (circle, mean dev px)`)
+console.log(
+  `  ${'crossing'.padStart(18)}${'authored°'.padStart(11)}${'traced°'.padStart(10)}${'err'.padStart(8)}   arms (circle, mean dev px)`,
+)
 
 const errs: number[] = []
 for (let a = 0; a < circles.length; a++) {
@@ -188,7 +194,11 @@ for (let a = 0; a < circles.length; a++) {
         }
       }
       if (bestV < 0 || bd > 3) continue
-      const arms = (inc.get(bestV) ?? []).map((x) => ({ ...x, c: armCircle(x.e, x.atEnd), t: endTangent(x.e, x.atEnd) }))
+      const arms = (inc.get(bestV) ?? []).map((x) => ({
+        ...x,
+        c: armCircle(x.e, x.atEnd),
+        t: endTangent(x.e, x.atEnd),
+      }))
       const onA = arms.filter((x) => x.c.i === a && x.t)
       const onB = arms.filter((x) => x.c.i === b && x.t)
       if (!onA.length || !onB.length) continue
@@ -219,5 +229,7 @@ for (let a = 0; a < circles.length; a++) {
 }
 errs.sort((x, y) => x - y)
 const q = (t: number): number => errs[Math.min(errs.length - 1, Math.floor(t * errs.length))]
-console.log(`\n  ${errs.length} crossings scored — |traced − authored| :  p50 ${f(q(0.5), 2)}°   p90 ${f(q(0.9), 2)}°   MAX ${f(errs[errs.length - 1], 2)}°`)
+console.log(
+  `\n  ${errs.length} crossings scored — |traced − authored| :  p50 ${f(q(0.5), 2)}°   p90 ${f(q(0.9), 2)}°   MAX ${f(errs[errs.length - 1], 2)}°`,
+)
 console.log(`  mean ${f(errs.reduce((s, e) => s + e, 0) / (errs.length || 1), 2)}°\n`)

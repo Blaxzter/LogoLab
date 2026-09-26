@@ -74,8 +74,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
       <header className="text-center">
         <h1 className="text-lg font-bold tracking-tight text-ink">SVG editor</h1>
         <p className="mt-1 text-sm text-muted">
-          Draw, fix and rearrange vector artwork — nodes, shapes, layers and colour. Everything
-          stays in your browser.
+          Draw, fix and rearrange vector artwork — nodes, shapes, layers and colour. Everything stays in your browser.
         </p>
       </header>
 
@@ -97,12 +96,10 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
           {busy ? <Loader2 size={26} className="animate-spin text-accent" /> : <PenTool size={26} />}
         </div>
         <div>
-          <p className="text-base font-medium text-ink">
-            {dragging ? 'Drop to open it' : 'Drop an SVG to edit'}
-          </p>
+          <p className="text-base font-medium text-ink">{dragging ? 'Drop to open it' : 'Drop an SVG to edit'}</p>
           <p className="mt-1 max-w-md text-sm text-muted">
-            Its layer groups, gradients and strokes come across as editable objects — anything this
-            editor can't model round-trips untouched.
+            Its layer groups, gradients and strokes come across as editable objects — anything this editor can't model
+            round-trips untouched.
           </p>
           <p className="mt-2 text-xs text-faint">
             Drop a file or <span className="font-medium text-muted">click to browse</span> · SVG only
@@ -124,9 +121,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
                 ? 'The loaded logo is a bitmap. Trace it on the Vectorize tab first — that produces the SVG this editor works on.'
                 : 'No logo is loaded. Drop one on the Preview tab, or open an SVG file here.'
           }
-          onClick={() =>
-            logo.svgText && open(logo.svgText, logo.fileName?.replace(/\.[^.]+$/, '') ?? 'logo')
-          }
+          onClick={() => logo.svgText && open(logo.svgText, logo.fileName?.replace(/\.[^.]+$/, '') ?? 'logo')}
           className="btn btn-secondary h-9 max-w-full text-xs"
         >
           <ImageDown size={15} className="shrink-0" />
@@ -140,7 +135,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
           note={
             pasting
               ? 'Hides the box again.'
-              : "Opens a box for raw <svg> text — from a design tool, a codebase, anywhere."
+              : 'Opens a box for raw <svg> text — from a design tool, a codebase, anywhere.'
           }
           pressed={pasting}
           onClick={() => setPasting((v) => !v)}

@@ -188,9 +188,15 @@ class MinHeap {
     return this.reg[i] < this.reg[j]
   }
   swap(i: number, j: number): void {
-    const d = this.de[i]; this.de[i] = this.de[j]; this.de[j] = d
-    const p = this.pix[i]; this.pix[i] = this.pix[j]; this.pix[j] = p
-    const r = this.reg[i]; this.reg[i] = this.reg[j]; this.reg[j] = r
+    const d = this.de[i]
+    this.de[i] = this.de[j]
+    this.de[j] = d
+    const p = this.pix[i]
+    this.pix[i] = this.pix[j]
+    this.pix[j] = p
+    const r = this.reg[i]
+    this.reg[i] = this.reg[j]
+    this.reg[j] = r
   }
   up(i: number): void {
     while (i > 0) {

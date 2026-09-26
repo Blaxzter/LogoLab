@@ -2,16 +2,7 @@
 //
 // Single letters, matching the conventions of Affinity / Illustrator / Figma.
 
-export type EditorTool =
-  | 'select'
-  | 'node'
-  | 'pen'
-  | 'rect'
-  | 'ellipse'
-  | 'line'
-  | 'polygon'
-  | 'star'
-  | 'pan'
+export type EditorTool = 'select' | 'node' | 'pen' | 'rect' | 'ellipse' | 'line' | 'polygon' | 'star' | 'pan'
 
 export interface ToolDef {
   id: EditorTool

@@ -70,9 +70,7 @@ class FakeCache {
   }
 
   async delete(request: Request | string) {
-    return this.entries.delete(
-      typeof request === 'string' ? request : new URL(request.url).pathname,
-    )
+    return this.entries.delete(typeof request === 'string' ? request : new URL(request.url).pathname)
   }
 }
 
@@ -116,16 +114,10 @@ interface Harness {
  * Load the real worker source, fill in the two placeholders the build plugin
  * fills in, and run it against fakes.
  */
-function loadWorker(options: {
-  precache: string[]
-  fetch: (request: Request) => Promise<Response>
-}): Harness {
+function loadWorker(options: { precache: string[]; fetch: (request: Request) => Promise<Response> }): Harness {
   const source = readFileSync(fileURLToPath(new URL('../src/pwa/sw.js', import.meta.url)), 'utf8')
     .replace(/^const BUILD = '__BUILD_ID__'$/m, `const BUILD = ${JSON.stringify('testbuild')}`)
-    .replace(
-      /^const PRECACHE_URLS = __PRECACHE__$/m,
-      `const PRECACHE_URLS = ${JSON.stringify(options.precache)}`,
-    )
+    .replace(/^const PRECACHE_URLS = __PRECACHE__$/m, `const PRECACHE_URLS = ${JSON.stringify(options.precache)}`)
   assert.ok(!source.includes('__BUILD_ID__'), 'BUILD placeholder moved; update this test')
   assert.ok(!source.includes('__PRECACHE__'), 'PRECACHE placeholder moved; update this test')
 
@@ -153,10 +145,7 @@ function loadWorker(options: {
   // absolute one, so give the worker source a constructor that does the same.
   const ScopedRequest = new Proxy(Request, {
     construct: (target, [input, init]: [RequestInfo, RequestInit?]) =>
-      new target(
-        typeof input === 'string' ? new URL(input, 'https://logolab.test').href : input,
-        init,
-      ),
+      new target(typeof input === 'string' ? new URL(input, 'https://logolab.test').href : input, init),
   })
 
   // eslint-disable-next-line @typescript-eslint/no-implied-eval

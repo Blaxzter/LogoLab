@@ -34,8 +34,17 @@ function hexA(c: RGB): string {
 function parseHexA(raw: string): RGB | null {
   const v = raw.trim().replace(/^#/, '')
   let h: string
-  if (/^[0-9a-fA-F]{3}$/.test(v)) h = v.split('').map((c) => c + c).join('') + 'ff'
-  else if (/^[0-9a-fA-F]{4}$/.test(v)) h = v.split('').map((c) => c + c).join('')
+  if (/^[0-9a-fA-F]{3}$/.test(v))
+    h =
+      v
+        .split('')
+        .map((c) => c + c)
+        .join('') + 'ff'
+  else if (/^[0-9a-fA-F]{4}$/.test(v))
+    h = v
+      .split('')
+      .map((c) => c + c)
+      .join('')
   else if (/^[0-9a-fA-F]{6}$/.test(v)) h = v + 'ff'
   else if (/^[0-9a-fA-F]{8}$/.test(v)) h = v
   else return null
@@ -82,9 +91,8 @@ export function PaletteEditor({ autoPalette, locked, onChange, onHighlight }: Pa
     return (
       <>
         <p className="text-xs leading-snug text-muted">
-          The flat colours your art reduces to. <em>Edit</em> to take over — eyedrop, tweak a hex,
-          set an opacity, or add/remove a colour. Left automatic, they snap to the true design
-          colours (and each region's opacity).
+          The flat colours your art reduces to. <em>Edit</em> to take over — eyedrop, tweak a hex, set an opacity, or
+          add/remove a colour. Left automatic, they snap to the true design colours (and each region's opacity).
         </p>
         {autoPalette.length > 0 ? (
           <>
@@ -177,8 +185,8 @@ export function PaletteEditor({ autoPalette, locked, onChange, onHighlight }: Pa
         )}
       </div>
       <p className="text-xs leading-snug text-muted">
-        Every pixel snaps to its nearest colour here. Drag a swatch's slider for a translucent fill.
-        Remove a colour to merge its areas into the nearest remaining one.
+        Every pixel snaps to its nearest colour here. Drag a swatch's slider for a translucent fill. Remove a colour to
+        merge its areas into the nearest remaining one.
       </p>
     </>
   )

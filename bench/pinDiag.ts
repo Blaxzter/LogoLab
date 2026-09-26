@@ -65,8 +65,11 @@ const logoCases = (): Case[] => {
     return []
   }
   const arg = flag('--logos')
-  const wanted = arg === 'all' ? onDisk.map((f) => f.replace(/\.svg$/, '')) : arg ? arg.split(',').map((s) => s.trim()) : WITNESSES
-  return wanted.filter((w) => onDisk.includes(`${w}.svg`)).map((w) => ({ name: w, svg: `examples/logos/${w}.svg`, gradients: false }))
+  const wanted =
+    arg === 'all' ? onDisk.map((f) => f.replace(/\.svg$/, '')) : arg ? arg.split(',').map((s) => s.trim()) : WITNESSES
+  return wanted
+    .filter((w) => onDisk.includes(`${w}.svg`))
+    .map((w) => ({ name: w, svg: `examples/logos/${w}.svg`, gradients: false }))
 }
 const cases: Case[] = argv.includes('--logos')
   ? logoCases()
@@ -81,7 +84,8 @@ const SHIFT_EDGES = [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, Infinity]
 const shiftOf = (r: PinDiagRecord): number => 2 * r.handle * Math.sin((r.rotDeg * Math.PI) / 360)
 const bucket = (v: number, edges: number[]): number => edges.findIndex((e) => v < e)
 
-const q = (xs: number[], p: number): number => (xs.length ? xs.slice().sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))] : NaN)
+const q = (xs: number[], p: number): number =>
+  xs.length ? xs.slice().sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))] : NaN
 const f2 = (v: number): string => (Number.isFinite(v) ? v.toFixed(2) : ' n/a').padStart(6)
 
 const grand = new Map<string, number>()

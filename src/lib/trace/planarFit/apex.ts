@@ -2,10 +2,28 @@
 
 import type { Vec } from '../../path/types'
 import {
-  ARC_ARM_BOW_MIN, ARC_ARM_MIN_N, ARC_PHI_MIN_DEG, ARC_PIN_MIN_N, ARC_PIN_TURN_MIN_DEG, ARC_TIP_MIN_DEG,
-  ARM_PIN_SAMPLES, PARALLEL_TIP_DEG, SHORT_ARM_PROBE_MIN, SHORT_ARM_SAMPLES, SNAP_COLLINEAR, SNAP_SPAN,
-  armCircle, armFitOf, armIntersections, armLine, armTangent, boxSmooth, circleTangentAt,
-  type ArmCircle, type ArmFit, type ArmTangent,
+  ARC_ARM_BOW_MIN,
+  ARC_ARM_MIN_N,
+  ARC_PHI_MIN_DEG,
+  ARC_PIN_MIN_N,
+  ARC_PIN_TURN_MIN_DEG,
+  ARC_TIP_MIN_DEG,
+  ARM_PIN_SAMPLES,
+  PARALLEL_TIP_DEG,
+  SHORT_ARM_PROBE_MIN,
+  SHORT_ARM_SAMPLES,
+  SNAP_COLLINEAR,
+  SNAP_SPAN,
+  armCircle,
+  armFitOf,
+  armIntersections,
+  armLine,
+  armTangent,
+  boxSmooth,
+  circleTangentAt,
+  type ArmCircle,
+  type ArmFit,
+  type ArmTangent,
 } from './arms.ts'
 import { dist, fitCircle } from './geom.ts'
 import { DEFAULT_PLANAR_FIT, type PlanarFitOptions } from './options.ts'
@@ -83,13 +101,31 @@ export type ApexDiag = (r: ApexDiagRecord) => void
  * (±1 for loops, 0 for open chains) feeds the concavity test.
  */
 function snapCornerToArmsFull(
-  pts: Vec[], c: number, inGap: number, outGap: number, inSpan: number, outSpan: number, inMax = 0, outMax = 0,
+  pts: Vec[],
+  c: number,
+  inGap: number,
+  outGap: number,
+  inSpan: number,
+  outSpan: number,
+  inMax = 0,
+  outMax = 0,
   opts: PlanarFitOptions = DEFAULT_PLANAR_FIT,
   winding = 0,
 ): { p: Vec; inArm: ArmFit | null; outArm: ArmFit | null; outcome: ApexOutcome; allow: number; hit: Vec | null } {
   const n = pts.length
-  const keep = (outcome: ApexOutcome, inArm: ArmFit | null, outArm: ArmFit | null, allow = 0, hit: Vec | null = null) => ({
-    p: { x: pts[c].x, y: pts[c].y }, inArm, outArm, outcome, allow, hit,
+  const keep = (
+    outcome: ApexOutcome,
+    inArm: ArmFit | null,
+    outArm: ArmFit | null,
+    allow = 0,
+    hit: Vec | null = null,
+  ) => ({
+    p: { x: pts[c].x, y: pts[c].y },
+    inArm,
+    outArm,
+    outcome,
+    allow,
+    hit,
   })
   const wrap = (i: number): number => ((i % n) + n) % n
   // Base window [gap..span], then extend up to `max` while the arm stays collinear.
@@ -236,8 +272,16 @@ function snapCornerToArmsFull(
   // Report each arm's direction as the tangent at the apex; the tangent pin consumes it.
   const pinMinN = opts.arcPinMinN ?? ARC_PIN_MIN_N
   // Corrected turn: from the model tangents where they exist, else the chords.
-  const dInF = tanA ? orient(tanA.d, pts[wrap(c - inSpan)], pts[c]) : circA ? circleTangentAt(circA, hit, inArm.dir) : inArm.dir
-  const dOutF = tanB ? orient(tanB.d, pts[c], pts[wrap(c + outSpan)]) : circB ? circleTangentAt(circB, hit, outArm.dir) : outArm.dir
+  const dInF = tanA
+    ? orient(tanA.d, pts[wrap(c - inSpan)], pts[c])
+    : circA
+      ? circleTangentAt(circA, hit, inArm.dir)
+      : inArm.dir
+  const dOutF = tanB
+    ? orient(tanB.d, pts[c], pts[wrap(c + outSpan)])
+    : circB
+      ? circleTangentAt(circB, hit, outArm.dir)
+      : outArm.dir
   const cosC = Math.min(1, Math.max(-1, -(dInF.x * dOutF.x + dInF.y * dOutF.y)))
   const turnC = 180 - (Math.acos(cosC) * 180) / Math.PI
   const pinTurnOk = turnC >= (opts.arcPinTurnMinDeg ?? ARC_PIN_TURN_MIN_DEG)
@@ -273,8 +317,16 @@ function snapCornerToArmsFull(
   // little to reconstruct. Past the cap we keep the lattice corner.
   const shortSpan = Math.min(inSpan, outSpan)
   const allow = shortSpan >= (opts.snapSpan ?? SNAP_SPAN) ? Math.max(inSpan, outSpan) : Math.max(2, 0.5 * shortSpan)
-  if (dist({ x: ix, y: iy }, pts[c]) > allow) return keep('over-cap', pinArm(inArm, inSamples), pinArm(outArm, outSamples), allow, hitOut)
-  return { p: { x: ix, y: iy }, inArm: pinArm(inArm, inSamples), outArm: pinArm(outArm, outSamples), outcome: 'reconstructed', allow, hit: hitOut }
+  if (dist({ x: ix, y: iy }, pts[c]) > allow)
+    return keep('over-cap', pinArm(inArm, inSamples), pinArm(outArm, outSamples), allow, hitOut)
+  return {
+    p: { x: ix, y: iy },
+    inArm: pinArm(inArm, inSamples),
+    outArm: pinArm(outArm, outSamples),
+    outcome: 'reconstructed',
+    allow,
+    hit: hitOut,
+  }
 }
 
 /** Intersection of two lines given as point + unit direction; null when parallel. */
@@ -357,7 +409,11 @@ export function snapApex(
       const k = reach / moved
       full = {
         p: { x: pts[c].x + (full.p.x - pts[c].x) * k, y: pts[c].y + (full.p.y - pts[c].y) * k },
-        inArm: full.inArm, outArm: full.outArm, outcome: 'past-evidence', allow: full.allow, hit: full.hit,
+        inArm: full.inArm,
+        outArm: full.outArm,
+        outcome: 'past-evidence',
+        allow: full.allow,
+        hit: full.hit,
       }
       moved = reach
     }
@@ -371,19 +427,29 @@ export function snapApex(
       tipDeg = (Math.acos(cosI) * 180) / Math.PI
     }
     opts.apexDiag({
-      cx: pts[c].x, cy: pts[c].y,
-      ax: full.p.x, ay: full.p.y,
+      cx: pts[c].x,
+      cy: pts[c].y,
+      ax: full.p.x,
+      ay: full.p.y,
       moved,
       outcome: full.outcome,
       allow: full.allow,
-      inSpan, outSpan, inGap, outGap,
-      hx: full.hit?.x ?? NaN, hy: full.hit?.y ?? NaN,
-      inBow: a?.bow ?? -1, outBow: b?.bow ?? -1,
-      inChord: a?.chord ?? -1, outChord: b?.chord ?? -1,
-      inN: a?.n ?? -1, outN: b?.n ?? -1,
+      inSpan,
+      outSpan,
+      inGap,
+      outGap,
+      hx: full.hit?.x ?? NaN,
+      hy: full.hit?.y ?? NaN,
+      inBow: a?.bow ?? -1,
+      outBow: b?.bow ?? -1,
+      inChord: a?.chord ?? -1,
+      outChord: b?.chord ?? -1,
+      inN: a?.n ?? -1,
+      outN: b?.n ?? -1,
       tipDeg,
       reach,
-      inKind: a?.kind ?? 'line', outKind: b?.kind ?? 'line',
+      inKind: a?.kind ?? 'line',
+      outKind: b?.kind ?? 'line',
     })
   }
   return { p: full.p, inArm: full.inArm, outArm: full.outArm }

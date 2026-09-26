@@ -61,7 +61,8 @@ const BORDER_EPS = 1.5
 /** Recursive de Casteljau to a chord-flatness tolerance. Appends to `out` (excl. p0). */
 function flattenCubic(p0: Vec, c1: Vec, c2: Vec, p3: Vec, out: Vec[], depth = 0): void {
   // Flatness = max control-point deviation from the chord.
-  const dx = p3.x - p0.x, dy = p3.y - p0.y
+  const dx = p3.x - p0.x,
+    dy = p3.y - p0.y
   const d1 = Math.abs((c1.x - p3.x) * dy - (c1.y - p3.y) * dx)
   const d2 = Math.abs((c2.x - p3.x) * dy - (c2.y - p3.y) * dx)
   const dd = (d1 + d2) ** 2
@@ -70,8 +71,11 @@ function flattenCubic(p0: Vec, c1: Vec, c2: Vec, p3: Vec, out: Vec[], depth = 0)
     return
   }
   const mid = (a: Vec, b: Vec): Vec => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
-  const p01 = mid(p0, c1), p12 = mid(c1, c2), p23 = mid(c2, p3)
-  const p012 = mid(p01, p12), p123 = mid(p12, p23)
+  const p01 = mid(p0, c1),
+    p12 = mid(c1, c2),
+    p23 = mid(c2, p3)
+  const p012 = mid(p01, p12),
+    p123 = mid(p12, p23)
   const m = mid(p012, p123)
   flattenCubic(p0, p01, p012, m, out, depth + 1)
   flattenCubic(m, p123, p23, p3, out, depth + 1)
@@ -98,7 +102,12 @@ function polylineLength(pts: Vec[]): number {
 
 /** A query point plus the unit tangent of the segment it was sampled from — the tangent
  *  exists so the visibility test can step along the boundary NORMAL. */
-interface QueryPt { x: number; y: number; tx: number; ty: number }
+interface QueryPt {
+  x: number
+  y: number
+  tx: number
+  ty: number
+}
 
 /**
  * Walk a polyline at a FIXED ARC-LENGTH step, emitting query points. This is the step that
@@ -111,10 +120,12 @@ function resampleByArcLength(pts: Vec[], spacing: number, out: QueryPt[]): void 
   out.push({ x: pts[0].x, y: pts[0].y, tx: (pts[1].x - pts[0].x) / l0, ty: (pts[1].y - pts[0].y) / l0 })
   let carry = 0
   for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1], b = pts[i]
+    const a = pts[i - 1],
+      b = pts[i]
     const seg = Math.hypot(b.x - a.x, b.y - a.y)
     if (seg <= 0) continue
-    const tx = (b.x - a.x) / seg, ty = (b.y - a.y) / seg
+    const tx = (b.x - a.x) / seg,
+      ty = (b.y - a.y) / seg
     let t = spacing - carry
     while (t <= seg) {
       const u = t / seg
@@ -129,50 +140,73 @@ function resampleByArcLength(pts: Vec[], spacing: number, out: QueryPt[]): void 
 // Nearest-segment distance, with a uniform grid
 // ---------------------------------------------------------------------------
 
-interface Seg { ax: number; ay: number; bx: number; by: number }
+interface Seg {
+  ax: number
+  ay: number
+  bx: number
+  by: number
+}
 
 /** Squared distance from a point to a segment. */
 function distSqToSeg(px: number, py: number, s: Seg): number {
-  const vx = s.bx - s.ax, vy = s.by - s.ay
-  const wx = px - s.ax, wy = py - s.ay
+  const vx = s.bx - s.ax,
+    vy = s.by - s.ay
+  const wx = px - s.ax,
+    wy = py - s.ay
   const vv = vx * vx + vy * vy
   let t = vv > 0 ? (wx * vx + wy * vy) / vv : 0
   t = t < 0 ? 0 : t > 1 ? 1 : t
-  const dx = px - (s.ax + t * vx), dy = py - (s.ay + t * vy)
+  const dx = px - (s.ax + t * vx),
+    dy = py - (s.ay + t * vy)
   return dx * dx + dy * dy
 }
 
 /** Uniform spatial hash over segments — expanding-ring query, exact nearest segment. */
 class SegGrid {
   private cell: number
-  private minX = Infinity; private minY = Infinity
-  private cols = 0; private rows = 0
+  private minX = Infinity
+  private minY = Infinity
+  private cols = 0
+  private rows = 0
   private bins: Seg[][] = []
 
   constructor(segs: Seg[], cell = 8) {
     this.cell = cell
-    let maxX = -Infinity, maxY = -Infinity
+    let maxX = -Infinity,
+      maxY = -Infinity
     for (const s of segs) {
-      this.minX = Math.min(this.minX, s.ax, s.bx); this.minY = Math.min(this.minY, s.ay, s.by)
-      maxX = Math.max(maxX, s.ax, s.bx); maxY = Math.max(maxY, s.ay, s.by)
+      this.minX = Math.min(this.minX, s.ax, s.bx)
+      this.minY = Math.min(this.minY, s.ay, s.by)
+      maxX = Math.max(maxX, s.ax, s.bx)
+      maxY = Math.max(maxY, s.ay, s.by)
     }
-    if (!segs.length) { this.minX = this.minY = 0; maxX = maxY = 0 }
+    if (!segs.length) {
+      this.minX = this.minY = 0
+      maxX = maxY = 0
+    }
     this.cols = Math.max(1, Math.ceil((maxX - this.minX) / cell) + 1)
     this.rows = Math.max(1, Math.ceil((maxY - this.minY) / cell) + 1)
     this.bins = Array.from({ length: this.cols * this.rows }, () => [])
     for (const s of segs) {
-      const c0 = this.cx(Math.min(s.ax, s.bx)), c1 = this.cx(Math.max(s.ax, s.bx))
-      const r0 = this.cy(Math.min(s.ay, s.by)), r1 = this.cy(Math.max(s.ay, s.by))
+      const c0 = this.cx(Math.min(s.ax, s.bx)),
+        c1 = this.cx(Math.max(s.ax, s.bx))
+      const r0 = this.cy(Math.min(s.ay, s.by)),
+        r1 = this.cy(Math.max(s.ay, s.by))
       for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) this.bins[r * this.cols + c].push(s)
     }
   }
-  private cx(x: number): number { return Math.min(this.cols - 1, Math.max(0, Math.floor((x - this.minX) / this.cell))) }
-  private cy(y: number): number { return Math.min(this.rows - 1, Math.max(0, Math.floor((y - this.minY) / this.cell))) }
+  private cx(x: number): number {
+    return Math.min(this.cols - 1, Math.max(0, Math.floor((x - this.minX) / this.cell)))
+  }
+  private cy(y: number): number {
+    return Math.min(this.rows - 1, Math.max(0, Math.floor((y - this.minY) / this.cell)))
+  }
 
   /** Exact distance to the nearest segment; Infinity if the grid is empty. */
   nearest(px: number, py: number): number {
     if (!this.bins.length) return Infinity
-    const c = this.cx(px), r = this.cy(py)
+    const c = this.cx(px),
+      r = this.cy(py)
     let best = Infinity
     const maxRing = Math.max(this.cols, this.rows)
     for (let ring = 0; ring <= maxRing; ring++) {
@@ -245,9 +279,10 @@ function collectBoundary(
       nodes += sp.nodes.length
       const poly = flattenSubPath(sp)
       if (poly.length < 2) continue
-      const pts = sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
-        ? [...poly, poly[0]]
-        : poly
+      const pts =
+        sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+          ? [...poly, poly[0]]
+          : poly
       length += polylineLength(pts)
       for (let i = 1; i < pts.length; i++) {
         segs.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
@@ -337,7 +372,14 @@ export const CORNER_MATCH_R = 2.5
  *  this gate's. Applied to GT corners only; any traced hard corner is a valid match target. */
 export const CORNER_MIN_EDGE = 7
 
-export interface Corner { x: number; y: number; itx: number; ity: number; otx: number; oty: number }
+export interface Corner {
+  x: number
+  y: number
+  itx: number
+  ity: number
+  otx: number
+  oty: number
+}
 
 /**
  * SHARP corners of a set of subpath lists: a vertex where the boundary TANGENT turns by
@@ -393,7 +435,10 @@ export function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
         const ln = Math.hypot(ix, iy)
         const lt = Math.hypot(ox, oy)
         if (ln < 1e-6 || lt < 1e-6) continue
-        ix /= ln; iy /= ln; ox /= lt; oy /= lt
+        ix /= ln
+        iy /= ln
+        ox /= lt
+        oy /= lt
         if (ix * ox + iy * oy <= cosMax) out.push({ x: cur.x, y: cur.y, itx: ix, ity: iy, otx: ox, oty: oy })
       }
     }
@@ -422,7 +467,8 @@ function matchCorners(gt: Corner[], doc: Corner[], R: number): number {
   for (const p of doc) {
     const k = key(Math.floor(p.x / cell), Math.floor(p.y / cell))
     const a = grid.get(k)
-    if (a) a.push(p); else grid.set(k, [p])
+    if (a) a.push(p)
+    else grid.set(k, [p])
   }
   const R2 = R * R
   let hit = 0
@@ -435,7 +481,10 @@ function matchCorners(gt: Corner[], doc: Corner[], R: number): number {
         for (const p of grid.get(key(gx + dx, gy + dy)) ?? []) {
           const ddx = p.x - g.x
           const ddy = p.y - g.y
-          if (ddx * ddx + ddy * ddy <= R2) { found = true; break }
+          if (ddx * ddx + ddy * ddy <= R2) {
+            found = true
+            break
+          }
         }
       }
     }
@@ -501,11 +550,15 @@ const toHex = (c: [number, number, number]): string =>
 /** CIE76 distance from `p` to the SEGMENT a—b in Lab (clamped, so "past an end" reads as
  *  "near that end"): the ramp between two tones of one ink is that ink too. */
 function labSegDist(p: Lab, a: Lab, b: Lab): number {
-  const abL = b[0] - a[0], abA = b[1] - a[1], abB = b[2] - a[2]
+  const abL = b[0] - a[0],
+    abA = b[1] - a[1],
+    abB = b[2] - a[2]
   const len2 = abL * abL + abA * abA + abB * abB
   let t = len2 > 0 ? ((p[0] - a[0]) * abL + (p[1] - a[1]) * abA + (p[2] - a[2]) * abB) / len2 : 0
   t = Math.max(0, Math.min(1, t))
-  const dL = p[0] - (a[0] + t * abL), dA = p[1] - (a[1] + t * abA), dB = p[2] - (a[2] + t * abB)
+  const dL = p[0] - (a[0] + t * abL),
+    dA = p[1] - (a[1] + t * abA),
+    dB = p[2] - (a[2] + t * abB)
   return Math.sqrt(dL * dL + dA * dA + dB * dB)
 }
 
@@ -565,7 +618,10 @@ export function scoreRegions(
       let flat = true
       for (let dy = -1; dy <= 1 && flat; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
-          if (rgbAt(i + dy * width + dx) !== key) { flat = false; break }
+          if (rgbAt(i + dy * width + dx) !== key) {
+            flat = false
+            break
+          }
         }
       }
       if (flat) hist.set(key, (hist.get(key) ?? 0) + 1)
@@ -575,7 +631,11 @@ export function scoreRegions(
   const minArea = Math.max(16, area * MIN_AREA_FRAC)
   const rawRegions = [...hist.entries()]
     .filter(([, n]) => n >= minArea)
-    .map(([k, n]) => ({ key: k, rgb: [(k >> 16) & 255, (k >> 8) & 255, k & 255] as [number, number, number], areaPx: n }))
+    .map(([k, n]) => ({
+      key: k,
+      rgb: [(k >> 16) & 255, (k >> 8) & 255, k & 255] as [number, number, number],
+      areaPx: n,
+    }))
     .sort((a, b) => b.areaPx - a.areaPx)
 
   // Fold ink families: every raster region that belongs to a family becomes part of ONE
@@ -583,10 +643,12 @@ export function scoreRegions(
   // pixel census below samples all of them); `labs` every colour the region may be painted
   // as (the family's listed members — the trace paints one of them, whichever tone wins).
   type Region = { key: number; rgb: [number, number, number]; areaPx: number; keys: number[]; labs: Lab[] }
-  const families = (opts.inkFamilies ?? []).map((f) => f.map((hx) => {
-    const v = parseInt(hx.replace('#', ''), 16)
-    return srgbToLab((v >> 16) & 255, (v >> 8) & 255, v & 255)
-  }))
+  const families = (opts.inkFamilies ?? []).map((f) =>
+    f.map((hx) => {
+      const v = parseInt(hx.replace('#', ''), 16)
+      return srgbToLab((v >> 16) & 255, (v >> 8) & 255, v & 255)
+    }),
+  )
   const familyOf = (rgb: [number, number, number]): number => {
     const lab = srgbToLab(rgb[0], rgb[1], rgb[2])
     for (let f = 0; f < families.length; f++) {
@@ -650,7 +712,9 @@ export function scoreRegions(
     const s = sampleOf.get(r.key) ?? []
     // Median per channel: robust to the few interior pixels that land on a traced edge.
     const got: [number, number, number] = [
-      median(s.map((p) => p[0])), median(s.map((p) => p[1])), median(s.map((p) => p[2])),
+      median(s.map((p) => p[0])),
+      median(s.map((p) => p[1])),
+      median(s.map((p) => p[2])),
     ]
     // A family is recovered when the paint is within tolerance of ANY of its tones.
     const d = Number.isFinite(got[0])
@@ -658,7 +722,12 @@ export function scoreRegions(
       : Infinity
     if (d <= MATCH_DELTA_E) recovered++
     else {
-      missing.push({ hex: toHex(r.rgb), areaPx: r.areaPx, paintedHex: Number.isFinite(got[0]) ? toHex(got) : '—', deltaE: d })
+      missing.push({
+        hex: toHex(r.rgb),
+        areaPx: r.areaPx,
+        paintedHex: Number.isFinite(got[0]) ? toHex(got) : '—',
+        deltaE: d,
+      })
       for (const k of r.keys) droppedKeys.add(k)
     }
   }
@@ -724,7 +793,11 @@ const pct = (a: number[], p: number): number => {
 
 /** A boundary sample and how far it sits from the other side's boundary — the raw material
  *  the view draws as a heat map, so a bad number can be LOCATED and not merely reported. */
-export interface DistPoint { x: number; y: number; d: number }
+export interface DistPoint {
+  x: number
+  y: number
+  d: number
+}
 
 export interface GeomDiagnostics {
   /** VISIBLE authored boundary (occluded outline excluded — see makeVisibleAt), coloured by
@@ -765,12 +838,15 @@ const VIS_SAME = 2
  * traced-wrong case intact (gradient-flat 6.31 → 6.31, hairlines 0.39 → 0.39); real dropped
  * regions stay caught because THEIR edges are visible in the truth render by definition.
  */
-export function makeVisibleAt(
-  raster: { width: number; height: number; data: Uint8ClampedArray | Uint8Array },
-): (q: { x: number; y: number; tx: number; ty: number }) => boolean {
+export function makeVisibleAt(raster: {
+  width: number
+  height: number
+  data: Uint8ClampedArray | Uint8Array
+}): (q: { x: number; y: number; tx: number; ty: number }) => boolean {
   const { width, height, data } = raster
   const at = (x: number, y: number): number => {
-    const xi = Math.round(x), yi = Math.round(y)
+    const xi = Math.round(x),
+      yi = Math.round(y)
     if (xi < 0 || yi < 0 || xi >= width || yi >= height) return -1
     const o = (yi * width + xi) * 4
     return (data[o] << 16) | (data[o + 1] << 8) | data[o + 2]
@@ -846,16 +922,21 @@ const KINK_CROSS = 1.6
 /** Distinct traced subpaths within this of a site; three or more is a junction. */
 const KINK_JUNCTION = 1.6
 
-interface TurnChain { pts: QueryPt[]; closed: boolean; shape: number }
+interface TurnChain {
+  pts: QueryPt[]
+  closed: boolean
+  shape: number
+}
 
 /** Uniform arc-length resample of one subpath, with per-sample tangents. */
 function turnChain(sp: SubPath, shape: number): TurnChain | null {
   const poly = flattenSubPath(sp)
   if (poly.length < 2) return null
   const closed = sp.closed !== false
-  const pts = closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
-    ? [...poly, poly[0]]
-    : poly
+  const pts =
+    closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+      ? [...poly, poly[0]]
+      : poly
   const out: QueryPt[] = []
   resampleByArcLength(pts, KINK_STEP, out)
   return out.length >= 3 ? { pts: out, closed, shape } : null
@@ -871,7 +952,11 @@ function chainTurn(ch: TurnChain, i: number, win: number): number {
   return (Math.acos(Math.max(-1, Math.min(1, a.tx * b.tx + a.ty * b.ty))) * 180) / Math.PI
 }
 
-export interface InventedCorner { x: number; y: number; excess: number }
+export interface InventedCorner {
+  x: number
+  y: number
+  excess: number
+}
 
 /**
  * Sharp corners the trace asserts that the authored art does not have, and the worst one's
@@ -892,12 +977,18 @@ export function inventedCorners(
     }
   })
   if (!chains.length) return { count: 0, worstExcess: 0, sites: [] }
-  const gtCorners = sharpCorners(gt.map((sh) => sh.subPaths), 0)
+  const gtCorners = sharpCorners(
+    gt.map((sh) => sh.subPaths),
+    0,
+  )
   const docPolys = docSets.flat().map((sp) => flattenSubPath(sp))
 
   // One physical corner is reported once per side of a shared edge; keep one of each.
   const uniq: Corner[] = []
-  for (const c of sharpCorners(docSets.flat().map((sp) => [sp]), 0))
+  for (const c of sharpCorners(
+    docSets.flat().map((sp) => [sp]),
+    0,
+  ))
     if (!uniq.some((u) => Math.hypot(u.x - c.x, u.y - c.y) <= 0.35)) uniq.push(c)
 
   // A uniform bucket grid over the authored samples: without it this is
@@ -1041,8 +1132,17 @@ export interface CircleRecovery {
    *  with both the size and the placement terms removed. REPORTED, not gated. */
   roundness: number
   per: {
-    cx: number; cy: number; r: number; samples: number; p50: number; p95: number
-    max: number; bias: number; spread: number; centre: number; roundness: number
+    cx: number
+    cy: number
+    r: number
+    samples: number
+    p50: number
+    p95: number
+    max: number
+    bias: number
+    spread: number
+    centre: number
+    roundness: number
   }[]
 }
 
@@ -1069,7 +1169,9 @@ export function strokedCircleGround(svg: string, rasterWidth: number): GroundSha
     const before = svg.slice(0, m.index)
     // stroke-width may be inherited from an ancestor <g>; the innermost declaration before
     // the element is enough for the flat one-group files this applies to.
-    const sw = attr('stroke-width') ? Number(attr('stroke-width')) : Number([...before.matchAll(/stroke-width="([\d.]+)"/g)].pop()?.[1] ?? 0)
+    const sw = attr('stroke-width')
+      ? Number(attr('stroke-width'))
+      : Number([...before.matchAll(/stroke-width="([\d.]+)"/g)].pop()?.[1] ?? 0)
     if (!(sw > 0) && attr('fill') === 'none') continue
     const cx = Number(attr('cx') ?? 0) * k
     const cy = Number(attr('cy') ?? 0) * k
@@ -1111,7 +1213,13 @@ export function circleRecovery(gt: GroundShape[], docSets: SubPath[][], w: numbe
   const circles = authoredCircles(gt)
   if (!circles.length) return { circles: 0, spread: 0, bias: 0, centre: 0, roundness: 0, per: [] }
   const D = collectBoundary(docSets, w, h)
-  const gGrid = new SegGrid(collectBoundary(gt.map((s) => s.subPaths), w, h).segs)
+  const gGrid = new SegGrid(
+    collectBoundary(
+      gt.map((s) => s.subPaths),
+      w,
+      h,
+    ).segs,
+  )
   const errs: number[][] = circles.map(() => [])
   // Signed residual (outward positive): separates a whole arc DISPLACED off the circle
   // (|bias| ≈ p95) from one that wobbles about it (bias ≈ 0). Different defects.
@@ -1129,7 +1237,10 @@ export function circleRecovery(gt: GroundShape[], docSets: SubPath[][], w: numbe
     for (let i = 0; i < circles.length; i++) {
       const c = circles[i]
       const e = Math.abs(Math.hypot(p.x - c.cx, p.y - c.cy) - c.r)
-      if (e < bestE) { bestE = e; best = i }
+      if (e < bestE) {
+        bestE = e
+        best = i
+      }
     }
     if (best < 0 || bestE > CIRCLE_BAND) continue
     // The distance from a point to a full circle IS |‖p−c‖ − r|, so dGT ≤ bestE always;
@@ -1155,13 +1266,18 @@ export function circleRecovery(gt: GroundShape[], docSets: SubPath[][], w: numbe
     const own = pts[i].length >= 8 ? fitCircle(pts[i]) : null
     const ownErr = own ? pts[i].map((p) => Math.abs(Math.hypot(p.x - own.cx, p.y - own.cy) - own.r)) : []
     return {
-      cx: c.cx, cy: c.cy, r: c.r,
+      cx: c.cx,
+      cy: c.cy,
+      r: c.r,
       samples: errs[i].length,
       p50: pct(errs[i], 0.5),
       p95: pct(errs[i], 0.95),
       max: maxOf(errs[i]),
       bias: b,
-      spread: pct(signed[i].map((v) => Math.abs(v - b)), 0.95),
+      spread: pct(
+        signed[i].map((v) => Math.abs(v - b)),
+        0.95,
+      ),
       centre: own ? Math.hypot(own.cx - c.cx, own.cy - c.cy) : NaN,
       roundness: own ? pct(ownErr, 0.95) : NaN,
     }
@@ -1194,9 +1310,10 @@ export function nearestTo(sets: SubPath[][]): (x: number, y: number) => number {
     for (const sp of set) {
       const poly = flattenSubPath(sp)
       if (poly.length < 2) continue
-      const pts = sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
-        ? [...poly, poly[0]]
-        : poly
+      const pts =
+        sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+          ? [...poly, poly[0]]
+          : poly
       for (let i = 1; i < pts.length; i++) segs.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
     }
   }
@@ -1229,9 +1346,10 @@ export function signedNearestTo(sets: SubPath[][]): (x: number, y: number) => nu
     for (const sp of set) {
       const poly = flattenSubPath(sp)
       if (poly.length < 2) continue
-      const pts = sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
-        ? [...poly, poly[0]]
-        : poly
+      const pts =
+        sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+          ? [...poly, poly[0]]
+          : poly
       for (let i = 1; i < pts.length; i++) segs.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
     }
   }
@@ -1247,7 +1365,8 @@ export function signedNearestTo(sets: SubPath[][]): (x: number, y: number) => nu
       const dd = Math.sqrt(distSqToSeg(x, y, sg))
       if (dd < best) {
         best = dd
-        const vx = sg.bx - sg.ax, vy = sg.by - sg.ay
+        const vx = sg.bx - sg.ax,
+          vy = sg.by - sg.ay
         side = (x - sg.ax) * vy - (y - sg.ay) * vx >= 0 ? 1 : -1
       }
     }
@@ -1286,7 +1405,12 @@ export const BAND_FLOOR = 0.15
 
 /** One scored band sample, for the instrument's per-site dump. Purely observational: the
  *  score is identical whether or not a sink is attached. */
-export interface BandSample { x: number; y: number; d: number; side: 'missed' | 'spurious' }
+export interface BandSample {
+  x: number
+  y: number
+  d: number
+  side: 'missed' | 'spurious'
+}
 
 export interface BorderBand {
   /** Mean of both directed distances over the band's transversal samples. */
@@ -1353,7 +1477,10 @@ export function scoreBorderBand(
   /** Distance to the canvas rect and that edge's own direction. SIGNED: a point outside the
    *  rectangle reads negative, which is how off-canvas art is detected instead of admitted. */
   const edgeOf = (p: QueryPt): { d: number; ex: number; ey: number } => {
-    const dl = p.x, dr = w - p.x, dt = p.y, db = h - p.y
+    const dl = p.x,
+      dr = w - p.x,
+      dt = p.y,
+      db = h - p.y
     const m = Math.min(dl, dr, dt, db)
     // Left/right edges run vertically; top/bottom run horizontally.
     return m === dl || m === dr ? { d: m, ex: 0, ey: 1 } : { d: m, ex: 1, ey: 0 }
@@ -1363,8 +1490,7 @@ export function scoreBorderBand(
     const e = edgeOf(p)
     return Math.abs(p.tx * e.ey - p.ty * e.ex) < parSin
   }
-  const atCorner = (p: QueryPt): boolean =>
-    Math.min(p.x, w - p.x) <= BAND && Math.min(p.y, h - p.y) <= BAND
+  const atCorner = (p: QueryPt): boolean => Math.min(p.x, w - p.x) <= BAND && Math.min(p.y, h - p.y) <= BAND
   const offCanvas = (p: QueryPt): boolean => p.x < 0 || p.y < 0 || p.x > w || p.y > h
 
   const collect = (sets: SubPath[][]): { segs: Seg[]; queries: QueryPt[] } => {
@@ -1374,10 +1500,12 @@ export function scoreBorderBand(
       for (const sp of set) {
         const poly = flattenSubPath(sp)
         if (poly.length < 2) continue
-        const pts = sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
-          ? [...poly, poly[0]]
-          : poly
-        for (let i = 1; i < pts.length; i++) segs.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
+        const pts =
+          sp.closed && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+            ? [...poly, poly[0]]
+            : poly
+        for (let i = 1; i < pts.length; i++)
+          segs.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
         resampleByArcLength(pts, SPACING, queries)
       }
     }
@@ -1400,19 +1528,40 @@ export function scoreBorderBand(
   // The AUTHORED side. Boundary the source raster does not show is occluded, not missed (§9.6).
   for (const p of A.queries) {
     if (visibleAt && !visibleAt(p)) continue
-    if (!keepOffCanvas && offCanvas(p)) { offCanvasHeld++; continue }
+    if (!keepOffCanvas && offCanvas(p)) {
+      offCanvasHeld++
+      continue
+    }
     const d = docGrid.nearest(p.x, p.y)
-    if (!inBand(p)) { interiorSum += d; interiorN++; continue }
-    if (isParallel(p) || atCorner(p)) { parallelHeld++; continue }
-    band.push(d); missed.push(d); sink?.({ x: p.x, y: p.y, d, side: 'missed' })
+    if (!inBand(p)) {
+      interiorSum += d
+      interiorN++
+      continue
+    }
+    if (isParallel(p) || atCorner(p)) {
+      parallelHeld++
+      continue
+    }
+    band.push(d)
+    missed.push(d)
+    sink?.({ x: p.x, y: p.y, d, side: 'missed' })
   }
   // The TRACED side. Targets stay whole on both sides — only the QUERY set is filtered,
   // exactly as collectBoundary does with its own exclusions.
   for (const p of B.queries) {
     const d = gtGrid.nearest(p.x, p.y)
-    if (!inBand(p)) { interiorSum += d; interiorN++; continue }
-    if (isParallel(p) || atCorner(p)) { parallelHeld++; continue }
-    band.push(d); spurious.push(d); sink?.({ x: p.x, y: p.y, d, side: 'spurious' })
+    if (!inBand(p)) {
+      interiorSum += d
+      interiorN++
+      continue
+    }
+    if (isParallel(p) || atCorner(p)) {
+      parallelHeld++
+      continue
+    }
+    band.push(d)
+    spurious.push(d)
+    sink?.({ x: p.x, y: p.y, d, side: 'spurious' })
   }
 
   const avg = (a: number[]): number => (a.length ? a.reduce((t, v) => t + v, 0) / a.length : NaN)
@@ -1450,7 +1599,12 @@ export function scoreGeometry(
   }
 
   const visible = makeVisibleAt(truthRaster)
-  const G = collectBoundary(gt.map((s) => s.subPaths), w, h, visible)
+  const G = collectBoundary(
+    gt.map((s) => s.subPaths),
+    w,
+    h,
+    visible,
+  )
   const D = collectBoundary(docSets, w, h)
 
   // Corner recovery — a topology check boundary distance is structurally blind to. A GT
@@ -1458,7 +1612,10 @@ export function scoreGeometry(
   // be traced — same exclusion §9.6 applies to the missed side); it is recovered when the
   // trace has a sharp corner within CORNER_MATCH_R. A corner is visible if the truth raster
   // changes colour across EITHER of its two edges.
-  const gtCornerAll = sharpCorners(gt.map((s) => s.subPaths), CORNER_MIN_EDGE)
+  const gtCornerAll = sharpCorners(
+    gt.map((s) => s.subPaths),
+    CORNER_MIN_EDGE,
+  )
   const gtCornerVis = gtCornerAll.filter(
     (c) => visible({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || visible({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
   )
@@ -1470,9 +1627,13 @@ export function scoreGeometry(
   const dGrid = new SegGrid(D.segs)
 
   // GT query → traced boundary: authored detail the tracer failed to reproduce.
-  const gtPoints: DistPoint[] = G.queries.map((p) => ({ x: p.x, y: p.y, d: dGrid.nearest(p.x, p.y) })).filter((p) => Number.isFinite(p.d))
+  const gtPoints: DistPoint[] = G.queries
+    .map((p) => ({ x: p.x, y: p.y, d: dGrid.nearest(p.x, p.y) }))
+    .filter((p) => Number.isFinite(p.d))
   // Traced query → GT boundary: boundary the tracer invented.
-  const docPoints: DistPoint[] = D.queries.map((p) => ({ x: p.x, y: p.y, d: gGrid.nearest(p.x, p.y) })).filter((p) => Number.isFinite(p.d))
+  const docPoints: DistPoint[] = D.queries
+    .map((p) => ({ x: p.x, y: p.y, d: gGrid.nearest(p.x, p.y) }))
+    .filter((p) => Number.isFinite(p.d))
 
   const missed = gtPoints.map((p) => p.d)
   const spurious = docPoints.map((p) => p.d)

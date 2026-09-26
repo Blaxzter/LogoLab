@@ -76,7 +76,19 @@ if (CENSUS) {
   const { AB_CORPUS, AB_LOGO_CASES } = await import('./abCorpus.ts')
   const { existsSync } = await import('node:fs')
   const FLAT = 0.008
-  type Row = { case: string; bg: string; authored: string; union: string; res: number; jump: number; gap: number; minSolid: number; dE: number; holeT: number; fit: string }
+  type Row = {
+    case: string
+    bg: string
+    authored: string
+    union: string
+    res: number
+    jump: number
+    gap: number
+    minSolid: number
+    dE: number
+    holeT: number
+    fit: string
+  }
   const rows: Row[] = []
   const inputs: { id: string; path: string; kind: 'svg' | 'png'; bg: 'white' | 'transparent' }[] = []
   for (const c of AB_CORPUS) {
@@ -88,13 +100,25 @@ if (CENSUS) {
     const p = join(root, inp.path)
     if (!existsSync(p)) continue
     const src = readFileSync(p)
-    const authored = inp.kind === 'svg' ? String((src.toString('utf8').match(/<(linear|radial)Gradient\b/g) ?? []).length) : 'png'
-    const png = inp.kind === 'svg'
-      ? new Resvg(src.toString('utf8'), { fitTo: { mode: 'width', value: RES }, ...(inp.bg === 'white' ? { background: 'white' } : {}) }).render().asPng()
-      : src
+    const authored =
+      inp.kind === 'svg' ? String((src.toString('utf8').match(/<(linear|radial)Gradient\b/g) ?? []).length) : 'png'
+    const png =
+      inp.kind === 'svg'
+        ? new Resvg(src.toString('utf8'), {
+            fitTo: { mode: 'width', value: RES },
+            ...(inp.bg === 'white' ? { background: 'white' } : {}),
+          })
+            .render()
+            .asPng()
+        : src
     const img = decodePng(png)
     const recs: MergePairRecord[] = []
-    await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true, segment: { onPair: (r) => recs.push(r) } })
+    await traceImage(img as unknown as ImageData, {
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: true,
+      segment: { onPair: (r) => recs.push(r) },
+    })
     const evalOfC = new Map<string, MergePairRecord>()
     for (const r of recs) if (r.kind === 'eval') evalOfC.set(r.gi < r.gj ? `${r.gi}:${r.gj}` : `${r.gj}:${r.gi}`, r)
     for (const m of recs) {
@@ -102,23 +126,34 @@ if (CENSUS) {
       const e = evalOfC.get(m.gi < m.gj ? `${m.gi}:${m.gj}` : `${m.gj}:${m.gi}`)
       if (!e) continue
       rows.push({
-        case: inp.id, bg: inp.bg, authored,
+        case: inp.id,
+        bg: inp.bg,
+        authored,
         union: `${hex(m.meanI)}(${m.membersI.length})∪${hex(m.meanJ)}(${m.membersJ.length})`,
-        res: m.res, jump: e.jump, gap: e.gap, minSolid: Math.min(e.solidI, e.solidJ), dE: dE(m.meanI, m.meanJ),
-        holeT: e.holeT ?? NaN, fit: e.fitType ?? '?',
+        res: m.res,
+        jump: e.jump,
+        gap: e.gap,
+        minSolid: Math.min(e.solidI, e.solidJ),
+        dE: dE(m.meanI, m.meanJ),
+        holeT: e.holeT ?? NaN,
+        fit: e.fitType ?? '?',
       })
     }
   }
   console.log(`
 ━━━ STEP-3C MERGE CENSUS @${RES} — every ACCEPTED merge, labelled by the SOURCE's authored gradient count ━━━
 `)
-  console.log(`  ${'case'.padEnd(22)}${'bg'.padEnd(12)}${'auth'.padStart(5)}  ${'union'.padEnd(34)}${'res'.padStart(7)}${'jump'.padStart(8)}${'gap'.padStart(7)}${'minSol'.padStart(8)}${'ΔEmean'.padStart(8)}${'holeT'.padStart(8)}  fit`)
+  console.log(
+    `  ${'case'.padEnd(22)}${'bg'.padEnd(12)}${'auth'.padStart(5)}  ${'union'.padEnd(34)}${'res'.padStart(7)}${'jump'.padStart(8)}${'gap'.padStart(7)}${'minSol'.padStart(8)}${'ΔEmean'.padStart(8)}${'holeT'.padStart(8)}  fit`,
+  )
   // Print the rows that matter first: FLAT∪FLAT (min solid ≤ FLAT) with a colour difference —
   // the only population a step-paste can hide in — sorted by holeJ, then the rest.
   const flatDiff = rows.filter((r) => r.minSolid <= FLAT && r.dE > 0.02).sort((a, b) => b.jump - a.jump)
   const other = rows.filter((r) => !(r.minSolid <= FLAT && r.dE > 0.02)).sort((a, b) => b.jump - a.jump)
   const pr = (r: Row): void =>
-    console.log(`  ${r.case.padEnd(22)}${r.bg.padEnd(12)}${r.authored.padStart(5)}  ${r.union.padEnd(34)}${f(r.res).padStart(7)}${f(r.jump, 3).padStart(8)}${f(r.gap, 3).padStart(7)}${f(r.minSolid).padStart(8)}${f(r.dE, 3).padStart(8)}${f(r.holeT, 3).padStart(8)}  ${r.fit}`)
+    console.log(
+      `  ${r.case.padEnd(22)}${r.bg.padEnd(12)}${r.authored.padStart(5)}  ${r.union.padEnd(34)}${f(r.res).padStart(7)}${f(r.jump, 3).padStart(8)}${f(r.gap, 3).padStart(7)}${f(r.minSolid).padStart(8)}${f(r.dE, 3).padStart(8)}${f(r.holeT, 3).padStart(8)}  ${r.fit}`,
+    )
   console.log(`
   FLAT∪FLAT, different colour (${flatDiff.length}) — a fusion of distinct objects wherever auth = 0:
 `)
@@ -137,14 +172,30 @@ const CASE = flag('--case')
 let name = 'olympic-rings'
 let svgPath = join(root, 'examples', 'logos', 'olympic-rings.svg')
 if (CASE) {
-  const tries = [join(EDGE, `${CASE}.svg`), join(root, 'public', 'examples', `${CASE}.svg`), join(root, 'examples', 'logos', `${CASE}.svg`), join(root, 'public', 'corpus', 'fluent', 'flat', `${CASE.replace(/-flat$/, '')}.svg`)]
-  const hit = tries.find((t) => { try { readFileSync(t); return true } catch { return false } })
+  const tries = [
+    join(EDGE, `${CASE}.svg`),
+    join(root, 'public', 'examples', `${CASE}.svg`),
+    join(root, 'examples', 'logos', `${CASE}.svg`),
+    join(root, 'public', 'corpus', 'fluent', 'flat', `${CASE.replace(/-flat$/, '')}.svg`),
+  ]
+  const hit = tries.find((t) => {
+    try {
+      readFileSync(t)
+      return true
+    } catch {
+      return false
+    }
+  })
   if (!hit) throw new Error(`no such case: ${CASE}`)
   name = CASE
   svgPath = hit
 }
 const text = readFileSync(svgPath, 'utf8')
-const raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, ...(TRANSPARENT ? {} : { background: 'white' }) }).render().asPng())
+const raster = decodePng(
+  new Resvg(text, { fitTo: { mode: 'width', value: RES }, ...(TRANSPARENT ? {} : { background: 'white' }) })
+    .render()
+    .asPng(),
+)
 
 // Which two colours to follow. Default: the olympic blue ∪ green pair the handoff names.
 const pairArg = flag('--pair')
@@ -180,22 +231,26 @@ const key = (a: number, b: number): string => (a < b ? `${a}:${b}` : `${b}:${a}`
 const evalOf = new Map<string, MergePairRecord>()
 for (const r of evals) evalOf.set(key(r.gi, r.gj), r)
 
-const sideName = (members: number[], mean: [number, number, number]): string =>
-  `{${members.join(',')}}${hex(mean)}`
+const sideName = (members: number[], mean: [number, number, number]): string => `{${members.join(',')}}${hex(mean)}`
 const FLAT = 0.008
 const geom = (r: MergePairRecord): string => {
   const g = r.fit
   if (!g) return ''
-  if (g.type === 'linear') return `linear (${g.x1.toFixed(0)},${g.y1.toFixed(0)})→(${g.x2.toFixed(0)},${g.y2.toFixed(0)}) len ${Math.hypot(g.x2 - g.x1, g.y2 - g.y1).toFixed(0)}px`
+  if (g.type === 'linear')
+    return `linear (${g.x1.toFixed(0)},${g.y1.toFixed(0)})→(${g.x2.toFixed(0)},${g.y2.toFixed(0)}) len ${Math.hypot(g.x2 - g.x1, g.y2 - g.y1).toFixed(0)}px`
   return `radial c(${g.cx.toFixed(0)},${g.cy.toFixed(0)}) r ${g.r.toFixed(0)}px${g.fx != null && (g.fx !== g.cx || g.fy !== g.cy) ? ` f(${g.fx.toFixed(0)},${g.fy!.toFixed(0)})` : ''}`
 }
-const binsTxt = (b?: number[]): string => (b ? b.map((c) => (c === 0 ? '·' : c < 10 ? String(c) : c < 100 ? '#' : '█')).join('') : '')
-const stopsTxt = (r: MergePairRecord): string => (r.fit ? r.fit.stops.map((s) => `${s.color}@${s.offset.toFixed(3)}`).join(' ') : '')
+const binsTxt = (b?: number[]): string =>
+  b ? b.map((c) => (c === 0 ? '·' : c < 10 ? String(c) : c < 100 ? '#' : '█')).join('') : ''
+const stopsTxt = (r: MergePairRecord): string =>
+  r.fit ? r.fit.stops.map((s) => `${s.color}@${s.offset.toFixed(3)}`).join(' ') : ''
 
 console.log(`
 ━━━ STEP-RAMP DIAG — ${name} @${RES} ${TRANSPARENT ? 'transparent' : 'on white'}, gradients ON${JUMP != null ? ` — COUNTERFACTUAL maxUnwitnessedJump=${JUMP}` : ''} ━━━
 `)
-console.log(`  fine segments S = ${S}   candidate gate ${gated ? 'ON (S > 64: adjacency-only)' : 'OFF (S ≤ 64: every pair eligible)'}`)
+console.log(
+  `  fine segments S = ${S}   candidate gate ${gated ? 'ON (S > 64: adjacency-only)' : 'OFF (S ≤ 64: every pair eligible)'}`,
+)
 console.log(`  evaluations ${evals.length}   accepted merges ${merges.length}   final groups ${S - merges.length}`)
 const stopped = new Map<string, number>()
 for (const r of evals) stopped.set(r.reached, (stopped.get(r.reached) ?? 0) + 1)
@@ -207,18 +262,20 @@ console.log(`
 `)
 console.log(`    ${'id'.padStart(4)}${'px'.padStart(9)}   ${'mean'.padEnd(8)}${'solid'.padStart(9)}   nearest tracked`)
 for (const [id, s] of [...fine].sort((a, b) => b[1].px - a[1].px)) {
-  const near = tracked
-    ? tracked.map((c, i) => [dE(s.mean, c), i] as const).sort((a, b) => a[0] - b[0])[0]
-    : null
+  const near = tracked ? tracked.map((c, i) => [dE(s.mean, c), i] as const).sort((a, b) => a[0] - b[0])[0] : null
   const tag = near && near[0] < 0.08 ? `${hex(tracked![near[1]])} (ΔE ${f(near[0], 3)})` : ''
-  console.log(`    ${String(id).padStart(4)}${String(s.px).padStart(9)}   ${hex(s.mean)}${f(s.solid).padStart(9)}   ${tag}`)
+  console.log(
+    `    ${String(id).padStart(4)}${String(s.px).padStart(9)}   ${hex(s.mean)}${f(s.solid).padStart(9)}   ${tag}`,
+  )
 }
 
 // --- merge sequence --------------------------------------------------------------------
 console.log(`
   MERGE SEQUENCE (in order; terms are the acceptance condition's — res ≤ 0.06, gap ≤ 0.34, jump ≤ 0.12 unless min(solid) > ${FLAT})
 `)
-console.log(`    ${'step'.padStart(4)}  ${'union'.padEnd(44)}${'res'.padStart(8)}${'gap'.padStart(8)}${'jump'.padStart(8)}${'solidI'.padStart(8)}${'solidJ'.padStart(8)}${'ΔEmeans'.padStart(9)}${'holeT'.padStart(8)}  fit    flag`)
+console.log(
+  `    ${'step'.padStart(4)}  ${'union'.padEnd(44)}${'res'.padStart(8)}${'gap'.padStart(8)}${'jump'.padStart(8)}${'solidI'.padStart(8)}${'solidJ'.padStart(8)}${'ΔEmeans'.padStart(9)}${'holeT'.padStart(8)}  fit    flag`,
+)
 merges.forEach((m, step) => {
   const e = evalOf.get(key(m.gi, m.gj))
   const both = e && e.solidI <= FLAT && e.solidJ <= FLAT
@@ -244,7 +301,9 @@ if (tracked) {
   console.log(`
   TRACKED PAIR ${hex(A)} ∪ ${hex(B)} — every evaluation whose two sides contain them
 `)
-  console.log(`    ${'pair'.padEnd(44)}${'reached'.padEnd(11)}${'res'.padStart(8)}${'gap'.padStart(8)}${'jump'.padStart(8)}${'solidI'.padStart(8)}${'solidJ'.padStart(8)}  fit/stops  accepted`)
+  console.log(
+    `    ${'pair'.padEnd(44)}${'reached'.padEnd(11)}${'res'.padStart(8)}${'gap'.padStart(8)}${'jump'.padStart(8)}${'solidI'.padStart(8)}${'solidJ'.padStart(8)}  fit/stops  accepted`,
+  )
   const rows = evals.filter(involves)
   for (const r of rows) {
     console.log(
@@ -254,7 +313,9 @@ if (tracked) {
     if (r.fit) {
       console.log(`        fit    ${geom(r)}`)
       console.log(`        stops  ${stopsTxt(r)}`)
-      console.log(`        t-bins ${binsTxt(r.bins)}   (24 bins; · empty, digit = n, # ≥10, █ ≥100)   jump ${f(r.jump, 3)} at t ${f(r.jumpT ?? NaN, 3)}; widest sample-free stretch ${f(r.holeT ?? NaN, 4)} of t`)
+      console.log(
+        `        t-bins ${binsTxt(r.bins)}   (24 bins; · empty, digit = n, # ≥10, █ ≥100)   jump ${f(r.jump, 3)} at t ${f(r.jumpT ?? NaN, 3)}; widest sample-free stretch ${f(r.holeT ?? NaN, 4)} of t`,
+      )
     }
   }
   if (!rows.length) console.log(`    (no evaluation ever put ${hex(A)} and ${hex(B)} on opposite sides)`)
@@ -294,7 +355,9 @@ for (const it of doc.items) {
   gi++
   const g = p.gradient
   const stops = g.stops.map((s) => `${s.color}@${s.offset.toFixed(3)}`).join(' ')
-  console.log(`    ${String(gi).padStart(3)}  ${g.type.padEnd(7)} ${String(g.stops.length).padStart(2)} stops  ${stops}`)
+  console.log(
+    `    ${String(gi).padStart(3)}  ${g.type.padEnd(7)} ${String(g.stops.length).padStart(2)} stops  ${stops}`,
+  )
 }
 if (!gi) console.log('    (none)')
 console.log()

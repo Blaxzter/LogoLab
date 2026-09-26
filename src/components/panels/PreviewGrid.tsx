@@ -19,8 +19,18 @@ interface SceneDef {
 }
 
 const SCENES: SceneDef[] = [
-  { id: 'ios', title: 'iOS home screen', desc: 'Real screenshot — drag your icon into a slot', Component: PhoneHomeIOS },
-  { id: 'android', title: 'Android home screen', desc: 'Real screenshot — drag your icon into a slot', Component: PhoneHomeAndroid },
+  {
+    id: 'ios',
+    title: 'iOS home screen',
+    desc: 'Real screenshot — drag your icon into a slot',
+    Component: PhoneHomeIOS,
+  },
+  {
+    id: 'android',
+    title: 'Android home screen',
+    desc: 'Real screenshot — drag your icon into a slot',
+    Component: PhoneHomeAndroid,
+  },
   { id: 'splash', title: 'App splash screen', desc: 'Launch / startup screen', Component: SplashScreen },
   {
     id: 'desktop',

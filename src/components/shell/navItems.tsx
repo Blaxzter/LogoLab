@@ -1,4 +1,16 @@
-import { Columns2, Download, Eraser, Eye, FlaskConical, Images, Layers, LayoutGrid, PenTool, Timer, Wand2 } from 'lucide-react'
+import {
+  Columns2,
+  Download,
+  Eraser,
+  Eye,
+  FlaskConical,
+  Images,
+  Layers,
+  LayoutGrid,
+  PenTool,
+  Timer,
+  Wand2,
+} from 'lucide-react'
 import type { Tab } from '../../state/store'
 
 /** The panel tabs — shared by the desktop header nav and the mobile menu. */
@@ -39,7 +51,8 @@ export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.
   {
     to: '/labs/workbench',
     label: 'Workbench',
-    blurb: 'Is it correct? Scored against the authored SVG — boundary error, node economy, dropped regions. Pick the corpus.',
+    blurb:
+      'Is it correct? Scored against the authored SVG — boundary error, node economy, dropped regions. Pick the corpus.',
     icon: <FlaskConical size={15} />,
   },
   {

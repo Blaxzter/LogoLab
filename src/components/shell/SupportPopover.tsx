@@ -85,8 +85,8 @@ export function SupportPopover() {
               Enjoying LogoLab?
             </div>
             <p className="mt-1.5 text-xs leading-relaxed text-muted">
-              It's free and runs entirely in your browser. If it saved you some time, you can chip
-              in — every bit keeps the project going.
+              It's free and runs entirely in your browser. If it saved you some time, you can chip in — every bit keeps
+              the project going.
             </p>
             <div className="mt-3 flex flex-col gap-2">
               <a

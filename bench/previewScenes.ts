@@ -37,7 +37,9 @@ function polygon(id: string, fill: string, pts: [number, number][], extra: Parti
     id,
     fill,
     fillRule: 'nonzero',
-    subPaths: [{ closed: true, nodes: pts.map(([x, y]) => ({ x, y, hIn: null, hOut: null, kind: 'corner' as const })) }],
+    subPaths: [
+      { closed: true, nodes: pts.map(([x, y]) => ({ x, y, hIn: null, hOut: null, kind: 'corner' as const })) },
+    ],
     visible: true,
     ...extra,
   }
@@ -47,7 +49,10 @@ function polygon(id: string, fill: string, pts: [number, number][], extra: Parti
  *  rounds the ripples; the curve fitter then needs fewer nodes. (Gentle on the
  *  crisp engine by design — the dramatic lever is the Potrace engine.) */
 function smoothingScene(): Scene {
-  const W = 256, H = 256, cx = 128, cy = 128
+  const W = 256,
+    H = 256,
+    cx = 128,
+    cy = 128
   const rand = rng(7)
   const N = 128
   const pts: [number, number][] = []
@@ -65,10 +70,18 @@ function smoothingScene(): Scene {
  *  despeckle raises the turd-size cutoff, dropping the small specks then the
  *  larger ones — so the path count falls in clear steps. */
 function despeckleScene(): Scene {
-  const W = 256, H = 256
+  const W = 256,
+    H = 256
   const rand = rng(42)
   const items: PathItem[] = [
-    { kind: 'path', id: 'core', fill: INK, fillRule: 'nonzero', subPaths: [ellipseSubPaths(128, 128, 58, 58)![0]], visible: true },
+    {
+      kind: 'path',
+      id: 'core',
+      fill: INK,
+      fillRule: 'nonzero',
+      subPaths: [ellipseSubPaths(128, 128, 58, 58)![0]],
+      visible: true,
+    },
   ]
   // Two speck sizes: ~3px (area ~9) drops first, ~6px (area ~36) drops later.
   const specks: { size: number; count: number }[] = [
@@ -79,19 +92,22 @@ function despeckleScene(): Scene {
   for (const { size, count } of specks) {
     for (let i = 0; i < count; i++) {
       // Keep specks out in the margin, clear of the core disc.
-      let x = 0, y = 0
+      let x = 0,
+        y = 0
       for (let t = 0; t < 12; t++) {
         x = 18 + rand() * (W - 36)
         y = 18 + rand() * (H - 36)
         if (Math.hypot(x - 128, y - 128) > 78) break
       }
       const s = size
-      items.push(polygon(`speck-${k++}`, INK, [
-        [x, y],
-        [x + s, y],
-        [x + s, y + s],
-        [x, y + s],
-      ]))
+      items.push(
+        polygon(`speck-${k++}`, INK, [
+          [x, y],
+          [x + s, y],
+          [x + s, y + s],
+          [x, y + s],
+        ]),
+      )
     }
   }
   return { width: W, height: H, doc: { viewBox: [0, 0, W, H], items } }
@@ -100,9 +116,12 @@ function despeckleScene(): Scene {
 /** Fidelity: a slightly-wobbly near-circle and a near-straight bent bar. Higher
  *  fidelity lets the beautify pass snap them to a perfect ellipse / line. */
 function fidelityScene(): Scene {
-  const W = 256, H = 256
+  const W = 256,
+    H = 256
   const rand = rng(99)
-  const cx = 128, cy = 96, R = 64
+  const cx = 128,
+    cy = 96,
+    R = 64
   const N = 22
   const ring: [number, number][] = []
   for (let i = 0; i < N; i++) {
@@ -130,7 +149,8 @@ function fidelityScene(): Scene {
  *  black strips over white. A higher cutoff keeps more of the lighter side, so
  *  the solid region grows visibly wider. */
 function thresholdScene(): Scene {
-  const W = 256, H = 256
+  const W = 256,
+    H = 256
   const strips = 64
   const items: PathItem[] = []
   for (let i = 0; i < strips; i++) {
@@ -138,12 +158,17 @@ function thresholdScene(): Scene {
     const x1 = ((i + 1) / strips) * W
     const opacity = i / (strips - 1) // 0 (white) → 1 (black), left → right
     items.push(
-      polygon(`strip-${i}`, '#000000', [
-        [x0, 0],
-        [x1, 0],
-        [x1, H],
-        [x0, H],
-      ], { fillOpacity: opacity }),
+      polygon(
+        `strip-${i}`,
+        '#000000',
+        [
+          [x0, 0],
+          [x1, 0],
+          [x1, H],
+          [x0, H],
+        ],
+        { fillOpacity: opacity },
+      ),
     )
   }
   return { width: W, height: H, doc: { viewBox: [0, 0, W, H], items } }
@@ -153,7 +178,8 @@ function thresholdScene(): Scene {
  *  With marker seeds on each lobe and overlap, the segmentation keeps every piece
  *  as its own shape instead of fusing the soft overlaps into a neighbour. */
 function overlapsScene(): Scene {
-  const W = 256, H = 256
+  const W = 256,
+    H = 256
   // Same colour, semi-transparent: the lobes read as one blue field and the
   // overlaps as darker bands, so the automatic merge fuses them WITHOUT markers
   // — markers then force each lobe + overlap back into its own shape.

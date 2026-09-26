@@ -28,13 +28,7 @@ function ago(at: number, now: number): string {
 }
 
 /** The same status and action as a row, for the mobile menu (the chip is hidden below md). */
-export function SavedStatusRow({
-  className = '',
-  onAct,
-}: {
-  className?: string
-  onAct?: () => void
-}) {
+export function SavedStatusRow({ className = '', onAct }: { className?: string; onAct?: () => void }) {
   const status = useSaveStatus()
   const [clearing, setClearing] = useState(false)
   const [now] = useState(() => Date.now())
@@ -172,10 +166,7 @@ export function SavedChip({ className = '' }: { className?: string }) {
             <span aria-hidden className="invisible col-start-1 row-start-1 whitespace-nowrap">
               Not saved
             </span>
-            <span
-              aria-hidden
-              className="invisible col-start-1 row-start-1 hidden whitespace-nowrap 2xl:block"
-            >
+            <span aria-hidden className="invisible col-start-1 row-start-1 hidden whitespace-nowrap 2xl:block">
               Saved 00 min ago
             </span>
             <span className="col-start-1 row-start-1 whitespace-nowrap">
@@ -204,9 +195,8 @@ export function SavedChip({ className = '' }: { className?: string }) {
                   Not being saved
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                  This browser isn't letting LogoLab store anything — usually a private window, or
-                  storage that's full. Everything still works, but a reload will lose it. Download
-                  what you want to keep.
+                  This browser isn't letting LogoLab store anything — usually a private window, or storage that's full.
+                  Everything still works, but a reload will lose it. Download what you want to keep.
                 </p>
               </>
             ) : (
@@ -216,12 +206,9 @@ export function SavedChip({ className = '' }: { className?: string }) {
                   Your work is saved
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                  Your logo, settings, traces and edits are stored in this browser and come back
-                  when you reload.{' '}
-                  {status.savedAt && (
-                    <>Last saved at {new Date(status.savedAt).toLocaleTimeString()}.</>
-                  )}{' '}
-                  Nothing is uploaded.
+                  Your logo, settings, traces and edits are stored in this browser and come back when you reload.{' '}
+                  {status.savedAt && <>Last saved at {new Date(status.savedAt).toLocaleTimeString()}.</>} Nothing is
+                  uploaded.
                 </p>
               </>
             )}

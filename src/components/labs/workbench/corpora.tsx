@@ -87,9 +87,8 @@ const svgDataUrl = (svg: string): string => `data:image/svg+xml;utf8,${encodeURI
 const logoEmptyState: ReactNode = (
   <div className="px-4 py-8">
     <NoteBox tone="warn">
-      The logo corpus isn't present in this build. It's a private, git-ignored set of brand marks
-      (not redistributed). Run <code>npm run fetch:logos</code> to download it into{' '}
-      <code>examples/logos/</code>, then reload this page.
+      The logo corpus isn't present in this build. It's a private, git-ignored set of brand marks (not redistributed).
+      Run <code>npm run fetch:logos</code> to download it into <code>examples/logos/</code>, then reload this page.
     </NoteBox>
   </div>
 )

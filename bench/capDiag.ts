@@ -53,9 +53,19 @@ const VIS_PROBE = 2
 const VIS_SAME = 2
 const DETECT_R = 3
 
-interface Corner { x: number; y: number; itx: number; ity: number; otx: number; oty: number }
+interface Corner {
+  x: number
+  y: number
+  itx: number
+  ity: number
+  otx: number
+  oty: number
+}
 
-function pickCtrl(at: { x: number; y: number }, ...cands: ({ x: number; y: number } | null | undefined)[]): { x: number; y: number } {
+function pickCtrl(
+  at: { x: number; y: number },
+  ...cands: ({ x: number; y: number } | null | undefined)[]
+): { x: number; y: number } {
   for (const c of cands) if (c && Math.hypot(c.x - at.x, c.y - at.y) >= 1e-6) return c
   return at
 }
@@ -82,12 +92,17 @@ function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
         if (li < minEdge || lo2 < minEdge) continue
         const tin = pickCtrl(cur, cur.hIn, prev.hOut, prev)
         const tout = pickCtrl(cur, cur.hOut, next.hIn, next)
-        let ix = cur.x - tin.x, iy = cur.y - tin.y
-        let ox = tout.x - cur.x, oy = tout.y - cur.y
+        let ix = cur.x - tin.x,
+          iy = cur.y - tin.y
+        let ox = tout.x - cur.x,
+          oy = tout.y - cur.y
         const ln = Math.hypot(ix, iy)
         const lt = Math.hypot(ox, oy)
         if (ln < 1e-6 || lt < 1e-6) continue
-        ix /= ln; iy /= ln; ox /= lt; oy /= lt
+        ix /= ln
+        iy /= ln
+        ox /= lt
+        oy /= lt
         if (ix * ox + iy * oy <= cosMax) out.push({ x: cur.x, y: cur.y, itx: ix, ity: iy, otx: ox, oty: oy })
       }
     }
@@ -95,10 +110,15 @@ function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
   return out
 }
 
-function makeVisibleAt(raster: { width: number; height: number; data: Uint8ClampedArray }): (q: { x: number; y: number; tx: number; ty: number }) => boolean {
+function makeVisibleAt(raster: {
+  width: number
+  height: number
+  data: Uint8ClampedArray
+}): (q: { x: number; y: number; tx: number; ty: number }) => boolean {
   const { width, height, data } = raster
   const at = (x: number, y: number): number => {
-    const xi = Math.round(x), yi = Math.round(y)
+    const xi = Math.round(x),
+      yi = Math.round(y)
     if (xi < 0 || yi < 0 || xi >= width || yi >= height) return -1
     const o = (yi * width + xi) * 4
     return (data[o] << 16) | (data[o + 1] << 8) | data[o + 2]
@@ -161,7 +181,8 @@ for (const s of shapes) {
   const width = Math.min(...sides)
   const len = Math.max(...sides)
   const li = sides.indexOf(len)
-  const a = nodes[li], b = nodes[(li + 1) % 4]
+  const a = nodes[li],
+    b = nodes[(li + 1) % 4]
   let angleDeg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
   angleDeg = ((angleDeg % 180) + 180) % 180
   if (angleDeg > 90) angleDeg = 180 - angleDeg
@@ -170,14 +191,17 @@ for (const s of shapes) {
   bars.push({ id: barId++, width, len, angleDeg, nodes, caps, graded: width >= CORNER_MIN_EDGE })
 }
 
-interface GtCorner extends Corner { bar: BarInfo | null; kind: 'canvas' | 'cap' }
+interface GtCorner extends Corner {
+  bar: BarInfo | null
+  kind: 'canvas' | 'cap'
+}
 const gtCorners: GtCorner[] = []
 for (const s of shapes) {
   const cs = sharpCorners([s.subPaths], CORNER_MIN_EDGE).filter(
     (c) => visible({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || visible({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
   )
   for (const c of cs) {
-    const bar = s.tag === 'polygon' ? bars.find((b) => b.nodes.some((n) => dist(n, c) < 0.5)) ?? null : null
+    const bar = s.tag === 'polygon' ? (bars.find((b) => b.nodes.some((n) => dist(n, c) < 0.5)) ?? null) : null
     gtCorners.push({ ...c, bar, kind: bar ? 'cap' : 'canvas' })
   }
 }
@@ -188,7 +212,9 @@ for (const b of bars)
   console.log(
     `  bar${b.id}: width ${f(b.width, 1)}px  len ${f(b.len, 0)}  angle ${f(b.angleDeg, 1)}°  ${b.graded ? 'GRADED' : 'below floor'}`,
   )
-console.log(`GT corners (scorer's reader, minEdge=${CORNER_MIN_EDGE}, visible): total ${gtCorners.length} = ${capGt.length} cap + ${canvasGt.length} canvas`)
+console.log(
+  `GT corners (scorer's reader, minEdge=${CORNER_MIN_EDGE}, visible): total ${gtCorners.length} = ${capGt.length} cap + ${canvasGt.length} canvas`,
+)
 
 // ---------------------------------------------------------------------------
 // 2. reproduce the pipeline's final label map (traceImage's flat path, verbatim)
@@ -200,8 +226,14 @@ const paletteOpts = {
   minRegionArea: Math.max(24, Math.round(0.25 * 0.25 * 800)),
   regionEvidence: true,
 }
-const fp = segmentFlatPalette(img as unknown as { width: number; height: number; data: Uint8ClampedArray }, paletteOpts, undefined)
-console.log(`\nsegmentFlatPalette: ${fp.palette.length} colours, flatCoverage ${f(fp.flatCoverage, 3)}, dominantColors ${fp.dominantColors}`)
+const fp = segmentFlatPalette(
+  img as unknown as { width: number; height: number; data: Uint8ClampedArray },
+  paletteOpts,
+  undefined,
+)
+console.log(
+  `\nsegmentFlatPalette: ${fp.palette.length} colours, flatCoverage ${f(fp.flatCoverage, 3)}, dominantColors ${fp.dominantColors}`,
+)
 const labels = healColorSpikes(fp.labels, img.data as unknown as Uint8ClampedArray, img.width, img.height, fp.palette)
 
 let inkLabel = 0
@@ -209,14 +241,19 @@ let inkLabel = 0
   let best = Infinity
   fp.palette.forEach((c, i) => {
     const d = (c.r - 26) ** 2 + (c.g - 26) ** 2 + (c.b - 34) ** 2
-    if (d < best) { best = d; inkLabel = i }
+    if (d < best) {
+      best = d
+      inkLabel = i
+    }
   })
 }
 
 const net = buildPlanarNetwork(labels, img.width, img.height)
 const inkLoops = net.edges.filter((e) => e.closed && (e.left === inkLabel || e.right === inkLabel))
 const inkOpen = net.edges.filter((e) => !e.closed && (e.left === inkLabel || e.right === inkLabel))
-console.log(`planar network: ${net.edges.length} edges, ${net.junctions.length} junctions; ink label ${inkLabel} → ${inkLoops.length} closed loop(s) + ${inkOpen.length} open edge(s)`)
+console.log(
+  `planar network: ${net.edges.length} edges, ${net.junctions.length} junctions; ink label ${inkLabel} → ${inkLoops.length} closed loop(s) + ${inkOpen.length} open edge(s)`,
+)
 
 const fitOpts: PlanarFitOptions = { ...DEFAULT_PLANAR_FIT, lineCost: FLAT_LINE_COST, smoothPasses: 2 }
 
@@ -226,7 +263,10 @@ function loopForBar(b: BarInfo): Vec[] | null {
   let bestD = Infinity
   for (const e of inkLoops) {
     const d = nearest(b.nodes[0], e.pts)
-    if (d < bestD) { bestD = d; bestLoop = e.pts }
+    if (d < bestD) {
+      bestD = d
+      bestLoop = e.pts
+    }
   }
   return bestD < 8 ? bestLoop : null
 }
@@ -234,11 +274,21 @@ function loopForBar(b: BarInfo): Vec[] | null {
 // ---------------------------------------------------------------------------
 // 3. stages A / B / C per bar loop
 // ---------------------------------------------------------------------------
-interface LoopStages { rawPts: Vec[]; apexPts: Vec[]; apexIdx: number[]; pts: Vec[]; fitCornerPts: Corner[]; fitNodes: PathNode[] }
+interface LoopStages {
+  rawPts: Vec[]
+  apexPts: Vec[]
+  apexIdx: number[]
+  pts: Vec[]
+  fitCornerPts: Corner[]
+  fitNodes: PathNode[]
+}
 const stagesByBar = new Map<number, LoopStages>()
 for (const b of bars) {
   const pts = loopForBar(b)
-  if (!pts) { console.log(`  !! bar${b.id} has no matching ink loop`); continue }
+  if (!pts) {
+    console.log(`  !! bar${b.id} has no matching ink loop`)
+    continue
+  }
   const rawSet = detectCorners(pts, fitOpts.cornerTurnDeg, true)
   const apexIdx = detectLoopCorners(pts, fitOpts.cornerTurnDeg)
   let fitNodes: PathNode[]
@@ -255,7 +305,11 @@ for (const b of bars) {
 }
 
 // FINAL — the real full pipeline, scorer-matched.
-const doc = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false })
+const doc = await traceImage(img as unknown as ImageData, {
+  ...DEFAULT_VECTORIZE_OPTIONS,
+  engine: 'planar',
+  gradients: false,
+})
 const docSets: SubPath[][] = []
 for (const item of doc.items) {
   if (item.kind !== 'path' || item.visible === false) continue
@@ -264,12 +318,21 @@ for (const item of doc.items) {
 const docCorners = sharpCorners(docSets)
 const recoveredAll = gtCorners.filter((g) => nearest(g, docCorners) <= CORNER_MATCH_R)
 const floorLost = Math.floor(gtCorners.length * 0.2)
-console.log(`FINAL doc: ${docCorners.length} sharp corners; scorer match: ${pct(recoveredAll.length, gtCorners.length)}  [gate needs ≥80% ⇒ RED iff lost > ${floorLost}]`)
+console.log(
+  `FINAL doc: ${docCorners.length} sharp corners; scorer match: ${pct(recoveredAll.length, gtCorners.length)}  [gate needs ≥80% ⇒ RED iff lost > ${floorLost}]`,
+)
 
 // ---------------------------------------------------------------------------
 // 4. per-corner attribution + histogram + per-bar table
 // ---------------------------------------------------------------------------
-interface Verdict { g: GtCorner; dA: number; dB: number; dC: number; dF: number; fate: string }
+interface Verdict {
+  g: GtCorner
+  dA: number
+  dB: number
+  dC: number
+  dF: number
+  fate: string
+}
 const verdicts: Verdict[] = gtCorners.map((g) => {
   const st = g.bar ? stagesByBar.get(g.bar.id) : undefined
   const dA = st ? nearest(g, st.rawPts) : NaN
@@ -327,10 +390,13 @@ for (const b of bars) {
   const thr = Math.cos((fitOpts.cornerTurnDeg * Math.PI) / 180)
   const cosArr = new Float64Array(n)
   for (let i = 0; i < n; i++) {
-    const a = pts[wrap(i - WIN)], m = pts[i], c = pts[wrap(i + WIN)]
+    const a = pts[wrap(i - WIN)],
+      m = pts[i],
+      c = pts[wrap(i + WIN)]
     const inD = { x: m.x - a.x, y: m.y - a.y }
     const outD = { x: c.x - m.x, y: c.y - m.y }
-    const li = Math.hypot(inD.x, inD.y), lo = Math.hypot(outD.x, outD.y)
+    const li = Math.hypot(inD.x, inD.y),
+      lo = Math.hypot(outD.x, outD.y)
     cosArr[i] = li < 1e-9 || lo < 1e-9 ? 1 : (inD.x * outD.x + inD.y * outD.y) / (li * lo)
   }
   // run id per vertex (contiguous cos<thr), cyclic
@@ -349,16 +415,22 @@ for (const b of bars) {
     }
   }
   const nearestIdx = (g: { x: number; y: number }): number => {
-    let bi = 0, bd = Infinity
+    let bi = 0,
+      bd = Infinity
     for (let i = 0; i < n; i++) {
       const d = dist(g, pts[i])
-      if (d < bd) { bd = d; bi = i }
+      if (d < bd) {
+        bd = d
+        bi = i
+      }
     }
     return bi
   }
   for (const [ci, cj] of b.caps) {
-    const g1 = b.nodes[ci], g2 = b.nodes[cj]
-    const i1 = nearestIdx(g1), i2 = nearestIdx(g2)
+    const g1 = b.nodes[ci],
+      g2 = b.nodes[cj]
+    const i1 = nearestIdx(g1),
+      i2 = nearestIdx(g2)
     const r1 = runId[i1] >= 0 ? runId[i1] : runId[wrap(i1 + 1)] >= 0 ? runId[wrap(i1 + 1)] : runId[wrap(i1 - 1)]
     const r2 = runId[i2] >= 0 ? runId[i2] : runId[wrap(i2 + 1)] >= 0 ? runId[wrap(i2 + 1)] : runId[wrap(i2 - 1)]
     const fused = r1 >= 0 && r1 === r2
@@ -404,12 +476,14 @@ for (const b of bars.filter((x) => x.graded)) {
   const st = stagesByBar.get(b.id)
   if (!st) continue
   for (const [ci, cj] of b.caps) {
-    const g1 = b.nodes[ci], g2 = b.nodes[cj]
+    const g1 = b.nodes[ci],
+      g2 = b.nodes[cj]
     const near = st.fitCornerPts
       .map((c) => ({ c, d: Math.min(dist(c, g1), dist(c, g2)) }))
       .filter((x) => x.d < 8)
       .sort((a, b2) => a.d - b2.d)
-    const desc = near.length === 0 ? 'NONE <8px' : near.map((x) => `(${f(x.c.x, 1)},${f(x.c.y, 1)}) d${f(x.d, 1)}`).join('  ')
+    const desc =
+      near.length === 0 ? 'NONE <8px' : near.map((x) => `(${f(x.c.x, 1)},${f(x.c.y, 1)}) d${f(x.d, 1)}`).join('  ')
     // ALL fitted nodes near the cap with their tangent turn — a corner "present but
     // blunt" (turn diluted below 60° by a spurious neighbour node) shows up here.
     const capMid = { x: (g1.x + g2.x) / 2, y: (g1.y + g2.y) / 2 }
@@ -422,14 +496,22 @@ for (const b of bars.filter((x) => x.graded)) {
       const next = st.fitNodes[(i + 1) % nn]
       const tin = pickCtrl(cur, cur.hIn, prev.hOut, prev)
       const tout = pickCtrl(cur, cur.hOut, next.hIn, next)
-      let ix = cur.x - tin.x, iy = cur.y - tin.y
-      let ox = tout.x - cur.x, oy = tout.y - cur.y
-      const ln = Math.hypot(ix, iy) || 1, lt = Math.hypot(ox, oy) || 1
-      ix /= ln; iy /= ln; ox /= lt; oy /= lt
+      let ix = cur.x - tin.x,
+        iy = cur.y - tin.y
+      let ox = tout.x - cur.x,
+        oy = tout.y - cur.y
+      const ln = Math.hypot(ix, iy) || 1,
+        lt = Math.hypot(ox, oy) || 1
+      ix /= ln
+      iy /= ln
+      ox /= lt
+      oy /= lt
       const turn = (Math.acos(Math.max(-1, Math.min(1, ix * ox + iy * oy))) * 180) / Math.PI
       nodesNear.push(`(${f(cur.x, 1)},${f(cur.y, 1)})${f(turn, 0)}°`)
     }
-    console.log(`  bar${b.id} w${f(b.width, 1)} ${f(b.angleDeg, 0)}° cap (${f(g1.x, 0)},${f(g1.y, 0)})–(${f(g2.x, 0)},${f(g2.y, 0)}): ${desc}`)
+    console.log(
+      `  bar${b.id} w${f(b.width, 1)} ${f(b.angleDeg, 0)}° cap (${f(g1.x, 0)},${f(g1.y, 0)})–(${f(g2.x, 0)},${f(g2.y, 0)}): ${desc}`,
+    )
     console.log(`      fit nodes ≤9px: ${nodesNear.join('  ') || 'NONE'}`)
   }
 }

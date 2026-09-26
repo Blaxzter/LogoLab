@@ -57,10 +57,16 @@ function flatInteriorCounts(img: DecodedImage, labels: Int32Array, paletteLen: n
       if (l < 0) continue
       const k = rgbAt(i)
       if (
-        rgbAt(i - w - 1) === k && rgbAt(i - w) === k && rgbAt(i - w + 1) === k &&
-        rgbAt(i - 1) === k && rgbAt(i + 1) === k &&
-        rgbAt(i + w - 1) === k && rgbAt(i + w) === k && rgbAt(i + w + 1) === k
-      ) counts[l]++
+        rgbAt(i - w - 1) === k &&
+        rgbAt(i - w) === k &&
+        rgbAt(i - w + 1) === k &&
+        rgbAt(i - 1) === k &&
+        rgbAt(i + 1) === k &&
+        rgbAt(i + w - 1) === k &&
+        rgbAt(i + w) === k &&
+        rgbAt(i + w + 1) === k
+      )
+        counts[l]++
     }
   }
   return counts
@@ -77,9 +83,12 @@ function edgeFractions(labels: Int32Array, w: number, h: number, paletteLen: num
       if (l < 0) continue
       total[l]++
       if (
-        (x > 0 && labels[i - 1] !== l) || (x < w - 1 && labels[i + 1] !== l) ||
-        (y > 0 && labels[i - w] !== l) || (y < h - 1 && labels[i + w] !== l)
-      ) edge[l]++
+        (x > 0 && labels[i - 1] !== l) ||
+        (x < w - 1 && labels[i + 1] !== l) ||
+        (y > 0 && labels[i - w] !== l) ||
+        (y < h - 1 && labels[i + w] !== l)
+      )
+        edge[l]++
     }
   }
   const out = new Float64Array(paletteLen)
@@ -90,11 +99,15 @@ function edgeFractions(labels: Int32Array, w: number, h: number, paletteLen: num
 /** paletteSegment.ts:141/146 BLEND_LINE_EPS + segDist2 */
 const BLEND_LINE_EPS = 10
 function segDist2(c: PaletteColor, a: PaletteColor, b: PaletteColor): number {
-  const abr = b.r - a.r, abg = b.g - a.g, abb = b.b - a.b
+  const abr = b.r - a.r,
+    abg = b.g - a.g,
+    abb = b.b - a.b
   const len2 = abr * abr + abg * abg + abb * abb
   let t = len2 > 0 ? ((c.r - a.r) * abr + (c.g - a.g) * abg + (c.b - a.b) * abb) / len2 : 0
   t = Math.max(0, Math.min(1, t))
-  const dr = c.r - (a.r + t * abr), dg = c.g - (a.g + t * abg), db = c.b - (a.b + t * abb)
+  const dr = c.r - (a.r + t * abr),
+    dg = c.g - (a.g + t * abg),
+    db = c.b - (a.b + t * abb)
   return dr * dr + dg * dg + db * db
 }
 
@@ -112,7 +125,9 @@ function classifyBlendsInstrumented(
   const routeTo = new Int32Array(palette.length).fill(-1)
   const minSegDist = new Float64Array(palette.length).fill(Infinity)
   const d2 = (a: PaletteColor, b: PaletteColor): number => {
-    const dr = a.r - b.r, dg = a.g - b.g, db = a.b - b.b
+    const dr = a.r - b.r,
+      dg = a.g - b.g,
+      db = a.b - b.b
     return dr * dr + dg * dg + db * db
   }
   for (let i = 0; i < palette.length; i++) {
@@ -124,7 +139,8 @@ function classifyBlendsInstrumented(
         if (d < bestAny) bestAny = d
         if (!real[i] && edgy[i] && d <= eps2 && d < bestD) {
           bestD = d
-          const ia = accepted[a], ib = accepted[b]
+          const ia = accepted[a],
+            ib = accepted[b]
           routeTo[i] = d2(palette[i], palette[ia]) <= d2(palette[i], palette[ib]) ? ia : ib
         }
       }
@@ -158,7 +174,14 @@ function modalColorCounts(labels: Int32Array, data: Uint8ClampedArray, paletteLe
 
 // --- new measurements (the proposed gate's inputs) -----------------------------
 
-interface AlphaStats { mode: number; modeShare: number; mean: number; std: number; p10: number; p90: number }
+interface AlphaStats {
+  mode: number
+  modeShare: number
+  mean: number
+  std: number
+  p10: number
+  p90: number
+}
 
 /** Per-label alpha statistics over kept (label ≥ 0) pixels. */
 function alphaStats(labels: Int32Array, data: Uint8ClampedArray, paletteLen: number): AlphaStats[] {
@@ -170,13 +193,20 @@ function alphaStats(labels: Int32Array, data: Uint8ClampedArray, paletteLen: num
     hist[l][data[i * 4 + 3]]++
   }
   return hist.map((h) => {
-    let n = 0, sum = 0, sum2 = 0, mode = 255, modeC = 0
+    let n = 0,
+      sum = 0,
+      sum2 = 0,
+      mode = 255,
+      modeC = 0
     for (let a = 0; a < 256; a++) {
       const c = h[a]
       n += c
       sum += a * c
       sum2 += a * a * c
-      if (c > modeC) { modeC = c; mode = a }
+      if (c > modeC) {
+        modeC = c
+        mode = a
+      }
     }
     if (n === 0) return { mode: 255, modeShare: 0, mean: 255, std: 0, p10: 255, p90: 255 }
     const mean = sum / n
@@ -208,11 +238,17 @@ function adjacency(labels: Int32Array, w: number, h: number, paletteLen: number)
       const l = labels[i]
       if (x < w - 1) {
         const m = labels[i + 1]
-        if (l !== m) { touch(l, m); touch(m, l) }
+        if (l !== m) {
+          touch(l, m)
+          touch(m, l)
+        }
       }
       if (y < h - 1) {
         const m = labels[i + w]
-        if (l !== m) { touch(l, m); touch(m, l) }
+        if (l !== m) {
+          touch(l, m)
+          touch(m, l)
+        }
       }
     }
   }
@@ -223,10 +259,16 @@ function adjacency(labels: Int32Array, w: number, h: number, paletteLen: number)
  *  c0 + c1·α. Returns rms residual (px RGB distance to its own fitted point) and
  *  the fitted endpoints at α=128 and α=255. This is the "RGB explainable as
  *  parent×t along the alpha ramp" measurement. */
-function alphaRampFit(labels: Int32Array, data: Uint8ClampedArray, label: number):
-  { n: number; rms: number; at128: PaletteColor; at255: PaletteColor } | null {
-  let n = 0, sa = 0, saa = 0
-  const sc = [0, 0, 0], sca = [0, 0, 0]
+function alphaRampFit(
+  labels: Int32Array,
+  data: Uint8ClampedArray,
+  label: number,
+): { n: number; rms: number; at128: PaletteColor; at255: PaletteColor } | null {
+  let n = 0,
+    sa = 0,
+    saa = 0
+  const sc = [0, 0, 0],
+    sca = [0, 0, 0]
   for (let i = 0; i < labels.length; i++) {
     if (labels[i] !== label) continue
     const o = i * 4
@@ -234,11 +276,15 @@ function alphaRampFit(labels: Int32Array, data: Uint8ClampedArray, label: number
     n++
     sa += a
     saa += a * a
-    for (let c = 0; c < 3; c++) { sc[c] += data[o + c]; sca[c] += data[o + c] * a }
+    for (let c = 0; c < 3; c++) {
+      sc[c] += data[o + c]
+      sca[c] += data[o + c] * a
+    }
   }
   if (n < 16) return null
   const det = n * saa - sa * sa
-  const c0 = [0, 0, 0], c1 = [0, 0, 0]
+  const c0 = [0, 0, 0],
+    c1 = [0, 0, 0]
   for (let c = 0; c < 3; c++) {
     c1[c] = det !== 0 ? (n * sca[c] - sa * sc[c]) / det : 0
     c0[c] = (sc[c] - c1[c] * sa) / n
@@ -261,10 +307,8 @@ function alphaRampFit(labels: Int32Array, data: Uint8ClampedArray, label: number
   return { n, rms: Math.sqrt(se / n), at128: at(128), at255: at(255) }
 }
 
-const rgbDist = (a: PaletteColor, b: PaletteColor): number =>
-  Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b)
-const hex = (c: PaletteColor): string =>
-  '#' + [c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, '0')).join('')
+const rgbDist = (a: PaletteColor, b: PaletteColor): number => Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b)
+const hex = (c: PaletteColor): string => '#' + [c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, '0')).join('')
 
 // --- the analysis driver -------------------------------------------------------
 
@@ -296,21 +340,30 @@ function analyse(name: string, img: DecodedImage): void {
   const adj = adjacency(q.labels, w, h, q.palette.length)
   const total = q.counts.reduce((a, b) => a + b, 0)
 
-  console.log(`\nquantize: ${q.palette.length} clusters over ${total} opaque px  (minShare ${OPTS.minShare} ⇒ floor ${Math.round(total * OPTS.minShare)} px, minRegionArea ${OPTS.minRegionArea})`)
-  console.log('  #  colour   share%    flatInt real  edgeF edgy  modal  blend→ segd   αmode αm.shr αmean  αstd  αp10-p90  top adjacency')
+  console.log(
+    `\nquantize: ${q.palette.length} clusters over ${total} opaque px  (minShare ${OPTS.minShare} ⇒ floor ${Math.round(total * OPTS.minShare)} px, minRegionArea ${OPTS.minRegionArea})`,
+  )
+  console.log(
+    '  #  colour   share%    flatInt real  edgeF edgy  modal  blend→ segd   αmode αm.shr αmean  αstd  αp10-p90  top adjacency',
+  )
   for (let i = 0; i < q.palette.length; i++) {
     const a = alpha[i]
-    const neigh = [...adj[i].entries()].sort((x, y) => y[1] - x[1]).slice(0, 3)
-      .map(([l, c]) => `${l < 0 ? 'TRANS' : '#' + l}:${((100 * c) / [...adj[i].values()].reduce((s, v) => s + v, 0)).toFixed(0)}%`)
+    const neigh = [...adj[i].entries()]
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 3)
+      .map(
+        ([l, c]) =>
+          `${l < 0 ? 'TRANS' : '#' + l}:${((100 * c) / [...adj[i].values()].reduce((s, v) => s + v, 0)).toFixed(0)}%`,
+      )
       .join(' ')
     console.log(
       `  ${String(i).padStart(2)} ${hex(q.palette[i])} ${f((100 * q.counts[i]) / total, 2).padStart(7)}` +
-      ` ${String(flat[i]).padStart(9)} ${real[i] ? ' R  ' : ' .  '}` +
-      ` ${f(edgeF[i], 2).padStart(5)} ${edgy[i] ? ' E  ' : ' .  '}` +
-      ` ${String(modal[i]).padStart(6)}` +
-      ` ${(blend[i] ? '→' + routeTo[i] : '  .').padStart(5)} ${f(minSegDist[i], 1).padStart(5)}` +
-      ` ${String(a.mode).padStart(5)} ${f(a.modeShare, 2).padStart(5)} ${f(a.mean, 0).padStart(5)} ${f(a.std, 1).padStart(6)}` +
-      ` ${String(a.p10).padStart(4)}-${String(a.p90).padEnd(4)} ${neigh}`,
+        ` ${String(flat[i]).padStart(9)} ${real[i] ? ' R  ' : ' .  '}` +
+        ` ${f(edgeF[i], 2).padStart(5)} ${edgy[i] ? ' E  ' : ' .  '}` +
+        ` ${String(modal[i]).padStart(6)}` +
+        ` ${(blend[i] ? '→' + routeTo[i] : '  .').padStart(5)} ${f(minSegDist[i], 1).padStart(5)}` +
+        ` ${String(a.mode).padStart(5)} ${f(a.modeShare, 2).padStart(5)} ${f(a.mean, 0).padStart(5)} ${f(a.std, 1).padStart(6)}` +
+        ` ${String(a.p10).padStart(4)}-${String(a.p90).padEnd(4)} ${neigh}`,
     )
   }
 
@@ -326,21 +379,25 @@ function analyse(name: string, img: DecodedImage): void {
     const parent = [...adj[i].entries()]
       .filter(([l]) => l >= 0 && !blend[l] && alpha[l].mode === 255)
       .sort((x, y) => y[1] - x[1])[0]?.[0]
-    const parentStr = parent !== undefined
-      ? `parent #${parent} ${hex(q.palette[parent])}, d(α→255 end, parent) = ${f(rgbDist(fit.at255, q.palette[parent]), 1)}`
-      : 'no opaque accepted neighbour'
+    const parentStr =
+      parent !== undefined
+        ? `parent #${parent} ${hex(q.palette[parent])}, d(α→255 end, parent) = ${f(rgbDist(fit.at255, q.palette[parent]), 1)}`
+        : 'no opaque accepted neighbour'
     console.log(
       `  #${i} ${hex(q.palette[i])}: ramp fit over ${fit.n} px — rms residual ${f(fit.rms, 2)} RGB, ` +
-      `α=128 end ${hex(fit.at128)}, α=255 end ${hex(fit.at255)}; ${parentStr}`,
+        `α=128 end ${hex(fit.at128)}, α=255 end ${hex(fit.at255)}; ${parentStr}`,
     )
   }
 
   // The FINAL palette the pipeline emits (through dissolve/drop/mode-snap/alpha-tag).
   const fp = segmentFlatPalette(img, OPTS)
-  console.log(`\nsegmentFlatPalette FINAL: ${fp.palette.length} colours, flatCoverage ${f(fp.flatCoverage, 3)}, dominantColors ${fp.dominantColors}`)
+  console.log(
+    `\nsegmentFlatPalette FINAL: ${fp.palette.length} colours, flatCoverage ${f(fp.flatCoverage, 3)}, dominantColors ${fp.dominantColors}`,
+  )
   const ftotal = fp.counts.reduce((a, b) => a + b, 0)
   fp.palette.forEach((c, i) =>
-    console.log(`  ${i}: ${hex(c)} a=${c.a ?? 255}  share ${f((100 * fp.counts[i]) / ftotal, 2)}%`))
+    console.log(`  ${i}: ${hex(c)} a=${c.a ?? 255}  share ${f((100 * fp.counts[i]) / ftotal, 2)}%`),
+  )
 }
 
 // --- A/B: the repro file @2048 -------------------------------------------------
@@ -369,7 +426,9 @@ analyse('control: authored translucent flats (opacity 0.55, transparent canvas)'
 // --- D: workaround verification (delete-the-swatch) ----------------------------
 
 const countDoc = (doc: Awaited<ReturnType<typeof traceImage>>): { items: number; subpaths: number; nodes: number } => {
-  let items = 0, subpaths = 0, nodes = 0
+  let items = 0,
+    subpaths = 0,
+    nodes = 0
   for (const it of doc.items) {
     if (it.kind !== 'path') continue
     items++
@@ -387,13 +446,17 @@ console.log(`default trace: ${dc.items} items, ${dc.subpaths} subpaths, ${dc.nod
 for (const it of doc.items) {
   if (it.kind !== 'path') continue
   const n = it.subPaths.reduce((s, sp) => s + sp.nodes.length, 0)
-  console.log(`  item ${it.id}: fill ${it.fill}${it.fillOpacity !== undefined ? ` opacity ${f(it.fillOpacity, 3)} (α ${Math.round(it.fillOpacity * 255)})` : ''} — ${it.subPaths.length} subpaths, ${n} nodes`)
+  console.log(
+    `  item ${it.id}: fill ${it.fill}${it.fillOpacity !== undefined ? ` opacity ${f(it.fillOpacity, 3)} (α ${Math.round(it.fillOpacity * 255)})` : ''} — ${it.subPaths.length} subpaths, ${n} nodes`,
+  )
 }
 
 // Locked palette = the auto palette minus every translucent swatch (what the user
 // does in the PaletteEditor).
 const fpFinal = segmentFlatPalette(repro, OPTS)
-const lockedPalette = fpFinal.palette.filter((c) => c.a === undefined || c.a >= 255).map((c) => ({ r: c.r, g: c.g, b: c.b }))
+const lockedPalette = fpFinal.palette
+  .filter((c) => c.a === undefined || c.a >= 255)
+  .map((c) => ({ r: c.r, g: c.g, b: c.b }))
 console.log(`\nlocked palette (${lockedPalette.length} colours): ${lockedPalette.map(hex).join(' ')}`)
 const doc2 = await traceImage(repro as unknown as ImageData, { ...baseOpts, palette: lockedPalette })
 const dc2 = countDoc(doc2)
@@ -426,7 +489,9 @@ function simulateFix(name: string, img: DecodedImage): void {
   const routeTo = new Int32Array(q.palette.length).fill(-1)
   const via: string[] = new Array(q.palette.length).fill('')
   const d2 = (a: PaletteColor, b: PaletteColor): number => {
-    const dr = a.r - b.r, dg = a.g - b.g, db = a.b - b.b
+    const dr = a.r - b.r,
+      dg = a.g - b.g,
+      db = a.b - b.b
     return dr * dr + dg * dg + db * db
   }
   for (let i = 0; i < q.palette.length; i++) {
@@ -437,7 +502,8 @@ function simulateFix(name: string, img: DecodedImage): void {
           const d = segDist2(q.palette[i], q.palette[accepted[a]], q.palette[accepted[b]])
           if (d <= eps2 && d < bestD) {
             bestD = d
-            const ia = accepted[a], ib = accepted[b]
+            const ia = accepted[a],
+              ib = accepted[b]
             routeTo[i] = d2(q.palette[i], q.palette[ia]) <= d2(q.palette[i], q.palette[ib]) ? ia : ib
             via[i] = 'pair'
           }
@@ -445,10 +511,14 @@ function simulateFix(name: string, img: DecodedImage): void {
       }
       // NEW: alpha-feather endpoint — unexplained + translucent + dispersed alpha.
       if (routeTo[i] < 0 && feather[i] && accepted.length > 0) {
-        let best = accepted[0], bd = Infinity
+        let best = accepted[0],
+          bd = Infinity
         for (const a of accepted) {
           const d = d2(q.palette[i], q.palette[a])
-          if (d < bd) { bd = d; best = a }
+          if (d < bd) {
+            bd = d
+            best = a
+          }
         }
         routeTo[i] = best
         via[i] = 'FEATHER'
@@ -461,7 +531,8 @@ function simulateFix(name: string, img: DecodedImage): void {
   const modal = modalColorCounts(q.labels, img.data, q.palette.length)
   console.log(`\n--- fix simulation: ${name} ---`)
   for (let i = 0; i < q.palette.length; i++) {
-    if (blend[i]) console.log(`  #${i} ${hex(q.palette[i])} dissolved via ${via[i]} → #${routeTo[i]} ${hex(q.palette[routeTo[i]])}`)
+    if (blend[i])
+      console.log(`  #${i} ${hex(q.palette[i])} dissolved via ${via[i]} → #${routeTo[i]} ${hex(q.palette[routeTo[i]])}`)
   }
   // Relabel + drop, verbatim (paletteSegment.ts:537-555).
   const counts = q.counts.slice()
@@ -481,7 +552,10 @@ function simulateFix(name: string, img: DecodedImage): void {
   const dTotal = dropped.counts.reduce((a, b) => a + b, 0)
   console.log(`  final palette (${dropped.palette.length}):`)
   dropped.palette.forEach((c, i) =>
-    console.log(`    ${hex(c)}  share ${f((100 * dropped.counts[i]) / dTotal, 2)}%  αmode ${finalAlpha[i].mode} (share-at-mode ${f(finalAlpha[i].modeShare, 2)})`))
+    console.log(
+      `    ${hex(c)}  share ${f((100 * dropped.counts[i]) / dTotal, 2)}%  αmode ${finalAlpha[i].mode} (share-at-mode ${f(finalAlpha[i].modeShare, 2)})`,
+    ),
+  )
 }
 
 simulateFix('100 years tour.png @2048', repro)
@@ -501,18 +575,24 @@ simulateFix('control (authored translucent flats)', control)
       if (q.labels[p] !== i) continue
       n++
       const o = p * 4
-      let best = -1, bestD = Infinity
+      let best = -1,
+        bestD = Infinity
       for (let c = 0; c < lockedPalette.length; c++) {
         const dr = repro.data[o] - lockedPalette[c].r
         const dg = repro.data[o + 1] - lockedPalette[c].g
         const db = repro.data[o + 2] - lockedPalette[c].b
         const d = dr * dr + dg * dg + db * db
-        if (d < bestD) { bestD = d; best = c }
+        if (d < bestD) {
+          bestD = d
+          best = c
+        }
       }
       votes.set(best, (votes.get(best) ?? 0) + 1)
     }
-    const dist = [...votes.entries()].sort((a, b) => b[1] - a[1])
-      .map(([c, v]) => `${hex(lockedPalette[c])}:${((100 * v) / n).toFixed(1)}%`).join(' ')
+    const dist = [...votes.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([c, v]) => `${hex(lockedPalette[c])}:${((100 * v) / n).toFixed(1)}%`)
+      .join(' ')
     console.log(`cluster #${i} (αmode ${alpha[i].mode}, ${n} px) nearest-RGB in locked palette → ${dist}`)
   }
 }

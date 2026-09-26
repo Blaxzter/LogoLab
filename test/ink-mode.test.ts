@@ -40,8 +40,8 @@ function art(w: number, h: number, bg: RGBA, ink: RGBA): ImageDataLike {
     data[i * 4 + 2] = bg[2]
     data[i * 4 + 3] = bg[3]
   }
-  for (let y = (h >> 2); y < h - (h >> 2); y++) {
-    for (let x = (w >> 2); x < w - (w >> 2); x++) {
+  for (let y = h >> 2; y < h - (h >> 2); y++) {
+    for (let x = w >> 2; x < w - (w >> 2); x++) {
       const o = (y * w + x) * 4
       data[o] = ink[0]
       data[o + 1] = ink[1]

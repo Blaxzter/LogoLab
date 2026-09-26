@@ -15,11 +15,17 @@ const out = process.argv[2] ?? join(root, 'twin-cap.png')
 // A/B stamps are LOCAL artifacts (test/ab-snapshots/README.md) — this input may not exist.
 const input = join(root, 'test', 'ab-snapshots', 'before-lowres', 'bg-ramp-twin.png')
 if (!existsSync(input)) {
-  throw new Error(`missing ${input} — A/B stamps are not committed; regenerate with \`pnpm gen:absnapshot before-lowres\``)
+  throw new Error(
+    `missing ${input} — A/B stamps are not committed; regenerate with \`pnpm gen:absnapshot before-lowres\``,
+  )
 }
 const img = decodePng(readFileSync(input))
 
-const X0 = 168, Y0 = 222, CW = 46, CH = 76, Z = 7 // crop window + zoom (right cap of the green disc)
+const X0 = 168,
+  Y0 = 222,
+  CW = 46,
+  CH = 76,
+  Z = 7 // crop window + zoom (right cap of the green disc)
 
 const crop = (rgba: Uint8ClampedArray | Uint8Array, w: number): Uint8ClampedArray => {
   const o = new Uint8ClampedArray(CW * Z * CH * Z * 4)
@@ -27,7 +33,10 @@ const crop = (rgba: Uint8ClampedArray | Uint8Array, w: number): Uint8ClampedArra
     for (let x = 0; x < CW * Z; x++) {
       const s = ((Y0 + Math.floor(y / Z)) * w + X0 + Math.floor(x / Z)) * 4
       const d = (y * CW * Z + x) * 4
-      o[d] = rgba[s]; o[d + 1] = rgba[s + 1]; o[d + 2] = rgba[s + 2]; o[d + 3] = 255
+      o[d] = rgba[s]
+      o[d + 1] = rgba[s + 1]
+      o[d + 2] = rgba[s + 2]
+      o[d + 3] = 255
     }
   return o
 }
@@ -35,7 +44,10 @@ const crop = (rgba: Uint8ClampedArray | Uint8Array, w: number): Uint8ClampedArra
 const panels: Uint8ClampedArray[] = [crop(img.data, img.width)]
 for (const over of [{}, { planarFit: { junctionReseat: false } }]) {
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, ...over,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    ...over,
   })
   panels.push(crop(rasterizeDoc(doc, 512, 512, { background: [255, 255, 255] }), 512))
 }
@@ -50,7 +62,10 @@ panels.forEach((p, i) => {
     for (let x = 0; x < CW * Z; x++) {
       const s = (y * CW * Z + x) * 4
       const d = (y * W + ox + x) * 4
-      sheet[d] = p[s]; sheet[d + 1] = p[s + 1]; sheet[d + 2] = p[s + 2]; sheet[d + 3] = 255
+      sheet[d] = p[s]
+      sheet[d + 1] = p[s + 1]
+      sheet[d + 2] = p[s + 2]
+      sheet[d + 3] = 255
     }
 })
 writeFileSync(out, encodePng(sheet, W, H))

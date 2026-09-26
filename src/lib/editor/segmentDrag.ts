@@ -85,22 +85,14 @@ export function dragSegment(
  * Move a whole segment bodily, anchors and handles (the Alt-drag variant);
  * its neighbours stretch to follow.
  */
-export function translateSegment(
-  item: PathItem,
-  sub: number,
-  seg: number,
-  dx: number,
-  dy: number,
-): PathItem {
+export function translateSegment(item: PathItem, sub: number, seg: number, dx: number, dy: number): PathItem {
   const sp = item.subPaths[sub]
   if (!sp) return item
   const n = sp.nodes.length
   if (n < 2) return item
   const aIdx = seg
   const bIdx = (seg + 1) % n
-  const nodes = sp.nodes.map((node, i) =>
-    i === aIdx || i === bIdx ? shiftNode(node, dx, dy) : node,
-  )
+  const nodes = sp.nodes.map((node, i) => (i === aIdx || i === bIdx ? shiftNode(node, dx, dy) : node))
   const subPaths = item.subPaths.slice()
   subPaths[sub] = { nodes, closed: sp.closed }
   return { ...item, subPaths }

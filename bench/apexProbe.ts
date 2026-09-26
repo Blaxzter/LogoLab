@@ -78,7 +78,10 @@ const profiles = new Map<string, Vec[]>()
 
 for (const [label, over] of VARIANTS) {
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, ...over,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    ...over,
   })
   // Only HIGH-CONTRAST edges are sampled. A band edge leaving the junction runs
   // near-perpendicular to the arm and its first few px sit inside the 4px corridor —
@@ -86,11 +89,12 @@ for (const [label, over] of VARIANTS) {
   const owners = new Map<number, Set<string>>()
   for (const it of doc.items) {
     if (it.kind !== 'path' || !it.loops) continue
-    for (const loop of it.loops) for (const r of loop) {
-      let s = owners.get(r.edge)
-      if (!s) owners.set(r.edge, (s = new Set()))
-      s.add(it.fill)
-    }
+    for (const loop of it.loops)
+      for (const r of loop) {
+        let s = owners.get(r.edge)
+        if (!s) owners.set(r.edge, (s = new Set()))
+        s.add(it.fill)
+      }
   }
   const contrast = (id: number): number => {
     const f = [...(owners.get(id) ?? [])]
@@ -175,8 +179,10 @@ const W = img.width
 const lum = (d: Uint8ClampedArray | Uint8Array, x: number, y: number): number => {
   const cx = Math.max(0, Math.min(W - 1.001, x))
   const cy = Math.max(0, Math.min(img.height - 1.001, y))
-  const x0 = Math.floor(cx), y0 = Math.floor(cy)
-  const fx = cx - x0, fy = cy - y0
+  const x0 = Math.floor(cx),
+    y0 = Math.floor(cy)
+  const fx = cx - x0,
+    fy = cy - y0
   const at = (px: number, py: number): number => {
     const i = (py * W + px) * 4
     return 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
@@ -203,7 +209,10 @@ function scan(d: Uint8ClampedArray | Uint8Array, p: Vec, n: Vec): number | null 
 const renders = new Map<string, Uint8ClampedArray>()
 for (const [label, over] of VARIANTS) {
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, ...over,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    ...over,
   })
   renders.set(label, rasterizeDoc(doc, W, img.height, { background: [255, 255, 255] }) as Uint8ClampedArray)
 }
@@ -254,16 +263,19 @@ for (const s of [40, 70, 90]) {
 // edge if the label map itself steps.
 {
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
   })
   const owners = new Map<number, Set<string>>()
   for (const it of doc.items) {
     if (it.kind !== 'path' || !it.loops) continue
-    for (const loop of it.loops) for (const r of loop) {
-      let st = owners.get(r.edge)
-      if (!st) owners.set(r.edge, (st = new Set()))
-      st.add(it.fill)
-    }
+    for (const loop of it.loops)
+      for (const r of loop) {
+        let st = owners.get(r.edge)
+        if (!st) owners.set(r.edge, (st = new Set()))
+        st.add(it.fill)
+      }
   }
   console.log('  EDGES COVERING THE FLANK (station range along B→C, within 2.5px of the line):')
   for (const e of doc.topology!.edges) {
@@ -275,7 +287,7 @@ for (const s of [40, 70, 90]) {
       for (let k = 0; k <= 24; k++) {
         const p = cubicAt(n[i], n[(i + 1) % n.length], k / 24)
         if (lineDist(p, B, C) > 2.5) continue
-        const t = ((p.x - B.x) * dirx + (p.y - B.y) * diry)
+        const t = (p.x - B.x) * dirx + (p.y - B.y) * diry
         if (t < -2 || t > LEN + 2) continue
         lo = Math.min(lo, t)
         hi = Math.max(hi, t)

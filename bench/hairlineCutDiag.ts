@@ -30,7 +30,10 @@ import { docStats } from '../src/lib/path/model.ts'
 import type { VectorizeOptions } from '../src/types'
 
 ensureImageData()
-const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 ? process.argv[i + 1] : null }
+const arg = (n: string) => {
+  const i = process.argv.indexOf(`--${n}`)
+  return i >= 0 ? process.argv[i + 1] : null
+}
 const RES = (arg('res') ?? '400,499,600,800').split(',').map(Number)
 const CUTS = (arg('cuts') ?? '128,136,144,152,160,168,176,184,192,200').split(',').map(Number)
 const GALLERY = Number(arg('gallery') ?? '0')
@@ -69,10 +72,19 @@ const synth: Record<string, string> = {
 }
 for (const [name, svg] of Object.entries(synth)) writeFileSync(join(OUT, `${name}.svg`), svg)
 
-const SVGS = [...Object.keys(synth).map((n) => join(OUT, `${n}.svg`)), ...(arg('svg')?.split(',').filter(Boolean) ?? [])]
+const SVGS = [
+  ...Object.keys(synth).map((n) => join(OUT, `${n}.svg`)),
+  ...(arg('svg')?.split(',').filter(Boolean) ?? []),
+]
 
 // ------------------------------------------------------------ ridge statistic
-interface RidgeStats { ink: number; ridges: number; lost: number; lostShare: number; p: number[] }
+interface RidgeStats {
+  ink: number
+  ridges: number
+  lost: number
+  lostShare: number
+  p: number[]
+}
 const RIDGE_MARGIN = 10
 const FAINT = 240
 function ridgeStats(px: ImageDataLike, cut: number, invert: boolean): RidgeStats {
@@ -80,50 +92,90 @@ function ridgeStats(px: ImageDataLike, cut: number, invert: boolean): RidgeStats
   const L = new Float32Array(W * H).fill(255)
   for (let i = 0; i < W * H; i++) if (data[i * 4 + 3] >= VISIBLE_ALPHA) L[i] = cutLuma(data, i * 4, invert)
   const dark = (l: number) => (invert ? 255 - l : l) // darkness axis: ink is low
-  let ink = 0, ridges = 0
+  let ink = 0,
+    ridges = 0
   const lostL: number[] = []
-  const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]]
-  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
-    const i = y * W + x
-    const d = dark(L[i])
-    if (d < cut) ink++
-    if (d >= FAINT) continue
-    let ridge = false
-    for (const [dx, dy] of dirs) {
-      const a = dark(L[(y - dy) * W + (x - dx)]), b = dark(L[(y + dy) * W + (x + dx)])
-      if (d + RIDGE_MARGIN <= a && d + RIDGE_MARGIN <= b) { ridge = true; break }
+  const dirs = [
+    [1, 0],
+    [0, 1],
+    [1, 1],
+    [1, -1],
+  ]
+  for (let y = 1; y < H - 1; y++)
+    for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x
+      const d = dark(L[i])
+      if (d < cut) ink++
+      if (d >= FAINT) continue
+      let ridge = false
+      for (const [dx, dy] of dirs) {
+        const a = dark(L[(y - dy) * W + (x - dx)]),
+          b = dark(L[(y + dy) * W + (x + dx)])
+        if (d + RIDGE_MARGIN <= a && d + RIDGE_MARGIN <= b) {
+          ridge = true
+          break
+        }
+      }
+      if (!ridge) continue
+      ridges++
+      if (d >= cut) lostL.push(d)
     }
-    if (!ridge) continue
-    ridges++
-    if (d >= cut) lostL.push(d)
-  }
   lostL.sort((a, b) => a - b)
   const q = (f: number) => (lostL.length ? lostL[Math.min(lostL.length - 1, Math.floor(f * lostL.length))] : NaN)
-  return { ink, ridges, lost: lostL.length, lostShare: lostL.length / Math.max(1, ink + lostL.length), p: [q(0.25), q(0.5), q(0.75), q(0.9)] }
+  return {
+    ink,
+    ridges,
+    lost: lostL.length,
+    lostShare: lostL.length / Math.max(1, ink + lostL.length),
+    p: [q(0.25), q(0.5), q(0.75), q(0.9)],
+  }
 }
 
 // ------------------------------------------------------------ the sweep
-interface Row { name: string; res: number; k: number; stats: RidgeStats; best: number; bestSsim: number; at128: number; curve: string }
+interface Row {
+  name: string
+  res: number
+  k: number
+  stats: RidgeStats
+  best: number
+  bestSsim: number
+  at128: number
+  curve: string
+}
 const rows: Row[] = []
 for (const file of SVGS) {
   const svg = readFileSync(file, 'utf8')
-  const name = file.replace(/\\/g, '/').split('/').pop()!.replace(/\.svg$/, '')
+  const name = file
+    .replace(/\\/g, '/')
+    .split('/')
+    .pop()!
+    .replace(/\.svg$/, '')
   for (const S of RES) {
     const px = renderSvg(svg, S) // transparent, like a user's PNG
     const ink = decideInkMode(px, 128, { colorMode: 'mono' })
-    const base: VectorizeOptions = { ...DEFAULT_VECTORIZE_OPTIONS, mode: 'mono', threshold: ink.threshold, invert: ink.invert }
+    const base: VectorizeOptions = {
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      mode: 'mono',
+      threshold: ink.threshold,
+      invert: ink.invert,
+    }
     const k = monoTraceScale(px, base).scale
     const input = k > 1 ? upscaleImageData(px, k) : px
     const truth = renderSvg(svg, S * k, '#ffffff')
     const stats = ridgeStats(px, ink.threshold, ink.invert)
-    let best = 0, bestSsim = -1, at128 = 0
+    let best = 0,
+      bestSsim = -1,
+      at128 = 0
     const curve: string[] = []
     for (const cut of CUTS) {
       const doc = await traceImage(toImageData(input), { ...base, threshold: cut })
       const render = rasterizeDoc(doc, truth.width, truth.height)
       const f = fidelity(truth.data, render, truth.width, truth.height)
       curve.push(`${cut}:${f.ssim.toFixed(3)}/${f.meanDeltaE.toFixed(2)}/${docStats(doc).nodes}`)
-      if (f.ssim > bestSsim) { bestSsim = f.ssim; best = cut }
+      if (f.ssim > bestSsim) {
+        bestSsim = f.ssim
+        best = cut
+      }
       if (cut === 128) at128 = f.ssim
     }
     rows.push({ name, res: S, k, stats, best, bestSsim, at128, curve: curve.join(' ') })
@@ -136,7 +188,10 @@ for (const file of SVGS) {
 
 if (GALLERY > 0) {
   const dir = join(process.cwd(), 'examples', 'logos')
-  const files = readdirSync(dir).filter((f) => f.endsWith('.svg')).sort().slice(0, GALLERY)
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith('.svg'))
+    .sort()
+    .slice(0, GALLERY)
   let shown = 0
   for (const f of files) {
     const svg = readFileSync(join(dir, f), 'utf8')
@@ -146,7 +201,9 @@ if (GALLERY > 0) {
       if (ink.mode !== 'mono') continue
       const st = ridgeStats(px, ink.threshold, ink.invert)
       if (shown++ < 12 || st.lostShare > 0.01)
-        process.stdout.write(`gallery ${f.replace(/\.svg$/, '').padEnd(24)} @${S}  ink ${st.ink}  ridges ${st.ridges}  lost ${st.lost} (${(100 * st.lostShare).toFixed(2)}%)  p50 ${Number.isNaN(st.p[1]) ? '—' : st.p[1].toFixed(0)}\n`)
+        process.stdout.write(
+          `gallery ${f.replace(/\.svg$/, '').padEnd(24)} @${S}  ink ${st.ink}  ridges ${st.ridges}  lost ${st.lost} (${(100 * st.lostShare).toFixed(2)}%)  p50 ${Number.isNaN(st.p[1]) ? '—' : st.p[1].toFixed(0)}\n`,
+        )
     }
   }
 }

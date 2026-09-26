@@ -94,8 +94,19 @@ const cases: [string, string][] = []
 const CASE = flag('--case')
 const FILE = argv.find((a) => a.endsWith('.svg'))
 if (CASE) {
-  const tries = [join(EDGE, `${CASE}.svg`), join(root, 'public', 'examples', `${CASE}.svg`), join(root, 'examples', 'logos', `${CASE}.svg`)]
-  const hit = tries.find((t) => { try { readFileSync(t); return true } catch { return false } })
+  const tries = [
+    join(EDGE, `${CASE}.svg`),
+    join(root, 'public', 'examples', `${CASE}.svg`),
+    join(root, 'examples', 'logos', `${CASE}.svg`),
+  ]
+  const hit = tries.find((t) => {
+    try {
+      readFileSync(t)
+      return true
+    } catch {
+      return false
+    }
+  })
   if (!hit) throw new Error(`no such case: ${CASE}`)
   cases.push([CASE, readFileSync(hit, 'utf8')])
 } else if (FILE) {
@@ -123,8 +134,13 @@ if (CIRCLES) {
     // by hand; it belongs in the instrument).
     const strokeGt = strokedCircleGround(text, RES)
     const why = strokeGt.length ? null : unscorable(parseGroundTruth(text))
-    if (why) { console.log(`  ${name.padEnd(24)} not scorable — ${why}`); continue }
-    const raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+    if (why) {
+      console.log(`  ${name.padEnd(24)} not scorable — ${why}`)
+      continue
+    }
+    const raster = decodePng(
+      new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng(),
+    )
     const doc = await traceImage(raster as unknown as ImageData, {
       ...DEFAULT_VECTORIZE_OPTIONS,
       engine: 'planar',
@@ -133,24 +149,37 @@ if (CIRCLES) {
       ...(NOCHAIN ? { planarFit: { chainArcs: false } } : {}),
     })
     const shapes = strokeGt.length ? strokeGt : toRasterSpace(parseGroundTruth(text), raster.width)
-    const docSets = doc.items.filter((i) => i.kind === 'path' && i.visible !== false).map((i) => (i as unknown as { subPaths: SubPath[] }).subPaths)
+    const docSets = doc.items
+      .filter((i) => i.kind === 'path' && i.visible !== false)
+      .map((i) => (i as unknown as { subPaths: SubPath[] }).subPaths)
     const cr = circleRecovery(shapes, docSets, raster.width, raster.height)
-    if (!cr.circles) { console.log(`  ${name.padEnd(24)} no authored circle — n/a`); continue }
+    if (!cr.circles) {
+      console.log(`  ${name.padEnd(24)} no authored circle — n/a`)
+      continue
+    }
     rows.push([name, cr.circles, cr.spread, cr.bias, cr.centre, cr.roundness])
     if (cases.length === 1) {
       console.log(`
   ${name} @${RES}px — ${cr.circles} scored authored circle(s)
 `)
-      console.log(`    ${'cx'.padStart(8)}${'cy'.padStart(8)}${'r'.padStart(8)}${'samples'.padStart(9)}${'spread'.padStart(9)}${'bias'.padStart(8)}${'centre'.padStart(8)}${'round'.padStart(8)}${'p50'.padStart(7)}${'p95'.padStart(7)}${'max'.padStart(7)}`)
+      console.log(
+        `    ${'cx'.padStart(8)}${'cy'.padStart(8)}${'r'.padStart(8)}${'samples'.padStart(9)}${'spread'.padStart(9)}${'bias'.padStart(8)}${'centre'.padStart(8)}${'round'.padStart(8)}${'p50'.padStart(7)}${'p95'.padStart(7)}${'max'.padStart(7)}`,
+      )
       for (const c of cr.per.slice().sort((a, b) => b.spread - a.spread))
-        console.log(`    ${f(c.cx, 1).padStart(8)}${f(c.cy, 1).padStart(8)}${f(c.r, 1).padStart(8)}${String(c.samples).padStart(9)}${f(c.spread).padStart(9)}${f(c.bias).padStart(8)}${f(c.centre).padStart(8)}${f(c.roundness).padStart(8)}${f(c.p50).padStart(7)}${f(c.p95).padStart(7)}${f(c.max).padStart(7)}${c.samples < 16 ? '   (occluded — not scored)' : ''}`)
+        console.log(
+          `    ${f(c.cx, 1).padStart(8)}${f(c.cy, 1).padStart(8)}${f(c.r, 1).padStart(8)}${String(c.samples).padStart(9)}${f(c.spread).padStart(9)}${f(c.bias).padStart(8)}${f(c.centre).padStart(8)}${f(c.roundness).padStart(8)}${f(c.p50).padStart(7)}${f(c.p95).padStart(7)}${f(c.max).padStart(7)}${c.samples < 16 ? '   (occluded — not scored)' : ''}`,
+        )
     }
   }
   if (cases.length > 1) {
     console.log()
-    console.log(`    ${'case'.padEnd(24)}${'circles'.padStart(8)}${'spread'.padStart(9)}${'|bias|'.padStart(9)}${'centre'.padStart(9)}${'round'.padStart(9)}`)
+    console.log(
+      `    ${'case'.padEnd(24)}${'circles'.padStart(8)}${'spread'.padStart(9)}${'|bias|'.padStart(9)}${'centre'.padStart(9)}${'round'.padStart(9)}`,
+    )
     for (const [n, k, p95, mx, ce, ro] of rows.slice().sort((a, b) => b[2] - a[2]))
-      console.log(`    ${n.padEnd(24)}${String(k).padStart(8)}${f(p95).padStart(9)}${f(mx).padStart(9)}${f(ce).padStart(9)}${f(ro).padStart(9)}`)
+      console.log(
+        `    ${n.padEnd(24)}${String(k).padStart(8)}${f(p95).padStart(9)}${f(mx).padStart(9)}${f(ce).padStart(9)}${f(ro).padStart(9)}`,
+      )
     const ps = rows.map((r) => r[2]).sort((a, b) => a - b)
     const at = (q: number): number => ps[Math.min(ps.length - 1, Math.floor(q * ps.length))]
     console.log(`
@@ -165,7 +194,9 @@ const fams: [string, number, number, number, number][] = []
 console.log(`\n━━━ §1d CO-CIRCULAR ARC-SNAP CENSUS @${RES} ${GRADIENTS ? 'grad' : 'flat'} ━━━`)
 
 for (const [name, text] of cases) {
-  const raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
+  const raster = decodePng(
+    new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng(),
+  )
   const loops: ArcLoopRecord[] = []
   await traceImage(raster as unknown as ImageData, {
     ...DEFAULT_VECTORIZE_OPTIONS,
@@ -184,11 +215,16 @@ for (const [name, text] of cases) {
     const snapped = loops.filter((l) => l.verdict === 'snapped').length
     const veto = loops.filter((l) => l.verdict === 'corner-veto').length
     const dev = loops.filter((l) => l.verdict === 'dev-exceeds-budget').length
-    if (loops.length) console.log(`  ${name.padEnd(28)} loops ${String(loops.length).padStart(4)}   snapped ${String(snapped).padStart(3)}   corner-veto ${String(veto).padStart(3)}   dev ${String(dev).padStart(3)}`)
+    if (loops.length)
+      console.log(
+        `  ${name.padEnd(28)} loops ${String(loops.length).padStart(4)}   snapped ${String(snapped).padStart(3)}   corner-veto ${String(veto).padStart(3)}   dev ${String(dev).padStart(3)}`,
+      )
     continue
   }
   console.log(`\n  ${name} @${RES}px — ${loops.length} candidate region loops\n`)
-  console.log(`    ${'label'.padStart(6)}${'edges'.padStart(7)}${'open'.padStart(6)}${'r'.padStart(9)}${'radialDev'.padStart(11)}${'budget'.padStart(9)}${'turn°'.padStart(8)}   verdict`)
+  console.log(
+    `    ${'label'.padStart(6)}${'edges'.padStart(7)}${'open'.padStart(6)}${'r'.padStart(9)}${'radialDev'.padStart(11)}${'budget'.padStart(9)}${'turn°'.padStart(8)}   verdict`,
+  )
   for (const l of loops.slice().sort((a, b) => b.edges - a.edges)) {
     console.log(
       `    ${String(l.label).padStart(6)}${String(l.edges).padStart(7)}${String(l.openEdges).padStart(6)}` +
@@ -198,12 +234,18 @@ for (const [name, text] of cases) {
 }
 
 if (FAMILIES) {
-  console.log(`\n  ${'case'.padEnd(26)}${'arcs'.padStart(6)}${'r'.padStart(9)}${'dev'.padStart(8)}${'sweep°'.padStart(9)}`)
+  console.log(
+    `\n  ${'case'.padEnd(26)}${'arcs'.padStart(6)}${'r'.padStart(9)}${'dev'.padStart(8)}${'sweep°'.padStart(9)}`,
+  )
   for (const [n, arcs, r, dev, sweep] of fams.slice().sort((a, b) => a[4] - b[4]))
-    console.log(`  ${n.padEnd(26)}${String(arcs).padStart(6)}${f(r, 1).padStart(9)}${f(dev).padStart(8)}${f(sweep, 0).padStart(9)}`)
+    console.log(
+      `  ${n.padEnd(26)}${String(arcs).padStart(6)}${f(r, 1).padStart(9)}${f(dev).padStart(8)}${f(sweep, 0).padStart(9)}`,
+    )
   const ss = fams.map((x) => x[4]).sort((a, b) => a - b)
   const at = (q: number): number => ss[Math.min(ss.length - 1, Math.floor(q * ss.length))]
-  console.log(`\n  ${fams.length} families over ${cases.length} case(s) — sweep°: min ${f(at(0), 0)}  p10 ${f(at(0.1), 0)}  p50 ${f(at(0.5), 0)}  max ${f(at(1), 0)}\n`)
+  console.log(
+    `\n  ${fams.length} families over ${cases.length} case(s) — sweep°: min ${f(at(0), 0)}  p10 ${f(at(0.1), 0)}  p50 ${f(at(0.5), 0)}  max ${f(at(1), 0)}\n`,
+  )
   process.exit(0)
 }
 

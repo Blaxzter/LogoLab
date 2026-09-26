@@ -113,9 +113,7 @@ export function ReportDialog({ onClose }: { onClose: () => void }) {
                     </span>
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-ink">{path.title}</span>
-                      <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                        {path.blurb}
-                      </span>
+                      <span className="mt-0.5 block text-xs leading-relaxed text-muted">{path.blurb}</span>
                     </span>
                   </button>
                 )
@@ -129,15 +127,7 @@ export function ReportDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-function Guidance({
-  choice,
-  onBack,
-  onClose,
-}: {
-  choice: Choice
-  onBack: () => void
-  onClose: () => void
-}) {
+function Guidance({ choice, onBack, onClose }: { choice: Choice; onBack: () => void; onClose: () => void }) {
   const path = PATHS[choice]
   const subject: ReportSubject = { what: 'LogoLab', kind: choice }
   // Shown in the disclosure below so the user sees exactly what the link carries.
@@ -171,8 +161,8 @@ function Guidance({
       <div>
         <h3 className="text-sm font-semibold text-ink">What LogoLab attaches</h3>
         <p className="mt-1 text-xs leading-relaxed text-muted">
-          Your settings, the image's size and format, this build, and anything that went wrong this
-          session. <span className="text-ink-2">Your image itself is never included.</span>
+          Your settings, the image's size and format, this build, and anything that went wrong this session.{' '}
+          <span className="text-ink-2">Your image itself is never included.</span>
         </p>
         <details className="mt-2">
           <summary className="cursor-pointer text-xs font-medium text-muted transition-colors hover:text-ink">

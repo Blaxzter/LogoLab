@@ -26,7 +26,12 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
   // Clustered corners (one per feature, like the loop path) — the raw `pinned`
   // set has both staircase shoulders of a vertex, which must not become two
   // breakpoints (a 2-node chamfer where the art has one corner).
-  let C = detectOpenCorners(pts, opts.cornerTurnDeg, opts.cornerWindow ?? CORNER_WINDOW, opts.cornerMerge ?? CORNER_MERGE)
+  let C = detectOpenCorners(
+    pts,
+    opts.cornerTurnDeg,
+    opts.cornerWindow ?? CORNER_WINDOW,
+    opts.cornerMerge ?? CORNER_MERGE,
+  )
   if (n < 2 * SNAP_GAP + 3) return fallback()
   const snapSpan = opts.snapSpan ?? SNAP_SPAN
   const gapOf = (steps: number): number => opts.armGapFixed ?? armGap(steps)
@@ -101,8 +106,10 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
         if (!dirs) continue
         const arriving = fitted[k]
         const leaving = fitted[k + 1]
-        if (dirs.inArm && arriving.length >= 2) pinHandle(arriving[arriving.length - 1], 'hIn', dirs.inArm, opts.epsilon, opts.pinDiag)
-        if (dirs.outArm && leaving && leaving.length >= 2) pinHandle(leaving[0], 'hOut', dirs.outArm, opts.epsilon, opts.pinDiag)
+        if (dirs.inArm && arriving.length >= 2)
+          pinHandle(arriving[arriving.length - 1], 'hIn', dirs.inArm, opts.epsilon, opts.pinDiag)
+        if (dirs.outArm && leaving && leaving.length >= 2)
+          pinHandle(leaving[0], 'hOut', dirs.outArm, opts.epsilon, opts.pinDiag)
       }
     }
 
@@ -117,7 +124,14 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
         break
       }
       if (out.length === 0) {
-        for (const nd of cur) out.push({ x: nd.x, y: nd.y, hIn: nd.hIn ? { ...nd.hIn } : null, hOut: nd.hOut ? { ...nd.hOut } : null, kind: nd.kind })
+        for (const nd of cur)
+          out.push({
+            x: nd.x,
+            y: nd.y,
+            hIn: nd.hIn ? { ...nd.hIn } : null,
+            hOut: nd.hOut ? { ...nd.hOut } : null,
+            kind: nd.kind,
+          })
       } else {
         const joint = out[out.length - 1]
         jointAt.push(out.length - 1)
@@ -125,7 +139,13 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
         joint.kind = 'corner'
         for (let j = 1; j < cur.length; j++) {
           const nd = cur[j]
-          out.push({ x: nd.x, y: nd.y, hIn: nd.hIn ? { ...nd.hIn } : null, hOut: nd.hOut ? { ...nd.hOut } : null, kind: nd.kind })
+          out.push({
+            x: nd.x,
+            y: nd.y,
+            hIn: nd.hIn ? { ...nd.hIn } : null,
+            hOut: nd.hOut ? { ...nd.hOut } : null,
+            kind: nd.kind,
+          })
         }
       }
     }

@@ -23,7 +23,9 @@ const snapDir = join(root, 'test', 'ab-snapshots', 'before-lowres')
 // not exist on a fresh clone — say what to run rather than throwing ENOENT.
 const input = join(snapDir, 'bg-ramp-twin.png')
 if (!existsSync(input)) {
-  throw new Error(`missing ${input} — A/B stamps are not committed; regenerate with \`pnpm gen:absnapshot before-lowres\` (any stamp's bg-ramp-twin.png works: it is the fixture's raster, not that revision's trace)`)
+  throw new Error(
+    `missing ${input} — A/B stamps are not committed; regenerate with \`pnpm gen:absnapshot before-lowres\` (any stamp's bg-ramp-twin.png works: it is the fixture's raster, not that revision's trace)`,
+  )
 }
 const img = decodePng(readFileSync(input))
 
@@ -61,20 +63,26 @@ for (const [label, over] of CONFIGS) {
   const paths = doc.items.filter((i): i is PathItem => i.kind === 'path')
   for (const d of DISCS) {
     const p = paths.find((x) => d.hex.test(x.fill))
-    if (!p) { console.log(`${d.tag} missing`); continue }
+    if (!p) {
+      console.log(`${d.tag} missing`)
+      continue
+    }
     const loop = p.loops?.[0] ?? []
     console.log(` ${d.tag} loop of ${loop.length} edge(s)`)
     for (const ref of loop) {
       const e = doc.topology!.edges[ref.edge]
       // radial error of the fitted CURVE (dense sample) vs the authored circle
-      let curveErr = 0, anchorErr = 0, arcDeg = 0
+      let curveErr = 0,
+        anchorErr = 0,
+        arcDeg = 0
       for (let i = 0; i + 1 < e.nodes.length; i++)
         for (let s = 0; s <= 24; s++) {
           const q = cubic(e.nodes[i], e.nodes[i + 1], s / 24)
           curveErr = Math.max(curveErr, Math.abs(Math.hypot(q.x - d.cx, q.y - d.cy) - d.r))
         }
       for (const n of e.nodes) anchorErr = Math.max(anchorErr, Math.abs(Math.hypot(n.x - d.cx, n.y - d.cy) - d.r))
-      const a = e.nodes[0], b = e.nodes[e.nodes.length - 1]
+      const a = e.nodes[0],
+        b = e.nodes[e.nodes.length - 1]
       const ang = (n: PathNode) => Math.atan2(n.y - d.cy, n.x - d.cx)
       arcDeg = Math.abs(((ang(b) - ang(a)) * 180) / Math.PI)
       if (arcDeg > 180) arcDeg = 360 - arcDeg

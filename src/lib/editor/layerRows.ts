@@ -58,11 +58,7 @@ export function layerRows(items: readonly DocItem[]): LayerRow[] {
  * order. An expanded group in the span contributes itself and its children;
  * structural ops drop the children again via `topLevelSelection`.
  */
-export function rowsBetween(
-  rows: readonly LayerRow[],
-  anchorId: string,
-  toId: string,
-): string[] {
+export function rowsBetween(rows: readonly LayerRow[], anchorId: string, toId: string): string[] {
   const a = rows.findIndex((r) => r.item.id === anchorId)
   const b = rows.findIndex((r) => r.item.id === toId)
   if (b < 0) return []
@@ -87,11 +83,7 @@ export function edgeAt(offsetY: number, height: number, group: boolean): DropEdg
  * in front in paint order (hence the `+1`). Dropping into a group lands at its
  * front, i.e. the first row under the header.
  */
-export function dropSpot(
-  rows: readonly LayerRow[],
-  rowId: string,
-  edge: DropEdge,
-): DropSpot | null {
+export function dropSpot(rows: readonly LayerRow[], rowId: string, edge: DropEdge): DropSpot | null {
   const row = rows.find((r) => r.item.id === rowId)
   if (!row) return null
   if (edge === 'into') {

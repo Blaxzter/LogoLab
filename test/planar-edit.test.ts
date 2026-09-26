@@ -63,7 +63,14 @@ function makeDoc(): EditableDoc {
     id: 'A',
     fill: '#ff0000',
     fillRule: 'nonzero',
-    loops: [[{ edge: 0, reversed: false }, { edge: ES, reversed: false }, { edge: 4, reversed: false }, { edge: 5, reversed: false }]],
+    loops: [
+      [
+        { edge: 0, reversed: false },
+        { edge: ES, reversed: false },
+        { edge: 4, reversed: false },
+        { edge: 5, reversed: false },
+      ],
+    ],
     subPaths: [],
     visible: true,
   }
@@ -72,7 +79,14 @@ function makeDoc(): EditableDoc {
     id: 'B',
     fill: '#0000ff',
     fillRule: 'nonzero',
-    loops: [[{ edge: 1, reversed: false }, { edge: 2, reversed: false }, { edge: 3, reversed: false }, { edge: ES, reversed: true }]],
+    loops: [
+      [
+        { edge: 1, reversed: false },
+        { edge: 2, reversed: false },
+        { edge: 3, reversed: false },
+        { edge: ES, reversed: true },
+      ],
+    ],
     subPaths: [],
     visible: true,
   }
@@ -80,11 +94,9 @@ function makeDoc(): EditableDoc {
   return materializeDoc(doc)
 }
 
-const pathItem = (doc: EditableDoc, id: string): PathItem =>
-  doc.items.find((it) => it.id === id) as PathItem
+const pathItem = (doc: EditableDoc, id: string): PathItem => doc.items.find((it) => it.id === id) as PathItem
 
-const findEdge = (doc: EditableDoc, id: number): SharedEdge =>
-  doc.topology!.edges.find((e) => e.id === id)!
+const findEdge = (doc: EditableDoc, id: number): SharedEdge => doc.topology!.edges.find((e) => e.id === id)!
 
 const anchors = (item: PathItem): { x: number; y: number }[] =>
   item.subPaths.flatMap((sp) => sp.nodes.map((n) => ({ x: n.x, y: n.y })))
@@ -140,18 +152,9 @@ test('planar-edit: moveVertex moves every incident edge endpoint (welded junctio
   // Vertex table updated.
   assert.deepEqual(next.topology!.vertices[1], { id: 1, x: 1.5, y: 0.4 })
   // Every incident edge's matching endpoint moved with it.
-  assert.deepEqual(
-    { x: findEdge(next, 0).nodes[1].x, y: findEdge(next, 0).nodes[1].y },
-    { x: 1.5, y: 0.4 },
-  ) // e0 end
-  assert.deepEqual(
-    { x: findEdge(next, 1).nodes[0].x, y: findEdge(next, 1).nodes[0].y },
-    { x: 1.5, y: 0.4 },
-  ) // e1 start
-  assert.deepEqual(
-    { x: findEdge(next, ES).nodes[0].x, y: findEdge(next, ES).nodes[0].y },
-    { x: 1.5, y: 0.4 },
-  ) // ES start
+  assert.deepEqual({ x: findEdge(next, 0).nodes[1].x, y: findEdge(next, 0).nodes[1].y }, { x: 1.5, y: 0.4 }) // e0 end
+  assert.deepEqual({ x: findEdge(next, 1).nodes[0].x, y: findEdge(next, 1).nodes[0].y }, { x: 1.5, y: 0.4 }) // e1 start
+  assert.deepEqual({ x: findEdge(next, ES).nodes[0].x, y: findEdge(next, ES).nodes[0].y }, { x: 1.5, y: 0.4 }) // ES start
 
   // Both regions show the junction at the SAME new spot (coincident).
   assert.ok(has(anchors(pathItem(next, 'A')), 1.5, 0.4))
@@ -277,7 +280,10 @@ test('planar-edit: deleteRegionNodes deletes interior, skips junctions', () => {
   const doc = makeDoc()
   const provA = regionProvenance(doc, pathItem(doc, 'A'))!
   // Select the interior node + a junction; only the interior should be removed.
-  const next = deleteRegionNodes(doc, provA, [{ sub: 0, idx: 2 }, { sub: 0, idx: 1 }])
+  const next = deleteRegionNodes(doc, provA, [
+    { sub: 0, idx: 2 },
+    { sub: 0, idx: 1 },
+  ])
   assert.equal(findEdge(next, ES).nodes.length, 2)
   assert.ok(has(anchors(pathItem(next, 'A')), 1, 0)) // junction kept
   assert.ok(!has(anchors(pathItem(next, 'A')), 1, 1)) // interior gone
@@ -404,7 +410,11 @@ test('planar-edit: chained multi-node drag (two junctions + interior of one edge
   const result = translateRegionNodes(
     doc,
     provA,
-    [{ sub: 0, idx: 1 }, { sub: 0, idx: 2 }, { sub: 0, idx: 3 }],
+    [
+      { sub: 0, idx: 1 },
+      { sub: 0, idx: 2 },
+      { sub: 0, idx: 3 },
+    ],
     1,
     1,
   )

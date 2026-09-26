@@ -18,7 +18,11 @@ const jobs: [string, string, number, [number, number, number, number]][] = [
 for (const [name, file, res, crop] of jobs) {
   const text = readFileSync(file, 'utf8')
   const img = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng())
-  const doc = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false })
+  const doc = await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+  })
   const out = serializeDoc(doc, 3)
   writeFileSync(join(SP, `${name}-trace.svg`), out)
   const [cx, cy, cw, ch] = crop
@@ -26,6 +30,9 @@ for (const [name, file, res, crop] of jobs) {
   // Crop by wrapping in an outer svg with a shifted viewBox, blown up 4×.
   const inner = out.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '')
   const cropSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${cw * 4}" height="${ch * 4}" viewBox="${cx} ${cy} ${cw} ${ch}"><rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="#fff"/>${inner}</svg>`
-  writeFileSync(join(SP, `${name}-crop.png`), new Resvg(cropSvg, { fitTo: { mode: 'width', value: cw * 4 } }).render().asPng())
+  writeFileSync(
+    join(SP, `${name}-crop.png`),
+    new Resvg(cropSvg, { fitTo: { mode: 'width', value: cw * 4 } }).render().asPng(),
+  )
   console.log(`${name}: viewBox ${doc.viewBox.join(' ')}  items ${doc.items.length}`)
 }

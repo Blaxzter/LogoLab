@@ -287,11 +287,7 @@ export interface RenderSource {
  * 0/150px), so callers like the export pipeline always get crisp, correctly
  * proportioned pixels.
  */
-export async function loadRenderSource(
-  src: string,
-  maxDim = 1024,
-  svgText?: string | null,
-): Promise<RenderSource> {
+export async function loadRenderSource(src: string, maxDim = 1024, svgText?: string | null): Promise<RenderSource> {
   if (svgText) {
     const { canvas, width, height } = await rasterizeSvgToCanvas(svgText, maxDim)
     return { source: canvas, width, height }
@@ -368,11 +364,7 @@ export function imageDataToCanvas(imageData: ImageData): HTMLCanvasElement {
 
 export function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/png', quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('canvas.toBlob returned null'))),
-      type,
-      quality,
-    )
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('canvas.toBlob returned null'))), type, quality)
   })
 }
 

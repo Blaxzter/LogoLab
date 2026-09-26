@@ -86,10 +86,7 @@ async function processFrame(src: string): Promise<ProcessedFrame> {
   const cy = Math.floor(H / 2)
   const at = (x: number, y: number) => (y * W + x) * 4
   const centerOpaqueDark =
-    d[at(cx, cy) + 3] > 180 &&
-    d[at(cx, cy)] < 45 &&
-    d[at(cx, cy) + 1] < 45 &&
-    d[at(cx, cy) + 2] < 45
+    d[at(cx, cy) + 3] > 180 && d[at(cx, cy)] < 45 && d[at(cx, cy) + 1] < 45 && d[at(cx, cy) + 2] < 45
 
   // The screen is either the opaque-black region (typical) or a transparent hole.
   const isScreen = centerOpaqueDark

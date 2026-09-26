@@ -11,15 +11,7 @@ import { ReportFailureLink } from '../report/ReportIssue'
  * can load a logo right where they're looking instead of hunting for the sidebar
  * uploader. Shares its intake logic with the sidebar via {@link useLogoUpload}.
  */
-export function PanelEmptyState({
-  icon,
-  title,
-  subtitle,
-}: {
-  icon: ReactNode
-  title: string
-  subtitle: string
-}) {
+export function PanelEmptyState({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle: string }) {
   const { handleFile, loading, error, failure } = useLogoUpload()
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -73,9 +65,7 @@ export function PanelEmptyState({
       <div className="w-full">
         <div className="mb-3 flex items-center gap-3">
           <span className="h-px flex-1 bg-line" />
-          <span className="text-xs font-medium uppercase tracking-wider text-faint">
-            Or start with an example
-          </span>
+          <span className="text-xs font-medium uppercase tracking-wider text-faint">Or start with an example</span>
           <span className="h-px flex-1 bg-line" />
         </div>
         <ExampleGrid className="sm:grid-cols-2 lg:grid-cols-3" />

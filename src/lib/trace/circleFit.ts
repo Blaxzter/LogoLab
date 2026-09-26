@@ -200,11 +200,13 @@ export function maxEllipseToPolyDev(pts: Vec[], e: Ellipse, samples = 128): numb
     for (let i = 0; i < pts.length; i++) {
       const a = pts[i]
       const b = pts[(i + 1) % pts.length]
-      const abx = b.x - a.x, aby = b.y - a.y
+      const abx = b.x - a.x,
+        aby = b.y - a.y
       const len2 = abx * abx + aby * aby
       let u = len2 > 0 ? ((px - a.x) * abx + (py - a.y) * aby) / len2 : 0
       u = Math.max(0, Math.min(1, u))
-      const dx = px - (a.x + u * abx), dy = py - (a.y + u * aby)
+      const dx = px - (a.x + u * abx),
+        dy = py - (a.y + u * aby)
       const d = dx * dx + dy * dy
       if (d < best) best = d
     }
@@ -357,11 +359,7 @@ export interface RelationOptions {
  * regenerates only those. The detection window is `relationFrac` of the document
  * bbox long side.
  */
-export function relationSolveCircles(
-  circles: RelationCircle[],
-  opts: RelationOptions,
-  longSide: number,
-): boolean[] {
+export function relationSolveCircles(circles: RelationCircle[], opts: RelationOptions, longSide: number): boolean[] {
   const changed = circles.map(() => false)
   if (circles.length < 2) return changed
   const index = new Map<RelationCircle, number>()

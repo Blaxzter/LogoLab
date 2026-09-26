@@ -71,12 +71,18 @@ export function decodePng(bytes: Uint8Array): DecodedImage {
 
 function channelCount(colorType: number): number {
   switch (colorType) {
-    case 0: return 1 // grayscale
-    case 2: return 3 // RGB
-    case 3: return 1 // palette index
-    case 4: return 2 // gray + alpha
-    case 6: return 4 // RGBA
-    default: throw new Error('unsupported PNG color type ' + colorType)
+    case 0:
+      return 1 // grayscale
+    case 2:
+      return 3 // RGB
+    case 3:
+      return 1 // palette index
+    case 4:
+      return 2 // gray + alpha
+    case 6:
+      return 4 // RGBA
+    default:
+      throw new Error('unsupported PNG color type ' + colorType)
   }
 }
 
@@ -111,12 +117,23 @@ function unfilter(raw: Uint8Array, width: number, height: number, bitDepth: numb
       const c = y > 0 && i >= bpp ? out[prevStart + i - bpp] : 0
       let val: number
       switch (filter) {
-        case 0: val = x; break
-        case 1: val = x + a; break
-        case 2: val = x + b; break
-        case 3: val = x + ((a + b) >> 1); break
-        case 4: val = x + paeth(a, b, c); break
-        default: throw new Error('unknown PNG filter ' + filter)
+        case 0:
+          val = x
+          break
+        case 1:
+          val = x + a
+          break
+        case 2:
+          val = x + b
+          break
+        case 3:
+          val = x + ((a + b) >> 1)
+          break
+        case 4:
+          val = x + paeth(a, b, c)
+          break
+        default:
+          throw new Error('unknown PNG filter ' + filter)
       }
       out[rowStart + i] = val & 0xff
     }

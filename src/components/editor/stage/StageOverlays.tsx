@@ -9,8 +9,20 @@ import { pathD } from '../../vector/DocRender'
 import { ACCENT, ACCENT_SEL, GUIDE, HALO, ROTATE_OFFSET_PX } from './stageConstants'
 
 export function GridOverlay({
-  vx, vy, vw, vh, step, width,
-}: { vx: number; vy: number; vw: number; vh: number; step: number; width: number }) {
+  vx,
+  vy,
+  vw,
+  vh,
+  step,
+  width,
+}: {
+  vx: number
+  vy: number
+  vw: number
+  vh: number
+  step: number
+  width: number
+}) {
   const lines: React.ReactNode[] = []
   // Cap the line count so a fine grid on a large artboard stays cheap.
   const maxLines = 200
@@ -30,8 +42,18 @@ export function GridOverlay({
 }
 
 export function SelectionOutline({
-  doc, id, width, color, opacity = 1,
-}: { doc: EditableDoc; id: string; width: number; color: string; opacity?: number }) {
+  doc,
+  id,
+  width,
+  color,
+  opacity = 1,
+}: {
+  doc: EditableDoc
+  id: string
+  width: number
+  color: string
+  opacity?: number
+}) {
   const item = findItem(doc.items, id)
   if (!item) return null
   const paths = isGroup(item) ? allPaths(item.children) : item.kind === 'path' ? [item] : []
@@ -84,8 +106,16 @@ export function TransformBox({ box, r }: { box: Box; r: (px: number) => number }
 }
 
 export function NodeOverlay({
-  path, nodeSel, r, penTip,
-}: { path: PathItem; nodeSel: ReadonlySet<string>; r: (px: number) => number; penTip: boolean }) {
+  path,
+  nodeSel,
+  r,
+  penTip,
+}: {
+  path: PathItem
+  nodeSel: ReadonlySet<string>
+  r: (px: number) => number
+  penTip: boolean
+}) {
   const handles: React.ReactNode[] = []
   const anchors: React.ReactNode[] = []
   const visible = handleKeysFor(path, nodeSel)
@@ -151,7 +181,12 @@ export function NodeOverlay({
 }
 
 export function SnapGuides({
-  guides, vx, vy, vw, vh, width,
+  guides,
+  vx,
+  vy,
+  vw,
+  vh,
+  width,
 }: {
   guides: { x: SnapCandidate | null; y: SnapCandidate | null }
   vx: number

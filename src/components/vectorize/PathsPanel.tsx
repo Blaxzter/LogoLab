@@ -295,20 +295,17 @@ function PathRow({
           so the opacity is visible; opaque fills / gradients keep the solid swatch. */}
       {(() => {
         const translucent =
-          !item.gradient &&
-          !isStrokeOnly(item) &&
-          item.fillOpacity !== undefined &&
-          item.fillOpacity < 1
+          !item.gradient && !isStrokeOnly(item) && item.fillOpacity !== undefined && item.fillOpacity < 1
         return (
           <Tooltip
             label={
               isStrokeOnly(item)
                 ? 'Recolor stroke'
                 : item.gradient
-                ? 'Recolor (replaces gradient with a solid)'
-                : translucent
-                  ? `Recolor · ${Math.round((item.fillOpacity ?? 1) * 100)}% opacity`
-                  : 'Recolor'
+                  ? 'Recolor (replaces gradient with a solid)'
+                  : translucent
+                    ? `Recolor · ${Math.round((item.fillOpacity ?? 1) * 100)}% opacity`
+                    : 'Recolor'
             }
           >
             <label
@@ -336,15 +333,10 @@ function PathRow({
         )
       })()}
 
-      <span className={`truncate text-xs ${item.visible ? 'text-ink' : 'text-faint'}`}>
-        Path {index}
-      </span>
+      <span className={`truncate text-xs ${item.visible ? 'text-ink' : 'text-faint'}`}>Path {index}</span>
       <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted">{nodes}</span>
 
-      <RowIconBtn
-        title={item.visible ? 'Hide (excluded from export)' : 'Show'}
-        onClick={onToggleVisible}
-      >
+      <RowIconBtn title={item.visible ? 'Hide (excluded from export)' : 'Show'} onClick={onToggleVisible}>
         {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
       </RowIconBtn>
       <RowIconBtn title="Delete path" onClick={onDelete}>
@@ -367,14 +359,9 @@ function RawRow({
   return (
     <div className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-3">
       <span className="h-[18px] w-[18px] shrink-0 rounded border border-dashed border-line-strong" />
-      <span className={`truncate font-mono text-[11px] ${item.visible ? 'text-muted' : 'text-faint'}`}>
-        {label}
-      </span>
+      <span className={`truncate font-mono text-[11px] ${item.visible ? 'text-muted' : 'text-faint'}`}>{label}</span>
       <span className="ml-auto" />
-      <RowIconBtn
-        title={item.visible ? 'Hide (excluded from export)' : 'Show'}
-        onClick={onToggleVisible}
-      >
+      <RowIconBtn title={item.visible ? 'Hide (excluded from export)' : 'Show'} onClick={onToggleVisible}>
         {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
       </RowIconBtn>
       <RowIconBtn title="Delete" onClick={onDelete}>
@@ -384,15 +371,7 @@ function RawRow({
   )
 }
 
-function RowIconBtn({
-  title,
-  onClick,
-  children,
-}: {
-  title: string
-  onClick: () => void
-  children: React.ReactNode
-}) {
+function RowIconBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <Tooltip label={title}>
       <button

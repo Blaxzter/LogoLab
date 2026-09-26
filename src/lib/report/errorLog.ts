@@ -31,9 +31,7 @@ let entries: LoggedError[] = []
  * are shortened as noise.
  */
 export function redact(text: string): string {
-  return text
-    .replace(/data:[^\s"'`)\]]{16,}/gi, 'data:…')
-    .replace(/blob:[^\s"'`)\]]+/gi, 'blob:…')
+  return text.replace(/data:[^\s"'`)\]]{16,}/gi, 'data:…').replace(/blob:[^\s"'`)\]]+/gi, 'blob:…')
 }
 
 /** `TypeError: x is not a function`, for anything at all that was thrown. */

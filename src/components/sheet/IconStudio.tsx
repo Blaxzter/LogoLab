@@ -61,7 +61,8 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
    * re-trace the icon at lower quality as soon as a slider moved.
    */
   const plan = useMemo(
-    () => planTileTrace(pixels, tile.opts ?? traceOptions, { colorMode, gradientMode, background: sheetBackground, hiRes }),
+    () =>
+      planTileTrace(pixels, tile.opts ?? traceOptions, { colorMode, gradientMode, background: sheetBackground, hiRes }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pixels, tile.id],
   )

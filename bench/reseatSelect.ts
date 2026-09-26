@@ -75,19 +75,35 @@ interface ArmRec {
   conf: number
   skipCap: boolean
   segLen0: number
-  alt: { len: number; line: Fit | null; circle: Fit | null; noCap: { len: number; line: Fit | null; circle: Fit | null } | null } | null
+  alt: {
+    len: number
+    line: Fit | null
+    circle: Fit | null
+    noCap: { len: number; line: Fit | null; circle: Fit | null } | null
+  } | null
 }
 interface CellRec {
   case: string
   lane: string
   res: number
-  v: { x: number; y: number; tx: number; ty: number; move: number; reason: string; pair: [number, number] | null; arms: ArmRec[] }
+  v: {
+    x: number
+    y: number
+    tx: number
+    ty: number
+    move: number
+    reason: string
+    pair: [number, number] | null
+    arms: ArmRec[]
+  }
   cross: { x: number; y: number; a: string; b: string; angleDeg: number } | null
   latErr: number
   err: number
 }
 
-const cells = (JSON.parse(readFileSync(file, 'utf8')) as CellRec[]).filter((c) => c.lane === LANE && c.cross && c.cross.angleDeg >= MIN_CROSS)
+const cells = (JSON.parse(readFileSync(file, 'utf8')) as CellRec[]).filter(
+  (c) => c.lane === LANE && c.cross && c.cross.angleDeg >= MIN_CROSS,
+)
 
 const primDist = (p: Vec, pr: ReseatPrim): number => {
   if (pr.kind === 'line') return Math.abs((p.x - pr.a!.x) * pr.d!.y - (p.y - pr.a!.y) * pr.d!.x)
@@ -220,12 +236,18 @@ interface Rule {
   /** Move when true. */
   go: (c: Cand) => boolean
 }
-const byConf = (cands: Cand[]): Cand | null => cands.reduce<Cand | null>((b, c) => (!b || c.conf > b.conf ? c : b), null)
+const byConf = (cands: Cand[]): Cand | null =>
+  cands.reduce<Cand | null>((b, c) => (!b || c.conf > b.conf ? c : b), null)
 const byUnc = (cands: Cand[]): Cand | null => cands.reduce<Cand | null>((b, c) => (!b || c.unc < b.unc ? c : b), null)
 const rules: Rule[] = [{ name: 'HEAD', pick: byConf, go: (c) => c.hd >= MIN_MOVE }]
 for (const k of KS) rules.push({ name: `UNC·${k}`, pick: byConf, go: (c) => c.hd >= Math.max(MIN_MOVE, k * c.unc) })
 rules.push({ name: 'THROUGH', pick: (cands) => byConf(cands.filter((c) => !c.through)), go: (c) => c.hd >= MIN_MOVE })
-for (const t of TS) rules.push({ name: `T-VETO·${t}`, pick: (cands) => byConf(cands.filter((c) => !(c.through && c.thirdTurn >= t))), go: (c) => c.hd >= MIN_MOVE })
+for (const t of TS)
+  rules.push({
+    name: `T-VETO·${t}`,
+    pick: (cands) => byConf(cands.filter((c) => !(c.through && c.thirdTurn >= t))),
+    go: (c) => c.hd >= MIN_MOVE,
+  })
 rules.push({ name: 'MIN-UNC', pick: byUnc, go: (c) => c.hd >= MIN_MOVE })
 for (const k of KS) rules.push({ name: `MIN-UNC·${k}`, pick: byUnc, go: (c) => c.hd >= Math.max(MIN_MOVE, k * c.unc) })
 
@@ -258,7 +280,10 @@ for (const c of cells) {
   if (headMoved === dumpMoved && (!headMoved || Math.hypot(head!.H.x - c.v.tx, head!.H.y - c.v.ty) < 0.05)) reproduced++
   else {
     mismatched++
-    if (disagreements.length < 8) disagreements.push(`${c.case}@${c.res} (${f(c.v.x, 0)},${f(c.v.y, 0)}): dump ${c.v.reason}${dumpMoved ? ` → (${f(c.v.tx, 1)},${f(c.v.ty, 1)})` : ''}, re-derived ${head ? `${headMoved ? 'moved' : 'below MIN_MOVE'} → (${f(head.H.x, 1)},${f(head.H.y, 1)}) hd ${f(head.hd)}` : 'no pair'}`)
+    if (disagreements.length < 8)
+      disagreements.push(
+        `${c.case}@${c.res} (${f(c.v.x, 0)},${f(c.v.y, 0)}): dump ${c.v.reason}${dumpMoved ? ` → (${f(c.v.tx, 1)},${f(c.v.ty, 1)})` : ''}, re-derived ${head ? `${headMoved ? 'moved' : 'below MIN_MOVE'} → (${f(head.H.x, 1)},${f(head.H.y, 1)}) hd ${f(head.hd)}` : 'no pair'}`,
+      )
   }
   for (const r of rules) {
     const k = key(r.name, c.res)
@@ -280,23 +305,42 @@ for (const c of cells) {
   const headWorse = head != null && head.hd >= MIN_MOVE && head.err > c.latErr + 0.1
   const headLost = head != null && head.hd >= MIN_MOVE && head.err < c.latErr - 0.1 && head.through
   if ((VERBOSE || (WORSE_ONLY && headWorse) || (LOST_ONLY && headLost)) && cands.length) {
-    console.log(`${c.case}@${c.res} (${f(c.v.x, 0)},${f(c.v.y, 0)}) ${c.cross!.a} × ${c.cross!.b} at ${f(c.cross!.angleDeg, 0)}°  lat ${f(c.latErr)}`)
+    console.log(
+      `${c.case}@${c.res} (${f(c.v.x, 0)},${f(c.v.y, 0)}) ${c.cross!.a} × ${c.cross!.b} at ${f(c.cross!.angleDeg, 0)}°  lat ${f(c.latErr)}`,
+    )
     for (const cd of cands.sort((a, b) => b.conf - a.conf))
-      console.log(`    pair ${cd.i}${c.v.arms[cd.i].kind === 'line' ? 'L' : 'C'}×${cd.j}${c.v.arms[cd.j].kind === 'line' ? 'L' : 'C'}  conf ${f(cd.conf, 0).padStart(4)}  slide ${f(cd.hd).padStart(5)}  unc ${f(cd.unc).padStart(5)}  @${f((Math.asin(Math.min(1, cd.sin)) * 180) / Math.PI, 0)}°  err ${f(cd.err)}${cd.through ? '  [through]' : ''}${cd === head ? '  ← HEAD' : ''}`)
+      console.log(
+        `    pair ${cd.i}${c.v.arms[cd.i].kind === 'line' ? 'L' : 'C'}×${cd.j}${c.v.arms[cd.j].kind === 'line' ? 'L' : 'C'}  conf ${f(cd.conf, 0).padStart(4)}  slide ${f(cd.hd).padStart(5)}  unc ${f(cd.unc).padStart(5)}  @${f((Math.asin(Math.min(1, cd.sin)) * 180) / Math.PI, 0)}°  err ${f(cd.err)}${cd.through ? '  [through]' : ''}${cd === head ? '  ← HEAD' : ''}`,
+      )
     const s = c.res / REF
-    console.log(`    turns: ${[[0, 1], [0, 2], [1, 2]].map(([i, j]) => `${i}-${j} ${f(turnOf(c, i, j), 0)}°`).join('  ')}`)
+    console.log(
+      `    turns: ${[
+        [0, 1],
+        [0, 2],
+        [1, 2],
+      ]
+        .map(([i, j]) => `${i}-${j} ${f(turnOf(c, i, j), 0)}°`)
+        .join('  ')}`,
+    )
     for (let i = 0; i < c.v.arms.length; i++) {
       const a = c.v.arms[i]
       const al = a.alt
-      const fit = (x: Fit | null): string => (x ? `dev ${f(x.dev)}${x.prim.kind === 'circle' ? ` r${f(x.prim.c!.r / s, 0)}` : ''}` : '—')
-      console.log(`    arm ${i}: ${a.kind ?? 'refused'}${a.skipCap ? ' (cap skipped)' : ''} len ${f(a.conf / s, 0)}art cap ${f(a.segLen0 / s, 1)}art${al ? ` | full: L ${fit(al.line)} · C ${fit(al.circle)}${al.noCap ? ` | no-cap (${f(al.noCap.len / s, 0)}art): L ${fit(al.noCap.line)} · C ${fit(al.noCap.circle)}` : ''}` : ''}`)
+      const fit = (x: Fit | null): string =>
+        x ? `dev ${f(x.dev)}${x.prim.kind === 'circle' ? ` r${f(x.prim.c!.r / s, 0)}` : ''}` : '—'
+      console.log(
+        `    arm ${i}: ${a.kind ?? 'refused'}${a.skipCap ? ' (cap skipped)' : ''} len ${f(a.conf / s, 0)}art cap ${f(a.segLen0 / s, 1)}art${al ? ` | full: L ${fit(al.line)} · C ${fit(al.circle)}${al.noCap ? ` | no-cap (${f(al.noCap.len / s, 0)}art): L ${fit(al.noCap.line)} · C ${fit(al.noCap.circle)}` : ''}` : ''}`,
+      )
     }
   }
 }
 
-console.log(`\n${cells.length} HEAD cells with an answer sheet; re-derivation reproduces the dump on ${reproduced}, differs on ${mismatched}`)
+console.log(
+  `\n${cells.length} HEAD cells with an answer sheet; re-derivation reproduces the dump on ${reproduced}, differs on ${mismatched}`,
+)
 for (const d of disagreements) console.log(`    ${d}`)
-console.log(`\n${'rule@res'.padEnd(16)} ${'cells'.padStart(5)}  ${'moved'.padStart(5)}  ${'worse'.padStart(5)}  ${'better'.padStart(6)}  ${'same'.padStart(4)}   ${'moved err mean/max'.padStart(18)}   ${'placed mean'.padStart(11)}`)
+console.log(
+  `\n${'rule@res'.padEnd(16)} ${'cells'.padStart(5)}  ${'moved'.padStart(5)}  ${'worse'.padStart(5)}  ${'better'.padStart(6)}  ${'same'.padStart(4)}   ${'moved err mean/max'.padStart(18)}   ${'placed mean'.padStart(11)}`,
+)
 for (const r of rules) {
   for (const res of resList) {
     const t = table.get(key(r.name, res))

@@ -16,15 +16,7 @@ const variantClass: Record<Variant, string> = {
   ghost: 'btn-ghost',
 }
 
-export function Button({
-  variant = 'secondary',
-  icon,
-  block,
-  active,
-  className = '',
-  children,
-  ...rest
-}: ButtonProps) {
+export function Button({ variant = 'secondary', icon, block, active, className = '', children, ...rest }: ButtonProps) {
   return (
     <button
       className={`btn ${variantClass[variant]} ${active ? 'is-active' : ''} ${block ? 'w-full' : ''} ${className}`}

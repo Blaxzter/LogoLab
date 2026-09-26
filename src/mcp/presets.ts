@@ -85,7 +85,9 @@ function webPreset(id: string, label: string, summary: string, targets: ExportTa
     label,
     summary,
     icons: targets.map(webIcon),
-    containers: faviconSizes.length ? [{ path: 'public/favicon.ico', kind: 'ico', sizes: faviconSizes.sort((a, b) => a - b) }] : [],
+    containers: faviconSizes.length
+      ? [{ path: 'public/favicon.ico', kind: 'ico', sizes: faviconSizes.sort((a, b) => a - b) }]
+      : [],
     text: (ctx) => [
       { path: 'public/manifest.webmanifest', content: buildManifest(ctx.appName, targets) },
       { path: 'head-snippet.html', content: buildHtmlSnippet(targets) },
@@ -101,7 +103,8 @@ const TAURI_STORE_LOGOS = [30, 44, 71, 89, 107, 142, 150, 284, 310]
 const tauri: Preset = {
   id: 'tauri',
   label: 'Tauri',
-  summary: 'src-tauri/icons — the exact set `tauri icon` generates: PNGs, icon.ico, icon.icns and the Windows Store logos.',
+  summary:
+    'src-tauri/icons — the exact set `tauri icon` generates: PNGs, icon.ico, icon.icns and the Windows Store logos.',
   icons: [
     { path: 'src-tauri/icons/32x32.png', size: 32 },
     { path: 'src-tauri/icons/128x128.png', size: 128 },
@@ -122,7 +125,8 @@ const ELECTRON_LINUX_SIZES = [16, 24, 32, 48, 64, 128, 256, 512, 1024]
 const electron: Preset = {
   id: 'electron',
   label: 'Electron',
-  summary: 'build/ — icon.icns (mac), icon.ico (win) and build/icons/*.png (linux), the layout electron-builder picks up by default.',
+  summary:
+    'build/ — icon.icns (mac), icon.ico (win) and build/icons/*.png (linux), the layout electron-builder picks up by default.',
   icons: [
     { path: 'build/icon.png', size: 1024 },
     ...ELECTRON_LINUX_SIZES.map((s) => ({ path: `build/icons/${s}x${s}.png`, size: s })),
@@ -147,7 +151,8 @@ const ANDROID_DENSITIES: { dir: string; launcher: number; foreground: number }[]
 const android: Preset = {
   id: 'android',
   label: 'Android',
-  summary: 'res/mipmap-* — ic_launcher, ic_launcher_round and the adaptive ic_launcher_foreground at every density, plus the v26 XML and the 512 Play listing icon.',
+  summary:
+    'res/mipmap-* — ic_launcher, ic_launcher_round and the adaptive ic_launcher_foreground at every density, plus the v26 XML and the 512 Play listing icon.',
   icons: [
     ...ANDROID_DENSITIES.flatMap((d) => [
       { path: `res/${d.dir}/ic_launcher.png`, size: d.launcher },
@@ -222,7 +227,8 @@ const iosFile = (e: { point: number; scale: number }): string => `Icon-${iosPx(e
 const ios: Preset = {
   id: 'ios',
   label: 'iOS',
-  summary: 'AppIcon.appiconset — every iPhone/iPad size plus the 1024 marketing icon, with Contents.json. Forced opaque: iOS rejects alpha.',
+  summary:
+    'AppIcon.appiconset — every iPhone/iPad size plus the 1024 marketing icon, with Contents.json. Forced opaque: iOS rejects alpha.',
   // Square and opaque: iOS applies its own mask, and an alpha channel is rejected
   // outright by App Store Connect.
   icons: [...new Map(IOS_ENTRIES.map((e) => [iosPx(e), e])).values()].map((e) => ({
@@ -268,7 +274,9 @@ const extension: Preset = {
         JSON.stringify(
           {
             icons: Object.fromEntries(EXTENSION_SIZES.map((s) => [String(s), `icons/icon-${s}.png`])),
-            action: { default_icon: Object.fromEntries(EXTENSION_SIZES.map((s) => [String(s), `icons/icon-${s}.png`])) },
+            action: {
+              default_icon: Object.fromEntries(EXTENSION_SIZES.map((s) => [String(s), `icons/icon-${s}.png`])),
+            },
           },
           null,
           2,

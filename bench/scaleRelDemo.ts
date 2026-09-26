@@ -29,10 +29,19 @@ const isRounded = (nodes: PathNode[]): boolean =>
   nodes.length >= 4 && nodes.every((n) => n.kind === 'smooth' && !!n.hIn && !!n.hOut)
 
 /** Paint one filled shape of `label` into L (kind: 'square' half-side a, or 'circle' radius a). */
-function paint(L: Int32Array, w: number, cx: number, cy: number, a: number, kind: 'square' | 'circle', label: number): void {
+function paint(
+  L: Int32Array,
+  w: number,
+  cx: number,
+  cy: number,
+  a: number,
+  kind: 'square' | 'circle',
+  label: number,
+): void {
   for (let y = cy - a - 1; y <= cy + a + 1; y++)
     for (let x = cx - a - 1; x <= cx + a + 1; x++) {
-      const inside = kind === 'square' ? Math.abs(x - cx) <= a && Math.abs(y - cy) <= a : (x - cx) ** 2 + (y - cy) ** 2 <= a * a
+      const inside =
+        kind === 'square' ? Math.abs(x - cx) <= a && Math.abs(y - cy) <= a : (x - cx) ** 2 + (y - cy) ** 2 <= a * a
       if (inside) L[y * w + x] = label
     }
 }
@@ -53,16 +62,19 @@ function roundedByLabel(L: Int32Array, w: number, h: number, snap: SnapOptions):
 // ── DEMO 1 ────────────────────────────────────────────────────────────────────────
 console.log('DEMO 1 — SUBSTITUTION: small squares + small circles, corner-turn veto OFF\n')
 {
-  const w = 200, h = 90
+  const w = 200,
+    h = 90
   const L = new Int32Array(w * h)
   let lab = 1
   const squares: number[] = []
   const circles: number[] = []
   for (let i = 0; i < 9; i++) {
-    paint(L, w, 20 + i * 20, 25, 5, 'square', lab); squares.push(lab++)
+    paint(L, w, 20 + i * 20, 25, 5, 'square', lab)
+    squares.push(lab++)
   }
   for (let i = 0; i < 9; i++) {
-    paint(L, w, 20 + i * 20, 65, 5, 'circle', lab); circles.push(lab++)
+    paint(L, w, 20 + i * 20, 65, 5, 'circle', lab)
+    circles.push(lab++)
   }
   for (const [label, snap] of [
     ['veto OFF, k=0   (no guard at all)', { cornerVeto: false, localScaleK: 0 }],
@@ -81,21 +93,31 @@ console.log('DEMO 1 — SUBSTITUTION: small squares + small circles, corner-turn
 // ── DEMO 2 ────────────────────────────────────────────────────────────────────────
 console.log('\nDEMO 2 — VETO BLIND SPOT: a small FLAT ellipse, corner-turn veto ON (shipped default)\n')
 {
-  const w = 40, h = 40, a = 5, ry = 0.55
+  const w = 40,
+    h = 40,
+    a = 5,
+    ry = 0.55
   const L = new Int32Array(w * h)
-  const cx = w / 2, cy = h / 2, b = a * ry
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (((x - cx) / a) ** 2 + ((y - cy) / b) ** 2 <= 1) L[y * w + x] = 1
+  const cx = w / 2,
+    cy = h / 2,
+    b = a * ry
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) if (((x - cx) / a) ** 2 + ((y - cy) / b) ** 2 <= 1) L[y * w + x] = 1
   const trace = tracePlanar(L, w, h)
   const eid = trace.loopsByLabel.get(1)![0][0].edge
   const raw = flatten({ nodes: trace.edges.find((e) => e.id === eid)!.nodes, closed: true })
   const c = fitCircle(raw)!
-  console.log(`  authored: a flat ellipse ~${2 * a}×${Math.round(2 * b)}px (ratio ${ry}); best-fit circle r=${c.r.toFixed(2)}, radial dev ${maxRadialDev(raw, c).toFixed(2)}px, k·r=${(K * c.r).toFixed(2)}px`)
+  console.log(
+    `  authored: a flat ellipse ~${2 * a}×${Math.round(2 * b)}px (ratio ${ry}); best-fit circle r=${c.r.toFixed(2)}, radial dev ${maxRadialDev(raw, c).toFixed(2)}px, k·r=${(K * c.r).toFixed(2)}px`,
+  )
   for (const [label, snap] of [
     ['shipped (veto ON, k=0)   ', { cornerVeto: true, localScaleK: 0 }],
     [`feature (veto ON, k=${K})`, { cornerVeto: true, localScaleK: K }],
   ] as [string, SnapOptions][]) {
     const topo = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, OPTS, snap)
     const rounded = isRounded(topo.edges.find((e) => e.id === eid)!.nodes)
-    console.log(`  ${label}  →  ${rounded ? '✗ ROUNDED to a circle (a flat ellipse became a round dot)' : '✓ kept elliptical (shape preserved)'}`)
+    console.log(
+      `  ${label}  →  ${rounded ? '✗ ROUNDED to a circle (a flat ellipse became a round dot)' : '✓ kept elliptical (shape preserved)'}`,
+    )
   }
 }

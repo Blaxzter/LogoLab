@@ -35,12 +35,7 @@ export interface SvgEditorStudioProps {
   onChange?: (doc: EditableDoc) => void
 }
 
-export function SvgEditorStudio({
-  initialDoc,
-  fileName = 'drawing',
-  onClose,
-  onChange,
-}: SvgEditorStudioProps) {
+export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onChange }: SvgEditorStudioProps) {
   const {
     history,
     selection,

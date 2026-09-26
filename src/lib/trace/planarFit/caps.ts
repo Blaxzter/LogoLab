@@ -192,7 +192,14 @@ export function capChordLine(pts: Vec[], cIn: number, cOut: number): { c: Vec; d
  *  shared cap-chord line. `sign` −1 ⇒ the long arm precedes the corner (an arc
  *  ends at this cap), +1 ⇒ it follows (an arc starts here). Falls back to the raw
  *  lattice vertex when the arm is degenerate or the intersection runs away. */
-export function snapCapCorner(pts: Vec[], c: number, sign: -1 | 1, toLong: number, capLine: { c: Vec; d: Vec }, snapMax: number): Vec {
+export function snapCapCorner(
+  pts: Vec[],
+  c: number,
+  sign: -1 | 1,
+  toLong: number,
+  capLine: { c: Vec; d: Vec },
+  snapMax: number,
+): Vec {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
   const gapN = armGap(toLong)

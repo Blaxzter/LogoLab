@@ -30,8 +30,8 @@ export default function Datenschutz() {
       {!legalInfoComplete && (
         <p className="note">
           Operator details come from the <code>VITE_LEGAL_*</code> build environment variables (see{' '}
-          <code>.env.example</code>); set them in the Cloudflare Workers Builds settings, and have the text reviewed before
-          publishing.
+          <code>.env.example</code>); set them in the Cloudflare Workers Builds settings, and have the text reviewed
+          before publishing.
         </p>
       )}
     </LegalShell>

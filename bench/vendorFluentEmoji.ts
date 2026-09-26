@@ -49,12 +49,18 @@ const REFRESH = argv.includes('--refresh')
 /** FNV-1a. Stable across runs and machines — unlike Math.random or Set iteration order. */
 function hash(s: string): number {
   let h = 2166136261
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
   return h >>> 0
 }
 
 const slugify = (name: string): string =>
-  name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
 
 const rawUrl = (path: string): string =>
   `https://raw.githubusercontent.com/${REPO}/${SHA}/${path.split('/').map(encodeURIComponent).join('/')}`
@@ -90,7 +96,10 @@ async function pool<T, R>(items: T[], n: number, job: (t: T, i: number) => Promi
 // 1. The candidate pool
 // ---------------------------------------------------------------------------
 
-interface TreeEntry { path: string; type: string }
+interface TreeEntry {
+  path: string
+  type: string
+}
 
 const tree: { tree: TreeEntry[]; truncated: boolean } = await (
   await fetch(`https://api.github.com/repos/${REPO}/git/trees/${SHA}?recursive=1`)
@@ -105,7 +114,11 @@ if (tree.truncated) throw new Error('git tree truncated — the candidate pool w
 const SKIN = /\/(Light|Medium-Light|Medium|Medium-Dark|Dark)\/Color\//
 const candidates = tree.tree
   .filter((e) => e.type === 'blob' && e.path.endsWith('.svg') && e.path.includes('/Color/') && !SKIN.test(e.path))
-  .map((e) => ({ name: e.path.split('/')[1], color: e.path, flat: e.path.replace(/\/Color\//, '/Flat/').replace(/_color/g, '_flat') }))
+  .map((e) => ({
+    name: e.path.split('/')[1],
+    color: e.path,
+    flat: e.path.replace(/\/Color\//, '/Flat/').replace(/_color/g, '_flat'),
+  }))
   .sort((a, b) => hash(a.name) - hash(b.name) || (a.name < b.name ? -1 : 1))
 
 console.log(`candidate pool: ${candidates.length} glyphs (Color style, skin-tone duplicates excluded)`)
@@ -132,7 +145,11 @@ console.log('triaging (downloading; cached under .cache/fluent-emoji)…')
 let done = 0
 const verdicts = await pool(candidates, 10, async (c): Promise<Verdict | null> => {
   let colorSvg: string
-  try { colorSvg = await fetchCached(c.color) } catch { return null }
+  try {
+    colorSvg = await fetchCached(c.color)
+  } catch {
+    return null
+  }
   if (++done % 200 === 0) console.log(`  … ${done}/${candidates.length}`)
 
   const gtC = parseGroundTruth(colorSvg)
@@ -145,7 +162,9 @@ const verdicts = await pool(candidates, 10, async (c): Promise<Verdict | null> =
     try {
       const flatSvg = await fetchCached(c.flat)
       refF = refusals(parseGroundTruth(flatSvg)).map((r) => r.code)
-    } catch { refF = ['empty'] }
+    } catch {
+      refF = ['empty']
+    }
   }
 
   return {
@@ -173,12 +192,16 @@ const gradientArt = scorable.filter((v) => v.gradients > 0)
 const paired = gradientArt.filter((v) => v.refusedFlat.length === 0)
 
 console.log(`\n━━━ TRIAGE — ${all.length} candidates ━━━`)
-console.log(`  scorable by svgGround ......... ${scorable.length}  (${((scorable.length / all.length) * 100).toFixed(1)}%)`)
+console.log(
+  `  scorable by svgGround ......... ${scorable.length}  (${((scorable.length / all.length) * 100).toFixed(1)}%)`,
+)
 console.log(`    …of which carry gradients ... ${gradientArt.length}   ← the tier-1 pool`)
 console.log(`    …with a scorable Flat twin .. ${paired.length}   ← the flat↔gradient A/B pool`)
 console.log(`  REFUSED ...................... ${all.length - scorable.length}`)
 for (const [code, n] of [...hist.entries()].sort((a, b) => b[1] - a[1])) {
-  console.log(`    ${String(n).padStart(5)}  ${code}${code === 'filtered' ? '   ← teaching svgGround inner shadows would unlock these' : ''}`)
+  console.log(
+    `    ${String(n).padStart(5)}  ${code}${code === 'filtered' ? '   ← teaching svgGround inner shadows would unlock these' : ''}`,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -249,9 +272,14 @@ writeFileSync(
         'refusalHistogram counts EVERY reason a glyph was refused, so the columns sum to more ' +
         'than (candidates - scorable). See bench/svgGround.ts for what each code means.',
       glyphs: all.map((v) => ({
-        name: v.name, slug: v.slug, vendored: v.vendored,
-        refusedColor: v.refusedColor, refusedFlat: v.refusedFlat,
-        shapes: v.shapes, nodes: v.nodes, gradients: v.gradients,
+        name: v.name,
+        slug: v.slug,
+        vendored: v.vendored,
+        refusedColor: v.refusedColor,
+        refusedFlat: v.refusedFlat,
+        shapes: v.shapes,
+        nodes: v.nodes,
+        gradients: v.gradients,
       })),
     },
     null,
@@ -273,9 +301,11 @@ const GATED = 10
 
 const lines = sample.map((v, i) => {
   const flat = v.refusedFlat.length === 0
-  return `  { name: 'fluent-${v.slug}', tier: 1, svg: 'public/corpus/fluent/color/${v.slug}.svg', ` +
+  return (
+    `  { name: 'fluent-${v.slug}', tier: 1, svg: 'public/corpus/fluent/color/${v.slug}.svg', ` +
     `flatSvg: ${flat ? `'public/corpus/fluent/flat/${v.slug}.svg'` : 'undefined'}, ` +
     `gradients: true, gated: ${i < GATED}, note: '${v.name.replace(/'/g, "\\'")} — ${v.gradients} gradients, ${v.shapes} shapes' },`
+  )
 })
 
 writeFileSync(

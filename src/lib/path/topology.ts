@@ -100,9 +100,7 @@ function materializeLoop(
     const arc = ref.reversed ? reverseEdgeNodes(e.nodes) : e.nodes.map(cloneNode)
     if (arc.length < 2) return null
     const len = e.nodes.length
-    const provenance = arc.map((_, k) =>
-      interiorProvenance(ref.edge, ref.reversed ? len - 1 - k : k, ref.reversed),
-    )
+    const provenance = arc.map((_, k) => interiorProvenance(ref.edge, ref.reversed ? len - 1 - k : k, ref.reversed))
     return { subPath: { nodes: arc, closed: true }, provenance }
   }
 

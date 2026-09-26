@@ -73,7 +73,9 @@ const shareArg = argv.includes('--share') ? Number(argv[argv.indexOf('--share') 
 const names = argv.filter(
   (a) => !a.startsWith('--') && !/^\d+$/.test(a) && a !== fitArg && a !== roiArg && !/^[\d.]+$/.test(a),
 )
-const CASES = names.length ? names : ['hairlines', 'fluent-flute-flat', 'fluent-parachute-flat', 'fluent-beverage-box-flat']
+const CASES = names.length
+  ? names
+  : ['hairlines', 'fluent-flute-flat', 'fluent-parachute-flat', 'fluent-beverage-box-flat']
 
 // --- paletteOptionsFor (index.ts, verbatim at the gate's defaults) -----------
 const DESPECKLE = DEFAULT_VECTORIZE_OPTIONS.despeckle ?? 0 // 25
@@ -99,10 +101,16 @@ function flatInteriorCounts(img: Img, labels: Int32Array, paletteLen: number): I
       if (l < 0) continue
       const k = rgbAt(i)
       if (
-        rgbAt(i - w - 1) === k && rgbAt(i - w) === k && rgbAt(i - w + 1) === k &&
-        rgbAt(i - 1) === k && rgbAt(i + 1) === k &&
-        rgbAt(i + w - 1) === k && rgbAt(i + w) === k && rgbAt(i + w + 1) === k
-      ) counts[l]++
+        rgbAt(i - w - 1) === k &&
+        rgbAt(i - w) === k &&
+        rgbAt(i - w + 1) === k &&
+        rgbAt(i - 1) === k &&
+        rgbAt(i + 1) === k &&
+        rgbAt(i + w - 1) === k &&
+        rgbAt(i + w) === k &&
+        rgbAt(i + w + 1) === k
+      )
+        counts[l]++
     }
   }
   return counts
@@ -118,9 +126,12 @@ function edgeFractions(labels: Int32Array, w: number, h: number, paletteLen: num
       if (l < 0) continue
       total[l]++
       if (
-        (x > 0 && labels[i - 1] !== l) || (x < w - 1 && labels[i + 1] !== l) ||
-        (y > 0 && labels[i - w] !== l) || (y < h - 1 && labels[i + w] !== l)
-      ) edge[l]++
+        (x > 0 && labels[i - 1] !== l) ||
+        (x < w - 1 && labels[i + 1] !== l) ||
+        (y > 0 && labels[i - w] !== l) ||
+        (y < h - 1 && labels[i + w] !== l)
+      )
+        edge[l]++
     }
   }
   const out = new Float64Array(paletteLen)
@@ -150,11 +161,15 @@ const BLEND_LINE_EPS = 10
 const EDGE_LOCAL_MIN = 0.6
 
 function segDist2(c: PaletteColor, a: PaletteColor, b: PaletteColor): number {
-  const abr = b.r - a.r, abg = b.g - a.g, abb = b.b - a.b
+  const abr = b.r - a.r,
+    abg = b.g - a.g,
+    abb = b.b - a.b
   const len2 = abr * abr + abg * abg + abb * abb
   let t = len2 > 0 ? ((c.r - a.r) * abr + (c.g - a.g) * abg + (c.b - a.b) * abb) / len2 : 0
   t = Math.max(0, Math.min(1, t))
-  const dr = c.r - (a.r + t * abr), dg = c.g - (a.g + t * abg), db = c.b - (a.b + t * abb)
+  const dr = c.r - (a.r + t * abr),
+    dg = c.g - (a.g + t * abg),
+    db = c.b - (a.b + t * abb)
   return dr * dr + dg * dg + db * db
 }
 
@@ -170,7 +185,9 @@ function classifyBlends(
   const blend = new Array<boolean>(palette.length).fill(false)
   const routeTo = new Int32Array(palette.length).fill(-1)
   const d2 = (a: PaletteColor, b: PaletteColor): number => {
-    const dr = a.r - b.r, dg = a.g - b.g, db = a.b - b.b
+    const dr = a.r - b.r,
+      dg = a.g - b.g,
+      db = a.b - b.b
     return dr * dr + dg * dg + db * db
   }
   for (let i = 0; i < palette.length; i++) {
@@ -181,7 +198,8 @@ function classifyBlends(
           const d = segDist2(palette[i], palette[accepted[a]], palette[accepted[b]])
           if (d <= eps2 && d < bestD) {
             bestD = d
-            const ia = accepted[a], ib = accepted[b]
+            const ia = accepted[a],
+              ib = accepted[b]
             routeTo[i] = d2(palette[i], palette[ia]) <= d2(palette[i], palette[ib]) ? ia : ib
           }
         }
@@ -205,7 +223,8 @@ function classifyBlends(
           const d = segDist2(palette[i], palette[live[a]], palette[live[b]])
           if (d <= eps2 && d < bestD) {
             bestD = d
-            const ia = live[a], ib = live[b]
+            const ia = live[a],
+              ib = live[b]
             route = d2(palette[i], palette[ia]) <= d2(palette[i], palette[ib]) ? ia : ib
           }
         }
@@ -227,7 +246,14 @@ function classifyBlends(
 
 const RESTORE_MAX_SURVIVAL = 0.3
 
-function restoreErasedComponents(pre: Int32Array, post: Int32Array, w: number, h: number, minArea: number, data: Uint8ClampedArray): Int32Array {
+function restoreErasedComponents(
+  pre: Int32Array,
+  post: Int32Array,
+  w: number,
+  h: number,
+  minArea: number,
+  data: Uint8ClampedArray,
+): Int32Array {
   const n = w * h
   let out = post
   const comp = new Int32Array(n).fill(-1)
@@ -245,21 +271,35 @@ function restoreErasedComponents(pre: Int32Array, post: Int32Array, w: number, h
       const p = stack.pop()!
       pixels.push(p)
       if (post[p] === lab) kept++
-      const x = p % w, y = (p / w) | 0
-      const x0 = x > 0, x1 = x < w - 1, y0 = y > 0, y1 = y < h - 1
+      const x = p % w,
+        y = (p / w) | 0
+      const x0 = x > 0,
+        x1 = x < w - 1,
+        y0 = y > 0,
+        y1 = y < h - 1
       const nb = [
-        x0 ? p - 1 : -1, x1 ? p + 1 : -1, y0 ? p - w : -1, y1 ? p + w : -1,
-        x0 && y0 ? p - w - 1 : -1, x1 && y0 ? p - w + 1 : -1,
-        x0 && y1 ? p + w - 1 : -1, x1 && y1 ? p + w + 1 : -1,
+        x0 ? p - 1 : -1,
+        x1 ? p + 1 : -1,
+        y0 ? p - w : -1,
+        y1 ? p + w : -1,
+        x0 && y0 ? p - w - 1 : -1,
+        x1 && y0 ? p - w + 1 : -1,
+        x0 && y1 ? p + w - 1 : -1,
+        x1 && y1 ? p + w + 1 : -1,
       ]
       for (const q of nb) {
-        if (q >= 0 && comp[q] === -1 && pre[q] === lab) { comp[q] = cid; stack.push(q) }
+        if (q >= 0 && comp[q] === -1 && pre[q] === lab) {
+          comp[q] = cid
+          stack.push(q)
+        }
       }
     }
     if (kept <= pixels.length * RESTORE_MAX_SURVIVAL && pixels.length >= minArea) {
       if (out === post) out = post.slice()
       for (const p of pixels) out[p] = lab
-      let mr = 0, mg = 0, mb = 0
+      let mr = 0,
+        mg = 0,
+        mb = 0
       for (const p of pixels) {
         mr += data[p * 4]
         mg += data[p * 4 + 1]
@@ -269,11 +309,14 @@ function restoreErasedComponents(pre: Int32Array, post: Int32Array, w: number, h
       mg /= pixels.length
       mb /= pixels.length
       const d2mean = (p: number): number => {
-        const dr = data[p * 4] - mr, dg = data[p * 4 + 1] - mg, db = data[p * 4 + 2] - mb
+        const dr = data[p * 4] - mr,
+          dg = data[p * 4 + 1] - mg,
+          db = data[p * 4 + 2] - mb
         return dr * dr + dg * dg + db * db
       }
       for (const p of pixels) {
-        const x = p % w, y = (p / w) | 0
+        const x = p % w,
+          y = (p / w) | 0
         if (y >= h - 1) continue
         for (const dx of [-1, 1]) {
           const qx = x + dx
@@ -311,21 +354,34 @@ function despeckleComponents(labels: Int32Array, w: number, h: number, minArea: 
     while (stack.length) {
       const p = stack.pop()!
       pixels.push(p)
-      const x = p % w, y = (p / w) | 0
-      const x0 = x > 0, x1 = x < w - 1, y0 = y > 0, y1 = y < h - 1
+      const x = p % w,
+        y = (p / w) | 0
+      const x0 = x > 0,
+        x1 = x < w - 1,
+        y0 = y > 0,
+        y1 = y < h - 1
       const nbAll = [
-        x0 ? p - 1 : -1, x1 ? p + 1 : -1, y0 ? p - w : -1, y1 ? p + w : -1,
-        x0 && y0 ? p - w - 1 : -1, x1 && y0 ? p - w + 1 : -1,
-        x0 && y1 ? p + w - 1 : -1, x1 && y1 ? p + w + 1 : -1,
+        x0 ? p - 1 : -1,
+        x1 ? p + 1 : -1,
+        y0 ? p - w : -1,
+        y1 ? p + w : -1,
+        x0 && y0 ? p - w - 1 : -1,
+        x1 && y0 ? p - w + 1 : -1,
+        x0 && y1 ? p + w - 1 : -1,
+        x1 && y1 ? p + w + 1 : -1,
       ]
       for (const q of nbAll) {
-        if (q >= 0 && comp[q] === -1 && out[q] === lab) { comp[q] = cid; stack.push(q) }
+        if (q >= 0 && comp[q] === -1 && out[q] === lab) {
+          comp[q] = cid
+          stack.push(q)
+        }
       }
     }
     if (pixels.length < minArea) {
       const border = new Map<number, number>()
       for (const p of pixels) {
-        const x = p % w, y = (p / w) | 0
+        const x = p % w,
+          y = (p / w) | 0
         const nb = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1]
         for (const qq of nb) {
           if (qq < 0) continue
@@ -334,8 +390,13 @@ function despeckleComponents(labels: Int32Array, w: number, h: number, minArea: 
           border.set(l, (border.get(l) ?? 0) + 1)
         }
       }
-      let best = -1, bestC = 0
-      for (const [l, c] of border) if (c > bestC) { bestC = c; best = l }
+      let best = -1,
+        bestC = 0
+      for (const [l, c] of border)
+        if (c > bestC) {
+          bestC = c
+          best = l
+        }
       if (best >= 0) for (const p of pixels) out[p] = best
     }
     cid++
@@ -343,7 +404,12 @@ function despeckleComponents(labels: Int32Array, w: number, h: number, minArea: 
   return out
 }
 
-function snapPaletteToModes(palette: PaletteColor[], labels: Int32Array, data: Uint8ClampedArray, exclude?: Uint8Array): PaletteColor[] {
+function snapPaletteToModes(
+  palette: PaletteColor[],
+  labels: Int32Array,
+  data: Uint8ClampedArray,
+  exclude?: Uint8Array,
+): PaletteColor[] {
   const hist: Map<number, number>[] = palette.map(() => new Map())
   for (let i = 0; i < labels.length; i++) {
     const l = labels[i]
@@ -353,7 +419,8 @@ function snapPaletteToModes(palette: PaletteColor[], labels: Int32Array, data: U
     hist[l].set(key, (hist[l].get(key) ?? 0) + 1)
   }
   return palette.map((c, l) => {
-    let bestKey = -1, bestCount = 0
+    let bestKey = -1,
+      bestCount = 0
     for (const [key, count] of hist[l]) {
       if (count > bestCount || (count === bestCount && key < bestKey)) {
         bestCount = count
@@ -367,8 +434,7 @@ function snapPaletteToModes(palette: PaletteColor[], labels: Int32Array, data: U
 
 // --- diagnosis helpers -------------------------------------------------------
 
-const hex = (c: PaletteColor): string =>
-  '#' + [c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, '0')).join('')
+const hex = (c: PaletteColor): string => '#' + [c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, '0')).join('')
 
 /** Authored fills from the SVG source — both #rrggbb and rgb(r,g,b) forms. */
 function authoredColors(svg: string): PaletteColor[] {
@@ -389,7 +455,8 @@ function authoredColors(svg: string): PaletteColor[] {
 function survival(labels: Int32Array, palette: PaletteColor[], mask: Uint8Array, target: PaletteColor): number {
   const tLab = srgbToLab(target.r, target.g, target.b)
   const near = palette.map((p) => deltaE76(srgbToLab(p.r, p.g, p.b), tLab) <= 4)
-  let n = 0, ok = 0
+  let n = 0,
+    ok = 0
   for (let i = 0; i < mask.length; i++) {
     if (!mask[i]) continue
     n++
@@ -420,7 +487,10 @@ if (argv.includes('--effect')) {
   let scanned = 0
   const fingerprint = async (img: ReturnType<typeof decodePng>, ev: boolean): Promise<string> => {
     const doc = await traceImage(img as unknown as ImageData, {
-      ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, paletteSegment: { regionEvidence: ev },
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: false,
+      paletteSegment: { regionEvidence: ev },
     })
     let s = ''
     for (const it of doc.items) {
@@ -434,34 +504,67 @@ if (argv.includes('--effect')) {
     if (only.length && !only.includes(file.replace(/\.svg$/, ''))) continue
     let img
     try {
-      img = decodePng(new Resvg(readFileSync(join(dir, file), 'utf8'), { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-    } catch { continue }
+      img = decodePng(
+        new Resvg(readFileSync(join(dir, file), 'utf8'), { fitTo: { mode: 'width', value: RES }, background: 'white' })
+          .render()
+          .asPng(),
+      )
+    } catch {
+      continue
+    }
     scanned++
     if ((await fingerprint(img, false)) !== (await fingerprint(img, true))) movers.push(file)
   }
-  console.log(`\n━━━ §20 EFFECT @ ${RES}px flat ━━━  pass 1: ${movers.length} of ${scanned} gallery marks change AT ALL`)
+  console.log(
+    `\n━━━ §20 EFFECT @ ${RES}px flat ━━━  pass 1: ${movers.length} of ${scanned} gallery marks change AT ALL`,
+  )
 
-  interface Row { mark: string; dChamfer: number; dMissed: number; dCorners: number; dNodes: number; on: string }
+  interface Row {
+    mark: string
+    dChamfer: number
+    dMissed: number
+    dCorners: number
+    dNodes: number
+    on: string
+  }
   const rows: Row[] = []
   let scorable = 0
   // PASS 2 — the movers, scored against their authored geometry.
   for (const file of movers) {
     const text = readFileSync(join(dir, file), 'utf8')
     let gt
-    try { gt = parseGroundTruth(text) } catch { console.log(`  ${file}: moves, but has no parsable ground truth`); continue }
-    if (unscorable(gt)) { console.log(`  ${file}: moves, but is not svgGround-scorable`); continue }
+    try {
+      gt = parseGroundTruth(text)
+    } catch {
+      console.log(`  ${file}: moves, but has no parsable ground truth`)
+      continue
+    }
+    if (unscorable(gt)) {
+      console.log(`  ${file}: moves, but is not svgGround-scorable`)
+      continue
+    }
     let img
     try {
       img = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-    } catch { continue }
+    } catch {
+      continue
+    }
     scorable++
     const sh = toRasterSpace(gt, img.width)
-    const score = async (ev: boolean): Promise<{ chamfer: number; missed: number; corners: number; got: number; nodes: number }> => {
+    const score = async (
+      ev: boolean,
+    ): Promise<{ chamfer: number; missed: number; corners: number; got: number; nodes: number }> => {
       const doc = await traceImage(img as unknown as ImageData, {
-        ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, paletteSegment: { regionEvidence: ev },
+        ...DEFAULT_VECTORIZE_OPTIONS,
+        engine: 'planar',
+        gradients: false,
+        paletteSegment: { regionEvidence: ev },
       })
       const g = scoreGeometry(sh, doc, img.width, img.height, img)
-      const nodes = doc.items.reduce((s, it) => s + (it.kind === 'path' ? it.subPaths.reduce((t, sp) => t + sp.nodes.length, 0) : 0), 0)
+      const nodes = doc.items.reduce(
+        (s, it) => s + (it.kind === 'path' ? it.subPaths.reduce((t, sp) => t + sp.nodes.length, 0) : 0),
+        0,
+      )
       return { chamfer: g.chamfer, missed: g.missedMax, corners: g.gtCorners, got: g.cornersRecovered, nodes }
     }
     const off = await score(false)
@@ -479,11 +582,15 @@ if (argv.includes('--effect')) {
   }
   rows.sort((a, b) => a.dChamfer - b.dChamfer)
   console.log(`\n  pass 2: ${rows.length} of the ${scorable} scorable movers, scored against authored geometry`)
-  console.log(`  ${'mark'.padEnd(28)}${'Δchamfer'.padStart(10)}${'ΔmissedMax'.padStart(12)}${'Δcorners'.padStart(10)}${'Δnodes'.padStart(8)}   after`)
+  console.log(
+    `  ${'mark'.padEnd(28)}${'Δchamfer'.padStart(10)}${'ΔmissedMax'.padStart(12)}${'Δcorners'.padStart(10)}${'Δnodes'.padStart(8)}   after`,
+  )
   for (const r of rows)
     console.log(
       `  ${r.mark.padEnd(28)}${r.dChamfer.toFixed(4).padStart(10)}${r.dMissed.toFixed(2).padStart(12)}` +
-        `${(r.dCorners > 0 ? '+' : '') + r.dCorners}`.padStart(10) + `${(r.dNodes > 0 ? '+' : '') + r.dNodes}`.padStart(8) + `   ${r.on}`,
+        `${(r.dCorners > 0 ? '+' : '') + r.dCorners}`.padStart(10) +
+        `${(r.dNodes > 0 ? '+' : '') + r.dNodes}`.padStart(8) +
+        `   ${r.on}`,
     )
   const sum = (f: (r: Row) => number): number => rows.reduce((s, r) => s + f(r), 0)
   console.log(
@@ -537,12 +644,22 @@ if (argv.includes('--census')) {
   for (const src of sources) {
     if (marks >= limitArg) break
     let svg: string
-    try { svg = readFileSync(join(root, src.svg), 'utf8') } catch { continue }
+    try {
+      svg = readFileSync(join(root, src.svg), 'utf8')
+    } catch {
+      continue
+    }
     let img: Img, big: Img
     try {
-      img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng()) as unknown as Img
-      big = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES * 4 }, background: 'white' }).render().asPng()) as unknown as Img
-    } catch { continue }
+      img = decodePng(
+        new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng(),
+      ) as unknown as Img
+      big = decodePng(
+        new Resvg(svg, { fitTo: { mode: 'width', value: RES * 4 }, background: 'white' }).render().asPng(),
+      ) as unknown as Img
+    } catch {
+      continue
+    }
     // The 4× render must be an exact 4× of the 1× one for the footprint mapping below.
     if (big.width !== img.width * 4 || big.height !== img.height * 4) continue
     marks++
@@ -567,7 +684,10 @@ if (argv.includes('--census')) {
       snapExclude = new Uint8Array(labels.length)
       for (let i = 0; i < labels.length; i++) {
         const l = labels[i]
-        if (l >= 0 && blend[l]) { labels[i] = routeTo[l]; snapExclude[i] = 1 }
+        if (l >= 0 && blend[l]) {
+          labels[i] = routeTo[l]
+          snapExclude[i] = 1
+        }
       }
       q = { palette: q.palette, labels, counts }
     }
@@ -589,10 +709,13 @@ if (argv.includes('--census')) {
       const stack = [start]
       while (stack.length) {
         const p = stack.pop()!
-        const x = p % w, y = (p / w) | 0
+        const x = p % w,
+          y = (p / w) | 0
         const push = (nb: number): void => {
           if (seen[nb] || restored[nb] !== lab) return
-          seen[nb] = 1; stack.push(nb); px.push(nb)
+          seen[nb] = 1
+          stack.push(nb)
+          px.push(nb)
         }
         if (x > 0) push(p - 1)
         if (x < w - 1) push(p + 1)
@@ -601,15 +724,23 @@ if (argv.includes('--census')) {
       }
       if (px.length >= OPTS.minRegionArea) continue
       const c = snapped[lab]
-      let exactPx = 0, flat3 = 0, cov = 0
+      let exactPx = 0,
+        flat3 = 0,
+        cov = 0
       const rgbAt = (i: number): number => (data[i * 4] << 16) | (data[i * 4 + 1] << 8) | data[i * 4 + 2]
       const key = (c.r << 16) | (c.g << 8) | c.b
       for (const i of px) {
         if (rgbAt(i) === key) exactPx++
-        const x = i % w, y = (i / w) | 0
+        const x = i % w,
+          y = (i / w) | 0
         if (x > 0 && x < w - 1 && y > 0 && y < h - 1) {
           let all = true
-          for (let dy = -1; dy <= 1 && all; dy++) for (let dx = -1; dx <= 1; dx++) if (rgbAt(i + dy * w + dx) !== key) { all = false; break }
+          for (let dy = -1; dy <= 1 && all; dy++)
+            for (let dx = -1; dx <= 1; dx++)
+              if (rgbAt(i + dy * w + dx) !== key) {
+                all = false
+                break
+              }
           if (all) flat3++
         }
         // 4× footprint: the 4×4 subpixel block this pixel expands to.
@@ -626,24 +757,36 @@ if (argv.includes('--census')) {
     }
   }
 
-  console.log(`\n━━━ SUB-FLOOR COMPONENT CENSUS @ ${RES}px ━━━  ${recs.length} components below the ${OPTS.minRegionArea}px floor across ${marks} marks`)
-  const bucket = (r: Rec): string => (r.cov4 >= 0.9 ? 'SOLID  (cov4 ≥ .90)' : r.cov4 >= 0.5 ? 'MIXED  (.50–.90)' : 'FRINGE (cov4 < .50)')
+  console.log(
+    `\n━━━ SUB-FLOOR COMPONENT CENSUS @ ${RES}px ━━━  ${recs.length} components below the ${OPTS.minRegionArea}px floor across ${marks} marks`,
+  )
+  const bucket = (r: Rec): string =>
+    r.cov4 >= 0.9 ? 'SOLID  (cov4 ≥ .90)' : r.cov4 >= 0.5 ? 'MIXED  (.50–.90)' : 'FRINGE (cov4 < .50)'
   const groups = new Map<string, Rec[]>()
   for (const r of recs) groups.set(bucket(r), [...(groups.get(bucket(r)) ?? []), r])
-  const pct = (v: number[], p: number): number => (v.length ? v.slice().sort((a, b) => a - b)[Math.min(v.length - 1, Math.floor(p * v.length))] : NaN)
+  const pct = (v: number[], p: number): number =>
+    v.length ? v.slice().sort((a, b) => a - b)[Math.min(v.length - 1, Math.floor(p * v.length))] : NaN
   console.log(`\n  truth bucket        n     size p10/p50/p90      exactFrac p10/p50/p90      flat3 p50   flat3=0`)
   for (const k of ['SOLID  (cov4 ≥ .90)', 'MIXED  (.50–.90)', 'FRINGE (cov4 < .50)']) {
     const g = groups.get(k) ?? []
-    if (!g.length) { console.log(`  ${k.padEnd(20)} 0`); continue }
-    const sz = g.map((r) => r.size), ef = g.map((r) => r.exactPx / r.size), f3 = g.map((r) => r.flat3)
+    if (!g.length) {
+      console.log(`  ${k.padEnd(20)} 0`)
+      continue
+    }
+    const sz = g.map((r) => r.size),
+      ef = g.map((r) => r.exactPx / r.size),
+      f3 = g.map((r) => r.flat3)
     console.log(
       `  ${k.padEnd(20)}${String(g.length).padStart(4)}   ${pct(sz, 0.1)}/${pct(sz, 0.5)}/${pct(sz, 0.9)}`.padEnd(52) +
         `${pct(ef, 0.1).toFixed(3)}/${pct(ef, 0.5).toFixed(3)}/${pct(ef, 0.9).toFixed(3)}`.padEnd(28) +
-        `${pct(f3, 0.5)}`.padEnd(12) + `${g.filter((r) => r.flat3 === 0).length}`,
+        `${pct(f3, 0.5)}`.padEnd(12) +
+        `${g.filter((r) => r.flat3 === 0).length}`,
     )
   }
   // Separability: sweep each candidate veto and report what it does to BOTH classes.
-  const solid = recs.filter((r) => r.cov4 >= 0.9), mixed = recs.filter((r) => r.cov4 >= 0.5 && r.cov4 < 0.9), fringe = recs.filter((r) => r.cov4 < 0.5)
+  const solid = recs.filter((r) => r.cov4 >= 0.9),
+    mixed = recs.filter((r) => r.cov4 >= 0.5 && r.cov4 < 0.9),
+    fringe = recs.filter((r) => r.cov4 < 0.5)
   console.log(`\n  SEPARABILITY A — "keep a sub-floor component when exactFrac ≥ t"`)
   console.log(`    t       SOLID kept        MIXED kept        FRINGE kept (regressions)`)
   for (const t of [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]) {
@@ -657,18 +800,30 @@ if (argv.includes('--census')) {
     console.log(`    ${String(t).padEnd(6)}  ${k(solid).padEnd(18)}${k(mixed).padEnd(18)}${k(fringe)}`)
   }
   const withF3 = recs.filter((r) => r.flat3 > 0).sort((a, b) => a.flat3 - b.flat3)
-  console.log(`\n  flat3 > 0 population (${withF3.length} of ${recs.length}) — every one, so the margin is visible, not assumed`)
+  console.log(
+    `\n  flat3 > 0 population (${withF3.length} of ${recs.length}) — every one, so the margin is visible, not assumed`,
+  )
   for (const r of withF3)
     console.log(
       `    flat3 ${String(r.flat3).padStart(3)}  ${r.mark.padEnd(26)} ${r.hex}  ${String(r.size).padStart(3)}px` +
         `  exactFrac ${(r.exactPx / r.size).toFixed(3)}  cov4 ${r.cov4.toFixed(3)}  ${r.cov4 >= 0.9 ? 'SOLID' : r.cov4 >= 0.5 ? 'MIXED' : '⇐ FRINGE'}`,
     )
   console.log(`\n  the 12 largest SOLID components (what the floor is destroying)`)
-  for (const r of solid.slice().sort((a, b) => b.size - a.size).slice(0, 12))
-    console.log(`    ${r.mark.padEnd(26)} ${r.hex}  ${String(r.size).padStart(3)}px  exactFrac ${(r.exactPx / r.size).toFixed(3)}  flat3 ${String(r.flat3).padStart(3)}  cov4 ${r.cov4.toFixed(3)}`)
+  for (const r of solid
+    .slice()
+    .sort((a, b) => b.size - a.size)
+    .slice(0, 12))
+    console.log(
+      `    ${r.mark.padEnd(26)} ${r.hex}  ${String(r.size).padStart(3)}px  exactFrac ${(r.exactPx / r.size).toFixed(3)}  flat3 ${String(r.flat3).padStart(3)}  cov4 ${r.cov4.toFixed(3)}`,
+    )
   console.log(`\n  the 12 FRINGE components with the highest exactFrac (what a veto would resurrect)`)
-  for (const r of fringe.slice().sort((a, b) => b.exactPx / b.size - a.exactPx / a.size).slice(0, 12))
-    console.log(`    ${r.mark.padEnd(26)} ${r.hex}  ${String(r.size).padStart(3)}px  exactFrac ${(r.exactPx / r.size).toFixed(3)}  flat3 ${String(r.flat3).padStart(3)}  cov4 ${r.cov4.toFixed(3)}`)
+  for (const r of fringe
+    .slice()
+    .sort((a, b) => b.exactPx / b.size - a.exactPx / a.size)
+    .slice(0, 12))
+    console.log(
+      `    ${r.mark.padEnd(26)} ${r.hex}  ${String(r.size).padStart(3)}px  exactFrac ${(r.exactPx / r.size).toFixed(3)}  flat3 ${String(r.flat3).padStart(3)}  cov4 ${r.cov4.toFixed(3)}`,
+    )
   process.exit(0)
 }
 
@@ -681,8 +836,10 @@ for (const name of CASES) {
   // makes the FINAL/autopsy sections below trace the mark with gradients ON (index.ts
   // reads `gradients !== false`) — i.e. down the Mumford–Shah path, not the flat palette
   // path this whole file replays. It reported the two lanes as one.
-  const c: { svg: string; gradients: boolean } =
-    TRUTH_CORPUS.find((x) => x.name === name) ?? { svg: `examples/logos/${name}.svg`, gradients: false }
+  const c: { svg: string; gradients: boolean } = TRUTH_CORPUS.find((x) => x.name === name) ?? {
+    svg: `examples/logos/${name}.svg`,
+    gradients: false,
+  }
   let svg: string
   try {
     svg = readFileSync(join(root, c.svg), 'utf8')
@@ -690,22 +847,28 @@ for (const name of CASES) {
     console.log(`⨯ unknown case ${name}`)
     continue
   }
-  const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng()) as unknown as Img
+  const img = decodePng(
+    new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng(),
+  ) as unknown as Img
   const { width: w, height: h, data } = img
   const total = w * h
   const authored = authoredColors(svg)
 
-  console.log(`\n━━━ ${name} @ ${RES}px ━━━  floors: minShare ${OPTS.minShare} (${Math.round(OPTS.minShare * total)}px of ${total}), minRegionArea ${OPTS.minRegionArea}px`)
+  console.log(
+    `\n━━━ ${name} @ ${RES}px ━━━  floors: minShare ${OPTS.minShare} (${Math.round(OPTS.minShare * total)}px of ${total}), minRegionArea ${OPTS.minRegionArea}px`,
+  )
 
   // The ROI lens, if asked for. `inRoi` gates the per-colour masks below; every stage
   // number downstream of them (survival, component census) is then ROI-local.
   const roiBox = ROI.length === 4 ? { x0: ROI[0], y0: ROI[1], x1: ROI[2], y1: ROI[3] } : null
   const inRoi = (i: number): boolean => {
     if (!roiBox) return true
-    const x = i % w, y = (i / w) | 0
+    const x = i % w,
+      y = (i / w) | 0
     return x >= roiBox.x0 && x <= roiBox.x1 && y >= roiBox.y0 && y <= roiBox.y1
   }
-  if (roiBox) console.log(`  ROI ${roiBox.x0},${roiBox.y0} → ${roiBox.x1},${roiBox.y1}  (masks + survival + census scoped to it)`)
+  if (roiBox)
+    console.log(`  ROI ${roiBox.x0},${roiBox.y0} → ${roiBox.x1},${roiBox.y1}  (masks + survival + census scoped to it)`)
 
   // Masks per authored colour: EXACT source pixels (the evidence the floors read) and
   // NEAR pixels (nearest authored colour — the ≥50%-coverage footprint incl. AA).
@@ -713,12 +876,20 @@ for (const name of CASES) {
   const exact = new Int32Array(authored.length)
   for (let i = 0; i < total; i++) {
     if (data[i * 4 + 3] < 128) continue
-    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2]
-    let best = -1, bestD = Infinity
+    const r = data[i * 4],
+      g = data[i * 4 + 1],
+      b = data[i * 4 + 2]
+    let best = -1,
+      bestD = Infinity
     for (let a = 0; a < authored.length; a++) {
-      const dr = r - authored[a].r, dg = g - authored[a].g, db = b - authored[a].b
+      const dr = r - authored[a].r,
+        dg = g - authored[a].g,
+        db = b - authored[a].b
       const d = dr * dr + dg * dg + db * db
-      if (d < bestD) { bestD = d; best = a }
+      if (d < bestD) {
+        bestD = d
+        best = a
+      }
       if (d === 0) exact[a]++
     }
     if (best >= 0 && inRoi(i)) masks[best][i] = 1
@@ -733,14 +904,22 @@ for (const name of CASES) {
       const a = authored.findIndex((cc) => ((cc.r << 16) | (cc.g << 8) | cc.b) === k)
       if (a < 0) continue
       if (
-        rgbAt(i - w - 1) === k && rgbAt(i - w) === k && rgbAt(i - w + 1) === k &&
-        rgbAt(i - 1) === k && rgbAt(i + 1) === k &&
-        rgbAt(i + w - 1) === k && rgbAt(i + w) === k && rgbAt(i + w + 1) === k
-      ) flatEvidence[a]++
+        rgbAt(i - w - 1) === k &&
+        rgbAt(i - w) === k &&
+        rgbAt(i - w + 1) === k &&
+        rgbAt(i - 1) === k &&
+        rgbAt(i + 1) === k &&
+        rgbAt(i + w - 1) === k &&
+        rgbAt(i + w) === k &&
+        rgbAt(i + w + 1) === k
+      )
+        flatEvidence[a]++
     }
   }
 
-  console.log(`\n  AUTHORED EVIDENCE — what the floors can see (share floor ${Math.round(OPTS.minShare * total)}px, area floor ${OPTS.minRegionArea}px)`)
+  console.log(
+    `\n  AUTHORED EVIDENCE — what the floors can see (share floor ${Math.round(OPTS.minShare * total)}px, area floor ${OPTS.minRegionArea}px)`,
+  )
   for (let a = 0; a < authored.length; a++) {
     const m = masks[a].reduce((s, v) => s + v, 0)
     if (m < 8) continue
@@ -825,28 +1004,49 @@ for (const name of CASES) {
     const comp = new Int32Array(n).fill(-1)
     const stack: number[] = []
     let cid = 0
-    const byLabel = new Map<number, { whole: number; wholePx: number; eroded: number; erodedPx: number; intact: number }>()
+    const byLabel = new Map<
+      number,
+      { whole: number; wholePx: number; eroded: number; erodedPx: number; intact: number }
+    >()
     for (let start = 0; start < n; start++) {
       if (comp[start] !== -1 || q.labels[start] < 0) continue
       const lab = q.labels[start]
       comp[start] = cid
       stack.length = 0
       stack.push(start)
-      let size = 0, kept = 0
+      let size = 0,
+        kept = 0
       while (stack.length) {
         const p = stack.pop()!
         size++
         if (smoothed[p] === lab) kept++
-        const x = p % w, y = (p / w) | 0
-        if (x > 0 && comp[p - 1] === -1 && q.labels[p - 1] === lab) { comp[p - 1] = cid; stack.push(p - 1) }
-        if (x < w - 1 && comp[p + 1] === -1 && q.labels[p + 1] === lab) { comp[p + 1] = cid; stack.push(p + 1) }
-        if (y > 0 && comp[p - w] === -1 && q.labels[p - w] === lab) { comp[p - w] = cid; stack.push(p - w) }
-        if (y < h - 1 && comp[p + w] === -1 && q.labels[p + w] === lab) { comp[p + w] = cid; stack.push(p + w) }
+        const x = p % w,
+          y = (p / w) | 0
+        if (x > 0 && comp[p - 1] === -1 && q.labels[p - 1] === lab) {
+          comp[p - 1] = cid
+          stack.push(p - 1)
+        }
+        if (x < w - 1 && comp[p + 1] === -1 && q.labels[p + 1] === lab) {
+          comp[p + 1] = cid
+          stack.push(p + 1)
+        }
+        if (y > 0 && comp[p - w] === -1 && q.labels[p - w] === lab) {
+          comp[p - w] = cid
+          stack.push(p - w)
+        }
+        if (y < h - 1 && comp[p + w] === -1 && q.labels[p + w] === lab) {
+          comp[p + w] = cid
+          stack.push(p + w)
+        }
       }
       const s = byLabel.get(lab) ?? { whole: 0, wholePx: 0, eroded: 0, erodedPx: 0, intact: 0 }
-      if (kept === 0) { s.whole++; s.wholePx += size }
-      else if (kept < size) { s.eroded++; s.erodedPx += size - kept }
-      else s.intact++
+      if (kept === 0) {
+        s.whole++
+        s.wholePx += size
+      } else if (kept < size) {
+        s.eroded++
+        s.erodedPx += size - kept
+      } else s.intact++
       byLabel.set(lab, s)
       cid++
     }
@@ -878,23 +1078,36 @@ for (const name of CASES) {
   // floor actually reads), listed for every stage. A component that appears in one row
   // and is gone from the next names the killing stage AND its size vs the floor.
   if (roiBox) {
-    console.log(`\n  ROI COMPONENT CENSUS — 4-conn components of the ROI's ink label, sized whole (floor ${OPTS.minRegionArea}px)`)
+    console.log(
+      `\n  ROI COMPONENT CENSUS — 4-conn components of the ROI's ink label, sized whole (floor ${OPTS.minRegionArea}px)`,
+    )
     // Which authored colour dominates the ROI? That is the feature under test.
-    let ink = -1, inkN = 0
+    let ink = -1,
+      inkN = 0
     for (let a = 0; a < authored.length; a++) {
       const n = masks[a].reduce((s, v) => s + v, 0)
       // Skip the paper: the ROI's background is whatever covers the most of it, and the
       // feature is the SECOND colour. Rank by "not the ROI majority" instead of guessing.
-      if (n > inkN) { inkN = n; ink = a }
+      if (n > inkN) {
+        inkN = n
+        ink = a
+      }
     }
     // The feature colour = the ROI's minority authored colour with ≥ 4px of mask.
-    let feat = -1, featN = 0
+    let feat = -1,
+      featN = 0
     for (let a = 0; a < authored.length; a++) {
       if (a === ink) continue
       const n = masks[a].reduce((s, v) => s + v, 0)
-      if (n > featN) { featN = n; feat = a }
+      if (n > featN) {
+        featN = n
+        feat = a
+      }
     }
-    for (const [who, a] of [['ROI-majority', ink], ['ROI-feature', feat]] as [string, number][]) {
+    for (const [who, a] of [
+      ['ROI-majority', ink],
+      ['ROI-feature', feat],
+    ] as [string, number][]) {
       if (a < 0) continue
       const tLab = srgbToLab(authored[a].r, authored[a].g, authored[a].b)
       console.log(`    ${who} ${hex(authored[a])} (${masks[a].reduce((s, v) => s + v, 0)}px of ROI mask)`)
@@ -913,7 +1126,8 @@ for (const name of CASES) {
           while (stack.length) {
             const p = stack.pop()!
             size++
-            const x = p % w, y = (p / w) | 0
+            const x = p % w,
+              y = (p / w) | 0
             const push = (nb: number): void => {
               if (seen[nb] || st.labels[nb] !== lab) return
               seen[nb] = 1
@@ -953,7 +1167,8 @@ for (const name of CASES) {
             .map((ref) => {
               const e = trace.edges.find((x) => x.id === ref.edge)!
               let len = 0
-              for (let i = 0; i + 1 < e.nodes.length; i++) len += Math.hypot(e.nodes[i + 1].x - e.nodes[i].x, e.nodes[i + 1].y - e.nodes[i].y)
+              for (let i = 0; i + 1 < e.nodes.length; i++)
+                len += Math.hypot(e.nodes[i + 1].x - e.nodes[i].x, e.nodes[i + 1].y - e.nodes[i].y)
               return `e${e.id}[${e.closed ? 'closed' : `${e.startVertex}→${e.endVertex}`}, ${len.toFixed(1)}px, ${e.nodes.length}n]`
             })
             .join(' '),
@@ -961,15 +1176,22 @@ for (const name of CASES) {
       )
     }
     let reseated: ReadonlySet<number> = new Set<number>()
-    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, DEFAULT_BEAUTIFY_OPTIONS, {
-      arcSnap: fitOpts.arcSnap,
-      localScaleK: fitOpts.localScaleK,
-      cornerVeto: fitOpts.cornerVeto,
-      reseat: fitOpts.junctionReseat,
-      width: w,
-      height: h,
-      onReseat: (m: ReadonlySet<number>) => { reseated = m },
-    })
+    const topology = planarBeautify(
+      { vertices: trace.vertices, edges: trace.edges },
+      trace.loopsByLabel,
+      DEFAULT_BEAUTIFY_OPTIONS,
+      {
+        arcSnap: fitOpts.arcSnap,
+        localScaleK: fitOpts.localScaleK,
+        cornerVeto: fitOpts.cornerVeto,
+        reseat: fitOpts.junctionReseat,
+        width: w,
+        height: h,
+        onReseat: (m: ReadonlySet<number>) => {
+          reseated = m
+        },
+      },
+    )
     weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, w, h, reseated)
     const em = edgeMap(topology)
     const counts = new Map<number, number>()
@@ -998,7 +1220,8 @@ for (const name of CASES) {
   const r = scoreRegions(img as unknown as ImageData, doc)
   const fitNote = Object.keys(FIT_OVERRIDE).length ? `  [planarFit ${fitArg}]` : ''
   console.log(`\n  FINAL (traceImage + scoreRegions): ${r.recovered}/${r.trueRegions} regions${fitNote}`)
-  for (const miss of r.missing) console.log(`    ✗ ${miss.hex} (${miss.areaPx}px) painted ${miss.paintedHex}, ΔE ${miss.deltaE.toFixed(1)}`)
+  for (const miss of r.missing)
+    console.log(`    ✗ ${miss.hex} (${miss.areaPx}px) painted ${miss.paintedHex}, ΔE ${miss.deltaE.toFixed(1)}`)
 
   // Doc-level autopsy per authored colour: does a path with that fill even EXIST, and
   // with what geometry? Separates "the label died in segmentation" from "the label
@@ -1043,12 +1266,15 @@ for (const name of CASES) {
           let a2 = 0
           const nn = sp.nodes.length
           for (let i = 0; i < nn; i++) {
-            const p = sp.nodes[i], qn = sp.nodes[(i + 1) % nn]
+            const p = sp.nodes[i],
+              qn = sp.nodes[(i + 1) % nn]
             a2 += p.x * qn.y - qn.x * p.y
           }
           area += Math.abs(a2) / 2
         }
-        console.log(`      · item ${it.id}: ${it.subPaths.length} subpath(s), ${it.subPaths.reduce((s, sp) => s + sp.nodes.length, 0)} nodes, ~${area.toFixed(1)}px² anchor-polygon area`)
+        console.log(
+          `      · item ${it.id}: ${it.subPaths.length} subpath(s), ${it.subPaths.reduce((s, sp) => s + sp.nodes.length, 0)} nodes, ~${area.toFixed(1)}px² anchor-polygon area`,
+        )
       }
     }
   }

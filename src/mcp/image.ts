@@ -57,7 +57,8 @@ function sniffMime(bytes: Uint8Array, ext: string): string {
   if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg'
   if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif'
   if (b[0] === 0x42 && b[1] === 0x4d) return 'image/bmp'
-  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45) return 'image/webp'
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45)
+    return 'image/webp'
   return RASTER_MIME[ext] ?? 'application/octet-stream'
 }
 
@@ -94,7 +95,8 @@ function rasterSize(bytes: Uint8Array, mime: string): { width: number; height: n
   if (mime === 'image/webp') {
     const fourcc = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15])
     if (fourcc === 'VP8X') return { width: 1 + readU24(bytes, 24), height: 1 + readU24(bytes, 27) }
-    if (fourcc === 'VP8 ') return { width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff }
+    if (fourcc === 'VP8 ')
+      return { width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff }
     if (fourcc === 'VP8L') {
       const bits = view.getUint32(21, true)
       return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }
@@ -121,7 +123,16 @@ export function loadSource(path: string): LoadedSource {
     const svgText = raw.toString('utf8')
     // resvg has already parsed width/height/viewBox — no second SVG parser here.
     const probe = new Resvg(svgText)
-    return { path: full, name, kind: 'svg', svgText, bytes: null, mime: 'image/svg+xml', width: probe.width, height: probe.height }
+    return {
+      path: full,
+      name,
+      kind: 'svg',
+      svgText,
+      bytes: null,
+      mime: 'image/svg+xml',
+      width: probe.width,
+      height: probe.height,
+    }
   }
 
   const mime = sniffMime(bytes, ext)
@@ -131,7 +142,8 @@ export function loadSource(path: string): LoadedSource {
 
 /** `data:` URI for embedding a raster source into a composed SVG. */
 export function dataUri(src: LoadedSource): string {
-  if (src.kind === 'svg') return `data:image/svg+xml;base64,${Buffer.from(src.svgText ?? '', 'utf8').toString('base64')}`
+  if (src.kind === 'svg')
+    return `data:image/svg+xml;base64,${Buffer.from(src.svgText ?? '', 'utf8').toString('base64')}`
   return `data:${src.mime};base64,${Buffer.from(src.bytes ?? new Uint8Array()).toString('base64')}`
 }
 
@@ -184,7 +196,11 @@ export async function rasterizeSource(src: LoadedSource, maxDim: number, backgro
  * image.
  */
 type SharpFactory = (input: Uint8Array) => {
-  raw: () => { ensureAlpha: () => { toBuffer: (o: { resolveWithObject: true }) => Promise<{ data: Buffer; info: { width: number; height: number } }> } }
+  raw: () => {
+    ensureAlpha: () => {
+      toBuffer: (o: { resolveWithObject: true }) => Promise<{ data: Buffer; info: { width: number; height: number } }>
+    }
+  }
 }
 let sharpCache: SharpFactory | null | undefined
 function loadSharp(): SharpFactory {
@@ -196,7 +212,9 @@ function loadSharp(): SharpFactory {
     }
   }
   if (!sharpCache) {
-    throw new Error('This format (WebP) needs the optional `sharp` decoder, which is not installed. Convert the image to PNG first, or run `npm install sharp` in this project.')
+    throw new Error(
+      'This format (WebP) needs the optional `sharp` decoder, which is not installed. Convert the image to PNG first, or run `npm install sharp` in this project.',
+    )
   }
   return sharpCache
 }
@@ -204,8 +222,15 @@ function loadSharp(): SharpFactory {
 /** Decode through sharp — the formats resvg cannot read (WebP). */
 async function decodeViaSharp(src: LoadedSource): Promise<ImageDataLike> {
   const sharp = loadSharp()
-  const { data, info } = await sharp(src.bytes ?? new Uint8Array()).raw().ensureAlpha().toBuffer({ resolveWithObject: true })
-  return { width: info.width, height: info.height, data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength) }
+  const { data, info } = await sharp(src.bytes ?? new Uint8Array())
+    .raw()
+    .ensureAlpha()
+    .toBuffer({ resolveWithObject: true })
+  return {
+    width: info.width,
+    height: info.height,
+    data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength),
+  }
 }
 
 /** Decode any raster resvg can read by wrapping it in a one-element SVG. */

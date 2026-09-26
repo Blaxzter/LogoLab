@@ -22,8 +22,13 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const V = 256
 
 // The bar, verbatim from genEdgeCases' band-cross: thickLine(40, 8, 96, 248, 20).
-const X1 = 40, Y1 = 8, X2 = 96, Y2 = 248, WBAR = 20
-const dxb = X2 - X1, dyb = Y2 - Y1
+const X1 = 40,
+  Y1 = 8,
+  X2 = 96,
+  Y2 = 248,
+  WBAR = 20
+const dxb = X2 - X1,
+  dyb = Y2 - Y1
 const lenb = Math.hypot(dxb, dyb)
 const nx = (-dyb / lenb) * (WBAR / 2)
 const ny = (dxb / lenb) * (WBAR / 2)
@@ -34,8 +39,13 @@ const F1: Vec = { x: (X2 - nx) * 2, y: (Y2 - ny) * 2 }
 const DEEP = 'rgb(19,72,129)'
 const shapes =
   `<polygon points="${[
-    [X1 + nx, Y1 + ny], [X2 + nx, Y2 + ny], [X2 - nx, Y2 - ny], [X1 - nx, Y1 - ny],
-  ].map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ')}" fill="${DEEP}"/>` +
+    [X1 + nx, Y1 + ny],
+    [X2 + nx, Y2 + ny],
+    [X2 - nx, Y2 - ny],
+    [X1 - nx, Y1 - ny],
+  ]
+    .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`)
+    .join(' ')}" fill="${DEEP}"/>` +
   `<circle cx="170" cy="80" r="40" fill="${DEEP}"/>` +
   `<path d="M140,165 H240 V245 H168 A28,28 0 0,1 140,217 Z" fill="${DEEP}"/>` +
   `<rect x="205" y="8" width="40" height="40" fill="${DEEP}"/>`
@@ -46,8 +56,11 @@ const below = (y0: number, y1: number, fill: string): string =>
 const FLAT =
   `<svg xmlns="http://www.w3.org/2000/svg" width="${V}" height="${V}" viewBox="0 0 ${V} ${V}">` +
   `<rect width="${V}" height="${V}" fill="rgb(90,213,251)"/>` +
-  below(62, 96, 'rgb(73,201,250)') + below(132, 166, 'rgb(56,189,250)') + below(196, 230, 'rgb(40,176,247)') +
-  shapes + '</svg>\n'
+  below(62, 96, 'rgb(73,201,250)') +
+  below(132, 166, 'rgb(56,189,250)') +
+  below(196, 230, 'rgb(40,176,247)') +
+  shapes +
+  '</svg>\n'
 
 // The ramp spans the SAME colours over the same direction, so a flat trace posterizes it
 // into bands in roughly the same places — but as iso-lines, not authored edges.
@@ -56,7 +69,9 @@ const RAMP =
   `<defs><linearGradient id="r" x1="0" y1="0" x2="0.13" y2="1">` +
   `<stop offset="0" stop-color="rgb(96,217,251)"/><stop offset="1" stop-color="rgb(34,172,247)"/>` +
   `</linearGradient></defs>` +
-  `<rect width="${V}" height="${V}" fill="url(#r)"/>` + shapes + '</svg>\n'
+  `<rect width="${V}" height="${V}" fill="url(#r)"/>` +
+  shapes +
+  '</svg>\n'
 
 function cubicAt(p0: PathNode, p1: PathNode, t: number): Vec {
   const c1 = p0.hOut ?? { x: p0.x, y: p0.y }
@@ -76,11 +91,18 @@ console.log('  Deviation of the traced boundary from the authored flank line, al
 console.log('    s(px)      flat bands        ramp (posterized)')
 
 const results = new Map<string, Vec[]>()
-for (const [tag, markup] of [['flat', FLAT], ['ramp', RAMP]] as Array<[string, string]>) {
+for (const [tag, markup] of [
+  ['flat', FLAT],
+  ['ramp', RAMP],
+] as Array<[string, string]>) {
   writeFileSync(join(root, `.band-${tag}.svg`), markup)
-  const img = decodePng(new Resvg(markup, { fitTo: { mode: 'width', value: 512 }, background: 'white' }).render().asPng())
+  const img = decodePng(
+    new Resvg(markup, { fitTo: { mode: 'width', value: 512 }, background: 'white' }).render().asPng(),
+  )
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
   })
   const pts: Vec[] = []
   for (const e of doc.topology?.edges ?? []) {
@@ -121,18 +143,25 @@ const uniform =
   `<rect width="${V}" height="${V}" fill="rgb(73,201,250)"/>`
 
 function build(kind: 'none' | 'flat' | 'ramp', dx: number): { markup: string; f0: Vec; f1: Vec } {
-  const bx1 = X1 + dx, bx2 = X2 + dx
-  const bar =
-    `<polygon points="${[
-      [bx1 + nx, Y1 + ny], [bx2 + nx, Y2 + ny], [bx2 - nx, Y2 - ny], [bx1 - nx, Y1 - ny],
-    ].map(([x, y]) => `${x.toFixed(3)},${y.toFixed(3)}`).join(' ')}" fill="${DEEP}"/>`
+  const bx1 = X1 + dx,
+    bx2 = X2 + dx
+  const bar = `<polygon points="${[
+    [bx1 + nx, Y1 + ny],
+    [bx2 + nx, Y2 + ny],
+    [bx2 - nx, Y2 - ny],
+    [bx1 - nx, Y1 - ny],
+  ]
+    .map(([x, y]) => `${x.toFixed(3)},${y.toFixed(3)}`)
+    .join(' ')}" fill="${DEEP}"/>`
   const bg =
     kind === 'none'
       ? uniform
       : kind === 'flat'
         ? `<svg xmlns="http://www.w3.org/2000/svg" width="${V}" height="${V}" viewBox="0 0 ${V} ${V}">` +
           `<rect width="${V}" height="${V}" fill="rgb(90,213,251)"/>` +
-          below(62, 96, 'rgb(73,201,250)') + below(132, 166, 'rgb(56,189,250)') + below(196, 230, 'rgb(40,176,247)')
+          below(62, 96, 'rgb(73,201,250)') +
+          below(132, 166, 'rgb(56,189,250)') +
+          below(196, 230, 'rgb(40,176,247)')
         : `<svg xmlns="http://www.w3.org/2000/svg" width="${V}" height="${V}" viewBox="0 0 ${V} ${V}">` +
           `<defs><linearGradient id="r" x1="0" y1="0" x2="0.13" y2="1">` +
           `<stop offset="0" stop-color="rgb(96,217,251)"/><stop offset="1" stop-color="rgb(34,172,247)"/>` +
@@ -146,9 +175,13 @@ function build(kind: 'none' | 'flat' | 'ramp', dx: number): { markup: string; f0
 
 async function worstFlank(kind: 'none' | 'flat' | 'ramp', dx: number): Promise<number> {
   const { markup, f0, f1 } = build(kind, dx)
-  const img = decodePng(new Resvg(markup, { fitTo: { mode: 'width', value: 512 }, background: 'white' }).render().asPng())
+  const img = decodePng(
+    new Resvg(markup, { fitTo: { mode: 'width', value: 512 }, background: 'white' }).render().asPng(),
+  )
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
   })
   const pts: Vec[] = []
   for (const e of doc.topology?.edges ?? []) {
@@ -183,6 +216,10 @@ for (let i = 0; i < 10; i++) {
   const b = await worstFlank('flat', dx)
   const c = await worstFlank('ramp', dx)
   mx = { none: Math.max(mx.none, a), flat: Math.max(mx.flat, b), ramp: Math.max(mx.ramp, c) }
-  console.log(`   ${(dx * 2).toFixed(1).padStart(8)}     ${a.toFixed(2).padStart(6)}     ${b.toFixed(2).padStart(8)}   ${c.toFixed(2).padStart(8)}`)
+  console.log(
+    `   ${(dx * 2).toFixed(1).padStart(8)}     ${a.toFixed(2).padStart(6)}     ${b.toFixed(2).padStart(8)}   ${c.toFixed(2).padStart(8)}`,
+  )
 }
-console.log(`\n   worst over phase:  none ${mx.none.toFixed(2)}   flat ${mx.flat.toFixed(2)}   ramp ${mx.ramp.toFixed(2)}\n`)
+console.log(
+  `\n   worst over phase:  none ${mx.none.toFixed(2)}   flat ${mx.flat.toFixed(2)}   ramp ${mx.ramp.toFixed(2)}\n`,
+)

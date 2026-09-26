@@ -446,7 +446,11 @@ export function surveyJunctions(
  * by lattice corner — whether the strong boundary continues through it or corners at it.
  * Junctions not in the map keep their integer corner, so an empty map is a no-op.
  */
-export function threadJunctions(net: PlanarNetwork, palette: readonly ThreadColor[], cornerJunctions = true): Map<number, Vec> {
+export function threadJunctions(
+  net: PlanarNetwork,
+  palette: readonly ThreadColor[],
+  cornerJunctions = true,
+): Map<number, Vec> {
   const out = new Map<number, Vec>()
   for (const v of surveyJunctions(net, edgeContrast(net, palette), cornerJunctions)) {
     if (v.linked && v.moveTo) out.set(v.corner, v.moveTo)

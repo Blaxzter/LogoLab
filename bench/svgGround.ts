@@ -83,17 +83,31 @@ export function refusals(gt: GroundTruth): { code: RefusalCode; detail: string }
   const out: { code: RefusalCode; detail: string }[] = []
   const tags = (xs: string[]): string => [...new Set(xs)].join(', ')
   if (gt.stroked.length)
-    out.push({ code: 'stroked', detail: `stroked geometry (${tags(gt.stroked)}) — visible boundary is the stroke outline, which this reader does not model` })
+    out.push({
+      code: 'stroked',
+      detail: `stroked geometry (${tags(gt.stroked)}) — visible boundary is the stroke outline, which this reader does not model`,
+    })
   if (gt.filtered.length)
-    out.push({ code: 'filtered', detail: `filtered geometry (${tags(gt.filtered)}) — a filter displaces the silhouette (blur) or adds a soft interior edge the authored paths do not contain (inner shadow)` })
+    out.push({
+      code: 'filtered',
+      detail: `filtered geometry (${tags(gt.filtered)}) — a filter displaces the silhouette (blur) or adds a soft interior edge the authored paths do not contain (inner shadow)`,
+    })
   if (gt.clipped.length)
-    out.push({ code: 'clipped', detail: `clipped geometry (${tags(gt.clipped)}) — the visible boundary is the intersection with the clip path, not the path itself` })
+    out.push({
+      code: 'clipped',
+      detail: `clipped geometry (${tags(gt.clipped)}) — the visible boundary is the intersection with the clip path, not the path itself`,
+    })
   if (gt.masked.length)
-    out.push({ code: 'masked', detail: `masked geometry (${tags(gt.masked)}) — the visible boundary is the mask's alpha, not the path itself` })
+    out.push({
+      code: 'masked',
+      detail: `masked geometry (${tags(gt.masked)}) — the visible boundary is the mask's alpha, not the path itself`,
+    })
   if (gt.patterned.length)
-    out.push({ code: 'patterned', detail: `pattern-filled geometry (${tags(gt.patterned)}) — the visible boundary is the pattern's tiling, not the shape's own outline` })
-  if (gt.unmodelled.length)
-    out.push({ code: 'unmodelled', detail: `unmodelled elements (${tags(gt.unmodelled)})` })
+    out.push({
+      code: 'patterned',
+      detail: `pattern-filled geometry (${tags(gt.patterned)}) — the visible boundary is the pattern's tiling, not the shape's own outline`,
+    })
+  if (gt.unmodelled.length) out.push({ code: 'unmodelled', detail: `unmodelled elements (${tags(gt.unmodelled)})` })
   if (!gt.shapes.length) out.push({ code: 'empty', detail: 'no geometry parsed' })
   return out
 }
@@ -119,7 +133,11 @@ function attrs(tagBody: string): Record<string, string> {
 
 /** "x,y x,y" / "x y x y" → flat number list. */
 function points(s: string): number[] {
-  return s.trim().split(/[\s,]+/).map(Number).filter(Number.isFinite)
+  return s
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number)
+    .filter(Number.isFinite)
 }
 
 /** A closed/open subpath of straight corner nodes. */
@@ -134,7 +152,10 @@ function polySubPath(pts: number[], closed: boolean): SubPath[] {
 /** Axis-aligned rect (rx/ry rounding is NOT modelled — authored GT should use plain rects
  *  or a path; a rounded rect would be scored as if its corners were sharp). */
 function rectSubPath(a: Record<string, string>): SubPath[] {
-  const x = num(a.x), y = num(a.y), w = num(a.width), h = num(a.height)
+  const x = num(a.x),
+    y = num(a.y),
+    w = num(a.width),
+    h = num(a.height)
   if (w <= 0 || h <= 0) return []
   return polySubPath([x, y, x + w, y, x + w, y + h, x, y + h], true)
 }
@@ -142,20 +163,27 @@ function rectSubPath(a: Record<string, string>): SubPath[] {
 /** Convert one shape element to outline subpaths in its own local space. */
 function shapeSubPaths(tag: string, a: Record<string, string>): SubPath[] {
   switch (tag) {
-    case 'path': return a.d ? parsePathD(a.d) : []
+    case 'path':
+      return a.d ? parsePathD(a.d) : []
     case 'circle': {
       const r = num(a.r)
       return r > 0 ? (ellipseSubPaths(num(a.cx), num(a.cy), r, r) ?? []) : []
     }
     case 'ellipse': {
-      const rx = num(a.rx), ry = num(a.ry)
+      const rx = num(a.rx),
+        ry = num(a.ry)
       return rx > 0 && ry > 0 ? (ellipseSubPaths(num(a.cx), num(a.cy), rx, ry) ?? []) : []
     }
-    case 'rect': return rectSubPath(a)
-    case 'polygon': return polySubPath(points(a.points ?? ''), true)
-    case 'polyline': return polySubPath(points(a.points ?? ''), false)
-    case 'line': return polySubPath([num(a.x1), num(a.y1), num(a.x2), num(a.y2)], false)
-    default: return []
+    case 'rect':
+      return rectSubPath(a)
+    case 'polygon':
+      return polySubPath(points(a.points ?? ''), true)
+    case 'polyline':
+      return polySubPath(points(a.points ?? ''), false)
+    case 'line':
+      return polySubPath([num(a.x1), num(a.y1), num(a.x2), num(a.y2)], false)
+    default:
+      return []
   }
 }
 
@@ -184,9 +212,18 @@ function isStroked(a: Record<string, string>): boolean {
 }
 
 /** filter / clip-path / mask — any non-`none` value re-defines the visible boundary. */
-const isFiltered = (a: Record<string, string>): boolean => { const v = prop(a, 'filter'); return v !== '' && v !== 'none' }
-const isClipped = (a: Record<string, string>): boolean => { const v = prop(a, 'clip-path'); return v !== '' && v !== 'none' }
-const isMasked = (a: Record<string, string>): boolean => { const v = prop(a, 'mask'); return v !== '' && v !== 'none' }
+const isFiltered = (a: Record<string, string>): boolean => {
+  const v = prop(a, 'filter')
+  return v !== '' && v !== 'none'
+}
+const isClipped = (a: Record<string, string>): boolean => {
+  const v = prop(a, 'clip-path')
+  return v !== '' && v !== 'none'
+}
+const isMasked = (a: Record<string, string>): boolean => {
+  const v = prop(a, 'mask')
+  return v !== '' && v !== 'none'
+}
 
 /** ids of every `<pattern>` in the document — a *gradient* url() fill is fine, a pattern is not. */
 function patternIds(svg: string): Set<string> {
@@ -206,7 +243,12 @@ function isPatterned(a: Record<string, string>, patterns: Set<string>): boolean 
 }
 
 /** The inherited paint context of the enclosing <g> chain. */
-interface Ctx { m: Affine; filtered: boolean; clipped: boolean; masked: boolean }
+interface Ctx {
+  m: Affine
+  filtered: boolean
+  clipped: boolean
+  masked: boolean
+}
 
 /**
  * Parse an authored SVG's geometry. Handles `<g>` nesting for BOTH transforms and the paint
@@ -222,7 +264,9 @@ export function parseGroundTruth(svg: string): GroundTruth {
   const vbAttr = /viewBox\s*=\s*["']([^"']+)["']/.exec(svg)
   const vb = vbAttr ? points(vbAttr[1]) : []
   const viewBox: [number, number, number, number] =
-    vb.length === 4 ? [vb[0], vb[1], vb[2], vb[3]] : [0, 0, num(/width\s*=\s*["'](\d+)/.exec(svg)?.[1], 512), num(/height\s*=\s*["'](\d+)/.exec(svg)?.[1], 512)]
+    vb.length === 4
+      ? [vb[0], vb[1], vb[2], vb[3]]
+      : [0, 0, num(/width\s*=\s*["'](\d+)/.exec(svg)?.[1], 512), num(/height\s*=\s*["'](\d+)/.exec(svg)?.[1], 512)]
 
   const shapes: GroundShape[] = []
   const stroked: string[] = []
@@ -244,12 +288,16 @@ export function parseGroundTruth(svg: string): GroundTruth {
     const [, close, rawTag, body, selfClose] = m
     const tag = rawTag.replace(/^.*:/, '') // strip namespace prefix
 
-    if (STENCILS.has(tag)) { inStencil += close ? -1 : selfClose ? 0 : 1; continue }
+    if (STENCILS.has(tag)) {
+      inStencil += close ? -1 : selfClose ? 0 : 1
+      continue
+    }
     if (inStencil > 0) continue
 
     if (tag === 'g') {
-      if (close) { if (stack.length > 1) stack.pop() }
-      else {
+      if (close) {
+        if (stack.length > 1) stack.pop()
+      } else {
         const a = attrs(body)
         const top = stack[stack.length - 1]
         // A filter/clip/mask on a <g> applies to the WHOLE SUBTREE. Figma puts them here,
@@ -276,17 +324,36 @@ export function parseGroundTruth(svg: string): GroundTruth {
     // Report EVERY reason this element is unrepresentable, so the triage histogram is honest
     // about what the art actually contains rather than about which check ran first.
     let refused = false
-    if (isStroked(a)) { stroked.push(tag); refused = true }
-    if (ctx.filtered || isFiltered(a)) { filtered.push(tag); refused = true }
-    if (ctx.clipped || isClipped(a)) { clipped.push(tag); refused = true }
-    if (ctx.masked || isMasked(a)) { masked.push(tag); refused = true }
-    if (isPatterned(a, patterns)) { patterned.push(tag); refused = true }
+    if (isStroked(a)) {
+      stroked.push(tag)
+      refused = true
+    }
+    if (ctx.filtered || isFiltered(a)) {
+      filtered.push(tag)
+      refused = true
+    }
+    if (ctx.clipped || isClipped(a)) {
+      clipped.push(tag)
+      refused = true
+    }
+    if (ctx.masked || isMasked(a)) {
+      masked.push(tag)
+      refused = true
+    }
+    if (isPatterned(a, patterns)) {
+      patterned.push(tag)
+      refused = true
+    }
     if (refused) continue
 
     const local = shapeSubPaths(tag, a)
     if (!local.length) continue
 
-    shapes.push({ tag, subPaths: transformSubPaths(local, composeAffine(ctx.m, parseTransformAttr(a.transform))), fill: a.fill })
+    shapes.push({
+      tag,
+      subPaths: transformSubPaths(local, composeAffine(ctx.m, parseTransformAttr(a.transform))),
+      fill: a.fill,
+    })
   }
 
   return { viewBox, shapes, stroked, filtered, clipped, masked, patterned, unmodelled }

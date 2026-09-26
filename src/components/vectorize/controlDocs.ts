@@ -19,9 +19,7 @@ export type SceneName = 'smoothing' | 'despeckle' | 'fidelity' | 'threshold' | '
  * loaded by the generator) or a purpose-built synthetic scene (rasterized by the
  * generator, which also emits an SVG thumbnail of the source).
  */
-export type ExampleSource =
-  | { kind: 'bundled'; key: ExampleKey; file: string }
-  | { kind: 'synthetic'; scene: SceneName }
+export type ExampleSource = { kind: 'bundled'; key: ExampleKey; file: string } | { kind: 'synthetic'; scene: SceneName }
 
 export interface ControlVariant {
   /** Short caption under the preview ("None" / "Medium" / "High", "Off" / "On"…). */
@@ -195,6 +193,4 @@ export const CONTROL_DOCS: ControlDoc[] = [
   },
 ]
 
-export const CONTROL_DOCS_BY_ID: Record<string, ControlDoc> = Object.fromEntries(
-  CONTROL_DOCS.map((d) => [d.id, d]),
-)
+export const CONTROL_DOCS_BY_ID: Record<string, ControlDoc> = Object.fromEntries(CONTROL_DOCS.map((d) => [d.id, d]))

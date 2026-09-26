@@ -23,9 +23,7 @@ export function useLogoUpload() {
    * loads nothing, so this is the only context a report has. The file name is
    * left out on purpose: it is the user's business, not a diagnosis.
    */
-  const rejected = useRef<{ type: string | null; extension: string | null; bytes: number } | null>(
-    null,
-  )
+  const rejected = useRef<{ type: string | null; extension: string | null; bytes: number } | null>(null)
 
   const handleFile = useCallback(
     async (file: File | undefined | null) => {

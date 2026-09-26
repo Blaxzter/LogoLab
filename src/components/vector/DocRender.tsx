@@ -123,13 +123,7 @@ export const PathView = memo(function PathView({
  * Invisible wide-stroke copy so a thin outline stays grabbable. Part of the
  * interaction layer, but kept here to share the `d` cache.
  */
-export const HitPath = memo(function HitPath({
-  item,
-  width,
-}: {
-  item: PathItem
-  width: number
-}) {
+export const HitPath = memo(function HitPath({ item, width }: { item: PathItem; width: number }) {
   return (
     <path
       data-id={item.id}

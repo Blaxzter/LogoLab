@@ -7,11 +7,7 @@ import { ErrorBoundary } from './components/report/ErrorBoundary'
 import { useStore } from './state/store'
 import { installErrorLog } from './lib/report/errorLog'
 import { provideReportContext } from './lib/report/reportContext'
-import {
-  flushSession,
-  loadSession,
-  requestPersistentStorage,
-} from './lib/persist/session'
+import { flushSession, loadSession, requestPersistentStorage } from './lib/persist/session'
 import { registerServiceWorker } from './pwa/register'
 
 /**

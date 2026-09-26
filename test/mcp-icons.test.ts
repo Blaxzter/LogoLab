@@ -29,7 +29,8 @@ import { ensureImageData } from '../src/mcp/runtime.ts'
 ensureImageData()
 
 /** A logo that fills its whole viewBox — the worst case for any safe zone. */
-const FULL_BLEED_SQUARE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#e11d48"/></svg>'
+const FULL_BLEED_SQUARE =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#e11d48"/></svg>'
 const logo = () => prepareVector(FULL_BLEED_SQUARE, 100, 100)
 
 const BASE = { background: 'transparent', shape: 'square' as const, radiusPct: 24, paddingPct: 0, scale: 1 }
@@ -58,7 +59,7 @@ function pixels(png: Uint8Array) {
   }
 }
 
-test('a maskable icon keeps its ink inside Android\'s safe circle', () => {
+test("a maskable icon keeps its ink inside Android's safe circle", () => {
   const size = 256
   const png = renderIconPng(logo(), { ...BASE, size, maskable: true })
   const img = pixels(png)
@@ -174,7 +175,10 @@ test('a pwa + tauri export writes the layout each platform expects', () => {
   ]
   for (const path of expected) {
     assert.ok(existsSync(join(out, path)), `wrote ${path}`)
-    assert.ok(report.files.some((f) => f.path === path), `reported ${path}`)
+    assert.ok(
+      report.files.some((f) => f.path === path),
+      `reported ${path}`,
+    )
   }
 
   // The PNGs are the size their name claims.

@@ -6,15 +6,7 @@
 // reused in this session ("max existing + 1" would reissue one after an undone
 // delete).
 
-import type {
-  DocItem,
-  EditableDoc,
-  GradientFill,
-  GroupItem,
-  PathItem,
-  Stroke,
-  SubPath,
-} from '../../lib/path/types'
+import type { DocItem, EditableDoc, GradientFill, GroupItem, PathItem, Stroke, SubPath } from '../../lib/path/types'
 import { findItem, isGroup, mapLeaves, replaceItem, walkItems } from '../../lib/path/docTree'
 
 let counter = 0
@@ -45,11 +37,7 @@ export function blankDoc(width = 512, height = width): EditableDoc {
 }
 
 /** Wrap freshly-drawn subpaths as a path item. */
-export function makePath(
-  subPaths: SubPath[],
-  fill: string = DEFAULT_FILL,
-  name?: string,
-): PathItem {
+export function makePath(subPaths: SubPath[], fill: string = DEFAULT_FILL, name?: string): PathItem {
   return {
     kind: 'path',
     id: newId('p'),
@@ -92,9 +80,7 @@ export function patchSelected(
   }
   collect(doc.items, false)
   if (targets.size === 0) return doc
-  const items = mapLeaves(doc.items, (it) =>
-    it.kind === 'path' && targets.has(it.id) ? patch(it) : it,
-  )
+  const items = mapLeaves(doc.items, (it) => (it.kind === 'path' && targets.has(it.id) ? patch(it) : it))
   return items === doc.items ? doc : { ...doc, items }
 }
 
@@ -107,11 +93,7 @@ export function setFill(doc: EditableDoc, ids: ReadonlySet<string>, fill: string
   })
 }
 
-export function setGradient(
-  doc: EditableDoc,
-  ids: ReadonlySet<string>,
-  gradient: GradientFill | null,
-): EditableDoc {
+export function setGradient(doc: EditableDoc, ids: ReadonlySet<string>, gradient: GradientFill | null): EditableDoc {
   return patchSelected(doc, ids, (it) => {
     const next = { ...it }
     if (gradient) next.gradient = gradient
@@ -120,11 +102,7 @@ export function setGradient(
   })
 }
 
-export function setStroke(
-  doc: EditableDoc,
-  ids: ReadonlySet<string>,
-  stroke: Stroke | null,
-): EditableDoc {
+export function setStroke(doc: EditableDoc, ids: ReadonlySet<string>, stroke: Stroke | null): EditableDoc {
   return patchSelected(doc, ids, (it) => {
     const next = { ...it }
     if (stroke) next.stroke = stroke
@@ -133,11 +111,7 @@ export function setStroke(
   })
 }
 
-export function setFillOpacity(
-  doc: EditableDoc,
-  ids: ReadonlySet<string>,
-  opacity: number,
-): EditableDoc {
+export function setFillOpacity(doc: EditableDoc, ids: ReadonlySet<string>, opacity: number): EditableDoc {
   return patchSelected(doc, ids, (it) => {
     const next = { ...it }
     if (opacity >= 1) delete next.fillOpacity
@@ -146,11 +120,7 @@ export function setFillOpacity(
   })
 }
 
-export function setFillRule(
-  doc: EditableDoc,
-  ids: ReadonlySet<string>,
-  fillRule: 'nonzero' | 'evenodd',
-): EditableDoc {
+export function setFillRule(doc: EditableDoc, ids: ReadonlySet<string>, fillRule: 'nonzero' | 'evenodd'): EditableDoc {
   return patchSelected(doc, ids, (it) => ({ ...it, fillRule }))
 }
 
@@ -222,7 +192,5 @@ export function docPalette(doc: EditableDoc): { color: string; count: number }[]
     if (key === 'none') return
     counts.set(key, (counts.get(key) ?? 0) + 1)
   })
-  return [...counts.entries()]
-    .map(([color, count]) => ({ color, count }))
-    .sort((a, b) => b.count - a.count)
+  return [...counts.entries()].map(([color, count]) => ({ color, count })).sort((a, b) => b.count - a.count)
 }

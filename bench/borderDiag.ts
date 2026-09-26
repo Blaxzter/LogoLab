@@ -61,9 +61,18 @@ import { ensureImageData } from './nodeHarness.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from './svgGround.ts'
 import {
-  sharpCorners, makeVisibleAt, flattenSubPath, CORNER_MATCH_R,
-  scoreBorderBand, nearestTo, signedNearestTo, BAND, BAND_PARALLEL_DEG, BAND_MIN_N,
-  type BandSample, type BorderBand,
+  sharpCorners,
+  makeVisibleAt,
+  flattenSubPath,
+  CORNER_MATCH_R,
+  scoreBorderBand,
+  nearestTo,
+  signedNearestTo,
+  BAND,
+  BAND_PARALLEL_DEG,
+  BAND_MIN_N,
+  type BandSample,
+  type BorderBand,
 } from './geomScore.ts'
 import { buildPlanarNetwork } from '../src/lib/trace/planarNetwork.ts'
 import { subpixelEdgeChains, type SubpixelDiagRecord } from '../src/lib/trace/planarSubpixel.ts'
@@ -118,7 +127,12 @@ const NEAR = 2.0
 /** Authored window (px) the traced kink is compared against, in the §23 like-for-like form. */
 const WIN = Number(flag('--win') ?? 1)
 
-interface Sample { x: number; y: number; tx: number; ty: number }
+interface Sample {
+  x: number
+  y: number
+  tx: number
+  ty: number
+}
 
 /** Uniform-arc-length resample of one subpath, with tangents. The corner census needs the
  *  TANGENT at each authored sample to read the authored turn over a window; the distance
@@ -126,9 +140,10 @@ interface Sample { x: number; y: number; tx: number; ty: number }
 function chainOf(sp: SubPath): Sample[] {
   const poly = flattenSubPath(sp)
   if (poly.length < 2) return []
-  const pts = sp.closed !== false && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
-    ? [...poly, poly[0]]
-    : poly
+  const pts =
+    sp.closed !== false && (poly[0].x !== poly[poly.length - 1].x || poly[0].y !== poly[poly.length - 1].y)
+      ? [...poly, poly[0]]
+      : poly
   const out: Sample[] = []
   let carry = 0
   for (let i = 1; i < pts.length; i++) {
@@ -155,7 +170,10 @@ const PAR_SIN = Math.sin((BAND_PARALLEL_DEG * Math.PI) / 180)
 let W = 0
 let H = 0
 const edgeOf = (p: Sample): { d: number; ex: number; ey: number } => {
-  const dl = p.x, dr = W - p.x, dt = p.y, db = H - p.y
+  const dl = p.x,
+    dr = W - p.x,
+    dt = p.y,
+    db = H - p.y
   const m = Math.min(dl, dr, dt, db)
   return m === dl || m === dr ? { d: m, ex: 0, ey: 1 } : { d: m, ex: 1, ey: 0 }
 }
@@ -164,8 +182,7 @@ const isParallel = (p: Sample): boolean => {
   const e = edgeOf(p)
   return Math.abs(p.tx * e.ey - p.ty * e.ex) < PAR_SIN
 }
-const atCanvasCorner = (p: Sample): boolean =>
-  Math.min(p.x, W - p.x) <= BAND && Math.min(p.y, H - p.y) <= BAND
+const atCanvasCorner = (p: Sample): boolean => Math.min(p.x, W - p.x) <= BAND && Math.min(p.y, H - p.y) <= BAND
 
 // The band's rules — the transversal cut, the canvas-corner hold-out, the off-canvas
 // hold-out and the sample floor — live in geomScore.scoreBorderBand, which the GATE calls
@@ -181,7 +198,13 @@ const pct = (a: number[], p: number): number => {
   return s[Math.min(s.length - 1, Math.floor(p * s.length))]
 }
 
-interface Site { x: number; y: number; kink: number; authored: number; excess: number }
+interface Site {
+  x: number
+  y: number
+  kink: number
+  authored: number
+  excess: number
+}
 export interface BorderReport {
   name: string
   band: BorderBand
@@ -191,7 +214,11 @@ export interface BorderReport {
   pts: BandSample[]
 }
 
-async function analyse(name: string, text: string, fit: Record<string, number | boolean>): Promise<BorderReport | null> {
+async function analyse(
+  name: string,
+  text: string,
+  fit: Record<string, number | boolean>,
+): Promise<BorderReport | null> {
   let gtDoc
   try {
     gtDoc = parseGroundTruth(text)
@@ -212,7 +239,10 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
   H = h
   const vis = makeVisibleAt(raster)
   const doc = await traceImage(raster as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: GRADIENTS, planarFit: fit,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: GRADIENTS,
+    planarFit: fit,
   })
   const docSets = doc.items.flatMap((it) => (it.kind === 'path' ? it.subPaths : [])) as SubPath[]
 
@@ -226,7 +256,10 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
   const nearestGt = nearestTo(gt.map((g) => g.subPaths))
 
   // --- the corner half (§23 form, restricted to the band) ---------------------
-  const gtCorners = sharpCorners(gt.map((s) => s.subPaths), 0)
+  const gtCorners = sharpCorners(
+    gt.map((s) => s.subPaths),
+    0,
+  )
   const sites: Site[] = []
   for (const c of sharpCorners([docSets], 0)) {
     const s: Sample = { x: c.x, y: c.y, tx: c.otx, ty: c.oty }
@@ -248,7 +281,10 @@ async function analyse(name: string, text: string, fit: Record<string, number | 
     let bd = Infinity
     for (let i = 0; i < gtPts.length; i++) {
       const d = Math.hypot(gtPts[i].x - c.x, gtPts[i].y - c.y)
-      if (d < bd) { bd = d; bi = i }
+      if (d < bd) {
+        bd = d
+        bi = i
+      }
     }
     let authored = 0
     if (bi >= 0) {
@@ -317,7 +353,9 @@ const silent = reports.filter((r) => r.band.n < BAND_MIN_N)
 // AUTHORED samples, a population fixed by the art and the visibility mask, so it does not
 // move when the trace does. The spurious side's queries are the trace's own boundary and do
 // move, so a shift there can be a change of sample SET rather than of accuracy.
-console.log(`  ${'case'.padEnd(24)}${'band n'.padStart(8)}${'chamfer'.padStart(9)}${'missed'.padStart(8)}${'spur'.padStart(7)}${'p95'.padStart(7)}${'max'.padStart(7)}${'interior'.padStart(10)}${'ratio'.padStart(8)}${'kinks'.padStart(7)}`)
+console.log(
+  `  ${'case'.padEnd(24)}${'band n'.padStart(8)}${'chamfer'.padStart(9)}${'missed'.padStart(8)}${'spur'.padStart(7)}${'p95'.padStart(7)}${'max'.padStart(7)}${'interior'.padStart(10)}${'ratio'.padStart(8)}${'kinks'.padStart(7)}`,
+)
 for (const r of [...scorable].sort((a, b) => b.band.ratio - a.band.ratio)) {
   const bad = r.sites.filter((s) => s.excess >= 40).length
   console.log(
@@ -325,23 +363,35 @@ for (const r of [...scorable].sort((a, b) => b.band.ratio - a.band.ratio)) {
       `${f(r.band.max).padStart(7)}${f(r.band.interior).padStart(10)}${(f(r.band.ratio, 2) + '×').padStart(8)}${String(bad).padStart(7)}`,
   )
 }
-if (silent.length) console.log(`\n  ${silent.length} case(s) never reach the canvas edge (no band samples): ${silent.map((r) => r.name).join(', ')}`)
+if (silent.length)
+  console.log(
+    `\n  ${silent.length} case(s) never reach the canvas edge (no band samples): ${silent.map((r) => r.name).join(', ')}`,
+  )
 
 if (scorable.length) {
   const ratios = scorable.map((r) => r.band.ratio).filter(Number.isFinite)
   const bandCh = scorable.map((r) => r.band.chamfer)
   const intCh = scorable.map((r) => r.band.interior)
-  console.log(`\n  THE HOLE: ${scorable.reduce((s, r) => s + r.band.n, 0)} transversal band samples carry authored truth and are scored by NOTHING in the repo today.`)
-  console.log(`            (a further ${scorable.reduce((s, r) => s + r.band.parallelHeld, 0)} in-band samples are frame/flush and correctly held out)`)
+  console.log(
+    `\n  THE HOLE: ${scorable.reduce((s, r) => s + r.band.n, 0)} transversal band samples carry authored truth and are scored by NOTHING in the repo today.`,
+  )
+  console.log(
+    `            (a further ${scorable.reduce((s, r) => s + r.band.parallelHeld, 0)} in-band samples are frame/flush and correctly held out)`,
+  )
   const off = reports.reduce((s, r) => s + r.band.offCanvasHeld, 0)
-  if (off) console.log(`            (${off} authored samples lie OUTSIDE the canvas and are unscorable by construction${KEEP_OFF ? ' — SCORED ANYWAY, --keepoff' : ''})`)
+  if (off)
+    console.log(
+      `            (${off} authored samples lie OUTSIDE the canvas and are unscorable by construction${KEEP_OFF ? ' — SCORED ANYWAY, --keepoff' : ''})`,
+    )
   console.log(`\n  band chamfer     p50 ${f(pct(bandCh, 0.5))}  p90 ${f(pct(bandCh, 0.9))}  max ${f(maxOf(bandCh))}`)
   console.log(`  interior chamfer p50 ${f(pct(intCh, 0.5))}  p90 ${f(pct(intCh, 0.9))}  max ${f(maxOf(intCh))}`)
   console.log(`  ratio            p50 ${f(pct(ratios, 0.5))}×  p90 ${f(pct(ratios, 0.9))}×  max ${f(maxOf(ratios))}×`)
   const worseCount = scorable.filter((r) => r.band.ratio > 1).length
   console.log(`  ${worseCount} of ${scorable.length} cases are WORSE at the border than in their own interior.`)
   const kinks = scorable.reduce((s, r) => s + r.sites.filter((x) => x.excess >= 40).length, 0)
-  console.log(`  ${kinks} traced corner(s) in the band turn ≥40° more than the authored boundary does (the "odd corners" half).`)
+  console.log(
+    `  ${kinks} traced corner(s) in the band turn ≥40° more than the authored boundary does (the "odd corners" half).`,
+  )
 }
 
 if (WORST > 0) {
@@ -387,12 +437,18 @@ if (STAGES) {
     let gtDoc
     try {
       gtDoc = parseGroundTruth(text)
-    } catch { continue }
+    } catch {
+      continue
+    }
     if (unscorable(gtDoc)) continue
     let raster
     try {
-      raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-    } catch { continue }
+      raster = decodePng(
+        new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng(),
+      )
+    } catch {
+      continue
+    }
     const w = raster.width
     const h = raster.height
     W = w
@@ -404,9 +460,17 @@ if (STAGES) {
 
     let raw: { labels: Int32Array; width: number; height: number } | null = null
     const trace = (subpixelEdges: boolean) =>
-      traceImage(raster as unknown as ImageData,
+      traceImage(
+        raster as unknown as ImageData,
         { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: GRADIENTS, planarFit: { ...fit, subpixelEdges } },
-        undefined, undefined, undefined, undefined, (l) => { raw = l })
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        (l) => {
+          raw = l
+        },
+      )
     const dispDoc = await trace(true)
     const lattDoc = await trace(false)
     if (!raw) continue
@@ -467,9 +531,7 @@ if (STAGES) {
     const bandNodes = (sets: SubPath[][]): number => {
       let k = 0
       for (const set of sets)
-        for (const sp of set)
-          for (const nd of sp.nodes)
-            if (Math.min(nd.x, w - nd.x, nd.y, h - nd.y) <= BAND) k++
+        for (const sp of set) for (const nd of sp.nodes) if (Math.min(nd.x, w - nd.x, nd.y, h - nd.y) <= BAND) k++
       return k
     }
     /** MEDIAN chord between consecutive nodes where at least one is IN the band — the span the
@@ -563,14 +625,26 @@ if (OUTCOMES) {
   for (const [name, text] of cases) {
     let raster
     try {
-      raster = decodePng(new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-    } catch { continue }
+      raster = decodePng(
+        new Resvg(text, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng(),
+      )
+    } catch {
+      continue
+    }
     const w = raster.width
     const h = raster.height
     let raw: { labels: Int32Array; width: number; height: number } | null = null
-    await traceImage(raster as unknown as ImageData,
+    await traceImage(
+      raster as unknown as ImageData,
       { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: GRADIENTS, planarFit: fit },
-      undefined, undefined, undefined, undefined, (l) => { raw = l })
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (l) => {
+        raw = l
+      },
+    )
     if (!raw) continue
     const rr = raw as { labels: Int32Array; width: number; height: number }
     const net = buildPlanarNetwork(rr.labels, w, h)
@@ -580,7 +654,10 @@ if (OUTCOMES) {
     const byPoint = new Map<string, { x: number; y: number; outcome: string }>()
     for (const r of recs) {
       const k = `${r.edgeId}:${r.index}`
-      if (r.outcome === 'corner-revert') { if (!byPoint.has(k)) byPoint.set(k, { x: r.x, y: r.y, outcome: 'corner-revert' }); continue }
+      if (r.outcome === 'corner-revert') {
+        if (!byPoint.has(k)) byPoint.set(k, { x: r.x, y: r.y, outcome: 'corner-revert' })
+        continue
+      }
       byPoint.set(k, { x: r.x, y: r.y, outcome: r.outcome })
     }
     for (const r of byPoint.values()) {
@@ -597,7 +674,9 @@ if (OUTCOMES) {
   console.log(`  ${'outcome'.padEnd(20)}${label.map((l) => l.padStart(11)).join('')}`)
   const totals = tally.map((m) => [...m.values()].reduce((s, v) => s + v, 0))
   for (const k of kinds)
-    console.log(`  ${k.padEnd(20)}${tally.map((m, i) => `${(m.get(k) ?? 0)} (${totals[i] ? ((100 * (m.get(k) ?? 0)) / totals[i]).toFixed(0) : '0'}%)`.padStart(11)).join('')}`)
+    console.log(
+      `  ${k.padEnd(20)}${tally.map((m, i) => `${m.get(k) ?? 0} (${totals[i] ? ((100 * (m.get(k) ?? 0)) / totals[i]).toFixed(0) : '0'}%)`.padStart(11)).join('')}`,
+    )
   console.log(`  ${'— total —'.padEnd(20)}${totals.map((t) => String(t).padStart(11)).join('')}`)
 }
 
@@ -608,7 +687,9 @@ if (LIST) {
     if (!hot.length) continue
     console.log(`   ${r.name}`)
     for (const s of hot.slice(0, 12))
-      console.log(`     (${f(s.x, 1)},${f(s.y, 1)})   kink ${f(s.kink, 1)}°   authored ${f(s.authored, 1)}°   excess ${f(s.excess, 1)}°`)
+      console.log(
+        `     (${f(s.x, 1)},${f(s.y, 1)})   kink ${f(s.kink, 1)}°   authored ${f(s.authored, 1)}°   excess ${f(s.excess, 1)}°`,
+      )
   }
 }
 console.log()

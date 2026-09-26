@@ -69,7 +69,10 @@ export interface SheetReport {
 }
 
 /** Detect the tiles without tracing — the cheap half, for a dry run. */
-export async function detectSheet(src: LoadedSource, req: SheetRequest = {}): Promise<{
+export async function detectSheet(
+  src: LoadedSource,
+  req: SheetRequest = {},
+): Promise<{
   image: ImageDataLike
   tiles: SheetTile[]
   detection: ReturnType<typeof detectSheetIcons>
@@ -92,7 +95,8 @@ export async function splitSheet(src: LoadedSource, outDir: string, req: SheetRe
   const background = detection.background
   // Overhang is filled with the sheet's own paper colour, so an icon at the edge
   // keeps its box instead of being clipped.
-  const fill = background && !background.transparent ? { r: background.r, g: background.g, b: background.b, a: 255 } : null
+  const fill =
+    background && !background.transparent ? { r: background.r, g: background.g, b: background.b, a: 255 } : null
 
   const iconTiles = detection.tiles.filter((t) => t.kind === 'icon')
   const wanted = req.limit ? iconTiles.slice(0, req.limit) : iconTiles

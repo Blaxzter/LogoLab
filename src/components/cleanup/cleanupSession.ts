@@ -44,8 +44,7 @@ export const DEFAULT_CLEANUP_SETTINGS: CleanupSettings = {
   recolorColor: '#ffffff',
 }
 
-export const loadCleanupSettings = (): CleanupSettings =>
-  readLocal(LS_KEY, DEFAULT_CLEANUP_SETTINGS)
+export const loadCleanupSettings = (): CleanupSettings => readLocal(LS_KEY, DEFAULT_CLEANUP_SETTINGS)
 
 /** Debounced: the rail is sliders, and each fires per pointer move. */
 export const saveCleanupSettings = debounce((settings: CleanupSettings) => {

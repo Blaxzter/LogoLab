@@ -5,7 +5,15 @@
 
 import type { EditableDoc } from '../src/lib/path/types.ts'
 import { rasterizeDoc, boundaryMask } from './raster.ts'
-import { fidelity, usefulness, topologyMetrics, hashDoc, type FidelityMetrics, type UsefulnessMetrics, type TopologyMetrics } from './metrics.ts'
+import {
+  fidelity,
+  usefulness,
+  topologyMetrics,
+  hashDoc,
+  type FidelityMetrics,
+  type UsefulnessMetrics,
+  type TopologyMetrics,
+} from './metrics.ts'
 
 /** Minimal source-image shape (a real ImageData satisfies it). */
 export interface SourceImage {

@@ -69,7 +69,11 @@ async function runCase(c: TruthCase, size: number): Promise<Row> {
     engine: 'planar',
     gradients: c.gradients,
   })
-  return { ...scoreGeometry(shapes, doc, img.width, img.height, img), size, regions: scoreRegions(img, doc, { inkFamilies: c.inkFamilies }) }
+  return {
+    ...scoreGeometry(shapes, doc, img.width, img.height, img),
+    size,
+    regions: scoreRegions(img, doc, { inkFamilies: c.inkFamilies }),
+  }
 }
 
 for (const c of selected) {
@@ -127,7 +131,9 @@ for (const c of selected) {
       const ok = g.recovered === g.trueRegions
       console.log(`  ${String(r.size).padStart(5)} ${g.recovered}/${g.trueRegions} recovered ${ok ? '✓' : '✗'}`)
       for (const m of g.missing.slice(0, 6)) {
-        console.log(`        ✗ ${m.hex} (${String(m.areaPx).padStart(6)}px) — the trace paints ${m.paintedHex} there instead, ΔE ${m.deltaE.toFixed(1)}`)
+        console.log(
+          `        ✗ ${m.hex} (${String(m.areaPx).padStart(6)}px) — the trace paints ${m.paintedHex} there instead, ΔE ${m.deltaE.toFixed(1)}`,
+        )
       }
       if (g.missing.length > 6) console.log(`        … and ${g.missing.length - 6} more`)
     }

@@ -91,9 +91,7 @@ self.addEventListener('activate', (event) => {
     (async () => {
       const keys = await caches.keys()
       await Promise.all(
-        keys
-          .filter((key) => key.startsWith('logolab-precache-') && key !== PRECACHE)
-          .map((key) => caches.delete(key)),
+        keys.filter((key) => key.startsWith('logolab-precache-') && key !== PRECACHE).map((key) => caches.delete(key)),
       )
       await self.clients.claim()
     })(),
@@ -161,12 +159,7 @@ async function serveAsset(request) {
   // the HTML check: the SPA fallback answers a missing asset with 200
   // index.html, and caching that under a `.js` URL poisons the cache.
   const contentType = response.headers.get('content-type') ?? ''
-  if (
-    response.ok &&
-    response.type === 'basic' &&
-    response.status === 200 &&
-    !contentType.startsWith('text/html')
-  ) {
+  if (response.ok && response.type === 'basic' && response.status === 200 && !contentType.startsWith('text/html')) {
     const length = Number(response.headers.get('content-length') ?? 0)
     if (length <= MAX_RUNTIME_BYTES) {
       const copy = response.clone()

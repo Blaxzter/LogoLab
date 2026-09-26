@@ -86,18 +86,18 @@ const ids = (...s: string[]) => new Set(s)
 /* --------------------------------------------------------------- docTree */
 
 test('leafItems flattens groups and prunes hidden subtrees', () => {
-  const d = doc([
-    square('a', 0, 0, 10),
-    group('g', [square('b', 20, 0, 10), square('c', 40, 0, 10)]),
-  ])
-  assert.deepEqual(leafItems(d.items).map((i) => i.id), ['a', 'b', 'c'])
+  const d = doc([square('a', 0, 0, 10), group('g', [square('b', 20, 0, 10), square('c', 40, 0, 10)])])
+  assert.deepEqual(
+    leafItems(d.items).map((i) => i.id),
+    ['a', 'b', 'c'],
+  )
 
   // Hiding the FOLDER must hide what's in it, even though b/c stay visible:true.
-  const hidden = doc([
-    square('a', 0, 0, 10),
-    { ...group('g', [square('b', 20, 0, 10)]), visible: false },
-  ])
-  assert.deepEqual(leafItems(hidden.items).map((i) => i.id), ['a'])
+  const hidden = doc([square('a', 0, 0, 10), { ...group('g', [square('b', 20, 0, 10)]), visible: false }])
+  assert.deepEqual(
+    leafItems(hidden.items).map((i) => i.id),
+    ['a'],
+  )
 })
 
 test('grouping preserves paint order and lands at the frontmost member', () => {
@@ -106,14 +106,23 @@ test('grouping preserves paint order and lands at the frontmost member', () => {
   const items = [square('a', 0, 0, 10), square('b', 0, 0, 10), square('c', 0, 0, 10), square('d', 0, 0, 10)]
   const res = groupItems(items, ids('a', 'c'), 'g1')
   assert.ok(res)
-  assert.deepEqual(res.items.map((i) => i.id), ['b', 'g1', 'd'])
+  assert.deepEqual(
+    res.items.map((i) => i.id),
+    ['b', 'g1', 'd'],
+  )
 
   const g = res.items[1]
   assert.ok(isGroup(g))
-  assert.deepEqual(g.children.map((i) => i.id), ['a', 'c'])
+  assert.deepEqual(
+    g.children.map((i) => i.id),
+    ['a', 'c'],
+  )
   // Flattened paint order is unchanged apart from a moving up past b, which is
   // unavoidable: a group is contiguous.
-  assert.deepEqual(leafItems(res.items).map((i) => i.id), ['b', 'a', 'c', 'd'])
+  assert.deepEqual(
+    leafItems(res.items).map((i) => i.id),
+    ['b', 'a', 'c', 'd'],
+  )
 })
 
 test('grouping needs two members and ignores ids nested in a selected group', () => {
@@ -124,10 +133,17 @@ test('grouping needs two members and ignores ids nested in a selected group', ()
 })
 
 test('ungroup splices children back in place and keeps a hidden group hidden', () => {
-  const items = [square('a', 0, 0, 10), group('g', [square('b', 0, 0, 10), square('c', 0, 0, 10)]), square('d', 0, 0, 10)]
+  const items = [
+    square('a', 0, 0, 10),
+    group('g', [square('b', 0, 0, 10), square('c', 0, 0, 10)]),
+    square('d', 0, 0, 10),
+  ]
   const out = ungroup(items, 'g')
   assert.ok(out)
-  assert.deepEqual(out.map((i) => i.id), ['a', 'b', 'c', 'd'])
+  assert.deepEqual(
+    out.map((i) => i.id),
+    ['a', 'b', 'c', 'd'],
+  )
 
   const hiddenG = [{ ...group('g', [square('b', 0, 0, 10)]), visible: false }]
   const out2 = ungroup(hiddenG, 'g')
@@ -137,7 +153,10 @@ test('ungroup splices children back in place and keeps a hidden group hidden', (
 
 test('ancestorsOf and findParent locate nested items', () => {
   const items = [group('outer', [group('inner', [square('leaf', 0, 0, 10)])])]
-  assert.deepEqual(ancestorsOf(items, 'leaf').map((g) => g.id), ['outer', 'inner'])
+  assert.deepEqual(
+    ancestorsOf(items, 'leaf').map((g) => g.id),
+    ['outer', 'inner'],
+  )
   const at = findParent(items, 'leaf')
   assert.equal(at?.parent?.id, 'inner')
   assert.equal(at?.index, 0)
@@ -149,14 +168,23 @@ test('reorder moves items within their own parent only', () => {
   const g = out[0]
   assert.ok(isGroup(g))
   // 'a' goes to the front OF ITS GROUP — it must not escape into the top level.
-  assert.deepEqual(g.children.map((i) => i.id), ['b', 'a'])
-  assert.deepEqual(out.map((i) => i.id), ['g', 'c'])
+  assert.deepEqual(
+    g.children.map((i) => i.id),
+    ['b', 'a'],
+  )
+  assert.deepEqual(
+    out.map((i) => i.id),
+    ['g', 'c'],
+  )
 })
 
 test('a contiguous run steps as a block', () => {
   const items = [square('a', 0, 0, 10), square('b', 0, 0, 10), square('c', 0, 0, 10), square('d', 0, 0, 10)]
   const out = reorderItems(items, ids('b', 'c'), 'forward')
-  assert.deepEqual(out.map((i) => i.id), ['a', 'd', 'b', 'c'])
+  assert.deepEqual(
+    out.map((i) => i.id),
+    ['a', 'd', 'b', 'c'],
+  )
 })
 
 test('removeItems prunes at any depth', () => {
@@ -164,7 +192,10 @@ test('removeItems prunes at any depth', () => {
   const out = removeItems(items, ids('a'))
   const g = out[0]
   assert.ok(isGroup(g))
-  assert.deepEqual(g.children.map((i) => i.id), ['b'])
+  assert.deepEqual(
+    g.children.map((i) => i.id),
+    ['b'],
+  )
 })
 
 /* ------------------------------------------------------------ serialize */
@@ -389,7 +420,11 @@ test('solveSegmentDrag moves the on-curve point by exactly the requested delta',
 
 test('dragging a straight segment bends it and leaves the anchors alone', () => {
   const item: PathItem = {
-    kind: 'path', id: 'p', fill: '#000000', fillRule: 'nonzero', visible: true,
+    kind: 'path',
+    id: 'p',
+    fill: '#000000',
+    fillRule: 'nonzero',
+    visible: true,
     subPaths: [{ nodes: [pn(0, 0), pn(10, 0)], closed: false }],
   }
   const from = { x: 5, y: 0 }
@@ -407,7 +442,11 @@ test('dragging a straight segment bends it and leaves the anchors alone', () => 
 
 test('dragging near a segment end is clamped instead of exploding', () => {
   const item: PathItem = {
-    kind: 'path', id: 'p', fill: '#000000', fillRule: 'nonzero', visible: true,
+    kind: 'path',
+    id: 'p',
+    fill: '#000000',
+    fillRule: 'nonzero',
+    visible: true,
     subPaths: [{ nodes: [pn(0, 0), pn(10, 0)], closed: false }],
   }
   const out = dragSegment(item, 0, 0, 0.001, { x: 0.01, y: 0 }, { x: 0.01, y: 2 })
@@ -447,7 +486,11 @@ test('opening a closed subpath duplicates the cut node', () => {
 
 test('breaking an open path at an interior node yields two strands', () => {
   const item: PathItem = {
-    kind: 'path', id: 'p', fill: '#000000', fillRule: 'nonzero', visible: true,
+    kind: 'path',
+    id: 'p',
+    fill: '#000000',
+    fillRule: 'nonzero',
+    visible: true,
     subPaths: [{ nodes: [pn(0, 0), pn(5, 0), pn(10, 0)], closed: false }],
   }
   const out = breakAt(item, 0, 1)
@@ -458,7 +501,11 @@ test('breaking an open path at an interior node yields two strands', () => {
 
 test('joining two open strands welds them into one', () => {
   const item: PathItem = {
-    kind: 'path', id: 'p', fill: '#000000', fillRule: 'nonzero', visible: true,
+    kind: 'path',
+    id: 'p',
+    fill: '#000000',
+    fillRule: 'nonzero',
+    visible: true,
     subPaths: [
       { nodes: [pn(0, 0), pn(10, 0)], closed: false },
       { nodes: [pn(10.2, 0), pn(20, 0)], closed: false },
@@ -473,7 +520,11 @@ test('joining two open strands welds them into one', () => {
 
 test('joining the two ends of one strand closes it', () => {
   const item: PathItem = {
-    kind: 'path', id: 'p', fill: '#000000', fillRule: 'nonzero', visible: true,
+    kind: 'path',
+    id: 'p',
+    fill: '#000000',
+    fillRule: 'nonzero',
+    visible: true,
     subPaths: [{ nodes: [pn(0, 0), pn(10, 0), pn(10, 10)], closed: false }],
   }
   const out = joinEnds(item, { sub: 0, idx: 0 }, { sub: 0, idx: 2 })
@@ -493,7 +544,11 @@ test('splitCompound and combinePaths are inverse in shape count', () => {
 
 test('closing needs at least three nodes', () => {
   const item: PathItem = {
-    kind: 'path', id: 'p', fill: '#000000', fillRule: 'nonzero', visible: true,
+    kind: 'path',
+    id: 'p',
+    fill: '#000000',
+    fillRule: 'nonzero',
+    visible: true,
     subPaths: [{ nodes: [pn(0, 0), pn(10, 0)], closed: false }],
   }
   assert.equal(closeSubPath(item, 0).subPaths[0].closed, false)
@@ -579,7 +634,11 @@ test('pickItem returns the frontmost hit and reports the enclosing group', () =>
 
 test('node hit priority is handle, then anchor, then segment', () => {
   const item: PathItem = {
-    kind: 'path', id: 'p', fill: '#000000', fillRule: 'nonzero', visible: true,
+    kind: 'path',
+    id: 'p',
+    fill: '#000000',
+    fillRule: 'nonzero',
+    visible: true,
     subPaths: [{ nodes: [pn(0, 0, null, { x: 0, y: 0 }), pn(10, 0)], closed: false }],
   }
   const opts = { anchorTol: 3, handleTol: 3, segmentTol: 3 }
@@ -599,10 +658,7 @@ test('a containment marquee takes only what it fully frames', () => {
   const items = [square('in', 10, 10, 10), square('out', 80, 80, 30)]
   assert.deepEqual(marqueeItems(items, { x: 0, y: 0, w: 50, h: 50 }), ['in'])
   // Crossing mode grazes.
-  assert.deepEqual(
-    marqueeItems(items, { x: 0, y: 0, w: 85, h: 85 }, { touch: true }).sort(),
-    ['in', 'out'],
-  )
+  assert.deepEqual(marqueeItems(items, { x: 0, y: 0, w: 85, h: 85 }, { touch: true }).sort(), ['in', 'out'])
 })
 
 test('marqueeNodes selects anchors inside the band', () => {

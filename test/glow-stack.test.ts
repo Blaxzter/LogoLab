@@ -10,12 +10,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  fitGlowStack,
-  sampleGlowStack,
-  type RegionSamples,
-  type GlowStack,
-} from '../src/lib/trace/gradient.ts'
+import { fitGlowStack, sampleGlowStack, type RegionSamples, type GlowStack } from '../src/lib/trace/gradient.ts'
 import type { LinearGradient } from '../src/lib/path/types.ts'
 import { srgbToLab, deltaE76 } from '../src/lib/trace/lab.ts'
 
@@ -102,9 +97,28 @@ test('a pure linear ramp (no glow) yields no overlay', () => {
 
 test('sampleGlowStack composites base then overlay with straight alpha-over', () => {
   const stack: GlowStack = {
-    base: { type: 'linear', x1: 0, y1: 0, x2: 100, y2: 0, stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#000000' }] },
+    base: {
+      type: 'linear',
+      x1: 0,
+      y1: 0,
+      x2: 100,
+      y2: 0,
+      stops: [
+        { offset: 0, color: '#000000' },
+        { offset: 1, color: '#000000' },
+      ],
+    },
     overlays: [
-      { type: 'radial', cx: 50, cy: 50, r: 50, stops: [{ offset: 0, color: '#ffffff', opacity: 0.5 }, { offset: 1, color: '#ffffff', opacity: 0 }] },
+      {
+        type: 'radial',
+        cx: 50,
+        cy: 50,
+        r: 50,
+        stops: [
+          { offset: 0, color: '#ffffff', opacity: 0.5 },
+          { offset: 1, color: '#ffffff', opacity: 0 },
+        ],
+      },
     ],
   }
   // At the centre the overlay alpha is 0.5 over black → mid grey.

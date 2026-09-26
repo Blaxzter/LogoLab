@@ -62,7 +62,18 @@ interface Piece {
 }
 
 /** Flatten one cubic (with parameter tracking) to FLATNESS. */
-function flattenCubic(ctl: Piece['ctl'], p0: Vec, c1: Vec, c2: Vec, p3: Vec, t0: number, t1: number, base: Omit<Piece, 'a' | 'b' | 't0' | 't1' | 'ctl'>, out: Piece[], depth = 0): void {
+function flattenCubic(
+  ctl: Piece['ctl'],
+  p0: Vec,
+  c1: Vec,
+  c2: Vec,
+  p3: Vec,
+  t0: number,
+  t1: number,
+  base: Omit<Piece, 'a' | 'b' | 't0' | 't1' | 'ctl'>,
+  out: Piece[],
+  depth = 0,
+): void {
   const dx = p3.x - p0.x
   const dy = p3.y - p0.y
   const d1 = Math.abs((c1.x - p3.x) * dy - (c1.y - p3.y) * dx)
@@ -215,11 +226,17 @@ export function authoredCrossings(shapes: GroundShape[]): Crossing[] {
             continue
           }
           // Touching: an endpoint of one piece on the other (an authored corner on an outline).
-          for (const [pt, s] of [[p.a, 0], [p.b, 1]] as [Vec, number][]) {
+          for (const [pt, s] of [
+            [p.a, 0],
+            [p.b, 1],
+          ] as [Vec, number][]) {
             const n = nearestOn(q, pt)
             if (n.d <= TOUCH) push(pt.x, pt.y, p, s, q, n.u)
           }
-          for (const [pt, u] of [[q.a, 0], [q.b, 1]] as [Vec, number][]) {
+          for (const [pt, u] of [
+            [q.a, 0],
+            [q.b, 1],
+          ] as [Vec, number][]) {
             const n = nearestOn(p, pt)
             if (n.d <= TOUCH) push(pt.x, pt.y, p, n.u, q, u)
           }

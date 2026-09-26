@@ -56,7 +56,8 @@ function modalColours(q: QuantizeResult, data: Uint8ClampedArray): PaletteColor[
     h.set(key, (h.get(key) ?? 0) + 1)
   }
   return q.palette.map((c, l) => {
-    let bestKey = -1, bestCount = 0
+    let bestKey = -1,
+      bestCount = 0
     for (const [key, count] of hist[l]) {
       if (count > bestCount || (count === bestCount && key < bestKey)) {
         bestCount = count
@@ -92,7 +93,9 @@ export function fuseShadingTones(
   const md2 = new Float64Array(K * K)
   for (let a = 0; a < K; a++) {
     for (let b = 0; b < K; b++) {
-      const dr = modes[a].r - modes[b].r, dg = modes[a].g - modes[b].g, db = modes[a].b - modes[b].b
+      const dr = modes[a].r - modes[b].r,
+        dg = modes[a].g - modes[b].g,
+        db = modes[a].b - modes[b].b
       md2[a * K + b] = dr * dr + dg * dg + db * db
     }
   }
@@ -101,21 +104,38 @@ export function fuseShadingTones(
   const nInt = new Int32Array(K * K)
   const hardInt = new Int32Array(K * K)
   const within = (i: number, x: number, y: number, a: number, b: number): boolean => {
-    if (x > 0) { const l = labels[i - 1]; if (l !== a && l !== b) return false }
-    if (x < w - 1) { const l = labels[i + 1]; if (l !== a && l !== b) return false }
-    if (y > 0) { const l = labels[i - w]; if (l !== a && l !== b) return false }
-    if (y < h - 1) { const l = labels[i + w]; if (l !== a && l !== b) return false }
+    if (x > 0) {
+      const l = labels[i - 1]
+      if (l !== a && l !== b) return false
+    }
+    if (x < w - 1) {
+      const l = labels[i + 1]
+      if (l !== a && l !== b) return false
+    }
+    if (y > 0) {
+      const l = labels[i - w]
+      if (l !== a && l !== b) return false
+    }
+    if (y < h - 1) {
+      const l = labels[i + w]
+      if (l !== a && l !== b) return false
+    }
     return true
   }
   const visit = (i: number, x: number, y: number, j: number, xj: number, yj: number): void => {
-    const a = labels[i], b = labels[j]
+    const a = labels[i],
+      b = labels[j]
     if (a < 0 || b < 0 || a === b) return
     if (!within(i, x, y, a, b) || !within(j, xj, yj, a, b)) return
-    const lo = a < b ? a : b, hi = a < b ? b : a
+    const lo = a < b ? a : b,
+      hi = a < b ? b : a
     const k = lo * K + hi
     nInt[k]++
-    const oi = i * 4, oj = j * 4
-    const dr = data[oi] - data[oj], dg = data[oi + 1] - data[oj + 1], db = data[oi + 2] - data[oj + 2]
+    const oi = i * 4,
+      oj = j * 4
+    const dr = data[oi] - data[oj],
+      dg = data[oi + 1] - data[oj + 1],
+      db = data[oi + 2] - data[oj + 2]
     const step2 = dr * dr + dg * dg + db * db
     if (step2 >= HARD_RATIO * HARD_RATIO * md2[k]) hardInt[k]++
   }
@@ -143,7 +163,8 @@ export function fuseShadingTones(
       if (nInt[k] < SOFT_MIN_BOUNDARY) continue
       // Identical modal colours cannot be two inks; otherwise read the hard share.
       if (md2[k] > 0 && hardInt[k] > SOFT_HARD_MAX * nInt[k]) continue
-      const ra = find(a), rb = find(b)
+      const ra = find(a),
+        rb = find(b)
       if (ra !== rb) {
         parent[ra] = rb
         anySoft = true
@@ -181,7 +202,10 @@ export function fuseShadingTones(
   const sumG = q.palette.map((c, i) => c.g * q.counts[i])
   const sumB = q.palette.map((c, i) => c.b * q.counts[i])
   for (const g of groups) {
-    const head = g.reduce((best, i) => (q.counts[i] > q.counts[best] || (q.counts[i] === q.counts[best] && i < best) ? i : best), g[0])
+    const head = g.reduce(
+      (best, i) => (q.counts[i] > q.counts[best] || (q.counts[i] === q.counts[best] && i < best) ? i : best),
+      g[0],
+    )
     for (const i of g) {
       if (i === head) continue
       target[i] = head
@@ -196,7 +220,9 @@ export function fuseShadingTones(
   for (let i = 0; i < K; i++) if (target[i] === i) survivors.push(i)
   survivors.sort((a, b) => count[b] - count[a] || a - b)
   const rank = new Int32Array(K).fill(-1)
-  survivors.forEach((s, pos) => { rank[s] = pos })
+  survivors.forEach((s, pos) => {
+    rank[s] = pos
+  })
   const out = new Int32Array(labels.length)
   for (let i = 0; i < labels.length; i++) {
     const l = labels[i]
@@ -206,7 +232,9 @@ export function fuseShadingTones(
   return {
     q: {
       palette: survivors.map((s) =>
-        count[s] > 0 ? { r: clamp255(sumR[s] / count[s]), g: clamp255(sumG[s] / count[s]), b: clamp255(sumB[s] / count[s]) } : q.palette[s],
+        count[s] > 0
+          ? { r: clamp255(sumR[s] / count[s]), g: clamp255(sumG[s] / count[s]), b: clamp255(sumB[s] / count[s]) }
+          : q.palette[s],
       ),
       labels: out,
       counts: survivors.map((s) => count[s]),

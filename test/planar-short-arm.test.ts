@@ -42,12 +42,18 @@ interface Traced {
   score: ReturnType<typeof scoreGeometry>
 }
 
-async function trace(name: string, shortArmSamples?: number): Promise<{ gt: Corner[]; t: Traced; img: ReturnType<typeof decodePng> }> {
+async function trace(
+  name: string,
+  shortArmSamples?: number,
+): Promise<{ gt: Corner[]; t: Traced; img: ReturnType<typeof decodePng> }> {
   const svg = readFileSync(join(root, 'public', 'examples', 'edge-cases', `${name}.svg`), 'utf8')
   const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
   const shapes = toRasterSpace(parseGroundTruth(svg), img.width)
   const visible = makeVisibleAt(img)
-  const gt = sharpCorners(shapes.map((s) => s.subPaths), CORNER_MIN_EDGE).filter(
+  const gt = sharpCorners(
+    shapes.map((s) => s.subPaths),
+    CORNER_MIN_EDGE,
+  ).filter(
     (c) => visible({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || visible({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
   )
   const recs: ApexDiagRecord[] = []
@@ -55,11 +61,20 @@ async function trace(name: string, shortArmSamples?: number): Promise<{ gt: Corn
     ...DEFAULT_VECTORIZE_OPTIONS,
     engine: 'planar',
     gradients: false,
-    planarFit: { apexDiag: (r: ApexDiagRecord) => { recs.push(r) }, ...(shortArmSamples !== undefined ? { shortArmSamples } : {}) },
+    planarFit: {
+      apexDiag: (r: ApexDiagRecord) => {
+        recs.push(r)
+      },
+      ...(shortArmSamples !== undefined ? { shortArmSamples } : {}),
+    },
   })
   const sets: SubPath[][] = []
   for (const it of doc.items) if (it.kind === 'path' && it.visible !== false) sets.push(it.subPaths)
-  return { gt, img, t: { doc, recs, corners: sharpCorners(sets), score: scoreGeometry(shapes, doc, img.width, img.height, img) } }
+  return {
+    gt,
+    img,
+    t: { doc, recs, corners: sharpCorners(sets), score: scoreGeometry(shapes, doc, img.width, img.height, img) },
+  }
 }
 
 const nearest = (p: { x: number; y: number }, xs: { x: number; y: number }[]): number => {
@@ -92,11 +107,23 @@ test('§31 gear-teeth @512: the corners the old rule bypassed are placed closer 
   const sumNew = bypassed.reduce((a, g) => a + nearest(g, newT.corners), 0)
   // Measured 2026-09-06: Σ 1.04 px/corner kept vs 0.54 reconstructed on 8 corners — the
   // bound is half the measured gain, so a partial regression still trips it.
-  assert.ok(sumNew <= 0.75 * sumOld, `Σ placement over the ${bypassed.length} bypassed corners: old ${sumOld.toFixed(2)} → new ${sumNew.toFixed(2)} px (limit 0.75×)`)
+  assert.ok(
+    sumNew <= 0.75 * sumOld,
+    `Σ placement over the ${bypassed.length} bypassed corners: old ${sumOld.toFixed(2)} → new ${sumNew.toFixed(2)} px (limit 0.75×)`,
+  )
   // …and the change buys placement without spending recall or precision on the driver.
-  assert.ok(newT.score.cornersRecovered >= oldT.score.cornersRecovered, `corners recovered ${oldT.score.cornersRecovered} → ${newT.score.cornersRecovered}`)
-  assert.ok(newT.score.cornersInvented <= oldT.score.cornersInvented, `corners invented ${oldT.score.cornersInvented} → ${newT.score.cornersInvented}`)
-  assert.ok(newT.score.chamfer <= oldT.score.chamfer + 0.005, `chamfer ${oldT.score.chamfer.toFixed(4)} → ${newT.score.chamfer.toFixed(4)}`)
+  assert.ok(
+    newT.score.cornersRecovered >= oldT.score.cornersRecovered,
+    `corners recovered ${oldT.score.cornersRecovered} → ${newT.score.cornersRecovered}`,
+  )
+  assert.ok(
+    newT.score.cornersInvented <= oldT.score.cornersInvented,
+    `corners invented ${oldT.score.cornersInvented} → ${newT.score.cornersInvented}`,
+  )
+  assert.ok(
+    newT.score.chamfer <= oldT.score.chamfer + 0.005,
+    `chamfer ${oldT.score.chamfer.toFixed(4)} → ${newT.score.chamfer.toFixed(4)}`,
+  )
 })
 
 test('§31 the corners the new floor still bypasses are ones the intersection would not improve', async () => {
@@ -109,7 +136,10 @@ test('§31 the corners the new floor still bypasses are ones the intersection wo
     if (!Number.isFinite(r!.hx)) continue
     const kept = Math.hypot(r!.ax - g.x, r!.ay - g.y)
     const hit = Math.hypot(r!.hx - g.x, r!.hy - g.y)
-    assert.ok(hit >= kept - 0.25, `still-bypassed corner @(${g.x.toFixed(0)},${g.y.toFixed(0)}): kept ${kept.toFixed(2)} px, refused intersection ${hit.toFixed(2)} px`)
+    assert.ok(
+      hit >= kept - 0.25,
+      `still-bypassed corner @(${g.x.toFixed(0)},${g.y.toFixed(0)}): kept ${kept.toFixed(2)} px, refused intersection ${hit.toFixed(2)} px`,
+    )
   }
 })
 
@@ -130,7 +160,14 @@ test('§31 a corner the new floor admits takes its apex from the intersection an
     ...DEFAULT_VECTORIZE_OPTIONS,
     engine: 'planar',
     gradients: false,
-    planarFit: { pinDiag: (p) => { pins.push({ x: p.x, y: p.y, applied: p.applied }) }, apexDiag: (r: ApexDiagRecord) => { recs.push(r) } },
+    planarFit: {
+      pinDiag: (p) => {
+        pins.push({ x: p.x, y: p.y, applied: p.applied })
+      },
+      apexDiag: (r: ApexDiagRecord) => {
+        recs.push(r)
+      },
+    },
   })
   // …every one of them is now placed by the intersection (so the change is live here)…
   const placed = admitted.filter((g) => recordAt(g, recs)?.outcome === 'reconstructed')

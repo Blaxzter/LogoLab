@@ -177,8 +177,7 @@ export function subpixelEdgeChains(
    * point without a full window has no profile to read and stays on the lattice, like an
    * EXT-sided chain.
    */
-  const supported = (x: number, y: number): boolean =>
-    x >= 0.5 && y >= 0.5 && x <= w - 0.5 && y <= h - 0.5
+  const supported = (x: number, y: number): boolean => x >= 0.5 && y >= 0.5 && x <= w - 0.5 && y <= h - 0.5
 
   // Scratch buffers (hot loop; no per-point allocation).
   const farL = new Float64Array(3)
@@ -256,13 +255,17 @@ export function subpixelEdgeChains(
       // Anchor flatness (see ANCHOR_FLAT_MAX): an anchor sitting in a ramp — the
       // opposite wall of a thin feature, a wide blur — is not a pure-colour witness.
       bilin(p.x + (FAR + 1) * nx, p.y + (FAR + 1) * ny, flatS)
-      let d0 = flatS[0] - farL[0], d1 = flatS[1] - farL[1], d2 = flatS[2] - farL[2]
+      let d0 = flatS[0] - farL[0],
+        d1 = flatS[1] - farL[1],
+        d2 = flatS[2] - farL[2]
       if (d0 * d0 + d1 * d1 + d2 * d2 > ANCHOR_FLAT_MAX * ANCHOR_FLAT_MAX) {
         say('flat-left')
         continue
       }
       bilin(p.x - (FAR + 1) * nx, p.y - (FAR + 1) * ny, flatS)
-      d0 = flatS[0] - farR[0]; d1 = flatS[1] - farR[1]; d2 = flatS[2] - farR[2]
+      d0 = flatS[0] - farR[0]
+      d1 = flatS[1] - farR[1]
+      d2 = flatS[2] - farR[2]
       if (d0 * d0 + d1 * d1 + d2 * d2 > ANCHOR_FLAT_MAX * ANCHOR_FLAT_MAX) {
         say('flat-right')
         continue
@@ -330,7 +333,9 @@ export function subpixelEdgeChains(
 
     if (displaced) {
       const reverted = revertCorners(displaced, pts, e.closed)
-      if (diag) for (const i of reverted) diag({ edgeId: e.id, index: i, x: pts[i].x, y: pts[i].y, nx: 0, ny: 0, outcome: 'corner-revert', delta: 0 })
+      if (diag)
+        for (const i of reverted)
+          diag({ edgeId: e.id, index: i, x: pts[i].x, y: pts[i].y, nx: 0, ny: 0, outcome: 'corner-revert', delta: 0 })
       out.set(e.id, displaced)
     }
   }

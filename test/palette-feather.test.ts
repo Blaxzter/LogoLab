@@ -38,7 +38,10 @@ function putPx(data: Uint8ClampedArray, x: number, y: number, r: number, g: numb
  *  into shells that are each one narrow alpha band (std < the gate). */
 function featherDisc(): { width: number; height: number; data: Uint8ClampedArray } {
   const data = canvas()
-  const cx = 64, cy = 64, rCore = 40, rim = 4
+  const cx = 64,
+    cy = 64,
+    rCore = 40,
+    rim = 4
   const mix = (c: number): number => Math.round(c + (255 - c) * 0.35)
   for (let y = 0; y < SIZE; y++) {
     for (let x = 0; x < SIZE; x++) {

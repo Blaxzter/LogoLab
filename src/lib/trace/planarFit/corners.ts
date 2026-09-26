@@ -17,13 +17,7 @@ export const CORNER_MERGE = 3
  *
  * The reading is the angle between two chords taken ±`win` points along the chain.
  */
-export function readTurnCos(
-  pts: Vec[],
-  closed: boolean,
-  win: number,
-  lo: number,
-  hi: number,
-): Float64Array {
+export function readTurnCos(pts: Vec[], closed: boolean, win: number, lo: number, hi: number): Float64Array {
   const n = pts.length
   const cos = new Float64Array(n)
   cos.fill(1)
@@ -48,12 +42,7 @@ export function readTurnCos(
  * ∅ at the default threshold, so its pre-smoothing is unchanged. `turnDeg ≥ 180`
  * ⇒ ∅ (corner pinning disabled).
  */
-export function detectCorners(
-  pts: Vec[],
-  turnDeg: number,
-  closed: boolean,
-  win = CORNER_WINDOW,
-): Set<number> {
+export function detectCorners(pts: Vec[], turnDeg: number, closed: boolean, win = CORNER_WINDOW): Set<number> {
   const out = new Set<number>()
   const n = pts.length
   if (turnDeg >= 180 || n < 2 * win + 1) return out
@@ -88,7 +77,12 @@ export function detectCorners(
  * poison their neighbours' fitted tangents, and a staircase reads ~90° at ordinary step
  * vertices at small windows.
  */
-export function detectLoopCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = CORNER_MERGE): number[] {
+export function detectLoopCorners(
+  pts: Vec[],
+  turnDeg: number,
+  win = CORNER_WINDOW,
+  mergeDist = CORNER_MERGE,
+): number[] {
   const n = pts.length
   if (turnDeg >= 180 || n < 2 * win + 1) return []
   const wrap = (i: number): number => ((i % n) + n) % n
@@ -135,7 +129,12 @@ export function detectLoopCorners(pts: Vec[], turnDeg: number, win = CORNER_WIND
  * so a vertex's two staircase shoulders never yield two corners. The endpoint
  * regions (± `win`, junction anchors) are excluded, as in `detectCorners`.
  */
-export function detectOpenCorners(pts: Vec[], turnDeg: number, win = CORNER_WINDOW, mergeDist = CORNER_MERGE): number[] {
+export function detectOpenCorners(
+  pts: Vec[],
+  turnDeg: number,
+  win = CORNER_WINDOW,
+  mergeDist = CORNER_MERGE,
+): number[] {
   const n = pts.length
   if (turnDeg >= 180 || n < 2 * win + 1) return []
   const thr = Math.cos((turnDeg * Math.PI) / 180)

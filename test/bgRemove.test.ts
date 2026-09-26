@@ -59,13 +59,9 @@ test('floodRestore brings back a connected region from the pristine source', () 
   const H = 12
   const inLeft = (x: number, y: number) => x >= 2 && x < 8 && y >= 3 && y < 9
   const inRight = (x: number, y: number) => x >= 16 && x < 22 && y >= 3 && y < 9
-  const source = img(W, H, (x, y) =>
-    inLeft(x, y) || inRight(x, y) ? [200, 30, 40, 255] : [0, 0, 0, 0],
-  )
+  const source = img(W, H, (x, y) => (inLeft(x, y) || inRight(x, y) ? [200, 30, 40, 255] : [0, 0, 0, 0]))
   // Working: both squares present but with alpha zeroed (over-erased background).
-  const working = img(W, H, (x, y) =>
-    inLeft(x, y) || inRight(x, y) ? [200, 30, 40, 0] : [0, 0, 0, 0],
-  )
+  const working = img(W, H, (x, y) => (inLeft(x, y) || inRight(x, y) ? [200, 30, 40, 0] : [0, 0, 0, 0]))
 
   const affected = floodRestore(working, source, 4, 5, NO_FEATHER)
   assert.equal(affected, 36, 'restored the 6×6 left square only')
@@ -75,10 +71,7 @@ test('floodRestore brings back a connected region from the pristine source', () 
   assert.equal(at(18, 5), 0, 'disconnected right square stays transparent')
   // RGBA is copied straight from the source.
   const o = (5 * W + 4) * 4
-  assert.deepEqual(
-    [working.data[o], working.data[o + 1], working.data[o + 2], working.data[o + 3]],
-    [200, 30, 40, 255],
-  )
+  assert.deepEqual([working.data[o], working.data[o + 1], working.data[o + 2], working.data[o + 3]], [200, 30, 40, 255])
 })
 
 test('floodRestore returns 0 when the source dimensions do not match', () => {
@@ -99,9 +92,7 @@ test('floodRestore keys off the source so it bridges transparent working pixels'
   const inSq = (x: number, y: number) => x >= 2 && x < 10 && y >= 3 && y < 9 // 8×6 = 48
   const leftHalf = (x: number) => x < 6
   const source = img(W, H, (x, y) => (inSq(x, y) ? [200, 30, 40, 255] : [0, 0, 0, 0]))
-  const working = img(W, H, (x, y) =>
-    inSq(x, y) ? (leftHalf(x) ? [200, 30, 40, 0] : [0, 0, 0, 0]) : [0, 0, 0, 0],
-  )
+  const working = img(W, H, (x, y) => (inSq(x, y) ? (leftHalf(x) ? [200, 30, 40, 0] : [0, 0, 0, 0]) : [0, 0, 0, 0]))
 
   const affected = floodRestore(working, source, 3, 5, NO_FEATHER)
   assert.equal(affected, 48, 'restored the whole source square, bridging the cleared right half')
@@ -148,9 +139,7 @@ test('growMatte carries the foreground color into the pixels it reveals', () => 
   const W = 12
   const H = 12
   const inBlock = (x: number, y: number) => x >= 4 && x <= 8 && y >= 4 && y <= 8
-  const m = img(W, H, (x, y) =>
-    inBlock(x, y) ? [255, 255, 255, 255] : [20, 20, 40, 0],
-  )
+  const m = img(W, H, (x, y) => (inBlock(x, y) ? [255, 255, 255, 255] : [20, 20, 40, 0]))
 
   growMatte(m, 1)
 
@@ -268,7 +257,13 @@ test('alphaBounds honors the threshold', () => {
 test('alphaBounds clamps threshold to >=1 so a 0 threshold still yields null when empty', () => {
   // threshold 0 must not match fully-transparent (alpha 0) pixels — otherwise an
   // empty cutout would report the whole frame and drive a bogus full-size crop.
-  assert.equal(alphaBounds(img(8, 8, () => [0, 0, 0, 0]), 0), null)
+  assert.equal(
+    alphaBounds(
+      img(8, 8, () => [0, 0, 0, 0]),
+      0,
+    ),
+    null,
+  )
   // A real opaque pixel is still found at threshold 0.
   const m = img(8, 8, (x, y) => (x === 3 && y === 4 ? [0, 0, 0, 255] : [0, 0, 0, 0]))
   assert.deepEqual(alphaBounds(m, 0), { x: 3, y: 4, w: 1, h: 1 })
@@ -488,11 +483,9 @@ test('despeckle wipes a small near-background island but keeps a bright accent',
   const affected = despeckle(m)
   assert.equal(affected, 9, 'cleared exactly the 3×3 gray speck')
   for (let y = 3; y < 6; y++)
-    for (let x = 3; x < 6; x++)
-      assert.equal(m.data[(y * W + x) * 4 + 3], 0, `gray speck (${x},${y}) wiped`)
+    for (let x = 3; x < 6; x++) assert.equal(m.data[(y * W + x) * 4 + 3], 0, `gray speck (${x},${y}) wiped`)
   for (let y = 3; y < 6; y++)
-    for (let x = 15; x < 18; x++)
-      assert.equal(m.data[(y * W + x) * 4 + 3], 255, `red accent (${x},${y}) kept`)
+    for (let x = 15; x < 18; x++) assert.equal(m.data[(y * W + x) * 4 + 3], 255, `red accent (${x},${y}) kept`)
 })
 
 test('despeckle clears a half-transparent stranded speck (alpha < 200)', () => {
@@ -515,9 +508,7 @@ test('despeckle clears a thin stranded hairline regardless of color', () => {
   const col = 7
   const y0 = 10
   const y1 = 30
-  const m = img(W, H, (x, y) =>
-    x === col && y >= y0 && y < y1 ? [128, 128, 128, 255] : [4, 4, 4, 0],
-  )
+  const m = img(W, H, (x, y) => (x === col && y >= y0 && y < y1 ? [128, 128, 128, 255] : [4, 4, 4, 0]))
   const affected = despeckle(m)
   assert.equal(affected, y1 - y0, 'the whole hairline was cleared')
   assert.equal(m.data[((y0 + 5) * W + col) * 4 + 3], 0, 'a mid-hairline pixel is gone')
@@ -531,9 +522,7 @@ test('despeckle keeps a thin feature attached to the logo body', () => {
   const H = 30
   const inBlock = (x: number, y: number) => x >= 4 && x < 20 && y >= 4 && y < 20
   const onSpike = (x: number, y: number) => x >= 20 && x < 28 && y === 11
-  const m = img(W, H, (x, y) =>
-    inBlock(x, y) || onSpike(x, y) ? [200, 200, 200, 255] : [4, 4, 4, 0],
-  )
+  const m = img(W, H, (x, y) => (inBlock(x, y) || onSpike(x, y) ? [200, 200, 200, 255] : [4, 4, 4, 0]))
   const affected = despeckle(m)
   assert.equal(affected, 0, 'nothing cleared — the spike is attached to the big body')
   assert.equal(m.data[(11 * W + 25) * 4 + 3], 255, 'spike tip still opaque')

@@ -68,7 +68,11 @@ test('the tabs are listed by the header or by the menu, never both', () => {
   const nav = /<nav aria-label="Sections" className="([^"]*)"/.exec(APP)
   assert.ok(nav, 'the header tab nav lost its aria-label, or its className moved')
   const shown = [...nav[1].matchAll(/\b([a-z0-9]+):flex\b/g)].map((m) => m[1])
-  assert.equal(shown.length, 1, `the header nav should appear at exactly one breakpoint, got ${shown.join(', ') || 'none'}`)
+  assert.equal(
+    shown.length,
+    1,
+    `the header nav should appear at exactly one breakpoint, got ${shown.join(', ') || 'none'}`,
+  )
 
   // The menu's copy of the tab list — a `contents` wrapper so the rows stay flex
   // children of the nav, hidden from the width at which the header takes over.

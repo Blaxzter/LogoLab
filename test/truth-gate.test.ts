@@ -148,7 +148,6 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // them across the whole topology, snap each cluster to its refit) plus placing a junction
   // claimed by two snapped circles on their INTERSECTION: 0.78 → 0.07, with the case's own
   // untouched control ring unmoved — docs/vectorization-benchmarks.md §24.
-
 }
 
 /**
@@ -190,17 +189,17 @@ async function runCase(
   // this is the gate that sees it. Skipped elsewhere — evaluateTruthGates would
   // report it n/a anyway, so the render cost is only paid where it can gate.
   const paint = c.gradients && c.tier === 0 ? scoreDoc(img, doc) : null
-  const corners = opts.skipTier2Corners && c.tier === 2
-    ? {}
-    : { gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered }
+  const corners =
+    opts.skipTier2Corners && c.tier === 2 ? {} : { gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered }
   // §23's precision term, @512 only for now. Every radius in the corpus HALVES at 256, so
   // the metric's own question ("corner or curve?") is a different question there and its
   // allowances would be a different calibration; gating a brand-new lens for the first time
   // inside another lane's numbers is the misattribution §12 warned about with tier-2 corners.
   // Named in §23.3 as the next thing to extend.
-  const precision = res === RES && !(opts.skipTier2Corners && c.tier === 2)
-    ? { cornersInvented: g.cornersInvented, inventedMax: inventedMaxFor(c.name) }
-    : {}
+  const precision =
+    res === RES && !(opts.skipTier2Corners && c.tier === 2)
+      ? { cornersInvented: g.cornersInvented, inventedMax: inventedMaxFor(c.name) }
+      : {}
   // §24's circle recovery, @512 only for §23's reason (every radius halves at 256, so the
   // same relative error is half the pixels there — its own calibration, not this one's).
   const gtRaster = toRasterSpace(gt, img.width)
@@ -210,20 +209,24 @@ async function runCase(
   // at 256, so the same relative error is half the pixels there and the floor would mean a
   // different thing. Flat art only — the gate declares itself n/a otherwise, and on gradient
   // art the interior denominator is posterization banding rather than geometry.
-  const bb = res === RES && !c.gradients
-    ? scoreBorderBand(gtRaster, docSets, img.width, img.height, makeVisibleAt(img))
-    : null
-  const circle = cr
-    ? { circles: cr.circles, circleSpread: cr.spread, circleSpreadMax: circleSpreadMaxFor(c.name) }
-    : {}
+  const bb =
+    res === RES && !c.gradients ? scoreBorderBand(gtRaster, docSets, img.width, img.height, makeVisibleAt(img)) : null
+  const circle = cr ? { circles: cr.circles, circleSpread: cr.spread, circleSpreadMax: circleSpreadMaxFor(c.name) } : {}
   const gates = evaluateTruthGates({
-    samples: g.samples, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
-    trueRegions: r.trueRegions, recovered: r.recovered,
+    samples: g.samples,
+    chamfer: g.chamfer,
+    p95: g.p95,
+    parsimony: g.parsimony,
+    trueRegions: r.trueRegions,
+    recovered: r.recovered,
     ...corners,
     ...precision,
     ...circle,
-    paintMean: paint?.meanDeltaE, paintP95: paint?.p95DeltaE,
-    borderChamfer: bb?.chamfer, borderInterior: bb?.interior, borderSamples: bb?.n,
+    paintMean: paint?.meanDeltaE,
+    paintP95: paint?.p95DeltaE,
+    borderChamfer: bb?.chamfer,
+    borderInterior: bb?.interior,
+    borderSamples: bb?.n,
     // Ink kept (§0 #14): region recovery is a MEDIAN and only flips past 50% loss, so a
     // region can pinch to a sliver with every other gate green. Flat art only.
     worstInk: r.worstInk,
@@ -334,8 +337,12 @@ async function runRegionCase(c: TruthCase): Promise<void> {
   const gates = evaluateTruthGates({
     // Boundary is not gated in this lane (see TIER2_REGION_CORPUS): samples 0 reports
     // those gates n/a, and geometry is not scored at all, which is most of the runtime.
-    samples: 0, chamfer: 0, p95: 0, parsimony: 0,
-    trueRegions: r.trueRegions, recovered: r.recovered,
+    samples: 0,
+    chamfer: 0,
+    p95: 0,
+    parsimony: 0,
+    trueRegions: r.trueRegions,
+    recovered: r.recovered,
     worstInk: r.worstInk,
     flatArt: !c.gradients,
     tier: c.tier,

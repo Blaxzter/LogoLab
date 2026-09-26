@@ -33,7 +33,17 @@ const RES = 512
 
 // A round/corner/thin mix: `checker` is the §9.8 target; the rest are the shapes a
 // too-tight scale-relative ε would REGRESS by refusing a genuine small circle snap.
-const DEFAULT_CASES = ['checker', 'concentric', 'nebula', 'annulus', 'bloom', 'petals', 'sharp-star', 'hairlines', 'aa-seam']
+const DEFAULT_CASES = [
+  'checker',
+  'concentric',
+  'nebula',
+  'annulus',
+  'bloom',
+  'petals',
+  'sharp-star',
+  'hairlines',
+  'aa-seam',
+]
 
 const K_GRID = [0.1, 0.12, 0.14, 0.16, 0.18, 0.2, 0.25]
 
@@ -96,10 +106,16 @@ for (const c of cases) {
     const g = scoreGeometry(shapes, doc, img.width, img.height, img)
     const r = scoreRegions(img, doc)
     const gates = evaluateTruthGates({
-      samples: g.samples, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
-      trueRegions: r.trueRegions, recovered: r.recovered,
-      gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered,
-      flatArt: !c.gradients, tier: c.tier,
+      samples: g.samples,
+      chamfer: g.chamfer,
+      p95: g.p95,
+      parsimony: g.parsimony,
+      trueRegions: r.trueRegions,
+      recovered: r.recovered,
+      gtCorners: g.gtCorners,
+      cornersRecovered: g.cornersRecovered,
+      flatArt: !c.gradients,
+      tier: c.tier,
     })
     const cornerGate = gates.find((x) => x.key === 'corners')!
     rows.push({

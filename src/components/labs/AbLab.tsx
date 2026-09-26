@@ -381,11 +381,17 @@ function diffHeatBuffer(a: ImageData, b: ImageData): Uint8ClampedArray {
     const db = a.data[o + 2] - b.data[o + 2]
     const t = Math.min(1, Math.sqrt(dr * dr + dg * dg + db * db) / HEAT_SCALE)
     if (t < 0.02) {
-      out[o] = bg[0]; out[o + 1] = bg[1]; out[o + 2] = bg[2]; out[o + 3] = 255
+      out[o] = bg[0]
+      out[o + 1] = bg[1]
+      out[o + 2] = bg[2]
+      out[o + 3] = 255
       continue
     }
     const [hr, hg, hb] = heatColor(t)
-    out[o] = hr; out[o + 1] = hg; out[o + 2] = hb; out[o + 3] = 255
+    out[o] = hr
+    out[o + 1] = hg
+    out[o + 2] = hb
+    out[o + 3] = 255
   }
   return out
 }
@@ -465,8 +471,20 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
     const img = await labImageData(v.bPng, Math.max(v.bf.width, v.bf.height))
     const inv = (svg: string): number | undefined => inventedIn(svg, gt, img, v.bf.width, v.bf.height)
     variants.push(
-      { name: `${base.name}${label(v)}`, tone: 'base', svg: v.bSvg, note: `frozen ${base.manifest.rev} · ${base.manifest.date}`, invented: inv(v.bSvg) },
-      { name: `${head.name}${label(v)}`, tone: 'shipped', svg: v.hSvg, note: `frozen ${head.manifest.rev} · ${head.manifest.date}`, invented: inv(v.hSvg) },
+      {
+        name: `${base.name}${label(v)}`,
+        tone: 'base',
+        svg: v.bSvg,
+        note: `frozen ${base.manifest.rev} · ${base.manifest.date}`,
+        invented: inv(v.bSvg),
+      },
+      {
+        name: `${head.name}${label(v)}`,
+        tone: 'shipped',
+        svg: v.hSvg,
+        note: `frozen ${head.manifest.rev} · ${head.manifest.date}`,
+        invented: inv(v.hSvg),
+      },
     )
   }
 
@@ -481,7 +499,10 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
               rasterizeSvgResvg(v.hSvg, v.hf.width, { background: 'white' }),
             ])
             if (bImg.width !== hImg.width || bImg.height !== hImg.height) return null
-            return { label: `diff heat${label(v)}`, url: rgbaToUrl(diffHeatBuffer(bImg, hImg), bImg.width, bImg.height) }
+            return {
+              label: `diff heat${label(v)}`,
+              url: rgbaToUrl(diffHeatBuffer(bImg, hImg), bImg.width, bImg.height),
+            }
           }),
         )
       ).filter((h): h is { label: string; url: string } => h != null)
@@ -605,7 +626,10 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
           rasterizeSvgResvg(v.live, v.f.width, { background: 'white' }),
         ])
         if (snapImg.width !== liveImg.width || snapImg.height !== liveImg.height) return null
-        return { label: `diff heat${label(v)}`, url: rgbaToUrl(diffHeatBuffer(snapImg, liveImg), snapImg.width, snapImg.height) }
+        return {
+          label: `diff heat${label(v)}`,
+          url: rgbaToUrl(diffHeatBuffer(snapImg, liveImg), snapImg.width, snapImg.height),
+        }
       }),
     )
   ).filter((h): h is { label: string; url: string } => h != null)
@@ -624,7 +648,8 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
 }
 async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<AbAnalysis> {
   // Gallery cases carry their markup (c.text); fixtures are fetched from public/.
-  const svgText = c.kind === 'svg' ? (c.text ?? (await (c.file ? c.file.text() : (await fetch(c.src)).text()))) : undefined
+  const svgText =
+    c.kind === 'svg' ? (c.text ?? (await (c.file ? c.file.text() : (await fetch(c.src)).text()))) : undefined
   const image = await labImageData(c.src, raster, svgText, c.background ? { background: c.background } : undefined)
   const w = image.width
   const h = image.height
@@ -711,7 +736,8 @@ export default function AbLab() {
         ? found.filter(
             (c) =>
               !c.id ||
-              (selectedSnap.manifest.cases.some((s) => s.id === c.id) && (!vsSnap || vsSnap.manifest.cases.some((s) => s.id === c.id))),
+              (selectedSnap.manifest.cases.some((s) => s.id === c.id) &&
+                (!vsSnap || vsSnap.manifest.cases.some((s) => s.id === c.id))),
           )
         : found,
     [found, selectedSnap, vsSnap],
@@ -870,7 +896,10 @@ export default function AbLab() {
               options={LANES.map((l) => ({
                 value: l.value,
                 // An unfetched logo corpus is a fact worth showing, not an empty list.
-                label: l.value !== 'fixtures' && GALLERY.length === 0 ? `${l.label} (no logos — npm run fetch:logos)` : l.label,
+                label:
+                  l.value !== 'fixtures' && GALLERY.length === 0
+                    ? `${l.label} (no logos — npm run fetch:logos)`
+                    : l.label,
               }))}
             />
             {/* Variants mode only. In snapshot mode the stamp holds BOTH traces per case and the
@@ -879,11 +908,7 @@ export default function AbLab() {
                 filters them. (Input px is hidden there for the same reason: the input is pinned
                 to the stamp's stored pixels.) */}
             {!snapMode && (
-              <LabCheck
-                label="Gradients"
-                checked={ui.gradients}
-                onChange={(gradients) => setUi({ gradients })}
-              />
+              <LabCheck label="Gradients" checked={ui.gradients} onChange={(gradients) => setUi({ gradients })} />
             )}
             {!snapMode && (
               <LabSelect
@@ -917,10 +942,7 @@ export default function AbLab() {
           <div className="px-4 pt-3 text-xs text-muted">
             <b className="text-fg">{changedN}</b> changed
             {changedN > 0 && (
-              <span className="text-muted">
-                {' '}
-                ({laneN.map((x) => `${x.n} ${x.lane.label}`).join(' · ')})
-              </span>
+              <span className="text-muted"> ({laneN.map((x) => `${x.n} ${x.lane.label}`).join(' · ')})</span>
             )}{' '}
             · {unchangedN} unchanged
             {pairMode ? (
@@ -987,7 +1009,9 @@ export default function AbLab() {
                     <span
                       className={`rounded px-1 py-0.5 text-[0.6rem] ${a.changed ? 'bg-warn/20 text-warn' : 'text-faint'}`}
                     >
-                      {a.changed ? `changed · ${laneLabels(a.changedIn)}` : `unchanged · showing ${laneLabels(a.shownLanes) || 'gradients off'}`}
+                      {a.changed
+                        ? `changed · ${laneLabels(a.changedIn)}`
+                        : `unchanged · showing ${laneLabels(a.shownLanes) || 'gradients off'}`}
                     </span>
                   )}
                   {c.file && (
@@ -1058,92 +1082,77 @@ function AbAbout() {
   return (
     <>
       <p className="mb-2 max-w-[96ch]">
-        Every case is traced by the planar engine once per <b>variant</b> — the same image, the same
-        options, one <code>planarFit</code> flag apart. The boxes of a row share one camera (each row
-        zooms independently), so you can zoom into a single junction and see what each variant did
-        to it, side by side.
+        Every case is traced by the planar engine once per <b>variant</b> — the same image, the same options, one{' '}
+        <code>planarFit</code> flag apart. The boxes of a row share one camera (each row zooms independently), so you
+        can zoom into a single junction and see what each variant did to it, side by side.
       </p>
       <p className="mb-2 max-w-[96ch]">
-        <b>Input px</b> re-rasterizes the SVG cases at a different size: a tracer whose node and
-        junction counts swing with input resolution is fragile, and only a resolution-independent
-        source can reveal that. <b>Nodes/edges</b> reveals the wireframe already baked into every
-        panel — square dots are corners, round are smooth, green rings are junction vertices — with
-        no re-trace.
+        <b>Input px</b> re-rasterizes the SVG cases at a different size: a tracer whose node and junction counts swing
+        with input resolution is fragile, and only a resolution-independent source can reveal that. <b>Nodes/edges</b>{' '}
+        reveals the wireframe already baked into every panel — square dots are corners, round are smooth, green rings
+        are junction vertices — with no re-trace.
       </p>
       <p className="mb-2 max-w-[96ch]">
         <b>Baseline</b> (the dropdown) picks what to compare against: a snapshot frozen by{' '}
-        <code>pnpm gen:absnapshot [name]</code> — each is its own subdir under test/ab-snapshots,
-        so several coexist and you pick which to diff against (newest first; the manifest records
-        the git rev + date). Both panels then trace the snapshot&apos;s own stored pixels, so what
-        differs is the code, never the rasterizer; the raster switch is hidden because the input is
-        pinned. Typical flow: BEFORE a change, freeze a baseline —{' '}
-        <code>pnpm gen:absnapshot before-thing</code> — then this page shows exactly what the
-        working tree changed against it. <b>Changed only</b> collapses the corpus to just the cases
-        whose trace actually moved (an exact serialization diff — a snapshot IS{' '}
-        <code>serializeDoc</code> at its rev), and each changed case gets a <b>diff heat</b> panel
-        that rasterizes both traces and paints WHERE they disagree (the shared cold→hot ramp) — so
-        a change is located, not just flagged. Re-run to re-bless a snapshot after a change is
-        accepted. (Residual caveat: the browser&apos;s canvas PNG decode can differ from
-        Node&apos;s by ±1 on a few partial-alpha pixels — the aurora story in docs/labs.md — which
-        is far below anything judged visually here.)
+        <code>pnpm gen:absnapshot [name]</code> — each is its own subdir under test/ab-snapshots, so several coexist and
+        you pick which to diff against (newest first; the manifest records the git rev + date). Both panels then trace
+        the snapshot&apos;s own stored pixels, so what differs is the code, never the rasterizer; the raster switch is
+        hidden because the input is pinned. Typical flow: BEFORE a change, freeze a baseline —{' '}
+        <code>pnpm gen:absnapshot before-thing</code> — then this page shows exactly what the working tree changed
+        against it. <b>Changed only</b> collapses the corpus to just the cases whose trace actually moved (an exact
+        serialization diff — a snapshot IS <code>serializeDoc</code> at its rev), and each changed case gets a{' '}
+        <b>diff heat</b> panel that rasterizes both traces and paints WHERE they disagree (the shared cold→hot ramp) —
+        so a change is located, not just flagged. Re-run to re-bless a snapshot after a change is accepted. (Residual
+        caveat: the browser&apos;s canvas PNG decode can differ from Node&apos;s by ±1 on a few partial-alpha pixels —
+        the aurora story in docs/labs.md — which is far below anything judged visually here.)
       </p>
       <p className="mb-2 max-w-[96ch]">
-        <b>Compare with</b> is the second half of that question, and its default is the{' '}
-        <b>working tree</b>. Point it at another <b>snapshot</b> instead and nothing is traced at
-        all: both panels are frozen stamps, diffed against each other. That matters because the
-        prescribed workflow produces two stamps per change — freeze <code>before-x</code>, change
-        the tracer, freeze <code>after-x</code> — and those two are a <b>set</b>. A
-        working-tree comparison decays the moment you keep editing; a frozen-vs-frozen one does
-        not, and it is the only way to compare two revisions when neither is checked out. Such a
-        set shows up in the Baseline dropdown under <b>⇄ Pairs</b> as a single entry that selects
-        both sides at once — detected from the <code>before-</code>/<code>after-</code> naming, or
-        recorded explicitly with <code>pnpm gen:absnapshot after-x --pair before-x</code> for names
-        outside that convention. One guard is worth knowing: two stamps taken far apart may have
-        traced <i>different pixels</i> for the same case (a fixture SVG was edited,{' '}
-        <code>AB_SNAPSHOT_RES</code> changed), and a trace diff would then report an art change as
-        a code change — so both stored input PNGs are compared byte-for-byte and a mismatched row
-        is marked <b>input differs</b> and kept out of the counts rather than answered wrongly.
+        <b>Compare with</b> is the second half of that question, and its default is the <b>working tree</b>. Point it at
+        another <b>snapshot</b> instead and nothing is traced at all: both panels are frozen stamps, diffed against each
+        other. That matters because the prescribed workflow produces two stamps per change — freeze{' '}
+        <code>before-x</code>, change the tracer, freeze <code>after-x</code> — and those two are a <b>set</b>. A
+        working-tree comparison decays the moment you keep editing; a frozen-vs-frozen one does not, and it is the only
+        way to compare two revisions when neither is checked out. Such a set shows up in the Baseline dropdown under{' '}
+        <b>⇄ Pairs</b> as a single entry that selects both sides at once — detected from the <code>before-</code>/
+        <code>after-</code> naming, or recorded explicitly with <code>pnpm gen:absnapshot after-x --pair before-x</code>{' '}
+        for names outside that convention. One guard is worth knowing: two stamps taken far apart may have traced{' '}
+        <i>different pixels</i> for the same case (a fixture SVG was edited, <code>AB_SNAPSHOT_RES</code> changed), and
+        a trace diff would then report an art change as a code change — so both stored input PNGs are compared
+        byte-for-byte and a mismatched row is marked <b>input differs</b> and kept out of the counts rather than
+        answered wrongly.
       </p>
       <p className="mb-2 max-w-[96ch]">
-        A stamp freezes <b>two</b> traces per case — gradients off and on — so in Vs-snapshot mode
-        the <b>Gradients</b> toggle only picks which frozen pair is on screen (both panels always
-        use the same setting; the input is one stored PNG either way). The <b>changed</b> verdict
-        is not a mode at all: a stamp freezes <b>both</b> traces per case (gradients off and on),
-        both are compared, and <b>whichever moved is what you see</b> — its snapshot pair and its
-        own diff heat, labelled with the setting, flat first. A case that moved in both shows two
-        pairs and two heats; one that moved in neither shows the flat pair alone, because there
-        is nothing to locate. The row badge always names the lane on screen (<i>changed ·
-        gradients</i>, <i>unchanged · showing flat</i>) — worth reading, because two different
-        baselines can put two different lanes in front of you and a lane switch looks exactly
-        like a regression. (Real example: <code>checker</code>&apos;s gradient trace has been
-        visibly warped since the oldest stamp on disk while its flat trace is pixel-perfect, so
-        a baseline that moves it shows the warped lane and one that doesn&apos;t shows the clean
-        one — same working tree, both times.) That is why there is no Gradients toggle here (nor an Input px one:
-        the input is pinned to the stamp&apos;s stored pixels) — §14&apos;s fix moved four FLAT
-        traces and no gradient one, and a page whose verdict follows a control is a page that can
-        be read wrong.
+        A stamp freezes <b>two</b> traces per case — gradients off and on — so in Vs-snapshot mode the <b>Gradients</b>{' '}
+        toggle only picks which frozen pair is on screen (both panels always use the same setting; the input is one
+        stored PNG either way). The <b>changed</b> verdict is not a mode at all: a stamp freezes <b>both</b> traces per
+        case (gradients off and on), both are compared, and <b>whichever moved is what you see</b> — its snapshot pair
+        and its own diff heat, labelled with the setting, flat first. A case that moved in both shows two pairs and two
+        heats; one that moved in neither shows the flat pair alone, because there is nothing to locate. The row badge
+        always names the lane on screen (<i>changed · gradients</i>, <i>unchanged · showing flat</i>) — worth reading,
+        because two different baselines can put two different lanes in front of you and a lane switch looks exactly like
+        a regression. (Real example: <code>checker</code>&apos;s gradient trace has been visibly warped since the oldest
+        stamp on disk while its flat trace is pixel-perfect, so a baseline that moves it shows the warped lane and one
+        that doesn&apos;t shows the clean one — same working tree, both times.) That is why there is no Gradients toggle
+        here (nor an Input px one: the input is pinned to the stamp&apos;s stored pixels) — §14&apos;s fix moved four
+        FLAT traces and no gradient one, and a page whose verdict follows a control is a page that can be read wrong.
       </p>
       <p className="mb-2 max-w-[96ch]">
-        <b>Cases</b> picks the lane. The ⟐ <b>fixtures</b> are handcrafted to isolate one mechanism
-        each, which makes them good gates and weak evidence — they are already &quot;good enough&quot;
-        long before real art is. The ◆ <b>gallery</b> lane is a slice of the same brand marks{' '}
-        <code>/labs/gallery</code> shows, rasterized on white exactly as that page does, so a change
-        can be judged on a mark you recognize. The two controls are independent axes — this one
-        picks the ART; what is traced is the variants (here) or whatever moved (Vs snapshot). One
-        thing worth knowing about a ◆ row: <code>/labs/gallery</code> itself traces FLAT, so the{' '}
-        <i>gradients off</i> panels are the gallery-parity view of that mark, and{' '}
-        <i>gradients on</i> is what the studio would do to it (the product default, with the
-        rampiness probe choosing per image). Both are stamped, so neither is lost. Those files are
-        gitignored (trademarks); run{' '}
-        <code>npm run fetch:logos</code> to fill the lane, edit <code>AB_LOGOS</code> in
-        bench/abCorpus.ts to change which marks it carries, or pass{' '}
-        <code>--logos all</code> / <code>--logos a,b</code> to the snapshot writer for a one-off.
-        Snapshots are <b>never committed</b> — they are local working artifacts, and this lane
-        traces art that must not be redistributed.
+        <b>Cases</b> picks the lane. The ⟐ <b>fixtures</b> are handcrafted to isolate one mechanism each, which makes
+        them good gates and weak evidence — they are already &quot;good enough&quot; long before real art is. The ◆{' '}
+        <b>gallery</b> lane is a slice of the same brand marks <code>/labs/gallery</code> shows, rasterized on white
+        exactly as that page does, so a change can be judged on a mark you recognize. The two controls are independent
+        axes — this one picks the ART; what is traced is the variants (here) or whatever moved (Vs snapshot). One thing
+        worth knowing about a ◆ row: <code>/labs/gallery</code> itself traces FLAT, so the <i>gradients off</i> panels
+        are the gallery-parity view of that mark, and <i>gradients on</i> is what the studio would do to it (the product
+        default, with the rampiness probe choosing per image). Both are stamped, so neither is lost. Those files are
+        gitignored (trademarks); run <code>npm run fetch:logos</code> to fill the lane, edit <code>AB_LOGOS</code> in
+        bench/abCorpus.ts to change which marks it carries, or pass <code>--logos all</code> / <code>--logos a,b</code>{' '}
+        to the snapshot writer for a one-off. Snapshots are <b>never committed</b> — they are local working artifacts,
+        and this lane traces art that must not be redistributed.
       </p>
       <p className="max-w-[96ch]">
-        Drop an image anywhere on the page (or use <b>Add image</b>) to run your own logo through
-        every variant. Dropped images last for the session (and have no snapshot).
+        Drop an image anywhere on the page (or use <b>Add image</b>) to run your own logo through every variant. Dropped
+        images last for the session (and have no snapshot).
       </p>
     </>
   )

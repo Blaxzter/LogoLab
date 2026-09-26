@@ -9,9 +9,7 @@ import { Sheet } from '../ui/Sheet'
 import type { IconShape } from '../../types'
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h3 className="text-[0.7rem] font-bold uppercase tracking-wider text-faint">{children}</h3>
-  )
+  return <h3 className="text-[0.7rem] font-bold uppercase tracking-wider text-faint">{children}</h3>
 }
 
 const SHAPE_LABEL: Record<IconShape, string> = {
@@ -46,14 +44,8 @@ function SidebarBody() {
   // One-line summaries shown on collapsed sections.
   const sizeSummary = `${Math.round(app.scale * 100)}% scale · ${app.padding}% pad`
   const cardSummary =
-    app.cardColor === 'transparent'
-      ? 'Transparent'
-      : `${SHAPE_LABEL[app.cardShape]} · ${app.cardColor}`
-  const recolorSummary = app.tintEnabled
-    ? `Tint ${app.tintColor}`
-    : app.invert
-      ? 'Inverted'
-      : 'Off'
+    app.cardColor === 'transparent' ? 'Transparent' : `${SHAPE_LABEL[app.cardShape]} · ${app.cardColor}`
+  const recolorSummary = app.tintEnabled ? `Tint ${app.tintColor}` : app.invert ? 'Inverted' : 'Off'
   const envSummary = isPreview
     ? `${env.theme === 'dark' ? 'Dark' : 'Light'}${env.brandName ? ` · ${env.brandName}` : ''}`
     : env.brandName || 'Unnamed'
@@ -80,13 +72,7 @@ function SidebarBody() {
                 />
               </Field>
               <Field label="Safe-zone padding">
-                <Slider
-                  value={app.padding}
-                  min={0}
-                  max={35}
-                  unit="%"
-                  onChange={(v) => setAppearance({ padding: v })}
-                />
+                <Slider value={app.padding} min={0} max={35} unit="%" onChange={(v) => setAppearance({ padding: v })} />
               </Field>
             </Collapsible>
 
@@ -95,25 +81,16 @@ function SidebarBody() {
               {isPreview && (
                 <Field
                   label="Draw card in flat contexts"
-                  right={
-                    <Toggle
-                      checked={app.cardInFlat}
-                      onChange={(v) => setAppearance({ cardInFlat: v })}
-                    />
-                  }
+                  right={<Toggle checked={app.cardInFlat} onChange={(v) => setAppearance({ cardInFlat: v })} />}
                 >
                   <p className="text-xs leading-snug text-muted">
-                    Adds a colored backplate behind the logo (great for white line-art). Always on
-                    for app-icon scenes; toggle controls flat scenes like nav bars &amp; favicons.
+                    Adds a colored backplate behind the logo (great for white line-art). Always on for app-icon scenes;
+                    toggle controls flat scenes like nav bars &amp; favicons.
                   </p>
                 </Field>
               )}
               <Field label="Card color">
-                <ColorField
-                  value={app.cardColor}
-                  onChange={(v) => setAppearance({ cardColor: v })}
-                  allowTransparent
-                />
+                <ColorField value={app.cardColor} onChange={(v) => setAppearance({ cardColor: v })} allowTransparent />
               </Field>
               <Field label="Shape">
                 <Segmented
@@ -146,16 +123,10 @@ function SidebarBody() {
             <Collapsible title="Recolor" summary={recolorSummary}>
               <Field
                 label="Recolor logo"
-                right={
-                  <Toggle
-                    checked={app.tintEnabled}
-                    onChange={(v) => setAppearance({ tintEnabled: v })}
-                  />
-                }
+                right={<Toggle checked={app.tintEnabled} onChange={(v) => setAppearance({ tintEnabled: v })} />}
               >
                 <p className="text-xs leading-snug text-muted">
-                  Paint a monochrome logo a single color via its alpha — preview a white mark in
-                  any brand color.
+                  Paint a monochrome logo a single color via its alpha — preview a white mark in any brand color.
                 </p>
               </Field>
               {app.tintEnabled && (
@@ -163,11 +134,7 @@ function SidebarBody() {
                   <ColorField value={app.tintColor} onChange={(v) => setAppearance({ tintColor: v })} />
                 </Field>
               )}
-              <Toggle
-                checked={app.invert}
-                onChange={(v) => setAppearance({ invert: v })}
-                label="Invert colors"
-              />
+              <Toggle checked={app.invert} onChange={(v) => setAppearance({ invert: v })} label="Invert colors" />
             </Collapsible>
 
             {/* Theme and page background only drive the Preview scenes; the brand
@@ -193,9 +160,7 @@ function SidebarBody() {
               <Field
                 label="Brand name"
                 hint={
-                  isPreview
-                    ? 'Shown as the app/site name inside mockups.'
-                    : 'Names the PWA manifest & exported files.'
+                  isPreview ? 'Shown as the app/site name inside mockups.' : 'Names the PWA manifest & exported files.'
                 }
               >
                 <TextField
@@ -213,13 +178,7 @@ function SidebarBody() {
       {/* Pinned Reset footer, shown only when the appearance differs from the defaults. */}
       {showStyling && !isDefaultAppearance(app) && (
         <div className="flex shrink-0 flex-col gap-3 border-t border-line bg-surface p-4">
-          <Button
-            variant="ghost"
-            block
-            icon={<RotateCcw size={16} />}
-            onClick={resetAppearance}
-            className="h-10"
-          >
+          <Button variant="ghost" block icon={<RotateCcw size={16} />} onClick={resetAppearance} className="h-10">
             Reset appearance
           </Button>
         </div>

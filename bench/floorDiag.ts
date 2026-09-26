@@ -63,7 +63,10 @@ const argv = process.argv.slice(2)
 const VALUE_FLAGS = new Set(['--lane', '--res', '--limit', '--fidelity', '--json'])
 const flag = (k: string): string => (argv.includes(k) ? (argv[argv.indexOf(k) + 1] ?? '') : '')
 const LANE = (flag('--lane') || 'tier2') as 'tier2' | 'tier0' | 'gallery'
-const RESOLUTIONS = (flag('--res') || (LANE === 'gallery' ? '256,1024' : '256,512')).split(',').map(Number).filter(Number.isFinite)
+const RESOLUTIONS = (flag('--res') || (LANE === 'gallery' ? '256,1024' : '256,512'))
+  .split(',')
+  .map(Number)
+  .filter(Number.isFinite)
 const LIMIT = Number(flag('--limit')) || Infinity
 /** 'sample' (tier-2 lane in full + the first 8 gallery marks), 'all', or 'none'. */
 const FIDELITY = flag('--fidelity') || 'sample'
@@ -79,13 +82,26 @@ const relFloor = (w: number): number => Math.round(F_DIAL * (w / REF_RES) ** 2)
 
 type Consumer = 'anchor' | 'real' | 'modal' | 'restore' | 'despeckle'
 type Floors = Record<Consumer, number>
-interface Recipe { key: string; label: string; floors: Floors }
+interface Recipe {
+  key: string
+  label: string
+  floors: Floors
+}
 const recipesFor = (w: number): Recipe[] => {
-  const R = relFloor(w), F = F_DIAL
+  const R = relFloor(w),
+    F = F_DIAL
   return [
-    { key: 'A', label: `A  internal ${R} · despeckle ${F}`, floors: { anchor: R, real: R, modal: R, restore: F, despeckle: F } },
+    {
+      key: 'A',
+      label: `A  internal ${R} · despeckle ${F}`,
+      floors: { anchor: R, real: R, modal: R, restore: F, despeckle: F },
+    },
     { key: 'B', label: `B  all ${R}`, floors: { anchor: R, real: R, modal: R, restore: R, despeckle: R } },
-    { key: 'C', label: `C  internal ${F} · despeckle ${R}`, floors: { anchor: F, real: F, modal: F, restore: R, despeckle: R } },
+    {
+      key: 'C',
+      label: `C  internal ${F} · despeckle ${R}`,
+      floors: { anchor: F, real: F, modal: F, restore: R, despeckle: R },
+    },
   ]
 }
 
@@ -112,40 +128,66 @@ function patchOnce(src: string, find: string, replace: string, what: string): st
 
 function buildShadow(): string {
   let ps = readFileSync(join(traceDir, 'paletteSegment.ts'), 'utf8').replace(/\r\n/g, '\n')
-  if (/import\(\s*['"]\./.test(ps)) throw new Error('paletteSegment.ts has a relative dynamic import the shadow cannot resolve')
-  ps = patchOnce(ps,
+  if (/import\(\s*['"]\./.test(ps))
+    throw new Error('paletteSegment.ts has a relative dynamic import the shadow cannot resolve')
+  ps = patchOnce(
+    ps,
     `let q = quantize(img as ImageData, opts.maxColors, opts.minRegionArea)`,
-    `let q = quantize(img as ImageData, opts.maxColors, __floor(opts, 'anchor'))`, 'anchor floor (quantize keepDistinctMinArea)')
-  ps = patchOnce(ps,
+    `let q = quantize(img as ImageData, opts.maxColors, __floor(opts, 'anchor'))`,
+    'anchor floor (quantize keepDistinctMinArea)',
+  )
+  ps = patchOnce(
+    ps,
     `const real = Array.from(flat, (c) => c >= opts.minRegionArea)`,
-    `const real = Array.from(flat, (c) => c >= __floor(opts, 'real'))`, 'real[] flat-interior floor')
-  ps = patchOnce(ps,
+    `const real = Array.from(flat, (c) => c >= __floor(opts, 'real'))`,
+    'real[] flat-interior floor',
+  )
+  ps = patchOnce(
+    ps,
     `const protect = real.map((r, i) => r || (!blend[i] && modal[i] >= opts.minRegionArea))`,
-    `const protect = real.map((r, i) => r || (!blend[i] && modal[i] >= __floor(opts, 'modal')))`, 'modal[] thin-feature floor')
-  ps = patchOnce(ps,
+    `const protect = real.map((r, i) => r || (!blend[i] && modal[i] >= __floor(opts, 'modal')))`,
+    'modal[] thin-feature floor',
+  )
+  ps = patchOnce(
+    ps,
     `const restored = restoreErasedComponents(labels, smoothed, img.width, img.height, opts.minRegionArea, img.data)`,
-    `const restored = restoreErasedComponents(labels, smoothed, img.width, img.height, __floor(opts, 'restore'), img.data)`, 'restoreErasedComponents floor')
-  ps = patchOnce(ps,
+    `const restored = restoreErasedComponents(labels, smoothed, img.width, img.height, __floor(opts, 'restore'), img.data)`,
+    'restoreErasedComponents floor',
+  )
+  ps = patchOnce(
+    ps,
     `    opts.minRegionArea,\n    opts.regionEvidence !== false`,
-    `    __floor(opts, 'despeckle'),\n    opts.regionEvidence !== false`, 'despeckleComponents floor')
-  if (ps.includes('opts.minRegionArea')) throw new Error('floorDiag shadow: an unpatched `opts.minRegionArea` read remains in paletteSegment.ts')
-  ps = `// SHADOW of src/lib/trace/paletteSegment.ts written by floorDiag.ts — five floor reads split per consumer. Not source.\n` +
-    `const __floor = (o: any, k: string): number => o.__floors?.[k] ?? o.minRegionArea\n` + absolutize(ps, traceDir)
+    `    __floor(opts, 'despeckle'),\n    opts.regionEvidence !== false`,
+    'despeckleComponents floor',
+  )
+  if (ps.includes('opts.minRegionArea'))
+    throw new Error('floorDiag shadow: an unpatched `opts.minRegionArea` read remains in paletteSegment.ts')
+  ps =
+    `// SHADOW of src/lib/trace/paletteSegment.ts written by floorDiag.ts — five floor reads split per consumer. Not source.\n` +
+    `const __floor = (o: any, k: string): number => o.__floors?.[k] ?? o.minRegionArea\n` +
+    absolutize(ps, traceDir)
   const psPath = join(shadowDir, 'paletteSegment.shadow.ts')
   writeFileSync(psPath, ps)
 
   let ix = readFileSync(join(traceDir, 'index.ts'), 'utf8').replace(/\r\n/g, '\n')
   if (/import\(\s*['"]\./.test(ix)) throw new Error('index.ts has a relative dynamic import the shadow cannot resolve')
   ix = patchOnce(ix, `from './paletteSegment.ts'`, `from '${pathToFileURL(psPath).href}'`, 'paletteSegment import')
-  ix = patchOnce(ix,
+  ix = patchOnce(
+    ix,
     `    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.dominantColors > FLAT_PALETTE_MAX_COLORS)) fp = null`,
     `    ;(globalThis as any).__floorDiagFp = { dominantColors: fp.dominantColors, flatCoverage: fp.flatCoverage, paletteLen: fp.palette.length }\n` +
       `    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.dominantColors > FLAT_PALETTE_MAX_COLORS)) fp = null\n` +
-      `    ;(globalThis as any).__floorDiagEngine = fp ? 'palette' : 'ms'`, 'engine gate tap')
-  ix = patchOnce(ix,
+      `    ;(globalThis as any).__floorDiagEngine = fp ? 'palette' : 'ms'`,
+    'engine gate tap',
+  )
+  ix = patchOnce(
+    ix,
     `    onPlanarLabels?.({ labels, width, height })`,
-    `    ;(globalThis as any).__floorDiagPalette = q.palette\n    onPlanarLabels?.({ labels, width, height })`, 'palette tap')
-  ix = `// SHADOW of src/lib/trace/index.ts written by floorDiag.ts — imports the shadow paletteSegment; two diagnostic taps. Not source.\n` +
+    `    ;(globalThis as any).__floorDiagPalette = q.palette\n    onPlanarLabels?.({ labels, width, height })`,
+    'palette tap',
+  )
+  ix =
+    `// SHADOW of src/lib/trace/index.ts written by floorDiag.ts — imports the shadow paletteSegment; two diagnostic taps. Not source.\n` +
     absolutize(ix, traceDir)
   const ixPath = join(shadowDir, 'index.shadow.ts')
   writeFileSync(ixPath, ix)
@@ -171,9 +213,15 @@ const sameLabels = (a: Int32Array, b: Int32Array): boolean => {
   return true
 }
 const samePalette = (a: PaletteColor[], b: PaletteColor[]): boolean =>
-  a.length === b.length && a.every((c, i) => c.r === b[i].r && c.g === b[i].g && c.b === b[i].b && (c.a ?? 255) === (b[i].a ?? 255))
+  a.length === b.length &&
+  a.every((c, i) => c.r === b[i].r && c.g === b[i].g && c.b === b[i].b && (c.a ?? 255) === (b[i].a ?? 255))
 
-async function traceWith(img: Img, floors: Floors | null, gradients: boolean, ref?: Traced): Promise<Traced | 'identical'> {
+async function traceWith(
+  img: Img,
+  floors: Floors | null,
+  gradients: boolean,
+  ref?: Traced,
+): Promise<Traced | 'identical'> {
   const g = globalThis as any
   g.__floorDiagEngine = 'none'
   g.__floorDiagPalette = null
@@ -188,7 +236,10 @@ async function traceWith(img: Img, floors: Floors | null, gradients: boolean, re
         gradients,
         ...(floors ? { paletteSegment: { __floors: floors } as any } : {}),
       },
-      undefined, undefined, undefined, undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       (l) => {
         labels = l.labels
         if (ref && sameLabels(ref.labels, l.labels) && samePalette(ref.palette, g.__floorDiagPalette)) throw IDENTICAL
@@ -214,12 +265,19 @@ function parseAuthored(svg: string): Set<number> {
   const out = new Set<number>()
   const addHex = (h: string): void => {
     let s = h
-    if (s.length === 3 || s.length === 4) s = s.slice(0, 3).split('').map((c) => c + c).join('')
+    if (s.length === 3 || s.length === 4)
+      s = s
+        .slice(0, 3)
+        .split('')
+        .map((c) => c + c)
+        .join('')
     else if (s.length === 8) s = s.slice(0, 6)
     if (s.length === 6) out.add(parseInt(s, 16))
   }
   for (const m of svg.matchAll(/(?:^|[\s;"'{])(?:fill|stroke)\s*[:=]\s*["']?\s*#([0-9a-fA-F]{3,8})\b/g)) addHex(m[1])
-  for (const m of svg.matchAll(/(?:^|[\s;"'{])(?:fill|stroke)\s*[:=]\s*["']?\s*rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/g))
+  for (const m of svg.matchAll(
+    /(?:^|[\s;"'{])(?:fill|stroke)\s*[:=]\s*["']?\s*rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/g,
+  ))
     out.add((Number(m[1]) << 16) | (Number(m[2]) << 8) | Number(m[3]))
   return out
 }
@@ -247,10 +305,18 @@ function census(img: Img, svg: string): { colours: ColourCensus[]; derived: bool
       const i = y * w + x
       const k = rgbAt(i)
       if (
-        rgbAt(i - w - 1) === k && rgbAt(i - w) === k && rgbAt(i - w + 1) === k &&
-        rgbAt(i - 1) === k && rgbAt(i + 1) === k &&
-        rgbAt(i + w - 1) === k && rgbAt(i + w) === k && rgbAt(i + w + 1) === k
-      ) { flatMask[i] = 1; flat3.set(k, (flat3.get(k) ?? 0) + 1) }
+        rgbAt(i - w - 1) === k &&
+        rgbAt(i - w) === k &&
+        rgbAt(i - w + 1) === k &&
+        rgbAt(i - 1) === k &&
+        rgbAt(i + 1) === k &&
+        rgbAt(i + w - 1) === k &&
+        rgbAt(i + w) === k &&
+        rgbAt(i + w + 1) === k
+      ) {
+        flatMask[i] = 1
+        flat3.set(k, (flat3.get(k) ?? 0) + 1)
+      }
     }
   }
   // Authored colour set: the SVG's fills that actually appear in the raster, plus the paper.
@@ -271,12 +337,20 @@ function census(img: Img, svg: string): { colours: ColourCensus[]; derived: bool
     const k = rgbAt(i)
     let a = cache.get(k)
     if (a === undefined) {
-      const r = (k >> 16) & 255, g = (k >> 8) & 255, b = k & 255
-      let best = 0, bd = Infinity
+      const r = (k >> 16) & 255,
+        g = (k >> 8) & 255,
+        b = k & 255
+      let best = 0,
+        bd = Infinity
       for (let c = 0; c < cols.length; c++) {
-        const dr = r - cols[c].r, dg = g - cols[c].g, db = b - cols[c].b
+        const dr = r - cols[c].r,
+          dg = g - cols[c].g,
+          db = b - cols[c].b
         const d = dr * dr + dg * dg + db * db
-        if (d < bd) { bd = d; best = c }
+        if (d < bd) {
+          bd = d
+          best = c
+        }
       }
       a = best
       cache.set(k, a)
@@ -293,23 +367,40 @@ function census(img: Img, svg: string): { colours: ColourCensus[]; derived: bool
     seen[start] = 1
     stack.length = 0
     stack.push(start)
-    let size = 0, evidence = false
+    let size = 0,
+      evidence = false
     while (stack.length) {
       const p = stack.pop()!
       size++
       if (!evidence && flatMask[p] && rgbAt(p) === key) evidence = true
-      const x = p % w, y = (p / w) | 0
-      if (x > 0 && !seen[p - 1] && assign[p - 1] === a) { seen[p - 1] = 1; stack.push(p - 1) }
-      if (x < w - 1 && !seen[p + 1] && assign[p + 1] === a) { seen[p + 1] = 1; stack.push(p + 1) }
-      if (y > 0 && !seen[p - w] && assign[p - w] === a) { seen[p - w] = 1; stack.push(p - w) }
-      if (y < h - 1 && !seen[p + w] && assign[p + w] === a) { seen[p + w] = 1; stack.push(p + w) }
+      const x = p % w,
+        y = (p / w) | 0
+      if (x > 0 && !seen[p - 1] && assign[p - 1] === a) {
+        seen[p - 1] = 1
+        stack.push(p - 1)
+      }
+      if (x < w - 1 && !seen[p + 1] && assign[p + 1] === a) {
+        seen[p + 1] = 1
+        stack.push(p + 1)
+      }
+      if (y > 0 && !seen[p - w] && assign[p - w] === a) {
+        seen[p - w] = 1
+        stack.push(p - w)
+      }
+      if (y < h - 1 && !seen[p + w] && assign[p + w] === a) {
+        seen[p + w] = 1
+        stack.push(p + w)
+      }
     }
     comps[a].push({ size, evidence })
   }
   return {
     derived,
     colours: keys.map((k, a) => ({
-      hex: hexOf(k), key: k, exactPx: exact.get(k) ?? 0, flat3: flat3.get(k) ?? 0,
+      hex: hexOf(k),
+      key: k,
+      exactPx: exact.get(k) ?? 0,
+      flat3: flat3.get(k) ?? 0,
       comps: comps[a].sort((p, q) => q.size - p.size),
     })),
   }
@@ -328,7 +419,16 @@ interface FloorCounts {
   wholeColourUnder: number
 }
 function countUnder(cs: ColourCensus[], F: number): FloorCounts {
-  const out: FloorCounts = { colours: cs.length, underReal: 0, underModal: 0, comps: 0, underDespeckle: 0, underDespeckleNoEvidence: 0, underDespeckleNoEvidenceGe9: 0, wholeColourUnder: 0 }
+  const out: FloorCounts = {
+    colours: cs.length,
+    underReal: 0,
+    underModal: 0,
+    comps: 0,
+    underDespeckle: 0,
+    underDespeckleNoEvidence: 0,
+    underDespeckleNoEvidenceGe9: 0,
+    wholeColourUnder: 0,
+  }
   for (const c of cs) {
     if (c.flat3 < F) out.underReal++
     if (c.exactPx < F) out.underModal++
@@ -347,31 +447,63 @@ function countUnder(cs: ColourCensus[], F: number): FloorCounts {
   }
   return out
 }
-const addCounts = (a: FloorCounts, b: FloorCounts): void => { for (const k of Object.keys(a) as (keyof FloorCounts)[]) a[k] += b[k] }
-const zeroCounts = (): FloorCounts => ({ colours: 0, underReal: 0, underModal: 0, comps: 0, underDespeckle: 0, underDespeckleNoEvidence: 0, underDespeckleNoEvidenceGe9: 0, wholeColourUnder: 0 })
+const addCounts = (a: FloorCounts, b: FloorCounts): void => {
+  for (const k of Object.keys(a) as (keyof FloorCounts)[]) a[k] += b[k]
+}
+const zeroCounts = (): FloorCounts => ({
+  colours: 0,
+  underReal: 0,
+  underModal: 0,
+  comps: 0,
+  underDespeckle: 0,
+  underDespeckleNoEvidence: 0,
+  underDespeckleNoEvidenceGe9: 0,
+  wholeColourUnder: 0,
+})
 
 // --- sources ---------------------------------------------------------------------------------
-interface Src { name: string; svg: string; gradients: boolean; inkFamilies?: string[][] }
+interface Src {
+  name: string
+  svg: string
+  gradients: boolean
+  inkFamilies?: string[][]
+}
 let sources: Src[] =
   LANE === 'tier2'
-    ? TIER2_REGION_CORPUS.map((c) => ({ name: c.name, svg: join(root, c.svg), gradients: c.gradients, inkFamilies: c.inkFamilies }))
+    ? TIER2_REGION_CORPUS.map((c) => ({
+        name: c.name,
+        svg: join(root, c.svg),
+        gradients: c.gradients,
+        inkFamilies: c.inkFamilies,
+      }))
     : LANE === 'tier0'
       ? // The flat tier-0 fixtures — the family's own witnesses live here (hairlines, peak-drop, scale-blind, checker).
-        TRUTH_CORPUS.filter((c) => c.tier === 0 && !c.gradients).map((c) => ({ name: c.name, svg: join(root, c.svg), gradients: false, inkFamilies: c.inkFamilies }))
+        TRUTH_CORPUS.filter((c) => c.tier === 0 && !c.gradients).map((c) => ({
+          name: c.name,
+          svg: join(root, c.svg),
+          gradients: false,
+          inkFamilies: c.inkFamilies,
+        }))
       : readdirSync(join(root, 'examples', 'logos'))
-        .filter((f) => f.endsWith('.svg'))
-        .map((f) => ({ name: f.replace(/\.svg$/, ''), svg: join(root, 'examples', 'logos', f), gradients: false }))
+          .filter((f) => f.endsWith('.svg'))
+          .map((f) => ({ name: f.replace(/\.svg$/, ''), svg: join(root, 'examples', 'logos', f), gradients: false }))
 if (ONLY.length) sources = sources.filter((s) => ONLY.includes(s.name))
 if (sources.length > LIMIT) sources = sources.slice(0, LIMIT)
 if (sources.length === 0) {
-  console.log(`⨯ no cases (lane ${LANE}${LANE === 'gallery' ? ' — is examples/logos fetched? `npm run fetch:logos`' : ''})`)
+  console.log(
+    `⨯ no cases (lane ${LANE}${LANE === 'gallery' ? ' — is examples/logos fetched? `npm run fetch:logos`' : ''})`,
+  )
   process.exit(1)
 }
 
 // --- the run ---------------------------------------------------------------------------------
 const pp = (v: number): string => (v * 100).toFixed(1) + '%'
 const sgn = (v: number, d = 0): string => (v > 0 ? '+' : '') + v.toFixed(d)
-interface InkRow { hex: string; kept: number; srcPx: number }
+interface InkRow {
+  hex: string
+  kept: number
+  srcPx: number
+}
 const inkOf = (r: RegionScore): InkRow[] => r.ink.map((i) => ({ hex: i.hex, kept: i.kept, srcPx: i.srcPx }))
 
 interface CaseRow {
@@ -382,7 +514,16 @@ interface CaseRow {
   derived: boolean
   censusAbs: FloorCounts
   censusRel: FloorCounts
-  P: { regions: number; trueRegions: number; worstInk: number; nodes: number; items: number; engine: string; fp: Traced['fp']; hash: string }
+  P: {
+    regions: number
+    trueRegions: number
+    worstInk: number
+    nodes: number
+    items: number
+    engine: string
+    fp: Traced['fp']
+    hash: string
+  }
   fidelity?: 'identical' | 'DIFFERS' | 'skipped'
   recipes: {
     key: string
@@ -410,20 +551,65 @@ console.log(
     `\n  shadow: ${shadowDir}`,
 )
 
-let fidelityChecked = 0, fidelityFailed = 0
+let fidelityChecked = 0,
+  fidelityFailed = 0
 for (const res of RESOLUTIONS) {
   const R = relFloor(res)
-  console.log(`\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  @ ${res}px  —  F_DIAL ${F_DIAL}, F_rel ${R}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-  const aggAbs = zeroCounts(), aggRel = zeroCounts()
-  let rendered = 0, derivedN = 0
-  const recipeAgg = new Map<string, { n: number; identical: number; sameDoc: number; changed: number; byConstruction: number; dRegions: number; regionsUp: number; regionsDown: number; inkBetter: number; inkWorse: number; distNearer: number; distFarther: number; dInkDist: number; flips: number; dNodes: number; movers: string[] }>()
-  for (const rc of recipesFor(res)) recipeAgg.set(rc.key, { n: 0, identical: 0, sameDoc: 0, changed: 0, byConstruction: 0, dRegions: 0, regionsUp: 0, regionsDown: 0, inkBetter: 0, inkWorse: 0, distNearer: 0, distFarther: 0, dInkDist: 0, flips: 0, dNodes: 0, movers: [] })
+  console.log(
+    `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  @ ${res}px  —  F_DIAL ${F_DIAL}, F_rel ${R}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+  )
+  const aggAbs = zeroCounts(),
+    aggRel = zeroCounts()
+  let rendered = 0,
+    derivedN = 0
+  const recipeAgg = new Map<
+    string,
+    {
+      n: number
+      identical: number
+      sameDoc: number
+      changed: number
+      byConstruction: number
+      dRegions: number
+      regionsUp: number
+      regionsDown: number
+      inkBetter: number
+      inkWorse: number
+      distNearer: number
+      distFarther: number
+      dInkDist: number
+      flips: number
+      dNodes: number
+      movers: string[]
+    }
+  >()
+  for (const rc of recipesFor(res))
+    recipeAgg.set(rc.key, {
+      n: 0,
+      identical: 0,
+      sameDoc: 0,
+      changed: 0,
+      byConstruction: 0,
+      dRegions: 0,
+      regionsUp: 0,
+      regionsDown: 0,
+      inkBetter: 0,
+      inkWorse: 0,
+      distNearer: 0,
+      distFarther: 0,
+      dInkDist: 0,
+      flips: 0,
+      dNodes: 0,
+      movers: [],
+    })
 
   for (const src of sources) {
     let svg: string, img: Img
     try {
       svg = readFileSync(src.svg, 'utf8')
-      img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng()) as unknown as Img
+      img = decodePng(
+        new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng(),
+      ) as unknown as Img
     } catch (e) {
       console.log(`  ${src.name}: render failed (${(e as Error).message.split('\n')[0]}) — skipped`)
       continue
@@ -434,7 +620,8 @@ for (const res of RESOLUTIONS) {
     // 1. CENSUS
     const cen = census(img, svg)
     if (cen.derived) derivedN++
-    const cAbs = countUnder(cen.colours, F_DIAL), cRel = countUnder(cen.colours, R)
+    const cAbs = countUnder(cen.colours, F_DIAL),
+      cRel = countUnder(cen.colours, R)
     addCounts(aggAbs, cAbs)
     addCounts(aggRel, cRel)
 
@@ -445,15 +632,35 @@ for (const res of RESOLUTIONS) {
     let fidelity: CaseRow['fidelity'] = 'skipped'
     const wantFidelity = FIDELITY === 'all' || (FIDELITY === 'sample' && (LANE !== 'gallery' || rendered <= 8))
     if (wantFidelity) {
-      const real = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: src.gradients })
+      const real = await traceImage(img as unknown as ImageData, {
+        ...DEFAULT_VECTORIZE_OPTIONS,
+        engine: 'planar',
+        gradients: src.gradients,
+      })
       fidelity = hashDoc(real) === hashP ? 'identical' : 'DIFFERS'
       fidelityChecked++
       if (fidelity === 'DIFFERS') fidelityFailed++
     }
     const row: CaseRow = {
-      res, name: src.name, width: img.width, height: img.height, derived: cen.derived, censusAbs: cAbs, censusRel: cRel,
-      P: { regions: scoreP.recovered, trueRegions: scoreP.trueRegions, worstInk: scoreP.worstInk, nodes: nodesOf(P.doc), items: itemsOf(P.doc), engine: P.engine, fp: P.fp, hash: hashP },
-      fidelity, recipes: [],
+      res,
+      name: src.name,
+      width: img.width,
+      height: img.height,
+      derived: cen.derived,
+      censusAbs: cAbs,
+      censusRel: cRel,
+      P: {
+        regions: scoreP.recovered,
+        trueRegions: scoreP.trueRegions,
+        worstInk: scoreP.worstInk,
+        nodes: nodesOf(P.doc),
+        items: itemsOf(P.doc),
+        engine: P.engine,
+        fp: P.fp,
+        hash: hashP,
+      },
+      fidelity,
+      recipes: [],
     }
 
     // 3. RECIPES
@@ -487,10 +694,17 @@ for (const res of RESOLUTIONS) {
         .filter((d) => !Number.isFinite(d.from) || Math.abs(d.to - d.from) >= 0.01)
         .sort((a, b) => Math.abs(b.to - b.from) - Math.abs(a.to - a.from))
       const inkDist = (r: RegionScore): number => r.ink.reduce((t, i) => t + Math.abs(i.kept - 1), 0)
-      const hexP = (c: PaletteColor): string => '#' + [c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, '0')).join('')
+      const hexP = (c: PaletteColor): string =>
+        '#' + [c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, '0')).join('')
       const rec: CaseRow['recipes'][number] = {
-        key: rc.key, outcome: 'changed',
-        regions: scoreX.recovered, worstInk: scoreX.worstInk, nodes: nodesOf(X.doc), items: itemsOf(X.doc), engine: X.engine, fp: X.fp,
+        key: rc.key,
+        outcome: 'changed',
+        regions: scoreX.recovered,
+        worstInk: scoreX.worstInk,
+        nodes: nodesOf(X.doc),
+        items: itemsOf(X.doc),
+        engine: X.engine,
+        fp: X.fp,
         inkDeltas,
         dInkDist: inkDist(scoreX) - inkDist(scoreP),
         paletteP: P.palette.map(hexP),
@@ -521,7 +735,8 @@ for (const res of RESOLUTIONS) {
       `real ${c.underReal}/${c.colours} modal ${c.underModal}/${c.colours} comps ${c.underDespeckle}(${c.underDespeckleNoEvidence} no-ev)/${c.comps} whole ${c.wholeColourUnder}`
     const recipeStr = row.recipes
       .map((r) => {
-        if (r.outcome !== 'changed') return `${r.key}=${r.outcome === 'identical' ? '=' : r.outcome === 'same-doc' ? '≈' : '·'}`
+        if (r.outcome !== 'changed')
+          return `${r.key}=${r.outcome === 'identical' ? '=' : r.outcome === 'same-doc' ? '≈' : '·'}`
         return `${r.key}: Δregions ${sgn(r.regions! - row.P.regions)} (${r.regions}/${row.P.trueRegions}) ΔworstInk ${sgn((r.worstInk! - row.P.worstInk) * 100, 1)}pp Σ|ink−1| ${sgn(r.dInkDist! * 100, 1)}pp Δnodes ${sgn(r.nodes! - row.P.nodes)} Δitems ${sgn(r.items! - row.P.items)}${r.engine !== row.P.engine ? ` ⇐ ENGINE ${row.P.engine}→${r.engine}` : ''}`
       })
       .join('  ')
@@ -535,21 +750,53 @@ for (const res of RESOLUTIONS) {
     const changed = row.recipes.filter((r) => r.outcome === 'changed')
     for (const r of changed) {
       if (r.inkDeltas!.length)
-        console.log(`        ${r.key} ink: ${r.inkDeltas!.slice(0, 8).map((d) => `${d.hex} ${Number.isFinite(d.from) ? pp(d.from) : '—'}→${pp(d.to)} (${d.srcPx}px)`).join(', ')}${r.inkDeltas!.length > 8 ? ', …' : ''}`)
+        console.log(
+          `        ${r.key} ink: ${r
+            .inkDeltas!.slice(0, 8)
+            .map((d) => `${d.hex} ${Number.isFinite(d.from) ? pp(d.from) : '—'}→${pp(d.to)} (${d.srcPx}px)`)
+            .join(', ')}${r.inkDeltas!.length > 8 ? ', …' : ''}`,
+        )
       if (r.missingP!.length || r.missingX!.length)
-        console.log(`        ${r.key} missing: P [${r.missingP!.join('; ') || '—'}]  →  ${r.key} [${r.missingX!.join('; ') || '—'}]`)
-      if (r.fp && row.P.fp && (r.fp.dominantColors !== row.P.fp.dominantColors || r.fp.paletteLen !== row.P.fp.paletteLen))
-        console.log(`        ${r.key} palette: dominant ${row.P.fp.dominantColors}→${r.fp.dominantColors} (engine gate 14), entries ${row.P.fp.paletteLen}→${r.fp.paletteLen}`)
-      const added = r.paletteX!.filter((h) => !r.paletteP!.includes(h)), gone = r.paletteP!.filter((h) => !r.paletteX!.includes(h))
-      if (added.length || gone.length) console.log(`        ${r.key} palette entries: +[${added.join(' ')}] −[${gone.join(' ')}]`)
+        console.log(
+          `        ${r.key} missing: P [${r.missingP!.join('; ') || '—'}]  →  ${r.key} [${r.missingX!.join('; ') || '—'}]`,
+        )
+      if (
+        r.fp &&
+        row.P.fp &&
+        (r.fp.dominantColors !== row.P.fp.dominantColors || r.fp.paletteLen !== row.P.fp.paletteLen)
+      )
+        console.log(
+          `        ${r.key} palette: dominant ${row.P.fp.dominantColors}→${r.fp.dominantColors} (engine gate 14), entries ${row.P.fp.paletteLen}→${r.fp.paletteLen}`,
+        )
+      const added = r.paletteX!.filter((h) => !r.paletteP!.includes(h)),
+        gone = r.paletteP!.filter((h) => !r.paletteX!.includes(h))
+      if (added.length || gone.length)
+        console.log(`        ${r.key} palette entries: +[${added.join(' ')}] −[${gone.join(' ')}]`)
     }
-    if (VERBOSE || (LANE !== 'gallery' && (cAbs.underReal + cAbs.underModal + cAbs.underDespeckle + cRel.underReal + cRel.underModal + cRel.underDespeckle) > 0)) {
+    if (
+      VERBOSE ||
+      (LANE !== 'gallery' &&
+        cAbs.underReal +
+          cAbs.underModal +
+          cAbs.underDespeckle +
+          cRel.underReal +
+          cRel.underModal +
+          cRel.underDespeckle >
+          0)
+    ) {
       for (const c of cen.colours) {
         const under = c.comps.filter((k) => k.size < Math.max(F_DIAL, R))
         if (c.flat3 >= Math.max(F_DIAL, R) && c.exactPx >= Math.max(F_DIAL, R) && under.length === 0) continue
         console.log(
           `        ${c.hex}  exact ${String(c.exactPx).padStart(6)}  flat3 ${String(c.flat3).padStart(6)}  comps ${c.comps.length}` +
-            `${under.length ? `  sub-floor comps: [${under.slice(0, 10).map((k) => `${k.size}${k.evidence ? '✓' : ''}`).join(', ')}${under.length > 10 ? ', …' : ''}]` : ''}` +
+            `${
+              under.length
+                ? `  sub-floor comps: [${under
+                    .slice(0, 10)
+                    .map((k) => `${k.size}${k.evidence ? '✓' : ''}`)
+                    .join(', ')}${under.length > 10 ? ', …' : ''}]`
+                : ''
+            }` +
             `  → real/anchor ${c.flat3 < F_DIAL ? '✗' : '✓'}${F_DIAL !== R ? `/${c.flat3 < R ? '✗' : '✓'}` : ''}  modal ${c.exactPx < F_DIAL ? '✗' : '✓'}${F_DIAL !== R ? `/${c.exactPx < R ? '✗' : '✓'}` : ''}`,
         )
       }
@@ -557,12 +804,23 @@ for (const res of RESOLUTIONS) {
   }
 
   // Summary for this raster.
-  console.log(`\n  ── CENSUS @ ${res}px — ${rendered} case(s)${derivedN ? `, ${derivedN} with raster-derived colour sets` : ''} ──`)
-  console.log(`  ${'floor'.padEnd(18)}${'colours'.padStart(9)}${'<real/anchor'.padStart(14)}${'<modal'.padStart(9)}${'comps'.padStart(9)}${'<despeckle'.padStart(12)}${'(no evidence)'.padStart(15)}${'(no-ev ≥9px)'.padStart(14)}${'whole colour'.padStart(14)}`)
-  for (const [lbl, c] of [[`F_DIAL ${F_DIAL}`, aggAbs], [`F_rel ${R}`, aggRel]] as [string, FloorCounts][])
-    console.log(`  ${lbl.padEnd(18)}${String(c.colours).padStart(9)}${String(c.underReal).padStart(14)}${String(c.underModal).padStart(9)}${String(c.comps).padStart(9)}${String(c.underDespeckle).padStart(12)}${String(c.underDespeckleNoEvidence).padStart(15)}${String(c.underDespeckleNoEvidenceGe9).padStart(14)}${String(c.wholeColourUnder).padStart(14)}`)
+  console.log(
+    `\n  ── CENSUS @ ${res}px — ${rendered} case(s)${derivedN ? `, ${derivedN} with raster-derived colour sets` : ''} ──`,
+  )
+  console.log(
+    `  ${'floor'.padEnd(18)}${'colours'.padStart(9)}${'<real/anchor'.padStart(14)}${'<modal'.padStart(9)}${'comps'.padStart(9)}${'<despeckle'.padStart(12)}${'(no evidence)'.padStart(15)}${'(no-ev ≥9px)'.padStart(14)}${'whole colour'.padStart(14)}`,
+  )
+  for (const [lbl, c] of [
+    [`F_DIAL ${F_DIAL}`, aggAbs],
+    [`F_rel ${R}`, aggRel],
+  ] as [string, FloorCounts][])
+    console.log(
+      `  ${lbl.padEnd(18)}${String(c.colours).padStart(9)}${String(c.underReal).padStart(14)}${String(c.underModal).padStart(9)}${String(c.comps).padStart(9)}${String(c.underDespeckle).padStart(12)}${String(c.underDespeckleNoEvidence).padStart(15)}${String(c.underDespeckleNoEvidenceGe9).padStart(14)}${String(c.wholeColourUnder).padStart(14)}`,
+    )
   console.log(`\n  ── COUNTERFACTUAL @ ${res}px — recipes vs production P ──`)
-  console.log(`  ${'recipe'.padEnd(34)}${'changed'.padStart(9)}${'identical'.padStart(11)}${'same-doc'.padStart(10)}${'Σ Δregions'.padStart(12)}${'cases ↑/↓'.padStart(11)}${'worstInk ↑/↓'.padStart(14)}${'Σ|ink−1| nearer/farther'.padStart(25)}${'ΣΔ'.padStart(9)}${'engine flips'.padStart(14)}${'Σ Δnodes'.padStart(10)}`)
+  console.log(
+    `  ${'recipe'.padEnd(34)}${'changed'.padStart(9)}${'identical'.padStart(11)}${'same-doc'.padStart(10)}${'Σ Δregions'.padStart(12)}${'cases ↑/↓'.padStart(11)}${'worstInk ↑/↓'.padStart(14)}${'Σ|ink−1| nearer/farther'.padStart(25)}${'ΣΔ'.padStart(9)}${'engine flips'.padStart(14)}${'Σ Δnodes'.padStart(10)}`,
+  )
   for (const rc of recipesFor(res)) {
     const a = recipeAgg.get(rc.key)!
     console.log(
@@ -574,7 +832,10 @@ for (const res of RESOLUTIONS) {
   }
 }
 
-if (fidelityChecked) console.log(`\n  fidelity: shadow (no override) vs real traceImage — ${fidelityChecked - fidelityFailed}/${fidelityChecked} byte-identical${fidelityFailed ? '  ⇐ SHADOW DESYNC, do not trust the recipes' : ''}`)
+if (fidelityChecked)
+  console.log(
+    `\n  fidelity: shadow (no override) vs real traceImage — ${fidelityChecked - fidelityFailed}/${fidelityChecked} byte-identical${fidelityFailed ? '  ⇐ SHADOW DESYNC, do not trust the recipes' : ''}`,
+  )
 if (JSON_OUT) {
   writeFileSync(JSON_OUT, JSON.stringify(rows, null, 1))
   console.log(`  rows → ${JSON_OUT}`)

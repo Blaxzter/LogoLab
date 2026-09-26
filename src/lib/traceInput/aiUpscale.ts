@@ -72,9 +72,7 @@ async function loadOrt(): Promise<Ort> {
       ort.env.wasm.wasmPaths = ORT_CDN
       // Threads need cross-origin isolation (COOP/COEP); ask for one thread
       // otherwise rather than letting ORT fall back with a warning.
-      ort.env.wasm.numThreads = globalThis.crossOriginIsolated
-        ? Math.min(4, navigator.hardwareConcurrency || 1)
-        : 1
+      ort.env.wasm.numThreads = globalThis.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1
       return ort
     })()
     ortPromise.catch(() => {
@@ -110,7 +108,11 @@ async function fetchWeights(
     if (done) break
     chunks.push(value)
     loaded += value.byteLength
-    onProgress?.({ phase: 'download', percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : undefined, factor })
+    onProgress?.({
+      phase: 'download',
+      percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : undefined,
+      factor,
+    })
   }
   const bytes = new Uint8Array(loaded)
   let o = 0
@@ -128,7 +130,11 @@ async function fetchWeights(
   return bytes.buffer
 }
 
-function loadSession(factor: UpscaleFactor, onProgress?: (p: UpscaleProgress) => void, signal?: AbortSignal): Promise<Session> {
+function loadSession(
+  factor: UpscaleFactor,
+  onProgress?: (p: UpscaleProgress) => void,
+  signal?: AbortSignal,
+): Promise<Session> {
   let promise = sessionPromises[factor]
   if (!promise) {
     promise = (async () => {

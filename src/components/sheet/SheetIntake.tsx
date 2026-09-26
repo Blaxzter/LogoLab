@@ -94,9 +94,7 @@ export function SheetIntake() {
           {loading ? <Loader2 size={26} className="animate-spin text-accent" /> : <LayoutGrid size={26} />}
         </div>
         <div>
-          <p className="text-base font-medium text-ink">
-            {dragging ? 'Drop to split it' : 'Drop an icon sheet'}
-          </p>
+          <p className="text-base font-medium text-ink">{dragging ? 'Drop to split it' : 'Drop an icon sheet'}</p>
           <p className="mt-1 max-w-md text-sm text-muted">
             One image holding a set of icons — the kind an image model hands you. Every icon is found, cropped and
             traced to its own clean SVG.
@@ -130,10 +128,16 @@ export function SheetIntake() {
       <div className="w-full rounded-lg border border-line bg-surface p-4 text-sm leading-relaxed text-muted">
         <h3 className="mb-1 text-sm font-semibold text-ink">How it works</h3>
         <ol className="ml-4 list-decimal space-y-1">
-          <li>The sheet's paper colour is measured, and the artwork on it is grouped into icons — captions and
-            titles are recognised and set aside.</li>
-          <li>Check the split on the <strong>Sheet</strong> view: drag a box, resize it, draw a missing one.</li>
-          <li><strong>Trace</strong> runs the vectorizer over every icon, a few at a time.</li>
+          <li>
+            The sheet's paper colour is measured, and the artwork on it is grouped into icons — captions and titles are
+            recognised and set aside.
+          </li>
+          <li>
+            Check the split on the <strong>Sheet</strong> view: drag a box, resize it, draw a missing one.
+          </li>
+          <li>
+            <strong>Trace</strong> runs the vectorizer over every icon, a few at a time.
+          </li>
           <li>Open any icon for the full editor, then download the set as one zip.</li>
         </ol>
       </div>

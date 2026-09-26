@@ -8,7 +8,19 @@
 import type { EdgeRef, PathNode, SharedEdge, Vec, Vertex } from '../path/types'
 import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
 import { buildPlanarNetwork, EXT, type PlanarNetwork } from './planarNetwork.ts'
-import { detectCorners, detectLoopCorners, discExplainsLoop, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type ApexReach, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import {
+  detectCorners,
+  detectLoopCorners,
+  discExplainsLoop,
+  fitCorneredLoop,
+  fitCorneredOpen,
+  fitLoopEdge,
+  fitOpenArc,
+  presmooth,
+  type ApexReach,
+  type PlanarFitOptions,
+  DEFAULT_PLANAR_FIT,
+} from './planarFit.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
 import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
 import { subpixelEdgeChains, type SourceImage } from './planarSubpixel.ts'
@@ -54,7 +66,11 @@ const APEX_MIN_SEP = 10
  * Returns null when the two colours are too close to judge (no veto); the probe
  * returns Infinity for a degenerate ray.
  */
-function apexReachFor(image: SourceImage, a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }): ApexReach | null {
+function apexReachFor(
+  image: SourceImage,
+  a: { r: number; g: number; b: number },
+  b: { r: number; g: number; b: number },
+): ApexReach | null {
   const la = srgbToLab(a.r, a.g, a.b)
   const lb = srgbToLab(b.r, b.g, b.b)
   if (deltaE76(la, lb) < APEX_MIN_SEP) return null
@@ -103,7 +119,6 @@ function apexReachFor(image: SourceImage, a: { r: number; g: number; b: number }
   }
 }
 
-
 /** Build the full planar trace from a label map. `palette` (label → colour) is
  *  optional and feeds the contrast-ranked junction placement and the apex probe.
  *  `image` (the source raster the labels were segmented from) is optional and feeds
@@ -121,9 +136,10 @@ export function tracePlanar(
   // Read the sub-pixel edge position out of the source anti-aliasing
   // (planarSubpixel.ts). Computed on the raw network, before junction placement, so
   // threadJunctions still reads the raw lattice chains it is calibrated on.
-  const subpix = image && opts.subpixelEdges
-    ? subpixelEdgeChains(net, labels, image, undefined, opts.subpixelWindowGuard)
-    : undefined
+  const subpix =
+    image && opts.subpixelEdges
+      ? subpixelEdgeChains(net, labels, image, undefined, opts.subpixelWindowGuard)
+      : undefined
   return assemblePlanar(net, opts, palette, subpix, image)
 }
 
@@ -271,7 +287,13 @@ export function assemblePlanar(
     }
     const startV = e.startV >= 0 ? vidByCorner.get(e.startV)! : -1
     const endV = e.endV >= 0 ? vidByCorner.get(e.endV)! : -1
-    edges.push({ id: e.id, nodes, closed: e.closed, startVertex: e.closed ? null : startV, endVertex: e.closed ? null : endV })
+    edges.push({
+      id: e.id,
+      nodes,
+      closed: e.closed,
+      startVertex: e.closed ? null : startV,
+      endVertex: e.closed ? null : endV,
+    })
     meta.push({ left: e.left, right: e.right, dirStart: e.dirStart, dirEnd: e.dirEnd, startV, endV, closed: e.closed })
   }
 
@@ -296,8 +318,24 @@ export function assemblePlanar(
   for (let i = 0; i < net.edges.length; i++) {
     const m = meta[i]
     if (m.closed) continue
-    const fwd: HalfEdge = { edgeIdx: i, reversed: false, label: m.left, tailV: m.startV, headV: m.endV, leaveDir: m.dirStart, arriveDir: m.dirEnd }
-    const rev: HalfEdge = { edgeIdx: i, reversed: true, label: m.right, tailV: m.endV, headV: m.startV, leaveDir: (m.dirEnd + 2) % 4, arriveDir: (m.dirStart + 2) % 4 }
+    const fwd: HalfEdge = {
+      edgeIdx: i,
+      reversed: false,
+      label: m.left,
+      tailV: m.startV,
+      headV: m.endV,
+      leaveDir: m.dirStart,
+      arriveDir: m.dirEnd,
+    }
+    const rev: HalfEdge = {
+      edgeIdx: i,
+      reversed: true,
+      label: m.right,
+      tailV: m.endV,
+      headV: m.startV,
+      leaveDir: (m.dirEnd + 2) % 4,
+      arriveDir: (m.dirStart + 2) % 4,
+    }
     const fId = halfEdges.push(fwd) - 1
     const rId = halfEdges.push(rev) - 1
     ensureOut(fwd.tailV)[fwd.leaveDir] = fId
@@ -428,15 +466,20 @@ function flattenNodes(nodes: PathNode[]): Vec[] {
  *  area-guard fallback: zero drift from the label map, at staircase node cost. */
 function staircaseCorners(pts: Vec[]): PathNode[] {
   // Drop a duplicated closing point so the cyclic direction test is clean.
-  const ring = pts.length > 1 && pts[0].x === pts[pts.length - 1].x && pts[0].y === pts[pts.length - 1].y ? pts.slice(0, -1) : pts.slice()
+  const ring =
+    pts.length > 1 && pts[0].x === pts[pts.length - 1].x && pts[0].y === pts[pts.length - 1].y
+      ? pts.slice(0, -1)
+      : pts.slice()
   const n = ring.length
   const out: PathNode[] = []
   for (let i = 0; i < n; i++) {
     const a = ring[(i - 1 + n) % n]
     const b = ring[i]
     const c = ring[(i + 1) % n]
-    const abx = b.x - a.x, aby = b.y - a.y
-    const bcx = c.x - b.x, bcy = c.y - b.y
+    const abx = b.x - a.x,
+      aby = b.y - a.y
+    const bcx = c.x - b.x,
+      bcy = c.y - b.y
     // Keep b when the direction changes (turn or reversal); skip mid-run points.
     if (abx * bcy - aby * bcx !== 0 || abx * bcx + aby * bcy <= 0) {
       out.push({ x: b.x, y: b.y, hIn: null, hOut: null, kind: 'corner' })

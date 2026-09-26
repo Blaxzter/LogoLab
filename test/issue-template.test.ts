@@ -66,11 +66,7 @@ test('the diagnostics field renders as plain text, because that is what we send'
   for (const [file, fields] of Object.entries(FIELDS)) {
     const text = form(file)
     const block = text.slice(text.indexOf(`id: ${fields.diagnostics}`))
-    assert.match(
-      block.slice(0, 600),
-      /render:\s*text/,
-      `${file}'s ${fields.diagnostics} field is not render: text`,
-    )
+    assert.match(block.slice(0, 600), /render:\s*text/, `${file}'s ${fields.diagnostics} field is not render: text`)
   }
 })
 

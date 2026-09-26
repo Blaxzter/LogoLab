@@ -1,12 +1,4 @@
-import {
-  cloneElement,
-  isValidElement,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react'
+import { cloneElement, isValidElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -24,12 +16,10 @@ type TriggerProps = {
   onPointerDown?: (e: unknown) => void
 }
 
-const compose =
-  (theirs: ((e: unknown) => void) | undefined, ours: (e: unknown) => void) =>
-  (e: unknown) => {
-    theirs?.(e)
-    ours(e)
-  }
+const compose = (theirs: ((e: unknown) => void) | undefined, ours: (e: unknown) => void) => (e: unknown) => {
+  theirs?.(e)
+  ours(e)
+}
 
 /**
  * Hover/focus tooltip; the app's replacement for the native `title` attribute
@@ -136,14 +126,17 @@ export function Tooltip({
   // Nothing to label, or not an element: render the child as-is.
   if (!isValidElement(children) || label == null || label === '') return children
 
-  const trigger = cloneElement(children as ReactElement<Record<string, unknown>>, {
-    ref: setRef,
-    onMouseEnter: compose(cp.onMouseEnter, () => show()),
-    onMouseLeave: compose(cp.onMouseLeave, () => hide()),
-    onFocus: compose(cp.onFocus, () => show(true)),
-    onBlur: compose(cp.onBlur, () => hide()),
-    onPointerDown: compose(cp.onPointerDown, () => hide()),
-  } as Record<string, unknown>)
+  const trigger = cloneElement(
+    children as ReactElement<Record<string, unknown>>,
+    {
+      ref: setRef,
+      onMouseEnter: compose(cp.onMouseEnter, () => show()),
+      onMouseLeave: compose(cp.onMouseLeave, () => hide()),
+      onFocus: compose(cp.onFocus, () => show(true)),
+      onBlur: compose(cp.onBlur, () => hide()),
+      onPointerDown: compose(cp.onPointerDown, () => hide()),
+    } as Record<string, unknown>,
+  )
 
   return (
     <>

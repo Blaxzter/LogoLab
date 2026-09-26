@@ -29,11 +29,7 @@ let snapshot: SaveStatus = { pending: false, savedAt: null, failed: false }
 function publish(next: SaveStatus): void {
   // useSyncExternalStore compares by identity, so an unchanged status must
   // keep the same object.
-  if (
-    next.pending === snapshot.pending &&
-    next.savedAt === snapshot.savedAt &&
-    next.failed === snapshot.failed
-  ) {
+  if (next.pending === snapshot.pending && next.savedAt === snapshot.savedAt && next.failed === snapshot.failed) {
     return
   }
   snapshot = next

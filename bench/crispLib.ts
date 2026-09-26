@@ -20,8 +20,12 @@ export function resampleNearest(src: Uint8ClampedArray, sw: number, sh: number, 
     for (let x = 0; x < dim; x++) {
       const sx = Math.min(sw - 1, Math.floor((x / dim) * sw))
       const sy = Math.min(sh - 1, Math.floor((y / dim) * sh))
-      const o = (y * dim + x) * 4, s = (sy * sw + sx) * 4
-      out[o] = src[s]; out[o + 1] = src[s + 1]; out[o + 2] = src[s + 2]; out[o + 3] = src[s + 3]
+      const o = (y * dim + x) * 4,
+        s = (sy * sw + sx) * 4
+      out[o] = src[s]
+      out[o + 1] = src[s + 1]
+      out[o + 2] = src[s + 2]
+      out[o + 3] = src[s + 3]
     }
   return out
 }
@@ -33,20 +37,29 @@ export function cropZoom(
   c: { x: number; y: number; w: number; h: number },
   zoom: number,
 ): { data: Uint8ClampedArray; w: number; h: number } {
-  const ow = c.w * zoom, oh = c.h * zoom
+  const ow = c.w * zoom,
+    oh = c.h * zoom
   const out = new Uint8ClampedArray(ow * oh * 4)
   for (let y = 0; y < oh; y++)
     for (let x = 0; x < ow; x++) {
       const sx = Math.min(dim - 1, c.x + Math.floor(x / zoom))
       const sy = Math.min(dim - 1, c.y + Math.floor(y / zoom))
-      const o = (y * ow + x) * 4, s = (sy * dim + sx) * 4
-      out[o] = img[s]; out[o + 1] = img[s + 1]; out[o + 2] = img[s + 2]; out[o + 3] = img[s + 3]
+      const o = (y * ow + x) * 4,
+        s = (sy * dim + sx) * 4
+      out[o] = img[s]
+      out[o + 1] = img[s + 1]
+      out[o + 2] = img[s + 2]
+      out[o + 3] = img[s + 3]
     }
   return { data: out, w: ow, h: oh }
 }
 
 /** Red→yellow heatmap of |a−b| (both opaque). Returns the heatmap + mean abs diff. */
-export function diffHeat(a: Uint8ClampedArray, b: Uint8ClampedArray, n: number): { img: Uint8ClampedArray; mean: number } {
+export function diffHeat(
+  a: Uint8ClampedArray,
+  b: Uint8ClampedArray,
+  n: number,
+): { img: Uint8ClampedArray; mean: number } {
   const out = new Uint8ClampedArray(n * 4)
   let sum = 0
   for (let i = 0; i < n; i++) {
@@ -84,12 +97,22 @@ export interface GeomMetrics {
 
 export function geomMetrics(svg: string): GeomMetrics {
   const ds = [...svg.matchAll(/\bd="([^"]*)"/g)].map((m) => m[1])
-  let cubics = 0, lines = 0, moves = 0, closes = 0, numbers = 0, ints = 0, decSum = 0
-  let sharp60 = 0, sharp100 = 0
+  let cubics = 0,
+    lines = 0,
+    moves = 0,
+    closes = 0,
+    numbers = 0,
+    ints = 0,
+    decSum = 0
+  let sharp60 = 0,
+    sharp100 = 0
 
   for (const d of ds) {
     const groups = d.match(/([MLHVCSQTAZmlhvcsqtaz])([^MLHVCSQTAZmlhvcsqtaz]*)/g) || []
-    let cx = 0, cy = 0, sx = 0, sy = 0
+    let cx = 0,
+      cy = 0,
+      sx = 0,
+      sy = 0
     const anchors: { x: number; y: number }[] = []
     let closed = false
 
@@ -107,19 +130,37 @@ export function geomMetrics(svg: string): GeomMetrics {
       }
       const nums = strs.map(Number)
       const arity = ARITY[up] ?? 0
-      if (up === 'Z') { closed = true; cx = sx; cy = sy; continue }
+      if (up === 'Z') {
+        closed = true
+        cx = sx
+        cy = sy
+        continue
+      }
       let first = up === 'M'
       for (let i = 0; i + arity <= nums.length; i += arity) {
         let nx: number, ny: number
-        if (up === 'H') { nx = rel ? cx + nums[i] : nums[i]; ny = cy }
-        else if (up === 'V') { nx = cx; ny = rel ? cy + nums[i] : nums[i] }
-        else { const ex = nums[i + arity - 2], ey = nums[i + arity - 1]; nx = rel ? cx + ex : ex; ny = rel ? cy + ey : ey }
+        if (up === 'H') {
+          nx = rel ? cx + nums[i] : nums[i]
+          ny = cy
+        } else if (up === 'V') {
+          nx = cx
+          ny = rel ? cy + nums[i] : nums[i]
+        } else {
+          const ex = nums[i + arity - 2],
+            ey = nums[i + arity - 1]
+          nx = rel ? cx + ex : ex
+          ny = rel ? cy + ey : ey
+        }
 
-        if (up === 'M' && first) { sx = nx; sy = ny; moves++ }
-        else if (up === 'C') cubics++
+        if (up === 'M' && first) {
+          sx = nx
+          sy = ny
+          moves++
+        } else if (up === 'C') cubics++
         else lines++
 
-        cx = nx; cy = ny
+        cx = nx
+        cy = ny
         anchors.push({ x: nx, y: ny })
         first = false
       }
@@ -131,8 +172,12 @@ export function geomMetrics(svg: string): GeomMetrics {
       const p = anchors[k]
       const a = anchors[(k - 1 + N) % N]
       const b = anchors[(k + 1) % N]
-      const v1x = p.x - a.x, v1y = p.y - a.y, v2x = b.x - p.x, v2y = b.y - p.y
-      const l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y)
+      const v1x = p.x - a.x,
+        v1y = p.y - a.y,
+        v2x = b.x - p.x,
+        v2y = b.y - p.y
+      const l1 = Math.hypot(v1x, v1y),
+        l2 = Math.hypot(v2x, v2y)
       if (l1 < 1e-6 || l2 < 1e-6) continue
       const cross = v1x * v2y - v1y * v2x
       const dot = v1x * v2x + v1y * v2y
@@ -144,10 +189,14 @@ export function geomMetrics(svg: string): GeomMetrics {
 
   return {
     paths: ds.length,
-    cubics, lines, moves, closes,
+    cubics,
+    lines,
+    moves,
+    closes,
     numbers,
     intFraction: numbers ? ints / numbers : 0,
     avgDecimals: numbers ? decSum / numbers : 0,
-    sharp60, sharp100,
+    sharp60,
+    sharp100,
   }
 }

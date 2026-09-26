@@ -6,13 +6,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  deltaEField,
-  deltaEStats,
-  deltaEHeat,
-  fidelity,
-  HEAT_FULL_SCALE_DE,
-} from '../src/lib/render/fidelity.ts'
+import { deltaEField, deltaEStats, deltaEHeat, fidelity, HEAT_FULL_SCALE_DE } from '../src/lib/render/fidelity.ts'
 import { heatColor, HEAT_BG_RGB } from '../src/lib/heat.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'
 import type { EditableDoc, PathItem, SubPath } from '../src/lib/path/types.ts'
@@ -28,11 +22,7 @@ function buf(w: number, h: number, rgba: [number, number, number, number]): Uint
   return px
 }
 
-const heatAt = (px: Uint8ClampedArray, i: number): [number, number, number] => [
-  px[i * 4],
-  px[i * 4 + 1],
-  px[i * 4 + 2],
-]
+const heatAt = (px: Uint8ClampedArray, i: number): [number, number, number] => [px[i * 4], px[i * 4 + 1], px[i * 4 + 2]]
 
 test('identical buffers: no error, and a heat that is all backdrop', () => {
   const a = buf(8, 8, [120, 60, 200, 255])
@@ -44,7 +34,7 @@ test('identical buffers: no error, and a heat that is all backdrop', () => {
   for (let i = 0; i < 64; i++) assert.deepEqual(heatAt(heat, i), HEAT_BG_RGB)
 })
 
-test('black vs white: ΔE ~100, and the heat pins to the ramp\'s hottest stop', () => {
+test("black vs white: ΔE ~100, and the heat pins to the ramp's hottest stop", () => {
   const f = deltaEField(buf(8, 8, [0, 0, 0, 255]), buf(8, 8, [255, 255, 255, 255]), 8, 8)
   const s = deltaEStats(f.de)
   assert.ok(Math.abs(s.meanDeltaE - 100) < 1, `meanDeltaE ${s.meanDeltaE}`)
@@ -107,7 +97,7 @@ test('the heat saturates at HEAT_FULL_SCALE_DE and floors below a JND', () => {
 // status bar and "1.8 ΔE" in the harness's benchmark table are the same number,
 // because they are the same code. A second implementation would pass every test
 // above and still quietly make them two different claims.
-test('the studio\'s numbers are the harness\'s numbers', () => {
+test("the studio's numbers are the harness's numbers", () => {
   const src = buf(16, 16, [30, 120, 200, 255])
   const render = buf(16, 16, [40, 110, 190, 255])
   const harness = fidelity(src, render, 16, 16)
@@ -128,7 +118,11 @@ function rect(x: number, y: number, w: number, h: number): SubPath {
 function circle(cx: number, cy: number, r: number): SubPath {
   const k = 0.5522847498 * r
   const n = (x: number, y: number, hIn: { x: number; y: number } | null, hOut: { x: number; y: number } | null) => ({
-    x, y, hIn, hOut, kind: 'smooth' as const,
+    x,
+    y,
+    hIn,
+    hOut,
+    kind: 'smooth' as const,
   })
   return {
     closed: true,
@@ -146,7 +140,13 @@ function doc(w: number, h: number, items: PathItem[]): EditableDoc {
 }
 
 const item = (subPaths: SubPath[], fill: string, extra: Partial<PathItem> = {}): PathItem => ({
-  kind: 'path', id: 'a', fill, fillRule: 'nonzero', subPaths, visible: true, ...extra,
+  kind: 'path',
+  id: 'a',
+  fill,
+  fillRule: 'nonzero',
+  subPaths,
+  visible: true,
+  ...extra,
 })
 
 /** Mean of the red channel — a coverage proxy for black-on-white art. */
@@ -188,7 +188,10 @@ test('curves stay curves when scaled UP — flattening tolerance is in output px
 test('a gradient ramps across the same span at any scale', () => {
   const gradient = {
     type: 'linear' as const,
-    x1: 0, y1: 0, x2: 128, y2: 0,
+    x1: 0,
+    y1: 0,
+    x2: 128,
+    y2: 0,
     stops: [
       { offset: 0, color: '#000000' },
       { offset: 1, color: '#ffffff' },

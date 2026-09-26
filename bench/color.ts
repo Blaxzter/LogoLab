@@ -26,8 +26,7 @@ const Zn = 1.08883
 // CIE Lab f(t): cube root above the linear-segment cutoff, linear below.
 const DELTA = 6 / 29
 const DELTA3 = DELTA * DELTA * DELTA
-const labF = (t: number): number =>
-  t > DELTA3 ? Math.cbrt(t) : t / (3 * DELTA * DELTA) + 4 / 29
+const labF = (t: number): number => (t > DELTA3 ? Math.cbrt(t) : t / (3 * DELTA * DELTA) + 4 / 29)
 
 /**
  * Convert one sRGB color (channels 0–255) to CIELAB under a D65 white point.

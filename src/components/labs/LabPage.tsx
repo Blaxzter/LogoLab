@@ -123,10 +123,7 @@ export function LabPage({
   const sq = search?.state.active ? search.state.q : ''
   const sMatch = search?.state.match
   const sHere = search?.here
-  const elsewhere = useMemo(
-    () => (sq && sMatch ? searchElsewhere(sMatch, sHere) : []),
-    [sq, sMatch, sHere],
-  )
+  const elsewhere = useMemo(() => (sq && sMatch ? searchElsewhere(sMatch, sHere) : []), [sq, sMatch, sHere])
 
   useEffect(() => pz.reset(), [pz.reset])
 
@@ -150,17 +147,10 @@ export function LabPage({
 
   return (
     <LabZoomContext.Provider value={{ pz, claimed }}>
-      <div
-        className={`min-h-full ${wires ? 'wires' : ''}`}
-        style={{ '--lab-box': `${box}px` } as CSSProperties}
-      >
+      <div className={`min-h-full ${wires ? 'wires' : ''}`} style={{ '--lab-box': `${box}px` } as CSSProperties}>
         <header className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
-            <Link
-              to="/labs"
-              className="btn btn-ghost h-8 shrink-0 gap-1.5 px-2 text-xs"
-              aria-label="All labs"
-            >
+            <Link to="/labs" className="btn btn-ghost h-8 shrink-0 gap-1.5 px-2 text-xs" aria-label="All labs">
               <ArrowLeft size={14} />
               Labs
             </Link>
@@ -202,10 +192,7 @@ export function LabPage({
             className="border-t border-dashed border-line"
           >
             <summary className="flex cursor-pointer select-none items-center gap-1 px-4 py-1.5 text-[0.7rem] text-muted transition-colors hover:bg-surface-2 hover:text-ink-2 [&::-webkit-details-marker]:hidden">
-              <ChevronDown
-                size={12}
-                className={`shrink-0 transition-transform ${ui.about ? 'rotate-180' : ''}`}
-              />
+              <ChevronDown size={12} className={`shrink-0 transition-transform ${ui.about ? 'rotate-180' : ''}`} />
               What this page is, and how to read each panel
             </summary>
             <div className="lab-prose max-h-[46vh] overflow-y-auto px-4 pb-3 text-xs leading-relaxed text-muted">
@@ -248,8 +235,7 @@ export function LabPage({
           <LabDarkContext.Provider value={ui.dark}>
             {search && search.state.active && search.matched === 0 && search.total > 0 && (
               <div className="px-4 py-10 text-center text-sm text-muted">
-                No {search.noun ?? 'case'} matches{' '}
-                <b className="text-ink">“{search.state.q}”</b> in this corpus.{' '}
+                No {search.noun ?? 'case'} matches <b className="text-ink">“{search.state.q}”</b> in this corpus.{' '}
                 <button
                   type="button"
                   onClick={() => search.state.setQuery('')}
@@ -322,10 +308,9 @@ function LabSearchBox({
       side="bottom"
       label={
         <>
-          Filter the corpus by name — <b>before</b> anything is traced, so a match hiding on
-          page 4 comes to you and the rest is never traced at all. Space-separated terms all
-          have to match. Press <b>/</b> from anywhere on the page to jump here, <b>Esc</b> to
-          clear.
+          Filter the corpus by name — <b>before</b> anything is traced, so a match hiding on page 4 comes to you and the
+          rest is never traced at all. Space-separated terms all have to match. Press <b>/</b> from anywhere on the page
+          to jump here, <b>Esc</b> to clear.
         </>
       }
     >
@@ -374,15 +359,7 @@ function LabSearchBox({
 
 /** A toolbar control with its label — the labs' `<label>Box <input/></label>` idiom.
  *  Pass `hint` to attach a hover/focus tooltip explaining what the control does. */
-export function LabField({
-  label,
-  hint,
-  children,
-}: {
-  label: string
-  hint?: ReactNode
-  children: ReactNode
-}) {
+export function LabField({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   const field = (
     <label className="inline-flex items-center gap-1.5 text-muted">
       <span className="whitespace-nowrap">{label}</span>

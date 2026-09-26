@@ -11,15 +11,7 @@ import { usePwa } from '../../pwa/register'
 /** How long informational notices stay up. */
 const RESTORE_MS = 9000
 
-function Toast({
-  icon,
-  children,
-  onDismiss,
-}: {
-  icon: ReactNode
-  children: ReactNode
-  onDismiss: () => void
-}) {
+function Toast({ icon, children, onDismiss }: { icon: ReactNode; children: ReactNode; onDismiss: () => void }) {
   return (
     <div
       role="status"
@@ -75,10 +67,7 @@ function PwaToast() {
   if (!needRefresh && !offlineReady) return null
 
   return (
-    <Toast
-      icon={needRefresh ? <RefreshCw size={15} /> : <WifiOff size={15} />}
-      onDismiss={dismiss}
-    >
+    <Toast icon={needRefresh ? <RefreshCw size={15} /> : <WifiOff size={15} />} onDismiss={dismiss}>
       {needRefresh ? (
         <span className="flex items-center gap-2">
           A new version is ready.

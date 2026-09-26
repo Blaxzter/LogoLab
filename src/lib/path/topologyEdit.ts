@@ -7,8 +7,28 @@
 // never wrap, except a closed disc edge (`closed: true`, no junctions). The
 // per-node cubic math is shared with geometry.ts so the two editors agree.
 
-import type { DocItem, EdgeRef, EditableDoc, NodeKind, NodeRef, PathItem, PathNode, SharedEdge, SubPath, Vec, Vertex } from './types'
-import { cubicAt, moveHandleNode, segmentControls, segmentCount, setNodeKindNode, splitSegmentAt, translateNode } from './geometry.ts'
+import type {
+  DocItem,
+  EdgeRef,
+  EditableDoc,
+  NodeKind,
+  NodeRef,
+  PathItem,
+  PathNode,
+  SharedEdge,
+  SubPath,
+  Vec,
+  Vertex,
+} from './types'
+import {
+  cubicAt,
+  moveHandleNode,
+  segmentControls,
+  segmentCount,
+  setNodeKindNode,
+  splitSegmentAt,
+  translateNode,
+} from './geometry.ts'
 import { edgeMap, materializeRegion, rematerializeRegions, reverseEdgeNodes, type NodeProvenance } from './topology.ts'
 
 /** A real (non-sentinel) vertex id. Open-edge endpoints may carry -1/null. */
@@ -348,7 +368,8 @@ function loopInside(inner: Vec[], outer: Vec[]): boolean {
 function edgeArcLength(e: SharedEdge | undefined): number {
   if (!e) return 0
   let L = 0
-  for (let i = 1; i < e.nodes.length; i++) L += Math.hypot(e.nodes[i].x - e.nodes[i - 1].x, e.nodes[i].y - e.nodes[i - 1].y)
+  for (let i = 1; i < e.nodes.length; i++)
+    L += Math.hypot(e.nodes[i].x - e.nodes[i - 1].x, e.nodes[i].y - e.nodes[i - 1].y)
   return L
 }
 
@@ -624,7 +645,12 @@ function pruneVertices(vertices: readonly Vertex[], edges: readonly SharedEdge[]
 }
 
 /** Remove F's section loops from its item; drop the item entirely if none remain. */
-function dropFLoops(items: readonly DocItem[], itemId: string, dead: ReadonlySet<number>, edges: Map<number, SharedEdge>): DocItem[] {
+function dropFLoops(
+  items: readonly DocItem[],
+  itemId: string,
+  dead: ReadonlySet<number>,
+  edges: Map<number, SharedEdge>,
+): DocItem[] {
   const out: DocItem[] = []
   for (const it of items) {
     if (it.id !== itemId) {
@@ -648,7 +674,12 @@ function dropFLoops(items: readonly DocItem[], itemId: string, dead: ReadonlySet
  * loops, prune unreferenced edges and vertices. Returns the same doc when it
  * cannot act.
  */
-function mergeOrDropSection(doc: EditableDoc, item: PathItem, edges: Map<number, SharedEdge>, section: Section): EditableDoc {
+function mergeOrDropSection(
+  doc: EditableDoc,
+  item: PathItem,
+  edges: Map<number, SharedEdge>,
+  section: Section,
+): EditableDoc {
   const topo = doc.topology!
   const loops = item.loops! // callers guarantee a planar item
   const itemId = item.id
@@ -681,7 +712,8 @@ function mergeOrDropSection(doc: EditableDoc, item: PathItem, edges: Map<number,
   if (gId == null) {
     const items = dropFLoops(doc.items, itemId, fLoopSet, edges)
     const stillRef = new Set<number>()
-    for (const it of items) if (it.kind === 'path' && it.loops) for (const loop of it.loops) for (const r of loop) stillRef.add(r.edge)
+    for (const it of items)
+      if (it.kind === 'path' && it.loops) for (const loop of it.loops) for (const r of loop) stillRef.add(r.edge)
     const nextEdges = topo.edges.filter((e) => stillRef.has(e.id))
     return { ...doc, items, topology: { vertices: pruneVertices(topo.vertices, nextEdges), edges: nextEdges } }
   }
@@ -759,4 +791,3 @@ export function removeRegionSection(doc: EditableDoc, itemId: string, loopIdx: n
   if (!section) return doc
   return mergeOrDropSection(doc, item, edges, section)
 }
-

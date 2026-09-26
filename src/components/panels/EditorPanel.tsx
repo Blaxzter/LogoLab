@@ -42,9 +42,7 @@ export default function EditorPanel() {
   const restored = useRef<StoredEditor | null | undefined>(undefined)
   if (restored.current === undefined) {
     // The in-memory document wins: it includes the edits made since.
-    restored.current = session
-      ? ({ doc: session.doc, name: session.name } as StoredEditor)
-      : claim('editor')
+    restored.current = session ? ({ doc: session.doc, name: session.name } as StoredEditor) : claim('editor')
   }
 
   const [open, setOpenState] = useState<OpenDoc | null>(() =>
@@ -104,12 +102,5 @@ export default function EditorPanel() {
   // Rendered as the route's direct child with no wrapper: the studio sizes itself
   // against <main>, and an intervening flex box makes its height negotiable,
   // which the canvas's ResizeObserver then fights.
-  return (
-    <SvgEditorStudio
-      initialDoc={open.doc}
-      fileName={open.name}
-      onClose={close}
-      onChange={onChange}
-    />
-  )
+  return <SvgEditorStudio initialDoc={open.doc} fileName={open.name} onClose={close} onChange={onChange} />
 }

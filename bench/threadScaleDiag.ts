@@ -72,7 +72,9 @@ const f = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d) : '�
 // real mark the band seams are POSTERIZATION of an authored gradient — they exist in the
 // raster only, never in the SVG — so every authored shape is strong ground truth there.
 const svgText = readFileSync(
-  LOGO ? join(root, 'examples', 'logos', `${LOGO.replace(/\.svg$/, '')}.svg`) : join(root, 'public', 'examples', 'edge-cases', `${CASE}.svg`),
+  LOGO
+    ? join(root, 'examples', 'logos', `${LOGO.replace(/\.svg$/, '')}.svg`)
+    : join(root, 'public', 'examples', 'edge-cases', `${CASE}.svg`),
   'utf8',
 )
 const gt = parseGroundTruth(svgText)
@@ -89,7 +91,11 @@ function strongShapes(shapes: GroundShape[]): GroundShape[] {
   // MOST elements (bar, disc, plate, square); the bands are one element each.
   let ink = ''
   let best = 0
-  for (const [fill, n] of counts) if (n > best) { best = n; ink = fill }
+  for (const [fill, n] of counts)
+    if (n > best) {
+      best = n
+      ink = fill
+    }
   return shapes.filter((s) => s.fill === ink)
 }
 
@@ -120,7 +126,14 @@ function gtSegments(shapes: GroundShape[]): GtSeg[] {
       for (let i = 0; i < segs; i++) {
         const a = sp.nodes[i]
         const b = sp.nodes[(i + 1) % n]
-        if (!a.hOut && !b.hIn) out.push({ pts: [{ x: a.x, y: a.y }, { x: b.x, y: b.y }], kind: 'line' })
+        if (!a.hOut && !b.hIn)
+          out.push({
+            pts: [
+              { x: a.x, y: a.y },
+              { x: b.x, y: b.y },
+            ],
+            kind: 'line',
+          })
         else out.push({ pts: cubic(a, a.hOut ?? a, b.hIn ?? b, b, 64), kind: 'curve' })
       }
     }
@@ -165,7 +178,8 @@ function nearestStrong(segs: GtSeg[], corners: Vec[], p: Vec, cornerTol: number)
       }
     }
   }
-  for (const c of corners) if (Math.hypot(c.x - p.x, c.y - p.y) <= cornerTol) return { dist: best, kind: 'corner', r: 0 }
+  for (const c of corners)
+    if (Math.hypot(c.x - p.x, c.y - p.y) <= cornerTol) return { dist: best, kind: 'corner', r: 0 }
   if (!bestSeg || bestSeg.kind === 'line') return { dist: best, kind: 'line', r: Infinity }
   const pts = bestSeg.pts
   const i = Math.max(2, Math.min(pts.length - 3, bestI))
@@ -196,7 +210,9 @@ interface Cell {
 }
 
 function lane(res: number): Cell[] {
-  const img = decodePng(new Resvg(svgText, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng())
+  const img = decodePng(
+    new Resvg(svgText, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng(),
+  )
   // threadDiag's lines verbatim — traceImage's flat path: paletteOptionsFor(DEFAULTS +
   // gradients:false) is detail 0, despeckle 25.
   const paletteOpts = {
@@ -206,7 +222,11 @@ function lane(res: number): Cell[] {
     minRegionArea: Math.max(24, Math.round(0.25 * 0.25 * 800)),
     regionEvidence: true,
   }
-  const fp = segmentFlatPalette(img as unknown as { width: number; height: number; data: Uint8ClampedArray }, paletteOpts, undefined)
+  const fp = segmentFlatPalette(
+    img as unknown as { width: number; height: number; data: Uint8ClampedArray },
+    paletteOpts,
+    undefined,
+  )
   const labels = healColorSpikes(fp.labels, img.data as unknown as Uint8ClampedArray, img.width, img.height, fp.palette)
   const net = buildPlanarNetwork(labels, img.width, img.height)
   const contrast = edgeContrast(net, fp.palette)
@@ -307,14 +327,20 @@ const branch = (v: JunctionVerdict): string => {
 }
 const gtName = (g: GtNear): string => (g.kind === 'arc' ? `arc r${f(g.r, 0)}` : g.kind)
 
-console.log(`\n━━━ PAIRED THREAD CENSUS — ${CASE} @ ${RESOLUTIONS.join('/')}  (errors in ${REF}-px artwork units, off the AUTHORED strong boundary) ━━━`)
-console.log(`    HEAD = span 12 / dev 1.2 · SCALED = span 12·(res/${REF}) / dev 1.2·(res/${REF}) · WIDE = span ${12 * K} (turn ratio WIDE/HEAD: arc → ~${K}, corner → ~1)`)
+console.log(
+  `\n━━━ PAIRED THREAD CENSUS — ${CASE} @ ${RESOLUTIONS.join('/')}  (errors in ${REF}-px artwork units, off the AUTHORED strong boundary) ━━━`,
+)
+console.log(
+  `    HEAD = span 12 / dev 1.2 · SCALED = span 12·(res/${REF}) / dev 1.2·(res/${REF}) · WIDE = span ${12 * K} (turn ratio WIDE/HEAD: arc → ~${K}, corner → ~1)`,
+)
 console.log(`    lat = the integer lattice corner's own error (what not moving costs)\n`)
 
 for (const r of rows) {
   const any = [...r.cells.values()][0]
   console.log(`  junction @(${f(r.ax, 0)},${f(r.ay, 0)})  GT: ${gtName(any.gt)}`)
-  console.log(`     ${'res'.padStart(5)}  ${'arm'.padStart(4)}  ${'lat'.padStart(5)}  ${'HEAD'.padEnd(8)} ${'err'.padStart(5)}  ${'turn'.padStart(5)}  ${'l/c dev'.padStart(9)}   ${'SCALED'.padEnd(8)} ${'err'.padStart(5)}  ${'turn'.padStart(5)}   ${'WIDE turn'.padStart(9)}  ${'ratio'.padStart(5)}   ${'each estimator: line'.padStart(20)} ${'circ(r)'.padStart(12)} ${'apex'.padStart(5)}`)
+  console.log(
+    `     ${'res'.padStart(5)}  ${'arm'.padStart(4)}  ${'lat'.padStart(5)}  ${'HEAD'.padEnd(8)} ${'err'.padStart(5)}  ${'turn'.padStart(5)}  ${'l/c dev'.padStart(9)}   ${'SCALED'.padEnd(8)} ${'err'.padStart(5)}  ${'turn'.padStart(5)}   ${'WIDE turn'.padStart(9)}  ${'ratio'.padStart(5)}   ${'each estimator: line'.padStart(20)} ${'circ(r)'.padStart(12)} ${'apex'.padStart(5)}`,
+  )
   for (const res of RESOLUTIONS) {
     const c = r.cells.get(res)
     if (!c) {
@@ -340,7 +366,9 @@ for (const r of rows) {
 console.log(`\n━━━ PER-RASTER FOLD (paired junctions only: present at EVERY raster) ━━━`)
 const full = rows.filter((r) => RESOLUTIONS.every((res) => r.cells.has(res)))
 console.log(`    ${full.length} of ${rows.length} junctions are present at every raster\n`)
-console.log(`    ${'res'.padStart(5)}  ${'n'.padStart(3)}  ${'lat mean'.padStart(8)}  ${'HEAD mean'.padStart(9)}  ${'HEAD max'.padStart(8)}  ${'SCALED mean'.padStart(11)}  ${'SCALED max'.padStart(10)}   branches (HEAD)                    branches (SCALED)`)
+console.log(
+  `    ${'res'.padStart(5)}  ${'n'.padStart(3)}  ${'lat mean'.padStart(8)}  ${'HEAD mean'.padStart(9)}  ${'HEAD max'.padStart(8)}  ${'SCALED mean'.padStart(11)}  ${'SCALED max'.padStart(10)}   branches (HEAD)                    branches (SCALED)`,
+)
 for (const res of RESOLUTIONS) {
   const cells = full.map((r) => r.cells.get(res)!)
   const mean = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN)
@@ -348,7 +376,10 @@ for (const res of RESOLUTIONS) {
   const hist = (pick: (c: Cell) => JunctionVerdict): string => {
     const m = new Map<string, number>()
     for (const c of cells) m.set(branch(pick(c)), (m.get(branch(pick(c))) ?? 0) + 1)
-    return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(' · ')
+    return [...m.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${k} ${n}`)
+      .join(' · ')
   }
   console.log(
     `    ${String(res).padStart(5)}  ${String(cells.length).padStart(3)}  ${f(mean(cells.map((c) => c.latErr)), 3).padStart(8)}  ${f(mean(cells.map((c) => c.headErr)), 3).padStart(9)}  ${f(max(cells.map((c) => c.headErr)), 3).padStart(8)}` +
@@ -357,8 +388,12 @@ for (const res of RESOLUTIONS) {
 }
 
 // Each estimator on its own, gates ignored: is there ONE that beats the rule at every raster?
-console.log(`\n━━━ EACH ESTIMATOR ALONE (paired junctions; mean / max error if it were used everywhere the rank fires) ━━━`)
-console.log(`    ${'res'.padStart(5)}  ${'lattice'.padStart(13)}  ${'HEAD rule'.padStart(13)}  ${'always line'.padStart(13)}  ${'always circle'.padStart(13)}  ${'always apex'.padStart(13)}  ${'oracle (best of 3)'.padStart(18)}   ${`wide(${12 * K}) line`.padStart(14)}  ${`wide circle`.padStart(13)}  ${'wide apex'.padStart(13)}  ${'oracle incl. wide'.padStart(17)}`)
+console.log(
+  `\n━━━ EACH ESTIMATOR ALONE (paired junctions; mean / max error if it were used everywhere the rank fires) ━━━`,
+)
+console.log(
+  `    ${'res'.padStart(5)}  ${'lattice'.padStart(13)}  ${'HEAD rule'.padStart(13)}  ${'always line'.padStart(13)}  ${'always circle'.padStart(13)}  ${'always apex'.padStart(13)}  ${'oracle (best of 3)'.padStart(18)}   ${`wide(${12 * K}) line`.padStart(14)}  ${`wide circle`.padStart(13)}  ${'wide apex'.padStart(13)}  ${'oracle incl. wide'.padStart(17)}`,
+)
 for (const res of RESOLUTIONS) {
   const cells = full.map((r) => r.cells.get(res)!)
   const stat = (xs: number[]): string => {
@@ -368,7 +403,11 @@ for (const res of RESOLUTIONS) {
   }
   const oracle = cells.map((c) => Math.min(...[c.altErr.line, c.altErr.circle, c.altErr.apex].filter(Number.isFinite)))
   const oracle6 = cells.map((c) =>
-    Math.min(...[c.altErr.line, c.altErr.circle, c.altErr.apex, c.wideErr.line, c.wideErr.circle, c.wideErr.apex].filter(Number.isFinite)),
+    Math.min(
+      ...[c.altErr.line, c.altErr.circle, c.altErr.apex, c.wideErr.line, c.wideErr.circle, c.wideErr.apex].filter(
+        Number.isFinite,
+      ),
+    ),
   )
   console.log(
     `    ${String(res).padStart(5)}  ${stat(cells.map((c) => c.latErr)).padStart(13)}  ${stat(cells.map((c) => c.headErr)).padStart(13)}  ${stat(cells.map((c) => c.altErr.line)).padStart(13)}` +
@@ -385,13 +424,17 @@ for (const r of full) {
   if (new Set(bs).size > 1) {
     flips++
     const errs = RESOLUTIONS.map((res) => f(r.cells.get(res)!.headErr))
-    console.log(`    @(${f(r.ax, 0)},${f(r.ay, 0)}) ${gtName(r.cells.get(RESOLUTIONS[0])!.gt).padEnd(10)} ${bs.map((b, i) => `${RESOLUTIONS[i]}:${b}(${errs[i]})`).join('  ')}`)
+    console.log(
+      `    @(${f(r.ax, 0)},${f(r.ay, 0)}) ${gtName(r.cells.get(RESOLUTIONS[0])!.gt).padEnd(10)} ${bs.map((b, i) => `${RESOLUTIONS[i]}:${b}(${errs[i]})`).join('  ')}`,
+    )
   }
 }
 console.log(`    ${flips} of ${full.length} paired junctions change branch across rasters\n`)
 
 // The two-window ratio, by ground truth — does it separate arcs from corners at EVERY raster?
-console.log(`━━━ TWO-WINDOW TURN RATIO by ground truth (WIDE/HEAD; arc → ~${K}, corner → ~1; needs both windows filled) ━━━`)
+console.log(
+  `━━━ TWO-WINDOW TURN RATIO by ground truth (WIDE/HEAD; arc → ~${K}, corner → ~1; needs both windows filled) ━━━`,
+)
 for (const res of RESOLUTIONS) {
   const byKind = new Map<string, number[]>()
   for (const c of lanes.get(res)!) {
@@ -404,7 +447,15 @@ for (const res of RESOLUTIONS) {
     if (!byKind.has(k)) byKind.set(k, [])
     byKind.get(k)!.push(w.turnDeg / h.turnDeg)
   }
-  const show = [...byKind.entries()].map(([k, rs]) => `${k}: ${rs.sort((a, b) => a - b).map((x) => x.toFixed(2)).join(' ')}`).join('   |   ')
+  const show = [...byKind.entries()]
+    .map(
+      ([k, rs]) =>
+        `${k}: ${rs
+          .sort((a, b) => a - b)
+          .map((x) => x.toFixed(2))
+          .join(' ')}`,
+    )
+    .join('   |   ')
   console.log(`    ${String(res).padStart(5)}  ${show || '(no junction with both windows filled and turn > 2°)'}`)
 }
 console.log()

@@ -36,11 +36,7 @@ export function TryExampleButton() {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="btn btn-secondary w-full"
-      >
+      <button type="button" onClick={() => setOpen(true)} className="btn btn-secondary w-full">
         <Shapes size={15} />
         Try an example logo
       </button>
@@ -223,8 +219,7 @@ function ExamplesDialog({ onClose }: { onClose: () => void }) {
           <div>
             <h2 className="text-base font-semibold text-ink">Example logos</h2>
             <p className="mt-1 text-sm text-muted">
-              No logo handy? Load one of ours and experiment — clean it up, vectorize it, export an
-              icon set.
+              No logo handy? Load one of ours and experiment — clean it up, vectorize it, export an icon set.
             </p>
           </div>
           <Tooltip label="Close">

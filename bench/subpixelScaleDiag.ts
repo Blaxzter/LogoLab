@@ -51,7 +51,10 @@ const flag = (name: string): string | null => {
   const v = argv[argv.indexOf(name) + 1]
   return v === undefined || v.startsWith('--') ? '' : v
 }
-const RES = (flag('--res') ?? '256,512,1024').split(',').map(Number).sort((a, b) => a - b)
+const RES = (flag('--res') ?? '256,512,1024')
+  .split(',')
+  .map(Number)
+  .sort((a, b) => a - b)
 const REF = RES[RES.length - 1]
 const EDGES = argv.includes('--edges')
 const flagValues = new Set(['--res'].map((f) => flag(f)).filter((v): v is string => v !== null && v !== ''))
@@ -59,7 +62,19 @@ const named = argv.filter((a) => !a.startsWith('--') && !flagValues.has(a))
 const CASES = named.length ? named : ['overlap', 'aa-seam', 'band-cross']
 
 /** The estimator's outcomes in the order the pass checks them (corner-revert is separate). */
-const OUTCOMES = ['moved', 'label-left', 'label-right', 'contrast', 'flat-left', 'flat-right', 'residual', 'monotone', 'max-disp', 'zero', 'degenerate-tangent']
+const OUTCOMES = [
+  'moved',
+  'label-left',
+  'label-right',
+  'contrast',
+  'flat-left',
+  'flat-right',
+  'residual',
+  'monotone',
+  'max-disp',
+  'zero',
+  'degenerate-tangent',
+]
 
 interface PointRow {
   edgeId: number
@@ -94,7 +109,11 @@ function collapse(recs: SubpixelDiagRecord[]): PointRow[] {
   return [...byPoint.values()]
 }
 
-const chainsDoc = (chains: { closed: boolean; pts: { x: number; y: number }[] }[], w: number, h: number): EditableDoc => ({
+const chainsDoc = (
+  chains: { closed: boolean; pts: { x: number; y: number }[] }[],
+  w: number,
+  h: number,
+): EditableDoc => ({
   viewBox: [0, 0, w, h],
   items: [
     {
@@ -104,7 +123,10 @@ const chainsDoc = (chains: { closed: boolean; pts: { x: number; y: number }[] }[
       fillRule: 'nonzero',
       visible: true,
       subPaths: chains.map(
-        (e): SubPath => ({ closed: e.closed, nodes: e.pts.map((p) => ({ x: p.x, y: p.y, hIn: null, hOut: null, kind: 'corner' as const })) }),
+        (e): SubPath => ({
+          closed: e.closed,
+          nodes: e.pts.map((p) => ({ x: p.x, y: p.y, hIn: null, hOut: null, kind: 'corner' as const })),
+        }),
       ),
     },
   ],
@@ -120,7 +142,8 @@ const p95 = (a: number[]): number => {
 /** Analytic answer sheets, in the 256 viewBox the fixtures are authored in. Only cases whose
  *  every visible boundary is one of these primitives belong here. */
 function primitives(name: string, k: number): ((x: number, y: number) => number)[] {
-  const circle = (cx: number, cy: number, r: number) => (x: number, y: number) => Math.abs(Math.hypot(x - cx * k, y - cy * k) - r * k)
+  const circle = (cx: number, cy: number, r: number) => (x: number, y: number) =>
+    Math.abs(Math.hypot(x - cx * k, y - cy * k) - r * k)
   const line = (ax: number, ay: number, bx: number, by: number) => {
     const L = Math.hypot((bx - ax) * k, (by - ay) * k)
     return (x: number, y: number) => Math.abs((bx - ax) * k * (y - ay * k) - (by - ay) * k * (x - ax * k)) / L
@@ -139,13 +162,17 @@ for (const name of CASES) {
     console.log(`${name}: unscorable (${why})`)
     continue
   }
-  const refImg = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: REF }, background: 'white' }).render().asPng())
+  const refImg = decodePng(
+    new Resvg(svg, { fitTo: { mode: 'width', value: REF }, background: 'white' }).render().asPng(),
+  )
   const gtRef = toRasterSpace(gt, refImg.width)
 
   console.log(`\n=== ${name} ===`)
   const laneRef: { res: number; lattice: number; displaced: number; fitOff: number; fitOn: number }[] = []
   for (const res of RES) {
-    const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng())
+    const img = decodePng(
+      new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng(),
+    )
     const W = img.width
     const H = img.height
     let raw: { labels: Int32Array; width: number; height: number } | null = null
@@ -167,7 +194,9 @@ for (const name of CASES) {
     const rr = raw as { labels: Int32Array; width: number; height: number }
     const net = buildPlanarNetwork(rr.labels, W, H)
     const recs: SubpixelDiagRecord[] = []
-    const displacedMap = subpixelEdgeChains(net, rr.labels, { data: img.data, width: W, height: H }, (r) => recs.push(r))
+    const displacedMap = subpixelEdgeChains(net, rr.labels, { data: img.data, width: W, height: H }, (r) =>
+      recs.push(r),
+    )
     const rows = collapse(recs)
     const n = rows.length
 
@@ -181,8 +210,12 @@ for (const name of CASES) {
       if (r.outcome === 'moved' && !r.reverted) surviving++
     }
     console.log(`\n@${res}  ${W}×${H}  chain points ${n} on ${net.edges.filter((e) => e.pts.length >= 3).length} edges`)
-    console.log('  estimator: ' + OUTCOMES.map((o) => `${o} ${tally.get(o) ?? 0} (${pct(tally.get(o) ?? 0, n)})`).join('  '))
-    console.log(`  corner-revert (after the estimate, any outcome): ${reverted} (${pct(reverted, n)})   → SURVIVING moved: ${surviving} (${pct(surviving, n)})`)
+    console.log(
+      '  estimator: ' + OUTCOMES.map((o) => `${o} ${tally.get(o) ?? 0} (${pct(tally.get(o) ?? 0, n)})`).join('  '),
+    )
+    console.log(
+      `  corner-revert (after the estimate, any outcome): ${reverted} (${pct(reverted, n)})   → SURVIVING moved: ${surviving} (${pct(surviving, n)})`,
+    )
 
     const bins = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 1, 1.5, 2, Infinity]
     const hist = (vals: number[]): number[] => {
@@ -228,18 +261,28 @@ for (const name of CASES) {
         o.before.push(dist(r.x, r.y))
         const kept = r.outcome === 'moved' && !r.reverted
         o.after.push(kept ? dist(r.x + r.delta * r.nx, r.y + r.delta * r.ny) : dist(r.x, r.y))
-        if (r.reverted) cf.push(r.outcome === 'moved' ? dist(r.x + r.delta * r.nx, r.y + r.delta * r.ny) : dist(r.x, r.y))
+        if (r.reverted)
+          cf.push(r.outcome === 'moved' ? dist(r.x + r.delta * r.nx, r.y + r.delta * r.ny) : dist(r.x, r.y))
       }
       console.log('  |point − authored primitive| native px, by outcome:     n   before mean/p95   after mean/p95')
       for (const [g, o] of Object.entries(groups).sort((a, b) => b[1].before.length - a[1].before.length))
-        console.log(`    ${g.padEnd(14)} ${String(o.before.length).padStart(6)}   ${mean(o.before).toFixed(3)} / ${p95(o.before).toFixed(3)}       ${mean(o.after).toFixed(3)} / ${p95(o.after).toFixed(3)}`)
-      if (cf.length) console.log(`    counterfactual — the ${cf.length} reverted points at the estimator's own δ: ${mean(cf).toFixed(3)} / ${p95(cf).toFixed(3)}`)
+        console.log(
+          `    ${g.padEnd(14)} ${String(o.before.length).padStart(6)}   ${mean(o.before).toFixed(3)} / ${p95(o.before).toFixed(3)}       ${mean(o.after).toFixed(3)} / ${p95(o.after).toFixed(3)}`,
+        )
+      if (cf.length)
+        console.log(
+          `    counterfactual — the ${cf.length} reverted points at the estimator's own δ: ${mean(cf).toFixed(3)} / ${p95(cf).toFixed(3)}`,
+        )
     }
 
     // --- 3. attribution: chain vs fit, native and reference px ------------------------
     const s = refImg.width / W
     const latDoc = latticeDoc(rr.labels, W, H)
-    const dispDoc = chainsDoc(net.edges.map((e) => ({ closed: e.closed, pts: displacedMap.get(e.id) ?? e.pts })), W, H)
+    const dispDoc = chainsDoc(
+      net.edges.map((e) => ({ closed: e.closed, pts: displacedMap.get(e.id) ?? e.pts })),
+      W,
+      H,
+    )
     const gtNat = toRasterSpace(gt, W)
     const nat = (d: EditableDoc) => scoreGeometry(gtNat, d, W, H, img)
     const ref = (d: EditableDoc) => scoreGeometry(gtRef, scaleDoc(d, s), refImg.width, refImg.height, refImg)
@@ -250,16 +293,33 @@ for (const name of CASES) {
       ['fitted, pass ON', nat(docOn), ref(docOn)],
     ] as const
     console.log(`  vs AUTHORED (chamfer / p95):      native px            ref px @${REF}`)
-    for (const [lbl, a, b] of table) console.log(`    ${lbl.padEnd(18)} ${a.chamfer.toFixed(3)} / ${a.p95.toFixed(3)}        ${b.chamfer.toFixed(3)} / ${b.p95.toFixed(3)}`)
-    laneRef.push({ res, lattice: table[0][2].chamfer, displaced: table[1][2].chamfer, fitOff: table[2][2].chamfer, fitOn: table[3][2].chamfer })
+    for (const [lbl, a, b] of table)
+      console.log(
+        `    ${lbl.padEnd(18)} ${a.chamfer.toFixed(3)} / ${a.p95.toFixed(3)}        ${b.chamfer.toFixed(3)} / ${b.p95.toFixed(3)}`,
+      )
+    laneRef.push({
+      res,
+      lattice: table[0][2].chamfer,
+      displaced: table[1][2].chamfer,
+      fitOff: table[2][2].chamfer,
+      fitOn: table[3][2].chamfer,
+    })
   }
 
   // The gate's own reading, coarsest vs finest, with and without the pass.
   const c = laneRef[0]
   const f = laneRef[laneRef.length - 1]
   const gated = (coarse: number, fine: number): string => `${(coarse / Math.max(fine, SCALE_SIGNAL_FLOOR)).toFixed(2)}×`
-  console.log(`\n  gate @${c.res} vs @${f.res} (coarse ≤ ${SCALE_DRIFT_MAX} · max(fine, ${SCALE_SIGNAL_FLOOR}) ref-px):`)
-  console.log(`    pass ON   ${gated(c.fitOn, f.fitOn)}  (${c.fitOn.toFixed(3)} → ${f.fitOn.toFixed(3)})     pass OFF  ${gated(c.fitOff, f.fitOff)}  (${c.fitOff.toFixed(3)} → ${f.fitOff.toFixed(3)})`)
-  console.log(`    displaced chain ${gated(c.displaced, f.displaced)}  (${c.displaced.toFixed(3)} → ${f.displaced.toFixed(3)})     lattice chain ${gated(c.lattice, f.lattice)}  (${c.lattice.toFixed(3)} → ${f.lattice.toFixed(3)})`)
-  console.log(`    the coarse lane must reach ≤ ${(SCALE_DRIFT_MAX * Math.max(f.fitOn, SCALE_SIGNAL_FLOOR)).toFixed(3)} ref-px = ${((SCALE_DRIFT_MAX * Math.max(f.fitOn, SCALE_SIGNAL_FLOOR) * c.res) / f.res).toFixed(4)} native px @${c.res}`)
+  console.log(
+    `\n  gate @${c.res} vs @${f.res} (coarse ≤ ${SCALE_DRIFT_MAX} · max(fine, ${SCALE_SIGNAL_FLOOR}) ref-px):`,
+  )
+  console.log(
+    `    pass ON   ${gated(c.fitOn, f.fitOn)}  (${c.fitOn.toFixed(3)} → ${f.fitOn.toFixed(3)})     pass OFF  ${gated(c.fitOff, f.fitOff)}  (${c.fitOff.toFixed(3)} → ${f.fitOff.toFixed(3)})`,
+  )
+  console.log(
+    `    displaced chain ${gated(c.displaced, f.displaced)}  (${c.displaced.toFixed(3)} → ${f.displaced.toFixed(3)})     lattice chain ${gated(c.lattice, f.lattice)}  (${c.lattice.toFixed(3)} → ${f.lattice.toFixed(3)})`,
+  )
+  console.log(
+    `    the coarse lane must reach ≤ ${(SCALE_DRIFT_MAX * Math.max(f.fitOn, SCALE_SIGNAL_FLOOR)).toFixed(3)} ref-px = ${((SCALE_DRIFT_MAX * Math.max(f.fitOn, SCALE_SIGNAL_FLOOR) * c.res) / f.res).toFixed(4)} native px @${c.res}`,
+  )
 }

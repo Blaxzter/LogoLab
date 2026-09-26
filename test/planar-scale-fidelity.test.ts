@@ -35,7 +35,8 @@ function disc(w: number, h: number, cx: number, cy: number, r: number): Int32Arr
 /** A filled axis-aligned square of label 1 (half-side `a`) in a field of label 0. */
 function square(w: number, h: number, cx: number, cy: number, a: number): Int32Array {
   const L = new Int32Array(w * h)
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) L[y * w + x] = Math.abs(x - cx) <= a && Math.abs(y - cy) <= a ? 1 : 0
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) L[y * w + x] = Math.abs(x - cx) <= a && Math.abs(y - cy) <= a ? 1 : 0
   return L
 }
 
@@ -44,7 +45,10 @@ function square(w: number, h: number, cx: number, cy: number, a: number): Int32A
 function shapeEdgeNodes(L: Int32Array, w: number, h: number, snap: SnapOptions): PathNode[] {
   const trace = tracePlanar(L, w, h)
   const shapeLoops = trace.loopsByLabel.get(1)
-  assert.ok(shapeLoops && shapeLoops.length === 1 && shapeLoops[0].length === 1, 'the filled shape is one closed single-edge loop')
+  assert.ok(
+    shapeLoops && shapeLoops.length === 1 && shapeLoops[0].length === 1,
+    'the filled shape is one closed single-edge loop',
+  )
   const eid = shapeLoops[0][0].edge
   const topo = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, OPTS, snap)
   return topo.edges.find((e) => e.id === eid)!.nodes

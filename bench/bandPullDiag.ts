@@ -65,7 +65,8 @@ function flatten(nodes: PathNode[], closed: boolean): Vec[] {
     const c1 = a.hOut ?? a
     const c2 = b.hIn ?? b
     // control-polygon length is an upper bound on the arc — good enough to pick a rate
-    const approx = Math.hypot(c1.x - a.x, c1.y - a.y) + Math.hypot(c2.x - c1.x, c2.y - c1.y) + Math.hypot(b.x - c2.x, b.y - c2.y)
+    const approx =
+      Math.hypot(c1.x - a.x, c1.y - a.y) + Math.hypot(c2.x - c1.x, c2.y - c1.y) + Math.hypot(b.x - c2.x, b.y - c2.y)
     const n = Math.max(1, Math.ceil(approx))
     for (let s = 1; s <= n; s++) out.push(cubicAt(a, b, s / n))
   }
@@ -118,7 +119,11 @@ function endTangent(pts: Vec[], atEnd: boolean, span = 6): Vec {
 // Reading the two sides locally (rather than from the region fills) is what makes this
 // work on posterized ramp art: the far side's colour drifts band to band, and the
 // midpoint of the LOCAL profile is still the boundary the artist drew.
-interface Img { width: number; height: number; data: Uint8ClampedArray }
+interface Img {
+  width: number
+  height: number
+  data: Uint8ClampedArray
+}
 
 function sampleRGB(img: Img, x: number, y: number): [number, number, number] {
   const cx = Math.max(0, Math.min(img.width - 1, x))
@@ -181,7 +186,16 @@ function edgeOffset(img: Img, p: Vec, n: Vec): number | null {
  *    • swing  — how much that signed offset VARIES along the edge. This is what reads as
  *               a bump or a bend: the edge stops being the shape it is supposed to be.
  */
-interface EdgeErr { n: number; mean: number; p95: number; max: number; at: Vec | null; swing: number; lo: Vec | null; hi: Vec | null }
+interface EdgeErr {
+  n: number
+  mean: number
+  p95: number
+  max: number
+  at: Vec | null
+  swing: number
+  lo: Vec | null
+  hi: Vec | null
+}
 
 function edgeError(img: Img, pts: Vec[], skip = 5): EdgeErr {
   const abs: number[] = []
@@ -205,9 +219,18 @@ function edgeError(img: Img, pts: Vec[], skip = 5): EdgeErr {
     if (off == null) continue
     const e = Math.abs(off)
     abs.push(e)
-    if (e > max) { max = e; at = pts[i] }
-    if (off < sMin) { sMin = off; lo = pts[i] }
-    if (off > sMax) { sMax = off; hi = pts[i] }
+    if (e > max) {
+      max = e
+      at = pts[i]
+    }
+    if (off < sMin) {
+      sMin = off
+      lo = pts[i]
+    }
+    if (off > sMax) {
+      sMax = off
+      hi = pts[i]
+    }
   }
   if (!abs.length) return { n: 0, mean: 0, p95: 0, max: 0, at: null, swing: 0, lo: null, hi: null }
   abs.sort((x, y) => x - y)
@@ -235,18 +258,22 @@ interface EdgeInfo {
   pts: Vec[]
 }
 
-function analyze(doc: EditableDoc): { edges: Map<number, EdgeInfo>; verts: Map<number, Array<{ e: number; atEnd: boolean }>> } {
+function analyze(doc: EditableDoc): {
+  edges: Map<number, EdgeInfo>
+  verts: Map<number, Array<{ e: number; atEnd: boolean }>>
+} {
   const topo = doc.topology!
   const owners = new Map<number, Set<string>>()
   for (const it of doc.items) {
     if (it.kind !== 'path') continue
     const p = it as PathItem
     if (!p.loops) continue
-    for (const loop of p.loops) for (const r of loop) {
-      let s = owners.get(r.edge)
-      if (!s) owners.set(r.edge, (s = new Set()))
-      s.add(p.fill)
-    }
+    for (const loop of p.loops)
+      for (const r of loop) {
+        let s = owners.get(r.edge)
+        if (!s) owners.set(r.edge, (s = new Set()))
+        s.add(p.fill)
+      }
   }
   const edges = new Map<number, EdgeInfo>()
   const verts = new Map<number, Array<{ e: number; atEnd: boolean }>>()
@@ -255,11 +282,21 @@ function analyze(doc: EditableDoc): { edges: Map<number, EdgeInfo>; verts: Map<n
     const de = fills.length >= 2 ? deltaE76(hexToLab(fills[0]), hexToLab(fills[1])) : -1
     const pts = flatten(e.nodes, e.closed)
     edges.set(e.id, {
-      id: e.id, de, fills, len: polyLen(pts), dev: chordDev(pts), closed: e.closed,
-      sv: e.startVertex, ev: e.endVertex, pts,
+      id: e.id,
+      de,
+      fills,
+      len: polyLen(pts),
+      dev: chordDev(pts),
+      closed: e.closed,
+      sv: e.startVertex,
+      ev: e.endVertex,
+      pts,
     })
     if (!e.closed) {
-      for (const [v, atEnd] of [[e.startVertex, false], [e.endVertex, true]] as Array<[number | null, boolean]>) {
+      for (const [v, atEnd] of [
+        [e.startVertex, false],
+        [e.endVertex, true],
+      ] as Array<[number | null, boolean]>) {
         if (v == null || v < 0) continue
         let a = verts.get(v)
         if (!a) verts.set(v, (a = []))
@@ -282,7 +319,9 @@ const doc = await traceImage(img as unknown as ImageData, {
 })
 
 const paths = doc.items.filter((i) => i.kind === 'path') as PathItem[]
-console.log(`  ${paths.length} regions, ${doc.topology!.edges.length} shared edges, ${doc.topology!.vertices.length} vertices`)
+console.log(
+  `  ${paths.length} regions, ${doc.topology!.edges.length} shared edges, ${doc.topology!.vertices.length} vertices`,
+)
 console.log(`  fills: ${paths.map((p) => p.fill).join(' ')}\n`)
 
 const { edges, verts } = analyze(doc)
@@ -375,7 +414,9 @@ for (const [vid, inc] of [...verts.entries()].sort((a, b) => a[0] - b[0])) {
   const dot = Math.max(-1, Math.min(1, t0.x * t1.x + t0.y * t1.y))
   const breakDeg = 180 - (Math.acos(dot) * 180) / Math.PI
   pulled++
-  const arms = two.map((a) => `#${a.e.id} ΔE${a.e.de.toFixed(0)} ${a.e.len.toFixed(0)}px dev ${a.e.dev.toFixed(2)}`).join(' | ')
+  const arms = two
+    .map((a) => `#${a.e.id} ΔE${a.e.de.toFixed(0)} ${a.e.len.toFixed(0)}px dev ${a.e.dev.toFixed(2)}`)
+    .join(' | ')
   const lowTags = lows.map((l) => `#${l.e.id} ΔE${l.e.de.toFixed(1)}`).join(',')
   console.log(
     `  v${String(vid).padEnd(4)} (${v.x.toFixed(1)},${v.y.toFixed(1)})${breakDeg.toFixed(1).padStart(9)}°  ${arms}   ← band ${lowTags}`,

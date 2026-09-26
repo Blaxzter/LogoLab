@@ -331,15 +331,7 @@ function makeRadialPaint(g: RadialGradient, vbx: number, vby: number, scale: num
  * the largest ω with P on the circle centered F+ω(C−F) of radius ω·r. Solves
  * the resulting quadratic and returns the geometrically valid (largest) root.
  */
-function focalOffset(
-  x: number,
-  y: number,
-  cx: number,
-  cy: number,
-  r: number,
-  fx: number,
-  fy: number,
-): number {
+function focalOffset(x: number, y: number, cx: number, cy: number, r: number, fx: number, fy: number): number {
   const cfx = cx - fx
   const cfy = cy - fy
   const pfx = x - fx
@@ -402,11 +394,7 @@ function sampleStops(stops: PreppedStop[], t: number): [number, number, number, 
 export function parseHex(hex: string): [number, number, number] {
   const h = hex.trim()
   if (h.length === 7 && h[0] === '#') {
-    return [
-      parseInt(h.slice(1, 3), 16),
-      parseInt(h.slice(3, 5), 16),
-      parseInt(h.slice(5, 7), 16),
-    ]
+    return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]
   }
   if (h.length === 4 && h[0] === '#') {
     const r = parseInt(h[1], 16)
@@ -425,13 +413,7 @@ export function parseHex(hex: string): [number, number, number] {
  * A 0/1 mask of pixels lying on (and within `dilate` px of) any traced path
  * boundary, where the seam metric looks for cracks and patch seams.
  */
-export function boundaryMask(
-  doc: EditableDoc,
-  width: number,
-  height: number,
-  dilate = 1,
-  scale = 1,
-): Uint8Array {
+export function boundaryMask(doc: EditableDoc, width: number, height: number, dilate = 1, scale = 1): Uint8Array {
   const [vbx, vby] = doc.viewBox
   const mask = new Uint8Array(width * height)
   for (const item of doc.items) {
@@ -452,7 +434,15 @@ export function boundaryMask(
 }
 
 /** Mark the pixels under a line segment (DDA). */
-function drawLine(mask: Uint8Array, width: number, height: number, x0: number, y0: number, x1: number, y1: number): void {
+function drawLine(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): void {
   const dx = x1 - x0
   const dy = y1 - y0
   const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))))

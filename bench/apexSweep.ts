@@ -35,12 +35,23 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 /** acute-counter's authored tips, recomputed from genEdgeCases' own formulas (viewBox units). */
 const UNITS: [number, number, number, number, number][] = [
-  [46, 46, 48, 32, 0], [128, 46, 40, 38, 23], [210, 46, 34, 44, 47],
-  [46.5, 128.5, 30, 38, 11], [128.5, 128.5, 24, 44, 67], [210.5, 128.5, 20, 56, 90],
+  [46, 46, 48, 32, 0],
+  [128, 46, 40, 38, 23],
+  [210, 46, 34, 44, 47],
+  [46.5, 128.5, 30, 38, 11],
+  [128.5, 128.5, 24, 44, 67],
+  [210.5, 128.5, 20, 56, 90],
   [210, 210, 30, 96, 31],
 ]
-const SPIKES: [number, number][] = [[24, 200], [24, 232]]
-interface Tip { x: number; y: number; lens: boolean }
+const SPIKES: [number, number][] = [
+  [24, 200],
+  [24, 232],
+]
+interface Tip {
+  x: number
+  y: number
+  lens: boolean
+}
 const TIPS: Tip[] = []
 for (const [cx, cy, R, tip, rot] of UNITS) {
   const h = 2 * R * Math.sin((tip * Math.PI) / 360)
@@ -61,7 +72,11 @@ const rasterOf = (svg: string, res: number) =>
 const imgs = new Map<string, ReturnType<typeof rasterOf>>()
 for (const n of ['acute-counter', ...CONTROLS]) for (const r of RES) imgs.set(`${n}@${r}`, rasterOf(svgOf(n), r))
 
-interface Row { label: string; over: number | null; frac: number | null }
+interface Row {
+  label: string
+  over: number | null
+  frac: number | null
+}
 const ROWS: Row[] = [
   { label: 'veto OFF (today)', over: null, frac: null },
   { label: 'over>2.5 only', over: 2.5, frac: 1e9 },
@@ -81,7 +96,10 @@ const fitFor = (r: Row): Record<string, unknown> =>
 async function tipError(r: Row, res: number): Promise<{ lensSum: number; lensWorst: number; spikeWorst: number }> {
   const img = imgs.get(`acute-counter@${res}`)!
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, planarFit: fitFor(r),
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    planarFit: fitFor(r),
   })
   const nodes: { x: number; y: number }[] = []
   for (const e of doc.topology?.edges ?? []) for (const n of e.nodes) if (n.kind === 'corner') nodes.push(n)
@@ -107,7 +125,10 @@ async function tipError(r: Row, res: number): Promise<{ lensSum: number; lensWor
 async function cornerRecall(r: Row, name: string, res: number): Promise<string> {
   const img = imgs.get(`${name}@${res}`)!
   const doc = await traceImage(img as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, planarFit: fitFor(r),
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    planarFit: fitFor(r),
   })
   const g = scoreGeometry(toRasterSpace(parseGroundTruth(svgOf(name)), img.width), doc, img.width, img.height, img)
   return `${g.cornersRecovered}/${g.gtCorners}`

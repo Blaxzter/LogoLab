@@ -20,12 +20,7 @@ import { CleanupControls, CleanupControlsBody } from './CleanupControls'
 import { CleanupStage, PaintingCanvas } from './CleanupStage'
 import { CleanupToolbar, CleanupTopStrip, type ViewMode } from './CleanupToolbar'
 import { CleanupActionBar, CleanupStatusBar } from './CleanupFooter'
-import {
-  cleanupSeed,
-  loadCleanupSettings,
-  saveCleanupPixels,
-  saveCleanupSettings,
-} from './cleanupSession'
+import { cleanupSeed, loadCleanupSettings, saveCleanupPixels, saveCleanupSettings } from './cleanupSession'
 
 export function CleanupStudio() {
   const logo = useLogo()

@@ -60,18 +60,37 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
   const { mw, mh, scale } = mask
 
   if (mask.inkCells === 0) {
-    return { tiles: [], background, grid: null, gap: 0, scale, warnings: ['The sheet looks empty — nothing differs from the background.'] }
+    return {
+      tiles: [],
+      background,
+      grid: null,
+      gap: 0,
+      scale,
+      warnings: ['The sheet looks empty — nothing differs from the background.'],
+    }
   }
   if (mask.inkCells / (mw * mh) > 0.9) {
-    warnings.push('Almost every pixel differs from the background — if this is a photo or a full-bleed design, splitting will not find icons.')
+    warnings.push(
+      'Almost every pixel differs from the background — if this is a photo or a full-bleed design, splitting will not find icons.',
+    )
   }
 
   const blobs = connectedComponents(mask)
   const solid = blobs.filter((b) => b.maskArea > SPECK_MASK_AREA)
   if (solid.length === 0) {
-    return { tiles: [], background, grid: null, gap: 0, scale, warnings: [...warnings, 'Only dust-sized specks found.'] }
+    return {
+      tiles: [],
+      background,
+      grid: null,
+      gap: 0,
+      scale,
+      warnings: [...warnings, 'Only dust-sized specks found.'],
+    }
   }
-  if (blobs.length !== solid.length) warnings.push(`Ignored ${blobs.length - solid.length} speck${blobs.length - solid.length === 1 ? '' : 's'} smaller than a few pixels.`)
+  if (blobs.length !== solid.length)
+    warnings.push(
+      `Ignored ${blobs.length - solid.length} speck${blobs.length - solid.length === 1 ? '' : 's'} smaller than a few pixels.`,
+    )
 
   // ---- 4. bands -----------------------------------------------------------
   const bands = findBands(solid)
@@ -84,7 +103,9 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
   const iconBands = bands.filter((b) => !b.isLabel)
   const labelBands = bands.filter((b) => b.isLabel)
   if (labelBands.length) {
-    warnings.push(`${labelBands.length} short text band${labelBands.length === 1 ? '' : 's'} (titles/captions) kept out of the icon rows.`)
+    warnings.push(
+      `${labelBands.length} short text band${labelBands.length === 1 ? '' : 's'} (titles/captions) kept out of the icon rows.`,
+    )
   }
 
   // ---- 5. grouping --------------------------------------------------------
@@ -130,7 +151,9 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
     rescued++
   }
   if (rescued > 0) {
-    warnings.push(`${rescued} smaller icon${rescued === 1 ? '' : 's'} in a short row ${rescued === 1 ? 'was' : 'were'} kept as icons, not caption text.`)
+    warnings.push(
+      `${rescued} smaller icon${rescued === 1 ? '' : 's'} in a short row ${rescued === 1 ? 'was' : 'were'} kept as icons, not caption text.`,
+    )
   }
 
   const tiles = buildTiles(all, img, background, threshold, mask, opts)
@@ -324,7 +347,10 @@ function buildLinkage(bands: Band[], warnings: string[]): Linkage {
   let members = bands.flatMap((b) => b.blobs)
   if (members.length > MAX_BLOBS) {
     const total = members.length
-    members = members.slice().sort((a, b) => b.weight - a.weight).slice(0, MAX_BLOBS)
+    members = members
+      .slice()
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, MAX_BLOBS)
     warnings.push(`The sheet has ${total} separate pieces of artwork — only the ${MAX_BLOBS} largest were grouped.`)
   }
 
@@ -554,15 +580,21 @@ function inferGrid(tiles: SheetTile[]): SheetGrid | null {
   const widths = icons.map((t) => t.ink.w).sort((a, b) => a - b)
   const medianW = widths[widths.length >> 1]
 
-  const rowCentres = cluster1d(icons.map((t) => t.ink.y + t.ink.h / 2), medianH * 0.6)
-  const colCentres = cluster1d(icons.map((t) => t.ink.x + t.ink.w / 2), medianW * 0.6)
+  const rowCentres = cluster1d(
+    icons.map((t) => t.ink.y + t.ink.h / 2),
+    medianH * 0.6,
+  )
+  const colCentres = cluster1d(
+    icons.map((t) => t.ink.x + t.ink.w / 2),
+    medianW * 0.6,
+  )
 
   for (const t of icons) {
     t.row = nearestIndex(rowCentres, t.ink.y + t.ink.h / 2)
     t.col = nearestIndex(colCentres, t.ink.x + t.ink.w / 2)
   }
   // Re-sort row-major now that positions are known.
-  tiles.sort((a, b) => (a.row - b.row) || (a.col - b.col) || (a.ink.y - b.ink.y) || (a.ink.x - b.ink.x))
+  tiles.sort((a, b) => a.row - b.row || a.col - b.col || a.ink.y - b.ink.y || a.ink.x - b.ink.x)
 
   const seen = new Set<string>()
   let collision = false
@@ -642,7 +674,10 @@ function applyBoxes(tiles: SheetTile[], grid: SheetGrid | null, opts: DetectOpti
     for (const t of icons) need = Math.max(need, Math.max(t.ink.w, t.ink.h))
     let room = grid ? Math.min(grid.pitchX || Infinity, grid.pitchY || Infinity) : Infinity
     for (const t of icons) {
-      const c = corridor(t.ink, blockers.filter((o) => o !== t).map((o) => o.ink))
+      const c = corridor(
+        t.ink,
+        blockers.filter((o) => o !== t).map((o) => o.ink),
+      )
       room = Math.min(room, c.w, c.h)
     }
     uniformSize = Math.max(need, Math.min(need * (1 + 2 * padding), room))

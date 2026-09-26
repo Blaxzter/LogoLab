@@ -267,8 +267,7 @@ export function splitSegmentAt(a: PathNode, b: PathNode, t: number): SegmentSpli
   const c1 = a.hOut ? { x: a.hOut.x, y: a.hOut.y } : p0
   const c2 = b.hIn ? { x: b.hIn.x, y: b.hIn.y } : p3
   // "Effective controls on the anchors" also catches degenerate non-null handles.
-  const isLine =
-    Math.hypot(c1.x - p0.x, c1.y - p0.y) < EPS && Math.hypot(c2.x - p3.x, c2.y - p3.y) < EPS
+  const isLine = Math.hypot(c1.x - p0.x, c1.y - p0.y) < EPS && Math.hypot(c2.x - p3.x, c2.y - p3.y) < EPS
   if (isLine) {
     return {
       aHOut: a.hOut,
@@ -388,13 +387,7 @@ export function moveHandleNode(node: PathNode, which: 'in' | 'out', to: Vec, mir
 /**
  * Drag one handle to `to`. Thin subpath wrapper over {@link moveHandleNode}.
  */
-export function moveHandle(
-  item: PathItem,
-  ref: NodeRef,
-  which: 'in' | 'out',
-  to: Vec,
-  mirror: boolean,
-): PathItem {
+export function moveHandle(item: PathItem, ref: NodeRef, which: 'in' | 'out', to: Vec, mirror: boolean): PathItem {
   const sp = item.subPaths[ref.sub]
   const node = sp?.nodes[ref.idx]
   if (!sp || !node) return item

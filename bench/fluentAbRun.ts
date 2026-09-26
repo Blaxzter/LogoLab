@@ -43,18 +43,32 @@ async function run(svgPath: string, gradients: boolean) {
   const gt = parseGroundTruth(svg)
   if (unscorable(gt)) return null
   const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-  const doc = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients })
+  const doc = await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients,
+  })
   const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
   return g.samples > 0 ? g : null
 }
 
-const pairs = tierCases(1).filter((c) => c.flatSvg && existsSync(join(root, c.flatSvg))).slice(0, LIMIT)
+const pairs = tierCases(1)
+  .filter((c) => c.flatSvg && existsSync(join(root, c.flatSvg)))
+  .slice(0, LIMIT)
 console.log(`flat ↔ gradient A/B — ${pairs.length} matched glyph pairs @ ${RES}px\n`)
 
 interface Row {
   name: string
-  cChamfer: number; cMissed: number; cSpurious: number; cParsimony: number; cShapes: number
-  fChamfer: number; fMissed: number; fSpurious: number; fParsimony: number; fShapes: number
+  cChamfer: number
+  cMissed: number
+  cSpurious: number
+  cParsimony: number
+  cShapes: number
+  fChamfer: number
+  fMissed: number
+  fSpurious: number
+  fParsimony: number
+  fShapes: number
 }
 const rows: Row[] = []
 
@@ -67,17 +81,28 @@ for (const c of pairs) {
   if (!g || !f) continue
   rows.push({
     name: c.name.replace('fluent-', ''),
-    cChamfer: g.chamfer, cMissed: g.missedMean, cSpurious: g.spuriousMean, cParsimony: g.parsimony, cShapes: g.gtShapes,
-    fChamfer: f.chamfer, fMissed: f.missedMean, fSpurious: f.spuriousMean, fParsimony: f.parsimony, fShapes: f.gtShapes,
+    cChamfer: g.chamfer,
+    cMissed: g.missedMean,
+    cSpurious: g.spuriousMean,
+    cParsimony: g.parsimony,
+    cShapes: g.gtShapes,
+    fChamfer: f.chamfer,
+    fMissed: f.missedMean,
+    fSpurious: f.spuriousMean,
+    fParsimony: f.parsimony,
+    fShapes: f.gtShapes,
   })
   process.stdout.write(`\r  ${rows.length}/${pairs.length}`)
 }
 console.log('\n')
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : 0)
-const med = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s[s.length >> 1] ?? 0 }
+const med = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b)
+  return s[s.length >> 1] ?? 0
+}
 
-const worst = [...rows].sort((a, b) => (b.cChamfer - b.fChamfer) - (a.cChamfer - a.fChamfer)).slice(0, 12)
+const worst = [...rows].sort((a, b) => b.cChamfer - b.fChamfer - (a.cChamfer - a.fChamfer)).slice(0, 12)
 console.log('WHERE GRADIENTS HURT MOST — the 12 biggest chamfer gaps (gradient minus flat)\n')
 console.log(`  ${'glyph'.padEnd(26)} ${'GRADIENT (Color)'.padStart(26)}   ${'FLAT'.padStart(24)}   delta`)
 console.log(`  ${''.padEnd(26)} ${'chamfer  missed  invent'.padStart(26)}   ${'chamfer  missed  invent'.padStart(24)}`)
@@ -89,10 +114,14 @@ for (const r of worst) {
   )
 }
 
-const cC = rows.map((r) => r.cChamfer), fC = rows.map((r) => r.fChamfer)
-const cM = rows.map((r) => r.cMissed), fM = rows.map((r) => r.fMissed)
-const cS = rows.map((r) => r.cSpurious), fS = rows.map((r) => r.fSpurious)
-const cP = rows.map((r) => r.cParsimony), fP = rows.map((r) => r.fParsimony)
+const cC = rows.map((r) => r.cChamfer),
+  fC = rows.map((r) => r.fChamfer)
+const cM = rows.map((r) => r.cMissed),
+  fM = rows.map((r) => r.fMissed)
+const cS = rows.map((r) => r.cSpurious),
+  fS = rows.map((r) => r.fSpurious)
+const cP = rows.map((r) => r.cParsimony),
+  fP = rows.map((r) => r.fParsimony)
 
 console.log(`\n━━━ THE RESULT (${rows.length} matched pairs @ ${RES}px) ━━━\n`)
 const line = (label: string, c: number[], f: number[], unit: string) =>
@@ -107,7 +136,9 @@ line('node economy', cP, fP, '×')
 console.log(`\n  medians — chamfer: gradient ${med(cC).toFixed(2)}px · flat ${med(fC).toFixed(2)}px`)
 
 const worseCount = rows.filter((r) => r.cChamfer > r.fChamfer).length
-console.log(`  gradient art scores worse on ${worseCount}/${rows.length} pairs (${((worseCount / rows.length) * 100).toFixed(0)}%)`)
+console.log(
+  `  gradient art scores worse on ${worseCount}/${rows.length} pairs (${((worseCount / rows.length) * 100).toFixed(0)}%)`,
+)
 console.log(
   `\n  authored complexity (the confound): gradient art averages ${mean(rows.map((r) => r.cShapes)).toFixed(0)} shapes,\n` +
     `  the redrawn flat variant ${mean(rows.map((r) => r.fShapes)).toFixed(0)}. Flat is a SIMPLER drawing as well as a flatter one,\n` +

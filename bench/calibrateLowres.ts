@@ -61,14 +61,25 @@ for (const c of cases) {
     continue
   }
   const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng())
-  const doc = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: c.gradients })
+  const doc = await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: c.gradients,
+  })
   const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
   const paint = c.gradients && c.tier === 0 ? scoreDoc(img, doc) : null
   rows.push({
-    name: c.name, tier: c.tier, gradients: c.gradients,
-    samples: g.samples, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
-    gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered,
-    paintMean: paint?.meanDeltaE ?? null, paintP95: paint?.p95DeltaE ?? null,
+    name: c.name,
+    tier: c.tier,
+    gradients: c.gradients,
+    samples: g.samples,
+    chamfer: g.chamfer,
+    p95: g.p95,
+    parsimony: g.parsimony,
+    gtCorners: g.gtCorners,
+    cornersRecovered: g.cornersRecovered,
+    paintMean: paint?.meanDeltaE ?? null,
+    paintP95: paint?.p95DeltaE ?? null,
     regions: scoreRegions(img, doc),
   })
   process.stdout.write(`\r  traced ${rows.length}/${cases.length}`)
@@ -92,8 +103,13 @@ for (const r of rows) {
   const regions = r.gradients ? 'n/a' : `${r.regions.recovered}/${r.regions.trueRegions}`
   const worstInk = r.gradients ? 'n/a' : `${(r.regions.worstInk * 100).toFixed(1)}%`
   const paint = r.paintMean !== null ? `${r.paintMean.toFixed(2)}/${r.paintP95!.toFixed(2)}` : 'n/a'
-  const bnd = r.samples > 0 ? `${f(r.chamfer)} ${f(r.p95)} ${f(r.parsimony, 1)}` : `${'n/a'.padStart(7)} ${'n/a'.padStart(7)} ${'n/a'.padStart(7)}`
-  console.log(`  ${r.name.padEnd(24)} ${bnd} ${corners.padStart(9)} ${regions.padStart(9)} ${worstInk.padStart(9)} ${paint.padStart(12)}`)
+  const bnd =
+    r.samples > 0
+      ? `${f(r.chamfer)} ${f(r.p95)} ${f(r.parsimony, 1)}`
+      : `${'n/a'.padStart(7)} ${'n/a'.padStart(7)} ${'n/a'.padStart(7)}`
+  console.log(
+    `  ${r.name.padEnd(24)} ${bnd} ${corners.padStart(9)} ${regions.padStart(9)} ${worstInk.padStart(9)} ${paint.padStart(12)}`,
+  )
 }
 
 for (const r of rows) {
@@ -118,7 +134,9 @@ const report = (key: 'chamfer' | 'p95' | 'parsimony', tol512: number, unit: stri
   const q = (p: number) => pct(xs, p).toFixed(2)
   const under = (t: number) => `${scorable.filter((r) => r[key] <= t).length}/${scorable.length}`
   console.log(`── ${key} ${'─'.repeat(60 - key.length)}`)
-  console.log(`   p10 ${q(0.1)}  p50 ${q(0.5)}  p75 ${q(0.75)}  p90 ${q(0.9)}  max ${Math.max(...xs).toFixed(2)} ${unit}`)
+  console.log(
+    `   p10 ${q(0.1)}  p50 ${q(0.5)}  p75 ${q(0.75)}  p90 ${q(0.9)}  max ${Math.max(...xs).toFixed(2)} ${unit}`,
+  )
   console.log(`   @512 limit ${tol512}${unit}: ${under(tol512)} would pass`)
   const worst = [...scorable].sort((a, b) => b[key] - a[key]).slice(0, 4)
   console.log(`   worst: ${worst.map((r) => `${r.name} ${r[key].toFixed(2)}`).join(' · ')}`)

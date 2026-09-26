@@ -87,7 +87,8 @@ export function monoLabels(img: ImageDataLike, threshold: number, invert: boolea
     s[2] += out[p + 2]
     s[3]++
   }
-  const mean = (s: number[]) => (s[3] > 0 ? { r: s[0] / s[3], g: s[1] / s[3], b: s[2] / s[3] } : { r: paper, g: paper, b: paper })
+  const mean = (s: number[]) =>
+    s[3] > 0 ? { r: s[0] / s[3], g: s[1] / s[3], b: s[2] / s[3] } : { r: paper, g: paper, b: paper }
   return {
     labels,
     palette: [mean(sum[MONO_INK]), mean(sum[MONO_PAPER])],
@@ -101,7 +102,14 @@ export function monoLabels(img: ImageDataLike, threshold: number, invert: boolea
  * `to`. A component that touches the image border is kept: it is the edge of
  * something larger, not a speck.
  */
-function flipSmallComponents(labels: Int32Array, width: number, height: number, from: number, to: number, minArea: number): void {
+function flipSmallComponents(
+  labels: Int32Array,
+  width: number,
+  height: number,
+  from: number,
+  to: number,
+  minArea: number,
+): void {
   const n = width * height
   const seen = new Uint8Array(n)
   const stack: number[] = []
@@ -119,10 +127,22 @@ function flipSmallComponents(labels: Int32Array, width: number, height: number, 
       const x = i % width
       const y = (i - x) / width
       if (x === 0 || y === 0 || x === width - 1 || y === height - 1) border = true
-      if (x > 0 && !seen[i - 1] && labels[i - 1] === from) { seen[i - 1] = 1; stack.push(i - 1) }
-      if (x < width - 1 && !seen[i + 1] && labels[i + 1] === from) { seen[i + 1] = 1; stack.push(i + 1) }
-      if (y > 0 && !seen[i - width] && labels[i - width] === from) { seen[i - width] = 1; stack.push(i - width) }
-      if (y < height - 1 && !seen[i + width] && labels[i + width] === from) { seen[i + width] = 1; stack.push(i + width) }
+      if (x > 0 && !seen[i - 1] && labels[i - 1] === from) {
+        seen[i - 1] = 1
+        stack.push(i - 1)
+      }
+      if (x < width - 1 && !seen[i + 1] && labels[i + 1] === from) {
+        seen[i + 1] = 1
+        stack.push(i + 1)
+      }
+      if (y > 0 && !seen[i - width] && labels[i - width] === from) {
+        seen[i - width] = 1
+        stack.push(i - width)
+      }
+      if (y < height - 1 && !seen[i + width] && labels[i + width] === from) {
+        seen[i + width] = 1
+        stack.push(i + width)
+      }
     }
     if (!border && members.length < minArea) for (const i of members) labels[i] = to
   }

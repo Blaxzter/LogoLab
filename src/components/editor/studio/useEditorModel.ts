@@ -105,10 +105,7 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     if (next !== 'pen') setPenPathId(null)
   }, [])
 
-  const box = useMemo(
-    () => selectionBox(previewDoc.items, selection),
-    [previewDoc.items, selection],
-  )
+  const box = useMemo(() => selectionBox(previewDoc.items, selection), [previewDoc.items, selection])
   const stats = useMemo(() => docStats(previewDoc), [previewDoc])
   // Built on demand rather than memoized: serializing is expensive and only
   // download/copy need it, so a memo would rerun on every drag frame for nothing.
@@ -186,18 +183,9 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     setNodeSel(new Set())
     setSelection(ids)
   }, [])
-  const rowToggleVisible = useCallback(
-    (id: string) => commit(toggleVisible(docRef.current, id)),
-    [commit],
-  )
-  const rowToggleExpanded = useCallback(
-    (id: string) => preview(toggleExpanded(docRef.current, id)),
-    [preview],
-  )
-  const rowRename = useCallback(
-    (id: string, name: string) => commit(renameItem(docRef.current, id, name)),
-    [commit],
-  )
+  const rowToggleVisible = useCallback((id: string) => commit(toggleVisible(docRef.current, id)), [commit])
+  const rowToggleExpanded = useCallback((id: string) => preview(toggleExpanded(docRef.current, id)), [preview])
+  const rowRename = useCallback((id: string, name: string) => commit(renameItem(docRef.current, id, name)), [commit])
   const rowDelete = useCallback(
     (id: string) => {
       const d = docRef.current
@@ -219,10 +207,7 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     [selection, withDoc],
   )
 
-  const align = useCallback(
-    (edge: AlignEdge) => withDoc((d) => alignItems(d, selection, edge)),
-    [selection, withDoc],
-  )
+  const align = useCallback((edge: AlignEdge) => withDoc((d) => alignItems(d, selection, edge)), [selection, withDoc])
   const distribute = useCallback(
     (axis: DistributeAxis) => withDoc((d) => distributeItems(d, selection, axis)),
     [selection, withDoc],
@@ -379,8 +364,21 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [
-    history, previewDoc, selection, nodeSel, penPathId, enteredGroupId, snap.grid,
-    deleteSelection, duplicateSelection, doGroup, doUngroup, doJoin, reorder, nudge, pickTool,
+    history,
+    previewDoc,
+    selection,
+    nodeSel,
+    penPathId,
+    enteredGroupId,
+    snap.grid,
+    deleteSelection,
+    duplicateSelection,
+    doGroup,
+    doUngroup,
+    doJoin,
+    reorder,
+    nudge,
+    pickTool,
   ])
 
   return {

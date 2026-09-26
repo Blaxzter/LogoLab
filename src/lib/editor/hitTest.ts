@@ -57,8 +57,7 @@ export function flattenSubPath(sp: SubPath): Vec[] {
   for (let seg = 0; seg < count; seg++) {
     const { p0, c1, c2, p3 } = segmentControls(sp, seg)
     // A straight segment needs no interior samples at all.
-    const straight =
-      c1.x === p0.x && c1.y === p0.y && c2.x === p3.x && c2.y === p3.y
+    const straight = c1.x === p0.x && c1.y === p0.y && c2.x === p3.x && c2.y === p3.y
     if (straight) {
       pts.push({ x: p3.x, y: p3.y })
       continue
@@ -185,10 +184,7 @@ export function pickItem(
   const atomic = opts.groupsAreAtomic !== false
   const skip = opts.skipIds
 
-  const search = (
-    list: readonly DocItem[],
-    topGroupId: string | null,
-  ): { id: string; leafId: string } | null => {
+  const search = (list: readonly DocItem[], topGroupId: string | null): { id: string; leafId: string } | null => {
     for (let i = list.length - 1; i >= 0; i--) {
       const it = list[i]
       if (!it.visible || skip?.has(it.id)) continue

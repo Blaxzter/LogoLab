@@ -49,7 +49,12 @@ export function arcSmoothPasses(passes: number, arcLen: number): number {
 export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOptions): PathNode[] {
   const n = pts.length
   const wrap = (i: number): number => ((i % n) + n) % n
-  const resolved = resolveLoopCaps(pts, corners.slice().sort((a, b) => a - b), opts.cornerTurnDeg, opts.cornerWindow ?? CORNER_WINDOW)
+  const resolved = resolveLoopCaps(
+    pts,
+    corners.slice().sort((a, b) => a - b),
+    opts.cornerTurnDeg,
+    opts.cornerWindow ?? CORNER_WINDOW,
+  )
   const snapSpan = opts.snapSpan ?? SNAP_SPAN
   const gapOf = (steps: number): number => opts.armGapFixed ?? armGap(steps)
   // Diagnostic only: a cap-resolved corner is placed by the resolver, not the apex snap,
@@ -57,10 +62,29 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
   const capRecord = (c: number, p: Vec, toPrev: number, toNext: number): void => {
     if (!opts.apexDiag) return
     opts.apexDiag({
-      cx: pts[c].x, cy: pts[c].y, ax: p.x, ay: p.y, moved: dist(p, pts[c]), outcome: 'cap', allow: CAP_SNAP_MAX,
-      inSpan: Math.min(snapSpan, Math.max(gapOf(toPrev) + 1, toPrev - 1)), outSpan: Math.min(snapSpan, Math.max(gapOf(toNext) + 1, toNext - 1)),
-      inGap: gapOf(toPrev), outGap: gapOf(toNext), hx: NaN, hy: NaN,
-      inBow: -1, outBow: -1, inChord: -1, outChord: -1, inN: -1, outN: -1, tipDeg: -1, reach: -1, inKind: 'line', outKind: 'line',
+      cx: pts[c].x,
+      cy: pts[c].y,
+      ax: p.x,
+      ay: p.y,
+      moved: dist(p, pts[c]),
+      outcome: 'cap',
+      allow: CAP_SNAP_MAX,
+      inSpan: Math.min(snapSpan, Math.max(gapOf(toPrev) + 1, toPrev - 1)),
+      outSpan: Math.min(snapSpan, Math.max(gapOf(toNext) + 1, toNext - 1)),
+      inGap: gapOf(toPrev),
+      outGap: gapOf(toNext),
+      hx: NaN,
+      hy: NaN,
+      inBow: -1,
+      outBow: -1,
+      inChord: -1,
+      outChord: -1,
+      inN: -1,
+      outN: -1,
+      tipDeg: -1,
+      reach: -1,
+      inKind: 'line',
+      outKind: 'line',
     })
   }
   const C = resolved.corners
@@ -193,7 +217,8 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
       if (!dirs) continue
       const arriving = fitted[(k - 1 + arcs) % arcs]
       const leaving = fitted[k]
-      if (dirs.inArm && arriving.length >= 2) pinHandle(arriving[arriving.length - 1], 'hIn', dirs.inArm, opts.epsilon, opts.pinDiag)
+      if (dirs.inArm && arriving.length >= 2)
+        pinHandle(arriving[arriving.length - 1], 'hIn', dirs.inArm, opts.epsilon, opts.pinDiag)
       if (dirs.outArm && leaving.length >= 2) pinHandle(leaving[0], 'hOut', dirs.outArm, opts.epsilon, opts.pinDiag)
     }
   }
@@ -207,11 +232,25 @@ export function fitCorneredLoop(pts: Vec[], corners: number[], opts: PlanarFitOp
     const start = cur[0]
     const prev = out[out.length - 1]
     if (prev) prev.hOut = start.hOut ? { x: start.hOut.x, y: start.hOut.y } : null
-    else out.push({ x: start.x, y: start.y, hIn: null, hOut: start.hOut ? { x: start.hOut.x, y: start.hOut.y } : null, kind: 'corner' })
+    else
+      out.push({
+        x: start.x,
+        y: start.y,
+        hIn: null,
+        hOut: start.hOut ? { x: start.hOut.x, y: start.hOut.y } : null,
+        kind: 'corner',
+      })
     for (let j = 1; j < cur.length - 1; j++) out.push(cur[j])
     const last = cur[cur.length - 1]
     if (k === arcs - 1) out[0].hIn = last.hIn ? { x: last.hIn.x, y: last.hIn.y } : null
-    else out.push({ x: last.x, y: last.y, hIn: last.hIn ? { x: last.hIn.x, y: last.hIn.y } : null, hOut: null, kind: 'corner' })
+    else
+      out.push({
+        x: last.x,
+        y: last.y,
+        hIn: last.hIn ? { x: last.hIn.x, y: last.hIn.y } : null,
+        hOut: null,
+        kind: 'corner',
+      })
   }
   return out.length >= 2 ? out : fitLoopEdge(presmooth(pts, opts.smoothPasses, false), opts)
 }

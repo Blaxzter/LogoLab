@@ -28,9 +28,7 @@ export function rectShape(a: Vec, b: Vec, radius = 0): SubPath[] {
   // Clamp to half the short side, matching SVG's rx/ry clamping.
   const r = Math.max(0, Math.min(radius, Math.min(w, h) / 2))
   if (r === 0) {
-    return [
-      { nodes: [corner(x0, y0), corner(x1, y0), corner(x1, y1), corner(x0, y1)], closed: true },
-    ]
+    return [{ nodes: [corner(x0, y0), corner(x1, y0), corner(x1, y1), corner(x0, y1)], closed: true }]
   }
 
   const k = r * KAPPA
@@ -84,13 +82,7 @@ export function polygonShape(center: Vec, radius: number, sides: number, rotatio
  * A star: `points` outer vertices alternating with inner ones at
  * `innerRatio` × the outer radius.
  */
-export function starShape(
-  center: Vec,
-  radius: number,
-  points: number,
-  innerRatio = 0.5,
-  rotation = 0,
-): SubPath[] {
+export function starShape(center: Vec, radius: number, points: number, innerRatio = 0.5, rotation = 0): SubPath[] {
   const n = Math.max(3, Math.round(points))
   if (radius <= 0) return []
   const inner = radius * Math.max(0.02, Math.min(0.98, innerRatio))

@@ -125,9 +125,8 @@ export function BlankArtboard({ onCreate }: BlankArtboardProps) {
           </div>
 
           <p className="text-xs leading-relaxed text-faint">
-            Sizes are artboard units, which a browser draws as pixels — so the paper presets are
-            their millimetres at 96 dpi and print at the real sheet size. The artboard can be
-            resized later.
+            Sizes are artboard units, which a browser draws as pixels — so the paper presets are their millimetres at 96
+            dpi and print at the real sheet size. The artboard can be resized later.
           </p>
         </div>
 

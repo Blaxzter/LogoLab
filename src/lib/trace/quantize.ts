@@ -271,10 +271,16 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
         if (labels[i] === -1) continue
         const key = rgbAt(i)
         if (
-          rgbAt(i - width - 1) === key && rgbAt(i - width) === key && rgbAt(i - width + 1) === key &&
-          rgbAt(i - 1) === key && rgbAt(i + 1) === key &&
-          rgbAt(i + width - 1) === key && rgbAt(i + width) === key && rgbAt(i + width + 1) === key
-        ) flatCount.set(key, (flatCount.get(key) ?? 0) + 1)
+          rgbAt(i - width - 1) === key &&
+          rgbAt(i - width) === key &&
+          rgbAt(i - width + 1) === key &&
+          rgbAt(i - 1) === key &&
+          rgbAt(i + 1) === key &&
+          rgbAt(i + width - 1) === key &&
+          rgbAt(i + width) === key &&
+          rgbAt(i + width + 1) === key
+        )
+          flatCount.set(key, (flatCount.get(key) ?? 0) + 1)
       }
     }
 
@@ -318,7 +324,9 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
       const sums = ids.map(() => ({ r: 0, g: 0, b: 0, w: 0 }))
       for (const [key, cl] of colorToCluster) {
         if (cl !== c) continue
-        const r = (key >> 16) & 255, g = (key >> 8) & 255, b = key & 255
+        const r = (key >> 16) & 255,
+          g = (key >> 8) & 255,
+          b = key & 255
         let best = 0
         let bestD = Infinity
         for (let j = 0; j < chosen.length; j++) {

@@ -136,10 +136,7 @@ export function encodeIco(images: { size: number; png: ArrayBuffer }[]): Blob {
 
 function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('canvas.toBlob returned null'))),
-      'image/png',
-    )
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('canvas.toBlob returned null'))), 'image/png')
   })
 }
 

@@ -33,7 +33,12 @@ const cases = tierCases(1)
 console.log(`calibrating tier 1: ${cases.length} cases @ ${RES}px\n`)
 
 interface Row {
-  name: string; chamfer: number; p95: number; parsimony: number; gtNodes: number; docNodes: number
+  name: string
+  chamfer: number
+  p95: number
+  parsimony: number
+  gtNodes: number
+  docNodes: number
   /** GT → trace: authored boundary the tracer MISSED. */
   missed: number
   /** trace → GT: boundary the tracer INVENTED. Splitting these two is the whole story here. */
@@ -45,17 +50,33 @@ for (const c of cases) {
   const svg = readFileSync(join(root, c.svg), 'utf8')
   const gt = parseGroundTruth(svg)
   const why = unscorable(gt)
-  if (why) { console.log(`  ⨯ ${c.name} — ${why}`); continue }
+  if (why) {
+    console.log(`  ⨯ ${c.name} — ${why}`)
+    continue
+  }
 
   const png = new Resvg(svg, { fitTo: { mode: 'width', value: RES }, background: 'white' }).render().asPng()
   const img = decodePng(png)
-  const doc = await traceImage(img as unknown as ImageData, { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: true })
+  const doc = await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: true,
+  })
   const g = scoreGeometry(toRasterSpace(gt, img.width), doc, img.width, img.height, img)
-  if (g.samples === 0) { console.log(`  · ${c.name} — no interior boundary, skipped`); continue }
+  if (g.samples === 0) {
+    console.log(`  · ${c.name} — no interior boundary, skipped`)
+    continue
+  }
 
   rows.push({
-    name: c.name, chamfer: g.chamfer, p95: g.p95, parsimony: g.parsimony,
-    gtNodes: g.gtNodes, docNodes: g.docNodes, missed: g.missedMean, spurious: g.spuriousMean,
+    name: c.name,
+    chamfer: g.chamfer,
+    p95: g.p95,
+    parsimony: g.parsimony,
+    gtNodes: g.gtNodes,
+    docNodes: g.docNodes,
+    missed: g.missedMean,
+    spurious: g.spuriousMean,
   })
   process.stdout.write(`\r  traced ${rows.length}/${cases.length}`)
 }
@@ -66,11 +87,18 @@ const pct = (xs: number[], p: number): number => {
   return s[Math.min(s.length - 1, Math.floor(p * s.length))]
 }
 
-const report = (key: 'chamfer' | 'p95' | 'parsimony' | 'missed' | 'spurious', tier0: number | null, unit: string, cands: number[]): void => {
+const report = (
+  key: 'chamfer' | 'p95' | 'parsimony' | 'missed' | 'spurious',
+  tier0: number | null,
+  unit: string,
+  cands: number[],
+): void => {
   const xs = rows.map((r) => r[key])
   const q = (p: number) => pct(xs, p).toFixed(2)
   console.log(`── ${key} ${'─'.repeat(60 - key.length)}`)
-  console.log(`   p10 ${q(0.1)}  p50 ${q(0.5)}  p75 ${q(0.75)}  p90 ${q(0.9)}  p95 ${q(0.95)}  max ${Math.max(...xs).toFixed(2)} ${unit}`)
+  console.log(
+    `   p10 ${q(0.1)}  p50 ${q(0.5)}  p75 ${q(0.75)}  p90 ${q(0.9)}  p95 ${q(0.95)}  max ${Math.max(...xs).toFixed(2)} ${unit}`,
+  )
   const under = (t: number) => `${rows.filter((r) => r[key] <= t).length}/${rows.length}`
   if (tier0 !== null) console.log(`   tier-0 limit ${tier0}${unit}: only ${under(tier0)} cases would pass`)
   const worst = [...rows].sort((a, b) => b[key] - a[key]).slice(0, 3)
@@ -94,11 +122,17 @@ const docN = rows.reduce((s, r) => s + r.docNodes, 0) / rows.length
 const mMissed = rows.reduce((s, r) => s + r.missed, 0) / rows.length
 const mSpur = rows.reduce((s, r) => s + r.spurious, 0) / rows.length
 console.log(`mean authored nodes ${gtN.toFixed(0)} · mean traced nodes ${docN.toFixed(0)}`)
-console.log(`mean MISSED ${mMissed.toFixed(2)}px · mean INVENTED ${mSpur.toFixed(2)}px  (ratio ${(mSpur / mMissed).toFixed(1)}×)`)
+console.log(
+  `mean MISSED ${mMissed.toFixed(2)}px · mean INVENTED ${mSpur.toFixed(2)}px  (ratio ${(mSpur / mMissed).toFixed(1)}×)`,
+)
 
 // The gate must be GREEN on the day it lands, or it gets switched off before it ever catches
 // anything. So print exactly what the gated subset does against the proposed tier-1 limits.
-const gated = new Set(tierCases(1).filter((c) => c.gated).map((c) => c.name))
+const gated = new Set(
+  tierCases(1)
+    .filter((c) => c.gated)
+    .map((c) => c.name),
+)
 const g = rows.filter((r) => gated.has(r.name))
 const T = TIER_TOL[1]
 console.log(`\n━━━ GATED SUBSET (${g.length} cases — what CI would run) vs proposed tier-1 limits ━━━`)
@@ -111,9 +145,12 @@ for (const r of [...g].sort((a, b) => b.chamfer - a.chamfer)) {
   )
 }
 const fails = g.filter((r) => !(r.chamfer <= T.chamfer && r.p95 <= T.p95 && r.parsimony <= T.parsimony))
-console.log(`\n  ${g.length - fails.length}/${g.length} of the gated subset pass. ${fails.length ? '⚠ CI WOULD BE RED ON LANDING.' : 'CI is green on landing.'}`)
+console.log(
+  `\n  ${g.length - fails.length}/${g.length} of the gated subset pass. ${fails.length ? '⚠ CI WOULD BE RED ON LANDING.' : 'CI is green on landing.'}`,
+)
 
 const corpusFails = rows.filter((r) => !(r.chamfer <= T.chamfer && r.p95 <= T.p95 && r.parsimony <= T.parsimony))
-console.log(`  Across the FULL 109: ${rows.length - corpusFails.length} pass, ${corpusFails.length} fail — those are real defects, browse them at /labs/truth.`)
+console.log(
+  `  Across the FULL 109: ${rows.length - corpusFails.length} pass, ${corpusFails.length} fail — those are real defects, browse them at /labs/truth.`,
+)
 if (corpusFails.length) console.log(`  failing: ${corpusFails.map((r) => r.name.replace('fluent-', '')).join(', ')}`)
-

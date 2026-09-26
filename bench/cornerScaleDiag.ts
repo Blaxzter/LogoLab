@@ -47,7 +47,14 @@ import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts
 import { buildPlanarNetwork } from '../src/lib/trace/planarNetwork.ts'
 import type { ApexDiagRecord } from '../src/lib/trace/planarFit.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from './svgGround.ts'
-import { sharpCorners, makeVisibleAt, scoreGeometry, CORNER_MIN_EDGE, CORNER_MATCH_R, type Corner } from './geomScore.ts'
+import {
+  sharpCorners,
+  makeVisibleAt,
+  scoreGeometry,
+  CORNER_MIN_EDGE,
+  CORNER_MATCH_R,
+  type Corner,
+} from './geomScore.ts'
 import type { SubPath, Vec, EditableDoc } from '../src/lib/path/types.ts'
 
 ensureImageData()
@@ -101,15 +108,31 @@ interface Case {
   svg: string
 }
 /** The §15.7 / §18 / §19 witness marks — the letterform marks whose corners have a history. */
-const WITNESSES = ['chupa-chups', 'instagram', 'coca-cola', 'mastercard', 'ibm', 'fedex', 'ahrefs-wordmark', 'cnn', 'bluetooth', 'nike']
+const WITNESSES = [
+  'chupa-chups',
+  'instagram',
+  'coca-cola',
+  'mastercard',
+  'ibm',
+  'fedex',
+  'ahrefs-wordmark',
+  'cnn',
+  'bluetooth',
+  'nike',
+]
 const cases = ((): Case[] => {
   const logo = flag('--logo')
-  if (logo) return [{ name: logo.replace(/\.svg$/, ''), svg: join(root, 'examples', 'logos', `${logo.replace(/\.svg$/, '')}.svg`) }]
+  if (logo)
+    return [
+      { name: logo.replace(/\.svg$/, ''), svg: join(root, 'examples', 'logos', `${logo.replace(/\.svg$/, '')}.svg`) },
+    ]
   if (argv.includes('--logos')) {
     const dir = join(root, 'examples', 'logos')
     let onDisk: string[]
     try {
-      onDisk = readdirSync(dir).filter((x) => x.endsWith('.svg')).map((x) => x.replace(/\.svg$/, ''))
+      onDisk = readdirSync(dir)
+        .filter((x) => x.endsWith('.svg'))
+        .map((x) => x.replace(/\.svg$/, ''))
     } catch {
       console.log('  (examples/logos/ is absent — `npm run fetch:logos` rehydrates it)')
       return []
@@ -132,7 +155,10 @@ interface GtCorner extends Corner {
   edge: number
 }
 
-function authoredCorners(shapes: { subPaths: SubPath[] }[], visible: (q: { x: number; y: number; tx: number; ty: number }) => boolean): GtCorner[] {
+function authoredCorners(
+  shapes: { subPaths: SubPath[] }[],
+  visible: (q: { x: number; y: number; tx: number; ty: number }) => boolean,
+): GtCorner[] {
   const sets = shapes.map((s) => s.subPaths)
   const raw = sharpCorners(sets, CORNER_MIN_EDGE).filter(
     (c) => visible({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || visible({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
@@ -192,15 +218,32 @@ interface Lane {
 }
 
 async function lane(svgText: string, gtCorners: GtCorner[], res: number): Promise<Lane> {
-  const img = decodePng(new Resvg(svgText, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng())
+  const img = decodePng(
+    new Resvg(svgText, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng(),
+  )
   const s = res / REF
   const recs: ApexDiagRecord[] = []
   let raw: { labels: Int32Array; width: number; height: number } | null = null
   const doc: EditableDoc = await traceImage(
     img as unknown as ImageData,
-    { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, planarFit: { ...FIT, apexDiag: (r: ApexDiagRecord) => { recs.push(r) } } },
-    undefined, undefined, undefined, undefined,
-    (l) => { raw = l },
+    {
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: false,
+      planarFit: {
+        ...FIT,
+        apexDiag: (r: ApexDiagRecord) => {
+          recs.push(r)
+        },
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    (l) => {
+      raw = l
+    },
   )
   const docSets: SubPath[][] = []
   for (const it of doc.items) if (it.kind === 'path' && it.visible !== false) docSets.push(it.subPaths)
@@ -228,12 +271,16 @@ async function lane(svgText: string, gtCorners: GtCorner[], res: number): Promis
       }
       console.log(`      ${a}   ${b}`)
     }
-    for (const set of docSets) for (const sp of set) for (const nd of sp.nodes) {
-      if (Math.abs(nd.x - X) > half || Math.abs(nd.y - Y) > half) continue
-      const h = (p: Vec | null | undefined): string => (p ? `(${f(p.x, 1)},${f(p.y, 1)})` : '-')
-      console.log(`      node (${f(nd.x)},${f(nd.y)}) hIn ${h(nd.hIn)} hOut ${h(nd.hOut)} ${nd.kind ?? ''}`)
-    }
-    const near = docCorners.filter((c) => Math.abs(c.x - X) <= 2 * half && Math.abs(c.y - Y) <= 2 * half).map((c) => `(${f(c.x, 1)},${f(c.y, 1)})`)
+    for (const set of docSets)
+      for (const sp of set)
+        for (const nd of sp.nodes) {
+          if (Math.abs(nd.x - X) > half || Math.abs(nd.y - Y) > half) continue
+          const h = (p: Vec | null | undefined): string => (p ? `(${f(p.x, 1)},${f(p.y, 1)})` : '-')
+          console.log(`      node (${f(nd.x)},${f(nd.y)}) hIn ${h(nd.hIn)} hOut ${h(nd.hOut)} ${nd.kind ?? ''}`)
+        }
+    const near = docCorners
+      .filter((c) => Math.abs(c.x - X) <= 2 * half && Math.abs(c.y - Y) <= 2 * half)
+      .map((c) => `(${f(c.x, 1)},${f(c.y, 1)})`)
     console.log(`      traced SHARP corners within ${2 * half}px: ${near.join(' ') || 'none'}`)
   }
   const turnAt = (pts: Vec[], i: number, closed: boolean): number => {
@@ -243,8 +290,12 @@ async function lane(svgText: string, gtCorners: GtCorner[], res: number): Promis
     const a = pts[wrap(i - WIN)]
     const b = pts[i]
     const c = pts[wrap(i + WIN)]
-    const ix = b.x - a.x, iy = b.y - a.y, ox = c.x - b.x, oy = c.y - b.y
-    const li = Math.hypot(ix, iy), lo = Math.hypot(ox, oy)
+    const ix = b.x - a.x,
+      iy = b.y - a.y,
+      ox = c.x - b.x,
+      oy = c.y - b.y
+    const li = Math.hypot(ix, iy),
+      lo = Math.hypot(ox, oy)
     if (li < 1e-9 || lo < 1e-9) return 0
     return (Math.acos(Math.max(-1, Math.min(1, (ix * ox + iy * oy) / (li * lo)))) * 180) / Math.PI
   }
@@ -312,7 +363,15 @@ async function lane(svgText: string, gtCorners: GtCorner[], res: number): Promis
   // The scorer's own lane numbers (native), so the watchlist is reproduced verbatim.
   const gtNative = toRasterSpace(parseGroundTruth(svgText), img.width)
   const g = scoreGeometry(gtNative, doc, img.width, img.height, img)
-  return { res, cells, gtCorners: g.gtCorners, cornersRecovered: g.cornersRecovered, cornersInvented: g.cornersInvented, chamfer: g.chamfer, p95: g.p95 }
+  return {
+    res,
+    cells,
+    gtCorners: g.gtCorners,
+    cornersRecovered: g.cornersRecovered,
+    cornersInvented: g.cornersInvented,
+    chamfer: g.chamfer,
+    p95: g.p95,
+  }
 }
 
 // --- reporting ------------------------------------------------------------------------------
@@ -327,9 +386,13 @@ const max = (xs: number[]): number => (xs.length ? Math.max(...xs) : NaN)
 const hist = (keys: string[]): string => {
   const m = new Map<string, number>()
   for (const k of keys) m.set(k, (m.get(k) ?? 0) + 1)
-  return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(' · ')
+  return [...m.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => `${k} ${n}`)
+    .join(' · ')
 }
-const outcomeOf = (c: Cell): string => (c.rec ? c.rec.outcome : Number.isFinite(c.latTurn) && c.latTurn >= SHARP_DEG ? 'lost-apex' : 'undetected')
+const outcomeOf = (c: Cell): string =>
+  c.rec ? c.rec.outcome : Number.isFinite(c.latTurn) && c.latTurn >= SHARP_DEG ? 'lost-apex' : 'undetected'
 const branchOf = (r: ApexDiagRecord): string => (Math.min(r.inSpan, r.outSpan) >= 14 ? 'full' : 'short')
 
 interface Witness {
@@ -347,45 +410,71 @@ async function census(cs: Case): Promise<void> {
     console.log(`\n━━━ ${cs.name}: unscorable (${why}) — skipped ━━━`)
     return
   }
-  const refImg = decodePng(new Resvg(svgText, { fitTo: { mode: 'width', value: REF }, background: 'white' }).render().asPng())
+  const refImg = decodePng(
+    new Resvg(svgText, { fitTo: { mode: 'width', value: REF }, background: 'white' }).render().asPng(),
+  )
   const gtCorners = authoredCorners(toRasterSpace(gt, refImg.width), makeVisibleAt(refImg))
   if (cases.length > 1) console.error(`  … ${cs.name} (${gtCorners.length} corners)`)
   const lanes: Lane[] = []
   for (const res of RESOLUTIONS) lanes.push(await lane(svgText, gtCorners, res))
 
-  console.log(`\n━━━ PAIRED CORNER CENSUS — ${cs.name} @ ${RESOLUTIONS.join('/')}  (${gtCorners.length} authored corners; errors in ${REF}-px artwork units)${Object.keys(FIT).length ? `  fit ${JSON.stringify(FIT)}` : ''} ━━━`)
+  console.log(
+    `\n━━━ PAIRED CORNER CENSUS — ${cs.name} @ ${RESOLUTIONS.join('/')}  (${gtCorners.length} authored corners; errors in ${REF}-px artwork units)${Object.keys(FIT).length ? `  fit ${JSON.stringify(FIT)}` : ''} ━━━`,
+  )
   {
     const turns = gtCorners.map((g) => g.turn)
     const edges = gtCorners.map((g) => g.edge)
-    console.log(`    authored turn: ${f(pctl(turns, 0), 1)}–${f(pctl(turns, 0.5), 1)}–${f(max(turns), 1)}°   shorter incident edge: ${f(pctl(edges, 0), 1)}–${f(pctl(edges, 0.5), 1)}–${f(max(edges), 1)} artwork px`)
+    console.log(
+      `    authored turn: ${f(pctl(turns, 0), 1)}–${f(pctl(turns, 0.5), 1)}–${f(max(turns), 1)}°   shorter incident edge: ${f(pctl(edges, 0), 1)}–${f(pctl(edges, 0.5), 1)}–${f(max(edges), 1)} artwork px`,
+    )
   }
 
   // --- per-raster fold ---
-  console.log(`\n    ${'res'.padStart(5)}  ${'scorer'.padStart(9)}  ${'census'.padStart(7)}  ${'inv'.padStart(3)}  ${'chamfer'.padStart(7)}  ${'lat err'.padStart(8)}  ${'apex err'.padStart(9)}  ${'final err (recovered) mean/p90/max'.padStart(34)}  ${'final err (all) mean/max'.padStart(24)}   outcomes`)
+  console.log(
+    `\n    ${'res'.padStart(5)}  ${'scorer'.padStart(9)}  ${'census'.padStart(7)}  ${'inv'.padStart(3)}  ${'chamfer'.padStart(7)}  ${'lat err'.padStart(8)}  ${'apex err'.padStart(9)}  ${'final err (recovered) mean/p90/max'.padStart(34)}  ${'final err (all) mean/max'.padStart(24)}   outcomes`,
+  )
   for (const L of lanes) {
     const rec = L.cells.filter((c) => c.recovered)
     console.log(
       `    ${String(L.res).padStart(5)}  ${`${L.cornersRecovered}/${L.gtCorners}`.padStart(9)}  ${`${rec.length}/${L.cells.length}`.padStart(7)}  ${String(L.cornersInvented).padStart(3)}  ${f(L.chamfer, 3).padStart(7)}` +
         `  ${f(mean(L.cells.map((c) => c.latErr)), 3).padStart(8)}  ${f(mean(L.cells.filter((c) => c.rec).map((c) => c.apexErr)), 3).padStart(9)}` +
-        `  ${`${f(mean(rec.map((c) => c.finalErr)), 3)} / ${f(pctl(rec.map((c) => c.finalErr), 0.9), 3)} / ${f(max(rec.map((c) => c.finalErr)), 3)}`.padStart(34)}` +
+        `  ${`${f(mean(rec.map((c) => c.finalErr)), 3)} / ${f(
+          pctl(
+            rec.map((c) => c.finalErr),
+            0.9,
+          ),
+          3,
+        )} / ${f(max(rec.map((c) => c.finalErr)), 3)}`.padStart(34)}` +
         `  ${`${f(mean(L.cells.map((c) => Math.min(c.finalErr, 50))), 3)} / ${f(max(L.cells.map((c) => c.finalErr)), 2)}`.padStart(24)}   ${hist(L.cells.map(outcomeOf))}`,
     )
   }
-  console.log(`    (scorer = geomScore's native-2.5px recall for the lane, the watchlist number; census = the same rule on the ${REF}-keyed corner set; inv = corners invented; 'lost-apex' = the lattice reads ≥ ${SHARP_DEG}° at the corner but no apex record of its own — its cluster fused with a neighbour's; 'undetected' = the lattice reads < ${SHARP_DEG}°)`)
+  console.log(
+    `    (scorer = geomScore's native-2.5px recall for the lane, the watchlist number; census = the same rule on the ${REF}-keyed corner set; inv = corners invented; 'lost-apex' = the lattice reads ≥ ${SHARP_DEG}° at the corner but no apex record of its own — its cluster fused with a neighbour's; 'undetected' = the lattice reads < ${SHARP_DEG}°)`,
+  )
 
   // --- the estimator in NATIVE px: is its error a function of the raster or of the art? ---
-  console.log(`\n    ESTIMATOR IN NATIVE PX (records with an arm intersection) — lattice vertex / raw intersection / chosen apex, mean · p90 · max off the authored corner:`)
-  console.log(`    ${'res'.padStart(5)}  ${'n'.padStart(4)}  ${'lattice'.padStart(20)}  ${'raw intersection'.padStart(20)}  ${'chosen apex'.padStart(20)}`)
+  console.log(
+    `\n    ESTIMATOR IN NATIVE PX (records with an arm intersection) — lattice vertex / raw intersection / chosen apex, mean · p90 · max off the authored corner:`,
+  )
+  console.log(
+    `    ${'res'.padStart(5)}  ${'n'.padStart(4)}  ${'lattice'.padStart(20)}  ${'raw intersection'.padStart(20)}  ${'chosen apex'.padStart(20)}`,
+  )
   for (const L of lanes) {
     const s = L.res / REF
     const cs = L.cells.filter((c) => c.rec && Number.isFinite(c.hitErr))
     const stat = (xs: number[]): string => `${f(mean(xs) * s)} · ${f(pctl(xs, 0.9) * s)} · ${f(max(xs) * s)}`
-    console.log(`    ${String(L.res).padStart(5)}  ${String(cs.length).padStart(4)}  ${stat(cs.map((c) => c.latErr)).padStart(20)}  ${stat(cs.map((c) => c.hitErr)).padStart(20)}  ${stat(cs.map((c) => c.apexErr)).padStart(20)}`)
+    console.log(
+      `    ${String(L.res).padStart(5)}  ${String(cs.length).padStart(4)}  ${stat(cs.map((c) => c.latErr)).padStart(20)}  ${stat(cs.map((c) => c.hitErr)).padStart(20)}  ${stat(cs.map((c) => c.apexErr)).padStart(20)}`,
+    )
   }
 
   // --- the SELECTOR: per outcome, would the raw intersection have beaten what was kept? ---
-  console.log(`\n    SELECTOR — per outcome and raster: what the rule kept vs what the raw intersection offered (artwork px). 'hit better' = the refused/clamped intersection was ≥ 0.25 px closer to the authored corner than the kept apex; 'kept better' the reverse; else 'same'.`)
-  console.log(`    ${'res'.padStart(5)}  ${'outcome'.padEnd(14)}  ${'n'.padStart(4)}  ${'kept err mean/max'.padStart(18)}  ${'hit err mean/max'.padStart(18)}  ${'hit better'.padStart(10)}  ${'kept better'.padStart(11)}  ${'same'.padStart(5)}`)
+  console.log(
+    `\n    SELECTOR — per outcome and raster: what the rule kept vs what the raw intersection offered (artwork px). 'hit better' = the refused/clamped intersection was ≥ 0.25 px closer to the authored corner than the kept apex; 'kept better' the reverse; else 'same'.`,
+  )
+  console.log(
+    `    ${'res'.padStart(5)}  ${'outcome'.padEnd(14)}  ${'n'.padStart(4)}  ${'kept err mean/max'.padStart(18)}  ${'hit err mean/max'.padStart(18)}  ${'hit better'.padStart(10)}  ${'kept better'.padStart(11)}  ${'same'.padStart(5)}`,
+  )
   for (const L of lanes) {
     const by = new Map<string, Cell[]>()
     for (const c of L.cells) {
@@ -404,58 +493,89 @@ async function census(cs: Case): Promise<void> {
   }
 
   // --- recipe 2: the detector's reading, per raster, by authored turn class ---
-  console.log(`\n    RECIPE 2 — the ±${WIN} chord turn the detector reads at each authored corner (min–median–max, and how many read ≥ ${SHARP_DEG}°), by authored turn:`)
+  console.log(
+    `\n    RECIPE 2 — the ±${WIN} chord turn the detector reads at each authored corner (min–median–max, and how many read ≥ ${SHARP_DEG}°), by authored turn:`,
+  )
   const classes = [...new Set(gtCorners.map((g) => Math.round(g.turn)))].sort((a, b) => a - b)
   const classOf = (g: GtCorner): number => Math.round(g.turn)
-  console.log(`    ${'authored'.padStart(9)}  ${'n'.padStart(3)}  ${RESOLUTIONS.map((r) => `@${r}`.padStart(22)).join('')}`)
+  console.log(
+    `    ${'authored'.padStart(9)}  ${'n'.padStart(3)}  ${RESOLUTIONS.map((r) => `@${r}`.padStart(22)).join('')}`,
+  )
   for (const cl of classes) {
     const ids = gtCorners.filter((g) => classOf(g) === cl).map((g) => g.id)
     if (ids.length === 0) continue
     const cols = lanes.map((L) => {
       const ts = ids.map((id) => L.cells[id].latTurn).filter(Number.isFinite)
-      return `${f(pctl(ts, 0), 0)}–${f(pctl(ts, 0.5), 0)}–${f(max(ts), 0)}° (${ts.filter((t) => t >= SHARP_DEG).length}/${ids.length})`.padStart(22)
+      return `${f(pctl(ts, 0), 0)}–${f(pctl(ts, 0.5), 0)}–${f(max(ts), 0)}° (${ts.filter((t) => t >= SHARP_DEG).length}/${ids.length})`.padStart(
+        22,
+      )
     })
     console.log(`    ${`${cl}°`.padStart(9)}  ${String(ids.length).padStart(3)}  ${cols.join('')}`)
   }
 
   // --- recipe 6: SNAP_SPAN branch + allow ---
-  console.log(`\n    RECIPE 6 — the snap's evidence window per raster (records joined to an authored corner): shortSpan = min(inSpan,outSpan), branch full ⇔ shortSpan ≥ 14, allow reached ⇔ moved ≥ 0.9·allow`)
-  console.log(`    ${'res'.padStart(5)}  ${'recs'.padStart(4)}  ${'shortSpan max'.padStart(13)}  ${'shortSpan hist'.padStart(40)}  ${'branch'.padStart(16)}  ${'moved (reconstructed) mean/p90/max'.padStart(34)}  ${'allow reached'.padStart(13)}  ${'over-cap'.padStart(8)}`)
+  console.log(
+    `\n    RECIPE 6 — the snap's evidence window per raster (records joined to an authored corner): shortSpan = min(inSpan,outSpan), branch full ⇔ shortSpan ≥ 14, allow reached ⇔ moved ≥ 0.9·allow`,
+  )
+  console.log(
+    `    ${'res'.padStart(5)}  ${'recs'.padStart(4)}  ${'shortSpan max'.padStart(13)}  ${'shortSpan hist'.padStart(40)}  ${'branch'.padStart(16)}  ${'moved (reconstructed) mean/p90/max'.padStart(34)}  ${'allow reached'.padStart(13)}  ${'over-cap'.padStart(8)}`,
+  )
   for (const L of lanes) {
     const rs = L.cells.filter((c) => c.rec).map((c) => c.rec!)
     const spans = rs.map((r) => Math.min(r.inSpan, r.outSpan))
     const spanHist = (() => {
       const m = new Map<number, number>()
       for (const sp of spans) m.set(sp, (m.get(sp) ?? 0) + 1)
-      return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([k, n]) => `${k}:${n}`).join(' ')
+      return [...m.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([k, n]) => `${k}:${n}`)
+        .join(' ')
     })()
     const recon = rs.filter((r) => r.outcome === 'reconstructed' || r.outcome === 'past-evidence')
     const reached = recon.filter((r) => r.allow > 0 && r.moved >= 0.9 * r.allow).length
     console.log(
       `    ${String(L.res).padStart(5)}  ${String(rs.length).padStart(4)}  ${f(max(spans), 0).padStart(13)}  ${spanHist.padStart(40)}  ${hist(rs.map(branchOf)).padStart(16)}` +
-        `  ${`${f(mean(recon.map((r) => r.moved)), 2)} / ${f(pctl(recon.map((r) => r.moved), 0.9), 2)} / ${f(max(recon.map((r) => r.moved)), 2)} px`.padStart(34)}  ${String(reached).padStart(13)}  ${String(rs.filter((r) => r.outcome === 'over-cap').length).padStart(8)}`,
+        `  ${`${f(mean(recon.map((r) => r.moved)), 2)} / ${f(
+          pctl(
+            recon.map((r) => r.moved),
+            0.9,
+          ),
+          2,
+        )} / ${f(max(recon.map((r) => r.moved)), 2)} px`.padStart(
+          34,
+        )}  ${String(reached).padStart(13)}  ${String(rs.filter((r) => r.outcome === 'over-cap').length).padStart(8)}`,
     )
   }
 
   // --- recipe 5: armGap per corner across rasters ---
-  console.log(`\n    RECIPE 5 — armGap per corner (the smaller of the two sides), paired: does the SAME corner get a different gap at a different raster?`)
+  console.log(
+    `\n    RECIPE 5 — armGap per corner (the smaller of the two sides), paired: does the SAME corner get a different gap at a different raster?`,
+  )
   console.log(`    ${'res'.padStart(5)}  ${'gap hist (min side)'.padStart(24)}  ${'gap hist (max side)'.padStart(24)}`)
   for (const L of lanes) {
     const rs = L.cells.filter((c) => c.rec).map((c) => c.rec!)
-    console.log(`    ${String(L.res).padStart(5)}  ${hist(rs.map((r) => `g${Math.min(r.inGap, r.outGap)}`)).padStart(24)}  ${hist(rs.map((r) => `g${Math.max(r.inGap, r.outGap)}`)).padStart(24)}`)
+    console.log(
+      `    ${String(L.res).padStart(5)}  ${hist(rs.map((r) => `g${Math.min(r.inGap, r.outGap)}`)).padStart(24)}  ${hist(rs.map((r) => `g${Math.max(r.inGap, r.outGap)}`)).padStart(24)}`,
+    )
   }
   if (lanes.length >= 2) {
     const pairs: string[] = []
     for (const g of gtCorners) {
-      const gaps = lanes.map((L) => (L.cells[g.id].rec ? Math.min(L.cells[g.id].rec!.inGap, L.cells[g.id].rec!.outGap) : -1))
+      const gaps = lanes.map((L) =>
+        L.cells[g.id].rec ? Math.min(L.cells[g.id].rec!.inGap, L.cells[g.id].rec!.outGap) : -1,
+      )
       if (gaps.some((x) => x < 0)) continue
       pairs.push(gaps.join('→'))
     }
-    console.log(`    corners with a record at EVERY raster: ${pairs.length} — gap trajectories ${RESOLUTIONS.join('→')}: ${hist(pairs)}`)
+    console.log(
+      `    corners with a record at EVERY raster: ${pairs.length} — gap trajectories ${RESOLUTIONS.join('→')}: ${hist(pairs)}`,
+    )
   }
 
   // --- flips: recovered at some rasters and not others ---
-  console.log(`\n    FLIPS — corners the scorer recovers at some rasters and not others (outcome · final err in artwork px per raster):`)
+  console.log(
+    `\n    FLIPS — corners the scorer recovers at some rasters and not others (outcome · final err in artwork px per raster):`,
+  )
   let flips = 0
   const rows = gtCorners
     .map((g) => ({ g, cells: lanes.map((L) => L.cells[g.id]) }))
@@ -463,21 +583,34 @@ async function census(cs: Case): Promise<void> {
   for (const r of rows) {
     flips++
     if (flips > TOP && !VERBOSE) continue
-    console.log(`      #${String(r.g.id).padStart(3)} @(${f(r.g.x, 0)},${f(r.g.y, 0)}) turn ${f(r.g.turn, 0)}° edge ${f(r.g.edge, 1)}  ${r.cells.map((c) => `${c.res}:${c.recovered ? '✓' : '✗'} ${outcomeOf(c).padEnd(13)} ${f(c.finalErr)}`).join('   ')}`)
+    console.log(
+      `      #${String(r.g.id).padStart(3)} @(${f(r.g.x, 0)},${f(r.g.y, 0)}) turn ${f(r.g.turn, 0)}° edge ${f(r.g.edge, 1)}  ${r.cells.map((c) => `${c.res}:${c.recovered ? '✓' : '✗'} ${outcomeOf(c).padEnd(13)} ${f(c.finalErr)}`).join('   ')}`,
+    )
   }
-  console.log(`    ${flips} of ${gtCorners.length} corners flip across rasters${flips > TOP && !VERBOSE ? ` (first ${TOP} shown; --verbose for all)` : ''}`)
+  console.log(
+    `    ${flips} of ${gtCorners.length} corners flip across rasters${flips > TOP && !VERBOSE ? ` (first ${TOP} shown; --verbose for all)` : ''}`,
+  )
   for (const r of rows) witnesses.push({ mark: cs.name, g: r.g, cells: new Map(r.cells.map((c) => [c.res, c])) })
 
   // --- worst placements at the lab raster ---
   const lab = lanes.find((L) => L.res === REF) ?? lanes[0]
-  console.log(`\n    WORST final placements @${lab.res} among recovered corners (artwork px), with the paired numbers at the other rasters:`)
+  console.log(
+    `\n    WORST final placements @${lab.res} among recovered corners (artwork px), with the paired numbers at the other rasters:`,
+  )
   const worst = gtCorners
     .map((g) => ({ g, c: lab.cells[g.id] }))
     .filter((x) => x.c.recovered)
     .sort((a, b) => b.c.finalErr - a.c.finalErr)
     .slice(0, VERBOSE ? gtCorners.length : Math.min(TOP, 8))
   for (const w of worst) {
-    console.log(`      #${String(w.g.id).padStart(3)} @(${f(w.g.x, 0)},${f(w.g.y, 0)}) turn ${f(w.g.turn, 0)}° edge ${f(w.g.edge, 1)}  ${lanes.map((L) => { const c = L.cells[w.g.id]; return `${L.res}: ${outcomeOf(c).padEnd(13)} lat ${f(c.latErr)} apex ${f(c.apexErr)} final ${f(c.finalErr)}${c.rec ? ` sp${c.rec.inSpan}/${c.rec.outSpan} g${c.rec.inGap}/${c.rec.outGap} mv${f(c.rec.moved, 1)}/${f(c.rec.allow, 1)}` : ''}` }).join('  |  ')}`)
+    console.log(
+      `      #${String(w.g.id).padStart(3)} @(${f(w.g.x, 0)},${f(w.g.y, 0)}) turn ${f(w.g.turn, 0)}° edge ${f(w.g.edge, 1)}  ${lanes
+        .map((L) => {
+          const c = L.cells[w.g.id]
+          return `${L.res}: ${outcomeOf(c).padEnd(13)} lat ${f(c.latErr)} apex ${f(c.apexErr)} final ${f(c.finalErr)}${c.rec ? ` sp${c.rec.inSpan}/${c.rec.outSpan} g${c.rec.inGap}/${c.rec.outGap} mv${f(c.rec.moved, 1)}/${f(c.rec.allow, 1)}` : ''}`
+        })
+        .join('  |  ')}`,
+    )
   }
 
   if (JSONL) {
@@ -485,10 +618,26 @@ async function census(cs: Case): Promise<void> {
       name: cs.name,
       corners: gtCorners.map((g) => ({ id: g.id, x: g.x, y: g.y, turn: g.turn, edge: g.edge })),
       lanes: lanes.map((L) => ({
-        res: L.res, gtCorners: L.gtCorners, cornersRecovered: L.cornersRecovered, cornersInvented: L.cornersInvented, chamfer: L.chamfer, p95: L.p95,
+        res: L.res,
+        gtCorners: L.gtCorners,
+        cornersRecovered: L.cornersRecovered,
+        cornersInvented: L.cornersInvented,
+        chamfer: L.chamfer,
+        p95: L.p95,
         cells: L.cells.map((c) => ({
-          outcome: outcomeOf(c), latTurn: c.latTurn, latErr: c.latErr, apexErr: c.apexErr, hitErr: c.hitErr, finalErr: c.finalErr, recovered: c.recovered,
-          inSpan: c.rec?.inSpan ?? -1, outSpan: c.rec?.outSpan ?? -1, inGap: c.rec?.inGap ?? -1, outGap: c.rec?.outGap ?? -1, moved: c.rec?.moved ?? NaN, allow: c.rec?.allow ?? NaN,
+          outcome: outcomeOf(c),
+          latTurn: c.latTurn,
+          latErr: c.latErr,
+          apexErr: c.apexErr,
+          hitErr: c.hitErr,
+          finalErr: c.finalErr,
+          recovered: c.recovered,
+          inSpan: c.rec?.inSpan ?? -1,
+          outSpan: c.rec?.outSpan ?? -1,
+          inGap: c.rec?.inGap ?? -1,
+          outGap: c.rec?.outGap ?? -1,
+          moved: c.rec?.moved ?? NaN,
+          allow: c.rec?.allow ?? NaN,
         })),
       })),
     }
@@ -498,49 +647,106 @@ async function census(cs: Case): Promise<void> {
   if (VERBOSE) {
     console.log(`\n    EVERY corner:`)
     for (const g of gtCorners) {
-      console.log(`      #${String(g.id).padStart(3)} @(${f(g.x, 0)},${f(g.y, 0)}) turn ${f(g.turn, 0)}° edge ${f(g.edge, 1)}  ${lanes.map((L) => { const c = L.cells[g.id]; return `${L.res}: ${c.recovered ? '✓' : '✗'} ${outcomeOf(c).padEnd(13)} turn ${f(c.latTurn, 0)}° lat ${f(c.latErr)} apex ${f(c.apexErr)} final ${f(c.finalErr)}${c.rec ? ` sp${c.rec.inSpan}/${c.rec.outSpan} g${c.rec.inGap}/${c.rec.outGap} mv${f(c.rec.moved, 1)}/${f(c.rec.allow, 1)}` : ''}` }).join('  |  ')}`)
+      console.log(
+        `      #${String(g.id).padStart(3)} @(${f(g.x, 0)},${f(g.y, 0)}) turn ${f(g.turn, 0)}° edge ${f(g.edge, 1)}  ${lanes
+          .map((L) => {
+            const c = L.cells[g.id]
+            return `${L.res}: ${c.recovered ? '✓' : '✗'} ${outcomeOf(c).padEnd(13)} turn ${f(c.latTurn, 0)}° lat ${f(c.latErr)} apex ${f(c.apexErr)} final ${f(c.finalErr)}${c.rec ? ` sp${c.rec.inSpan}/${c.rec.outSpan} g${c.rec.inGap}/${c.rec.outGap} mv${f(c.rec.moved, 1)}/${f(c.rec.allow, 1)}` : ''}`
+          })
+          .join('  |  ')}`,
+      )
     }
   }
 }
 
 // --- `--fold file.jsonl`: the corpus summary from per-mark lines (one process per mark) ----
 if (FOLD) {
-  type Line = { name: string; corners: { id: number; x: number; y: number; turn: number; edge: number }[]; lanes: { res: number; gtCorners: number; cornersRecovered: number; cornersInvented: number; chamfer: number; cells: { outcome: string; latErr: number; apexErr: number; hitErr: number; finalErr: number; recovered: boolean; inSpan: number; outSpan: number }[] }[] }
-  const lines: Line[] = readFileSync(FOLD, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  type Line = {
+    name: string
+    corners: { id: number; x: number; y: number; turn: number; edge: number }[]
+    lanes: {
+      res: number
+      gtCorners: number
+      cornersRecovered: number
+      cornersInvented: number
+      chamfer: number
+      cells: {
+        outcome: string
+        latErr: number
+        apexErr: number
+        hitErr: number
+        finalErr: number
+        recovered: boolean
+        inSpan: number
+        outSpan: number
+      }[]
+    }[]
+  }
+  const lines: Line[] = readFileSync(FOLD, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l))
   const RES = lines[0]?.lanes.map((L) => L.res) ?? []
   console.log(`\n━━━ CORPUS FOLD — ${lines.length} marks from ${FOLD} @ ${RES.join('/')} ━━━`)
-  console.log(`    ${'res'.padStart(5)}  ${'scorer recall'.padStart(14)}  ${'invented'.padStart(8)}  ${'chamfer mean'.padStart(12)}  ${'final err (recovered) mean/p90'.padStart(30)}   outcomes`)
+  console.log(
+    `    ${'res'.padStart(5)}  ${'scorer recall'.padStart(14)}  ${'invented'.padStart(8)}  ${'chamfer mean'.padStart(12)}  ${'final err (recovered) mean/p90'.padStart(30)}   outcomes`,
+  )
   for (const [i, res] of RES.entries()) {
     const Ls = lines.map((l) => l.lanes[i]).filter(Boolean)
     const cells = Ls.flatMap((L) => L.cells)
     const rec = cells.filter((c) => c.recovered)
     console.log(
       `    ${String(res).padStart(5)}  ${`${Ls.reduce((a, L) => a + L.cornersRecovered, 0)}/${Ls.reduce((a, L) => a + L.gtCorners, 0)}`.padStart(14)}  ${String(Ls.reduce((a, L) => a + L.cornersInvented, 0)).padStart(8)}  ${f(mean(Ls.map((L) => L.chamfer)), 3).padStart(12)}` +
-        `  ${`${f(mean(rec.map((c) => c.finalErr)), 3)} / ${f(pctl(rec.map((c) => c.finalErr), 0.9), 3)}`.padStart(30)}   ${hist(cells.map((c) => c.outcome))}`,
+        `  ${`${f(mean(rec.map((c) => c.finalErr)), 3)} / ${f(
+          pctl(
+            rec.map((c) => c.finalErr),
+            0.9,
+          ),
+          3,
+        )}`.padStart(30)}   ${hist(cells.map((c) => c.outcome))}`,
     )
   }
   console.log(`\n    SELECTOR (short-arm records, corpus-wide): n · hit better · kept better · same (±0.25 artwork px)`)
   for (const [i, res] of RES.entries()) {
-    const cs = lines.flatMap((l) => l.lanes[i]?.cells ?? []).filter((c) => c.outcome === 'short-arm' && Number.isFinite(c.hitErr))
+    const cs = lines
+      .flatMap((l) => l.lanes[i]?.cells ?? [])
+      .filter((c) => c.outcome === 'short-arm' && Number.isFinite(c.hitErr))
     const hb = cs.filter((c) => c.hitErr < c.apexErr - 0.25).length
     const kb = cs.filter((c) => c.apexErr < c.hitErr - 0.25).length
     console.log(`    ${String(res).padStart(5)}  ${cs.length} · ${hb} · ${kb} · ${cs.length - hb - kb}`)
   }
   const lab = RES.includes(REF) ? RES.indexOf(REF) : 0
   const fine = RES.length - 1
-  const flips = lines.flatMap((l) => l.corners.map((g) => ({ mark: l.name, g, cells: l.lanes.map((L) => L.cells[g.id]) }))).filter((r) => new Set(r.cells.map((c) => c?.recovered)).size > 1)
+  const flips = lines
+    .flatMap((l) => l.corners.map((g) => ({ mark: l.name, g, cells: l.lanes.map((L) => L.cells[g.id]) })))
+    .filter((r) => new Set(r.cells.map((c) => c?.recovered)).size > 1)
   const pat = new Map<string, number>()
   for (const r of flips) {
     const k = r.cells.map((c) => (c?.recovered ? '✓' : '✗')).join('')
     pat.set(k, (pat.get(k) ?? 0) + 1)
   }
-  console.log(`\n    FLIPS: ${flips.length} corners recovered at some rasters and not others — pattern ${RES.join('/')}: ${[...pat.entries()].map(([k, n]) => `${k} ${n}`).join(' · ')}`)
+  console.log(
+    `\n    FLIPS: ${flips.length} corners recovered at some rasters and not others — pattern ${RES.join('/')}: ${[...pat.entries()].map(([k, n]) => `${k} ${n}`).join(' · ')}`,
+  )
   const pop = flips.filter((r) => !r.cells[lab]?.recovered && r.cells[fine]?.recovered)
   const turnBucket = (t: number): string => (t < 75 ? '60–75°' : t < 100 ? '75–100°' : '>100°')
-  console.log(`    recovered @${RES[fine]}, MISSED @${RES[lab]} (${pop.length}) — by outcome @${RES[lab]}: ${hist(pop.map((r) => r.cells[lab].outcome))}`)
-  console.log(`    …by authored turn: ${hist(pop.map((r) => turnBucket(r.g.turn)))}   …by shorter incident edge: ${hist(pop.map((r) => (r.g.edge < 10 ? '<10px' : r.g.edge < 20 ? '10–20px' : '≥20px')))}`)
-  for (const r of pop.sort((a, b) => a.cells[lab].finalErr - b.cells[lab].finalErr).slice(0, VERBOSE ? pop.length : TOP)) {
-    console.log(`      ${r.mark.padEnd(18)} #${String(r.g.id).padStart(3)} @(${f(r.g.x, 0)},${f(r.g.y, 0)}) turn ${f(r.g.turn, 0)}° edge ${f(r.g.edge, 1).padStart(5)}  ${RES.map((res, i) => { const c = r.cells[i]; return `${res}: ${c.recovered ? '✓' : '✗'} ${c.outcome.padEnd(13)} final ${f(c.finalErr)}` }).join('  |  ')}`)
+  console.log(
+    `    recovered @${RES[fine]}, MISSED @${RES[lab]} (${pop.length}) — by outcome @${RES[lab]}: ${hist(pop.map((r) => r.cells[lab].outcome))}`,
+  )
+  console.log(
+    `    …by authored turn: ${hist(pop.map((r) => turnBucket(r.g.turn)))}   …by shorter incident edge: ${hist(pop.map((r) => (r.g.edge < 10 ? '<10px' : r.g.edge < 20 ? '10–20px' : '≥20px')))}`,
+  )
+  for (const r of pop
+    .sort((a, b) => a.cells[lab].finalErr - b.cells[lab].finalErr)
+    .slice(0, VERBOSE ? pop.length : TOP)) {
+    console.log(
+      `      ${r.mark.padEnd(18)} #${String(r.g.id).padStart(3)} @(${f(r.g.x, 0)},${f(r.g.y, 0)}) turn ${f(r.g.turn, 0)}° edge ${f(r.g.edge, 1).padStart(5)}  ${RES.map(
+        (res, i) => {
+          const c = r.cells[i]
+          return `${res}: ${c.recovered ? '✓' : '✗'} ${c.outcome.padEnd(13)} final ${f(c.finalErr)}`
+        },
+      ).join('  |  ')}`,
+    )
   }
   console.log()
   process.exit(0)
@@ -550,19 +756,34 @@ for (const cs of cases) await census(cs)
 
 // --- the gallery fold: §15.7's witness population -------------------------------------------
 if (cases.length > 1) {
-  console.log(`\n━━━ GALLERY WITNESSES — authored corners recovered at one raster and not another (${cases.length} marks @ ${RESOLUTIONS.join('/')}) ━━━`)
+  console.log(
+    `\n━━━ GALLERY WITNESSES — authored corners recovered at one raster and not another (${cases.length} marks @ ${RESOLUTIONS.join('/')}) ━━━`,
+  )
   const byPattern = new Map<string, number>()
   for (const w of witnesses) {
     const pat = RESOLUTIONS.map((r) => (w.cells.get(r)?.recovered ? '✓' : '✗')).join('')
     byPattern.set(pat, (byPattern.get(pat) ?? 0) + 1)
   }
-  console.log(`    ${witnesses.length} flipping corners; recovery pattern ${RESOLUTIONS.join('/')}: ${[...byPattern.entries()].map(([k, n]) => `${k} ${n}`).join(' · ')}`)
+  console.log(
+    `    ${witnesses.length} flipping corners; recovery pattern ${RESOLUTIONS.join('/')}: ${[...byPattern.entries()].map(([k, n]) => `${k} ${n}`).join(' · ')}`,
+  )
   const lab = RESOLUTIONS.includes(REF) ? REF : RESOLUTIONS[0]
   const fine = RESOLUTIONS[RESOLUTIONS.length - 1]
   const missLab = witnesses.filter((w) => !w.cells.get(lab)?.recovered && w.cells.get(fine)?.recovered)
-  console.log(`\n    recovered @${fine}, MISSED @${lab} — the §15.7 population (${missLab.length}), by how far the @${lab} trace's nearest sharp corner sits (artwork px):`)
-  for (const w of missLab.sort((a, b) => a.cells.get(lab)!.finalErr - b.cells.get(lab)!.finalErr).slice(0, VERBOSE ? missLab.length : 40)) {
-    console.log(`      ${w.mark.padEnd(18)} #${String(w.g.id).padStart(3)} @(${f(w.g.x, 0)},${f(w.g.y, 0)}) turn ${f(w.g.turn, 0)}° edge ${f(w.g.edge, 1).padStart(5)}  ${RESOLUTIONS.map((r) => { const c = w.cells.get(r)!; return `${r}: ${c.recovered ? '✓' : '✗'} ${outcomeOf(c).padEnd(13)} final ${f(c.finalErr)}${c.rec ? ` sp${c.rec.inSpan}/${c.rec.outSpan} mv${f(c.rec.moved, 1)}` : ''}` }).join('  |  ')}`)
+  console.log(
+    `\n    recovered @${fine}, MISSED @${lab} — the §15.7 population (${missLab.length}), by how far the @${lab} trace's nearest sharp corner sits (artwork px):`,
+  )
+  for (const w of missLab
+    .sort((a, b) => a.cells.get(lab)!.finalErr - b.cells.get(lab)!.finalErr)
+    .slice(0, VERBOSE ? missLab.length : 40)) {
+    console.log(
+      `      ${w.mark.padEnd(18)} #${String(w.g.id).padStart(3)} @(${f(w.g.x, 0)},${f(w.g.y, 0)}) turn ${f(w.g.turn, 0)}° edge ${f(w.g.edge, 1).padStart(5)}  ${RESOLUTIONS.map(
+        (r) => {
+          const c = w.cells.get(r)!
+          return `${r}: ${c.recovered ? '✓' : '✗'} ${outcomeOf(c).padEnd(13)} final ${f(c.finalErr)}${c.rec ? ` sp${c.rec.inSpan}/${c.rec.outSpan} mv${f(c.rec.moved, 1)}` : ''}`
+        },
+      ).join('  |  ')}`,
+    )
   }
 }
 console.log()
