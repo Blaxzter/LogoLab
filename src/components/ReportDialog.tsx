@@ -1,22 +1,9 @@
-// "Report a problem" — the question before the link.
+// "Report a problem" dialog, opened by the header's bug button.
 //
-// The header's bug button used to open GitHub directly. That is a cliff: the
-// user presses a button in LogoLab and lands, without warning, in a stranger's
-// issue tracker on a form they did not ask for, with a wall of text already in
-// it. Two things go wrong. Someone with a FEATURE idea files it as a bug
-// because the bug form is what appeared. And someone who was about to report a
-// real defect backs out, because a sign-in wall and a "Create" button are a lot
-// to meet when all you wanted was to say the corners came out round.
-//
-// So: ask first, in the app, where the user still has their bearings. Which
-// kind of thing is this — something broken, or something missing? Then say what
-// will be attached and what they should add, and only then hand them the link.
-// The GitHub forms this targets live in `.github/ISSUE_TEMPLATE/`.
-//
-// This dialog is for the STANDING entry point only. A crash screen and a failed
-// trace already know they are bugs and already hold the error, so they keep
-// their direct link — asking "is this a bug or a feature?" after the app has
-// just fallen over would be a question with one possible answer.
+// Asks first whether this is a problem or an idea, explains what will be
+// attached and what to add, then links to the matching GitHub issue form
+// (`.github/ISSUE_TEMPLATE/`). Crash screens and failed traces skip this and
+// link to the bug form directly, since they already know it's a bug.
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -153,9 +140,7 @@ function Guidance({
 }) {
   const path = PATHS[choice]
   const subject: ReportSubject = { what: 'LogoLab', kind: choice }
-  // Built once for the panel below: this is the text the user is about to send,
-  // and showing it is the only honest way to say "nothing is uploaded" while
-  // handing someone a link that carries their settings.
+  // Shown in the disclosure below so the user sees exactly what the link carries.
   const attached = diagnosticsText(buildReport(subject))
 
   return (

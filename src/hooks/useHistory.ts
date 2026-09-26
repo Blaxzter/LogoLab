@@ -17,15 +17,12 @@ const MERGE_MS = 800
  * true)` on release, so undo returns to the pre-drag state, never to an
  * intermediate preview frame.
  *
- * `commitMerged(next, key)` is the third case: a gesture that has no end event
- * to commit on. Scrubbing a colour well or dragging an opacity slider fires one
- * change per pointer move, and every one of them is a real edit — previewing
- * them would leave the last one uncommitted, so the NEXT unrelated commit would
- * cut its undo snapshot from before the colour ever changed. Committing each
- * one instead buries the document under an undo step per pixel of travel. A
- * merged commit does commit, but replaces the previous merged commit carrying
- * the same key: the burst collapses to one entry, and undo lands on the state
- * before the scrub began.
+ * `commitMerged(next, key)` is for gestures with no end event to commit on,
+ * such as scrubbing a colour well. Previewing them would leave the last change
+ * uncommitted (the next unrelated commit would snapshot from before it), and
+ * committing each one adds an undo step per pointer move. A merged commit
+ * replaces the previous merged commit with the same key, so the burst is one
+ * entry and undo lands on the state before the scrub began.
  */
 export function useHistory<T extends object>(limit = 80) {
   const [value, setValue] = useState<T | null>(null)

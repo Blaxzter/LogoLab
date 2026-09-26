@@ -1,12 +1,10 @@
 // Per-control teaching dialog: opened from a control's (i) button. Explains one
 // vectorize knob in plain language and shows its effect as a before/after spread.
 //
-// The default spread is PRECOMPUTED at build time (controlPreviews.generated.ts,
-// lazy-imported here so it stays out of the initial bundle) on a small example
-// crafted to make that knob's effect visible. "Use my image" re-runs the same
-// variant set live on the uploaded logo via the trace worker, so the user sees
-// the effect on their own artwork. A `liveOnly` control is computed in the
-// browser on open instead of from the precomputed spread.
+// The default spread is precomputed at build time (controlPreviews.generated.ts,
+// lazy-imported to keep it out of the initial bundle). "Use my image" re-runs the
+// same variants live on the upload via the trace worker. A `liveOnly` control is
+// always computed live.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -45,16 +43,13 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
   const liveCache = useRef<Map<Source, PreviewVariant[]>>(new Map())
   const runIdRef = useRef(0)
 
-  // One shared pan/zoom across every compare cell — zoom or pan any of them and
-  // they all move together (same box size + one transform), so you inspect the
-  // exact same region of input and each result side by side, like the main split.
+  // One pan/zoom shared by every compare cell, so they all show the same region.
   const pz = usePanZoom({ maxScale: 24 })
 
   const panelRef = useRef<HTMLDivElement | null>(null)
 
-  // Close on Escape. Capture-phase + stopPropagation so that when this dialog is
-  // open inside an open <Sheet> (e.g. the mobile Trace sheet), Escape closes only
-  // the dialog — not the sheet underneath it.
+  // Close on Escape. Capture phase + stopPropagation so that inside an open
+  // <Sheet> (the mobile Trace sheet) Escape closes only the dialog.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -66,8 +61,7 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
     return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
 
-  // Move focus into the dialog on open and restore it to the trigger on close,
-  // so keyboard focus never gets stranded behind the modal.
+  // Move focus into the dialog on open and back to the trigger on close.
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null
     panelRef.current?.focus()
@@ -137,8 +131,7 @@ export function ControlInfoDialog({ controlId, onClose }: { controlId: string; o
     [doc, sourceImage],
   )
 
-  // Drive live runs: whenever we need a non-precomputed spread (upload source, or
-  // a liveOnly control on either source), (re)compute it.
+  // Compute the spread live for the upload source or a liveOnly control.
   useEffect(() => {
     if (!doc) return
     if (source === 'upload' || doc.liveOnly) void runLive(source)
@@ -313,9 +306,8 @@ function PreviewCell({
   caption?: string
   children: React.ReactNode
 }) {
-  // Same backdrop as the studio stage (dark behind a light/white mark), so a white
-  // outline trace doesn't come back invisible-on-white here. No bg-* utility beside
-  // it: Tailwind's utilities layer would win over the checkerboard's own base tint.
+  // Same backdrop as the studio stage, so a white trace stays visible. Don't add a
+  // bg-* utility here: Tailwind's utilities layer would override the checker tint.
   const checkerClass = useCheckerClass()
   return (
     <div className="min-w-[8.5rem] flex-1">

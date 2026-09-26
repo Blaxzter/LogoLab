@@ -1,21 +1,11 @@
-// "Report an issue", everywhere a report is worth making.
+// "Report an issue" links and buttons, shared by every entry point:
 //
-// The crash screen was the first place this appeared, and for a while the only
-// one — which put the button on the RAREST failure. A render that throws is
-// unusual here precisely because the expensive work happens off the main thread:
-// the tracer runs in a worker that catches its own errors, so a trace that goes
-// wrong becomes a polite red line in the status bar, not a crash. That line was
-// the end of the road for a bug report.
-//
-// So the same report hangs off three things now:
-//
-//   a crash        components/ErrorBoundary — it throws its own bigger screen
+//   a crash        components/ErrorBoundary
 //   a failure      anywhere a catch turns an error into a message for the user
-//   a problem      the header, any time: "it traced, and the result is wrong"
+//   a problem      the header: "it traced, and the result is wrong"
 //
-// That last one is the most valuable report this project can receive and it had
-// no route at all. Nothing is sent by any of them: the link opens a prefilled
-// GitHub issue the user reads, edits and posts themselves.
+// Nothing is sent: the link opens a prefilled GitHub issue the user reviews and
+// posts themselves.
 
 import { useState, type ReactNode } from 'react'
 import { Bug, Check, Copy, ExternalLink } from 'lucide-react'
@@ -37,20 +27,16 @@ export interface ReportSubject {
   error?: unknown
   componentStack?: string | null
   /**
-   * Context collected EARLIER, by a caller that had to. A crash boundary must
+   * Pre-collected context. Only a crash boundary needs this, because it must
    * collect while the crashing subtree is still mounted (see lib/reportContext);
-   * everyone else can let this default and be collected from live state.
+   * otherwise it is collected from live state.
    */
   context?: Record<string, unknown> | null
 }
 
 /**
- * Fill in everything the app knows and the user should not have to type.
- *
- * Collected at CALL time rather than render time so a link built while a studio
- * is still working describes the moment it is clicked, not the moment the button
- * appeared — except for the context a crash boundary already captured, which is
- * the one case where "now" is too late.
+ * Everything the app knows about the current state, collected at call time so
+ * the report describes the moment of the click.
  */
 export function buildReport(subject: ReportSubject): IssueReportInput {
   return {
@@ -67,11 +53,8 @@ export function buildReport(subject: ReportSubject): IssueReportInput {
 }
 
 /**
- * Copy the whole report to the clipboard — the untruncated one.
- *
- * The link has a length budget (GitHub's request line); this does not. It is the
- * answer to "the report says it was cut", and the fallback for a browser that
- * blocks the clipboard is the text being on screen anyway.
+ * Copies the full, untruncated report. The link is length-limited by GitHub's
+ * request line; the clipboard is not.
  */
 export function CopyReportButton({
   subject,
@@ -91,8 +74,7 @@ export function CopyReportButton({
           setCopied(true)
           setTimeout(() => setCopied(false), 2000)
         } catch {
-          /* clipboard blocked (permissions, insecure origin) — the details
-             block beside this button holds the same text, selectable by hand. */
+          /* Clipboard blocked; the details block beside this button shows the same text. */
         }
       }}
     >
@@ -103,19 +85,13 @@ export function CopyReportButton({
 }
 
 /**
- * Rebuild the href immediately before the browser follows it.
+ * Rebuilds the href just before the browser follows it.
  *
- * A link's href is built during RENDER, and some of these links are mounted for
- * the whole session: the mobile menu lives in a drawer that is translated
- * off-screen rather than unmounted, so its "Report a problem" href was built on
- * the app's very first render — before any studio had published what it was
- * working on — and was never rebuilt. It filed reports with the settings
- * missing, which is the one thing a report like this exists to carry.
- *
- * `pointerdown` covers left, middle and right (the context menu opens after it,
- * so "copy link address" copies the fresh one); `focus` covers keyboard
- * activation, which fires no pointer event at all. Both run before navigation,
- * and the render-time href stays as the value either one improves on.
+ * Don't rely on the render-time href alone: some of these links never
+ * re-render (the mobile menu drawer is translated off-screen, not unmounted),
+ * so their href would predate any studio publishing its settings. `pointerdown`
+ * covers every mouse button and "copy link address"; `focus` covers keyboard
+ * activation. Both fire before navigation.
  */
 function freshHrefProps(build: () => string) {
   const refresh = (event: { currentTarget: HTMLAnchorElement }) => {
@@ -124,10 +100,7 @@ function freshHrefProps(build: () => string) {
   return { onPointerDown: refresh, onFocus: refresh }
 }
 
-/**
- * The link itself. An `<a>` rather than a button so it can be opened in a new
- * tab, bookmarked or middle-clicked like any other link.
- */
+/** An `<a>` rather than a button so it behaves like any other link. */
 export function ReportIssueLink({
   subject,
   className = 'btn btn-secondary h-9 gap-2 text-sm',
@@ -142,19 +115,13 @@ export function ReportIssueLink({
   children?: ReactNode
   /** Replaces the default glyph — for hosts whose rows align icons themselves. */
   icon?: ReactNode
-  /**
-   * Hover hint, as a real tooltip rather than a native `title` — the bubble is
-   * themed, readable and does not wait a second and a half to appear. An
-   * icon-only trigger has no visible label to stand in for it.
-   */
+  /** Hover hint; needed for icon-only triggers. */
   tip?: ReactNode
   showExternal?: boolean
   onClick?: () => void
 }) {
-  // The Tooltip lives INSIDE, wrapping the anchor itself: it clones its child to
-  // attach handlers, so a caller wrapping <ReportIssueLink> would hand them to a
-  // component that never forwards them. It also composes with the handlers
-  // `freshHrefProps` already put on this element rather than replacing them.
+  // The Tooltip wraps the anchor here because it clones its child to attach
+  // handlers; wrapping <ReportIssueLink> from outside would lose them.
   return (
     <Tooltip label={tip ?? ''}>
       <a
@@ -173,10 +140,7 @@ export function ReportIssueLink({
   )
 }
 
-/**
- * The compact form, for sitting beside a red line in a status bar or under a
- * failed upload. Small, quiet, and the same report underneath.
- */
+/** Compact inline link for a failure message (status bar, failed upload). */
 export function ReportFailureLink({
   what,
   error,

@@ -1,15 +1,12 @@
-// The install affordance. The service worker's two NOTICES live in Toasts.tsx
-// with the rest of the app's transient messages; this is a control, so it sits
-// in the header with the other controls.
+// The "Install app" button. The service worker's notices live in Toasts.tsx.
 
 import { Download } from 'lucide-react'
 import { usePwa } from '../pwa/register'
 import { Tooltip } from './ui/Tooltip'
 
 /**
- * "Install app", shown only while the browser is actually offering it — the
- * event arrives once per eligible visit and cannot be replayed, so there is no
- * honest way to render this button the rest of the time.
+ * Rendered only while the browser is offering an install; the prompt event
+ * arrives once per eligible visit and can't be replayed.
  */
 export function InstallAppButton({
   variant = 'icon',

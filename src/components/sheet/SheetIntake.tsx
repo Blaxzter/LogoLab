@@ -1,9 +1,8 @@
 // The "drop a sheet here" state.
 //
-// It is NOT `PanelEmptyState`: that one always writes the app's working logo,
-// and a sheet must not clobber the logo the user is preparing on the other tabs.
-// The drop-target markup and copy deliberately mirror it so the app reads as one
-// thing; only the destination differs.
+// Not `PanelEmptyState`: that one always writes the app's working logo, and a
+// sheet must not clobber the logo being prepared on the other tabs. The markup
+// mirrors it; only the destination differs.
 
 import { useRef, useState } from 'react'
 import { Loader2, LayoutGrid } from 'lucide-react'

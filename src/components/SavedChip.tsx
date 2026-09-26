@@ -1,15 +1,7 @@
-// "Saved · just now" — the header's standing answer to "is my work safe?".
-//
-// The app's promise is that a reload costs nothing, and a promise like that
-// wants a quiet, permanent indicator rather than a banner that appears once and
-// is gone. So: a chip, in the title bar, saying when the session was last written
-// down — and, when the browser won't let us write at all (private mode, a blocked
-// origin, a full quota), saying THAT instead. A UI that keeps claiming "Saved"
-// through a failed store is worse than one that says nothing.
-//
-// It is also where "Start fresh" lives now. The restore notice is a transient
-// toast, so the one durable control over the stored session belongs next to the
-// status it acts on.
+// Header chip showing when the session was last saved, with a popover holding
+// "Start fresh". It must be able to say "Not saved": when the browser refuses
+// storage (private mode, blocked origin, full quota), claiming "Saved" would be
+// worse than showing nothing.
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
@@ -26,7 +18,7 @@ function useSaveStatus() {
   return useSyncExternalStore(subscribeSaveStatus, getSaveStatus)
 }
 
-/** "just now" / "3 min ago" / "14:07" — the shape a person actually reads. */
+/** "just now" / "3 min ago" / "14:07". */
 function ago(at: number, now: number): string {
   const seconds = Math.max(0, Math.round((now - at) / 1000))
   if (seconds < 45) return 'just now'
@@ -35,10 +27,7 @@ function ago(at: number, now: number): string {
   return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }
 
-/**
- * The same status and the same action, as a row — for the mobile menu, since the
- * header's right-hand cluster (and with it the chip) is hidden below md.
- */
+/** The same status and action as a row, for the mobile menu (the chip is hidden below md). */
 export function SavedStatusRow({
   className = '',
   onAct,
@@ -83,7 +72,7 @@ export function SavedChip({ className = '' }: { className?: string }) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
 
-  // Only while there is a timestamp on screen to age.
+  // Tick only while there is a timestamp to age.
   useEffect(() => {
     if (status.savedAt === null) return
     const id = setInterval(() => setNow(Date.now()), TICK_MS)
@@ -124,16 +113,12 @@ export function SavedChip({ className = '' }: { className?: string }) {
     }
   }, [open])
 
-  // Nothing stored and nothing failing: there is no work yet, so an indicator
-  // would be answering a question nobody has asked. It still HOLDS ITS SPACE,
-  // though — dropping out of the layout would move the centred tab nav the
-  // moment the first save landed, which is the same flinch this component's
-  // width reservation exists to prevent, just once per session.
+  // Nothing saved yet: hide the chip but keep its space, so the centred tab nav
+  // doesn't shift when the first save lands.
   const idle = status.savedAt === null && !status.failed && !status.pending
 
-  // The header is tight — six icons, a six-tab nav and the brand all want room —
-  // so the chip sheds its relative time before the wordmark is allowed to
-  // truncate. The exact time is still one hover (or one click) away.
+  // The relative time is hidden below 2xl so the header wordmark doesn't
+  // truncate; the exact time stays in the tooltip and popover.
   const label = status.failed ? 'Not saved' : status.pending ? 'Saving…' : 'Saved'
   const when = status.failed || status.pending ? null : ago(status.savedAt!, now)
 
@@ -144,10 +129,7 @@ export function SavedChip({ className = '' }: { className?: string }) {
 
   return (
     <>
-      {/* The chip's exact time was a native `title`: a slow, unstyled bubble that
-          the header's own tooltip convention had already replaced everywhere
-          else. Empty while the popover is open (Tooltip then renders the child
-          alone) and while idle, when the chip is invisible anyway. */}
+      {/* Empty label while the popover is open or the chip is idle, so no bubble shows. */}
       <Tooltip
         label={
           idle || open
@@ -184,16 +166,8 @@ export function SavedChip({ className = '' }: { className?: string }) {
           ) : (
             <Check size={13} className="shrink-0 text-accent" />
           )}
-          {/*
-            * A fixed box, sized by the browser to the longest thing that can go in
-            * it, with every state stacked in the same grid cell.
-            *
-            * Without it the chip resizes as its own text changes — Saved → Saving…
-            * → Saved 4 min ago — and since the header's tab nav is centred against
-            * the width of this cluster, the tabs slid sideways every time a save
-            * landed. A reservation rather than a hard px width so it survives a
-            * font change and a translation.
-            */}
+          {/* All states stacked in one grid cell, sized to the longest, so the chip
+              doesn't resize as its text changes and shift the centred tab nav. */}
           <span className="grid text-left">
             <span aria-hidden className="invisible col-start-1 row-start-1 whitespace-nowrap">
               Not saved

@@ -64,14 +64,12 @@ export function PanelEmptyState({
       {error && (
         <p className="flex items-center gap-2 text-sm text-bad">
           {error}
-          {/* Only when something was actually THROWN: "please drop an image
-              file" is the user's mistake, not ours, and offering to file an
-              issue about it would be noise. */}
+          {/* Only for thrown errors; a validation message like "please drop an
+              image file" isn't worth reporting. */}
           {failure != null && <ReportFailureLink what="the uploader" error={failure} />}
         </p>
       )}
 
-      {/* No logo handy? Start from a bundled example — cards inline, no modal. */}
       <div className="w-full">
         <div className="mb-3 flex items-center gap-3">
           <span className="h-px flex-1 bg-line" />

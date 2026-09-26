@@ -1,11 +1,10 @@
 // Document plumbing for the SVG editor: creating documents, minting ids, and
 // the item-level edits the panels drive.
 //
-// Ids are minted from a module-level counter rather than derived from the item
-// list, because an id must be unique against every item that has EVER existed
-// in this session — React keys, the selection set and the undo history all hold
-// ids across edits, and a "max existing + 1" scheme hands out a stale id the
-// moment you undo a delete.
+// Ids come from a module-level counter rather than the item list: React keys,
+// the selection and undo history hold ids across edits, so an id must never be
+// reused in this session ("max existing + 1" would reissue one after an undone
+// delete).
 
 import type {
   DocItem,
@@ -77,7 +76,7 @@ export function putItem(doc: EditableDoc, item: DocItem): EditableDoc {
   return { ...doc, items: replaceItem(doc.items, item.id, item) }
 }
 
-/** Patch fields on every selected LEAF (groups forward the patch to children). */
+/** Patch fields on every selected leaf (groups forward the patch to children). */
 export function patchSelected(
   doc: EditableDoc,
   ids: ReadonlySet<string>,

@@ -1,17 +1,11 @@
-// Geometry for the node-edit overlay, as a handful of BATCHED path strings.
+// Geometry for the node-edit overlay, batched into one path string per style.
 //
-// The overlay used to be one <g> per node — two spokes, two handle dots, an
-// anchor, plus three invisible grab circles — which is ~9 elements a node. A
-// re-traced page of sheet music is one path with 3000 nodes: 27 000 elements,
-// every one of them re-rendered by a pan and re-attributed by a zoom (their
-// radii are constant in SCREEN px), so a pan frame took ~130 ms. Drawn as one
-// <path> per style instead, the whole overlay is a few elements and a zoom is a
-// string rebuild.
+// Per-node SVG elements don't scale: a traced page can have thousands of nodes,
+// and every element re-renders on pan and zoom (marker radii are constant in
+// screen px). Batching keeps the overlay to a few elements. Grabbing uses a
+// nearest-point test (`nearestGrab`) instead of DOM hit targets.
 //
-// Grabbing goes the same way: no DOM targets, a nearest-point test instead
-// (`nearestGrab`) — the double-click handler already hit-tested geometrically.
-//
-// Plain .ts, not .tsx, so node's type stripping can reach it from a test.
+// Plain .ts, not .tsx, so tests can import it.
 
 import type { PathItem, Vec } from "../../lib/path/types";
 

@@ -1,9 +1,6 @@
-// Left rail of the cleanup studio: background-removal controls grouped into
-// collapsible sections to keep the panel uncluttered — one-click removers,
-// manual brushes/flood tools, guided keep/remove markers, edge refine, trim,
-// and the matte fill — plus a pinned footer with the usage tip + Reset. Pure
-// controlled UI: every bit of cleanup state lives in CleanupStudio; only the
-// "which info hint is open" state is local. Mirrors TraceControls' structure.
+// Left rail of the cleanup studio: background-removal controls in collapsible
+// sections, plus a pinned footer with the usage tip and Reset. Fully controlled:
+// all cleanup state lives in CleanupStudio.
 
 import { useState } from 'react'
 import { Bot, Loader2, MapPin, RotateCcw, Sparkles, Wand2, X } from 'lucide-react'
@@ -14,8 +11,7 @@ import type { CleanupTool } from '../../hooks/useCleanupCanvas'
 /**
  * The manual painting tools split into their two families: single-click flood
  * *removers* (tolerance-driven) and the drag *touch-up brushes* (size-driven).
- * They live in separate rail sections so neither control is cramped and each
- * owns a stable parameter slider.
+ * Each family has its own rail section and parameter slider.
  */
 type ManualTool = 'magic' | 'color' | 'restore' | 'erase'
 type RemoveTool = 'magic' | 'color'
@@ -29,7 +25,7 @@ const BRUSH_TOOLS: { value: BrushTool; label: string }[] = [
   { value: 'restore', label: 'Restore' },
 ]
 
-/** Per-tool teaching copy, carried verbatim from the old CleanupPanel. */
+/** Per-tool help copy. */
 function toolHint(tool: ManualTool): string {
   switch (tool) {
     case 'magic':
@@ -154,10 +150,8 @@ export function CleanupControlsBody({
   aiStatus,
   aiDevice,
 }: CleanupControlsProps) {
-  // Which family the active tool belongs to. Each Segmented below is passed the
-  // raw `tool`; when it's out of that group nothing highlights, so only the
-  // active family shows a selection. Hints fall back to each family's first tool
-  // so an opened-but-inactive section still previews sensible copy.
+  // Each Segmented gets the raw `tool`, so only the active family highlights.
+  // Hints fall back to each family's first tool when the family is inactive.
   const isRemove = tool === 'magic' || tool === 'color'
   const isBrush = tool === 'erase' || tool === 'restore'
   const isMarker = tool === 'keep' || tool === 'remove'

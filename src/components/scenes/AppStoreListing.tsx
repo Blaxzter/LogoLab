@@ -94,7 +94,6 @@ export default function AppStoreListing() {
         </div>
       </div>
 
-      {/* Divider */}
       <div className="mx-5 mt-4" style={{ borderTop: `1px solid ${chrome.hair}` }} />
 
       {/* Screenshots strip */}

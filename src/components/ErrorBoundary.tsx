@@ -1,29 +1,17 @@
-// The thing that stands between one bad render and a blank page.
+// Catches a render crash so it costs one panel instead of the whole page.
 //
-// React's answer to an uncaught error in render is to unmount the WHOLE tree —
-// so before this existed, a gradient with no stops reaching the renderer, a
-// degenerate document reaching the canvas or a malformed SVG reaching parseSvg
-// left the user looking at white, with a reload as the only way out. The tracer
-// is numerical geometry running on arbitrary uploads; that is not a theoretical
-// failure mode.
+// There is one boundary per route (see App.tsx) so the header and the other tabs
+// stay usable, plus a last-resort one at the root in main.tsx. Each route's
+// boundary must sit OUTSIDE its <Suspense>, or a failed chunk load rejects past
+// it to the root.
 //
-// One boundary per ROUTE (see App.tsx), not one per app: a crash in /vectorize
-// must not take out /preview, and the header stays alive so the user can simply
-// walk to another tab. A last-resort boundary sits at the root in main.tsx for
-// the chrome that is outside every route.
-//
-// Three ways out, in increasing order of how much they cost you:
-//
-//   Reset this panel — remount the subtree with fresh state. The logo, the other
-//     tabs and the stored session all stay. Enough whenever the crash came from
-//     state this panel built rather than from state it was handed.
-//   Start over — clear the stored session and reload. The escape hatch for a
-//     crash that comes BACK on remount, which is what a poisoned restored
-//     document looks like; promoted to the primary action once that happens.
-//   Report an issue — a prefilled GitHub issue carrying the options, the image
-//     shape, the build and the stack (see lib/issueReport). The tracer's hard
-//     cases are the ones nobody can reproduce from prose, so the one click that
-//     attaches the options is worth more here than anywhere else in the app.
+// Recovery options, cheapest first:
+//   Reset this panel — remount the subtree with fresh state; everything else stays.
+//   Start over — clear the stored session and reload. Promoted to the primary
+//     action when the crash comes straight back on remount, which is what a
+//     poisoned restored document looks like.
+//   Report an issue — a prefilled GitHub issue with options, image shape, build
+//     and stack (see lib/issueReport).
 
 import { Component, Fragment, useState, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
@@ -40,12 +28,10 @@ interface Props {
   /** `app` is the root boundary, where "this panel" would be a lie. */
   kind?: 'panel' | 'app'
   /**
-   * Change it and the boundary forgets the crash. Every routed boundary passes
-   * the pathname, and it is load-bearing rather than defensive: the router
-   * renders whichever route matched into the SAME position, so React reuses one
-   * boundary instance across all of them and only updates its props. Without
-   * this, crashing on Preview and then clicking Cleanup showed Cleanup the
-   * preview's crash screen — a working panel, hidden behind a stale apology.
+   * Changing it clears the crash. Routed boundaries pass the pathname, and it is
+   * required: the router renders every route into the same position, so React
+   * reuses one boundary instance across tabs. Without it, a crash in one tab
+   * would keep showing its crash screen over the next tab.
    */
   resetKey?: string
   children: ReactNode
@@ -59,7 +45,7 @@ interface State {
   componentStack: string | null
   /** Doubles as the children's key: bumping it is what remounts them. */
   resets: number
-  /** When the last reset happened, so a LATER crash isn't blamed on it. */
+  /** When the last reset happened, so a later unrelated crash isn't blamed on it. */
   resetAt: number
   /** This crash came straight back on the remount the user just asked for. */
   again: boolean
@@ -68,12 +54,9 @@ interface State {
 
 /**
  * How soon after a reset a crash still counts as "the same one coming back".
- *
- * A re-crash on remount is synchronous — it happens in the render the reset
- * triggered — so this window only has to survive one commit. It must not be
- * generous: "resetting didn't help, start over" tells the user to wipe their
- * session, and saying that about an unrelated crash ten minutes later would be
- * destructive advice dressed up as a diagnosis.
+ * A re-crash on remount happens in the render the reset triggered, so this only
+ * needs to cover one commit. Keep it short: the repeat case advises wiping the
+ * session, which would be bad advice for an unrelated later crash.
  */
 const REPEAT_WINDOW_MS = 4000
 
@@ -90,9 +73,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: unknown): Partial<State> {
-    // Collected HERE, in the render phase, and not in the fallback's own render:
-    // by the time the fallback is committed the crashing children have been
-    // unmounted and every context provider they registered is gone.
+    // Collect the report context here, in the render phase. By the time the
+    // fallback commits, the crashing children have unmounted and unregistered
+    // their providers, so a later read comes back empty.
     return { crashed: true, error, context: collectReportContext() }
   }
 
@@ -111,10 +94,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
-    // React only logs caught errors to the console in development, and a crash
-    // report is a lot easier to write with the real thing in front of you.
+    // React only logs caught errors in development.
     console.error(`[LogoLab] crash in ${this.props.what}`, error, info.componentStack)
-    // Into the session log too, so a LATER report still knows this happened.
+    // Also into the session log, so a later report includes it.
     logError(`crash:${this.props.what}`, error)
     this.setState((s) => ({
       componentStack: info.componentStack ?? null,
@@ -171,12 +153,11 @@ function CrashScreen({
 }) {
   const [clearing, setClearing] = useState(false)
 
-  // A chunk that never arrived is a different failure with a different remedy:
-  // the code isn't there, so remounting re-throws the cached rejection forever.
+  // React.lazy caches a failed chunk load, so remounting can never fix it; offer
+  // a reload instead.
   const chunk = isChunkLoadError(error)
 
-  // The context is the one thing NOT collected on demand: this boundary already
-  // captured it in the render phase, while the crashing subtree was still up.
+  // Context comes from getDerivedStateFromError, not collected on demand.
   const subject: ReportSubject = { what, kind: 'crash', error, componentStack, context }
 
   const startOver = () => {

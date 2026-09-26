@@ -1,6 +1,5 @@
-// Vectorize tab: the shared drop-zone empty state until a logo is loaded,
-// then the full-height vectorize studio (trace controls, node-editing canvas,
-// paths panel) takes over the whole viewport.
+// Vectorize tab: the empty state until a logo is loaded, then the full-height
+// vectorize studio.
 
 import { ImageOff } from 'lucide-react'
 import { useLogo } from '../../store'
@@ -22,9 +21,7 @@ export default function VectorizePanel() {
     )
   }
 
-  // `persist`: this is the studio that owns the app's working logo, so its
-  // settings and traced document are the ones a reload has to bring back. The
-  // sheet's per-tile studios deliberately don't — their documents belong to the
-  // sheet store, which persists them as part of the sheet.
+  // Only this studio persists: it owns the working logo. The sheet's per-tile
+  // studios are persisted by the sheet store instead.
   return <VectorizeStudio persist />
 }

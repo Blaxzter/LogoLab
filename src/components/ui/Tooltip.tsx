@@ -32,23 +32,19 @@ const compose =
   }
 
 /**
- * A lightweight, theme-aware hover/focus tooltip — a nicer replacement for the
- * native `title` attribute. Wrap any single interactive element:
+ * Hover/focus tooltip; the app's replacement for the native `title` attribute
+ * (don't add `title` attributes back). Wrap a single interactive element:
  *
  *     <Tooltip label="Undo"><button …/></Tooltip>
  *
- * It clones the child to attach hover/focus handlers and a ref (no extra DOM
- * node, so toolbar layout — `ml-auto`, `shrink-0`, flex gaps — is untouched),
- * then portals the bubble to <body> with fixed positioning so an
- * `overflow-hidden` card or `overflow-x-auto` strip can't clip it. Appears on
- * hover (after a short delay) and immediately on keyboard focus; dismisses on
- * leave/blur/click and on scroll/resize (where a fixed bubble would drift from
- * its trigger).
+ * The child is cloned to attach handlers and a ref, so no wrapper node affects
+ * layout. The bubble is portalled to <body> with fixed positioning so overflow
+ * containers can't clip it. Placement flips rather than clamps (see
+ * tooltipPlace.ts); header tooltips pass `side="bottom"`.
  *
- * Accessibility: the bubble is purely visual (`aria-hidden`) — it deliberately
- * does NOT touch the trigger's accessible name, so a text button keeps its
- * label and we never trip WCAG 2.5.3 ("Label in Name"). Give icon-only triggers
- * their own `aria-label` (the label string is the obvious value).
+ * The bubble is `aria-hidden` and leaves the trigger's accessible name alone,
+ * so icon-only triggers need their own `aria-label`. An empty label renders the
+ * child alone.
  */
 export function Tooltip({
   label,
@@ -92,8 +88,7 @@ export function Tooltip({
 
   useEffect(() => () => clearTimer(), [])
 
-  // Measure once mounted, then place it. useLayoutEffect runs before paint, so
-  // the bubble appears already positioned (no (0,0) flash).
+  // Layout effect so the bubble is positioned before paint (no flash at 0,0).
   useLayoutEffect(() => {
     if (!open) return
     const trigger = triggerRef.current
@@ -110,12 +105,9 @@ export function Tooltip({
     setCoords({ left, top })
   }, [open, side, label])
 
-  // A fixed bubble would float away from its trigger on scroll/resize — drop
-  // it. `blur` on the WINDOW is the safety net: the bubble closes on the
-  // trigger's own blur, but focus can leave without the trigger ever hearing
-  // about it (the window is deactivated, the trigger unmounts under the
-  // pointer), and a bubble stranded on screen with nothing under it is worse
-  // than one dismissed a moment early.
+  // A fixed bubble would drift from its trigger on scroll/resize, so dismiss it.
+  // Window blur catches focus leaving without the trigger's own blur firing
+  // (window deactivated, trigger unmounted under the pointer).
   useEffect(() => {
     if (!open) return
     const dismiss = () => hide()
@@ -141,8 +133,7 @@ export function Tooltip({
     [cp.ref],
   )
 
-  // Nothing to label, or the child isn't a real element — pass it straight
-  // through so the component is always safe to drop in.
+  // Nothing to label, or not an element: render the child as-is.
   if (!isValidElement(children) || label == null || label === '') return children
 
   const trigger = cloneElement(children as ReactElement<Record<string, unknown>>, {
@@ -179,9 +170,8 @@ export function Tooltip({
 }
 
 /**
- * A tooltip label in two parts: what the control is, and a muted second line —
- * either why it can't be pressed and what would change that, or a note about
- * what it will do. Kept here so every such bubble in the app reads the same.
+ * Two-part tooltip label: the control's name and a muted detail line (why it's
+ * disabled, or what it will do).
  */
 export function TipLabel({ title, detail }: { title: ReactNode; detail?: ReactNode }) {
   if (!detail) return <>{title}</>

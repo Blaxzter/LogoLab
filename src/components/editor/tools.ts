@@ -1,7 +1,6 @@
 // The editor's tool set and its keyboard shortcuts.
 //
-// Single letters, matching what Affinity / Illustrator / Figma have trained
-// people's hands to expect, so the tool you press for is the tool you get.
+// Single letters, matching the conventions of Affinity / Illustrator / Figma.
 
 export type EditorTool =
   | 'select'
@@ -47,9 +46,8 @@ export function isDrawTool(tool: EditorTool): boolean {
 }
 
 /**
- * The shape tools, in the order the toolbar's shape flyout lists them. They are
- * the ones that CREATE geometry from a drag, which is why the bar groups them
- * apart from the tools that select and reshape what is already there.
+ * The shape tools (those that create geometry from a drag), in the order the
+ * toolbar's shape flyout lists them.
  */
 export const SHAPE_TOOLS: ToolDef[] = TOOLS.filter((t) => isDrawTool(t.id))
 

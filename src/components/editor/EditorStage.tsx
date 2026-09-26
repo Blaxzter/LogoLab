@@ -1,24 +1,17 @@
 // The editor canvas: rendering, hit-testing and every pointer gesture.
 //
-// PAN VS EDIT. The stage sits inside a ZoomSurface that pans on a left drag and
-// zooms on the wheel. Rather than fight it, the stage decides per pointerdown
-// who owns the gesture and stops propagation only when it takes it — so holding
-// Space, using the middle button, or picking the Pan tool lets the event reach
-// the surface underneath and pans, and everything else edits. That is the whole
-// mechanism, and it is why panning never steals a drag that was meant to move a
-// shape (and vice versa).
+// Pan vs edit: the stage sits inside a ZoomSurface that pans on drag and zooms
+// on the wheel. Each pointerdown decides who owns the gesture, and the stage
+// stops propagation only when it takes it; Space, the middle button and the Pan
+// tool let the event through to the surface.
 //
-// SCREEN-CONSTANT CHROME. Handles, grips and hit radii are specified in SCREEN
-// pixels and converted to viewBox units through `upp` (units per screen pixel),
-// which folds in both the fitted-box scale and the live zoom. A grab radius that
-// is constant in viewBox units would be unusably small zoomed out and absurdly
-// large zoomed in; this way an 9px target is 9px at every zoom level.
+// Handles, grips and hit radii are specified in screen pixels and converted to
+// viewBox units through `upp` (units per screen pixel, including zoom), so they
+// stay the same on-screen size at every zoom level.
 //
-// DRAGS ARE COMPUTED FROM A SNAPSHOT. Every gesture stores the document as it
-// was at pointerdown and recomputes the whole result from the cumulative
-// pointer delta, never from the previous frame. Incremental application is how
-// drags accumulate floating-point drift and how a snapped drag gets stuck to
-// its own snap.
+// Drags recompute from a snapshot taken at pointerdown plus the cumulative
+// pointer delta, never incrementally from the previous frame, which would
+// accumulate drift and make a snapped drag stick to its own snap.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DocItem, EditableDoc, GroupItem, PathItem, Vec } from '../../lib/path/types'
@@ -69,7 +62,7 @@ const ACCENT_SEL = '#f25f2e'
 const GUIDE = '#e11d8f'
 const HALO = '#ffffff'
 
-/** Screen-pixel hit radii. Generous on purpose: see the file header. */
+/** Hit radii in screen pixels (converted through `upp`). */
 const ANCHOR_PX = 9
 const HANDLE_PX = 8
 const SEGMENT_PX = 7
@@ -81,9 +74,7 @@ const DRAG_THRESHOLD_PX = 3
 const ROTATE_OFFSET_PX = 22
 
 /**
- * What each grip's cursor says it will do. Without these every grip reads as
- * "move", which is how a scale handle sitting on top of the artwork gets
- * mistaken for a node.
+ * Per-grip cursors, so a scale handle over the artwork doesn't read as "move".
  */
 const GRIP_CURSOR: Record<Grip | 'rotate', string> = {
   nw: 'nwse-resize',
@@ -214,7 +205,7 @@ export function EditorStage({
   const [hoverId, setHoverId] = useState<string | null>(null)
   const [hoverGrip, setHoverGrip] = useState<Grip | 'rotate' | null>(null)
 
-  /** ViewBox units per screen pixel — the whole chrome-sizing story. */
+  /** ViewBox units per screen pixel; sizes all on-canvas chrome. */
   const upp = vw / Math.max(1, boxW * pz.scale)
   const r = useCallback((px: number) => px * upp, [upp])
 
@@ -322,8 +313,7 @@ export function EditorStage({
       }
       if (!sp || sp.length === 0) return null
       const item = makePath(sp)
-      // A line has no interior, so it is born stroked rather than filled —
-      // a filled zero-area path would be invisible and read as a no-op.
+      // A line has no interior, so it gets a stroke instead of a fill.
       if (tool === 'line') {
         item.fill = 'none'
         item.stroke = { color: '#111827', width: Math.max(1, vw / 256), cap: 'round', join: 'round' }
@@ -551,9 +541,8 @@ export function EditorStage({
     const p = toDoc(e)
     if (!gesture) {
       if (tool === 'select') {
-        // Grips first: they sit ON the artwork (the north grip lands exactly on
-        // a chevron's apex), so without this the cursor would say "move" while
-        // a press would actually scale.
+        // Grips first, matching pointerdown: they can sit on the artwork, and
+        // the cursor must show what a press would actually do.
         const grip = box ? hitGrip(box, p, r(GRIP_PX * HIT)) : null
         const onRotate =
           box && !grip && hitRotate(box, p, r(GRIP_PX * HIT), r(ROTATE_OFFSET_PX))
@@ -630,8 +619,7 @@ export function EditorStage({
       case 'nodes': {
         let delta = { x: p.x - gesture.start.x, y: p.y - gesture.start.y }
         if (e.shiftKey) delta = axisLock(delta)
-        // Node drags snap the DRAGGED NODE itself, so a single node can land
-        // exactly on a neighbour's anchor — the gap-closing move.
+        // Snap the dragged node itself, so it can land exactly on another anchor.
         if (!(e.metaKey || e.ctrlKey) && gesture.refs.length === 1) {
           const ref = gesture.refs[0]
           const item = findItem(gesture.base.items, ref.itemId)
@@ -669,8 +657,7 @@ export function EditorStage({
         const item = findItem(gesture.base.items, gesture.itemId)
         if (!item || item.kind !== 'path') break
         if (Math.hypot(p.x - gesture.start.x, p.y - gesture.start.y) < r(DRAG_THRESHOLD_PX)) break
-        // Dragging straight after placing a point pulls a symmetric handle out
-        // of it — the standard pen gesture that draws curves in one motion.
+        // Dragging right after placing a point pulls out a symmetric handle.
         const sp = item.subPaths[gesture.sub]
         const node = sp.nodes[gesture.idx]
         const out = { x: p.x, y: p.y }
@@ -743,8 +730,8 @@ export function EditorStage({
       case 'handle':
       case 'segment':
       case 'pen-handle':
-        // The live preview already produced the final document; commit it so
-        // the whole gesture becomes ONE undo step rather than a hundred.
+        // The live preview already holds the final document; committing it
+        // makes the whole gesture one undo step.
         onDocCommit(doc)
         break
     }
@@ -770,8 +757,7 @@ export function EditorStage({
   /* ------------------------------------------------------ double click */
 
   const onDoubleClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    // Always ours: the ZoomSurface below resets the zoom on double-click, which
-    // would be a startling thing to happen while editing a node.
+    // Always ours: the ZoomSurface below would otherwise reset the zoom.
     e.stopPropagation()
     const p = toDoc(e)
 
@@ -856,9 +842,7 @@ export function EditorStage({
               onPointerCancel={onPointerUp}
               onDoubleClick={onDoubleClick}
             >
-              {/* Catcher for empty-space clicks. Transparent, so the checker
-                  backdrop shows through and an artboard with no background
-                  looks like what it will export as. */}
+              {/* Catches empty-space clicks; transparent so the checker shows. */}
               <rect x={vx} y={vy} width={vw} height={vh} fill="transparent" />
 
               {showGrid && gridStep > 0 && (
@@ -1007,9 +991,7 @@ function handleKeysFor(path: PathItem, nodeSel: ReadonlySet<string>): Set<string
     for (let idx = 0; idx < n; idx++) {
       if (nodeSel.has(nodeKey(path.id, sub, idx))) {
         keys.add(`${sub}:${idx}`)
-        // Neighbours too: the handle that shapes the segment leaving a selected
-        // node lives on the NEXT node, so hiding it would make half of every
-        // curve unreachable.
+        // Neighbours too: the far handle of each adjacent segment lives on them.
         keys.add(`${sub}:${(idx + 1) % n}`)
         keys.add(`${sub}:${(idx - 1 + n) % n}`)
       }
@@ -1038,7 +1020,7 @@ function hitRotate(box: Box, p: Vec, tol: number, offset: number): boolean {
 }
 
 function constrainLine(a: Vec, b: Vec): Vec {
-  // Snap a line to the nearest 45°, the constraint every editor puts on Shift.
+  // Shift snaps a line to the nearest 45°.
   const dx = b.x - a.x
   const dy = b.y - a.y
   const len = Math.hypot(dx, dy)
@@ -1054,8 +1036,7 @@ function GridOverlay({
   vx, vy, vw, vh, step, width,
 }: { vx: number; vy: number; vw: number; vh: number; step: number; width: number }) {
   const lines: React.ReactNode[] = []
-  // Cap the line count: a fine grid on a big artboard is thousands of nodes for
-  // something the eye reads as a flat tone anyway.
+  // Cap the line count so a fine grid on a large artboard stays cheap.
   const maxLines = 200
   const stepX = Math.max(step, vw / maxLines)
   const stepY = Math.max(step, vh / maxLines)
@@ -1152,8 +1133,7 @@ function NodeOverlay({
         }
       }
 
-      // A smooth node is a circle, a corner a square — the shape tells you what
-      // the joint will do before you drag it.
+      // Smooth nodes draw as circles, corners as squares.
       const size = r(selected ? 4 : 3.2)
       anchors.push(
         node.kind === 'smooth' ? (

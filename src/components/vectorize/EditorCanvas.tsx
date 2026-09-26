@@ -1,11 +1,11 @@
 // Node-editing SVG canvas for the vectorize studio. Renders an EditableDoc
 // inside a shared pan/zoom surface and (in node mode) lets the user drag whole
 // paths, anchors and Bézier handles, insert nodes on segments, and toggle
-// corner/smooth joints — Affinity-style.
+// corner/smooth joints.
 //
 // Coordinate model: the doc's viewBox aspect is fitted into the available
 // space as an explicitly-sized "fitted box"; the <svg> fills that box exactly,
-// so the svg element rect IS the drawing rect and pointer → viewBox mapping is
+// so the svg element rect is the drawing rect and pointer → viewBox mapping is
 // a plain proportion off getBoundingClientRect() (the pan/zoom CSS transform
 // is already baked into that rect). All gestures compute from a pointerdown
 // snapshot with cumulative deltas, so previews never accumulate drift.
@@ -89,7 +89,7 @@ export interface EditorCanvasProps {
     selectedNodes: ReadonlySet<string>;
     /** Original-image ghost rendered under the SVG (overlay view mode). */
     underlay?: { src: string; opacity: number } | null;
-    /** Region markers (segmentation seeds) in NORMALIZED [0,1] image coords. */
+    /** Region markers (segmentation seeds) in normalized [0,1] image coords. */
     markers?: { x: number; y: number; flat?: boolean; remove?: boolean }[];
     /** Which marker kind the mark tool drops — tints the hover-highlight to match. */
     markMode?: "separate" | "flat" | "remove";
@@ -97,7 +97,7 @@ export interface EditorCanvasProps {
      *  trace; the mark tool highlights the region under the cursor from it. */
     preMerge?: { labels: Int32Array; width: number; height: number } | null;
     /** Hovering a palette swatch / path row sets this fill; every visible path with
-     *  it lights up, so the user sees which regions ARE that colour. null ⇒ none. */
+     *  it lights up. null ⇒ none. */
     highlightFill?: string | null;
     onSelectPath: (id: string | null) => void;
     onSelectNodes: (keys: Set<string>) => void;
@@ -130,16 +130,14 @@ function parseNodeKey(key: string): NodeRef {
 }
 
 // --- region hit-testing (remove-mode hover preview) -------------------------
-// The flattening, containment and area tests all come from lib/editor/hitTest,
-// which is the same code the SVG editor picks with — so "what did I click?"
-// cannot answer differently in the two studios.
+// Hit tests come from lib/editor/hitTest, shared with the SVG editor so both
+// studios agree on what a click hit.
 
 /**
  * The d-string of the region boundary a "remove" click would dissolve at `pt`: the
  * topmost visible path item with a subpath containing the point, and within it the
- * largest containing subpath (the blob's OUTER loop, not a hole). null over empty
- * canvas. This previews exactly what the trace-time flood removes, at the geometry
- * the user sees — so the granularity of the click is visible before committing.
+ * largest containing subpath (the blob's outer loop, not a hole). null over empty
+ * canvas.
  */
 function removeRegionDAt(doc: EditableDoc, pt: Vec): string | null {
     for (let i = doc.items.length - 1; i >= 0; i--) {
@@ -180,7 +178,7 @@ interface DragState {
     pointerId: number;
     /** Planar (topological) selected item: route edits through doc.topology so
      *  the neighbour region follows. Captured at pointerdown and valid for the
-     *  whole drag (moves never change node counts). Absent ⇒ legacy per-item path. */
+     *  whole drag (moves never change node counts). Absent ⇒ per-item editing. */
     provenance?: NodeProvenance[][];
     /** Handle drag on a planar item: the canonical edge handle to drag. */
     handleSite?: HandleSite;
@@ -215,14 +213,11 @@ export function EditorCanvas({
     // Key of the anchor/handle currently under the cursor ('sub:idx' or
     // 'sub:idx:in|out'), for hover feedback in node mode.
     const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-    // Mark tool: the PRE-merge region label under the cursor, highlighted so the
-    // user sees the section a marker will affect.
+    // Mark tool: the pre-merge region label under the cursor.
     const [hoverLabel, setHoverLabel] = useState<number | null>(null);
-    // Remove mode: the d-string of the FINAL region under the cursor, tinted so the
-    // user sees exactly which section a click dissolves (the flood is 1px-sensitive).
+    // Remove mode: the d-string of the final region a click would dissolve.
     const [removeHoverD, setRemoveHoverD] = useState<string | null>(null);
-    // Mark tool: the live cursor position (viewBox coords) so a ghost marker can
-    // ride the pointer — placement is then WYSIWYG (the dot lands where the ghost is).
+    // Mark tool: the cursor position (viewBox coords) for the ghost marker.
     const [hoverPt, setHoverPt] = useState<Vec | null>(null);
 
     // --- marquee (rubber-band) selection state ---
@@ -267,8 +262,8 @@ export function EditorCanvas({
 
     // Region hover-highlight overlay (mark tool, flat mode only): rasterize the
     // pre-merge region under the cursor to a tinted mask, as a data-URL <image> over
-    // the viewBox. Recomputed only when the hovered label changes — O(w·h) once per
-    // region entered, not per mouse-move. Amber to match the "flat colour" marker.
+    // the viewBox. Recomputed only when the hovered label changes (O(w·h) per region
+    // entered, not per mouse-move).
     const hoverOverlay = useMemo(() => {
         if (hoverLabel === null || hoverLabel < 0 || !preMerge) return null;
         if (typeof document === "undefined") return null;
@@ -304,9 +299,7 @@ export function EditorCanvas({
               (it) =>
                   it.kind === "path" &&
                   it.visible &&
-                  // A stroke-only path's colour is its stroke, so matching on
-                  // `fill` would compare the literal string "none" and the row
-                  // you're hovering would light up nothing.
+                  // A stroke-only path's colour is its stroke; its fill is "none".
                   representativePaint(it) === highlightFill,
           ) as PathItem[])
         : [];
@@ -342,12 +335,9 @@ export function EditorCanvas({
         return rect && rect.width > 0 ? rect.width / vbW : 1;
     };
 
-    // NOTE: capture deliberately does NOT happen here. Capturing on pointerdown
-    // makes the browser retarget the derived click/dblclick events to the svg
-    // root, which kills double-click-to-insert / -toggle (the handler's
-    // closest('[data-id]') then starts from <svg> and finds nothing). The
-    // capture happens in handleSvgPointerMove once the drag threshold is
-    // crossed — pure clicks never capture.
+    // Don't capture the pointer here: capturing on pointerdown retargets the
+    // derived click/dblclick to the svg root, which breaks double-click insert /
+    // toggle. handleSvgPointerMove captures once the drag threshold is crossed.
     const beginDrag = (_e: React.PointerEvent, drag: DragState) => {
         dragRef.current = drag;
     };
@@ -404,13 +394,12 @@ export function EditorCanvas({
         const pt = toVb(e.clientX, e.clientY);
         if (!pt) return;
 
-        // Remember the in-region click as the "remove & heal" seed: which blob the
-        // user is pointing at, so a later ⌫ dissolves that section (not the whole
-        // colour). Updated on every pointerdown on a path so it tracks the cursor.
+        // Remember the click as the "remove & heal" seed, so a later ⌫ dissolves
+        // the blob under it rather than the whole colour.
         onRegionSeed?.(item.id, pt);
 
         if (interactive) {
-            // Dragging on the SELECTED path → move that path (existing behavior).
+            // Dragging on the selected path moves it.
             if (id === selectedPathId) {
                 beginDrag(e, {
                     type: "path",
@@ -425,7 +414,7 @@ export function EditorCanvas({
                 });
                 return;
             }
-            // Dragging on a DIFFERENT path → start a marquee; pure click selects it.
+            // Dragging on a different path starts a marquee; a click selects it.
             marqueeRef.current = {
                 startVb: pt,
                 currentVb: pt,
@@ -451,11 +440,9 @@ export function EditorCanvas({
         });
     };
 
-    // One precise double-click handler on the svg root. DOM-target-based routing
-    // is hopeless here: once a path is selected, its (generous) invisible grab
-    // circles blanket the outline — a circle's Bézier handle dots sit almost ON
-    // the curve — so a dblclick "on the segment" usually lands on a grab target.
-    // Instead, hit-test geometrically with priorities: anchor (toggle kind) →
+    // One double-click handler on the svg root, hit-testing geometrically rather
+    // than by DOM target (handle dots sit almost on the curve, so the target is
+    // ambiguous). Priorities: anchor (toggle kind) →
     // handle dot (swallow) → segment (insert node) → painted fill (swallow) →
     // background (fall through to ZoomSurface's zoom reset).
     const handleSvgDoubleClick = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -572,7 +559,7 @@ export function EditorCanvas({
     };
 
     // Capture phase on the svg: a grab beats the path body and the marquee
-    // underneath it, as the old per-node hit circles did by sitting on top.
+    // underneath it.
     const handleGrabPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
         if (!interactive || e.button !== 0 || !e.isPrimary || !selectedItem) return;
         const key = grabAt(e.clientX, e.clientY);
@@ -585,7 +572,7 @@ export function EditorCanvas({
         if (!pt) return;
         const startClient = { x: e.clientX, y: e.clientY };
         // Planar region: provenance bridges a materialized NodeRef back to the
-        // shared-edge graph so the neighbour region follows. null ⇒ legacy item.
+        // shared-edge graph so the neighbour region follows. null ⇒ per-item.
         const topoProv = selectedItem.loops
             ? regionProvenance(doc, selectedItem) ?? undefined
             : undefined;
@@ -639,7 +626,7 @@ export function EditorCanvas({
         let baseItem = selectedItem;
         if (e.altKey && node.kind !== "corner") {
             if (handleSite) {
-                // Corner the edge node THIS handle belongs to (at a junction the
+                // Corner the edge node this handle belongs to (at a junction the
                 // out-handle lives on a different edge than the anchor owner).
                 baseDoc = setEdgeNodeKind(doc, handleSite.edgeId, handleSite.edgeNodeIdx, "corner");
                 onDocChange(baseDoc);
@@ -676,14 +663,11 @@ export function EditorCanvas({
         }
         // --- region hover-highlight (mark tool) ---
         if (marking) {
-            // A ghost marker rides the pointer (the crosshair is hidden), so the user
-            // sees EXACTLY where a click lands — placement is WYSIWYG. Computed once
-            // and reused by the mode-specific previews below.
+            // The ghost marker rides the pointer (the crosshair is hidden).
             const pt = toVb(e.clientX, e.clientY);
             setHoverPt(pt);
-            // Remove mode: preview the FINAL region the click would dissolve, by
-            // hit-testing the rendered geometry (resolution-independent → matches
-            // what the user sees, unlike the 1px-sensitive trace-time flood).
+            // Remove mode: preview the final region the click would dissolve,
+            // hit-tested against the rendered geometry.
             if (markMode === "remove") {
                 const d = pt ? removeRegionDAt(doc, pt) : null;
                 setRemoveHoverD((prev) => (prev === d ? prev : d));
@@ -755,7 +739,7 @@ export function EditorCanvas({
         const dx = pt.x - drag.startVb.x;
         const dy = pt.y - drag.startVb.y;
         // Planar items route every gesture through doc.topology (so the shared
-        // edge's neighbour region follows live); legacy items edit subPaths.
+        // edge's neighbour region follows live); other items edit subPaths.
         let next: EditableDoc;
         if (drag.type === "path") {
             next = drag.origItem.loops
@@ -953,12 +937,10 @@ export function EditorCanvas({
                         viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
                         width="100%"
                         height="100%"
-                        // The fitted box already carries the viewBox aspect (useFitBox),
-                        // so "none" never visibly stretches — but it pins the user→screen
-                        // map to a pure edge-to-edge proportion, exactly what toVb inverts.
-                        // The default "meet" can letterbox by a sub-pixel when the rendered
-                        // box aspect drifts, which a marker placed at 3200% then shows as a
-                        // few-px gap between the cursor and the dot.
+                        // The fitted box already has the viewBox aspect, so "none" never
+                        // visibly stretches; it keeps the mapping a pure proportion, which
+                        // is what toVb inverts. "meet" can letterbox by a sub-pixel, which
+                        // shows as a cursor-to-marker gap at high zoom.
                         preserveAspectRatio="none"
                         className={
                             marking
@@ -992,9 +974,7 @@ export function EditorCanvas({
                         onDoubleClick={handleSvgDoubleClick}
                     >
                         <g onPointerDown={handlePathPointerDown}>
-                            {/* Paint layer — the SHARED renderer (see
-                                components/vector/DocRender). Nothing about how a
-                                path looks is decided in this file. */}
+                            {/* Paint layer: the shared renderer (components/vector/DocRender). */}
                             <ItemsView items={doc.items} interactive={interactive} />
                             {/* Interaction layer: fat invisible strokes so a
                                 hairline outline is still grabbable. */}
@@ -1004,11 +984,7 @@ export function EditorCanvas({
                                 ))}
                         </g>
 
-                        {/* Colour-locator highlight: light up every region painted the
-                            hovered palette colour — a translucent flash + a halo/accent
-                            outline (legible over any fill), so the user sees exactly which
-                            regions are that colour before recolouring or deleting it.
-                            pointerEvents none so it never blocks editing. */}
+                        {/* Colour-locator highlight for the hovered palette colour. */}
                         {highlightItems.length > 0 && fit.width > 0 && (
                             <g style={{ pointerEvents: "none" }}>
                                 {highlightItems.map((it) => (
@@ -1034,11 +1010,9 @@ export function EditorCanvas({
                             </g>
                         )}
 
-                        {/* Selection overlay: outline + handle spokes/dots + anchors,
-                            drawn as a few BATCHED paths (see nodeOverlay.ts) — one
-                            element per node was 27k elements on a 3000-node trace.
-                            Grabbing is geometric (nearestGrab), so there are no
-                            per-node hit targets either. */}
+                        {/* Selection overlay, drawn as a few batched paths (see
+                            nodeOverlay.ts) because one element per node doesn't scale
+                            to large traces. Grabbing is geometric (nearestGrab). */}
                         {selectedItem && fit.width > 0 && (
                             <NodeOverlay
                                 item={selectedItem}
@@ -1063,10 +1037,8 @@ export function EditorCanvas({
                             />
                         )}
 
-                        {/* Region hover-highlight (mark tool, flat mode): tint the
-                            pre-merge region under the cursor so the user sees the
-                            section a flat marker will carve out. Above the paths,
-                            below the pins. */}
+                        {/* Mark tool, flat mode: tint the pre-merge region a flat
+                            marker would carve out. Above the paths, below the pins. */}
                         {marking && markMode === "flat" && hoverOverlay && (
                             <image
                                 href={hoverOverlay}
@@ -1080,9 +1052,7 @@ export function EditorCanvas({
                             />
                         )}
 
-                        {/* Remove mode: outline + tint the exact region the click
-                            would dissolve, so the user can aim at a thin sliver and
-                            see precisely what heals away. Above the paths, below pins. */}
+                        {/* Remove mode: the region a click would dissolve. */}
                         {marking && markMode === "remove" && removeHoverD && (
                             <path
                                 d={removeHoverD}
@@ -1095,11 +1065,8 @@ export function EditorCanvas({
                             />
                         )}
 
-                        {/* Region markers (segmentation seeds). Drawn in every tool
-                            so the user always sees what's protected; clicks are
-                            handled geometrically by the svg, so the pins themselves
-                            never intercept (pointerEvents: none). Sized via r() to
-                            stay constant on screen at any zoom. */}
+                        {/* Region markers, drawn in every tool. Clicks are hit-tested
+                            by the svg, so the pins never intercept pointer events. */}
                         {markers && markers.length > 0 && fit.width > 0 && (
                             <g style={{ pointerEvents: "none" }}>
                                 {markers.map((m, i) => {
@@ -1151,10 +1118,8 @@ export function EditorCanvas({
                             </g>
                         )}
 
-                        {/* Ghost marker: the pin the NEXT click will drop, riding the
-                            pointer (the crosshair is hidden). Placement is WYSIWYG — a
-                            click stores exactly this point — so it doubles as a probe for
-                            any cursor↔dot offset. A hairline cross marks the exact pixel. */}
+                        {/* Ghost marker: the pin the next click will drop, at exactly
+                            the point a click stores. */}
                         {marking && hoverPt && fit.width > 0 && (
                             <g style={{ pointerEvents: "none" }} opacity={0.85}>
                                 <circle
@@ -1174,8 +1139,7 @@ export function EditorCanvas({
                                     strokeWidth={r(1.5)}
                                     strokeDasharray={`${r(2)} ${r(1.5)}`}
                                 />
-                                {/* Exact-point crosshair (extends past the pin so it's
-                                    visible against it) — what actually gets stored. */}
+                                {/* Crosshair at the exact stored point. */}
                                 <path
                                     d={`M${hoverPt.x - r(9)} ${hoverPt.y} H${hoverPt.x + r(9)} M${hoverPt.x} ${hoverPt.y - r(9)} V${hoverPt.y + r(9)}`}
                                     stroke={GHOST_COL}
@@ -1193,11 +1157,10 @@ export function EditorCanvas({
 }
 
 /**
- * The selected path's edit overlay. Every width and radius is a constant SCREEN
- * size, so the geometry depends on `scale` (px per viewBox unit) — which a pan
- * does not change, so a pan re-renders none of this. The bulk layer is every
- * node in its resting style; selected and hovered nodes are drawn again on top,
- * which keeps a hover from rebuilding the 3000-node strings underneath it.
+ * The selected path's edit overlay. Widths and radii are constant screen sizes,
+ * so the geometry depends only on `scale` and a pan re-renders nothing. Selected
+ * and hovered nodes are drawn again on top of the resting layer, so a hover
+ * doesn't rebuild the bulk path strings.
  */
 const NodeOverlay = memo(function NodeOverlay({
     item,

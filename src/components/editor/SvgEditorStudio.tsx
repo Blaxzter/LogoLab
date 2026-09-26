@@ -2,9 +2,9 @@
 // undoable EditableDoc.
 //
 // This component owns the document, the selection and the keyboard; the stage
-// owns pointer gestures and the panels own their own controls. Keeping the
-// keyboard here (rather than on the canvas) is what makes shortcuts work while
-// the focus is in the layers list — the one place people reach for Delete.
+// owns pointer gestures and the panels own their controls. The keyboard lives
+// here rather than on the canvas so shortcuts (notably Delete) also work while
+// focus is in the layers list.
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -82,13 +82,11 @@ export interface SvgEditorStudioProps {
   /** Leave the editor and go back to the intake screen. */
   onClose: () => void
   /**
-   * Fires whenever the document changes — including once for the document it
-   * opens with. The Editor tab writes it to IndexedDB and hands it to the app as
-   * the working logo; there is no "apply" step, and no button for one.
+   * Fires whenever the document changes, including once with the document it
+   * opens with.
    *
-   * Deliberately NOT a round trip through `initialDoc`: that prop re-seeds the
-   * history on identity change, so feeding edits back through it would wipe undo
-   * on every stroke.
+   * Don't feed edits back through `initialDoc`: that prop re-seeds the history
+   * on identity change, which would wipe undo on every edit.
    */
   onChange?: (doc: EditableDoc) => void
 }
@@ -122,13 +120,11 @@ export function SvgEditorStudio({
     setEnteredGroupId(null)
   }, [initialDoc, history])
 
-  // White line-art on the light checker is invisible, and the editor is reached
-  // by routes the upload path never sees (a dropped file, pasted markup, an
-  // example). So the backdrop picks its own side from the artwork on open —
-  // unless the user already flipped it by hand, which always wins. Only on
-  // open: re-deciding it mid-edit would strobe the canvas as you paint.
+  // Pick a light or dark checker from the artwork on open (white line-art is
+  // invisible on the light one); a manual choice always wins. Only on open, so
+  // the backdrop doesn't flip while you paint.
   useEffect(() => {
-    // An empty artboard is no evidence either way; leave the backdrop alone.
+    // An empty artboard gives no signal; leave the backdrop alone.
     if (docStats(initialDoc).paths === 0) return
     let alive = true
     void svgPrefersDarkChecker(serializeDoc(initialDoc)).then((dark) => {
@@ -146,9 +142,8 @@ export function SvgEditorStudio({
     if (doc) onChange?.(doc)
   }, [doc, onChange])
 
-  // The document, for handlers that must stay identity-stable across renders
-  // (see the layers rail below) — reading a ref rather than closing over the
-  // render's document is what lets them be `useCallback([])`.
+  // Read through a ref so handlers passed to the layers rail can stay
+  // identity-stable (`useCallback([])`).
   const docRef = useRef(previewDoc)
   docRef.current = previewDoc
 
@@ -160,12 +155,10 @@ export function SvgEditorStudio({
   const preview = useCallback((next: EditableDoc) => historySet(next), [historySet])
 
   /**
-   * A paint edit that arrives as a STREAM — a colour well being scrubbed, an
-   * opacity slider being dragged. Every frame is committed (so nothing is left
-   * uncommitted when the gesture just stops, which is all a colour picker ever
-   * does), but the whole burst folds into one undo entry. Keyed by the control
-   * AND the selection, so moving to another shape starts a new entry rather
-   * than absorbing it into the last one.
+   * Commit a streamed paint edit (a scrubbed colour well, a dragged slider).
+   * Every frame is committed, since a colour picker has no "end" event, but the
+   * burst merges into one undo entry keyed by control and selection, so
+   * switching shapes starts a new entry.
    */
   const selectionKey = useMemo(() => [...selection].sort().join(','), [selection])
   const commitLive = useCallback(
@@ -184,10 +177,8 @@ export function SvgEditorStudio({
     [previewDoc.items, selection],
   )
   const stats = useMemo(() => docStats(previewDoc), [previewDoc])
-  // Built on demand, NOT memoized per document: serializing rebuilds the `d` of
-  // every path in the file, and the only three things that want it are a
-  // download, a copy and an apply. Kept as a memo it re-ran on every frame of
-  // every drag and every colour scrub, for a string nobody was looking at.
+  // Built on demand rather than memoized: serializing is expensive and only
+  // download/copy need it, so a memo would rerun on every drag frame for nothing.
   const buildSvg = useCallback(() => serializeDoc(previewDoc, 2), [previewDoc])
 
   /* --------------------------------------------------------- operations */
@@ -201,9 +192,9 @@ export function SvgEditorStudio({
   )
 
   const deleteSelection = useCallback(() => {
-    // With nodes selected, Delete removes NODES; otherwise it removes items.
-    // The node case has to come first or you could never delete a single node
-    // from a shape you also have selected — which is always.
+    // Selected nodes take precedence over selected items: a node is always
+    // selected together with its shape, so checking items first would make
+    // deleting a single node impossible.
     if (nodeSel.size > 0) {
       const byItem = new Map<string, { sub: number; idx: number }[]>()
       for (const key of nodeSel) {
@@ -287,12 +278,10 @@ export function SvgEditorStudio({
 
   /* -------------------------------------------------------- layers rail */
 
-  // The rail lags DELIBERATELY. It is the most expensive thing on screen (one
-  // row per item, each with a thumbnail) and the least urgent: during a colour
-  // scrub the only thing in it that changes is one 16px swatch. Deferred, React
-  // renders it at low priority and simply drops the intermediate frames of a
-  // drag — which it can only do if the rail bails out of the urgent render, so
-  // `LayersTree` is memoized and every prop below is identity-stable.
+  // The rail renders from a deferred document: it is the most expensive and
+  // least urgent thing on screen (a thumbnail per row). Deferral only helps if
+  // the rail bails out of the urgent render, so `LayersTree` is memoized and
+  // every prop below must stay identity-stable.
   const railDoc = useDeferredValue(previewDoc)
 
   const selectRows = useCallback((ids: ReadonlySet<string>) => {
@@ -356,8 +345,8 @@ export function SvgEditorStudio({
       if (patch.w !== undefined || patch.h !== undefined) {
         const sx = patch.w !== undefined && box.w > 0 ? patch.w / box.w : 1
         const sy = patch.h !== undefined && box.h > 0 ? patch.h / box.h : 1
-        // Resize about the top-left, so typing a width doesn't also move the
-        // shape — the box origin is what the X/Y fields above it report.
+        // Resize about the top-left (the origin the X/Y fields report), so
+        // typing a width doesn't also move the shape.
         items = transformItems(items, selection, scaleAbout({ x: box.x, y: box.y }, sx, sy))
       }
       if (patch.x !== undefined || patch.y !== undefined) {
@@ -551,9 +540,8 @@ export function SvgEditorStudio({
 
   const selectedCount = topLevelSelection(previewDoc.items, selection).length
 
-  // What is selected, counted in ONE walk. (The previous `findItem` per
-  // selected id was a tree search each time — quadratic the moment you press
-  // Ctrl+A on a traced document.)
+  // Selection counts in a single tree walk (a lookup per id is quadratic after
+  // Ctrl+A on a large traced document).
   const sel = useMemo(() => {
     let paths = 0
     let groups = 0
@@ -577,9 +565,8 @@ export function SvgEditorStudio({
   /**
    * Why each action can't be used right now — null when it can.
    *
-   * One place, so the greyed-out state and the tooltip that explains it can
-   * never drift apart, and so every reason is phrased as what WOULD make the
-   * button work rather than as a complaint that it doesn't.
+   * Drives both the disabled state and its tooltip, so the two can't disagree.
+   * Each reason says what would make the action available.
    */
   const nothing = 'Nothing is selected — click a shape on the canvas or a row in the layers list.'
   const onePath =
@@ -626,8 +613,7 @@ export function SvgEditorStudio({
     <div className="canvas-ui flex h-full min-h-0 w-full shrink-0 flex-col animate-in-fade">
       {/* Toolbar */}
       <div className="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-surface px-2">
-        {/* Three groups, so the bar says what a tool DOES before you hover it:
-            what you select and reshape with, what draws new geometry, the view. */}
+        {/* Grouped by purpose: select/reshape, draw, view. */}
         <div className="flex items-center gap-1.5">
           <ToolPill>
             <ToolBtn id="select" tool={tool} onPick={pickTool} />
@@ -732,9 +718,8 @@ export function SvgEditorStudio({
             />
           </div>
 
-          {/* The layer ops live WITH the layers. They act on the same selection
-              the rail shows, and in the top bar they read as "tools" — sat next
-              to the pen, they invite the question "what will this draw?". */}
+          {/* Layer operations sit with the layers list, whose selection they
+              act on, rather than in the toolbar where they'd read as drawing tools. */}
           <div className="flex shrink-0 items-center gap-0.5 border-t border-line px-1.5 py-1.5">
             <BarBtn label="Group (Ctrl+G)" onClick={doGroup} reason={why.group}>
               <GroupIcon size={15} />
@@ -937,10 +922,8 @@ function BarBtn({
   active?: boolean
   children: React.ReactNode
 }) {
-  // Hover styling is DROPPED when the button is off rather than overridden: a
-  // greyed control that lights up under the pointer still reads as pressable,
-  // and the whole point of keeping it hoverable is the explanation, not the
-  // invitation.
+  // No hover styling when disabled: a greyed control that lights up still reads
+  // as pressable. It stays hoverable only for its tooltip.
   const off = isOff(reason)
   return (
     <ActionButton
@@ -965,8 +948,7 @@ function BarBtn({
 function MiniBtn({
   label, note, onClick, reason,
 }: { label: string; note?: string; onClick: () => void; reason?: string | null }) {
-  // `.btn` dims and un-hovers itself off `aria-disabled` (see index.css), so
-  // unlike the icon buttons this one needs no conditional class of its own.
+  // `.btn` handles its own disabled styling via `aria-disabled` (index.css).
   return (
     <ActionButton
       label={label}
@@ -981,8 +963,8 @@ function MiniBtn({
 }
 
 /**
- * Join welds two loose ends of ONE path, so "two nodes selected" isn't the
- * whole requirement — two ends of different shapes is the mistake worth naming.
+ * Join welds two loose ends of the same path, so two nodes on different shapes
+ * get their own explanation.
  */
 function joinReason(nodeSel: ReadonlySet<string>): string | null {
   if (nodeSel.size !== 2) {

@@ -4,7 +4,7 @@ import { useAppearance, useEnv } from '../../store'
 
 /**
  * BrowserTabs — a browser tab-strip + address bar mock that stress-tests
- * FAVICON legibility at 16px. The active tab, address bar, and one bookmark
+ * favicon legibility at 16px. The active tab, address bar, and one bookmark
  * carry the user logo; everything else is a generic gray placeholder, so the
  * tiny mark can be judged against realistic browser chrome.
  */

@@ -7,14 +7,10 @@ import { Tooltip } from './ui/Tooltip'
 const POPOVER_W = 256
 
 /**
- * The header's single "support" affordance: a coffee icon that pops a small card
- * offering both ways to chip in — Buy Me a Coffee and GitHub Sponsors — so the
- * title bar carries one icon, not two. (Reporting a problem lived here briefly
- * and moved out to its own bug button: "where do I report this" should not be
- * answered by a coffee cup.) Portaled to <body> with fixed positioning
- * (so the header's own stacking/overflow can't clip it) and anchored below-right of
- * the trigger; closes on outside tap, Esc, scroll, resize — matching the
- * {@link PopoverSlider} conventions.
+ * The header's "support" button: a coffee icon that opens a card with Buy Me a
+ * Coffee and GitHub Sponsors. Portalled to <body> with fixed positioning so the
+ * header can't clip it, anchored below-right of the trigger; closes on outside
+ * tap, Escape, scroll and resize.
  */
 export function SupportPopover() {
   const [open, setOpen] = useState(false)

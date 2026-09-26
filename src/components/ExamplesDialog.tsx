@@ -50,23 +50,14 @@ export function TryExampleButton() {
 }
 
 /**
- * Reusable gallery of the bundled example logos. Clicking a card loads it into
- * the store. Used both inside {@link ExamplesDialog} (the sidebar's modal) and
- * inline beneath the drop zone in the panels' empty state. `onPicked` lets a
- * host react to a successful load (e.g. the modal closes itself).
- */
-/**
- * How a swatch frames its image: `contain` shows the whole mark on the checker
- * (a logo); `cover` fills the square (a sheet — a wide one shrunk to fit would be
- * a faint strip).
+ * How a swatch frames its image: `contain` shows the whole mark (a logo);
+ * `cover` fills the square (a wide sheet would otherwise be a thin strip).
  */
 export type ThumbFit = 'contain' | 'cover'
 
 /**
- * An example's preview swatch. Decides its *own* checker from the image: a
- * light/white mark (e.g. white line-art) gets the dark checker so it stays
- * visible, everything else keeps the light one. This is per-thumbnail — it does
- * not follow the global preview backdrop.
+ * An example's preview swatch. Picks its own checker per image: a light mark
+ * gets the dark checker so it stays visible.
  */
 function ExampleThumb({ url, busy, fit = 'contain' }: { url: string; busy: boolean; fit?: ThumbFit }) {
   const [dark, setDark] = useState(false)
@@ -97,10 +88,7 @@ function ExampleThumb({ url, busy, fit = 'contain' }: { url: string; busy: boole
   )
 }
 
-/**
- * One gallery card — swatch, name, format badge, blurb. Shared with the icon
- * sheet's example gallery so the two read as one thing.
- */
+/** One gallery card: swatch, name, format badge, blurb. Also used by the icon sheet's gallery. */
 export function ExampleCard({
   url,
   file,
@@ -142,6 +130,10 @@ export function ExampleCard({
   )
 }
 
+/**
+ * Gallery of the bundled example logos; clicking a card loads it into the store.
+ * Used in {@link ExamplesDialog} and inline in the panels' empty state.
+ */
 export function ExampleGrid({
   onPicked,
   className,
@@ -199,9 +191,8 @@ export function ExampleGrid({
 }
 
 function ExamplesDialog({ onClose }: { onClose: () => void }) {
-  // Close on Escape. Capture-phase + stopPropagation so that when this dialog is
-  // open inside an open <Sheet> (e.g. the mobile appearance drawer), Escape closes
-  // only the dialog, not the sheet underneath.
+  // Capture phase + stopPropagation so Escape closes only this dialog, not an
+  // open <Sheet> underneath it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -220,7 +211,6 @@ function ExamplesDialog({ onClose }: { onClose: () => void }) {
       aria-modal="true"
       aria-label="Example logos"
     >
-      {/* Backdrop */}
       <button
         type="button"
         aria-label="Close"
@@ -228,7 +218,6 @@ function ExamplesDialog({ onClose }: { onClose: () => void }) {
         className="absolute inset-0 bg-ink/40 backdrop-blur-sm dark:bg-black/55"
       />
 
-      {/* Panel */}
       <div className="panel animate-in-fade relative z-10 flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden">
         <div className="flex items-start justify-between border-b border-line p-5">
           <div>

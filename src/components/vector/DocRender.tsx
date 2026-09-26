@@ -1,16 +1,9 @@
-// THE renderer for an EditableDoc — the single place that decides how a
-// PathItem paints.
+// The renderer for an EditableDoc, shared by the SVG editor and the vectorize
+// canvas: the single place that decides how a PathItem paints.
 //
-// It lives here, outside both studios, because there used to be two of these:
-// one in the SVG editor and one in the vectorize canvas. They drifted, and the
-// drift was invisible until it wasn't — teaching the importer to model strokes
-// made stroked paths render correctly in the editor and vanish entirely in the
-// vectorizer, because only one of the two copies knew what a stroke was.
-//
-// So: paint decisions go HERE and nowhere else. Interaction (hit layers,
-// gestures, overlays) stays with each studio, because those genuinely differ —
-// the vectorizer edits a planar shared-edge graph and drops region markers; the
-// editor draws shapes and moves groups.
+// Keep paint decisions here so the two studios can't drift apart (e.g. one
+// learning to draw strokes while the other drops them). Interaction (hit layers,
+// gestures, overlays) stays with each studio because it genuinely differs.
 
 import { memo } from 'react'
 import type { DocItem, GradientFill, PathItem, RawItem } from '../../lib/path/types'
@@ -36,11 +29,9 @@ function escapeAttr(v: string): string {
 /**
  * Deterministic paint-server id for an item's gradient.
  *
- * `scope` namespaces it, because ids are DOCUMENT-global: a layer thumbnail
- * drawing the same item as the main canvas would otherwise emit a second
- * element with the same id, and the browser resolves `url(#…)` to whichever
- * came first — so one of the two would silently paint with the other's
- * gradient.
+ * `scope` namespaces it because ids are document-global: a layer thumbnail
+ * drawing the same item as the main canvas would otherwise emit a duplicate id,
+ * and `url(#…)` resolves to whichever element came first.
  */
 export const gradIdOf = (itemId: string, scope = 'c') => `eg-${scope}-${itemId}`
 
@@ -79,8 +70,8 @@ export function GradientDef({ id, gradient }: { id: string; gradient: GradientFi
 }
 
 /**
- * One filled / stroked path. `interactive` makes it a pointer target — a
- * stroke-only path has no interior, so its painted area IS the stroke and
+ * One filled / stroked path. `interactive` makes it a pointer target; stroked
+ * paths use `visibleStroke`, since a stroke-only path has no interior and
  * `visiblePainted` would leave it unclickable.
  */
 export const PathView = memo(function PathView({
@@ -129,9 +120,8 @@ export const PathView = memo(function PathView({
 })
 
 /**
- * Invisible wide-stroke copy so a thin outline stays grabbable. Separate from
- * PathView because it belongs to the interaction layer, not the paint layer —
- * but it needs the same `d`, so it lives next to the cache.
+ * Invisible wide-stroke copy so a thin outline stays grabbable. Part of the
+ * interaction layer, but kept here to share the `d` cache.
  */
 export const HitPath = memo(function HitPath({
   item,
