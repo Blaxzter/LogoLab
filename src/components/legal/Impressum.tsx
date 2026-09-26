@@ -87,7 +87,7 @@ export default function Impressum() {
       {!legalInfoComplete && (
         <p className="note">
           Draft template — operator details come from the <code>VITE_LEGAL_*</code> build
-          environment variables (see <code>.env.example</code>); set them in Cloudflare Pages
+          environment variables (see <code>.env.example</code>); set them in the Cloudflare Workers Builds settings
           before publishing, and have the text reviewed.
         </p>
       )}

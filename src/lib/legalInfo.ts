@@ -4,7 +4,7 @@
  * These are injected at BUILD time from environment variables so your real
  * name / address / contact never live in the (public) git repo or its history.
  *  - Locally: put them in a gitignored `.env.local` (see `.env.example`).
- *  - On deploy: set them in Cloudflare Pages → Settings → Environment variables.
+ *  - On deploy: set them in Cloudflare → Workers & Pages → logo-lab → Settings → Build → Variables.
  *
  * IMPORTANT: an Impressum is legally required to be PUBLICLY VISIBLE, so these
  * values still appear on the deployed page (and in the shipped JS bundle). This
