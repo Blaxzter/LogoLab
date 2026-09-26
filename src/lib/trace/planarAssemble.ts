@@ -1,9 +1,9 @@
-// Phase 3 of the planar tracer: fit every edge once, build the shared-edge graph
-// (vertices + edges), then assemble each region's boundary as ordered loops of
-// shared-edge references via a half-edge face walk on the lattice rotational
-// system. Loops are oriented for nonzero fill (outer CCW, holes CW) by flipping
-// EdgeRef loops — so materializeRegion stays a pure forward concatenation and the
-// two regions on a shared edge reference byte-identical geometry.
+// Planar trace assembly: place the junction vertices, fit every edge once, then
+// assemble each region's boundary as ordered loops of shared-edge references via a
+// half-edge face walk on the lattice rotational system. Loops are oriented for
+// nonzero fill (outer CCW, holes CW) by flipping EdgeRef loops, so materializeRegion
+// stays a pure forward concatenation and the two regions on a shared edge reference
+// identical geometry.
 
 import type { EdgeRef, PathNode, SharedEdge, Vec, Vertex } from '../path/types'
 import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
@@ -26,34 +26,33 @@ export interface PlanarTrace {
  *  consistent side (validated by the per-pixel relabel check). */
 const ROT = [1, 2, 3] // try clockwise turns from the reverse direction first
 
-// --- §18 (issue #17): the raster evidence behind an apex reconstruction ------------
-// planarFit is pure geometry and stays that way; this is the layer that holds both the
-// source raster and the two regions' colours, so the probe is built here and handed down
-// as a closure (PlanarFitOptions.apexReach). See APEX_OVERSHOOT_MAX in planarFit.ts for
-// what consumes it and the corpus numbers the bound was read off.
+// --- Raster evidence for apex reconstruction -------------------------------------
+// planarFit is pure geometry; this layer holds both the source raster and the two
+// regions' colours, so the probe is built here and handed down as a closure
+// (PlanarFitOptions.apexReach). See APEX_OVERSHOOT_MAX in planarFit.ts for its use.
 
-/** Coverage below this is "the own region is not here". */
+/** Coverage below this means the own region is absent. */
 const APEX_ALPHA_FLOOR = 0.1
 /** Walk step (px) along the reconstruction ray. */
 const APEX_STEP = 0.25
-/** How far BEHIND the lattice vertex the own region is identified — inside the corner,
- *  where neither AA nor the reconstruction can reach. */
+/** How far behind the lattice vertex (px) the own region is identified — inside the
+ *  corner, beyond the reach of anti-aliasing and of the reconstruction. */
 const APEX_BEHIND = 2.5
 /** Below this own↔other ΔE the projection is noise and the probe declines to judge. */
 const APEX_MIN_SEP = 10
 
 /**
- * How far the corner's OWN region still has coverage in the source raster, walking from
- * `from` toward `to`. Coverage is recovered by projecting the sampled colour onto the
- * own↔other line in sRGB — which is where the rasterizer composited it, so the mixing
- * line is straight there and would curve in Lab. Sampling is BILINEAR: nearest-neighbour
- * quantizes the very trail being measured into whole pixels (§14's trap).
+ * Builds a probe for how far the corner's own region still has coverage in the source
+ * raster, walking from `from` toward `to`. Coverage is recovered by projecting the
+ * sampled colour onto the own↔other line in sRGB, where the rasterizer composited it
+ * (the mixing line would curve in Lab). Sampling is bilinear, since nearest-neighbour
+ * would quantize the measured trail into whole pixels.
  *
- * Which of the two regions is "own" is read from the raster BEHIND `from`, so convex and
- * concave corners need no separate treatment — whichever region fills the corner's
- * interior is the one whose coverage is followed outward.
+ * "Own" is whichever region the raster shows behind `from`, so convex and concave
+ * corners need no separate treatment.
  *
- * Returns Infinity when it cannot judge (colours too close), which vetoes nothing.
+ * Returns null when the two colours are too close to judge (no veto); the probe
+ * returns Infinity for a degenerate ray.
  */
 function apexReachFor(image: SourceImage, a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }): ApexReach | null {
   const la = srgbToLab(a.r, a.g, a.b)
@@ -106,12 +105,10 @@ function apexReachFor(image: SourceImage, a: { r: number; g: number; b: number }
 
 
 /** Build the full planar trace from a label map. `palette` (label → colour) is
- *  optional and only feeds the §14 contrast rank: without it nothing threads and the
- *  fit is byte-identical to the pre-§14 tracer. `image` (the source raster the labels
- *  were segmented from) is optional and only feeds the §15 sub-pixel edge placement:
- *  without it every chain stays on the integer crack lattice — so label-only callers
- *  (tests, diagnostics, synthetic label maps with no raster) are unchanged by
- *  construction. */
+ *  optional and feeds the contrast-ranked junction placement and the apex probe.
+ *  `image` (the source raster the labels were segmented from) is optional and feeds
+ *  sub-pixel edge placement and the apex probe; without it every chain stays on the
+ *  integer crack lattice, which is what label-only callers (tests, synthetic maps) get. */
 export function tracePlanar(
   labels: Int32Array,
   width: number,
@@ -121,9 +118,9 @@ export function tracePlanar(
   image?: SourceImage,
 ): PlanarTrace {
   const net = buildPlanarNetwork(labels, width, height)
-  // §0 #8: read the sub-pixel edge position out of the source AA (planarSubpixel.ts).
-  // Computed on the raw network — BEFORE junction placement — so §14's threadJunctions
-  // keeps reading the raw lattice chains its gates were calibrated on (§14.3).
+  // Read the sub-pixel edge position out of the source anti-aliasing
+  // (planarSubpixel.ts). Computed on the raw network, before junction placement, so
+  // threadJunctions still reads the raw lattice chains it is calibrated on.
   const subpix = image && opts.subpixelEdges
     ? subpixelEdgeChains(net, labels, image, undefined, opts.subpixelWindowGuard)
     : undefined
@@ -135,23 +132,19 @@ export function assemblePlanar(
   opts: PlanarFitOptions,
   palette?: readonly ThreadColor[],
   subpix?: ReadonlyMap<number, Vec[]>,
-  /** §18 (issue #17): the source raster the apex evidence veto reads. Absent ⇒ no veto. */
+  /** Source raster read by the apex evidence probe. Absent ⇒ no probe. */
   image?: SourceImage,
 ): PlanarTrace {
   const cw = net.width + 1
   // --- vertices: one per junction corner ---
-  // §14 CONTRAST RANK: where a band seam (weak colour boundary) ends on a real edge
-  // (strong) that continues through, the junction is placed on a fit THROUGH it,
-  // taken from both strong arms' raw lattice chains — instead of on the integer
-  // lattice corner, which quantizes it across the edge and tilts a 100+px boundary
-  // (planarThread.ts). §17 covers the other branch of the same rank: where the strong
-  // boundary CORNERS at the junction, it is placed on the two arms' line intersection.
-  // Needs the palette (contrast is a colour question) and is
-  // skipped under refineJunctions, a competing placement rule for the same vertices.
-  // With refineJunctions (experimental, off by default) every junction instead moves
-  // to its sub-pixel arm intersection. Either way, each incident edge's endpoints are
-  // pinned to the moved vertex below; junctions in neither map keep their integer
-  // lattice corner (the shipped path).
+  // Contrast-ranked placement (planarThread.ts): where a weak boundary (e.g. a band
+  // seam) ends on a strong edge that continues through, the junction is placed on a
+  // fit through the strong arms rather than on the integer lattice corner, which
+  // would tilt the strong boundary; where the strong boundary turns a corner there,
+  // the junction goes to its arms' line intersection. Needs the palette. With
+  // refineJunctions (experimental, off by default) every junction instead moves to
+  // its sub-pixel arm intersection. Incident edge endpoints are pinned to moved
+  // vertices below; all other junctions keep their lattice corner.
   const juncPos = opts.refineJunctions
     ? subpixelJunctions(net, cw)
     : palette && opts.fitThrough
@@ -179,10 +172,8 @@ export function assemblePlanar(
   }
   const meta: EdgeMeta[] = []
   for (const e of net.edges) {
-    // Pin open-edge endpoints to the sub-pixel junction positions (refineJunctions, or
-    // a junction the §14 through fit moved — including the band seam's own endpoint,
-    // which follows the real edge) so the fitted arc ends exactly on the shared vertex
-    // and both regions stay byte-coincident. e.pts unchanged when nothing moved.
+    // Pin open-edge endpoints to moved junction positions so the fitted arc ends
+    // exactly on the shared vertex. e.pts is reused when nothing moved.
     let latticePts = e.pts
     if (juncPos && !e.closed) {
       const sp0 = e.startV >= 0 ? juncPos.get(e.startV) : undefined
@@ -193,26 +184,21 @@ export function assemblePlanar(
         if (sp1) latticePts[latticePts.length - 1] = { x: sp1.x, y: sp1.y }
       }
     }
-    // Sharp corners are found on the RAW staircase and pinned through pre-smoothing
-    // so a valley/point isn't melted into a curve before the fitter detects it.
+    // Sharp corners are found on the raw staircase and pinned through pre-smoothing
+    // so a point isn't melted into a curve before the fitter sees it.
     let nodes: PathNode[]
     const corners = detectCorners(latticePts, opts.cornerTurnDeg, e.closed, opts.cornerWindow, turnReadOf(opts))
-    // §15 sub-pixel chain: displaced interior points + the same pinned endpoints. Two
-    // chains deliberately coexist: CORNER DETECTION (above) and the area-guard fallback
-    // stay on `latticePts` — their thresholds are turn angles / exact areas calibrated
-    // on the integer staircase, and the displacement is index-preserving, so indices
-    // detected on the lattice chain address the same points in the displaced one. The
-    // FIT reads `pts`, which carries the sub-pixel evidence. (Corner zones are already
-    // reverted to the lattice INSIDE the pass — planarSubpixel's corner self-guard; the
-    // AA iso-line rounds every apex, and fitting that rounding melts corners.) Absent
-    // from the map (or the pass off/imageless) ⇒ pts === latticePts, today's path
-    // byte-for-byte.
+    // Two chains coexist. Corner detection and the area guard read `latticePts`, since
+    // their thresholds are calibrated on the integer staircase; the fit reads `pts`,
+    // the sub-pixel displaced chain. The displacement preserves indices, so corners
+    // found on one address the same points in the other. (planarSubpixel already
+    // reverts corner zones to the lattice, because the anti-aliasing iso-line rounds
+    // every apex.) Without sub-pixel data, pts === latticePts.
     const sub = subpix?.get(e.id)
     let pts = latticePts
-    // Displaced chains additionally get the §15 TANGENT PIN (planarFit): the arc fits'
-    // end tangents are free within ε, and on a smooth displaced chain they rotate
-    // toward the bisector, softening real corners below the 60° sharp bar. Per-edge so
-    // label-only callers stay byte-identical.
+    // Displaced chains also pin corner tangents: the arc fits' end tangents are free
+    // within ε, and on a smooth displaced chain they rotate toward the bisector,
+    // softening real corners.
     let edgeOpts = opts
     if (sub) {
       pts = sub.map((p) => ({ x: p.x, y: p.y }))
@@ -223,30 +209,26 @@ export function assemblePlanar(
       }
       edgeOpts = { ...opts, pinCornerTangents: true }
     }
-    // §18 (issue #17): hand the fit this edge's own raster evidence probe — the two
-    // regions it separates are what "own" and "other" mean at any corner on it. An EXT
-    // side has no colour (issue #9's territory) and simply gets no probe.
+    // Hand the fit this edge's raster evidence probe: the two regions it separates
+    // are "own" and "other" at any corner on it. An EXT side has no colour, so no probe.
     if (image && palette && e.left !== EXT && e.right !== EXT && palette[e.left] && palette[e.right]) {
       const reach = apexReachFor(image, palette[e.left], palette[e.right])
       if (reach) edgeOpts = { ...edgeOpts, apexReach: reach }
     }
-    // DIAGNOSTIC only: the fitter does not know which shared edge it is fitting, and the
-    // apex histogram needs it to look the corner's two regions up. Wrapping is per-edge
-    // and inert without a sink.
+    // Diagnostics only: tag apex records with the edge id, which the fitter does not know.
     if (opts.apexDiag) {
       const sink = opts.apexDiag
       const eid = e.id
       edgeOpts = { ...edgeOpts, apexDiag: (r) => sink({ ...r, edge: eid }) }
     }
     if (e.closed) {
-      // A closed loop with ≥2 genuine sharp corners is fitted corner-first (snap
-      // each corner to its sub-pixel arm intersection, then fit the arcs between
-      // them) so the apex is an exact node, not a beveled pair. Smooth loops have
-      // <2 corners and fall through to the unchanged closed-loop fitter.
+      // A closed loop with ≥2 sharp corners is fitted corner-first (snap each corner to
+      // its sub-pixel arm intersection, then fit the arcs between them) so the apex is
+      // an exact node, not a beveled pair. Otherwise the smooth closed-loop fitter runs.
       let loopCorners = detectLoopCorners(latticePts, opts.cornerTurnDeg, opts.cornerWindow, opts.cornerMerge, turnReadOf(opts))
-      // A small DISC reads 2–5 false corners on its staircase; when one circle explains
+      // A small disc's staircase reads as a few false corners; when one circle explains
       // the loop better than those corners' straight arms, it is fitted smooth and the
-      // pins go with the corners (discExplainsLoop — i-dots traced as polygons).
+      // pins are dropped with the corners (see discExplainsLoop).
       let loopPins = corners
       if (discExplainsLoop(latticePts, loopCorners)) {
         loopCorners = []
@@ -256,29 +238,19 @@ export function assemblePlanar(
         loopCorners.length >= 2
           ? fitCorneredLoop(pts, loopCorners, edgeOpts)
           : fitLoopEdge(presmooth(pts, opts.smoothPasses, false, loopPins), opts)
-      // AREA GUARD. A fit can keep every boundary sample within ε and still
-      // pinch a thin loop's two walls together — a thin bar's cap shoulder-
-      // corners (1–2px apart) fuse to a single apex in detectLoopCorners, the
-      // wall-arcs pin to the same point, and the region loses its width: bar 7
-      // of hairlines became a ZERO-AREA 2-node line, bar 6 a 3-node triangle
-      // pinched at one end (exactly 50% area — a one-end pinch of a rectangle
-      // is always half). Boundary tolerance cannot see this failure; area can.
-      // If the fit kept < 75% of the raw loop's area, emit the exact staircase
-      // corners instead. For a feature thin enough to trip this, "exact" beats
-      // "smooth" outright (an axis-aligned bar is just its 4 corners); for
-      // normal blobs a real fit's area drift is a small fraction of ε·perimeter
-      // and never approaches 25% (tier 2 measured byte-identical under this).
-      // Both sides read the LATTICE chain: the reference area is the label map's
-      // own, and the fallback is BY DEFINITION the exact staircase (float-displaced
-      // points would turn every mid-run point into a "corner" there).
+      // Area guard. A fit can keep every sample within ε and still pinch a thin
+      // loop's two walls together: a thin bar's cap corners (1–2px apart) fuse into
+      // one apex, the wall arcs pin to the same point, and the region collapses to a
+      // line or triangle. Boundary tolerance cannot see this; area can. If the fit
+      // keeps < 75% of the raw loop's area, fall back to the exact staircase corners
+      // (an axis-aligned bar is just its 4 corners). A normal blob's fit drifts by a
+      // small fraction of ε·perimeter and never approaches the threshold. Both sides
+      // read the lattice chain: the reference area is the label map's own.
       const rawArea = Math.abs(polySignedArea(latticePts))
       if (rawArea >= 4 && Math.abs(polySignedArea(flattenNodes(nodes))) < rawArea * 0.75) {
-        // §15: when the pinch came from DISPLACED evidence (a thin loop whose anchors
-        // the flatness guard could not fully clean), first refit from the lattice
-        // chain — the exact pre-§15 path, which held these loops fine. Only a fit
-        // that pinches on the LATTICE too falls through to the staircase (bar-caps
-        // @256 measured: the direct-to-staircase fallback exploded three ~3.5px bars
-        // to 82/36/72 nodes, parsimony 5.99× — for a defect the lattice fit never had).
+        // If the fit used displaced points, first refit from the lattice chain; only
+        // a fit that pinches there too falls back to the staircase, which costs many
+        // more nodes.
         if (sub) {
           nodes =
             loopCorners.length >= 2
@@ -290,9 +262,8 @@ export function assemblePlanar(
         }
       }
     } else {
-      // An open edge with genuinely sharp interior corners (a tip that a junction
-      // split onto this edge) gets the same sub-pixel corner snap as closed loops
-      // (fitCorneredOpen); without corners this is the unchanged legacy fit.
+      // An open edge with sharp interior corners gets the same corner-first fit as
+      // closed loops (fitCorneredOpen); otherwise the smooth open-arc fit.
       nodes =
         corners.size > 0
           ? fitCorneredOpen(pts, corners, edgeOpts)
@@ -394,8 +365,8 @@ export function assemblePlanar(
 }
 
 // ---------------------------------------------------------------------------
-// Orientation (mirrors subpixel.orientForNonzero, but flips EdgeRef loops so the
-// loops themselves carry the correct winding and materialize stays forward-only).
+// Orientation: flips EdgeRef loops so the loops themselves carry the nonzero
+// winding (outer CCW, holes CW by nesting depth) and materialize stays forward-only.
 // ---------------------------------------------------------------------------
 
 function orientLoops(loops: EdgeRef[][], edges: Map<number, SharedEdge>): void {
@@ -438,8 +409,8 @@ function flattenEdgeRefLoop(loop: EdgeRef[], edges: Map<number, SharedEdge>): Ve
   return pts
 }
 
-/** Flatten a fitted closed node loop to a polygon (6 samples per segment — the
- *  same density flattenEdgeRefLoop uses; area only needs the coarse shape). */
+/** Flatten a fitted closed node loop to a polygon (6 samples per segment, like
+ *  flattenEdgeRefLoop; area only needs the coarse shape). */
 function flattenNodes(nodes: PathNode[]): Vec[] {
   if (nodes.length < 2) return nodes.map((n) => ({ x: n.x, y: n.y }))
   const sp = { nodes, closed: true }
