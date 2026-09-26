@@ -172,8 +172,6 @@ export interface VectorizeOptions {
    * lets its neighbours grow into the gap (`applyRemoveMarkers`).
    */
   markers?: { x: number; y: number; flat?: boolean; remove?: boolean }[]
-  /** Vestigial: no tracer reads it. Kept so stored options still parse. */
-  layeredDecomposition?: boolean
   /** Advanced override of the planar curve-fit tunables, merged over the smoothing-derived defaults. */
   planarFit?: Partial<import('./lib/trace/planarFit').PlanarFitOptions>
   /** Advanced override of the flat-palette segmenter's tunables (flat art only), merged over the defaults. */
