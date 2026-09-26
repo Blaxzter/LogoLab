@@ -1,11 +1,11 @@
-// Discrete piecewise-smooth Mumford–Shah smoothing (Stage 1.1 of the structure-
-// first vectorizer — plan §3.1 / §4.1, blueprint paper eq 1–2).
+// Discrete piecewise-smooth Mumford–Shah smoothing (the structure-first
+// segmenter's first stage; reference paper eq 1–2).
 //
 // The functional (paper eq 1) is
 //
 //     u* = argmin_u  Σ_x ‖u(x) − I(x)‖²  +  [∇u]^α_λ ,   [g]^α_λ = min(α‖g‖², λ)
 //
-// a quadratic data term plus the TRUNCATED-quadratic (Blake–Zisserman /
+// a quadratic data term plus the truncated-quadratic (Blake–Zisserman /
 // line-process) regulariser: a neighbour pair is smoothed quadratically while its
 // squared colour step stays below the cap, and is left free (a "discontinuity")
 // once it would exceed the cap. The discontinuity map (paper eq 2)
@@ -19,17 +19,14 @@
 // ([SC14], Strekalovskiy–Cremers' real-time scheme) — a binary line process.
 // Each outer iteration (a) recomputes the cut/uncut state of every 4-neighbour
 // edge from the current u (cut ⇔ α‖Δu‖² ≥ λ), then (b) minimises the resulting
-// QUADRATIC sub-problem Σ‖u−I‖² + α Σ_{uncut} ‖Δu‖² with a few Gauss–Seidel
-// sweeps. Deterministic (fixed sweep order, no PRNG); pure (no DOM, no Node API),
-// so it runs under `node --test` unchanged.
+// quadratic sub-problem Σ‖u−I‖² + α Σ_{uncut} ‖Δu‖² with a few Gauss–Seidel
+// sweeps. Deterministic (fixed sweep order).
 //
-// Units note: the cap λ is given in the paper's (unstated) value scale; with its
-// fixed λ=1.5, α=1 the cut threshold √(λ/α)=1.22 is unreachable in normalised RGB
-// (max step √3≈1.73, real logo edges ≈0.3–0.85), so 𝒟 would be empty. We keep the
-// functional FORM exact and the smoothness weight α=1.0, and express the cap as an
-// explicit gradient-magnitude threshold T = √(λ/α) recalibrated to this working
-// scale (RGB in [0,1], ‖·‖ = L2 over the 3 channels). This is a units conversion,
-// not a relaxation; T is tuned against the evaluation harness.
+// Units: the paper's λ=1.5, α=1 give a cut threshold √(λ/α)=1.22, unreachable in
+// normalised RGB (max step √3≈1.73, typical logo edges ≈0.3–0.85), so 𝒟 would be
+// empty. The functional's form and α=1 are kept; the cap is expressed as an
+// explicit gradient-magnitude threshold T = √(λ/α) calibrated to RGB in [0,1]
+// with ‖·‖ = L2 over the 3 channels.
 
 /** Tunables for the discrete Mumford–Shah solve. */
 export interface MumfordShahOptions {
@@ -159,19 +156,15 @@ export function solveMumfordShah(img: RgbaImage, opts: MumfordShahOptions = DEFA
       let sg = Ig[i]
       let sb = Ib[i]
       let wsum = 1
-      // left
       if (x > 0 && !cutH[i - 1] && opaque[i - 1]) {
         sr += alpha * ur[i - 1]; sg += alpha * ug[i - 1]; sb += alpha * ub[i - 1]; wsum += alpha
       }
-      // right
       if (x + 1 < w && !cutH[i] && opaque[i + 1]) {
         sr += alpha * ur[i + 1]; sg += alpha * ug[i + 1]; sb += alpha * ub[i + 1]; wsum += alpha
       }
-      // up
       if (y > 0 && !cutV[i - w] && opaque[i - w]) {
         sr += alpha * ur[i - w]; sg += alpha * ug[i - w]; sb += alpha * ub[i - w]; wsum += alpha
       }
-      // down
       if (y + 1 < h && !cutV[i] && opaque[i + w]) {
         sr += alpha * ur[i + w]; sg += alpha * ug[i + w]; sb += alpha * ub[i + w]; wsum += alpha
       }

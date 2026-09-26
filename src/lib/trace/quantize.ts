@@ -3,7 +3,7 @@
 // Logos are mostly a handful of flat hues plus anti-aliasing gradients between
 // them, so clustering runs over the distinct-color histogram (count-weighted),
 // never over raw pixels. The cleanup passes (modeFilter, dropMinorColors) then
-// melt single-pixel AA slivers and dissolve sub-threshold colors so potrace
+// melt single-pixel AA slivers and dissolve sub-threshold colors so the tracer
 // sees clean, contiguous regions.
 
 import type { PaletteColor, QuantizeResult } from './types'
@@ -16,24 +16,13 @@ const MAX_CLUSTER_ENTRIES = 65536
 const MERGE_DISTANCE = 10
 
 /**
- * Two flat-interior ANCHOR colours must be at least this far apart (CIE76 ΔE) for
- * the merge veto to treat them as two AUTHORED colours. Flat-interior evidence
- * alone is not enough — two measured counter-examples:
- *
- *   • schild: the paper-white background carries large exact-colour runs of
- *     neighbouring tonal values (#f4f3f1 vs #f5f4f2, ΔE ≈ 0.5, thousands of
- *     flat-interior px each) — splitting them speckles the background,
- *     180 → 546 nodes;
- *   • aurora traced flat: a smooth ramp's 8-bit posterization bands are wide,
- *     flat and ~ΔE 2.9 apart — vetoing their merges at a perceptual-JND floor
- *     (2.0) pushed dominantColors past FLAT_PALETTE_MAX_COLORS and flipped the
- *     whole image out of palette-first into MS (visibly coarser bands).
- *
- * The floor is scoreRegions' own MATCH_DELTA_E: a region painted within ΔE 4 of
- * its truth counts as recovered, so a fusion below 4 is invisible to the region
- * gate (and, per §9.4, near-invisible to eyes); above it the fusion is a scored
- * drop (flute's pair: ΔE 4.5). The veto defends exactly the fusions that would
- * be scored — and cannot invent palette entries the art does not show.
+ * Two flat-interior anchor colours must be at least this far apart (CIE76 ΔE) for
+ * the merge veto and the split to treat them as two authored colours. Flat-interior
+ * evidence alone is not enough: a paper-white background holds large exact runs of
+ * neighbouring tonal values (ΔE ≈ 0.5), and a smooth ramp's 8-bit posterization
+ * bands are wide, flat and a few ΔE apart. Keeping those apart speckles the
+ * background or explodes the palette. A fusion below ΔE 4 is near-invisible, and
+ * matches the tolerance the region scorer (MATCH_DELTA_E) accepts.
  */
 const ANCHOR_DISTINCT_DE = 4.0
 
@@ -46,10 +35,9 @@ const keyToColor = (key: number): PaletteColor => ({
 })
 
 /**
- * Deterministic 32-bit PRNG (mulberry32). k-means++ seeding used to draw from
- * Math.random, which made the whole pipeline non-reproducible and impossible to
- * regression-test; seeding a fixed PRNG from the image content makes the same
- * input + settings yield byte-identical output every run.
+ * Deterministic 32-bit PRNG (mulberry32) for k-means++ seeding. Seeded from the
+ * image content so the same input and settings give byte-identical output. Don't
+ * use Math.random here: it makes traces non-reproducible and untestable.
  */
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0
@@ -61,7 +49,7 @@ function mulberry32(seed: number): () => number {
   }
 }
 
-/** FNV-1a hash of an image's bytes — the PRNG seed (so each image is stable). */
+/** FNV-1a hash of an image's bytes, used as the PRNG seed. */
 function hashImageData(data: Uint8ClampedArray): number {
   let h = 0x811c9dc5
   for (let i = 0; i < data.length; i++) {
@@ -89,14 +77,12 @@ function weightedPick(weights: Float64Array, rand: () => number): number {
  * (alpha < 128) get label -1 and never join a cluster. Palette and counts come
  * back sorted by pixel count, descending (largest region first).
  *
- * `keepDistinctMinArea` > 0 arms the evidence-based MERGE veto: two clusters
- * that are each anchored by a DIFFERENT exact colour with at least that many
- * flat-interior pixels — and whose anchors are perceptually distinct
- * (≥ ANCHOR_DISTINCT_DE) — are treated as two authored colours and never fused,
- * however close their centroids sit (see the veto block below). The same
- * evidence also SPLITS a single cluster that k-means resolved two authored
- * colours into (low resolution starves small colour clouds of a centroid —
- * §0 #11; see the split block). 0 keeps the pre-existing distance-only merge.
+ * `keepDistinctMinArea` > 0 enables the evidence-based merge veto: two clusters
+ * each anchored by a different exact colour with at least that many flat-interior
+ * pixels, whose anchors are ≥ ANCHOR_DISTINCT_DE apart, are two authored colours
+ * and are never fused, however close their centroids sit. The same evidence also
+ * splits a single cluster that holds two authored colours (at low resolution a
+ * small colour cloud may never win a centroid). 0 uses the distance-only merge.
  */
 export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea = 0): QuantizeResult {
   const { data, width, height } = img
@@ -141,7 +127,6 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
     entries.sort((a, b) => b[1] - a[1])
     entries = entries.slice(0, MAX_CLUSTER_ENTRIES)
   }
-  // Deterministic PRNG keyed by image content (replaces Math.random).
   const rand = mulberry32(hashImageData(data))
 
   const m = entries.length
@@ -233,7 +218,7 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
     if (maxShift < 0.5) break
   }
 
-  // Map EVERY distinct color (not just the clustered subset) to its nearest
+  // Map every distinct color (not just the clustered subset) to its nearest
   // centroid; cluster counts come from this full mapping.
   const colorToCluster = new Map<number, number>()
   const clusterCounts = new Float64Array(k)
@@ -257,24 +242,20 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
     clusterCounts[best] += count
   }
 
-  // ---------------------------------------------------------------------------
-  // Evidence for the merge veto (docs/vectorization-benchmarks.md §0 #5).
+  // Evidence for the merge veto and split.
   //
-  // MERGE_DISTANCE exists to re-fuse k-means centroids that SPLIT one colour's
-  // pixel cloud — but two AUTHORED colours can sit closer than it (flute's
-  // #f5a165/#fea069 are 9.9 apart; fusing them paints a 2796px region a colour
-  // the art does not contain — the last tier-2 region drop). Flat-interior
-  // evidence separates the two cases, and area/share cannot (§9.4): every
-  // distinct colour maps to exactly ONE cluster, so a split cloud carries its
-  // 8-neighbour-exact block in one half only, while two authored colours each
-  // anchor their own cluster with such a block. A cluster's anchor is its
-  // highest-flat-interior exact colour at ≥ keepDistinctMinArea px (the same
-  // floor paletteSegment protects real regions with: anything smaller is
-  // despeckled away regardless, so vetoing for it would be pointless).
-  // ---------------------------------------------------------------------------
-  // The split below can ADD clusters, so from here on the cluster set lives in
-  // growable arrays (same doubles as cr/cg/cb/clusterCounts — bit-identical
-  // arithmetic when no split fires).
+  // MERGE_DISTANCE re-fuses k-means centroids that split one colour's pixel
+  // cloud, but two authored colours can sit closer than it, and fusing them
+  // paints a region a colour the art does not contain. Flat-interior evidence
+  // separates the cases where area or share cannot: every distinct colour maps
+  // to exactly one cluster, so a split cloud carries its 8-neighbour-exact block
+  // in one half only, while two authored colours each anchor their own cluster.
+  // A cluster's anchor is its exact colour with the most flat-interior pixels,
+  // at ≥ keepDistinctMinArea (the floor paletteSegment protects real regions
+  // with; anything smaller is despeckled regardless).
+  //
+  // The split can add clusters, so from here on the cluster set lives in
+  // growable arrays holding the same doubles as cr/cg/cb/clusterCounts.
   const cR: number[] = Array.from(cr)
   const cG: number[] = Array.from(cg)
   const cB: number[] = Array.from(cb)
@@ -297,21 +278,13 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
       }
     }
 
-    // --- anchor-guided cluster SPLIT — the DUAL of the merge veto below (§0 #11).
-    //
-    // The veto can only refuse a MERGE EVENT. At low resolution there is none to
-    // refuse: k-means puts two authored colours in ONE cluster from the start (a
-    // 355px colour cloud does not reliably win a centroid at 256² — flute's
-    // #974827 lands inside #893925's cluster, parachute's #00a6ed inside
-    // #5092ff's), and the region is gone before any floor or protection can see
-    // it. Same evidence, same thresholds as the veto: a cluster holding two or
-    // more flat-interior anchors (≥ keepDistinctMinArea px each, the §9.4
-    // criterion) whose colours are ≥ ANCHOR_DISTINCT_DE apart is two authored
-    // colours — split it, each member colour going to its nearest anchor. When
-    // k-means separates properly every cluster holds one anchor and this is a
-    // no-op, so well-resolved art is untouched by construction. schild's tonal
-    // noise (ΔE 0.5) and aurora's ramp bands (ΔE 2.9) sit under the ΔE floor and
-    // keep merging exactly as §9.7 calibrated.
+    // Anchor-guided cluster split, the dual of the merge veto below. The veto can
+    // only refuse a merge; at low resolution k-means may put two authored colours
+    // in one cluster from the start, since a small colour cloud does not reliably
+    // win a centroid. Same evidence and thresholds as the veto: a cluster holding
+    // two or more anchors ≥ ANCHOR_DISTINCT_DE apart is split, each member colour
+    // going to its nearest anchor. When k-means separated properly every cluster
+    // has one anchor and this is a no-op.
     const keyLab = (key: number) => srgbToLab((key >> 16) & 255, (key >> 8) & 255, key & 255)
     const anchorsBy = new Map<number, { key: number; area: number }[]>()
     for (const [key, area] of flatCount) {
@@ -340,8 +313,8 @@ export function quantize(img: ImageData, maxColors: number, keepDistinctMinArea 
         cCount.push(0)
       }
       // Reassign every member colour to its nearest anchor, and rebuild the split
-      // clusters' centroids as count-weighted means so the post-merge sees honest
-      // positions (snapPaletteToModes downstream picks the final hex regardless).
+      // clusters' centroids as count-weighted means for the post-merge
+      // (snapPaletteToModes downstream picks the final hex).
       const sums = ids.map(() => ({ r: 0, g: 0, b: 0, w: 0 }))
       for (const [key, cl] of colorToCluster) {
         if (cl !== c) continue
@@ -537,14 +510,12 @@ export function modeFilter(labels: Int32Array, width: number, height: number, pa
  * into their nearest surviving color (relabel + merge counts). At least one
  * color always survives. Result is re-sorted by count, descending.
  *
- * `protect[i]` exempts entry i from the share test. The share threshold exists to
- * kill anti-alias blend smears, but share alone cannot tell a smear from a REAL
- * small region — a logo's small dark detail can hold fewer pixels than a long
- * boundary's blend band. Dropping a real region does not just lose its outline:
- * every pixel is relabelled to the nearest SURVIVING colour, which for an isolated
- * dark region can be wildly wrong (a #402a32 pencil tip repainted with the #f92f60
- * eraser pink, ΔE 76 — docs/vectorization-benchmarks.md §9.1). The caller supplies
- * the evidence that an entry is a real region (paletteSegment: flat-interior area).
+ * `protect[i]` exempts entry i from the share test. The share threshold removes
+ * anti-alias blend smears, but share alone cannot tell a smear from a real small
+ * region: a small dark detail can hold fewer pixels than a long boundary's blend
+ * band. Dropping a real region relabels its pixels to the nearest surviving
+ * colour, which for an isolated region can be a very different colour. The caller
+ * supplies the evidence that an entry is real (paletteSegment: flat-interior area).
  */
 export function dropMinorColors(q: QuantizeResult, minShare: number, protect?: readonly boolean[]): QuantizeResult {
   const { palette, counts } = q

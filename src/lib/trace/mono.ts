@@ -1,33 +1,20 @@
-// The mono cut as a LABEL MAP — what lets one-ink art ride the planar tracer.
-//
-// Mono used to be its own little pipeline: threshold → binary mask → the crisp
-// mask tracer → loop beautify. That fitter could only put anchors on contour
-// samples, so a 61° peak whose tip the raster never held came back as a 4px
-// chamfer, while the same peak through the planar fitter was recovered to half a
-// pixel (docs/vectorization-benchmarks.md §37). Every corner, apex, junction and
-// circle rule since July lives in the planar path — and with the ink probe making
-// Mono the default for one-ink art, most icons were never reaching it.
-//
-// So mono is now a SEGMENTATION with two labels, ink and paper, handed to
-// `tracePlanar` exactly as a colour segmentation is. One label cannot be carved,
-// which is the property that made mono win over the colour path on shaded
-// single-ink art in the first place (src/lib/ink.ts); the fitter is the one the
-// rest of the tracer is measured on.
+// Mono segmentation: the ink cut as a two-label map (ink, paper) that
+// `tracePlanar` consumes exactly like a colour segmentation. A single ink label
+// cannot be carved into tones, which is why one-ink art is traced this way
+// (see src/lib/ink.ts for the mode decision).
 //
 // Three details are decided here rather than in the tracer:
 //
-//  • The cut is `cutLuma` (ink.ts): a COVERAGE cut on art over transparency.
-//  • Despeckle is the old mono contract — a loop-area floor in px², the turdsize
-//    the crisp and potrace tracers took — applied to connected components of BOTH
-//    labels (an ink speck becomes paper, a pinhole becomes ink). It is far gentler
-//    than the colour path's region floor (4px² against 50px² at the default), and
-//    that is deliberate: the dot on an "i" at 499px is 4px².
-//  • The source the planar passes read for sub-pixel edges (§15) and apex evidence
-//    (§18) is COMPOSITED over the paper the cut assumes. Those passes fit a
-//    two-colour model to the raw RGB, and on black-on-transparent art the raw RGB
-//    of a transparent pixel is black too — the model degenerates and every chain
-//    falls back to the lattice. Composited, the anti-aliasing is a real ramp from
-//    ink to paper, the same one an opaque rendering has. Opaque art is unchanged.
+//  - The cut uses `cutLuma` (ink.ts), a coverage cut on art over transparency.
+//  - Despeckle is an area floor in px² applied to connected components of both
+//    labels (an ink speck becomes paper, a pinhole becomes ink). It is much
+//    gentler than the colour path's region floor because a dot on an "i" at
+//    small sizes is only a few px².
+//  - The source handed to the sub-pixel and apex passes is composited over the
+//    paper the cut assumes. Those passes fit a two-colour model to RGB; on
+//    black-on-transparent art a transparent pixel's RGB is black too, so the
+//    model degenerates. Composited, anti-aliasing is a real ink-to-paper ramp.
+//    Opaque art is unchanged.
 
 import { cutLuma, VISIBLE_ALPHA, type ImageDataLike } from '../ink.ts'
 
@@ -87,8 +74,8 @@ export function monoLabels(img: ImageDataLike, threshold: number, invert: boolea
     flipSmallComponents(labels, width, height, MONO_PAPER, MONO_INK, minArea)
   }
 
-  // Label means over the composited image — the two-entry palette the contrast
-  // rank (§14) reads. Paper on transparency is the paper colour by construction.
+  // Label means over the composited image: the two-entry palette the contrast
+  // rank reads. Paper on transparency is the paper colour by construction.
   const sum = [
     [0, 0, 0, 0],
     [0, 0, 0, 0],

@@ -1,48 +1,27 @@
-// "Rampiness" probe — a cheap pre-trace heuristic that answers ONE question:
-// does this image actually contain smooth colour ramps, or is it flat-colour art?
+// Rampiness probe: a cheap pre-trace heuristic for whether an image contains
+// smooth colour ramps or is flat-colour art. It seeds the default of the
+// `gradients` toggle (the user can always override it).
 //
-// It exists to auto-default the `gradients` toggle. Flat logos (the common case
-// for icon / sticker art) gain nothing from the gradient machinery and can hit
-// the Step-3c over-merge edge cases, so when an image reads as flat we seed the
-// toggle OFF — while leaving it a visible, user-overridable control.
+// The primary signal is local colour slope, not a histogram: a histogram's peak
+// count is inflated by anti-aliasing, slope is not. For each pixel the max
+// per-channel step to a neighbour BASELINE px right/down is bucketed:
 //
-// The signal is the local colour SLOPE, not a colour histogram. A histogram peak
-// count is fooled by anti-aliasing (every edge spawns hundreds of transition
-// colours); slope is not. For each pixel we measure the max per-channel step to a
-// neighbour BASELINE px to the right/down and bucket it:
+//   < RAMP_MIN               flat interior
+//   RAMP_MIN .. EDGE_DELTA   ramp step (gentle, ongoing variation)
+//   >= EDGE_DELTA            hard edge (shape boundary), excluded
 //
-//   • ≈0 (< RAMP_MIN)      → flat interior
-//   • RAMP_MIN..EDGE_DELTA → a RAMP step (gentle, ongoing variation)
-//   • > EDGE_DELTA         → a hard edge (a shape boundary) — ignored
+// The baseline is wider than one pixel because a gentle gradient (< 1 level/px)
+// rounds to a 0–1 delta between adjacent pixels. Over a few px a coherent ramp
+// accumulates while noise does not.
 //
-// The baseline matters: a real logo gradient can be gentle (< 1 level/px), which
-// at byte resolution rounds to a 0–1 delta between ADJACENT pixels and reads as
-// flat. Measured over a few px a coherent ramp ACCUMULATES (slope × baseline)
-// while random noise does not, so a small baseline recovers gentle gradients
-// without lowering the noise floor.
+// Slope alone cannot tell a soft edge (several px wide, common in AI-generated or
+// high-res art) from a gentle gradient: both are a gradual change over a few px.
+// So the suggestion also requires palette spread: flat art is a handful of
+// dominant colours covering almost every pixel, while a real gradient spreads its
+// pixels thinly across many colours. Gradients default on only when both hold.
 //
-// Flat-with-AA art is bimodal: a sea of flat interiors plus a thin spike at hard
-// edges. When the edges are SHARP (1–2 px) the ramp band is nearly empty — the
-// transition reads as a full edge jump across the baseline and is excluded. But a
-// SOFT edge (an AI-generated logo, or a high-res image whose colour borders span
-// several px) is a gradual ramp that never trips the edge threshold, so the slope
-// probe ALONE counts it as gradient — e.g. the flat "schild" logo reads 14% rampy
-// purely from its soft colour borders. A soft edge and a gentle gradient are
-// locally identical (both are a gradual colour change over a few px); slope can't
-// tell them apart.
-//
-// So the decision uses a SECOND, orthogonal signal: PALETTE CONCENTRATION. Flat
-// art is a handful of dominant colours (the soft borders add only thin, sub-0.1%
-// transition colours), so a few colours cover almost everything; a real gradient
-// spreads its pixels thinly across many colours. Measured: schild top-8 colours
-// cover 97%, nebula's gradient only 30%. Gradients default ON only when BOTH hold —
-// gentle slope present AND the palette is genuinely spread — which kills the
-// soft-edge false-positive without losing real gradients.
-//
-// Pure and deterministic (no DOM) so it runs unchanged in the browser and under
-// `node --test`. The toggle is only ever seeded, never locked, so the user can
-// override; heavy JPEG noise still biases toward ON, but that is the SAFE direction
-// (the per-region fit keeps noisy-flat regions solid, so the output stays flat).
+// Heavy JPEG noise biases toward on, which is the safe direction: the per-region
+// fit keeps noisy flat regions solid.
 
 /** Per-channel step (0–255) at/above which a baseline delta is a hard edge, not
  *  a ramp — excluded so shape boundaries don't read as gradient. */
@@ -57,8 +36,8 @@ const BASELINE = 3
 const MIN_ALPHA = 128
 /** How many of the most-common (5-bit-quantised) colours define "the palette". */
 const TOP_COLORS = 8
-/** If the top colours cover MORE than this fraction of opaque pixels the palette
- *  is concentrated (flat art), so gradients stay OFF however rampy the soft edges
+/** If the top colours cover more than this fraction of opaque pixels the palette
+ *  is concentrated (flat art), so gradients stay off however rampy soft edges
  *  read. A real gradient spreads its pixels far below this. */
 const MAX_FLAT_COVERAGE = 0.65
 
@@ -91,7 +70,6 @@ export function measureRampiness(img: ImageData, step = 1): RampinessResult {
     for (let x = 0; x + BASELINE < w; x += step) {
       const i = (y * w + x) * 4
       if (data[i + 3] < MIN_ALPHA) continue
-      // Compare to neighbours BASELINE px to the right and down.
       const right = i + BASELINE * 4
       const down = i + BASELINE * w * 4
       let d = 0
@@ -119,7 +97,7 @@ function chanDelta(data: Uint8ClampedArray, a: number, b: number): number {
 export interface ColorSpread {
   /** Distinct 5-bit/channel colours holding ≥0.1% of opaque pixels (real fills). */
   distinctColors: number
-  /** Share of opaque pixels in the TOP_COLORS most-common colours, 0–1. High ⇒
+  /** Share of opaque pixels in the TOP_COLORS most common colours, 0–1. High ⇒
    *  a few flats dominate (flat art); low ⇒ pixels spread thin (a gradient). */
   topCoverage: number
 }
@@ -173,10 +151,9 @@ export interface RampinessReport extends RampinessResult, ColorSpread {
  * Full gradient-detection analysis for one image: the slope buckets, the palette
  * concentration, and the resulting `gradients` suggestion. Strides large images
  * down to ~512 px on the long side for speed (slope is still measured at full
- * neighbour resolution). The suggestion is ON only when BOTH a gentle slope is
- * present AND the palette is genuinely spread — so a flat logo with soft edges
- * (high rampiness, concentrated palette) correctly stays OFF. `suggestGradients`
- * is the boolean shorthand over this.
+ * neighbour resolution). The suggestion is on only when a gentle slope is present
+ * and the palette is spread, so a flat logo with soft edges stays off.
+ * `suggestGradients` is the boolean shorthand over this.
  */
 export function analyzeRampiness(img: ImageData): RampinessReport {
   const step = Math.max(1, Math.floor(Math.max(img.width, img.height) / 512))
