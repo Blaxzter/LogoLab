@@ -9,9 +9,7 @@ import { useEffect, useState } from 'react'
  * right; a `useEffect`-only read would render the wide layout and snap.
  */
 export function useMediaQuery(query: string) {
-  const [matches, setMatches] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia(query).matches,
-  )
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
 
   useEffect(() => {
     const mq = window.matchMedia(query)

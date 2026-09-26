@@ -8,7 +8,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { monoLabels, MONO_INK, MONO_PAPER } from '../src/lib/trace/mono.ts'
-import type { ImageDataLike } from '../src/lib/ink.ts'
+import type { ImageDataLike } from '../src/lib/traceInput/ink.ts'
 
 type RGBA = [number, number, number, number]
 
@@ -42,7 +42,11 @@ test('despeckle flips ink specks to paper and pinholes to ink, but never a compo
   const loose = monoLabels(img, 128, false, 1)
   assert.equal(count(loose.labels, MONO_INK), 900 - 4 + 4 + 4, 'floor 1: everything stays')
   const tidy = monoLabels(img, 128, false, 8)
-  assert.equal(count(tidy.labels, MONO_INK), 900 + 4, 'floor 8: the pinhole fills, the speck goes, the border speck stays')
+  assert.equal(
+    count(tidy.labels, MONO_INK),
+    900 + 4,
+    'floor 8: the pinhole fills, the speck goes, the border speck stays',
+  )
   assert.equal(tidy.labels[0], MONO_INK)
   assert.equal(tidy.labels[50 * 60 + 50], MONO_PAPER)
   assert.equal(tidy.labels[20 * 60 + 20], MONO_INK)
@@ -72,6 +76,9 @@ test('inverted: light ink on a dark ground, composited over black', () => {
   rect(img, 9, 10, 1, 20, [255, 255, 255, 100])
   const seg = monoLabels(img, 128, true, 1)
   assert.equal(seg.inkPixels, 400, 'the 39% column is paper by coverage')
-  assert.ok(seg.palette[MONO_PAPER].r > 0 && seg.palette[MONO_PAPER].r < 5, 'paper is black plus its anti-aliased column')
+  assert.ok(
+    seg.palette[MONO_PAPER].r > 0 && seg.palette[MONO_PAPER].r < 5,
+    'paper is black plus its anti-aliased column',
+  )
   assert.deepEqual([...seg.image.data.slice(0, 4)], [0, 0, 0, 255], 'transparent paper reads black')
 })

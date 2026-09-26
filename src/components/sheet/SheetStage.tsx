@@ -2,9 +2,9 @@
 //
 // This is where you check the split and fix it: click a box to select, drag it or
 // its corners to adjust, drag on empty paper (in Draw mode) to add one the
-// detector missed. Boxes are stored in SHEET pixels and drawn in percentages, so
-// they ride the pan/zoom for free — but their outlines and handles counter-scale
-// by `--pz-scale`, or they'd balloon into slabs at 8×.
+// detector missed. Boxes are stored in sheet pixels and drawn in percentages, so
+// they follow pan/zoom for free; outlines and handles counter-scale by
+// `--pz-scale` so they stay thin at high zoom.
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Trash2 } from 'lucide-react'
@@ -12,7 +12,7 @@ import { ZoomSurface } from '../ui/ZoomSurface'
 import { useFitBox } from '../vectorize/useFitBox'
 import type { PanZoom } from '../../hooks/usePanZoom'
 import type { Rect } from '../../lib/sheet'
-import type { SheetIcon, SheetSource } from '../../sheetStore'
+import type { SheetIcon, SheetSource } from '../../state/sheetStore'
 
 type Corner = 'nw' | 'ne' | 'sw' | 'se'
 
@@ -71,7 +71,14 @@ export function SheetStage({
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
     const p = toSheet(e)
     onSelect(tile.id)
-    setDrag({ kind: 'move', id: tile.id, ox: p.x - tile.rect.x, oy: p.y - tile.rect.y, orig: tile.rect, rect: tile.rect })
+    setDrag({
+      kind: 'move',
+      id: tile.id,
+      ox: p.x - tile.rect.x,
+      oy: p.y - tile.rect.y,
+      orig: tile.rect,
+      rect: tile.rect,
+    })
   }
 
   const startResize = (e: ReactPointerEvent, tile: SheetIcon, corner: Corner) => {
@@ -113,7 +120,10 @@ export function SheetStage({
       const y0 = north ? Math.min(p.y, bottom - MIN_SIZE) : o.y
       const x1 = west ? right : Math.max(p.x, o.x + MIN_SIZE)
       const y1 = north ? bottom : Math.max(p.y, o.y + MIN_SIZE)
-      setDrag({ ...drag, rect: { x: Math.round(x0), y: Math.round(y0), w: Math.round(x1 - x0), h: Math.round(y1 - y0) } })
+      setDrag({
+        ...drag,
+        rect: { x: Math.round(x0), y: Math.round(y0), w: Math.round(x1 - x0), h: Math.round(y1 - y0) },
+      })
       return
     }
     setDrag({
@@ -204,7 +214,9 @@ export function SheetStage({
                   <span
                     className="pointer-events-none absolute left-0 top-0 origin-top-left rounded-br font-mono tabular-nums text-accent-fg"
                     style={{
-                      background: selected ? 'var(--color-accent)' : 'color-mix(in oklab, var(--color-accent) 70%, transparent)',
+                      background: selected
+                        ? 'var(--color-accent)'
+                        : 'color-mix(in oklab, var(--color-accent) 70%, transparent)',
                       fontSize: `calc(10px / var(--pz-scale, 1))`,
                       padding: `calc(1px / var(--pz-scale, 1)) calc(3px / var(--pz-scale, 1))`,
                       lineHeight: 1.4,
@@ -227,7 +239,8 @@ export function SheetStage({
                             left: corner === 'nw' || corner === 'sw' ? `calc(-4.5px / var(--pz-scale, 1))` : undefined,
                             right: corner === 'ne' || corner === 'se' ? `calc(-4.5px / var(--pz-scale, 1))` : undefined,
                             top: corner === 'nw' || corner === 'ne' ? `calc(-4.5px / var(--pz-scale, 1))` : undefined,
-                            bottom: corner === 'sw' || corner === 'se' ? `calc(-4.5px / var(--pz-scale, 1))` : undefined,
+                            bottom:
+                              corner === 'sw' || corner === 'se' ? `calc(-4.5px / var(--pz-scale, 1))` : undefined,
                             cursor: corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize',
                           }}
                         />
@@ -248,7 +261,9 @@ export function SheetStage({
                           top: `calc(-8px / var(--pz-scale, 1))`,
                         }}
                       >
-                        <Trash2 style={{ width: `calc(9px / var(--pz-scale, 1))`, height: `calc(9px / var(--pz-scale, 1))` }} />
+                        <Trash2
+                          style={{ width: `calc(9px / var(--pz-scale, 1))`, height: `calc(9px / var(--pz-scale, 1))` }}
+                        />
                       </button>
                     </>
                   )}

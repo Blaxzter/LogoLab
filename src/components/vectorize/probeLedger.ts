@@ -1,28 +1,16 @@
-// Which image the studio's auto-probes have DECIDED for.
+// Records which image the studio's auto-probes have decided options for.
 //
-// The two probes in VectorizeStudio (the ink probe and the rampiness probe) are
-// each two things at once: a measurement (what ink is this? does it ramp?) and a
-// default (so set Mode / the cut / Gradients accordingly). A RESTORED session
-// wants the first without the second — the options on screen are the user's
-// own, and a probe overwriting them is the "my settings reset themselves" bug.
+// The ink and rampiness probes in VectorizeStudio both measure (what ink is
+// this? does it ramp?) and set defaults from that. A restored session wants the
+// measurement without the defaults, or the probes overwrite the user's options.
 //
-// The trap is WHAT "restored" is keyed to. It used to be a boolean armed at
-// mount whenever a stored view existed at all — which, after the first ever
-// visit, is always — and consumed only when a probe actually RAN. A vector
-// source in "Clean SVG" mode never probes, so the flag sat armed across any
-// number of uploads and then ate the first probe that did run: a fresh upload,
-// or the same SVG once the user switched Source to Re-trace. That image got the
-// persisted options of whatever came before it (colour + gradients at 1024 for
-// one-ink sheet music, instead of the mono cut at 2048 the probe had measured),
-// while the panel under Mode correctly said "One ink → Mono".
+// "Restored" is keyed to the image (`assetKey`), not to a flag armed at mount.
+// Don't switch to a mount flag: a stored view exists after the first visit, and a
+// "Clean SVG" source never probes, so the flag survives an upload and hands the
+// next image the previous image's options. A view that records no image is not a
+// decision for anything, so the probe applies as on a fresh image.
 //
-// So the restore is keyed to the IMAGE instead: a probe only measures when the
-// stored view records that it was decided for exactly the pixels on screen
-// (`assetKey`, which the store reissues whenever the working pixels change).
-// A view that records no image — stored before the field existed, or saved
-// while a "Clean SVG" source sat unprobed — is not a decision for anything, and
-// the probe applies as it would on a fresh image. Pure, and in its own `.ts` so
-// `test/probe-ledger.test.ts` can reach it.
+// Pure, in a `.ts` so test/probe-ledger.test.ts can import it.
 
 /** The asset a restored view was decided for, or null when it records none. */
 export function restoredDecision(view: { probedAssetKey?: string | null } | null): string | null {
@@ -30,9 +18,9 @@ export function restoredDecision(view: { probedAssetKey?: string | null } | null
 }
 
 /**
- * Whether a probe about to run on `assetKey` should APPLY its decision, or only
+ * Whether a probe about to run on `assetKey` should apply its decision or only
  * measure. It applies unless the options on screen were already decided for
- * this very image — a restore.
+ * this image (a restore).
  */
 export function probeShouldApply(decidedFor: string | null, assetKey: string): boolean {
   return decidedFor !== assetKey

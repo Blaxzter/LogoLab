@@ -7,8 +7,8 @@
 import { memo, useEffect, useMemo, useRef } from 'react'
 import { AlertTriangle, Check, Download, Loader2, Pencil, ScanText, Type } from 'lucide-react'
 import { cleanAffix, cropTile, exportName, toImageData, type ImageDataLike, type Rect } from '../../lib/sheet'
-import { downloadText } from '../../lib/download'
-import { CAPTION_UNSURE_BELOW, type SheetIcon, type SheetNaming } from '../../sheetStore'
+import { downloadText } from '../../lib/export/download'
+import { CAPTION_UNSURE_BELOW, type SheetIcon, type SheetNaming } from '../../state/sheetStore'
 
 export interface IconGridProps {
   image: ImageDataLike
@@ -102,7 +102,12 @@ function IconCard({
         {traced ? (
           <img src={svgDataUrl(traced)} alt="" className="absolute inset-0 h-full w-full object-contain p-2" />
         ) : (
-          <TileCanvas image={image} rect={tile.rect} background={background} className="absolute inset-0 h-full w-full object-contain" />
+          <TileCanvas
+            image={image}
+            rect={tile.rect}
+            background={background}
+            className="absolute inset-0 h-full w-full object-contain"
+          />
         )}
 
         <span className="absolute left-1.5 top-1.5 rounded bg-ink/55 px-1.5 py-0.5 font-mono text-[0.6rem] tabular-nums text-white">
@@ -228,6 +233,8 @@ const TileCanvas = memo(function TileCanvas({
   className?: string
 }) {
   const ref = useRef<HTMLCanvasElement | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies(rect.h): keyed on the rect's values so a new rect object with the same box doesn't re-crop
+  // biome-ignore lint/correctness/useExhaustiveDependencies(rect): keyed on the rect's values so a new rect object with the same box doesn't re-crop
   const pixels = useMemo(
     () =>
       cropTile(

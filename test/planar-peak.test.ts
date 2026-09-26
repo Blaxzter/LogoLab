@@ -35,11 +35,11 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
-import { decodePng } from '../src/devtest/png.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
+import { decodePng } from '../src/lib/png/decode.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'
-import { srgbToLab, deltaE76 } from '../src/devtest/color.ts'
+import { srgbToLab, deltaE76 } from '../bench/color.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -53,7 +53,10 @@ const GOLD: [number, number, number] = [226, 170, 40]
 /** genEdgeCases' own rack: areas (raster px² @512), and [yTop, fill, phase] per row. */
 const AREAS = [20, 30, 40, 48, 64]
 const ROWS: [number, [number, number, number], number][] = [
-  [12, INK, 0], [56, GOLD, 0.25], [100, INK, 0.5], [144, GOLD, 0.75],
+  [12, INK, 0],
+  [56, GOLD, 0.25],
+  [100, INK, 0.5],
+  [144, GOLD, 0.75],
 ]
 /** The floor at the default Despeckle dial — the line the rack is authored to straddle. */
 const FLOOR = 50
@@ -88,11 +91,14 @@ const IMG = decodePng(new Resvg(SVG, { fitTo: { mode: 'width', value: RES }, bac
  *  rack's own bars.) */
 async function paintedPeaks(over: Record<string, unknown>): Promise<boolean[]> {
   const doc = await traceImage(IMG as unknown as ImageData, {
-    ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, paletteSegment: over,
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+    paletteSegment: over,
   })
   const render = rasterizeDoc(doc, IMG.width, IMG.height)
   return PEAKS.map((p) => {
-    const o = ((Math.round(p.y) * IMG.width) + Math.round(p.x)) * 4
+    const o = (Math.round(p.y) * IMG.width + Math.round(p.x)) * 4
     const got = srgbToLab(render[o], render[o + 1], render[o + 2])
     return deltaE76(got, srgbToLab(p.fill[0], p.fill[1], p.fill[2])) <= 4
   })
@@ -116,7 +122,8 @@ test('peak: sub-floor features with flat-interior evidence survive the despeckle
   // rather than the total is the point — a count of 16 could also be four sizes recovered
   // in two rows and a phase lottery in the other two, which is a different tracer.
   assert.equal(
-    count(OFF), PEAKS.filter((p) => p.areaR > FLOOR).length,
+    count(OFF),
+    PEAKS.filter((p) => p.areaR > FLOOR).length,
     `precondition: the pre-§20 floor should paint the above-floor controls and nothing else (painted ${count(OFF)}/20)`,
   )
   for (let i = 0; i < PEAKS.length; i++) {
@@ -161,7 +168,10 @@ test('peak: the AA seam control does not shatter into fringe loops', async () =>
   // 16 recovered peaks' own outlines, not fringe.
   const nodesOf = async (over: Record<string, unknown>): Promise<number> => {
     const doc = await traceImage(IMG as unknown as ImageData, {
-      ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar', gradients: false, paletteSegment: over,
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      gradients: false,
+      paletteSegment: over,
     })
     return doc.items.reduce(
       (s, it) => s + (it.kind === 'path' ? it.subPaths.reduce((t, sp) => t + sp.nodes.length, 0) : 0),

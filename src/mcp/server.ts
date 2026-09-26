@@ -2,11 +2,9 @@
 // LogoLab as an MCP server: the vectorizer and the icon exporter, exposed to
 // whatever agent is holding the image.
 //
-// The flow it exists for: a model generates an icon (a 1024px PNG with soft
-// edges and a JPEG-ish halo), and something has to turn that into an app icon
-// set — a clean SVG, then favicons, PWA icons, a maskable pair, a .ico, a Tauri
-// or Android or iOS collection. Doing that by hand means a raster upscale and a
-// blurry 16px favicon; doing it here runs the same tracer the app runs.
+// Typical flow: a model generates an icon (a soft-edged 1024px PNG) and this
+// turns it into a clean SVG, then favicons, PWA icons, a maskable pair, a .ico,
+// or a Tauri / Android / iOS collection, using the same tracer as the app.
 //
 //   logolab                             serve over stdio (what a client runs)
 //   logolab install                     register this server with your client
@@ -15,7 +13,7 @@
 // From a checkout that is `node src/mcp/server.ts <same args>`; published, the
 // npm bin is `logolab`, which is what `npx -y logolab` runs.
 //
-// stdout belongs to the protocol — everything human goes to stderr (see `log`).
+// stdout belongs to the protocol; everything human goes to stderr (see `log`).
 
 import { writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, relative } from 'node:path'
@@ -42,20 +40,41 @@ const traceShape = {
   mode: z
     .enum(['auto', 'color', 'mono'])
     .optional()
-    .describe('auto (default) counts the inks: one ink on paper traces mono, which is far cleaner for line art; anything else traces colour.'),
+    .describe(
+      'auto (default) counts the inks: one ink on paper traces mono, which is far cleaner for line art; anything else traces colour.',
+    ),
   gradients: z
     .enum(['auto', 'flat', 'rich'])
     .optional()
-    .describe('auto (default) probes for real colour ramps. flat forces solid fills (right for most icons). rich forces gradient fitting.'),
+    .describe(
+      'auto (default) probes for real colour ramps. flat forces solid fills (right for most icons). rich forces gradient fitting.',
+    ),
   flattenOnto: z
     .string()
     .optional()
-    .describe('Composite a TRANSPARENT source onto this colour before tracing, e.g. "#ffffff". Omit to keep the alpha. (Not the card colour — that is appearance.background.)'),
-  removeBackground: z.boolean().optional().describe('Drop the detected background layer so the SVG comes back transparent.'),
-  detail: z.enum(['balanced', 'high']).optional().describe('high lifts the flat-art raster cap 2048 → 4096: crisper, ~4x the work.'),
-  smoothing: z.number().min(0).max(100).optional().describe('0 = crisp and node-dense, 100 = smooth and sparse. Default 50.'),
+    .describe(
+      'Composite a TRANSPARENT source onto this colour before tracing, e.g. "#ffffff". Omit to keep the alpha. (Not the card colour — that is appearance.background.)',
+    ),
+  removeBackground: z
+    .boolean()
+    .optional()
+    .describe('Drop the detected background layer so the SVG comes back transparent.'),
+  detail: z
+    .enum(['balanced', 'high'])
+    .optional()
+    .describe('high lifts the flat-art raster cap 2048 → 4096: crisper, ~4x the work.'),
+  smoothing: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe('0 = crisp and node-dense, 100 = smooth and sparse. Default 50.'),
   despeckle: z.number().min(0).max(100).optional().describe('0 keeps every speck, 100 is aggressive. Default 25.'),
-  fidelity: z.number().min(0).optional().describe('Shape-beautification tolerance in px; 0 disables snapping to circles/lines.'),
+  fidelity: z
+    .number()
+    .min(0)
+    .optional()
+    .describe('Shape-beautification tolerance in px; 0 disables snapping to circles/lines.'),
 }
 
 const appearanceShape = {
@@ -64,8 +83,18 @@ const appearanceShape = {
     .optional()
     .describe('Card colour behind the logo, or "transparent" (the default — the source art is used full-bleed).'),
   shape: z.enum(['rounded', 'circle', 'square']).optional().describe('Card shape. Default square (no card).'),
-  radiusPct: z.number().min(0).max(50).optional().describe('Corner radius as % of size, for shape=rounded. Default 24.'),
-  paddingPct: z.number().min(0).max(45).optional().describe('Safe-zone inset as % of size. Default 0. Maskable targets raise this to their own floor.'),
+  radiusPct: z
+    .number()
+    .min(0)
+    .max(50)
+    .optional()
+    .describe('Corner radius as % of size, for shape=rounded. Default 24.'),
+  paddingPct: z
+    .number()
+    .min(0)
+    .max(45)
+    .optional()
+    .describe('Safe-zone inset as % of size. Default 0. Maskable targets raise this to their own floor.'),
   scale: z.number().min(0.1).max(1.5).optional().describe('Logo scale inside the safe box. Default 1.'),
   tintColor: z.string().nullable().optional().describe('Recolour a monochrome logo through its alpha, e.g. "#5b5bd6".'),
   invert: z.boolean().optional().describe('Invert the logo colours (a dark mark for a light context).'),
@@ -146,7 +175,11 @@ export function createServer(): McpServer {
       description:
         'Report what an image is (size, format, transparency) and what the tracer WOULD do with it — colour vs mono, gradients on or off, the mono cut, the resolution it would trace at — without tracing. Fast. Use it to sanity-check a source, or to explain a choice before overriding it.',
       inputSchema: {
-        image: z.string().describe('Path to a PNG, JPEG, WebP, GIF, BMP or SVG file. Relative paths resolve against the working directory.'),
+        image: z
+          .string()
+          .describe(
+            'Path to a PNG, JPEG, WebP, GIF, BMP or SVG file. Relative paths resolve against the working directory.',
+          ),
         ...traceShape,
       },
     },
@@ -175,8 +208,14 @@ export function createServer(): McpServer {
         'Vectorize a raster image into a clean, editable SVG: colour regions become real shapes with fitted curves, not a traced outline of pixels. Decides colour vs mono, gradient fitting and trace resolution automatically (override with the options). Writes the .svg and reports path count, node count and the decisions it made.',
       inputSchema: {
         image: z.string().describe('Path to the image to trace (PNG, JPEG, WebP, GIF, BMP, or an SVG to re-trace).'),
-        out: z.string().optional().describe('Where to write the SVG. Default: next to the source, same name, .svg extension.'),
-        inline: z.boolean().optional().describe('Also return the SVG markup in the response (only do this for small icons).'),
+        out: z
+          .string()
+          .optional()
+          .describe('Where to write the SVG. Default: next to the source, same name, .svg extension.'),
+        inline: z
+          .boolean()
+          .optional()
+          .describe('Also return the SVG markup in the response (only do this for small icons).'),
         ...traceShape,
       },
     },
@@ -210,15 +249,29 @@ export function createServer(): McpServer {
     'export_icons',
     {
       title: 'Export an icon collection',
-      description:
-        `Render a logo (SVG or raster) into a complete icon collection on disk. Presets:\n${presetCatalogue()}\n\nAn SVG source is rendered analytically at every size, so a 16px favicon is drawn, not downsampled. Maskable/adaptive icons get the platform safe zone automatically (Android keeps only the centre 66% circle). Also emits the real multi-image favicon.ico / .icns containers and the text assets each platform needs (webmanifest, <head> snippet, Contents.json, adaptive-icon XML).`,
+      description: `Render a logo (SVG or raster) into a complete icon collection on disk. Presets:\n${presetCatalogue()}\n\nAn SVG source is rendered analytically at every size, so a 16px favicon is drawn, not downsampled. Maskable/adaptive icons get the platform safe zone automatically (Android keeps only the centre 66% circle). Also emits the real multi-image favicon.ico / .icns containers and the text assets each platform needs (webmanifest, <head> snippet, Contents.json, adaptive-icon XML).`,
       inputSchema: {
-        image: z.string().describe('Path to the logo: an SVG (best — rendered crisply at every size) or a raster image.'),
-        outDir: z.string().describe('Directory to write into. Files land in the layout each preset expects (public/, src-tauri/icons/, res/, …).'),
-        presets: z.array(presetEnum).optional().describe('Which collections to write. Default ["pwa"]. Several may be combined.'),
-        sizes: z.array(z.number().int().min(1).max(4096)).optional().describe('Extra arbitrary sizes, written to icons/icon-<n>.png.'),
+        image: z
+          .string()
+          .describe('Path to the logo: an SVG (best — rendered crisply at every size) or a raster image.'),
+        outDir: z
+          .string()
+          .describe(
+            'Directory to write into. Files land in the layout each preset expects (public/, src-tauri/icons/, res/, …).',
+          ),
+        presets: z
+          .array(presetEnum)
+          .optional()
+          .describe('Which collections to write. Default ["pwa"]. Several may be combined.'),
+        sizes: z
+          .array(z.number().int().min(1).max(4096))
+          .optional()
+          .describe('Extra arbitrary sizes, written to icons/icon-<n>.png.'),
         appName: z.string().optional().describe('Name used in the webmanifest and the README. Default "App".'),
-        appearance: z.object(appearanceShape).optional().describe('How the logo sits in the icon. Defaults keep the source art full-bleed and transparent.'),
+        appearance: z
+          .object(appearanceShape)
+          .optional()
+          .describe('How the logo sits in the icon. Defaults keep the source art full-bleed and transparent.'),
       },
     },
     async (input) => {
@@ -249,16 +302,21 @@ export function createServer(): McpServer {
     'make_app_icons',
     {
       title: 'Image → traced SVG → icon set',
-      description:
-        `The whole pipeline in one call: trace the image to a clean SVG, then render that SVG into the icon collections asked for. This is the tool to use on an AI-generated icon. Presets:\n${presetCatalogue()}`,
+      description: `The whole pipeline in one call: trace the image to a clean SVG, then render that SVG into the icon collections asked for. This is the tool to use on an AI-generated icon. Presets:\n${presetCatalogue()}`,
       inputSchema: {
         image: z.string().describe('Path to the generated or drawn icon image.'),
         outDir: z.string().describe('Directory to write the icon set into.'),
         presets: z.array(presetEnum).optional().describe('Collections to write. Default ["pwa"].'),
         sizes: z.array(z.number().int().min(1).max(4096)).optional().describe('Extra arbitrary PNG sizes.'),
         appName: z.string().optional().describe('Name used in the webmanifest and README.'),
-        appearance: z.object(appearanceShape).optional().describe('How the logo sits in the icon. Default: full-bleed, transparent.'),
-        keepSvg: z.string().optional().describe('Also write the traced SVG here (a copy is placed inside the collection anyway).'),
+        appearance: z
+          .object(appearanceShape)
+          .optional()
+          .describe('How the logo sits in the icon. Default: full-bleed, transparent.'),
+        keepSvg: z
+          .string()
+          .optional()
+          .describe('Also write the traced SVG here (a copy is placed inside the collection anyway).'),
         ...traceShape,
       },
     },
@@ -305,8 +363,18 @@ export function createServer(): McpServer {
         gradients: z.enum(['auto', 'flat', 'rich']).optional().describe('Default auto.'),
         keepCrops: z.boolean().optional().describe('Also write each tile as a PNG next to its SVG.'),
         limit: z.number().int().min(1).optional().describe('Trace at most this many tiles (tracing is the slow part).'),
-        padding: z.number().min(0).max(0.5).optional().describe('Padding around each icon as a fraction of its long side. Default 0.08.'),
-        threshold: z.number().min(1).max(255).optional().describe('How far from the paper colour a pixel counts as ink. Default 24.'),
+        padding: z
+          .number()
+          .min(0)
+          .max(0.5)
+          .optional()
+          .describe('Padding around each icon as a fraction of its long side. Default 0.08.'),
+        threshold: z
+          .number()
+          .min(1)
+          .max(255)
+          .optional()
+          .describe('How far from the paper colour a pixel counts as ink. Default 24.'),
         gap: z.number().optional().describe('Force the grouping gap in source px. Omit to detect it (recommended).'),
       },
     },
@@ -365,8 +433,14 @@ async function tryRun(argv: string[]): Promise<void> {
   const src = loadSource(image)
   process.stdout.write(`tracing ${src.path} …\n`)
   const traced = await traceIcon(src)
-  process.stdout.write(`  ${traced.plan.summary}\n  ${traced.stats.paths} paths / ${traced.stats.nodes} nodes in ${(traced.ms / 1000).toFixed(1)}s\n`)
-  const report = exportCollection(prepareTraced(traced.svg), outDir, { presets: ['pwa'], svg: traced.svg, appName: src.name })
+  process.stdout.write(
+    `  ${traced.plan.summary}\n  ${traced.stats.paths} paths / ${traced.stats.nodes} nodes in ${(traced.ms / 1000).toFixed(1)}s\n`,
+  )
+  const report = exportCollection(prepareTraced(traced.svg), outDir, {
+    presets: ['pwa'],
+    svg: traced.svg,
+    appName: src.name,
+  })
   process.stdout.write(`  ${report.summary}\n`)
   for (const f of report.files) process.stdout.write(`    ${f.path} (${humanBytes(f.bytes)})\n`)
 }

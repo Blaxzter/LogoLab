@@ -1,16 +1,15 @@
-// Trace ONE sheet tile — the studio's `run()` boiled down to what a batch needs.
+// Trace one sheet tile: the pipeline shared by the sheet batch, the single-icon
+// editor and the MCP server.
 //
-// Deliberately NOT re-exported from the sheet barrel, so the Node tests can keep
-// importing the detector without dragging the tracer in. It DOES run headless:
-// the worker hop is opt-in (`canTraceOffThread` is false where there is no
-// `Worker`), so the MCP server traces through this same function — one tile
-// pipeline for the batch, the single-icon editor and the agent alike. That is why
-// its imports name the `.ts` extension: Node resolves specifiers literally.
+// Not re-exported from the sheet barrel, so Node tests can import the detector
+// without the tracer. It runs headless too (the worker hop is skipped where
+// there is no `Worker`), which is why imports carry the `.ts` extension: Node
+// resolves specifiers literally.
 
 import { serializeDoc, docStats } from '../path/model.ts'
 import { suggestGradients, traceImage } from '../trace/index.ts'
 import { canTraceOffThread, traceImageOffThread } from '../trace/traceOffThread.ts'
-import { rasterCapFor } from '../traceCaps.ts'
+import { rasterCapFor } from '../traceInput/traceCaps.ts'
 import type { TraceProgress } from '../trace/types'
 import type { EditableDoc } from '../path/types'
 import type { VectorizeOptions } from '../../types'
@@ -28,9 +27,8 @@ export interface TileTrace {
 export const TILE_PRECISION = 3
 
 /**
- * `gradients` is a per-IMAGE decision, and a sheet's tiles differ — a flat glyph
- * next to a shaded badge. Probing each tile is what the studio does per upload,
- * and it is cheap (the probe strides to ~512px internally).
+ * Seed `gradients` from this tile's own pixels: tiles on one sheet differ (a
+ * flat glyph next to a shaded badge). The probe is cheap.
  */
 export function seedGradients(pixels: ImageDataLike, opts: VectorizeOptions): VectorizeOptions {
   try {
@@ -78,9 +76,8 @@ export function planTileTrace(
 }
 
 /**
- * The pixels a tile is actually traced from: the crop, enlarged so the tracer's
- * pixel lattice can use the anti-aliasing's sub-pixel information. The single-icon
- * editor traces THIS too — if the two differed, opening an icon would silently
+ * The pixels a tile is traced from: the crop, enlarged by `scale`. The
+ * single-icon editor must trace this same input, or opening an icon would
  * re-trace it at a different quality than the batch produced.
  */
 export function tileTraceInput(pixels: ImageDataLike, scale: number): ImageDataLike {

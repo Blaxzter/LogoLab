@@ -12,12 +12,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { DocItem, GroupItem, PathItem } from '../src/lib/path/types.ts'
 import { isGroup, leafItems, moveItems } from '../src/lib/path/docTree.ts'
-import {
-  dropSpot,
-  edgeAt,
-  layerRows,
-  rowsBetween,
-} from '../src/lib/editor/layerRows.ts'
+import { dropSpot, edgeAt, layerRows, rowsBetween } from '../src/lib/editor/layerRows.ts'
 
 /* ------------------------------------------------------------- fixtures */
 
@@ -52,10 +47,19 @@ test('layerRows reverses paint order and indents children', () => {
     ['p3', 'g1', 'c2', 'c1', 'p2', 'p1'],
     'top of the list is the frontmost item',
   )
-  assert.deepEqual(rows.map((r) => r.depth), [0, 0, 1, 1, 0, 0])
-  assert.deepEqual(rows.map((r) => r.parentId), [null, null, 'g1', 'g1', null, null])
+  assert.deepEqual(
+    rows.map((r) => r.depth),
+    [0, 0, 1, 1, 0, 0],
+  )
+  assert.deepEqual(
+    rows.map((r) => r.parentId),
+    [null, null, 'g1', 'g1', null, null],
+  )
   // The index is into the PARENT's children, in paint order — not the row list.
-  assert.deepEqual(rows.map((r) => r.siblingIndex), [3, 2, 1, 0, 1, 0])
+  assert.deepEqual(
+    rows.map((r) => r.siblingIndex),
+    [3, 2, 1, 0, 1, 0],
+  )
 })
 
 test('layerRows numbers in paint order, so adding a shape renumbers nothing', () => {
@@ -75,7 +79,10 @@ test('layerRows numbers in paint order, so adding a shape renumbers nothing', ()
 
 test('a collapsed group hides its subtree from the rail', () => {
   const items = [path('p1'), group('g1', [path('c1'), path('c2')], false)]
-  assert.deepEqual(layerRows(items).map((r) => r.item.id), ['g1', 'p1'])
+  assert.deepEqual(
+    layerRows(items).map((r) => r.item.id),
+    ['g1', 'p1'],
+  )
 })
 
 /* -------------------------------------------------------- range select */
@@ -146,7 +153,10 @@ test('moveItems drops into a group, and the shape stays put visually', () => {
   const g = next.find((it) => it.id === 'g1') as GroupItem
   assert.deepEqual(ids(g.children), ['c1', 'c2', 'p3'], 'front of the group')
   // Nothing that was in front of p3 was in that group, so paint order holds.
-  assert.deepEqual(leafItems(next).map((l) => l.id), ['p1', 'p2', 'c1', 'c2', 'p3'])
+  assert.deepEqual(
+    leafItems(next).map((l) => l.id),
+    ['p1', 'p2', 'c1', 'c2', 'p3'],
+  )
 })
 
 test('moveItems pulls a child back out to the top level', () => {

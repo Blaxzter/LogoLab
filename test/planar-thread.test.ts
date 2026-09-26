@@ -66,15 +66,24 @@ test('thread: the seam junction lands on the true edge, not on its lattice corne
   const threaded = seamVertex(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, PALETTE))
 
   // The lattice corner is quantized ACROSS the boundary; the through fit is not.
-  assert.ok(Number.isInteger(pinned.x) && Number.isInteger(pinned.y), `lattice corner expected, got ${JSON.stringify(pinned)}`)
-  assert.ok(offLine(pinned) > 0.3, `fixture must offer something to fix (lattice sits ${offLine(pinned).toFixed(2)}px off)`)
+  assert.ok(
+    Number.isInteger(pinned.x) && Number.isInteger(pinned.y),
+    `lattice corner expected, got ${JSON.stringify(pinned)}`,
+  )
+  assert.ok(
+    offLine(pinned) > 0.3,
+    `fixture must offer something to fix (lattice sits ${offLine(pinned).toFixed(2)}px off)`,
+  )
   assert.ok(
     offLine(threaded) < offLine(pinned) - 0.2,
     `threaded junction should sit on the edge: ${offLine(threaded).toFixed(2)}px vs ${offLine(pinned).toFixed(2)}px`,
   )
   // …and only across it: the seam decides where along the edge the junction sits, and
   // an error there is invisible. Moving it along would be the tracer inventing a place.
-  assert.ok(Math.abs(threaded.x - pinned.x) < 0.6, `move should be ~normal to the edge, got dx ${(threaded.x - pinned.x).toFixed(2)}`)
+  assert.ok(
+    Math.abs(threaded.x - pinned.x) < 0.6,
+    `move should be ~normal to the edge, got dx ${(threaded.x - pinned.x).toFixed(2)}`,
+  )
 })
 
 test('thread: the strong edge stops being aimed by the seam', () => {
@@ -131,8 +140,14 @@ test('corner: a junction that IS a corner lands on its arm intersection, not its
   const pinned = seamVertex(tracePlanar(L, W, H))
   const placed = seamVertex(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, PALETTE))
 
-  assert.ok(Number.isInteger(pinned.x) && Number.isInteger(pinned.y), `lattice corner expected, got ${JSON.stringify(pinned)}`)
-  assert.ok(offApex(pinned) > 0.3, `fixture must offer something to fix (lattice sits ${offApex(pinned).toFixed(2)}px off the apex)`)
+  assert.ok(
+    Number.isInteger(pinned.x) && Number.isInteger(pinned.y),
+    `lattice corner expected, got ${JSON.stringify(pinned)}`,
+  )
+  assert.ok(
+    offApex(pinned) > 0.3,
+    `fixture must offer something to fix (lattice sits ${offApex(pinned).toFixed(2)}px off the apex)`,
+  )
   assert.ok(
     offApex(placed) < 0.5 * offApex(pinned),
     `corner junction should land on the authored apex: ${offApex(placed).toFixed(2)}px vs ${offApex(pinned).toFixed(2)}px`,
@@ -174,7 +189,10 @@ test('corner: placing it does not ROUND it — the apex stays as sharp as the ar
   const pinned = turnAt(tracePlanar(L, W, H))
   const placed = turnAt(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, PALETTE))
   // Authored opening between the two arms: 180° − 65.3° of turn.
-  assert.ok(Math.abs(placed - pinned) < 12, `corner opening should survive placement: ${placed.toFixed(1)}° vs ${pinned.toFixed(1)}°`)
+  assert.ok(
+    Math.abs(placed - pinned) < 12,
+    `corner opening should survive placement: ${placed.toFixed(1)}° vs ${pinned.toFixed(1)}°`,
+  )
   assert.ok(placed < 150, `a rounded-off corner would read near 180°, got ${placed.toFixed(1)}°`)
 })
 
@@ -228,17 +246,24 @@ test('corner: cornerJunctions off is byte-identical to the pre-§17 tracer', () 
   // §14 alone must not move this junction — its own turn gate refuses it — so the corner
   // fixture with only fitThrough on has to reproduce the no-palette trace exactly.
   assert.equal(sig(tracePlanar(L, W, H, { ...DEFAULT_PLANAR_FIT, cornerJunctions: false }, PALETTE)), pinned)
-  assert.notEqual(sig(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, PALETTE)), pinned, 'the fixture must exercise the corner branch')
+  assert.notEqual(
+    sig(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, PALETTE)),
+    pinned,
+    'the fixture must exercise the corner branch',
+  )
 })
 
 test('thread: no palette (or fitThrough off) is byte-identical', () => {
   const L = fixture()
-  const sig = (t: ReturnType<typeof tracePlanar>): string =>
-    JSON.stringify([t.vertices, t.edges.map((e) => e.nodes)])
+  const sig = (t: ReturnType<typeof tracePlanar>): string => JSON.stringify([t.vertices, t.edges.map((e) => e.nodes)])
   const base = sig(tracePlanar(L, W, H))
   assert.equal(sig(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, undefined)), base)
   assert.equal(sig(tracePlanar(L, W, H, { ...DEFAULT_PLANAR_FIT, fitThrough: false }, PALETTE)), base)
-  assert.notEqual(sig(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, PALETTE)), base, 'the fixture must actually exercise the pass')
+  assert.notEqual(
+    sig(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, PALETTE)),
+    base,
+    'the fixture must actually exercise the pass',
+  )
 })
 
 test('thread: deterministic', () => {
@@ -295,12 +320,21 @@ test('arc: a seam junction on a tight arc lands on the circle, not inside it (is
   const pinned = topVertex(tracePlanar(L, W, H))
   const placed = topVertex(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, PALETTE))
 
-  assert.ok(Number.isInteger(pinned.x) && Number.isInteger(pinned.y), `lattice corner expected, got ${JSON.stringify(pinned)}`)
-  assert.ok(offCircle(pinned) > 0.3, `fixture must offer something to fix (lattice sits ${offCircle(pinned).toFixed(2)}px off the circle)`)
+  assert.ok(
+    Number.isInteger(pinned.x) && Number.isInteger(pinned.y),
+    `lattice corner expected, got ${JSON.stringify(pinned)}`,
+  )
+  assert.ok(
+    offCircle(pinned) > 0.3,
+    `fixture must offer something to fix (lattice sits ${offCircle(pinned).toFixed(2)}px off the circle)`,
+  )
   assert.ok(
     offCircle(placed) < 0.5 * offCircle(pinned),
     `arc junction should land on the authored circle: ${offCircle(placed).toFixed(2)}px vs lattice ${offCircle(pinned).toFixed(2)}px`,
   )
   // …and only radially: along the arc is the seam's business.
-  assert.ok(Math.abs(placed.x - pinned.x) < 0.6, `move should be ~normal to the arc, got dx ${(placed.x - pinned.x).toFixed(2)}`)
+  assert.ok(
+    Math.abs(placed.x - pinned.x) < 0.6,
+    `move should be ~normal to the arc, got dx ${(placed.x - pinned.x).toFixed(2)}`,
+  )
 })

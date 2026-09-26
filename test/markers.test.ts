@@ -42,10 +42,13 @@ test('two markers split one adjacent same-colour region (seeded region growing)'
   const H = 40
   const solid = img(W, H, () => [120, 130, 145])
   assert.equal(macroCount(segmentImage(solid)), 1, 'solid field is one region without markers')
-  const seg = segmentImage(solid, withMarkers([
-    { x: 0.25, y: 0.5 },
-    { x: 0.75, y: 0.5 },
-  ]))
+  const seg = segmentImage(
+    solid,
+    withMarkers([
+      { x: 0.25, y: 0.5 },
+      { x: 0.75, y: 0.5 },
+    ]),
+  )
   assert.equal(macroCount(seg), 2, 'two markers split the solid field into two regions')
 })
 
@@ -61,10 +64,13 @@ test('a marker in each of two merging blobs keeps them separate (seeded split of
     return inA || inB ? [10, 10, 10] : [245, 245, 245]
   }
   assert.equal(macroCount(segmentImage(img(W, H, scene))), 2, 'blobs merge into one region by default')
-  const seg = segmentImage(img(W, H, scene), withMarkers([
-    { x: 16 / W, y: 24 / H }, // centre of blob A
-    { x: 64 / W, y: 24 / H }, // centre of blob B
-  ]))
+  const seg = segmentImage(
+    img(W, H, scene),
+    withMarkers([
+      { x: 16 / W, y: 24 / H }, // centre of blob A
+      { x: 64 / W, y: 24 / H }, // centre of blob B
+    ]),
+  )
   assert.equal(macroCount(seg), 3, 'white bg + two distinct marked blobs')
 })
 
@@ -78,10 +84,13 @@ test('seeded split puts the boundary on the colour edge (no ragged slivers)', ()
   const right: [number, number, number] = [126, 124, 150] // ΔE ≈ 7 < τ_s = 10
   const scene = img(W, H, (x) => (x < W / 2 ? left : right))
   assert.equal(macroCount(segmentImage(scene)), 1, 'the two close halves fuse into one region by default')
-  const seg = segmentImage(scene, withMarkers([
-    { x: 0.25, y: 0.5 },
-    { x: 0.75, y: 0.5 },
-  ]))
+  const seg = segmentImage(
+    scene,
+    withMarkers([
+      { x: 0.25, y: 0.5 },
+      { x: 0.75, y: 0.5 },
+    ]),
+  )
   assert.equal(seg.palette.length, 2, 'two markers split the fused region into two')
   // Both regions are substantial (a clean edge split is ~half each = 1280 px); the
   // old veto produced a tiny sliver here. Allow generous slack for the edge column.
@@ -114,7 +123,10 @@ test('deterministic with markers: identical input + markers → identical labels
     const inB = x >= 36 && x < 56 && y >= 8 && y < 40
     return inA || inB ? [30, 160, 90] : [240, 240, 240]
   })
-  const markers = [{ x: 18 / 64, y: 0.5 }, { x: 46 / 64, y: 0.5 }]
+  const markers = [
+    { x: 18 / 64, y: 0.5 },
+    { x: 46 / 64, y: 0.5 },
+  ]
   const a = segmentImage(src, withMarkers(markers))
   const b = segmentImage(src, withMarkers(markers))
   assert.equal(a.palette.length, b.palette.length)

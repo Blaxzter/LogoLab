@@ -5,13 +5,12 @@
 // makes for a human — colour vs mono, where a mono cut falls, whether the art has
 // real gradients, what resolution to trace at — are `planTileTrace` (src/lib/sheet),
 // and the trace itself is `traceTile`, the same function the icon-sheet batch and
-// the single-icon editor run. An agent gets the same answer a person would, and
-// the plan is REPORTED back so it can overrule one decision without hand-tuning
-// the rest.
+// the single-icon editor run. The plan is reported back so an agent can
+// overrule one decision without hand-tuning the rest.
 
 import { estimateBackground } from '../lib/sheet/detect.ts'
 import { planTileTrace, tileTraceInput, traceTile } from '../lib/sheet/traceTile.ts'
-import { rasterCapFor } from '../lib/traceCaps.ts'
+import { rasterCapFor } from '../lib/traceInput/traceCaps.ts'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import type { ImageDataLike } from '../lib/sheet/types'
 import type { VectorizeOptions } from '../types'
@@ -42,7 +41,7 @@ export interface TraceRequest {
   regionDetail?: number
 }
 
-/** The decisions, reported so the agent can see WHY it got this SVG. */
+/** The decisions, reported so the agent can see why it got this SVG. */
 export interface TracePlanReport {
   mode: 'color' | 'mono'
   gradients: boolean
@@ -96,10 +95,9 @@ export async function planTrace(
   const probe = await rasterizeSource(src, PLAN_PROBE_PX, background)
   const bg = estimateBackground(probe, 24)
 
-  // Two passes over the planner: the first is only to learn mode + gradients, which
-  // together decide the raster cap (flat art traces at 2048, gradient art at 1024);
-  // the caller then re-plans on the pixels that cap produces, where the mono cut and
-  // the smoothing scale are measured on what the tracer will really see.
+  // Two planner passes: the first only learns mode + gradients, which decide the
+  // raster cap; the caller then re-plans on the capped pixels, so the mono cut
+  // and smoothing scale are measured on what the tracer will really see.
   const first = planTileTrace(probe, base, {
     colorMode: req.mode ?? 'auto',
     gradientMode: req.gradients ?? 'auto',
@@ -115,7 +113,10 @@ export async function planTrace(
   })
 
   const opts = plan.opts
-  const scaled = plan.scale > 1 ? { width: pixels.width * plan.scale, height: pixels.height * plan.scale } : { width: pixels.width, height: pixels.height }
+  const scaled =
+    plan.scale > 1
+      ? { width: pixels.width * plan.scale, height: pixels.height * plan.scale }
+      : { width: pixels.width, height: pixels.height }
   const report: TracePlanReport = {
     mode: opts.mode,
     gradients: opts.gradients !== false,
@@ -146,7 +147,9 @@ function summarize(
       ? `mono (${inks === 1 ? 'one ink' : `${inks} inks`} on paper${opts.invert ? ', light-on-dark so the cut is inverted' : ''}, cut at ${opts.threshold})`
       : `colour (${inks} inks), gradients ${opts.gradients === false ? 'off — flat fills' : 'on — real SVG ramps'}`,
   )
-  bits.push(`traced at ${traced.width}×${traced.height}${scale > 1 ? ` (source enlarged ×${scale} for sub-pixel edges)` : ''}`)
+  bits.push(
+    `traced at ${traced.width}×${traced.height}${scale > 1 ? ` (source enlarged ×${scale} for sub-pixel edges)` : ''}`,
+  )
   if (src.kind === 'svg') bits.push('source is already vector — it was rasterized and re-traced')
   return bits.join('; ')
 }

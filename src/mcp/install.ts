@@ -10,10 +10,10 @@
 //   logolab install --scope user        → the client's user-level config
 //   logolab install --client print      → print the JSON, change nothing
 //
-// The same file runs two ways, and the config it WRITES has to match the one it
-// was RUN from, or the client would launch a copy the user never chose:
-// from a checkout (`node src/mcp/server.ts`) it writes that path, and from the
-// published package it writes `npx -y logolab`. See `launchSpec`.
+// The config it writes must match how it was run, or the client would launch a
+// copy the user never chose: from a checkout it writes the path to
+// `src/mcp/server.ts`, from the published package `npx -y logolab`. See
+// `launchSpec`.
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
@@ -97,7 +97,8 @@ function mergeInto(file: string, key: string, entry: Record<string, unknown>): {
 export function configPath(client: InstallClient, scope: InstallScope, dir: string): string {
   const home = homedir()
   if (client === 'claude') return scope === 'user' ? join(home, '.claude.json') : join(dir, '.mcp.json')
-  if (client === 'cursor') return scope === 'user' ? join(home, '.cursor', 'mcp.json') : join(dir, '.cursor', 'mcp.json')
+  if (client === 'cursor')
+    return scope === 'user' ? join(home, '.cursor', 'mcp.json') : join(dir, '.cursor', 'mcp.json')
   return scope === 'user' ? join(home, '.vscode', 'mcp.json') : join(dir, '.vscode', 'mcp.json')
 }
 
@@ -110,10 +111,9 @@ export interface InstallResult {
 }
 
 /**
- * User-scope Claude Code lives in `~/.claude.json` — the CLI's own state file,
- * megabytes of it, possibly being written by a session RIGHT NOW. Rewriting that
- * from here would race with it, so ask the CLI to do its own bookkeeping and only
- * fall back to the file when there is no CLI to ask.
+ * User-scope Claude Code config lives in `~/.claude.json`, the CLI's own state
+ * file, which a running session may be writing. Don't rewrite it from here: ask
+ * the CLI to add the server, and fall back to the file only when there is no CLI.
  */
 function claudeCliAdd(name: string, command: string, args: string[]): boolean {
   const run = (bin: string) =>
@@ -200,11 +200,9 @@ export function parseInstallArgs(argv: string[]): InstallOptions {
 /**
  * True when this module was run directly, not imported.
  *
- * Both sides are resolved through `realpath` because an npm `bin` is a SYMLINK
- * (`node_modules/.bin/logolab` → `../logolab/dist/mcp/server.js`): argv[1] is the
- * link, `import.meta.url` is the target ESM already resolved, and comparing them
- * raw makes an npx-launched server decide it was imported and exit without ever
- * serving.
+ * Both sides go through `realpath` because an npm `bin` is a symlink: argv[1] is
+ * the link while `import.meta.url` is the resolved target. Compared raw, an
+ * npx-launched server decides it was imported and exits without serving.
  */
 export function isMain(url: string): boolean {
   const invoked = process.argv[1]

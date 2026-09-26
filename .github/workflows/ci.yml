@@ -32,6 +32,10 @@ jobs:
 
       - run: pnpm typecheck
 
+      # Biome lint + formatting (biome.jsonc).
+      - run: pnpm lint
+      - run: pnpm format:check
+
       # The gallery A/B lane needs `pnpm fetch:logos`, which downloads brand art
       # that is deliberately not redistributed. CI never runs it: that lane is
       # simply empty here and the rest of the suite is unaffected.

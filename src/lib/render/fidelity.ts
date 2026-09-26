@@ -1,21 +1,16 @@
-// How far a RENDER is from the image it was traced from — as a number and as a
-// picture, out of one measurement.
+// How far a render is from the image it was traced from, as numbers and as a
+// per-pixel heat, both derived from one ΔE field.
 //
-// Fidelity (render vs source): average L1 in CIELAB and SSIM — the blueprint
-// paper's exact pair, so our numbers read against its Tables 1–2 — plus P95 ΔE
-// and a boundary-normal seam score (max ΔE on traced edges, which surfaces the
-// hairline cracks and patch seams a mean-error metric averages away).
+// Metrics: mean L1 in CIELAB and SSIM (the pair used by the reference paper),
+// P95 ΔE, and a seam score (max ΔE on traced boundaries in smooth source areas,
+// which catches cracks and patch seams a mean averages away).
 //
-// This lived in src/devtest/metrics.ts (which still re-exports `fidelity`) until
-// the studio started SHOWING the number. A score a user reads off the status bar
-// is no longer a harness-only concern, and the one thing that must not happen is
-// the app growing a second, slightly-different implementation of it: then "1.8 ΔE"
-// on screen and "1.8 ΔE" in the benchmark table would be two different claims.
-// The studio takes the cheap half (`deltaEField` + `deltaEStats`) and the harness
-// layers SSIM and the seam score on the SAME field.
+// This is the single implementation for both the studio's ΔE readout and the
+// benchmark harness (bench/metrics.ts re-exports it). Don't give the app
+// its own copy of the ΔE math: the studio uses `deltaEField` + `deltaEStats`,
+// the harness layers SSIM and seams on the same field.
 //
-// All pure: no DOM, no Node APIs — it runs in the studio's scoring worker, in the
-// browser labs and under `node --test` unchanged.
+// Pure (no DOM or Node APIs): runs in the scoring worker, the labs and tests.
 
 import { srgbToLab } from '../trace/lab.ts'
 import { heatColor, HEAT_BG_RGB } from '../heat.ts'
@@ -30,39 +25,32 @@ export interface FidelityMetrics {
   /** Mean SSIM (11×11 Gaussian windows) over the luma images. */
   ssim: number
   /**
-   * Seam score: max render-vs-source CIE76 ΔE over boundary pixels that lie in a
-   * SMOOTH part of the source (low local source gradient). A genuine high-contrast
-   * edge has a high source gradient and is excluded — so its unavoidable ~1px AA
-   * placement error does not count. What remains are cracks (page bleeding through
-   * a smooth field) and mismatched gradient patches (a rendered discontinuity where
-   * the source is continuous) — exactly the artifacts mean error averages away.
+   * Seam score: max CIE76 ΔE over boundary pixels that are not a correctly
+   * reproduced edge. Real edges are excluded so their unavoidable sub-pixel AA
+   * error does not count; what remains are cracks and mismatched gradient
+   * patches.
    */
   seamMax: number
   /** 99.5th-percentile of that smooth-field boundary ΔE (robust seam score). */
   seamP995: number
 }
 
-/** Source is "smooth" at a pixel when its max neighbour ΔE is below this — a
- *  true edge sits well above it, a ramp well below. */
+/** A pixel is an edge when its max neighbour ΔE reaches this; ramps stay below. */
 const SMOOTH_GRAD = 8
 
-/** Neighbourhood (px) within which a source edge and a render edge are treated as
- *  the SAME edge — i.e. the tracer reproduced it, give or take sub-pixel
- *  placement. Kept to 1px so the exclusion forgives only unavoidable placement,
- *  never a real artifact sitting near an edge. */
+/** Distance (px) within which a source edge and a render edge count as the same
+ *  edge. Kept at 1 so only sub-pixel placement is forgiven. */
 const EDGE_NEIGHBORHOOD = 1
 
 /**
- * The per-pixel difference between a render and its source, in CIELAB — the one
- * thing every fidelity number and the Difference view are computed from.
+ * Per-pixel CIELAB difference between a render and its source; every fidelity
+ * number and the Difference view derive from it.
  *
- * Both buffers are composited over the SAME opaque white background first. The
- * render is already opaque-over-white; the source may carry alpha (e.g. white
- * line-art on transparency), and scoring its raw RGB would treat transparent
- * pixels as black and wildly inflate the error.
+ * Pass the source with its alpha: both buffers are composited over white here.
+ * Decoding the source onto another background, or scoring raw RGB, makes art on
+ * transparency score as badly wrong.
  *
- * The packed Lab buffers come back with the field because the seam metric needs
- * them and converting twice is the expensive half of this function.
+ * The Lab buffers are returned too because the seam metric reuses them.
  */
 export interface DeltaEField {
   /** CIE76 ΔE per pixel, source vs render. */
@@ -124,29 +112,19 @@ export function deltaEStats(de: Float64Array): { meanDeltaE: number; p95DeltaE: 
 }
 
 /**
- * ΔE at which the Difference heat pins to its hottest colour.
- *
- * About ten JNDs (one CIE76 JND ≈ 2.3): below a couple of ΔE two colours are the
- * same colour to a viewer, and by 25 they are plainly different ones. Measured on
- * the bundled art, a healthy trace sits at mean ~1.6 with p99 ~8 — mostly cold,
- * cooler on the edges where sub-pixel AA placement lives — while a trace that
- * picked the wrong MODE (mono over colour art) runs 85+ and pins hot everywhere.
- * That is the separation this view exists to show.
+ * ΔE at which the Difference heat reaches its hottest colour: about ten JNDs
+ * (one CIE76 JND ≈ 2.3), where two colours are plainly different.
  */
 export const HEAT_FULL_SCALE_DE = 25
 
-/** Below this fraction of full scale a pixel is drawn as backdrop, not as heat:
- *  sub-JND differences are noise and would fog the whole picture faintly warm. */
+/** Below this fraction of full scale a pixel is drawn as backdrop, so sub-JND
+ *  noise does not tint the whole picture. */
 export const HEAT_FLOOR = 0.02
 
 /**
- * Paint a ΔE field as an RGBA heat on the shared cold→hot ramp (lib/heat.ts) — the
- * same ramp `/labs/ab` diffs two traces with, so cold and hot mean the same thing
- * in the product as in the lab. The FULL SCALE is per-view, because the two are not
- * the same comparison: the lab asks whether a trace moved (RGB distance between two
- * traces), this asks whether one is right (ΔE against the source).
- *
- * Pure (no DOM): the canvas encode is the caller's problem.
+ * Paint a ΔE field as RGBA heat on the shared cold→hot ramp (lib/heat.ts), the
+ * same ramp `/labs/ab` uses. The full scale is per view: the lab compares two
+ * traces, this compares a trace against its source.
  */
 export function deltaEHeat(de: Float64Array, fullScale = HEAT_FULL_SCALE_DE): Uint8ClampedArray {
   const out = new Uint8ClampedArray(de.length * 4)
@@ -183,14 +161,9 @@ export function fidelity(
   const n = width * height
   const { de, sourceLab, renderLab, l1Lab } = deltaEField(source, render, width, height)
 
-  // Seam score over boundary pixels that are NOT a correctly-reproduced edge.
-  // A genuine high-contrast edge is excluded ONLY where both the source AND the
-  // render have an edge within 1px — meaning the tracer placed the same edge, and
-  // the residual is unavoidable sub-pixel placement, not an artifact. A crack
-  // (page through a smooth field), a mismatched gradient patch, or a boundary
-  // OVERSHOOT into a smooth region has an edge in one image but not the other (or
-  // neither), so it is kept. This is what stops the exclusion from hiding the very
-  // artifacts the seam metric exists to catch when they sit near an edge.
+  // A boundary pixel is excluded only when both source and render have an edge
+  // within 1px (the same edge, placed slightly differently). Cracks, patch seams
+  // and overshoots have an edge in at most one image, so they still count.
   let seamMax = 0
   const seamVals: number[] = []
   if (boundary) {

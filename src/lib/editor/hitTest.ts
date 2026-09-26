@@ -1,28 +1,19 @@
 // Hit-testing for the editor canvas: what is under the pointer, and in what
 // priority order.
 //
-// The single most important thing in this file is PRIORITY. When a handle dot,
-// an anchor and a curve all sit within a few pixels of the pointer — which is
-// the normal case, not the edge case, because a handle is often short — the
-// editor must always resolve to the same one, and it must be the one the user
-// is most likely to want. The order is:
+// Priority when several targets are within reach: handle → anchor → segment →
+// fill. Handles beat anchors, or a handle lying on its anchor could never be
+// pulled out of a corner; anchors beat segments because an anchor always lies
+// on its segments and would otherwise be unclickable.
 //
-//   handle → anchor → segment → fill
-//
-// Handles beat anchors because a handle sitting exactly on top of its anchor
-// (a collapsed handle on a straight joint) is otherwise ungrabbable: you could
-// never pull a curve out of a corner. Anchors beat segments because an anchor
-// is always ON its segments, so the reverse order makes anchors unclickable.
-//
-// All tolerances arrive in VIEWBOX units, already divided by the zoom by the
-// caller — so a 8px grab radius stays 8 screen px at any zoom, which is what
-// makes small artwork editable at all.
+// Tolerances are in viewBox units, already divided by the zoom by the caller,
+// so a grab radius stays constant in screen pixels.
 
-import type { DocItem, PathItem, SubPath, Vec } from '../path/types.ts'
+import type { DocItem, EditableDoc, GroupItem, PathItem, SubPath, Vec } from '../path/types.ts'
 import { cubicAt, nearestPointOnItem, segmentControls, segmentCount } from '../path/geometry.ts'
-import { isGroup } from '../path/docTree.ts'
-import type { Box } from './transform.ts'
-import { itemBox } from './transform.ts'
+import { findItem, isGroup } from '../path/docTree.ts'
+import type { Box, Grip } from './transform.ts'
+import { GRIPS, gripPoint, itemBox } from './transform.ts'
 
 /** Which part of a path the pointer landed on. */
 export type HitKind = 'handle' | 'anchor' | 'segment' | 'fill'
@@ -48,10 +39,9 @@ export interface Hit {
 /* ---------------------------------------------------------- flattening */
 
 /**
- * Polyline approximation of a subpath, cached by `nodes` identity. Fill
- * hit-testing needs a polygon; re-flattening on every pointermove over a
- * hundred-path document is the kind of thing that makes a canvas feel heavy,
- * and the node arrays are immutable so the cache can never go stale.
+ * Polyline approximation of a subpath, cached by `nodes` identity so fill
+ * tests don't re-flatten on every pointermove. Node arrays are immutable, so
+ * the cache cannot go stale.
  */
 const polyCache = new WeakMap<object, Vec[]>()
 
@@ -67,8 +57,7 @@ export function flattenSubPath(sp: SubPath): Vec[] {
   for (let seg = 0; seg < count; seg++) {
     const { p0, c1, c2, p3 } = segmentControls(sp, seg)
     // A straight segment needs no interior samples at all.
-    const straight =
-      c1.x === p0.x && c1.y === p0.y && c2.x === p3.x && c2.y === p3.y
+    const straight = c1.x === p0.x && c1.y === p0.y && c2.x === p3.x && c2.y === p3.y
     if (straight) {
       pts.push({ x: p3.x, y: p3.y })
       continue
@@ -84,11 +73,9 @@ export function flattenSubPath(sp: SubPath): Vec[] {
 /* ------------------------------------------------------------ fill tests */
 
 /**
- * Whether a point lies inside a closed polyline (odd-crossing rule).
- *
- * Distinct from {@link pointInPath}, which asks about a whole item under its
- * fill rule: this answers "is the point in THIS loop", which is what you need
- * to decide which blob of a multi-blob region was clicked.
+ * Whether a point lies inside one closed polyline (odd-crossing rule). Unlike
+ * {@link pointInPath}, which tests a whole item under its fill rule, this
+ * tells which blob of a multi-blob region was clicked.
  */
 export function pointInPolygon(p: Vec, poly: readonly Vec[]): boolean {
   return windingOf(p, poly) % 2 !== 0
@@ -168,8 +155,7 @@ export function distToSegment(p: Vec, a: Vec, b: Vec): number {
 
 /**
  * Whether a click at `p` should select this item: inside the fill, or within
- * `tol` of its outline. The outline slack is what makes a hairline shape or an
- * unfilled (stroke-only) path clickable at all.
+ * `tol` of its outline, so hairlines and stroke-only paths stay clickable.
  */
 export function itemHitBy(item: PathItem, p: Vec, tol: number): boolean {
   const filled = item.fill !== 'none'
@@ -185,11 +171,9 @@ export function itemHitBy(item: PathItem, p: Vec, tol: number): boolean {
 /* --------------------------------------------------------- item picking */
 
 /**
- * The topmost item under the point. Walks the tree back-to-front so the
- * frontmost hit wins, and reports the outermost enclosing group when
- * `groupsAreAtomic` — clicking a grouped shape selects the group, which is what
- * grouping is for; a second click (handled by the caller as "enter group")
- * drills in.
+ * The topmost item under the point (front-to-back walk). With
+ * `groupsAreAtomic`, reports the outermost enclosing group instead; the caller
+ * handles a second click as "enter group".
  */
 export function pickItem(
   items: readonly DocItem[],
@@ -200,10 +184,7 @@ export function pickItem(
   const atomic = opts.groupsAreAtomic !== false
   const skip = opts.skipIds
 
-  const search = (
-    list: readonly DocItem[],
-    topGroupId: string | null,
-  ): { id: string; leafId: string } | null => {
+  const search = (list: readonly DocItem[], topGroupId: string | null): { id: string; leafId: string } | null => {
     for (let i = list.length - 1; i >= 0; i--) {
       const it = list[i]
       if (!it.visible || skip?.has(it.id)) continue
@@ -236,8 +217,8 @@ export interface NodeHitOptions {
 }
 
 /**
- * Resolve the pointer against ONE path in node-edit mode, in the documented
- * priority order. Returns null when nothing is close enough.
+ * Resolve the pointer against one path in node-edit mode, in the priority
+ * order above. Returns null when nothing is close enough.
  */
 export function pickNodePart(item: PathItem, p: Vec, opts: NodeHitOptions): Hit | null {
   // 1. Handles — only on nodes that are actually showing them.
@@ -321,9 +302,7 @@ export function boxFromPoints(a: Vec, b: Vec): Box {
 
 /**
  * Ids a marquee selects. `touch` mode takes anything the rubber band grazes
- * (crossing selection); the default requires full containment, which is the
- * behaviour that lets you drag a band across a busy canvas and get only what
- * you framed.
+ * (crossing selection); the default requires full containment.
  */
 export function marqueeItems(
   items: readonly DocItem[],
@@ -368,4 +347,49 @@ export function marqueeNodes(item: PathItem, box: Box): string[] {
     }
   }
   return keys
+}
+
+/* ------------------------------------------------------ transform box */
+
+/** The transform-box grip within `tol` of the point, nearest first. */
+export function hitGrip(box: Box, p: Vec, tol: number): Grip | null {
+  let best: Grip | null = null
+  let bestD = tol
+  for (const g of GRIPS) {
+    const gp = gripPoint(box, g)
+    const d = Math.hypot(gp.x - p.x, gp.y - p.y)
+    if (d <= bestD) {
+      bestD = d
+      best = g
+    }
+  }
+  return best
+}
+
+/** Whether the point is on the rotation grip, `offset` above the box's top edge. */
+export function hitRotate(box: Box, p: Vec, tol: number, offset: number): boolean {
+  const c = { x: box.x + box.w / 2, y: box.y - offset }
+  return Math.hypot(c.x - p.x, c.y - p.y) <= tol
+}
+
+/* ------------------------------------------------------ entered groups */
+
+/** Which id a click resolves to, given whether a group has been entered. */
+export function resolveTarget(
+  doc: EditableDoc,
+  hit: { id: string; leafId: string },
+  enteredGroupId: string | null,
+): string {
+  if (enteredGroupId === null) return hit.id
+  const entered = findItem(doc.items, enteredGroupId)
+  if (entered && isGroup(entered) && containsId(entered, hit.leafId)) return hit.leafId
+  return hit.id
+}
+
+function containsId(group: GroupItem, id: string): boolean {
+  for (const c of group.children) {
+    if (c.id === id) return true
+    if (isGroup(c) && containsId(c, id)) return true
+  }
+  return false
 }

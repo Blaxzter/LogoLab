@@ -1,33 +1,23 @@
 // Dragging a curve directly — grab the stroke anywhere between two anchors and
 // bend it, instead of hunting for the two handles that control it.
 //
-// The math. A cubic segment is
-//
-//   B(t) = (1-t)³·P0 + 3(1-t)²t·C1 + 3(1-t)t²·C2 + t³·P3
-//
-// A drag holds P0 and P3 fixed and asks for B(t) to move by d, so the two
-// control points must satisfy
+// With P0 and P3 fixed, moving B(t) by d requires
 //
 //   b1·ΔC1 + b2·ΔC2 = d,   b1 = 3(1-t)²t,  b2 = 3(1-t)t²
 //
-// which is one equation in two unknowns. We take the MINIMUM-NORM solution,
+// We take the minimum-norm solution
 //
 //   ΔC1 = d·b1/(b1²+b2²),   ΔC2 = d·b2/(b1²+b2²)
 //
-// i.e. move the controls as little as possible to satisfy the constraint. That
-// is what makes the gesture feel like pulling a physical wire: grab near one
-// end and mostly that end's handle responds, grab the middle and both share the
-// work equally. Distributing the delta any other way (all to the nearer handle,
-// or equally regardless of t) produces a curve that lurches away from the
-// cursor.
+// so grabbing near one end mostly moves that end's handle and grabbing the
+// middle shares the move equally, keeping the curve under the cursor.
 
 import type { PathItem, PathNode, SubPath, Vec } from '../path/types.ts'
 import { moveHandleNode, segmentControls } from '../path/geometry.ts'
 
 /**
- * Below this the basis weights are so small that the required control-point
- * move explodes — grabbing 2% along a segment would fling the handles off
- * screen. Clamp instead: a drag that close to an anchor behaves as one at 8%.
+ * Lower clamp on t. Near an anchor the basis weights vanish and the required
+ * control-point move explodes, so closer drags behave as one at this t.
  */
 const T_CLAMP = 0.08
 
@@ -48,13 +38,9 @@ export function solveSegmentDrag(t: number, d: Vec): { dc1: Vec; dc2: Vec } {
  * Bend segment `seg` of subpath `sub` so the point at parameter `t` lands on
  * `to`, keeping both endpoints where they are.
  *
- * A straight segment (both handles collapsed) grows handles on first drag —
- * that is the whole point of the gesture on a polygon: you shouldn't have to
- * convert a line to a curve as a separate step before you can curve it.
- *
- * `from` is the on-curve point the drag STARTED at, not the previous frame's,
- * so the gesture is computed from a pointerdown snapshot and can't accumulate
- * drift over a long drag.
+ * A straight segment (both handles collapsed) grows handles on the first drag.
+ * `from` is the on-curve point at pointerdown, not the previous frame's, so a
+ * long drag cannot accumulate drift.
  */
 export function dragSegment(
   item: PathItem,
@@ -96,26 +82,17 @@ export function dragSegment(
 }
 
 /**
- * Move a whole segment bodily — both its anchors and its handles. This is the
- * Alt-drag variant: instead of bending the curve between two fixed anchors, the
- * segment slides and its neighbours stretch to keep up.
+ * Move a whole segment bodily, anchors and handles (the Alt-drag variant);
+ * its neighbours stretch to follow.
  */
-export function translateSegment(
-  item: PathItem,
-  sub: number,
-  seg: number,
-  dx: number,
-  dy: number,
-): PathItem {
+export function translateSegment(item: PathItem, sub: number, seg: number, dx: number, dy: number): PathItem {
   const sp = item.subPaths[sub]
   if (!sp) return item
   const n = sp.nodes.length
   if (n < 2) return item
   const aIdx = seg
   const bIdx = (seg + 1) % n
-  const nodes = sp.nodes.map((node, i) =>
-    i === aIdx || i === bIdx ? shiftNode(node, dx, dy) : node,
-  )
+  const nodes = sp.nodes.map((node, i) => (i === aIdx || i === bIdx ? shiftNode(node, dx, dy) : node))
   const subPaths = item.subPaths.slice()
   subPaths[sub] = { nodes, closed: sp.closed }
   return { ...item, subPaths }

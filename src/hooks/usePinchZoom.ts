@@ -13,8 +13,8 @@ function metrics(a: Pt, b: Pt) {
  * the pinch midpoint and pan by the midpoint's drift — using the same axis-aligned
  * transform math as the wheel path, so image-coordinate mapping is unchanged.
  *
- * Mouse/pen pointers are ignored entirely, so desktop wheel + drag stay
- * byte-for-byte. The host calls `down/move/up` from its own handlers and uses the
+ * Mouse/pen pointers are ignored, so desktop wheel + drag are unaffected. The
+ * host calls `down/move/up` from its own handlers and uses the
  * boolean return (or `active()`) to suppress its one-finger tool behaviour while a
  * pinch is in progress. `boxFor` returns the transformed clipping-box rect that
  * {@link usePanZoom} expects (defaults to the event's currentTarget rect).
@@ -47,6 +47,7 @@ export function usePinchZoom(pz: PanZoom, boxFor?: (e: React.PointerEvent) => DO
   }, [])
 
   /** @returns true when the move was consumed by a pinch (host should not pan/paint). */
+  // biome-ignore lint/correctness/useExhaustiveDependencies(box): reads boxRef, which always holds the latest boxFor
   const move = useCallback(
     (e: React.PointerEvent): boolean => {
       if (e.pointerType !== 'touch' || !pts.current.has(e.pointerId)) return false

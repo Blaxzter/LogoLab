@@ -12,7 +12,7 @@ same corpora, same gates, same numbers, wearing the app's design system.
 | `/labs/gallery` | `GalleryLab` | How does the tracer render art it can't be scored on? |
 | `/labs/scoreboard` | `EngineLab` | potrace vs crisp: ΔE / SSIM / seam / determinism. |
 
-Everything lives in `src/components/labs/`. `LAB_VIEWS` in `src/components/navItems.tsx` is the
+Everything lives in `src/components/labs/`. `LAB_VIEWS` in `src/components/shell/navItems.tsx` is the
 one list the header popover, the mobile menu and the labs index all read.
 
 ## ONE LAB, ONE QUESTION — and the corpus × lens mistake
@@ -194,7 +194,7 @@ code **from that stored PNG**, not from its own canvas rasterization of the SVG.
 file, two code revisions — a visible delta is the code, never resvg-vs-canvas. (Residual
 caveat: the browser's canvas PNG *decode* can differ from Node's by ±1 on a few
 partial-alpha pixels — the aurora finding below — which is far below anything judged
-visually.) The case list is owned by `src/devtest/abCorpus.ts`, imported by both the writer
+visually.) The case list is owned by `bench/abCorpus.ts`, imported by both the writer
 and the view, per rule 1.
 
 Typical flow: `git stash && pnpm gen:absnapshot && git stash pop` freezes the last committed
@@ -224,8 +224,8 @@ lane resolutions move without invalidating the stamps already on disk: an old st
 a new one reports `512×512 vs 2048×2048` rather than inventing a verdict.
 
 **Three trace lanes, each at the resolution production uses.** `AB_LANES` in
-`src/devtest/abCorpus.ts` owns them: flat art at the flat cap, gradient/photo at the gradient
-cap (`src/lib/traceCaps.ts`), and **mono**. Judging the tracer at a resolution the app never
+`bench/abCorpus.ts` owns them: flat art at the flat cap, gradient/photo at the gradient
+cap (`src/lib/traceInput/traceCaps.ts`), and **mono**. Judging the tracer at a resolution the app never
 runs measures code that does not ship — displacement, corner windows and the fit are not
 scale-invariant — while tracing the gradient lane *above* its production cap buys minutes and
 nothing else. Mono is a lane rather than a subset of the flat one because `mode: 'mono'`
@@ -233,7 +233,7 @@ returns from `traceImage` before segmentation (threshold → mask → `traceMask
 `beautify`) and the colour lanes pin `engine: 'planar'`, whose geometry path routes around both
 of those modules: before the lane existed, a mono-side change showed up as an all-green corpus.
 The mono lane does not trace at a fixed cut either — `AbLane.resolve` asks the ink probe
-(`src/lib/ink.ts`) where the ink ends and the paper begins, on the same pixels it traces, which
+(`src/lib/traceInput/ink.ts`) where the ink ends and the paper begins, on the same pixels it traces, which
 is the call `/vectorize` makes when a user picks Mono. Both sides of a comparison resolve it
 from the same raster, so the panels still differ only by code. Each lane's resolution is
 recorded **per stamp**, and `laneFiles` resolves what an older stamp lacks, so stamps frozen
@@ -247,7 +247,7 @@ rasterized **on white** exactly as that page does, so what you judge here is wha
 there. Those SVGs are the private, gitignored corpus (`npm run fetch:logos`): the writer skips
 the ones that aren't on disk and the view drops them, so a clone that never fetched them still
 runs the fixture lane. **Cases** in the lab switches lane (the gallery doubles the corpus, and
-in variants mode every case costs one trace per variant); `AB_LOGOS` in `src/devtest/abCorpus.ts`
+in variants mode every case costs one trace per variant); `AB_LOGOS` in `bench/abCorpus.ts`
 is the list, and `pnpm gen:absnapshot <name> --logos all|a,b|none` overrides it for one run.
 
 **Stamps are not committed.** `test/ab-snapshots/` is gitignored (its README explains the

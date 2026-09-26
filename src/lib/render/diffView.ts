@@ -1,25 +1,16 @@
-// The Difference PICTURE and its readout — the presentation half of the studio's
-// Difference view, kept pure (no DOM) so it is testable and so the pane stays a
-// component that only paints.
+// The studio's Difference view: the picture and the under-cursor readout. Pure
+// (no DOM) so it is testable; the pane only paints the buffers.
 //
-// The heat (`deltaEHeat`, one ΔE field, the same ramp `/labs/ab` diffs with) is
-// exact as far as it goes: hot where the trace is wrong, backdrop where it is
-// right. What it lacks is a MAP. A right trace is a black square, and a hot spot
-// on a busy mark tells you something is wrong without telling you where on the
-// art it is — so the heat is laid over a dim greyscale GHOST of the source. Two
-// rules keep that from turning the heat into a second, softer measurement:
+// The ΔE heat is laid over a dim greyscale ghost of the source so a hot spot
+// has a location on the art. The ghost must not become a second measurement:
+//  - From `HEAT_OPAQUE_DE` up the picture is the heat byte for byte; below it
+//    the heat fades into the ghost in proportion to the same `de` field the
+//    numbers came from. Nothing is recomputed or re-tinted.
+//  - The ghost stays below `GHOST_MAX`, darker than every warm ramp stop.
 //
-// * The heat pixels are NOT recomputed and NOT re-tinted: from `HEAT_OPAQUE_DE`
-//   up the picture IS the heat, byte for byte. Below it the heat fades into the
-//   ghost in proportion to the SAME field the numbers came from (`de`), so there
-//   is no seam at the JND floor and nothing a second formula could disagree on.
-// * The ghost tops out at `GHOST_MAX`, darker than every warm stop of the ramp,
-//   so the art never competes with the error for attention. It is a place to
-//   read the heat against, not a layer to look at.
-//
-// The readout (`probeDiff`) quotes the bytes the number was measured on: the
-// source WITH its alpha composited over white exactly as the metric does it, the
-// render as scored, and the field value — not a re-measurement of the screen.
+// The readout (`probeDiff`) reports the scored bytes (source composited over
+// white as the metric does, the render as scored, the field value), not a
+// re-measurement of the screen.
 
 import { HEAT_BG_RGB } from '../heat.ts'
 import { HEAT_FULL_SCALE_DE, HEAT_FLOOR } from './fidelity.ts'
@@ -28,8 +19,7 @@ import { HEAT_FULL_SCALE_DE, HEAT_FLOOR } from './fidelity.ts'
 export const GHOST_MAX = 72
 
 /** ΔE from which the heat is fully opaque over the ghost. Below it the heat mixes
- *  in proportionally, down to the ramp's own floor (`HEAT_FLOOR` of full scale),
- *  under which a pixel is pure ghost — the trace is right there. */
+ *  in proportionally down to the ramp's floor, under which a pixel is pure ghost. */
 export const HEAT_OPAQUE_DE = 5
 
 /** Rec.709 luma, 0–255 in, 0–255 out. */
@@ -54,8 +44,8 @@ export function diffPicture(
   const [bgR, bgG, bgB] = HEAT_BG_RGB
   for (let i = 0; i < n; i++) {
     const o = i * 4
-    // Ghost: the source's luma, weighted by its alpha, lifted from the backdrop
-    // towards GHOST_MAX. Transparent → backdrop; white → GHOST_MAX; ink in between.
+    // Ghost: alpha-weighted source luma, from the backdrop (transparent) up to
+    // GHOST_MAX (white).
     const y = (luma(source[o], source[o + 1], source[o + 2]) / 255) * (source[o + 3] / 255)
     const gR = bgR + (GHOST_MAX - bgR) * y
     const gG = bgG + (GHOST_MAX - bgG) * y

@@ -12,7 +12,16 @@ import { tracePlanar } from '../src/lib/trace/planarAssemble.ts'
 import { materializeDoc } from '../src/lib/path/topology.ts'
 import { removeRegionAndHeal, removeRegionSection } from '../src/lib/path/topologyEdit.ts'
 import { cubicAt, segmentControls, segmentCount } from '../src/lib/path/geometry.ts'
-import type { EdgeRef, EditableDoc, PathItem, PathNode, SharedEdge, SubPath, Vec, Vertex } from '../src/lib/path/types.ts'
+import type {
+  EdgeRef,
+  EditableDoc,
+  PathItem,
+  PathNode,
+  SharedEdge,
+  SubPath,
+  Vec,
+  Vertex,
+} from '../src/lib/path/types.ts'
 
 // --- fixture DSL -------------------------------------------------------------
 
@@ -101,8 +110,14 @@ function assertNoOrphans(doc: EditableDoc): void {
  */
 function strip(): EditableDoc {
   const V: Vertex[] = [
-    { id: 0, x: 0, y: 0 }, { id: 1, x: 1, y: 0 }, { id: 2, x: 2, y: 0 }, { id: 3, x: 3, y: 0 },
-    { id: 4, x: 0, y: 1 }, { id: 5, x: 1, y: 1 }, { id: 6, x: 2, y: 1 }, { id: 7, x: 3, y: 1 },
+    { id: 0, x: 0, y: 0 },
+    { id: 1, x: 1, y: 0 },
+    { id: 2, x: 2, y: 0 },
+    { id: 3, x: 3, y: 0 },
+    { id: 4, x: 0, y: 1 },
+    { id: 5, x: 1, y: 1 },
+    { id: 6, x: 2, y: 1 },
+    { id: 7, x: 3, y: 1 },
   ]
   const edges: SharedEdge[] = [
     E(0, 0, 0, 1, 0, 0, 1), // A top
@@ -146,8 +161,15 @@ function enclosed(): EditableDoc {
  */
 function dominant(): EditableDoc {
   const V: Vertex[] = [
-    { id: 0, x: 0, y: 0 }, { id: 1, x: 1, y: 0 }, { id: 2, x: 2, y: 0 }, { id: 3, x: 3, y: 0 },
-    { id: 4, x: 3, y: 1 }, { id: 5, x: 2, y: 1 }, { id: 6, x: 2, y: 2 }, { id: 7, x: 1, y: 2 }, { id: 8, x: 0, y: 2 },
+    { id: 0, x: 0, y: 0 },
+    { id: 1, x: 1, y: 0 },
+    { id: 2, x: 2, y: 0 },
+    { id: 3, x: 3, y: 0 },
+    { id: 4, x: 3, y: 1 },
+    { id: 5, x: 2, y: 1 },
+    { id: 6, x: 2, y: 2 },
+    { id: 7, x: 1, y: 2 },
+    { id: 8, x: 0, y: 2 },
   ]
   const edges: SharedEdge[] = [
     E(0, 1, 0, 1, 2, 1, 7), // F|G shared (x=1, len 2)
@@ -175,8 +197,14 @@ function dominant(): EditableDoc {
  */
 function twoBlobs(): EditableDoc {
   const V: Vertex[] = [
-    { id: 0, x: 0, y: 0 }, { id: 1, x: 1, y: 0 }, { id: 2, x: 2, y: 0 }, { id: 3, x: 3, y: 0 },
-    { id: 4, x: 0, y: 1 }, { id: 5, x: 1, y: 1 }, { id: 6, x: 2, y: 1 }, { id: 7, x: 3, y: 1 },
+    { id: 0, x: 0, y: 0 },
+    { id: 1, x: 1, y: 0 },
+    { id: 2, x: 2, y: 0 },
+    { id: 3, x: 3, y: 0 },
+    { id: 4, x: 0, y: 1 },
+    { id: 5, x: 1, y: 1 },
+    { id: 6, x: 2, y: 1 },
+    { id: 7, x: 3, y: 1 },
   ]
   const edges: SharedEdge[] = [
     E(0, 0, 0, 1, 0, 0, 1), // left blob top
@@ -201,9 +229,17 @@ function twoBlobs(): EditableDoc {
 /** A lone square item floating on transparency — every edge faces EXT. */
 function floating(): EditableDoc {
   const V: Vertex[] = [
-    { id: 0, x: 0, y: 0 }, { id: 1, x: 1, y: 0 }, { id: 2, x: 1, y: 1 }, { id: 3, x: 0, y: 1 },
+    { id: 0, x: 0, y: 0 },
+    { id: 1, x: 1, y: 0 },
+    { id: 2, x: 1, y: 1 },
+    { id: 3, x: 0, y: 1 },
   ]
-  const edges: SharedEdge[] = [E(0, 0, 0, 1, 0, 0, 1), E(1, 1, 0, 1, 1, 1, 2), E(2, 1, 1, 0, 1, 2, 3), E(3, 0, 1, 0, 0, 3, 0)]
+  const edges: SharedEdge[] = [
+    E(0, 0, 0, 1, 0, 0, 1),
+    E(1, 1, 0, 1, 1, 1, 2),
+    E(2, 1, 1, 0, 1, 2, 3),
+    E(3, 0, 1, 0, 0, 3, 0),
+  ]
   return docOf(V, edges, [region('F', [[ref(0), ref(1), ref(2), ref(3)]])])
 }
 

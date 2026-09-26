@@ -1,26 +1,25 @@
 // Reading pixels in, and writing pixels out, without a browser.
 //
-// The app gets both from canvas. Here the decoder is picked PER FORMAT, and
-// deterministically — the same file must trace the same way on every machine:
+// The app gets both from canvas. Here the decoder is picked per format, and
+// deterministically, so the same file traces the same way on every machine:
 //
-//   PNG            the harness's own decoder (exact, no re-encode round trip),
-//                  falling back to resvg for the interlaced ones it refuses
+//   PNG            the harness's own decoder, falling back to resvg for the
+//                  interlaced files it refuses
 //   JPEG/GIF/BMP   resvg, by wrapping the bytes in a one-element `<image>` SVG
-//   WebP           sharp — resvg's image reader does not know the format, and
-//                  silently renders NOTHING rather than failing (which is how
-//                  this was found: the repo's own example sheets are WebP)
+//   WebP           sharp. Don't route WebP through resvg: it does not know the
+//                  format and silently renders nothing instead of failing.
 //   SVG            resvg, rendered at the resolution the tracer asked for
 //
-// Downscaling to the trace cap is the repo's box-average `downscaleImageData`,
-// not resvg's sampler: an area average is what the sheet path was measured on,
-// and a bilinear tap at 4:1 would alias the anti-aliasing the tracer reads.
+// Downscaling to the trace cap uses the box-average `downscaleImageData`, not
+// resvg's sampler: a bilinear tap at 4:1 would alias the anti-aliasing the
+// tracer reads.
 
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { basename, extname } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
-import { decodePng } from '../devtest/png.ts'
-import { encodePng } from '../devtest/pngEncode.ts'
+import { decodePng } from '../lib/png/decode.ts'
+import { encodePng } from '../lib/png/encode.ts'
 import { downscaleImageData } from '../lib/sheet/crop.ts'
 import type { ImageDataLike } from '../lib/sheet/types'
 import { requireFile } from './runtime.ts'
@@ -58,7 +57,8 @@ function sniffMime(bytes: Uint8Array, ext: string): string {
   if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg'
   if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif'
   if (b[0] === 0x42 && b[1] === 0x4d) return 'image/bmp'
-  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45) return 'image/webp'
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45)
+    return 'image/webp'
   return RASTER_MIME[ext] ?? 'application/octet-stream'
 }
 
@@ -95,7 +95,8 @@ function rasterSize(bytes: Uint8Array, mime: string): { width: number; height: n
   if (mime === 'image/webp') {
     const fourcc = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15])
     if (fourcc === 'VP8X') return { width: 1 + readU24(bytes, 24), height: 1 + readU24(bytes, 27) }
-    if (fourcc === 'VP8 ') return { width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff }
+    if (fourcc === 'VP8 ')
+      return { width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff }
     if (fourcc === 'VP8L') {
       const bits = view.getUint32(21, true)
       return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }
@@ -122,7 +123,16 @@ export function loadSource(path: string): LoadedSource {
     const svgText = raw.toString('utf8')
     // resvg has already parsed width/height/viewBox — no second SVG parser here.
     const probe = new Resvg(svgText)
-    return { path: full, name, kind: 'svg', svgText, bytes: null, mime: 'image/svg+xml', width: probe.width, height: probe.height }
+    return {
+      path: full,
+      name,
+      kind: 'svg',
+      svgText,
+      bytes: null,
+      mime: 'image/svg+xml',
+      width: probe.width,
+      height: probe.height,
+    }
   }
 
   const mime = sniffMime(bytes, ext)
@@ -132,7 +142,8 @@ export function loadSource(path: string): LoadedSource {
 
 /** `data:` URI for embedding a raster source into a composed SVG. */
 export function dataUri(src: LoadedSource): string {
-  if (src.kind === 'svg') return `data:image/svg+xml;base64,${Buffer.from(src.svgText ?? '', 'utf8').toString('base64')}`
+  if (src.kind === 'svg')
+    return `data:image/svg+xml;base64,${Buffer.from(src.svgText ?? '', 'utf8').toString('base64')}`
   return `data:${src.mime};base64,${Buffer.from(src.bytes ?? new Uint8Array()).toString('base64')}`
 }
 
@@ -176,19 +187,20 @@ export async function rasterizeSource(src: LoadedSource, maxDim: number, backgro
 }
 
 /**
- * sharp, loaded only if a format needs it — WebP alone, today.
+ * sharp, loaded only when a format needs it (currently WebP only).
  *
- * It stays OPTIONAL on purpose. sharp pulls a platform-specific libvips binary
- * that dwarfs the rest of the server (an install goes 30 MB → 47 MB) and drags
- * in libvips/libheif advisories that have no fix, all in front of every
- * `npx -y logolab` — for a format most callers never pass. So the published
- * package lists it as an OPTIONAL PEER, which npm does not install on its own,
- * and a WebP caller opts in with `npm install sharp`. A checkout has it anyway
- * (devDependency, and a transitive dep of the AI cutout's runtime). Either way a
- * missing sharp gets a message naming the fix rather than a blank image.
+ * It is an optional peer dependency of the published package: its platform
+ * libvips binary would dominate every `npx -y logolab` install for a format
+ * most callers never pass. A WebP caller opts in with `npm install sharp`; a
+ * missing sharp throws a message naming that fix rather than yielding a blank
+ * image.
  */
 type SharpFactory = (input: Uint8Array) => {
-  raw: () => { ensureAlpha: () => { toBuffer: (o: { resolveWithObject: true }) => Promise<{ data: Buffer; info: { width: number; height: number } }> } }
+  raw: () => {
+    ensureAlpha: () => {
+      toBuffer: (o: { resolveWithObject: true }) => Promise<{ data: Buffer; info: { width: number; height: number } }>
+    }
+  }
 }
 let sharpCache: SharpFactory | null | undefined
 function loadSharp(): SharpFactory {
@@ -200,7 +212,9 @@ function loadSharp(): SharpFactory {
     }
   }
   if (!sharpCache) {
-    throw new Error('This format (WebP) needs the optional `sharp` decoder, which is not installed. Convert the image to PNG first, or run `npm install sharp` in this project.')
+    throw new Error(
+      'This format (WebP) needs the optional `sharp` decoder, which is not installed. Convert the image to PNG first, or run `npm install sharp` in this project.',
+    )
   }
   return sharpCache
 }
@@ -208,8 +222,15 @@ function loadSharp(): SharpFactory {
 /** Decode through sharp — the formats resvg cannot read (WebP). */
 async function decodeViaSharp(src: LoadedSource): Promise<ImageDataLike> {
   const sharp = loadSharp()
-  const { data, info } = await sharp(src.bytes ?? new Uint8Array()).raw().ensureAlpha().toBuffer({ resolveWithObject: true })
-  return { width: info.width, height: info.height, data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength) }
+  const { data, info } = await sharp(src.bytes ?? new Uint8Array())
+    .raw()
+    .ensureAlpha()
+    .toBuffer({ resolveWithObject: true })
+  return {
+    width: info.width,
+    height: info.height,
+    data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength),
+  }
 }
 
 /** Decode any raster resvg can read by wrapping it in a one-element SVG. */

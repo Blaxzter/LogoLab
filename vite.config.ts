@@ -32,7 +32,9 @@ const page = (name: string) => fileURLToPath(new URL(name, import.meta.url))
 function buildStamp(): { version: string; date: string; commit: string } {
   const git = (...args: string[]): string => {
     try {
-      return execFileSync('git', args, { cwd: fileURLToPath(new URL('.', import.meta.url)) }).toString().trim()
+      return execFileSync('git', args, { cwd: fileURLToPath(new URL('.', import.meta.url)) })
+        .toString()
+        .trim()
     } catch {
       return ''
     }
@@ -45,7 +47,11 @@ function buildStamp(): { version: string; date: string; commit: string } {
   }
   // Committer date, not author date: a rebased or cherry-picked commit ships
   // when it lands, not when it was written. ISO, so the browser can localise it.
-  return { version, date: git('log', '-1', '--format=%cI') || new Date().toISOString(), commit: git('rev-parse', '--short', 'HEAD') }
+  return {
+    version,
+    date: git('log', '-1', '--format=%cI') || new Date().toISOString(),
+    commit: git('rev-parse', '--short', 'HEAD'),
+  }
 }
 
 // https://vite.dev/config/
@@ -55,7 +61,7 @@ export default defineConfig(({ command }) => ({
   // preview build tested on this host can't go on serving its precache over the
   // dev server.
   plugins: [react(), tailwindcss(), serviceWorker()],
-  // The MCP install dialog (src/components/AgentSetup.tsx) prints a command that
+  // The MCP install dialog (src/components/shell/AgentSetup.tsx) prints a command that
   // names this checkout. `vite dev` IS the checkout, so fill it in; a hosted build
   // has no idea where the user cloned it, and the dialog asks instead.
   define: {
@@ -67,17 +73,17 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       // Single entry. The vectorizer's harnesses used to be standalone HTML pages here;
       // they are now lazily-loaded React routes under /labs (LAB_VIEWS in
-      // src/components/navItems.tsx, wired up in App.tsx). React.lazy keeps them out of the
+      // src/components/shell/navItems.tsx, wired up in App.tsx). React.lazy keeps them out of the
       // main bundle just as separate entries did — the corpora, the scoring modules and the
       // fixtures they import all land in their own chunks.
       input: { index: page('index.html') },
     },
   },
-  // Transformers.js is loaded lazily (dynamic import in src/lib/aiRemove.ts) and
+  // Transformers.js is loaded lazily (dynamic import in src/lib/cleanup/aiRemove.ts) and
   // pulls Node-only optional deps (onnxruntime-node, sharp). Excluding it from
   // dep pre-bundling keeps Vite from trying to crawl those during dev/build; the
   // browser runtime fetches its WASM from the CDN on demand. (The AI upscaler in
-  // src/lib/aiUpscale.ts loads the same runtime straight from that CDN instead —
+  // src/lib/traceInput/aiUpscale.ts loads the same runtime straight from that CDN instead —
   // bundling onnxruntime-web made Vite emit its 13 + 24 MB WASM binaries as assets.)
   optimizeDeps: {
     exclude: ['@huggingface/transformers'],
@@ -92,15 +98,7 @@ export default defineConfig(({ command }) => ({
     watch: {
       // Don't watch/reload on test & screenshot artifacts or dropped-in image
       // assets (binary files can be locked mid-write and crash the watcher).
-      ignored: [
-        '**/.playwright-mcp/**',
-        '**/assets/**',
-        '**/*.png',
-        '**/*.webp',
-        '**/*.yml',
-        '**/*.log',
-        '**/dist/**',
-      ],
+      ignored: ['**/.playwright-mcp/**', '**/assets/**', '**/*.png', '**/*.webp', '**/*.yml', '**/*.log', '**/dist/**'],
     },
   },
 }))

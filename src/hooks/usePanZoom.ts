@@ -17,6 +17,16 @@ export interface PanZoomOptions {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
 
+const clampXY = (scale: number, x: number, y: number, w: number, h: number) => {
+  // The content is anchored at the box's top-left (transform-origin: 0 0) and
+  // scaled, so it overflows down/right only. Keeping it covering the box means
+  // the translation lives in [-(overflow), 0] per axis, not symmetric around 0.
+  // (At scale 1 this pins to 0; the centred view sits at the range's midpoint.)
+  const ox = Math.max(0, w * scale - w)
+  const oy = Math.max(0, h * scale - h)
+  return { x: clamp(x, -ox, 0), y: clamp(y, -oy, 0) }
+}
+
 /**
  * Headless pan + zoom controller shared by the Cleanup and Vectorize stages.
  *
@@ -40,16 +50,6 @@ export function usePanZoom(opts: PanZoomOptions = {}) {
   // the last box we saw during a gesture, so buttons work even before registration.
   const viewportRef = useRef<HTMLElement | null>(null)
   const lastBoxRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null)
-
-  const clampXY = (scale: number, x: number, y: number, w: number, h: number) => {
-    // The content is anchored at the box's top-left (transform-origin: 0 0) and
-    // scaled, so it overflows down/right only. Keeping it covering the box means
-    // the translation lives in [-(overflow), 0] per axis — NOT symmetric around 0.
-    // (At scale 1 this pins to 0; the centred view sits at the range's midpoint.)
-    const ox = Math.max(0, w * scale - w)
-    const oy = Math.max(0, h * scale - h)
-    return { x: clamp(x, -ox, 0), y: clamp(y, -oy, 0) }
-  }
 
   /** Zoom by `factor` keeping the content point under (clientX, clientY) fixed. */
   const zoomAround = useCallback(
@@ -85,11 +85,13 @@ export function usePanZoom(opts: PanZoomOptions = {}) {
     return lastBoxRef.current as DOMRect | null
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(boxRect): reads refs only
   const zoomIn = useCallback(() => {
     const box = boxRect()
     if (box) zoomAround(box.left + box.width / 2, box.top + box.height / 2, zoomStep, box)
   }, [zoomAround, zoomStep])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(boxRect): reads refs only
   const zoomOut = useCallback(() => {
     const box = boxRect()
     if (box) zoomAround(box.left + box.width / 2, box.top + box.height / 2, 1 / zoomStep, box)
@@ -103,11 +105,10 @@ export function usePanZoom(opts: PanZoomOptions = {}) {
   const contentStyle = {
     transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
     transformOrigin: '0 0',
-    // Live zoom, exposed as a CSS variable so overlays inside the scaled content can
-    // counter-scale to a CONSTANT screen size. `scale()` above magnifies every stroke,
-    // and `vector-effect: non-scaling-stroke` only cancels the SVG's own CTM, not this
-    // ancestor transform — so the labs' node wireframe divides its width by this var
-    // (`stroke-width: calc(N / var(--pz-scale))`) to stay the same size at any zoom.
+    // Live zoom as a CSS variable so overlays inside the scaled content can
+    // counter-scale to a constant screen size. `vector-effect: non-scaling-stroke`
+    // does not undo an ancestor `scale()`, so use
+    // `stroke-width: calc(N / var(--pz-scale))` instead.
     '--pz-scale': transform.scale,
   } as CSSProperties
 

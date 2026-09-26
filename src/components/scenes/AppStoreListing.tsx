@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import type { CSSProperties } from 'react'
-import { LogoMark } from '../LogoMark'
-import { useAppearance, useEnv } from '../../store'
+import { LogoMark } from './LogoMark'
+import { useAppearance, useEnv } from '../../state/store'
 import { hexToRgb } from '../../lib/colorUtils'
 
 /**
@@ -44,10 +44,7 @@ export default function AppStoreListing() {
   const tints = screenshotTints(app.cardColor, dark)
 
   return (
-    <div
-      className="flex w-full flex-col"
-      style={{ height: 360, backgroundColor: chrome.bg, color: chrome.text }}
-    >
+    <div className="flex w-full flex-col" style={{ height: 360, backgroundColor: chrome.bg, color: chrome.text }}>
       {/* Header / metadata row */}
       <div className="flex items-start gap-3.5 px-5 pt-5">
         <LogoMark
@@ -60,10 +57,7 @@ export default function AppStoreListing() {
         />
 
         <div className="flex min-w-0 flex-1 flex-col self-stretch">
-          <h3
-            className="truncate text-[19px] font-semibold leading-tight"
-            style={{ color: chrome.text }}
-          >
+          <h3 className="truncate text-[19px] font-semibold leading-tight" style={{ color: chrome.text }}>
             {env.brandName}
           </h3>
           <p className="mt-0.5 truncate text-[13px]" style={{ color: chrome.sub }}>
@@ -94,7 +88,6 @@ export default function AppStoreListing() {
         </div>
       </div>
 
-      {/* Divider */}
       <div className="mx-5 mt-4" style={{ borderTop: `1px solid ${chrome.hair}` }} />
 
       {/* Screenshots strip */}

@@ -81,7 +81,7 @@ export interface Vertex {
 }
 
 /**
- * One fitted boundary curve between exactly two regions, stored ONCE and
+ * One fitted boundary curve between exactly two regions, stored once and
  * referenced (forward in one region, reversed in the other) so adjacent regions
  * are byte-coincident — no overlap, no hairline seam. `nodes` run start→end
  * (canonical direction). `startVertex`/`endVertex` index the doc's vertex table,
@@ -149,7 +149,7 @@ export interface PathItem {
   fillRule: 'nonzero' | 'evenodd'
   /**
    * The region's boundary as ordered loops of shared-edge references (planar
-   * model). When present, `subPaths` is a DERIVED render/hit cache rebuilt from
+   * model). When present, `subPaths` is a derived render/hit cache rebuilt from
    * the doc's `topology` via materializeRegion; edits go through the edges so
    * shared boundaries stay coincident. Absent ⇒ legacy independent path (e.g.
    * an imported SVG) whose `subPaths` are edited directly.
@@ -187,14 +187,12 @@ export interface RawItem {
  * A named container of items — the layer folder of the SVG editor, serialized
  * as a plain `<g>`.
  *
- * DELIBERATELY CARRIES NO TRANSFORM. Every coordinate in this model is absolute
- * in viewBox units (see the file header), and that invariant is what lets any
- * consumer read `subPaths` without composing an ancestor chain — `parseSvg`
- * already bakes imported group transforms into their children for exactly this
- * reason. Grouping is therefore *structure only*: moving or scaling a group
- * rewrites its descendants' coordinates. That costs a walk per transform and
- * buys immunity to the entire class of bug where a coordinate means one thing
- * to the renderer and another to hit-testing.
+ * Deliberately carries no transform: every coordinate in the model stays
+ * absolute, so any consumer can read `subPaths` without composing an ancestor
+ * chain (`parseSvg` bakes imported group transforms into the children for the
+ * same reason). Moving or scaling a group rewrites its descendants'
+ * coordinates, so the renderer and hit-testing can never disagree about what a
+ * coordinate means.
  */
 export interface GroupItem {
   kind: 'group'

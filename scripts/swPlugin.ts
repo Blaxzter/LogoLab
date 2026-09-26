@@ -11,7 +11,7 @@
 //
 // So the set is computed from the CHUNK GRAPH instead. Start at the entry chunk
 // and walk imports, static and dynamic alike — a lazily-loaded tab is still part
-// of the app — but stop at chunks whose facade module is a lab, a devtest
+// of the app — but stop at chunks whose facade module is a lab, a bench
 // harness or one of the heavyweight optional packages. Everything reached that
 // way is what the app needs to run offline; everything else is left to the
 // runtime cache, which picks it up the first time someone actually opens it.
@@ -39,7 +39,7 @@ const here = (name: string) => fileURLToPath(new URL(name, import.meta.url))
  */
 const OPTIONAL_ROOTS = [
   'src/components/labs/', // the vectorizer's research harnesses
-  'src/devtest/', // corpora, scoring, snapshot fixtures
+  '/bench/', // the research harness: corpora, scoring, snapshot fixtures
   '@huggingface/transformers', // AI background removal
   'onnxruntime', // its runtime
   '@resvg/resvg-wasm', // the labs' SVG rasterizer
@@ -187,10 +187,7 @@ export function serviceWorker(): Plugin {
       const template = readFileSync(here('../src/pwa/sw.js'), 'utf8')
       const source = template
         .replace(/^const BUILD = '__BUILD_ID__'$/m, `const BUILD = ${JSON.stringify(buildId)}`)
-        .replace(
-          /^const PRECACHE_URLS = __PRECACHE__$/m,
-          `const PRECACHE_URLS = ${JSON.stringify(urls, null, 2)}`,
-        )
+        .replace(/^const PRECACHE_URLS = __PRECACHE__$/m, `const PRECACHE_URLS = ${JSON.stringify(urls, null, 2)}`)
       if (source.includes('__BUILD_ID__') || source.includes('__PRECACHE__')) {
         this.error('service worker: a placeholder declaration in src/pwa/sw.js was not substituted')
       }

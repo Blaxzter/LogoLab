@@ -1,64 +1,45 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Bug, Loader2, Menu, SlidersHorizontal, X } from 'lucide-react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useLogo, useStore } from './store'
+import { useLogo, useStore } from './state/store'
 import { useActiveTab } from './hooks/useActiveTab'
 import { useLiveFavicon } from './hooks/useLiveFavicon'
 import { useMediaQuery } from './hooks/useIsMobile'
-import { Sidebar, MobileSidebarDrawer } from './components/Sidebar'
-import { ErrorBoundary } from './components/ErrorBoundary'
-import { ReportDialog } from './components/ReportDialog'
-import { AgentSetupButton } from './components/AgentSetup'
-import { AppMenu } from './components/AppMenu'
-import { Toasts } from './components/Toasts'
-import { SavedChip } from './components/SavedChip'
-import { InstallAppButton } from './components/PwaPrompts'
-import { LabPopover } from './components/LabPopover'
-import { SupportPopover } from './components/SupportPopover'
-import { ThemeToggleButton } from './components/ThemeToggle'
-import { TABS, REPO_URL, GithubMark } from './components/navItems'
-import { UploadDropzone } from './components/UploadDropzone'
+import { Sidebar, MobileSidebarDrawer } from './components/shell/Sidebar'
+import { ErrorBoundary } from './components/report/ErrorBoundary'
+import { ReportDialog } from './components/report/ReportDialog'
+import { AgentSetupButton } from './components/shell/AgentSetup'
+import { AppMenu } from './components/shell/AppMenu'
+import { Toasts } from './components/shell/Toasts'
+import { SavedChip } from './components/shell/SavedChip'
+import { InstallAppButton } from './components/shell/PwaPrompts'
+import { LabPopover } from './components/shell/LabPopover'
+import { SupportPopover } from './components/shell/SupportPopover'
+import { ThemeToggleButton } from './components/shell/ThemeToggle'
+import { TABS, REPO_URL, GithubMark } from './components/shell/navItems'
+import { UploadDropzone } from './components/intake/UploadDropzone'
 import { TipLabel, Tooltip } from './components/ui/Tooltip'
-import { TryExampleButton } from './components/ExamplesDialog'
-import { PreviewGrid } from './components/PreviewGrid'
+import { TryExampleButton } from './components/intake/ExamplesDialog'
+import { PreviewGrid } from './components/panels/PreviewGrid'
 import CleanupPanel from './components/panels/CleanupPanel'
 import ExportPanel from './components/panels/ExportPanel'
 import Impressum from './components/legal/Impressum'
 import Datenschutz from './components/legal/Datenschutz'
 import { LegalFooter } from './components/legal/LegalFooter'
 
-/**
- * The vectorizer's labs (see LAB_VIEWS in components/navItems). Lazy, every one of
- * them: each pulls in the devtest scoring modules and traces a whole corpus, and none
- * of that has any business in the bundle a normal user downloads to crop a logo. They
- * were separate Vite HTML entries for exactly this reason — React.lazy is what keeps
- * that isolation now that they're routes.
- */
-/**
- * The SVG editor. Lazy for the same reason the labs are: it is a whole vector
- * authoring tool — canvas, shape builders, path surgery — and none of it belongs
- * in the bundle someone downloads to preview a logo on a phone mockup.
- */
+// Heavy routes are lazy so the landing bundle stays small: the SVG editor, the
+// two tabs that pull in the tracer (they share its chunk), and the labs, which
+// also pull in the bench scoring modules.
 const EditorPanel = lazy(() => import('./components/panels/EditorPanel'))
 
-/**
- * The two tabs that carry the TRACER. Lazy for the same reason, and it is the
- * single biggest thing in the first load: `src/lib/trace` is 144 kB of the entry
- * chunk, and it arrives only because these two routes were imported eagerly —
- * Preview, the landing tab, was paying for a vectorizer it never calls. Measured
- * on the whole entry chunk: 893 → 425 kB raw, 287 → 132 kB gzip. The cost is one
- * Suspense fallback the first time either tab is opened; they share the trace
- * chunk, so opening the second is free.
- */
 const VectorizePanel = lazy(() => import('./components/panels/VectorizePanel'))
 const SheetPanel = lazy(() => import('./components/panels/SheetPanel'))
 
 const LabsIndex = lazy(() => import('./components/labs/LabsIndex'))
 const PipelineLab = lazy(() => import('./components/labs/PipelineLab'))
 const AbLab = lazy(() => import('./components/labs/AbLab'))
-// The Workbench asks ONE question — "is the trace correct against the art that made the pixels?" —
-// of a switchable corpus. What can't be asked of every corpus lives in its own lab: raster-only art
-// in the Gallery (just look) and Feature A/B (compare revisions).
+// Workbench scores traces against their source art over a switchable corpus;
+// raster-only art lives in the Gallery, revision comparison in Feature A/B.
 const Workbench = lazy(() => import('./components/labs/workbench/Workbench'))
 const GalleryLab = lazy(() => import('./components/labs/GalleryLab'))
 const ProfilerLab = lazy(() => import('./components/labs/ProfilerLab'))
@@ -72,7 +53,7 @@ function LabLoading() {
   )
 }
 
-/** The same wait, worded for a normal tab — "the harness" is lab language. */
+/** Loading fallback for a normal tab. */
 function PanelLoading({ what }: { what: string }) {
   return (
     <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted">
@@ -82,42 +63,23 @@ function PanelLoading({ what }: { what: string }) {
   )
 }
 
-function Header({
-  onOpenMenu,
-  onReport,
-}: {
-  onOpenMenu: () => void
-  onReport: () => void
-}) {
+function Header({ onOpenMenu, onReport }: { onOpenMenu: () => void; onReport: () => void }) {
   const logo = useLogo()
   const clearLogo = useStore((s) => s.clearLogo)
   const tab = useActiveTab()
   const activeLabel = TABS.find((t) => t.id === tab)?.label ?? ''
-  // Between md and lg the tabs are icon-only, so they need the tooltip the
-  // visible label makes redundant above it. Keyed to the same 1024 as the
-  // `lg:inline` on those labels — change one and change the other.
+  // Between md and lg the tabs are icon-only and need a tooltip. Must match the
+  // `lg:inline` breakpoint on the tab labels.
   const iconOnlyTabs = useMediaQuery('(max-width: 1023px)')
 
   return (
     /*
-     * A GRID, not a flex row with justify-between.
+     * A grid with equal 1fr side tracks keeps the tab nav centred regardless of
+     * the side clusters' widths (e.g. the Saved chip's label changing), so it
+     * doesn't slide under the cursor.
      *
-     * The tab nav is the thing people aim at, so its position must not be a
-     * function of what happens to be beside it. Under justify-between it was: the
-     * right cluster is much wider than the wordmark, which pushed the nav ~135px
-     * left of centre, and anything that changed the cluster's width — the Saved
-     * chip going from "Saving…" to "Saved 4 min ago", a Clear button appearing —
-     * slid the whole nav sideways under the cursor.
-     *
-     * Equal 1fr side tracks put the auto-width middle track exactly in the centre
-     * and keep it there no matter what either side does. When a side genuinely
-     * outgrows its share the track grows and the nav drifts, which is the old
-     * behaviour as a graceful floor rather than the normal case.
-     *
-     * The three children name their columns EXPLICITLY. A grid item with
-     * `display:none` is not placed at all, so while the nav was `hidden` below its
-     * breakpoint auto-placement handed the right cluster the middle track — which
-     * is how the hamburger came to sit in the dead centre of a tablet header.
+     * Children set their columns explicitly: a `display:none` nav is not placed,
+     * and auto-placement would move the right cluster into the middle track.
      */
     <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-line bg-surface px-3 sm:px-4">
       <div className="col-start-1 flex min-w-0 items-center gap-2.5">
@@ -137,26 +99,16 @@ function Header({
       </div>
 
       {/*
-       * The tab nav, which COLLAPSES IN TWO STEPS rather than vanishing at one
-       * breakpoint. Widths measured on this header: the labelled nav is 599px,
-       * icon-only (with the active tab still labelled) is ~290px, and the right
-       * cluster is ~360px.
-       *
-       * ≥ xl   labelled tabs + the full right cluster inline (599+360 needs 1280).
-       * lg–xl  labelled tabs; the cluster has folded into the menu (599+40 fits 1024).
-       * md–lg  icon-only tabs, except the open one, which keeps its label so the
-       *        header still says where you are (~290+40 fits 768).
+       * The tab nav collapses in steps:
+       * >= xl  labelled tabs and the full right cluster.
+       * lg–xl  labelled tabs; the right cluster folds into the menu.
+       * md–lg  icon-only tabs, except the active one keeps its label.
        * < md   no nav; the menu holds every tab.
-       *
-       * Each step drops the least-used half first, so a tablet keeps the thing
-       * people actually aim at instead of hiding all six tabs behind a hamburger.
        */}
       <nav aria-label="Sections" className="col-start-2 hidden shrink-0 rounded-lg bg-surface-3 p-0.5 md:flex">
         {TABS.map((t) => (
-          // Icon-only below lg, so the name has to be reachable some other way:
-          // aria-label for assistive tech, the bubble for a pointer. Empty above
-          // lg, where Tooltip renders the link alone — a bubble that only repeats
-          // the label sitting next to it is noise.
+          // Below lg the tab is icon-only, so it gets aria-label and a tooltip;
+          // above lg the empty label makes Tooltip render the link alone.
           <Tooltip key={t.id} label={iconOnlyTabs ? t.label : ''} side="bottom">
             <NavLink
               to={`/${t.id}`}
@@ -180,57 +132,39 @@ function Header({
         ))}
       </nav>
 
-      {/* Right cluster — its contents move into AppMenu below xl, which is the
-          FIRST thing this header gives up: a Clear button, a theme toggle and a
-          link to GitHub are all meta, and a tab is not. Justified to the end so
-          the icons stay put while the Saved chip's label changes width beside
-          them.
-
-          Every tooltip in here is `side="bottom"`. There is no room above a
-          control that sits 8px from the top of the viewport, and the default
-          `top` would land the bubble on the icon it is describing. Tooltip
-          flips on its own now, but saying it here means the placement is the
-          intent rather than a fallback being relied on. */}
+      {/* Right cluster; its contents move into AppMenu below xl. Justified to
+          the end so the icons stay put while the Saved chip's label changes.
+          Every tooltip here is `side="bottom"`: there is no room above a
+          control at the top of the viewport. */}
       <div className="col-start-3 flex items-center justify-end gap-3">
         <div className="hidden items-center gap-3 xl:flex">
           {logo.src && (
             <Tooltip label="Clear the loaded logo" side="bottom">
               <button
+                type="button"
                 onClick={clearLogo}
                 aria-label="Clear logo"
                 className="btn btn-ghost h-8 gap-1.5 px-2 text-xs"
               >
                 <X size={14} />
-                {/* Label only where the row has room for it — the nav's centring
-                    budget is this cluster's width. */}
+                {/* Label only on wide screens; this cluster's width limits the nav's centring. */}
                 <span className="hidden 2xl:inline">Clear</span>
               </button>
             </Tooltip>
           )}
-          {/* When the session was last written down. Replaces the old restore
-              BANNER, which cost every page a strip of vertical space to say
-              something that belongs in the title bar. */}
+          {/* When the session was last saved. */}
           <SavedChip />
           <div className="flex items-center gap-1">
-            {/* LogoLab's MCP server. First in the cluster because it is a product
-                feature, not a meta affordance like the three that follow — and
-                because it has no other desktop home (the mobile menu has a row). */}
             {/* Only rendered while the browser is offering an install. */}
             <InstallAppButton />
+            {/* The MCP server setup; its only desktop entry point. */}
             <AgentSetupButton variant="icon" />
             <ThemeToggleButton />
-            {/* Opens the ASK, not GitHub (components/ReportDialog): which kind
-                of thing is this, what to write, what gets attached. Jumping
-                straight to a stranger's issue tracker filed every idea as a bug
-                and lost the people who bounced off the form. It keeps the bug
-                glyph — the labs moved to a flask, because two bugs in one
-                header would have meant neither of them said anything. */}
+            {/* Opens ReportDialog, which asks bug vs idea and shows what gets
+                attached, rather than linking straight to GitHub. */}
             <Tooltip
               label={
-                <TipLabel
-                  title="Report a problem"
-                  detail="A bug, or an idea. Nothing is sent until you post it."
-                />
+                <TipLabel title="Report a problem" detail="A bug, or an idea. Nothing is sent until you post it." />
               }
               side="bottom"
             >
@@ -259,9 +193,8 @@ function Header({
           </div>
         </div>
 
-        {/* Menu trigger (~44px target). `xl:hidden` has to stay in step with the
-            `hideFrom` on AppMenu's Sheet — a trigger that outlives its sheet is
-            a button that locks the page and shows nothing. */}
+        {/* Menu trigger. `xl:hidden` must match `hideFrom` on AppMenu's Sheet,
+            or the trigger locks the page and shows nothing. */}
         <Tooltip label="Menu" side="bottom">
           <button
             type="button"
@@ -289,11 +222,8 @@ function BrandMark() {
 }
 
 /**
- * Mobile-only entry to load a logo on the Preview tab before one exists. On
- * desktop the sidebar's Logo section covers this; on phones the sidebar is a
- * drawer that only opens *after* a logo is loaded, so without this card there'd
- * be no way to add one from Preview. Cleanup, Vectorize & Export all render their
- * own full-width upload empty states, so only Preview needs it.
+ * Mobile-only upload card on Preview. On phones the sidebar is a drawer that
+ * only appears once a logo is loaded; the other tabs have their own empty states.
  */
 function MobileLogoIntro() {
   return (
@@ -315,32 +245,26 @@ export function App() {
   const logo = useLogo()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  // The standing "tell us something" flow. Lives up here because both the
-  // header's bug button and the mobile menu's row open the same dialog.
+  // Shared by the header's bug button and the mobile menu.
   const [reportOpen, setReportOpen] = useState(false)
 
-  // The appearance controls only exist on Preview & Export. On phones they live
-  // in a slide-over that we only surface once a logo is loaded (nothing to tweak
-  // before then) — matches the desktop sidebar, which is also logo-driven.
+  // Appearance controls exist only on Preview and Export; on phones their
+  // drawer is offered once a logo is loaded.
   const showStyling = tab === 'preview' || tab === 'export'
   const hasLogo = Boolean(logo.src)
 
-  // The full-height studios (Cleanup/Vectorize) carry the legal links in their
-  // own desktop status bar, so on desktop we drop the bottom footer there — it
-  // would otherwise add a second scroll past an already full-height tool. On
-  // mobile those studios have no status bar, so the footer stays (scrolls in).
-  const isStudio =
-    tab === 'cleanup' || tab === 'vectorize' || tab === 'sheet' || tab === 'editor'
+  // Full-height studios show the legal links in their desktop status bar, so
+  // the footer is hidden there on desktop.
+  const isStudio = tab === 'cleanup' || tab === 'vectorize' || tab === 'sheet' || tab === 'editor'
 
-  // Close any open overlay on navigation (covers the back button, not just the
-  // in-menu links), and drop the appearance drawer when its trigger disappears.
+  // Close overlays on any navigation (including Back), and the appearance
+  // drawer when its trigger disappears.
   useEffect(() => {
     setMenuOpen(false)
     if (!showStyling || !hasLogo) setDrawerOpen(false)
   }, [tab, showStyling, hasLogo])
 
-  // Legal pages (Impressum / Datenschutz) render in their own standalone shell —
-  // no studio sidebar or appearance FAB — so the long-form text reads cleanly.
+  // Legal pages render in a standalone shell without the studio chrome.
   if (pathname === '/impressum' || pathname === '/datenschutz') {
     return (
       <Routes>
@@ -350,23 +274,17 @@ export function App() {
     )
   }
 
-  // The labs keep the app header (they're part of the app, not a dev sidecar) but drop
-  // the studio sidebar and the appearance FAB: they carry their own toolbar, and they
-  // want the full width for the panel strips.
+  // The labs keep the header but drop the sidebar and appearance button to use
+  // the full width.
   if (pathname.startsWith('/labs')) {
     return (
       <div className="flex h-full flex-col overflow-x-hidden">
         <Header onOpenMenu={() => setMenuOpen(true)} onReport={() => setReportOpen(true)} />
-        <AppMenu
-          open={menuOpen}
-          onClose={() => setMenuOpen(false)}
-          onReport={() => setReportOpen(true)}
-        />
+        <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} onReport={() => setReportOpen(true)} />
         {reportOpen && <ReportDialog onClose={() => setReportOpen(false)} />}
         <Toasts />
         <main className="min-h-0 flex-1 overflow-y-auto bg-bg">
-          {/* One boundary for all of them — a lab is a harness, and the pathname
-              resets it so walking to another lab clears the last one's crash. */}
+          {/* One boundary for all labs; resetKey clears a crash on navigation. */}
           <ErrorBoundary what="this lab" resetKey={pathname}>
             <Suspense fallback={<LabLoading />}>
               <Routes>
@@ -376,9 +294,7 @@ export function App() {
                 <Route path="/labs/workbench" element={<Workbench />} />
                 <Route path="/labs/gallery" element={<GalleryLab />} />
                 <Route path="/labs/profiler" element={<ProfilerLab />} />
-                {/* Old routes, kept as deep-links so bookmarks survive. `golden` has no view any
-                    more — the regression gate still runs in CI, but Feature A/B already shows those
-                    exact fixtures, which is where you'd go to look at them. */}
+                {/* Old routes, redirected so bookmarks keep working. */}
                 <Route path="/labs/truth" element={<Navigate to="/labs/workbench?corpus=tier0" replace />} />
                 <Route path="/labs/logos" element={<Navigate to="/labs/workbench?corpus=logos" replace />} />
                 <Route path="/labs/eval" element={<Navigate to="/labs/scoreboard" replace />} />
@@ -395,23 +311,14 @@ export function App() {
   return (
     <div className="flex h-full flex-col overflow-x-hidden">
       <Header onOpenMenu={() => setMenuOpen(true)} onReport={() => setReportOpen(true)} />
-      <AppMenu
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        onReport={() => setReportOpen(true)}
-      />
+      <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} onReport={() => setReportOpen(true)} />
       {reportOpen && <ReportDialog onClose={() => setReportOpen(false)} />}
       <div className="flex min-h-0 flex-1">
-        {/* Inline column on desktop; a drawer (below) replaces it on mobile.
-            Hidden on the Editor tab: that tool edits its OWN document, not the
-            app's working logo, so a logo rail there is both misleading and a
-            320px bite out of the canvas. */}
+        {/* Inline on desktop, a drawer on mobile. Hidden on the Editor tab,
+            which edits its own document rather than the working logo. */}
         {tab !== 'editor' && <Sidebar className="hidden md:block" />}
-        {/* flex column + footer with mt-auto = the footer rides below the
-            content instead of being a bar pinned to the viewport: it rests at
-            the bottom on short pages and scrolls out of view under tall ones
-            (incl. the full-height studio tabs, whose shrink-0 root keeps the
-            whole area and pushes the footer just past the fold). */}
+        {/* Flex column with an mt-auto footer: the footer sits at the bottom of
+            short pages and scrolls below tall ones instead of being pinned. */}
         <main
           className={`flex min-w-0 flex-1 flex-col overflow-y-auto bg-bg ${
             showStyling && hasLogo ? 'max-md:pb-24' : ''
@@ -419,23 +326,15 @@ export function App() {
         >
           {tab === 'preview' && !hasLogo && <MobileLogoIntro />}
           {/*
-           * ONE BOUNDARY PER PANEL (components/ErrorBoundary). A throw anywhere in
-           * a render path used to unmount the whole tree and leave a blank page;
-           * per-route means a crash in the vectorizer costs you the vectorizer —
-           * the header, the loaded logo and every other tab keep working, and the
-           * panel can be remounted clean without a reload.
+           * One error boundary per panel, so a crash costs only that panel.
            *
-           * The boundary sits OUTSIDE the Suspense on purpose. A lazy chunk that
-           * fails to load (a deploy replaced it under an open tab, or the network
-           * dropped) rejects into the nearest boundary ABOVE its Suspense — put it
-           * inside and the rejection sails past to the root and takes the whole
-           * app with it, which is what used to happen to the tab that failed.
+           * The boundary must sit outside the Suspense: a lazy chunk that fails
+           * to load rejects into the nearest boundary above its Suspense, and
+           * one inside would let it escape to the root.
            *
-           * `resetKey` is NOT belt and braces. The router renders the matched
-           * route's element in the same position every time, so React reuses ONE
-           * boundary instance across all six and merely updates its props — a
-           * crash in Preview followed by a click on Cleanup showed Cleanup the
-           * preview's crash screen. The pathname is what ends the crash.
+           * Don't drop `resetKey={pathname}`: the router renders every route in
+           * the same position, so React reuses one boundary instance across all
+           * tabs, and without the key a crash in one tab follows you to the next.
            */}
           <Routes>
             <Route
@@ -500,15 +399,13 @@ export function App() {
         </main>
       </div>
 
-      {/* Mobile appearance drawer + the button that opens it. Only on the tabs
-          that have controls, and only once there's a logo to customize. */}
-      {showStyling && (
-        <MobileSidebarDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-      )}
+      {/* Mobile appearance drawer and its button, on tabs with controls once a logo is loaded. */}
+      {showStyling && <MobileSidebarDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />}
       <Toasts />
       {showStyling && hasLogo && (
         <Tooltip label="Customize appearance">
           <button
+            type="button"
             onClick={() => setDrawerOpen(true)}
             className="btn btn-primary bottom-safe fixed right-5 z-30 h-12 gap-2 rounded-full px-5 shadow-lg md:hidden"
           >

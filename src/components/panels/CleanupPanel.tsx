@@ -3,8 +3,8 @@
 // takes over the whole viewport. Mirrors VectorizePanel.
 
 import { Eraser } from 'lucide-react'
-import { useLogo } from '../../store'
-import { PanelEmptyState } from '../PanelEmptyState'
+import { useLogo } from '../../state/store'
+import { PanelEmptyState } from '../intake/PanelEmptyState'
 import { CleanupStudio } from '../cleanup/CleanupStudio'
 
 export default function CleanupPanel() {

@@ -1,14 +1,10 @@
 // Snapping: grid, other geometry, and the artboard.
 //
-// The two axes are resolved INDEPENDENTLY. That matters: dragging a node
-// leftward past another node's x should snap x while leaving y alone, and a
-// snapper that only fires when both axes agree feels broken in exactly the
-// situation you most want help. Each axis reports the candidate it locked onto,
-// so the canvas can draw the alignment guide that explains the jump.
+// The two axes snap independently (passing another node's x snaps x and leaves
+// y alone). Each axis reports the candidate it locked onto so the canvas can
+// draw the matching guide.
 //
-// Tolerances arrive in VIEWBOX units — the caller divides its screen-pixel
-// threshold by the zoom, so snapping stays a fixed number of pixels of pointer
-// slack no matter how far in you are.
+// Tolerances are in viewBox units, already divided by the zoom by the caller.
 
 import type { DocItem, Vec } from '../path/types.ts'
 import { allLeaves } from '../path/docTree.ts'
@@ -16,14 +12,10 @@ import type { Box } from './transform.ts'
 import { itemBox } from './transform.ts'
 
 /**
- * What kind of feature a candidate is, and what a probe is looking for.
- *
- * Roles are matched LIKE FOR LIKE when snapping a box: an edge snaps to an
- * edge, a centre to a centre. Letting a moving box's centre land on another
- * box's edge technically "aligns" something, but it reads as the shape jumping
- * for no visible reason — there is no guide the user would have predicted.
- * Point snapping (a node drag) ignores roles, because a lone point is not an
- * edge or a centre and should be free to land on anything.
+ * What kind of feature a candidate is, and what a probe is looking for. Box
+ * snapping matches like for like (edge to edge, centre to centre); a centre
+ * landing on an edge reads as an unexplained jump. Point snapping (a node
+ * drag) ignores roles.
  */
 export type SnapRole = 'edge' | 'center'
 
@@ -36,9 +28,8 @@ export interface SnapCandidate {
   /** Which probe kind may match it. */
   role: SnapRole
   /**
-   * Extent of the thing that produced it along the OTHER axis, so the canvas
-   * can draw a guide that spans from the dragged point to its partner rather
-   * than an unhelpful full-viewport line. Absent for grid/artboard.
+   * Extent of the source along the other axis, so the guide can span from the
+   * dragged point to its partner. Absent for grid/artboard.
    */
   from?: number
   to?: number
@@ -77,9 +68,8 @@ export const DEFAULT_SNAP: SnapConfig = {
 }
 
 /**
- * Candidate coordinates on each axis, gathered once per drag rather than per
- * pointermove — the geometry can't change mid-drag, and rebuilding this on
- * every frame is what makes snapping expensive on a big document.
+ * Candidate coordinates on each axis, gathered once per drag (the geometry
+ * can't change mid-drag) rather than per pointermove.
  */
 export interface SnapTargets {
   xs: SnapCandidate[]
@@ -89,9 +79,8 @@ export interface SnapTargets {
 export const NO_TARGETS: SnapTargets = { xs: [], ys: [] }
 
 /**
- * Collect snap candidates from everything EXCEPT the items being dragged —
- * a shape must never snap to where it currently is, or it would stick to its
- * own start position and refuse to move.
+ * Collect snap candidates from everything except the items being dragged;
+ * otherwise a shape would stick to its own start position.
  */
 export function collectTargets(
   items: readonly DocItem[],
@@ -129,8 +118,7 @@ export function collectTargets(
       ys.push({ value: y1, source: 'edge', role: 'edge', from: x0, to: x1 })
       ys.push({ value: y0 + box.h / 2, source: 'center', role: 'center', from: x0, to: x1 })
 
-      // Anchors, so a node drag can land exactly on a neighbouring node — the
-      // move that closes a gap invisibly at 100% and glaringly at 1600%.
+      // Anchors, so a node drag can land exactly on a neighbouring node.
       if (leaf.kind === 'path') {
         for (const sp of leaf.subPaths) {
           for (const node of sp.nodes) {
@@ -159,9 +147,8 @@ function snapAxis(
   for (const c of candidates) {
     if (role !== null && c.role !== role) continue
     const d = Math.abs(c.value - v)
-    // Strictly-nearer wins, so ties go to the earlier candidate — and the
-    // collection order puts geometry ahead of the artboard, meaning a snap to a
-    // shape you can see beats one to an edge you can't.
+    // Strictly-nearer wins, so ties go to the earlier candidate; geometry is
+    // collected before the artboard, so visible shapes win ties.
     if (d < bestD || (best === null && d <= bestD)) {
       bestD = d
       best = c
@@ -187,12 +174,9 @@ export function snapPoint(p: Vec, targets: SnapTargets, cfg: SnapConfig): SnapRe
 }
 
 /**
- * Snap a DRAG DELTA by testing the moving box's leading edges, centre and
- * trailing edges against the targets, and taking the smallest correction.
- *
- * Snapping the pointer instead of the box is the classic mistake: it makes the
- * shape stick when the CURSOR passes a guide, which is nowhere near where the
- * shape's own edge is, so the feedback contradicts the guide being drawn.
+ * Snap a drag delta by testing the moving box's edges and centre against the
+ * targets and taking the smallest correction. The box is snapped, not the
+ * pointer, so the shape's own edge is what lands on the guide.
  */
 export function snapBoxDelta(
   box: Box,
@@ -242,20 +226,13 @@ export function snapBoxDelta(
 
 /** Constrain a delta to the dominant axis (Shift-drag). */
 export function axisLock(delta: Vec): Vec {
-  return Math.abs(delta.x) >= Math.abs(delta.y)
-    ? { x: delta.x, y: 0 }
-    : { x: 0, y: delta.y }
+  return Math.abs(delta.x) >= Math.abs(delta.y) ? { x: delta.x, y: 0 } : { x: 0, y: delta.y }
 }
 
 /**
- * Arrow-key step. Plain = 1 unit, Shift = 10× for coarse moves, Alt = a tenth
- * for sub-unit nudges — the increments every vector editor uses, so muscle
- * memory transfers.
+ * Arrow-key step: 1 unit, Shift = 10×, Alt = 0.1×.
  */
-export function nudgeStep(
-  base: number,
-  mods: { shift?: boolean; alt?: boolean },
-): number {
+export function nudgeStep(base: number, mods: { shift?: boolean; alt?: boolean }): number {
   if (mods.shift) return base * 10
   if (mods.alt) return base / 10
   return base

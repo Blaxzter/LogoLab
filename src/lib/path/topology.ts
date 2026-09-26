@@ -1,11 +1,10 @@
-// Shared-edge (planar) topology helpers: materialize each region's render/hit
-// `subPaths` cache from the doc's edge graph, and (Phase 5) edge-aware editing.
+// Shared-edge (planar) topology: materialize each region's `subPaths` cache
+// from the doc's edge graph.
 //
-// The graph (EditableDoc.topology = {vertices, edges}) is the source of truth.
-// A region (PathItem) carries `loops: EdgeRef[][]` — ordered shared-edge
-// references forming its outer boundary + holes. Two adjacent regions reference
-// the SAME SharedEdge (one forward, one reversed), so their materialized
-// boundaries are byte-coincident: no overlap, no hairline seam.
+// The graph (`EditableDoc.topology`) is the source of truth. A region carries
+// `loops: EdgeRef[][]` (outer boundary + holes). Adjacent regions reference the
+// same SharedEdge, one forward and one reversed, so their boundaries coincide
+// exactly: no overlap, no hairline seam.
 
 import type { EdgeRef, EditableDoc, PathItem, PathNode, SharedEdge, SubPath, Topology, Vec } from './types'
 
@@ -17,8 +16,8 @@ const samePoint = (a: Vec, b: Vec): boolean => Math.abs(a.x - b.x) < EPS && Math
 
 /**
  * Reverse a shared edge's node list for backward traversal: reverse order and
- * swap each node's hIn/hOut (a pure reindex+swap — introduces no new arithmetic,
- * so the reversed view is byte-coincident with the forward one).
+ * swap each node's hIn/hOut. No arithmetic, so the reversed view coincides
+ * exactly with the forward one.
  */
 export function reverseEdgeNodes(nodes: PathNode[]): PathNode[] {
   const out = nodes.map((n) => ({ x: n.x, y: n.y, hIn: clone(n.hOut), hOut: clone(n.hIn), kind: n.kind }))
@@ -46,8 +45,8 @@ export interface HandleSite {
 }
 
 /**
- * The graph origin of ONE materialized node — the bridge the editor uses to map
- * a `NodeRef{sub,idx}` (into the derived `subPaths`) back onto `doc.topology`.
+ * The graph origin of one materialized node: how the editor maps a
+ * `NodeRef{sub,idx}` (into the derived `subPaths`) back onto `doc.topology`.
  *
  * - Interior edge node: `vertexId === null`; `edgeId`/`edgeNodeIdx` name the
  *   canonical node; `inHandle`/`outHandle` point at the same node.
@@ -101,9 +100,7 @@ function materializeLoop(
     const arc = ref.reversed ? reverseEdgeNodes(e.nodes) : e.nodes.map(cloneNode)
     if (arc.length < 2) return null
     const len = e.nodes.length
-    const provenance = arc.map((_, k) =>
-      interiorProvenance(ref.edge, ref.reversed ? len - 1 - k : k, ref.reversed),
-    )
+    const provenance = arc.map((_, k) => interiorProvenance(ref.edge, ref.reversed ? len - 1 - k : k, ref.reversed))
     return { subPath: { nodes: arc, closed: true }, provenance }
   }
 
@@ -118,9 +115,8 @@ function materializeLoop(
     let start = 0
     const last = nodes[nodes.length - 1]
     if (last && samePoint(last, arc[0])) {
-      // Shared junction anchor: carry the incoming arc's outgoing handle onto the
-      // surviving previous node, and re-home that node's provenance as a junction:
-      // its hOut now belongs to THIS (departing) edge's first canonical node.
+      // Shared junction anchor: keep the previous node, give it this arc's hOut,
+      // and mark its provenance as a junction whose hOut belongs to this edge.
       last.hOut = clone(arc[0].hOut)
       const pv = prov[prov.length - 1]
       pv.vertexId = vid(ref.reversed ? e.endVertex : e.startVertex)
@@ -148,13 +144,10 @@ function materializeLoop(
 }
 
 /**
- * Build one region's `subPaths` from its edge-ref loops. Each loop concatenates
- * its edges' node arrays (reversed when the ref says so), dropping the shared
- * junction anchor that the previous arc already emitted, and closes by merging
- * the final duplicate junction back onto the first node. The loops are assumed
- * already oriented for nonzero (outer CCW, holes CW) by the assembler, so this
- * is a pure forward concatenation — the materialized node order matches the loop
- * order, which the editor relies on to map a node hit back to its edge.
+ * Build one region's `subPaths` from its edge-ref loops. Loops are assumed
+ * already oriented for nonzero (outer CCW, holes CW), so this is a forward
+ * concatenation and node order matches loop order, which the editor relies on
+ * to map a node hit back to its edge.
  */
 export function materializeRegion(loops: EdgeRef[][], edges: Map<number, SharedEdge>): SubPath[] {
   const subPaths: SubPath[] = []
@@ -166,11 +159,9 @@ export function materializeRegion(loops: EdgeRef[][], edges: Map<number, SharedE
 }
 
 /**
- * Like {@link materializeRegion}, but also returns, per materialized node, its
- * {@link NodeProvenance} — `provenance[sub][idx]` aligned 1:1 with
- * `subPaths[sub].nodes[idx]`. This is the editor's bridge from a node hit back
- * to the shared-edge graph so an edit can update both adjacent regions. Re-uses
- * the exact same walk as `materializeRegion`, so the two never drift.
+ * Like {@link materializeRegion}, but also returns each node's
+ * {@link NodeProvenance}, aligned 1:1 with `subPaths[sub].nodes[idx]`. Uses the
+ * same walk, so the two cannot drift.
  */
 export function materializeRegionWithProvenance(
   loops: EdgeRef[][],

@@ -45,7 +45,7 @@ pnpm-debug.log*
 # generated dev-harness artifacts (crispnessStudy/facetSweep/paletteCompare output)
 /crispness-study/
 
-# vendored-corpus download cache (src/devtest/vendorFluentEmoji.ts)
+# vendored-corpus download cache (bench/vendorFluentEmoji.ts)
 /.cache/
 
 # A/B feature stamps (`pnpm gen:absnapshot`) — LOCAL working artifacts: a frozen copy

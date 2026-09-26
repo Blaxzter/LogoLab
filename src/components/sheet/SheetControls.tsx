@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import { Loader2, Play, RefreshCw, Square, Trash2, Download } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Collapsible, Field, Segmented, Slider, TextField, Toggle } from '../ui/controls'
-import { CAPTION_UNSURE_BELOW } from '../../sheetStore'
+import { CAPTION_UNSURE_BELOW } from '../../state/sheetStore'
 import type {
   DetectMode,
   GradientMode,
@@ -16,7 +16,7 @@ import type {
   SheetIcon,
   SheetNaming,
   SheetSource,
-} from '../../sheetStore'
+} from '../../state/sheetStore'
 import type { SheetColorMode } from '../../lib/sheet/traceTile'
 import { cleanAffix, exportName } from '../../lib/sheet'
 import type { SheetGrid } from '../../lib/sheet'
@@ -189,7 +189,13 @@ export function SheetControlsBody({
             <Field
               label="Keep caption text"
               hint="Sheets usually label every icon. Captions are detected and set aside; turn this on to get boxes for them too."
-              right={<Toggle checked={detect.keepLabels} onChange={(v) => onDetect({ keepLabels: v })} label="Keep caption text" />}
+              right={
+                <Toggle
+                  checked={detect.keepLabels}
+                  onChange={(v) => onDetect({ keepLabels: v })}
+                  label="Keep caption text"
+                />
+              }
             >
               <></>
             </Field>
@@ -203,10 +209,22 @@ export function SheetControlsBody({
               <Slider value={detect.cols} min={1} max={16} onChange={(v) => onDetect({ cols: v })} />
             </Field>
             <Field label="Margin" hint="Border of the sheet to skip before the first cell.">
-              <Slider value={detect.margin} min={0} max={Math.round(Math.min(source.width, source.height) / 4)} onChange={(v) => onDetect({ margin: v })} unit="px" />
+              <Slider
+                value={detect.margin}
+                min={0}
+                max={Math.round(Math.min(source.width, source.height) / 4)}
+                onChange={(v) => onDetect({ margin: v })}
+                unit="px"
+              />
             </Field>
             <Field label="Gutter" hint="Space between cells.">
-              <Slider value={detect.gutter} min={0} max={Math.round(Math.min(source.width, source.height) / 8)} onChange={(v) => onDetect({ gutter: v })} unit="px" />
+              <Slider
+                value={detect.gutter}
+                min={0}
+                max={Math.round(Math.min(source.width, source.height) / 8)}
+                onChange={(v) => onDetect({ gutter: v })}
+                unit="px"
+              />
             </Field>
           </Collapsible>
         )}
@@ -236,7 +254,9 @@ export function SheetControlsBody({
             <Field
               label="Uniform size"
               hint="Give every icon the same box, so a small glyph stays smaller than a big one instead of being blown up to match."
-              right={<Toggle checked={detect.uniform} onChange={(v) => onDetect({ uniform: v })} label="Uniform size" />}
+              right={
+                <Toggle checked={detect.uniform} onChange={(v) => onDetect({ uniform: v })} label="Uniform size" />
+              }
             >
               <></>
             </Field>
@@ -263,10 +283,20 @@ export function SheetControlsBody({
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Prefix">
-              <TextField value={naming.prefix} onChange={(v) => onNaming({ prefix: v })} placeholder="ic-" maxLength={40} />
+              <TextField
+                value={naming.prefix}
+                onChange={(v) => onNaming({ prefix: v })}
+                placeholder="ic-"
+                maxLength={40}
+              />
             </Field>
             <Field label="Suffix">
-              <TextField value={naming.suffix} onChange={(v) => onNaming({ suffix: v })} placeholder="-24" maxLength={40} />
+              <TextField
+                value={naming.suffix}
+                onChange={(v) => onNaming({ suffix: v })}
+                placeholder="-24"
+                maxLength={40}
+              />
             </Field>
           </div>
           {exampleName && (
@@ -305,7 +335,10 @@ export function SheetControlsBody({
             />
           </Field>
           {colorMode !== 'mono' && (
-            <Field label="Gradients" hint="Auto decides per icon from its own pixels — a flat glyph traces flat, a shaded badge doesn't.">
+            <Field
+              label="Gradients"
+              hint="Auto decides per icon from its own pixels — a flat glyph traces flat, a shaded badge doesn't."
+            >
               <Segmented<GradientMode>
                 value={gradientMode}
                 onChange={onGradientMode}
@@ -341,10 +374,20 @@ export function SheetControlsBody({
             label="Smoothing"
             hint="Low keeps corners crisp; high sweeps out detail. Scaled down per icon: smoothing is an absolute tolerance, and a 170px crop would lose its interior details at the full-size setting."
           >
-            <Slider value={traceOptions.smoothing} min={0} max={100} onChange={(v) => onTraceOptions({ smoothing: v })} />
+            <Slider
+              value={traceOptions.smoothing}
+              min={0}
+              max={100}
+              onChange={(v) => onTraceOptions({ smoothing: v })}
+            />
           </Field>
           <Field label="Despeckle" hint="Drops specks and stray anti-aliasing colours.">
-            <Slider value={traceOptions.despeckle} min={0} max={100} onChange={(v) => onTraceOptions({ despeckle: v })} />
+            <Slider
+              value={traceOptions.despeckle}
+              min={0}
+              max={100}
+              onChange={(v) => onTraceOptions({ despeckle: v })}
+            />
           </Field>
         </Collapsible>
 

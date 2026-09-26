@@ -5,7 +5,7 @@ import { Tooltip } from '../ui/Tooltip'
  * Mobile-only chrome shared by the Cleanup & Vectorize studios so the two stay
  * visually consistent. Each studio composes its own controls into these shells;
  * the shells own the height, borders, safe-area, scroll behaviour, and the
- * `md:hidden` gate (desktop keeps its original h-12 toolbar + h-9 footer).
+ * `md:hidden` gate (desktop uses its own h-12 toolbar + h-9 footer).
  */
 
 /** Sticky strip under the header: view-mode + tool + undo/redo + zoom. Scrolls

@@ -82,7 +82,7 @@ falls back to the crisp mask tracer.
 integrity on synthetic maps (quadrants, island/hole), determinism, and exact
 shared-edge coincidence. Full suite 152 pass. Headless metrics vs crisp: petals
 `seamMax` 5.7→**3.0**, shield `seamP995` 65.7→**53.7**, nebula visually identical
-(meanΔE 2.95→3.01), node counts higher (real holes). `src/devtest/planarScore.ts`
+(meanΔE 2.95→3.01), node counts higher (real holes). `bench/planarScore.ts`
 is the scoring helper.
 
 ### 2c. Unrelated: gradient-import WIP → `main`
@@ -259,7 +259,7 @@ coincident, with zero desync risk.
   untouched, concentric relation solve, `fidelity=0` no-op, determinism, and a
   Phase-5 drag on the beautified edge. Full suite **173 pass**, typecheck clean.
 
-- **Measured** ([planarBeautifyScore.ts](../src/devtest/planarBeautifyScore.ts),
+- **Measured** ([planarBeautifyScore.ts](../bench/planarBeautifyScore.ts),
   planar at fidelity 0 vs 1.5): on geometric shapes the win is **regularity +
   fidelity**, not node count. The planar fitter is already node-economical (it fits
   a disc to a 2-cubic closed loop), so snapping to the canonical 4-node kappa circle
@@ -383,7 +383,7 @@ union's sample build (else a ghost tint drags an endpoint ~100/255 per channel).
   a thinness metric (absorb long-but-thin AA bands a pure area threshold misses).
 - **Sub-pixel edge placement** — optionally place crack vertices at AA-weighted
   sub-pixel positions to close the small nebula seam gap with crisp.
-- `src/devtest/planarScore.ts` is the harness for tuning all of the above.
+- `bench/planarScore.ts` is the harness for tuning all of the above.
 - **Band-boundary regularization** (if 1f isn't taken): with gradients OFF all of
   bloom/aurora/nebula take the PALETTE-FIRST path, so band↔band boundaries are
   perpendicular-bisector iso-planes between k-means centroids evaluated on RAW
@@ -397,7 +397,7 @@ union's sample build (else a ghost tint drags an endpoint ~100/255 per channel).
 
 The golden harness previously measured only render fidelity (meanΔE/SSIM/seam) and
 counts — a junction cluster or a jagged band boundary hid inside every tolerance.
-`topologyMetrics` ([metrics.ts](../src/devtest/metrics.ts)) now scores every traced
+`topologyMetrics` ([metrics.ts](../bench/metrics.ts)) now scores every traced
 doc (via `scoreDoc`) with:
 
 - `junctions` — vertices in the shared-edge graph;

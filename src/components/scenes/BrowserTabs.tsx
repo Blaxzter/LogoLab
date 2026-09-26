@@ -1,10 +1,10 @@
 import type { CSSProperties } from 'react'
-import { LogoMark } from '../LogoMark'
-import { useAppearance, useEnv } from '../../store'
+import { LogoMark } from './LogoMark'
+import { useAppearance, useEnv } from '../../state/store'
 
 /**
  * BrowserTabs — a browser tab-strip + address bar mock that stress-tests
- * FAVICON legibility at 16px. The active tab, address bar, and one bookmark
+ * favicon legibility at 16px. The active tab, address bar, and one bookmark
  * carry the user logo; everything else is a generic gray placeholder, so the
  * tiny mark can be judged against realistic browser chrome.
  */
@@ -56,20 +56,12 @@ const DARK: Chrome = {
 
 function GenericFavicon({ color }: { color: string }) {
   return (
-    <span
-      className="inline-block shrink-0 rounded-full"
-      style={{ width: 16, height: 16, backgroundColor: color }}
-    />
+    <span className="inline-block shrink-0 rounded-full" style={{ width: 16, height: 16, backgroundColor: color }} />
   )
 }
 
 function WindowDot({ color }: { color: string }) {
-  return (
-    <span
-      className="inline-block rounded-full"
-      style={{ width: 8, height: 8, backgroundColor: color }}
-    />
-  )
+  return <span className="inline-block rounded-full" style={{ width: 8, height: 8, backgroundColor: color }} />
 }
 
 export default function BrowserTabs() {
@@ -87,10 +79,7 @@ export default function BrowserTabs() {
   }
 
   return (
-    <div
-      className="flex w-full flex-col select-none"
-      style={{ height: 300, backgroundColor: c.strip }}
-    >
+    <div className="flex w-full flex-col select-none" style={{ height: 300, backgroundColor: c.strip }}>
       {/* Tab strip */}
       <div className="flex items-end gap-1 px-2 pt-2" style={{ height: 44 }}>
         {/* Pinned tab — favicon only, narrow */}
@@ -108,15 +97,9 @@ export default function BrowserTabs() {
         </div>
 
         {/* Active tab — user favicon + brand title */}
-        <div
-          className="flex items-center gap-2 px-3"
-          style={{ ...activeTabStyle, width: 168, height: 34 }}
-        >
+        <div className="flex items-center gap-2 px-3" style={{ ...activeTabStyle, width: 168, height: 34 }}>
           <LogoMark size={16} showCard={app.cardInFlat} radiusPct={20} placeholder />
-          <span
-            className="flex-1 truncate text-[12px] font-medium"
-            style={{ color: c.text }}
-          >
+          <span className="flex-1 truncate text-[12px] font-medium" style={{ color: c.text }}>
             {brand}
           </span>
           <span
@@ -141,16 +124,10 @@ export default function BrowserTabs() {
             }}
           >
             <GenericFavicon color={c.generic} />
-            <span
-              className="flex-1 truncate text-[12px]"
-              style={{ color: c.textMuted }}
-            >
+            <span className="flex-1 truncate text-[12px]" style={{ color: c.textMuted }}>
               {label}
             </span>
-            <span
-              className="shrink-0 text-[11px] leading-none"
-              style={{ color: c.textMuted }}
-            >
+            <span className="shrink-0 text-[11px] leading-none" style={{ color: c.textMuted }}>
               ×
             </span>
           </div>
@@ -166,19 +143,13 @@ export default function BrowserTabs() {
       </div>
 
       {/* Toolbar: nav buttons + address bar */}
-      <div
-        className="flex items-center gap-2 px-3"
-        style={{ height: 48, backgroundColor: c.bar }}
-      >
+      <div className="flex items-center gap-2 px-3" style={{ height: 48, backgroundColor: c.bar }}>
         <div className="flex items-center gap-3" style={{ color: c.textMuted }}>
           <span className="text-[16px] leading-none">‹</span>
           <span className="text-[16px] leading-none">›</span>
           <span className="text-[15px] leading-none">⟳</span>
         </div>
-        <div
-          className="flex h-8 flex-1 items-center gap-2 rounded-full px-3"
-          style={{ backgroundColor: c.pill }}
-        >
+        <div className="flex h-8 flex-1 items-center gap-2 rounded-full px-3" style={{ backgroundColor: c.pill }}>
           <LogoMark size={16} showCard={app.cardInFlat} radiusPct={20} placeholder />
           <span className="text-[12px]" style={{ color: c.hostStrong }}>
             {host}
@@ -216,10 +187,7 @@ export default function BrowserTabs() {
         </div>
         {/* Generic bookmarks */}
         {['Mail', 'Calendar', 'Drive', 'News'].map((label) => (
-          <div
-            key={label}
-            className="flex items-center gap-1.5 rounded-md px-1.5 py-1"
-          >
+          <div key={label} className="flex items-center gap-1.5 rounded-md px-1.5 py-1">
             <GenericFavicon color={c.generic} />
             <span className="text-[12px]" style={{ color: c.textMuted }}>
               {label}

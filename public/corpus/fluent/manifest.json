@@ -5,7 +5,7 @@
     "style": "Color",
     "licence": "MIT"
   },
-  "generatedBy": "src/devtest/vendorFluentEmoji.ts",
+  "generatedBy": "bench/vendorFluentEmoji.ts",
   "candidates": 1595,
   "scorable": 110,
   "gradientArt": 109,
@@ -18,7 +18,7 @@
     "clipped": 115,
     "masked": 15
   },
-  "note": "refusalHistogram counts EVERY reason a glyph was refused, so the columns sum to more than (candidates - scorable). See src/devtest/svgGround.ts for what each code means.",
+  "note": "refusalHistogram counts EVERY reason a glyph was refused, so the columns sum to more than (candidates - scorable). See bench/svgGround.ts for what each code means.",
   "glyphs": [
     {
       "name": "Person gesturing ok",

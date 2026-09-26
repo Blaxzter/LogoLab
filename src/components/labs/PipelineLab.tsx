@@ -14,12 +14,7 @@ import { segmentImage, DEFAULT_SEGMENT_OPTIONS } from '../../lib/trace/segment'
 import { fitPaintLadder } from '../../lib/trace/gradient'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import { serializeDoc } from '../../lib/path/model'
-import {
-  smoothedToRgba,
-  discontinuityToRgba,
-  segmentsToRgba,
-  regionFillsToRgba,
-} from '../../lib/trace/stageViz'
+import { smoothedToRgba, discontinuityToRgba, segmentsToRgba, regionFillsToRgba } from '../../lib/trace/stageViz'
 import { LabPage } from './LabPage'
 import { Panel, RawArt } from './Panel'
 import { CaseRow, NoteBox, PendingRow } from './CaseRow'
@@ -187,17 +182,10 @@ function PaintModels({ paints }: { paints: Paint[] }) {
       <div className="lab-box overflow-y-auto rounded-lg border border-line-strong bg-surface p-1.5">
         {paints.map((p, i) => (
           <div key={i} className="flex items-center gap-1.5 py-0.5 text-[0.65rem]">
-            <span
-              className="h-3 w-3 shrink-0 rounded-sm border border-line"
-              style={{ background: p.hex }}
-            />
+            <span className="h-3 w-3 shrink-0 rounded-sm border border-line" style={{ background: p.hex }} />
             <span className="w-16 shrink-0 font-mono text-ink">{p.model}</span>
-            <span className="shrink-0 font-mono tabular-nums text-muted">
-              {p.px.toLocaleString()}px
-            </span>
-            <span className="ml-auto shrink-0 font-mono tabular-nums text-faint">
-              {p.residual.toFixed(3)}
-            </span>
+            <span className="shrink-0 font-mono tabular-nums text-muted">{p.px.toLocaleString()}px</span>
+            <span className="ml-auto shrink-0 font-mono tabular-nums text-faint">{p.residual.toFixed(3)}</span>
           </div>
         ))}
       </div>
@@ -209,20 +197,19 @@ function PipelineAbout() {
   return (
     <>
       <p className="mb-2 max-w-[96ch]">
-        The tracer is <b>structure-first</b>: it does not follow colour boundaries pixel by pixel. It
-        first smooths the image (Mumford–Shah), reads the discontinuities that survive, segments the
-        result into macro-regions, and only then fits a paint model and a curve to each region. Each
-        panel is one of those steps, in order.
+        The tracer is <b>structure-first</b>: it does not follow colour boundaries pixel by pixel. It first smooths the
+        image (Mumford–Shah), reads the discontinuities that survive, segments the result into macro-regions, and only
+        then fits a paint model and a curve to each region. Each panel is one of those steps, in order.
       </p>
       <p className="mb-2 max-w-[96ch]">
-        This is where surprises get explained. Three translucent overlapping circles collapse into a
-        handful of opaque macro-regions — the overlap blends were merged away at the segmentation
-        step — which is why the overlaps don't appear in the final trace. The region count in the
-        heading (<code>S₀ … before merge</code>) is the fine segmentation the merge started from.
+        This is where surprises get explained. Three translucent overlapping circles collapse into a handful of opaque
+        macro-regions — the overlap blends were merged away at the segmentation step — which is why the overlaps don't
+        appear in the final trace. The region count in the heading (<code>S₀ … before merge</code>) is the fine
+        segmentation the merge started from.
       </p>
       <p className="max-w-[96ch]">
-        The last two panels are the final traces from the other two engines, for reference — the app
-        itself defaults to the planar engine.
+        The last two panels are the final traces from the other two engines, for reference — the app itself defaults to
+        the planar engine.
       </p>
     </>
   )

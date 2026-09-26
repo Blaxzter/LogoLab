@@ -1,60 +1,46 @@
-// Junction RE-SEAT for the planar tracer — a planarBeautify pre-pass that moves a
-// degree-3 junction vertex to the intersection of the two strongest fitted
-// primitives (line / circle) arriving at it, when the vertex sits close to BOTH
-// primitives yet their intersection lies measurably away ALONG them.
+// Junction re-seat for the planar tracer: a planarBeautify pre-pass that moves a
+// degree-3 junction to the intersection of the two strongest fitted primitives
+// (line / circle) arriving at it, when the vertex lies close to both yet their
+// intersection lies measurably away along them.
 //
-// The failure it corrects (docs/vectorization-benchmarks.md §10.4): where an
-// occluding straight edge crosses a disc near-tangentially (gradient-flat's
-// triangle over the white circle — 12° incidence), the three-colour meeting point
-// in the LABEL MAP slides several px along the shared tangent: the colour needle
-// between the two boundaries is sub-pixel thin near the true crossing, so AA +
-// quantization hand its pixels to a neighbour class and the lattice junction
-// lands where the needle first becomes wide enough to survive — measured 8.4px
-// past the authored intersection at 512px. Every downstream fit honours the
-// pinned vertex, so the straight edge's LAST segment bends off its own line to
-// reach it ("the line gets pulled into the circle") and the chord between the
-// junctions fits neither the line nor the arc. No lattice-local scheme can find
-// the true point (the evidence is destroyed in the raster); the fitted primitives
-// of the long incident boundaries still hold it — their intersection restores the
-// junction to sub-pixel accuracy, and the mangled terminal caps are re-emitted
-// from the primitives themselves.
+// Where a straight edge crosses a disc near-tangentially, the sliver of colour
+// between the two boundaries is sub-pixel thin near the true crossing, so
+// anti-aliasing and quantization give its pixels to a neighbouring class and the
+// label-map junction lands several pixels along the tangent, where the sliver first
+// becomes wide enough to survive. Every downstream fit honours the pinned vertex,
+// so the line's last segment bends off to reach it. The raster no longer holds the
+// true point, but the fitted primitives of the long incident boundaries do: their
+// intersection restores the junction, and the mangled terminal caps are re-emitted
+// from the primitives.
 //
-// This is NOT planarJunction.subpixelJunctions (refineJunctions): that pass
-// least-squares the RAW lattice arms within ±10px of the corner — exactly the
-// mangled evidence — and caps its move at 2px, so it cannot see this defect. It
-// re-seats EVERY junction (measured a corpus-wide tradeoff, off by default);
-// this pass fires only where a slid junction is positively identified: the
-// vertex within NEAR_TOL of both primitives, the correction ≥ MIN_MOVE (generic
-// sub-pixel lattice noise stays untouched), transversal incidence at the target.
+// Unlike planarJunction's sub-pixel refinement (which fits the raw lattice arms near
+// the corner, i.e. the mangled evidence, and moves every junction a little), this
+// pass fires only on a positively identified slide: vertex within NEAR_TOL of both
+// primitives, correction ≥ MIN_MOVE, transversal incidence at the target.
 //
-// Pure & deterministic: fixed vertex/edge order, no PRNG. Mutates `edges` /
-// `vertices` in place (planarBeautify hands it the already-cloned copies).
+// Deterministic (fixed vertex/edge order). Mutates `edges` / `vertices` in place;
+// planarBeautify passes it cloned copies.
 
 import type { EdgeRef, PathNode, SharedEdge, Vec, Vertex } from '../path/types'
 import { armLine } from './planarFit.ts'
 import { arcSlice, type Circle, fitCircle, maxRadialDev } from './circleFit.ts'
 import { weldJunctionClusters } from './planarWeld.ts'
 
-/** Vertex must lie within this of BOTH primitives (a slid junction stays near
- *  both boundaries; one that is genuinely far from a primitive is not this
- *  failure mode and must not be "corrected" onto it). */
+/** Vertex must lie within this (px) of both primitives; a junction far from a
+ *  primitive is not a slide and must not be pulled onto it. */
 const NEAR_TOL = 3.0
-/** Hard cap on the correction distance. */
+/** Hard cap on the correction distance (px). */
 const MAX_SLIDE = 12
-/** Corrections below this are generic sub-pixel lattice noise, not a slide —
- *  skipped so ordinary (correct) junctions stay byte-stable. refineJunctions
- *  already measured corpus-wide sub-pixel re-seating as a tradeoff; this pass
- *  only claims the unambiguous failures. */
+/** Corrections below this (px) are ordinary lattice noise, not a slide, and are
+ *  skipped so correct junctions stay untouched. */
 const MIN_MOVE = 1.5
-/** Primitives must cross this transversally at the target (near-tangent
+/** Primitives must cross at least this transversally at the target (near-tangent
  *  intersections are numerically unstable along the shared tangent). */
 const MIN_ANGLE_SIN = Math.sin((5 * Math.PI) / 180)
 /** Arm evidence budget (px along the fitted boundary, from the vertex inward). */
 const ARM_MAX = 110
-/** A terminal segment no longer than this may be a mangled cap: the fit chasing
- *  the needle-annexed pixels into the junction. Its arm may exclude it. (24, not
- *  18: overlap's bottom lens tip put the cap breakpoint 20px out — the slid
- *  vertex then had ONE primitive and could not be corrected.) */
+/** A terminal segment no longer than this (px) may be a mangled cap — the fit
+ *  chasing the misassigned pixels into the junction — and its arm may exclude it. */
 const CAP_MAX = 24
 /** Max perp deviation for a line arm / radial deviation for a circle arm. */
 const LINE_TOL = 0.8
@@ -64,86 +50,52 @@ const CIRC_TOL = 0.9
 const MIN_LINE_ARM = 8
 const MIN_ARC_ARM = 24
 /**
- * THROUGH-PAIR VETO (issue #39, §29). A re-seat is the intersection of two DIFFERENT
- * boundaries, and at a degree-3 junction one of the three arms is the continuation of
- * another: the boundary that passes THROUGH the junction (gradient-flat: the hypotenuse
- * continuing as the chord, turn 0°) while the third arm terminates on it. The pair may
- * therefore not be the two halves of the through-boundary — yet nothing stopped it: on
- * brave-browser's notch×seam junction the seam (the crossing boundary) was refused, and the
- * pass paired the notch's two sides (one boundary with a 24° corner, fitted at 512 as a
- * r≈157 circle and a line) and moved the junction 2.7 px onto their intersection, 2.2 px
- * off the authored crossing where the lattice corner sat 0.5 px off. Scored against the
- * authored crossing over five gallery marks, EVERY ungated estimator pair at that junction
- * lands within 0.6 px except that one — the selector, not the certification, is wrong there
- * (§29 measured the certification alternatives too: holding the arm at an artwork fraction,
- * a residual-based uncertainty gate, demoting circles by their line prefix — each a wash or
- * worse on the reliable cells).
+ * Through-pair veto (degrees). A re-seat target is the intersection of two different
+ * boundaries, but at a degree-3 junction two of the arms may be the halves of one
+ * boundary passing through while the third terminates on it; intersecting those two
+ * halves (e.g. across a slight corner) moves the junction to a meaningless point.
  *
  * The turn between two arms is 180° minus the angle between their away-from-vertex
- * directions: 0° for a boundary continuing straight through, ~168° for the two flanks of a
- * needle. The smallest-turn pair is the through-boundary, and it is vetoed ONLY when the
- * third arm is transversal to both its halves by at least this — at a near-tangent crossing
- * (the pass's own regime, 12° on the driver) all three arms are within ~15° of one line and
- * the smallest turn says nothing, so the veto needs a T, not a needle. 45°: on the reliable
- * cells of the five witness marks (61 junctions at authored crossings ≥ 5°) it keeps every
- * one of HEAD's 15 improving moves and refuses 4 of its 6 moves away; 30° is the same, 60°
- * lets the witness through again.
+ * directions: 0° for a boundary continuing straight through, near 180° for the flanks of
+ * a needle. The smallest-turn pair is taken as the through-boundary and refused as a
+ * re-seat pair, but only when the third arm meets both its halves at least this
+ * transversally — a T, not a needle. At a near-tangent crossing (the case this pass
+ * exists for) all three arms lie close to one line and the smallest turn says nothing.
  */
 const THROUGH_VETO_DEG = 45
 /** Circle-radius sanity range for an arm primitive. */
 const R_MIN = 6
 const R_MAX = 2500
-/** Stop collecting arm segments at a fitted corner turning sharper than this —
- *  the boundary beyond a corner is a DIFFERENT primitive (gradient-flat: the
- *  triangle's top edge must not pollute its hypotenuse's line). */
+/** Stop collecting arm segments at a fitted corner turning sharper than this: the
+ *  boundary beyond a corner is a different primitive. */
 const CORNER_STOP_COS = Math.cos((30 * Math.PI) / 180)
-/** …EXCEPT at the first interior node when the terminal segment is this short:
- *  a ≤8px cap turning ≥30° into a long run IS the mangle (overlap's bottom lens
- *  tip: a 3px cap kinked off the arc — the corner stop starved the arm, so the
- *  cap-skip never had a candidate). A real short terminal (gradient-flat's 24px
- *  hypotenuse piece meeting the top edge at 42°) stays protected by the bound;
- *  and when the bypass does cross a REAL corner, candidate A fails its fit and
- *  candidate B must still pass the NEAR_TOL gate at the vertex. */
+/** The corner stop is bypassed at the first interior node when the terminal segment
+ *  is at most this long (px): a tiny cap kinked into a long run is the mangle itself,
+ *  and stopping there would leave the cap-skip nothing to fit. If the bypass does
+ *  cross a real corner, the full-arm fit fails and the cap-skipped fit must still
+ *  pass NEAR_TOL at the vertex. */
 const CAP_STOP_BYPASS = 8
 /** Samples per cubic segment when flattening an arm. */
 const ARM_SAMPLES = 12
-/** Chord straightening: the two junction line-primitives must be THIS collinear
- *  (angle / mutual offset) to count as one continuing occluder line… */
+/** Chord straightening: the two junction line primitives must be this collinear
+ *  (angle / mutual offset) to count as one continuing occluder line, */
 const CHORD_COLLINEAR_SIN = Math.sin((3 * Math.PI) / 180)
 const CHORD_COLLINEAR_OFF = 1.0
-/** …the edge between them must stay within this of that line (it crosses the
- *  needle-mangled zone, so it is looser than the arm tolerance but bounded), */
+/** the edge between them must stay within this (px) of that line (looser than the
+ *  arm tolerance, since it crosses the mangled zone), */
 const CHORD_TOL = 2.5
 /**
- * …and no longer than the straight evidence that certifies it: the two line arms'
- * fitted lengths (`Prim.conf`) summed, times this. A chord is the claim "the line
- * continues across this gap"; the arms are the observed straight runs on either side,
- * so a gap longer than both of them together is extrapolation past the evidence (two
- * short straight feet either side of a wide, gently curved arch), and 1 is the
- * bound with no free constant — "at most as much straightened span as observed
- * straight span".
- *
- * Was `CHORD_MAX_LEN = 80`, an absolute px number compared against an ARTWORK span
- * (issue #14, the Phase-0 audit's ART list): gradient-flat's authored chord is 32.9px
- * @512 and 131px @2048, so the pass fired at the lab's raster and was dead at the app's
- * own export — measured with chordDiag, 1 straightened @512 and @1024, 0 @2048 (§0.1).
- * Both sides of this bound are spans of art, so it reads the same at every raster. The
- * gallery census (chordDiag --logos, 152 marks × 512/1024/2048) found the absolute cap
- * separating NOTHING: every one of the 29 candidates it stopped had line arms at least
- * as long as the chord, i.e. this bound admits exactly what deleting the cap would, while
- * still refusing the one case a length bound is for. §28 has the numbers.
+ * and the chord may be no longer than this times the two line arms' fitted lengths
+ * (`Prim.conf`) summed. The arms are the observed straight runs either side of the
+ * gap; straightening more span than was observed straight would be extrapolation
+ * (e.g. two short straight feet either side of a gently curved arch). Both sides of
+ * the bound are spans of art, so it behaves the same at every raster size.
  */
 const CHORD_ARM_K = 1
 
 /**
- * Diagnostic out-sink for the chord pass (`chordDiag.ts`, issue #14). The audit measured
- * the old CHORD_MAX_LEN as an ART constant compared against an ARTWORK span, and therefore
- * dead on its own driver case above ~1024 — but nothing in the repo could observe the
- * candidates it rejects, so the claim could not be re-checked without this. One record per
- * candidate edge, with the value each gate saw and which gate stopped it.
- *
- * Same shape and cost as `onReseat` in planarBeautify: undefined in production, so the pass
- * is byte-identical when no observer is attached.
+ * Diagnostic record for the chord pass: one per candidate edge, with the value each
+ * gate saw and which gate stopped it. Output is identical with or without an observer.
  */
 export interface ChordCandidate {
   edgeId: number
@@ -153,29 +105,23 @@ export interface ChordCandidate {
   maxDev: number
   sameLine: boolean
   verdict: 'straightened' | 'too-long' | 'not-collinear' | 'dev-exceeded'
-  /** Arm evidence (fitted px, `Prim.conf`) of the line primitive at each end — the two
-   *  spans of boundary that CERTIFIED the line the chord is asked to continue. */
+  /** Fitted arm length (px, `Prim.conf`) of the line primitive at each end. */
   armA: number
   armB: number
-  /** The deviation PROFILE behind `maxDev`: every sample's distance off the re-seat line
-   *  against its arc distance `s` from the NEARER endpoint. Empty unless `sameLine` — the
-   *  profile is only computed where the length veto is the next gate. */
+  /** Each sample's distance off the re-seat line against its arc distance `s` from the
+   *  nearer endpoint. Empty unless `sameLine`. */
   profile: { s: number; dev: number }[]
 }
 export type ChordObserver = (c: ChordCandidate) => void
 
 /**
- * Diagnostic out-sink for the re-seat itself (`reseatDiag.ts`, issue #14): one record per
- * degree-3 interior junction the pass weighed — each incident arm's primitive verdict (and
- * why it was refused), the pair that won, and how far the vertex moved. The audit classed
- * `ARM_MAX` (the arm evidence budget, `Prim.conf`, the pair-ranking key) and `R_MIN` (the
- * circle-radius floor) as ART constants; whether either changes a verdict on the SAME art
- * at another raster is exactly what this makes observable. Undefined in production — the
- * pass computes nothing extra without it.
+ * Diagnostic record for the re-seat: one per degree-3 interior junction weighed — each
+ * incident arm's primitive verdict (and why it was refused), the winning pair, and how far
+ * the vertex moved. Nothing extra is computed without an observer.
  */
 export interface ReseatVerdict {
   vertex: number
-  /** The lattice position BEFORE any move. */
+  /** The lattice position before any move. */
   x: number
   y: number
   arms: {
@@ -187,25 +133,22 @@ export interface ReseatVerdict {
     skipCap: boolean
     /** Empty for an accepted primitive; the gate(s) that refused it otherwise. */
     why: string
-    /** Length of the arm's TERMINAL fitted segment (px) — the value `CAP_MAX` and
-     *  `CAP_STOP_BYPASS` compare against (audit UNRESOLVED 10). */
+    /** Length (px) of the arm's terminal fitted segment, the value `CAP_MAX` and
+     *  `CAP_STOP_BYPASS` compare against. */
     segLen0: number
     /**
-     * Every estimator, GATES IGNORED (issue #39, §28.1's pattern: measure the estimators
-     * before designing the selector): the line and the circle fitted to the full collected
-     * arm and to the arm with its terminal segment excluded, each with the deviation the
-     * tolerance gate would have read. `null` when the fit itself is degenerate. Only
-     * computed with an observer attached.
+     * Every estimator with gates ignored: line and circle fitted to the full arm and to
+     * the arm without its terminal segment, each with the deviation the tolerance gate
+     * would read. Null when the fit is degenerate.
      */
     alt: ReseatArmAlt | null
   }[]
   /** Arm indices of the winning pair (null when no pair qualified). */
   pair: [number, number] | null
-  /** The pair the §29 through-veto refused at this junction (null when none was). */
+  /** The pair the through-pair veto refused at this junction (null when none was). */
   vetoed: [number, number] | null
   /** The pair's intersection — where the vertex goes (or would go, below MIN_MOVE); NaN
-   *  with no pair. The slid lattice corner moves with the raster, this point does not,
-   *  so it is what pairs the same junction across rasters. */
+   *  with no pair. Unlike the lattice corner it is stable across raster sizes. */
   tx: number
   ty: number
   /** Distance the vertex moved (0 when it was not re-seated). */
@@ -221,16 +164,17 @@ export interface ReseatArmAlt {
   line: { prim: ReseatPrim; dev: number } | null
   circle: { prim: ReseatPrim; dev: number } | null
   /** The same two fits with the terminal segment excluded (null when the arm has one
-   *  segment) — what the cap-skip branch would see, whatever `CAP_MAX` says. */
-  noCap: { len: number; line: { prim: ReseatPrim; dev: number } | null; circle: { prim: ReseatPrim; dev: number } | null } | null
+   *  segment) — what the cap-skip branch would see, regardless of `CAP_MAX`. */
+  noCap: {
+    len: number
+    line: { prim: ReseatPrim; dev: number } | null
+    circle: { prim: ReseatPrim; dev: number } | null
+  } | null
 }
 
 /**
- * DIAGNOSTIC overrides for the arm-certification constants (issue #39 — the audit's
- * UNRESOLVED 9–11: hold the arm at a fixed ARTWORK fraction instead of `ARM_MAX` 110 px and
- * re-count which arms certify as a line and which as a circle at each raster). Undefined
- * in production; every field defaults to the module constant, so the pass is byte-identical
- * without it. This is a counterfactual dial for `reseatDiag`, not a product option.
+ * Diagnostic overrides for the arm-certification constants. Each field defaults to the
+ * module constant of the same name; not a product option.
  */
 export interface ReseatTune {
   armMax?: number
@@ -238,7 +182,7 @@ export interface ReseatTune {
   circTol?: number
   minArcArm?: number
   capMax?: number
-  /** `THROUGH_VETO_DEG`; 0 = no through-pair veto (the pre-§29 pass). */
+  /** `THROUGH_VETO_DEG`; 0 disables the through-pair veto. */
   throughVeto?: number
 }
 
@@ -294,7 +238,7 @@ function polyLen(pts: Vec[]): number {
 }
 
 interface Arm {
-  /** Per fitted segment, flattened points ordered FROM the vertex INWARD
+  /** Per fitted segment, flattened points ordered from the vertex inward
    *  (segPts[0][0] is the vertex-side anchor). */
   segPts: Vec[][]
   segLen: number[]
@@ -359,7 +303,7 @@ function lineMaxDev(pts: Vec[], a: Vec, d: Vec): number {
 }
 
 /** Fit `pts` (total length `len`) to a line, else a circle. `why` names the gate(s) that
- *  refused it (empty on success) — read only by the diagnostic observer. */
+ *  refused it (empty on success), for the diagnostic observer. */
 function evalArm(pts: Vec[], len: number, cfg: Cfg): { prim: Prim | null; why: string } {
   if (pts.length < 2) return { prim: null, why: 'empty' }
   let why: string
@@ -383,22 +327,27 @@ function evalArm(pts: Vec[], len: number, cfg: Cfg): { prim: Prim | null; why: s
   return { prim: null, why }
 }
 
-/** Both fits of an arm with every gate ignored — the diagnostic's estimator table. */
+/** Both fits of an arm with every gate ignored (diagnostics only). */
 function altFits(pts: Vec[], len: number): { line: ReseatArmAlt['line']; circle: ReseatArmAlt['circle'] } {
   if (pts.length < 2) return { line: null, circle: null }
   const l = armLine(pts)
-  const line = { prim: { kind: 'line' as const, a: l.c, d: l.d, conf: len, skipCap: false }, dev: lineMaxDev(pts, l.c, l.d) }
+  const line = {
+    prim: { kind: 'line' as const, a: l.c, d: l.d, conf: len, skipCap: false },
+    dev: lineMaxDev(pts, l.c, l.d),
+  }
   const c = fitCircle(pts)
-  const circle = c ? { prim: { kind: 'circle' as const, c, conf: len, skipCap: false }, dev: maxRadialDev(pts, c) } : null
+  const circle = c
+    ? { prim: { kind: 'circle' as const, c, conf: len, skipCap: false }, dev: maxRadialDev(pts, c) }
+    : null
   return { line, circle }
 }
 
 /**
- * Terminal primitive at one edge end. Preference order: the arm INCLUDING the
- * terminal segment (the boundary is already primitive-clean up to the vertex);
- * else, when the terminal segment is short enough to be a mangled cap, the arm
- * EXCLUDING it (the neighbouring run carries the true primitive). `len` is the
- * collected arm length either way; `why` the refusal(s) when `prim` is null.
+ * Terminal primitive at one edge end. Preference order: the arm including the
+ * terminal segment; else, when the terminal segment is short enough to be a
+ * mangled cap, the arm excluding it. `len` is the collected arm length either
+ * way; `why` the refusal(s) when `prim` is null; `dir` the arm's overall
+ * away-from-vertex direction (read by the through-pair veto).
  */
 function endPrimitive(
   e: SharedEdge,
@@ -411,8 +360,8 @@ function endPrimitive(
   const all: Vec[] = []
   for (const seg of arm.segPts) for (const p of seg) all.push(p)
   const total = arm.segLen.reduce((a, b) => a + b, 0)
-  // Away-from-vertex direction of the arm as a whole: vertex → centroid of its samples (the
-  // through-pair veto's turn is read on this; certified or not, every arm has one).
+  // Away-from-vertex direction of the whole arm: vertex → centroid of its samples.
+  // Defined whether or not the arm certifies a primitive.
   let cx = 0
   let cy = 0
   for (const p of all) {
@@ -510,41 +459,30 @@ function intersect(p1: Prim, p2: Prim): Vec[] {
 }
 
 /**
- * Re-map a CURVED terminal segment onto a moved endpoint, keeping its own
- * curvature (§13). The un-paired third edge at a re-seated junction is
- * anchor-shifted, and a rigid shift keeps handles sized for the OLD span: when
- * the correction shortens the segment, the cubic balloons outward by the
- * leftover handle length (bg-ramp-twin: a 41° rim cap whose two ends were
- * re-seated 7.5px and 5.2px inward bulged 3.26px past its own circle — the
- * "beak" on a disc that should be round).
+ * Re-map a curved terminal segment onto a moved endpoint `H`, keeping its
+ * curvature. A rigid shift keeps handles sized for the old span, so when the
+ * correction shortens the segment the cubic bulges outward by the leftover
+ * handle length.
  *
  * The control polygon is carried by the similarity that maps the old endpoint
- * onto `H` about the inner anchor, EXCEPT that the component perpendicular to
+ * onto `H` about the inner anchor, except that the component perpendicular to
  * the chord scales by k² rather than k: a circular arc's sagitta goes as
  * chord²/radius, so a pure similarity would inflate the radius as the chord
- * shrinks — it preserves the shape when what must be preserved is the CURVE the
- * boundary is a piece of. Exact for a straight segment (perp component 0) and
- * for a circular arc.
+ * shrinks. Exact for a straight segment and for a circular arc.
  *
- * ONLY the SHRINKING case is corrected (k < 1). That is the defect: leftover
- * handle length the shortened span no longer supports, bulging outward, visible
- * and gate-poisoning. A LENGTHENED span leaves the handles too short instead —
- * the segment flattens toward its chord, the conservative direction, and the
- * near-straight fits depend on it: `hairlines`' diagonal crosses a bar in a 9.9px
- * edge whose fit carries a sub-pixel wobble, and scaling that by k² put a visible
- * S-kink in a straight bar (it also stopped 1b from straightening the edge at all,
- * so the kink survived to the output). Growth keeps the plain shift, unchanged.
- *
- * `k` is floored for the perpendicular term so a near-collapsed span does not
- * quite flatten the segment to its chord.
+ * Only shrinking (k < 1) is corrected. A lengthened span leaves the handles too
+ * short, flattening the segment toward its chord — the conservative error — while
+ * scaling a near-straight fit's wobble by k² can turn it into a visible S-kink.
+ * Returns false when the caller should apply the plain shift instead.
  */
+/** Floor on `k` for the perpendicular term, so a near-collapsed span does not flatten
+ *  the segment entirely to its chord. */
 const RESHAPE_K_MIN = 0.25
 
 function reshapeTerminalTo(T: PathNode, inner: PathNode, atEnd: boolean, H: Vec): boolean {
   const hT = atEnd ? T.hIn : T.hOut
   const hI = atEnd ? inner.hOut : inner.hIn
-  // A straight terminal segment is already exact under a plain shift — leave it
-  // (and every edge made of straight runs) byte-identical.
+  // A straight terminal segment is already exact under a plain shift.
   if (!hT && !hI) return false
   const ux = T.x - inner.x
   const uy = T.y - inner.y
@@ -554,7 +492,7 @@ function reshapeTerminalTo(T: PathNode, inner: PathNode, atEnd: boolean, H: Vec)
   const L1 = Math.hypot(vx, vy)
   if (L0 < 1e-6 || L1 < 1e-6) return false
   const k = L1 / L0
-  if (k >= 1) return false // growth: the plain shift's under-bulge is the safe error
+  if (k >= 1) return false // growth: the plain shift's flattening is the safe error
   const kPerp = k * Math.max(RESHAPE_K_MIN, k)
   // Orthonormal frames on the old and new chords (both rooted at `inner`).
   const oax = ux / L0
@@ -593,15 +531,12 @@ function shiftNodeTo(n: PathNode, x: number, y: number): void {
 }
 
 /**
- * Sweep-side hint for a TERMINAL arc re-emit. The terminal segment is junction-
- * local — it can never lap the fitted circle — but on a mangled cap the sampled
- * midpoint can land on the wrong angular side of a tiny from→to span (the cap
- * points AWAY from the corrected vertex), and arcSlice would honour that as a
- * near-full-circle sweep: a ghost disc ballooning out of a sliver edge (a 5.9px
- * cap on an r≈81 arm re-emitted as a 356° arc — soft-alpha logo art, §10.4b).
- * When the hinted sweep exceeds π the hint IS the mangle — replace it with the
- * minor arc's own midpoint (the chord midpoint projected radially onto the
- * circle). from/to antipodal never reaches the projection: both sweeps are π.
+ * Sweep-side hint for a terminal arc re-emit. A terminal segment is junction-local
+ * and can never lap the fitted circle, but on a mangled cap the sampled midpoint can
+ * land on the wrong side of a tiny from→to span, and arcSlice would honour it as a
+ * near-full-circle sweep. When the hinted sweep exceeds π, the hint is replaced by
+ * the minor arc's midpoint (the chord midpoint projected radially onto the circle).
+ * Antipodal from/to never reaches the projection: both sweeps are π.
  */
 function junctionLocalMid(c: Circle, from: Vec, to: Vec, mid: Vec): Vec {
   const TWO_PI = Math.PI * 2
@@ -634,8 +569,8 @@ function terminalMid(e: SharedEdge, atEnd: boolean): Vec {
 /**
  * Re-anchor one edge end on the corrected vertex position `H`.
  *  • pair member, line arm: the terminal anchor moves along its own line; a
- *    mangled cap (skipCap) is removed entirely — its breakpoint node is dropped
- *    and the straight run extends to `H` (the bend was the defect).
+ *    mangled cap (skipCap) is removed — its breakpoint node is dropped and the
+ *    straight run extends to `H`.
  *  • pair member, circle arm: the terminal segment re-emits as an arc slice of
  *    the fitted circle into `H`, so the boundary keeps the circle's tangent.
  *  • third edge (no primitive used): the anchor moves to `H`; a curved terminal
@@ -648,10 +583,8 @@ function applyEnd(end: End, H: Vec, prim: Prim | null): void {
   let m = nodes.length
   if (m < 2) return
   if (!prim) {
-    // No primitive of its own in the winning pair: the anchor moves, and a CURVED
-    // terminal segment is re-mapped onto it (a rigid shift would leave it holding
-    // handles sized for the old span — the bulging rim cap of §13). A straight
-    // one takes the plain shift, byte-identically.
+    // Not in the winning pair: the anchor moves; a curved terminal segment is
+    // re-mapped curvature-preserving, a straight one takes the plain shift.
     const T = atEnd ? nodes[m - 1] : nodes[0]
     if (!reshapeTerminalTo(T, atEnd ? nodes[m - 2] : nodes[1], atEnd, H)) shiftNodeTo(T, H.x, H.y)
     return
@@ -667,7 +600,7 @@ function applyEnd(end: End, H: Vec, prim: Prim | null): void {
     T.x = H.x
     T.y = H.y
     T.kind = 'corner'
-    // The terminal segment IS (part of) the line — keep it exactly straight.
+    // The terminal segment is part of the line; keep it exactly straight.
     if (atEnd) {
       T.hIn = null
       inner.hOut = null
@@ -712,20 +645,14 @@ function applyEnd(end: End, H: Vec, prim: Prim | null): void {
  * length.
  *
  * Returns:
- *  • `chords` — ids of edges straightened as occluder CHORDS: an edge whose two
- *    endpoints were both re-seated against the SAME line primitive is that line
- *    continuing through the crossing (gradient-flat: the triangle hypotenuse
- *    occluding the disc — the white|dark boundary between the junctions IS the
- *    line, sagitta-close to the disc's arc but not on it). Its fit crossed the
- *    needle-mangled zone, so it is re-emitted as the straight chord. The caller
- *    must keep the co-circular loop snap (§1d) OFF any loop containing one: a
- *    disc cut by a chord is a "D", and absorbing the chord into the circle
- *    re-invents the occluded sliver the art paints on top.
- *  • `moved` — ids of the vertices the pass re-seated, the evidence key for the
- *    converged-pair weld (weldConvergedJunctions): a rasterized degree-4
- *    crossing splits into two degree-3 junctions + a micro-edge, and when the
- *    re-seat drives both (or one) onto the true crossing the pair should fuse
- *    into ONE vertex — which needs the region loops, so it runs in the caller.
+ *  • `chords` — ids of edges straightened as occluder chords: an edge whose two
+ *    endpoints were both re-seated against the same line primitive is that line
+ *    continuing through the crossing (e.g. a straight edge occluding a disc). Its
+ *    fit crossed the mangled zone, so it is re-emitted as the straight chord. The
+ *    caller must keep the co-circular snap off any loop containing one: a disc cut
+ *    by a chord is a "D", and absorbing the chord into the circle would be wrong.
+ *  • `moved` — ids of the re-seated vertices, the evidence key for
+ *    weldConvergedJunctions (which needs the region loops, so runs in the caller).
  */
 export function reseatJunctions(
   edges: SharedEdge[],
@@ -768,14 +695,29 @@ export function reseatJunctions(
     if (!ends || ends.length !== 3) continue
     const at = { x: v.x, y: v.y }
     if (width != null && height != null && (v.x <= 1 || v.y <= 1 || v.x >= width - 1 || v.y >= height - 1)) {
-      onVerdict?.({ vertex: v.id, ...at, arms: [], pair: null, vetoed: null, tx: NaN, ty: NaN, move: 0, reason: 'border' })
+      onVerdict?.({
+        vertex: v.id,
+        ...at,
+        arms: [],
+        pair: null,
+        vetoed: null,
+        tx: NaN,
+        ty: NaN,
+        move: 0,
+        reason: 'border',
+      })
       continue
     }
 
     // Fresh primitives per vertex (an earlier re-seat may have touched an edge).
     const armV = ends.map((end) => endPrimitive(end.e, end.atEnd, cfg, onVerdict != null))
     const prims = armV.map((a) => a.prim)
-    const verdict = (pair: [number, number] | null, H: Vec | null, move: number, reason: ReseatVerdict['reason']): void =>
+    const verdict = (
+      pair: [number, number] | null,
+      H: Vec | null,
+      move: number,
+      reason: ReseatVerdict['reason'],
+    ): void =>
       onVerdict?.({
         vertex: v.id,
         ...at,
@@ -796,8 +738,8 @@ export function reseatJunctions(
         reason,
       })
 
-    // §29 — the through-boundary: the smallest-turn arm pair, vetoed as a re-seat pair when
-    // the third arm meets both its halves transversally (see THROUGH_VETO_DEG).
+    // Through-boundary: the smallest-turn arm pair, vetoed as a re-seat pair when the
+    // third arm meets both its halves transversally (see THROUGH_VETO_DEG).
     const dirs = armV.map((a) => a.dir)
     const turn = (i: number, j: number): number => {
       const a = dirs[i]
@@ -896,10 +838,8 @@ export function reseatJunctions(
     const armA = armOf(l1s)
     const armB = armOf(l2s)
     const tooLong = len > CHORD_ARM_K * (armA + armB)
-    // Production short-circuits here. With an observer attached the remaining gates are
-    // evaluated anyway — that is the whole point of the census (what does the length veto
-    // actually reject?) — but the mutation below stays behind the identical condition, so
-    // the pass is byte-identical either way.
+    // Without an observer, stop here. With one, the remaining gates are still evaluated
+    // for the record, but the mutation below is behind the same condition.
     if (tooLong && !onChord) continue
     const sameLine = l1s.some((l1) =>
       l2s.some(
@@ -909,11 +849,20 @@ export function reseatJunctions(
       ),
     )
     if (!sameLine) {
-      onChord?.({ edgeId: e.id, len, maxDev: NaN, sameLine: false, verdict: tooLong ? 'too-long' : 'not-collinear', armA, armB, profile: [] })
+      onChord?.({
+        edgeId: e.id,
+        len,
+        maxDev: NaN,
+        sameLine: false,
+        verdict: tooLong ? 'too-long' : 'not-collinear',
+        armA,
+        armB,
+        profile: [],
+      })
       continue
     }
-    // The edge's own fit must sit near the chord (it crossed the mangled zone —
-    // a genuinely different boundary between the two junctions must survive).
+    // The edge's own fit must sit near the chord, so a genuinely different boundary
+    // between the two junctions survives.
     const line = l1s[0]
     let maxDev = 0
     // Observer only: each sample's deviation against its arc position along the edge.
@@ -955,18 +904,13 @@ export function reseatJunctions(
 }
 
 /**
- * Fuse junction pairs the re-seat CONVERGED into one vertex. A rasterized
- * degree-4 crossing (two boundaries crossing at a point — overlap's lens tips)
- * splits into two degree-3 junctions joined by a 1–4px micro-edge; when the
- * re-seat drives them onto the true crossing (both, or one with the other
- * already sub-pixel-close) the pair is one authored point and the micro-edge is
- * pure rasterization. Contract it: `weldJunctionClusters` does the graph work
- * (fuse to centroid, re-anchor incident edges, excise the edge from every
- * loop) — but gated here on RE-SEAT EVIDENCE, not on bare shortness: candidates
- * are micro-edges (≤ RESEAT_WELD_LEN fitted px) with a re-seated endpoint. The
- * blanket ≤3px weld was measured a corpus regression (a micro-edge is sometimes
- * a REAL thin feature — beverage-box-flat, §9.3); an untouched micro-edge stays.
- * Mutates topology + loops in place (index.ts owns both at the call site).
+ * Fuse junction pairs the re-seat converged into one vertex. A rasterized degree-4
+ * crossing splits into two degree-3 junctions joined by a micro-edge; once the
+ * re-seat has driven them onto the true crossing, the micro-edge is pure
+ * rasterization and is contracted (`weldJunctionClusters` does the graph work).
+ * Gated on re-seat evidence rather than shortness alone: only micro-edges
+ * (≤ RESEAT_WELD_LEN fitted px) with a re-seated endpoint qualify, because an
+ * untouched micro-edge can be a real thin feature. Mutates topology and loops in place.
  */
 export function weldConvergedJunctions(
   vertices: Vertex[],
@@ -977,13 +921,18 @@ export function weldConvergedJunctions(
   moved: ReadonlySet<number>,
 ): void {
   if (moved.size === 0) return
-  weldJunctionClusters(vertices, edges, loopsByLabel, width, height, RESEAT_WELD_LEN, (e) =>
-    (e.startVertex != null && moved.has(e.startVertex)) || (e.endVertex != null && moved.has(e.endVertex)),
+  weldJunctionClusters(
+    vertices,
+    edges,
+    loopsByLabel,
+    width,
+    height,
+    RESEAT_WELD_LEN,
+    (e) => (e.startVertex != null && moved.has(e.startVertex)) || (e.endVertex != null && moved.has(e.endVertex)),
   )
 }
 
-/** Max fitted length of a micro-edge the converged-pair weld may contract. Above
- *  the re-seat's own convergence radius (a one-sided pair: one endpoint moved
- *  onto the crossing, the other already within MIN_MOVE of it — up to ~2px
- *  apart), far below any real thin feature the blanket weld tripped on. */
+/** Max fitted length (px) of a micro-edge the converged-pair weld may contract. Covers
+ *  a one-sided pair (one endpoint moved onto the crossing, the other already within
+ *  MIN_MOVE of it) while staying below real thin features. */
 const RESEAT_WELD_LEN = 2.0

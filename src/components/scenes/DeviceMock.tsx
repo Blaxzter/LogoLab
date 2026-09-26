@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ImageUp, Maximize2, RotateCcw, Smartphone } from 'lucide-react'
-import { LogoMark } from '../LogoMark'
+import { LogoMark } from './LogoMark'
 import { PopoverSlider } from '../ui/PopoverSlider'
 import { Tooltip } from '../ui/Tooltip'
-import { useStore } from '../../store'
-import type { DeviceId } from '../../store'
+import { useStore } from '../../state/store'
+import type { DeviceId } from '../../state/store'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { loadImageElement } from '../../lib/image'
 
@@ -86,10 +86,7 @@ async function processFrame(src: string): Promise<ProcessedFrame> {
   const cy = Math.floor(H / 2)
   const at = (x: number, y: number) => (y * W + x) * 4
   const centerOpaqueDark =
-    d[at(cx, cy) + 3] > 180 &&
-    d[at(cx, cy)] < 45 &&
-    d[at(cx, cy) + 1] < 45 &&
-    d[at(cx, cy) + 2] < 45
+    d[at(cx, cy) + 3] > 180 && d[at(cx, cy)] < 45 && d[at(cx, cy) + 1] < 45 && d[at(cx, cy) + 2] < 45
 
   // The screen is either the opaque-black region (typical) or a transparent hole.
   const isScreen = centerOpaqueDark
@@ -232,7 +229,7 @@ export function DeviceMock({ id }: { id: DeviceId }) {
         style={{ background: 'linear-gradient(160deg,#f3f4f7,#e8eaef)', minHeight: 360 }}
       >
         <div className="relative" style={{ height: 420, maxWidth: '100%', aspectRatio: String(aspect) }}>
-          {/* Screenshot screen (BEHIND the frame) */}
+          {/* Screenshot screen (behind the frame) */}
           <div
             ref={screenRef}
             className="absolute select-none overflow-hidden"
@@ -298,7 +295,7 @@ export function DeviceMock({ id }: { id: DeviceId }) {
             )}
           </div>
 
-          {/* Device frame ON TOP (screen knocked out, notch/bezel kept) */}
+          {/* Device frame on top (screen knocked out, notch/bezel kept) */}
           {useFrame && frame && (
             <img
               src={frame.src}

@@ -5,14 +5,14 @@
 // the whole brand-logo set (most marks use strokes/filters/clips, so their visible boundary isn't
 // their path geometry and svgGround refuses to score them) and anything you drop in.
 //
-// The logo SVGs load via import.meta.glob (see ../../devtest/logoCorpus): the corpus is full after
+// The logo SVGs load via import.meta.glob (see ../../bench/logoCorpus): the corpus is full after
 // `npm run fetch:logos` and shows an empty-state hint in any build that didn't fetch them.
 
 import { useMemo, useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { EditableDoc } from '../../lib/path/types'
-import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE } from '../../devtest/logoCorpus'
+import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE } from '../../../bench/logoCorpus'
 import { LabPage, LabCheck, LabField } from './LabPage'
 import { Tooltip } from '../ui/Tooltip'
 import { Panel, RawArt } from './Panel'
@@ -75,8 +75,7 @@ export default function GalleryLab() {
   const search = useLabSearch(() => setUi({ page: 0 }))
 
   const all = useMemo(
-    (): GalleryCase[] =>
-      LOGO_CORPUS.map((c) => ({ key: c.file, title: c.company, note: c.notes, svgText: c.svg })),
+    (): GalleryCase[] => LOGO_CORPUS.map((c) => ({ key: c.file, title: c.company, note: c.notes, svgText: c.svg })),
     [],
   )
   // Filtered BEFORE paging, so `airbnb` finds the mark wherever in the 150 it sits instead of
@@ -84,10 +83,7 @@ export default function GalleryLab() {
   // are cases like any other, and an unfiltered one riding above an empty result reads as a
   // broken search.
   const logos = useMemo(() => all.filter((c) => search.match(c.title, c.note, c.key)), [all, search.match])
-  const shownDropped = useMemo(
-    () => dropped.filter((c) => search.match(c.title, c.note)),
-    [dropped, search.match],
-  )
+  const shownDropped = useMemo(() => dropped.filter((c) => search.match(c.title, c.note)), [dropped, search.match])
   const pages = Math.max(1, Math.ceil(logos.length / PAGE_SIZE))
   const page = Math.min(ui.page, pages - 1)
   // Dropped images always ride along at the top — you dropped them to look at them now, not to
@@ -220,9 +216,9 @@ export default function GalleryLab() {
         {empty && (
           <div className="px-4 py-8">
             <NoteBox tone="warn">
-              The logo corpus isn't present in this build. It's a private, git-ignored set of brand
-              marks (not redistributed). Run <code>npm run fetch:logos</code> to download it into{' '}
-              <code>examples/logos/</code>, then reload — or just drop an image here.
+              The logo corpus isn't present in this build. It's a private, git-ignored set of brand marks (not
+              redistributed). Run <code>npm run fetch:logos</code> to download it into <code>examples/logos/</code>,
+              then reload — or just drop an image here.
             </NoteBox>
           </div>
         )}
@@ -260,22 +256,21 @@ function GalleryAbout() {
   return (
     <>
       <p className="mb-2 max-w-[96ch]">
-        A looking-glass, not a gate. Every source is rasterized at {MAX_DIM}px on white — the exact
-        input the tracer ingests — and traced with the shipping flat planar config. Nothing here is
-        scored, because nothing here can be: this is the art the <b>Workbench</b> has to refuse.
+        A looking-glass, not a gate. Every source is rasterized at {MAX_DIM}px on white — the exact input the tracer
+        ingests — and traced with the shipping flat planar config. Nothing here is scored, because nothing here can be:
+        this is the art the <b>Workbench</b> has to refuse.
       </p>
       <p className="mb-2 max-w-[96ch]">
-        The <b>logo corpus</b> is ~150 real, authored brand marks (svgl.app, vectorlogo.zone,
-        Wikimedia Commons), spanning simple flat marks to gradient- and stroke-heavy artwork. Most of
-        them can't be ground truth: a stroked, filtered, clipped or masked mark renders a silhouette
-        that isn't the geometry its paths describe, so scoring it would measure the trace against
-        something the renderer never drew. The subset that <em>can</em> be scored is in the{' '}
-        <b>Workbench</b> under <b>Logo corpus (scorable)</b>; all of them are here.
+        The <b>logo corpus</b> is ~150 real, authored brand marks (svgl.app, vectorlogo.zone, Wikimedia Commons),
+        spanning simple flat marks to gradient- and stroke-heavy artwork. Most of them can't be ground truth: a stroked,
+        filtered, clipped or masked mark renders a silhouette that isn't the geometry its paths describe, so scoring it
+        would measure the trace against something the renderer never drew. The subset that <em>can</em> be scored is in
+        the <b>Workbench</b> under <b>Logo corpus (scorable)</b>; all of them are here.
       </p>
       <p className="max-w-[96ch]">
-        The .svg files are <b>git-ignored</b> and never deployed; run <code>npm run fetch:logos</code>{' '}
-        to rehydrate them. Drop an image anywhere (or use <b>Add image</b>) to run your own art
-        through the same flat trace — dropped images last for the session.
+        The .svg files are <b>git-ignored</b> and never deployed; run <code>npm run fetch:logos</code> to rehydrate
+        them. Drop an image anywhere (or use <b>Add image</b>) to run your own art through the same flat trace — dropped
+        images last for the session.
       </p>
     </>
   )

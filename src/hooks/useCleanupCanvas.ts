@@ -1,70 +1,52 @@
-// The Cleanup canvas hot path, extracted from CleanupPanel verbatim and given a
-// crisp, typed surface for the workspace shell (CleanupStudio/CleanupControls)
-// to build against. Everything mutable mid-gesture lives in refs (no re-render);
-// the returned state is the reactive slice the UI binds to.
+// The Cleanup canvas: pixel buffer, tools, history and actions behind
+// CleanupStudio/CleanupControls. Everything mutable mid-gesture lives in refs (no
+// re-render); the returned state is the reactive slice the UI binds to.
 //
-// Keeps the bespoke 30-snapshot history (full-ImageData snapshots need the cap —
-// we deliberately do NOT migrate to useHistory) and `equalsPristine` divergence
-// check. New vs. the old panel: a wider tool union (guided keep/remove markers),
-// one-shot edge-refine / trim actions, a baked matte for Apply/Download, and a
-// real-device AI status with a real error message on failure.
+// History is its own capped stack of full ImageData snapshots rather than
+// useHistory, because each entry is a whole buffer and needs the cap.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLogo, useStore } from '../store'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLogo, useStore } from '../state/store'
 import { canvasToBlob, getImageData } from '../lib/image'
 import {
-  alphaBounds,
   autoRemove,
   brushStamp,
   brushStroke,
   cloneImageData,
-  closeSeams,
-  colorAt,
-  despeckle,
   compositeOver,
   cropPad,
   defringe,
-  featherAlpha,
-  floodRemove,
-  floodRestore,
-  growMatte,
-  recolor,
-  removeColor,
   sampleCornerColor,
-  shrinkMatte,
   type BrushMode,
   type RemoveOptions,
-} from '../lib/bgRemove'
-import { aiRemoveBackground } from '../lib/aiRemove'
-import { downloadBlob } from '../lib/download'
+} from '../lib/cleanup/bgRemove'
+import { aiRemoveBackground } from '../lib/cleanup/aiRemove'
+import {
+  aiProgressLabel,
+  applyClickTool,
+  clickToolStatus,
+  edgeOps,
+  finishRemoval,
+  imageDataEqual,
+  imageDataToCanvas,
+  isFormField,
+  trimBounds,
+  type CleanupTool,
+  type EdgeOp,
+  type KeepRemoveMarker,
+} from '../lib/cleanup/cleanupOps'
+import { downloadBlob } from '../lib/export/download'
 import type { PanZoom } from './usePanZoom'
 import { usePinchZoom } from './usePinchZoom'
+import { useUndoShortcuts } from './useUndoShortcuts'
 
-// Longest-side cap for the editable working buffer. 2048 because AI logo tools
-// (e.g. Gemini Pro) emit ~2K by default — clamping lower would throw away half
-// the source resolution before any edit. Manual tools (flood/brush/color/defringe)
-// and the RGB pixels run at full buffer res; the AI alpha mask is still computed
-// at the model's 1024 and upscaled to fit (see aiRemove.ts).
+export type { CleanupTool, KeepRemoveMarker }
+
+// Longest-side cap for the working buffer. AI logo generators commonly emit ~2K,
+// so a lower cap would discard source resolution before any edit. The AI alpha
+// mask is computed at the model's 1024 and upscaled to fit (see aiRemove.ts).
 const MAX_DIM = 2048
 const HISTORY_LIMIT = 30
-
-/**
- * The active painting/marker tool.
- * - 'magic'   — contiguous flood-remove from the clicked pixel.
- * - 'color'   — global color-key remove of the clicked color.
- * - 'erase'   — soft brush that rubs out alpha (drag).
- * - 'restore' — soft brush that paints the pristine pixels back (drag).
- * - 'keep'    — guided marker: flood-RESTORE the clicked region (one history step).
- * - 'remove'  — guided marker: flood-REMOVE the clicked region (one history step).
- */
-export type CleanupTool = 'magic' | 'color' | 'erase' | 'restore' | 'keep' | 'remove'
-
-/**
- * A guided keep/remove pin, stored normalized (0–1) to the image so it survives
- * a crop. Lives in the STUDIO (not persisted, not in undo) — the union is exported
- * here because it is the hook's vocabulary; the pin list is the studio's state.
- */
-export type KeepRemoveMarker = { x: number; y: number; kind: 'keep' | 'remove' }
 
 export interface UseCleanupCanvasParams {
   pz: PanZoom
@@ -91,15 +73,25 @@ export interface UseCleanupCanvasParams {
    * Un-applied pixels from a previous session, resolved once after the source
    * decodes. The pristine snapshot still comes from the source — Reset has to
    * mean "back to the upload", not "back to where I was before the reload" — so
-   * this replaces only the WORKING buffer, and `modified` is re-derived from it.
-   * Returning null (nothing stored, or stored for a different image) leaves the
-   * studio exactly as it behaved before.
+   * this replaces only the working buffer, and `modified` is re-derived from it.
+   * Returning null (nothing stored, or stored for a different image) is a no-op.
    */
   seedWorking?: (() => Promise<ImageData | null>) | null
 }
 
 export function useCleanupCanvas(params: UseCleanupCanvasParams) {
-  const { pz, tool, tolerance, softness, brushSize, defringeStrength, matteOn, matteColor, onMarkerPlaced, seedWorking } = params
+  const {
+    pz,
+    tool,
+    tolerance,
+    softness,
+    brushSize,
+    defringeStrength,
+    matteOn,
+    matteColor,
+    onMarkerPlaced,
+    seedWorking,
+  } = params
 
   const logo = useLogo()
   const setProcessedLogo = useStore((s) => s.setProcessedLogo)
@@ -113,9 +105,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const panningViewRef = useRef(false)
   const lastPanRef = useRef({ x: 0, y: 0 })
   const spaceHeldRef = useRef(false)
-  // Bidirectional history: undoRef holds snapshots taken *before* each change
-  // (oldest→newest); redoRef holds states we undid past. Any new change clears
-  // redo. Works uniformly for flood, color-key, brush strokes and AI.
+  // undoRef holds snapshots taken before each change (oldest→newest); redoRef
+  // holds states undone past. Any new change clears redo.
   const undoRef = useRef<ImageData[]>([])
   const redoRef = useRef<ImageData[]>([])
   const lastKeyRef = useRef<{ r: number; g: number; b: number } | null>(null)
@@ -165,7 +156,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null)
 
   const isBrush = tool === 'erase' || tool === 'restore'
-  const opts: RemoveOptions = { tolerance, softness }
+  // Memoized so the tool callbacks below keep their identity between renders.
+  const opts: RemoveOptions = useMemo(() => ({ tolerance, softness }), [tolerance, softness])
 
   // Two-finger pinch-zoom + pan on touch. One finger always drives the active
   // tool (paint/flood/marker); a second finger turns the gesture into navigation.
@@ -220,16 +212,15 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       setDims(null)
       return
     }
-    // Rasterize an SVG at its own intrinsic size (capped to MAX_DIM), never
-    // upscaled — so a 512px SVG cleans up at 512px instead of being blown up to
-    // MAX_DIM. Matches how raster sources are handled; export/vectorize still upscale.
+    // Rasterize an SVG at its intrinsic size (capped to MAX_DIM), never upscaled,
+    // the same as raster sources.
     getImageData(logo.src, MAX_DIM, logo.isSvg ? logo.svgText : null, { upscale: false })
       .then(async (data) => {
         if (cancelled) return
         pristineRef.current = cloneImageData(data)
         lastKeyRef.current = sampleCornerColor(data)
         // A restored session's un-applied pixels replace the working buffer (see
-        // `seedWorking`). Consumed once — a later source change is a NEW image
+        // `seedWorking`). Consumed once — a later source change is a new image
         // and must start from that image's own pixels.
         let working = data
         const seedOnce = seedWorkingRef.current
@@ -245,8 +236,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         workingRef.current = working
         setDims({ w: working.width, h: working.height })
         setReady(true)
-        // Actual draw happens in the [ready] effect below, after React commits
-        // the (re)mounted <canvas> — avoids drawing to a detached canvas.
+        // Drawing happens in the [ready] effect, after React commits the
+        // (re)mounted <canvas>, so it never targets a detached element.
       })
       .catch(() => {
         if (!cancelled) setStatus('Could not load this image for editing.')
@@ -256,18 +247,17 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     }
   }, [logo.src, logo.isSvg, logo.svgText])
 
-  // Draw once the canvas is mounted/ready (runs after commit, so canvasRef
-  // points at the live element — robust across unmount/remount on reload).
   useEffect(() => {
     if (ready) redraw()
   }, [ready, redraw])
 
-  // Cancel any pending animation frame on unmount.
-  useEffect(() => () => {
-    if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
-  }, [])
+  useEffect(
+    () => () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+    },
+    [],
+  )
 
-  // Register the stage as the pan/zoom viewport and keep our own ref to it.
   const setStage = useCallback(
     (el: HTMLDivElement | null) => {
       stageRef.current = el
@@ -283,11 +273,9 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     if (!el) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      // Zoom around the box of the pane the cursor is in. In split view each half
-      // is its own [data-zoom-pane] whose rect matches its transformed content;
-      // usePanZoom requires box == transformed element, so passing the full stage
-      // here would drift the right pane and over-permit the pan clamp. Single-pane
-      // modes use a full-width pane, so closest() still resolves correctly.
+      // Zoom around the pane under the cursor, not the whole stage: usePanZoom
+      // needs the box to be the transformed element, and in split view each half
+      // is its own [data-zoom-pane]. Passing the stage drifts the right pane.
       const pane = e.target instanceof Element ? e.target.closest('[data-zoom-pane]') : null
       const box = (pane ?? el).getBoundingClientRect()
       pz.zoomAround(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015), box)
@@ -296,14 +284,11 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     return () => el.removeEventListener('wheel', onWheel)
   }, [pz.zoomAround, logo.src])
 
-  // Hold Space to pan (Photoshop-style). We only arm the flag here; the actual
-  // drag is handled in the canvas pointer handlers so it composes with painting.
+  // Hold Space to pan. Only the flag is armed here; the drag itself runs in the
+  // canvas pointer handlers so it composes with painting.
   useEffect(() => {
-    const formish = (t: EventTarget | null) =>
-      t instanceof HTMLElement &&
-      (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')
     const down = (e: KeyboardEvent) => {
-      if (e.code !== 'Space' || e.repeat || formish(e.target)) return
+      if (e.code !== 'Space' || e.repeat || isFormField(e.target)) return
       spaceHeldRef.current = true
       setSpacePan(true)
       const tag = (e.target as HTMLElement | null)?.tagName
@@ -323,21 +308,11 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   }, [])
 
   /** True when the working pixels are byte-identical to the pristine upload. */
-  const equalsPristine = useCallback(() => {
-    const w = workingRef.current
-    const p = pristineRef.current
-    if (!w || !p) return true
-    if (w.width !== p.width || w.height !== p.height) return false
-    const a = w.data
-    const b = p.data
-    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
-    return true
-  }, [])
+  const equalsPristine = useCallback(() => imageDataEqual(workingRef.current, pristineRef.current), [])
 
   /**
-   * Commit a completed change to history. `pre` is the working snapshot taken
-   * *before* the mutation. Only call this when pixels actually changed — dead
-   * clicks must not push phantom undo steps or flip the modified state.
+   * Commit a completed change to history. `pre` is the snapshot taken before the
+   * mutation. Call only when pixels changed, so dead clicks leave no undo step.
    */
   const commit = useCallback((pre: ImageData) => {
     undoRef.current.push(pre)
@@ -392,31 +367,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     setStatus('Redid change')
   }, [redraw, equalsPristine, pz.reset, syncDims])
 
-  // Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z or Ctrl+Y to redo (panel only).
-  useEffect(() => {
-    if (!ready) return
-    const onKey = (e: KeyboardEvent) => {
-      if (aiBusy || !(e.ctrlKey || e.metaKey)) return
-      // Don't hijack the browser's native undo while the user is typing in a
-      // text field (the always-mounted Sidebar has hex / brand-name inputs).
-      const t = e.target
-      if (
-        t instanceof HTMLElement &&
-        (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')
-      )
-        return
-      const k = e.key.toLowerCase()
-      if (k === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        handleUndo()
-      } else if ((k === 'z' && e.shiftKey) || k === 'y') {
-        e.preventDefault()
-        handleRedo()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [ready, aiBusy, handleUndo, handleRedo])
+  useUndoShortcuts(ready, aiBusy, handleUndo, handleRedo)
 
   /** Map a pointer event to floating-point image coordinates (and refresh scale). */
   const imgCoords = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -477,52 +428,16 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         const ix = Math.floor(p.x)
         const iy = Math.floor(p.y)
         if (ix < 0 || iy < 0 || ix >= working.width || iy >= working.height) return
-        // Snapshot first, mutate, then commit only if it actually changed pixels.
         const pre = cloneImageData(working)
-
-        if (tool === 'keep') {
-          // Guided keep: flood-restore the clicked region from the pristine source.
-          const pristine = pristineRef.current
-          const affected = pristine ? floodRestore(working, pristine, ix, iy, opts) : 0
-          if (affected > 0) {
-            commit(pre)
-            redraw()
-            onMarkerPlaced?.(ix / working.width, iy / working.height, 'keep')
-            setStatus(`Kept ${affected.toLocaleString()} px (restored region)`)
-          } else {
-            setStatus('Nothing to restore there — raise tolerance or pick a clearer spot.')
-          }
-          return
-        }
-
-        // magic / remove: contiguous flood-remove at the pixel; remove == magic
-        // but seeded by a marker. color: global color key.
-        const key = colorAt(working, ix, iy)
-        lastKeyRef.current = key
-        const affected =
-          tool === 'color' ? removeColor(working, key, opts) : floodRemove(working, ix, iy, opts)
+        // Keep restores from the pristine pixels; the rest key the clicked color.
+        const { affected, key } = applyClickTool(tool, working, pristineRef.current, ix, iy, opts, defringeStrength)
+        if (key) lastKeyRef.current = key
         if (affected > 0) {
-          // Close the anti-aliasing seam left where this cut meets an
-          // already-removed region, then wipe small noise specks the flood left
-          // stranded in a noisy background. Both run before defringe so they
-          // sample the raw background colors. (No-ops until pixels are removed
-          // around them, so the first click is clean and later clicks tidy up.)
-          closeSeams(working)
-          despeckle(working)
-          if (defringeStrength > 0) defringe(working, key, defringeStrength)
           commit(pre)
           redraw()
-          if (tool === 'remove') {
-            onMarkerPlaced?.(ix / working.width, iy / working.height, 'remove')
-            setStatus(`Removed ${affected.toLocaleString()} px (marker region)`)
-          } else {
-            setStatus(
-              `Removed ${affected.toLocaleString()} px (${tool === 'magic' ? 'contiguous' : 'by color'})`,
-            )
-          }
-        } else {
-          setStatus('Nothing within tolerance there — try raising tolerance.')
+          if (tool === 'keep' || tool === 'remove') onMarkerPlaced?.(ix / working.width, iy / working.height, tool)
         }
+        setStatus(clickToolStatus(tool, affected))
         return
       }
 
@@ -533,28 +448,31 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       paintingRef.current = true
       lastPtRef.current = p
       const src = tool === 'restore' ? pristineRef.current : undefined
-      strokeAffectedRef.current += brushStamp(
-        working,
-        p.x,
-        p.y,
-        brushSize / 2,
-        1 - softness,
-        tool as BrushMode,
-        src,
-      )
+      strokeAffectedRef.current += brushStamp(working, p.x, p.y, brushSize / 2, 1 - softness, tool as BrushMode, src)
       scheduleRedraw()
     },
-    [aiBusy, tool, opts, defringeStrength, brushSize, softness, imgCoords, commit, redraw, scheduleRedraw, onMarkerPlaced, pinch],
+    [
+      aiBusy,
+      tool,
+      opts,
+      defringeStrength,
+      brushSize,
+      softness,
+      imgCoords,
+      commit,
+      redraw,
+      scheduleRedraw,
+      onMarkerPlaced,
+      pinch,
+    ],
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       // Two-finger pinch consumes the move (zoom/pan); never paints.
       if (pinch.move(e)) return
-      // Drag-to-pan the view (Space/middle-button) — runs before any brush logic.
       if (panningViewRef.current) {
-        // Pan within the canvas's own pane box (the right half in split), not the
-        // whole stage, so the shared transform stays geometrically correct per pane.
+        // Pan within the canvas's own pane box (see the wheel handler).
         const pane = canvasRef.current?.closest('[data-zoom-pane]') as HTMLElement | null
         const box = (pane ?? stageRef.current)?.getBoundingClientRect()
         if (box) {
@@ -589,17 +507,14 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
 
   const endStroke = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      // Release this finger from the pinch tracker (no-op for mouse/pen).
       pinch.up(e)
-      // Always release this pointer's capture (if any). A second finger can turn a
-      // brush stroke into a pinch and clear paintingRef before the original finger
-      // lifts, so the per-branch releases below would otherwise be skipped.
+      // Release capture unconditionally: a second finger can turn a stroke into
+      // a pinch and clear paintingRef before the first finger lifts.
       try {
         e.currentTarget.releasePointerCapture(e.pointerId)
       } catch {
         /* not captured */
       }
-      // End a view-pan drag without committing any brush history.
       if (panningViewRef.current) {
         panningViewRef.current = false
         try {
@@ -617,8 +532,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         /* pointer already released */
       }
       redraw()
-      // Commit the whole stroke as one undo step — but only if it changed pixels
-      // (a tap on already-transparent area or a no-op restore leaves no history).
+      // The whole stroke is one undo step, and only if it changed pixels.
       if (strokeAffectedRef.current > 0 && strokePreRef.current) {
         commit(strokePreRef.current)
         setStatus(tool === 'erase' ? 'Erased with brush' : 'Restored with brush')
@@ -641,9 +555,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     const { color, affected } = autoRemove(working, opts)
     lastKeyRef.current = color
     if (affected > 0) {
-      closeSeams(working)
-      despeckle(working)
-      if (defringeStrength > 0) defringe(working, color, defringeStrength)
+      finishRemoval(working, color, defringeStrength)
       commit(pre)
       redraw()
       setStatus(`Auto-removed corner background — ${affected.toLocaleString()} px`)
@@ -664,22 +576,16 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         // The device is confirmed only once a backend produced a result; capture
         // it for the status line and the persisted `aiDevice`.
         if (p.device) device = p.device
-        setAiStatus(
-          p.phase === 'download'
-            ? `Downloading model${p.percent != null ? ` — ${p.percent}%` : '…'}`
-            : 'Removing background…',
-        )
+        setAiStatus(aiProgressLabel(p))
       })
-      // The image was swapped/reset while we were running — drop this result
-      // rather than splatting it onto the wrong picture. (The reload effect
-      // installs a fresh pristine snapshot whenever the source changes.)
+      // The image was swapped or reset mid-run (the reload effect installs a new
+      // pristine snapshot): drop the result rather than apply it to another image.
       if (pristineRef.current !== pristine || !workingRef.current) return
       // Commit the pre-AI state only now that we have a result (a failed run
       // leaves history untouched), then swap in the AI output.
       commit(cloneImageData(workingRef.current))
-      // RMBG leaves the original background color tinting its soft matte (e.g. a
-      // purple halo) — bleed it out, keyed off the original corner color for any
-      // isolated specks. Gated by the same Defringe strength as manual removes.
+      // RMBG's soft matte keeps a tint of the old background (a coloured halo);
+      // defringe it against the original corner color.
       if (defringeStrength > 0) defringe(result, sampleCornerColor(pristine), defringeStrength)
       workingRef.current = result
       redraw()
@@ -707,47 +613,37 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     if (pristineRef.current) {
       workingRef.current = cloneImageData(pristineRef.current)
       redraw()
-      // A prior auto-trim crop leaves the view fitted to the smaller buffer; the
-      // pristine restore changes dims back, so re-fit (like the resized undo path)
-      // to avoid the stage clamping against stale dimensions.
+      // A prior trim may have changed dims; re-fit so the stage doesn't clamp
+      // against stale dimensions.
       pz.reset()
       syncDims()
     }
     setApplied(false)
     setModified(false)
     setRevision((n) => n + 1)
-    // Pre-arm the reload-effect guard with the original src so restoreOriginal's
-    // src change short-circuits its re-decode (the in-memory pristine is already
-    // correct) — keeps the post-Apply Reset path flicker-free like the no-Apply one.
+    // Pre-arm the reload guard so restoreOriginal's src change skips a redundant
+    // re-decode (the in-memory pristine is already correct) and doesn't flicker.
     if (logo.originalSrc) appliedSrcRef.current = logo.originalSrc
-    // Also revert the store (undoes a prior Apply for previews/export).
     restoreOriginal()
     setStatus('Reset to original')
   }, [aiBusy, restoreOriginal, redraw, pz.reset, syncDims, logo.originalSrc])
 
   /**
    * Bake the working buffer to a canvas for export. When the matte preview is on
-   * we flatten the cutout onto `matteColor` via a THROWAWAY copy — workingRef is
-   * never mutated, so toggling the matte off restores transparency intact.
+   * the cutout is flattened onto `matteColor` in a copy; workingRef is never
+   * mutated, so turning the matte off keeps the transparency.
    */
   const bakeCanvas = useCallback((): HTMLCanvasElement | null => {
     const working = workingRef.current
     if (!working) return null
-    const out = matteOn ? compositeOver(working, matteColor) : working
-    const canvas = document.createElement('canvas')
-    canvas.width = out.width
-    canvas.height = out.height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return null
-    ctx.putImageData(out, 0, 0)
-    return canvas
+    return imageDataToCanvas(matteOn ? compositeOver(working, matteColor) : working)
   }, [matteOn, matteColor])
 
   const handleApply = useCallback(() => {
     const working = workingRef.current
     const canvas = bakeCanvas()
     if (!working || !canvas) return
-    // Guard the reload effect: keep these pixels & the Applied state.
+    // Lets the reload effect recognise this src as our own and skip it.
     const dataUrl = canvas.toDataURL('image/png')
     appliedSrcRef.current = dataUrl
     setProcessedLogo(dataUrl, working.width, working.height)
@@ -759,19 +655,14 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
 
   /**
    * The working pixels as PNG bytes — what the studio stores so an un-applied
-   * cutout survives a reload. Deliberately NOT `bakeCanvas`: the matte is a
-   * PREVIEW, and baking it in would turn a transparent cutout into a flattened
-   * one the next time the session came back.
+   * cutout survives a reload. Not `bakeCanvas`: the matte is only a preview, and
+   * baking it in would restore a flattened image instead of the cutout.
    */
   const snapshotWorking = useCallback(async (): Promise<Blob | null> => {
     const working = workingRef.current
     if (!working) return null
-    const canvas = document.createElement('canvas')
-    canvas.width = working.width
-    canvas.height = working.height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return null
-    ctx.putImageData(working, 0, 0)
+    const canvas = imageDataToCanvas(working)
+    if (!canvas) return null
     return canvasToBlob(canvas, 'image/png').catch(() => null)
   }, [])
 
@@ -784,104 +675,47 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   }, [bakeCanvas, logo.fileName])
 
   /**
-   * Run a one-shot in-place pixel op as a single history step: snapshot → mutate
-   * → commit (iff it changed anything) → redraw, exactly like handleAuto. `run`
-   * returns the affected-pixel count; `label`/`empty` are the status messages.
+   * Run an in-place pixel op as a single history step (committed only if it
+   * changed anything). `op.run` returns the affected-pixel count.
    */
   const oneShot = useCallback(
-    (run: (working: ImageData) => number, label: (affected: number) => string, empty: string) => {
+    (op: EdgeOp) => {
       const working = workingRef.current
       if (!working || aiBusy) return
       const pre = cloneImageData(working)
-      const affected = run(working)
+      const affected = op.run(working, lastKeyRef.current)
       if (affected > 0) {
         commit(pre)
         redraw()
-        setStatus(label(affected))
+        setStatus(op.label(affected))
       } else {
-        setStatus(empty)
+        setStatus(op.empty)
       }
     },
     [aiBusy, commit, redraw],
   )
 
-  const growEdge = useCallback(
-    (radius: number) =>
-      oneShot(
-        (w) => growMatte(w, radius),
-        (n) => `Grew the edge by ${radius}px — ${n.toLocaleString()} px`,
-        'Edge already filled — nothing to grow.',
-      ),
-    [oneShot],
-  )
-
-  const shrinkEdge = useCallback(
-    (radius: number) =>
-      oneShot(
-        (w) => shrinkMatte(w, radius),
-        (n) => `Shrank the edge by ${radius}px — ${n.toLocaleString()} px`,
-        'Nothing to shrink — the edge is already tight.',
-      ),
-    [oneShot],
-  )
-
-  const featherEdge = useCallback(
-    (radius: number) =>
-      oneShot(
-        (w) => featherAlpha(w, radius),
-        (n) => `Feathered the edge by ${radius}px — ${n.toLocaleString()} px`,
-        'Nothing to feather.',
-      ),
-    [oneShot],
-  )
-
-  const defringeMore = useCallback(
-    (amount: number) =>
-      oneShot(
-        (w) => {
-          // defringe doesn't report a count; treat any semi-transparent edge as
-          // a change so the step commits (the op is a near-no-op otherwise).
-          defringe(w, lastKeyRef.current ?? undefined, amount)
-          return alphaBounds(w) ? 1 : 0
-        },
-        () => `Defringed the edges (strength ${amount.toFixed(1)})`,
-        'Nothing to defringe — no soft edges.',
-      ),
-    [oneShot],
-  )
-
-  const recolorAll = useCallback(
-    (hex: string) =>
-      oneShot(
-        (w) => recolor(w, hex),
-        (n) => `Recolored ${n.toLocaleString()} px to ${hex}`,
-        'Nothing to recolor — the cutout is empty.',
-      ),
-    [oneShot],
-  )
+  const growEdge = useCallback((radius: number) => oneShot(edgeOps.grow(radius)), [oneShot])
+  const shrinkEdge = useCallback((radius: number) => oneShot(edgeOps.shrink(radius)), [oneShot])
+  const featherEdge = useCallback((radius: number) => oneShot(edgeOps.feather(radius)), [oneShot])
+  const defringeMore = useCallback((amount: number) => oneShot(edgeOps.defringe(amount)), [oneShot])
+  const recolorAll = useCallback((hex: string) => oneShot(edgeOps.recolor(hex)), [oneShot])
 
   /**
    * Auto-trim transparent margins to the alpha bbox, padded by `pad` px. Crops the
-   * working buffer to a NEW, smaller ImageData, so it re-fits the view (pz.reset)
+   * working buffer to a new, smaller ImageData, so it re-fits the view (pz.reset)
    * and refreshes `dims`. One history step (undo restores the original size).
    */
   const autoTrim = useCallback(
     (pad: number) => {
       const working = workingRef.current
       if (!working || aiBusy) return
-      const bounds = alphaBounds(working)
-      if (!bounds) {
+      const bounds = trimBounds(working, pad)
+      if (bounds === 'empty') {
         setStatus('Nothing to trim — the image is fully transparent.')
         return
       }
-      // Already tight with no padding requested: skip the no-op history step.
-      if (
-        pad === 0 &&
-        bounds.x === 0 &&
-        bounds.y === 0 &&
-        bounds.w === working.width &&
-        bounds.h === working.height
-      ) {
+      if (bounds === 'tight') {
         setStatus('Nothing to trim — already cropped tight.')
         return
       }

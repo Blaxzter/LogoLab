@@ -16,9 +16,8 @@ type RGB = { r: number; g: number; b: number; a?: number }
 /** Swatch background: a CSS preview of the gradient when present, else the flat fill. */
 function swatchStyle(item: PathItem): CSSProperties {
   const g = item.gradient
-  // A stroke-only path has no fill to show, so the swatch becomes a RING in the
-  // stroke colour — which reads as "outline" at a glance and, unlike a solid
-  // chip, doesn't claim the shape is filled.
+  // A stroke-only path has no fill, so the swatch is a ring in the stroke colour
+  // rather than a solid chip that would suggest the shape is filled.
   if (isStrokeOnly(item)) {
     return {
       backgroundColor: 'transparent',
@@ -226,9 +225,9 @@ export function PathsPanelBody({
       </div>
 
       {showPalette && onPaletteChange && (
-        // Cap on the SECTION (its parent — the rail — has a definite height, so the
-        // percentage resolves); the body scrolls within it. shrink-0 so it isn't
-        // crushed by the path list, max-h so it can't crush the list either.
+        // Cap the section (the rail has a definite height, so the percentage
+        // resolves) and scroll inside it; shrink-0 + max-h keep it and the path
+        // list from crushing each other.
         <div className="flex max-h-[55%] shrink-0 flex-col border-t border-line">
           <h3 className="shrink-0 px-4 pb-1 pt-2.5 text-xs font-semibold text-ink">Palette</h3>
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3">
@@ -296,27 +295,23 @@ function PathRow({
           so the opacity is visible; opaque fills / gradients keep the solid swatch. */}
       {(() => {
         const translucent =
-          !item.gradient &&
-          !isStrokeOnly(item) &&
-          item.fillOpacity !== undefined &&
-          item.fillOpacity < 1
+          !item.gradient && !isStrokeOnly(item) && item.fillOpacity !== undefined && item.fillOpacity < 1
         return (
           <Tooltip
             label={
               isStrokeOnly(item)
                 ? 'Recolor stroke'
                 : item.gradient
-                ? 'Recolor (replaces gradient with a solid)'
-                : translucent
-                  ? `Recolor · ${Math.round((item.fillOpacity ?? 1) * 100)}% opacity`
-                  : 'Recolor'
+                  ? 'Recolor (replaces gradient with a solid)'
+                  : translucent
+                    ? `Recolor · ${Math.round((item.fillOpacity ?? 1) * 100)}% opacity`
+                    : 'Recolor'
             }
           >
             <label
               onClick={(e) => e.stopPropagation()}
-              // The stroke ring needs the checker behind it too: white outlines
-              // are extremely common, and a white ring on the white panel is
-              // an invisible swatch.
+              // Checker behind the stroke ring too: a white ring on the white
+              // panel would be invisible.
               className={`relative h-[18px] w-[18px] shrink-0 cursor-pointer overflow-hidden rounded border border-line ${
                 translucent || isStrokeOnly(item) ? 'checkerboard' : ''
               }`}
@@ -338,15 +333,10 @@ function PathRow({
         )
       })()}
 
-      <span className={`truncate text-xs ${item.visible ? 'text-ink' : 'text-faint'}`}>
-        Path {index}
-      </span>
+      <span className={`truncate text-xs ${item.visible ? 'text-ink' : 'text-faint'}`}>Path {index}</span>
       <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted">{nodes}</span>
 
-      <RowIconBtn
-        title={item.visible ? 'Hide (excluded from export)' : 'Show'}
-        onClick={onToggleVisible}
-      >
+      <RowIconBtn title={item.visible ? 'Hide (excluded from export)' : 'Show'} onClick={onToggleVisible}>
         {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
       </RowIconBtn>
       <RowIconBtn title="Delete path" onClick={onDelete}>
@@ -369,14 +359,9 @@ function RawRow({
   return (
     <div className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-3">
       <span className="h-[18px] w-[18px] shrink-0 rounded border border-dashed border-line-strong" />
-      <span className={`truncate font-mono text-[11px] ${item.visible ? 'text-muted' : 'text-faint'}`}>
-        {label}
-      </span>
+      <span className={`truncate font-mono text-[11px] ${item.visible ? 'text-muted' : 'text-faint'}`}>{label}</span>
       <span className="ml-auto" />
-      <RowIconBtn
-        title={item.visible ? 'Hide (excluded from export)' : 'Show'}
-        onClick={onToggleVisible}
-      >
+      <RowIconBtn title={item.visible ? 'Hide (excluded from export)' : 'Show'} onClick={onToggleVisible}>
         {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
       </RowIconBtn>
       <RowIconBtn title="Delete" onClick={onDelete}>
@@ -386,15 +371,7 @@ function RawRow({
   )
 }
 
-function RowIconBtn({
-  title,
-  onClick,
-  children,
-}: {
-  title: string
-  onClick: () => void
-  children: React.ReactNode
-}) {
+function RowIconBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <Tooltip label={title}>
       <button

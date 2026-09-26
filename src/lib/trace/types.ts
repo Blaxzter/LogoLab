@@ -21,10 +21,9 @@ export interface PaletteColor {
   b: number
   /**
    * Optional alpha 0–255. Undefined ⇒ fully opaque (the common case). Only the
-   * FLAT palette path populates it — the auto path from each region's alpha MODE,
-   * a locked palette from the user's RGBA swatches — and only when < 255, so opaque
-   * art carries no alpha and serializes byte-identically. The Mumford–Shah path and
-   * k-means quantize never set it.
+   * flat palette path sets it — from each region's alpha mode, or from a locked
+   * palette's RGBA swatches — and only when < 255, so opaque art carries no alpha.
+   * The Mumford–Shah path and k-means quantize never set it.
    */
   a?: number
 }

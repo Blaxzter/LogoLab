@@ -1,12 +1,6 @@
 /**
- * The one cold→hot ramp this repo paints error with. `goldenView` (ΔE per pixel) and
- * `truthView` (boundary distance per sample) had a copy each, with the same stops — so
- * the two pages already read alike, they just couldn't prove it. One module now.
- *
- * It lives in `lib/` rather than under `components/labs/` because the studio's
- * **Difference** view paints the same ramp as `/labs/ab`'s diff heat: the research view
- * of "where is this trace wrong" and the shipped one are the same picture, and a second
- * set of stops for the product would quietly make them two.
+ * The cold→hot ramp every error view paints with: the studio's Difference view
+ * and the labs' diff heat share it, so don't add a second set of stops.
  *
  * `t` is a 0..1 normalized error; the caller picks the full-scale.
  */

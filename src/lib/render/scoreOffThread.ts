@@ -6,11 +6,8 @@ import type { EditableDoc } from '../path/types'
 import type { ScoreReq, ScoreRes } from './fidelity.worker.ts'
 
 /**
- * What the studio shows: the two numbers, the heat behind them, and the buffers
- * the Difference view reads back — the field under the cursor, and the source
- * and render pixels it was measured on (see lib/render/diffView.ts). All of one
- * measurement at one resolution, so nothing here can describe a different trace
- * than the number does.
+ * The studio's score: the two numbers, the heat, and the buffers the
+ * Difference view reads back (see diffView.ts). All from one measurement.
  */
 export interface TraceScore {
   /** Mean CIE76 ΔE, render vs source. */
@@ -28,8 +25,8 @@ export interface TraceScore {
   source: Uint8ClampedArray
 }
 
-/** False where there is no Worker (a non-browser host). The score is an extra,
- *  not a result, so it is simply not offered rather than run on the main thread. */
+/** False without Worker support; the score is then omitted rather than run on
+ *  the main thread. */
 export function canScoreOffThread(): boolean {
   return typeof Worker !== 'undefined'
 }
@@ -72,9 +69,7 @@ export function scoreOffThread(
       reject(new Error(e.message || 'Fidelity worker failed'))
     }
 
-    // Copy the pixels so the caller's ImageData stays valid after we transfer —
-    // the studio keeps this raster and scores against it again on the next edit.
-    // (The worker hands the copy back with the result, as `source`.)
+    // Transfer a copy: the caller keeps its ImageData for the next score.
     const data = new Uint8ClampedArray(source.data)
     const req: ScoreReq = {
       type: 'score',

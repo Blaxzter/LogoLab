@@ -10,9 +10,9 @@
 // every number here can be located on the image and argued with.
 //
 // TRUST PROPERTIES — the reason this view is worth looking at:
-//   • the case lists, trace options and gates come from ../../../devtest/truthCorpus.ts — the SAME
+//   • the case lists, trace options and gates come from ../../../bench/truthCorpus.ts — the SAME
 //     module the Node runner (groundTruthRun.ts) imports;
-//   • the metrics come from ../../../devtest/geomScore.ts — the SAME functions that runner calls;
+//   • the metrics come from ../../../bench/geomScore.ts — the SAME functions that runner calls;
 //   • the rasterizer is the SAME: @resvg/resvg-wasm, the WASM build of the exact Rust engine the
 //     Node runner uses via @resvg/resvg-js. Verified byte-identical (0 differing pixels).
 // Nothing is re-implemented here; this file only DRAWS what those modules return.
@@ -21,7 +21,7 @@ import { useMemo } from 'react'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../../lib/trace'
 import { serializeDoc } from '../../../lib/path/model'
 import type { EditableDoc, SubPath } from '../../../lib/path/types'
-import { parseGroundTruth, toRasterSpace, unscorable } from '../../../devtest/svgGround'
+import { parseGroundTruth, toRasterSpace, unscorable } from '../../../../bench/svgGround'
 import {
   scoreGeometry,
   scoreRegions,
@@ -29,9 +29,9 @@ import {
   type GeomScore,
   type RegionScore,
   type DistPoint,
-} from '../../../devtest/geomScore'
-import { scoreDoc } from '../../../devtest/scoreboard'
-import { TIER_TOL, evaluateTruthGates, inventedMaxFor } from '../../../devtest/truthCorpus'
+} from '../../../../bench/geomScore'
+import { scoreDoc } from '../../../../bench/scoreboard'
+import { TIER_TOL, evaluateTruthGates, inventedMaxFor } from '../../../../bench/truthCorpus'
 import { Panel, RawArt } from '../Panel'
 import { traceSvg, subPathsWire } from '../wire'
 import { Badge, CaseRow, NoteBox } from '../CaseRow'
@@ -90,8 +90,7 @@ const polysOf = (sets: SubPath[][]): string[] => {
       const pts = flattenSubPath(sp)
       if (pts.length < 2) continue
       const d =
-        pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('') +
-        (sp.closed ? 'Z' : '')
+        pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('') + (sp.closed ? 'Z' : '')
       out.push(`<path d="${d}"/>`)
     }
   }
@@ -226,7 +225,14 @@ export async function analyze(c: WbCase, res: number, ab: boolean): Promise<Anal
 
 /** The gates, as bar rows. `applicable: false` ⇒ tone 'na' — never a pass. Only ever called for a
  *  case with a calibrated tier; an untiered case has no honest limit to draw. */
-function gateRows(name: string, tier: 0 | 1 | 2, gradients: boolean, geom: GeomScore, regions: RegionScore, paint?: { mean: number; p95: number }): GateBarRow[] {
+function gateRows(
+  name: string,
+  tier: 0 | 1 | 2,
+  gradients: boolean,
+  geom: GeomScore,
+  regions: RegionScore,
+  paint?: { mean: number; p95: number },
+): GateBarRow[] {
   return evaluateTruthGates({
     samples: geom.samples,
     chamfer: geom.chamfer,
@@ -264,12 +270,12 @@ function gateRows(name: string, tier: 0 | 1 | 2, gradients: boolean, geom: GeomS
             : g.key === 'ink'
               ? 'gradient art — ink area per flat region is meaningless where the art has no flat regions'
               : g.key === 'corners'
-              ? 'too few authored corners to grade (mostly-round art), or gradient art'
-              : g.key === 'invented'
-              ? 'gradient art — its traced corners belong to the posterization banding, not to the authored outline'
-              : g.key === 'paintMean' || g.key === 'paintP95'
-                ? 'flat art (regions + boundary already pin the paint), or tier-1 paint not yet calibrated'
-                : "no interior boundary to compare (the art's whole outline is the canvas border)",
+                ? 'too few authored corners to grade (mostly-round art), or gradient art'
+                : g.key === 'invented'
+                  ? 'gradient art — its traced corners belong to the posterization banding, not to the authored outline'
+                  : g.key === 'paintMean' || g.key === 'paintP95'
+                    ? 'flat art (regions + boundary already pin the paint), or tier-1 paint not yet calibrated'
+                    : "no interior boundary to compare (the art's whole outline is the canvas border)",
       }
     }
     const tone = !g.pass ? 'fail' : g.headroom < 0.25 ? 'tight' : g.headroom < 0.5 ? 'warn' : 'ok'
@@ -282,9 +288,9 @@ function gateRows(name: string, tier: 0 | 1 | 2, gradients: boolean, geom: GeomS
           ? `${geom.cornersRecovered}/${geom.gtCorners}`
           : g.key === 'invented'
             ? `${geom.cornersInvented}`
-          : g.key === 'ink'
-            ? `${(g.value * 100).toFixed(0)}%`
-            : g.value.toFixed(g.digits) + (g.key === 'parsimony' ? '×' : isPaint ? 'ΔE' : 'px')
+            : g.key === 'ink'
+              ? `${(g.value * 100).toFixed(0)}%`
+              : g.value.toFixed(g.digits) + (g.key === 'parsimony' ? '×' : isPaint ? 'ΔE' : 'px')
     const unit =
       g.key === 'parsimony'
         ? '×'
@@ -306,10 +312,7 @@ function gateRows(name: string, tier: 0 | 1 | 2, gradients: boolean, geom: GeomS
 
 function Swatch({ hex }: { hex: string }) {
   return (
-    <code
-      className="rounded px-1.5 py-px text-white [text-shadow:0_0_2px_#000]"
-      style={{ background: hex }}
-    >
+    <code className="rounded px-1.5 py-px text-white [text-shadow:0_0_2px_#000]" style={{ background: hex }}>
       {hex}
     </code>
   )
@@ -362,10 +365,20 @@ function CasePanels({ c, a, heat }: { c: WbCase; a: Analysis; heat: number }) {
       {/* Boundary heat is meaningless when there was no interior boundary to sample. */}
       {geom.samples > 0 && (
         <>
-          <Panel label="miss heat" note={`authored boundary, hot = tracer MISSED it (0→${heat}px)`} aspect={aspect} dark>
+          <Panel
+            label="miss heat"
+            note={`authored boundary, hot = tracer MISSED it (0→${heat}px)`}
+            aspect={aspect}
+            dark
+          >
             <RawArt html={missHeat} />
           </Panel>
-          <Panel label="invented heat" note={`traced boundary, hot = tracer INVENTED it (0→${heat}px)`} aspect={aspect} dark>
+          <Panel
+            label="invented heat"
+            note={`traced boundary, hot = tracer INVENTED it (0→${heat}px)`}
+            aspect={aspect}
+            dark
+          >
             <RawArt html={inventedHeat} />
           </Panel>
         </>
@@ -414,13 +427,13 @@ function AbDelta({ a }: { a: Analysis }) {
       <br />
       boundary <b>{g.chamfer.toFixed(2)}px</b> gradient vs <b>{f.chamfer.toFixed(2)}px</b> flat (
       {d(g.chamfer, f.chamfer)}) · missed {g.missedMean.toFixed(2)} vs {f.missedMean.toFixed(2)} (
-      {d(g.missedMean, f.missedMean)}) · <b>invented</b> {g.spuriousMean.toFixed(2)} vs{' '}
-      {f.spuriousMean.toFixed(2)} ({d(g.spuriousMean, f.spuriousMean)})
+      {d(g.missedMean, f.missedMean)}) · <b>invented</b> {g.spuriousMean.toFixed(2)} vs {f.spuriousMean.toFixed(2)} (
+      {d(g.spuriousMean, f.spuriousMean)})
       <br />
       <span className="text-faint">
-        Flat is a separately AUTHORED drawing, not this art with the gradients deleted — usually
-        simpler ({f.gtShapes} shapes vs {g.gtShapes}). A matched pair, not an ablation: the direction
-        is solid, the magnitude is an upper bound.
+        Flat is a separately AUTHORED drawing, not this art with the gradients deleted — usually simpler ({f.gtShapes}{' '}
+        shapes vs {g.gtShapes}). A matched pair, not an ablation: the direction is solid, the magnitude is an upper
+        bound.
       </span>
     </NoteBox>
   )
@@ -444,16 +457,15 @@ function Drops({ c, regions }: { c: WbCase; regions: RegionScore }) {
 function Ungated({ geom }: { geom: GeomScore }) {
   return (
     <NoteBox tone="info">
-      authored {geom.gtShapes} shapes / {geom.gtNodes} nodes · traced {geom.docPaths} paths /{' '}
-      {geom.docNodes} nodes · boundary {geom.gtLength.toFixed(0)}px vs {geom.docLength.toFixed(0)}px ·
-      missed {geom.missedMean.toFixed(2)}px (max {geom.missedMax.toFixed(1)}) · invented{' '}
-      {geom.spuriousMean.toFixed(2)}px (max {geom.spuriousMax.toFixed(1)}) · hausdorff{' '}
-      {geom.hausdorff.toFixed(1)}px
+      authored {geom.gtShapes} shapes / {geom.gtNodes} nodes · traced {geom.docPaths} paths / {geom.docNodes} nodes ·
+      boundary {geom.gtLength.toFixed(0)}px vs {geom.docLength.toFixed(0)}px · missed {geom.missedMean.toFixed(2)}px
+      (max {geom.missedMax.toFixed(1)}) · invented {geom.spuriousMean.toFixed(2)}px (max {geom.spuriousMax.toFixed(1)})
+      · hausdorff {geom.hausdorff.toFixed(1)}px
       <br />
       <span className="text-faint">
-        Shape and path counts need not match: compositing splits one authored shape into several
-        visible regions, and regions sharing a fill merge into one path. That is why the gates score
-        boundary geometry and region recovery, not counts.
+        Shape and path counts need not match: compositing splits one authored shape into several visible regions, and
+        regions sharing a fill merge into one path. That is why the gates score boundary geometry and region recovery,
+        not counts.
       </span>
     </NoteBox>
   )
@@ -501,9 +513,9 @@ export function AnalysisCaseRow({ c, value, error, heat }: AnalysisRowProps) {
           ) : (
             <NoteBox tone="info">
               <b>No gates on this corpus.</b> The tier limits are calibrated per population (see{' '}
-              <code>calibrateTier1.ts</code> / <code>calibrateTier2.ts</code>); this case belongs to
-              none of them, so it gets the measurements below and no pass/fail — a bar borrowed from
-              another tier would be a number pretending to be a verdict.
+              <code>calibrateTier1.ts</code> / <code>calibrateTier2.ts</code>); this case belongs to none of them, so it
+              gets the measurements below and no pass/fail — a bar borrowed from another tier would be a number
+              pretending to be a verdict.
             </NoteBox>
           )}
           <AbDelta a={a} />

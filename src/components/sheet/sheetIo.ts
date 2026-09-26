@@ -4,11 +4,11 @@
 // `bgRemove` for the paper knockout, `serializeDoc` output for the SVGs, JSZip
 // (already an app dependency, used by the PWA export) for the archive.
 
-import { autoRemove, cloneImageData, defringe, despeckle } from '../../lib/bgRemove'
+import { autoRemove, cloneImageData, defringe, despeckle } from '../../lib/cleanup/bgRemove'
 import { canvasToBlob, getImageData, imageDataToCanvas, loadLogoFile } from '../../lib/image'
 import { toImageData } from '../../lib/sheet'
 import type { ImageDataLike } from '../../lib/sheet'
-import type { SheetIcon, SheetSource } from '../../sheetStore'
+import type { SheetIcon, SheetSource } from '../../state/sheetStore'
 
 /**
  * Long side the sheet is decoded at. A sheet is a mosaic — the per-icon crop is
@@ -29,7 +29,7 @@ export async function readSheetFile(file: File): Promise<SheetIntake> {
     source: {
       src: loaded.src,
       fileName: loaded.fileName ?? file.name,
-      // The sheet's coordinate space is the DECODED raster, not the file's
+      // The sheet's coordinate space is the decoded raster, not the file's
       // natural size — every tile rect is in these pixels.
       width: image.width,
       height: image.height,
@@ -46,8 +46,8 @@ export function isImageFile(file: File): boolean {
 
 /**
  * Knock the sheet's paper colour out of a crop: flood from the four corners (so
- * a white shape INSIDE the icon survives), then tidy the halo the flood leaves
- * behind. Exactly the sequence the Cleanup studio's one-click Auto runs.
+ * a white shape inside the icon survives), then tidy the halo the flood leaves
+ * behind. Same sequence as the Cleanup studio's one-click Auto.
  */
 export function knockoutBackground(tile: ImageDataLike, tolerance = 32, softness = 0.35): ImageData {
   // cloneImageData constructs a real ImageData, which is what the bgRemove passes
@@ -83,7 +83,7 @@ export interface SheetExportItem {
  * format is asked for, `svg/` + `png/` when both.
  */
 export async function buildSheetZip(items: SheetExportItem[], opts: SheetExportOptions): Promise<Blob> {
-  // Fetched on demand — see the same import in lib/pwaExport.ts.
+  // Fetched on demand — see the same import in lib/export/pwaExport.ts.
   const { default: JSZip } = await import('jszip')
   const zip = new JSZip()
   const both = opts.svg && opts.png

@@ -12,25 +12,26 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  anchorMarksD,
-  handleDotsD,
-  nearestGrab,
-  spokesD,
-} from '../src/components/vectorize/nodeOverlay.ts'
+import { anchorMarksD, handleDotsD, nearestGrab, spokesD } from '../src/components/vectorize/nodeOverlay.ts'
 import type { PathItem, PathNode } from '../src/lib/path/types.ts'
 
-const node = (x: number, y: number, kind: PathNode['kind'], hIn: PathNode['hIn'] = null, hOut: PathNode['hOut'] = null): PathNode =>
-  ({ x, y, kind, hIn, hOut })
+const node = (
+  x: number,
+  y: number,
+  kind: PathNode['kind'],
+  hIn: PathNode['hIn'] = null,
+  hOut: PathNode['hOut'] = null,
+): PathNode => ({ x, y, kind, hIn, hOut })
 
-const item = (nodes: PathNode[][]): PathItem => ({
-  kind: 'path',
-  id: 'p',
-  fill: '#000000',
-  fillRule: 'nonzero',
-  visible: true,
-  subPaths: nodes.map((n) => ({ nodes: n, closed: true })),
-} as PathItem)
+const item = (nodes: PathNode[][]): PathItem =>
+  ({
+    kind: 'path',
+    id: 'p',
+    fill: '#000000',
+    fillRule: 'nonzero',
+    visible: true,
+    subPaths: nodes.map((n) => ({ nodes: n, closed: true })),
+  }) as PathItem
 
 const count = (d: string, ch: string) => d.split(ch).length - 1
 
@@ -79,7 +80,8 @@ test('an anchor wins a tie with a handle sitting on top of it', () => {
 
 test('3000 nodes stay cheap', () => {
   const nodes: PathNode[] = []
-  for (let i = 0; i < 3000; i++) nodes.push(node(i, (i * 7) % 50, i % 2 ? 'smooth' : 'corner', { x: i - 0.3, y: 0 }, { x: i + 0.3, y: 0 }))
+  for (let i = 0; i < 3000; i++)
+    nodes.push(node(i, (i * 7) % 50, i % 2 ? 'smooth' : 'corner', { x: i - 0.3, y: 0 }, { x: i + 0.3, y: 0 }))
   const it = item([nodes])
   const t0 = performance.now()
   for (let k = 0; k < 10; k++) {

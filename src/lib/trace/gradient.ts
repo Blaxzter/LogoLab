@@ -1,18 +1,12 @@
 // Per-region gradient fitting: given the source pixels that fall inside one
-// traced region, decide whether they read better as a SOLID color, a LINEAR
-// ramp, or a RADIAL ramp, and (for the gradient cases) recover an SVG
-// linear/radial gradient in viewBox coordinates.
+// traced region, decide whether they read better as a solid color, a linear
+// ramp, or a radial ramp, and for the gradient cases recover an SVG
+// linear/radial gradient in viewBox coordinates. Fitting against the original
+// pixel colours is what keeps a smooth ramp from posterizing into flat bands.
 //
-// This is the piece that fixes "every gradient is just meh": potrace only ever
-// emits flat fills, so a smooth ramp gets posterized into hard color bands.
-// Here we look back at the ORIGINAL pixel colors of each region and fit a real
-// gradient, emitting a standard SVG <linearGradient>/<radialGradient> instead.
-//
-// The math is small, closed-form linear algebra (least-squares plane fit per
-// channel + structure-tensor axis for linear; 1-D radius regression over a few
-// candidate centers for radial) — milliseconds for a 1024² logo, no model, no
-// GPU. Pure and deterministic: no DOM, no imports with runtime side effects, so
-// it runs unchanged in the browser and under `node --test`.
+// The math is closed-form linear algebra: a least-squares plane fit per channel
+// plus a structure-tensor axis for linear; a radius profile over a few candidate
+// centers for radial. Deterministic and DOM-free.
 
 import type { GradientFill, GradientStop, LinearGradient, RadialGradient } from '../path/types'
 import { srgbToOklab, oklabDeltaE } from './oklab.ts'
@@ -102,16 +96,10 @@ const luma = (r: number, g: number, b: number): number => 0.2126 * r + 0.7152 * 
 const clamp01 = (t: number): number => (t < 0 ? 0 : t > 1 ? 1 : t)
 
 // ---------------------------------------------------------------------------
-// Multi-stop emission: build the 1-D colour profile along a gradient parameter
-// and place stops at the knots of its piecewise-linear approximation.
-//
-// The old fitter emitted exactly two stops (the colours at the axis extremes),
-// so an eased or hue-rotating ramp — where the colour does NOT vary linearly
-// along the axis — was reproduced as a straight 2-stop ramp and read wrong. Here
-// we bin the actual colours along the parameter t∈[0,1], then RDP-simplify that
-// profile with an Oklab-ΔE tolerance: a pure linear ramp collapses back to two
-// stops, while a curved profile keeps the intermediate knots it needs. The doc
-// model already supports N stops; only the fitter was the bottleneck.
+// Multi-stop emission: bin the actual colours along the gradient parameter
+// t∈[0,1], then RDP-simplify that profile with an Oklab-ΔE tolerance. A linear
+// ramp collapses to two stops; an eased or hue-rotating ramp keeps the
+// intermediate knots it needs.
 // ---------------------------------------------------------------------------
 
 /** Bin count for the 1-D colour profile sampled along a gradient parameter. */
@@ -127,7 +115,13 @@ interface ProfilePt {
 }
 
 /** Mean colour per non-empty bin of t∈[0,1]; endpoints pinned to 0 and 1. */
-function binnedProfile(param: Float64Array, rs: Float64Array, gs: Float64Array, bs: Float64Array, n: number): ProfilePt[] {
+function binnedProfile(
+  param: Float64Array,
+  rs: Float64Array,
+  gs: Float64Array,
+  bs: Float64Array,
+  n: number,
+): ProfilePt[] {
   const sr = new Float64Array(PROFILE_BINS)
   const sg = new Float64Array(PROFILE_BINS)
   const sb = new Float64Array(PROFILE_BINS)
@@ -192,7 +186,13 @@ function rdpProfile(pts: ProfilePt[], tol: number): ProfilePt[] {
 }
 
 /** Stops from a per-sample parameter array (binned profile → Oklab RDP). */
-function stopsAlong(param: Float64Array, rs: Float64Array, gs: Float64Array, bs: Float64Array, n: number): GradientStop[] {
+function stopsAlong(
+  param: Float64Array,
+  rs: Float64Array,
+  gs: Float64Array,
+  bs: Float64Array,
+  n: number,
+): GradientStop[] {
   const profile = rdpProfile(binnedProfile(param, rs, gs, bs, n), STOP_OKLAB_TOL)
   if (profile.length < 2) {
     const c = profile[0] ?? { r: 0, g: 0, b: 0 }
@@ -232,24 +232,15 @@ const hexToRgb3 = (hex: string): [number, number, number] => [
 
 /**
  * SVG radial-gradient offset t∈[0,1] at (x,y) for circle (cx,cy,r) with focal
- * point (fx,fy). Mirrors the rasterizer's `focalOffset` (raster.ts) EXACTLY, so
- * a fit's measured residual matches what the SVG renderer actually paints. With
- * the focal AT the centre it reduces to plain `distance/r` — byte-identical to
- * the pre-focal behaviour, so every centred radial emitted today is unchanged.
+ * point (fx,fy). Mirrors the rasterizer's `focalOffset` (raster.ts) exactly, so
+ * a fit's measured residual matches what the renderer paints. With the focal at
+ * the centre it reduces to `distance/r`.
  */
-export function radialParamT(
-  cx: number,
-  cy: number,
-  r: number,
-  fx: number,
-  fy: number,
-  x: number,
-  y: number,
-): number {
+export function radialParamT(cx: number, cy: number, r: number, fx: number, fy: number, x: number, y: number): number {
   const rr = r || 1
   if (Math.hypot(fx - cx, fy - cy) <= 1e-6) return clamp01(Math.hypot(x - cx, y - cy) / rr)
   // Largest ω with P on the circle centred F+ω(C−F) of radius ω·r (the SVG focal
-  // construction) — the geometrically valid (largest non-negative) quadratic root.
+  // construction): the largest non-negative quadratic root.
   const cfx = cx - fx
   const cfy = cy - fy
   const pfx = x - fx
@@ -270,10 +261,9 @@ export function radialParamT(
 }
 
 /**
- * Scalar gradient parameter t∈[0,1] at (x,y) for any gradient — focal-aware for
- * radials. Single source of truth shared by the fit-time samplers here AND the
- * segmenter's profile-gap test (segment.ts), so all three stay in lock-step with
- * the rasterizer's `makeRadialPaint`.
+ * Scalar gradient parameter t∈[0,1] at (x,y) for any gradient, focal-aware for
+ * radials. Shared by the fit-time samplers here and the segmenter's profile-gap
+ * test (segment.ts) so both agree with the rasterizer's `makeRadialPaint`.
  */
 export function gradientParamT(g: GradientFill, x: number, y: number): number {
   if (g.type === 'linear') {
@@ -316,13 +306,10 @@ export function modelResidualOklab(g: GradientFill, s: RegionSamples): number {
 
 /**
  * Fit the best paint for a region's sampled pixels. Coordinates of the returned
- * gradient are in the SAME space as the input `xs`/`ys` (the tracing pipeline
- * works in pixel == viewBox space, so no rescaling is needed).
+ * gradient are in the same space as the input `xs`/`ys` (the tracing pipeline
+ * works in pixel == viewBox space).
  */
-export function fitRegionFill(
-  s: RegionSamples,
-  opts: GradientFitOptions = DEFAULT_GRADIENT_FIT,
-): FitResult {
+export function fitRegionFill(s: RegionSamples, opts: GradientFitOptions = DEFAULT_GRADIENT_FIT): FitResult {
   const { xs, ys, rs, gs, bs, n } = s
 
   // --- solid (mean) ---------------------------------------------------------
@@ -371,20 +358,15 @@ export function fitRegionFill(
   const radial = fitRadial(s, mx, my)
   if (radial) result.radialResidual = radial.residual
 
-  // --- model selection ------------------------------------------------------
-  // Only graduate to a gradient when the region is genuinely non-flat AND the
-  // ramp explains it markedly better than a single color.
+  // Take a gradient only when the region is non-flat and the ramp explains it
+  // markedly better than a single color.
   if (solidResidual >= opts.flatResidual) {
     let best: { residual: number; gradient: GradientFill; kind: 'linear' | 'radial' } | null = null
     if (linear) best = { residual: linear.residual, gradient: linear.gradient, kind: 'linear' }
     if (radial && radial.residual < (best?.residual ?? Infinity)) {
       best = { residual: radial.residual, gradient: radial.gradient, kind: 'radial' }
     }
-    if (
-      best &&
-      best.residual <= opts.maxGradResidual &&
-      best.residual <= solidResidual * opts.improveFraction
-    ) {
+    if (best && best.residual <= opts.maxGradResidual && best.residual <= solidResidual * opts.improveFraction) {
       result.kind = best.kind
       result.gradient = best.gradient
     }
@@ -396,9 +378,8 @@ export function fitRegionFill(
 /**
  * Fit the best gradient model (linear or radial, multi-stop) to a region's
  * samples, ranked by Oklab ΔE. Used by the union-refit merge to decide whether a
- * SINGLE gradient explains the combined samples of several regions. Unlike
- * fitRegionFill it does NOT gate on solid-vs-gradient improvement — it returns the
- * best gradient and how well it fits perceptually, and the caller applies the ΔE
+ * single gradient explains the combined samples of several regions. Unlike
+ * fitRegionFill it applies no solid-vs-gradient test; the caller applies the ΔE
  * threshold.
  */
 export function fitBestGradient(s: RegionSamples): { gradient: GradientFill; oklabResidual: number } | null {
@@ -434,10 +415,10 @@ export function fitBestGradient(s: RegionSamples): { gradient: GradientFill; okl
 }
 
 // ---------------------------------------------------------------------------
-// Stage 2 — paint-model ladder (plan §3.2 / paper §3.3): per macro-region, pick
-// the cheapest model under an MDL score (Oklab error + λ·complexity) from
-// solid → linear-multistop → radial-multistop, with the §3.2.2 rank-2 early-out.
-// Fits run on the segmenter's SMOOTH (AA-free) samples, so a plain mean already
+// Paint-model ladder (reference paper §3.3): per macro-region, pick the cheapest
+// model under an MDL score (Oklab error + λ·complexity) from solid, linear
+// multi-stop and radial multi-stop, with a rank-2 early-out for 2-D fields.
+// Fits run on the segmenter's smooth (AA-free) samples, so a plain mean already
 // approximates the paper's boundary-distance-weighted constant.
 // ---------------------------------------------------------------------------
 
@@ -452,7 +433,7 @@ export interface PaintLadderOptions {
   mdlLambda: number
   /** Structure-tensor anisotropy λ₂/λ₁ above which linear is doomed → prefer radial. */
   anisotropy2D: number
-  /** Above this single-model Oklab residual, try a glow stack (plan §3.2.4). */
+  /** Above this single-model Oklab residual, try a glow stack. */
   glowTrigger: number
   /** A glow stack must beat the best single model by this CIE76 ΔE margin to win. */
   glowMinGain: number
@@ -497,12 +478,12 @@ function solidResidualOklab(s: RegionSamples, mr: number, mg: number, mb: number
 }
 
 /**
- * Fit the cheapest adequate paint model for a macro-region's samples (Stage 2).
+ * Fit the cheapest adequate paint model for a macro-region's samples.
  * Selection is MDL: cost = Oklab residual + λ·#params, minimised over
- * {solid, linear, radial}; linear is excluded when the structure tensor says the
- * field is genuinely 2-D (the rank-2 early-out) so a deceptively-low 1-D fit can't
- * win over the radial a glow actually needs. A gradient is taken only if it fits
- * under `maxModelResidual`; otherwise the region stays solid (the §3.4 fallback).
+ * {solid, linear, radial}. When the structure tensor says the field is 2-D, the
+ * radial's extra parameter is waived so it wins a near-tie over linear. A
+ * gradient is taken only if it fits under `maxModelResidual`; otherwise the
+ * region stays solid.
  */
 export function fitPaintLadder(
   s: RegionSamples,
@@ -516,14 +497,30 @@ export function fitPaintLadder(
   let mx = 0
   let my = 0
   for (let i = 0; i < n; i++) {
-    mr += rs[i]; mg += gs[i]; mb += bs[i]; mx += xs[i]; my += ys[i]
+    mr += rs[i]
+    mg += gs[i]
+    mb += bs[i]
+    mx += xs[i]
+    my += ys[i]
   }
-  if (n > 0) { mr /= n; mg /= n; mb /= n; mx /= n; my /= n }
+  if (n > 0) {
+    mr /= n
+    mg /= n
+    mb /= n
+    mx /= n
+    my /= n
+  }
   const solid: [number, number, number] = [mr, mg, mb]
   const solidRes = n > 0 ? solidResidualOklab(s, mr, mg, mb) : 0
 
   if (n < opts.minSamples || solidRes < opts.flatResidual) {
-    return { model: 'solid', gradient: null, solid, residualOklab: solidRes, debug: { solidRes, linearRes: Infinity, radialRes: Infinity, anisotropy: 0 } }
+    return {
+      model: 'solid',
+      gradient: null,
+      solid,
+      residualOklab: solidRes,
+      debug: { solidRes, linearRes: Infinity, radialRes: Infinity, anisotropy: 0 },
+    }
   }
 
   const linear = fitLinear(s, mx, my, mr, mg, mb)
@@ -540,14 +537,17 @@ export function fitPaintLadder(
     cands.push({ model: 'linear', gradient: linear.gradient, res: linRes, complexity: linear.gradient.stops.length })
   }
   if (radial && radRes <= opts.maxModelResidual) {
-    // §3.2.2 rank-2 signal: on a genuinely 2-D field (high anisotropy) the radial
-    // is the structurally-right model, so waive its extra centre-parameter cost so
-    // it wins a near-tie over linear. This is a SOFT preference — it never discards
-    // a markedly-better-fitting linear (a hard linear-drop was measured to force a
-    // worse SOLID on a linearly-shaded petal). On a 1-D field the radial pays the
-    // +1 and the lower-residual linear wins on merit.
+    // Rank-2 signal: on a 2-D field (high anisotropy) the radial is the right
+    // model, so waive its extra centre-parameter cost and let it win a near-tie.
+    // Keep this a soft preference: dropping linear outright can leave a worse
+    // solid on a linearly shaded region. On a 1-D field the radial pays the +1.
     const twoD = anisotropy > opts.anisotropy2D
-    cands.push({ model: 'radial', gradient: radial.gradient, res: radRes, complexity: radial.gradient.stops.length + (twoD ? 0 : 1) })
+    cands.push({
+      model: 'radial',
+      gradient: radial.gradient,
+      res: radRes,
+      complexity: radial.gradient.stops.length + (twoD ? 0 : 1),
+    })
   }
 
   // MDL: cost = Oklab residual + λ·#params, with λ sized so complexity only breaks
@@ -562,11 +562,10 @@ export function fitPaintLadder(
     }
   }
 
-  // §3.2.4 glow stack: when the best single gradient still leaves a sizeable
-  // residual, the field is likely 2-D (a base PLUS radial glows) that no single
-  // SVG gradient can represent. Peel residual blobs into translucent radial
-  // overlays and keep them only if the composite beats the single model clearly
-  // — measured in CIE76 (the harness fidelity metric), not Oklab (see below).
+  // Glow stack: when the best single gradient still leaves a sizeable residual,
+  // the field is likely a base plus radial glows that no single SVG gradient can
+  // represent. Peel residual blobs into translucent radial overlays and keep them
+  // only if the composite clearly wins, measured in CIE76 (see DEFAULT_GLOW_STACK).
   if (best.gradient && best.res > opts.glowTrigger) {
     const glow = fitGlowStack(s, glowSamples, best.gradient)
     if (glow) {
@@ -593,9 +592,9 @@ interface LinearFit {
   residual: number
   /**
    * Structure-tensor anisotropy λ₂/λ₁ ∈ [0,1]: 0 = a perfectly 1-D ramp (the
-   * three channel gradients share one direction), →1 = a genuinely 2-D colour
-   * field (channels ramp in different directions — nebula's glow). The §3.2.2
-   * rank-2 early-out reads this to skip a doomed linear fit and prefer radial.
+   * three channel gradients share one direction), →1 = a 2-D colour field
+   * (channels ramp in different directions, e.g. a glow). The paint ladder reads
+   * this to prefer radial over linear.
    */
   anisotropy: number
 }
@@ -605,14 +604,7 @@ interface LinearFit {
  * channel mean), then the structure tensor of the three channel gradients gives
  * the dominant ramp axis. Stops are the fitted colors at the axis extremes.
  */
-function fitLinear(
-  s: RegionSamples,
-  mx: number,
-  my: number,
-  mr: number,
-  mg: number,
-  mb: number,
-): LinearFit | null {
+function fitLinear(s: RegionSamples, mx: number, my: number, mr: number, mg: number, mb: number): LinearFit | null {
   const { xs, ys, rs, gs, bs, n } = s
 
   let Sxx = 0
@@ -653,7 +645,7 @@ function fitLinear(
   if (Txx + Tyy < 1e-12) return null
   const [ux, uy] = dominantEigenvector(Txx, Txy, Tyy)
   // Eigenvalues of T = squared singular values of the 3×2 channel Jacobian; their
-  // ratio is the field's 2-D-ness (rank-2 early-out, §3.2.2).
+  // ratio is the field's 2-D-ness.
   const half = (Txx + Tyy) / 2
   const disc = Math.hypot((Txx - Tyy) / 2, Txy)
   const lam1 = half + disc
@@ -671,8 +663,7 @@ function fitLinear(
   if (!(tmax - tmin > 1e-6)) return null
 
   // Per-sample normalized position along the axis, then multi-stop emission from
-  // the binned colour profile (captures eased / hue-rotating ramps a 2-stop fit
-  // flattens). The RMS residual is measured against the emitted stop model.
+  // the binned colour profile. The residual is measured against the emitted stops.
   const span = tmax - tmin
   const param = new Float64Array(n)
   for (let i = 0; i < n; i++) {
@@ -767,8 +758,7 @@ function fitRadial(s: RegionSamples, mx: number, my: number): RadialFit | null {
     }
     if (maxD < 1e-6) return null
 
-    // Multi-stop emission along the radius profile (captures non-linear radial
-    // ramps the old intercept+slope fit flattened). Residual vs the stop model.
+    // Multi-stop emission along the radius profile; residual vs the emitted stops.
     const param = new Float64Array(n)
     for (let i = 0; i < n; i++) {
       param[i] = clamp01(Math.hypot(samples.xs[i] - cx, samples.ys[i] - cy) / maxD)
@@ -780,20 +770,14 @@ function fitRadial(s: RegionSamples, mx: number, my: number): RadialFit | null {
 }
 
 // ---------------------------------------------------------------------------
-// Stage 2.4 — glow stack (plan §3.2.4, the "wow" tier): a 2-D colour field like
-// nebula's background (a diagonal base PLUS lighter radial glows) cannot be
-// represented by ANY single SVG gradient. So decompose it: base = best linear
-// fit, then greedily peel the K≤3 strongest residual "blobs", each fitted as a
-// CENTRED radial overlay whose opacity fades to 0 at its rim (a translucent
-// Gaussian glow layered above the base). SVG composites these natively, and it
-// degrades gracefully — K=0 ⇒ the plain linear we already had.
+// Glow stack: a 2-D colour field (a diagonal base plus lighter radial glows)
+// cannot be represented by any single SVG gradient, so decompose it: base = the
+// best single fit, then greedily peel up to K strongest residual blobs, each a
+// centred radial overlay whose opacity fades to 0 at its rim (a translucent
+// Gaussian glow). SVG composites these natively; K=0 is the plain base.
 //
-// Overlays are centred (no fx/fy). `sampleGradient`/`gradientParamT` are now
-// focal-aware (mirroring the rasterizer's `makeRadialPaint`), so the fit-time
-// samplers agree with the renderer for ANY radial, not just centred ones — the
-// old V2 focal-sync latent is disarmed. The composite math below mirrors
-// raster.ts `compositeItem` (straight alpha-over, base opaque first) so the
-// harness measures what is emitted.
+// The composite math mirrors raster.ts `compositeItem` (straight alpha-over,
+// opaque base first) so the fit measures what is rendered.
 // ---------------------------------------------------------------------------
 
 export interface GlowStack {
@@ -815,10 +799,9 @@ export interface GlowStackOptions {
   alphaHi: number
 }
 
-// Gates are in CIE76 ΔE — the harness's own fidelity metric — NOT Oklab. The glow
-// is the "wow" tier targeting visible fidelity, and a blue-violet glow correction
-// (nebula) is large in CIE76 / SSIM yet compressed in the perceptually-flatter
-// Oklab, so an Oklab gate would silently reject a clearly-beneficial overlay.
+// Thresholds are in CIE76 ΔE, not Oklab: a blue-violet glow correction is large
+// in CIE76 but compressed in Oklab, so an Oklab test would reject overlays that
+// visibly help.
 export const DEFAULT_GLOW_STACK: GlowStackOptions = {
   maxOverlays: 3,
   minPeakResidual: 2.0,
@@ -827,9 +810,8 @@ export const DEFAULT_GLOW_STACK: GlowStackOptions = {
   alphaHi: 1.0,
 }
 
-/** A gradient's colour AND alpha at (x, y) — alpha from per-stop opacity. Uses the
- *  shared focal-aware `gradientParamT`, so it matches the rasterizer's `sampleStops`
- *  for any radial (glow overlays stay centred, but the two now agree generally). */
+/** A gradient's colour and alpha at (x, y), alpha from per-stop opacity. Matches
+ *  the rasterizer's `sampleStops`. */
 function sampleGradientRGBA(g: GradientFill, x: number, y: number): [number, number, number, number] {
   return interpStopsRGBA(g.stops, gradientParamT(g, x, y))
 }
@@ -880,8 +862,7 @@ export function sampleGlowStack(stack: GlowStack, x: number, y: number): [number
   return [R, G, B]
 }
 
-/** Mean CIE76 ΔE of a per-sample colour evaluator vs the source samples (the
- *  harness's fidelity metric — used to gate the glow stack). */
+/** Mean CIE76 ΔE of a per-sample colour evaluator vs the source samples. */
 function meanLabResidual(s: RegionSamples, evalFn: (x: number, y: number) => [number, number, number]): number {
   let sum = 0
   for (let i = 0; i < s.n; i++) {
@@ -893,20 +874,18 @@ function meanLabResidual(s: RegionSamples, evalFn: (x: number, y: number) => [nu
 
 /**
  * Decompose a region into the given opaque `base` paint + up to K radial glow
- * overlays. Returns null when no overlay clears the acceptance gates (then the
- * caller keeps the plain single model). Greedy: each round finds the sample where
- * the current composite is most wrong, fits a centred Gaussian glow toward that
- * colour, and keeps it only if it meaningfully cuts the composited residual.
+ * overlays. Returns null when no overlay is accepted (the caller then keeps the
+ * single model). Greedy: each round finds the sample where the current composite
+ * is most wrong, fits a centred Gaussian glow toward that colour, and keeps it
+ * only if it meaningfully cuts the composited residual.
  *
  * Two sample sets, deliberately distinct:
- *  - `fit`  — the SMOOTH (AA-free) samples: peak location + the Gaussian falloff
- *             are fit here, so the blob is seeded at the clean glow centre, not on
- *             a high-error anti-aliased boundary pixel.
- *  - `gate` — the FULL region (all pixels, AA included): the accept/improvement
- *             gates are measured here, because the smooth subset omits the
- *             high-error AA pixels a glow most improves and so under-reports its
- *             benefit by ~20× (measured on nebula). This makes the fit-time gate
- *             match what the rasterizer actually renders.
+ *  - `fit`:  the smooth (AA-free) samples. Peak location and falloff are fit here,
+ *            so a blob is seeded at the glow centre, not on an anti-aliased
+ *            boundary pixel.
+ *  - `gate`: the full region, AA included. Acceptance is measured here because
+ *            the smooth subset omits the high-error pixels a glow improves most
+ *            and so badly under-reports its benefit.
  */
 export function fitGlowStack(
   fit: RegionSamples,
@@ -918,7 +897,10 @@ export function fitGlowStack(
 
   // Region extent caps a glow's sigma (a "blob" wider than the region is just the
   // base trend, not a localized glow).
-  let bbMinX = Infinity, bbMinY = Infinity, bbMaxX = -Infinity, bbMaxY = -Infinity
+  let bbMinX = Infinity,
+    bbMinY = Infinity,
+    bbMaxX = -Infinity,
+    bbMaxY = -Infinity
   for (let i = 0; i < fit.n; i++) {
     if (fit.xs[i] < bbMinX) bbMinX = fit.xs[i]
     if (fit.xs[i] > bbMaxX) bbMaxX = fit.xs[i]
@@ -931,8 +913,7 @@ export function fitGlowStack(
   let curResidual = meanLabResidual(gate, (x, y) => sampleGlowStack({ base, overlays }, x, y))
 
   for (let k = 0; k < opts.maxOverlays; k++) {
-    // Peak = SMOOTH sample whose current composite is most wrong (clean glow
-    // centre, deterministic argmax) — never a noisy AA boundary pixel.
+    // Peak = smooth sample whose current composite is most wrong (deterministic argmax).
     let peak = -1
     let peakDE = 0
     for (let i = 0; i < fit.n; i++) {
@@ -979,13 +960,21 @@ function fitOverlayAt(
   const C: [number, number, number] = [rs[peak], gs[peak], bs[peak]]
 
   // Per-sample alpha + distance² for the falloff regression.
-  let sw = 0, sX = 0, sY = 0, sXX = 0, sXY = 0 // weighted sums for ln(α) ~ a + b·d²
+  let sw = 0,
+    sX = 0,
+    sY = 0,
+    sXX = 0,
+    sXY = 0 // weighted sums for ln(α) ~ a + b·d²
   let strong = 0
   for (let i = 0; i < n; i++) {
     const [cr, cg, cb] = sampleGlowStack({ base, overlays }, xs[i], ys[i])
     // remaining error and the available "glow direction" (C − composite).
-    const er = rs[i] - cr, eg = gs[i] - cg, eb = bs[i] - cb
-    const dr = C[0] - cr, dg = C[1] - cg, db = C[2] - cb
+    const er = rs[i] - cr,
+      eg = gs[i] - cg,
+      eb = bs[i] - cb
+    const dr = C[0] - cr,
+      dg = C[1] - cg,
+      db = C[2] - cb
     const denom = dr * dr + dg * dg + db * db
     if (denom < 1e-6) continue
     let a = (er * dr + eg * dg + eb * db) / denom
@@ -994,7 +983,11 @@ function fitOverlayAt(
     const d2 = (xs[i] - cx) ** 2 + (ys[i] - cy) ** 2
     const w = a // weight by alpha so the bright core drives the fit
     const ln = Math.log(a)
-    sw += w; sX += w * d2; sY += w * ln; sXX += w * d2 * d2; sXY += w * d2 * ln
+    sw += w
+    sX += w * d2
+    sY += w * ln
+    sXX += w * d2 * d2
+    sXY += w * d2 * ln
   }
   if (strong < 16) return null // not a real blob, just noise
   const det = sw * sXX - sX * sX
@@ -1055,9 +1048,7 @@ export function gradientToSvgDef(g: GradientFill, id: string, precision = 2): st
       '</linearGradient>'
     )
   }
-  let attrs =
-    `id="${id}" gradientUnits="userSpaceOnUse" ` +
-    `cx="${p(g.cx)}" cy="${p(g.cy)}" r="${p(g.r)}"`
+  let attrs = `id="${id}" gradientUnits="userSpaceOnUse" ` + `cx="${p(g.cx)}" cy="${p(g.cy)}" r="${p(g.r)}"`
   if (g.fx !== undefined && g.fy !== undefined) attrs += ` fx="${p(g.fx)}" fy="${p(g.fy)}"`
   return `<radialGradient ${attrs}>${stopsMarkup(g.stops)}</radialGradient>`
 }

@@ -1,5 +1,5 @@
-import { useAppearance, useEnv } from '../../store'
-import { LogoMark } from '../LogoMark'
+import { useAppearance, useEnv } from '../../state/store'
+import { LogoMark } from './LogoMark'
 import { bestTextColor } from '../../lib/colorUtils'
 
 /**
@@ -39,8 +39,7 @@ export default function SplashScreen() {
           borderRadius: 38,
           background: '#0a0b0f',
           padding: 7,
-          boxShadow:
-            '0 22px 50px -16px rgba(16,18,27,0.45), 0 4px 10px -4px rgba(16,18,27,0.25)',
+          boxShadow: '0 22px 50px -16px rgba(16,18,27,0.45), 0 4px 10px -4px rgba(16,18,27,0.25)',
         }}
       >
         {/* Screen */}
@@ -60,29 +59,20 @@ export default function SplashScreen() {
           {/* Centered subject */}
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6">
             <LogoMark size={100} showCard={app.cardInFlat} />
-            <span
-              className="text-[19px] font-semibold tracking-tight"
-              style={{ color: textColor }}
-            >
+            <span className="text-[19px] font-semibold tracking-tight" style={{ color: textColor }}>
               {env.brandName}
             </span>
           </div>
 
           {/* Bottom: loading indicator + footer */}
           <div className="absolute inset-x-0 bottom-7 flex flex-col items-center gap-3 px-10">
-            <div
-              className="relative h-[3px] w-full overflow-hidden rounded-full"
-              style={{ backgroundColor: track }}
-            >
+            <div className="relative h-[3px] w-full overflow-hidden rounded-full" style={{ backgroundColor: track }}>
               <span
                 className="splash-indeterminate absolute inset-y-0 rounded-full"
                 style={{ width: '40%', backgroundColor: bar }}
               />
             </div>
-            <span
-              className="text-[10px] font-medium tracking-wide"
-              style={{ color: textColor, opacity: 0.45 }}
-            >
+            <span className="text-[10px] font-medium tracking-wide" style={{ color: textColor, opacity: 0.45 }}>
               from {env.brandName}
             </span>
           </div>

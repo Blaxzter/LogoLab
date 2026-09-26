@@ -1,11 +1,9 @@
-// The layers panel's display model: the doc tree flattened into the rows the
-// panel actually shows, plus the two questions a pointer asks of that list —
-// "what does shift-click select?" and "where does this drop land?".
+// The layers panel's display model: the doc tree flattened into visible rows,
+// plus range selection and drop resolution over them.
 //
-// Display order is REVERSED against paint order (top of the list = frontmost,
-// like every layers panel ever made) and a collapsed group hides its subtree.
-// The renderer, the range select and the drop resolver all have to agree on
-// what row 5 is, so they read one array, built once, here.
+// Display order is the reverse of paint order (top row = frontmost), and a
+// collapsed group hides its subtree. The renderer, range select and drop
+// resolver all read the same row array so they agree on what each row is.
 
 import type { DocItem } from '../path/types.ts'
 import { isGroup, walkItems } from '../path/docTree.ts'
@@ -16,13 +14,13 @@ export interface LayerRow {
   depth: number
   /** The group this row lives in — null at top level. */
   parentId: string | null
-  /** Index within that parent's children, in PAINT order. */
+  /** Index within that parent's children, in paint order. */
   siblingIndex: number
   /** The number in "Path 3". */
   number: number
 }
 
-/** Where a drop lands: an insertion point in PAINT order. */
+/** Where a drop lands: an insertion point in paint order. */
 export interface DropSpot {
   parentId: string | null
   index: number
@@ -32,12 +30,8 @@ export interface DropSpot {
 export type DropEdge = 'above' | 'below' | 'into'
 
 /**
- * Every visible row, top of the stack first.
- *
- * Numbering runs in PAINT order, not display order: counting down the reversed
- * list would renumber every existing row each time a shape is added — the shape
- * you were looking at silently becomes "Path 4" — and the number would disagree
- * with the one that shape carries everywhere else in the editor.
+ * Every visible row, top of the stack first. Numbering runs in paint order so
+ * adding a shape doesn't renumber the existing rows.
  */
 export function layerRows(items: readonly DocItem[]): LayerRow[] {
   const numbers = new Map<string, number>()
@@ -60,18 +54,11 @@ export function layerRows(items: readonly DocItem[]): LayerRow[] {
 }
 
 /**
- * The ids of every row between two rows, inclusive — what shift-click selects.
- *
- * The span is taken in DISPLAY order, so it is exactly the block of rows the
- * user drew a line down with their eyes: an expanded group caught in the middle
- * contributes both itself and its children, and structural ops drop the
- * children again through `topLevelSelection`.
+ * The ids of every row between two rows, inclusive (shift-click), in display
+ * order. An expanded group in the span contributes itself and its children;
+ * structural ops drop the children again via `topLevelSelection`.
  */
-export function rowsBetween(
-  rows: readonly LayerRow[],
-  anchorId: string,
-  toId: string,
-): string[] {
+export function rowsBetween(rows: readonly LayerRow[], anchorId: string, toId: string): string[] {
   const a = rows.findIndex((r) => r.item.id === anchorId)
   const b = rows.findIndex((r) => r.item.id === toId)
   if (b < 0) return []
@@ -92,18 +79,11 @@ export function edgeAt(offsetY: number, height: number, group: boolean): DropEdg
 }
 
 /**
- * The insertion point a drop on `rowId`'s `edge` means.
- *
- * ABOVE in the list is IN FRONT in paint order — that `+1` is the whole reason
- * this lives in one function instead of being inlined at the drop site.
- * Dropping INTO a group lands at the front of it, where the eye expects a row
- * dragged onto a folder to appear: first child under the header.
+ * The insertion point a drop on `rowId`'s `edge` means. Above in the list is
+ * in front in paint order (hence the `+1`). Dropping into a group lands at its
+ * front, i.e. the first row under the header.
  */
-export function dropSpot(
-  rows: readonly LayerRow[],
-  rowId: string,
-  edge: DropEdge,
-): DropSpot | null {
+export function dropSpot(rows: readonly LayerRow[], rowId: string, edge: DropEdge): DropSpot | null {
   const row = rows.find((r) => r.item.id === rowId)
   if (!row) return null
   if (edge === 'into') {

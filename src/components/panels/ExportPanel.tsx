@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Download, ImageOff, Package, Sparkles, Layers } from 'lucide-react'
-import { AgentSetupButton } from '../AgentSetup'
-import { useAppearance, useCheckerClass, useEnv, useLogo } from '../../store'
+import { AgentSetupButton } from '../shell/AgentSetup'
+import { useAppearance, useCheckerClass, useEnv, useLogo } from '../../state/store'
 import type { ExportTarget, RenderIconOptions } from '../../types'
 import { Toggle } from '../ui/controls'
 import { Button } from '../ui/Button'
 import { CheckerToggle } from '../ui/CheckerToggle'
-import { downloadBlob } from '../../lib/download'
+import { downloadBlob } from '../../lib/export/download'
 import { loadRenderSource } from '../../lib/image'
 import type { RenderSource } from '../../lib/image'
-import { DEFAULT_TARGETS, MASKABLE_SAFE_DIAMETER, buildExportZip, renderIcon } from '../../lib/pwaExport'
-import { PanelEmptyState } from '../PanelEmptyState'
+import { DEFAULT_TARGETS, MASKABLE_SAFE_DIAMETER, buildExportZip, renderIcon } from '../../lib/export/pwaExport'
+import { PanelEmptyState } from '../intake/PanelEmptyState'
 import { debounce, readLocal, writeLocal } from '../../lib/persist/local'
 
 /* ----------------------------------------------------------------- constants */
@@ -112,9 +112,7 @@ export default function ExportPanel(): ReactNode {
 
   const selectedCount = useMemo(() => targets.filter((t) => t.enabled).length, [targets])
 
-  // Picking an icon set is a small but fiddly decision (19 targets, five
-  // presets), and re-making it after every reload is exactly the kind of lost
-  // work this app was throwing away.
+  // The target selection is persisted so it survives a reload.
   useEffect(() => {
     saveExport({
       enabled: targets.filter((t) => t.enabled).map((t) => t.id),
@@ -164,14 +162,27 @@ export default function ExportPanel(): ReactNode {
         includeHtml,
         svgText: logo.isSvg ? logo.svgText : null,
       })
-      const safeName = (env.brandName.trim() || 'app').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      const safeName = (env.brandName.trim() || 'app')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
       downloadBlob(blob, `${safeName || 'app'}-icons.zip`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Export failed')
     } finally {
       setBusy(false)
     }
-  }, [logo.src, logo.isSvg, logo.svgText, selectedCount, targets, baseOpts, env.brandName, includeManifest, includeHtml])
+  }, [
+    logo.src,
+    logo.isSvg,
+    logo.svgText,
+    selectedCount,
+    targets,
+    baseOpts,
+    env.brandName,
+    includeManifest,
+    includeHtml,
+  ])
 
   /* -------------------------------------------------------------- empty state */
 
@@ -194,8 +205,8 @@ export default function ExportPanel(): ReactNode {
       <header className="mb-6">
         <h1 className="text-lg font-semibold text-ink">Export icons</h1>
         <p className="mt-1 text-sm text-muted">
-          Generate a production-ready favicon &amp; PWA icon set. Icon look follows the sidebar appearance
-          (card color, shape, radius, padding, scale &amp; tint).
+          Generate a production-ready favicon &amp; PWA icon set. Icon look follows the sidebar appearance (card color,
+          shape, radius, padding, scale &amp; tint).
         </p>
       </header>
 
@@ -283,9 +294,9 @@ export default function ExportPanel(): ReactNode {
               </label>
             </div>
             <p className="mt-3 rounded-md bg-surface-3 px-3 py-2 text-xs leading-snug text-muted">
-              Maskable icons are drawn full-bleed and opaque with an enlarged safe-zone so Android can crop them
-              to any shape without clipping your mark. The dashed circle in the preview is that crop — the centre
-              66% Android guarantees, a circle rather than a square.
+              Maskable icons are drawn full-bleed and opaque with an enlarged safe-zone so Android can crop them to any
+              shape without clipping your mark. The dashed circle in the preview is that crop — the centre 66% Android
+              guarantees, a circle rather than a square.
             </p>
           </section>
         </div>
@@ -301,15 +312,9 @@ export default function ExportPanel(): ReactNode {
               <CheckerToggle />
             </div>
 
-            <PreviewGrid
-              src={logo.src}
-              svgText={logo.isSvg ? logo.svgText : null}
-              baseOpts={baseOpts}
-            />
+            <PreviewGrid src={logo.src} svgText={logo.isSvg ? logo.svgText : null} baseOpts={baseOpts} />
 
-            {error && (
-              <p className="rounded-md bg-[color:var(--color-bad)]/8 px-3 py-2 text-xs text-bad">{error}</p>
-            )}
+            {error && <p className="rounded-md bg-[color:var(--color-bad)]/8 px-3 py-2 text-xs text-bad">{error}</p>}
 
             <Button
               variant="primary"
@@ -366,10 +371,8 @@ function PreviewGrid({
   }, [src, svgText])
 
   return (
-    // Flex-wrap (not a fixed 3-col grid) so each tile keeps its true pixel size
-    // and flows to the next row instead of overflowing the narrow 320px panel.
-    // Natural packing groups the tiny favicons, then the app icons, then the
-    // 512 + maskable pair.
+    // Flex-wrap (not a fixed grid) so each tile keeps its true pixel size and
+    // wraps instead of overflowing the narrow panel.
     <div className="flex flex-wrap content-center justify-center gap-3">
       {PREVIEW_TILES.map((tile, i) => (
         <PreviewTile
