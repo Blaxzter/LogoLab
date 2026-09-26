@@ -66,6 +66,7 @@ export const AB_CORPUS: AbCorpusCase[] = [
   { id: 'peak-drop', name: '⟐ peak-drop — small isolated features under the despeckle floor (§20)', kind: 'svg', path: 'public/examples/edge-cases/peak-drop.svg' },
   { id: 'smooth-radii', name: '⟐ smooth-radii — no authored corners; the kink gate (§23)', kind: 'svg', path: 'public/examples/edge-cases/smooth-radii.svg' },
   { id: 'corner-turns', name: '⟐ corner-turns — authored-turn sweep, the detector’s turn reading (§22)', kind: 'svg', path: 'public/examples/edge-cases/corner-turns.svg' },
+  { id: 'dot-ladder', name: '⟐ dot-ladder — 5–32px discs vs squares/diamonds/triangles, the small-disc veto', kind: 'svg', path: 'public/examples/edge-cases/dot-ladder.svg' },
   { id: 'shaded-ink', name: '⟐ shaded-ink — one ink, soft shading; the colour path carves it (#15)', kind: 'svg', path: 'public/examples/edge-cases/shaded-ink.svg' },
   { id: 'annulus', name: '⟐ annulus — hole winding + alpha', kind: 'svg', path: 'public/examples/edge-cases/annulus.svg' },
   { id: 'ring-cross', name: '⟐ ring-cross — interlocking annuli; co-circular snap across crossings (#10)', kind: 'svg', path: 'public/examples/edge-cases/ring-cross.svg' },

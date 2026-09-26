@@ -8,7 +8,7 @@
 import type { EdgeRef, PathNode, SharedEdge, Vec, Vertex } from '../path/types'
 import { cubicAt, segmentControls, segmentCount } from '../path/geometry.ts'
 import { buildPlanarNetwork, EXT, type PlanarNetwork } from './planarNetwork.ts'
-import { detectCorners, detectLoopCorners, turnReadOf, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type ApexReach, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
+import { detectCorners, detectLoopCorners, discExplainsLoop, turnReadOf, fitCorneredLoop, fitCorneredOpen, fitLoopEdge, fitOpenArc, presmooth, type ApexReach, type PlanarFitOptions, DEFAULT_PLANAR_FIT } from './planarFit.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
 import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
 import { subpixelEdgeChains, type SourceImage } from './planarSubpixel.ts'
@@ -243,11 +243,19 @@ export function assemblePlanar(
       // each corner to its sub-pixel arm intersection, then fit the arcs between
       // them) so the apex is an exact node, not a beveled pair. Smooth loops have
       // <2 corners and fall through to the unchanged closed-loop fitter.
-      const loopCorners = detectLoopCorners(latticePts, opts.cornerTurnDeg, opts.cornerWindow, opts.cornerMerge, turnReadOf(opts))
+      let loopCorners = detectLoopCorners(latticePts, opts.cornerTurnDeg, opts.cornerWindow, opts.cornerMerge, turnReadOf(opts))
+      // A small DISC reads 2–5 false corners on its staircase; when one circle explains
+      // the loop better than those corners' straight arms, it is fitted smooth and the
+      // pins go with the corners (discExplainsLoop — i-dots traced as polygons).
+      let loopPins = corners
+      if (discExplainsLoop(latticePts, loopCorners)) {
+        loopCorners = []
+        loopPins = new Set()
+      }
       nodes =
         loopCorners.length >= 2
           ? fitCorneredLoop(pts, loopCorners, edgeOpts)
-          : fitLoopEdge(presmooth(pts, opts.smoothPasses, false, corners), opts)
+          : fitLoopEdge(presmooth(pts, opts.smoothPasses, false, loopPins), opts)
       // AREA GUARD. A fit can keep every boundary sample within ε and still
       // pinch a thin loop's two walls together — a thin bar's cap shoulder-
       // corners (1–2px apart) fuse to a single apex in detectLoopCorners, the
@@ -275,7 +283,7 @@ export function assemblePlanar(
           nodes =
             loopCorners.length >= 2
               ? fitCorneredLoop(latticePts, loopCorners, opts)
-              : fitLoopEdge(presmooth(latticePts, opts.smoothPasses, false, corners), opts)
+              : fitLoopEdge(presmooth(latticePts, opts.smoothPasses, false, loopPins), opts)
         }
         if (Math.abs(polySignedArea(flattenNodes(nodes))) < rawArea * 0.75) {
           nodes = staircaseCorners(latticePts)
