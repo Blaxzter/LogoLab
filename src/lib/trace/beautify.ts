@@ -1,23 +1,19 @@
-// Shape beautification (Stage 3 of the V3 vectorizer — plan §3.3 / §6 V3).
-//
-// A PURE post-processing pass over the traced contours, run AFTER the tracer and
-// BEFORE the EditableDoc is assembled, so it works for BOTH engines (potrace and
-// crisp). It does NOT re-segment — it only regularises the geometry the tracer
-// already produced:
+// Loop-level shape beautification over independent subpaths. Regularises traced
+// geometry without re-segmenting:
 //
 //   1. Per closed loop — snap to a primitive (circle / axis-aligned ellipse) when
-//      the loop genuinely is one; straighten near-straight cubic runs to lines,
-//      merge collinear vertices, and snap rectilinear edges to horizontal/vertical.
+//      the loop is one; otherwise straighten near-straight cubic runs to lines,
+//      merge collinear vertices, and snap near-axis edges to horizontal/vertical.
 //   2. Cross-shape relation solver — detect concentric centres and equal radii
-//      across all loops/items and reconcile them with one small mean adjustment.
+//      across all loops and reconcile them with one small mean adjustment.
 //
-// Every snap is gated by ONE user-facing tolerance — the FIDELITY knob: a snap is
-// accepted only if the maximum deviation it introduces from the raw flattened
-// trace stays ≤ `fidelity` px. This is the single knob that says how far from the
-// source PNG the output may drift. `fidelity = 0` disables beautification.
+// The planar pipeline does not run this pass (moving loops independently would
+// desync edges two regions share); it uses planarBeautify.ts, which shares this
+// module's options and the fitting math in circleFit.ts.
 //
-// Pure and deterministic (fixed sample counts, fixed scan/cluster orders, no PRNG
-// / Date): runs unchanged under `node --test`.
+// Every snap is gated by the user-facing fidelity tolerance: accepted only if the
+// maximum deviation it introduces from the raw flattened trace stays ≤ `fidelity`
+// px. `fidelity = 0` disables beautification. Pure and deterministic.
 
 import type { SubPath, PathNode, Vec } from '../path/types'
 import { cubicAt } from '../path/geometry.ts'
@@ -44,7 +40,7 @@ export interface BeautifyOptions {
    */
   fidelity: number
   /** Concentric-centre / equal-radius detection radius, as a fraction of the
-   *  whole-document bbox long side (plan §3.3: ~1/10). */
+   *  whole-document bbox long side. */
   relationFrac: number
   /** Angle (deg) within which a straight edge snaps to horizontal/vertical. */
   hvAngleDeg: number
@@ -57,16 +53,12 @@ export const DEFAULT_BEAUTIFY_OPTIONS: BeautifyOptions = {
 }
 
 /**
- * Drift ceiling (px) for the LINE cleanups — straighten, collinear-merge, H-V
- * snap. Deliberately a small value (well under 1 px) and NOT scaled up by the
- * fidelity knob. Each line cleanup repositions a single boundary vertex, so any
- * drift over ~1 px reads as a seam (the harness flags boundary moves the source
- * edge cannot account for) and second-guesses the tracer's own fit — measured to
- * regress petals' organic edges and aurora's translucent strokes when run at the
- * full 1.5 px budget. The knob's larger drift budget belongs to WHOLE-SHAPE
- * primitive snaps (circles/ellipses): there the deviation is distributed smoothly
- * around a perfect shape and the perceptual payoff justifies it, whereas nudging
- * one vertex never does. (`min(fidelity, …)` still lets a user tighten below it.)
+ * Drift ceiling (px) for the line cleanups — straighten, collinear-merge, H-V snap.
+ * Kept well under a pixel and not scaled by the fidelity knob: each cleanup moves a
+ * single boundary vertex, which reads as a seam and second-guesses the tracer's own
+ * fit. The larger fidelity budget is for whole-shape primitive snaps, where the
+ * deviation is spread smoothly around a perfect shape. `min(fidelity, …)` still lets
+ * a user tighten below it.
  */
 const LINE_POLISH_CAP = 0.3
 
@@ -111,8 +103,8 @@ interface CircleRecord {
   r: number
   /** Sign of the original loop's winding, to regenerate with matching orientation. */
   positive: boolean
-  /** The original flattened trace, so any later (relation) adjustment can be
-   *  re-checked against the RAW trace, never against the snapped circle. */
+  /** The original flattened trace, so a later relation adjustment is re-checked
+   *  against the raw trace rather than the snapped circle. */
   raw: Vec[]
 }
 
@@ -149,7 +141,7 @@ function analyseLoop(sp: SubPath, opts: BeautifyOptions): ShapeRecord {
 
   // --- Axis-aligned ellipse -------------------------------------------------
   const ell = fitEllipse(raw)
-  // BOTH directions must hold: maxEllipseDev (polygon→ellipse) is blind to the
+  // Both directions must hold: maxEllipseDev (polygon→ellipse) is blind to the
   // ellipse bulging into space the polygon never visits (maxEllipseToPolyDev).
   if (
     ell &&
@@ -311,7 +303,7 @@ function shiftAnchorY(n: PathNode, y: number): void {
 /**
  * Reconcile the snapped circles across all items via the shared
  * `relationSolveCircles` solver (concentric centres, equal radii — each gated
- * against the circle's RAW trace). It mutates each record's cx/cy/r in place and
+ * against the circle's raw trace). It mutates each record's cx/cy/r in place and
  * reports which moved; we regenerate only those as fresh 4-node Bézier subpaths.
  */
 function relationSolve(records: ShapeRecord[][], opts: BeautifyOptions, longSide: number): void {

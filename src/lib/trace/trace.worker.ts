@@ -1,16 +1,10 @@
-// Web Worker that runs vectorize work OFF the main thread, so the UI stays
-// responsive (and animations stay smooth) while computing.
-//
-// Two jobs, both pure-JS (no DOM/WASM, so worker-safe) — the planar and crisp
-// engines run here:
+// Web Worker that runs vectorize work off the main thread, so the UI stays
+// responsive while computing. Two jobs (the pipeline is pure JS, so worker-safe):
 //   - 'trace':   run the full pipeline, return the EditableDoc (the studio result).
-//   - 'analyze': run the pipeline AND the intermediate stages, returning the
+//   - 'analyze': run the pipeline and the intermediate stages, returning the
 //                stage visualisations (smoothed / discontinuity / regions / region
-//                fills as RGBA buffers) + paint models + the final SVG — for the
-//                user-facing "How it works" explainer, so it no longer freezes.
-//
-// (The potrace engine that had to stay on the main thread is gone.) The caller
-// dispatches the pure-JS engines (planar, crisp) here.
+//                fills as RGBA buffers) + paint models + the final SVG, for the
+//                "How it works" explainer.
 
 import { traceImage, segmentOptionsFor } from './index.ts'
 import { segmentImage } from './segment.ts'

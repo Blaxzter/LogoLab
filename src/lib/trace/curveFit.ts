@@ -1,57 +1,46 @@
-// Evidence-based curve fitting for the crisp tracer (plan §4.2 / Stage A — the
-// supplement's "soft-corner + dynamic-programming" curve-selection recipe).
-//
-// The crisp tracer used to place corners with a hard turn-angle threshold
-// (detectCorners): one global knob that had to be both sharp on real corners and
-// smooth on curves, so it rounded genuine sharp corners (summit's mountain peaks)
-// and drifted the boundary off the source edge. This module replaces that with
-// the supplement's evidence-driven pipeline, keeping the same Schneider cubic
-// fitter as the inner primitive:
+// Evidence-based curve fitting: turns a dense sub-pixel polyline into a minimal
+// chain of lines and cubic Béziers, deciding corner vs smooth joins from local
+// shape evidence rather than a turn-angle threshold. The planar fitter uses the
+// closed-loop entry point and the building blocks (single-cubic fit, line fit,
+// junction costs) directly.
 //
 //   1. Key vertices  — Douglas–Peucker at ε on the dense loop; the retained
-//      vertices are the ONLY allowed curve endpoints (§3.3.1).
+//      vertices are the only allowed curve endpoints.
 //   2. Tangents      — at each key vertex, fit a line over a growing window until
-//      its RMS exceeds ε/2; that direction is the G¹ tangent (§3.3.2).
-//   3. Soft-corner   — a score c(j) ∈ [−1 smooth … +1 corner] from competitively
+//      its RMS exceeds ε/2; that direction is the G¹ tangent.
+//   3. Soft-corner   — a score c ∈ [−1 smooth … +1 corner] from competitively
 //      fitting a line, a circle and a two-line wedge over growing windows until
-//      each exceeds ε; corners emerge from evidence, not a threshold (§3.3.3).
+//      each exceeds ε.
 //   4. DP selection  — an over-complete candidate set (a line between adjacent
-//      key vertices, plus Schneider cubics between ANY key-vertex pair for the
-//      four C⁰/G¹ endpoint combinations), each ≤ ε, costed with junction
-//      penalties from c(j); a min-cost path through the DAG picks where C⁰ corners
-//      go based on global context (§3.3.4).
+//      key vertices, plus Schneider cubics between key-vertex pairs for the four
+//      C⁰/G¹ endpoint combinations), each within ε, costed with junction
+//      penalties derived from c; a min-cost cyclic path picks where corners go.
 //
-// Everything is pure and deterministic (fixed scan orders, no PRNG / Date), so it
-// runs unchanged under `node --test`.
+// Pure and deterministic (fixed scan orders).
 
 import type { PathNode, Vec } from '../path/types'
 
 export interface CurveFitOptions {
-  /** Key-vertex DP tolerance AND cubic-discard tolerance ε (px). Paper: 1.5. */
+  /** Douglas–Peucker tolerance and cubic-discard tolerance ε (px). */
   epsilon: number
-  /** Base cost of a line segment. Paper: 3.9. */
+  /** Base cost of a line segment. */
   lineCost: number
-  /** Base cost of a cubic Bézier. Paper: 4. */
+  /** Base cost of a cubic Bézier. */
   cubicCost: number
 }
 
 /**
- * Max key-vertex span of a single cubic candidate. The paper allows cubics
- * between ANY key-vertex pair, but on a SMOOTH boundary cubics fit far before the
- * ε-discard fires, so "any pair" makes candidate building O(N·m²) and a large
- * smooth loop (e.g. a 512² rounded-rect background) costs seconds. Capping the
- * span makes it O(N·K²), independent of m. A single cubic cannot accurately span
- * much more than a semicircle within ε anyway, so K=20 never costs nodes in
- * practice (verified on the corpus) and a longer smooth arc just uses one more
- * cubic.
+ * Max key-vertex span of a single cubic candidate. On a smooth boundary cubics keep
+ * fitting within ε, so allowing any pair makes candidate building quadratic in the
+ * key-vertex count; capping the span bounds it. A single cubic cannot span much more
+ * than a semicircle within ε anyway, so a longer arc just uses one more cubic.
  */
 const MAX_SPAN = 20
 
 /**
- * Max key vertices per loop before ε is coarsened (see fitClosedLoop). A real
- * logo boundary stays well under this; exceeding it signals an anti-aliased
- * sliver whose jagged edge bloats candidate building, so the loop is traced
- * coarser instead of costing seconds.
+ * Max key vertices per loop before ε is coarsened (see fitClosedLoop). Clean art
+ * stays well under this; exceeding it signals a jagged anti-aliased sliver, which
+ * is traced coarser rather than at a cost of seconds.
  */
 const MAX_KEY_VERTICES = 300
 
@@ -66,20 +55,18 @@ export const DEFAULT_CURVE_FIT: CurveFitOptions = {
 // ---------------------------------------------------------------------------
 
 /**
- * Fit a dense, closed sub-pixel loop (marching-squares output) into a minimal
- * chain of lines / cubic Béziers, choosing corner vs smooth joins from evidence.
- * Returns the closed subpath's nodes, or null when the loop is degenerate.
+ * Fit a dense, closed sub-pixel loop into a minimal chain of lines / cubic
+ * Béziers, choosing corner vs smooth joins from evidence. Returns the closed
+ * subpath's nodes, or null when the loop is degenerate or has fewer than two
+ * key vertices (the caller decides the fallback).
  */
 export function fitClosedLoop(denseRaw: Vec[], opts: CurveFitOptions = DEFAULT_CURVE_FIT): PathNode[] | null {
   const dense = dedupLoop(denseRaw)
   const N = dense.length
   if (N < 3) return null
 
-  // Coarsen ε for a pathological boundary. A clean logo loop has well under
-  // MAX_KEY_VERTICES key vertices; thousands means a thin anti-aliased sliver
-  // whose jagged boundary RDP can't simplify at ε. Since candidate building is
-  // O(key-vertices), such a loop would cost seconds, so raise ε until the loop
-  // is bounded — coarser geometry is the right answer for an AA-noise sliver.
+  // Coarsen ε for a pathological boundary (see MAX_KEY_VERTICES): coarser geometry
+  // is the right answer for an anti-aliasing sliver, and keeps the cost bounded.
   let eps = opts.epsilon
   let keyIdx = keyVertexIndices(dense, eps)
   while (keyIdx.length > MAX_KEY_VERTICES && eps < opts.epsilon * 32) {
@@ -89,17 +76,16 @@ export function fitClosedLoop(denseRaw: Vec[], opts: CurveFitOptions = DEFAULT_C
   const fitOpts = eps === opts.epsilon ? opts : { ...opts, epsilon: eps }
   const m = keyIdx.length
   if (m < 2) {
-    // No corners survive simplification (a near-circle smaller than ε across, or
-    // a tiny blob): fall back to a single smooth closed cubic chain.
+    // Nothing survives simplification (a tiny blob): leave it to the caller.
     return null
   }
 
-  // Per-key-vertex forward tangents (§3.3.2) and soft-corner scores (§3.3.3).
+  // Per-key-vertex forward tangents and soft-corner scores.
   const tangents = keyIdx.map((i) => tangentAtIndex(dense, i, eps))
   const scores = keyIdx.map((i) => cornerScoreAtIndex(dense, i, eps))
   const junc = scores.map(junctionCosts)
 
-  // Over-complete candidate set + min-cost cyclic DP (§3.3.4).
+  // Over-complete candidate set + min-cost cyclic DP.
   const cand = buildCandidates(dense, keyIdx, tangents, junc, fitOpts)
   const tour = solveCyclicDP(m, cand, junc)
   if (!tour) return null
@@ -112,15 +98,15 @@ export function fitClosedLoop(denseRaw: Vec[], opts: CurveFitOptions = DEFAULT_C
 // ---------------------------------------------------------------------------
 
 /**
- * RDP on a closed loop, returning the KEPT dense indices in cyclic order. Anchors
+ * RDP on a closed loop, returning the kept dense indices in cyclic order. Anchors
  * the two farthest-apart points (stable), simplifies both arcs, and reports the
- * surviving indices — the only allowed curve endpoints (§3.3.1).
+ * surviving indices — the only allowed curve endpoints.
  */
 export function keyVertexIndices(dense: Vec[], eps: number): number[] {
   const n = dense.length
   if (n < 3) return dense.map((_, i) => i)
 
-  // Two farthest-apart points as stable anchors (mirrors subpixel.rdpClosed).
+  // Two farthest-apart points as stable anchors.
   let iB = 0
   let best = -1
   for (let i = 1; i < n; i++) {
@@ -180,7 +166,7 @@ function rdpMark(dense: Vec[], from: number, to: number, eps: number, keep: Uint
 }
 
 // ---------------------------------------------------------------------------
-// 2. Tangents (§3.3.2)
+// 2. Tangents
 // ---------------------------------------------------------------------------
 
 /**
@@ -190,8 +176,8 @@ function rdpMark(dense: Vec[], from: number, to: number, eps: number, keep: Uint
  */
 export function tangentAtIndex(dense: Vec[], i: number, eps: number): Vec {
   const half = eps / 2
-  // Cap the window like the soft-corner shapes: a longer straight run grows it to
-  // the whole edge (RMS stays ~0) for no extra tangent accuracy, but at O(loop²).
+  // Capped like the soft-corner windows: on a long straight run the window would
+  // otherwise grow to the whole edge for no extra accuracy.
   const kMax = Math.min(dense.length >> 1, MAX_EVIDENCE_WINDOW)
   let bestDir = forwardDir(dense, i)
   for (let k = 1; k <= kMax; k++) {
@@ -218,14 +204,15 @@ function forwardDir(dense: Vec[], i: number): Vec {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Soft-corner score (§3.3.3)
+// 3. Soft-corner score
 // ---------------------------------------------------------------------------
 
 /**
  * Soft-corner score c ∈ [−1 (smooth) … +1 (corner)] at dense index `i`.
  * Competitively grows a line, a circle and a two-line wedge over windows
  * `[i-k, i+k]` until each's max deviation exceeds ε; L, S, C are the point counts
- * each shape covered. The score then follows the supplement's heuristic.
+ * each shape covered. A line (or circle) covering more than the wedge reads smooth;
+ * a wedge covering more than the circle reads as a corner.
  */
 export function cornerScoreAtIndex(dense: Vec[], i: number, eps: number): number {
   const L = lineCoverage(dense, i, eps)
@@ -244,12 +231,10 @@ function softF(x: number): number {
 }
 
 /**
- * Max half-window (points each side) the soft-corner shapes grow to. The paper
- * grows "until the shape exceeds ε" unbounded, but on a SMOOTH boundary the
- * circle (and line, on a straight run) never exceed ε, so an unbounded window is
- * O(loop²) per vertex — fatal on a big smooth loop. A real corner breaks the line
- * and circle within a few points, far below this cap, so capping the window
- * preserves the corner-vs-smooth discrimination while making the score O(cap²).
+ * Max half-window (points each side) the soft-corner shapes grow to. On a smooth
+ * boundary the circle (and the line, on a straight run) never exceed ε, so an
+ * unbounded window would cost O(loop²) per vertex. A real corner breaks the line and
+ * circle within a few points, so the cap does not change the discrimination.
  */
 const MAX_EVIDENCE_WINDOW = 24
 
@@ -313,7 +298,7 @@ function windowPoints(dense: Vec[], i: number, k: number, side = 0): Vec[] {
 }
 
 // ---------------------------------------------------------------------------
-// Junction costs (§3.3.4)
+// Junction costs
 // ---------------------------------------------------------------------------
 
 export interface JunctionCost {
@@ -323,7 +308,7 @@ export interface JunctionCost {
   g1: number
 }
 
-/** Map a cornerness score c into the (C⁰, G¹) junction costs (§3.3.4). */
+/** Map a cornerness score c into the (C⁰, G¹) junction costs. */
 export function junctionCosts(c: number): JunctionCost {
   if (c > 0.25) return { c0: 10 / (1 + softG(c, 0.25)), g1: 10 * softG(c, 0.25) }
   if (c < 0) return { c0: 10 + 10 * softG(-c, 0), g1: 0 }
@@ -337,7 +322,7 @@ function softG(c: number, alpha: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Candidate set + DP (§3.3.4)
+// 4. Candidate set + DP
 // ---------------------------------------------------------------------------
 
 type Cont = 0 | 1 // 0 = C⁰ (free tangent), 1 = G¹ (key-vertex tangent)
@@ -365,8 +350,8 @@ interface CandidateTable {
 
 /**
  * Build the over-complete candidate set: a line between each adjacent key-vertex
- * pair, and Schneider cubics between any pair for the four C⁰/G¹ endpoint
- * combinations, each discarded if its max deviation exceeds ε.
+ * pair, and Schneider cubics between pairs up to MAX_SPAN apart for the four C⁰/G¹
+ * endpoint combinations, each discarded if its max deviation exceeds ε.
  */
 function buildCandidates(
   dense: Vec[],
@@ -418,7 +403,7 @@ function buildCandidates(
         }
       }
 
-      // Free end tangents from the TRUE dense neighbours of each key vertex (the
+      // Free end tangents from the true dense neighbours of each key vertex (the
       // subsampled arc's neighbours may be far), pointing into the arc.
       const freeStart = unit(sub(dense[(fromIdx + 1) % N], dense[fromIdx]))
       const freeEnd = unit(sub(dense[(toIdx - 1 + N) % N], dense[toIdx]))
@@ -481,8 +466,7 @@ const SMOOTH_SEAMS = 8
  *  • larger loops with a forced break → that one seam (still exact);
  *  • larger fully-spannable loops (a big smooth ring) → a few evenly-spaced seams
  *    (near-optimal; at most one extra node).
- * This bounds the cost at O(seams · m · candidates) instead of O(m³), which a
- * heavy-AA boundary with thousands of key vertices would otherwise blow up.
+ * This bounds the cost at O(seams · m · candidates) instead of O(m³).
  */
 function solveCyclicDP(m: number, cand: CandidateTable, junc: JunctionCost[]): TourCurve[] | null {
   let bestCost = Infinity
@@ -511,7 +495,7 @@ function solveCyclicDP(m: number, cand: CandidateTable, junc: JunctionCost[]): T
 /** Pick the seam key vertices to run the cyclic DP from (see solveCyclicDP). */
 function chooseSeams(m: number, cand: CandidateTable): number[] {
   if (m <= SEAM_EXACT_CAP) return Array.from({ length: m }, (_, i) => i)
-  // A vertex is spannable if some cubic passes strictly over it; one that is NOT
+  // A vertex is spannable if some cubic passes strictly over it; one that is not
   // is a forced break in every valid tour, so a single such seam is exact.
   const spannable = new Uint8Array(m)
   for (let a = 0; a < m; a++) {
@@ -665,17 +649,16 @@ interface CubicFit {
 }
 
 /**
- * Fit a SINGLE cubic Bézier to the open arc with prescribed unit end tangents
+ * Fit a single cubic Bézier to the open arc with prescribed unit end tangents
  * (tHat1 pointing into the arc at the start, tHat2 pointing into the arc at the
  * end), using Schneider's least-squares solve + a few Newton reparameterizations.
  * Returns the interior control points and the fit's max/squared deviation.
  */
 export function fitSingleCubic(arcRaw: Vec[], tHat1: Vec, tHat2: Vec): CubicFit {
-  // Subsample long arcs to a bounded point count (endpoints always kept). A cubic
-  // is fully characterised by ~tens of points; without this, fitting a long
-  // smooth arc (a big background boundary) is O(arc-length) per candidate and a
-  // single large loop costs seconds. Jagged arcs stay short (early-break), so
-  // their max deviation is never under-sampled.
+  // Subsample long arcs to a bounded point count (endpoints kept): a cubic is
+  // characterised by a few tens of points, and this keeps each candidate O(1)
+  // in arc length. Jagged arcs stay short, so their max deviation is not
+  // under-sampled.
   const arc = subsampleArc(arcRaw, MAX_FIT_POINTS)
   const n = arc.length
   const p0 = arc[0]

@@ -1,16 +1,15 @@
 // Main-thread client for the trace worker: a drop-in async replacement for
-// traceImage() that runs the (crisp) pipeline off-thread so the UI stays
-// responsive. One worker per call — created on start, terminated on
-// finish/error/abort — so aborting is instant (terminate kills the in-flight
-// computation) with no shared state to reset.
+// traceImage() that runs the pipeline off-thread so the UI stays responsive.
+// One worker per call — created on start, terminated on finish/error/abort — so
+// aborting is instant (terminate kills the in-flight computation) with no shared
+// state to reset.
 
 import type { EditableDoc } from '../path/types'
 import type { VectorizeOptions } from '../../types'
 import type { TraceProgress } from './types'
 
-/** True when this environment can run the trace off the main thread. The tracer
- *  is pure JS (worker-safe); potrace, which needed DOMParser/WASM the worker
- *  lacks, so it alone stays on the main thread. */
+/** True when this environment can run the trace off the main thread (the tracer is
+ *  pure JS, so any environment with Web Workers). `options` is currently unused. */
 export function canTraceOffThread(options: VectorizeOptions): boolean {
   void options
   return typeof Worker !== 'undefined'
@@ -87,7 +86,7 @@ export interface OffThreadAnalysis {
 
 /**
  * Run the pipeline + intermediate stages off-thread for the explainer, so it
- * doesn't freeze the UI. Crisp-only (pure); the explainer always traces crisp.
+ * doesn't freeze the UI.
  */
 export function analyzeImageOffThread(
   imageData: ImageData,

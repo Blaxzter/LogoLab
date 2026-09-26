@@ -1,11 +1,8 @@
-// Shared primitive-fit math for BOTH beautifiers — the loop-level `beautify.ts`
-// (crisp / potrace) and the edge-level `planarBeautify.ts` (planar). Extracted
-// VERBATIM from beautify.ts so the two engines share ONE circle/ellipse fit,
-// kappa-Bézier emit, single-linkage clustering, and concentric / equal-radius
-// relation solver — there is no forked copy that can drift.
+// Primitive-fit math shared by the loop-level `beautify.ts` and the edge-level
+// `planarBeautify.ts` (and the junction re-seat): circle / ellipse fits, kappa-Bézier
+// emit, single-linkage clustering, and the concentric / equal-radius relation solver.
 //
-// Everything here is pure and deterministic (fixed sample/scan orders, no PRNG /
-// Date), so it runs unchanged under `node --test`.
+// Pure and deterministic (fixed sample and scan orders).
 
 import type { PathNode, SubPath, Vec } from '../path/types'
 import { segmentControls, segmentCount, cubicAt } from '../path/geometry.ts'
@@ -63,8 +60,8 @@ export interface Circle {
 
 /**
  * Centred algebraic circle fit (Kåsa/Coope): minimise Σ(‖p−c‖²−r²)² in
- * centroid-centred coordinates via a 2×2 solve. Full closed contours (our case)
- * make the algebraic bias vs Taubin negligible. Returns null on a degenerate
+ * centroid-centred coordinates via a 2×2 solve. On full or long contours the
+ * algebraic bias (vs Taubin) is negligible. Returns null on a degenerate
  * (collinear / too-few-points) configuration.
  */
 export function fitCircle(pts: Vec[]): Circle | null {
@@ -133,7 +130,7 @@ export interface Ellipse {
  * term ⇒ axes aligned to the grid) is fit by linear least squares under the
  * normalisation A + C = 2 (so a circle gives A = C = 1 and the trivial zero
  * solution is excluded). Returns null unless the result is a real ellipse
- * (A,C > 0, positive radii). Rotated ellipses are out of scope (deferred).
+ * (A,C > 0, positive radii). Rotated ellipses are not fitted.
  */
 export function fitEllipse(pts: Vec[]): Ellipse | null {
   if (pts.length < 5) return null
@@ -184,16 +181,13 @@ export function maxEllipseDev(pts: Vec[], e: Ellipse): number {
 }
 
 /**
- * Worst distance (px) from the ELLIPSE to the polygon ring — the reverse
- * direction of maxEllipseDev, and the acceptance half that function cannot
- * provide: point→ellipse residuals are blind to anywhere the ellipse goes that
- * the polygon does not. A 6×408 bar fits an extreme-aspect ellipse (3.8 × 278)
- * with every polygon point within ~1 "radial" unit, while the ellipse's poles
- * overshoot the bar caps by 22px of empty space — the polygon simply has no
- * sample there to complain (hairlines bar 1, traced as a wedge to y=−22).
- * Sampling the ellipse and measuring to the nearest polygon segment sees
- * exactly that overshoot. 128 samples resolve a pole to well under a pixel at
- * any radius the snap would accept.
+ * Worst distance (px) from the ellipse to the polygon ring — the reverse of
+ * maxEllipseDev. Point→ellipse residuals cannot see where the ellipse goes that
+ * the polygon does not: a thin bar fits an extreme-aspect ellipse with every
+ * polygon point close to it, while the ellipse's poles overshoot the bar's caps
+ * into empty space. Sampling the ellipse and measuring to the nearest polygon
+ * segment catches that. 128 samples resolve a pole to well under a pixel at any
+ * radius the snap would accept.
  */
 export function maxEllipseToPolyDev(pts: Vec[], e: Ellipse, samples = 128): number {
   if (pts.length < 2) return Infinity
@@ -259,13 +253,12 @@ export function orient(sp: SubPath, positive: boolean): SubPath {
 }
 
 /**
- * Emit an OPEN circular-arc slice as PathNodes from `from` to `to` along the circle
+ * Emit an open circular-arc slice as PathNodes from `from` to `to` along the circle
  * (cx,cy,r), taking the rotational direction that passes the `mid` hint (so the arc
- * bulges the same way the raw edge did). Endpoints are pinned byte-exact to `from`/
- * `to` (they stay welded to their junction vertices) and forced `corner`; interior
- * nodes sit on the circle and are `smooth`. Two arcs that meet at a junction both
- * carry the circle's tangent there, so they join G¹ — the ring stops kinking. Split
- * into ≤90° kappa-Bézier pieces. Pure & deterministic.
+ * bulges the same way the raw edge did). Endpoints are pinned exactly to `from`/`to`
+ * (they stay welded to their junction vertices) and marked `corner`; interior nodes
+ * sit on the circle and are `smooth`. Two arcs meeting at a junction both carry the
+ * circle's tangent there, so they join G¹. Split into ≤90° kappa-Bézier pieces.
  */
 export function arcSlice(cx: number, cy: number, r: number, from: Vec, to: Vec, mid: Vec): PathNode[] {
   const TWO_PI = Math.PI * 2
@@ -342,7 +335,7 @@ export function clusterBy<T>(items: T[], related: (a: T, b: T) => boolean): T[][
 // ---------------------------------------------------------------------------
 
 /** A circle the relation solver may reconcile: its centre/radius are mutated in
- *  place; `raw` is the RAW flattened trace it was fit to (the re-gate set). */
+ *  place; `raw` is the flattened trace it was fitted to (the re-gate set). */
 export interface RelationCircle {
   cx: number
   cy: number
@@ -357,15 +350,12 @@ export interface RelationOptions {
 
 /**
  * Reconcile the snapped circles: concentric centres (radius-weighted mean) and
- * equal radii (mean), each accepted ONLY when it does not push that circle past
- * the fidelity knob — re-measured against the circle's RAW flattened trace,
- * never the snapped one. Mutates each circle's cx/cy/r IN PLACE and returns a
- * per-circle flag (aligned to input order) marking which actually moved, so the
- * caller regenerates only those. The detection window is `relationFrac` of the
- * document bbox long side.
- *
- * This is the exact two-pass math beautify.ts used privately; lifting it here
- * lets the planar edge-beautifier reuse it over disc-edge circles unchanged.
+ * equal radii (mean), each accepted only when it keeps that circle within the
+ * fidelity tolerance, re-measured against the circle's raw flattened trace (never
+ * the snapped one). Mutates each circle's cx/cy/r in place and returns a
+ * per-circle flag (aligned to input order) marking which moved, so the caller
+ * regenerates only those. The detection window is `relationFrac` of the document
+ * bbox long side.
  */
 export function relationSolveCircles(
   circles: RelationCircle[],
