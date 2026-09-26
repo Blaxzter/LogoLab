@@ -9,7 +9,7 @@
 
 import type { EditableDoc } from '../../lib/path/types'
 import type { VectorizeOptions } from '../../types'
-import type { InkColorMode } from '../../lib/ink'
+import type { InkColorMode } from '../../lib/traceInput/ink'
 import { debounce, readLocal, writeLocal } from '../../lib/persist/local'
 import { claim, saveSlot, SLOTS, type StoredVectorize } from '../../lib/persist/session'
 

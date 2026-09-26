@@ -4,9 +4,9 @@
 // <LogoMark>), then bundles a complete favicon + PWA icon set into a .zip with a
 // real favicon.ico, a webmanifest, and a copy-paste <head> snippet.
 
-import { loadRenderSource } from './image.ts'
+import { loadRenderSource } from '../image.ts'
 import { buildHtmlSnippet, buildManifest, encodeIcoBytes, iconLayout, type RenderIconOpts } from './iconSpec.ts'
-import type { ExportTarget, RenderIconOptions } from '../types'
+import type { ExportTarget, RenderIconOptions } from '../../types'
 
 // Layout math and text assets are shared with the headless exporter and live
 // in iconSpec.ts; re-exported for the UI.

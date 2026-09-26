@@ -19,8 +19,8 @@
 // ---------------------------------------------------------------------------
 
 import type { VectorizeOptions } from '../src/types'
-import { RASTER_MAX_DIM, RASTER_MAX_DIM_FLAT } from '../src/lib/traceCaps.ts'
-import { decideInkMode, type ImageDataLike } from '../src/lib/ink.ts'
+import { RASTER_MAX_DIM, RASTER_MAX_DIM_FLAT } from '../src/lib/traceInput/traceCaps.ts'
+import { decideInkMode, type ImageDataLike } from '../src/lib/traceInput/ink.ts'
 
 /** One A/B case. `path` is repo-relative — under public/ for the fixture lane, so the
  *  Node writer can read the file and the browser can fetch it (abUrl); the GALLERY lane
@@ -138,7 +138,7 @@ export const AB_LOGO_CASES: AbCorpusCase[] = AB_LOGOS.map((l) => ({
 
 /**
  * THE LANES A STAMP FREEZES — each traced at the resolution PRODUCTION uses for that kind
- * of art (src/lib/traceCaps.ts), rather than one convenient number for all of them.
+ * of art (src/lib/traceInput/traceCaps.ts), rather than one convenient number for all of them.
  *
  * Judging the tracer at a resolution the app never runs measures code that does not ship:
  * displacement, corner windows and the fit are NOT scale-invariant (§12, §30, and the @512
@@ -164,7 +164,7 @@ export interface AbLane {
   opts: Partial<VectorizeOptions>
   /** Options this lane can only decide FROM THE RASTER, resolved on the same pixels it
    *  traces and merged last. Mono's cut is the case: production does not trace at a fixed
-   *  threshold, it asks the ink probe (src/lib/ink.ts) where the ink ends and the paper
+   *  threshold, it asks the ink probe (src/lib/traceInput/ink.ts) where the ink ends and the paper
    *  begins — so a lane pinned to 128 would freeze a trace no user ever gets, and would
    *  leave ink.ts as uncovered as the mono path itself was. */
   resolve?: (pixels: ImageDataLike) => Partial<VectorizeOptions>

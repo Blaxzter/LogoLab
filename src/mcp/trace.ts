@@ -10,7 +10,7 @@
 
 import { estimateBackground } from '../lib/sheet/detect.ts'
 import { planTileTrace, tileTraceInput, traceTile } from '../lib/sheet/traceTile.ts'
-import { rasterCapFor } from '../lib/traceCaps.ts'
+import { rasterCapFor } from '../lib/traceInput/traceCaps.ts'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import type { ImageDataLike } from '../lib/sheet/types'
 import type { VectorizeOptions } from '../types'

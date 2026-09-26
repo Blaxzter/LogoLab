@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bug, ChevronLeft, ExternalLink, Lightbulb, X } from 'lucide-react'
-import { diagnosticsText, type ReportKind } from '../../lib/issueReport'
+import { diagnosticsText, type ReportKind } from '../../lib/report/issueReport'
 import { buildReport, CopyReportButton, ReportIssueLink, type ReportSubject } from './ReportIssue'
 
 type Choice = Extract<ReportKind, 'problem' | 'idea'>

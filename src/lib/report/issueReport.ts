@@ -15,7 +15,7 @@
 //
 // Pure (no React, DOM or globals) so the whole report is testable in node.
 
-import { BUILD, buildTitle, type BuildInfo } from './buildInfo.ts'
+import { BUILD, buildTitle, type BuildInfo } from '../buildInfo.ts'
 import { redact, type LoggedError } from './errorLog.ts'
 
 /** What is being reported. Picks the form, the prompts and the title. */

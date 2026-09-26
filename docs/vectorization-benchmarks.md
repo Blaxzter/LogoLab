@@ -6807,9 +6807,9 @@ and about as long in the worker.
 
 ### 36.2 The policy
 
-`monoTraceScale` (`src/lib/traceCaps.ts`), read by the studio, `planTileBase` and so the MCP
+`monoTraceScale` (`src/lib/traceInput/traceCaps.ts`), read by the studio, `planTileBase` and so the MCP
 server: the larger of the sheet's SIZE rule (toward 512px, ≤3×, §32's numbers) and a STROKE
-rule (`inkThickness`, `src/lib/strokeWidth.ts`: the min of the vertical and horizontal ink run
+rule (`inkThickness`, `src/lib/traceInput/strokeWidth.ts`: the min of the vertical and horizontal ink run
 through each ink pixel, the 10% quantile by pixel, enlarged toward 3px, ≤4×), capped by the
 flat raster cap, mono only, bilinear. `upscale: 'auto'` is the default; `'off'` and `'ai'`
 keep their meaning. Gate: `test/stroke-width.test.ts`.

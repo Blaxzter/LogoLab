@@ -1,8 +1,8 @@
 // Pure per-tile trace planning. Gradient seeding on top of this lives in the
 // browser-only traceTile.ts.
 
-import { decideInkMode, type InkColorMode } from '../ink.ts'
-import { monoTraceScale, traceScale } from '../traceCaps.ts'
+import { decideInkMode, type InkColorMode } from '../traceInput/ink.ts'
+import { monoTraceScale, traceScale } from '../traceInput/traceCaps.ts'
 import type { ImageDataLike, SheetBackground } from './types'
 import type { VectorizeOptions } from '../../types'
 

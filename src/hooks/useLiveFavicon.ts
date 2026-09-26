@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useAppearance, useLogo } from '../state/store'
 import { loadRenderSource } from '../lib/image'
-import { renderIcon } from '../lib/pwaExport'
+import { renderIcon } from '../lib/export/pwaExport'
 
 const DEFAULT_HREF = '/favicon.svg'
 

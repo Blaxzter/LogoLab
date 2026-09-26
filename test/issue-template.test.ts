@@ -18,7 +18,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { FIELDS, TEMPLATE, issueReportUrl } from '../src/lib/issueReport.ts'
+import { FIELDS, TEMPLATE, issueReportUrl } from '../src/lib/report/issueReport.ts'
 
 const DIR = '.github/ISSUE_TEMPLATE'
 

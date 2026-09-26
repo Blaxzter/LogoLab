@@ -4,7 +4,7 @@
 // `bgRemove` for the paper knockout, `serializeDoc` output for the SVGs, JSZip
 // (already an app dependency, used by the PWA export) for the archive.
 
-import { autoRemove, cloneImageData, defringe, despeckle } from '../../lib/bgRemove'
+import { autoRemove, cloneImageData, defringe, despeckle } from '../../lib/cleanup/bgRemove'
 import { canvasToBlob, getImageData, imageDataToCanvas, loadLogoFile } from '../../lib/image'
 import { toImageData } from '../../lib/sheet'
 import type { ImageDataLike } from '../../lib/sheet'
@@ -83,7 +83,7 @@ export interface SheetExportItem {
  * format is asked for, `svg/` + `png/` when both.
  */
 export async function buildSheetZip(items: SheetExportItem[], opts: SheetExportOptions): Promise<Blob> {
-  // Fetched on demand — see the same import in lib/pwaExport.ts.
+  // Fetched on demand — see the same import in lib/export/pwaExport.ts.
   const { default: JSZip } = await import('jszip')
   const zip = new JSZip()
   const both = opts.svg && opts.png

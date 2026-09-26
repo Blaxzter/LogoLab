@@ -8,7 +8,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { monoLabels, MONO_INK, MONO_PAPER } from '../src/lib/trace/mono.ts'
-import type { ImageDataLike } from '../src/lib/ink.ts'
+import type { ImageDataLike } from '../src/lib/traceInput/ink.ts'
 
 type RGBA = [number, number, number, number]
 

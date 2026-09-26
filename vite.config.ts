@@ -73,11 +73,11 @@ export default defineConfig(({ command }) => ({
       input: { index: page('index.html') },
     },
   },
-  // Transformers.js is loaded lazily (dynamic import in src/lib/aiRemove.ts) and
+  // Transformers.js is loaded lazily (dynamic import in src/lib/cleanup/aiRemove.ts) and
   // pulls Node-only optional deps (onnxruntime-node, sharp). Excluding it from
   // dep pre-bundling keeps Vite from trying to crawl those during dev/build; the
   // browser runtime fetches its WASM from the CDN on demand. (The AI upscaler in
-  // src/lib/aiUpscale.ts loads the same runtime straight from that CDN instead —
+  // src/lib/traceInput/aiUpscale.ts loads the same runtime straight from that CDN instead —
   // bundling onnxruntime-web made Vite emit its 13 + 24 MB WASM binaries as assets.)
   optimizeDeps: {
     exclude: ['@huggingface/transformers'],

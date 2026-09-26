@@ -1,4 +1,4 @@
-// Maskable safe-zone geometry (src/lib/pwaExport.ts) — issue #30.
+// Maskable safe-zone geometry (src/lib/export/pwaExport.ts) — issue #30.
 //
 //   node --test test/pwa-maskable.test.ts
 //
@@ -15,8 +15,8 @@ import {
   MASKABLE_MIN_PADDING_PCT,
   MASKABLE_PADDING_FLOOR_PCT,
   renderIcon,
-} from '../src/lib/pwaExport.ts'
-import type { RenderIconOpts } from '../src/lib/pwaExport.ts'
+} from '../src/lib/export/pwaExport.ts'
+import type { RenderIconOpts } from '../src/lib/export/pwaExport.ts'
 
 /** Safe radius as a fraction of the icon's width. */
 const SAFE_R = MASKABLE_SAFE_DIAMETER / 2

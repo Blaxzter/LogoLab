@@ -30,9 +30,9 @@ import {
   shrinkMatte,
   type BrushMode,
   type RemoveOptions,
-} from '../lib/bgRemove'
-import { aiRemoveBackground } from '../lib/aiRemove'
-import { downloadBlob } from '../lib/download'
+} from '../lib/cleanup/bgRemove'
+import { aiRemoveBackground } from '../lib/cleanup/aiRemove'
+import { downloadBlob } from '../lib/export/download'
 import type { PanZoom } from './usePanZoom'
 import { usePinchZoom } from './usePinchZoom'
 

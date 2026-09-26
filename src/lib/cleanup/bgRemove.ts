@@ -2,7 +2,7 @@
 // tolerance threshold and optional soft (anti-aliased) edges. Operates in
 // place on an ImageData so the caller can keep an undo history of snapshots.
 
-import { hexToRgb } from './colorUtils.ts'
+import { hexToRgb } from '../colorUtils.ts'
 
 export interface RemoveOptions {
   /** Max color distance (0–255-ish) still considered "background". */

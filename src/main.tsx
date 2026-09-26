@@ -5,8 +5,8 @@ import './index.css'
 import { App } from './App'
 import { ErrorBoundary } from './components/report/ErrorBoundary'
 import { useStore } from './state/store'
-import { installErrorLog } from './lib/errorLog'
-import { provideReportContext } from './lib/reportContext'
+import { installErrorLog } from './lib/report/errorLog'
+import { provideReportContext } from './lib/report/reportContext'
 import {
   flushSession,
   loadSession,
@@ -46,7 +46,7 @@ async function boot() {
   // with the first paint.
   registerServiceWorker()
 
-  // Image context for issue reports (lib/reportContext), read via `getState` so
+  // Image context for issue reports (lib/report/reportContext), read via `getState` so
   // it describes the logo loaded at report time.
   provideReportContext('image', () => {
     const { logo, assetKey } = useStore.getState()

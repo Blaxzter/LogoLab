@@ -1,4 +1,4 @@
-// Unit tests for the pure pixel ops added to src/lib/bgRemove.ts:
+// Unit tests for the pure pixel ops added to src/lib/cleanup/bgRemove.ts:
 //
 //   node --test test/bgRemove.test.ts
 //
@@ -24,7 +24,7 @@ import {
   recolor,
   closeSeams,
   despeckle,
-} from '../src/lib/bgRemove.ts'
+} from '../src/lib/cleanup/bgRemove.ts'
 
 // The crop/composite ops construct `new ImageData(...)`, which Node lacks.
 ensureImageData()

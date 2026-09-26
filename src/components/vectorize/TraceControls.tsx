@@ -9,10 +9,10 @@ import { Button } from '../ui/Button'
 import { ColorField, Collapsible, Field, Segmented, Slider, Toggle } from '../ui/controls'
 import { Tooltip } from '../ui/Tooltip'
 import type { VectorizeOptions } from '../../types'
-import type { InkColorMode, InkModePlan } from '../../lib/ink'
+import type { InkColorMode, InkModePlan } from '../../lib/traceInput/ink'
 import { CONTROL_DOCS_BY_ID } from './controlDocs'
 import { ControlInfoDialog } from './ControlInfoDialog'
-import { AI_UPSCALE_MAX_PX, aiUpscaleFactor } from '../../lib/aiUpscale'
+import { AI_UPSCALE_MAX_PX, aiUpscaleFactor } from '../../lib/traceInput/aiUpscale'
 import {
   MONO_TARGET_STROKE_PX,
   RASTER_MAX_DIM,
@@ -21,7 +21,7 @@ import {
   TRACE_TARGET_PX,
   rasterCapFor,
   type MonoUpscalePlan,
-} from '../../lib/traceCaps'
+} from '../../lib/traceInput/traceCaps'
 
 export interface TraceControlsProps {
   /** The upload is an SVG, so "clean existing markup" is an option. */
@@ -34,7 +34,7 @@ export interface TraceControlsProps {
   sourceMaxDim?: number
   /** What Auto enlargement decided on the last run (null before one, or on the AI path). */
   autoUpscale?: MonoUpscalePlan | null
-  /** Colour-vs-mono choice: `auto` defers to the ink probe (src/lib/ink.ts). */
+  /** Colour-vs-mono choice: `auto` defers to the ink probe (src/lib/traceInput/ink.ts). */
   colorMode: InkColorMode
   onColorMode: (m: InkColorMode) => void
   /** What the ink probe last saw, so Auto can say what it decided and why. */

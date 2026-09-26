@@ -1,5 +1,5 @@
 // Colour-vs-mono, the mono cut, and the invert flag — the decision in
-// src/lib/ink.ts that /vectorize, /sheet and the MCP server all read.
+// src/lib/traceInput/ink.ts that /vectorize, /sheet and the MCP server all read.
 //
 //   node --test test/ink-mode.test.ts
 //
@@ -20,7 +20,7 @@ import {
   snapCutToGap,
   type ImageDataLike,
   type PaperColor,
-} from '../src/lib/ink.ts'
+} from '../src/lib/traceInput/ink.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { docStats } from '../src/lib/path/model.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'

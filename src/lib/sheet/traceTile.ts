@@ -9,7 +9,7 @@
 import { serializeDoc, docStats } from '../path/model.ts'
 import { suggestGradients, traceImage } from '../trace/index.ts'
 import { canTraceOffThread, traceImageOffThread } from '../trace/traceOffThread.ts'
-import { rasterCapFor } from '../traceCaps.ts'
+import { rasterCapFor } from '../traceInput/traceCaps.ts'
 import type { TraceProgress } from '../trace/types'
 import type { EditableDoc } from '../path/types'
 import type { VectorizeOptions } from '../../types'

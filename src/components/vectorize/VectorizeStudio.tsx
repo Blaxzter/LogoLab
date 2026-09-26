@@ -34,14 +34,14 @@ import {
     monoTraceScale,
     rasterCapFor,
     type MonoUpscalePlan,
-} from "../../lib/traceCaps";
+} from "../../lib/traceInput/traceCaps";
 import { toImageData, upscaleImageData } from "../../lib/sheet/crop";
 import { hexToRgb, normalizeHex, rgbToHex } from "../../lib/colorUtils";
-import { downloadText } from "../../lib/download";
-import { cleanSvg } from "../../lib/svgClean";
-import { logError } from "../../lib/errorLog";
-import { clearFailure, raiseFailure } from "../../lib/failureNotice";
-import { provideReportContext } from "../../lib/reportContext";
+import { downloadText } from "../../lib/export/download";
+import { cleanSvg } from "../../lib/export/svgClean";
+import { logError } from "../../lib/report/errorLog";
+import { clearFailure, raiseFailure } from "../../lib/report/failureNotice";
+import { provideReportContext } from "../../lib/report/reportContext";
 import { ReportFailureLink } from "../report/ReportIssue";
 import { docStats, isStrokeOnly, parseSvg, serializeDoc } from "../../lib/path/model";
 import { deleteNodes, moveNodes } from "../../lib/path/geometry";
@@ -60,8 +60,8 @@ import {
     inkLumaRange,
     type InkColorMode,
     type InkModePlan,
-} from "../../lib/ink";
-import { aiUpscale, aiUpscaleFactor } from "../../lib/aiUpscale";
+} from "../../lib/traceInput/ink";
+import { aiUpscale, aiUpscaleFactor } from "../../lib/traceInput/aiUpscale";
 import {
     canScoreOffThread,
     scoreOffThread,
@@ -305,7 +305,7 @@ export function VectorizeStudio({
     );
 
     // Colour vs mono, the mono cut, and invert. `auto` asks the ink probe
-    // (src/lib/ink.ts), the same decision /sheet and the MCP server make. A host
+    // (src/lib/traceInput/ink.ts), the same decision /sheet and the MCP server make. A host
     // that already planned the trace (the icon sheet) passes its own mode.
     const [colorMode, setColorMode] = useState<InkColorMode>(
         initialOptions ? initialOptions.mode : (session.view?.colorMode ?? "auto"),
@@ -504,7 +504,7 @@ export function VectorizeStudio({
     const docRef = useRef(doc);
     docRef.current = doc;
 
-    // Published for the crash screen's bug report (lib/reportContext). Reads the
+    // Published for the crash screen's bug report (lib/report/reportContext). Reads the
     // refs, not closed-over values, so the snapshot taken at crash time describes
     // the options live then. Never includes pixels, only the image's shape.
     useEffect(
@@ -635,7 +635,7 @@ export function VectorizeStudio({
                 // Opt-in AI super-resolution for small rasters only (SVG sources are already
                 // rasterized at full detail). The doc comes back in the enlarged pixel space;
                 // markers are normalized and the overlay fits by aspect, so nothing downstream
-                // cares. Size rule: src/lib/aiUpscale.ts.
+                // cares. Size rule: src/lib/traceInput/aiUpscale.ts.
                 setAutoUpscale(null);
                 const upscaleBy = opts.upscale === "ai" && !logo.isSvg
                     ? aiUpscaleFactor(Math.max(imageData.width, imageData.height))

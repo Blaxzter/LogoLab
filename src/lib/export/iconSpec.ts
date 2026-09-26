@@ -5,7 +5,7 @@
 // copy of the layout math: they would drift and a maskable icon would clip in
 // one but not the other. No DOM, canvas or zip here, so Node can import it.
 
-import type { ExportTarget, IconShape, RenderIconOptions } from '../types'
+import type { ExportTarget, IconShape, RenderIconOptions } from '../../types'
 
 /**
  * RenderIconOptions plus the per-target `maskable` flag. Kept out of the shared

@@ -24,7 +24,7 @@ import type {
   SheetTile,
   TileKind,
 } from './types'
-import { estimateBackground, isInkPixel } from '../ink.ts'
+import { estimateBackground, isInkPixel } from '../traceInput/ink.ts'
 
 export const DETECT_DEFAULTS = {
   threshold: 24,

@@ -4,7 +4,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { AlertTriangle, History, RefreshCw, WifiOff, X } from 'lucide-react'
 import { sessionWasRestored } from '../../lib/persist/session'
-import { dismissFailure, getFailure, subscribeFailure } from '../../lib/failureNotice'
+import { dismissFailure, getFailure, subscribeFailure } from '../../lib/report/failureNotice'
 import { ReportIssueLink } from '../report/ReportIssue'
 import { usePwa } from '../../pwa/register'
 
@@ -102,7 +102,7 @@ function PwaToast() {
 
 /**
  * "Something failed — report it?" Doesn't time out, since it asks a question.
- * A dismissed failure stays dismissed for the session (see lib/failureNotice).
+ * A dismissed failure stays dismissed for the session (see lib/report/failureNotice).
  */
 function FailureToast() {
   const failure = useSyncExternalStore(subscribeFailure, getFailure)

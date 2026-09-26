@@ -11,13 +11,13 @@
 //     action when the crash comes straight back on remount, which is what a
 //     poisoned restored document looks like.
 //   Report an issue — a prefilled GitHub issue with options, image shape, build
-//     and stack (see lib/issueReport).
+//     and stack (see lib/report/issueReport).
 
 import { Component, Fragment, useState, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
-import { logError } from '../../lib/errorLog'
-import { collectReportContext } from '../../lib/reportContext'
-import { errorLabel, errorStack, isChunkLoadError } from '../../lib/issueReport'
+import { logError } from '../../lib/report/errorLog'
+import { collectReportContext } from '../../lib/report/reportContext'
+import { errorLabel, errorStack, isChunkLoadError } from '../../lib/report/issueReport'
 import { startFreshSession } from '../../lib/persist/session'
 import { CopyReportButton, ReportIssueLink, type ReportSubject } from './ReportIssue'
 
@@ -40,7 +40,7 @@ interface Props {
 interface State {
   crashed: boolean
   error: unknown
-  /** Collected while the crashing subtree is still mounted — see lib/reportContext. */
+  /** Collected while the crashing subtree is still mounted — see lib/report/reportContext. */
   context: Record<string, unknown> | null
   componentStack: string | null
   /** Doubles as the children's key: bumping it is what remounts them. */

@@ -1,4 +1,4 @@
-// MONO ENLARGEMENT CENSUS — what `monoTraceScale` (src/lib/traceCaps.ts) decides on
+// MONO ENLARGEMENT CENSUS — what `monoTraceScale` (src/lib/traceInput/traceCaps.ts) decides on
 // real marks, and what the decision buys.
 //
 //   node bench/strokeScaleDiag.ts                      # gallery @256 + @512
@@ -21,9 +21,9 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { ensureImageData } from './nodeHarness.ts'
 import { loadSource, rasterizeSource, renderSvg } from '../src/mcp/image.ts'
-import { decideInkMode, type ImageDataLike } from '../src/lib/ink.ts'
-import { inkThickness, thicknessAt } from '../src/lib/strokeWidth.ts'
-import { monoTraceScale } from '../src/lib/traceCaps.ts'
+import { decideInkMode, type ImageDataLike } from '../src/lib/traceInput/ink.ts'
+import { inkThickness, thicknessAt } from '../src/lib/traceInput/strokeWidth.ts'
+import { monoTraceScale } from '../src/lib/traceInput/traceCaps.ts'
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from '../src/lib/trace/index.ts'
 import { cropTile, downscaleImageData, toImageData, upscaleImageData } from '../src/lib/sheet/crop.ts'
 import { detectSheetIcons } from '../src/lib/sheet/detect.ts'

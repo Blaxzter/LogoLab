@@ -110,7 +110,7 @@ Three things the score gets right that are easy to undo:
 
 ## A small mono raster is ENLARGED before it is traced, and the mono cut is a COVERAGE cut
 
-Two rules in `src/lib/traceCaps.ts`, next to the raster cap, decide how many pixels a mono
+Two rules in `src/lib/traceInput/traceCaps.ts`, next to the raster cap, decide how many pixels a mono
 trace gets — the studio, the icon sheet (`planTileBase`) and the MCP server all read the
 same `monoTraceScale`, so `upscale: 'auto'` (the default) means the same thing everywhere:
 
@@ -118,7 +118,7 @@ same `monoTraceScale`, so `upscale: 'auto'` (the default) means the same thing e
   ink-area drift 0.75pp → 0.13pp, 4× no better than 3×).
 * **by STROKE** — what the size rule misses: a 499px page of sheet music is not "small", but
   its staff lines are 1px, and at 1× they melted into the note heads. `inkThickness`
-  (`src/lib/strokeWidth.ts`) reads the thin ink's local thickness (min of the vertical and
+  (`src/lib/traceInput/strokeWidth.ts`) reads the thin ink's local thickness (min of the vertical and
   horizontal run through each ink pixel, a low quantile by pixel) and enlarges it toward
   3px, at most 4×. Measured on that page: 2× still broke the staff, 3× traced it clean.
 
@@ -132,7 +132,7 @@ and it crops). 2026-09-21: 63 gallery marks enlarged, ΔE better 60 / worse 0, m
 The stroke probe found a second thing: the mono mask read the RGB luma of any pixel with
 alpha ≥ 16, so on art over TRANSPARENCY (anti-aliasing carried in alpha, black RGB
 everywhere) every stroke was a pixel fatter than drawn — the page's mask held 68% more ink
-than the picture, 1px lines read 2px, lyrics came out bold. `cutLuma` (`src/lib/ink.ts`)
+than the picture, 1px lines read 2px, lyrics came out bold. `cutLuma` (`src/lib/traceInput/ink.ts`)
 composites the pixel over the paper the cut assumes (white, or black when inverted), so the
 mask's edge is the iso-0.5 coverage contour. Opaque art is byte-identical. `thresholdToMask`,
 the stroke probe and the three cut readouts (`snapCutToGap`, `cutFraction`, `inkLumaRange`)
@@ -270,14 +270,14 @@ code:
   `React.lazy` caches the rejection, so "Reset this panel" can never fix it and the screen
   offers a reload instead.
 * **The context is collected in `getDerivedStateFromError`** — the render phase, while the
-  crashing subtree is still mounted. `src/lib/reportContext.ts` is a registry that studios
+  crashing subtree is still mounted. `src/lib/report/reportContext.ts` is a registry that studios
   publish a snapshot function into (`VectorizeStudio` publishes its live options through the
   refs); by the time the fallback is COMMITTED those children are unmounted and every provider
   they registered has unregistered itself, so a later read is silently empty.
 
 ## Filing an issue is a FEATURE, and the crash screen is its rarest entry point
 
-`src/lib/issueReport.ts` fills in a GitHub issue FORM — `.github/ISSUE_TEMPLATE/*.yml` — and
+`src/lib/report/issueReport.ts` fills in a GitHub issue FORM — `.github/ISSUE_TEMPLATE/*.yml` — and
 `src/components/report/ReportIssue.tsx` hangs it off four kinds: a **crash** (the boundary), a
 **failure** (any catch that turns an error into a message for the user: the vectorize status
 bar, the uploader, the sheet's failed tiles), a **problem** ("it traced and the result is
@@ -306,7 +306,7 @@ The failure lane matters more than the crash lane. The tracer runs in a WORKER t
 own errors, so its normal bad day is a red line in a status bar, not a throw — for a long time
 that line was the end of the road for a bug report.
 
-A failure also ASKS, rather than leaving a link and hoping: `src/lib/failureNotice.ts` raises a
+A failure also ASKS, rather than leaving a link and hoping: `src/lib/report/failureNotice.ts` raises a
 question into the existing bottom toast stack ("Could not vectorize this image. Report it?").
 A toast and not a modal — the user is mid-task and the app still works, so a dialog they have
 to dismiss before trying another setting would punish them for a failure that was not theirs.
@@ -328,7 +328,7 @@ Three traps here too:
   this app that URL is sometimes a `data:` URL holding the user's actual logo. Without it, a
   decode failure would carry the user's art into a public issue tracker. A report carries the
   SHAPE of the art and never the art.
-* **The log collapses repeats** (`src/lib/errorLog.ts`, in memory, never persisted). A retrying
+* **The log collapses repeats** (`src/lib/report/errorLog.ts`, in memory, never persisted). A retrying
   worker can produce one error fifty times and push everything that matters out of a 25-entry
   buffer.
 

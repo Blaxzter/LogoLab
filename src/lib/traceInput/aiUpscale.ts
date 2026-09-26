@@ -13,7 +13,7 @@
 //
 // The ORT session API is typed `any` and kept inside this file.
 
-import { upscaleImageData } from './sheet/crop.ts'
+import { upscaleImageData } from '../sheet/crop.ts'
 
 export type UpscaleFactor = 2 | 4
 

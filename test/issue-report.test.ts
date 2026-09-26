@@ -31,13 +31,13 @@ import {
   issueReportUrl,
   summaryText,
   type IssueReportInput,
-} from '../src/lib/issueReport.ts'
+} from '../src/lib/report/issueReport.ts'
 import {
   clearReportContext,
   collectReportContext,
   provideReportContext,
-} from '../src/lib/reportContext.ts'
-import { clearErrorLog, logError, recentErrors } from '../src/lib/errorLog.ts'
+} from '../src/lib/report/reportContext.ts'
+import { clearErrorLog, logError, recentErrors } from '../src/lib/report/errorLog.ts'
 
 const REPO = 'https://github.com/Blaxzter/LogoLab'
 

@@ -8,7 +8,7 @@
 
 import { existsSync, writeFileSync } from 'node:fs'
 import { join, posix, relative } from 'node:path'
-import { encodeIcoBytes, type RenderIconOpts } from '../lib/iconSpec.ts'
+import { encodeIcoBytes, type RenderIconOpts } from '../lib/export/iconSpec.ts'
 import type { IconShape } from '../types'
 import { encodeIcns } from './icns.ts'
 import { customPreset, presetById, type IconFileSpec, type Preset } from './presets.ts'

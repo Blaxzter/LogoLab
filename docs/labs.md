@@ -225,7 +225,7 @@ a new one reports `512×512 vs 2048×2048` rather than inventing a verdict.
 
 **Three trace lanes, each at the resolution production uses.** `AB_LANES` in
 `bench/abCorpus.ts` owns them: flat art at the flat cap, gradient/photo at the gradient
-cap (`src/lib/traceCaps.ts`), and **mono**. Judging the tracer at a resolution the app never
+cap (`src/lib/traceInput/traceCaps.ts`), and **mono**. Judging the tracer at a resolution the app never
 runs measures code that does not ship — displacement, corner windows and the fit are not
 scale-invariant — while tracing the gradient lane *above* its production cap buys minutes and
 nothing else. Mono is a lane rather than a subset of the flat one because `mode: 'mono'`
@@ -233,7 +233,7 @@ returns from `traceImage` before segmentation (threshold → mask → `traceMask
 `beautify`) and the colour lanes pin `engine: 'planar'`, whose geometry path routes around both
 of those modules: before the lane existed, a mono-side change showed up as an all-green corpus.
 The mono lane does not trace at a fixed cut either — `AbLane.resolve` asks the ink probe
-(`src/lib/ink.ts`) where the ink ends and the paper begins, on the same pixels it traces, which
+(`src/lib/traceInput/ink.ts`) where the ink ends and the paper begins, on the same pixels it traces, which
 is the call `/vectorize` makes when a user picks Mono. Both sides of a comparison resolve it
 from the same raster, so the panels still differ only by code. Each lane's resolution is
 recorded **per stamp**, and `laneFiles` resolves what an older stamp lacks, so stamps frozen

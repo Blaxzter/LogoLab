@@ -5,9 +5,9 @@
 //
 // Pure: no DOM, no Node APIs, plain pixels in.
 
-import { deltaE76, srgbToLab, type Lab } from './trace/lab.ts'
+import { deltaE76, srgbToLab, type Lab } from '../trace/lab.ts'
 import { hairlineCut, type HairlineRead } from './strokeWidth.ts'
-import type { VectorizeOptions } from '../types'
+import type { VectorizeOptions } from '../../types'
 
 /** Anything shaped like a browser `ImageData` (the Node harness decodes into this too). */
 export interface ImageDataLike {

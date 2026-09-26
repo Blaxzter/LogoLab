@@ -17,7 +17,7 @@
 // segmentation would follow every interpolated tone. Colour has the opt-in AI
 // upscaler (aiUpscale.ts) instead.
 
-import type { VectorizeOptions } from '../types'
+import type { VectorizeOptions } from '../../types'
 import { inkThickness, type InkThickness } from './strokeWidth.ts'
 import type { ImageDataLike } from './ink.ts'
 

@@ -15,8 +15,8 @@ import { traceTile, planTileTrace, tileTraceInput, type SheetColorMode } from '.
 import type { EditableDoc } from '../lib/path/types'
 import type { VectorizeOptions } from '../types'
 import { getImageData } from '../lib/image'
-import { logError } from '../lib/errorLog'
-import { raiseFailure } from '../lib/failureNotice'
+import { logError } from '../lib/report/errorLog'
+import { raiseFailure } from '../lib/report/failureNotice'
 import { saveSlot, SLOTS, srcToBlob, type StoredSheet } from '../lib/persist/session'
 
 export type TileStatus = 'idle' | 'queued' | 'tracing' | 'done' | 'error'

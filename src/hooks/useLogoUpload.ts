@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../state/store'
-import { logError } from '../lib/errorLog'
-import { clearFailure, raiseFailure } from '../lib/failureNotice'
-import { provideReportContext } from '../lib/reportContext'
+import { logError } from '../lib/report/errorLog'
+import { clearFailure, raiseFailure } from '../lib/report/failureNotice'
+import { provideReportContext } from '../lib/report/reportContext'
 import { loadLogoFile } from '../lib/image'
 
 /**

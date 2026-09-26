@@ -9,14 +9,14 @@
 
 import { useState, type ReactNode } from 'react'
 import { Bug, Check, Copy, ExternalLink } from 'lucide-react'
-import { recentErrors } from '../../lib/errorLog'
-import { collectReportContext } from '../../lib/reportContext'
+import { recentErrors } from '../../lib/report/errorLog'
+import { collectReportContext } from '../../lib/report/reportContext'
 import {
   issueReportText,
   issueReportUrl,
   type IssueReportInput,
   type ReportKind,
-} from '../../lib/issueReport'
+} from '../../lib/report/issueReport'
 import { REPO_URL } from '../shell/navItems'
 import { TipLabel, Tooltip } from '../ui/Tooltip'
 
@@ -28,7 +28,7 @@ export interface ReportSubject {
   componentStack?: string | null
   /**
    * Pre-collected context. Only a crash boundary needs this, because it must
-   * collect while the crashing subtree is still mounted (see lib/reportContext);
+   * collect while the crashing subtree is still mounted (see lib/report/reportContext);
    * otherwise it is collected from live state.
    */
   context?: Record<string, unknown> | null

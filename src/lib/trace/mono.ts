@@ -1,7 +1,7 @@
 // Mono segmentation: the ink cut as a two-label map (ink, paper) that
 // `tracePlanar` consumes exactly like a colour segmentation. A single ink label
 // cannot be carved into tones, which is why one-ink art is traced this way
-// (see src/lib/ink.ts for the mode decision).
+// (see src/lib/traceInput/ink.ts for the mode decision).
 //
 // Three details are decided here rather than in the tracer:
 //
@@ -16,7 +16,7 @@
 //    model degenerates. Composited, anti-aliasing is a real ink-to-paper ramp.
 //    Opaque art is unchanged.
 
-import { cutLuma, VISIBLE_ALPHA, type ImageDataLike } from '../ink.ts'
+import { cutLuma, VISIBLE_ALPHA, type ImageDataLike } from '../traceInput/ink.ts'
 
 /** Label of the ink in the map `monoLabels` builds. */
 export const MONO_INK = 0

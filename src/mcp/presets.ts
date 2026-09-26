@@ -6,10 +6,10 @@
 // this and calls the renderer — so adding a platform is a table, not code.
 //
 // The web presets are not re-listed here: they are `DEFAULT_TARGETS` from
-// src/lib/iconSpec.ts, the catalogue the browser export offers, so the two
+// src/lib/export/iconSpec.ts, the catalogue the browser export offers, so the two
 // cannot drift.
 
-import { DEFAULT_TARGETS, buildHtmlSnippet, buildManifest } from '../lib/iconSpec.ts'
+import { DEFAULT_TARGETS, buildHtmlSnippet, buildManifest } from '../lib/export/iconSpec.ts'
 import { ICNS_SIZES } from './icns.ts'
 import type { ExportTarget, IconShape } from '../types'
 

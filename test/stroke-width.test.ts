@@ -18,7 +18,7 @@ import {
   HAIRLINE_MAX_RAISE,
   HAIRLINE_MIN_SHARE,
   THIN_INK_SHARE,
-} from '../src/lib/strokeWidth.ts'
+} from '../src/lib/traceInput/strokeWidth.ts'
 import {
   monoTraceScale,
   strokeScale,
@@ -26,9 +26,9 @@ import {
   MONO_UPSCALE_MAX,
   RASTER_MAX_DIM_FLAT,
   RASTER_MAX_DIM_HIGH,
-} from '../src/lib/traceCaps.ts'
+} from '../src/lib/traceInput/traceCaps.ts'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
-import type { ImageDataLike } from '../src/lib/ink.ts'
+import type { ImageDataLike } from '../src/lib/traceInput/ink.ts'
 import type { VectorizeOptions } from '../src/types'
 
 /** White opaque paper. */

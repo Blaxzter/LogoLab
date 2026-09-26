@@ -3,8 +3,8 @@
 // the vectorizer runs unchanged on each crop.
 
 // Pixel and paper types live in ink.ts; re-exported under the sheet names.
-import type { PaperColor } from '../ink.ts'
-export type { ImageDataLike } from '../ink.ts'
+import type { PaperColor } from '../traceInput/ink.ts'
+export type { ImageDataLike } from '../traceInput/ink.ts'
 export type SheetBackground = PaperColor
 
 export interface Rect {
