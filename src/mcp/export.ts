@@ -2,9 +2,9 @@
 // disk — the half of the pipeline that turns one logo into a folder an agent can
 // drop into a project.
 //
-// Rendering is per SIZE, not per file: a Tauri export asks for 32px four times
-// over (32x32.png, Square30x30 rounds up, the .ico, the .icns) and each distinct
-// (size, maskable, shape, background) combination is rendered once and reused.
+// Rendering is per size, not per file: each distinct (size, maskable, shape,
+// background) combination is rendered once and reused, since e.g. a Tauri export
+// needs 32px for several files and containers.
 
 import { existsSync, writeFileSync } from 'node:fs'
 import { join, posix, relative } from 'node:path'
@@ -32,10 +32,9 @@ export interface Appearance {
 }
 
 /**
- * Full-bleed passthrough: an image model's icon IS the icon, so by default it is
- * not re-cropped, re-carded or re-padded. Ask for a background + padding to get
- * the studio's card look instead (that is what the UI defaults to, for logos that
- * still need a plate behind them).
+ * Full-bleed passthrough: by default an image model's icon is used as is, not
+ * re-cropped, re-carded or re-padded. Ask for a background + padding to get the
+ * studio's card look instead.
  */
 export const DEFAULT_APPEARANCE: Appearance = {
   background: 'transparent',

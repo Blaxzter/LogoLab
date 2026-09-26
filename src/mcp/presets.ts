@@ -1,12 +1,12 @@
-// The icon COLLECTIONS an agent can ask for.
+// The icon collections an agent can ask for.
 //
 // A preset is pure data: which files, at which sizes, in which folder layout,
 // plus the text assets that make the set usable (manifest, Contents.json, the
 // adaptive-icon XML, a <head> snippet). Nothing here renders — `export.ts` walks
 // this and calls the renderer — so adding a platform is a table, not code.
 //
-// The web presets are NOT re-listed here: they are `DEFAULT_TARGETS` from
-// src/lib/iconSpec.ts, the same catalogue the browser export offers, so the two
+// The web presets are not re-listed here: they are `DEFAULT_TARGETS` from
+// src/lib/iconSpec.ts, the catalogue the browser export offers, so the two
 // cannot drift.
 
 import { DEFAULT_TARGETS, buildHtmlSnippet, buildManifest } from '../lib/iconSpec.ts'
@@ -23,10 +23,10 @@ export interface IconFileSpec {
   /** Override the card shape for this file (Android's round launcher icon). */
   shape?: IconShape
   /**
-   * What to paint behind the logo when the caller asked for TRANSPARENT and the
-   * platform will not take it (iOS rejects alpha outright; the Play listing icon
-   * has to be a flat square). A chosen card colour still wins — this is a floor,
-   * not an override.
+   * What to paint behind the logo when the caller asked for transparent and the
+   * platform will not take it (iOS rejects alpha; the Play listing icon must be
+   * a flat square). A chosen card colour still wins: this is a floor, not an
+   * override.
    */
   opaqueBackground?: string
 }

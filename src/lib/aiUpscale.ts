@@ -1,29 +1,17 @@
-// In-browser AI super-resolution in front of the tracer — waifu2x swin_unet (nunif),
-// run through onnxruntime-web, lazy-loaded. Measured: docs/vectorization-benchmarks.md §32.
+// In-browser AI super-resolution in front of the colour tracer: waifu2x swin_unet
+// via onnxruntime-web, lazy-loaded. Only used on small rasters (see
+// `aiUpscaleFactor`). This model is chosen because it emits nearly hard edges
+// between the exact source colours, which suits palette segmentation; models that
+// repaint flat colours or add edge rims make the trace worse.
 //
-// Why THIS model and not the one that looks best: on the authored answer sheet it halves
-// plain bilinear's outline error on small rasters (chamfer 0.09 vs 0.17 at 256 px, 0.25 vs
-// 0.47 at 128) while recovering more authored corners (529/564 vs 364) and inventing fewer
-// (23 vs 47), because it emits a nearly hard edge between the two EXACT source colours —
-// the input the palette stage and the corner detector were built for. Real-ESRGAN, whose
-// output looks nicer, repaints every flat colour (ΔE ~2.5) and draws a dark rim inside each
-// edge that the palette stage slivers into hundreds of nodes (§32.4). Where it does NOT
-// help: the icon-sheet path (mono — bilinear ×4 ties it at 1/300 the cost, so the sheet
-// keeps its plain upscale) and anything above ~300 px, where the lattice error is already
-// below what anyone can see. Hence `aiUpscaleFactor` returns 0 there and the option is inert.
+// Nothing is bundled. The runtime (script + WASM) is imported from the CDN on
+// first use; don't make `onnxruntime-web` a bundled dependency, or Vite emits its
+// WASM binaries into dist/assets and they exceed the deploy's per-file size limit.
+// The weights come from the Hugging Face Hub and are kept in the Cache API; the
+// `no-referrer` meta in index.html is what gets past the Hub's hotlink
+// protection. WASM backend only.
 //
-// Same rules as aiRemove.ts: nothing lands in the initial bundle — the runtime
-// (onnxruntime-web, script + WASM) is imported from the CDN on first use, the same host
-// transformers.js fetches its copy from; the weights (17 / 19 MB, MIT) come from the
-// Hugging Face Hub — the `no-referrer` meta in index.html is what gets past the Hub's
-// hotlink protection — and are kept in the browser's Cache API. Not a bundled dependency
-// on purpose: importing `onnxruntime-web` made Vite emit its 13 MB + 24 MB WASM binaries
-// into dist/assets (the deploy has a 25 MiB per-file limit) for files the runtime never
-// reads once `wasmPaths` points at the CDN. WASM only: WebGPU support in onnxruntime-web
-// is real but the adapter was refused on the machine this was measured on, and 2–5 s
-// single-threaded for a 160–256 px image is the budget the option was accepted at.
-//
-// The model boundary is the one loosely-typed spot here (the ORT session API), isolated.
+// The ORT session API is typed `any` and kept inside this file.
 
 import { upscaleImageData } from './sheet/crop.ts'
 
@@ -38,16 +26,13 @@ export interface UpscaleProgress {
 }
 
 /**
- * Rasters longer than this are traced as-is: at 512 px the tracer's own lattice error is
- * already 0.1 px of art, and the answer sheet stops showing a gain (§32.3). Also the time
- * budget — inference scales with the OUTPUT area.
+ * Rasters longer than this are traced as-is: the tracer's own error is already
+ * negligible there, and inference time scales with the output area.
  */
 export const AI_UPSCALE_MAX_PX = 320
 /**
- * Below this, ×4; from here to the max, ×2. At 128 px the ×4 model recovered 476 authored
- * corners to the ×2 model's 331; at 256 they are within noise of each other and ×2 invents
- * fewer (16 vs 23) — the factor follows the raster toward ~512 px, as the sheet's
- * `traceScale` does.
+ * Below this, ×4; from here to the max, ×2, so the result lands near ~512 px as
+ * `traceScale` does for mono.
  */
 const X4_BELOW_PX = 160
 
@@ -61,7 +46,7 @@ const HUB = 'https://huggingface.co/deepghs/waifu2x_onnx/resolve/main/20250502/o
 const MODEL_URL: Record<UpscaleFactor, string> = { 2: `${HUB}/scale2x.onnx`, 4: `${HUB}/scale4x.onnx` }
 /** The swin_unet export eats this many input px per side … */
 const BORDER = 8
-/** … and only accepts sizes that are a multiple of this. Both found by probing (§32.1). */
+/** … and only accepts sizes that are a multiple of this. */
 const MULTIPLE = 64
 const CACHE_NAME = 'logolab-models'
 /**
@@ -85,8 +70,8 @@ async function loadOrt(): Promise<Ort> {
       // Script and WASM from the CDN, nothing bundled (see the header).
       const ort: Ort = await import(/* @vite-ignore */ `${ORT_CDN}ort.wasm.min.mjs`)
       ort.env.wasm.wasmPaths = ORT_CDN
-      // Threads need cross-origin isolation (COOP/COEP); without it ORT falls back to one
-      // thread and warns — say so up front instead.
+      // Threads need cross-origin isolation (COOP/COEP); ask for one thread
+      // otherwise rather than letting ORT fall back with a warning.
       ort.env.wasm.numThreads = globalThis.crossOriginIsolated
         ? Math.min(4, navigator.hardwareConcurrency || 1)
         : 1
@@ -166,10 +151,9 @@ function refl(i: number, n: number): number {
 }
 
 /**
- * Upscale `img` by `factor` with the model. RGB goes through the model composited over
- * white; alpha (if the image has any) is upscaled bilinearly and the colour un-composited
- * under it — the measured lanes were opaque, and this keeps a transparent upload's
- * transparency without a second model pass.
+ * Upscale `img` by `factor` with the model. RGB goes through the model composited
+ * over white; alpha, if any, is upscaled bilinearly and the colour un-composited
+ * under it, which keeps transparency without a second model pass.
  */
 export async function aiUpscale(
   img: ImageData,

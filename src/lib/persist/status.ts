@@ -1,15 +1,10 @@
-// Whether the working session is actually written down, and when.
+// Whether the working session is saved, and when; backs the header's Saved chip.
 //
-// The app now promises that a reload costs nothing. A promise like that has to be
-// visible, and it has to be *honest* — the two states worth showing are "saved a
-// moment ago" and "this browser will not let me save", and the second one is the
-// whole reason this module reports failure rather than swallowing it. Private
-// mode, a blocked origin and a full quota all make persistence silently
-// impossible, and a UI that keeps saying "Saved" through that is worse than one
-// that says nothing at all.
+// Failures are reported, not swallowed: private mode, a blocked origin or a
+// full quota make persistence impossible, and the chip must then say "Not
+// saved" instead of claiming the work is safe.
 //
-// Deliberately framework-free, like the rest of `lib/`: a plain observable that a
-// component reads with `useSyncExternalStore`.
+// A plain observable, read with `useSyncExternalStore`.
 
 export interface SaveStatus {
   /** A write is queued or in flight. */
@@ -21,10 +16,9 @@ export interface SaveStatus {
 }
 
 /**
- * Writes armed vs. writes completed, per slot. A count rather than a flag
- * because writes are debounced: a slot can be re-armed while its own previous
- * write is still in flight, and collapsing that to a boolean would report "saved"
- * while the newest value is still only in memory.
+ * Writes armed vs. completed, per slot. A count, not a flag: a slot can be
+ * re-armed while its previous write is in flight, and a boolean would report
+ * "saved" while the newest value is still only in memory.
  */
 const armed = new Map<string, number>()
 const done = new Map<string, number>()
@@ -34,7 +28,7 @@ let snapshot: SaveStatus = { pending: false, savedAt: null, failed: false }
 
 function publish(next: SaveStatus): void {
   // useSyncExternalStore compares by identity, so an unchanged status must
-  // return the SAME object or every listener re-renders on every keystroke.
+  // keep the same object.
   if (
     next.pending === snapshot.pending &&
     next.savedAt === snapshot.savedAt &&
@@ -60,9 +54,8 @@ export function markArmed(key: string): number {
 }
 
 /**
- * A write finished. `upTo` is the sequence number read when the write STARTED,
- * not now: anything armed while it was in flight is a newer value that has not
- * been stored yet, and must keep the status pending.
+ * A write finished. `upTo` is the sequence number taken when the write started:
+ * anything armed since is newer and must keep the status pending.
  */
 export function markSettled(key: string, upTo: number, ok: boolean): void {
   done.set(key, Math.max(done.get(key) ?? 0, upTo))
@@ -74,20 +67,15 @@ export function markSettled(key: string, upTo: number, ok: boolean): void {
 }
 
 /**
- * The boot read found stored work, written at `at`.
- *
- * Without this the indicator would read "nothing saved yet" for someone who just
- * reloaded INTO their restored session — technically true of this page load, and
- * exactly backwards as an answer to "is my work safe?". The timestamp comes back
- * with the data rather than being invented here, so the chip says when the work
- * was actually last written, not when the tab happened to open.
+ * The boot read found stored work, written at `at`, so a restored session
+ * reports when it was last saved rather than "nothing saved yet".
  */
 export function markRestored(at: number): void {
   if (snapshot.savedAt !== null && snapshot.savedAt >= at) return
   publish({ ...snapshot, savedAt: at })
 }
 
-/** A synchronous store (localStorage) landed — no pending phase to report. */
+/** A synchronous (localStorage) write landed; there is no pending phase. */
 export function markSaved(): void {
   publish({ ...snapshot, savedAt: Date.now(), failed: false })
 }
@@ -97,7 +85,7 @@ export function markFailed(): void {
   publish({ ...snapshot, failed: true })
 }
 
-/** Back to "nothing has been saved" — the Start fresh path. */
+/** Back to "nothing has been saved" (Start fresh). */
 export function resetSaveStatus(): void {
   armed.clear()
   done.clear()

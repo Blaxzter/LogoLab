@@ -8,9 +8,8 @@ import { loadRenderSource } from './image.ts'
 import { buildHtmlSnippet, buildManifest, encodeIcoBytes, iconLayout, type RenderIconOpts } from './iconSpec.ts'
 import type { ExportTarget, RenderIconOptions } from '../types'
 
-// The catalogue, the maskable safe-zone numbers, the layout math and the text
-// assets are SHARED with the headless exporter (src/mcp) and live in iconSpec.ts.
-// Re-exported here so the UI's existing imports keep working unchanged.
+// Layout math and text assets are shared with the headless exporter and live
+// in iconSpec.ts; re-exported for the UI.
 export {
   DEFAULT_TARGETS,
   MASKABLE_SAFE_DIAMETER,
@@ -49,11 +48,8 @@ function get2d(canvas: HTMLCanvasElement, willReadFrequently = false): CanvasRen
 
 /**
  * Render a drawable `source` (with its true intrinsic `srcW`x`srcH`) into a
- * square icon canvas of `opts.size`.
- *
- * The geometry — backplate shape, safe zone, contain-fit, the maskable clamp —
- * is `iconLayout` (iconSpec.ts), shared with the headless exporter; this
- * function is only the canvas drawing of that answer.
+ * square icon canvas of `opts.size`. All geometry comes from `iconLayout`;
+ * this only draws it.
  */
 export function renderIcon(
   source: CanvasImageSource,
@@ -162,18 +158,14 @@ export async function buildExportZip(
     svgText?: string | null
   },
 ): Promise<Blob> {
-  // JSZip is 94 kB and nothing needs it until someone actually asks for the
-  // bundle, so it is fetched here rather than carried by every page load.
+  // Lazy-loaded: JSZip is only needed when a bundle is requested.
   const { default: JSZip } = await import('jszip')
   // Rasterize SVGs at high resolution so exported icons are crisp (an <img>
   // with only a viewBox would render blank/150px); raster sources pass through.
   const { source, width, height } = await loadRenderSource(src, 1024, meta.svgText ?? null)
   const zip = new JSZip()
-  // Deployable assets live under public/ so the bundle drops straight into a
-  // Vite / Next / CRA / SvelteKit project's public folder (or any web root) and
-  // resolves at /favicon.ico, /manifest.webmanifest, /icons/... — the exact
-  // paths the manifest and <head> snippet reference. Docs (README, snippet)
-  // stay at the zip root, outside the deployable tree.
+  // Deployable assets go under public/ so they resolve at the paths the
+  // manifest and <head> snippet reference; docs stay at the zip root.
   const publicDir = zip.folder('public')
   if (!publicDir) throw new Error('Failed to create public folder')
   const iconsDir = publicDir.folder('icons')

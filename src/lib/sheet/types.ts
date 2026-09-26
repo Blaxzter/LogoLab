@@ -1,14 +1,8 @@
-// Icon-sheet splitting — the types shared by detection, cropping and the UI.
-//
-// A "sheet" is one raster holding N icons laid out on a common background: the
-// thing an image model hands you when you ask for an icon set. Splitting it is a
-// separate problem from tracing, and it stays separate: everything here works on
-// plain pixels and produces BOXES, and the existing vectorizer runs unchanged on
-// each crop.
+// Types shared by icon-sheet detection, cropping and the UI. A sheet is one
+// raster holding N icons on a common background; splitting produces boxes, and
+// the vectorizer runs unchanged on each crop.
 
-// Pixels and paper are not sheet-specific — the studio and the MCP server ask the
-// same questions of a single logo — so they live in `src/lib/ink.ts` and are
-// re-exported here under the names the sheet code has always used.
+// Pixel and paper types live in ink.ts; re-exported under the sheet names.
 import type { PaperColor } from '../ink.ts'
 export type { ImageDataLike } from '../ink.ts'
 export type SheetBackground = PaperColor
@@ -21,17 +15,15 @@ export interface Rect {
 }
 
 /**
- * What a tile is: `icon` gets extracted, `label` is the caption text under an
- * icon (sheets from image models are usually annotated) and `noise` is a speck
- * too small to be either. Only `icon` is selected by default, but the others are
- * kept so the UI can show what it decided and let you overrule it — a "label"
- * misfire would otherwise look like a silently missing icon.
+ * What a tile is: `icon` gets extracted, `label` is caption text, `noise` is a
+ * speck. Only icons are selected by default; the others are kept so the UI can
+ * show the decision and let the user overrule it.
  */
 export type TileKind = 'icon' | 'label' | 'noise'
 
 export interface SheetTile {
   id: string
-  /** The crop box in SOURCE pixels — padded, and squared when `square` is on. */
+  /** The crop box in source pixels, padded and squared when `square` is on. */
   box: Rect
   /** Tight bounding box of the ink itself, before padding/squaring. */
   ink: Rect
@@ -54,8 +46,7 @@ export interface DetectOptions {
   detectSize?: number
   /**
    * Gap (in source px) at which two ink blobs are considered the same icon.
-   * Undefined = pick it automatically from the gap-scale plateau (recommended:
-   * it is the one number that actually decides "one icon or two").
+   * Undefined = pick it automatically from the gap-scale plateau.
    */
   gap?: number
   /** Padding around the ink, as a fraction of the tile's long side. */

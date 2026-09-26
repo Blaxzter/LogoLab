@@ -5,9 +5,8 @@
 // makes for a human — colour vs mono, where a mono cut falls, whether the art has
 // real gradients, what resolution to trace at — are `planTileTrace` (src/lib/sheet),
 // and the trace itself is `traceTile`, the same function the icon-sheet batch and
-// the single-icon editor run. An agent gets the same answer a person would, and
-// the plan is REPORTED back so it can overrule one decision without hand-tuning
-// the rest.
+// the single-icon editor run. The plan is reported back so an agent can
+// overrule one decision without hand-tuning the rest.
 
 import { estimateBackground } from '../lib/sheet/detect.ts'
 import { planTileTrace, tileTraceInput, traceTile } from '../lib/sheet/traceTile.ts'
@@ -42,7 +41,7 @@ export interface TraceRequest {
   regionDetail?: number
 }
 
-/** The decisions, reported so the agent can see WHY it got this SVG. */
+/** The decisions, reported so the agent can see why it got this SVG. */
 export interface TracePlanReport {
   mode: 'color' | 'mono'
   gradients: boolean
@@ -96,10 +95,9 @@ export async function planTrace(
   const probe = await rasterizeSource(src, PLAN_PROBE_PX, background)
   const bg = estimateBackground(probe, 24)
 
-  // Two passes over the planner: the first is only to learn mode + gradients, which
-  // together decide the raster cap (flat art traces at 2048, gradient art at 1024);
-  // the caller then re-plans on the pixels that cap produces, where the mono cut and
-  // the smoothing scale are measured on what the tracer will really see.
+  // Two planner passes: the first only learns mode + gradients, which decide the
+  // raster cap; the caller then re-plans on the capped pixels, so the mono cut
+  // and smoothing scale are measured on what the tracer will really see.
   const first = planTileTrace(probe, base, {
     colorMode: req.mode ?? 'auto',
     gradientMode: req.gradients ?? 'auto',

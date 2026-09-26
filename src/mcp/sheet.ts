@@ -1,14 +1,13 @@
 // A sheet of icons → one traced SVG per icon.
 //
-// Image models like to answer "give me app icons" with a CONTACT SHEET: a grid of
-// twelve marks on one canvas. The app has a whole tab for cutting those up; this
-// is that flow headless — detect the tiles, crop each one (paper colour filling
-// any overhang), plan and trace it exactly as the batch does.
+// Image models often answer "give me app icons" with a contact sheet: a grid of
+// marks on one canvas. This is the app's sheet tab, headless: detect the tiles,
+// crop each one (paper colour filling any overhang), plan and trace it as the
+// batch does.
 //
-// The one thing missing against the UI is caption OCR: the tab names each icon
-// after the label printed under it via tesseract.js, which needs a browser worker.
-// Here tiles are named by position, and the DETECTED label tiles are reported so
-// an agent can rename them itself if it wants.
+// Unlike the UI there is no caption OCR (tesseract.js needs a browser worker):
+// tiles are named by position, and detected label tiles are reported so an agent
+// can rename them.
 
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -34,7 +33,7 @@ export interface SheetRequest {
   detect?: DetectOptions
   mode?: 'auto' | 'color' | 'mono'
   gradients?: 'auto' | 'flat' | 'rich'
-  /** Enlarge small crops before tracing (mono only). Default on — it is measurably better. */
+  /** Enlarge small crops before tracing (mono only). Default on. */
   hiRes?: boolean
   /** Also write the cropped PNG beside each SVG. */
   keepCrops?: boolean

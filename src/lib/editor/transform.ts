@@ -1,11 +1,9 @@
 // Applying an affine to a selection, and the transform-box handle math behind
 // the eight drag handles + rotation.
 //
-// Transforms are BAKED, never accumulated as a `transform` attribute on the
-// item (see the GroupItem doc comment for why): scaling a group rewrites its
-// descendants' coordinates. The one exception is a RawItem, whose markup is
-// opaque to us — there the affine composes onto its captured `transform`
-// string, which is the only place in the model where a matrix survives.
+// Transforms are baked into coordinates, never kept as a `transform` attribute
+// (see GroupItem). The exception is a RawItem, whose markup is opaque: its
+// affine composes onto the captured `transform` string.
 
 import type {
   Affine,
@@ -98,18 +96,10 @@ export function uniformScale(m: Affine): number | null {
 }
 
 /**
- * Scale a stroke's scalar lengths — but ONLY under a uniform scale.
- *
- * A stroke width is one number describing a distance in every direction, so a
- * squash simply has no correct answer: the outline should get thinner top-and-
- * bottom and stay put left-and-right, which one width cannot say. Picking
- * √|det| (the area-preserving compromise) meant dragging the top edge down to
- * flatten a shape ALSO silently thinned its outline — a number the user never
- * touched, changing by an amount they could not predict.
- *
- * So: follow a uniform scale, and leave the width alone otherwise. Scaling an
- * icon up still thickens its strokes as expected; squashing one keeps the
- * weight the designer chose.
+ * Scale a stroke's scalar lengths, but only under a uniform scale. A single
+ * width has no correct value under a squash, and changing it (e.g. by √|det|)
+ * would silently alter a weight the user never touched, so non-uniform scales
+ * leave it alone.
  */
 function transformStroke(s: Stroke, m: Affine): Stroke {
   const k = uniformScale(m)
@@ -128,9 +118,8 @@ export function transformItem(item: DocItem, m: Affine): DocItem {
     const next: PathItem = { ...item, subPaths: transformSubPaths(item.subPaths, m) }
     if (item.gradient) next.gradient = transformGradient(item.gradient, m)
     if (item.stroke) next.stroke = transformStroke(item.stroke, m)
-    // A transformed region no longer matches the shared-edge graph it came
-    // from, so drop the planar link and let it live as an independent path.
-    // Keeping `loops` would have the next rematerialize silently undo the move.
+    // Drop the planar link: keeping `loops` would let the next rematerialize
+    // from the shared-edge graph silently undo the move.
     delete next.loops
     return next
   }
@@ -160,9 +149,8 @@ export function transformItems(
 export function itemBox(item: DocItem): Box | null {
   if (isGroup(item)) return unionBoxes(item.children.map(itemBox))
   if (item.kind === 'path') return subPathsTightBounds(item.subPaths)
-  // A RawItem's geometry lives in markup we deliberately never parse, so it has
-  // no measurable box. Callers treat it as unselectable-by-marquee rather than
-  // guessing a box that would be wrong.
+  // A RawItem's markup is never parsed, so it has no measurable box; callers
+  // treat it as unselectable by marquee.
   return null
 }
 
@@ -234,19 +222,15 @@ export interface ScaleGripOptions {
   /** Scale about the box centre instead of the opposite grip (Alt). */
   fromCenter?: boolean
   /**
-   * Smallest allowed absolute scale factor. Below this a drag would collapse
-   * the geometry to a line it can never be recovered from, since the transform
-   * is baked into coordinates rather than kept as an undoable matrix.
+   * Smallest allowed absolute scale factor. The transform is baked, so
+   * collapsing geometry to a line would be unrecoverable.
    */
   minScale?: number
 }
 
 /**
- * The affine for dragging `grip` from its home position to `to`.
- *
- * Edge grips scale one axis only; corner grips scale both. Dragging a grip past
- * its anchor produces a negative factor — a mirror — which is the behaviour
- * every vector editor has and costs nothing to allow here.
+ * The affine for dragging `grip` from its home position to `to`. Edge grips
+ * scale one axis, corner grips both; dragging past the anchor mirrors.
  */
 export function scaleFromGrip(
   box: Box,
@@ -269,9 +253,8 @@ export function scaleFromGrip(
   let sy = movesY && Math.abs(spanY) > 1e-9 ? (to.y - origin.y) / spanY : 1
 
   if (opts.uniform && movesX && movesY) {
-    // Follow the axis the pointer pushed hardest, and carry its sign to the
-    // other — otherwise a uniform drag through the anchor flips only one axis
-    // and the shape shears instead of mirroring.
+    // Follow the axis pushed hardest and carry its sign to the other, so a
+    // locked drag through the anchor mirrors both axes.
     const k = Math.max(Math.abs(sx), Math.abs(sy))
     sx = k * Math.sign(sx || 1)
     sy = k * Math.sign(sy || 1)

@@ -119,10 +119,8 @@ export function prefersDarkChecker(img: HTMLImageElement, sample = 48): boolean 
 
 /**
  * Resolve `currentColor` the way the DOM does, so a rasterization agrees with
- * what is on screen. Whole icon sets (Lucide, Feather, Heroicons) paint in
- * nothing else: rendered inline they take the app's ink — near-white in the
- * dark theme — while a standalone rasterization would resolve them to black
- * and read the artwork as dark. Falls back to black, SVG's own initial value.
+ * what is on screen (icon sets like Lucide paint only in `currentColor`, which
+ * inline takes the app's text colour). Falls back to black.
  */
 function resolveCurrentColor(svgText: string): string {
   if (!/currentcolor/i.test(svgText)) return svgText
@@ -237,11 +235,9 @@ function ensureSvgSize(svgText: string, w: number, h: number): string {
 
 /**
  * Rasterize SVG markup crisply at `maxDim` into a canvas (forces explicit size).
- * By default the longest side is scaled *to* `maxDim` (small SVGs are upscaled),
- * which is what the export/vectorize pipelines want. Pass `upscale: false` to only
- * ever scale *down* — so an SVG smaller than `maxDim` rasterizes at its intrinsic
- * size (matching the raster branch of getImageData), e.g. a 512px SVG → 512px, not
- * 1024px. Cleanup uses this so the working buffer matches the source's own size.
+ * By default the longest side is scaled to `maxDim`, upscaling small SVGs. With
+ * `upscale: false` it only scales down, so a small SVG rasterizes at its
+ * intrinsic size like the raster branch of getImageData.
  */
 async function rasterizeSvgToCanvas(
   svgText: string,

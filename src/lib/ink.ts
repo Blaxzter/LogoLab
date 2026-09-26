@@ -1,22 +1,9 @@
-// Ink vs paper: how many colours is this art actually made of, and where does a
-// mono cut belong?
+// Ink vs paper: how many colours the art is made of, and where a mono cut
+// belongs. One-ink art with soft shading traces badly in colour (the palette
+// splits each shape along its shading), so it goes mono instead. The sheet, the
+// MCP server and the vectorize studio all read this one decision.
 //
-// This started life inside the icon-sheet splitter, because that is where the
-// question first got asked: a sheet icon is usually ONE ink on paper, that ink
-// carries soft shading (a light side and a shadow side, ΔE 4–11 apart), and the
-// colour path keeps those as separate palette entries and CARVES every shape
-// along the line where the assignment flips — the bite out of a disc that made
-// the traces look broken. Mono has no palette to split, so the same icon comes
-// out as one clean shape.
-//
-// None of that reasoning is sheet-specific. It is equally true of a single logo
-// dropped on /vectorize, and the studio spent its whole life without it: mode
-// defaulted to colour, the mono cut was a constant 128 ("black ink on white
-// paper"), and `invert` had no control at all — so white line-art in Mono traced
-// to nothing, silently (issue #46). So the decision lives here now, and the
-// sheet, the MCP server and the studio all read the same one.
-//
-// Everything in this file is pure: no DOM, no Node APIs, plain pixels in.
+// Pure: no DOM, no Node APIs, plain pixels in.
 
 import { deltaE76, srgbToLab, type Lab } from './trace/lab.ts'
 import { hairlineCut, type HairlineRead } from './strokeWidth.ts'
@@ -100,8 +87,8 @@ export function estimateBackground(img: ImageDataLike, threshold: number): Paper
   // Uniformity: how much of the ring agrees with its own median.
   let agree = 0
   for (let i = 0; i < rs.length; i++) {
-    // rs/gs/bs are sorted now, so compare the *distribution* instead: count ring
-    // samples within tolerance using the sorted arrays' quantiles.
+    // rs/gs/bs are sorted by now, so this compares the distributions rather
+    // than individual samples.
     if (Math.abs(rs[i] - r) <= threshold && Math.abs(gs[i] - g) <= threshold && Math.abs(bs[i] - b) <= threshold) agree++
   }
   const transparent = a < 16
@@ -141,21 +128,19 @@ export function isInkPixel(data: Uint8ClampedArray, i: number, bg: PaperColor, t
 /** Ink colours closer than this (CIE76) are one ink under shading, not two. */
 const SAME_INK_DE = 14
 /** Fused inks holding less than this share of the ink are not a colour the art
- *  is made of. Applied AFTER fusion — see `probeInk`. */
+ *  is made of. Applied after fusion (see `probeInk`). */
 const MIN_INK_SHARE = 0.02
 /**
- * …and applied BEFORE it, only to bound the work: a 5-bit bucket this small
- * cannot move any ink's mean, and skipping the tail keeps the O(buckets × inks)
- * fusion off the 3000-bucket tails that shaded JPEG art produces.
+ * Applied before fusion, only to bound the work: a bucket this small cannot move
+ * any ink's mean, and skipping it keeps the O(buckets × inks) fusion off the
+ * long tails that shaded JPEG art produces.
  */
 const MIN_BUCKET_SHARE = 0.0005
 /**
  * Perpendicular distance (CIE76) within which a colour counts as a point on the
  * ramp between the paper and the dominant ink, rather than a second colour.
- *
- * Anti-aliasing and drop shadows MIX the ink with the paper, so they land on the
- * segment joining the two — the measured spread around it is 0–9 on real sheets,
- * against 13+ for the nearest genuine second colour.
+ * Anti-aliasing and drop shadows mix ink with paper, so they land near the
+ * segment joining the two.
  */
 const RAMP_DE = 12
 /** How far past either end of that segment a mixture may still sit (see `onRamp`). */
@@ -171,17 +156,15 @@ export interface InkProbe {
   /** One ink, clearly darker than the paper ⇒ trace it mono. */
   mono: boolean
   /**
-   * One ink, clearly LIGHTER than the paper (white glyphs on a dark ground) ⇒
+   * One ink, clearly lighter than the paper (white glyphs on a dark ground) ⇒
    * mono as well, with the cut inverted (`VectorizeOptions.invert`). The colour
-   * path on such art keeps the anti-aliasing band between glyph and paper as a
-   * region of its own: dark slivers around every shape, worse the smaller the
-   * source (measured: 16/16 tiles at 184px).
+   * path would keep the anti-aliasing band as a region of its own and leave dark
+   * slivers around every shape.
    */
   monoInverted: boolean
   /**
-   * Luminance (Rec.709, 0–255, the tracer's own mask weights) of the dominant
-   * ink — null when there is none — and of the paper: the two values a mono cut
-   * has to fall between.
+   * Luminance (Rec.709, 0–255) of the dominant ink (null when there is none)
+   * and of the paper: the two values a mono cut has to fall between.
    */
   inkLuma: number | null
   paperLuma: number
@@ -191,19 +174,13 @@ export interface InkProbe {
 const luma = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 /**
- * Is `c` a MIXTURE of the paper and the ink rather than a colour of its own?
+ * Is `c` a mixture of the paper and the ink rather than a colour of its own?
  *
- * Every edge in an opaque raster is such a mixture: the renderer blended the two
- * before the pixels were saved, so the fringe of a black glyph on white is a run
- * of greys and the fringe of a white glyph on navy is a run of slate. Those land
- * on the straight segment `paper → ink` in Lab, which is what this measures —
- * perpendicular distance small, and the foot of the perpendicular between the two
- * ends (`t`, with a little slack for JPEG noise).
- *
- * The `t` bound is what keeps it honest: a colour that is the same HUE as the ink
- * but darker projects onto the line too, at t > 1 — the far side of the ink,
- * where no paper is mixed in. That is a second tone the art actually has (the
- * two-tone blue of the travel sheet's tile 01, t = 1.8), not an edge.
+ * Every anti-aliased edge in an opaque raster is such a mixture, so it lands on
+ * the segment `paper → ink` in Lab: small perpendicular distance, with the foot
+ * of the perpendicular between the two ends (`t`, with slack for JPEG noise).
+ * The `t` bound matters: a darker tone of the same hue projects onto the line at
+ * t > 1, beyond the ink, and is a real second tone rather than an edge.
  */
 function onRamp(c: Lab, paper: Lab, ink: Lab): boolean {
   const dx = ink[0] - paper[0]
@@ -247,15 +224,9 @@ export function probeInk(img: ImageDataLike, bg: PaperColor, threshold = INK_THR
   }
   if (inkPixels === 0) return none
 
-  // FUSE FIRST, then apply the share floor — not the other way round.
-  //
-  // These buckets are 5 bits per channel, and shaded art spreads one colour over
-  // dozens of them: a red balloon with a highlight and a shadow is 20 buckets of
-  // ~1% each, none of which clears a 2% floor on its own. Filtering here used to
-  // throw away 71–84% of the ink on such a tile and leave only whatever WAS
-  // concentrated — the flat grey of a card's border — so ten colourful icons
-  // reported "1 ink" and traced as flat grey silhouettes. Fusion is what turns
-  // those 20 buckets back into one 12% red, and the floor belongs after it.
+  // Fuse first, then apply the share floor. Shaded art spreads one colour over
+  // many small buckets, none of which clears the floor alone; filtering first
+  // would discard most of that ink and leave only whatever was concentrated.
   const entries = [...buckets.values()]
     .filter((e) => e.n >= inkPixels * MIN_BUCKET_SHARE)
     .map((e) => ({ n: e.n, r: e.r / e.n, g: e.g / e.n, b: e.b / e.n }))
@@ -263,8 +234,7 @@ export function probeInk(img: ImageDataLike, bg: PaperColor, threshold = INK_THR
   if (entries.length === 0) return none
 
   // Greedy fusion, biggest first: a tonal variant joins the ink it belongs to.
-  // (The host's Lab is cached and refreshed on merge — the whole tail runs
-  // through this loop now, so recomputing it per comparison would be the cost.)
+  // Each host's Lab is cached and refreshed on merge.
   const inks: { n: number; r: number; g: number; b: number; lab: Lab }[] = []
   for (const e of entries) {
     const lab = srgbToLab(e.r, e.g, e.b)
@@ -284,10 +254,9 @@ export function probeInk(img: ImageDataLike, bg: PaperColor, threshold = INK_THR
   inks.sort((a, b) => b.n - a.n)
 
   const top = inks[0]
-  // What survives as a colour of its own: enough of the ink to count, and not a
-  // point on the paper→ink ramp (an edge or a drop shadow). The ramp test needs
-  // a paper colour to mix WITH — on a transparent ground the edges are in the
-  // alpha channel, and `data[i + 3] < 200` above already dropped them.
+  // A colour of its own: enough of the ink to count, and not on the paper→ink
+  // ramp (an edge or a drop shadow). On a transparent ground the edges live in
+  // alpha and were already dropped by the `< 200` test above.
   const paperLab = bg.transparent ? null : srgbToLab(bg.r, bg.g, bg.b)
   const distinct = inks.filter(
     (k) =>
@@ -318,11 +287,9 @@ function hex(r: number, g: number, b: number): string {
 export type InkColorMode = 'auto' | 'color' | 'mono'
 
 /**
- * Where a mono trace cuts. The old studio default (128) assumes black ink on
- * white paper; once both the ink and the paper are known the cut goes halfway
- * between them. Without this an orange ticket (luma 174) on cream paper (244)
- * sits ABOVE the default cut — on the paper side — and traces to nothing
- * (0 paths on the travel sheet's tile 08).
+ * Where a mono trace cuts: halfway between the ink and the paper luminance, or
+ * `fallback` when there is no ink. A fixed 128 assumes black on white and
+ * misses light inks on light paper entirely.
  */
 export function monoThreshold(probe: Pick<InkProbe, 'inkLuma' | 'paperLuma'>, fallback: number): number {
   if (probe.inkLuma == null) return fallback
@@ -331,60 +298,48 @@ export function monoThreshold(probe: Pick<InkProbe, 'inkLuma' | 'paperLuma'>, fa
 
 /* ------------------------------------------- putting the cut in a real gap */
 
-// The midpoint above is only meaningful when the ink and the paper really ARE
-// two populations. `estimateBackground` reads the paper off the border ring, and
-// on full-bleed art — a gradient card, a photo — that ring does not agree with
-// itself: nebula gives paper rgb(125,59,215) at 21% coverage, `uniform` false, so
-// 79% of the image (the gradient) is counted as ink and the "dominant ink" comes
-// back as the purple rather than the white ring drawn on it. The cut then lands
-// at 98, halfway between the gradient and itself — INSIDE one population, which
-// splits it down the middle and inks 62% of the square as one blob.
-//
-// The art is cleanly separable and the histogram says so: everything but the
-// white marks sits below luma 112, so any cut from 130 to 254 traces the ring and
-// the dot in 16 nodes. What is wrong with 98 is not that it is far from that
-// range but that it has PIXELS ON IT. So that is the test, and the repair is to
-// slide the cut to the nearest luminance the image genuinely leaves empty.
+// The midpoint is only meaningful when ink and paper really are two
+// populations. On full-bleed art (a gradient card, a photo) the border ring is
+// not a clean paper sample, and the midpoint can land inside one population and
+// split it into a blob. The test is whether the cut has pixels on it; the
+// repair is to slide it to the nearest luminance the image leaves empty.
 
 /** A luma bin holding less than this share of the visible pixels is a gap. */
 const GAP_BIN_SHARE = 0.002
 /** Narrower than this (luma units) and a gap is histogram noise, not a real one. */
 const MIN_GAP_WIDTH = 12
 /**
- * …and a gap only SEPARATES if both sides of it hold this much of the image. The
- * empty run below the darkest pixel is a gap by arithmetic and a cut placed there
- * selects nothing — the failure #47 exists to make visible.
+ * A gap only separates if both sides of it hold this much of the image; the
+ * empty run below the darkest pixel is a gap too, but a cut there selects nothing.
  */
 const MIN_GAP_SIDE_SHARE = 0.01
 /** Mass within ±`GAP_PROBE_RADIUS` of the cut above which the cut is inside a
- *  population rather than between two — the whole trigger for moving it. */
+ *  population rather than between two, and gets moved. */
 const CUT_ON_INK_SHARE = 0.02
 const GAP_PROBE_RADIUS = 4
-/** A move that would ink this much of the image produces no shape, just a filled
- *  square — refuse it and keep the cut where it was. */
+/** A move that would ink this much of the image yields a filled square rather
+ *  than a shape, so it is refused. */
 const DEGENERATE_SOLID = 0.9
 
 /* ------------------------------------------------ what a mono cut looks at */
 
-/** Below this alpha a pixel is not there at all — invisible to the cut and to every
- *  readout that mirrors it. */
+/** Below this alpha a pixel is invisible to the cut and to every readout that
+ *  mirrors it. */
 export const VISIBLE_ALPHA = 16
 
 /**
- * The luminance a mono cut compares for pixel `i`: its Rec.709 luma, COMPOSITED
- * over the paper the cut assumes — white when the ink is the dark side, black
- * when `invert` makes it the light side. Opaque pixels are untouched.
+ * The luminance a mono cut compares for pixel `i`: its Rec.709 luma composited
+ * over the paper the cut assumes (white normally, black when `invert`). Opaque
+ * pixels are untouched.
  *
- * This is what makes the cut a COVERAGE cut on art over transparency. Such art
- * carries its anti-aliasing in alpha (black RGB everywhere, alpha ramping at the
- * edge), and a cut that read the RGB luma alone counted every pixel with any
- * alpha at all as ink — a 1px staff line became 2px, lyrics came out bold, and a
- * page of sheet music at 499px held 68% more ink in its mask than it drew.
- * Composited, a half-covered black pixel reads 128: the mask's edge is the
- * iso-0.5 coverage contour, the same line an opaque rendering puts it on.
+ * This makes the cut a coverage cut on art over transparency, where the
+ * anti-aliasing lives in alpha: a half-covered black pixel reads 128, so the
+ * mask edge is the iso-0.5 coverage contour. Don't read the raw RGB luma
+ * instead: every pixel with any alpha would count as ink and each stroke would
+ * trace a pixel fatter than drawn.
  *
  * `thresholdToMask` (trace/index.ts), `inkMask` (strokeWidth.ts) and the three
- * readouts below all go through here, so they cannot disagree by a pixel.
+ * readouts below all go through here so they cannot disagree with the mask.
  */
 export function cutLuma(d: Uint8ClampedArray, i: number, invert: boolean): number {
   const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
@@ -394,8 +349,7 @@ export function cutLuma(d: Uint8ClampedArray, i: number, invert: boolean): numbe
   return invert ? lum * k : lum * k + 255 * (1 - k)
 }
 
-/** Histogram of what the cut sees over the VISIBLE pixels — `cutLuma`, so the bins
- *  are the mask's own. */
+/** Histogram of `cutLuma` over the visible pixels, so the bins are the mask's own. */
 function lumaHistogram(img: ImageDataLike, invert: boolean): { bins: Float64Array; visible: number } {
   const bins = new Float64Array(256)
   const d = img.data
@@ -412,12 +366,10 @@ function lumaHistogram(img: ImageDataLike, invert: boolean): { bins: Float64Arra
  * Slide `cut` to the nearest luminance the image leaves empty, when it is
  * sitting in the middle of a population.
  *
- * Deliberately conservative in three ways, because every case whose cut already
- * lands in a gap is one this must not touch: it only acts when there is real mass
- * ON the cut; it moves to the NEAREST gap rather than the widest (a cut one unit
- * below a gap belongs in that gap, not in a bigger one at the far end); and it
- * refuses a move that would ink almost everything. A pure ramp — the `bg-ramp`
- * fixtures, `radial-glow` — has no gap anywhere and keeps the cut it had.
+ * Conservative so a cut that already sits in a gap is never touched: it acts
+ * only when there is real mass on the cut, moves to the nearest gap rather than
+ * the widest, and refuses a move that would ink almost everything. A pure ramp
+ * has no gap and keeps its cut.
  */
 export function snapCutToGap(img: ImageDataLike, cut: number, invert: boolean): number {
   const { bins, visible } = lumaHistogram(img, invert)
@@ -463,31 +415,25 @@ export interface InkModePlan {
   /** Light ink on dark paper: flip the cut. Always false in colour mode. */
   invert: boolean
   /**
-   * The ink's real colour (#rrggbb) when a mono trace should be repainted with
-   * it — a mono trace comes back `#000`, and this is the only thing that knows
-   * better. Null in colour mode, or when there is no ink.
+   * The ink's real colour (#rrggbb) to repaint the mono trace with (a mono trace
+   * comes back `#000`). Null in colour mode, or when there is no ink.
    */
   recolor: string | null
-  /** Distinct inks the probe saw — surfaced so the UI can explain the choice. */
+  /** Distinct inks the probe saw, so the UI can explain the choice. */
   inks: number
   /** The probe itself, for callers that want to explain more than `inks`. */
   probe: InkProbe
   /**
-   * What the thin-ink read did to the cut (strokeWidth.ts `hairlineCut`): the
-   * cut it started from, the share of sub-pixel ridge ink that cut was losing,
-   * and where those ridges sit. `cut !== from` means the cut was raised for
-   * hairlines. Null in colour mode.
+   * What the thin-ink read did to the cut (strokeWidth.ts `hairlineCut`).
+   * `cut !== from` means the cut was raised for hairlines. Null in colour mode.
    */
   hairlines: HairlineRead | null
 }
 
 /**
- * Colour vs mono, the mono cut, and whether to invert it — the whole decision,
- * from pixels.
- *
- * The one that matters is colour vs mono, and it is made on evidence: fuse the
- * ink colours that are only tonal variants of each other and count what is left.
- * Only take the colour path when there really is more than one ink.
+ * Colour vs mono, the mono cut, and whether to invert it, decided from pixels.
+ * Tonal variants of one ink are fused first; the colour path is taken only when
+ * more than one ink remains.
  */
 export function decideInkMode(
   pixels: ImageDataLike,
@@ -509,32 +455,25 @@ export function decideInkMode(
     return { mode: 'color', threshold: fallbackThreshold, invert: false, recolor: null, inks: probe.inks, probe, hairlines: null }
   }
 
-  // What the cut has to clear the ink AGAINST.
-  //
-  // Normally that is the paper. On a TRANSPARENT ground there is no paper
-  // luminance to split against — `probeInk` reports 255 by fiat — so white
-  // line-art gives ink 255 against paper 255 and a midpoint cut of exactly 255,
-  // where whether anything traces at all comes down to floating-point noise
-  // (`luma(255,255,255)` is 254.99999999999997, so it currently squeaks through
-  // on the right side of `lum < 255` by 3e-14). Alpha already separates the art
-  // there — `thresholdToMask` gates on it — so the cut only has to sit clear of
-  // the ink on the correct side: aim it at the far end of the range instead.
+  // What the cut separates the ink from: normally the paper. On a transparent
+  // ground `probeInk` reports paper luma 255 by fiat, so white line-art would get
+  // a midpoint cut of exactly 255 and trace only by floating-point luck
+  // (luma(255,255,255) is 254.99999999999997). Don't simplify this back to the
+  // plain midpoint. Alpha already separates the art there, so aim the cut at the
+  // far end of the range instead.
   const opaqueGround = paper != null && !paper.transparent
   const against =
     opaqueGround || probe.inkLuma == null ? probe.paperLuma : probe.inkLuma >= 128 ? 0 : 255
 
   const midpoint = monoThreshold({ inkLuma: probe.inkLuma, paperLuma: against }, fallbackThreshold)
-  // Light ink on a dark ground: the same one-shape trace, with the cut flipped.
-  // A FORCED mono gets it too — without it a white glyph on navy comes back as
-  // the paper traced around a hole.
+  // Light ink on a dark ground: flip the cut. A forced mono needs this too, or a
+  // white glyph on navy traces as the paper around a hole.
   const invert = probe.inkLuma != null && probe.inkLuma > against
-  // …and on a TRANSPARENT ground, leave the cut where the branch above aimed
-  // it: alpha is what separates the art there, so the luminance cut is only
-  // required to stay clear of the ink, and a "gap" between tones of the ink is
-  // not somewhere it should be pulled.
+  // On a transparent ground keep the aimed cut: alpha separates the art, and a
+  // gap between tones of the ink is not somewhere to pull it.
   const placed = opaqueGround ? snapCutToGap(pixels, midpoint, invert) : midpoint
-  // Then let the thin ink have its say: strokes thinner than a pixel never reach
-  // the midpoint's 50% coverage and would vanish (strokeWidth.ts, hairlineCut).
+  // Strokes thinner than a pixel never reach 50% coverage and would vanish, so
+  // the hairline read may raise the cut (strokeWidth.ts, hairlineCut).
   const hairlines = hairlineCut(pixels, placed, invert, probe.inkLuma == null ? 255 : Math.abs(against - probe.inkLuma))
   return {
     mode: 'mono',
@@ -549,21 +488,15 @@ export function decideInkMode(
 
 /* ------------------------------------------------- what a mono cut admits */
 
-// A mono cut is the one setting in the studio that can silently produce NOTHING:
-// it is a single global threshold, and an image whose ink all sits on one side of
-// it yields an empty mask. The tracer is right to return nothing — the user asked
-// for pixels that do not exist — but a control that can reach such a state without
-// saying so is the actual defect (#47). These two let the panel show the
-// consequence on the control itself, so the blank is visible before it happens.
+// A mono cut can select nothing (all ink on one side of the threshold) and
+// yield an empty trace. These readouts let the panel show that on the control
+// itself, before the blank happens.
 
 /**
- * Fraction of the image's VISIBLE pixels a mono cut turns solid, in [0,1].
- *
- * Mirrors `thresholdToMask` exactly — the same `cutLuma`, the same visibility
- * gate, the same strict comparison — because a readout that disagreed with the
- * mask by even one pixel at the boundary would be worse than no readout. One
- * O(pixels) pass; ~1.5 ms on a 512px raster, so it is fine to recompute while
- * dragging.
+ * Fraction of the image's visible pixels a mono cut turns solid, in [0,1].
+ * Mirrors `thresholdToMask` exactly (same `cutLuma`, visibility gate and strict
+ * comparison): a readout that disagrees with the mask is worse than none. One
+ * O(pixels) pass, cheap enough to recompute while dragging.
  */
 export function cutFraction(img: ImageDataLike, cut: number, invert = false): number {
   const d = img.data
@@ -580,15 +513,11 @@ export function cutFraction(img: ImageDataLike, cut: number, invert = false): nu
 }
 
 /**
- * Luminance span of the visible pixels — the range a mono cut has to land inside
- * to select some of them but not all.
- *
- * With the cut OFF the ink is what falls BELOW it, so any cut at or under `min`
- * selects nothing; with it ON the ink is what rises above, so any cut at or over
- * `max` selects nothing. Those are the dead zones the Threshold slider shades.
- * Each end is read the way that Invert position reads the pixels (`cutLuma`:
- * over white for OFF, over black for ON), so the zones are the mask's own on art
- * over transparency too. Null when the image has no visible pixels at all.
+ * Luminance span of the visible pixels: the range a mono cut must land inside
+ * to select some of them but not all. Without invert a cut at or under `min`
+ * selects nothing; with invert a cut at or over `max` does. Those are the dead
+ * zones the Threshold slider shades. Each end is read with the matching
+ * `cutLuma` compositing. Null when no pixel is visible.
  */
 export function inkLumaRange(img: ImageDataLike): { min: number; max: number; visible: number } | null {
   const d = img.data
