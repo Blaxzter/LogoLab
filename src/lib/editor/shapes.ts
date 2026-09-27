@@ -1,10 +1,8 @@
 // Primitive shape construction for the SVG editor's draw tools.
 //
-// Everything returns SubPath[] in absolute viewBox units — the editor has no
-// "rect object" that later becomes a path, because a second representation is a
-// second thing to keep in sync and the model is already cubic-only. A rectangle
-// drawn here is a path from the moment it exists, so node editing, boolean-free
-// path ops and export all work on it with no conversion step.
+// Everything returns SubPath[] in absolute viewBox units. There are no
+// parametric shape objects: a drawn shape is a path from the start, so node
+// editing, path ops and export need no conversion step.
 
 import type { SubPath, Vec } from '../path/types.ts'
 import { ellipseSubPaths } from '../path/model.ts'
@@ -27,13 +25,10 @@ export function rectShape(a: Vec, b: Vec, radius = 0): SubPath[] {
   const h = y1 - y0
   if (w <= 0 || h <= 0) return []
 
-  // Clamp to half the short side, matching SVG's own rx/ry clamping — a radius
-  // larger than that has no meaning and would fold the corners through itself.
+  // Clamp to half the short side, matching SVG's rx/ry clamping.
   const r = Math.max(0, Math.min(radius, Math.min(w, h) / 2))
   if (r === 0) {
-    return [
-      { nodes: [corner(x0, y0), corner(x1, y0), corner(x1, y1), corner(x0, y1)], closed: true },
-    ]
+    return [{ nodes: [corner(x0, y0), corner(x1, y0), corner(x1, y1), corner(x0, y1)], closed: true }]
   }
 
   const k = r * KAPPA
@@ -87,13 +82,7 @@ export function polygonShape(center: Vec, radius: number, sides: number, rotatio
  * A star: `points` outer vertices alternating with inner ones at
  * `innerRatio` × the outer radius.
  */
-export function starShape(
-  center: Vec,
-  radius: number,
-  points: number,
-  innerRatio = 0.5,
-  rotation = 0,
-): SubPath[] {
+export function starShape(center: Vec, radius: number, points: number, innerRatio = 0.5, rotation = 0): SubPath[] {
   const n = Math.max(3, Math.round(points))
   if (radius <= 0) return []
   const inner = radius * Math.max(0.02, Math.min(0.98, innerRatio))
@@ -115,4 +104,15 @@ export function boxRadius(a: Vec, b: Vec): { center: Vec; radius: number } {
     center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
     radius: Math.min(Math.abs(b.x - a.x), Math.abs(b.y - a.y)) / 2,
   }
+}
+
+/** Shift snaps a line to the nearest 45°, keeping its length. */
+export function constrainLine(a: Vec, b: Vec): Vec {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.hypot(dx, dy)
+  if (len === 0) return b
+  const step = Math.PI / 4
+  const t = Math.round(Math.atan2(dy, dx) / step) * step
+  return { x: a.x + Math.cos(t) * len, y: a.y + Math.sin(t) * len }
 }

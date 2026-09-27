@@ -14,7 +14,7 @@ import { PendingRow } from '../CaseRow'
 import { useLabRun } from '../useLabRun'
 import { useLabSearch } from '../useLabSearch'
 import { useLabState } from '../useLabState'
-import { TRUTH_RESOLUTIONS } from '../../../devtest/truthCorpus'
+import { TRUTH_RESOLUTIONS } from '../../../../bench/truthCorpus'
 import { CORPORA, corpusById } from './corpora'
 import { analyze, AnalysisCaseRow, type AnalysisResult } from './analysis'
 import { DEFAULT_WB_UI } from './types'
@@ -46,10 +46,7 @@ export default function Workbench() {
   const pages = Math.max(1, Math.ceil(all.length / ui.pageSize))
   // Changing the corpus, the page size or the search can strand you past the end.
   const page = Math.min(ui.page, pages - 1)
-  const cases = useMemo(
-    () => all.slice(page * ui.pageSize, page * ui.pageSize + ui.pageSize),
-    [all, page, ui.pageSize],
-  )
+  const cases = useMemo(() => all.slice(page * ui.pageSize, page * ui.pageSize + ui.pageSize), [all, page, ui.pageSize])
 
   const run = useLabRun(cases, (c) => analyze(c, ui.res, ui.ab), {
     label: (c) => `Tracing ${c.title} @ ${ui.res}px`,
@@ -91,11 +88,14 @@ export default function Workbench() {
     // Keep every OTHER param — `q` above all: switching corpus is what you do when the search
     // told you your case lives in a different one, and dropping the query on the way there
     // would land you on 231 unfiltered cases.
-    setParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.set('corpus', id)
-      return next
-    }, { replace: true })
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('corpus', id)
+        return next
+      },
+      { replace: true },
+    )
   }
 
   return (
@@ -188,9 +188,7 @@ export default function Workbench() {
     >
       {!corpus.available && corpus.emptyState}
       {corpus.available && rows}
-      {corpus.available && run.pending && (
-        <PendingRow title={run.pending.title} note={run.pending.note} />
-      )}
+      {corpus.available && run.pending && <PendingRow title={run.pending.title} note={run.pending.note} />}
     </LabPage>
   )
 }
@@ -200,68 +198,63 @@ function WorkbenchAbout({ blurb }: { blurb: string }) {
     <>
       <p className="mb-2 max-w-[96ch]">
         One question, asked of every corpus: <b>is the trace correct?</b> Each case is an{' '}
-        <b>authored SVG that produced the pixels</b> — rasterized, traced, and the recovered vectors
-        compared to the art itself. Every gate is an absolute distance from correct (<b>0px boundary
-        error, parsimony 1.0, every region recovered</b>), so improvements move numbers down and
-        nothing ever needs re-blessing. The <b>Corpus</b> selector changes which images and nothing
-        else — the panels and the numbers mean the same thing wherever you point it.
+        <b>authored SVG that produced the pixels</b> — rasterized, traced, and the recovered vectors compared to the art
+        itself. Every gate is an absolute distance from correct (
+        <b>0px boundary error, parsimony 1.0, every region recovered</b>), so improvements move numbers down and nothing
+        ever needs re-blessing. The <b>Corpus</b> selector changes which images and nothing else — the panels and the
+        numbers mean the same thing wherever you point it.
       </p>
       <p className="mb-2 max-w-[96ch]">
         <b>This corpus.</b> {blurb}
       </p>
       <p className="mb-2 max-w-[96ch]">
-        <b>Tiers are calibrated populations, not opinions.</b> Tier 0's limits (chamfer 1.0px / p95
-        2.5px) were measured on crisp flat art; soft-edged gradient art is not gradeable there, so
-        tiers 1 and 2 have their own limits measured on their own populations
-        (<code>calibrateTier1.ts</code> / <code>calibrateTier2.ts</code>). Each row's badge says which
-        limit it was held to — a green bar can never mean "we quietly widened tier 0". A corpus
-        outside every calibrated population (the logos) gets the measurements and <b>no</b> pass/fail
-        bars, because a borrowed limit is a verdict nobody measured.
+        <b>Tiers are calibrated populations, not opinions.</b> Tier 0's limits (chamfer 1.0px / p95 2.5px) were measured
+        on crisp flat art; soft-edged gradient art is not gradeable there, so tiers 1 and 2 have their own limits
+        measured on their own populations (<code>calibrateTier1.ts</code> / <code>calibrateTier2.ts</code>). Each row's
+        badge says which limit it was held to — a green bar can never mean "we quietly widened tier 0". A corpus outside
+        every calibrated population (the logos) gets the measurements and <b>no</b> pass/fail bars, because a borrowed
+        limit is a verdict nobody measured.
       </p>
       <p className="mb-2 max-w-[96ch]">
-        Raster-only art is deliberately not here: with no authored vector there is nothing to score
-        against. Those images live in <b>Feature A/B</b> (compare revisions/variants) and the{' '}
-        <b>Gallery</b> (just look). potrace vs crisp is the <b>Engine scoreboard</b>.
+        Raster-only art is deliberately not here: with no authored vector there is nothing to score against. Those
+        images live in <b>Feature A/B</b> (compare revisions/variants) and the <b>Gallery</b> (just look). potrace vs
+        crisp is the <b>Engine scoreboard</b>.
       </p>
       <div className="mt-2 flex flex-wrap gap-4 border-t border-dashed border-line pt-2 text-[0.68rem]">
         <div className="max-w-[32ch]">
           <b className="text-ink">truth</b> — the authored SVG. The answer sheet, not another guess.
         </div>
         <div className="max-w-[32ch]">
-          <b className="text-ink">raster input</b> — the SVG rasterized at the chosen size; the only
-          thing the tracer sees. Changing the raster size and watching the numbers stay flat is the{' '}
-          <b>scale-stability</b> check.
+          <b className="text-ink">raster input</b> — the SVG rasterized at the chosen size; the only thing the tracer
+          sees. Changing the raster size and watching the numbers stay flat is the <b>scale-stability</b> check.
         </div>
         <div className="max-w-[32ch]">
           <b className="text-ink">boundary overlay</b> — authored boundary in{' '}
           <span className="font-bold text-[#16a34a]">green</span>, traced in{' '}
-          <span className="font-bold text-[#c026d3]">magenta</span>. Where the tracer is right they
-          overprint; where it is wrong you see one colour alone.
+          <span className="font-bold text-[#c026d3]">magenta</span>. Where the tracer is right they overprint; where it
+          is wrong you see one colour alone.
         </div>
         <div className="max-w-[32ch]">
-          <b className="text-ink">miss heat</b> — the VISIBLE authored boundary, coloured by how far
-          the nearest traced boundary is. <span className="lab-ramp" /> Hot = the tracer{' '}
-          <b>missed</b> that arc. Authored outline occluded behind later-painted shapes is excluded —
-          no tracer can recover an edge that made no pixels.
+          <b className="text-ink">miss heat</b> — the VISIBLE authored boundary, coloured by how far the nearest traced
+          boundary is. <span className="lab-ramp" /> Hot = the tracer <b>missed</b> that arc. Authored outline occluded
+          behind later-painted shapes is excluded — no tracer can recover an edge that made no pixels.
         </div>
         <div className="max-w-[32ch]">
-          <b className="text-ink">invented heat</b> — the traced boundary, coloured by distance to the
-          nearest authored boundary. Hot = the tracer <b>invented</b> an edge the art does not have.
+          <b className="text-ink">invented heat</b> — the traced boundary, coloured by distance to the nearest authored
+          boundary. Hot = the tracer <b>invented</b> an edge the art does not have.
         </div>
         <div className="max-w-[32ch]">
-          <b className="text-ink">dropped regions</b> — red marks a flat region the composited art
-          contains and the trace does not. This is the failure raster fidelity is blind to: merging a
-          small low-contrast region into its neighbour barely moves ΔE or SSIM while destroying the
-          topology.
+          <b className="text-ink">dropped regions</b> — red marks a flat region the composited art contains and the
+          trace does not. This is the failure raster fidelity is blind to: merging a small low-contrast region into its
+          neighbour barely moves ΔE or SSIM while destroying the topology.
         </div>
       </div>
       <div className="mt-2 max-w-[96ch] rounded-md border border-ok/30 bg-ok/8 px-2.5 py-1.5 text-ok">
-        <b>Rasterizer.</b> This page rasterizes with <code>@resvg/resvg-wasm</code> — the WebAssembly
-        build of the <em>same</em> Rust engine the Node runner (<code>groundTruthRun.ts</code>) uses
-        via <code>@resvg/resvg-js</code>, with the same options (<code>fitTo width</code>,{' '}
-        <code>background: white</code>). Verified byte-identical, so <b>what you see is exactly what
-        CI measures</b>. The corpus, trace options, gates and scoring are already the same modules
-        (<code>truthCorpus.ts</code>, <code>geomScore.ts</code>, <code>svgGround.ts</code>).
+        <b>Rasterizer.</b> This page rasterizes with <code>@resvg/resvg-wasm</code> — the WebAssembly build of the{' '}
+        <em>same</em> Rust engine the Node runner (<code>groundTruthRun.ts</code>) uses via <code>@resvg/resvg-js</code>
+        , with the same options (<code>fitTo width</code>, <code>background: white</code>). Verified byte-identical, so{' '}
+        <b>what you see is exactly what CI measures</b>. The corpus, trace options, gates and scoring are already the
+        same modules (<code>truthCorpus.ts</code>, <code>geomScore.ts</code>, <code>svgGround.ts</code>).
       </div>
     </>
   )

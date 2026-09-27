@@ -1,10 +1,10 @@
 import type { CSSProperties } from 'react'
-import { LogoMark } from '../LogoMark'
-import { useAppearance, useEnv } from '../../store'
+import { LogoMark } from './LogoMark'
+import { useAppearance, useEnv } from '../../state/store'
 import { hexToRgb } from '../../lib/colorUtils'
 
 /**
- * Social profile mock (X / Mastodon flavor) that stress-tests the CIRCULAR
+ * Social profile mock (X / Mastodon flavor) that stress-tests the circular
  * avatar crop. A gradient cover banner, a large circular avatar overlapping it,
  * profile metadata + Follow button, and one example post row below. The page
  * chrome flips light/dark via env.theme.
@@ -40,18 +40,12 @@ export default function SocialAvatar() {
   const banner = bannerGradient(app.cardColor, dark)
 
   return (
-    <div
-      className="flex w-full flex-col"
-      style={{ height: 360, backgroundColor: chrome.bg, color: chrome.text }}
-    >
+    <div className="flex w-full flex-col" style={{ height: 360, backgroundColor: chrome.bg, color: chrome.text }}>
       {/* Cover banner */}
       <div className="relative h-[96px] w-full shrink-0" style={{ background: banner }}>
         {/* Large circular avatar overlapping the banner */}
         <div className="absolute -bottom-9 left-4">
-          <div
-            className="rounded-full p-[3px]"
-            style={{ backgroundColor: chrome.avatarRing }}
-          >
+          <div className="rounded-full p-[3px]" style={{ backgroundColor: chrome.avatarRing }}>
             <LogoMark size={88} showCard shape="circle" clip shadow={false} />
           </div>
         </div>
@@ -90,10 +84,7 @@ export default function SocialAvatar() {
       </div>
 
       {/* Example post row */}
-      <div
-        className="mt-3.5 flex gap-3 px-4 pt-3.5"
-        style={{ borderTop: `1px solid ${chrome.hair}` }}
-      >
+      <div className="mt-3.5 flex gap-3 px-4 pt-3.5" style={{ borderTop: `1px solid ${chrome.hair}` }}>
         <LogoMark size={36} showCard shape="circle" clip shadow={false} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-[14px] leading-tight">
@@ -125,7 +116,10 @@ function ActionIcon({ kind }: { kind: 'reply' | 'repost' | 'like' }) {
   if (kind === 'reply') {
     return (
       <svg viewBox="0 0 24 24" style={common} aria-hidden>
-        <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 9.5 9.5 0 0 1-4-.9L3 20l1.9-4.5a8.5 8.5 0 1 1 16.1-4z" strokeLinejoin="round" />
+        <path
+          d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 9.5 9.5 0 0 1-4-.9L3 20l1.9-4.5a8.5 8.5 0 1 1 16.1-4z"
+          strokeLinejoin="round"
+        />
       </svg>
     )
   }
@@ -141,7 +135,10 @@ function ActionIcon({ kind }: { kind: 'reply' | 'repost' | 'like' }) {
   }
   return (
     <svg viewBox="0 0 24 24" style={common} aria-hidden>
-      <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" strokeLinejoin="round" />
+      <path
+        d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }

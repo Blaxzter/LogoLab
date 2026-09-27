@@ -1,46 +1,36 @@
-// §14 — contrast rank: a WEAK colour boundary must not aim a STRONG one.
+// Junction placement by contrast rank: a weak colour boundary must not aim a strong one.
 //
-// On ramp art traced FLAT the posterization band seams (ΔE 2.7–10.2 on the Affinity
-// mark) plant junctions on the logo's REAL edges (ΔE 47–79). A junction is an INTEGER
-// lattice corner, so pinning a 116px edge to it costs ~1px at that end against 100+px
-// of the edge's own staircase evidence: the flank does not step, it ROTATES (0.98px
-// end to end), and an arc caught between two seam junctions kinks 11° into its
-// straight neighbours. The weak boundary aims the strong edge.
+// On ramp art traced flat, posterization band seams plant junctions on the logo's real
+// edges. A junction is an integer lattice corner, so pinning a long edge to it costs
+// ~1px at that end against the edge's own staircase evidence: the edge rotates, and an
+// arc caught between two seam junctions kinks into its straight neighbours.
 //
-// The fix has to live BEFORE the fit. A post-fit re-seat provably moves the vertex
-// 0.000px — the primitive is fitted from the ALREADY-PINNED edge, so its line passes
-// through the vertex by construction (§14.1, built, measured, reverted). Here the two
-// STRONG arms' raw lattice chains are joined into one window ACROSS the junction and
-// fitted — as one line, or as one circle when the boundary curves through — and the
-// junction is moved onto that curve. Every incident edge (including the band seam,
-// whose endpoint follows) is then fitted pinned to the same point, so both regions
-// still reference one shared edge and the planar byte-coincidence invariant holds.
+// The correction has to happen before the fit — a post-fit re-seat cannot move the
+// vertex, because the primitive is fitted from the already-pinned edge and passes
+// through it by construction. Here the two strong arms' raw lattice chains are joined
+// into one window across the junction and fitted as one line, or one circle when the
+// boundary curves through, and the junction is moved onto that curve. Every incident
+// edge (including the seam) is then fitted pinned to the same point, so the shared-edge
+// invariant holds.
 //
-// The correction is purely NORMAL to the strong boundary. That is the whole point: the
-// lattice quantizes the junction ACROSS the edge, which tilts it; where the junction
-// sits ALONG the edge is the weak boundary's business, and an error there is invisible.
+// The correction is purely normal to the strong boundary: the lattice quantizes the
+// junction across the edge, which tilts it; where it sits along the edge is the weak
+// boundary's business and an error there is invisible.
 //
-// §17 (§0 #15) is the OTHER branch of the same rank. Where the strong boundary CORNERS at
-// the junction instead of continuing, no through fit exists — one line or circle across
-// the bend would round the corner off, which is exactly what the chord-turn gate refuses —
-// and until now such a junction simply kept its integer lattice corner, so an edge with
-// one threaded end and one corner-pinned end traded a constant offset for a TILT. A corner
-// is still a sub-pixel place: it is where the two arms' OWN lines meet, the evidence
-// §10.6's corner snap uses inside a chain and cannot reach at a junction (the chain ends
-// there, so `snapCornerToArms` has nothing to intersect against). Both arms must be
-// straight enough for their lines to be tangents (ARM_BOW) or the junction is left alone.
+// Where the strong boundary corners at the junction instead of continuing, no through
+// fit exists (it would round the corner off). A corner is still a sub-pixel place — where
+// the two arms' own lines meet, the evidence the in-chain corner snap uses but cannot
+// reach at a junction because the chain ends there. Both arms must be straight enough
+// for their lines to be tangents (ARM_BOW), else the junction keeps its lattice corner.
 //
-// §28 (issue #14) sits between the two. The turn gate reads a chord over a FIXED px window,
-// and 12px is a fraction of the art that halves with every doubling of the raster — so an
-// authored ARC that threads at 512 reads as a corner at 256 and was intersected inside its
-// own curve. A refused junction is now first offered the circle window EXTENDED while the
-// arms still fit one circle (THROUGH_EXTEND): an arc survives that at any raster, a corner
-// at none, and the circle from the widest surviving window is also the one every circle
-// placement now projects onto — its radius is read from enough sweep to mean something.
+// Between the two: the turn gate reads a chord over a fixed px window, and at a coarse
+// raster that window covers more of an arc, so an arc can read as a corner. A junction
+// the turn gate refuses is first offered a circle window extended while the arms still
+// fit one circle (THROUGH_EXTEND): an arc survives that at any raster, a corner at none.
 //
-// Everything is evidence-gated and every gate can only DROP a junction: with no palette
-// (or `fitThrough: false`) nothing moves and the fit is byte-identical to the pre-§14
-// tracer. Pure & deterministic.
+// Every gate can only drop a junction: with no palette (or `fitThrough: false`) nothing
+// moves. Pure and deterministic.
+// Design notes and measurements: docs/vectorization-benchmarks.md.
 
 import type { Vec } from '../path/types'
 import { EXT, type PlanarNetwork } from './planarNetwork.ts'
@@ -55,91 +45,50 @@ export interface ThreadColor {
   b: number
 }
 
-// --- gates (calibrated in docs/vectorization-benchmarks.md §14.3) -------------
-/** ΔE76 at or above which a boundary is a REAL edge (the mark's own outline). */
+// --- gates -------------------------------------------------------------------
+/** ΔE76 at or above which a boundary is a real edge (the mark's own outline). */
 const STRONG_DE = 25
 /** ΔE76 at or below which a boundary is a posterization band seam. */
 const WEAK_DE = 12
-/** Raw-lattice arc (px) sampled on each arm for the through fit — the BASE window. It is
- *  a fixed px count, and deliberately so for the LINE question (does the boundary run
- *  straight through?): staircase phase noise is ±0.5px per endpoint at every raster, so a
- *  chord direction needs the same px of evidence at every raster (the §10.6 short-arm
- *  lesson, and why MIN_ARM does not scale either).
- *
- *  For the CIRCLE question it is NOT enough on its own, and that is issue #14's measured
- *  defect: 12px of an arc is a fraction of the art that halves with every doubling of the
- *  raster, so the same authored arc reads a chord turn of 21.4° @256 and 7.1° @2048, the
- *  coarse end trips THROUGH_TURN_DEG and is routed to the §17 apex branch (0.73 artwork-px
- *  off the arc, worse than its own lattice corner), and the circle 12px CAN fit is
- *  ill-conditioned (radius 47–56 for an authored 79–81, too little sweep against the
- *  staircase). Scaling this window with the raster was built and MEASURED worse at every
- *  raster (§28: at 256 it shrinks to 6px and refuses four straight continuations on
- *  noise). What is scale-free is the circle's own evidence: the window is EXTENDED
- *  (THROUGH_EXTEND) while the joined arms still fit ONE circle within THROUGH_DEV, and the
- *  junction threads onto the circle the widest surviving window affords. An arc survives
- *  the extension at any raster; a corner's straight arms leave any circle at a rate set by
- *  the corner angle alone, so it fails the first step. */
+/** Raw-lattice arc (px) sampled on each arm for the through fit — the base window. It is
+ *  a fixed px count on purpose: staircase phase noise is ±0.5px per endpoint at every
+ *  raster, so a chord direction needs the same px of evidence at every raster. Don't
+ *  scale it with the raster: at small sizes it would refuse straight continuations on
+ *  noise. Arcs at coarse rasters are handled by THROUGH_EXTEND instead. */
 const THROUGH_SPAN = 12
 /** Multiples of THROUGH_SPAN the circle window may grow to, in order; the extension stops
  *  at the first that does not fit (or that an arm cannot fill) and keeps the last that did.
- *  A junction the turn gate refused becomes a threaded arc only if the 2× window fits —
- *  that is the evidence a corner cannot produce (§28 measured: a 40° corner's circle
- *  residual is 1.11px at 12px and ~2.2px at 24px, a 20° corner's ~1.1px at 24px; the
- *  turn gate's own 20° boundary, reached from the residual instead of the chord turn, and
- *  identical at every raster). The upper multiple bounds work, not fidelity: more arc is
- *  only more evidence, and the residual gate stops the window at any real feature. */
+ *  A junction the turn gate refused becomes a threaded arc only if the 2× window fits: a
+ *  corner's straight arms leave any circle at a rate set by the corner angle alone, so a
+ *  corner sharper than ~20° fails at 24px at every raster. The upper multiple bounds work,
+ *  not fidelity. */
 const THROUGH_EXTEND = [2, 3, 4]
-/** …and the shortest arm that earns a verdict at all (below this a chord direction is
- *  staircase-phase noise — the §10.6 short-arm lesson). */
+/** Shortest arm (px) that earns a verdict at all; below this a chord direction is
+ *  staircase-phase noise. */
 const MIN_ARM = 6
-/** Max deviation (px) of the two arms' JOINED window from one line or one circle. A
- *  line covers "runs straight through", a circle "curves smoothly through" (a
- *  radius-50 rounded corner bows 1.5px off its own chord over ±12px and would fail a
- *  line-only test — the user's second complaint is exactly such a corner). */
+/** Max deviation (px) of the two arms' joined window from one line or one circle. The
+ *  circle covers a boundary that curves through (a radius-50 rounded corner bows 1.5px off
+ *  its chord over ±12px and would fail a line-only test). */
 const THROUGH_DEV = 1.2
-/** …and the chord turn (deg) the boundary may take across the junction. The residual
- *  ALONE is not enough, and this is measured, not assumed: on the Affinity mark a
- *  genuine 40° corner of the navy plate fits a circle to 1.11px over the ±12px window
- *  (a 40° bend over 24px IS an arc of radius ~35), so it passes THROUGH_DEV and would
- *  be moved — off the corner the lattice had right. The turn splits the same junctions
- *  cleanly where the residual cannot: continuations and the plate's radius-50 corners
- *  read 0–13.2°, real corners 39.8–105.3°. 20° sits in that gap, 1.5× from both.
- *
- *  That calibration is a 512 statement (issue #14): the same arc reads 21.4° @256. So a
- *  junction this gate refuses is no longer sent straight to the corner branch — it is
- *  first offered the EXTENDED circle window (THROUGH_EXTEND), which a corner cannot
- *  pass and an arc can at any raster. The turn stays the gate for the LINE branch. */
+/** Max chord turn (deg) the boundary may take across the junction to count as
+ *  continuing. The residual alone is not enough: a 40° corner fits a circle to ~1.1px over
+ *  the base window (a 40° bend over 24px is an arc of radius ~35) and would be moved off
+ *  the corner the lattice had right. Continuations and large-radius rounds read well under
+ *  20°, real corners well over. A junction this gate refuses is still offered the extended
+ *  circle window (THROUGH_EXTEND); the turn remains the gate for the line branch. */
 const THROUGH_TURN_DEG = 20
-/** How far the re-placed junction may travel off its lattice corner. It is a sub-pixel
- *  placement, not a re-seat (§10.4's MIN_MOVE 1.5px is the other end of this scale);
- *  past this the through fit disagrees with the label map and the junction is dropped.
- *
- *  §17 SHARES it, and a separate wider bound for the corner branch was measured and NOT
- *  taken. An ACUTE apex is the one place a bigger move is legitimate — the raster erodes
- *  a narrow tip, so its true corner sits px past the lattice — and `seam-corner`'s 17°
- *  wedge is refused here at 2.16px. But the sweep saturates immediately: every value from
- *  3 to 12px does exactly the same thing (that one junction, nothing else) for @512
- *  chamfer 0.214 → 0.209 and @256 0.196 → 0.200. A knob that trades one lane against
- *  another for 0.005px does not earn its place; the refusal is named residue instead. */
+/** How far the re-placed junction may travel off its lattice corner (px). This is a
+ *  sub-pixel placement, not a re-seat; past this the fit disagrees with the label map and
+ *  the junction is dropped. The corner branch shares it: an acute apex could justify a
+ *  larger move, but a wider bound for that branch changes almost nothing. */
 const MAX_MOVE = 2.0
 /**
- * §17 (§0 #15) — max |perp deviation| of ONE arm's samples from its OWN fitted line for
- * that line to be usable as the boundary's tangent at the junction.
+ * Max |perp deviation| (px) of one arm's samples from its own fitted line for that line
+ * to be usable as the boundary's tangent at the junction (corner branch).
  *
- * This is a ONE-SIDED veto and the measurement is why. Scoring all 202 arms of the 101
- * corner-verdict junctions across the 128 GT-scorable marks against the AUTHORED outline
- * (does the art run straight over that same 12px window?):
- *
- *     bow ≤ 0.79   51 authored-STRAIGHT   100 authored-bent
- *     bow > 0.79    0 authored-STRAIGHT    51 authored-bent
- *
- * So a HIGH bow proves the line is a chord across something that turns — no straight arm
- * in the corpus reaches 0.8 — while a LOW bow proves nothing at all (two thirds of the
- * arms under it are bent). The gate is therefore only ever used to DROP an arm, never to
- * certify one, and a junction whose two arms are both dropped keeps its lattice corner.
- * (The §15.8 residue predicted this: `bow` on a lattice staircase is not separable. It
- * was re-measured here rather than assumed, and it is not separable in this population
- * either — only bounded on one side.)
+ * A one-sided veto: a high bow proves the line is a chord across something that turns
+ * (authored-straight arms stay below 0.8), but a low bow proves nothing — many bent arms
+ * read low too. So it only ever drops an arm, never certifies one.
  */
 const ARM_BOW = 0.8
 
@@ -170,7 +119,7 @@ export function edgeContrast(net: PlanarNetwork, palette: readonly ThreadColor[]
 /** One incident edge-end at a junction. */
 export interface JunctionEnd {
   edge: number
-  /** True when the junction is the edge's END (pts[n-1]), false at its START. */
+  /** True when the junction is the edge's end (pts[n-1]), false at its start. */
   atEnd: boolean
   de: number
   /** Raw lattice arc available on this arm (px, capped at THROUGH_SPAN). */
@@ -189,11 +138,11 @@ export interface JunctionVerdict {
   turnDeg: number | null
   /** Each strong arm's own line residual (`bow`), in the order the ends were surveyed. */
   armBow: [number, number] | null
-  /** Which rule placed it: a §14 through fit, or a §17 corner APEX (the two arms' own
-   *  lines intersected). */
+  /** Which rule placed it: a through fit, or a corner apex (the two arms' own lines
+   *  intersected). */
   kind: 'thread' | 'apex' | null
-  /** For a through-CIRCLE placement: the THROUGH_SPAN multiple the window grew to while
-   *  still one circle (1 = the base window only; ≥ 2 = the §28 extension). Null otherwise. */
+  /** For a through-circle placement: the THROUGH_SPAN multiple the window grew to while
+   *  still one circle (1 = the base window only; ≥ 2 = extended). Null otherwise. */
   extK: number | null
   /** Where the placement puts this junction (null when it is not moved). */
   moveTo: Vec | null
@@ -201,10 +150,9 @@ export interface JunctionVerdict {
   move: number | null
   linked: boolean
   reason: string
-  /** DIAGNOSTIC ONLY (`tune.alt`): where EACH estimator would put the junction, gates
+  /** Diagnostic only (`tune.alt`): where each estimator would put the junction, gates
    *  ignored — the through-line projection, the through-circle projection (with the fitted
-   *  radius), and the two arms' line intersection. Lets a census score the estimators
-   *  against the authored boundary independently of the rule that picks between them. */
+   *  radius), and the two arms' line intersection. */
   alt?: { line: Vec | null; circle: Vec | null; r: number; apex: Vec | null }
 }
 
@@ -225,7 +173,7 @@ function incidentEnds(net: PlanarNetwork): Map<number, JunctionEnd[]> {
   return out
 }
 
-/** Raw lattice points on one arm, JUNCTION FIRST, out to `span` px of arc. */
+/** Raw lattice points on one arm, junction first, out to `span` px of arc. */
 function armWindow(pts: Vec[], atEnd: boolean, span: number): Vec[] {
   const out: Vec[] = []
   let acc = 0
@@ -256,9 +204,8 @@ function chordDir(w: Vec[]): Vec | null {
 
 /** An arm's own least-squares line plus `bow` — the max |perp deviation| of the samples
  *  that produced it. A straight arm's samples sit on the line (bow ≈ the raster's own
- *  staircase); a CURVED arm's line is a chord and its bow is the sagitta over the window,
- *  which is what ARM_BOW vetoes. Shares `armLine` with the §10.6 corner snap — one
- *  estimator, two callers. */
+ *  staircase); a curved arm's line is a chord and its bow is the sagitta over the window,
+ *  which is what ARM_BOW vetoes. Shares `armLine` with the in-chain corner snap. */
 function armFit(w: Vec[]): { line: { c: Vec; d: Vec }; bow: number } {
   const line = armLine(w)
   let bow = 0
@@ -279,20 +226,16 @@ function crossLines(a: { c: Vec; d: Vec }, b: { c: Vec; d: Vec }): Vec | null {
 }
 
 /**
- * §28 (issue #14) — the circle window, grown while the evidence stays ONE circle.
+ * The circle window, grown while the evidence stays one circle.
  *
  * Both arms are re-read at each multiple of the base span; the extension stops at the
- * first window an arm cannot fill (the edge ends — another junction, another feature) or
- * whose joined samples no longer fit one circle within `dev`, and returns the circle of the
- * widest window that did, with its multiple. Null when not even the 2× window fits — the
- * caller then has no more evidence than the base window gave it.
+ * first window an arm cannot fill (the edge ends) or whose joined samples no longer fit
+ * one circle within `dev`, and returns the circle of the widest window that did, with its
+ * multiple. Null when not even the 2× window fits.
  *
- * Why the radius comes out right here and not from the base window: a circle fitted to
- * 12px of a radius-40 arc has ~0.45px of sagitta to read against ±0.5px of staircase, and
- * its radius is a coin flip (measured 47–56 for an authored 79–81 on band-cross); at 24px
- * the sagitta is 1.8px and the radius reads 73–80. The projection error at the junction is
- * the radius error's sagitta, so it falls the same way (0.63 → 0.38, 0.73 → 0.15 artwork
- * px, `threadScaleDiag`).
+ * The wider window also gives a better radius: 12px of a radius-40 arc has ~0.45px of
+ * sagitta against ±0.5px of staircase, so its fitted radius is unreliable, while 24px
+ * has ~1.8px.
  */
 function extendCircle(
   net: PlanarNetwork,
@@ -330,18 +273,15 @@ function centroid(pts: Vec[]): Vec {
 
 /**
  * Survey every junction: which incident boundaries are real edges, which are band
- * seams, whether the real ones CONTINUE through, and where the through fit puts the
- * junction. The tracer moves exactly the junctions this marks `linked`;
- * `src/devtest/threadDiag.ts` prints these same rows, so the calibration is
- * inspectable rather than asserted.
+ * seams, whether the real ones continue through, and where the fit puts the junction.
+ * The tracer moves exactly the junctions this marks `linked`; `bench/threadDiag.ts`
+ * prints these same rows.
  */
 export function surveyJunctions(
   net: PlanarNetwork,
   contrast: Float64Array,
   cornerJunctions = true,
-  /** DIAGNOSTIC ONLY (issue #14's paired census): override the window / residual gates so
-   *  a counterfactual can be measured without editing the constants. Production never
-   *  passes it; omitted ⇒ the shipped constants, byte-identical. */
+  /** Diagnostic only: override the window / residual gates. Production never passes it. */
   tune?: { span?: number; dev?: number; alt?: boolean },
 ): JunctionVerdict[] {
   const span = tune?.span ?? THROUGH_SPAN
@@ -431,22 +371,20 @@ export function surveyJunctions(
       const l = Math.hypot(q.x - c.cx, q.y - c.cy)
       return l > 1e-9 ? { x: c.cx + ((q.x - c.cx) / l) * c.r, y: c.cy + ((q.y - c.cy) / l) * c.r } : null
     }
-    // §28: a junction the turn gate refuses is an ARC read at a coarse raster until proven
-    // a corner — the extended circle window is that proof either way (see THROUGH_EXTEND).
-    // Only worth asking where the base window already fits a circle; a sharp corner's
-    // residual only grows from there.
+    // A junction the turn gate refuses may still be an arc read at a coarse raster; the
+    // extended circle window decides (see THROUGH_EXTEND). Only worth asking where the
+    // base window already fits a circle; a sharp corner's residual only grows from there.
     const refusedByTurn = v.turnDeg == null || v.turnDeg > THROUGH_TURN_DEG
     const ext = (v.circleDev ?? Infinity) <= throughDev ? extendCircle(net, a, b, span, throughDev) : null
     if (!refusedByTurn) {
-      // --- §14: the boundary CONTINUES through. Fit it as one window and project. ---
+      // The boundary continues through: fit it as one window and project.
       const dev = Math.min(v.lineDev ?? Infinity, v.circleDev ?? Infinity)
       if (!(dev <= throughDev)) {
         v.reason = `break (dev ${Number.isFinite(dev) ? dev.toFixed(2) : '—'})`
         continue
       }
-      // Move the junction onto the through fit — whichever primitive the joined window
-      // is actually made of. A circle is taken from the widest window that still fits it
-      // (§28) — the base window's own circle only when nothing wider does.
+      // Project onto whichever primitive the joined window is made of. A circle comes
+      // from the widest window that still fits it.
       if ((v.circleDev ?? Infinity) < (v.lineDev ?? Infinity)) {
         const c = ext?.c ?? fitCircle(win)
         if (c) p = ontoCircle(c)
@@ -458,37 +396,17 @@ export function surveyJunctions(
       }
       v.kind = 'thread'
     } else if (ext) {
-      // --- §28 (issue #14): the chord turn said "corner", the wider evidence says ARC.
-      // 24px of an authored arc fits one circle at every raster; 24px of a real corner's
-      // straight arms fit none (a 40° corner reads ~2.2px against THROUGH_DEV 1.2). The
-      // junction threads onto that circle — the through fit the base window was too short
-      // to earn, not the apex the corner branch would have intersected inside the curve.
+      // The chord turn said corner, the wider window says arc: thread onto that circle
+      // rather than intersecting the arms inside the curve.
       p = ontoCircle(ext.c)
       v.extK = ext.k
       v.kind = 'thread'
     } else {
-      // --- §17 (§0 #15): the boundary CORNERS here. A through fit is not defined — one
-      // line or circle across the bend would round the corner off, which is exactly what
-      // the turn gate above exists to refuse. But a corner is still a SUB-PIXEL place:
-      // it is where the two arms' own lines meet, the same evidence §10.6's corner snap
-      // uses INSIDE a chain and the one thing a junction cannot reach there (the chain
-      // ends at the junction, so `snapCornerToArms` has nothing to intersect).
-      //
-      // BOTH arms have to be usable evidence (ARM_BOW). A bowed arm's "line" is a chord of
-      // something turning, and intersecting against a chord throws the apex px ALONG the
-      // other arm (measured, with the veto removed: moves reach 10.4px). One arm alone does
-      // not define a corner, so such a junction keeps its lattice corner.
-      //
-      // MEASURED AND REJECTED, recorded so it is not rebuilt: with ONE usable arm the
-      // junction can still be corrected in that arm's NORMAL direction (§14's own rule —
-      // the along-edge position is the weak boundary's business). That is geometrically
-      // right and it does improve the junction itself: on the Affinity mark it moves all
-      // five corner junctions from 0.50px to 0.27px off the authored outline. But the
-      // correction has a component ACROSS the OTHER arm, whose chain is still on the
-      // lattice, so it tilts that one instead. Over the 110 GT-scorable marks it measured
-      // 8 better / 6 worse on chamfer (against 6/3 for the apex branch alone), cost
-      // `affinity-designer` a recovered corner (5/7 → 4/7), and left that mark's
-      // authored-straight-run swing a wash (Σ 7.39 → 7.57px). §17.3 has the numbers.
+      // The boundary corners here: place the junction where the two arms' own lines meet.
+      // Both arms must be usable (ARM_BOW) — intersecting against a bowed arm's chord
+      // throws the apex pixels along the other arm, and one arm alone does not define a
+      // corner. Don't correct along a single usable arm's normal instead: the move has a
+      // component across the other arm, whose chain is still on the lattice, and tilts it.
       if (!cornerJunctions) {
         v.reason = `corner (turn ${v.turnDeg == null ? '—' : v.turnDeg.toFixed(1)}°)`
         continue
@@ -525,11 +443,14 @@ export function surveyJunctions(
 
 /**
  * Sub-pixel position for every junction a weak boundary planted on a strong one, keyed
- * by lattice corner — whether the strong boundary continues through it (§14) or corners
- * at it (§17). Junctions not in the map keep their integer corner, so an empty map is a
- * byte-identical no-op.
+ * by lattice corner — whether the strong boundary continues through it or corners at it.
+ * Junctions not in the map keep their integer corner, so an empty map is a no-op.
  */
-export function threadJunctions(net: PlanarNetwork, palette: readonly ThreadColor[], cornerJunctions = true): Map<number, Vec> {
+export function threadJunctions(
+  net: PlanarNetwork,
+  palette: readonly ThreadColor[],
+  cornerJunctions = true,
+): Map<number, Vec> {
   const out = new Map<number, Vec>()
   for (const v of surveyJunctions(net, edgeContrast(net, palette), cornerJunctions)) {
     if (v.linked && v.moveTo) out.set(v.corner, v.moveTo)

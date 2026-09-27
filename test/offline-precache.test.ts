@@ -6,7 +6,7 @@
 // install, and that list is not a glob: a LogoLab build is ~31 MB of assets, 27
 // MB of which is the lab harness and the optional AI upscaler. So the list is
 // computed from the chunk graph in scripts/swPlugin.ts — reachable from the
-// entry, stopping at labs/devtest/AI roots.
+// entry, stopping at labs/bench/AI roots.
 //
 // Which makes this a heuristic over a graph nobody looks at, with a failure mode
 // that a green build, a green typecheck and a working dev server all miss: a

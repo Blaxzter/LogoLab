@@ -93,10 +93,12 @@ test('sharp two-region edge → discontinuity on the seam, regions preserved', (
 test('smooth linear ramp keeps no interior discontinuities', () => {
   // Black→white over 64 px: per-pixel step ≈ 1/63 ≈ 0.016 ≪ edge threshold.
   const W = 64
-  const res = solveMumfordShah(img(W, 20, (x) => {
-    const v = Math.round((255 * x) / (W - 1))
-    return [v, v, v]
-  }))
+  const res = solveMumfordShah(
+    img(W, 20, (x) => {
+      const v = Math.round((255 * x) / (W - 1))
+      return [v, v, v]
+    }),
+  )
   // Allow the two border columns (clamped) but the interior must be smooth.
   let interiorEdges = 0
   for (let y = 0; y < 20; y++) {
@@ -117,7 +119,7 @@ test('transparent pixels are excluded and never couple across', () => {
 })
 
 test('deterministic: identical input → identical output', () => {
-  const src = img(48, 48, (x, y) => [((x * 7) % 256), ((y * 5) % 256), ((x + y) % 256)])
+  const src = img(48, 48, (x, y) => [(x * 7) % 256, (y * 5) % 256, (x + y) % 256])
   const a = solveMumfordShah(src, DEFAULT_MS_OPTIONS)
   const b = solveMumfordShah(src, DEFAULT_MS_OPTIONS)
   for (let i = 0; i < a.r.length; i++) {

@@ -1,15 +1,10 @@
-// SVG gradient paint-server import — the read-side counterpart to
-// trace/gradient.ts `gradientToSvgDef`. Reads <linearGradient>/<radialGradient>
-// defs and resolves a shape's `url(#id)` fill into the editable GradientFill
-// model, so gradient output round-trips back into node-editable paths.
+// SVG gradient import, the counterpart to `gradientToSvgDef`: resolves a
+// shape's `url(#id)` fill into the editable GradientFill model.
 //
-// Coordinate handling: gradient coords live in either `userSpaceOnUse` (already
-// in user units) or `objectBoundingBox` (fractions of the filled shape's tight
-// bbox). `gradientTransform` and the shape's baked-in ancestor transform are
-// folded into one affine. Linear endpoints transform exactly; a radial only
-// survives when that affine keeps its circle a circle (a similarity) — under a
-// non-uniform/shearing map it would become a rotated ellipse the single-radius
-// model can't store, so we bail (the shape stays raw markup — lossless).
+// `gradientUnits`, `gradientTransform` and the shape's ancestor transform are
+// folded into one affine. A radial survives only when that affine is a
+// similarity; otherwise it would be an ellipse the single-radius model cannot
+// store, so we return null and the shape stays raw markup.
 
 import type { Affine, GradientFill, GradientStop, RadialGradient, Vec } from './types'
 import { applyAffine, composeAffine, parseTransformAttr } from './geometry.ts'

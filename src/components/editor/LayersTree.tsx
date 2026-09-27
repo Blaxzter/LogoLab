@@ -1,33 +1,15 @@
 // The layers rail: the document tree, top of the list = top of the stack.
 //
 // The row model (order, indent, what shift-click spans, where a drop lands)
-// lives in `lib/editor/layerRows.ts`; this file is the pointer and the paint.
-// Reordering is a DRAG on the grip at the left of a row — deliberately not the
-// whole row, which has to stay a plain click target for selection and a double
-// click target for renaming.
+// lives in `lib/editor/layerRows.ts`; this file handles pointer input and
+// rendering. Reordering drags from the grip at a row's left, so the rest of the
+// row stays a click target for selection and double-click renaming.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ChevronDown,
-  ChevronRight,
-  Eye,
-  EyeOff,
-  Folder,
-  GripVertical,
-  Lock,
-  Square,
-  Trash2,
-} from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, GripVertical, Lock, Square, Trash2 } from 'lucide-react'
 import type { DocItem, EditableDoc, PathItem } from '../../lib/path/types'
 import { isGroup } from '../../lib/path/docTree'
-import {
-  dropSpot,
-  edgeAt,
-  layerRows,
-  rowsBetween,
-  type DropEdge,
-  type DropSpot,
-} from '../../lib/editor/layerRows'
+import { dropSpot, edgeAt, layerRows, rowsBetween, type DropEdge, type DropSpot } from '../../lib/editor/layerRows'
 import { itemLabel } from './editorDoc'
 import { PathView } from '../vector/DocRender'
 import { itemBox } from '../../lib/editor/transform'
@@ -82,17 +64,14 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
 
   /* ----------------------------------------------------------- selection */
 
-  // Every handler a row is handed is IDENTITY-STABLE (it reads `propsRef`, not
-  // this render's props) so that `LayerRowView` can be memoized. Without that
-  // the rail re-rendered every row on every document change, and each row's
-  // thumbnail re-measures the tight bounds of its path — which is most of what
-  // made scrubbing a colour crawl on a real traced document.
+  // Row handlers are identity-stable (they read `propsRef`) so `LayerRowView`
+  // stays memoized; otherwise every row and its thumbnail re-renders on each
+  // document change, which makes colour scrubbing slow on traced documents.
   const clickRow = useCallback((id: string, e: React.PointerEvent) => {
     const p = propsRef.current
     if (e.shiftKey && anchorRef.current) {
-      // The anchor deliberately SURVIVES a range click, so shift-clicking
-      // further down keeps re-spanning from the same origin instead of
-      // ratcheting the selection open one row at a time.
+      // The anchor survives a range click, so repeated shift-clicks re-span
+      // from the same origin.
       p.onSelect(new Set(rowsBetween(rowsRef.current, anchorRef.current, id)))
       return
     }
@@ -125,6 +104,8 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
     if (to) propsRef.current.onMove(state.ids, to)
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(endDrag): only touches refs and state setters
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setDragState): only touches refs and state setters
   const startDrag = useCallback((id: string, e: React.PointerEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -156,17 +137,11 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
         setDragState({ ...state, over: null })
       }
 
-      // Auto-scroll: a list taller than the rail is otherwise undraggable past
-      // its own edge — the pointer never reaches the rows it has to travel to.
+      // Auto-scroll near the edge, so rows outside the visible rail are reachable.
       const sc = scrollerRef.current
       if (!sc) return
       const b = sc.getBoundingClientRect()
-      velRef.current =
-        ev.clientY < b.top + EDGE_PX
-          ? -EDGE_SPEED
-          : ev.clientY > b.bottom - EDGE_PX
-            ? EDGE_SPEED
-            : 0
+      velRef.current = ev.clientY < b.top + EDGE_PX ? -EDGE_SPEED : ev.clientY > b.bottom - EDGE_PX ? EDGE_SPEED : 0
     }
     const onUp = () => endDrag(true)
     const onCancel = () => endDrag(false)
@@ -176,9 +151,8 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
       endDrag(false)
     }
 
-    // Bound HERE rather than from an effect on `dragging`: an effect only runs
-    // after React re-renders, and a fast drag can already be several
-    // pointermoves along by then — the first one is what picks the drop row.
+    // Bound here rather than in an effect on `dragging`: an effect runs after
+    // the re-render, and a fast drag may have missed its first pointermoves.
     let raf = requestAnimationFrame(function tick() {
       if (velRef.current !== 0) scrollerRef.current?.scrollBy(0, velRef.current)
       raf = requestAnimationFrame(tick)
@@ -230,10 +204,8 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
 })
 
 /**
- * One row. Memoized on FLAT props rather than on the `LayerRow` object:
- * `layerRows` mints fresh row objects whenever the document changes, so a
- * row-shaped prop would defeat the memo on exactly the edits it exists to
- * survive — recolouring one shape must not re-render the other two hundred.
+ * One row. Memoized on flat props rather than the `LayerRow` object, because
+ * `layerRows` mints fresh row objects on every document change.
  */
 const LayerRowView = memo(function LayerRowView({
   item,
@@ -295,7 +267,11 @@ const LayerRowView = memo(function LayerRowView({
       {over === 'above' && <DropLine side="top" depth={depth} />}
       {over === 'below' && <DropLine side="bottom" depth={depth} />}
 
-      <Tooltip label={<TipLabel title="Drag to reorder" detail="Drop between rows to restack, or onto a group to move it inside." />}>
+      <Tooltip
+        label={
+          <TipLabel title="Drag to reorder" detail="Drop between rows to restack, or onto a group to move it inside." />
+        }
+      >
         <button
           type="button"
           aria-label="Reorder layer"
@@ -315,17 +291,17 @@ const LayerRowView = memo(function LayerRowView({
             />
           }
         >
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.stopPropagation()
-            onToggleExpanded(item.id)
-          }}
-          className="flex h-4 w-4 shrink-0 items-center justify-center text-faint hover:text-ink"
-          aria-label={item.expanded === false ? 'Expand group' : 'Collapse group'}
-        >
-          {item.expanded === false ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-        </button>
+          <button
+            type="button"
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              onToggleExpanded(item.id)
+            }}
+            className="flex h-4 w-4 shrink-0 items-center justify-center text-faint hover:text-ink"
+            aria-label={item.expanded === false ? 'Expand group' : 'Collapse group'}
+          >
+            {item.expanded === false ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+          </button>
         </Tooltip>
       ) : (
         <span className="w-4 shrink-0" />
@@ -358,7 +334,14 @@ const LayerRowView = memo(function LayerRowView({
         <span className="min-w-0 flex-1 truncate">{itemLabel(item, number)}</span>
       )}
 
-      <Tooltip label={<TipLabel title={item.visible ? 'Hide layer' : 'Show layer'} detail="Hidden layers stay in the file but are left out of the export." />}>
+      <Tooltip
+        label={
+          <TipLabel
+            title={item.visible ? 'Hide layer' : 'Show layer'}
+            detail="Hidden layers stay in the file but are left out of the export."
+          />
+        }
+      >
         <button
           type="button"
           onPointerDown={(e) => {
@@ -411,23 +394,18 @@ function scrollParent(el: HTMLElement | null): HTMLElement | null {
 }
 
 /**
- * A 16px thumbnail of the path's own geometry. Cheap — the path data is already
- * cached — and far more useful than a colour chip when a document has a dozen
- * shapes that happen to share a fill.
+ * A 16px thumbnail of the path's geometry (the path data is already cached).
  */
 function LayerThumb({ item }: { item: PathItem }) {
   const box = itemBox(item)
   if (!box || box.w === 0 || box.h === 0) {
     return <Square size={12} style={{ color: item.fill }} />
   }
-  // `itemBox` is the GEOMETRY box, which for a stroked path stops at the
-  // centreline — so half the stroke sits outside it and a thumbnail cropped to
-  // it clips a 40-unit outline down to a sliver. Pad by half the width.
+  // `itemBox` is the geometry box and stops at a stroke's centreline, so pad
+  // by half the stroke width to avoid clipping it.
   const pad = Math.max(box.w, box.h) * 0.06 + (item.stroke?.width ?? 0) / 2
   return (
-    // Checkerboard rather than a white plate: white artwork is extremely common
-    // (knocked-out marks, light-on-dark logos) and white-on-white makes the
-    // thumbnail look empty — which reads as "this layer is broken".
+    // Checkerboard rather than white, so white artwork stays visible.
     <svg
       width={16}
       height={16}
@@ -435,9 +413,8 @@ function LayerThumb({ item }: { item: PathItem }) {
       className="checkerboard rounded-[3px] ring-1 ring-line"
       aria-hidden
     >
-      {/* The SHARED renderer, so a thumbnail can never disagree with the canvas
-          about how a path paints — gradients included. Its own gradient-id
-          scope keeps those defs from colliding with the canvas's. */}
+      {/* The shared renderer, with its own gradient-id scope so its defs don't
+          collide with the canvas's. */}
       <PathView item={item} scope={`thumb-${item.id}`} />
     </svg>
   )

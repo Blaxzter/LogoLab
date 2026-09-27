@@ -1,13 +1,7 @@
-// What the cleanup studio remembers across a reload.
-//
-// Two halves, for the same reason as everywhere else in this app: the tool
-// settings go to localStorage (read synchronously while the studio mounts), and
-// the PIXELS go to IndexedDB.
-//
-// The pixels are the point. A cutout that has not been Applied yet exists only in
-// the studio's working buffer — the store still holds the untouched upload — so
-// before this, ten minutes of brushwork was one refresh away from gone, and it
-// was the one kind of work in the app with no way to get it back.
+// What the cleanup studio remembers across a reload: tool settings in
+// localStorage (read synchronously while the studio mounts), and the working
+// pixels in IndexedDB. An un-applied cutout exists only in the studio's working
+// buffer (the store still holds the original upload), so it has to be saved here.
 
 import { getImageData } from '../../lib/image'
 import { debounce, readLocal, writeLocal } from '../../lib/persist/local'
@@ -50,8 +44,7 @@ export const DEFAULT_CLEANUP_SETTINGS: CleanupSettings = {
   recolorColor: '#ffffff',
 }
 
-export const loadCleanupSettings = (): CleanupSettings =>
-  readLocal(LS_KEY, DEFAULT_CLEANUP_SETTINGS)
+export const loadCleanupSettings = (): CleanupSettings => readLocal(LS_KEY, DEFAULT_CLEANUP_SETTINGS)
 
 /** Debounced: the rail is sliders, and each fires per pointer move. */
 export const saveCleanupSettings = debounce((settings: CleanupSettings) => {
@@ -63,10 +56,8 @@ export const saveCleanupSettings = debounce((settings: CleanupSettings) => {
  * none, or it belongs to a different image. Claimed, so re-entering the tab
  * later in the session starts from the live canvas rather than re-seeding it.
  *
- * Returns a thunk because the hook wants to resolve this AFTER it has decoded
- * the source, and only then: a decode we never use is a decode we shouldn't pay
- * for. The claim still happens eagerly, at call time, so it is not left sitting
- * in the boot payload for a second studio to pick up.
+ * Returns a thunk so the hook decodes it only after the source has decoded. The
+ * claim itself happens at call time, so a second studio can't pick it up.
  */
 export function cleanupSeed(assetKey: string): (() => Promise<ImageData | null>) | null {
   const stored: StoredCleanup | null = claim('cleanup')
@@ -74,9 +65,8 @@ export function cleanupSeed(assetKey: string): (() => Promise<ImageData | null>)
   return async () => {
     const url = URL.createObjectURL(stored.working)
     try {
-      // No cap: these are the exact pixels we stored, and rescaling them would
-      // land them on a different lattice than the pristine snapshot they have to
-      // line up with (the hook checks the dimensions before adopting them).
+      // No size cap: rescaling would misalign them with the pristine snapshot
+      // (the hook checks the dimensions before adopting them).
       return await getImageData(url, Infinity, null, { upscale: false })
     } catch {
       return null

@@ -1,13 +1,10 @@
 // The properties rail: paint, geometry and alignment for the current selection.
 //
-// Every numeric field is a "commit on blur / Enter, preview never" control. A
-// field that applied on each keystroke would push one undo step per digit and
-// would fight you the moment you cleared it to retype — so the draft lives in
-// local state until you leave the field.
+// Numeric fields keep a local draft and commit on blur / Enter, so typing
+// doesn't push an undo step per digit or fight a cleared field.
 //
-// The two CONTINUOUS controls — the colour wells and the sliders — can't work
-// that way: they have no commit moment, they just stop. They pass `live` with
-// every change instead, and the studio folds the burst into one undo entry.
+// Colour wells and sliders have no commit moment, so they pass `live` with every
+// change and the studio merges the burst into one undo entry.
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -72,15 +69,11 @@ export function Inspector({
   }
   const lead = paths[0] ?? null
 
-  // The document's palette is DEFERRED. Every frame of a colour scrub changes
-  // the document, hence the palette, hence all of its swatches — for a strip
-  // nobody is reading mid-drag, and which flickers while it re-sorts. Deferred,
-  // React renders the swatches at low priority: during a fast scrub the whole
-  // strip is simply skipped, and it catches up the moment the drag settles.
+  // Deferred: every frame of a colour scrub changes the palette, and the strip
+  // can catch up once the drag settles instead of re-sorting mid-drag.
   const paletteDoc = useDeferredValue(doc)
   const palette = useMemo(() => docPalette(paletteDoc), [paletteDoc])
-  // Stable, so <Palette> can bail out on the frames where `palette` has not
-  // moved. `onFill` itself is a fresh closure on every parent render.
+  // Stable (unlike `onFill`), so the memoized <Palette> can skip re-renders.
   const fillRef = useRef(onFill)
   fillRef.current = onFill
   const pickPaletteColor = useCallback((c: string) => fillRef.current(c), [])
@@ -103,8 +96,8 @@ export function Inspector({
     )
   }
 
-  // Why a paint control can't be used. `lead` is the first selected PATH, so
-  // its absence means the selection is all groups-of-nothing or raw markup.
+  // Why a paint control can't be used. `lead` is the first selected path, so
+  // without one the selection is only empty groups or raw markup.
   const paintReason = lead
     ? null
     : 'Nothing paintable is selected — imported markup keeps the paint it came with and can\u2019t be recoloured here.'
@@ -116,12 +109,24 @@ export function Inspector({
     <div className="flex flex-col gap-4 p-3">
       <Section title="Arrange">
         <div className="grid grid-cols-6 gap-1">
-          <AlignBtn label="Align left" note={ALIGN_REF} onClick={() => onAlign('left')}><AlignStartVertical size={14} /></AlignBtn>
-          <AlignBtn label="Centre horizontally" note={ALIGN_REF} onClick={() => onAlign('hcenter')}><AlignCenterVertical size={14} /></AlignBtn>
-          <AlignBtn label="Align right" note={ALIGN_REF} onClick={() => onAlign('right')}><AlignEndVertical size={14} /></AlignBtn>
-          <AlignBtn label="Align top" note={ALIGN_REF} onClick={() => onAlign('top')}><AlignStartHorizontal size={14} /></AlignBtn>
-          <AlignBtn label="Centre vertically" note={ALIGN_REF} onClick={() => onAlign('vcenter')}><AlignCenterHorizontal size={14} /></AlignBtn>
-          <AlignBtn label="Align bottom" note={ALIGN_REF} onClick={() => onAlign('bottom')}><AlignEndHorizontal size={14} /></AlignBtn>
+          <AlignBtn label="Align left" note={ALIGN_REF} onClick={() => onAlign('left')}>
+            <AlignStartVertical size={14} />
+          </AlignBtn>
+          <AlignBtn label="Centre horizontally" note={ALIGN_REF} onClick={() => onAlign('hcenter')}>
+            <AlignCenterVertical size={14} />
+          </AlignBtn>
+          <AlignBtn label="Align right" note={ALIGN_REF} onClick={() => onAlign('right')}>
+            <AlignEndVertical size={14} />
+          </AlignBtn>
+          <AlignBtn label="Align top" note={ALIGN_REF} onClick={() => onAlign('top')}>
+            <AlignStartHorizontal size={14} />
+          </AlignBtn>
+          <AlignBtn label="Centre vertically" note={ALIGN_REF} onClick={() => onAlign('vcenter')}>
+            <AlignCenterHorizontal size={14} />
+          </AlignBtn>
+          <AlignBtn label="Align bottom" note={ALIGN_REF} onClick={() => onAlign('bottom')}>
+            <AlignEndHorizontal size={14} />
+          </AlignBtn>
         </div>
         <div className="mt-1 grid grid-cols-6 gap-1">
           <AlignBtn
@@ -160,10 +165,32 @@ export function Inspector({
       {box && (
         <Section title="Geometry">
           <div className="grid grid-cols-2 gap-2">
-            <NumField label="X" tip="Left edge of the selection, in artboard units." value={box.x} onCommit={(v) => onGeometry({ x: v })} />
-            <NumField label="Y" tip="Top edge of the selection, in artboard units." value={box.y} onCommit={(v) => onGeometry({ y: v })} />
-            <NumField label="W" tip="Width. Resizes from the left edge, so X stays put." value={box.w} min={0.01} onCommit={(v) => onGeometry({ w: v })} />
-            <NumField label="H" tip="Height. Resizes from the top edge, so Y stays put." value={box.h} min={0.01} onCommit={(v) => onGeometry({ h: v })} />
+            <NumField
+              label="X"
+              tip="Left edge of the selection, in artboard units."
+              value={box.x}
+              onCommit={(v) => onGeometry({ x: v })}
+            />
+            <NumField
+              label="Y"
+              tip="Top edge of the selection, in artboard units."
+              value={box.y}
+              onCommit={(v) => onGeometry({ y: v })}
+            />
+            <NumField
+              label="W"
+              tip="Width. Resizes from the left edge, so X stays put."
+              value={box.w}
+              min={0.01}
+              onCommit={(v) => onGeometry({ w: v })}
+            />
+            <NumField
+              label="H"
+              tip="Height. Resizes from the top edge, so Y stays put."
+              value={box.h}
+              min={0.01}
+              onCommit={(v) => onGeometry({ h: v })}
+            />
           </div>
         </Section>
       )}
@@ -205,9 +232,7 @@ export function Inspector({
           />
         </div>
 
-        {/* Fill RULE, not opacity — it sits under the slider but answers a
-            different question: which parts of a path count as inside when the
-            path has several subpaths or crosses itself. */}
+        {/* Fill rule: which parts of a compound or self-crossing path count as inside. */}
         <div className="mt-2 flex gap-1">
           {FILL_RULES.map((r) => (
             <ActionButton
@@ -312,8 +337,12 @@ function StrokeSection({
               >
                 <svg width="34" height="8" aria-hidden>
                   <line
-                    x1="1" y1="4" x2="33" y2="4"
-                    stroke="currentColor" strokeWidth="2"
+                    x1="1"
+                    y1="4"
+                    x2="33"
+                    y2="4"
+                    stroke="currentColor"
+                    strokeWidth="2"
                     strokeDasharray={dash.length ? dash.join(' ') : undefined}
                     strokeLinecap="round"
                   />
@@ -328,9 +357,8 @@ function StrokeSection({
 }
 
 /**
- * The document-colours strip. Memoized because it is the widest thing in the
- * rail — one node per distinct fill, which on traced art is hundreds — and it
- * has no reason to re-render for anything but its own list changing.
+ * The document-colours strip. Memoized: traced art can have hundreds of
+ * distinct fills, and the strip only needs to re-render when its list changes.
  */
 const Palette = memo(function Palette({
   palette,
@@ -339,10 +367,8 @@ const Palette = memo(function Palette({
   palette: { color: string; count: number }[]
   onPick?: (color: string) => void
 }) {
-  // These keep the native `title` rather than a <Tooltip>: traced art has one
-  // swatch per distinct fill, which runs to hundreds, and each Tooltip is a
-  // component with its own state and portal. The strip is the one place in the
-  // rail where the cheap tooltip is the right one.
+  // Native `title` rather than <Tooltip>: there can be hundreds of swatches,
+  // and each Tooltip carries its own state and portal.
   return (
     <div className={onPick ? 'mt-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1'}>
       {palette.map((p) =>
@@ -419,7 +445,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function AlignBtn({
-  label, note, onClick, reason, children,
+  label,
+  note,
+  onClick,
+  reason,
+  children,
 }: {
   label: string
   note?: string
@@ -444,7 +474,11 @@ function AlignBtn({
 }
 
 function ColorWell({
-  value, onChange, label, note, reason,
+  value,
+  onChange,
+  label,
+  note,
+  reason,
 }: {
   value: string
   onChange: (v: string) => void
@@ -452,37 +486,35 @@ function ColorWell({
   note?: string
   reason?: string | null
 }) {
-  // `none` is the absence of paint, not a colour — showing the picker's black
-  // fallback would claim the shape is filled black, which is exactly what the
-  // user is looking at the well to find out.
+  // `none` is no paint; don't show the picker's black fallback as if it were.
   const none = value.trim().toLowerCase() === 'none'
   const off = isOff(reason)
-  // The tooltip goes on the WELL, not the input: a disabled input is silent
-  // (see ui/ActionButton.tsx), and focus bubbles, so the swatch hears both the
-  // hover and the keyboard focus of the picker inside it.
+  // The tooltip goes on the well, not the input: a disabled input fires no
+  // pointer events (see ui/ActionButton.tsx), while the well still gets hover
+  // and the picker's bubbled focus.
   return (
     <Tooltip label={<TipLabel title={none ? `${label} — none` : label} detail={off ? reason : note} />}>
-    <span
-      className={`relative h-8 w-8 shrink-0 overflow-hidden rounded-md ring-1 ring-line-strong ${
-        none ? 'checkerboard' : ''
-      } ${off ? 'opacity-40' : ''}`}
-    >
-      {none ? (
-        <svg viewBox="0 0 32 32" className="absolute inset-0 h-full w-full" aria-hidden>
-          <line x1="4" y1="28" x2="28" y2="4" stroke="#d6453d" strokeWidth="3" />
-        </svg>
-      ) : (
-        <span className="absolute inset-0" style={{ backgroundColor: value }} />
-      )}
-      <input
-        type="color"
-        value={normalizeHex(value) ?? '#000000'}
-        aria-disabled={off || undefined}
-        onChange={off ? undefined : (e) => onChange(e.target.value)}
-        className={`absolute inset-0 opacity-0 ${off ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-        aria-label={label}
-      />
-    </span>
+      <span
+        className={`relative h-8 w-8 shrink-0 overflow-hidden rounded-md ring-1 ring-line-strong ${
+          none ? 'checkerboard' : ''
+        } ${off ? 'opacity-40' : ''}`}
+      >
+        {none ? (
+          <svg viewBox="0 0 32 32" className="absolute inset-0 h-full w-full" aria-hidden>
+            <line x1="4" y1="28" x2="28" y2="4" stroke="#d6453d" strokeWidth="3" />
+          </svg>
+        ) : (
+          <span className="absolute inset-0" style={{ backgroundColor: value }} />
+        )}
+        <input
+          type="color"
+          value={normalizeHex(value) ?? '#000000'}
+          aria-disabled={off || undefined}
+          onChange={off ? undefined : (e) => onChange(e.target.value)}
+          className={`absolute inset-0 opacity-0 ${off ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+          aria-label={label}
+        />
+      </span>
     </Tooltip>
   )
 }
@@ -517,8 +549,18 @@ function HexField({ value, onCommit, tip }: { value: string; onCommit: (v: strin
 }
 
 function NumField({
-  label, value, onCommit, min, tip,
-}: { label: string; value: number; onCommit: (v: number) => void; min?: number; tip: string }) {
+  label,
+  value,
+  onCommit,
+  min,
+  tip,
+}: {
+  label: string
+  value: number
+  onCommit: (v: number) => void
+  min?: number
+  tip: string
+}) {
   const shown = String(Number(value.toFixed(2)))
   const [draft, setDraft] = useState(shown)
   useEffect(() => setDraft(shown), [shown])
@@ -527,10 +569,8 @@ function NumField({
     if (Number.isFinite(n) && (min === undefined || n >= min)) onCommit(n)
     else setDraft(shown)
   }
-  // The tooltip goes on the INPUT, not on the <label> around it. Wrapping the
-  // label means focus arrives by bubbling from a child, and a bubble opened
-  // that way can be left stranded when focus leaves by a route the label never
-  // hears — the trigger should be the thing that actually takes focus.
+  // The tooltip goes on the input, not the surrounding <label>: a bubble opened
+  // by bubbled focus can be left stranded when focus leaves by another route.
   return (
     <label className="flex items-center gap-1.5">
       <span className="w-8 shrink-0 text-[0.7rem] text-muted">{label}</span>
@@ -557,8 +597,18 @@ function NumField({
 }
 
 function SliderRow({
-  label, tip, note, value, onChange,
-}: { label: string; tip: string; note: string; value: number; onChange: (v: number) => void }) {
+  label,
+  tip,
+  note,
+  value,
+  onChange,
+}: {
+  label: string
+  tip: string
+  note: string
+  value: number
+  onChange: (v: number) => void
+}) {
   return (
     <label className="flex items-center gap-2">
       <span className="w-14 shrink-0 text-[0.7rem] text-muted">{label}</span>
@@ -579,7 +629,10 @@ function SliderRow({
 }
 
 function SegRow({
-  label, value, options, onChange,
+  label,
+  value,
+  options,
+  onChange,
 }: {
   label: string
   value: string

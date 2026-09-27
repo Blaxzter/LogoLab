@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
-const generator = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'devtest', 'genControlPreviews.ts')
+const generator = join(dirname(fileURLToPath(import.meta.url)), '..', 'bench', 'genControlPreviews.ts')
 const { status } = spawnSync(process.execPath, [generator], { stdio: 'inherit' })
 
 if (status !== 0) {

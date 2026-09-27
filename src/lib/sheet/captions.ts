@@ -1,22 +1,14 @@
 // Captions → icon names: which caption belongs to which icon, and how a line of
-// OCR'd text becomes a file name.
-//
-// The detector already tells captions apart from icons (short text bands, see
-// detect.ts); what it does not say is WHOSE caption each one is. A sheet from an
-// image model puts the caption directly under its icon, closer than anything
-// else on the page, so the pairing is geometric: the nearest text below an icon,
-// inside that icon's column, is its caption. Everything here is pure and works
-// on the detector's tiles, so the browser and the Node harness pair identically;
-// reading the text out of the pixels (OCR) lives in ocr.ts, which is browser-only.
+// OCR'd text becomes a file name. The pairing is geometric (the nearest text
+// below an icon, inside its column). Pure; the OCR itself lives in ocr.ts.
 
 import { cropTile, upscaleImageData } from './crop.ts'
 import type { ImageDataLike, Rect, SheetBackground, SheetGrid, SheetTile } from './types'
 
 /**
- * How far below an icon its caption may start, as a fraction of the grid pitch
- * (or of the icon's own height on a free layout). Real sheets put the caption
- * 15–25% of the pitch under the icon; the NEXT row's caption is a full pitch
- * away, so 0.5 sits in open space between the two.
+ * How far below an icon its caption may start, as a fraction of the grid pitch.
+ * A caption typically sits 15–25% of the pitch under its icon and the next
+ * row's a full pitch away, so 0.5 separates the two.
  */
 const MAX_GAP_PITCH = 0.5
 /**
@@ -38,13 +30,10 @@ export interface CaptionMatch {
 }
 
 /**
- * Pair every icon tile with the caption under it.
- *
- * Greedy by vertical gap: the closest (icon, caption) pair wins, so a caption
- * that lies between two rows goes to the icon it sits under, never to the one it
- * sits above. A caption broken into two lines (the detector groups per band, so
- * "SECURITY" / "CAMERA" arrive as two tiles) is stitched back together by
- * absorbing text directly under the matched line.
+ * Pair every icon tile with the caption under it. Greedy by vertical gap, so a
+ * caption between two rows goes to the icon it sits under. A two-line caption
+ * (two label tiles) is stitched back together by absorbing text directly under
+ * the matched line.
  */
 export function matchCaptions(tiles: SheetTile[], grid: SheetGrid | null): Map<string, CaptionMatch> {
   const icons = tiles.filter((t) => t.kind === 'icon')
@@ -68,8 +57,7 @@ export function matchCaptions(tiles: SheetTile[], grid: SheetGrid | null): Map<s
     for (const label of labels) {
       if (label.ink.w > maxWidth) continue
       const gap = label.ink.y - bottom
-      // A caption starts under the icon's ink (a little overlap is the label
-      // band's own anti-aliasing, not the caption sitting on the icon).
+      // Allow a little overlap for anti-aliasing.
       if (gap < -0.1 * icon.ink.h || gap > maxGap) continue
       if (!sameColumn(icon.ink, label.ink)) continue
       candidates.push({ icon, label, gap })
@@ -175,14 +163,9 @@ const MAX_CAPTION_SCALE = 4
 
 /**
  * Cut a caption out of the sheet as dark grey text on light paper, at a size
- * the OCR reads well.
- *
- * Tesseract is trained on dark-on-light print, so light captions on a dark
- * sheet are inverted, and a transparent sheet's alpha IS the ink (a white
- * caption over transparency has no colour contrast at all). Enlarging small
- * captions (a 1024px sheet's are ~20px tall) is the same sub-pixel argument as
- * the tracer's `traceScale`: the anti-aliasing carries shape the recognizer can
- * use once the lattice is fine enough.
+ * the OCR reads well. Tesseract expects dark-on-light, so light captions are
+ * inverted, and on a transparent sheet the alpha is used as the ink. Small
+ * captions are enlarged so the recognizer can use their anti-aliasing.
  */
 export function prepareCaption(image: ImageDataLike, ink: Rect, bg: SheetBackground): ImageDataLike {
   const pad = Math.max(8, Math.round(ink.h * CAPTION_PAD))
@@ -214,16 +197,9 @@ export function prepareCaption(image: ImageDataLike, ink: Rect, bg: SheetBackgro
 }
 
 /**
- * A [1 2 1]/4 blur, separable, in place on a grey RGBA buffer.
- *
- * Sheets arrive JPEG/WebP-compressed, and the ringing on a glyph's edge is
- * enough to turn a "g" into a "Q" for the recognizer: at native 2048px the
- * weather example read "Fog" as "FOQ" at 65% confidence, while the same sheet
- * downscaled to 1024 (smoothed by the resample, then enlarged) read fine. One
- * light blur pass gives the native crop the same smoothness — measured over the
- * 28 captions of the two captioned examples at 2048, 1024 and 768px: every
- * caption at ≥ 90% confidence with it, one misread without. Showing the OCR a
- * LARGER crop instead (target 96px) made every read less confident.
+ * A [1 2 1]/4 blur, separable, in place on a grey RGBA buffer. Suppresses
+ * JPEG/WebP ringing on glyph edges, which otherwise causes misreads
+ * (e.g. "g" read as "Q").
  */
 function blur121(px: Uint8ClampedArray, w: number, h: number): void {
   const tmp = new Float32Array(w * h)

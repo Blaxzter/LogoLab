@@ -43,10 +43,12 @@ test('two flat regions across a sharp edge stay separate (edge veto)', () => {
 
 test('a smooth gradient field collapses to ONE region', () => {
   const W = 80
-  const seg = segmentImage(img(W, 48, (x) => {
-    const v = Math.round((255 * x) / (W - 1))
-    return [v, v, v]
-  }))
+  const seg = segmentImage(
+    img(W, 48, (x) => {
+      const v = Math.round((255 * x) / (W - 1))
+      return [v, v, v]
+    }),
+  )
   assert.equal(macroCount(seg), 1, 'a continuous ramp is one macro-region (bands reunited)')
 })
 
@@ -54,11 +56,13 @@ test('same-colour non-adjacent blobs merge into one region', () => {
   // White field with two separate black squares far apart.
   const W = 80
   const H = 48
-  const seg = segmentImage(img(W, H, (x, y) => {
-    const inA = x >= 8 && x < 24 && y >= 8 && y < 40
-    const inB = x >= 56 && x < 72 && y >= 8 && y < 40
-    return inA || inB ? [10, 10, 10] : [245, 245, 245]
-  }))
+  const seg = segmentImage(
+    img(W, H, (x, y) => {
+      const inA = x >= 8 && x < 24 && y >= 8 && y < 40
+      const inB = x >= 56 && x < 72 && y >= 8 && y < 40
+      return inA || inB ? [10, 10, 10] : [245, 245, 245]
+    }),
+  )
   assert.equal(macroCount(seg), 2, 'white bg + one merged black region')
 })
 
@@ -67,13 +71,15 @@ test('distinct non-adjacent flats are NOT bridged into a fake gradient', () => {
   // would fit the two clusters with low residual, but its profile is bimodal.
   const W = 80
   const H = 48
-  const seg = segmentImage(img(W, H, (x, y) => {
-    const inA = x >= 8 && x < 24 && y >= 8 && y < 40
-    const inB = x >= 56 && x < 72 && y >= 8 && y < 40
-    if (inA) return [30, 60, 220]
-    if (inB) return [220, 50, 40]
-    return [245, 245, 245]
-  }))
+  const seg = segmentImage(
+    img(W, H, (x, y) => {
+      const inA = x >= 8 && x < 24 && y >= 8 && y < 40
+      const inB = x >= 56 && x < 72 && y >= 8 && y < 40
+      if (inA) return [30, 60, 220]
+      if (inB) return [220, 50, 40]
+      return [245, 245, 245]
+    }),
+  )
   assert.equal(macroCount(seg), 3, 'white bg + blue + red kept distinct (profile veto)')
 })
 
@@ -96,15 +102,17 @@ test('a thin all-discontinuity mark on transparency is never dropped (labelled -
   // the transparent sentinel −1 (which the tracer would silently drop).
   const W = 64
   const H = 64
-  const seg = segmentImage(img(W, H, (x, y) => {
-    const inBlob = x >= 6 && x < 26 && y >= 6 && y < 26 // 20×20 filled blob
-    const inStroke = x === 50 && y >= 8 && y < 56 // 1px vertical stroke
-    const inDot = x >= 44 && x < 46 && y >= 44 && y < 46 // tiny 2×2 mark
-    if (inBlob) return [200, 40, 40, 255]
-    if (inStroke) return [20, 20, 200, 255]
-    if (inDot) return [20, 160, 60, 255]
-    return [0, 0, 0, 0] // transparent
-  }))
+  const seg = segmentImage(
+    img(W, H, (x, y) => {
+      const inBlob = x >= 6 && x < 26 && y >= 6 && y < 26 // 20×20 filled blob
+      const inStroke = x === 50 && y >= 8 && y < 56 // 1px vertical stroke
+      const inDot = x >= 44 && x < 46 && y >= 44 && y < 46 // tiny 2×2 mark
+      if (inBlob) return [200, 40, 40, 255]
+      if (inStroke) return [20, 20, 200, 255]
+      if (inDot) return [20, 160, 60, 255]
+      return [0, 0, 0, 0] // transparent
+    }),
+  )
   let lostOpaque = 0
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -122,7 +130,10 @@ test('a thin all-discontinuity mark on transparency is never dropped (labelled -
 })
 
 test('respects custom options object (smoke)', () => {
-  const seg = segmentImage(img(40, 40, () => [100, 150, 200]), { ...DEFAULT_SEGMENT_OPTIONS })
+  const seg = segmentImage(
+    img(40, 40, () => [100, 150, 200]),
+    { ...DEFAULT_SEGMENT_OPTIONS },
+  )
   assert.ok(seg.palette.length >= 1)
 })
 

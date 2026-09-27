@@ -1,0 +1,121 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**/*.{ts,tsx,js,mjs,cjs}",
+      "!!**/dist",
+      "!!**/node_modules",
+      "!!test/ab-snapshots",
+      "!!examples",
+      "!!crispness-study",
+      "!!.playwright-mcp",
+      "!!public",
+      "!**/*.generated.*"
+    ]
+  },
+  // Describes the style the code is already written in, so `pnpm format` is a small diff.
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "asNeeded",
+      "trailingCommas": "all",
+      "arrowParentheses": "always"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        // Indexed typed-array loops under `strict`: the `!` after a bounds-checked read is deliberate (540+ sites).
+        "noNonNullAssertion": "off",
+        // String concatenation vs template literal is taste, not a defect.
+        "useTemplate": "off",
+        // `Math.pow` in the colour-space formulas reads like the published equations.
+        "useExponentiationOperator": "off"
+      },
+      "suspicious": {
+        // `while ((m = re.exec(s)))` and `(map[k] ??= [])` are idioms used on purpose.
+        "noAssignInExpressions": "off",
+        // `let x` assigned later is typed by TS control-flow analysis; tsc's noImplicitAny still guards real anys.
+        "noImplicitAnyLet": "off",
+        // The keyed lists are positional (swatches, table rows over fixed arrays) and never reorder.
+        "noArrayIndexKey": "off",
+        // `xs.forEach((x) => set.add(x))` returns a value nobody reads; harmless.
+        "useIterableCallbackReturn": "off",
+        // The remaining `any`s are untyped runtime handles (ORT / transformers.js sessions) and test shims.
+        "noExplicitAny": "off",
+        // The filename sanitiser strips control characters on purpose.
+        "noControlCharactersInRegex": "off"
+      },
+      "complexity": {
+        // `a && a.b` -> `a?.b` changes the value for falsy non-nullish `a`, so it is not a mechanical fix.
+        "useOptionalChain": "off",
+        // `inherited['fill']` sits next to `inherited['fill-rule']`; the bracket form is kept for symmetry.
+        "useLiteralKeys": "off",
+        // `<Field>` requires children; `<></>` is its intentionally empty slot.
+        "noUselessFragments": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        // Mirrors tsconfig's noUnusedParameters: false (callbacks and fitters keep positional signatures).
+        "noUnusedFunctionParameters": "off",
+        // Extra deps are used deliberately as re-run triggers (asset keys, revisions). Missing deps stay
+        // visible as warnings: each needs a behavioural review, not a mechanical fix.
+        "useExhaustiveDependencies": {
+          "level": "warn",
+          "options": { "reportUnnecessaryDependencies": false }
+        }
+      },
+      "security": {
+        // Renders the app's own serialised SVG and generated previews, never user-supplied HTML.
+        "noDangerouslySetInnerHtml": "off"
+      },
+      "a11y": {
+        // Real findings on custom widgets (listbox, drop zones, pan/zoom canvas); kept visible until fixed.
+        "noStaticElementInteractions": "warn",
+        "noSvgWithoutTitle": "warn",
+        "useKeyWithClickEvents": "warn",
+        "useFocusableInteractive": "warn",
+        "useSemanticElements": "warn",
+        "noLabelWithoutControl": "warn",
+        "noAutofocus": "warn"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // Tracer files change only with an A/B snapshot (see CLAUDE.md); fix these in a tracer PR.
+      "includes": ["src/lib/trace/**"],
+      "linter": {
+        "rules": {
+          "style": { "useConst": "off" }
+        }
+      }
+    }
+  ],
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        // Import order is left as written; enabling this would rewrite most files' import blocks.
+        "organizeImports": "off"
+      }
+    }
+  }
+}

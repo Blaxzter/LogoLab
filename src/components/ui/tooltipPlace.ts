@@ -1,8 +1,6 @@
-// Where a tooltip bubble goes. Pure geometry, no React and no DOM.
-//
-// It lives in its own .ts file rather than inside Tooltip.tsx because node runs
-// TypeScript by stripping types — which handles .ts and NOT .tsx — so anything
-// a test needs to reach has to be out here. Gated by test/tooltip-place.test.ts.
+// Tooltip placement: pure geometry, no React or DOM. Kept out of Tooltip.tsx
+// because node's type stripping handles .ts but not .tsx, and
+// test/tooltip-place.test.ts needs to import it.
 
 /** Distance in px between the trigger and the bubble. */
 export const GAP = 8
@@ -23,19 +21,9 @@ export interface TriggerRect {
 const OPPOSITE: Record<Side, Side> = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' }
 
 /**
- * Where the bubble goes — FLIP along the main axis, clamp only across it.
- *
- * Clamping both axes produced the one placement a tooltip must never take. A
- * header icon sits ~8px from the top of the viewport, so the default `top` side
- * computed a negative y, the clamp pulled it back to the viewport edge, and the
- * bubble landed ON the button it was describing — hiding the thing you were
- * pointing at. Flipping to the other side is what a tooltip is supposed to do
- * when its preferred side has no room.
- *
- * The cross axis still clamps: sliding along the trigger keeps the bubble on
- * screen and still beside what it describes.
- *
- * Pure, so `test/tooltip-place.test.ts` can pin it without a DOM.
+ * Flips along the main axis and clamps only across it. Don't clamp both axes:
+ * for a trigger near the viewport edge, clamping the main axis pushes the
+ * bubble back on top of the trigger it describes.
  */
 export function placeTooltip(
   side: Side,
@@ -57,9 +45,7 @@ export function placeTooltip(
         return r.right + GAP + tw <= vw - GAP
     }
   }
-  // Only flip when the other side is actually better: on a viewport too small
-  // for either, the preferred side keeps its placement rather than ping-ponging
-  // to an equally bad one.
+  // Flip only if the opposite side fits; if neither does, keep the preferred side.
   const placed = fits(side) || !fits(OPPOSITE[side]) ? side : OPPOSITE[side]
 
   let left: number
@@ -89,4 +75,3 @@ export function placeTooltip(
   }
   return { side: placed, left, top }
 }
-

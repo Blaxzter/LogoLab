@@ -1,11 +1,9 @@
 // Structural surgery on a path's subpaths: reverse, open/close, break apart,
 // join two ends, and split one compound path into its pieces.
 //
-// The invariant every one of these preserves: a node's hIn is the control that
-// governs the segment ARRIVING at it and hOut the one LEAVING it. Reversing a
-// subpath therefore has to swap the two on every node, not just reverse the
-// array — the single most common way to get this wrong, and the result is a
-// path that renders identically until you drag a handle and it jumps.
+// Invariant: hIn governs the segment arriving at a node, hOut the one leaving
+// it. Reversing a subpath must swap them on every node, not just reverse the
+// array, or the path renders identically but handles jump when dragged.
 
 import type { PathItem, PathNode, SubPath, Vec } from '../path/types.ts'
 
@@ -17,16 +15,13 @@ export function flipNode(node: PathNode): PathNode {
 /** Reverse one subpath's direction, keeping the geometry identical. */
 export function reverseSubPath(sp: SubPath): SubPath {
   const nodes = sp.nodes.map(flipNode).reverse()
-  // A closed loop's start node is arbitrary, but reversing an OPEN path must
-  // keep the same two endpoints, which plain reversal already does.
+  // Plain reversal keeps an open path's two endpoints.
   return { nodes, closed: sp.closed }
 }
 
 /** Reverse one subpath of an item (or every subpath when `sub` is null). */
 export function reversePath(item: PathItem, sub: number | null = null): PathItem {
-  const subPaths = item.subPaths.map((sp, i) =>
-    sub === null || i === sub ? reverseSubPath(sp) : sp,
-  )
+  const subPaths = item.subPaths.map((sp, i) => (sub === null || i === sub ? reverseSubPath(sp) : sp))
   return { ...item, subPaths, loops: undefined }
 }
 
@@ -41,8 +36,8 @@ export function closeSubPath(item: PathItem, sub: number): PathItem {
 
 /**
  * Open a closed subpath by cutting it at `idx`, so the loop becomes a strand
- * that starts and ends at that node. The node is DUPLICATED — a cut produces
- * two coincident endpoints, which is what lets you then drag them apart.
+ * that starts and ends at that node. The node is duplicated, giving two
+ * coincident endpoints that can be dragged apart.
  */
 export function openSubPathAt(item: PathItem, sub: number, idx: number): PathItem {
   const sp = item.subPaths[sub]
@@ -50,18 +45,14 @@ export function openSubPathAt(item: PathItem, sub: number, idx: number): PathIte
   const n = sp.nodes.length
   const rotated = Array.from({ length: n }, (_, i) => sp.nodes[(idx + i) % n])
   const first = rotated[0]
-  const nodes = [
-    { ...first, hIn: null },
-    ...rotated.slice(1),
-    { ...first, hOut: null },
-  ]
+  const nodes = [{ ...first, hIn: null }, ...rotated.slice(1), { ...first, hOut: null }]
   const subPaths = item.subPaths.slice()
   subPaths[sub] = { nodes, closed: false }
   return { ...item, subPaths, loops: undefined }
 }
 
 /**
- * Split an OPEN subpath in two at an interior node, duplicating that node so
+ * Split an open subpath in two at an interior node, duplicating that node so
  * each half keeps an endpoint there.
  */
 export function breakAt(item: PathItem, sub: number, idx: number): PathItem {
@@ -87,9 +78,8 @@ export function breakAt(item: PathItem, sub: number, idx: number): PathItem {
  * Join two open endpoints. Same subpath ⇒ it closes; different subpaths ⇒ they
  * merge into one, reversing whichever needs it so the two chosen ends meet.
  *
- * `weld` collapses the two endpoints into one node at their midpoint (the
- * normal case — you are closing a gap). Without it both nodes survive, joined
- * by a new segment, which is what you want when the ends are far apart.
+ * `weld` collapses the two endpoints into one node at their midpoint; without
+ * it both nodes survive, joined by a new segment.
  */
 export function joinEnds(
   item: PathItem,
@@ -121,8 +111,8 @@ export function joinEnds(
       y: (tail.y + head.y) / 2,
       hIn: tail.hIn,
       hOut: head.hOut,
-      // The welded node is a corner unless both sides were already smooth —
-      // guessing "smooth" would silently bend two strands that met at an angle.
+      // The welded node is a corner unless both sides were already smooth, so
+      // strands that met at an angle are not bent.
       kind: tail.kind === 'smooth' && head.kind === 'smooth' ? 'smooth' : 'corner',
     }
     nodes = [...strandA.nodes.slice(0, -1), merged, ...strandB.nodes.slice(1)]
@@ -141,8 +131,7 @@ function isEndpoint(sp: SubPath, idx: number): boolean {
 
 /**
  * Split a compound path into one item per subpath. The caller supplies fresh
- * ids; holes become their own filled shapes, which is the honest result — a
- * hole only exists relative to the shape it was punched through.
+ * ids; holes become their own filled shapes.
  */
 export function splitCompound(item: PathItem, nextId: () => string): PathItem[] {
   if (item.subPaths.length < 2) return [item]
@@ -161,8 +150,7 @@ export function combinePaths(items: PathItem[]): PathItem | null {
   return {
     ...first,
     subPaths: [...first.subPaths, ...rest.flatMap((it) => it.subPaths)],
-    // A compound path built from overlapping shapes is only legible with
-    // evenodd — nonzero would fill the "hole" whenever the windings agree.
+    // evenodd: nonzero would fill overlaps whose windings agree.
     fillRule: 'evenodd',
     loops: undefined,
   }

@@ -43,8 +43,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
-import { measureScale, SCALE_CORPUS, SCALE_DRIFT_MAX, SCALE_SIGNAL_FLOOR } from '../src/devtest/scaleScore.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
+import { measureScale, SCALE_CORPUS, SCALE_DRIFT_MAX, SCALE_SIGNAL_FLOOR } from '../bench/scaleScore.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -83,8 +83,10 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // @1024 improved to 0.263 while @256 stayed at 0.529 and the ratio went the WRONG WAY, to
   // 2.01. §24.7's sweep-gated join is what reached the coarse lane. This is the mechanism
   // `annulus` is kept here to demonstrate, on art the disc snap alone could not reach.
-  'aa-seam': 'drift 4.98× — the diagonal blend band; @1024 stalls at 0.228 on the §0 #3 sliver residue, so the ratio understates it',
-  'band-cross': 'drift 3.69× — the §14 control; weak boundaries are harmless but the strong edges still ride the lattice',
+  'aa-seam':
+    'drift 4.98× — the diagonal blend band; @1024 stalls at 0.228 on the §0 #3 sliver residue, so the ratio understates it',
+  'band-cross':
+    'drift 3.69× — the §14 control; weak boundaries are harmless but the strong edges still ride the lattice',
 }
 
 for (const c of SCALE_CORPUS) {

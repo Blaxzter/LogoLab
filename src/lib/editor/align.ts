@@ -1,10 +1,7 @@
 // Align and distribute a selection.
 //
-// Both operate on each selected item's own bounding box and move it bodily —
-// nothing is scaled, so aligning never deforms artwork. With a single item
-// selected the reference is the artboard (aligning one shape to the canvas is
-// the common case and there is nothing else to align it to); with several, the
-// reference is the selection's own union box.
+// Items are moved bodily by their own bounding boxes, never scaled. A single
+// item aligns to the artboard; several align to their union box.
 
 import type { DocItem, EditableDoc } from '../path/types.ts'
 import { isGroup, topLevelSelection } from '../path/docTree.ts'
@@ -15,10 +12,7 @@ export type AlignEdge = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bott
 export type DistributeAxis = 'horizontal' | 'vertical'
 
 /** The boxes of the top-level selected items, paired with their ids. */
-function selectionMembers(
-  items: readonly DocItem[],
-  ids: ReadonlySet<string>,
-): { id: string; box: Box }[] {
+function selectionMembers(items: readonly DocItem[], ids: ReadonlySet<string>): { id: string; box: Box }[] {
   const out: { id: string; box: Box }[] = []
   const wanted = new Set(topLevelSelection(items, ids))
   const walk = (list: readonly DocItem[]) => {
@@ -34,11 +28,7 @@ function selectionMembers(
 }
 
 /** Align every selected item to one edge of the reference box. */
-export function alignItems(
-  doc: EditableDoc,
-  ids: ReadonlySet<string>,
-  edge: AlignEdge,
-): EditableDoc {
+export function alignItems(doc: EditableDoc, ids: ReadonlySet<string>, edge: AlignEdge): EditableDoc {
   const members = selectionMembers(doc.items, ids)
   if (members.length === 0) return doc
 
@@ -53,12 +43,24 @@ export function alignItems(
     let dx = 0
     let dy = 0
     switch (edge) {
-      case 'left': dx = ref.x - box.x; break
-      case 'hcenter': dx = ref.x + ref.w / 2 - (box.x + box.w / 2); break
-      case 'right': dx = ref.x + ref.w - (box.x + box.w); break
-      case 'top': dy = ref.y - box.y; break
-      case 'vcenter': dy = ref.y + ref.h / 2 - (box.y + box.h / 2); break
-      case 'bottom': dy = ref.y + ref.h - (box.y + box.h); break
+      case 'left':
+        dx = ref.x - box.x
+        break
+      case 'hcenter':
+        dx = ref.x + ref.w / 2 - (box.x + box.w / 2)
+        break
+      case 'right':
+        dx = ref.x + ref.w - (box.x + box.w)
+        break
+      case 'top':
+        dy = ref.y - box.y
+        break
+      case 'vcenter':
+        dy = ref.y + ref.h / 2 - (box.y + box.h / 2)
+        break
+      case 'bottom':
+        dy = ref.y + ref.h - (box.y + box.h)
+        break
     }
     if (dx === 0 && dy === 0) continue
     items = transformItems(items, new Set([id]), translation(dx, dy))
@@ -68,14 +70,10 @@ export function alignItems(
 
 /**
  * Space the selection evenly between the two extremes, which stay put.
- * Distributes the GAPS, not the centres — evenly-spaced centres leave visually
- * uneven gaps as soon as the items differ in size, which they almost always do.
+ * Distributes the gaps, not the centres, so differently sized items look
+ * evenly spaced.
  */
-export function distributeItems(
-  doc: EditableDoc,
-  ids: ReadonlySet<string>,
-  axis: DistributeAxis,
-): EditableDoc {
+export function distributeItems(doc: EditableDoc, ids: ReadonlySet<string>, axis: DistributeAxis): EditableDoc {
   const members = selectionMembers(doc.items, ids)
   if (members.length < 3) return doc
 
@@ -96,11 +94,7 @@ export function distributeItems(
     const m = sorted[i]
     const delta = cursor - start(m.box)
     if (delta !== 0) {
-      items = transformItems(
-        items,
-        new Set([m.id]),
-        horiz ? translation(delta, 0) : translation(0, delta),
-      )
+      items = transformItems(items, new Set([m.id]), horiz ? translation(delta, 0) : translation(0, delta))
     }
     cursor += size(m.box) + gap
   }

@@ -1,9 +1,7 @@
-// Left rail of the vectorize studio: trace parameters grouped into collapsible
-// sections (Shape & detail / Color & background) to keep the panel uncluttered,
-// plus the pinned Trace button. Every tuning knob carries a short hint and an (i)
-// that opens a per-control teaching dialog (ControlInfoDialog). Pure controlled
-// UI — all trace state lives in VectorizeStudio; only the "which info dialog is
-// open" state is local.
+// Left rail of the vectorize studio: trace parameters in collapsible sections
+// plus the pinned Trace button. Each knob has a hint and an (i) that opens
+// ControlInfoDialog. Controlled UI: trace state lives in VectorizeStudio; only
+// the open info dialog is local.
 
 import { useState } from 'react'
 import { Wand2, HelpCircle, AlertTriangle, MapPin, X } from 'lucide-react'
@@ -11,10 +9,10 @@ import { Button } from '../ui/Button'
 import { ColorField, Collapsible, Field, Segmented, Slider, Toggle } from '../ui/controls'
 import { Tooltip } from '../ui/Tooltip'
 import type { VectorizeOptions } from '../../types'
-import type { InkColorMode, InkModePlan } from '../../lib/ink'
+import type { InkColorMode, InkModePlan } from '../../lib/traceInput/ink'
 import { CONTROL_DOCS_BY_ID } from './controlDocs'
 import { ControlInfoDialog } from './ControlInfoDialog'
-import { AI_UPSCALE_MAX_PX, aiUpscaleFactor } from '../../lib/aiUpscale'
+import { AI_UPSCALE_MAX_PX, aiUpscaleFactor } from '../../lib/traceInput/aiUpscale'
 import {
   MONO_TARGET_STROKE_PX,
   RASTER_MAX_DIM,
@@ -23,7 +21,7 @@ import {
   TRACE_TARGET_PX,
   rasterCapFor,
   type MonoUpscalePlan,
-} from '../../lib/traceCaps'
+} from '../../lib/traceInput/traceCaps'
 
 export interface TraceControlsProps {
   /** The upload is an SVG, so "clean existing markup" is an option. */
@@ -36,21 +34,20 @@ export interface TraceControlsProps {
   sourceMaxDim?: number
   /** What Auto enlargement decided on the last run (null before one, or on the AI path). */
   autoUpscale?: MonoUpscalePlan | null
-  /** Colour-vs-mono choice: `auto` defers to the ink probe (src/lib/ink.ts). */
+  /** Colour-vs-mono choice: `auto` defers to the ink probe (src/lib/traceInput/ink.ts). */
   colorMode: InkColorMode
   onColorMode: (m: InkColorMode) => void
   /** What the ink probe last saw, so Auto can say what it decided and why. */
   inkPlan: InkModePlan | null
   /**
-   * What the CURRENT mono cut admits, so Threshold and Invert can show their own
-   * consequence. A control that can silently reach a state producing nothing is
-   * the defect (#47); this is what makes that state visible on the control.
-   * Null outside mono, or before the probe lands.
+   * What the current mono cut admits, so Threshold and Invert can show which
+   * settings would trace nothing before the user picks them. Null outside mono
+   * or before the probe lands.
    */
   monoGuide: {
-    /** Cuts at or below this select nothing with Invert OFF. */
+    /** Cuts at or below this select nothing with Invert off. */
     deadOff: number
-    /** Cuts at or above this select nothing with Invert ON. */
+    /** Cuts at or above this select nothing with Invert on. */
     deadOn: number
     /** Fraction of visible pixels each Invert position admits at this cut. */
     fracOff: number
@@ -84,8 +81,8 @@ export interface TraceControlsProps {
 
 const d = CONTROL_DOCS_BY_ID
 
-/** A fraction as a percentage, keeping one decimal while it is still visible —
- *  "0.4%" is a thin hairline that traces; rounding it to "0%" would be a lie. */
+/** A fraction as a percentage, keeping one decimal for small values: "0.4%" is a
+ *  hairline that still traces, and "0%" would misreport it. */
 function pct(f: number): string {
   if (f === 0) return '0%'
   if (f < 0.01) return `${(f * 100).toFixed(1)}%`
@@ -141,22 +138,14 @@ export function TraceControlsBody({
       ? `Mono · threshold ${opts.threshold}${opts.invert ? ' · inverted' : ''}`
       : `Smoothing ${opts.smoothing}`
     : 'Cleaning SVG markup'
-  const colorSummary =
-    opts.mode === 'color' && opts.gradients !== false ? 'Gradients on' : 'Flat fills'
+  const colorSummary = opts.mode === 'color' && opts.gradients !== false ? 'Gradients on' : 'Flat fills'
 
-  // WHAT DOES NOT APPLY TO THIS IMAGE, AND WHY.
-  //
-  // A control that cannot bite is worse than absent: it invites a setting that
-  // silently does nothing. But hiding it outright is its own defect — you go
-  // looking for "Threshold", it is not there, and the panel never says why. So an
-  // inert control folds into ONE collapsed list that names it, gives the reason,
-  // and says what would bring it back. The exception is a control that is inert
-  // but NOT at its default (an `upscale: 'ai'` carried over from a smaller image):
-  // that one stays in place, because a setting has to stay reachable to be undone.
-  //
-  // The rules live where the behaviour does — traceCaps.ts for the Detail cap,
-  // aiUpscale.ts for the upscaler's size window — so these reasons cannot drift
-  // from what the pipeline actually does.
+  // Controls that have no effect on this image fold into one collapsed list that
+  // names each and says why, rather than silently doing nothing or vanishing.
+  // An inert control that is not at its default (e.g. `upscale: 'ai'` carried over
+  // from a smaller image) stays in place so the setting can still be undone.
+  // The rules come from traceCaps.ts and aiUpscale.ts, so the reasons match what
+  // the pipeline does.
   const flatArt = opts.mode === 'mono' || opts.gradients === false
   const detailWhy = !flatArt
     ? `High only lifts the cap for flat art; gradient and photo colour stays at ${RASTER_MAX_DIM}px so the region merge cannot bog down. Turn Gradients off, or switch to Mono, and it applies.`
@@ -165,9 +154,8 @@ export function TraceControlsBody({
       : null
   const showDetail = detailWhy == null || (opts.traceDetail ?? 'balanced') !== 'balanced'
 
-  // Upscale has two live positions with different reach: Auto enlarges MONO art
-  // when the cap leaves room for a factor of 2; AI enlarges small rasters of any
-  // mode. Inert only when neither can bite on this image.
+  // Auto enlarges mono art when the cap leaves room for a factor of 2; AI enlarges
+  // small rasters in any mode. Upscale is inert only when neither applies.
   const cap = rasterCapFor(opts)
   const room = sourceMaxDim ? Math.floor(cap / sourceMaxDim) : 0
   const autoCanBite = opts.mode === 'mono' && room >= 2
@@ -224,12 +212,9 @@ export function TraceControlsBody({
     if (upscaleWhy && !showUpscale) inert.push({ label: 'Upscale — Auto / AI', why: upscaleWhy })
   }
 
-  // Mono cut consequences (#47). The cut is the one control that can silently
-  // yield NOTHING — a single global threshold with all the ink on one side of it.
-  // Rather than explain the blank afterwards, price both Invert positions and
-  // strike out the cuts that cannot work, so it is visible before it is chosen.
-  // The dead span is drawn, never enforced: the estimate behind it can be wrong on
-  // unusual art, so the override stays reachable.
+  // The mono cut can yield nothing when all the ink sits on one side of it. Show
+  // what both Invert positions admit and mark the dead cuts up front. The dead
+  // span is drawn, not enforced: the estimate can be wrong on unusual art.
   const inverted = opts.invert === true
   const deadCuts = monoGuide
     ? inverted
@@ -239,80 +224,73 @@ export function TraceControlsBody({
 
   return (
     <>
-      {/* Scrollable settings — the action below stays pinned so it can't scroll away. */}
+      {/* Scrollable settings; the action below stays pinned. */}
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-ink">Vectorize</h2>
-            <Tooltip label="See how vectorize turns your image into shapes">
-              <button
-                type="button"
-                onClick={onShowHelp}
-                className="btn btn-ghost h-7 gap-1 px-2 text-xs text-ink-2"
-              >
-                <HelpCircle size={14} />
-                How it works
-              </button>
-            </Tooltip>
-          </div>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-ink">Vectorize</h2>
+          <Tooltip label="See how vectorize turns your image into shapes">
+            <button type="button" onClick={onShowHelp} className="btn btn-ghost h-7 gap-1 px-2 text-xs text-ink-2">
+              <HelpCircle size={14} />
+              How it works
+            </button>
+          </Tooltip>
+        </div>
 
-          {isVectorSource && (
-            <>
-              <Field label="Source" hint="Re-tracing rasterizes the SVG, then rebuilds vector paths.">
-                <Segmented<'clean' | 'retrace'>
-                  value={source}
-                  onChange={onSourceChange}
-                  options={[
-                    { value: 'clean', label: 'Clean SVG' },
-                    { value: 'retrace', label: 'Re-trace' },
-                  ]}
-                />
-              </Field>
-              {!tracing && (
-                <div className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
-                  Already vector — cleaning the existing SVG. Switch to Re-trace to rebuild paths from
-                  pixels instead.
-                </div>
-              )}
-            </>
-          )}
-
-          {tracing && (
-            <Field label="Mode" hint={d.mode.hint} onInfo={info('mode')}>
-              <Segmented<InkColorMode>
-                value={colorMode}
-                onChange={onColorMode}
+        {isVectorSource && (
+          <>
+            <Field label="Source" hint="Re-tracing rasterizes the SVG, then rebuilds vector paths.">
+              <Segmented<'clean' | 'retrace'>
+                value={source}
+                onChange={onSourceChange}
                 options={[
-                  { value: 'auto', label: 'Auto' },
-                  { value: 'color', label: 'Color' },
-                  { value: 'mono', label: 'Mono' },
+                  { value: 'clean', label: 'Clean SVG' },
+                  { value: 'retrace', label: 'Re-trace' },
                 ]}
               />
-              {/* What Auto decided, in the probe's own terms. A choice the user
-                  can't see is a choice they can't overrule. */}
-              {colorMode === 'auto' && inkPlan && (
-                <p className="text-xs leading-snug text-muted">
-                  {inkPlan.inks === 0
-                    ? 'Nothing but background found — tracing in colour.'
-                    : inkPlan.mode === 'mono'
-                      ? `One ink${inkPlan.invert ? ', lighter than the background' : ''} → Mono, cut at ${inkPlan.threshold}${
-                          inkPlan.hairlines && inkPlan.hairlines.cut !== inkPlan.hairlines.from
-                            ? ` (raised from ${inkPlan.hairlines.from} to keep hairlines)`
-                            : ''
-                        }${inkPlan.invert ? ' and inverted' : ''}${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
-                      : inkPlan.inks === 1
-                        ? // One ink, but not far enough from the background in
-                          // luminance for a cut to separate them — which is the
-                          // normal case for art on transparency.
-                          'One ink, too close to the background to cut → Color.'
-                        : `${inkPlan.inks} inks → Color.`}
-                </p>
-              )}
             </Field>
-          )}
+            {!tracing && (
+              <div className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
+                Already vector — cleaning the existing SVG. Switch to Re-trace to rebuild paths from pixels instead.
+              </div>
+            )}
+          </>
+        )}
 
-          {tracing && (
-            <Collapsible title="Shape & detail" summary={detailSummary} defaultOpen>
-              {showDetail && (
+        {tracing && (
+          <Field label="Mode" hint={d.mode.hint} onInfo={info('mode')}>
+            <Segmented<InkColorMode>
+              value={colorMode}
+              onChange={onColorMode}
+              options={[
+                { value: 'auto', label: 'Auto' },
+                { value: 'color', label: 'Color' },
+                { value: 'mono', label: 'Mono' },
+              ]}
+            />
+            {/* What Auto decided and why, so the user can overrule it. */}
+            {colorMode === 'auto' && inkPlan && (
+              <p className="text-xs leading-snug text-muted">
+                {inkPlan.inks === 0
+                  ? 'Nothing but background found — tracing in colour.'
+                  : inkPlan.mode === 'mono'
+                    ? `One ink${inkPlan.invert ? ', lighter than the background' : ''} → Mono, cut at ${inkPlan.threshold}${
+                        inkPlan.hairlines && inkPlan.hairlines.cut !== inkPlan.hairlines.from
+                          ? ` (raised from ${inkPlan.hairlines.from} to keep hairlines)`
+                          : ''
+                      }${inkPlan.invert ? ' and inverted' : ''}${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
+                    : inkPlan.inks === 1
+                      ? // One ink, too close to the background in luminance
+                        // for a cut (common for art on transparency).
+                        'One ink, too close to the background to cut → Color.'
+                      : `${inkPlan.inks} inks → Color.`}
+              </p>
+            )}
+          </Field>
+        )}
+
+        {tracing && (
+          <Collapsible title="Shape & detail" summary={detailSummary} defaultOpen>
+            {showDetail && (
               <Field
                 label="Detail"
                 hint={
@@ -329,9 +307,9 @@ export function TraceControlsBody({
                   ]}
                 />
               </Field>
-              )}
+            )}
 
-              {showUpscale && (
+            {showUpscale && (
               <Field label="Upscale" hint={upscaleHint}>
                 <Segmented<'off' | 'auto' | 'ai'>
                   value={upscaleMode}
@@ -343,268 +321,252 @@ export function TraceControlsBody({
                   ]}
                 />
               </Field>
-              )}
-
-              {opts.mode === 'mono' && (
-                <>
-                  <Field label="Threshold" hint={d.threshold.hint} onInfo={info('threshold')}>
-                    <Slider
-                      value={opts.threshold}
-                      min={0}
-                      max={255}
-                      onChange={(v) => onPatch({ threshold: v })}
-                      dead={deadCuts}
-                    />
-                  </Field>
-
-                  {/* The other half of a mono cut: WHICH side of it becomes solid.
-                      Without this, light art on a dark ground traces to nothing —
-                      every pixel of it sits above the cut. */}
-                  <Field label="Invert" hint={d.invert.hint} onInfo={info('invert')}>
-                    <Toggle
-                      checked={opts.invert === true}
-                      onChange={(v) => onPatch({ invert: v })}
-                      label="Light ink on a dark ground"
-                    />
-                    {/* Both positions, priced. The whole point of #47: you can see
-                        which one selects nothing WITHOUT having to pick it first. */}
-                    {monoGuide && (
-                      <p className="text-xs leading-snug text-muted tabular-nums">
-                        At this cut — off takes{' '}
-                        <span className={opts.invert ? '' : 'font-semibold text-ink-2'}>
-                          {pct(monoGuide.fracOff)}
-                        </span>{' '}
-                        of the visible pixels, on takes{' '}
-                        <span className={opts.invert ? 'font-semibold text-ink-2' : ''}>
-                          {pct(monoGuide.fracOn)}
-                        </span>
-                        .
-                      </p>
-                    )}
-                  </Field>
-
-                </>
-              )}
-
-              <Field label="Smoothing" hint={d.smoothing.hint} onInfo={info('smoothing')}>
-                <Slider value={opts.smoothing} min={0} max={100} onChange={(v) => onPatch({ smoothing: v })} />
-              </Field>
-
-              <Field label="Despeckle" hint={d.despeckle.hint} onInfo={info('despeckle')}>
-                <Slider value={opts.despeckle} min={0} max={100} onChange={(v) => onPatch({ despeckle: v })} />
-              </Field>
-
-              <Field label="Fidelity" hint={d.fidelity.hint} onInfo={info('fidelity')}>
-                <Slider
-                  value={opts.fidelity ?? 1.5}
-                  min={0}
-                  max={6}
-                  step={0.5}
-                  onChange={(v) => onPatch({ fidelity: v })}
-                  format={(v) => (v === 0 ? 'off' : `${v}px`)}
-                />
-              </Field>
-
-              {opts.mode === 'color' && (
-                <Field label="Region detail" hint={d.regionDetail.hint} onInfo={info('regionDetail')}>
-                  <Slider
-                    value={opts.regionDetail ?? 0}
-                    min={0}
-                    max={100}
-                    step={5}
-                    onChange={(v) => onPatch({ regionDetail: v })}
-                    format={(v) => (v === 0 ? 'auto' : `${v}`)}
-                  />
-                </Field>
-              )}
-            </Collapsible>
-          )}
-
-          {tracing && opts.mode === 'color' && (
-            <Collapsible
-              title="Region markers"
-              summary={
-                marking
-                  ? `Placing · ${markerCount} marker${markerCount === 1 ? '' : 's'}`
-                  : markerCount > 0
-                    ? `${markerCount} marker${markerCount === 1 ? '' : 's'}`
-                    : undefined
-              }
-            >
-              {/* No master switch — the markers ARE the feature: with none placed the
-                  trace is byte-identical, and placing one turns it on. */}
-              <p className="text-xs leading-snug text-muted">
-                Seed the segmentation per spot: keep a region <em>separate</em> from its
-                neighbour, paint it one <em>flat</em> colour, or <em>remove</em> it and heal
-                the neighbours into the gap. No markers ⇒ output unchanged.
-              </p>
-
-              {/* Placement mode: click to seed (on) vs pan freely (off). */}
-              <button
-                type="button"
-                aria-pressed={marking}
-                onClick={() => onMarkingChange(!marking)}
-                className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                  marking
-                    ? 'border-emerald-400/70 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : 'border-line text-ink-2 hover:bg-surface-2'
-                }`}
-              >
-                <MapPin size={14} />
-                {marking ? 'Placing — click the image' : 'Place markers'}
-              </button>
-              <p className="text-xs leading-snug text-muted">
-                {marking
-                  ? 'Click either pane to drop a marker; click a marker to remove it. Turn off to pan and edit — markers stay active.'
-                  : 'Markers stay active while you pan, zoom and edit. Turn on to place more.'}
-              </p>
-
-              {/* Marker kind: a click drops this type. "Separate" keeps the
-                  region distinct (paint untouched); "Flat" also pins it to one
-                  solid colour (its pre-merge form), not a fitted gradient;
-                  "Remove" dissolves the section and heals the neighbours in. */}
-              <div className="grid grid-cols-3 gap-1 rounded-lg border border-line p-1">
-                {(
-                  [
-                    ['separate', 'Separate', 'text-emerald-600 dark:text-emerald-400', '#10b981'],
-                    ['flat', 'Flat', 'text-amber-600 dark:text-amber-400', '#f59e0b'],
-                    ['remove', 'Remove', 'text-rose-600 dark:text-rose-400', '#f43f5e'],
-                  ] as const
-                ).map(([mode, label, active, dot]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-pressed={markMode === mode}
-                    onClick={() => onMarkModeChange(mode)}
-                    className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-                      markMode === mode ? `bg-surface-3 ${active}` : 'text-ink-2 hover:bg-surface-2'
-                    }`}
-                  >
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: dot }} />
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs leading-snug text-muted">
-                {markMode === 'flat'
-                  ? 'Flat: paints the section one solid colour. If it was fused with a different colour into a fake gradient, one marker splits it off along the colour edge.'
-                  : markMode === 'remove'
-                    ? 'Remove: dissolves the clicked section and grows its bordering colours into the gap (split along the middle) — heals instead of leaving a hole. Re-traces on next run.'
-                    : 'Separate: keep this region distinct; its gradient/flat paint is left as fitted. Mark both sides of an over-merge to set the boundary on the colour ridge.'}
-              </p>
-
-              {markerCount > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-xs text-ink-2">
-                    <MapPin size={12} className="text-emerald-500" />
-                    {markerCount} marker{markerCount === 1 ? '' : 's'}
-                    {flatCount > 0 ? ` · ${flatCount} flat` : ''}
-                    {removeCount > 0 ? ` · ${removeCount} remove` : ''}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={onClearMarkers}
-                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
-                  >
-                    <X size={12} /> Clear all
-                  </button>
-                </div>
-              )}
-            </Collapsible>
-          )}
-
-          <Collapsible title="Color & background" summary={colorSummary}>
-            {tracing && opts.mode === 'color' && (
-              <Field label="Gradients" hint={d.gradients.hint} onInfo={info('gradients')}>
-                <Toggle
-                  checked={opts.gradients !== false}
-                  onChange={(v) => onPatch({ gradients: v })}
-                  label="Fit smooth gradients"
-                />
-              </Field>
             )}
 
-            <Field label="Remove background">
-              <Toggle
-                checked={opts.removeBackground}
-                onChange={(v) => onPatch({ removeBackground: v })}
-                label="Drop the dominant backplate"
+            {opts.mode === 'mono' && (
+              <>
+                <Field label="Threshold" hint={d.threshold.hint} onInfo={info('threshold')}>
+                  <Slider
+                    value={opts.threshold}
+                    min={0}
+                    max={255}
+                    onChange={(v) => onPatch({ threshold: v })}
+                    dead={deadCuts}
+                  />
+                </Field>
+
+                {/* Which side of the cut becomes solid. Light art on a dark ground
+                      needs this, or it traces to nothing. */}
+                <Field label="Invert" hint={d.invert.hint} onInfo={info('invert')}>
+                  <Toggle
+                    checked={opts.invert === true}
+                    onChange={(v) => onPatch({ invert: v })}
+                    label="Light ink on a dark ground"
+                  />
+                  {/* What both positions admit, so an empty one is visible before
+                        it is picked. */}
+                  {monoGuide && (
+                    <p className="text-xs leading-snug text-muted tabular-nums">
+                      At this cut — off takes{' '}
+                      <span className={opts.invert ? '' : 'font-semibold text-ink-2'}>{pct(monoGuide.fracOff)}</span> of
+                      the visible pixels, on takes{' '}
+                      <span className={opts.invert ? 'font-semibold text-ink-2' : ''}>{pct(monoGuide.fracOn)}</span>.
+                    </p>
+                  )}
+                </Field>
+              </>
+            )}
+
+            <Field label="Smoothing" hint={d.smoothing.hint} onInfo={info('smoothing')}>
+              <Slider value={opts.smoothing} min={0} max={100} onChange={(v) => onPatch({ smoothing: v })} />
+            </Field>
+
+            <Field label="Despeckle" hint={d.despeckle.hint} onInfo={info('despeckle')}>
+              <Slider value={opts.despeckle} min={0} max={100} onChange={(v) => onPatch({ despeckle: v })} />
+            </Field>
+
+            <Field label="Fidelity" hint={d.fidelity.hint} onInfo={info('fidelity')}>
+              <Slider
+                value={opts.fidelity ?? 1.5}
+                min={0}
+                max={6}
+                step={0.5}
+                onChange={(v) => onPatch({ fidelity: v })}
+                format={(v) => (v === 0 ? 'off' : `${v}px`)}
               />
             </Field>
 
-            <Field
-              label="Force single color"
-              right={<Toggle checked={forceColorOn} onChange={onForceColorOn} />}
-            >
-              {forceColorOn ? (
-                <ColorField value={forceColor} onChange={onForceColor} />
-              ) : (
-                <p className="text-xs leading-snug text-muted">Recolor every shape to one fill.</p>
-              )}
-            </Field>
+            {opts.mode === 'color' && (
+              <Field label="Region detail" hint={d.regionDetail.hint} onInfo={info('regionDetail')}>
+                <Slider
+                  value={opts.regionDetail ?? 0}
+                  min={0}
+                  max={100}
+                  step={5}
+                  onChange={(v) => onPatch({ regionDetail: v })}
+                  format={(v) => (v === 0 ? 'auto' : `${v}`)}
+                />
+              </Field>
+            )}
           </Collapsible>
+        )}
 
-          {/* The options this image has no use for — named, explained, and one
-              click away, instead of simply missing from the panel. */}
-          {inert.length > 0 && (
-            <Collapsible
-              title="Looking for another option?"
-              summary={`${inert.length} don’t apply to this image`}
-            >
-              <p className="text-xs leading-snug text-muted">
-                Folded away because they cannot change this trace. Each one says what would
-                bring it back.
-              </p>
-              <ul className="flex flex-col gap-3">
-                {inert.map((c) => (
-                  <li key={c.label} className="flex flex-col gap-0.5">
-                    <span className="text-xs font-medium text-ink-2">{c.label}</span>
-                    <span className="text-xs leading-snug text-muted">{c.why}</span>
-                  </li>
-                ))}
-              </ul>
-            </Collapsible>
-          )}
-
-          <div className="mt-auto border-t border-line pt-4">
-            <p className="text-[0.7rem] leading-relaxed text-faint">
-              V pan · A edit nodes · M mark regions · ⌫ delete nodes — or, with none selected, dissolve the clicked region and heal it into its neighbour · double-click a segment to add a node.
-            </p>
-          </div>
-        </div>
-
-        {/* Pinned action footer — always visible no matter how far the settings scroll. */}
-        <div className="flex shrink-0 flex-col gap-3 border-t border-line bg-surface p-4">
-          {(staleEdits || staleOpts) && (
-            <div className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-snug text-warn">
-              <AlertTriangle size={14} className="mt-px shrink-0" />
-              <span>
-                {staleEdits
-                  ? "Settings changed since the last trace. Re-trace to apply them — this discards your path edits."
-                  : "Tracing was stopped, so this result may not match the current settings. Re-trace to apply them."}
-              </span>
-            </div>
-          )}
-
-          <Button
-            variant="primary"
-            block
-            icon={<Wand2 size={16} />}
-            onClick={onTrace}
-            disabled={busy}
-            className="h-11 text-[0.95rem] font-semibold shadow-sm"
+        {tracing && opts.mode === 'color' && (
+          <Collapsible
+            title="Region markers"
+            summary={
+              marking
+                ? `Placing · ${markerCount} marker${markerCount === 1 ? '' : 's'}`
+                : markerCount > 0
+                  ? `${markerCount} marker${markerCount === 1 ? '' : 's'}`
+                  : undefined
+            }
           >
-            {busy
-              ? 'Tracing…'
-              : staleEdits
-                ? 'Re-trace (discard edits)'
-                : staleOpts
-                  ? 'Re-trace'
-                  : tracing
-                    ? 'Trace'
-                    : 'Clean SVG'}
-          </Button>
+            {/* No master switch: with no markers placed the trace is unchanged. */}
+            <p className="text-xs leading-snug text-muted">
+              Seed the segmentation per spot: keep a region <em>separate</em> from its neighbour, paint it one{' '}
+              <em>flat</em> colour, or <em>remove</em> it and heal the neighbours into the gap. No markers ⇒ output
+              unchanged.
+            </p>
+
+            {/* Placement mode: click to seed (on) vs pan freely (off). */}
+            <button
+              type="button"
+              aria-pressed={marking}
+              onClick={() => onMarkingChange(!marking)}
+              className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                marking
+                  ? 'border-emerald-400/70 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  : 'border-line text-ink-2 hover:bg-surface-2'
+              }`}
+            >
+              <MapPin size={14} />
+              {marking ? 'Placing — click the image' : 'Place markers'}
+            </button>
+            <p className="text-xs leading-snug text-muted">
+              {marking
+                ? 'Click either pane to drop a marker; click a marker to remove it. Turn off to pan and edit — markers stay active.'
+                : 'Markers stay active while you pan, zoom and edit. Turn on to place more.'}
+            </p>
+
+            {/* Marker kind a click drops: Separate keeps the region distinct,
+                  Flat also pins it to one solid colour, Remove dissolves it into
+                  its neighbours. */}
+            <div className="grid grid-cols-3 gap-1 rounded-lg border border-line p-1">
+              {(
+                [
+                  ['separate', 'Separate', 'text-emerald-600 dark:text-emerald-400', '#10b981'],
+                  ['flat', 'Flat', 'text-amber-600 dark:text-amber-400', '#f59e0b'],
+                  ['remove', 'Remove', 'text-rose-600 dark:text-rose-400', '#f43f5e'],
+                ] as const
+              ).map(([mode, label, active, dot]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={markMode === mode}
+                  onClick={() => onMarkModeChange(mode)}
+                  className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                    markMode === mode ? `bg-surface-3 ${active}` : 'text-ink-2 hover:bg-surface-2'
+                  }`}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: dot }} />
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs leading-snug text-muted">
+              {markMode === 'flat'
+                ? 'Flat: paints the section one solid colour. If it was fused with a different colour into a fake gradient, one marker splits it off along the colour edge.'
+                : markMode === 'remove'
+                  ? 'Remove: dissolves the clicked section and grows its bordering colours into the gap (split along the middle) — heals instead of leaving a hole. Re-traces on next run.'
+                  : 'Separate: keep this region distinct; its gradient/flat paint is left as fitted. Mark both sides of an over-merge to set the boundary on the colour ridge.'}
+            </p>
+
+            {markerCount > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-xs text-ink-2">
+                  <MapPin size={12} className="text-emerald-500" />
+                  {markerCount} marker{markerCount === 1 ? '' : 's'}
+                  {flatCount > 0 ? ` · ${flatCount} flat` : ''}
+                  {removeCount > 0 ? ` · ${removeCount} remove` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={onClearMarkers}
+                  className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+                >
+                  <X size={12} /> Clear all
+                </button>
+              </div>
+            )}
+          </Collapsible>
+        )}
+
+        <Collapsible title="Color & background" summary={colorSummary}>
+          {tracing && opts.mode === 'color' && (
+            <Field label="Gradients" hint={d.gradients.hint} onInfo={info('gradients')}>
+              <Toggle
+                checked={opts.gradients !== false}
+                onChange={(v) => onPatch({ gradients: v })}
+                label="Fit smooth gradients"
+              />
+            </Field>
+          )}
+
+          <Field label="Remove background">
+            <Toggle
+              checked={opts.removeBackground}
+              onChange={(v) => onPatch({ removeBackground: v })}
+              label="Drop the dominant backplate"
+            />
+          </Field>
+
+          <Field label="Force single color" right={<Toggle checked={forceColorOn} onChange={onForceColorOn} />}>
+            {forceColorOn ? (
+              <ColorField value={forceColor} onChange={onForceColor} />
+            ) : (
+              <p className="text-xs leading-snug text-muted">Recolor every shape to one fill.</p>
+            )}
+          </Field>
+        </Collapsible>
+
+        {/* Options that don't apply to this image, with the reason. */}
+        {inert.length > 0 && (
+          <Collapsible title="Looking for another option?" summary={`${inert.length} don’t apply to this image`}>
+            <p className="text-xs leading-snug text-muted">
+              Folded away because they cannot change this trace. Each one says what would bring it back.
+            </p>
+            <ul className="flex flex-col gap-3">
+              {inert.map((c) => (
+                <li key={c.label} className="flex flex-col gap-0.5">
+                  <span className="text-xs font-medium text-ink-2">{c.label}</span>
+                  <span className="text-xs leading-snug text-muted">{c.why}</span>
+                </li>
+              ))}
+            </ul>
+          </Collapsible>
+        )}
+
+        <div className="mt-auto border-t border-line pt-4">
+          <p className="text-[0.7rem] leading-relaxed text-faint">
+            V pan · A edit nodes · M mark regions · ⌫ delete nodes — or, with none selected, dissolve the clicked region
+            and heal it into its neighbour · double-click a segment to add a node.
+          </p>
         </div>
+      </div>
+
+      {/* Pinned action footer. */}
+      <div className="flex shrink-0 flex-col gap-3 border-t border-line bg-surface p-4">
+        {(staleEdits || staleOpts) && (
+          <div className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-snug text-warn">
+            <AlertTriangle size={14} className="mt-px shrink-0" />
+            <span>
+              {staleEdits
+                ? 'Settings changed since the last trace. Re-trace to apply them — this discards your path edits.'
+                : 'Tracing was stopped, so this result may not match the current settings. Re-trace to apply them.'}
+            </span>
+          </div>
+        )}
+
+        <Button
+          variant="primary"
+          block
+          icon={<Wand2 size={16} />}
+          onClick={onTrace}
+          disabled={busy}
+          className="h-11 text-[0.95rem] font-semibold shadow-sm"
+        >
+          {busy
+            ? 'Tracing…'
+            : staleEdits
+              ? 'Re-trace (discard edits)'
+              : staleOpts
+                ? 'Re-trace'
+                : tracing
+                  ? 'Trace'
+                  : 'Clean SVG'}
+        </Button>
+      </div>
 
       {infoId && <ControlInfoDialog controlId={infoId} onClose={() => setInfoId(null)} />}
     </>

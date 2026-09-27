@@ -1,4 +1,4 @@
-// Unit tests for the harness colour science (src/devtest/color.ts).
+// Unit tests for the harness colour science (bench/color.ts).
 //
 //   node --test test/color.test.ts
 //
@@ -7,7 +7,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { srgbToLab, deltaE76, l1Lab, luma709 } from '../src/devtest/color.ts'
+import { srgbToLab, deltaE76, l1Lab, luma709 } from '../bench/color.ts'
 
 function assertLabNear(got: [number, number, number], want: [number, number, number], tol = 0.6) {
   for (let i = 0; i < 3; i++) {

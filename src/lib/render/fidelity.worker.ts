@@ -1,14 +1,6 @@
-// Web Worker that scores a traced document against the image it came from, OFF
-// the main thread.
-//
-// It is here for the same reason the tracer's worker is: the work is O(w·h) per
-// path and then O(w·h) again in CIELAB, which on a busy document at 1024px is a
-// few hundred milliseconds — a visible hitch in a studio whose whole promise is
-// that you can keep panning while it thinks. It also runs on EVERY committed node
-// edit, so the main thread must never see it.
-//
-// Pure JS (no DOM), like the trace worker: rasterizeDoc renders the doc model
-// directly rather than handing SVG to a canvas the worker doesn't have.
+// Web Worker that scores a traced document against its source image. Scoring is
+// O(w·h) per path and reruns on every committed node edit, so it stays off the
+// main thread. No DOM needed: rasterizeDoc renders the doc model directly.
 
 import { rasterizeDoc } from './raster.ts'
 import { deltaEField, deltaEStats, deltaEHeat } from './fidelity.ts'
@@ -32,22 +24,19 @@ export interface ScoreRes {
   /** ΔE painted on the shared cold→hot ramp, ready for putImageData. */
   heat: Uint8ClampedArray
   /**
-   * The field itself, one ΔE per pixel. The Difference view reads it back under
-   * the cursor and uses it to fade the heat into a ghost of the source, so the
-   * readout and the picture quote the SAME field the two numbers came from —
-   * never a second measurement. Float32: two decimals is all a readout shows.
+   * The ΔE field, one value per pixel. The Difference view reads it for the
+   * cursor readout and the ghost blend, so both quote the same field as the
+   * numbers. Float32 is ample for a two-decimal readout.
    */
   de: Float32Array
   /** The render that was scored (opaque, over white) — the "trace" swatch. */
   render: Uint8ClampedArray
-  /** The source pixels that were scored, alpha intact, handed back so the
-   *  "original" swatch and the ghost are the bytes the number was measured on. */
+  /** The scored source pixels, alpha intact, for the swatch and the ghost. */
   source: Uint8ClampedArray
 }
 
-// `self` is typed as a Window in the app's tsconfig (no "webworker" lib), whose
-// postMessage overloads take a targetOrigin rather than a transfer list. Every
-// buffer here is 4 bytes per pixel, so they are transferred, not structured-cloned.
+// `self` is typed as Window here (no "webworker" lib), so cast postMessage to
+// the worker signature that takes a transfer list; the buffers are large.
 const post = self.postMessage as unknown as (message: unknown, transfer?: Transferable[]) => void
 
 self.onmessage = (e: MessageEvent<ScoreReq>) => {
@@ -55,8 +44,8 @@ self.onmessage = (e: MessageEvent<ScoreReq>) => {
   try {
     const { width, height } = source
     const render = rasterizeDoc(doc, width, height, { scale })
-    // ONE field feeds both answers, so the number in the status bar and the
-    // picture in the Difference view can never disagree about the same trace.
+    // One field feeds both the numbers and the heat. Don't compute them
+    // separately, or the status bar and the picture can disagree.
     const { de } = deltaEField(source.data, render, width, height)
     const { meanDeltaE, p95DeltaE } = deltaEStats(de)
     const heat = deltaEHeat(de)

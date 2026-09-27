@@ -23,7 +23,11 @@ function grid(w: number, h: number, color: ColorFn): RegionSamples {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const [r, g, b] = color(x, y)
-      xs[k] = x; ys[k] = y; rs[k] = r; gs[k] = g; bs[k] = b
+      xs[k] = x
+      ys[k] = y
+      rs[k] = r
+      gs[k] = g
+      bs[k] = b
       k++
     }
   }
@@ -39,19 +43,23 @@ test('flat region → solid (no gradient)', () => {
 })
 
 test('near-flat region (sub-threshold noise) stays solid', () => {
-  const r = fitPaintLadder(grid(40, 40, (x, y) => {
-    const d = (x + y) % 2 === 0 ? 2 : -2
-    return [128 + d, 128 - d, 128 + d]
-  }))
+  const r = fitPaintLadder(
+    grid(40, 40, (x, y) => {
+      const d = (x + y) % 2 === 0 ? 2 : -2
+      return [128 + d, 128 - d, 128 + d]
+    }),
+  )
   assert.equal(r.model, 'solid')
 })
 
 test('linear-shaded region → linear gradient (solid never wins it)', () => {
   const W = 64
-  const r = fitPaintLadder(grid(W, 40, (x) => {
-    const v = Math.round(lerp(40, 230, x / (W - 1)))
-    return [v, 80, 255 - v]
-  }))
+  const r = fitPaintLadder(
+    grid(W, 40, (x) => {
+      const v = Math.round(lerp(40, 230, x / (W - 1)))
+      return [v, 80, 255 - v]
+    }),
+  )
   assert.equal(r.model, 'linear')
   assert.ok(r.gradient && r.gradient.type === 'linear')
   // The chosen model must fit far better than the flat fallback.
@@ -64,10 +72,12 @@ test('radial region → radial gradient', () => {
   const cx = (W - 1) / 2
   const cy = (H - 1) / 2
   const maxD = Math.hypot(cx, cy)
-  const r = fitPaintLadder(grid(W, H, (x, y) => {
-    const t = Math.hypot(x - cx, y - cy) / maxD
-    return [Math.round(lerp(255, 0, t)), Math.round(lerp(255, 0, t)), 255]
-  }))
+  const r = fitPaintLadder(
+    grid(W, H, (x, y) => {
+      const t = Math.hypot(x - cx, y - cy) / maxD
+      return [Math.round(lerp(255, 0, t)), Math.round(lerp(255, 0, t)), 255]
+    }),
+  )
   assert.equal(r.model, 'radial')
   assert.ok(r.gradient && r.gradient.type === 'radial')
 })
@@ -76,10 +86,12 @@ test('MDL: a strongly-shaded region never collapses to solid', () => {
   // The bug class V2 fixed: an over-weighted complexity penalty letting solid beat
   // a clearly-better gradient. A 5 ΔE-ish ramp must graduate to a gradient.
   const W = 80
-  const r = fitPaintLadder(grid(W, 48, (x) => {
-    const t = x / (W - 1)
-    return [Math.round(lerp(43, 120, t)), Math.round(lerp(168, 113, t)), Math.round(lerp(229, 238, t))]
-  }))
+  const r = fitPaintLadder(
+    grid(W, 48, (x) => {
+      const t = x / (W - 1)
+      return [Math.round(lerp(43, 120, t)), Math.round(lerp(168, 113, t)), Math.round(lerp(229, 238, t))]
+    }),
+  )
   assert.notEqual(r.model, 'solid')
 })
 

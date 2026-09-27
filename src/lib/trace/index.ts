@@ -1,15 +1,12 @@
-// Raster → vector tracing engine (structure-first — plan §3): segmentation into
-// a label map (Mumford–Shah smoothness for gradient art, palette-first for flat
-// art, a two-label ink/paper cut for mono) → per-region paint-model ladder →
-// ONE planar shared-edge trace of the label map → EditableDoc.
-//
-// The order is INVERTED from the old posterize-then-mend pipeline: regions are
-// found FIRST (segment.ts / paletteSegment.ts / mono.ts), each region's paint
-// (solid / linear / radial gradient) is fitted SECOND (gradient.ts
-// fitPaintLadder), and geometry is traced LAST — every boundary once, shared by
-// both regions (planarAssemble.ts), so regions tile with no overlap and no seam.
-// The stacked per-region mask tracers that preceded it (crisp, potrace) were
-// removed on 2026-09-22 (docs/vectorization-benchmarks.md §37).
+// Raster → vector tracing pipeline:
+//   1. segmentation into a label map — Mumford–Shah smoothness for gradient art
+//      (segment.ts), palette-first for flat art (paletteSegment.ts), a two-label
+//      ink/paper cut for mono (mono.ts);
+//   2. a paint model per region — solid, linear or radial gradient (gradient.ts);
+//   3. one planar shared-edge trace of the label map (planarAssemble.ts), so every
+//      boundary is traced once and regions tile with no overlap and no seam;
+//   4. edge-level beautify (planarBeautify.ts), then materialization into an
+//      EditableDoc.
 // k-means quantization (quantize.ts) survives only as a fallback / UI palette.
 
 import type { VectorizeOptions } from '../../types'
@@ -48,34 +45,27 @@ export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   fidelity: DEFAULT_BEAUTIFY_OPTIONS.fidelity,
 }
 
-// Progress-bar span split (overall [0,1]): segmentation is the bulk and the long
-// pole (the Step-3c merge), so it owns most of the bar; paint + trace are quick.
+// Progress-bar span split (overall [0,1]): segmentation dominates the run time,
+// so it owns most of the bar; paint + trace are quick.
 const PROGRESS_SEGMENT_END = 0.8
 const PROGRESS_PAINT_END = 0.88
 
-/** Palette-first is KEPT over the smoothness segmenter only for genuinely simple
- *  flat art: high flat-coverage (not continuous-tone) AND few dominant colours.
- *  A rich flat illustration (many colours / fine detail — coverage can still be ~1)
- *  is better served by MS, which captures its structure without exploding the node
- *  count or over-posterizing. Schild ≈ 7 colours; the Headphones illustration ≥ 16. */
+/** Palette-first segmentation is kept over the smoothness segmenter only for simple
+ *  flat art: high flat coverage (not continuous-tone) and few dominant colours. A
+ *  rich flat illustration can still have coverage near 1, but is better served by
+ *  the smoothness segmenter, which does not over-posterize it. */
 const FLAT_PALETTE_MIN_COVERAGE = 0.7
 const FLAT_PALETTE_MAX_COLORS = 14
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n))
 
 /**
- * Final labels pinned FLAT by a flat marker — painted one solid colour. Each flat
- * marker's normalized point maps to a pixel → its final label. (Segmentation already
- * excludes a flat-marked section from the field merge via `flatMarkers`, so the label
- * is the marked section's own region; forcing solid paint here guarantees it stays
- * flat, not a subtle gradient.) Empty ⇒ no change.
+ * Labels pinned flat by a flat marker, to be painted one solid colour. Each flat
+ * marker's normalized point maps to a pixel and so to its label. (Segmentation
+ * already keeps a flat-marked section out of the field merge, so the label is that
+ * section's own region; forcing solid paint keeps it from becoming a subtle gradient.)
  */
-function flatMarkerLabels(
-  options: VectorizeOptions,
-  labels: Int32Array,
-  width: number,
-  height: number,
-): Set<number> {
+function flatMarkerLabels(options: VectorizeOptions, labels: Int32Array, width: number, height: number): Set<number> {
   const out = new Set<number>()
   for (const m of options.markers ?? []) {
     if (!m.flat) continue
@@ -88,14 +78,14 @@ function flatMarkerLabels(
 }
 
 /**
- * "Remove & heal" markers (planar engine). For each marker tagged `remove`, dissolve
- * the 4-connected region under it and let its bordering colours grow into the freed
- * area: every removed pixel is reassigned to the NEAREST bordering opaque region by a
- * multi-source grassfire (a discrete medial-axis split between the neighbours), so the
- * gap closes instead of leaving a hole. Transparent (-1) and the detected background
- * `bg` are excluded as fill sources, so the area goes to real colours; a section that
- * borders ONLY those dissolves to transparent (a plain delete). Returns a relabeled
- * COPY, or the input unchanged when there are no remove markers (byte-identical).
+ * "Remove & heal" markers. For each marker tagged `remove`, dissolve the 4-connected
+ * region under it and let its bordering colours grow into the freed area: every
+ * removed pixel is reassigned to the nearest bordering opaque region by a
+ * multi-source grassfire (a discrete medial-axis split between the neighbours), so
+ * the gap closes instead of leaving a hole. Transparent (-1) and the detected
+ * background `bg` are not fill sources; a section bordering only those dissolves to
+ * transparent. Returns a relabeled copy, or the input itself when there are no
+ * remove markers.
  */
 export function applyRemoveMarkers(
   options: VectorizeOptions,
@@ -110,10 +100,9 @@ export function applyRemoveMarkers(
   const n = width * height
   const isFill = (lab: number): boolean => lab >= 0 && lab !== bg
   for (const m of seeds) {
-    // floor, NOT round: the seed must be the pixel that CONTAINS the click point.
-    // round() snaps to the nearest grid line — an up-to-1px bias toward the next
-    // region, which for a 1–2px unmerged sliver means flooding the big neighbour
-    // instead of the sliver the user clicked.
+    // floor, not round: the seed must be the pixel that contains the click point.
+    // Rounding biases up to 1px toward the next region, which on a thin sliver
+    // floods the neighbour instead of the sliver the user clicked.
     const sx = clamp(Math.floor(m.x * width), 0, width - 1)
     const sy = clamp(Math.floor(m.y * height), 0, height - 1)
     const start = sy * width + sx
@@ -175,30 +164,20 @@ export function applyRemoveMarkers(
 }
 
 /**
- * Heal mislabeled boundary pixels in FLAT-art segmentation. A pixel grouped into
- * region L but whose OWN colour clearly matches an ADJACENT region B (within a tight
- * RGB tolerance, and closer to B than to L) was mis-grouped — typically at a soft
- * multi-colour junction, where the segmenter lets one region (often the dark
- * background) wedge a thin spike into a continuous two-colour stroke (the schild
- * shield's amber↔teal tip). Reassigning those pixels to the region their colour
- * actually belongs to closes the wedge.
+ * Heal mislabeled boundary pixels in flat-art segmentation. A pixel grouped into
+ * region L whose own colour clearly matches an adjacent region B (within a tight RGB
+ * tolerance, and closer to B than to L) was mis-grouped — typically at a soft
+ * multi-colour junction, where one region wedges a thin spike into a two-colour
+ * stroke. Reassigning such pixels closes the wedge.
  *
- * Deliberately conservative: only a pixel that is UNAMBIGUOUSLY another region's
- * colour moves. An anti-aliased edge pixel sits BETWEEN two colours — close to
- * neither within the tolerance — so it is left alone and true edges don't shift; a
- * genuinely background-coloured gap pixel stays background (its colour matches its
- * own region). Target regions are the 4-connected neighbours ONLY: reassigning a
- * pixel to a region it touches just diagonally joins them at a corner point, and
- * that checkerboard pinch becomes a junction in the planar network — it split
- * sharp-star's outline into OPEN edges, which get no corner snap, so every tip
- * traced as a beveled cap (§10.2). The colour evidence comes from the PALETTE, not
- * the neighbour pixel, so 8-connectivity added nothing except those pinches; a
- * genuinely mislabeled wedge still heals inward edge-by-edge across passes.
- * Iterates so a 2–3px spike is peeled inward, pass-synchronous for determinism;
- * returns the INPUT unchanged when nothing is mislabeled (byte-identical). Pure.
+ * Conservative: only a pixel that is unambiguously another region's colour moves.
+ * An anti-aliased edge pixel sits between two colours, close to neither, so true
+ * edges don't shift. Candidates are the 4-connected neighbours only: reassigning to a
+ * diagonal-only neighbour joins regions at a corner point, and that pinch becomes a
+ * spurious junction in the planar graph. Iterates (pass-synchronous, for determinism)
+ * so a 2–3px spike is peeled inward. Returns the input itself when nothing moves.
  *
- * The caller gates this to flat art (gradients off): a gradient region's pixels
- * stray from the region mean by design, so the colour-match test must not run there.
+ * Flat art only: a gradient region's pixels stray from the region mean by design.
  */
 export function healColorSpikes(
   labels: Int32Array,
@@ -207,7 +186,7 @@ export function healColorSpikes(
   height: number,
   palette: { r: number; g: number; b: number }[],
 ): Int32Array {
-  const TIGHT = 30 // RGB distance below which a pixel IS that region's flat colour
+  const TIGHT = 30 // RGB distance below which a pixel counts as that region's flat colour
   const T2 = TIGHT * TIGHT
   const dist2 = (o: number, c: { r: number; g: number; b: number }): number => {
     const dr = data[o] - c.r
@@ -228,7 +207,12 @@ export function healColorSpikes(
         if (dist2(o, palette[L]) <= T2) continue // matches its own region — keep
         let bestB = -1
         let bestD = T2
-        const nb = [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, y > 0 ? i - width : -1, y < height - 1 ? i + width : -1]
+        const nb = [
+          x > 0 ? i - 1 : -1,
+          x < width - 1 ? i + 1 : -1,
+          y > 0 ? i - width : -1,
+          y < height - 1 ? i + width : -1,
+        ]
         for (const q of nb) {
           if (q < 0) continue
           const B = cur[q]
@@ -252,7 +236,7 @@ export function healColorSpikes(
   return out ?? labels
 }
 
-/** Map the user fidelity dial onto the beautify pass (plan §3.3 / V3). */
+/** Map the user fidelity dial onto the beautify pass. */
 function beautifyOptionsFor(options: VectorizeOptions): BeautifyOptions {
   return {
     ...DEFAULT_BEAUTIFY_OPTIONS,
@@ -264,16 +248,13 @@ const rgbToHex = (r: number, g: number, b: number): string =>
   '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)
 
 /** Map the user dials onto the planar tracer's edge-fit tunables. More smoothing
- *  ⇒ more staircase pre-smoothing passes; ε stays at the crisp tracer's 1.0 px. */
+ *  ⇒ more staircase pre-smoothing passes; ε stays at the default. */
 function planarFitOptionsFor(options: VectorizeOptions): PlanarFitOptions {
   const s = clamp(options.smoothing, 0, 100) / 100
-  // smoothing=0 now means ZERO pre-smoothing (was clamped to 1, so a fully crisp
-  // staircase trace was unreachable). Note: the crispness-study showed 0 passes
-  // does NOT improve fidelity on flat logos (slightly more faceting) — this just
-  // makes the floor reachable; the 50 default stays best for most art.
-  // Flat (gradients-off) art prefers cubics over chords to de-facet curves; gradient
-  // art keeps the conservative lineCost (the bump worsened the headphones-grad seam).
-  // `options.planarFit` (advanced) overrides any tunable for A/B experiments.
+  // smoothing 0 means no pre-smoothing at all (a raw staircase trace); the default
+  // of 50 suits most art. Flat (gradients-off) art uses a higher line cost so curves
+  // prefer cubics over faceted chords; gradient art keeps the conservative default.
+  // `options.planarFit` (advanced) overrides any tunable.
   return {
     ...DEFAULT_PLANAR_FIT,
     lineCost: options.gradients === false ? FLAT_LINE_COST : DEFAULT_PLANAR_FIT.lineCost,
@@ -283,31 +264,27 @@ function planarFitOptionsFor(options: VectorizeOptions): PlanarFitOptions {
 }
 
 /**
- * Trace an ImageData into an editable vector document. Color mode segments by
- * smoothness (Mumford–Shah), fits a paint model per macro-region, and traces one
- * stacked mask per region (bottom-first paint order); mono mode thresholds to a
- * single black shape. Aborts (via `signal`) throw a DOMException named 'AbortError'.
+ * Trace an ImageData into an editable vector document. Colour mode segments the
+ * image, fits a paint model per region and traces the label map as one planar
+ * graph (one path per region, tiling); mono mode cuts ink from paper and returns a
+ * single black path. Both carry the shared-edge `topology`. Aborts (via `signal`)
+ * throw a DOMException named 'AbortError'.
  */
 export async function traceImage(
   imageData: ImageData,
   options: VectorizeOptions,
   onProgress?: (p: TraceProgress) => void,
   signal?: AbortSignal,
-  /** Optional sink for the PRE-merge region map (the fine regions before the
-   *  gradient field-merge) — used by the editor's region hover-highlight. Called
-   *  once per color trace; never in mono mode. */
+  /** Optional sink for the pre-merge region map (the fine regions before the
+   *  gradient field merge), used by the editor's region hover-highlight. Called
+   *  once per colour trace; never in mono mode. */
   onPreMerge?: (pm: { labels: Int32Array; width: number; height: number }) => void,
-  /** Optional per-stage timing sink (the Profiler lab). Reports the ms spent in each
-   *  major pipeline stage — segment / paint / trace / beautify / materialize. A pure
-   *  side channel: it never touches the returned geometry, so output stays byte-
-   *  identical, and when omitted NOT EVEN `performance.now()` is called (zero cost). */
+  /** Optional per-stage timing sink: ms spent in segment / paint / trace / beautify /
+   *  materialize. Does not affect output; when omitted, no timing calls are made. */
   onStage?: (name: string, ms: number) => void,
-  /** Optional sink for the FINAL label map — the exact array `tracePlanar` is handed,
-   *  after heal / remove-heal / background union. Diagnostic only (`scaleDiag.ts` scores
-   *  the raw crack lattice against the authored SVG, to separate lattice-placement error
-   *  from fit error). Same contract as `onStage`: a pure side channel, never read back,
-   *  so the returned geometry is byte-identical whether or not it is supplied. Planar
-   *  colour path only — mono and the legacy layer path never call it. */
+  /** Optional diagnostic sink for the final label map — the exact array `tracePlanar`
+   *  receives, after healing, remove markers and background union. Does not affect
+   *  output. */
   onPlanarLabels?: (l: { labels: Int32Array; width: number; height: number }) => void,
 ): Promise<EditableDoc> {
   const { width, height } = imageData
@@ -324,57 +301,54 @@ export async function traceImage(
     if (onStage) stageAt = performance.now()
   }
   const despeckle = clamp(options.despeckle, 0, 100)
-  // Mono despeckle: the loop-area floor (px²) the old mask tracers took as
-  // `turdsize`, now applied to the two-label map (mono.ts). From 1 px², growing
-  // quadratically, so the dial's low end is gentle; the colour path has its own,
-  // steeper region floor (minRegionAreaFor).
+  // Mono despeckle: minimum component area (px²) kept in the two-label map
+  // (mono.ts). From 1 px², growing quadratically so the dial's low end is gentle;
+  // the colour path has its own, steeper floor (minRegionAreaFor).
   const turdsize = Math.max(1, Math.round((despeckle / 100) ** 2 * 64))
   // Planar regions tile and their loops are oriented for nonzero.
   const fillRule: 'nonzero' | 'evenodd' = 'nonzero'
 
-  // Stage 3 beautify (plan §3.3): a pure post-pass that snaps traced contours to
-  // perfect circles/ellipses/lines and reconciles concentric/equal shapes, gated
-  // by the user fidelity tolerance. Runs for BOTH engines, on the traced subpaths
-  // before items are assembled. fidelity ≤ 0 makes it a no-op (raw trace).
+  // Beautify snaps traced edges to circles/ellipses/lines within the user fidelity
+  // tolerance; fidelity ≤ 0 leaves the raw trace.
   const beautifyOpts = beautifyOptionsFor(options)
 
-  // Edge-level beautify + the converged-junction weld, shared by the mono and
-  // colour planar paths. Phase 6: snap shared edges to circles/ellipses/lines ONCE
-  // (both adjacent regions inherit it; no desync). fidelity ≤ 0 is a no-op, so the
-  // unbeautified planar output is byte-identical. The co-circular arc snap (§1d)
-  // can be turned off via planarFit.arcSnap (Test view baseline). §10.4 second half
-  // — fuse junction pairs the re-seat converged (a rasterized degree-4 crossing =
-  // two degree-3 junctions + a micro-edge; once re-seated onto the true crossing
-  // they are ONE authored point) — runs here, not inside planarBeautify:
-  // contracting the micro-edge rewrites the region loops, and beautify treats
-  // `loopsByLabel` as read-only. Everything downstream reads them AFTER this.
+  // Edge-level beautify + converged-junction weld, shared by the mono and colour
+  // paths. The weld (fusing junction pairs the re-seat drove onto one crossing) runs
+  // here rather than inside planarBeautify because contracting the micro-edge
+  // rewrites the region loops, which beautify treats as read-only. Everything
+  // downstream reads the loops after this.
   const fitOpts = planarFitOptionsFor(options)
   const finishPlanar = (trace: PlanarTrace) => {
     let reseated: ReadonlySet<number> = new Set<number>()
-    const topology = planarBeautify({ vertices: trace.vertices, edges: trace.edges }, trace.loopsByLabel, beautifyOpts, {
-      arcSnap: fitOpts.arcSnap,
-      localScaleK: fitOpts.localScaleK,
-      cornerVeto: fitOpts.cornerVeto,
-      chainArcs: fitOpts.chainArcs,
-      reseat: fitOpts.junctionReseat,
-      width,
-      height,
-      onReseat: (m) => { reseated = m },
-      onChord: fitOpts.onChord,
-      onReseatVerdict: fitOpts.onReseatVerdict,
-      reseatTune: fitOpts.reseatTune,
-      onArcLoop: fitOpts.onArcLoop,
-    })
+    const topology = planarBeautify(
+      { vertices: trace.vertices, edges: trace.edges },
+      trace.loopsByLabel,
+      beautifyOpts,
+      {
+        arcSnap: fitOpts.arcSnap,
+        localScaleK: fitOpts.localScaleK,
+        cornerVeto: fitOpts.cornerVeto,
+        chainArcs: fitOpts.chainArcs,
+        reseat: fitOpts.junctionReseat,
+        width,
+        height,
+        onReseat: (m) => {
+          reseated = m
+        },
+        onChord: fitOpts.onChord,
+        onReseatVerdict: fitOpts.onReseatVerdict,
+        reseatTune: fitOpts.reseatTune,
+        onArcLoop: fitOpts.onArcLoop,
+      },
+    )
     weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, width, height, reseated)
     return { topology, edges: edgeMap(topology) }
   }
 
   if (options.mode === 'mono') {
-    // One ink on paper: a two-label segmentation (mono.ts) through the SAME planar
-    // fitter as colour — one label cannot be carved, and the fitter is the one every
-    // corner/apex/junction/circle rule was built into. The result keeps mono's
-    // contract: one path, painted #000000 (the caller repaints it with the probed
-    // ink), plus the shared-edge topology so its nodes are jointly editable.
+    // One ink on paper: a two-label segmentation (mono.ts) through the same planar
+    // fitter as colour. Mono's contract: one path painted #000000 (the caller
+    // repaints it with the probed ink), plus the shared-edge topology.
     onProgress?.({ phase: 'segment', fraction: 0.3, label: 'Cutting the ink' })
     const seg = monoLabels(imageData, options.threshold, options.invert === true, turdsize)
     stage('segment')
@@ -397,25 +371,24 @@ export async function traceImage(
   }
 
   // Stage 1 — segmentation. Two paths:
-  //  • FLAT art (gradients off) → PALETTE-FIRST (paletteSegment.ts): pick the
-  //    dominant colours, assign every pixel (AA included) to the nearest one. No
-  //    blend region can form, so anti-alias transitions are a single clean edge
-  //    between two flats (the olive/brown sliver fix). Opt out with flatPalette:false.
+  //  • flat art (gradients off) → palette-first (paletteSegment.ts): pick the
+  //    dominant colours and assign every pixel (anti-aliasing included) to the
+  //    nearest, so an anti-aliased transition is one clean edge between two flats
+  //    rather than a blend sliver. Opt out with flatPalette:false.
   //  • everything else → Mumford–Shah smoothness segmentation (segment.ts): groups
   //    by smooth field, reunites a split background, fits gradients downstream.
   const wantFlatPalette = options.gradients === false && options.flatPalette !== false
-  mark() // exclude the mask-option setup above from the segment stage
+  mark() // exclude the setup above from the segment stage
   let q: QuantizeResult
   let preMergeLabels: Int32Array
   let regionSamples: RegionSamples[] = []
-  // Try palette-first for flat art, but only KEEP it if the image is actually flat
-  // (high flatCoverage). A continuous-tone image (a photo traced with gradients off)
-  // would over-posterize, so it falls through to the smoothness segmenter below.
+  // Palette-first is only kept if the image is actually flat; a continuous-tone
+  // image would over-posterize and falls through to the smoothness segmenter.
   let fp: ReturnType<typeof segmentFlatPalette> | null = null
   let usedLockedPalette = false
   if (wantFlatPalette) {
     onProgress?.({ phase: 'segment', fraction: 0, label: 'Reading colours' })
-    // A user-LOCKED palette overrides automatic extraction: the segmenter snaps
+    // A user-locked palette overrides automatic extraction: the segmenter snaps
     // every pixel to the nearest of these colours (emitted verbatim).
     const locked = options.palette && options.palette.length > 0 ? options.palette : undefined
     fp = segmentFlatPalette(
@@ -423,13 +396,12 @@ export async function traceImage(
       paletteOptionsFor(options),
       locked,
     )
-    // Photo-like (low coverage) OR rich flat art (many colours) ⇒ use MS instead —
-    // but a locked palette bypasses both gates (the user owns the colours + count).
-    // Richness is fp.dominantColors, NOT fp.palette.length: blend dissolution can
-    // shrink a photo's palette under the ceiling (continuous tone is full of
-    // colours that sit on lines between other colours), and the gate must count
-    // what the image contains, not what the cleanup kept.
-    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.dominantColors > FLAT_PALETTE_MAX_COLORS)) fp = null
+    // Photo-like (low coverage) or rich (many colours) ⇒ use the smoothness
+    // segmenter instead; a locked palette bypasses both gates. Richness is read from
+    // fp.dominantColors, not fp.palette.length: blend cleanup can shrink a photo's
+    // palette under the ceiling, and the gate must count what the image contains.
+    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.dominantColors > FLAT_PALETTE_MAX_COLORS))
+      fp = null
     usedLockedPalette = fp != null && locked != null
   }
   if (fp) {
@@ -439,7 +411,9 @@ export async function traceImage(
     const seg = segmentImage(
       imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
       segmentOptionsFor(options),
-      onProgress ? (f, label) => onProgress({ phase: 'segment', fraction: f * PROGRESS_SEGMENT_END, label }) : undefined,
+      onProgress
+        ? (f, label) => onProgress({ phase: 'segment', fraction: f * PROGRESS_SEGMENT_END, label })
+        : undefined,
     )
     q = { palette: seg.palette, labels: seg.labels, counts: seg.counts }
     preMergeLabels = seg.preMergeLabels
@@ -447,39 +421,40 @@ export async function traceImage(
   }
   stage('segment')
 
-  // Surface the pre-merge region map (fine regions before the field-merge) for the
-  // editor's hover-highlight. Independent of engine; skipped in mono (no markers).
+  // Surface the pre-merge region map for the editor's hover-highlight.
   onPreMerge?.({ labels: preMergeLabels, width, height })
 
   const gradientsOn = options.gradients !== false
 
-  // Stage 2 — paint-model ladder per macro-region: pick the cheapest of
-  // solid / linear-multistop / radial under an MDL score, fitting on the region's
-  // smooth (anti-alias-free) samples. A flat region stays solid (flat-logo
-  // parity); a smooth field becomes one coherent gradient; a 2-D glow field
-  // (model 'glow') becomes a base linear + radial overlays (Stage 2.4, §3.2.4).
+  // Stage 2 — paint-model ladder per region: pick the cheapest of solid /
+  // linear-multistop / radial under an MDL score, fitted on the region's smooth
+  // (anti-alias-free) samples. A 2-D glow field (model 'glow') becomes a base
+  // linear gradient plus radial overlays.
   let labelPaint: (PaintLadderResult | null)[] = q.palette.map(() => null)
   let fullSamples: RegionSamples[] | null = null
   if (gradientsOn) {
-    // The paint model is fit on the segmenter's SMOOTH (AA-free) samples, but the
-    // glow stack is GATED on the FULL region (every labelled pixel, AA included):
-    // the smooth subset omits the high-error anti-aliased pixels where a glow
-    // helps most and so under-reports its benefit (see fitGlowStack).
+    // The glow stack is gated on the full region (anti-aliased pixels included):
+    // the smooth subset omits exactly the pixels where a glow helps most and would
+    // under-report its benefit (see fitGlowStack).
     fullSamples = fullRegionSamples(q.labels, imageData.data, width, q.palette.length)
-    // Regions pinned by a FLAT marker are painted SOLID — fitPaintLadder is
-    // skipped so they keep their representative flat colour, not a fitted gradient
-    // (the user's "this region should be flat"). Segmentation already excluded them
-    // from the field merge (`flatMarkers`), so they're their own distinct regions.
+    // Regions pinned by a flat marker skip fitPaintLadder and keep their flat colour.
     const flatLabels = flatMarkerLabels(options, q.labels, width, height)
     labelPaint = regionSamples.map((s, label) =>
       flatLabels.has(label) ? null : fitPaintLadder(s, undefined, fullSamples![label]),
     )
   }
   stage('paint')
-  onProgress?.({ phase: 'paint', fraction: PROGRESS_SEGMENT_END, label: gradientsOn ? 'Fitting colours' : 'Preparing shapes' })
+  onProgress?.({
+    phase: 'paint',
+    fraction: PROGRESS_SEGMENT_END,
+    label: gradientsOn ? 'Fitting colours' : 'Preparing shapes',
+  })
 
   /** Copy a region's fitted paint (solid / gradient / glow base+overlays) onto a layer. */
-  const applyPaint = (layer: { gradient?: GradientFill; overlays?: RadialGradient[] }, paint: PaintLadderResult | null): void => {
+  const applyPaint = (
+    layer: { gradient?: GradientFill; overlays?: RadialGradient[] },
+    paint: PaintLadderResult | null,
+  ): void => {
     if (!paint) return
     if (paint.model === 'glow' && paint.glow) {
       layer.gradient = paint.glow.base
@@ -489,81 +464,57 @@ export async function traceImage(
     }
   }
 
-  // --- Planar subdivision path (default for color) -------------------------
-  // Trace the label map as a shared-edge planar graph: every boundary is ONE
-  // fitted curve referenced (forward/reversed) by both adjacent regions, so the
-  // regions tile with no overlap and no hairline seam, and shared boundaries are
-  // jointly editable (the doc carries the edge graph as `topology`; each region's
-  // `subPaths` is the derived render/hit cache). No loop-beautify (it moves loops
-  // independently and would desync shared edges); per-region paint is reused.
+  // --- Planar trace -----------------------------------------------------------
+  // Trace the label map as a shared-edge planar graph: every boundary is one
+  // fitted curve referenced (forward/reversed) by both adjacent regions, so regions
+  // tile with no overlap or seam and shared boundaries are jointly editable. The doc
+  // carries the edge graph as `topology`; each region's `subPaths` is derived from it.
   onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END, label: 'Tracing shapes' })
-  // "Remove & heal" markers dissolve a marked section and grow its neighbours into
-  // the gap. Background is detected first (from the ORIGINAL labels) so it can be
-  // both excluded as a fill source and dropped from the paint order below.
+  // Background is detected first (from the original labels) so it can be excluded
+  // as a remove-marker fill source and dropped from the paint order below.
   const bg = options.removeBackground ? detectBorderBackground(q.labels, width, height, q.palette.length) : -1
   const removed = applyRemoveMarkers(options, q.labels, width, height, bg)
-  // Flat-art only: heal pixels grouped into the wrong region at a soft multi-colour
-  // junction — e.g. a dark-background wedge poking into a continuous two-colour
-  // stroke (the schild shield tip). Skipped when gradients are on (a gradient
-  // region's pixels legitimately stray from the region mean, so the colour test
-  // doesn't apply) AND when the user LOCKED a palette: there is no mis-grouping to
-  // heal — every pixel is already its nearest locked colour by construction, so the
-  // contract is exactly "snap to nearest given colour", nothing more. No mislabeled
-  // pixels ⇒ returns the input ⇒ byte-identical.
+  // Heal mis-grouped pixels (see healColorSpikes). Skipped for gradient art, and for
+  // a locked palette, where every pixel is by construction its nearest locked colour.
   const healed =
-    gradientsOn || usedLockedPalette
-      ? removed
-      : healColorSpikes(removed, imageData.data, width, height, q.palette)
-  // EXPERIMENTAL background layer separation (backgroundGradient, gradients OFF):
-  // the border-seeded band-set that ONE gradient explains is relabeled into a
-  // single region painted with that fitted gradient — the background becomes one
-  // uninterrupted layer, so band↔band boundaries and the band junctions that
-  // split a foreground outline (the ring "pull") never reach the tracer.
-  // Null / flag off ⇒ byte-identical passthrough.
+    gradientsOn || usedLockedPalette ? removed : healColorSpikes(removed, imageData.data, width, height, q.palette)
+  // Experimental background layer separation (backgroundGradient, gradients off):
+  // the border-seeded set of bands that one gradient explains is relabeled into a
+  // single region painted with that gradient, so band boundaries and the junctions
+  // they would cut into a foreground outline never reach the tracer.
   //
-  // COMPOSES with removeBackground: the union is the better background DETECTOR (a
-  // posterized ramp is one background, not N bands), so with both flags on we delete
-  // the whole united set rather than the single border-majority band. The label to
-  // drop is therefore computed on the FINAL map (`dropped`, below) — not from `bg`,
-  // which was detected on `q.labels` before the union relabeled its members to a seed
-  // re-detected on `healed`.
+  // With removeBackground also on, the whole united set is removed rather than the
+  // single border-majority band; the labels to drop are computed on the final map
+  // (`dropped`, below).
   let bgUnion: BackgroundUnion | null = null
   if (!gradientsOn && options.backgroundGradient) {
     const bgSeed = detectBorderBackground(healed, width, height, q.palette.length)
     if (bgSeed >= 0) {
-      // Remove-markers relabel pixels but the raster keeps the DISSOLVED object's
-      // colours, so sampling them feeds a ghost tint into the union's gradient fit and
-      // its render gate. Exclude exactly the pixels the markers moved. No remove
-      // markers ⇒ `removed` IS `q.labels` ⇒ no mask ⇒ byte-identical.
+      // Remove markers relabel pixels but the raster keeps the dissolved object's
+      // colours; exclude those pixels so they don't tint the union's gradient fit.
       const dissolved = removed === q.labels ? undefined : changedMask(q.labels, removed)
       const unionSamples = fullRegionSamples(healed, imageData.data, width, q.palette.length, 6000, dissolved)
-      // A FLAT marker ("keep this region flat") pins its label out of the union, so
-      // an explicitly-flat region is never absorbed into the background gradient —
-      // even where the gradient could explain it. Computed on `healed` (the map the
-      // union runs on) so the label ids line up. No flat markers ⇒ empty ⇒ no-op.
+      // Flat-marked regions are pinned out of the union, even where the gradient
+      // could explain them. Computed on `healed` so the label ids line up.
       const pinned = flatMarkerLabels(options, healed, width, height)
       bgUnion = uniteBackgroundGradient(healed, width, height, bgSeed, unionSamples, q.palette, pinned)
     }
   }
   const labels = bgUnion ? bgUnion.labels : healed
   onPlanarLabels?.({ labels, width, height })
-  // The palette rides along for the §14 contrast rank only: it lets the fit tell a
-  // posterization band seam (weak) from a real logo edge (strong) so the weak one
-  // stops aiming the strong one. Geometry-only when omitted.
-  // The source raster rides along for §15's sub-pixel edge placement: the chains are
-  // displaced from the integer crack lattice onto the AA's iso-0.5 crossing before the
-  // fit (planarSubpixel.ts). Guards inside the pass fall back to the lattice wherever
-  // the local two-colour model does not hold (junction neighbourhoods, thin features,
-  // healed boundaries the image no longer witnesses).
+  // The palette lets the fit rank boundary contrast (a weak posterization seam vs a
+  // strong edge). The source raster enables sub-pixel edge placement: chains are
+  // moved from the integer crack lattice onto the anti-aliasing's iso-0.5 crossing
+  // before fitting (planarSubpixel.ts), falling back to the lattice wherever the
+  // local two-colour model does not hold.
   const trace = tracePlanar(labels, width, height, fitOpts, q.palette, imageData)
   stage('trace') // includes the flat-art prep above (bg detect / remove-heal / heal-spikes)
   const { topology, edges } = finishPlanar(trace)
   stage('beautify')
   let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
-  // Background removal drops the pre-union `bg` (byte-identical to before when no union
-  // ran) AND, when the union ran, every label it swallowed — of which only `seed` still
-  // exists in the map. Covering both makes the drop correct whether or not the union's
-  // seed (re-detected on `healed`) agrees with `bg` (detected on `q.labels`).
+  // Background removal drops the pre-union `bg` and, when the union ran, every label
+  // it absorbed (only its `seed` survives in the map). Covering both keeps the drop
+  // correct whether or not the union's seed agrees with `bg`.
   if (options.removeBackground) {
     const dropped = new Set<number>(bg !== -1 ? [bg] : [])
     if (bgUnion) for (const l of bgUnion.set) dropped.add(l)
@@ -577,7 +528,11 @@ export async function traceImage(
     const pct = Math.floor((++traced / order.length) * 100)
     if (pct > lastTracePct) {
       lastTracePct = pct
-      onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * (traced / order.length), label: 'Tracing shapes' })
+      onProgress?.({
+        phase: 'trace',
+        fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * (traced / order.length),
+        label: 'Tracing shapes',
+      })
     }
     const loops = trace.loopsByLabel.get(label)!
     const subPaths = materializeRegion(loops, edges)
@@ -585,21 +540,35 @@ export async function traceImage(
     const c = q.palette[label]
     const paint: { gradient?: GradientFill; overlays?: RadialGradient[] } = {}
     applyPaint(paint, labelPaint[label])
-    const base: PathItem = { kind: 'path', id: 'trace-' + label, fill: rgbToHex(c.r, c.g, c.b), fillRule, loops, subPaths, visible: true }
+    const base: PathItem = {
+      kind: 'path',
+      id: 'trace-' + label,
+      fill: rgbToHex(c.r, c.g, c.b),
+      fillRule,
+      loops,
+      subPaths,
+      visible: true,
+    }
     if (paint.gradient) base.gradient = paint.gradient
-    // Background layer separation: the united band-set renders as ONE region
-    // carrying the gradient fitted over the union (its palette hex stays as the
-    // fallback fill/swatch).
+    // The united background renders as one region carrying the union's gradient
+    // (its palette hex stays as the fallback fill/swatch).
     if (bgUnion && label === bgUnion.seed) base.gradient = bgUnion.gradient
-    // Flat palette path may tag a region with an alpha (its alpha mode, or a locked
-    // RGBA swatch) — paint it translucent. Planar regions tile without overlap, so a
-    // single fill-opacity composites correctly against the background. Opaque (a≥255
-    // / undefined) ⇒ no fill-opacity ⇒ byte-identical to before.
+    // The flat palette path may give a region an alpha (its alpha mode, or a locked
+    // RGBA swatch). Planar regions tile without overlap, so a single fill-opacity
+    // composites correctly.
     if (c.a !== undefined && c.a < 255) base.fillOpacity = c.a / 255
     items.push(base)
     if (paint.overlays) {
       paint.overlays.forEach((ov, k) => {
-        items.push({ kind: 'path', id: `trace-${label}-glow-${k}`, fill: rgbToHex(c.r, c.g, c.b), fillRule, subPaths: cloneSubPaths(subPaths), gradient: ov, visible: true })
+        items.push({
+          kind: 'path',
+          id: `trace-${label}-glow-${k}`,
+          fill: rgbToHex(c.r, c.g, c.b),
+          fillRule,
+          subPaths: cloneSubPaths(subPaths),
+          gradient: ov,
+          visible: true,
+        })
       })
     }
   }
@@ -607,9 +576,8 @@ export async function traceImage(
   return { viewBox: [0, 0, width, height], items, topology }
 }
 
-/** 1 wherever `after` moved a pixel to a different label than `before` — i.e. the
- *  pixels a remove-marker dissolve reassigned, whose raster RGB still belongs to the
- *  deleted object and must not be sampled as its new region's colour. */
+/** 1 wherever `after` gives a pixel a different label than `before` — the pixels a
+ *  remove marker reassigned, whose raster colour still belongs to the deleted object. */
 function changedMask(before: Int32Array, after: Int32Array): Uint8Array {
   const m = new Uint8Array(before.length)
   for (let i = 0; i < before.length; i++) if (before[i] !== after[i]) m[i] = 1
@@ -617,10 +585,9 @@ function changedMask(before: Int32Array, after: Int32Array): Uint8Array {
 }
 
 /**
- * Per-region FULL sample sets (every labelled pixel of each region, AA included),
+ * Per-region full sample sets (every labelled pixel, anti-aliasing included),
  * strided down to a cap — the gate set for the glow stack. Distinct from the
- * segmenter's smooth `regionSamples`, which the paint model is FIT on but which
- * omit the anti-aliased pixels a glow most improves.
+ * segmenter's smooth `regionSamples`, which the paint model is fitted on.
  *
  * `skip` (optional, 1 per pixel) drops pixels whose raster colour does not belong to
  * the label they now carry; omitted ⇒ every labelled pixel is sampled.
@@ -690,66 +657,49 @@ function cloneSubPaths(subPaths: SubPath[]): SubPath[] {
 }
 
 /**
- * Map the user-facing VectorizeOptions onto the structure-first segmenter's
- * tunables. V2 starts every parameter at the blueprint paper's fixed value
- * (τ_s = 10, σ = 5, τ_a = 0.25, MS α = 1.0, and the calibrated edge threshold);
- * the `colors`/`despeckle` dials no longer drive a k-means count — segmentation
- * is structural — so they are intentionally left at the defaults here (the dials
- * still tune the tracer's smoothing/turdsize downstream).
- */
-/**
- * Map the Despeckle dial onto the segmenter's minimum-region area (opaque px²) —
- * the engine-agnostic small-region merge that absorbs anti-alias / colour-ramp
- * TRANSITION SLIVERS into their nearest-colour neighbour. 0 at despeckle 0 (so a
- * despeckle-0 trace is byte-identical to before), growing quadratically so the
- * dial's low end stays gentle and the high end aggressively cleans slivers. The
- * merge is render-safe (a sliver is recoloured to its closest neighbour), so this
- * scales faster than the crisp/potrace `turdsize` loop-drop. Absolute px², like
- * turdsize, so it reads the same across engines.
+ * Map the Despeckle dial onto the segmenter's minimum region area (opaque px²):
+ * the small-region merge that absorbs anti-aliasing and colour-ramp transition
+ * slivers into their nearest-colour neighbour. 0 at despeckle 0, growing
+ * quadratically so the dial's low end stays gentle. The merge only recolours a
+ * sliver to its closest neighbour, so it can afford to grow faster than mono's
+ * component-area floor.
  */
 function minRegionAreaFor(despeckle: number): number {
   const d = clamp(despeckle, 0, 100) / 100
   return Math.round(d * d * 800)
 }
 
+/**
+ * Map the user-facing VectorizeOptions onto the smoothness segmenter's tunables.
+ * With default dials and no markers this returns DEFAULT_SEGMENT_OPTIONS itself.
+ */
 export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
-  // Region detail: 0 ⇒ the balanced default (identical output to before); higher
-  // tightens the colour-difference (τ_s) and union-fit (mergeTol) merge so finer
-  // regions — e.g. translucent overlaps — survive instead of fusing into a
-  // neighbour. Measured: the overlaps return only once τ_s drops to ≈2–3, which
-  // also risks fragmenting smooth gradients, so this is opt-in, not the default.
+  // Region detail: 0 ⇒ the balanced default; higher tightens the colour-difference
+  // (τ_s) and union-fit (mergeTol) merges so finer regions — e.g. translucent
+  // overlaps — survive instead of fusing into a neighbour. Opt-in, because low τ_s
+  // also risks fragmenting smooth gradients.
   const d = clamp(options.regionDetail ?? 0, 0, 100) / 100
-  // User markers (normalized [0,1]) are a surgical alternative to regionDetail:
-  // they protect only the marked spots from merging (segment.ts), leaving smooth
-  // gradients elsewhere intact. Threaded through whether or not regionDetail is
-  // raised. No markers + regionDetail 0 ⇒ the exact default object (byte-identical
-  // output to before).
-  // The UI marker list is tagged (`flat?`); split it into the segmenter's two
-  // seed lists. Both drive the seeded split (keep regions distinct); flat ones
-  // additionally pin their region to its pre-merge flat form (+ solid paint).
+  // Markers (normalized [0,1]) are the surgical alternative to regionDetail: they
+  // protect only the marked spots from merging, leaving gradients elsewhere intact.
+  // The UI list is tagged (`flat?`) and split into the segmenter's two seed lists;
+  // flat ones additionally pin their region to its pre-merge flat form.
   const allMarkers = options.markers ?? []
   const keepMarkers = allMarkers.filter((m) => !m.flat).map((m) => ({ x: m.x, y: m.y }))
   const flatMarkerList = allMarkers.filter((m) => m.flat).map((m) => ({ x: m.x, y: m.y }))
   const markers = keepMarkers.length > 0 ? keepMarkers : undefined
   const flatMarkers = flatMarkerList.length > 0 ? flatMarkerList : undefined
-  // Gradients OFF disables the gradient-explained union-fit merge (segment.ts Step
-  // 3c) so smooth ramps posterize into flat bands rather than fusing into one
-  // region that Stage 2 then averages to a muddy mean colour. On (the default) is
-  // byte-identical to before.
+  // Gradients off disables the gradient-explained union-fit merge, so smooth ramps
+  // posterize into flat bands rather than fusing into one region painted with a
+  // muddy mean colour.
   const mergeGradients = options.gradients !== false
-  // Despeckle → minimum-region area: absorbs anti-alias / colour-ramp slivers into
-  // a neighbour (segment.ts mergeSmallRegions). 0 ⇒ no merge (byte-identical).
+  // Despeckle → minimum region area (segment.ts mergeSmallRegions); 0 ⇒ no merge.
   const minRegionArea = minRegionAreaFor(options.despeckle ?? 0)
-  const needsOverride =
-    d !== 0 || !mergeGradients || minRegionArea !== DEFAULT_SEGMENT_OPTIONS.minRegionArea
-  // The unwitnessed-jump veto (the step-fit merge fix, segment.ts) applies to the
-  // AUTO path only. User-steered segmentation — Region detail raised or
-  // keep-separate markers — keeps the legacy merge: the marker-controlled split
-  // and the V6 translucent recovery CONSUME the fusion behaviour (an overlap must
-  // fuse into its shape's class for the marker split to carve it out, and the
-  // α-solve is calibrated on those exact classes; bloom's layers-integration test
-  // locks this). FLAT markers keep the veto: they exist to hand-fix fake regions,
-  // and disabling it on their account would resurrect the fakes it already fixed.
+  const needsOverride = d !== 0 || !mergeGradients || minRegionArea !== DEFAULT_SEGMENT_OPTIONS.minRegionArea
+  // The unwitnessed-jump merge veto (segment.ts) applies to automatic segmentation
+  // only. With Region detail raised or keep-separate markers, the legacy merge is
+  // kept: the marker split relies on an overlap first fusing into its shape's class
+  // so it can carve it out. Flat markers keep the veto, since they exist to fix the
+  // spurious regions it prevents.
   const userSteered = d !== 0 || markers !== undefined
   const base: SegmentOptions = needsOverride
     ? {
@@ -765,17 +715,15 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
     !markers && !flatMarkers
       ? withVetoScope
       : { ...withVetoScope, ...(markers ? { markers } : {}), ...(flatMarkers ? { flatMarkers } : {}) }
-  // Advanced override for A/B experiments and devtest observers, the planarFit idiom.
-  // Absent ⇒ the very same object as before (identity preserved, output byte-identical).
+  // Advanced override for experiments and diagnostics (same idiom as planarFit).
   return options.segment ? { ...withMarkers, ...options.segment } : withMarkers
 }
 
 /**
  * Map the user dials onto the palette-first flat segmenter (paletteSegment.ts).
- * Region detail keeps MORE colours (more clusters + a lower drop threshold, so
+ * Region detail keeps more colours (more clusters + a lower drop threshold, so
  * subtler flats survive); despeckle sheds more (a higher drop threshold). The
- * default (detail 0) lands on the dominant flats only — the fewest, cleanest
- * colours, which is the point for flat logos.
+ * default (detail 0) keeps only the dominant flats.
  */
 function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
   const detail = clamp(options.regionDetail ?? 0, 0, 100) / 100
@@ -787,10 +735,9 @@ function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
     // Reuse the despeckle→area curve, with a small floor so source noise never
     // litters the trace with single-pixel loops even at despeckle 0.
     minRegionArea: Math.max(24, minRegionAreaFor(options.despeckle ?? 0)),
-    // The §20 sub-floor evidence veto. On by default; `paletteSegment` below can
-    // turn it off, which is how its mechanism gate measures red-before-green.
+    // Spare sub-floor regions with flat-interior evidence in the source.
     regionEvidence: true,
-    // Advanced override for A/B experiments, the planarFit idiom.
+    // Advanced override for experiments (same idiom as planarFit).
     ...(options.paletteSegment ?? {}),
   }
 }
@@ -800,12 +747,7 @@ function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
  * border ring, but only when opaque pixels cover at least half the ring.
  * An image already floating on transparency returns -1 (nothing to remove).
  */
-function detectBorderBackground(
-  labels: Int32Array,
-  width: number,
-  height: number,
-  paletteSize: number,
-): number {
+function detectBorderBackground(labels: Int32Array, width: number, height: number, paletteSize: number): number {
   if (paletteSize === 0) return -1
   const counts = new Array<number>(paletteSize).fill(0)
   let ringTotal = 0

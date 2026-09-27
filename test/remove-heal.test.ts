@@ -70,7 +70,10 @@ test('a section touching only transparency dissolves to transparent (plain delet
   // Seed on the blob: round(0.4*5)=2, round(0.4*3)=1 → the middle row.
   const out = applyRemoveMarkers(opts([{ x: 0.4, y: 0.4, remove: true }]), labels, width, height, -1)
   assert.ok(!out.includes(2), 'no opaque neighbour ⇒ the section is removed')
-  assert.ok(out.every((v) => v === -1), 'everything is transparent')
+  assert.ok(
+    out.every((v) => v === -1),
+    'everything is transparent',
+  )
 })
 
 test('the background colour is excluded as a fill source (heals to the real neighbour)', () => {

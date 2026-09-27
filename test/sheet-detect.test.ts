@@ -266,7 +266,13 @@ test('light ink on dark paper does NOT go mono (it would invert)', () => {
 
 test('an empty tile probes as no ink at all', () => {
   const probe = probeInk(sheet(60, 60, WHITE, []), {
-    r: 255, g: 255, b: 255, a: 255, coverage: 1, transparent: false, uniform: true,
+    r: 255,
+    g: 255,
+    b: 255,
+    a: 255,
+    coverage: 1,
+    transparent: false,
+    uniform: true,
   })
   assert.equal(probe.inks, 0)
   assert.equal(probe.dominant, null)
@@ -313,15 +319,27 @@ test('the trace scale feeds back into smoothing', () => {
   // 170px × 3 = 510px of raster, so the tolerance follows the raster the tracer
   // actually sees — the two scale corrections have to compose, not fight.
   const img = sheet(170, 170, WHITE, [{ x: 30, y: 30, w: 110, h: 110, rgba: [15, 28, 19, 255] }])
-  const hi = planTileBase(img, { ...DEFAULT_VECTORIZE_OPTIONS, smoothing: 50 }, {
-    colorMode: 'auto', background: WHITE_BG, hiRes: true,
-  })
+  const hi = planTileBase(
+    img,
+    { ...DEFAULT_VECTORIZE_OPTIONS, smoothing: 50 },
+    {
+      colorMode: 'auto',
+      background: WHITE_BG,
+      hiRes: true,
+    },
+  )
   assert.equal(hi.scale, 3)
   assert.equal(hi.opts.smoothing, 25)
 
-  const native = planTileBase(img, { ...DEFAULT_VECTORIZE_OPTIONS, smoothing: 50 }, {
-    colorMode: 'auto', background: WHITE_BG, hiRes: false,
-  })
+  const native = planTileBase(
+    img,
+    { ...DEFAULT_VECTORIZE_OPTIONS, smoothing: 50 },
+    {
+      colorMode: 'auto',
+      background: WHITE_BG,
+      hiRes: false,
+    },
+  )
   assert.equal(native.scale, 1)
   assert.equal(native.opts.smoothing, 8)
 })
@@ -331,10 +349,14 @@ test('a one-ink tile is planned as mono, repainted in its own ink', () => {
     { x: 20, y: 20, w: 80, h: 40, rgba: [15, 28, 19, 255] },
     { x: 20, y: 60, w: 80, h: 40, rgba: [5, 15, 6, 255] },
   ])
-  const plan = planTileBase(img, { ...DEFAULT_VECTORIZE_OPTIONS, smoothing: 50 }, {
-    colorMode: 'auto',
-    background: WHITE_BG,
-  })
+  const plan = planTileBase(
+    img,
+    { ...DEFAULT_VECTORIZE_OPTIONS, smoothing: 50 },
+    {
+      colorMode: 'auto',
+      background: WHITE_BG,
+    },
+  )
   assert.equal(plan.opts.mode, 'mono')
   assert.equal(plan.color, false)
   assert.ok(plan.recolor?.startsWith('#'), 'mono traces come back black, so the ink colour rides along')
@@ -395,7 +417,10 @@ test('a light ink on dark paper is traced mono with the cut inverted, repainted 
   assert.ok(plan.opts.threshold > paper && plan.opts.threshold < 255, `cut ${plan.opts.threshold}`)
 
   // Forcing mono on the same tile flips the cut too.
-  assert.equal(planTileBase(img, DEFAULT_VECTORIZE_OPTIONS, { colorMode: 'mono', background: NAVY_BG }).opts.invert, true)
+  assert.equal(
+    planTileBase(img, DEFAULT_VECTORIZE_OPTIONS, { colorMode: 'mono', background: NAVY_BG }).opts.invert,
+    true,
+  )
   // …and dark-on-light stays the right way up.
   const dark = planTileBase(
     sheet(120, 120, WHITE, [{ x: 20, y: 20, w: 80, h: 80, rgba: [15, 28, 19, 255] }]),
@@ -407,8 +432,14 @@ test('a light ink on dark paper is traced mono with the cut inverted, repainted 
 
 test('forcing the mode overrules the probe', () => {
   const img = sheet(120, 120, WHITE, [{ x: 20, y: 20, w: 80, h: 80, rgba: [15, 28, 19, 255] }])
-  assert.equal(planTileBase(img, DEFAULT_VECTORIZE_OPTIONS, { colorMode: 'color', background: WHITE_BG }).opts.mode, 'color')
-  assert.equal(planTileBase(img, DEFAULT_VECTORIZE_OPTIONS, { colorMode: 'mono', background: WHITE_BG }).opts.mode, 'mono')
+  assert.equal(
+    planTileBase(img, DEFAULT_VECTORIZE_OPTIONS, { colorMode: 'color', background: WHITE_BG }).opts.mode,
+    'color',
+  )
+  assert.equal(
+    planTileBase(img, DEFAULT_VECTORIZE_OPTIONS, { colorMode: 'mono', background: WHITE_BG }).opts.mode,
+    'mono',
+  )
 })
 
 test('tile-name stems stay short and file-safe', () => {

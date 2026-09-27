@@ -1,13 +1,12 @@
 import { create } from 'zustand'
 
 /**
- * App theme — a small, standalone store (deliberately separate from the
- * session-only `useStore`, which intentionally never persists). Supports three
- * modes; only the chosen MODE is persisted, so `system` keeps tracking the OS.
+ * App theme store. Only the chosen mode is persisted, so `system` keeps
+ * tracking the OS.
  *
- * Applying a theme = toggling the `dark` class on <html>; the CSS token overrides
- * under `.dark` (see index.css) do the rest. An inline `index.html` script sets
- * the same class before first paint to avoid a flash of the wrong theme.
+ * Applying a theme toggles the `dark` class on <html>; the `.dark` token
+ * overrides in index.css do the rest. An inline script in index.html sets the
+ * same class before first paint to avoid a flash of the wrong theme.
  */
 
 export type ThemeMode = 'light' | 'dark' | 'system'

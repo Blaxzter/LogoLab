@@ -18,7 +18,7 @@ import {
   HAIRLINE_MAX_RAISE,
   HAIRLINE_MIN_SHARE,
   THIN_INK_SHARE,
-} from '../src/lib/strokeWidth.ts'
+} from '../src/lib/traceInput/strokeWidth.ts'
 import {
   monoTraceScale,
   strokeScale,
@@ -26,9 +26,9 @@ import {
   MONO_UPSCALE_MAX,
   RASTER_MAX_DIM_FLAT,
   RASTER_MAX_DIM_HIGH,
-} from '../src/lib/traceCaps.ts'
+} from '../src/lib/traceInput/traceCaps.ts'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
-import type { ImageDataLike } from '../src/lib/ink.ts'
+import type { ImageDataLike } from '../src/lib/traceInput/ink.ts'
 import type { VectorizeOptions } from '../src/types'
 
 /** White opaque paper. */
@@ -82,7 +82,11 @@ test('the mask is the tracer’s own cut: alpha is coverage, invert flips the si
   // alpha 255 on the line, 90 on the rows beside it) is 1px, not 3.
   const aa = paper(100, 100)
   for (let x = 0; x < 100; x++)
-    for (const [y, a] of [[59, 90], [60, 255], [61, 90]] as const) {
+    for (const [y, a] of [
+      [59, 90],
+      [60, 255],
+      [61, 90],
+    ] as const) {
       const i = (y * 100 + x) * 4
       aa.data[i] = aa.data[i + 1] = aa.data[i + 2] = 0
       aa.data[i + 3] = a
@@ -173,8 +177,16 @@ test('the raise follows the lost share: nothing under the gate, the square root 
   assert.equal(hairlineRaise(HAIRLINE_MIN_SHARE / 2), 0)
   assert.equal(hairlineRaise(HAIRLINE_FULL_SHARE), Math.round(HAIRLINE_MAX_RAISE * 255))
   assert.equal(hairlineRaise(1), Math.round(HAIRLINE_MAX_RAISE * 255), 'capped at the full share')
-  assert.equal(hairlineRaise(HAIRLINE_FULL_SHARE / 4), Math.round((HAIRLINE_MAX_RAISE * 255) / 2), 'a quarter of the share is half the raise')
-  assert.equal(hairlineRaise(HAIRLINE_FULL_SHARE, 100), Math.round(HAIRLINE_MAX_RAISE * 100), 'scaled by the ink-to-paper span')
+  assert.equal(
+    hairlineRaise(HAIRLINE_FULL_SHARE / 4),
+    Math.round((HAIRLINE_MAX_RAISE * 255) / 2),
+    'a quarter of the share is half the raise',
+  )
+  assert.equal(
+    hairlineRaise(HAIRLINE_FULL_SHARE, 100),
+    Math.round(HAIRLINE_MAX_RAISE * 100),
+    'scaled by the ink-to-paper span',
+  )
 })
 
 test('sub-pixel strokes the midpoint loses raise the cut; solid strokes do not', () => {
@@ -231,4 +243,3 @@ test('an anti-aliased edge of a thick stroke is a ramp, not a ridge', () => {
   assert.ok(read.lostShare < 0.001, 'the ramp pixel at 180 has a darker neighbour on one side')
   assert.equal(read.cut, 128)
 })
-

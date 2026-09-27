@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useStore } from '../store'
-import { logError } from '../lib/errorLog'
-import { clearFailure, raiseFailure } from '../lib/failureNotice'
-import { provideReportContext } from '../lib/reportContext'
+import { useStore } from '../state/store'
+import { logError } from '../lib/report/errorLog'
+import { clearFailure, raiseFailure } from '../lib/report/failureNotice'
+import { provideReportContext } from '../lib/report/reportContext'
 import { loadLogoFile } from '../lib/image'
 
 /**
@@ -19,17 +19,11 @@ export function useLogoUpload() {
   /** The decode error itself, so "Could not read that file" can be reported. */
   const [failure, setFailure] = useState<unknown>(null)
   /**
-   * What was rejected — WITHOUT the file's name.
-   *
-   * A failed upload loads nothing, so the app's usual "what it was working on"
-   * is empty exactly when a report needs it most: which format a browser
-   * wouldn't decode is the whole question. The name is left out on the same
-   * principle as the pixels — "a 512 kB image/avif" is the diagnosis, and
-   * "rebrand-final-CONFIDENTIAL.avif" is the user's business.
+   * What was rejected (type and size), for the issue report. A failed upload
+   * loads nothing, so this is the only context a report has. The file name is
+   * left out on purpose: it is the user's business, not a diagnosis.
    */
-  const rejected = useRef<{ type: string | null; extension: string | null; bytes: number } | null>(
-    null,
-  )
+  const rejected = useRef<{ type: string | null; extension: string | null; bytes: number } | null>(null)
 
   const handleFile = useCallback(
     async (file: File | undefined | null) => {
@@ -65,8 +59,8 @@ export function useLogoUpload() {
     [clearLogo, setLogo],
   )
 
-  // Published only while a failure is on screen: the report is about THAT file,
-  // and a stale entry describing last week's rejected upload would be a lie.
+  // Published only while a failure is on screen, so a report never describes
+  // an earlier rejected upload.
   useEffect(() => {
     if (!failure) return
     return provideReportContext('upload', () => rejected.current)

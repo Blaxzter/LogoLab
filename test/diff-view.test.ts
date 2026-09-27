@@ -28,12 +28,18 @@ test('a right trace shows the art, not a black square', () => {
   const src = new Uint8ClampedArray([255, 255, 255, 255, 0, 0, 0, 255, 0, 0, 0, 0])
   const render = new Uint8ClampedArray([255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255])
   const f = deltaEField(src, render, w, h)
-  assert.ok(f.de.every((d) => d === 0), 'a right trace')
+  assert.ok(
+    f.de.every((d) => d === 0),
+    'a right trace',
+  )
   const pic = diffPicture(deltaEHeat(f.de), f.de, src, w, h)
   assert.deepEqual(px(pic, 0), [GHOST_MAX, GHOST_MAX, GHOST_MAX], 'white paper is the ghost at its brightest')
   assert.deepEqual(px(pic, 1), HEAT_BG_RGB, 'black ink is the backdrop')
   assert.deepEqual(px(pic, 2), HEAT_BG_RGB, 'transparency is the backdrop, not black-ink-on-white')
-  assert.ok(pic.every((_, i) => i % 4 !== 3 || pic[i] === 255), 'opaque')
+  assert.ok(
+    pic.every((_, i) => i % 4 !== 3 || pic[i] === 255),
+    'opaque',
+  )
 })
 
 test('from HEAT_OPAQUE_DE up the picture IS the heat, byte for byte', () => {
@@ -42,7 +48,8 @@ test('from HEAT_OPAQUE_DE up the picture IS the heat, byte for byte', () => {
   const src = buf(4, 1, [255, 255, 255, 255]) // the brightest ghost there is
   const pic = diffPicture(heat, de, src, 4, 1)
   assert.deepEqual(px(pic, 0), [GHOST_MAX, GHOST_MAX, GHOST_MAX], 'no error: pure ghost')
-  for (let i = 1; i < 4; i++) assert.deepEqual(px(pic, i), px(heat, i), `pixel ${i} is the heat, untouched by the ghost`)
+  for (let i = 1; i < 4; i++)
+    assert.deepEqual(px(pic, i), px(heat, i), `pixel ${i} is the heat, untouched by the ghost`)
 })
 
 test('below it the heat fades into the ghost by the same field, with no seam at the floor', () => {
@@ -54,7 +61,8 @@ test('below it the heat fades into the ghost by the same field, with no seam at 
   const pic = diffPicture(heat, de, src, 3, 1)
   assert.deepEqual(px(pic, 0), [GHOST_MAX, GHOST_MAX, GHOST_MAX], 'under the floor: ghost')
   const justOver = px(pic, 1)
-  for (let c = 0; c < 3; c++) assert.ok(Math.abs(justOver[c] - GHOST_MAX) <= 1, `continuous across the floor (${justOver})`)
+  for (let c = 0; c < 3; c++)
+    assert.ok(Math.abs(justOver[c] - GHOST_MAX) <= 1, `continuous across the floor (${justOver})`)
   // Half-way: strictly between the ghost and the heat on the ramp's blue, which
   // is the channel the cold end of the ramp carries.
   const b = px(pic, 2)[2]

@@ -1,5 +1,5 @@
 import { Contrast } from 'lucide-react'
-import { useStore } from '../../store'
+import { useStore } from '../../state/store'
 import { Tooltip } from './Tooltip'
 
 /**

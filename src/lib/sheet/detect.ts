@@ -1,27 +1,18 @@
-// Find the individual icons in an icon SHEET.
+// Find the individual icons in an icon sheet: a flat background, icons on a
+// lattice, often a caption under each icon and a title on top. The two failure
+// modes are one icon arriving as several blobs (a wifi arc stack) and caption
+// text being mistaken for an icon.
 //
-// The shape of the problem, from the real sheets image models produce: a flat
-// background, icons laid out on a lattice, and — very often — a caption under
-// every icon plus a title across the top. So the two things that actually go
-// wrong are (a) one icon arriving as several disconnected blobs (a "wifi" arc
-// stack is 4 components) and (b) caption text being mistaken for an icon.
+//   1. background  border-ring median, or alpha alone on a transparent sheet
+//   2. ink mask    downscaled with OR reduction so hairlines survive
+//   3. components  8-connected blobs with boxes and ink weight
+//   4. bands       maximal y-intervals containing blobs. A caption can sit
+//                  closer to its icon than an icon's own parts are to each
+//                  other, so no gap threshold separates them; band height does.
+//   5. grouping    single-linkage merge at a gap picked by persistence (pickGap)
+//   6. classify    labels/noise, grid inference, boxes refined at full res
 //
-// The pipeline answers those in order:
-//
-//   1. background   → border-ring median; alpha alone when the sheet is transparent
-//   2. ink mask     → downscaled, OR-reduced so hairlines survive the downscale
-//   3. components   → 8-connected blobs with boxes and ink weight
-//   4. BANDS        → maximal y-intervals that contain blobs. A captioned sheet
-//                     alternates tall icon bands with short text bands, and the
-//                     caption sits CLOSER to its icon (≈18px) than some icons'
-//                     own parts are to each other — so no gap threshold can tell
-//                     them apart. Band height can, and does.
-//   5. grouping     → single-linkage merge inside each band, at a gap chosen by
-//                     scale-space persistence (§pickGap) rather than a constant
-//   6. classify     → labels/noise, grid inference, boxes refined at full res
-//
-// Everything is pure and works on plain RGBA, so the browser and the Node test
-// harness run the identical code.
+// Pure, on plain RGBA, so the browser and Node run the same code.
 
 import type {
   DetectOptions,
@@ -33,7 +24,7 @@ import type {
   SheetTile,
   TileKind,
 } from './types'
-import { estimateBackground, isInkPixel } from '../ink.ts'
+import { estimateBackground, isInkPixel } from '../traceInput/ink.ts'
 
 export const DETECT_DEFAULTS = {
   threshold: 24,
@@ -50,10 +41,9 @@ const SPECK_MASK_AREA = 3
 /** A band shorter than this fraction of the tallest band is caption text. */
 const LABEL_BAND_RATIO = 0.55
 /**
- * …unless the group itself is this tall against the median icon, and no wider
- * than LABEL_RESCUE_ASPECT × its height. Captions on a real sheet run 23–30px
- * against 130px icons (≈0.2), so a 0.45 cut sits in open space between the two
- * populations rather than splitting either.
+ * …unless the group itself is at least this tall against the median icon and
+ * no wider than LABEL_RESCUE_ASPECT × its height. Captions are typically ~0.2
+ * of the icon height, so 0.45 sits between the two populations.
  */
 const LABEL_RESCUE_HEIGHT = 0.45
 const LABEL_RESCUE_ASPECT = 2.5
@@ -70,32 +60,52 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
   const { mw, mh, scale } = mask
 
   if (mask.inkCells === 0) {
-    return { tiles: [], background, grid: null, gap: 0, scale, warnings: ['The sheet looks empty — nothing differs from the background.'] }
+    return {
+      tiles: [],
+      background,
+      grid: null,
+      gap: 0,
+      scale,
+      warnings: ['The sheet looks empty — nothing differs from the background.'],
+    }
   }
   if (mask.inkCells / (mw * mh) > 0.9) {
-    warnings.push('Almost every pixel differs from the background — if this is a photo or a full-bleed design, splitting will not find icons.')
+    warnings.push(
+      'Almost every pixel differs from the background — if this is a photo or a full-bleed design, splitting will not find icons.',
+    )
   }
 
   const blobs = connectedComponents(mask)
   const solid = blobs.filter((b) => b.maskArea > SPECK_MASK_AREA)
   if (solid.length === 0) {
-    return { tiles: [], background, grid: null, gap: 0, scale, warnings: [...warnings, 'Only dust-sized specks found.'] }
+    return {
+      tiles: [],
+      background,
+      grid: null,
+      gap: 0,
+      scale,
+      warnings: [...warnings, 'Only dust-sized specks found.'],
+    }
   }
-  if (blobs.length !== solid.length) warnings.push(`Ignored ${blobs.length - solid.length} speck${blobs.length - solid.length === 1 ? '' : 's'} smaller than a few pixels.`)
+  if (blobs.length !== solid.length)
+    warnings.push(
+      `Ignored ${blobs.length - solid.length} speck${blobs.length - solid.length === 1 ? '' : 's'} smaller than a few pixels.`,
+    )
 
   // ---- 4. bands -----------------------------------------------------------
   const bands = findBands(solid)
   const tallest = bands.reduce((m, b) => Math.max(m, b.y1 - b.y0 + 1), 1)
   for (const band of bands) {
     const h = band.y1 - band.y0 + 1
-    // A lone band is whatever it is — only call something a caption when there
-    // is a taller band on the same sheet to be a caption FOR.
+    // Only call a band a caption when there is a taller band for it to caption.
     band.isLabel = bands.length > 1 && h < LABEL_BAND_RATIO * tallest
   }
   const iconBands = bands.filter((b) => !b.isLabel)
   const labelBands = bands.filter((b) => b.isLabel)
   if (labelBands.length) {
-    warnings.push(`${labelBands.length} short text band${labelBands.length === 1 ? '' : 's'} (titles/captions) kept out of the icon rows.`)
+    warnings.push(
+      `${labelBands.length} short text band${labelBands.length === 1 ? '' : 's'} (titles/captions) kept out of the icon rows.`,
+    )
   }
 
   // ---- 5. grouping --------------------------------------------------------
@@ -127,11 +137,9 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
     else if (medianHeight > 0 && h < 0.5 * medianHeight && w > 2.5 * h) item.kind = 'label'
   }
 
-  // Rescue: a SHORT band is not automatically caption text. Sheets put a strip of
-  // smaller icons ("Branding": upload, grid, sliders) between the full-size rows,
-  // and one such band measured 83px against a 84px cut — a whole row of real icons
-  // silently lost. Caption text is short AND text-shaped; these are neither, so ask
-  // the group itself rather than trusting the band it fell in.
+  // A short band is not automatically caption text: sheets can hold a row of
+  // smaller icons. Caption text is short and text-shaped, so judge each group by
+  // its own shape rather than by the band it fell in.
   let rescued = 0
   for (const item of all) {
     if (item.kind !== 'label') continue
@@ -143,7 +151,9 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
     rescued++
   }
   if (rescued > 0) {
-    warnings.push(`${rescued} smaller icon${rescued === 1 ? '' : 's'} in a short row ${rescued === 1 ? 'was' : 'were'} kept as icons, not caption text.`)
+    warnings.push(
+      `${rescued} smaller icon${rescued === 1 ? '' : 's'} in a short row ${rescued === 1 ? 'was' : 'were'} kept as icons, not caption text.`,
+    )
   }
 
   const tiles = buildTiles(all, img, background, threshold, mask, opts)
@@ -161,10 +171,8 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
 // 1. background
 // ---------------------------------------------------------------------------
 
-// `estimateBackground` / `isInkPixel` moved to `src/lib/ink.ts` — "what is the
-// paper, and is this pixel ink" is asked of single logos too (the studio's mono
-// mode, the MCP planner), not just of sheets. Re-exported here so every existing
-// import keeps working.
+// Background and ink tests live in ink.ts (single logos need them too);
+// re-exported for existing importers.
 export { estimateBackground, isInkPixel }
 
 // ---------------------------------------------------------------------------
@@ -183,9 +191,8 @@ interface Mask {
 
 /**
  * Downscale to a working resolution with OR reduction: a mask cell is ink when
- * ANY source pixel inside it is. Averaging would erase 1px hairlines at 3× — and
- * a dropped hairline splits an icon into pieces, which is exactly the failure the
- * grouping stage then has to guess its way out of.
+ * any source pixel inside it is. Averaging would erase hairlines and split
+ * icons into pieces.
  */
 function buildMask(img: ImageDataLike, bg: SheetBackground, threshold: number, detectSize: number): Mask {
   const { width: W, height: H, data } = img
@@ -331,19 +338,19 @@ function boxGap(a: Blob, b: Blob): number {
 
 /**
  * Single-linkage clustering, computed once as a minimum spanning tree (Prim's,
- * O(n²) time but O(n) memory) so every gap threshold afterwards is just a prefix
- * of the sorted edges.
+ * O(n²) time, O(n) memory) so any gap threshold is a prefix of the sorted edges.
  *
- * Note what is NOT constrained here: merges are free to cross bands. Bands exist
- * to keep captions out of the icons, and once the caption bands are held back the
- * gap alone should decide — an icon drawn as two stacked bars puts every icon in
- * the row in its own band, and forbidding the merge would split all of them.
+ * Merges may cross bands: bands only keep captions out, and an icon drawn as
+ * two stacked bars would otherwise be split across two bands.
  */
 function buildLinkage(bands: Band[], warnings: string[]): Linkage {
   let members = bands.flatMap((b) => b.blobs)
   if (members.length > MAX_BLOBS) {
     const total = members.length
-    members = members.slice().sort((a, b) => b.weight - a.weight).slice(0, MAX_BLOBS)
+    members = members
+      .slice()
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, MAX_BLOBS)
     warnings.push(`The sheet has ${total} separate pieces of artwork — only the ${MAX_BLOBS} largest were grouped.`)
   }
 
@@ -420,18 +427,14 @@ function groupsAtGap(link: Linkage, gap: number): Group[] {
 }
 
 /**
- * Which gap makes "one icon"?
+ * Which gap makes "one icon"? Sweeping the gap upwards, the group count falls in
+ * steps: pieces of each icon fuse (and the count stays at the icon count over a
+ * wide range), then whole rows, then everything. Pick the plateau with the
+ * widest relative range, weighted by two terms that penalise run-away merges:
  *
- * Sweep the gap from 0 upwards and the group count falls in steps: first the
- * pieces of each icon fuse (the count settles on the number of icons and STAYS
- * there across a wide range of gaps), then whole rows fuse, then everything.
- * Pick the step that survives the widest *relative* range of gaps — with two
- * corrections, because raw persistence prefers the run-away merges:
- *
- *   compactness — icons are roughly as wide as they are tall; a fused row is
- *                 14:1 and scores near zero.
- *   consistency — an icon set is drawn at one size, so the spread of group sizes
- *                 is small exactly at the right answer.
+ *   compactness  icons are roughly square; a fused row is not.
+ *   consistency  an icon set shares one size, so size spread is lowest at the
+ *                right answer.
  */
 function pickGap(link: Linkage, maskMin: number): number {
   const n = link.blobs.length
@@ -481,8 +484,7 @@ function pickGap(link: Linkage, maskMin: number): number {
     const score = persistence * compact * consistency
     if (score > bestScore) {
       bestScore = score
-      // Sit in the middle of the plateau (geometric mean): the safest place to
-      // be when the next sheet's gaps are a little different.
+      // Geometric middle of the plateau: most robust to small gap differences.
       bestGap = from <= 0 ? Math.min(to - 1, 1) : Math.sqrt(from * to)
     }
   }
@@ -566,9 +568,8 @@ function refineInk(img: ImageDataLike, bg: SheetBackground, threshold: number, r
 }
 
 /**
- * Rows come from the bands; columns from clustering the x-centres across all
- * rows. It is a grid only when every row fills the same columns — otherwise the
- * caller keeps per-icon boxes, which is the honest answer for a free layout.
+ * Rows and columns from clustering the icon centres. Returns null unless every
+ * icon lands in its own cell; the caller then keeps per-icon boxes.
  */
 function inferGrid(tiles: SheetTile[]): SheetGrid | null {
   const icons = tiles.filter((t) => t.kind === 'icon')
@@ -579,15 +580,21 @@ function inferGrid(tiles: SheetTile[]): SheetGrid | null {
   const widths = icons.map((t) => t.ink.w).sort((a, b) => a - b)
   const medianW = widths[widths.length >> 1]
 
-  const rowCentres = cluster1d(icons.map((t) => t.ink.y + t.ink.h / 2), medianH * 0.6)
-  const colCentres = cluster1d(icons.map((t) => t.ink.x + t.ink.w / 2), medianW * 0.6)
+  const rowCentres = cluster1d(
+    icons.map((t) => t.ink.y + t.ink.h / 2),
+    medianH * 0.6,
+  )
+  const colCentres = cluster1d(
+    icons.map((t) => t.ink.x + t.ink.w / 2),
+    medianW * 0.6,
+  )
 
   for (const t of icons) {
     t.row = nearestIndex(rowCentres, t.ink.y + t.ink.h / 2)
     t.col = nearestIndex(colCentres, t.ink.x + t.ink.w / 2)
   }
   // Re-sort row-major now that positions are known.
-  tiles.sort((a, b) => (a.row - b.row) || (a.col - b.col) || (a.ink.y - b.ink.y) || (a.ink.x - b.ink.x))
+  tiles.sort((a, b) => a.row - b.row || a.col - b.col || a.ink.y - b.ink.y || a.ink.x - b.ink.x)
 
   const seen = new Set<string>()
   let collision = false
@@ -646,9 +653,8 @@ function medianStep(centres: number[]): number {
 
 /**
  * Turn ink extents into crop boxes: pad, optionally square, and optionally give
- * every icon the SAME box so their relative sizes survive into the export (a
- * sheet draws a "plus" smaller than a "cloud" on purpose). Uniform boxes are
- * capped at the grid pitch so a tile can never eat its neighbour.
+ * every icon the same box so relative sizes survive into the export. Uniform
+ * boxes are capped at the grid pitch so a tile never eats its neighbour.
  */
 function applyBoxes(tiles: SheetTile[], grid: SheetGrid | null, opts: DetectOptions, warnings: string[]): void {
   const padding = opts.padding ?? DETECT_DEFAULTS.padding
@@ -656,22 +662,22 @@ function applyBoxes(tiles: SheetTile[], grid: SheetGrid | null, opts: DetectOpti
   const uniform = opts.uniform ?? DETECT_DEFAULTS.uniform
   const icons = tiles.filter((t) => t.kind === 'icon')
 
-  // Nothing but this icon may end up inside its crop. On a captioned sheet the
-  // caption sits ~18px under an icon that is 150px tall, so a padded box lands on
-  // the words — and every exported icon would carry a slice of text.
+  // Nothing but this icon may end up inside its crop; a padded box would
+  // otherwise catch the caption underneath.
   const blockers = tiles.filter((t) => t.kind !== 'noise')
 
   let uniformSize = 0
   if (uniform && icons.length > 1) {
-    // The biggest icon sets the floor — a uniform box smaller than that would
-    // CROP an icon, which is worse than any amount of padding lost. The ceiling
-    // is the tightest CORRIDOR any icon sits in (its free room between the things
-    // around it), so one size fits every icon without touching a caption.
+    // Floor: the biggest icon (never crop an icon). Ceiling: the tightest free
+    // corridor any icon sits in, so one size fits all without touching a caption.
     let need = 0
     for (const t of icons) need = Math.max(need, Math.max(t.ink.w, t.ink.h))
     let room = grid ? Math.min(grid.pitchX || Infinity, grid.pitchY || Infinity) : Infinity
     for (const t of icons) {
-      const c = corridor(t.ink, blockers.filter((o) => o !== t).map((o) => o.ink))
+      const c = corridor(
+        t.ink,
+        blockers.filter((o) => o !== t).map((o) => o.ink),
+      )
       room = Math.min(room, c.w, c.h)
     }
     uniformSize = Math.max(need, Math.min(need * (1 + 2 * padding), room))
@@ -706,19 +712,14 @@ function applyBoxes(tiles: SheetTile[], grid: SheetGrid | null, opts: DetectOpti
 
 /**
  * Place a box of a given size around one icon so it holds all of that icon and
- * none of anything else.
- *
- * The box may SLIDE — an icon shorter than its uniform box has room to spare, and
- * sliding up off a caption keeps every tile the same size, which is the whole
- * point of uniform boxes. Only when sliding cannot clear (a header above AND a
- * caption below) does it shrink, and never past the icon's own ink.
+ * nothing else. The box slides first (keeping uniform sizes); only when sliding
+ * cannot clear does it shrink, never past the icon's own ink.
  */
 function placeBox(ink: Rect, wantW: number, wantH: number, others: Rect[]): { box: Rect; clear: boolean } {
   let w = Math.max(wantW, ink.w)
   let h = Math.max(wantH, ink.h)
 
-  // Only what could ever be reached matters — an icon at the far end of the sheet
-  // is not a constraint, and the position search below is quadratic in this set.
+  // Only nearby rects can constrain the box; the search below is quadratic in them.
   const reach = Math.max(w, h) + Math.max(ink.w, ink.h)
   const cx = ink.x + ink.w / 2
   const cy = ink.y + ink.h / 2
@@ -730,10 +731,8 @@ function placeBox(ink: Rect, wantW: number, wantH: number, others: Rect[]): { bo
     const pos = findPosition(ink, w, h, near)
     if (pos) return { box: round(pos.x, pos.y, w, h), clear: true }
 
-    // Boxed in on every side at this size (a header above AND a caption below is
-    // the usual reason) — shrink against the worst offender and try again. The
-    // neighbour's ink never overlaps this icon's own, so a shrink always exists,
-    // and it can never cut into the icon itself.
+    // Boxed in at this size: shrink against the worst offender and retry. A
+    // neighbour never overlaps this icon's ink, so a valid shrink always exists.
     const x = clamp(cx - w / 2, ink.x + ink.w - w, ink.x)
     const y = clamp(cy - h / 2, ink.y + ink.h - h, ink.y)
     const worst = worstOverlap(x, y, w, h, near)
@@ -764,13 +763,9 @@ function placeBox(ink: Rect, wantW: number, wantH: number, others: Rect[]): { bo
 
 /**
  * The position for a fixed-size box that holds `ink` and no `others`, closest to
- * centred on the ink.
- *
- * Every side of every blocker is a candidate edge, so the feasible set — if it is
- * non-empty — always contains one of the candidate positions. Trying them all is
- * what keeps this from oscillating: sliding "up off the caption, down off the
- * header, up off the caption…" never terminates when each move is chosen against
- * one blocker at a time.
+ * centred on the ink. Every blocker side is a candidate edge, so a non-empty
+ * feasible set always contains a candidate; testing them all avoids the
+ * oscillation of sliding against one blocker at a time.
  */
 function findPosition(ink: Rect, w: number, h: number, others: Rect[]): { x: number; y: number } | null {
   const minX = ink.x + ink.w - w
@@ -823,10 +818,8 @@ function worstOverlap(x: number, y: number, w: number, h: number, others: Rect[]
 }
 
 /**
- * The free room around an icon: how far it is to the nearest thing on each side,
- * counting only what lies across from it. This is the largest box the icon can
- * have without meeting a neighbour, and the tightest one over the whole sheet is
- * what a uniform size has to respect.
+ * The free room around an icon: distance to the nearest rect on each side,
+ * counting only rects that lie across from it.
  */
 function corridor(ink: Rect, others: Rect[]): { w: number; h: number } {
   let top = -Infinity
@@ -861,10 +854,8 @@ function round(x: number, y: number, w: number, h: number): Rect {
 }
 
 /**
- * The manual escape hatch: an evenly divided grid. When auto-detection reads a
- * sheet wrong (touching icons, a busy background), saying "3 × 3" is faster than
- * any amount of threshold twiddling — and it is exactly how these sheets are
- * generated in the first place.
+ * Manual fallback: an evenly divided grid, for sheets auto-detection reads
+ * wrong (touching icons, a busy background).
  */
 export function gridTiles(
   width: number,

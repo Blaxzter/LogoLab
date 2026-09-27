@@ -23,7 +23,7 @@ import {
   raiseFailure,
   resetFailureNotices,
   subscribeFailure,
-} from '../src/lib/failureNotice.ts'
+} from '../src/lib/report/failureNotice.ts'
 
 beforeEach(() => resetFailureNotices())
 

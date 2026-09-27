@@ -11,7 +11,7 @@
 //
 // The witness (a script 'a' whose counter wedge pinches out at the top): 29.3° of rotation
 // on a 26.0px handle moved the control point 13.1px, the bowl's crown sagged ~2px, and the
-// white gap at the top of the counter closed. The corpus-wide histogram (src/devtest/
+// white gap at the top of the counter closed. The corpus-wide histogram (bench/
 // pinDiag.ts) put that one pin 3.6× beyond every other applied pin in tier 0 + the gallery
 // witnesses, which is what makes a bound on the handle-tip movement the right guard.
 //
@@ -25,7 +25,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { cubicAt } from '../src/lib/path/geometry.ts'
-import { DEFAULT_PLANAR_FIT, detectLoopCorners, fitCorneredLoop, type PinDiagRecord } from '../src/lib/trace/planarFit.ts'
+import {
+  DEFAULT_PLANAR_FIT,
+  detectLoopCorners,
+  fitCorneredLoop,
+  type PinDiagRecord,
+} from '../src/lib/trace/planarFit.ts'
 import type { PathNode, Vec } from '../src/lib/path/types.ts'
 
 // --- the anatomy ------------------------------------------------------------------------
@@ -103,7 +108,11 @@ function crownSag(pin: boolean): { sag: number; pins: PinDiagRecord[] } {
   const pts = counterLoop()
   const corners = detectLoopCorners(pts, DEFAULT_PLANAR_FIT.cornerTurnDeg)
   const pins: PinDiagRecord[] = []
-  const nodes = fitCorneredLoop(pts, corners, { ...DEFAULT_PLANAR_FIT, pinCornerTangents: pin, pinDiag: (r) => pins.push(r) })
+  const nodes = fitCorneredLoop(pts, corners, {
+    ...DEFAULT_PLANAR_FIT,
+    pinCornerTangents: pin,
+    pinDiag: (r) => pins.push(r),
+  })
   const poly = flatten(nodes)
   let sag = 0
   for (const p of pts) {
@@ -139,7 +148,10 @@ test('pin: the fitted curve still explains the crown it was fitted to', () => {
 
 test('pin: the unpinned fit is inside the same bar — the pin is what moves it', () => {
   const { sag } = crownSag(false)
-  assert.ok(sag <= SAG_MAX, `the unpinned fit already leaves its evidence by ${sag.toFixed(2)}px — the fixture is not isolating the pin`)
+  assert.ok(
+    sag <= SAG_MAX,
+    `the unpinned fit already leaves its evidence by ${sag.toFixed(2)}px — the fixture is not isolating the pin`,
+  )
 })
 
 test('pin: a gently-curved arm is still pinned (§15.7 stays on)', () => {

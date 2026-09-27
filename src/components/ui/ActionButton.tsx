@@ -7,23 +7,16 @@ import { TipLabel, Tooltip, type TooltipSide } from './Tooltip'
 export const isOff = (reason?: string | null): boolean => reason != null && reason !== ''
 
 /**
- * `disabled` is deliberately NOT used here.
+ * Don't use `disabled` here: the browser drops pointer and focus events on a
+ * disabled control, so its tooltip could never explain why it's unavailable.
+ * An unavailable button uses `aria-disabled`, has no click handler, and stays
+ * in the tab order.
  *
- * The browser drops pointer and focus events on a disabled control, so a
- * tooltip attached to one never opens: the moment someone most wants an
- * explanation — "why is this greyed out?" — is exactly the moment the native
- * attribute guarantees silence. An unavailable button therefore stays live to
- * the DOM, reports its state with `aria-disabled` (what assistive tech reads),
- * and simply has no click wired up. It also stays in the tab order, so the
- * explanation is reachable from the keyboard rather than hover-only.
+ * `reason` makes the button unavailable and should say what would make it
+ * work; `note` is the second tooltip line when it is available.
  *
- * `reason` is what makes a button unavailable, and it should say what WOULD
- * make it work, not merely that it doesn't. `note` is the same second line for
- * a button that IS available but whose behaviour is worth a sentence.
- *
- * Styling stays with the caller: each of these buttons is a different shape,
- * and Tailwind's `disabled:` variants no longer apply once the attribute is
- * gone, so the caller must dim and un-hover itself using `isOff(reason)`.
+ * Tailwind's `disabled:` variants don't apply, so callers style the off state
+ * themselves via `isOff(reason)`.
  */
 export function ActionButton({
   label,

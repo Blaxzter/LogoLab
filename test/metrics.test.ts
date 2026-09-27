@@ -1,11 +1,11 @@
-// Unit tests for the harness metrics (src/devtest/metrics.ts).
+// Unit tests for the harness metrics (bench/metrics.ts).
 //
 //   node --test test/metrics.test.ts
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fidelity, usefulness, hashDoc } from '../src/devtest/metrics.ts'
-import { rasterizeDoc } from '../src/devtest/raster.ts'
+import { fidelity, usefulness, hashDoc } from '../bench/metrics.ts'
+import { rasterizeDoc } from '../bench/raster.ts'
 import type { EditableDoc, PathItem, SubPath } from '../src/lib/path/types.ts'
 
 function solidBuf(w: number, h: number, r: number, g: number, b: number): Uint8ClampedArray {
@@ -108,9 +108,27 @@ function rect(x: number, y: number, w: number, h: number): SubPath {
 }
 
 test('usefulness counts paths, nodes, distinct gradients', () => {
-  const grad = { type: 'linear' as const, x1: 0, y1: 0, x2: 10, y2: 0, stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }] }
+  const grad = {
+    type: 'linear' as const,
+    x1: 0,
+    y1: 0,
+    x2: 10,
+    y2: 0,
+    stops: [
+      { offset: 0, color: '#000000' },
+      { offset: 1, color: '#ffffff' },
+    ],
+  }
   const items: PathItem[] = [
-    { kind: 'path', id: 'a', fill: '#000000', fillRule: 'nonzero', subPaths: [rect(0, 0, 10, 10)], visible: true, gradient: grad },
+    {
+      kind: 'path',
+      id: 'a',
+      fill: '#000000',
+      fillRule: 'nonzero',
+      subPaths: [rect(0, 0, 10, 10)],
+      visible: true,
+      gradient: grad,
+    },
     { kind: 'path', id: 'b', fill: '#ffffff', fillRule: 'nonzero', subPaths: [rect(2, 2, 4, 4)], visible: true },
   ]
   const doc: EditableDoc = { viewBox: [0, 0, 10, 10], items }
@@ -132,7 +150,9 @@ test('hashDoc is stable and content-sensitive', () => {
 test('round-trip: rasterize a doc and score it against itself = perfect', () => {
   const doc: EditableDoc = {
     viewBox: [0, 0, 32, 32],
-    items: [{ kind: 'path', id: 'a', fill: '#3366cc', fillRule: 'nonzero', subPaths: [rect(4, 4, 24, 24)], visible: true }],
+    items: [
+      { kind: 'path', id: 'a', fill: '#3366cc', fillRule: 'nonzero', subPaths: [rect(4, 4, 24, 24)], visible: true },
+    ],
   }
   const px = rasterizeDoc(doc, 32, 32)
   const m = fidelity(px, px, 32, 32)

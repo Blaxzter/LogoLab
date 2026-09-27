@@ -1,14 +1,13 @@
 // The "drop a sheet here" state.
 //
-// It is NOT `PanelEmptyState`: that one always writes the app's working logo,
-// and a sheet must not clobber the logo the user is preparing on the other tabs.
-// The drop-target markup and copy deliberately mirror it so the app reads as one
-// thing; only the destination differs.
+// Not `PanelEmptyState`: that one always writes the app's working logo, and a
+// sheet must not clobber the logo being prepared on the other tabs. The markup
+// mirrors it; only the destination differs.
 
 import { useRef, useState } from 'react'
 import { Loader2, LayoutGrid } from 'lucide-react'
-import { useLogo } from '../../store'
-import { useSheetStore } from '../../sheetStore'
+import { useLogo } from '../../state/store'
+import { useSheetStore } from '../../state/sheetStore'
 import { getImageData } from '../../lib/image'
 import { isImageFile, readSheetFile, SHEET_MAX_DIM } from './sheetIo'
 import { SheetExampleGrid } from './SheetExamples'
@@ -40,7 +39,7 @@ export function SheetIntake() {
   }
 
   /** Take whatever is already loaded on the other tabs as the sheet. */
-  const useCurrentLogo = async () => {
+  const openCurrentLogo = async () => {
     if (!logo.src) return
     setError(null)
     setLoading(true)
@@ -95,9 +94,7 @@ export function SheetIntake() {
           {loading ? <Loader2 size={26} className="animate-spin text-accent" /> : <LayoutGrid size={26} />}
         </div>
         <div>
-          <p className="text-base font-medium text-ink">
-            {dragging ? 'Drop to split it' : 'Drop an icon sheet'}
-          </p>
+          <p className="text-base font-medium text-ink">{dragging ? 'Drop to split it' : 'Drop an icon sheet'}</p>
           <p className="mt-1 max-w-md text-sm text-muted">
             One image holding a set of icons — the kind an image model hands you. Every icon is found, cropped and
             traced to its own clean SVG.
@@ -111,7 +108,7 @@ export function SheetIntake() {
       {error && <p className="text-sm text-bad">{error}</p>}
 
       {logo.src && (
-        <button type="button" onClick={() => void useCurrentLogo()} className="btn btn-secondary h-9 text-xs">
+        <button type="button" onClick={() => void openCurrentLogo()} className="btn btn-secondary h-9 text-xs">
           Use the loaded image ({logo.fileName ?? 'current logo'})
         </button>
       )}
@@ -131,10 +128,16 @@ export function SheetIntake() {
       <div className="w-full rounded-lg border border-line bg-surface p-4 text-sm leading-relaxed text-muted">
         <h3 className="mb-1 text-sm font-semibold text-ink">How it works</h3>
         <ol className="ml-4 list-decimal space-y-1">
-          <li>The sheet's paper colour is measured, and the artwork on it is grouped into icons — captions and
-            titles are recognised and set aside.</li>
-          <li>Check the split on the <strong>Sheet</strong> view: drag a box, resize it, draw a missing one.</li>
-          <li><strong>Trace</strong> runs the vectorizer over every icon, a few at a time.</li>
+          <li>
+            The sheet's paper colour is measured, and the artwork on it is grouped into icons — captions and titles are
+            recognised and set aside.
+          </li>
+          <li>
+            Check the split on the <strong>Sheet</strong> view: drag a box, resize it, draw a missing one.
+          </li>
+          <li>
+            <strong>Trace</strong> runs the vectorizer over every icon, a few at a time.
+          </li>
           <li>Open any icon for the full editor, then download the set as one zip.</li>
         </ol>
       </div>

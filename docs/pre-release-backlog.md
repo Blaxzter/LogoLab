@@ -92,7 +92,7 @@ The original report follows.
 
 ---
 
-`src/store.ts` is a plain zustand store with no persistence. The only thing
+`src/state/store.ts` is a plain zustand store with no persistence. The only thing
 written to `localStorage` in the whole product is the **theme** (`src/theme.ts`).
 Reload and you lose: the logo, every trace setting, every region marker, every
 hand-edited node, the appearance/mockup state, and the export selection.
@@ -110,7 +110,7 @@ to a refresh is the most likely first bad review.
 
 > Filed as [#49](https://github.com/Blaxzter/LogoLab/issues/49) (bug). **Done.**
 
-**What shipped.** `src/components/ErrorBoundary.tsx`, one per route (plus a last-resort one at
+**What shipped.** `src/components/report/ErrorBoundary.tsx`, one per route (plus a last-resort one at
 the root in `main.tsx` for the header, the sidebar and the router itself). A crash now costs
 you the panel it happened in: the header, the loaded logo and every other tab keep working.
 The screen offers **Reset this panel** (remount the subtree, keep everything), **Start over**
@@ -131,12 +131,12 @@ Three things that are less obvious than they look:
   root and takes the whole app with it. A chunk failure is also reported differently
   (`isChunkLoadError`) — `React.lazy` caches the rejection, so remounting re-throws it forever
   and only a reload can help.
-- The context comes from `lib/reportContext`, a registry a studio publishes a snapshot function
+- The context comes from `lib/report/reportContext`, a registry a studio publishes a snapshot function
   into while it is mounted, and the boundary collects it in `getDerivedStateFromError` — the
   render phase, while the crashing subtree is still up. Collect it any later and the children
   are gone, their effect cleanups have run, and the report is silently empty.
 
-`lib/issueReport.ts` is pure and gated by `test/issue-report.test.ts`: the report has a URL
+`lib/report/issueReport.ts` is pure and gated by `test/issue-report.test.ts`: the report has a URL
 budget (GitHub answers a request line past ~8 kB with a 414), it spends that budget from the
 end so the OPTIONS survive and the stack is what gets cut, and it cannot throw on a cycle, on a
 non-Error throw or on a stack full of astral characters.
@@ -146,12 +146,12 @@ the tracer runs in a worker that catches its own errors, so its normal bad day i
 a status bar, not a throw. The same report now hangs off a **failure** (the vectorize status
 bar, the uploader, the sheet's failed tiles) and off a standing **"Report a problem"** in the
 support popover and the mobile menu — the "it traced and the result is wrong" case, which had
-no route at all. Every report also carries `lib/errorLog`, a 25-entry in-memory ring buffer of
+no route at all. Every report also carries `lib/report/errorLog`, a 25-entry in-memory ring buffer of
 what else went wrong this session (repeats collapsed), and `redact()` keeps a `data:` URL
 quoted by an error message from carrying the user's actual art into a public issue.
 
 And a failure now ASKS. A red line with a small Report link beside it, at the bottom of a
-full-height studio, is not a question — so `lib/failureNotice.ts` raises one into the bottom
+full-height studio, is not a question — so `lib/report/failureNotice.ts` raises one into the bottom
 toast stack ("Could not vectorize this image. Report it?"), with the button that answers it. A
 toast rather than a modal: the app still works and the user is mid-task. Asked once per
 distinct failure — dismiss it and that failure stays dismissed for the session, because
@@ -221,7 +221,7 @@ Every piece needed to do better already exists and is already pure:
 | piece | where | note |
 |---|---|---|
 | render a traced doc to pixels | `src/lib/render/raster.ts` `rasterizeDoc` | pure, deterministic, identical in Node and browser — by design |
-| score render vs source | `src/devtest/metrics.ts` `fidelity()` | meanΔE / p95ΔE / SSIM / boundary-seam. Header says it: *"All pure: no DOM, no Node APIs"*. 461 lines + an 86-line `color.ts`, importing only `lib/path` |
+| score render vs source | `bench/metrics.ts` `fidelity()` | meanΔE / p95ΔE / SSIM / boundary-seam. Header says it: *"All pure: no DOM, no Node APIs"*. 461 lines + an 86-line `color.ts`, importing only `lib/path` |
 | parsimony | `src/lib/path/model.ts` `docStats` | already displayed in the stats bar |
 | pick mono/invert/threshold | `src/lib/sheet/inkProbe.ts` + `plan.ts` | see A1 |
 | run N traces off-thread | `traceOffThread.ts` | one worker per call, abortable |
@@ -255,7 +255,7 @@ The stats bar said `7 paths · 44 nodes · 7 colors · 2.07 KB` — four numbers
 *size* and none about *accuracy*. To judge whether a trace was good the user had
 to switch to Overlay and squint at a ghost blend.
 
-**What shipped.** `fidelity()` moved out of `src/devtest/metrics.ts` into
+**What shipped.** `fidelity()` moved out of `bench/metrics.ts` into
 `src/lib/render/fidelity.ts` and the status bar shows its mean **ΔE** (p95 on
 hover). Clicking that number opens **Difference**, a fifth view beside Split /
 Traced / Original / Overlay, painting per-pixel ΔE on the same cold→hot ramp
@@ -324,7 +324,7 @@ is the decision the user actually has. Kept here so it is not re-proposed.
 Smoothing (0–100) maps onto blur and turd size; it is not the fit tolerance.
 The fit ε is `planarFit.keyEpsilon` — the lever §30 and §35 both identify as the
 live one (tightening 1.0 → 0.35 takes interior error 0.09 → 0.04) — and it is
-reachable only from `src/devtest/crispnessStudy.ts`.
+reachable only from `bench/crispnessStudy.ts`.
 
 **Ask:** expose ε as **"Curve tolerance"**, or invert it into a **node budget**
 ("simplify until ≤ N nodes"), which is what an icon author actually wants to say.

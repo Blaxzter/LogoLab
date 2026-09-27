@@ -1,4 +1,4 @@
-// The A/B snapshot PAIRING contract (src/devtest/abCorpus.ts).
+// The A/B snapshot PAIRING contract (bench/abCorpus.ts).
 //
 // Two stamps of one change are a set: `pnpm gen:absnapshot before-x`, change the tracer,
 // `pnpm gen:absnapshot after-x`. /labs/ab groups them into one dropdown entry that diffs
@@ -13,7 +13,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { conventionalPartner, pairSlug, snapshotDirName } from '../src/devtest/abCorpus.ts'
+import { conventionalPartner, pairSlug, snapshotDirName } from '../bench/abCorpus.ts'
 
 test('pair: before- and after- name each other', () => {
   assert.equal(conventionalPartner('before-cornerjunction'), 'after-cornerjunction')

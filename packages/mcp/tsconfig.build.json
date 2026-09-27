@@ -3,7 +3,7 @@
   //
   // The server is not a copy of the tracer — it IMPORTS it, so this compiles the
   // whole reachable graph from src/mcp/server.ts (src/mcp + src/lib/trace, path,
-  // sheet, render + two PNG helpers from src/devtest) into dist/, keeping the
+  // sheet, render, png) into dist/, keeping the
   // repo's src/ layout underneath it. `bin` therefore points at dist/mcp/server.js.
   //
   // Resolution is "bundler", NOT "nodenext", on purpose: the codebase writes

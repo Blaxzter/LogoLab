@@ -1,53 +1,41 @@
-// EXPERIMENTAL background layer separation (`VectorizeOptions.backgroundGradient`,
-// gradients-OFF planar only).
+// Experimental background layer separation (`VectorizeOptions.backgroundGradient`,
+// planar tracer with gradients off).
 //
-// With gradients off a smooth background ramp posterizes into flat bands. The
-// planar tracer then (a) traces every band↔band boundary — a noisy nearest-colour
-// frontier that vectorizes SUPER-JAGGED — and (b) mints a junction wherever a band
-// touches a foreground outline, splitting e.g. a white ring into independently
-// fitted arcs (the user-visible "pull"/dot at each junction). Both defects are the
-// bands' existence, not the fit — so the fix is to make the boundary not exist:
+// With gradients off, a smooth background ramp posterizes into flat bands. The
+// tracer then traces every band-to-band boundary (a noisy nearest-colour frontier
+// that vectorizes jagged) and mints a junction wherever a band touches a
+// foreground outline, splitting e.g. a ring into separately fitted arcs. Both
+// defects come from the bands existing, so this pass removes them:
 //
-//   1. seed with the border-ring background label (caller passes it in),
-//   2. grow the set over ADJACENT labels, accepting a candidate only when the
-//      union's fitted gradient RENDERS the union's own pixels at least as well as
-//      the posterized band colours do (a per-pixel CIE76 render gate — the V6
-//      "gate on what ships" pattern, not an analytic veto),
-//   3. relabel the accepted set to the seed and paint that single region with the
-//      fitted gradient (a real SVG gradient — the bottom "layer").
+//   1. seed with the border-ring background label (passed in by the caller),
+//   2. grow the set over adjacent labels, accepting a candidate only when the
+//      union's fitted gradient renders the candidate's pixels about as well as
+//      its own flat band colour does (a per-pixel CIE76 render test),
+//   3. relabel the accepted set to the seed and paint that one region with the
+//      fitted gradient.
 //
-// The render gate is what keeps real art out of the union: absorbing a distinct
-// flat shape forces the gradient to paint a transition across pixels the source
-// renders crisp, so its ΔE loses to the band palette and the shape survives. A
-// posterized ramp loses to the gradient (banding steps vs a smooth fit), so it
-// merges. Returns null (byte-identical passthrough) when fewer than two labels
-// merge. Pure + deterministic: ascending scans, fixed thresholds, no PRNG.
+// The render test keeps real art out of the union: absorbing a distinct flat
+// shape forces the gradient across pixels the source renders crisp, so it loses
+// to the band colour. A posterized ramp's banding loses to a smooth fit, so it
+// merges. Deterministic: ascending scans, fixed thresholds.
 
 import type { GradientFill } from '../path/types'
 import { concatSamples, fitBestGradient, sampleGradient, type RegionSamples } from './gradient.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
 
-/** Cheap pre-filter: max Oklab RMS residual for a candidate union fit (Step-3c's
- *  default `mergeTol`) — skips the render gate for hopeless fits. */
+/** Cheap pre-filter: max Oklab RMS residual for a candidate union fit (the same
+ *  default as the gradient merge's `mergeTol`). Skips the render test for hopeless fits. */
 const UNION_TOL = 0.06
-/** Cap on the union sample count fed to each candidate's gradient fit. Bounds the
- *  per-candidate cost on a many-label input (a photo forced down this path with
- *  gradients off): the growth re-fits over the whole accepted union once per frontier
- *  candidate per round, so an uncapped union makes that quadratic in the pixel count.
- *  Generous enough that any real posterized band-set stays under it and fits
- *  byte-identically; only a pathological label explosion is subsampled. */
+/** Cap on the union sample count fed to each candidate's fit. Growth re-fits the
+ *  whole union once per candidate per round, so an uncapped union is quadratic in
+ *  pixel count on a many-label input. Real band sets stay under the cap. */
 const UNION_FIT_CAP = 12000
-/** Hard budget on candidate gradient fits per union, so the greedy growth can never
- *  run away on a pathological many-label input (a photo forced down this path). Far
- *  above what any real posterized ramp needs (a handful of bands ⇒ tens of fits), so
- *  it only trips on a genuine label explosion, where growth simply stops early with
- *  whatever merged so far. */
+/** Budget of candidate fits per union. A real posterized ramp needs tens; on a
+ *  label explosion growth stops early and keeps what merged so far. */
 const MAX_UNION_FITS = 600
-/** Candidate render slack: the union gradient may render an absorbed band at most
- *  this much worse (mean CIE76 ΔE) than the band's OWN flat colour. Kept below the
- *  ΔE76 JND (~2.3) so the worst a wrongful absorb can do is imperceptible, yet well
- *  above the ~0.1–0.2 compromise one global gradient makes on a genuine ramp band
- *  (measured: legit bands gap ≤0.14, a distinct foreground shape gaps ≥10). */
+/** How much worse (mean CIE76 ΔE) the union gradient may render a candidate than
+ *  the candidate's own flat colour. Below the ΔE76 JND (~2.3) so a wrong absorb is
+ *  imperceptible, above the small compromise one gradient makes on a genuine band. */
 const RENDER_MARGIN = 1.0
 
 export interface BackgroundUnion {
@@ -57,12 +45,12 @@ export interface BackgroundUnion {
   set: number[]
   /** The gradient fitted over the union's pixels (viewBox == pixel coords). */
   gradient: GradientFill
-  /** Relabeled COPY of the input label map. */
+  /** Relabeled copy of the input label map. */
   labels: Int32Array
 }
 
-/** Deterministically stride a sample set down to at most `cap` points — a no-op when
- *  already under the cap, so small band-sets fit byte-identically. */
+/** Deterministically stride a sample set down to at most `cap` points; a no-op
+ *  when already under the cap. */
 function capSamples(s: RegionSamples, cap: number): RegionSamples {
   if (s.n <= cap) return s
   const step = Math.ceil(s.n / cap)
@@ -154,12 +142,9 @@ export function uniteBackgroundGradient(
 
   const unionOf = (members: number[]): RegionSamples => concatSamples(members.map((l) => samples[l]))
 
-  // Greedy adjacent growth: each round, try every label adjacent to the set
-  // (ascending, deterministic); accept it if the union's gradient renders THIS
-  // candidate at least as faithfully as its own flat band. Repeat until stable.
-  // A fit budget bounds the worst case (a large gradient split into many bands that
-  // each merge one-per-round makes the per-candidate refit ~quadratic in the label
-  // count); a real posterized ramp is a handful of bands and never approaches it.
+  // Greedy adjacent growth: each round, try every label adjacent to the set in
+  // ascending order and accept it if the union's gradient renders that candidate
+  // about as well as its own flat band. Repeat until stable or out of fit budget.
   let best: { gradient: GradientFill } | null = null
   let fits = 0
   outer: for (;;) {
@@ -174,14 +159,11 @@ export function uniteBackgroundGradient(
       const union = capSamples(unionOf(members), UNION_FIT_CAP)
       const fit = fitBestGradient(union)
       if (!fit || fit.oklabResidual > UNION_TOL) continue
-      // Gate on the CANDIDATE's OWN pixels, not the whole union. Judging the
-      // union-wide mean lets a large accepted background DILUTE a small candidate's
-      // error to nothing, so it gets absorbed regardless of whether it belongs —
-      // a late band, or (palette path, where a label is a colour CLASS spanning
-      // disconnected components) a foreground shape that merely shares a band's
-      // colour. With removeBackground composed in, that silent absorb is a DELETE.
-      // Asking only whether the union gradient renders the candidate at least as
-      // well as its own flat band keeps the test discriminating at any union size.
+      // Judge the candidate's own pixels, not the union-wide mean: a large union
+      // dilutes a small candidate's error to nothing, which would absorb a
+      // foreground shape that merely shares a band colour (on the palette path a
+      // label spans disconnected components). With background removal enabled,
+      // such an absorb deletes the shape.
       if (gradientRenderError(fit.gradient, samples[cand]) > bandErr[cand] + RENDER_MARGIN) continue
       set.add(cand)
       best = fit

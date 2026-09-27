@@ -1,10 +1,9 @@
-// Oklab colour space (Björn Ottosson, 2020) for perceptually-uniform distances.
+// Oklab colour space (Björn Ottosson, 2020) for perceptually uniform distances.
 //
-// The mending decisions (does one gradient fit these regions? is this band the
-// same paint as that ramp?) used raw-RGB Euclidean distance, whose meaning swings
-// wildly across hues — a fixed RGB tolerance is lax in dark blues and harsh in
-// greens. Oklab ΔE (plain Euclidean here) is roughly perceptually uniform, so one
-// tolerance behaves consistently. Pure, deterministic, ~30 lines.
+// Used by the paint-model decisions (does one gradient fit these regions? is
+// this band the same paint as that ramp?). A fixed RGB tolerance is lax in dark
+// blues and harsh in greens; Euclidean Oklab ΔE is roughly uniform, so one
+// tolerance behaves consistently across hues.
 
 export type Oklab = [number, number, number]
 
@@ -42,13 +41,6 @@ export function oklabDeltaE(a: Oklab, b: Oklab): number {
 }
 
 /** ΔE between two sRGB triples (0–255), measured in Oklab. */
-export function srgbDeltaEOk(
-  r1: number,
-  g1: number,
-  b1: number,
-  r2: number,
-  g2: number,
-  b2: number,
-): number {
+export function srgbDeltaEOk(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
   return oklabDeltaE(srgbToOklab(r1, g1, b1), srgbToOklab(r2, g2, b2))
 }

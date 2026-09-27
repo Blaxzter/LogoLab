@@ -96,158 +96,97 @@ export interface RenderIconOptions {
 /** Vectorization configuration for the raster → SVG tracing pipeline. */
 export interface VectorizeOptions {
   mode: 'color' | 'mono'
-  /** 0 (crisp corners, node-dense) → 100 (very smooth, sparse). Drives potrace curve fitting. */
+  /** 0 (crisp corners, node-dense) to 100 (very smooth, sparse). Drives curve fitting. */
   smoothing: number
-  /** 0 (keep every speck) → 100 (aggressive noise suppression). Drives speckle & color cleanup. */
+  /** 0 (keep every speck) to 100 (aggressive noise suppression). Drives speckle and colour cleanup. */
   despeckle: number
   /**
-   * Region detail (color mode), 0–100. 0 = balanced (the default) — similar
-   * colours merge into few macro-regions. Higher tightens the segmentation merge
-   * (colour-difference + union-fit thresholds) so finer/subtler regions survive —
-   * e.g. the blends where translucent shapes overlap. The tradeoff: high values
-   * can fragment smooth gradients into flat bands and are slower. Omitted ⇒ 0.
+   * Region detail (color mode), 0–100, default 0. Higher tightens the
+   * segmentation merge so finer regions survive (e.g. translucent overlaps), at
+   * the cost of speed and of fragmenting smooth gradients into bands.
    */
   regionDetail?: number
   /** Mono threshold 0–255 (mono mode). */
   threshold: number
   /**
-   * Mono: the ink is LIGHTER than the threshold (light art on dark paper), so
-   * pixels above the cut become solid instead of pixels below it. Omitted ⇒ off.
+   * Mono: the ink is lighter than the paper, so pixels above the cut become
+   * solid instead of pixels below it. Default off.
    */
   invert?: boolean
   /** Drop the detected background layer for transparent output. */
   removeBackground: boolean
   /**
-   * Fit smooth color gradients (color mode): regions whose source pixels follow
-   * a linear/radial ramp export as a real SVG gradient instead of a flat fill.
-   * Defaults to on when omitted.
+   * Color mode: regions whose pixels follow a linear/radial ramp export as an
+   * SVG gradient instead of a flat fill. Default on.
    */
   gradients?: boolean
   /**
-   * Vestigial: the planar shared-edge tracer is the only engine. The crisp and
-   * potrace mask tracers were removed on 2026-09-22 (docs §37) — every region's
-   * boundary is traced once and shared with its neighbour. The field stays so
-   * stored options and the diagnostics' option literals keep parsing.
+   * Vestigial: the planar tracer is the only engine. Kept so stored options and
+   * existing option literals still parse; don't remove it.
    */
   engine?: 'planar'
   /**
-   * Trace detail / resolution preset. 'balanced' (default) uses the adaptive cap
-   * (flat art 2048, gradient/photo 1024). 'high' raises the FLAT cap to 4096 for
-   * crisper edges on large sources, at ~the square of the cost; gradient/photo is
-   * unchanged (keeps the Step-3c freeze guard). No effect when the source is
-   * already ≤ the balanced cap — rasters are never upscaled. Omitted ⇒ 'balanced'.
+   * Resolution preset. 'balanced' (default) caps flat art at 2048 and gradient
+   * art at 1024; 'high' raises the flat cap to 4096 at roughly the square of the
+   * cost. Only affects sources larger than the balanced cap.
    */
   traceDetail?: 'balanced' | 'high'
   /**
-   * Enlargement in front of the tracer. A UI-side policy like `traceDetail` —
-   * read by the vectorize studio, the icon sheet and the MCP server, never inside
-   * src/lib/trace.
-   *  • 'auto' (the default when omitted): a MONO raster is enlarged bilinearly
-   *    when it is small or its ink is thin — `monoTraceScale` in traceCaps.ts,
-   *    the sheet's measured rule plus a stroke-width rule, never past the flat
-   *    cap. Colour and SVG sources are left alone.
-   *  • 'ai': AI super-resolution (waifu2x swin_unet, lazy-loaded, in-browser),
-   *    small rasters only (see src/lib/aiUpscale.ts for the size rule); inert on
-   *    SVG sources and on rasters above the size where it stops helping.
-   *  • 'off': trace the raster as it is.
+   * Enlargement before tracing. UI-side policy (read by the studio, the icon
+   * sheet and the MCP server, never by src/lib/trace).
+   *  - 'auto' (default): a mono raster that is small or has thin ink is
+   *    enlarged bilinearly (`monoTraceScale` in traceCaps.ts). Colour and SVG
+   *    sources are left alone.
+   *  - 'ai': in-browser AI super-resolution for small rasters (aiUpscale.ts).
+   *  - 'off': trace the raster as it is.
    */
   upscale?: 'off' | 'auto' | 'ai'
   /**
-   * Flat-art segmentation strategy. When gradients are OFF, the default is
-   * PALETTE-FIRST (paletteSegment.ts): pick the dominant colours, snap every pixel
-   * to the nearest, so anti-alias transitions never become their own blend region.
-   * Set false to fall back to the Mumford–Shah smoothness segmenter for flat art.
-   * Ignored when gradients are on (MS always owns gradient art). Omitted ⇒ palette.
+   * Flat-art segmentation (gradients off). Default is palette-first
+   * (paletteSegment.ts): snap every pixel to the nearest dominant colour so
+   * anti-aliasing never becomes its own region. False uses the Mumford–Shah
+   * segmenter instead. Ignored when gradients are on.
    */
   flatPalette?: boolean
   /**
-   * User-LOCKED flat palette (color mode, gradients OFF). When set, the
-   * palette-first segmenter skips automatic colour extraction and snaps every pixel
-   * to the nearest of THESE colours — the user owns both the colours (emitted as
-   * exact hex) and the count. A locked palette also bypasses the automatic
-   * coverage / ≤14-colour gates (the user has decided this art is flat). Omitted ⇒
-   * the palette is extracted automatically and snapped to each region's true design
-   * hex. Ignored when gradients are on. Seed it from the auto palette and edit.
+   * User-locked flat palette (color mode, gradients off). Every pixel snaps to
+   * the nearest of these colours, emitted as exact hex, and the automatic
+   * flat-art gates are bypassed. Omitted: extracted automatically. Ignored when
+   * gradients are on.
    *
-   * Each entry may carry an optional alpha 0–255 (undefined ⇒ opaque): pixels snap
-   * to the nearest colour in RGBA space, and a translucent entry paints its region
-   * with that `fill-opacity` (planar engine). The auto path fills `a` from each
-   * region's alpha mode, so a flat semi-transparent region round-trips its opacity.
+   * `a` is an optional alpha 0–255 (default opaque): snapping happens in RGBA
+   * and a translucent entry paints its region with that `fill-opacity`.
    */
   palette?: { r: number; g: number; b: number; a?: number }[]
   /**
-   * Shape-beautification fidelity tolerance (px): how far a traced contour may
-   * drift from the source when snapping it to a perfect circle/ellipse/line or
-   * aligning concentric/equal shapes. A snap is accepted only if its max
-   * deviation stays under this. 0 disables beautification entirely. Defaults to
-   * ~1.5 when omitted. Higher = more regular geometry, less PNG-faithful.
+   * Beautification tolerance (px): the maximum deviation a snap to a perfect
+   * circle/ellipse/line, or an alignment, may introduce. 0 disables
+   * beautification. Default ~1.5.
    */
   fidelity?: number
   /**
-   * User-placed region markers ("seeds") for segmentation, in NORMALIZED [0,1]
-   * image coordinates (resolution-independent: correct at any raster size).
-   * Marker-watershed semantics — a marker means "keep a distinct region here":
-   * two regions that contain different markers never merge, and a marked region
-   * is never absorbed away. Unmarked areas merge exactly as without markers. To
-   * split a translucent overlap from a neighbouring shape, mark BOTH. Omitted /
-   * empty ⇒ byte-identical to no markers.
-   */
-  /**
-   * User-placed region markers (segmentation seeds), NORMALIZED [0,1] coords. Each
-   * marker keeps its region distinct (a seeded split settles the boundary on the
-   * colour ridge). A marker tagged `flat: true` ADDITIONALLY pins its region to its
-   * pre-merge flat form — excluded from the gradient field-merge and painted one
-   * solid colour ("this section is flat, kept its own thing"). The two tags are
-   * split into the segmenter's `markers` / `flatMarkers` by `segmentOptionsFor`.
-   * A marker tagged `remove: true` instead DISSOLVES the section under it: at trace
-   * time (planar engine) its connected region is removed and its bordering colours
-   * grow into the freed area (nearest-neighbour split — `applyRemoveMarkers`), so
-   * the gap heals instead of leaving a hole. Omitted / empty ⇒ no markers.
+   * User-placed segmentation seeds in normalized [0,1] image coordinates. A
+   * marker keeps its region distinct: regions holding different markers never
+   * merge. `flat: true` also keeps the region out of the gradient merge and
+   * paints it one solid colour. `remove: true` instead dissolves the region and
+   * lets its neighbours grow into the gap (`applyRemoveMarkers`).
    */
   markers?: { x: number; y: number; flat?: boolean; remove?: boolean }[]
-  /**
-   * Translucent layer decomposition (V6, color mode). When the segmentation has
-   * recovered overlap-shaped regions (via markers or Region detail), try to
-   * represent them as a few STACKED TRANSLUCENT shapes (N circles at one opacity
-   * over the background) instead of opaque flat bands — the source's true form,
-   * with the fewest, most editable elements. Purely additive and gated: it is
-   * emitted only when it beats the opaque rendering, and is a NO-OP (byte-
-   * identical output) when there are no overlap regions or no markers/detail.
-   * Defaults to on when omitted; set false to force opaque bands.
-   */
-  layeredDecomposition?: boolean
-  /**
-   * Advanced override of the planar curve-fit tunables (epsilon / line vs cubic
-   * cost / corner angle / pre-smoothing). Merged over the smoothing-derived
-   * defaults. Used by the crispness study to A/B faceting; omitted ⇒ defaults.
-   */
+  /** Advanced override of the planar curve-fit tunables, merged over the smoothing-derived defaults. */
   planarFit?: Partial<import('./lib/trace/planarFit').PlanarFitOptions>
-  /**
-   * Advanced override of the flat-palette segmenter's tunables (colour budget /
-   * share floor / mode passes / small-component area floor / the sub-floor
-   * evidence veto). Merged over the dial-derived defaults, the same way
-   * `planarFit` is; omitted ⇒ defaults. Flat art only — the Mumford–Shah path
-   * (gradients on) does not read it.
-   */
+  /** Advanced override of the flat-palette segmenter's tunables (flat art only), merged over the defaults. */
   paletteSegment?: Partial<import('./lib/trace/paletteSegment').PaletteSegmentOptions>
   /**
-   * Advanced override of the smoothness segmenter's tunables (segment.ts: merge
-   * tolerances, the Step-3c vetoes) and its devtest observer (`onPair`). Merged over
-   * the dial-derived options LAST, the same way `planarFit` is; omitted ⇒ the exact
-   * object segmentOptionsFor built (byte-identical output). Gradients-on path only.
+   * Advanced override of the smoothness segmenter's tunables and its bench
+   * observer (`onPair`), merged last over the dial-derived options. Gradients-on
+   * path only.
    */
   segment?: Partial<import('./lib/trace/segment').SegmentOptions>
   /**
-   * EXPERIMENTAL background layer separation (color mode, gradients OFF, planar).
-   * With gradients off a smooth background ramp posterizes into flat bands; every
-   * band boundary is traced, and each band that touches a foreground outline (a
-   * ring, a chevron) mints a junction that splits the outline — the ring "pull" /
-   * jagged-band defect. When true, the border-seeded background band-set that one
-   * gradient explains (Step-3c's union-fit test, applied only to the background)
-   * is RELABELED into a single region painted with that fitted gradient: the
-   * background becomes one uninterrupted layer (a real SVG gradient), foreground
-   * shapes keep their flat fills, and the outline is a junction-free closed loop.
-   * No-op when nothing merges (flat background, no gradient fit). Omitted ⇒ off.
+   * Experimental (color mode, gradients off). A posterized background ramp
+   * splits every foreground outline it touches into band junctions. When true,
+   * the border-connected bands one gradient explains are merged into a single
+   * region painted with that gradient. Default off.
    */
   backgroundGradient?: boolean
 }

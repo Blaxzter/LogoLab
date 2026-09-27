@@ -4,9 +4,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Grid2x2, Layers, Loader2, MousePointer2, Play, Scissors, SlidersHorizontal, Square } from 'lucide-react'
-import { useCheckerClass } from '../../store'
+import { useCheckerClass } from '../../state/store'
 import { usePanZoom } from '../../hooks/usePanZoom'
-import { useSheetStore } from '../../sheetStore'
+import { useSheetStore } from '../../state/sheetStore'
 import { Button } from '../ui/Button'
 import { Segmented } from '../ui/controls'
 import { CheckerToggle } from '../ui/CheckerToggle'
@@ -14,8 +14,8 @@ import { ZoomControls } from '../ui/ZoomControls'
 import { Sheet } from '../ui/Sheet'
 import { StudioActionBar, StudioTopBar } from '../studio/StudioBar'
 import { LegalLinksInline } from '../legal/LegalFooter'
-import { ReportFailureLink } from '../ReportIssue'
-import { downloadBlob } from '../../lib/download'
+import { ReportFailureLink } from '../report/ReportIssue'
+import { downloadBlob } from '../../lib/export/download'
 import { exportName } from '../../lib/sheet'
 import { SheetControls, SheetControlsBody } from './SheetControls'
 import { SheetStage } from './SheetStage'
@@ -113,7 +113,8 @@ export function SheetStudio() {
     if (openTile || view !== 'sheet') return
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
-      if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return
+      if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)))
+        return
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
         e.preventDefault()
         removeTile(selectedId)
@@ -131,7 +132,7 @@ export function SheetStudio() {
     setOpenId(null)
   }
 
-  const onExport = async () => {
+  const onExport = useCallback(async () => {
     if (!image) return
     setExporting(true)
     try {
@@ -149,7 +150,7 @@ export function SheetStudio() {
     } finally {
       setExporting(false)
     }
-  }
+  }, [image, exportPng, exportSvg, transparentPng, source])
 
   const controlProps = useMemo(
     () => ({
@@ -192,9 +193,36 @@ export function SheetStudio() {
       onReplace: () => replaceInput.current?.click(),
       onClear: clear,
     }),
-    // onExport closes over the export toggles, which are all in the dep list.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [detect, grid, warnings, tiles, traceOptions, colorMode, hiRes, gradientMode, naming, ocr, running, exportSvg, exportPng, transparentPng, exporting, source],
+    [
+      detect,
+      grid,
+      warnings,
+      tiles,
+      traceOptions,
+      colorMode,
+      hiRes,
+      gradientMode,
+      naming,
+      ocr,
+      running,
+      exportSvg,
+      exportPng,
+      transparentPng,
+      exporting,
+      onExport,
+      // Store actions: stable for the store's lifetime.
+      patchDetect,
+      setTraceOptions,
+      setColorMode,
+      setHiRes,
+      setGradientMode,
+      setNaming,
+      readCaptions,
+      traceAll,
+      stopAll,
+      setAllIncluded,
+      clear,
+    ],
   )
 
   if (!source || !image) return null
@@ -226,8 +254,22 @@ export function SheetStudio() {
             value={view}
             onChange={setView}
             options={[
-              { value: 'icons', label: <><Grid2x2 size={13} /> Icons ({tiles.length})</> },
-              { value: 'sheet', label: <><Layers size={13} /> Sheet</> },
+              {
+                value: 'icons',
+                label: (
+                  <>
+                    <Grid2x2 size={13} /> Icons ({tiles.length})
+                  </>
+                ),
+              },
+              {
+                value: 'sheet',
+                label: (
+                  <>
+                    <Layers size={13} /> Sheet
+                  </>
+                ),
+              },
             ]}
           />
           {view === 'sheet' ? (
@@ -235,8 +277,24 @@ export function SheetStudio() {
               value={draw ? 'draw' : 'select'}
               onChange={(v) => setDraw(v === 'draw')}
               options={[
-                { value: 'select', title: 'Select & adjust boxes', label: <><MousePointer2 size={13} /> Select</> },
-                { value: 'draw', title: 'Drag on the sheet to add a box', label: <><Scissors size={13} /> Draw</> },
+                {
+                  value: 'select',
+                  title: 'Select & adjust boxes',
+                  label: (
+                    <>
+                      <MousePointer2 size={13} /> Select
+                    </>
+                  ),
+                },
+                {
+                  value: 'draw',
+                  title: 'Drag on the sheet to add a box',
+                  label: (
+                    <>
+                      <Scissors size={13} /> Draw
+                    </>
+                  ),
+                },
               ]}
             />
           ) : (
@@ -255,7 +313,12 @@ export function SheetStudio() {
             <CheckerToggle />
             <span className="h-5 w-px bg-line" aria-hidden />
             {running ? (
-              <Button variant="secondary" className="h-8 px-3 text-xs" icon={<Square size={13} />} onClick={() => stopAll()}>
+              <Button
+                variant="secondary"
+                className="h-8 px-3 text-xs"
+                icon={<Square size={13} />}
+                onClick={() => stopAll()}
+              >
                 Stop
               </Button>
             ) : (
@@ -341,9 +404,8 @@ export function SheetStudio() {
             {failed > 0 && (
               <>
                 <span className="text-bad">· {failed} failed</span>
-                {/* One link for the batch rather than one per tile: the failures
-                    in a sheet are almost always the same failure N times, and a
-                    badge per tile would shout it N times. */}
+                {/* One link for the batch, not one per tile: a sheet's failures
+                    are usually the same failure repeated. */}
                 <ReportFailureLink
                   what="the icon sheet"
                   error={firstFailure ?? new Error('Trace failed')}

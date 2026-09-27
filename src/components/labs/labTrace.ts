@@ -21,7 +21,5 @@ import type { VectorizeOptions } from '../../types'
  * re-made at each call site.
  */
 export function labTrace(image: ImageData, options: VectorizeOptions): Promise<EditableDoc> {
-  return canTraceOffThread(options)
-    ? traceImageOffThread(image, options)
-    : traceImage(image, options)
+  return canTraceOffThread(options) ? traceImageOffThread(image, options) : traceImage(image, options)
 }

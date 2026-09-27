@@ -10,7 +10,7 @@
 // crisp in the Engine scoreboard, raster-only art in the Gallery, variants in Feature A/B.
 //
 // The load-bearing rule is unchanged: nothing here re-implements scoring. The cases, the metrics
-// and the gates come from the same devtest modules the Node CLI imports (truthCorpus, geomScore,
+// and the gates come from the same bench modules the Node CLI imports (truthCorpus, geomScore,
 // svgGround); a corpus only PRODUCES cases, and this view only DRAWS what those modules return.
 
 import type { FC, ReactNode } from 'react'

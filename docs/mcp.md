@@ -112,7 +112,7 @@ Maskable and adaptive icons ignore that padding and use their own floor. Android
 keeps only the centre **72dp of 108dp** — a circle of ~66% diameter — and art that
 fills its box sits at the box's half *diagonal*, so those targets are full-bleed
 with the mark clamped inside that circle. Same numbers as the UI: both renderers
-read `iconLayout` from `src/lib/iconSpec.ts`.
+read `iconLayout` from `src/lib/export/iconSpec.ts`.
 
 ### `split_icon_sheet` — a grid of icons on one canvas
 
@@ -159,7 +159,7 @@ src/mcp/
 ```
 
 Shared with the app rather than reimplemented: `src/lib/trace` (the tracer),
-`src/lib/sheet` (tile planning, detection, cropping), `src/lib/iconSpec.ts` (icon
+`src/lib/sheet` (tile planning, detection, cropping), `src/lib/export/iconSpec.ts` (icon
 geometry, manifest, `.ico`). Tests: `test/mcp-icons.test.ts` (geometry + containers,
 measured on rendered pixels) and `test/mcp-server.test.ts` (the protocol, over the
 SDK's in-memory transport).

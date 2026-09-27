@@ -1,9 +1,5 @@
-// Cutting tiles out of a sheet.
-//
-// Deliberately plain: a box in, pixels out. The interesting decisions (what the
-// box IS) belong to detect.ts, and the interesting pixel work afterwards —
-// knocking the paper colour out, tracing — already exists elsewhere in the app
-// and is called on the result of this.
+// Cutting tiles out of a sheet and resampling them: a box in, pixels out.
+// Choosing the box is detect.ts's job.
 
 import type { ImageDataLike, Rect } from './types'
 
@@ -15,10 +11,9 @@ export interface CropFill {
 }
 
 /**
- * Copy `rect` out of `img`. The box may hang off the edge of the sheet — an icon
- * in the corner with a uniform box around it does exactly that — and the outside
- * is filled with `fill` (the sheet's own paper colour, normally) rather than
- * clipped, so every tile keeps the size it was given.
+ * Copy `rect` out of `img`. A box hanging off the sheet edge is filled with
+ * `fill` (normally the paper colour) rather than clipped, so every tile keeps
+ * the size it was given.
  */
 export function cropTile(img: ImageDataLike, rect: Rect, fill: CropFill | null): ImageDataLike {
   const w = Math.max(1, Math.round(rect.w))
@@ -56,10 +51,9 @@ export function cropTile(img: ImageDataLike, rect: Rect, fill: CropFill | null):
 }
 
 /**
- * Box-average downscale to a long-side cap. The tracer is capped per image, and
- * a tile is normally far below the cap — this only bites on huge sheets, where
- * skipping it would hand the tracer a 2000px crop and the O(S²) merge that comes
- * with it. Never upscales (same contract as `getImageData`).
+ * Box-average downscale to a long-side cap, so a crop from a huge sheet never
+ * exceeds the tracer's raster cap. Never upscales (same contract as
+ * `getImageData`).
  */
 export function downscaleImageData(img: ImageDataLike, maxDim: number): ImageDataLike {
   const long = Math.max(img.width, img.height)
@@ -104,14 +98,9 @@ export function downscaleImageData(img: ImageDataLike, maxDim: number): ImageDat
 }
 
 /**
- * Bilinear upscale by an integer factor.
- *
- * This adds no information — but it does recover some. A sheet icon is ~170px and
- * its anti-aliased edges encode SUB-pixel coverage; the tracer works on a pixel
- * lattice, so a finer lattice places each contour more precisely. Measured over 54
- * real tiles (see `traceScale`): the traced ink area drifts from the source's by
- * 0.75pp at 1× and 0.13pp at 3×, SSIM 0.864 → 0.946, with no tile left visibly
- * wrong — at 2.5× the trace time and +57% nodes.
+ * Bilinear upscale by an integer factor. Anti-aliased edges encode sub-pixel
+ * coverage; on a finer lattice the tracer places each contour more precisely
+ * (see `monoTraceScale`).
  */
 export function upscaleImageData(img: ImageDataLike, scale: number): ImageDataLike {
   const k = Math.max(1, Math.round(scale))
@@ -145,10 +134,8 @@ export function upscaleImageData(img: ImageDataLike, scale: number): ImageDataLi
 }
 
 /**
- * Bridge to the browser's `ImageData` (the tracer, canvas and cleanup all speak
- * it). Copies, so the result owns a plain ArrayBuffer and can be transferred to a
- * worker without taking the caller's pixels with it. Browser-only by virtue of
- * being CALLED there — the Node test harness never reaches this.
+ * Convert to a browser `ImageData`. Copies, so the result owns its buffer and
+ * can be transferred to a worker without detaching the caller's pixels.
  */
 export function toImageData(img: ImageDataLike): ImageData {
   return new ImageData(new Uint8ClampedArray(img.data), img.width, img.height)
@@ -164,9 +151,7 @@ export function defaultTileName(index: number, base?: string | null): string {
 export function nameStem(fileName: string | null | undefined): string {
   if (!fileName) return 'icon'
   const stem = fileName.replace(/\.[^.]+$/, '').trim()
-  // Model-generated names ("Gemini_Generated_Image_50d4ai50d4ai50d4") make awful
-  // file names; keep them short and slug-safe, and cut on a word boundary rather
-  // than mid-token ("…-image", not "…-image-5").
+  // Keep generated names short and slug-safe, cutting on a word boundary.
   const words = stem
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')

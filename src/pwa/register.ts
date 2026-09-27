@@ -1,12 +1,7 @@
-// Service-worker registration and the small amount of state the UI needs from it.
+// Service-worker registration and the small app-wide store the UI reads from it.
 //
-// A standalone zustand store, like src/theme.ts and for the same reason: it is
-// app-wide, it is tiny, and it has nothing to do with the working session.
-//
-// The update policy is PROMPT, not auto-reload. A new build reaching the browser
-// mid-trace and swapping the code out would abort work in flight; the session is
-// persisted now, but a trace that was 8 seconds in is still 8 seconds lost. So a
-// new worker installs, waits, and the page offers a reload.
+// Updates prompt rather than auto-reload, so a new build never interrupts a
+// trace in flight: a new worker installs, waits, and the page offers a reload.
 
 import { create } from 'zustand'
 import { flushSession } from '../lib/persist/session'
@@ -44,15 +39,13 @@ export const usePwa = create<PwaState>((set, get) => ({
   update: () => {
     // Write out anything still sitting in a debounce before the page goes.
     flushSession()
-    // No worker in charge of this page (dev, unsupported, blocked): there is no
-    // handover to wait for, so the button means what it says.
+    // No service worker (dev, unsupported, blocked): nothing to hand over.
     if (!handover) {
       location.reload()
       return
     }
-    // The notice STAYS until the page actually goes. Clearing it here took the
-    // only control that applies the update away from anyone whose handover did
-    // not land, which is how a stuck update looked like a button doing nothing.
+    // Keep the notice up until the page actually reloads; if the handover
+    // stalls, it is the only control that can apply the update.
     set({ updating: true })
     handover.take(registration?.waiting ?? null)
   },
@@ -76,33 +69,25 @@ export const usePwa = create<PwaState>((set, get) => ({
 let registration: ServiceWorkerRegistration | null = null
 let handover: Handover | null = null
 
-/** How often an open tab re-checks for a new build. Long: this app is a tool
- *  someone keeps open for an afternoon, not a feed. */
+/** How often an open tab re-checks for a new build. */
 const UPDATE_INTERVAL_MS = 60 * 60 * 1000
 
 export function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator)) return
 
   if (!import.meta.env.PROD) {
-    // A worker registered by a production build on the same host (localhost, or
-    // the branded dev hostname after testing a preview build) would keep serving
-    // its precached bundle over the dev server, and the symptom — edits that
-    // don't show up — costs an hour to recognise. So dev actively clears them.
+    // Unregister any worker left by a production build on this host; it would
+    // keep serving its precached bundle over the dev server.
     void navigator.serviceWorker.getRegistrations().then((regs) => {
       for (const reg of regs) void reg.unregister()
     })
     return
   }
 
-  // After `load`, so registering never competes with the first render for
-  // bandwidth: the precache fetch is a few megabytes.
-  //
-  // The readyState check is not belt-and-braces. This runs from main.tsx AFTER
-  // the boot gate has awaited the stored session out of IndexedDB, and `load`
-  // routinely fires during that await — a bare `addEventListener('load', …)`
-  // here attaches to an event that has already happened, and the worker is
-  // silently never registered. (Observed: zero registrations, on a page whose
-  // install prompt had already fired.)
+  // Register after `load` so the precache does not compete with the first
+  // render. Keep the readyState check: this runs after main.tsx awaits the
+  // stored session, and `load` often fires during that await, so a bare
+  // listener would never run and the worker would never register.
   if (document.readyState === 'complete') register()
   else window.addEventListener('load', register, { once: true })
 
@@ -122,8 +107,7 @@ export function registerServiceWorker(): void {
           if (!installing) return
           installing.addEventListener('statechange', () => {
             if (installing.state !== 'installed') return
-            // A controller already running means this is an UPDATE; none means
-            // this was the first install, and the app is now offline-capable.
+            // With a controller this is an update; without, the first install.
             if (navigator.serviceWorker.controller) usePwa.setState({ needRefresh: true })
             else usePwa.setState({ offlineReady: true })
           })
@@ -131,24 +115,19 @@ export function registerServiceWorker(): void {
 
         setInterval(() => void reg.update(), UPDATE_INTERVAL_MS)
       } catch {
-        /* blocked, unsupported, or served over plain http — the app still works,
-           it just isn't installable or offline-capable */
+        /* blocked or plain http: the app works, just not offline */
       }
     })()
   }
 
-  // Who is in charge of this page, and what a change of hands means. See
-  // pwa/handover.ts — the rule it keeps (a first claim is not a reload, a
-  // handover is, and one the user asked for always is) is the whole reason the
-  // update button works.
+  // Decides when a controller change reloads the page (see handover.ts).
   handover = watchHandover({
     container: navigator.serviceWorker,
     reload: () => location.reload(),
   })
 
   window.addEventListener('beforeinstallprompt', (event) => {
-    // Keep the event: without preventDefault Chrome shows its own mini-infobar,
-    // and the event can't be replayed later from a button.
+    // Keep the event for the app's own install button instead of Chrome's infobar.
     event.preventDefault()
     usePwa.setState({ installPrompt: event as InstallPromptEvent })
   })

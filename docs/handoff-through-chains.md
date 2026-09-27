@@ -143,7 +143,7 @@ right one? That is a measurement, and it decides whether this direction is real.
 |---|---|
 | the pass | `src/lib/trace/planarBeautify.ts` — the co-circular FAMILY pass, `FAMILY_*` constants |
 | the through-fit | `src/lib/trace/planarThread.ts` — §14, the machinery to generalize |
-| the lens | `src/devtest/geomScore.ts` — `circleRecovery`, `authoredCircles` |
-| the gate | `src/devtest/truthCorpus.ts` — `CIRCLE_SPREAD_MAX`, `CIRCLE_SPREAD_ALLOWED` |
+| the lens | `bench/geomScore.ts` — `circleRecovery`, `authoredCircles` |
+| the gate | `bench/truthCorpus.ts` — `CIRCLE_SPREAD_MAX`, `CIRCLE_SPREAD_ALLOWED` |
 | instruments | `ringDiag --circles` / `--families` / `--corpus` / `--logos`; `threadDiag` |
 | the record | `docs/vectorization-benchmarks.md` §24 (and §14, §17 for the through-fit) |

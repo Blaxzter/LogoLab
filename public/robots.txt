@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+# The research harness: dev tooling, not the product.
+Disallow: /labs
+
+Sitemap: https://logolab.fabraham.dev/sitemap.xml

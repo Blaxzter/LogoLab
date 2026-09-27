@@ -6,7 +6,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ensureImageData } from '../src/devtest/nodeHarness.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
 import { compressRoutes, segmentFlatPalette } from '../src/lib/trace/paletteSegment.ts'
 import { traceImage } from '../src/lib/trace/index.ts'
 
@@ -90,9 +90,7 @@ test('traceImage honours a locked palette on flat art (gate bypassed)', async ()
 
 test('auto path tags each region with its alpha MODE (opaque regions stay alpha-free)', () => {
   // 60 px of half-transparent orange (α128), 40 px of opaque teal (α255).
-  const img = makeImageA(10, 10, (x, y) =>
-    y * 10 + x < 60 ? [200, 50, 10, 128] : [40, 180, 160, 255],
-  )
+  const img = makeImageA(10, 10, (x, y) => (y * 10 + x < 60 ? [200, 50, 10, 128] : [40, 180, 160, 255]))
   const res = segmentFlatPalette(img, { maxColors: 16, minShare: 0.006, modePasses: 0, minRegionArea: 0 })
 
   assert.equal(res.palette.length, 2)
@@ -103,9 +101,7 @@ test('auto path tags each region with its alpha MODE (opaque regions stay alpha-
 
 test('locked RGBA palette separates the same hue at two opacities (4-D nearest)', () => {
   // Same RGB, two opacities: 50 px opaque, 50 px half-transparent.
-  const img = makeImageA(10, 10, (x, y) =>
-    y * 10 + x < 50 ? [200, 50, 10, 255] : [200, 50, 10, 128],
-  )
+  const img = makeImageA(10, 10, (x, y) => (y * 10 + x < 50 ? [200, 50, 10, 255] : [200, 50, 10, 128]))
   const locked = [
     { r: 200, g: 50, b: 10 }, // opaque target
     { r: 200, g: 50, b: 10, a: 128 }, // translucent target (same hue)
@@ -124,7 +120,11 @@ test('lowering a swatch alpha keeps its region (hue is RGB-nearest, not RGBA)', 
   // indigo swatch to α64 — its region must STAY indigo, not defect to the same-α cyan.
   const indigo: [number, number, number] = [99, 102, 241]
   const cyan: [number, number, number] = [14, 165, 233]
-  const img = makeImageA(10, 10, (x, y) => [...(y * 10 + x < 60 ? indigo : cyan), 217] as [number, number, number, number])
+  const img = makeImageA(
+    10,
+    10,
+    (x, y) => [...(y * 10 + x < 60 ? indigo : cyan), 217] as [number, number, number, number],
+  )
   const locked = [
     { r: indigo[0], g: indigo[1], b: indigo[2], a: 64 }, // alpha lowered hard
     { r: cyan[0], g: cyan[1], b: cyan[2], a: 217 },

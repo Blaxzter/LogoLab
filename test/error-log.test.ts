@@ -17,7 +17,7 @@
 
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { clearErrorLog, logError, recentErrors, redact } from '../src/lib/errorLog.ts'
+import { clearErrorLog, logError, recentErrors, redact } from '../src/lib/report/errorLog.ts'
 
 beforeEach(() => clearErrorLog())
 

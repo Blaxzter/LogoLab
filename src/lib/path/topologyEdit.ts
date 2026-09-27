@@ -1,18 +1,34 @@
-// Phase 5 — shared-edge joint editing. Every op here mutates `doc.topology`
-// (the source of truth) immutably and then re-materializes only the regions that
-// reference a changed edge, so an edit to ONE shared edge propagates to BOTH
-// adjacent regions and they stay byte-coincident (each region reads the same
-// canonical `SharedEdge.nodes`, one forward, one via `reverseEdgeNodes`).
+// Shared-edge editing on a planar doc. Every op updates `doc.topology` (the
+// source of truth) immutably, then re-materializes only the regions that
+// reference a changed edge, so both regions beside a shared edge stay exactly
+// coincident.
 //
-// The ops edit the CANONICAL edge node array (always start→end). Edge node
-// arrays are OPEN (start ≠ end, segments 0→1 … len-2→len-1), so — unlike the
-// closed-subpath editor in geometry.ts — they never wrap, EXCEPT a pure
-// closed-loop edge (a disc, `closed: true`, no junctions) which does wrap. The
-// pure cubic/tangent/mirror math is shared with geometry.ts (splitSegmentAt,
-// setNodeKindNode, moveHandleNode, translateNode) so the two never drift.
+// Ops edit the canonical (start→end) edge node array. Edge arrays are open and
+// never wrap, except a closed disc edge (`closed: true`, no junctions). The
+// per-node cubic math is shared with geometry.ts so the two editors agree.
 
-import type { DocItem, EdgeRef, EditableDoc, NodeKind, NodeRef, PathItem, PathNode, SharedEdge, SubPath, Vec, Vertex } from './types'
-import { cubicAt, moveHandleNode, segmentControls, segmentCount, setNodeKindNode, splitSegmentAt, translateNode } from './geometry.ts'
+import type {
+  DocItem,
+  EdgeRef,
+  EditableDoc,
+  NodeKind,
+  NodeRef,
+  PathItem,
+  PathNode,
+  SharedEdge,
+  SubPath,
+  Vec,
+  Vertex,
+} from './types'
+import {
+  cubicAt,
+  moveHandleNode,
+  segmentControls,
+  segmentCount,
+  setNodeKindNode,
+  splitSegmentAt,
+  translateNode,
+} from './geometry.ts'
 import { edgeMap, materializeRegion, rematerializeRegions, reverseEdgeNodes, type NodeProvenance } from './topology.ts'
 
 /** A real (non-sentinel) vertex id. Open-edge endpoints may carry -1/null. */
@@ -43,7 +59,7 @@ export function moveEdgeNode(doc: EditableDoc, edgeId: number, nodeIdx: number, 
   return rematerializeRegions(withEdgeNodes(doc, edgeId, nodes), new Set([edgeId]))
 }
 
-/** Drag one edge node's handle. `which` is the CANONICAL side (in/out). */
+/** Drag one edge node's handle. `which` is the canonical side (in/out). */
 export function moveEdgeHandle(
   doc: EditableDoc,
   edgeId: number,
@@ -93,10 +109,9 @@ export function setEdgeNodeKind(doc: EditableDoc, edgeId: number, nodeIdx: numbe
 }
 
 /**
- * Delete one edge node. No-op if it would leave the edge with < 2 nodes; an open
- * edge's junction endpoints (idx 0 / len-1) are never deletable — removing one
- * would unweld the shared vertex and open a seam. Closed disc edges have no
- * junctions, so any node may go (down to the 2-node floor).
+ * Delete one edge node. No-op if it would leave < 2 nodes. An open edge's
+ * endpoints (junctions) are never deletable: removing one would unweld the
+ * shared vertex and open a seam. Closed disc edges may lose any node.
  */
 export function deleteEdgeNode(doc: EditableDoc, edgeId: number, nodeIdx: number): EditableDoc {
   const e = findEdge(doc, edgeId)
@@ -113,10 +128,8 @@ export function deleteEdgeNode(doc: EditableDoc, edgeId: number, nodeIdx: number
 // ---------------------------------------------------------------------------
 
 /**
- * Move a junction: translate the `Vertex` AND the matching endpoint node of
- * EVERY incident edge (any edge whose startVertex/endVertex === vertexId,
- * updating nodes[0] / nodes[len-1]). Missing any incident edge would open a seam,
- * so the changed set is all incident edge ids.
+ * Move a junction: translate the `Vertex` and the matching endpoint node of
+ * every incident edge. Missing one incident edge would open a seam.
  */
 export function moveVertex(doc: EditableDoc, vertexId: number, dx: number, dy: number): EditableDoc {
   const topo = doc.topology
@@ -195,7 +208,7 @@ export function translateRegion(doc: EditableDoc, item: PathItem, dx: number, dy
  * junctions (`vertexId != null`) → {@link moveVertex} (all incident spokes
  * follow), interior nodes → {@link moveEdgeNode} (the one edge → both regions
  * follow). Shared targets are de-duped so a vertex/edge node never moves twice.
- * `prov` must be the provenance for the SAME materialization the refs index into.
+ * `prov` must be the provenance for the same materialization the refs index into.
  */
 export function translateRegionNodes(
   doc: EditableDoc,
@@ -290,16 +303,14 @@ export function resolveEdgeSegment(
 }
 
 // ---------------------------------------------------------------------------
-// Remove & heal — dissolve ONE connected section of a planar region and grow the
-// neighbour(s) into the freed area, live on the graph (no re-trace). The clean,
-// well-defined heal: absorb the section F entirely into the single neighbour G it
-// shares the most boundary with (a face-merge). Edges shared only between F and G
-// dissolve; F's remaining boundary (facing other regions / EXT) becomes G's. This
-// is the live-graph equivalent of the trace-time `applyRemoveMarkers` flood.
+// Remove & heal: dissolve one connected section F of a planar region and merge
+// it into the neighbour G it shares the most boundary with (a face-merge on the
+// live graph, no re-trace). Edges shared by F and G dissolve; F's remaining
+// boundary becomes G's.
 // ---------------------------------------------------------------------------
 
-// --- small geometry helpers (replicated from planarAssemble so lib/path stays
-// self-contained: flatten a loop to a dense polygon, winding sign, containment) -
+// --- geometry helpers (duplicated from planarAssemble so lib/path stays
+// self-contained) -
 
 /** Flatten an EdgeRef loop into a dense polygon for winding / containment tests. */
 function flattenLoop(loop: EdgeRef[], edges: Map<number, SharedEdge>): Vec[] {
@@ -357,12 +368,12 @@ function loopInside(inner: Vec[], outer: Vec[]): boolean {
 function edgeArcLength(e: SharedEdge | undefined): number {
   if (!e) return 0
   let L = 0
-  for (let i = 1; i < e.nodes.length; i++) L += Math.hypot(e.nodes[i].x - e.nodes[i - 1].x, e.nodes[i].y - e.nodes[i - 1].y)
+  for (let i = 1; i < e.nodes.length; i++)
+    L += Math.hypot(e.nodes[i].x - e.nodes[i - 1].x, e.nodes[i].y - e.nodes[i - 1].y)
   return L
 }
 
-// --- orientation (mirrors planarAssemble.orientLoops; flips EdgeRef loops so the
-// loops carry the winding and materialize stays a forward concatenation) --------
+// --- orientation (mirrors planarAssemble.orientLoops) ---------------------------
 
 function flipLoop(loop: EdgeRef[]): void {
   loop.reverse()
@@ -439,12 +450,10 @@ function holesNestedIn(polys: Vec[][], areas: number[], outerIdx: number): numbe
 }
 
 /**
- * Which connected section of a planar item the seed sits in: the smallest-area
- * outer ring (signed area > 0) containing the seed, plus its nested holes. When no
- * ring strictly contains the seed, falls back to the ring NEAREST the seed — but
- * only among rings whose bounding box contains it, so a thin sliver's flattened
- * polygon can miss a click that visually landed on it WITHOUT a click in a wholly
- * different region resolving to the wrong blob. Null when nothing qualifies.
+ * Which connected section of a planar item the seed sits in: the smallest outer
+ * ring containing the seed, plus its nested holes. If no ring contains it (a
+ * click on a thin sliver can miss the flattened polygon), falls back to the
+ * nearest ring whose bounding box contains the seed. Null when nothing qualifies.
  */
 function findSection(loops: EdgeRef[][], edges: Map<number, SharedEdge>, seed: Vec): Section | null {
   const polys = loops.map((l) => flattenLoop(l, edges))
@@ -460,8 +469,7 @@ function findSection(loops: EdgeRef[][], edges: Map<number, SharedEdge>, seed: V
     }
   }
   if (outerIdx < 0) {
-    // Near-miss: the nearest ring whose bbox still contains the seed (bounded so a
-    // click elsewhere doesn't snap to an arbitrary far blob).
+    // Bounded by bbox so a click elsewhere doesn't snap to a far blob.
     let bestD = Infinity
     for (let i = 0; i < loops.length; i++) {
       if (areas[i] <= 0 || !inBBox(seed, polys[i])) continue
@@ -477,9 +485,8 @@ function findSection(loops: EdgeRef[][], edges: Map<number, SharedEdge>, seed: V
 }
 
 /**
- * The section a given loop index belongs to (the loop the user's selected nodes sit
- * on): that loop if it is an outer ring, else the ring that owns it as a hole. Lets
- * the editor remove the exact blob whose junctions are selected — no seed needed.
+ * The section a loop index belongs to: that loop if it is an outer ring, else
+ * the ring that owns it as a hole.
  */
 function sectionForLoop(loops: EdgeRef[][], edges: Map<number, SharedEdge>, loopIdx: number): Section | null {
   if (loopIdx < 0 || loopIdx >= loops.length) return null
@@ -547,14 +554,11 @@ interface DirectedRef {
 }
 
 /**
- * Chain a bag of directed edge-refs (each already oriented with the merged face on
- * the correct side) into closed loops by endpoint coincidence — robust to -1/null
- * vertex ids (border arcs) since it matches actual arc endpoints, not vertex table
- * entries. At a point where the boundary passes more than once, the continuation is
- * the next edge clockwise from the reverse of the arrival direction (the planar
- * rotational system — same rule as planarAssemble's face walk). Returns null if a
- * walk fails to close (deferred silhouette cases), so the caller can no-op rather
- * than emit a broken tiling.
+ * Chain oriented edge refs into closed loops by endpoint coincidence (not vertex
+ * ids, which border arcs may lack). Where the boundary passes a point more than
+ * once, continue with the next edge clockwise from the reversed arrival
+ * direction, as planarAssemble's face walk does. Returns null if a walk cannot
+ * close, so the caller no-ops rather than emit a broken tiling.
  */
 function chainRefs(refs: readonly EdgeRef[], edges: Map<number, SharedEdge>): EdgeRef[][] | null {
   const loops: EdgeRef[][] = []
@@ -641,7 +645,12 @@ function pruneVertices(vertices: readonly Vertex[], edges: readonly SharedEdge[]
 }
 
 /** Remove F's section loops from its item; drop the item entirely if none remain. */
-function dropFLoops(items: readonly DocItem[], itemId: string, dead: ReadonlySet<number>, edges: Map<number, SharedEdge>): DocItem[] {
+function dropFLoops(
+  items: readonly DocItem[],
+  itemId: string,
+  dead: ReadonlySet<number>,
+  edges: Map<number, SharedEdge>,
+): DocItem[] {
   const out: DocItem[] = []
   for (const it of items) {
     if (it.id !== itemId) {
@@ -660,13 +669,17 @@ function dropFLoops(items: readonly DocItem[], itemId: string, dead: ReadonlySet
 }
 
 /**
- * The shared merge core: dissolve `section` of `item` and heal the gap. Resolves
- * the dominant opaque neighbour across the section's outward ring, face-merges F
- * into it (symmetric-difference of edge refs, re-chain, re-orient), drops F's loops
- * (and the item if empty), and prunes the now-unreferenced edges/vertices. Returns
- * the SAME doc when it can't act (not adjacent / re-chain can't close).
+ * Dissolve `section` of `item` and heal the gap: face-merge it into the dominant
+ * neighbour (symmetric difference of edge refs, re-chain, re-orient), drop its
+ * loops, prune unreferenced edges and vertices. Returns the same doc when it
+ * cannot act.
  */
-function mergeOrDropSection(doc: EditableDoc, item: PathItem, edges: Map<number, SharedEdge>, section: Section): EditableDoc {
+function mergeOrDropSection(
+  doc: EditableDoc,
+  item: PathItem,
+  edges: Map<number, SharedEdge>,
+  section: Section,
+): EditableDoc {
   const topo = doc.topology!
   const loops = item.loops! // callers guarantee a planar item
   const itemId = item.id
@@ -695,12 +708,12 @@ function mergeOrDropSection(doc: EditableDoc, item: PathItem, edges: Map<number,
     }
   }
 
-  // No opaque neighbour: a plain transparent delete of the section (nothing to heal
-  // into). Drop F's loops, prune edges/vertices nobody references any more.
+  // No opaque neighbour: delete the section, leaving it transparent.
   if (gId == null) {
     const items = dropFLoops(doc.items, itemId, fLoopSet, edges)
     const stillRef = new Set<number>()
-    for (const it of items) if (it.kind === 'path' && it.loops) for (const loop of it.loops) for (const r of loop) stillRef.add(r.edge)
+    for (const it of items)
+      if (it.kind === 'path' && it.loops) for (const loop of it.loops) for (const r of loop) stillRef.add(r.edge)
     const nextEdges = topo.edges.filter((e) => stillRef.has(e.id))
     return { ...doc, items, topology: { vertices: pruneVertices(topo.vertices, nextEdges), edges: nextEdges } }
   }
@@ -713,9 +726,8 @@ function mergeOrDropSection(doc: EditableDoc, item: PathItem, edges: Map<number,
   for (const e of fEdges) if (gEdges.has(e)) shared.add(e)
   if (shared.size === 0) return doc // not actually adjacent — bail
 
-  // Boundary of the merged face = (G's refs) ⊕ (F's refs), shared edges cancelling.
-  // F's refs keep F's-side orientation: F's interior becomes G's interior, so the
-  // winding is already right (re-asserted by orientLoops below).
+  // Merged boundary = G's refs ⊕ F's refs with shared edges cancelling. F's refs
+  // keep their orientation since F's interior becomes G's.
   const survivors: EdgeRef[] = []
   for (const loop of g.loops!) for (const r of loop) if (!shared.has(r.edge)) survivors.push(r)
   for (const li of fLoopIdxs) for (const r of loops[li]) if (!shared.has(r.edge)) survivors.push(r)
@@ -748,14 +760,10 @@ function mergeOrDropSection(doc: EditableDoc, item: PathItem, edges: Map<number,
 }
 
 /**
- * Remove & heal a single connected section of a planar region, seeded by a point
- * inside (or nearest) the section — e.g. the click that selected the blob. Grows
- * the neighbour it shares the most boundary with into the freed area, leaving a
- * valid planar tiling (no hole, no overlap, no seam); all other geometry/edits are
- * untouched. Returns a fresh immutable doc the caller commits through history
- * (undoable), or the SAME doc when it can't act (no topology, legacy/non-planar
- * item, the item has no ring, or a deferred silhouette case the re-chain can't
- * close).
+ * Remove one connected section of a planar region, picked by a seed point, and
+ * grow the neighbour it shares the most boundary with into the freed area. The
+ * result is still a valid planar tiling. Returns a new doc, or the same doc when
+ * it cannot act (no topology, non-planar item, or a boundary that won't re-close).
  */
 export function removeRegionAndHeal(doc: EditableDoc, itemId: string, seed: Vec): EditableDoc {
   const topo = doc.topology
@@ -769,10 +777,9 @@ export function removeRegionAndHeal(doc: EditableDoc, itemId: string, seed: Vec)
 }
 
 /**
- * Like {@link removeRegionAndHeal} but targets the section by a loop / subpath index
- * (the loop the editor's selected nodes sit on) instead of a seed point — used when
- * a whole blob's junctions are selected (which {@link deleteRegionNodes} can't thin)
- * so ⌫ dissolves that blob and heals it. Same return contract.
+ * Like {@link removeRegionAndHeal} but targets the section by loop index (the
+ * loop the selected nodes sit on). Used when deleting a selection of junctions,
+ * which {@link deleteRegionNodes} cannot remove. Same return contract.
  */
 export function removeRegionSection(doc: EditableDoc, itemId: string, loopIdx: number): EditableDoc {
   const topo = doc.topology
@@ -784,4 +791,3 @@ export function removeRegionSection(doc: EditableDoc, itemId: string, loopIdx: n
   if (!section) return doc
   return mergeOrDropSection(doc, item, edges, section)
 }
-

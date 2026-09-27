@@ -25,13 +25,24 @@ test('centred radial reduces EXACTLY to distance/r (byte-identical parity)', () 
     const t = Math.hypot(x - 50, y - 40) / 30
     return t < 0 ? 0 : t > 1 ? 1 : t
   }
-  for (const [x, y] of [[50, 40], [60, 40], [50, 70], [80, 90], [0, 0], [50, 11]]) {
+  for (const [x, y] of [
+    [50, 40],
+    [60, 40],
+    [50, 70],
+    [80, 90],
+    [0, 0],
+    [50, 11],
+  ]) {
     assert.equal(gradientParamT(g, x, y), ref(x, y), `parity at ${x},${y}`)
   }
 })
 
 test('focal radial: t=0 at the focal point, t=1 on the circle', () => {
-  const cx = 60, cy = 50, r = 40, fx = 75, fy = 50
+  const cx = 60,
+    cy = 50,
+    r = 40,
+    fx = 75,
+    fy = 50
   // At the focal point itself the offset is 0.
   assert.ok(Math.abs(radialParamT(cx, cy, r, fx, fy, fx, fy)) < 1e-9, 't(focal)=0')
   // Any point ON the gradient circle has offset 1 (the SVG focal construction).
@@ -43,7 +54,11 @@ test('focal radial: t=0 at the focal point, t=1 on the circle', () => {
 })
 
 test('focal radial: offset increases monotonically along a ray from the focal point', () => {
-  const cx = 60, cy = 50, r = 40, fx = 70, fy = 55
+  const cx = 60,
+    cy = 50,
+    r = 40,
+    fx = 70,
+    fy = 55
   let prev = -1
   // March from the focal point toward the circle along a fixed direction.
   for (let s = 0; s <= 1.0001; s += 0.1) {

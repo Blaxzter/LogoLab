@@ -21,8 +21,8 @@
 // labs will show you `bloom`, and never wrong about whether `bloom` exists.
 
 import { CORPORA } from './workbench/corpora'
-import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE } from '../../devtest/logoCorpus'
-import { AB_CORPUS, AB_LOGO_CASES } from '../../devtest/abCorpus'
+import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE } from '../../../bench/logoCorpus'
+import { AB_CORPUS, AB_LOGO_CASES } from '../../../bench/abCorpus'
 import type { LabSearchState } from './useLabSearch'
 
 /** One searchable corpus, somewhere in the labs. */
@@ -62,8 +62,7 @@ export const CORPUS_PLACES: CorpusPlace[] = [
       available: c.available,
       href: (q) => `/labs/workbench?corpus=${c.id}&q=${enc(q)}`,
       // `note` is a ReactNode in general; only a plain string can honestly be substring-matched.
-      fields: () =>
-        c.cases().map((x) => [x.title, x.key, typeof x.note === 'string' ? x.note : undefined]),
+      fields: () => c.cases().map((x) => [x.title, x.key, typeof x.note === 'string' ? x.note : undefined]),
     }),
   ),
   {
@@ -87,8 +86,7 @@ export const CORPUS_PLACES: CorpusPlace[] = [
     corpus: 'Gallery lane',
     available: LOGO_CORPUS_AVAILABLE,
     href: (q) => `/labs/ab?lane=gallery&q=${enc(q)}`,
-    fields: () =>
-      AB_LOGO_CASES.filter((c) => onDisk.has(c.path.split('/').pop()!)).map((c) => [c.name, c.id]),
+    fields: () => AB_LOGO_CASES.filter((c) => onDisk.has(c.path.split('/').pop()!)).map((c) => [c.name, c.id]),
   },
 ]
 
@@ -114,10 +112,7 @@ export interface Elsewhere {
  * @param here  the corpus (or corpora — A/B shows two lanes at once) being searched right now;
  *              never in the result, because "it is also here" is not news.
  */
-export function searchElsewhere(
-  match: LabSearchState['match'],
-  here?: string | readonly string[],
-): Elsewhere[] {
+export function searchElsewhere(match: LabSearchState['match'], here?: string | readonly string[]): Elsewhere[] {
   const skip = new Set(here == null ? [] : typeof here === 'string' ? [here] : here)
   const out: Elsewhere[] = []
   for (const place of CORPUS_PLACES) {

@@ -2,28 +2,18 @@
 //
 // LogoLab's service worker.
 //
-// Read verbatim at build time by the `serviceWorker()` plugin (scripts/swPlugin.ts),
-// which fills in the build id and the precache list below and emits it as /sw.js.
-// It is plain JS on purpose: it never goes through the bundler, so there is
-// nothing to compile and nothing that can silently pull an app module into
-// worker scope.
+// Plain JS, read verbatim by the build plugin (scripts/swPlugin.ts), which fills
+// in the build id and precache list and emits /sw.js. It never goes through the
+// bundler, so no app module can leak into worker scope.
 //
-// Why hand-written rather than Workbox: the caching decision here is not generic.
-// A LogoLab build is ~31 MB of assets, and 27 MB of that is a research harness
-// and an optional AI upscaler that a user cropping a logo will never open —
-// precaching by glob would make installing the app a 31 MB download. What the
-// app actually needs offline is a few megabytes, and which few is a question
-// about this codebase's structure (see the plugin: it reads the module graph),
-// not about file extensions.
+// The precache list is computed from the module graph, not globbed: most of the
+// build is the research labs and the optional AI runtime, which a normal user
+// never opens.
 //
-// The shape:
-//   • PRECACHE — the app shell and every chunk the normal tabs reach, stored on
-//     install, keyed by build. This is what "works offline" means here.
-//   • RUNTIME  — everything else same-origin, cached the first time it is
-//     actually fetched. A user who opens the labs or the AI upscaler once has
-//     them offline too, without everyone paying for them up front.
-//   • Cross-origin is never touched. The model weights come from a CDN and are
-//     megabytes each; their own HTTP caching is better at this than we are.
+// Caches:
+//  - precache: the shell and every chunk the normal tabs reach, per build.
+//  - runtime: other same-origin assets, cached on first fetch.
+//  - Cross-origin requests (CDN model weights, fonts) are not intercepted.
 
 const BUILD = '__BUILD_ID__'
 const PRECACHE_URLS = __PRECACHE__
@@ -35,9 +25,8 @@ const RUNTIME = 'logolab-runtime'
 const SHELL = '/index.html'
 
 /**
- * Runtime-cache ceiling. Above this a response is served but not stored: the
- * 23 MB onnxruntime binary would otherwise evict the entire rest of the cache
- * the first time someone tries the AI upscaler.
+ * Runtime-cache ceiling. Larger responses are served but not stored, so one huge
+ * binary (e.g. the ONNX runtime) cannot evict the rest of the cache.
  */
 const MAX_RUNTIME_BYTES = 12 * 1024 * 1024
 
@@ -45,43 +34,23 @@ const MAX_RUNTIME_BYTES = 12 * 1024 * 1024
 const MAX_RUNTIME_ENTRIES = 80
 
 /**
- * Match options used for EVERY lookup here. `ignoreVary` is not a nicety.
- *
- * A precache entry is stored against a Request this worker built from a URL
- * string, which carries no `Origin` header. A module script — every lazily
- * loaded tab, and the tracer's worker — is fetched in CORS mode and does carry
- * one. Servers that answer with `Vary: Origin` (Vite's preview does; a CDN may)
- * therefore make the two representations non-equivalent, and the lookup misses
- * something that is sitting right there: online it silently refetches, offline
- * the tab just fails to open.
- *
- * Ignoring Vary is correct for this cache because every URL in it has exactly
- * one representation — the build assets are content-hashed, so the URL already
- * is the version.
+ * Match options for every lookup. Don't drop `ignoreVary`: precache entries are
+ * stored without an `Origin` header, but module scripts are fetched in CORS mode
+ * with one, so a `Vary: Origin` response would never match and lazy tabs would
+ * fail offline. Safe because every cached URL has exactly one representation.
  */
 const MATCH = { ignoreVary: true }
 
 /**
- * Strip the "I followed a redirect to get here" flag off a response.
+ * Clear a response's `redirected` flag by rebuilding it (same body, status and
+ * headers).
  *
- * This one is load-bearing, and its failure mode is the whole site rather than
- * one asset. A navigation may only be answered with a response that was NOT
- * redirected — hand `respondWith` a redirected one and the browser rejects it
- * and fails the navigation outright, which the user sees as Chrome's
- * "This site can't be reached / ERR_FAILED". Not a blank page, not a stale
- * shell: no page at all, on every route, for as long as the worker is
- * installed.
- *
- * Which is what the shell is. `SHELL` is `/index.html`, and the production host
- * (Cloudflare Workers Assets) answers `/index.html` with a 307 to `/` — it
- * normalises the pretty URL. So the precache fetch follows that redirect, stores
- * a perfectly good 200 under the `/index.html` key with `redirected` set, and
- * the navigate branch below then serves it to every navigation. Nothing is
- * broken on the server, every asset still 200s to curl, and the build is green:
- * the app is simply unreachable in any browser that installed the worker.
- *
- * Rebuilding the response through the constructor clears the flag; the bytes,
- * status and headers are the same ones.
+ * Never answer a navigation with a redirected response: the browser fails the
+ * navigation ("This site can't be reached / ERR_FAILED") on every route while
+ * the worker is installed. The production host (Cloudflare Workers Assets)
+ * redirects `/index.html` to `/`, so the fetched shell is always redirected.
+ * Local dev and preview servers do not redirect, so this only shows up on the
+ * deployed host.
  */
 async function unredirected(response) {
   if (!response.redirected) return response
@@ -96,11 +65,10 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(PRECACHE)
-      // One request at a time rather than cache.addAll: addAll is all-or-nothing,
-      // so a single 404 (a renamed example, a stale entry in the list) would fail
-      // the whole install and leave the app with no offline support at all.
-      // `cache: 'reload'` bypasses the HTTP cache so a precache can never store
-      // the previous build's bytes under the new build's URL.
+      // Per-URL fetch + put instead of cache.addAll/add: addAll fails the whole
+      // install on one 404, and add would store a redirected shell (see
+      // `unredirected`). `cache: 'reload'` bypasses the HTTP cache so a stale
+      // copy is never stored under this build.
       await Promise.all(
         PRECACHE_URLS.map(async (url) => {
           try {
@@ -112,14 +80,8 @@ self.addEventListener('install', (event) => {
           }
         }),
       )
-      // `fetch` + `put` rather than `cache.add` because of `unredirected()`:
-      // add() stores whatever the fetch ended on, redirect and all, and a
-      // redirected shell is not a response a navigation can be answered with.
-      //
-      // Deliberately no skipWaiting() here: the new worker waits until the page
-      // asks for it (see the SKIP_WAITING message below). Swapping the build out
-      // from under a running trace — or a half-finished node edit — to save one
-      // click is the wrong trade.
+      // No skipWaiting() here: the new worker waits until the page asks (the
+      // SKIP_WAITING message), so a running trace or edit is never swapped out.
     })(),
   )
 })
@@ -129,17 +91,14 @@ self.addEventListener('activate', (event) => {
     (async () => {
       const keys = await caches.keys()
       await Promise.all(
-        keys
-          .filter((key) => key.startsWith('logolab-precache-') && key !== PRECACHE)
-          .map((key) => caches.delete(key)),
+        keys.filter((key) => key.startsWith('logolab-precache-') && key !== PRECACHE).map((key) => caches.delete(key)),
       )
       await self.clients.claim()
     })(),
   )
 })
 
-// The page's "Reload" button on the update toast. Taking over is the page's
-// call, not ours — see the install handler.
+// Sent by the update toast's "Reload" button.
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting()
 })
@@ -149,25 +108,19 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return
 
   const url = new URL(request.url)
-  // Cross-origin (the CDN model weights, fonts) is left to the browser. A
-  // service worker that intercepts those inherits their opaque responses and
-  // their multi-megabyte bodies, and gains nothing.
+  // Cross-origin requests are left to the browser's own HTTP cache.
   if (url.origin !== self.location.origin) return
 
-  // Every route is the same SPA document, so a navigation is answered from the
-  // shell. Cache-first, because the shell and the hashed chunks it names are one
-  // versioned set: revalidating the document alone could hand a returning user
-  // an index.html pointing at chunks this cache no longer has.
+  // Every route is the SPA shell. Cache-first, because the shell and the hashed
+  // chunks it references are one versioned set; a fresher index.html could point
+  // at chunks this cache lacks.
   if (request.mode === 'navigate') {
     event.respondWith(
       (async () => {
         const shell = await caches.match(SHELL, { ...MATCH, cacheName: PRECACHE })
-        // `!shell.redirected` is belt and braces over the install handler, and
-        // it is the half that recovers rather than prevents: a shell cached by
-        // an OLDER worker is already on disk in the wild, and serving it is the
-        // one mistake here that takes the whole site down (see `unredirected`).
-        // Falling through to the network instead costs a returning user one
-        // request and keeps the app reachable.
+        // Also refuse a redirected hit: shells cached by older workers may still
+        // be redirected, and serving one takes the whole site down (see
+        // `unredirected`). The network fallback keeps the app reachable.
         if (shell && !shell.redirected) return shell
         try {
           return await fetch(request)
@@ -186,12 +139,9 @@ self.addEventListener('fetch', (event) => {
 })
 
 /**
- * Cache-first for same-origin assets.
- *
- * Safe as a blanket rule because every build asset carries a content hash in its
- * name: the URL *is* the version, so a cached hit can never be stale. The few
- * unhashed ones (icons, examples, mockups) are re-fetched on install, keyed by
- * the build.
+ * Cache-first for same-origin assets. Safe because build assets are
+ * content-hashed; the few unhashed ones are re-fetched into each build's
+ * precache.
  */
 async function serveAsset(request) {
   const hit = await caches.match(request, MATCH)
@@ -201,27 +151,15 @@ async function serveAsset(request) {
   try {
     response = await fetch(request)
   } catch {
-    // Offline and never seen: let the caller's own error path handle it. The
-    // studios already degrade when an optional chunk won't load.
+    // Offline and uncached: let the caller's error path handle it.
     return Response.error()
   }
 
-  // Only full, successful, same-origin responses are worth keeping. `type` rules
-  // out opaque redirects; 206 rules out range requests, which cache badly.
-  //
-  // The HTML check is the important one. This app is served with an SPA
-  // fallback, so a request for an asset that ISN'T there comes back as 200
-  // index.html rather than 404 — and caching that under a `.js` URL poisons the
-  // cache with a document the browser will then try to execute, permanently and
-  // offline. A navigation is the only request that should ever answer in HTML,
-  // and navigations don't come through here.
+  // Only cache full, successful, same-origin, non-HTML responses. Don't drop
+  // the HTML check: the SPA fallback answers a missing asset with 200
+  // index.html, and caching that under a `.js` URL poisons the cache.
   const contentType = response.headers.get('content-type') ?? ''
-  if (
-    response.ok &&
-    response.type === 'basic' &&
-    response.status === 200 &&
-    !contentType.startsWith('text/html')
-  ) {
+  if (response.ok && response.type === 'basic' && response.status === 200 && !contentType.startsWith('text/html')) {
     const length = Number(response.headers.get('content-length') ?? 0)
     if (length <= MAX_RUNTIME_BYTES) {
       const copy = response.clone()
@@ -231,7 +169,7 @@ async function serveAsset(request) {
           await cache.put(request, copy)
           await trimRuntime(cache)
         } catch {
-          /* quota — serving the response still worked, which is the job */
+          /* quota exceeded; the response was still served */
         }
       })()
     }
@@ -239,8 +177,7 @@ async function serveAsset(request) {
   return response
 }
 
-/** Keep the runtime cache bounded. `keys()` is insertion-ordered, so the front
- *  of the list is the oldest thing in there. */
+/** Keep the runtime cache bounded; `keys()` is insertion-ordered, oldest first. */
 async function trimRuntime(cache) {
   const keys = await cache.keys()
   if (keys.length <= MAX_RUNTIME_ENTRIES) return

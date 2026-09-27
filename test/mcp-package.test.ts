@@ -94,10 +94,7 @@ function closure(entry: string): { files: Set<string>; external: Set<string> } {
 
 test('the server graph reaches only packages the published one declares', () => {
   const { external } = closure(ENTRY)
-  const declared = new Set([
-    ...Object.keys(mcpPkg.dependencies ?? {}),
-    ...Object.keys(mcpPkg.peerDependencies ?? {}),
-  ])
+  const declared = new Set([...Object.keys(mcpPkg.dependencies ?? {}), ...Object.keys(mcpPkg.peerDependencies ?? {})])
   const undeclared = [...external].filter((p) => !declared.has(p)).sort()
   assert.deepEqual(
     undeclared,

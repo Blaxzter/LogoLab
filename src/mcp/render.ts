@@ -1,19 +1,16 @@
 // The icon renderer, without a canvas.
 //
-// The app draws each icon on a 2D context; here the same icon is COMPOSED as an
+// The app draws each icon on a 2D context; here the same icon is composed as an
 // SVG (backplate, clip, logo, optional tint/invert filter) and handed to resvg.
-// The geometry is not re-derived — `iconLayout` in src/lib/iconSpec.ts is the one
-// answer both renderers draw, so an agent's 512px maskable clears Android's mask
-// exactly where the UI's does.
+// Geometry comes from `iconLayout` in src/lib/export/iconSpec.ts, shared with the canvas
+// renderer, so both place the logo identically.
 //
-// A VECTOR logo is nested as a real `<svg>` element, so resvg draws the curves
-// analytically at the target size: a 16px favicon off a traced logo is rendered,
-// not downsampled. A RASTER logo is box-averaged to roughly twice its destination
-// box first — resvg's own sampler is a bilinear tap, which aliases badly at 4:1 —
-// and then embedded as a PNG.
+// A vector logo is nested as a real `<svg>` element, so resvg draws the curves at
+// the target size. A raster logo is box-averaged to roughly twice its destination
+// box first (resvg's bilinear sampler aliases badly at 4:1), then embedded as PNG.
 
 import { Resvg } from '@resvg/resvg-js'
-import { iconLayout, type RenderIconOpts } from '../lib/iconSpec.ts'
+import { iconLayout, type RenderIconOpts } from '../lib/export/iconSpec.ts'
 import { downscaleImageData } from '../lib/sheet/crop.ts'
 import type { ImageDataLike } from '../lib/sheet/types'
 import { pngFrom, rasterizeSource, type LoadedSource } from './image.ts'

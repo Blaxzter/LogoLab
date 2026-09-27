@@ -1,4 +1,4 @@
-// Pure visualizations of the structure-first pipeline's intermediate stages, as
+// Pure visualizations of the pipeline's intermediate stages, as
 // RGBA buffers (no DOM). Shared by the Pipeline-debug lab (src/components/labs/PipelineLab)
 // and the user-facing "How it works" explainer (components/vectorize), so both
 // render the same pictures. Each function returns a Uint8ClampedArray of

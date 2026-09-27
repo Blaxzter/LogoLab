@@ -1,5 +1,5 @@
-import { useAppearance, useEnv } from '../../store'
-import { LogoMark } from '../LogoMark'
+import { useAppearance, useEnv } from '../../state/store'
+import { LogoMark } from './LogoMark'
 
 /**
  * Full-width desktop website mock inside a browser window chrome.
@@ -102,15 +102,12 @@ export default function DesktopBrowser() {
         {/* Hero */}
         <div className="flex flex-col gap-6 px-8 py-9">
           <div className="flex max-w-[520px] flex-col gap-3.5">
-            <h1
-              className="text-[28px] font-bold leading-[1.12] tracking-tight"
-              style={{ color: headline }}
-            >
+            <h1 className="text-[28px] font-bold leading-[1.12] tracking-tight" style={{ color: headline }}>
               Build something brilliant with {env.brandName}.
             </h1>
             <p className="text-[14px] leading-relaxed" style={{ color: subtext }}>
-              The all-in-one platform that helps your team ship faster, stay aligned,
-              and look effortlessly professional.
+              The all-in-one platform that helps your team ship faster, stay aligned, and look effortlessly
+              professional.
             </p>
             <div className="mt-1 flex items-center gap-3">
               <span

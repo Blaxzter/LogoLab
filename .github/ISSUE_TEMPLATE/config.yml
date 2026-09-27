@@ -1,6 +1,6 @@
 # Blank issues stay ON deliberately.
 #
-# The app files every report through a template (see src/lib/issueReport.ts),
+# The app files every report through a template (see src/lib/report/issueReport.ts),
 # so the chooser is not what protects triage here. What blank issues protect is
 # the CRASH screen: if a template is ever renamed or a form field id drifts, a
 # templated link 404s, and the one moment a user is most willing to file a

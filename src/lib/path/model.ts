@@ -456,10 +456,9 @@ const SHAPE_TAGS = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'pol
 
 /**
  * Attributes that change how a shape paints in ways this model cannot express.
- * A shape carrying any of them stays a RawItem, because lifting it into a
- * PathItem would render it correctly today and then silently drop the attribute
- * on export — a lossless round-trip quietly becoming a lossy one is far worse
- * than a shape you can't node-edit.
+ * A shape carrying any of them stays a RawItem: as a PathItem it would render
+ * correctly but silently lose the attribute on export, and a lossy round-trip
+ * is worse than a shape you can't node-edit.
  */
 const UNMODELLABLE_ATTRS = [
   'filter',
@@ -478,14 +477,10 @@ const UNMODELLABLE_ATTRS = [
 /** Options for {@link parseSvg}. */
 export interface ParseSvgOptions {
   /**
-   * Keep `<g>` nesting as GroupItems instead of flattening it away.
-   *
-   * OFF by default, because the vectorize studio re-parses its own serialized
-   * output and wants the flat item list it has always had. The SVG editor turns
-   * it ON so an imported file keeps the layer folders its author made.
-   *
-   * Either way ancestor transforms are still baked into the leaves — a
-   * GroupItem carries no transform of its own (see {@link GroupItem}).
+   * Keep `<g>` nesting as GroupItems instead of flattening it away. Off by
+   * default (the vectorize studio re-parses its own output and expects a flat
+   * list); the SVG editor turns it on to keep the author's layer folders.
+   * Ancestor transforms are baked into the leaves either way.
    */
   preserveGroups?: boolean
 }
@@ -509,7 +504,10 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
   let viewBox: [number, number, number, number] | null = null
   const vbAttr = root.getAttribute('viewBox')
   if (vbAttr) {
-    const p = vbAttr.trim().split(/[\s,]+/).map(Number)
+    const p = vbAttr
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number)
     if (p.length === 4 && p.every(Number.isFinite) && p[2] > 0 && p[3] > 0) {
       viewBox = [p[0], p[1], p[2], p[3]]
     }
@@ -610,10 +608,8 @@ function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void 
         walkChildren(el, childContext(el, ctx), w)
         continue
       }
-      // Collect the subtree into its own list, then wrap it. The group's own
-      // transform/opacity are consumed by `childContext` on the way down — they
-      // reach the leaves baked into coordinates and paint, so the GroupItem is
-      // pure structure and nothing downstream has to compose a matrix chain.
+      // The group's transform/opacity are baked into the leaves by
+      // `childContext`, so the GroupItem is pure structure.
       const children: DocItem[] = []
       walkChildren(el, childContext(el, ctx), { ...w, items: children })
       if (children.length === 0) continue
@@ -631,8 +627,7 @@ function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void 
     }
     if (SHAPE_TAGS.has(tag)) {
       const shapeCtx = childContext(el, ctx)
-      // Anything carrying paint we can't re-emit stays raw, whatever else is
-      // true of it — a lossy round-trip is worse than an uneditable shape.
+      // Anything carrying paint we can't re-emit stays raw.
       const lossy = hasUnmodellableAttrs(el) || hasUnmodellableStroke(shapeCtx)
 
       if (!lossy && hasPlainFill(shapeCtx)) {
@@ -652,7 +647,10 @@ function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void 
         if (!subPaths || subPaths.length === 0) continue
         const gradient = resolveGradientFill(gradEl, w.gradients, subPathsTightBounds(subPaths), shapeCtx.transform)
         if (gradient) {
-          const item = makePathItem(w.nextId(), subPaths, { ...shapeCtx, fill: representativeStopColor(gradient.stops) })
+          const item = makePathItem(w.nextId(), subPaths, {
+            ...shapeCtx,
+            fill: representativeStopColor(gradient.stops),
+          })
           item.gradient = gradient
           w.items.push(item)
           w.consumedGradients.add(gradId)
@@ -977,7 +975,10 @@ export function ellipseSubPaths(cx: number, cy: number, rx: number, ry: number):
 }
 
 function pointsSubPaths(el: Element, closed: boolean): SubPath[] | null {
-  const parts = (el.getAttribute('points') ?? '').trim().split(/[\s,]+/).filter(Boolean)
+  const parts = (el.getAttribute('points') ?? '')
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean)
   const pts: Vec[] = []
   for (let k = 0; k + 1 < parts.length; k += 2) {
     const px = Number(parts[k])
@@ -1014,10 +1015,8 @@ export function serializeDoc(doc: EditableDoc, precision = 2): string {
   const [x, y, w, h] = doc.viewBox
   let out = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x)} ${fmt(y)} ${fmt(w)} ${fmt(h)}">`
 
-  // Gradient paint servers for visible paths that carry one. Shared gradient
-  // objects (merged bands) are emitted once and referenced by every path.
-  // `leafItems` flattens groups and prunes hidden subtrees, so for the flat,
-  // group-free docs the tracer produces this visits exactly what it always did.
+  // Gradient paint servers for visible paths. A gradient object shared by
+  // several paths (merged bands) is emitted once and referenced by each.
   const gradIds = new Map<GradientFill, string>()
   let defs = ''
   for (const item of leafItems(doc.items)) {
@@ -1044,9 +1043,7 @@ function serializeItems(
   for (const item of items) {
     if (!item.visible) continue
     if (item.kind === 'group') {
-      // An empty folder (or one whose children are all hidden) is structure the
-      // editor cares about and markup nobody does — emitting `<g></g>` would
-      // just add noise to every export.
+      // An empty (or fully hidden) group is not emitted.
       const inner = serializeItems(item.children, gradIds, precision, fmt)
       if (!inner) continue
       out += '<g'
@@ -1100,10 +1097,9 @@ function escapeAttr(v: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * True when the path paints only its outline — `fill="none"` with a stroke.
- * Such a path's visible colour is its STROKE, so any UI that shows "the
- * colour of this path" (swatch, palette, recolor, hover highlight) has to ask
- * here rather than reading `fill` and getting the string "none".
+ * True when the path paints only its outline (`fill="none"` with a stroke).
+ * Its visible colour is the stroke, so UI showing a path's colour should ask
+ * here rather than read `fill` and get "none".
  */
 export function isStrokeOnly(item: PathItem): boolean {
   return item.fill.trim().toLowerCase() === 'none' && item.stroke !== undefined

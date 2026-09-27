@@ -2,13 +2,13 @@
 // disk — the half of the pipeline that turns one logo into a folder an agent can
 // drop into a project.
 //
-// Rendering is per SIZE, not per file: a Tauri export asks for 32px four times
-// over (32x32.png, Square30x30 rounds up, the .ico, the .icns) and each distinct
-// (size, maskable, shape, background) combination is rendered once and reused.
+// Rendering is per size, not per file: each distinct (size, maskable, shape,
+// background) combination is rendered once and reused, since e.g. a Tauri export
+// needs 32px for several files and containers.
 
 import { existsSync, writeFileSync } from 'node:fs'
 import { join, posix, relative } from 'node:path'
-import { encodeIcoBytes, type RenderIconOpts } from '../lib/iconSpec.ts'
+import { encodeIcoBytes, type RenderIconOpts } from '../lib/export/iconSpec.ts'
 import type { IconShape } from '../types'
 import { encodeIcns } from './icns.ts'
 import { customPreset, presetById, type IconFileSpec, type Preset } from './presets.ts'
@@ -32,10 +32,9 @@ export interface Appearance {
 }
 
 /**
- * Full-bleed passthrough: an image model's icon IS the icon, so by default it is
- * not re-cropped, re-carded or re-padded. Ask for a background + padding to get
- * the studio's card look instead (that is what the UI defaults to, for logos that
- * still need a plate behind them).
+ * Full-bleed passthrough: by default an image model's icon is used as is, not
+ * re-cropped, re-carded or re-padded. Ask for a background + padding to get the
+ * studio's card look instead.
  */
 export const DEFAULT_APPEARANCE: Appearance = {
   background: 'transparent',
@@ -105,7 +104,10 @@ export function resolvePresets(req: ExportRequest): Preset[] {
   const out: Preset[] = []
   for (const id of ids) {
     const preset = presetById(id)
-    if (!preset) throw new Error(`Unknown preset "${id}". Available: ${['pwa', 'favicon', 'web', 'tauri', 'electron', 'android', 'ios', 'extension'].join(', ')}`)
+    if (!preset)
+      throw new Error(
+        `Unknown preset "${id}". Available: ${['pwa', 'favicon', 'web', 'tauri', 'electron', 'android', 'ios', 'extension'].join(', ')}`,
+      )
     out.push(preset)
   }
   if (req.sizes?.length) out.push(customPreset(req.sizes))
@@ -185,7 +187,9 @@ function readme(appName: string, presets: Preset[], app: Appearance, files: Writ
   lines.push('')
   lines.push('## Appearance')
   lines.push('')
-  lines.push(`- card: ${app.background === 'transparent' ? 'transparent (the source art, full bleed)' : `${app.background}, ${app.shape}${app.shape === 'rounded' ? ` @ ${app.radiusPct}% radius` : ''}`}`)
+  lines.push(
+    `- card: ${app.background === 'transparent' ? 'transparent (the source art, full bleed)' : `${app.background}, ${app.shape}${app.shape === 'rounded' ? ` @ ${app.radiusPct}% radius` : ''}`}`,
+  )
   lines.push(`- safe-zone padding ${app.paddingPct}%, logo scale ${app.scale}`)
   if (app.tintColor) lines.push(`- tinted ${app.tintColor}`)
   lines.push('')

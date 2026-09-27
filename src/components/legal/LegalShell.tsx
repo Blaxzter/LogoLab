@@ -16,20 +16,14 @@ export function LegalShell({ children }: { children: React.ReactNode }) {
           <BrandMark />
           <span className="truncate text-[0.95rem] font-bold tracking-tight text-ink">LogoLab</span>
         </Link>
-        <Link
-          to="/"
-          className="btn btn-ghost h-8 gap-1.5 px-2.5 text-xs"
-          title="Back to the app"
-        >
+        <Link to="/" className="btn btn-ghost h-8 gap-1.5 px-2.5 text-xs" title="Back to the app">
           <ArrowLeft size={14} />
           Back to app
         </Link>
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <article className="legal mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">
-          {children}
-        </article>
+        <article className="legal mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">{children}</article>
         <LegalFooter />
       </main>
     </div>

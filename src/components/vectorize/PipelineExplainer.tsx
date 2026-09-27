@@ -1,14 +1,12 @@
-// "How it works" — a user-facing teaching overlay that runs the CURRENT uploaded
-// image through the structure-first vectorize pipeline WITH THE USER'S CURRENT
-// settings, and shows each stage with a plain-language explanation. The analysis
-// runs OFF the main thread (the trace worker's 'analyze' job) so opening it never
-// freezes the UI, and its stages honour the same options as the real trace (so the
-// region count matches the output). Linked from the vectorize view.
+// "How it works": a teaching overlay that runs the current image through the
+// vectorize pipeline with the user's current settings and explains each stage.
+// The analysis runs in the trace worker ('analyze' job) with the same options as
+// the real trace, so its region count matches the output.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, X } from 'lucide-react'
-import { useCheckerClass, useLogo } from '../../store'
+import { useCheckerClass, useLogo } from '../../state/store'
 import { Tooltip } from '../ui/Tooltip'
 import { getImageData } from '../../lib/image'
 import { analyzeImageOffThread, type OffThreadAnalysis } from '../../lib/trace/traceOffThread'
@@ -45,7 +43,7 @@ export function PipelineExplainer({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Analyse the current image with the current settings, OFF the main thread.
+  // Analyse the current image with the current settings in the worker.
   const optsKey = JSON.stringify(opts)
   useEffect(() => {
     setAnalysis(null)
@@ -72,20 +70,35 @@ export function PipelineExplainer({
   }, [logo.src, logo.isSvg, logo.svgText, optsKey, opts])
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="How vectorize works">
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm dark:bg-black/55" />
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="How vectorize works"
+    >
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/40 backdrop-blur-sm dark:bg-black/55"
+      />
 
       <div className="panel animate-in-fade relative z-10 flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden">
         <div className="flex items-start justify-between border-b border-line p-5">
           <div>
             <h2 className="text-base font-semibold text-ink">How vectorize works</h2>
             <p className="mt-1 text-sm text-muted">
-              Your image, walked through the stages — with your current settings — that turn pixels into clean,
-              editable vector shapes.
+              Your image, walked through the stages — with your current settings — that turn pixels into clean, editable
+              vector shapes.
             </p>
           </div>
           <Tooltip label="Close">
-            <button type="button" onClick={onClose} aria-label="Close" className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="btn btn-ghost -mr-1.5 -mt-1.5 h-8 w-8 shrink-0 px-0"
+            >
               <X size={16} />
             </button>
           </Tooltip>
@@ -131,8 +144,9 @@ function Steps({
     <div className="flex flex-col gap-6">
       {opts.mode === 'mono' && (
         <p className="rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-xs leading-snug text-ink-2">
-          You're in <b>Mono</b> mode — it simply thresholds the image to one black shape. The colour-grouping stages
-          below show how <b>Color</b> mode works; your actual result in step 5 is the mono shape.
+          You're in <b>Mono</b> mode — the image is cut at one threshold into ink and paper, and that two-region map
+          goes through the same outline tracer as colour. The colour-grouping stages below show how <b>Color</b> mode
+          works; your actual result in step 5 is the mono shape.
         </p>
       )}
 
@@ -186,10 +200,6 @@ function Steps({
           gradientsOn
             ? ' (Coloured tags below show what each region matched.)'
             : ' Gradients are off, so every region here is a single flat colour.'
-        }${
-          markerCount > 0
-            ? ' Where you’ve marked overlapping translucent shapes, the recovered exclusive + overlap regions are checked against a stack of see-through shapes (a few circles at one opacity over the background): if that stack reproduces the colours better than the opaque pieces, it replaces them — so 3 overlapping translucent circles come out as 3 editable see-through circles, not 7 opaque puzzle-pieces.'
-            : ''
         }`}
       >
         {detect && <GradientDetection ramp={detect.ramp} hist={detect.hist} gradientsOn={gradientsOn} />}
@@ -204,8 +214,14 @@ function Steps({
               const model = p?.model ?? 'solid'
               const [sr, sg, sb] = p?.solid ?? [200, 200, 200]
               return (
-                <span key={i} className="flex items-center gap-1 rounded-md border border-line bg-surface-2 px-1.5 py-0.5 text-[10px] text-ink-2">
-                  <span className="h-3 w-3 rounded-sm" style={{ background: rgb(sr, sg, sb), outline: `1px solid ${rgb(r, g, b)}` }} />
+                <span
+                  key={i}
+                  className="flex items-center gap-1 rounded-md border border-line bg-surface-2 px-1.5 py-0.5 text-[10px] text-ink-2"
+                >
+                  <span
+                    className="h-3 w-3 rounded-sm"
+                    style={{ background: rgb(sr, sg, sb), outline: `1px solid ${rgb(r, g, b)}` }}
+                  />
                   {model}
                 </span>
               )
@@ -218,7 +234,7 @@ function Steps({
         n={5}
         title="Trace clean outlines, then tidy them"
         controls={[`Smoothing ${opts.smoothing}`, `Despeckle ${opts.despeckle}`, `Fidelity ${fidelity}px`]}
-        body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass (Fidelity) snaps near-circles, near-lines and shared centres to perfect shapes. The Engine control chooses how the outline is drawn: Crisp (the default) gives the fewest, cleanest nodes; Potrace sticks closest to the original pixels. Result with your settings: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
+        body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass (Fidelity) snaps near-circles, near-lines and shared centres to perfect shapes. Result with your settings: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
       >
         <Visual label="Vector result">
           <div className="h-full w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: a.svg }} />
@@ -228,8 +244,8 @@ function Steps({
       <Step
         n={6}
         title="Keep peaks sharp, heal the seams"
-        controls={['Planar engine', 'automatic']}
-        body="The default Planar engine traces every shared boundary once — so neighbouring shapes meet exactly, with no seam or overlap — then does two finishing touches. Sharp features (a mountain's peak, a V-valley, a frame corner) are found on the raw outline and snapped to their exact sub-pixel point, so they stay crisp instead of being rounded into a soft bevel. And where two colours meet through a soft, blurry edge, stray boundary pixels whose colour clearly belongs to one side are healed back to it — so a continuous stroke doesn't pick up a thin background notch at the junction. Both run automatically (no knob)."
+        controls={['automatic']}
+        body="The tracer draws every boundary two regions share once — so neighbouring shapes meet exactly, with no seam or overlap — then does two finishing touches. Sharp features (a mountain's peak, a V-valley, a frame corner) are found on the raw outline and snapped to their exact sub-pixel point, so they stay crisp instead of being rounded into a soft bevel. And where two colours meet through a soft, blurry edge, stray boundary pixels whose colour clearly belongs to one side are healed back to it — so a continuous stroke doesn't pick up a thin background notch at the junction. Both run automatically (no knob)."
       >
         <Visual label="Before">
           <CornerIllustration variant="before" />
@@ -240,10 +256,9 @@ function Steps({
       </Step>
 
       <p className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
-        Tip: if overlapping or finely-detailed areas don't come through, it's usually step 3 — those areas merged
-        into a neighbouring region before they could become their own shape. Raise <b>Region detail</b> or place
-        <b> Mark</b> seeds to keep them; once the overlaps survive, step 4 can rebuild see-through shapes as editable
-        translucent layers.
+        Tip: if overlapping or finely-detailed areas don't come through, it's usually step 3 — those areas merged into a
+        neighbouring region before they could become their own shape. Raise <b>Region detail</b> or place
+        <b> Mark</b> seeds to keep them.
       </p>
 
       <References />
@@ -251,22 +266,18 @@ function Steps({
   )
 }
 
-/** Links to the algorithms the two engines are built on. */
+/** Links to the algorithms the tracer is built on. */
 function References() {
   return (
     <div className="border-t border-line pt-4 text-xs leading-relaxed text-ink-2">
       <div className="mb-1 font-semibold text-ink">The research behind it</div>
       <ul className="flex flex-col gap-1">
         <li>
-          The structure-first pipeline and the <b>Crisp</b> engine follow Adobe's{' '}
+          The structure-first pipeline and the shared-boundary tracer follow Adobe's{' '}
           <ResearchLink href="https://research.adobe.com/publication/image-vectorization-via-gradient-reconstruction/">
             Image Vectorization via Gradient Reconstruction
           </ResearchLink>{' '}
           (Eurographics 2025), with Schneider's classic Bézier curve fitting (Graphics Gems) at its core.
-        </li>
-        <li>
-          The <b>Potrace</b> engine is Peter Selinger's{' '}
-          <ResearchLink href="https://potrace.sourceforge.net/">Potrace</ResearchLink> polygon-tracing algorithm.
         </li>
       </ul>
     </div>
@@ -275,7 +286,12 @@ function References() {
 
 function ResearchLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-2 hover:text-accent-hover">
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="text-accent underline underline-offset-2 hover:text-accent-hover"
+    >
       {children}
     </a>
   )
@@ -311,10 +327,9 @@ function colorHistogram(img: ImageData, bins = 64): ColorHistogram {
   return { r, g, b, bins, max }
 }
 
-/** The auto-gradients decision, made visible. Gradients turn ON only when BOTH a
- *  gentle slope is present AND the palette is spread — so a flat logo with soft
- *  (anti-aliased) edges, which reads "rampy" but is a few dominant colours, stays
- *  OFF. Both signals are shown with their verdicts so a surprising call is legible. */
+/** The auto-gradients decision, made visible. Gradients turn on only when a gentle
+ *  slope is present and the palette is spread, so a flat logo with anti-aliased
+ *  edges stays off. Both signals are shown with their verdicts. */
 function GradientDetection({
   ramp,
   hist,
@@ -352,7 +367,8 @@ function GradientDetection({
           <div className="mt-1 text-[10px] leading-snug text-muted">
             Colour histogram (R/G/B, log scale). <Signal ok={ramp.paletteSpread} />{' '}
             <b className="text-ink-2">{ramp.distinctColors}</b> main colour{ramp.distinctColors === 1 ? '' : 's'}, top 8
-            cover <b className="text-ink-2">{coverPct}%</b> ({ramp.paletteSpread ? `spread, ≤${coverMaxPct}%` : `concentrated, >${coverMaxPct}% ⇒ flat`}).
+            cover <b className="text-ink-2">{coverPct}%</b> (
+            {ramp.paletteSpread ? `spread, ≤${coverMaxPct}%` : `concentrated, >${coverMaxPct}% ⇒ flat`}).
           </div>
         </div>
         <div className="min-w-[180px] flex-1">
@@ -361,7 +377,11 @@ function GradientDetection({
               className={`h-full rounded ${ramp.slopePresent ? 'bg-accent' : 'bg-ink/30'}`}
               style={{ width: `${Math.min(100, Math.max(pct, pct > 0 ? 1 : 0))}%` }}
             />
-            <div className="absolute inset-y-0 w-0.5 bg-ink/70" style={{ left: `${thrPct}%` }} title={`threshold ${thrPct}%`} />
+            <div
+              className="absolute inset-y-0 w-0.5 bg-ink/70"
+              style={{ left: `${thrPct}%` }}
+              title={`threshold ${thrPct}%`}
+            />
           </div>
           <div className="mt-1 text-[10px] leading-snug text-muted">
             <Signal ok={ramp.slopePresent} /> <b className="text-ink-2">Rampiness {pct.toFixed(1)}%</b> of the interior
@@ -383,13 +403,11 @@ function GradientDetection({
 
 /** Tiny ✓ / ✗ chip telling whether one signal points at "gradient". */
 function Signal({ ok }: { ok: boolean }) {
-  return (
-    <span className={ok ? 'font-semibold text-accent' : 'font-semibold text-muted'}>{ok ? '✓' : '✗'}</span>
-  )
+  return <span className={ok ? 'font-semibold text-accent' : 'font-semibold text-muted'}>{ok ? '✓' : '✗'}</span>
 }
 
-/** Three overlaid per-channel area plots — the classic RGB colour histogram, on a
- *  LOG scale so a dominant colour (e.g. a black background) doesn't flatten every
+/** Three overlaid per-channel area plots (an RGB histogram) on a log scale so a
+ *  dominant colour (e.g. a black background) doesn't flatten every
  *  other peak into the baseline. */
 function HistogramChart({ hist }: { hist: ColorHistogram }) {
   const { r, g, b, bins, max } = hist
@@ -406,7 +424,11 @@ function HistogramChart({ hist }: { hist: ColorHistogram }) {
     return `${d} L${W} ${H} Z`
   }
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-14 w-full rounded border border-line bg-surface" preserveAspectRatio="none">
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="h-14 w-full rounded border border-line bg-surface"
+      preserveAspectRatio="none"
+    >
       <path d={area(r)} fill="rgb(239,68,68)" fillOpacity="0.45" />
       <path d={area(g)} fill="rgb(34,197,94)" fillOpacity="0.45" />
       <path d={area(b)} fill="rgb(59,130,246)" fillOpacity="0.45" />
@@ -455,7 +477,7 @@ function Step({
   )
 }
 
-/** A static before/after of the Planar engine's finishing pass: rounded peaks + a
+/** A static before/after of the tracer's finishing pass: rounded peaks + a
  *  thin background notch at a seam (before) vs sharp peaks + a clean seam (after). */
 function CornerIllustration({ variant }: { variant: 'before' | 'after' }) {
   return (

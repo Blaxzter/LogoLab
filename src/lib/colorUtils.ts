@@ -41,7 +41,10 @@ export function hexToRgb(hex: string): RGB | null {
 }
 
 export function rgbToHex({ r, g, b }: RGB): string {
-  const to = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
+  const to = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, '0')
   return '#' + to(r) + to(g) + to(b)
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { useSheetStore } from '../../sheetStore'
+import { useSheetStore } from '../../state/sheetStore'
 import { claim, type StoredSheet } from '../../lib/persist/session'
 import { SheetIntake } from '../sheet/SheetIntake'
 import { SheetStudio } from '../sheet/SheetStudio'
@@ -9,12 +9,9 @@ import { SheetStudio } from '../sheet/SheetStudio'
  * The icon-sheet tab: split one image of many icons into many icons, each traced
  * by the same vectorizer the single-logo tab uses.
  *
- * The one route that restores asynchronously. Everything else in the session is
- * read during the boot gate in main.tsx, but a stored sheet has to be DECODED
- * back to pixels before its boxes mean anything, and putting a multi-megapixel
- * decode in front of the app's first paint would make every cold start pay for a
- * tab most sessions never open. So the wait lives here, where it is the tab's own
- * wait and reads as one.
+ * The one route that restores asynchronously: a stored sheet must be decoded
+ * back to pixels before its boxes mean anything, and doing that in the boot gate
+ * (main.tsx) would make every cold start pay for a tab most sessions never open.
  */
 export default function SheetPanel() {
   const source = useSheetStore((s) => s.source)

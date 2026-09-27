@@ -1,12 +1,8 @@
 // The toolbar's shape control: one split button that draws the last shape you
 // picked, plus a caret that opens the rest.
 //
-// Five shape buttons sitting inline next to Move/Node/Pen made the bar read as
-// one undifferentiated row — "what does this do to my selection?" — so the ones
-// that CREATE geometry collapse behind a single trigger. The main half stays a
-// one-click draw (a shape tool falls back to Move after each drag, so making
-// every shape cost a menu trip would be worse than the flat row it replaces),
-// and the letter keys still select any shape directly without opening anything.
+// The main half stays a one-click draw because a shape tool falls back to Move
+// after each drag; letter keys still select any shape directly.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -42,8 +38,7 @@ export function ShapeFlyout({
     onPick(id)
   }
 
-  // The trigger shows whatever shape you reached for last — including one picked
-  // by its letter key, which never touches this menu.
+  // The trigger shows the last shape used, including one picked by letter key.
   useEffect(() => {
     if (isShape) setShown(tool)
   }, [isShape, tool])
@@ -59,10 +54,16 @@ export function ShapeFlyout({
       left: Math.max(8, Math.min(b.left, window.innerWidth - MENU_W - 8)),
       top: b.bottom + 6,
     })
-    setCursor(Math.max(0, SHAPE_TOOLS.findIndex((t) => t.id === shown)))
+    setCursor(
+      Math.max(
+        0,
+        SHAPE_TOOLS.findIndex((t) => t.id === shown),
+      ),
+    )
     menuRef.current?.focus()
   }, [open, shown])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(pick): only calls setters and the parent's memoized pickTool
   useEffect(() => {
     if (!open) return
     const onDown = (e: PointerEvent) => {
@@ -70,9 +71,8 @@ export function ShapeFlyout({
       if (menuRef.current?.contains(t) || wrapRef.current?.contains(t)) return
       setOpen(false)
     }
-    // Capture the keyboard while the menu is up: the studio listens on window
-    // for bare letters and arrows, and menu navigation must not nudge the
-    // selection out from under the drawing.
+    // Capture the keyboard while open: the studio listens on window for bare
+    // letters and arrows, and menu navigation must not nudge the selection.
     const onKey = (e: KeyboardEvent) => {
       const k = e.key
       const stop = () => {
@@ -136,7 +136,9 @@ export function ShapeFlyout({
         >
           {TOOL_ICON[def.id]}
         </ActionButton>
-        <Tooltip label={<TipLabel title="Shape tools" detail="Pick a different shape. Each one keeps its own letter key." />}>
+        <Tooltip
+          label={<TipLabel title="Shape tools" detail="Pick a different shape. Each one keeps its own letter key." />}
+        >
           <button
             type="button"
             aria-label="Shape tools"
@@ -176,10 +178,7 @@ export function ShapeFlyout({
                 } ${tool === t.id ? 'text-accent' : 'text-ink'}`}
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center">{TOOL_ICON[t.id]}</span>
-                {/* The hint rides IN the row rather than in a tooltip: a bubble
-                    floating over an open menu fights the menu's own hover
-                    cursor, and this is the one place there is room to just say
-                    it. */}
+                {/* Hint inline rather than in a tooltip, which would cover the open menu. */}
                 <span className="min-w-0 flex-1">
                   <span className="block">{t.label}</span>
                   <span className="block text-[0.65rem] leading-tight text-faint">{t.hint}</span>

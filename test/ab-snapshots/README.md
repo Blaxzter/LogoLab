@@ -22,11 +22,11 @@ So a stamp lives exactly as long as you need it. Two consequences worth knowing:
 - switching branches will not delete these files (git does not touch ignored paths), but
   they are yours alone — a stamp you want to keep should be copied somewhere outside the
   repo, not pushed;
-- a few diagnostics read a specific stamp by name (`src/devtest/rimCapDiag.ts` and
+- a few diagnostics read a specific stamp by name (`bench/rimCapDiag.ts` and
   `rimCapRender.ts` want `before-lowres`). If it is not here, regenerate it from the
   revision the diagnostic is about, or point the script at another stamp — both say so
   when the file is missing.
 
 The workflow and the reasoning behind the input-pixel contract are in `docs/labs.md`
 ("The A/B lab can compare against a frozen revision"); the case list — both lanes — is
-`src/devtest/abCorpus.ts`.
+`bench/abCorpus.ts`.

@@ -31,13 +31,9 @@ import {
   issueReportUrl,
   summaryText,
   type IssueReportInput,
-} from '../src/lib/issueReport.ts'
-import {
-  clearReportContext,
-  collectReportContext,
-  provideReportContext,
-} from '../src/lib/reportContext.ts'
-import { clearErrorLog, logError, recentErrors } from '../src/lib/errorLog.ts'
+} from '../src/lib/report/issueReport.ts'
+import { clearReportContext, collectReportContext, provideReportContext } from '../src/lib/report/reportContext.ts'
+import { clearErrorLog, logError, recentErrors } from '../src/lib/report/errorLog.ts'
 
 const REPO = 'https://github.com/Blaxzter/LogoLab'
 
@@ -134,11 +130,7 @@ test('a handled failure says so, and does not claim the app crashed', () => {
   assert.match(issueReportTitle(input), /^\[bug\] The vectorizer failed: TypeError/)
   assert.match(summaryText(input), /The vectorizer reported a failure/)
   assert.doesNotMatch(summaryText(input), /crashed while rendering/)
-  assert.match(
-    diagnosticsText(input),
-    /"engine": "planar"/,
-    'a failure carries the same options a crash does',
-  )
+  assert.match(diagnosticsText(input), /"engine": "planar"/, 'a failure carries the same options a crash does')
 })
 
 test('a problem carries the settings but invents no words of its own', () => {
@@ -274,9 +266,7 @@ test('a sub-object referenced twice is not a cycle and prints normally', () => {
 })
 
 test('a chunk that never loaded is told apart from a crash in the code that did', () => {
-  assert.ok(
-    isChunkLoadError(new TypeError('Failed to fetch dynamically imported module: /assets/x.js')),
-  )
+  assert.ok(isChunkLoadError(new TypeError('Failed to fetch dynamically imported module: /assets/x.js')))
   assert.ok(isChunkLoadError(new Error('error loading dynamically imported module')))
   assert.ok(isChunkLoadError(new Error('Importing a module script failed.')))
   assert.equal(isChunkLoadError(new TypeError('x is not a function')), false)

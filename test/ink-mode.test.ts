@@ -1,5 +1,5 @@
 // Colour-vs-mono, the mono cut, and the invert flag — the decision in
-// src/lib/ink.ts that /vectorize, /sheet and the MCP server all read.
+// src/lib/traceInput/ink.ts that /vectorize, /sheet and the MCP server all read.
 //
 //   node --test test/ink-mode.test.ts
 //
@@ -20,11 +20,11 @@ import {
   snapCutToGap,
   type ImageDataLike,
   type PaperColor,
-} from '../src/lib/ink.ts'
+} from '../src/lib/traceInput/ink.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { docStats } from '../src/lib/path/model.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'
-import { ensureImageData, loadPng } from '../src/devtest/nodeHarness.ts'
+import { ensureImageData, loadPng } from '../bench/nodeHarness.ts'
 
 // The mono path builds its mask with `new ImageData(w, h)`.
 ensureImageData()
@@ -40,8 +40,8 @@ function art(w: number, h: number, bg: RGBA, ink: RGBA): ImageDataLike {
     data[i * 4 + 2] = bg[2]
     data[i * 4 + 3] = bg[3]
   }
-  for (let y = (h >> 2); y < h - (h >> 2); y++) {
-    for (let x = (w >> 2); x < w - (w >> 2); x++) {
+  for (let y = h >> 2; y < h - (h >> 2); y++) {
+    for (let x = w >> 2; x < w - (w >> 2); x++) {
       const o = (y * w + x) * 4
       data[o] = ink[0]
       data[o + 1] = ink[1]

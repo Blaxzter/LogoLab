@@ -85,9 +85,7 @@ export function Panel({
       <ZoomSurface
         pz={pz}
         primary={primary}
-        className={`rounded-lg border border-line-strong ${
-          isDark ? '' : 'checkerboard dark:checkerboard-dark'
-        }`}
+        className={`rounded-lg border border-line-strong ${isDark ? '' : 'checkerboard dark:checkerboard-dark'}`}
         style={size}
       >
         <div
@@ -95,12 +93,7 @@ export function Panel({
           style={isDark ? { background: HEAT_BG } : undefined}
         >
           {children}
-          {grid && (
-            <div
-              className="pixel-grid"
-              style={{ '--pg-w': grid.w, '--pg-h': grid.h } as CSSProperties}
-            />
-          )}
+          {grid && <div className="pixel-grid" style={{ '--pg-w': grid.w, '--pg-h': grid.h } as CSSProperties} />}
         </div>
       </ZoomSurface>
     </div>

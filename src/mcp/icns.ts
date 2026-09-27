@@ -1,8 +1,7 @@
-// Apple icon container (.icns) — the macOS half of "and whatever collection is
-// needed" (Tauri and Electron both want one next to the .ico).
+// Apple icon container (.icns), which Tauri and Electron want next to the .ico.
 //
 // The format is a flat container: the magic 'icns', the total length, then one
-// entry per image — a four-character OSType, the entry length INCLUDING its own
+// entry per image: a four-character OSType, the entry length including its own
 // 8-byte header, and the payload. Every type emitted here takes a PNG payload,
 // which is what `iconutil` itself writes for a modern .iconset, so no ARGB or
 // RLE encoder is needed.

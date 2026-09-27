@@ -1,15 +1,11 @@
 import { useEffect } from 'react'
 
-// Module-level refcount so multiple simultaneously-open sheets (e.g. a sheet
-// opened from another sheet) don't unlock the body until the LAST one closes.
+// Module-level refcount so stacked sheets keep the body locked until the last
+// one closes.
 let lockCount = 0
 let savedOverflow = ''
 
-/**
- * Locks background scroll on <body> while `active` is true. Refcounted, so
- * nested/stacked sheets compose correctly — the lock releases only when every
- * caller has unlocked. No-op on the server / before mount.
- */
+/** Locks background scroll on <body> while `active` is true (refcounted). */
 export function useBodyScrollLock(active: boolean) {
   useEffect(() => {
     if (!active) return
