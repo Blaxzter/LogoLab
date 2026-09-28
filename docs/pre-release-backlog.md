@@ -20,9 +20,9 @@ not invention.
 
 ## A. Ship blockers
 
-### A1. Mono has no Invert, and light-on-dark art traces to nothing — silently
+### A1. Mono has no Invert, and light-on-dark art traces to nothing — SHIPPED 2026-09-08
 
-> Filed as [#46](https://github.com/Blaxzter/LogoLab/issues/46) (bug).
+> Filed as [#46](https://github.com/Blaxzter/LogoLab/issues/46) (bug). **Done:** Mode has Auto / Color / Mono over the ink probe (`src/lib/traceInput/ink.ts`, shared with /sheet and the MCP server), with an Invert toggle and a measured cut.
 
 **Reproduced.** Load the bundled **Outline** example (white line-art), switch
 Source → *Re-trace*, Mode → *Mono*. Result: **`0 paths · 0 nodes · 0 colors ·
@@ -48,9 +48,9 @@ control driven by it. `/vectorize` — the flagship tab — has none of it.
 Mono gains an **Invert** toggle and a threshold seeded from ink/paper luma;
 mono output offers the ink's own colour instead of `#000`.
 
-### A2. An empty (or near-empty) trace should say so
+### A2. An empty (or near-empty) trace should say so — SHIPPED 2026-09-08
 
-> Filed as [#47](https://github.com/Blaxzter/LogoLab/issues/47).
+> Filed as [#47](https://github.com/Blaxzter/LogoLab/issues/47). **Done.**
 
 Independent of A1: any trace that comes back with 0 paths, or one path covering
 the whole canvas, should render a hint next to the stats bar rather than an empty
@@ -176,9 +176,9 @@ tabs alive is the actual fix.
 "Report an issue" link that prefills the image dimensions, the options JSON and
 the stack.
 
-### A5. There is no CI
+### A5. There is no CI — SHIPPED 2026-09-10
 
-> Filed as [#50](https://github.com/Blaxzter/LogoLab/issues/50).
+> Filed as [#50](https://github.com/Blaxzter/LogoLab/issues/50). **Done:** `.github/workflows/ci.yml` runs typecheck, Biome lint + format check, the suite and the build on every PR; both riders are handled (the generated previews are checked, the README no longer names Crisp).
 
 `.github/` contains only `FUNDING.yml`. `CLAUDE.md` describes a regime that
 assumes CI exists — *"`KNOWN_DEFECTS` … is the authoritative, machine-checked
@@ -291,7 +291,7 @@ is the one thing it must not show. `test/diff-view.test.ts` gates all three.
 
 This is the scorer B1 (self-scoring Auto) needs, so that one is now mostly UI.
 
-### B3. Presets, and a Reset
+### B3. Presets, and a Reset — Reset SHIPPED 2026-09-28, presets open
 
 There is no preset system and no "reset to defaults" anywhere in
 `TraceControls.tsx`. A user who drags four sliders into a bad place has no way
@@ -301,6 +301,16 @@ place back with them. Getting out is now strictly a UI problem.
 **Ask:** *Flat icon · Line art · Illustration · Photo* as one-click bundles over
 mode/gradients/detail/fidelity/despeckle, plus **Reset to defaults**. Presets are
 also the honest UI for B1: Auto picks one, and the preset row shows which.
+
+**Reset shipped.** The Vectorize rail's header has a **Reset** beside "How it works".
+It restores what a *fresh upload of this image* gets, not the bare constants: the ink
+and rampiness probes re-decide (one-ink art comes back as Mono with its measured cut,
+flat art with gradients off, coloured ink recoloured), and the user's pins on
+gradients and recolour are released. Markers stay — they are edits to the image, and
+Clear already removes them. It is unavailable, and says so, when the settings already
+match. The target is computed by the pure `studio/freshSettings.ts`
+(`test/fresh-settings.test.ts`), which mirrors the probes rather than re-running them.
+Presets are still open.
 
 ---
 
@@ -401,10 +411,10 @@ piece of work, highest ceiling on this list.
 
 ## Suggested order
 
-1. **A1 + A2** — the visible-broken one, and its fix is already written in `src/lib/sheet`.
-2. **A5** — CI, before anything else moves.
+1. ~~**A1 + A2** — the visible-broken one.~~ Done, see above.
+2. ~~**A5** — CI, before anything else moves.~~ Done, see above.
 3. ~~**A4** — the error boundary.~~ Done, see above. (A3, persistence, is done too.)
 4. ~~**B2** — the fidelity number and the Difference view.~~ Done, see above.
 5. **B1** — self-scoring Auto, built on B2's scorer.
-6. **C2 + C4 + C5** — the knobs, behind B3's presets. (C1 rejected.)
+6. **C2 + C4 + C5** — the knobs, behind B3's presets (B3's Reset is done). (C1 rejected.)
 7. **D1 + D2**, then **D3** when there is appetite for a new tracer pass.
