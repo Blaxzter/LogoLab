@@ -67,13 +67,14 @@ node editor, all client-side. The research behind each stage is in
 
 ![Vectorize](docs/vectorize.png)
 
-- **Clean curves, not staircases:** the default **Planar** engine traces each colour region as one shared boundary curve, and the **Crisp** engine melts each mask into a
-  sub-pixel coverage field, contours it (marching squares) and fits minimal Béziers with
-  genuinely sharp corners; **Potrace** is one click away for the most pixel-faithful trace.
-  Regions are stacked so adjacent shapes overlap instead of leaving hairline seams.
-- **Gradients & translucency:** detects linear / radial gradients and rebuilds soft "glow"
-  backgrounds and see-through overlapping shapes as real, editable gradient / translucent
-  layers — not flat posterized bands.
+- **Clean curves, not staircases:** the whole image is traced as one planar map, so every
+  boundary two colours share is drawn exactly once — neighbouring shapes meet exactly, with
+  no gaps, overlaps or hairline seams. Edges are placed with sub-pixel accuracy from the
+  anti-aliasing, and corners stay sharp where the pixels show a corner. One-colour art goes
+  through the same tracer as an ink / paper map.
+- **Gradients:** detects linear / radial gradients and rebuilds soft "glow" backgrounds as a
+  base paint under translucent radial layers — real, editable gradients, not flat
+  posterized bands.
 - **Color** or **mono** tracing with **smoothing**, **despeckle** and **fidelity**
   (shape-snapping) dials, optional **remove background**, and **region markers** to protect
   spots the auto-merge would otherwise fuse.
@@ -204,8 +205,7 @@ No environment variables or server routes required.
 - **React 19** + **TypeScript** (strict) + **Vite 8**
 - **Tailwind CSS v4** (CSS-first `@theme` design tokens)
 - **Zustand** for state
-- **esm-potrace-wasm** (potrace tracing engine, GPL-2.0, lazily `import()`-ed) · **JSZip**
-  (export) · **lucide-react** (icons)
+- **JSZip** (export) · **lucide-react** (icons)
 - **@huggingface/transformers** (Transformers.js) for the in-browser AI background remover —
   lazily `import()`-ed so it never weighs down the initial bundle.
 - **tesseract.js** to read the captions on an icon sheet — also lazily `import()`-ed; the WASM
@@ -222,7 +222,7 @@ No environment variables or server routes required.
 
 The **Cleanup** and **Vectorize** views are small, self-contained reimplementations of
 published computer-graphics research — all running client-side in pure TypeScript (plus WASM
-for the two heavy engines). The full design rationale and per-stage implementation log lives
+for the optional AI and OCR runtimes). The full design rationale and per-stage implementation log lives
 in [docs/vectorization-plan.md](docs/vectorization-plan.md).
 
 ### ✏️ Vectorize — structure-first tracing
@@ -234,18 +234,16 @@ gradient-aware Image Trace.
 
 | Stage / technique | What it does here | Introduced by |
 |---|---|---|
-| **Structure-first gradient reconstruction** | the overall segment → fit → trace architecture, and the Crisp engine | Chakraborty et al., [*Image Vectorization via Gradient Reconstruction*](https://research.adobe.com/publication/image-vectorization-via-gradient-reconstruction/), Eurographics / CGF **2025** |
+| **Structure-first gradient reconstruction** | the overall segment → fit → trace architecture | Chakraborty et al., [*Image Vectorization via Gradient Reconstruction*](https://research.adobe.com/publication/image-vectorization-via-gradient-reconstruction/), Eurographics / CGF **2025** |
 | **Piecewise-smooth Mumford–Shah** | denoise into smooth colour fields + extract the edge / discontinuity map | [Mumford & Shah](https://en.wikipedia.org/wiki/Mumford%E2%80%93Shah_functional) **1989** (the functional); real-time discrete solver: Strekalovskiy & Cremers, [ECCV **2014**](https://link.springer.com/chapter/10.1007/978-3-319-10605-2_9) ([code](https://github.com/tum-vision/fastms)) |
 | **CIELAB & Oklab colour difference** | perceptually-uniform thresholds for region merging and gradient-stop placement | [CIELAB ΔE76](https://en.wikipedia.org/wiki/Color_difference#CIE76); Ottosson, [*Oklab*](https://bottosson.github.io/posts/oklab/) **2020** |
 | **Paint-model ladder (MDL selection)** | pick the cheapest paint that still fits — solid → linear → radial → glow | [Minimum Description Length](https://en.wikipedia.org/wiki/Minimum_description_length) — Rissanen **1978** |
-| **Translucent-layer / glow-stack decomposition** | rebuild see-through overlapping shapes and soft "glow" backgrounds as stacked translucent layers | [ARDECO](https://inria.hal.science/inria-00105620/en/) (Lecot & Lévy, EGSR **2006**); [Photo2ClipArt](https://www-sop.inria.fr/reves/Basilic/2017/FLB17/) (Favreau et al., SIGGRAPH Asia **2017**); [Linear-Gradient Layer Decomposition](https://dl.acm.org/doi/10.1145/3592128) (Du et al., SIGGRAPH **2023**) |
+| **Glow-stack decomposition** | rebuild a soft "glow" background as a base paint under translucent radial layers | [ARDECO](https://inria.hal.science/inria-00105620/en/) (Lecot & Lévy, EGSR **2006**); [Photo2ClipArt](https://www-sop.inria.fr/reves/Basilic/2017/FLB17/) (Favreau et al., SIGGRAPH Asia **2017**); [Linear-Gradient Layer Decomposition](https://dl.acm.org/doi/10.1145/3592128) (Du et al., SIGGRAPH **2023**) |
 | **Marker-controlled seeded region growing** | the **Mark** tool — each seed grows into its own region along the colour ridge | Adams & Bischof, [*Seeded Region Growing*](https://doi.org/10.1109/34.295913), IEEE TPAMI **1994** |
-| **Marching squares** | sub-pixel iso-contour extraction from the coverage field | Lorensen & Cline, [*Marching Cubes*](https://doi.org/10.1145/37402.37422), SIGGRAPH **1987** (its 2-D analogue) |
 | **Ramer–Douglas–Peucker** | reduce dense contours to key vertices | [Ramer 1972 / Douglas & Peucker 1973](https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm) |
 | **Schneider Bézier fitting + soft-corner DP** | fit minimal cubic Béziers and keep genuine corners sharp by evidence, not a threshold | Schneider, [*Graphics Gems*](https://github.com/erich666/GraphicsGems) **1990**; corner / DP recipe after Baran et al. (CGF **2010**) and Kopf & Lischinski, [*Depixelizing Pixel Art*](https://johanneskopf.de/publications/pixelart/), SIGGRAPH **2011** |
 | **Beautify / shape snapping** | snap near-circles, lines and shared centres to perfect primitives (algebraic circle fit) | Hoshyari et al., [SIGGRAPH **2018**](https://www.cs.ubc.ca/labs/imager/tr/2018/PerceptionDrivenVectorization/); [PolyFit](https://www.cs.ubc.ca/labs/imager/tr/2020/ClipArtVectorization/) (Dominici et al., SIGGRAPH **2020**); [ClipGen](https://arxiv.org/abs/2106.04912), TVCG **2021** |
 | **k-means++ (deterministic seeding)** | palette generation + fallback decomposition | Arthur & Vassilvitskii, [*k-means++*](https://theory.stanford.edu/~sergei/papers/kMeansPP-soda.pdf), SODA **2007** |
-| **Potrace** (alternative engine) | classic polygon-based bitmap tracing, one click away | Selinger, [*Potrace*](https://potrace.sourceforge.net/) **2003** |
 | **AI super-resolution in front of the tracer** (opt-in) | enlarge a small raster ×2–×4 with a line-art model so the tracer's pixel lattice can place edges and corners it would otherwise round off; chosen over GAN upscalers because it keeps the flat colours exact and adds no edge rim (measured in `docs/vectorization-benchmarks.md` §32) | waifu2x **swin_unet** — nagadomi, [*nunif*](https://github.com/nagadomi/nunif) (Swin-transformer U-Net, MIT); runtime: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) |
 
 ### 🧽 Cleanup — background removal & matting
