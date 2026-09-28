@@ -15,6 +15,7 @@ export function useContentProbe({
   applyInkDecision,
   setOpts,
   gradientsTouchedRef,
+  forceColorTouchedRef,
   autoGradientsSrcRef,
   decidedForRef,
   probePixelsRef,
@@ -27,6 +28,7 @@ export function useContentProbe({
   applyInkDecision: (mode: InkColorMode, pixels?: ImageData | null, apply?: boolean) => void
   setOpts: SetOpts
   gradientsTouchedRef: RefObject<boolean>
+  forceColorTouchedRef: RefObject<boolean>
   autoGradientsSrcRef: RefObject<string | null>
   decidedForRef: RefObject<string | null>
   probePixelsRef: RefObject<ImageData | null>
@@ -40,6 +42,7 @@ export function useContentProbe({
   // biome-ignore lint/correctness/useExhaustiveDependencies(gradientsTouchedRef.current): a ref, read when the code runs
   // biome-ignore lint/correctness/useExhaustiveDependencies(setOpts): a state setter, stable
   // biome-ignore lint/correctness/useExhaustiveDependencies(gradientsTouchedRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(forceColorTouchedRef): a ref, read when the code runs
   // biome-ignore lint/correctness/useExhaustiveDependencies(probePixelsRef): a ref, read when the code runs
   // biome-ignore lint/correctness/useExhaustiveDependencies(decidedForRef.current): a ref, read when the code runs
   // biome-ignore lint/correctness/useExhaustiveDependencies(autoGradientsSrcRef.current): a ref, read when the code runs
@@ -52,7 +55,10 @@ export function useContentProbe({
     if (autoGradientsSrcRef.current === src) return
     // Fresh image: re-enable the auto-decision. A restored image keeps its flags.
     const restoring = !probeShouldApply(decidedForRef.current, assetKey)
-    if (!restoring) gradientsTouchedRef.current = false
+    if (!restoring) {
+      gradientsTouchedRef.current = false
+      forceColorTouchedRef.current = false
+    }
     let cancelled = false
     void (async () => {
       try {

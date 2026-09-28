@@ -138,7 +138,12 @@ export function TraceControlsBody({
       ? `Mono · threshold ${opts.threshold}${opts.invert ? ' · inverted' : ''}`
       : `Smoothing ${opts.smoothing}`
     : 'Cleaning SVG markup'
-  const colorSummary = opts.mode === 'color' && opts.gradients !== false ? 'Gradients on' : 'Flat fills'
+  // Force colour repaints every shape; a collapsed "Flat fills" hid where the colours went.
+  const colorSummary = forceColorOn
+    ? `All shapes ${forceColor}`
+    : opts.mode === 'color' && opts.gradients !== false
+      ? 'Gradients on'
+      : 'Flat fills'
 
   // Controls that have no effect on this image fold into one collapsed list that
   // names each and says why, rather than silently doing nothing or vanishing.

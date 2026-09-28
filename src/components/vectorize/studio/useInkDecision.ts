@@ -86,10 +86,12 @@ export function useInkDecision({
         : next
     })
     // A mono trace comes back #000. Seed the recolor with the ink's real colour,
-    // and turn it on when the ink is clearly not black (e.g. white on navy).
-    if (plan.recolor && !forceColorTouchedRef.current) {
-      setForceColor(plan.recolor)
-      setForceColorOn(plan.probe.inkLuma != null && plan.probe.inkLuma > INK_IS_BLACK_LUMA)
+    // and turn it on when the ink is clearly not black (e.g. white on navy). A
+    // colour plan has no ink, so it turns the recolor OFF: left alone, the last
+    // image's green glyph repainted every region of the next, colourful one.
+    if (!forceColorTouchedRef.current) {
+      if (plan.recolor) setForceColor(plan.recolor)
+      setForceColorOn(plan.recolor != null && plan.probe.inkLuma != null && plan.probe.inkLuma > INK_IS_BLACK_LUMA)
     }
   }, [])
 

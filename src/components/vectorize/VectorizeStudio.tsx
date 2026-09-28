@@ -236,6 +236,7 @@ export function VectorizeStudio({
     applyInkDecision,
     setOpts,
     gradientsTouchedRef,
+    forceColorTouchedRef,
     autoGradientsSrcRef,
     decidedForRef,
     probePixelsRef,
