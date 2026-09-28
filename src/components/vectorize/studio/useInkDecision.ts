@@ -12,13 +12,8 @@ import {
 } from '../../../lib/traceInput/ink'
 import type { VectorizeOptions } from '../../../types'
 import type { StudioSeed } from '../studioSession'
+import { INK_IS_BLACK_LUMA } from './freshSettings'
 import type { SetOpts } from './types'
-
-/**
- * Above this Rec.709 luma the probed ink is clearly not black, so a mono trace
- * (always #000) is repainted with the ink's colour by default.
- */
-const INK_IS_BLACK_LUMA = 32
 
 export function useInkDecision({
   session,

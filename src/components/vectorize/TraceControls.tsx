@@ -4,7 +4,8 @@
 // the open info dialog is local.
 
 import { useState } from 'react'
-import { Wand2, HelpCircle, AlertTriangle, MapPin, X } from 'lucide-react'
+import { Wand2, HelpCircle, AlertTriangle, MapPin, RotateCcw, X } from 'lucide-react'
+import { ActionButton } from '../ui/ActionButton'
 import { Button } from '../ui/Button'
 import { ColorField, Collapsible, Field, Segmented, Slider, Toggle } from '../ui/controls'
 import { Tooltip } from '../ui/Tooltip'
@@ -77,6 +78,10 @@ export interface TraceControlsProps {
   onTrace: () => void
   /** Open the "How it works" pipeline explainer. */
   onShowHelp: () => void
+  /** False when the settings already match what a fresh upload of this image gets. */
+  canReset: boolean
+  /** Restore the settings a fresh upload of this image gets (markers stay). */
+  onReset: () => void
 }
 
 const d = CONTROL_DOCS_BY_ID
@@ -128,6 +133,8 @@ export function TraceControlsBody({
   staleOpts = false,
   onTrace,
   onShowHelp,
+  canReset,
+  onReset,
 }: TraceControlsProps) {
   const tracing = !isVectorSource || source === 'retrace'
   const [infoId, setInfoId] = useState<string | null>(null)
@@ -233,12 +240,24 @@ export function TraceControlsBody({
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-ink">Vectorize</h2>
-          <Tooltip label="See how vectorize turns your image into shapes">
-            <button type="button" onClick={onShowHelp} className="btn btn-ghost h-7 gap-1 px-2 text-xs text-ink-2">
-              <HelpCircle size={14} />
-              How it works
-            </button>
-          </Tooltip>
+          <div className="flex items-center gap-1">
+            <ActionButton
+              label="Reset"
+              reason={canReset ? null : 'These are already the settings this image starts with.'}
+              note="Back to the settings a fresh upload of this image gets. Markers stay."
+              onClick={onReset}
+              className="btn btn-ghost h-7 gap-1 px-2 text-xs text-ink-2"
+            >
+              <RotateCcw size={14} />
+              Reset
+            </ActionButton>
+            <Tooltip label="See how vectorize turns your image into shapes">
+              <button type="button" onClick={onShowHelp} className="btn btn-ghost h-7 gap-1 px-2 text-xs text-ink-2">
+                <HelpCircle size={14} />
+                How it works
+              </button>
+            </Tooltip>
+          </div>
         </div>
 
         {isVectorSource && (

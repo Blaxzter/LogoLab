@@ -8,7 +8,7 @@
 // The state and effects live in hooks under ./studio, called in the order the
 // effects must run; the chrome is split into the presentational parts there.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useCheckerClass, useLogo, useStore } from '../../state/store'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import { useHistory } from '../../hooks/useHistory'
@@ -27,6 +27,7 @@ import type { Tool, VectorizeSource, ViewMode } from './studio/types'
 import { useSessionSave, useStudioSession } from './studio/useStudioSession'
 import { useSelection } from './studio/useSelection'
 import { useInkDecision } from './studio/useInkDecision'
+import { freshSettings, sameSettings } from './studio/freshSettings'
 import { useDocEdits } from './studio/useDocEdits'
 import { useStudioReportContext } from './studio/useStudioReportContext'
 import { useMarkers } from './studio/useMarkers'
@@ -174,6 +175,23 @@ export function VectorizeStudio({
     monoGuide,
     useMeasuredCut,
   } = useInkDecision({ session, initialOptions, opts, setOpts, setForceColor, setForceColorOn })
+
+  // What a fresh upload of this image would get — the target of "Reset". Keyed on
+  // inkPlan because the probe sets it from the same pixels it leaves in
+  // probePixelsRef, which a memo can't observe directly.
+  // biome-ignore lint/correctness/useExhaustiveDependencies(probePixelsRef.current): a ref, read when the code runs
+  const fresh = useMemo(
+    () =>
+      freshSettings(
+        initialOptions ?? DEFAULT_VECTORIZE_OPTIONS,
+        initialOptions ? initialOptions.mode : 'auto',
+        probePixelsRef.current,
+        !initialOptions,
+      ),
+    [inkPlan, initialOptions],
+  )
+  const atFreshSettings =
+    sameSettings(opts, fresh.opts) && colorMode === fresh.colorMode && forceColorOn === fresh.forceColorOn
 
   const isVectorSource = logo.isSvg && Boolean(logo.svgText)
   const cleanFromExisting = isVectorSource && retraceVector === 'clean'
@@ -464,6 +482,21 @@ export function VectorizeStudio({
     onShowHelp: () => {
       setTraceSheetOpen(false)
       setShowHelp(true)
+    },
+    canReset: !atFreshSettings,
+    onReset: () => {
+      // As a fresh upload: the probes' decisions apply again, and the user's
+      // pins on gradients and recolour are released. Markers stay: they are
+      // edits to this image, and Clear already removes them.
+      gradientsTouchedRef.current = false
+      forceColorTouchedRef.current = false
+      setColorMode(fresh.colorMode)
+      colorModeRef.current = fresh.colorMode
+      setOpts((o) => ({ ...fresh.opts, markers: o.markers }))
+      setForceColorOn(fresh.forceColorOn)
+      if (fresh.forceColor) setForceColor(fresh.forceColor)
+      // Refresh the "why" line under Mode without touching the options again.
+      applyInkDecision(fresh.colorMode, null, false)
     },
   }
 
