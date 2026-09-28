@@ -30,9 +30,9 @@ export interface PaletteSegmentOptions {
   /** 3×3 majority-vote passes to melt the 1px stair-step the nearest-colour
    *  assignment leaves along each boundary (a clean single edge afterwards). */
   modePasses: number
-  /** Connected components smaller than this (opaque px) are dissolved into the
-   *  label that borders them most, so specks and pinholes from source noise don't
-   *  each become an extra traced loop. */
+  /** Connected components smaller than this (opaque px) are dissolved into their
+   *  neighbours by colour (see `dissolve`), so specks and pinholes from source noise
+   *  don't each become an extra traced loop. */
   minRegionArea: number
   /** Spare a sub-`minRegionArea` component that carries flat-interior evidence:
    *  at least one pixel whose whole 3×3 source block is exactly its palette hex.
@@ -43,6 +43,13 @@ export interface PaletteSegmentOptions {
    *  region instead of being carved where the nearest tone flips. See shadingFuse.ts.
    *  Default true. */
   shadingFuse?: boolean
+  /** How a dissolved speck is shared out (see despeckleComponents' byColor): 'mean'
+   *  gives the whole component to the neighbour nearest its mean colour; 'grow' grows
+   *  the neighbours into it pixel by pixel, cheapest colour match first, so a blend
+   *  band splits where its colour crosses over. Default 'grow' — measured on the truth
+   *  corpus through a real JPEG encoder (bench/jpegRingDiag.ts): identical on the PNG
+   *  corpus, lower mean chamfer at q60 / q75 / q90. */
+  dissolve?: 'mean' | 'grow'
 }
 
 export const DEFAULT_PALETTE_SEGMENT: PaletteSegmentOptions = {
@@ -52,6 +59,108 @@ export const DEFAULT_PALETTE_SEGMENT: PaletteSegmentOptions = {
   minRegionArea: 64,
   regionEvidence: true,
   shadingFuse: true,
+  dissolve: 'grow',
+}
+
+/**
+ * Seeded region growing over one dissolved component (despeckleComponents' `grow`):
+ * the regions bordering `pixels` claim them from the rim inward, cheapest first, where
+ * a pixel's cost for a region is its RGB distance to that region's palette colour. A
+ * pixel no region reaches keeps `lab`. Writes `out` in place.
+ */
+function growInto(
+  out: Int32Array,
+  pixels: number[],
+  lab: number,
+  w: number,
+  h: number,
+  byColor: { data: Uint8ClampedArray; palette: PaletteColor[] },
+): void {
+  const { data, palette } = byColor
+  const inComp = new Set(pixels)
+  // A pixel is scored by its 3×3 mean, not its own value: on a compressed source the
+  // single pixel carries the ringing, and a per-pixel split then follows the noise
+  // (a ragged seam where the component-mean rule drew a straight one).
+  const cost = (p: number, l: number): number => {
+    const c = palette[l]
+    const x = p % w
+    const y = (p / w) | 0
+    let r = 0,
+      g = 0,
+      b = 0,
+      k = 0
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx
+        const yy = y + dy
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue
+        const o = (yy * w + xx) * 4
+        r += data[o]
+        g += data[o + 1]
+        b += data[o + 2]
+        k++
+      }
+    return (r / k - c.r) ** 2 + (g / k - c.g) ** 2 + (b / k - c.b) ** 2
+  }
+  // Binary min-heap of (cost, pixel, label), keyed on cost then pixel for determinism.
+  const hc: number[] = []
+  const hp: number[] = []
+  const hl: number[] = []
+  const less = (i: number, j: number): boolean => hc[i] < hc[j] || (hc[i] === hc[j] && hp[i] < hp[j])
+  const swap = (i: number, j: number): void => {
+    ;[hc[i], hc[j]] = [hc[j], hc[i]]
+    ;[hp[i], hp[j]] = [hp[j], hp[i]]
+    ;[hl[i], hl[j]] = [hl[j], hl[i]]
+  }
+  const push = (c: number, p: number, l: number): void => {
+    hc.push(c)
+    hp.push(p)
+    hl.push(l)
+    for (let i = hc.length - 1; i > 0; ) {
+      const up = (i - 1) >> 1
+      if (!less(i, up)) break
+      swap(i, up)
+      i = up
+    }
+  }
+  const pop = (): void => {
+    const last = hc.length - 1
+    swap(0, last)
+    hc.pop()
+    hp.pop()
+    hl.pop()
+    for (let i = 0; ; ) {
+      const a = 2 * i + 1
+      const b = a + 1
+      let m = i
+      if (a < hc.length && less(a, m)) m = a
+      if (b < hc.length && less(b, m)) m = b
+      if (m === i) break
+      swap(i, m)
+      i = m
+    }
+  }
+  const nbrs = (p: number): number[] => {
+    const x = p % w
+    const y = (p / w) | 0
+    return [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1]
+  }
+  for (const p of pixels)
+    for (const q of nbrs(p)) {
+      if (q < 0 || inComp.has(q)) continue
+      const l = out[q]
+      if (l >= 0 && l !== lab) push(cost(p, l), p, l)
+    }
+  const claimed = new Set<number>()
+  while (hc.length > 0) {
+    const p = hp[0]
+    const l = hl[0]
+    pop()
+    if (claimed.has(p)) continue
+    claimed.add(p)
+    out[p] = l
+    for (const q of nbrs(p)) if (q >= 0 && inComp.has(q) && !claimed.has(q)) push(cost(q, l), q, l)
+  }
 }
 
 /**
@@ -66,13 +175,31 @@ export const DEFAULT_PALETTE_SEGMENT: PaletteSegmentOptions = {
  *
  * `evidence` enables the veto: a sub-floor component is spared when it carries
  * flat-interior evidence (see hasFlatInterior). Omitted ⇒ the unconditional floor.
+ *
+ * `byColor` changes WHO absorbs a dissolved component: the bordering label whose
+ * palette colour is nearest the component's mean colour, instead of the one it
+ * borders most. A 1px strand between two regions borders both about equally, and
+ * the majority vote then hands it to either side by tie order — on a JPEG's
+ * ringing line between cream and teal that grew the cream a pixel into the teal
+ * wherever the strand ran, a bumpy edge on a straight one.
+ *
+ * `grow` (with byColor) shares the component out instead of handing it to one winner:
+ * the bordering regions grow into it from its rim, each step taking the unclaimed
+ * pixel that best matches a region already touching it. A 3px blend band between red
+ * and blue then splits where its colour crosses over, not wholly to whichever side its
+ * mean favoured. Grown from the rim, every piece stays attached to its region, so the
+ * split never leaves a new speck.
  */
-function despeckleComponents(
+export function despeckleComponents(
   labels: Int32Array,
   w: number,
   h: number,
   minArea: number,
   evidence?: { data: Uint8ClampedArray; palette: PaletteColor[] },
+  byColor?: { data: Uint8ClampedArray; palette: PaletteColor[] },
+  grow = false,
+  /** Restricts WHICH sub-floor components dissolve (default: all of them). */
+  eligible?: (pixels: number[], lab: number) => boolean,
 ): Int32Array {
   if (minArea <= 0) return labels
   const n = w * h
@@ -109,7 +236,11 @@ function despeckleComponents(
         stack.push(p + w)
       }
     }
-    if (pixels.length < minArea && !(evidence && hasFlatInterior(pixels, lab, w, h, evidence))) {
+    if (
+      pixels.length < minArea &&
+      !(evidence && hasFlatInterior(pixels, lab, w, h, evidence)) &&
+      (!eligible || eligible(pixels, lab))
+    ) {
       // Majority bordering label (≠ lab, ≥ 0); fall back to leaving it if isolated.
       const border = new Map<number, number>()
       for (const p of pixels) {
@@ -125,11 +256,39 @@ function despeckleComponents(
       }
       let best = -1,
         bestC = 0
-      for (const [l, c] of border)
-        if (c > bestC) {
-          bestC = c
-          best = l
+      if (byColor && grow && border.size > 1) {
+        growInto(out, pixels, lab, w, h, byColor)
+        cid++
+        continue
+      }
+      if (byColor) {
+        let r = 0,
+          g = 0,
+          b = 0
+        for (const p of pixels) {
+          r += byColor.data[p * 4]
+          g += byColor.data[p * 4 + 1]
+          b += byColor.data[p * 4 + 2]
         }
+        r /= pixels.length
+        g /= pixels.length
+        b /= pixels.length
+        bestC = Infinity
+        for (const l of border.keys()) {
+          const c = byColor.palette[l]
+          const d = (c.r - r) ** 2 + (c.g - g) ** 2 + (c.b - b) ** 2
+          if (d < bestC) {
+            bestC = d
+            best = l
+          }
+        }
+      } else {
+        for (const [l, c] of border)
+          if (c > bestC) {
+            bestC = c
+            best = l
+          }
+      }
       if (best >= 0) for (const p of pixels) out[p] = best
     }
     cid++
@@ -914,13 +1073,16 @@ export function segmentFlatPalette(
   const restored = restoreErasedComponents(labels, smoothed, img.width, img.height, opts.minRegionArea, img.data)
   // 4. Dissolve sub-threshold specks and pinholes so they don't each become a loop,
   //    unless the component carries flat-interior evidence that it is real art (a
-  //    small glyph of an otherwise large ink can be one such component).
+  //    small glyph of an otherwise large ink can be one such component). A speck
+  //    goes to the neighbour it is the colour of (see despeckleComponents' byColor).
   const cleaned = despeckleComponents(
     restored,
     img.width,
     img.height,
     opts.minRegionArea,
     opts.regionEvidence !== false ? { data: img.data, palette } : undefined,
+    { data: img.data, palette },
+    opts.dissolve !== 'mean',
   )
 
   // modeFilter and despeckle move pixels between labels; recompute exact counts.

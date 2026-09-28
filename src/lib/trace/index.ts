@@ -13,7 +13,7 @@ import type { VectorizeOptions } from '../../types'
 import type { EditableDoc, GradientFill, PathItem, RadialGradient, SubPath } from '../path/types'
 import type { TraceProgress, QuantizeResult } from './types'
 import { segmentImage, DEFAULT_SEGMENT_OPTIONS, type SegmentOptions } from './segment.ts'
-import { segmentFlatPalette, type PaletteSegmentOptions } from './paletteSegment.ts'
+import { despeckleComponents, segmentFlatPalette, type PaletteSegmentOptions } from './paletteSegment.ts'
 import { fitPaintLadder, type PaintLadderResult, type RegionSamples } from './gradient.ts'
 import { DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
 import { uniteBackgroundGradient, type BackgroundUnion } from './backgroundLayer.ts'
@@ -236,6 +236,81 @@ export function healColorSpikes(
   return out ?? labels
 }
 
+/**
+ * Which sub-floor components of the healed map are heal's DEBRIS: fragments whose
+ * surroundings heal mostly peeled away. Among the pixels within DEBRIS_REACH of the
+ * fragment that carried its label before heal, at least half no longer belong to a
+ * region of that label at or above `minArea` — the remains of a JPEG ringing strand, whose
+ * other fragments do not count as survivors — or there were none (heal moved the
+ * fragment in). Judged
+ * locally, not per pre-heal component: a strand is 4-connected to whatever large region
+ * it rings against, and that region as a whole of course survives. A fragment whose
+ * neighbourhood kept its label is art heal trimmed (a thin tip), and stays.
+ */
+const DEBRIS_REACH = 2
+function healDebris(
+  before: Int32Array,
+  after: Int32Array,
+  width: number,
+  height: number,
+  minArea: number,
+): (pixels: number[], lab: number) => boolean {
+  // Size of every healed 4-connected component, per pixel: a "survivor" is a pixel still
+  // carrying the label inside a component the floor keeps.
+  const n = width * height
+  const compOf = new Int32Array(n).fill(-1)
+  const compSize: number[] = []
+  const stack: number[] = []
+  for (let s = 0; s < n; s++) {
+    if (compOf[s] !== -1 || after[s] < 0) continue
+    const lab = after[s]
+    const c = compSize.length
+    let count = 0
+    compOf[s] = c
+    stack.length = 0
+    stack.push(s)
+    while (stack.length) {
+      const p = stack.pop()!
+      count++
+      const x = p % width
+      const y = (p / width) | 0
+      for (const q of [
+        x > 0 ? p - 1 : -1,
+        x < width - 1 ? p + 1 : -1,
+        y > 0 ? p - width : -1,
+        y < height - 1 ? p + width : -1,
+      ])
+        if (q >= 0 && compOf[q] === -1 && after[q] === lab) {
+          compOf[q] = c
+          stack.push(q)
+        }
+    }
+    compSize.push(count)
+  }
+  return (pixels, lab) => {
+    const own = new Set(pixels)
+    const seen = new Set<number>()
+    let moved = 0
+    let total = 0
+    for (const p of pixels) {
+      const px = p % width
+      const py = (p / width) | 0
+      for (let dy = -DEBRIS_REACH; dy <= DEBRIS_REACH; dy++)
+        for (let dx = -DEBRIS_REACH; dx <= DEBRIS_REACH; dx++) {
+          const x = px + dx
+          const y = py + dy
+          if (x < 0 || y < 0 || x >= width || y >= height) continue
+          const q = y * width + x
+          if (own.has(q) || seen.has(q) || before[q] !== lab) continue
+          seen.add(q)
+          total++
+          if (after[q] !== lab || compSize[compOf[q]] < minArea) moved++
+        }
+    }
+    return total === 0 || moved * 2 >= total
+  }
+}
+
 /** Map the user fidelity dial onto the beautify pass. */
 function beautifyOptionsFor(options: VectorizeOptions): BeautifyOptions {
   return {
@@ -385,23 +460,30 @@ export async function traceImage(
   // Palette-first is only kept if the image is actually flat; a continuous-tone
   // image would over-posterize and falls through to the smoothness segmenter.
   let fp: ReturnType<typeof segmentFlatPalette> | null = null
+  let paletteOpts: PaletteSegmentOptions | null = null
   let usedLockedPalette = false
   if (wantFlatPalette) {
     onProgress?.({ phase: 'segment', fraction: 0, label: 'Reading colours' })
     // A user-locked palette overrides automatic extraction: the segmenter snaps
     // every pixel to the nearest of these colours (emitted verbatim).
     const locked = options.palette && options.palette.length > 0 ? options.palette : undefined
+    paletteOpts = paletteOptionsFor(options)
     fp = segmentFlatPalette(
       imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
-      paletteOptionsFor(options),
+      paletteOpts,
       locked,
     )
     // Photo-like (low coverage) or rich (many colours) ⇒ use the smoothness
     // segmenter instead; a locked palette bypasses both gates. Richness is read from
     // fp.dominantColors, not fp.palette.length: blend cleanup can shrink a photo's
     // palette under the ceiling, and the gate must count what the image contains.
-    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.dominantColors > FLAT_PALETTE_MAX_COLORS))
+    if (!locked && (fp.flatCoverage < FLAT_PALETTE_MIN_COVERAGE || fp.dominantColors > FLAT_PALETTE_MAX_COLORS)) {
       fp = null
+      // The post-heal despeckle below applies the PALETTE segmenter's floor; the
+      // smoothness segmenter's map was never cut to it (petals @256 lost 0.1px of
+      // chamfer when it was applied there anyway).
+      paletteOpts = null
+    }
     usedLockedPalette = fp != null && locked != null
   }
   if (fp) {
@@ -476,8 +558,34 @@ export async function traceImage(
   const removed = applyRemoveMarkers(options, q.labels, width, height, bg)
   // Heal mis-grouped pixels (see healColorSpikes). Skipped for gradient art, and for
   // a locked palette, where every pixel is by construction its nearest locked colour.
-  const healed =
+  const spiked =
     gradientsOn || usedLockedPalette ? removed : healColorSpikes(removed, imageData.data, width, height, q.palette)
+  // Healing peels pixels off a thin strand (JPEG ringing along an edge is the usual
+  // one: a 1px line of the darkest ink, long enough to pass the palette despeckle)
+  // and leaves the rest of it as 1–5px islands. Each would trace as a zero-width
+  // needle loop — hundreds of invisible, unclickable subpaths on one colour — so
+  // re-apply the palette floor (same area, same flat-interior veto). Everything
+  // heal did not touch already passed that floor, so this only removes its debris.
+  // The debris goes to the neighbour it is the COLOUR of, not the one it borders
+  // most: a strand between two regions borders both, and the wrong side bulges.
+  //
+  // Only the remains of a component heal mostly DISSOLVED count as debris. Heal also
+  // clips a pixel or two off regions that otherwise survive — at 256px the tip of
+  // petals' thin lens is one such pixel — and dissolving that is taking art, not
+  // noise (the fit around the junction it sat at lost 0.1px chamfer).
+  const healed =
+    spiked !== removed && paletteOpts
+      ? despeckleComponents(
+          spiked,
+          width,
+          height,
+          paletteOpts.minRegionArea,
+          paletteOpts.regionEvidence !== false ? { data: imageData.data, palette: q.palette } : undefined,
+          { data: imageData.data, palette: q.palette },
+          paletteOpts.dissolve !== 'mean',
+          healDebris(removed, spiked, width, height, paletteOpts.minRegionArea),
+        )
+      : spiked
   // Experimental background layer separation (backgroundGradient, gradients off):
   // the border-seeded set of bands that one gradient explains is relabeled into a
   // single region painted with that gradient, so band boundaries and the junctions
