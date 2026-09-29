@@ -385,14 +385,19 @@ classes. An SVG headed for a codebase wants `#logo-mark`, `.brand-primary`.
 Coordinate precision is hard-coded at 3 (`VectorizeStudio.tsx:157`) with no way
 to trade bytes for accuracy.
 
-### D3. Centerline (stroke) tracing
+### D3. Centerline (stroke) tracing — DONE 2026-09-28
 
 A real capability gap rather than a missing control. Monoline marks — the
-majority of icon-set logos — currently trace as outlined fills; the user gets the
-*silhouette of a stroke* instead of a stroke they can re-weight. `isStrokeOnly`
-and stroke import already exist in the model (`parseSvg` imports strokes as
-editable paths), so the doc side is ready; the tracer has no skeleton pass. Big
-piece of work, highest ceiling on this list.
+majority of icon-set logos — used to trace as outlined fills; the user got the
+*silhouette of a stroke* instead of a stroke they can re-weight.
+
+**Shipped** as the **Strokes** toggle under Mono (`centerline: true`,
+`src/lib/trace/centerline/`, MCP `strokes`): the ink's centrelines as stroked
+paths with a measured width, the rest as fills. Judged on a new line-art lane
+(`bench/genLineArt.ts`: eight synthetic cases + twelve Lucide icons) with its own
+answer sheet and gate (`test/centerline-gate.test.ts`, 18/20 pass; the two
+limits are `docs/vectorization-benchmarks.md` §39.4). The A/B lab traces the
+lane in a fourth trace lane, `line`.
 
 ---
 
@@ -417,4 +422,4 @@ piece of work, highest ceiling on this list.
 4. ~~**B2** — the fidelity number and the Difference view.~~ Done, see above.
 5. **B1** — self-scoring Auto, built on B2's scorer.
 6. **C2 + C4 + C5** — the knobs, behind B3's presets (B3's Reset is done). (C1 rejected.)
-7. **D1 + D2**, then **D3** when there is appetite for a new tracer pass.
+7. **D1 + D2**. (~~**D3**~~ done, see above.)

@@ -164,6 +164,66 @@ with the engines. A stacked output — regions painted over one another rather t
 a PAINT-ORDER question the planar graph can answer later as a post-pass, not a second tracer.
 `test/mono-labels.test.ts` and `test/harness.test.ts` are the gates.
 
+## Line art traces as STROKES — the centreline engine, and its own lane
+
+Mono has a second output. `centerline: true` (the **Strokes** toggle under Mono, MCP
+`strokes`) hands the ink cut to `src/lib/trace/centerline/` instead of `tracePlanar`: the
+middle of every line as an open or closed **stroked path with a measured width**, and the ink
+no stroke explains (a note head, a dot) as fills through the planar tracer. A Lucide icon comes
+back as the paths it was drawn as. `docs/vectorization-benchmarks.md` §39 is the method and
+the census; three things there were measured in and are easy to undo:
+
+* **The profile's reach is one half-width** (`profile.ts`). Widening it so a drifted skeleton
+  point could find its far edge made every case worse — at a concave corner the walk runs
+  along the other arm. A lopsided profile reads NO width, on purpose.
+* **A corner's apex is rebuilt from its arms, and the RASTER decides whether it is a corner**
+  (`fit.ts`): the distance transform at the apex must read a full half-width. That is what
+  keeps a tight smooth bend from being drawn as a spike, and it is also why an over-limit
+  miter (bevelled ink) stays rounded — §39.4.
+* **Don't smooth the pieces before the fit.** σ = 0.2 W shrinks every arc by σ²/2R and took
+  the corpus from 17 to 13 of 20; the staircase gets σ ≤ 2 px and nothing more.
+* **Where a stroke enters a fill, the fill's mask reaches its rim** (`blobs.ts`, the bridge
+  rule: a channel pixel whose ink ACROSS the stroke runs longer than the stroke is wide is
+  the fill's) — otherwise a bay the stem's channel cut stays in the mask and the fill is
+  traced around it, five nodes stacked at the join. Don't cap the flared width to get
+  there: that turned a uniform thick stroke's outer band into a fill. And two cut ends
+  collinear across one fill pair into one stroke (`assemble.ts`) — a staff line through a
+  note head. §39.6.
+
+It has its own answer sheet because the outline lanes' cannot score it: `svgGround.ts`
+refuses strokes, and for the outline tracer that refusal is right. `bench/genLineArt.ts`
+writes `public/examples/line-art/` (eight synthetic ⌇ cases, twelve ◎ Lucide icons — ISC,
+already a dependency), authored WITH strokes because here the `d` IS the answer;
+`bench/lineArtGround.ts` reads them and `bench/centerlineScore.ts` scores centre / missed /
+width / topology / fill IoU / rendered ΔE. `test/centerline-gate.test.ts` is the gate
+(KNOWN_DEFECTS, boolean, only shrinks); `bench/centerlineDiag.ts` is the table plus a contact
+strip per case with the score's losses drawn on it. `rasterizeDoc` paints strokes now
+(`test/raster-stroke.test.ts`), so the studio's ΔE and the Difference view work on a stroked
+trace — and a stroke-only path is `fill: 'none'`, which `parseHex` would have read as black.
+
+**The A/B lab has a fourth trace lane, `line`**, and a third case lane: the line-art cases run
+`mono` + `line` only (`AbCorpusCase.lanes`), both at the flat cap, and a stamp records per
+case which lanes it carries (`laneFiles` answers null for the rest). The line lane ran at 512
+for a day and a 512 trace stretched into a 2048 row read as a bad tracer — the lane shows
+what the app does, and the app never traces line art that small. The GATE still runs at 512
+as well as 2048 (small icons reach the 2–18 px stroke regime after the mono upscale), with
+its pixel limits scaled by the raster (`centerlineTol`, §39.7). A case that is in only ONE side of a
+comparison — a stamp older than the case, or older than its lane — shows as a one-sided row
+(`AbAnalysis.onlyIn`: that side's lanes alone, no verdict, kept under Changed only) rather
+than being hidden; the day the lane landed, hiding them made the pair view read as empty.
+Freeze a baseline before touching the engine like any tracer change — a fix that only
+moves the line lane still gets its own `before-` stamp, because the pair is the only place
+the change can be SEEN afterwards (a re-frozen `after-centerline` overwrote the reviewed
+traces once, and the baseline had to be rebuilt by reverting the fix). The pairs so far:
+`before-centerline` ⇄ `after-centerline` shows the outline lanes byte-identical across the
+engine's landing, with the twenty line-art cases one-sided on the after;
+`before-line-nodes` ⇄ `after-line-nodes` is the corner-index / stub-pairing / self-loop-weld
+fix (§39.3), which moves four line lanes (polylines, loops, score, and the star by 0.02 px)
+and nothing else; `before-fill-join` ⇄ `after-fill-join` is the fill-rim bridge and the
+pairing across a fill (§39.6); `before-line-2048` ⇄ `after-line-2048` is the first pair at
+the lane's real resolution — the flare cap and the surrounded-island rule that closed the
+holes 2048 exposed in a note head (§39.7).
+
 ## The tracer ships TWICE, and only one of them is automatic
 
 A tracer change reaches the website by itself — Cloudflare Workers Builds is connected to this

@@ -19,6 +19,7 @@ import { DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
 import { uniteBackgroundGradient, type BackgroundUnion } from './backgroundLayer.ts'
 import { tracePlanar, type PlanarTrace } from './planarAssemble.ts'
 import { monoLabels, MONO_INK } from './mono.ts'
+import { traceCenterline } from './centerline/index.ts'
 import { type PlanarFitOptions, DEFAULT_PLANAR_FIT, FLAT_LINE_COST } from './planarFit.ts'
 import { planarBeautify } from './planarBeautify.ts'
 import { weldConvergedJunctions } from './planarReseat.ts'
@@ -429,6 +430,34 @@ export async function traceImage(
     stage('segment')
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     onPlanarLabels?.({ labels: seg.labels, width, height })
+    // The one-ink map traced as regions, the way the planar tracer does it — used by
+    // mono itself and by the centreline engine for the ink its strokes do not explain.
+    const traceInkRegions = (labels: Int32Array) => {
+      const trace = tracePlanar(labels, width, height, fitOpts, seg.palette, seg.image)
+      const { topology, edges } = finishPlanar(trace)
+      const loops = trace.loopsByLabel.get(MONO_INK) ?? []
+      const subPaths = materializeRegion(loops, edges)
+      const items: PathItem[] = []
+      if (subPaths.length > 0) {
+        items.push({ kind: 'path', id: 'trace-0', fill: '#000000', fillRule, loops, subPaths, visible: true })
+      }
+      return { items, topology }
+    }
+    if (options.centerline) {
+      // Line art: strokes with a width, fills for the rest (centerline/index.ts).
+      const { doc } = traceCenterline({
+        seg,
+        width,
+        height,
+        fitOpts,
+        fidelity: beautifyOpts.fidelity,
+        traceFills: traceInkRegions,
+        onProgress: onProgress ? (fraction, label) => onProgress({ phase: 'trace', fraction, label }) : undefined,
+      })
+      stage('trace')
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      return doc
+    }
     onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END, label: 'Tracing shapes' })
     const trace = tracePlanar(seg.labels, width, height, fitOpts, seg.palette, seg.image)
     stage('trace')

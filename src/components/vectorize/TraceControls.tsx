@@ -142,7 +142,7 @@ export function TraceControlsBody({
 
   const detailSummary = tracing
     ? opts.mode === 'mono'
-      ? `Mono · threshold ${opts.threshold}${opts.invert ? ' · inverted' : ''}`
+      ? `Mono · threshold ${opts.threshold}${opts.invert ? ' · inverted' : ''}${opts.centerline ? ' · strokes' : ''}`
       : `Smoothing ${opts.smoothing}`
     : 'Cleaning SVG markup'
   // Force colour repaints every shape; a collapsed "Flat fills" hid where the colours went.
@@ -377,6 +377,17 @@ export function TraceControlsBody({
                       <span className={opts.invert ? 'font-semibold text-ink-2' : ''}>{pct(monoGuide.fracOn)}</span>.
                     </p>
                   )}
+                </Field>
+
+                {/* Line art: the centreline engine (src/lib/trace/centerline/) instead of
+                      filled outlines. The consequence is in the result itself — stroked
+                      paths with a width — so the hint says what to expect, not what happened. */}
+                <Field label="Strokes" hint={d.centerline.hint} onInfo={info('centerline')}>
+                  <Toggle
+                    checked={opts.centerline === true}
+                    onChange={(v) => onPatch({ centerline: v })}
+                    label="Trace lines as strokes with a width"
+                  />
                 </Field>
               </>
             )}

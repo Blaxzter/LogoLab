@@ -1,4 +1,4 @@
-import { serializeDoc, subPathsToD } from '../../lib/path/model'
+import { parseSvg, serializeDoc, subPathsToD } from '../../lib/path/model'
 import type { EditableDoc, SubPath } from '../../lib/path/types'
 
 /**
@@ -67,13 +67,42 @@ export function subPathsWire(sets: SubPath[][]): string {
   return `<g class="lab-wire"><g class="w-edge">${edges}</g><g class="w-corner">${corners}</g><g class="w-smooth">${smooths}</g></g>`
 }
 
+/**
+ * The wireframe of a whole doc: the shared-edge graph where the doc has one, and plain
+ * subpath wires for every path outside it — a centreline trace's stroked paths carry no
+ * topology, and without this the Nodes/edges toggle showed nothing on the one lane whose
+ * nodes are the most worth looking at.
+ */
+export function docWire(doc: EditableDoc): string {
+  const loose: SubPath[][] = []
+  for (const it of doc.items) if (it.kind === 'path' && it.visible !== false && !it.loops) loose.push(it.subPaths)
+  return wireGroup(doc) + subPathsWire(loose)
+}
+
 /** A traced doc as panel art: the fill (dimmed when the wireframe is on) plus the
  *  wireframe overlay, in one SVG. With wires off it renders exactly like the fill. */
 export function traceSvg(doc: EditableDoc, w: number, h: number): string {
   const inner = serializeDoc(doc, 2)
     .replace(/^<svg[^>]*>/, '')
     .replace(/<\/svg>\s*$/, '')
-  return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><g class="lab-fill">${inner}</g>${wireGroup(doc)}</svg>`
+  return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><g class="lab-fill">${inner}</g>${docWire(doc)}</svg>`
+}
+
+/**
+ * A FROZEN trace (the SVG text a stamp stored) as panel art with the same wireframe:
+ * the markup is parsed back into a doc for its nodes and re-wrapped exactly as
+ * `traceSvg` wraps a live one. The shared-edge topology is not in the markup, so a
+ * planar trace gets anchor dots and edges but no junction rings; a stroked one gets
+ * everything it has. The raw text stays what diffs, heats and the invented-corner lens
+ * read — a wire group parses as paths and would pollute all three.
+ */
+export function frozenSvg(svg: string): string {
+  const doc = parseSvg(svg)
+  if (!doc) return svg
+  const open = /^\s*<svg[^>]*>/.exec(svg)
+  if (!open) return svg
+  const inner = svg.slice(open[0].length).replace(/<\/svg>\s*$/, '')
+  return `${open[0]}<g class="lab-fill">${inner}</g>${docWire(doc)}</svg>`
 }
 
 /** Counts a lab shows under a trace panel. */

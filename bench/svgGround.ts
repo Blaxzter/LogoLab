@@ -123,7 +123,7 @@ const num = (v: string | undefined, dflt = 0): number => {
 }
 
 /** Attributes of one start tag: name="value" (single or double quoted). */
-function attrs(tagBody: string): Record<string, string> {
+export function attrs(tagBody: string): Record<string, string> {
   const out: Record<string, string> = {}
   const re = /([\w:-]+)\s*=\s*("([^"]*)"|'([^']*)')/g
   let m: RegExpExecArray | null
@@ -149,19 +149,45 @@ function polySubPath(pts: number[], closed: boolean): SubPath[] {
   return nodes.length >= 2 ? [{ nodes, closed }] : []
 }
 
-/** Axis-aligned rect (rx/ry rounding is NOT modelled — authored GT should use plain rects
- *  or a path; a rounded rect would be scored as if its corners were sharp). */
+/** Axis-aligned rect, with `rx`/`ry` corner rounding as SVG defines it (one radius
+ *  implies the other, each clamped to half the side) — a Lucide `<rect rx="2">` scored
+ *  as a sharp-cornered rect read its own correct trace as 9 px off at every corner. */
 function rectSubPath(a: Record<string, string>): SubPath[] {
   const x = num(a.x),
     y = num(a.y),
     w = num(a.width),
     h = num(a.height)
   if (w <= 0 || h <= 0) return []
-  return polySubPath([x, y, x + w, y, x + w, y + h, x, y + h], true)
+  let rx = a.rx !== undefined ? num(a.rx) : a.ry !== undefined ? num(a.ry) : 0
+  let ry = a.ry !== undefined ? num(a.ry) : rx
+  rx = Math.max(0, Math.min(rx, w / 2))
+  ry = Math.max(0, Math.min(ry, h / 2))
+  if (rx <= 0 || ry <= 0) return polySubPath([x, y, x + w, y, x + w, y + h, x, y + h], true)
+  const K = 0.5522847498
+  const kx = rx * K
+  const ky = ry * K
+  const c = (px: number, py: number, hIn: [number, number] | null, hOut: [number, number] | null): PathNode => ({
+    x: px,
+    y: py,
+    hIn: hIn ? { x: hIn[0], y: hIn[1] } : null,
+    hOut: hOut ? { x: hOut[0], y: hOut[1] } : null,
+    kind: 'smooth',
+  })
+  const nodes: PathNode[] = [
+    c(x + rx, y, [x + rx - kx, y], null),
+    c(x + w - rx, y, null, [x + w - rx + kx, y]),
+    c(x + w, y + ry, [x + w, y + ry - ky], null),
+    c(x + w, y + h - ry, null, [x + w, y + h - ry + ky]),
+    c(x + w - rx, y + h, [x + w - rx + kx, y + h], null),
+    c(x + rx, y + h, null, [x + rx - kx, y + h]),
+    c(x, y + h - ry, [x, y + h - ry + ky], null),
+    c(x, y + ry, null, [x, y + ry - ky]),
+  ]
+  return [{ nodes, closed: true }]
 }
 
 /** Convert one shape element to outline subpaths in its own local space. */
-function shapeSubPaths(tag: string, a: Record<string, string>): SubPath[] {
+export function shapeSubPaths(tag: string, a: Record<string, string>): SubPath[] {
   switch (tag) {
     case 'path':
       return a.d ? parsePathD(a.d) : []
@@ -187,7 +213,7 @@ function shapeSubPaths(tag: string, a: Record<string, string>): SubPath[] {
   }
 }
 
-const SHAPES = new Set(['path', 'circle', 'ellipse', 'rect', 'polygon', 'polyline', 'line'])
+export const SHAPES = new Set(['path', 'circle', 'ellipse', 'rect', 'polygon', 'polyline', 'line'])
 
 /**
  * Containers whose children are a STENCIL, not artwork: they are never painted where they
@@ -195,10 +221,10 @@ const SHAPES = new Set(['path', 'circle', 'ellipse', 'rect', 'polygon', 'polylin
  * does not contain — and unlike <defs>, Figma exports these at TOP LEVEL, so a defs-only
  * skip does not catch them.
  */
-const STENCILS = new Set(['defs', 'mask', 'clipPath', 'pattern', 'marker', 'symbol'])
+export const STENCILS = new Set(['defs', 'mask', 'clipPath', 'pattern', 'marker', 'symbol'])
 
 /** Value of a presentation property, whether written as an attribute or in `style`. */
-function prop(a: Record<string, string>, name: string): string {
+export function prop(a: Record<string, string>, name: string): string {
   const fromStyle = new RegExp(`(?:^|;)\\s*${name}\\s*:\\s*([^;]+)`).exec(a.style ?? '')?.[1]
   return (a[name] ?? fromStyle ?? '').trim()
 }

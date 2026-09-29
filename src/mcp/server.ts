@@ -49,6 +49,12 @@ const traceShape = {
     .describe(
       'auto (default) probes for real colour ramps. flat forces solid fills (right for most icons). rich forces gradient fitting.',
     ),
+  strokes: z
+    .boolean()
+    .optional()
+    .describe(
+      'Mono only. Trace LINE ART as centreline strokes with a measured stroke-width (open and closed stroked paths you can re-weight), instead of filled outlines of each line. Ink no stroke explains (a dot, a note head) still becomes a fill. Default off.',
+    ),
   flattenOnto: z
     .string()
     .optional()
@@ -120,6 +126,7 @@ function appearanceFrom(input: Record<string, unknown> | undefined): Partial<App
 function traceRequestFrom(input: Record<string, unknown>): TraceRequest {
   return {
     mode: input.mode as TraceRequest['mode'],
+    strokes: input.strokes as boolean | undefined,
     gradients: input.gradients as TraceRequest['gradients'],
     background: (input.flattenOnto as string) ?? null,
     removeBackground: input.removeBackground as boolean | undefined,

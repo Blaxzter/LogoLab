@@ -113,6 +113,13 @@ export interface VectorizeOptions {
    * solid instead of pixels below it. Default off.
    */
   invert?: boolean
+  /**
+   * Mono: trace the ink as CENTRELINE STROKES — open and closed stroked paths with a
+   * measured width, plus filled paths for ink no stroke explains (a note head, a dot)
+   * — instead of as filled outlines (src/lib/trace/centerline/). For line art: monoline
+   * icons, diagrams, sheet music. Default off. Ignored in colour mode.
+   */
+  centerline?: boolean
   /** Drop the detected background layer for transparent output. */
   removeBackground: boolean
   /**

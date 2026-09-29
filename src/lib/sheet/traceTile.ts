@@ -84,11 +84,18 @@ export function tileTraceInput(pixels: ImageDataLike, scale: number): ImageDataL
   return upscaleImageData(pixels, scale)
 }
 
-/** Repaint every path of a doc with one fill (mono results come back black). */
+/** Repaint every path of a doc with one colour (mono results come back black): the
+ *  fill of a filled path, the stroke of a stroke-only one (a centreline trace). */
 export function repaintDoc(doc: EditableDoc, fill: string): EditableDoc {
   return {
     ...doc,
-    items: doc.items.map((item) => (item.kind === 'path' ? { ...item, fill } : item)),
+    items: doc.items.map((item) =>
+      item.kind !== 'path'
+        ? item
+        : item.fill === 'none' && item.stroke
+          ? { ...item, stroke: { ...item.stroke, color: fill } }
+          : { ...item, fill },
+    ),
   }
 }
 

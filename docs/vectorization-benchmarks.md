@@ -38,6 +38,8 @@ guardrails):
 | 19 | **The junction re-seat moves a junction AWAY from its authored crossing** — the residue of §29 after the through-pair veto: 16 of 62 gallery re-seats on scorable crossings (128 marks, 512/1024/2048) still land further from the crossing than the lattice corner they left. Three mechanisms, none of them the certification constant issue #39 was filed on: a cap-skip that drops a REAL short terminal (an authored r=6 curve, 11.6 px at 1024) and extrapolates the line beyond it to the junction — audit recipe 10, `CAP_MAX`'s zero-margin populations; two huge-radius circle arms (r≈535 × r≈1104) whose intersection is ill-conditioned; and stub arms of 8 native px paired at a 14° angle. Visible on the mark at 1×: the junction sits 1.8–3.1 px off a crossing the lattice had within 0.3 | `logo-brave-browser` @512 (258,474) and @1024 (259,474) artwork px (gallery, ungated — the §29 gate covers the witness junction only); the answer sheet is `authoredCrossings` | 3.12 px off vs 0.29 lattice (C+C @512); 1.78 vs 0.18 (cap-skip @1024); gallery-wide 16 / 62 | **§29.4**; instruments `reseatDiag --lanes` (census, `--json`) and `reseatSelect --worse` (offline, per pair) |
 | 9c | **The border band residue, re-measured and mostly RETRACTED** (§35, 2026-09-07). §34.4 named `letter-joins` as a live residue and §30's fit-ε as the next lever; the corpus says otherwise. Over 35 gallery marks the displaced fit is BETTER at the border on 18 and worse on 7 (mean band-missed 0.333 lattice vs 0.331 displaced — a dead heat), so the residue is one case, not a family. Five hypotheses measured and refuted: the pinned terminal (the penalty grows AWAY from the frame), the knot budget (band node counts identical, 8→8 / 38→38 / 316→316), the segment span (grows on 2 of 33 marks, shrinks on 10), chain bias (both chains unbiased: −0.06 against |·| 0.28), and §30's ε (tightening 1.0 → 0.35 takes the interior 0.09 → 0.04 and the band 0.21 → 0.19). What `letter-joins` really has is art TANGENT to the canvas edge, rendered by both engines as a 20px flat run on x=0 where the authored arc stands off by ≤ 0.84px — a shared, pre-existing approximation no distance gate can call. Methodological residue worth keeping: the traced frame contaminates a NODE lane exactly as it contaminates a distance lane, so the transversal cut belongs to both | `letter-joins` (tier 0, gated, PASSES); `boeing-wm` 2.13× on 29 samples (gallery, ungated) is the only mark still unexplained, and is small-sample | gallery 18 better / 7 worse / 10 wash; means 0.333 vs 0.331 | **§35**; instrument `borderDiag --stages` (chain vs fit on both inputs, interior as control), `--profile`, `geomScore.signedNearestTo` |
 | 9b | **The border band is worse than the case's own interior, and the §15 sub-pixel pass is part of why** — GATING HOLE CLOSED 2026-09-07 (§34): `scoreBorderBand` scores the TRANSVERSAL part of the band against authored truth and `evaluateTruthGates` gates it at `band ≤ 2.0 · max(interior, 0.15)`, flat art @512, with `border-cross` authored for the lane. Two of the issue's own claims fell on the way: its nominated fixture witness was mostly INSTRUMENT (`wedge-counter` 4.70× → 1.23× once the lens stopped dropping segments on the far canvas edge and stopped scoring authored art outside it), and its stated cause — "the border stays on the lattice while everything adjacent went sub-pixel" — is REFUTED by the one-flag counterfactual: the pass is active there and makes the border WORSE on 4 of 9 cases while improving the interior on nearly all. The measured mechanism is that `bilin` clamps out-of-raster samples instead of declaring them missing, which triples `contrast` refusals and drops anchor-flatness refusals to a third of the interior rate — the guard that should be strictest where the window is worst is the one the clamp disarms. `subpixelWindowGuard` closes that half. WHAT REMAINS: `letter-joins` reads 0.21 band-missed against a 0.08 lattice with its own band points no longer displaced, so the residue is downstream of the estimator — §30's "the loss is in the FIT" is the next reading | `border-cross` (tier 0, **gated**, authored for this — passes at 83% of its limit), `letter-joins` 2.37× and `aa-seam` 1.71× (gated, pass); `langchain` 0.41 vs 0.34 and `boeing-wm` 0.54 vs 0.50 (gallery, ungated, FAIL the bar) | band ÷ own interior: fixture median 0.78×, max 2.37×; gallery max 2.36× over 42 border-touching marks | **§34**; instrument `borderDiag` (`--worst`, `--outcomes`, `--keepoff`), scorer `geomScore.scoreBorderBand` |
+| 21 | **CENTRELINE: an over-limit miter's apex is declined** — the apex rebuild keeps a corner only where the distance transform at the apex reads a full half-width, and a bevelled tip (SVG's miter limit at 14°) reads 0.9 px there, so the corner stays at the skeleton's own turn ~12 px inside. The check is load-bearing (it is what keeps a tight smooth bend from being drawn as a spike); what is missing is a test that tells a bevel's straight cut from a bend's arc | `la-caps` (line-art lane, **gated**, in `test/centerline-gate.test.ts` KNOWN_DEFECTS) | missed 28 px over the tip; the other nine strokes of the case at centre 0.36 / 0.66 | **§39.4** |
+| 22 | **CENTRELINE: an authored corner radius below the half-width rounds wider** — a centreline arc tighter than r has no inner boundary, so the medial axis (any skeleton) rounds it at a larger radius and the fit follows; Lucide draws every star vertex at 0.53 u on a 2 u stroke. The evidence that would recover it is the OUTER boundary (an arc of ρ + r), which is the outline tracer's | `lucide-star` (line-art lane, **gated**, KNOWN_DEFECTS) | centre 0.88 / p95 4.08 px; ΔE 2.07 | **§39.4** |
 | 20 | **The flat lane's ENGINE is chosen per raster** — `dominantColors` (paletteSegment.ts) counts the palette entries with share ≥ `minShare` OR `real[i]`, and `real[i]` is a 3×3 flat-interior count against the absolute 50px² floor, so the SAME art clears the `FLAT_PALETTE_MAX_COLORS` (14) gate at one raster and falls to the Mumford–Shah segmenter at another. The audit had named the consequence ("counting into `dominantColors`, which selects the engine"); §33's census is the first time it was witnessed. No lane traces one case through the engine gate at two rasters, so nothing gates it. | gallery, production, no override: `auth-js`, `bing`, `kotlin`, `proton-vpn`, `ups-wm` trace on the palette path @256 and on Mumford–Shah @512; `swc` the reverse — 6 of 152 marks, all many-colour art sitting at dominant 12–14. No fixture (ungated). | dominant 14→22, 14→16, 12→15, 14→23, 14→19, 16→12 across 256→512 | **§33.5**; instrument `floorDiag --lane gallery --res 256,512` (the `ENGINE` column) |
 
 ### 0.1 Premise re-check of the four open issues (2026-08-23)
@@ -7012,3 +7014,272 @@ A centreline stroke for line art. Staff lines, stems and barlines as stroked pat
 measured width, note heads as fills — the right output for sheet music and diagrams, and a
 project of its own. This section only moves a threshold that was already the user's to move.
 
+
+## 39. Centreline tracing: line art as strokes with a measured width (D3, 2026-09-28)
+
+**One line.** A monoline icon traced as fills is the silhouette of a pen: twice the edges and
+no width to change. `mode: 'mono'` + `centerline: true` (`src/lib/trace/centerline/`) traces
+the MIDDLE of each line and measures the ink's width, so a Lucide icon comes back as the
+open and closed stroked paths it was drawn as — one `stroke-width` for the whole icon,
+corners as single points, rings as circles — and the ink no stroke explains (a note head, a
+dot) still becomes a fill through the planar tracer. This section is the method, the answer
+sheet, and the census; the gate is `test/centerline-gate.test.ts`.
+
+### 39.1 The answer sheet is the stroke itself
+
+`bench/genLineArt.ts` writes `public/examples/line-art/`: eight synthetic cases, one
+mechanism each (⌇ polylines with 30–110° corners, curves, T/Y/X/#/asterisk junctions, closed
+loops, a width ladder from 2 to 18 px beside a lollipop and a filled square, caps and
+joins, a sheet of music, hairlines), and twelve real Lucide icons (◎, ISC) framed into the
+same 256 box. Every case is authored with STROKES — the opposite of §6's rule for the outline
+lanes, and for the same reason: there the `d` is the wrong boundary, here the `d` IS the
+answer and `stroke-width` the second answer. `bench/lineArtGround.ts` reads exactly those
+(with a stroked disc whose radius is under half its width converted to the fill it paints),
+`svgGround.ts` still refuses them for the outline lanes, and `<rect rx>` is modelled in both
+now — Lucide's mail rect scored as sharp-cornered read its own correct trace as 9 px off at
+every corner.
+
+`bench/centerlineScore.ts` measures, per case at 512: **centre** (traced centreline → nearest
+authored, mean / p95 — precision), **missed** (authored → traced, excluding authored
+centreline the source never painted or the trace's own ink covers — where one stroke merges
+tangentially into another the centreline runs inside ink no tracer can tell apart, the
+same exclusion §9.6 makes for occluded boundary), **width** error against the authored width,
+**ends / paths** against the authored topology *after joining paths that meet end to end*
+(the ink cannot say whether a corner was one element or two), **fill IoU**, and **ΔE** of the
+trace rendered by `rasterizeDoc` — which paints strokes now (outline polygons unioned
+under nonzero: quads, join discs or wedges, caps; `test/raster-stroke.test.ts`) — against the
+source. Gates: centre ≤ 0.75 / p95 ≤ 3, missed ≤ 1, width ≤ 15%, |ends| ≤ 2, |paths| ≤ 2,
+IoU ≥ 0.8, ΔE ≤ 3.
+
+### 39.2 The engine, and what each stage was for
+
+Exact EDT (`distance.ts`) → Zhang–Suen + a simple-point cleanup by Yokoi's connectivity
+number (`thin.ts`; without it a diagonal keeps a two-pixel elbow on every step and the graph
+read a 45° stroke as a chain of one-pixel junctions) → the skeleton as nodes and chains
+(`graph.ts`: junction clusters split by a pixel contracted, spurs under 1.5 r pruned unless
+their tip still reads a full radius, the two Y's of a shallow crossing welded when their outer
+arms line up) → every chain re-centred on the coverage profile's iso-0.5 crossings and given a
+width from the coverage integral between them (`profile.ts`; a lopsided profile is a concave
+corner's or a crossing's and reads no width) → the ink no stroke's disc explains becomes a
+fill (`blobs.ts`; a wide-but-uniform stretch is a thick stroke, a short wide stretch inside a
+chain is a corner) → arms paired through junctions by rank of straightness, junctions at the
+least-squares meet of the arm lines, free ends walked out to the ink's end with the cap read
+from the flanks (`assemble.ts`, `ends.ts`) → each path fitted with the planar fitter's own
+open-arc DP between corners, and each corner's apex REBUILT from its two arms outside the
+skeleton's rounded zone, kept only where the distance transform at the apex reads a full
+half-width (`fit.ts`).
+
+Three of those rules were measured in rather than reasoned in:
+
+* **The profile's reach is one half-width.** Widened to 2.5 r + 3 so a point thinning had
+  drifted off-centre could find its far edge, every case got worse (bell 0.48 → 0.88 px,
+  star 0.88 → 1.57): at a concave corner the walk runs along the other arm before it finds
+  paper. Capped at r + 2.5 the profile is bounded by the stroke it is on.
+* **The skeleton's rounding at a sharp corner is ~0.6 r a side, not r / sin(θ/2).** The
+  exact medial axis turns AT the apex; thinning rounds it, and the zone that clears the
+  rounding is 0.8 r + 1 — the r / sin(θ/2) zone the wedge geometry suggests (3.2 r at a 36°
+  tip) starved every arm on the star.
+* **Smoothing the pieces before the fit shrinks every curve.** σ = 0.2 W on each piece, tried
+  for a rect-corner kink, took the corpus from 17 to 13 of 20 passing (house 0.35 → 0.65 px):
+  an arc of radius R moves inward by σ²/2R. The staircase is smoothed at σ ≤ 2 px only.
+
+### 39.3 Census at 512 and 2048 (the gate's numbers, `bench/centerlineDiag.ts`)
+
+| case | paths | nodes | W traced / authored | centre mean / p95 | missed | width | ends / paths Δ | fill IoU | ΔE |
+|---|---|---|---|---|---|---|---|---|---|
+| la-polylines | 3 | 19 | 6.0 / 6.0 | 0.27 / 0.55 | 0.00 | 0% | 0 / 0 | — | 0.61 |
+| la-curves | 4 | 30 | 6.0 / 6.0 | 0.30 / 0.60 | 0.00 | 0% | 0 / 0 | — | 0.81 |
+| la-junctions | 19 | 42 | 6.0 / 6.0 | 0.30 / 0.54 | 0.00 | 0% | +2 / +1 | — | 1.18 |
+| la-loops | 4 | 20 | 6.0 / 6.0 | 0.25 / 0.83 | 0.00 | 0% | 0 / 0 | — | 0.70 |
+| la-widths | 10 | 38 | 6.0 / 6.0 | 0.30 / 0.50 | 0.51 | 0% | 0 / 0 | 1.00 | 1.05 |
+| la-caps | 10 | 26 | 16.0 / 16.0 | 0.36 / 0.66 | **28.2** | 0% | 0 / 0 | — | 1.63 |
+| la-score | 11 | 49 | 2.5 / 2.4 | 0.20 / 0.52 | 0.81 | 2% | +2 / +1 | 0.84 | 0.44 |
+| la-hairline | 5 | 12 | 1.5 / 1.5 | 0.41 / 0.79 | 0.52 | 1% | 0 / 0 | — | 0.68 |
+| lucide-house | 2 | 16 | 32.0 / 32.0 | 0.35 / 0.69 | 0.00 | 0% | 0 / 0 | — | 1.97 |
+| lucide-bell | 2 | 12 | 32.0 / 32.0 | 0.48 / 1.65 | 0.00 | 0% | −2 / 0 | — | 1.61 |
+| lucide-settings | 2 | 24 | 32.1 / 32.0 | 0.30 / 0.61 | 0.00 | 0% | −2 / 0 | — | 2.09 |
+| lucide-search | 2 | 8 | 32.0 / 32.0 | 0.55 / 0.96 | 0.00 | 0% | 0 / 0 | — | 1.45 |
+| lucide-mail | 2 | 14 | 32.0 / 32.0 | 0.33 / 0.67 | 0.00 | 0% | 0 / 0 | — | 2.08 |
+| lucide-heart | 1 | 9 | 32.1 / 32.0 | 0.37 / 0.60 | 0.00 | 0% | −2 / 0 | — | 1.43 |
+| lucide-git-branch | 4 | 15 | 32.1 / 32.0 | 0.55 / 2.76 | 0.00 | 0% | +2 / +1 | — | 1.52 |
+| lucide-shopping-cart | 2 | 20 | 32.0 / 32.0 | 0.33 / 0.93 | 0.00 | 0% | 0 / 0 | 0.99 | 1.61 |
+| lucide-umbrella | 3 | 12 | 32.0 / 32.0 | 0.42 / 1.49 | 0.00 | 0% | 0 / 0 | — | 1.59 |
+| lucide-map-pin | 2 | 9 | 32.0 / 32.0 | 0.26 / 0.55 | 0.00 | 0% | −2 / 0 | — | 1.73 |
+| lucide-camera | 2 | 14 | 32.0 / 32.0 | 0.32 / 0.85 | 0.00 | 0% | 0 / 0 | — | 2.02 |
+| lucide-star | 1 | 18 | 32.0 / 32.0 | **0.90 / 4.09** | 0.00 | 0% | 0 / 0 | — | 2.08 |
+
+Eighteen of twenty pass every gate. The width is right to the decimal on every case (the
+coverage integral is exact for a uniform stroke however its edges fall on the grid), the
+topology deltas are the ±2 the scorer allows (a Y drawn as three arms, a flag joined to its
+stem), and the render sits at ΔE 0.5–2.1 — the same range the outline lanes hold on flat art.
+
+The polylines and the figure-8 are exact (0 / 0) only since the wire overlay reached the
+line lane: with the nodes visible, three things every gate had passed showed up on the
+simplest fixture. Each was a bookkeeping error, not a geometry one, and each is now gated by
+`test/centerline-engine.test.ts`:
+
+* **A corner in the middle of a straight step.** The apex rebuild replaces the rounded
+  zone around a corner with one point and works through the corners in descending index
+  order so the edits never move an earlier index — but every corner already REBUILT sits
+  past the edit and moves by the zone's length. Left uncorrected, each earlier corner's
+  node landed 6–14 px down its arm. The staircase read 10 nodes where it has 10 vertices
+  only once the shift was carried.
+* **The zigzag split in two at its tip.** Thinning leaves a two-pixel branch toward a
+  sharp corner's apex; too short to read, its direction was the chord of two pixels, and
+  paired as a THROUGH arm it took one side of the corner as its continuation and left the
+  other side to end there. An unreadable arm never pairs now, and a stub shorter than a
+  stroke width at a corner of two readable arms is dropped whatever its two pixels say.
+* **The figure-8 fell open.** Its crossing thins to two Y's a stroke width apart, which
+  is exactly what the crossing weld is for — and it never fired, because a lobe is ONE
+  chain with both ends on the same node and the weld read arms by chain id, one
+  direction twice. Raising the cluster reach to two radii closed the loop instead and
+  merged the score's 2 px staff-and-stem junctions into welded clusters (stems lost,
+  `missed` 0.81 → 1.77): the reach is a thinning artefact's, not a crossing's. The weld
+  enumerates arm ENDS.
+
+The pair `before-line-nodes` ⇄ `after-line-nodes` holds the three fixes: 168 lane traces
+byte-identical (every outline lane, sixteen of the twenty line lanes), four line lanes
+moved — `la-polylines`, `la-loops`, `la-score`, and `lucide-star` by 0.02 px of mean
+centre error (0.88 → 0.90; a counterfactual with only the index shift reverted reads 0.88
+again, so it is the star's rebuilt corners being recorded at their own index rather than
+down an arm).
+
+At 2048 — the A/B line lane's resolution and the app's (§39.7), with the three pixel
+limits scaled by 4 (`centerlineTol`):
+
+| case | paths | nodes | W traced / authored | centre mean / p95 | missed | width | ends / paths Δ | fill IoU | ΔE |
+|---|---|---|---|---|---|---|---|---|---|
+| la-polylines | 3 | 22 | 24.0 / 24.0 | 0.22 / 0.69 | 0.00 | 0% | 0 / 0 | — | 0.50 |
+| la-curves | 4 | 45 | 24.0 / 24.0 | 0.40 / 0.81 | 0.00 | 0% | 0 / 0 | — | 0.65 |
+| la-junctions | 19 | 51 | 24.0 / 24.0 | 0.35 / 0.51 | 0.00 | 0% | +2 / +1 | — | 0.87 |
+| la-loops | 4 | 30 | 24.0 / 24.0 | 0.22 / 0.53 | 0.00 | 0% | 0 / 0 | — | 0.53 |
+| la-widths | 10 | 54 | 24.0 / 24.0 | 0.37 / 0.58 | 0.00 | 0% | 0 / 0 | 1.00 | 0.96 |
+| la-caps | 10 | 32 | 64.0 / 64.0 | 0.60 / 0.58 | **72.9** | 0% | 0 / 0 | — | 1.35 |
+| la-score | 11 | 84 | 9.5 / 9.6 | 0.26 / 0.51 | 0.00 | 2% | +2 / +1 | 0.94 | 0.36 |
+| la-hairline | 5 | 13 | 6.0 / 6.0 | 0.21 / 0.65 | 0.00 | 0% | 0 / 0 | — | 0.21 |
+| lucide-house | 2 | 28 | 128.0 / 128.0 | 0.99 / 4.83 | 0.00 | 0% | 0 / 0 | — | 2.02 |
+| lucide-bell | 2 | 25 | 128.0 / 128.0 | 1.19 / 6.05 | 0.00 | 0% | −2 / 0 | — | 1.51 |
+| lucide-settings | 2 | 56 | 125.1 / 128.0 | 1.99 / 4.45 | 0.00 | 2% | −2 / 0 | — | 2.50 |
+| lucide-search | 2 | 17 | 128.0 / 128.0 | 0.99 / 1.68 | 0.00 | 0% | 0 / 0 | — | 1.33 |
+| lucide-mail | 2 | 32 | 128.0 / 128.0 | 1.29 / 4.89 | 0.00 | 0% | 0 / 0 | — | 2.16 |
+| lucide-heart | 1 | 20 | 128.1 / 128.0 | 1.05 / 3.35 | 0.00 | 0% | −2 / 0 | — | 1.44 |
+| lucide-git-branch | 4 | 41 | 128.0 / 128.0 | 2.42 / 9.17 | 0.00 | 0% | +2 / +1 | — | 1.55 |
+| lucide-shopping-cart | 2 | 27 | 128.0 / 128.0 | 1.04 / 5.30 | 0.00 | 0% | 0 / 0 | 1.00 | 1.59 |
+| lucide-umbrella | 3 | 24 | 128.0 / 128.0 | 1.14 / 5.35 | 0.00 | 0% | 0 / 0 | — | 1.56 |
+| lucide-map-pin | 2 | 24 | 128.0 / 128.0 | 0.89 / 3.19 | 0.00 | 0% | −2 / 0 | — | 1.77 |
+| lucide-camera | 2 | 35 | 128.0 / 128.0 | 1.23 / 4.44 | 0.00 | 0% | 0 / 0 | — | 2.09 |
+| lucide-star | 1 | 36 | 128.0 / 128.0 | 2.91 / **18.34** | 0.00 | 0% | 0 / 0 | — | 2.01 |
+
+Eighteen of twenty again, the same two. The Lucide centre errors read 1–2.4 px, which is
+0.8–1.9% of their 128 px strokes — a smaller share than the 0.3–0.5 px on 32 px strokes
+at 512 — and the fills are whole (la-widths and the cart 1.00, the score 0.94 against 0.84).
+
+### 39.4 The two that fail, and why they stay listed
+
+* **`la-caps`, the 14° chevron.** Its miter exceeds SVG's default limit of 4, so the ink is
+  bevelled — 0.7 px short of the authored apex, but that is enough: the apex rebuild's
+  raster check wants a full half-width at the apex and reads 0.9 px, calls it a smooth
+  bend, and the corner stays at the skeleton's own turn, ~12 px inside the tip (`missed`
+  28 px over the authored tip). The check is what keeps the umbrella's hook and the gear's
+  lobes from being drawn as spikes; a test that separates a bevel from a tight bend (the
+  bevel's boundary is a straight cut, the bend's an arc) is open. Bevel joins are rare in
+  icons, which use round.
+* **`lucide-star`.** Lucide rounds every vertex with a 0.53 u arc — 8.5 px at 512, HALF the
+  stroke's 16 px half-width. A centreline arc tighter than r has no inner boundary at all,
+  so any medial axis rounds it wider, the apex rebuild rightly declines (the tangents' meet
+  lies past the ink), and the fit follows the skeleton's rounding: 0.88 px mean, 4.1 p95, a
+  tip a little blunt. The render is ΔE 2.07. Recovering an authored radius below r needs the
+  OUTER boundary (an arc of radius ρ + r centred where the centreline's arc is), which is the
+  outline tracer's evidence, not this one's.
+
+### 39.6 Where a stroke meets a fill: the mask's bay, and pairing across a fill
+
+The lollipop's join looked wrong on the wire overlay — five nodes stacked where the stem
+leaves the disc, and a bite in the rim above and below the stem. The dump of the blob mask
+said why: the stem's channel (the stroke mask, painted at each point's measured width
+plus the margin) cuts through the rim, and the growth that hands a fill its interior
+back stops where the inscribed radius falls under W + 0.5 — which it does within a
+stroke width of the rim, because there the nearest paper is the pocket beside the stem.
+A bay 6 px deep and 13 px tall stayed in the mask, and the planar fitter traced the fill
+around it. Wider than the stem, because the coverage profile FLARES where the stroke
+enters the fill (it reads the disc's chord as the stroke's width for the last few
+points), and the channel was painted at that width.
+
+Two rules, both in `blobs.ts`, and one in `assemble.ts`:
+
+* **The bridge rule.** A blob also grows into a channel pixel whose ink, measured along
+  the stroke's normal both ways to paper, runs further than the stroke is wide plus 2.5
+  px. Inside the bay that run is the disc's chord; on the stem past the rim it is the
+  stem's width; at a shallow crossing of two strokes it is W / sin θ, which is why the
+  rule only ever ADMITS from a blob already there (it is a second admission for the
+  growth, not a detector). Each channel pixel remembers the normal and the chain width
+  of the point that painted it. The mask at the mouth now follows the rim to within the
+  rim's own anti-aliasing pixel, and the disc traces as a four-node circle with the
+  stem's end 3 px inside it.
+* **Not a cap on the flare.** The first version capped the painted width at the blob bar
+  as well; that also capped the 18 px S beside the 6 px ones (a uniform thick stroke,
+  which `blobFlags` re-admits on purpose), and its outer band became a fill (la-widths
+  fill IoU 0.98 → 0.75). The bridge hands the flare's over-reach back anyway.
+* **Pairing across a fill.** With the last note head's mask reaching its rim, the flag
+  stroke no longer glued to the staff line through the junction inside the head — and the
+  staff line, which had always been two strokes there (inside the head the skeleton is the
+  head's own thicket, so `strokeRuns`' interior bridging never saw across), now counted
+  as one too many ends. The assembly pairs the cut ends of two runs that enter the SAME
+  fill component, collinear (the junction through bar, 35°) and on one line (half a width
+  plus a tenth of the way across, read over three widths — over two, the last points bend
+  into the fill's axis and read 8° off), and `follow` bridges them with a straight chord
+  under the fill. The stem into the head sits 5 px off the staff line's line over 20 px
+  and stays out.
+
+la-widths: 44 → 38 nodes, fill IoU 0.98 → 1.00, ΔE 1.14 → 1.05. la-score: 61 → 49
+nodes, fill IoU 0.83 → 0.85, and the staff line through the last head is one stroke
+(the flag's 8 px tail into the head's junction remains a separate stroke, hidden under
+the head: +1 path, as before). Nothing else moved. `test/centerline-engine.test.ts` gates
+both rules (a counterfactual with the bridge disabled fails the mask test); the pair
+`before-fill-join` ⇄ `after-fill-join` holds it.
+
+### 39.7 The lane runs at the app's resolution, and what 2048 showed
+
+The line lane ran at 512 for its first day, the gate's resolution, beside a mono lane at
+2048 — and a one-sided row drew the two into one box over one 2048 source. A note head
+12 px wide, traced by the outline tracer as a four-corner polygon, sat next to the same
+head at 48 px traced as an ellipse, and read as a bad tracer. The user's question was the
+right one: the app never traces line art at 512 (an upload traces at its own size times
+the mono upscale, up to the flat cap), so a lane that does shows something the user
+cannot get. The lane is at the flat cap now, like mono. The gate runs at BOTH 512 and
+2048, because 512 is still where the fixtures' widths span 2–18 px, the regime a small
+icon reaches after the upscale, and the pixel limits (centre mean and p95, missed) scale
+with the raster: the fixtures are authored in units, and 0.75 px on a 32 px stroke is the
+same 2.3% as 3 px on that stroke's 128 px at 2048 (`centerlineTol`).
+
+2048 found one defect the 512 census could not see. The last note head traced as THREE
+fills, the head's with 19 nodes, and `missed` read 6.7 px on the stem's own centreline
+inside the head. The mask had holes: the stem's chain runs on into the head along the
+head's own axis, and its first points past the rim — too shallow for `blobFlags` (the
+pocket between stem and rim bounds their inscribed radius) — painted discs at their FLARED
+width, 16 px into the head, carrying the axis's diagonal as those pixels' normal. Near the
+pocket the ink run along that diagonal is short on both sides, so the bridge rule declined
+them, and a handful of pixels ringed by fill stayed unclaimed. Two rules, both `blobs.ts`:
+
+* **A flared reading is painted no wider than the chain's own width and a quarter**, or
+  the blob bar, whichever is more. The chain's own width cannot cap itself, so the uniform
+  18 px S that the earlier cap broke (§39.6) is untouched.
+* **An island of ink the fill surrounds is the fill's.** After the growth, a component of
+  unclaimed ink none of whose pixels touches paper or the border joins the fill — the ink
+  has no hole there, so the fill must not either. (Residue the growth reaches — leftover
+  ink no disc painted, dropped as too small for a fill of its own — joins it the same way.)
+
+la-score at 2048: `missed` 6.74 → 0.00, 96 → 84 nodes, the head one fill of 13 nodes plus a
+one-pixel sliver of its rim above the pocket that the planar tracer pinches off as its own
+loop. At 512 the score's fill IoU moved 0.85 → 0.84 and nothing else in the census moved.
+The pair `before-line-2048` ⇄ `after-line-2048` holds it, at the new resolution.
+
+### 39.5 What it is not, yet
+
+Butt is never told from square (the ink is identical; the end is placed at the ink's end).
+Joins are always round. Two strokes merging tangentially (git-branch's arc into its stem)
+share one centreline over the merge and the second stroke ends where they meet. Width is one
+number per path — a brush stroke with pressure comes back at its median width. Nothing here
+reads colour: the engine takes mono's cut, so a two-ink diagram traces its darker ink. And the
+Mode control's Auto never picks Strokes: the toggle is the user's, with the ink probe's
+thickness readout beside it as the hint.

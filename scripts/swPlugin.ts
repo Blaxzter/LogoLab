@@ -57,6 +57,7 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024
 const PUBLIC_SKIP = [
   'corpus', // lab fixtures
   'examples/edge-cases', // the tracer's ⟐ fixture corpus — labs only
+  'examples/line-art', // the centreline tracer's ⌇ fixture corpus — labs only
   'og.png', // link-preview card, never rendered in the app
 ]
 

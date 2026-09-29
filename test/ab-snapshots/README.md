@@ -2,8 +2,10 @@
 
 `pnpm gen:absnapshot [name] [--logos all|a,b|none]` freezes the tracer's current output
 here, one subdir per stamp, so the next change can be judged against it in **/labs/ab →
-Vs snapshot**. Each subdir holds, per case: the exact input pixels (`<id>.png`), the
-serialized trace with gradients off and on (`<id>.flat.svg`, `<id>.grad.svg`), and a
+Vs snapshot**. Each subdir holds, per case: the exact input pixels (`<id>.png`, plus
+`<id>.r<res>.png` for a lane that traces smaller), the serialized trace per lane the case
+runs (`<id>.flat.svg`, `<id>.grad.svg`, `<id>.mono.svg`; the ⌇/◎ line-art cases run
+`mono` and `line` only, so they carry `<id>.line.svg` and no colour lanes), and a
 `manifest.json` recording the git rev (`+dirty` when the tree had modifications), the date,
 and a full `createdAt` timestamp (the dropdown's sort key — stamps list newest first, and a
 same-day pair no longer sorts under an unrelated earlier stamp by name).

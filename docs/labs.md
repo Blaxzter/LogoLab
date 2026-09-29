@@ -104,7 +104,7 @@ inspecting one junction flung every other case off-screen; pinch-zoom included),
   corpus, the corpora do not overlap, and so "No case matches “olympic”" is regularly a true
   statement answering the wrong question: it reads as *we don't have it* when the truth is *not
   on this page*. The index knows all nine searchable corpora (the Workbench's six, the Gallery,
-  A/B's two lanes), so a lab can add "…also in **Gallery 1**" beside its counter and put the same
+  A/B's three case lanes — fixtures, gallery, line art), so a lab can add "…also in **Gallery 1**" beside its counter and put the same
   list in its empty state, each entry a link carrying `?q=` (and `?corpus=` / `?lane=`) so
   following it lands on the match. Every entry derives its names from the module the lab itself
   renders from, so a corpus cannot drift out from under it. `olympic-rings` is the worked example:

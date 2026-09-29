@@ -22,7 +22,7 @@
 
 import { CORPORA } from './workbench/corpora'
 import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE } from '../../../bench/logoCorpus'
-import { AB_CORPUS, AB_LOGO_CASES } from '../../../bench/abCorpus'
+import { AB_CORPUS, AB_LINE_ART_CASES, AB_LOGO_CASES } from '../../../bench/abCorpus'
 import type { LabSearchState } from './useLabSearch'
 
 /** One searchable corpus, somewhere in the labs. */
@@ -87,6 +87,14 @@ export const CORPUS_PLACES: CorpusPlace[] = [
     available: LOGO_CORPUS_AVAILABLE,
     href: (q) => `/labs/ab?lane=gallery&q=${enc(q)}`,
     fields: () => AB_LOGO_CASES.filter((c) => onDisk.has(c.path.split('/').pop()!)).map((c) => [c.name, c.id]),
+  },
+  {
+    id: 'ab:lineart',
+    lab: 'Feature A/B',
+    corpus: 'Line art',
+    available: true,
+    href: (q) => `/labs/ab?lane=lineart&q=${enc(q)}`,
+    fields: () => AB_LINE_ART_CASES.map((c) => [c.name, c.id]),
   },
 ]
 

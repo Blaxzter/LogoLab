@@ -257,11 +257,17 @@ export function cleanSvg(svg: string, opts: CleanOptions): CleanResult {
     }
   }
 
-  // Force a single fill if requested.
+  // Force a single fill if requested. A stroke-only shape (fill="none" with a stroke —
+  // a centreline trace) takes the colour on its stroke and stays unfilled.
   if (opts.forceFill) {
     for (const tag of SHAPE_TAGS) {
       const els = Array.from(root.getElementsByTagName(tag))
       for (const el of els) {
+        const strokeOnly = getFill(el) === 'none' && (el.getAttribute('stroke') ?? 'none') !== 'none'
+        if (strokeOnly) {
+          el.setAttribute('stroke', opts.forceFill)
+          continue
+        }
         el.setAttribute('fill', opts.forceFill)
         // Drop any conflicting inline fill in style.
         const style = el.getAttribute('style')

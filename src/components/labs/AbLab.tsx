@@ -20,7 +20,8 @@
 //
 // Meant to STAY in the tree and grow with future features. To A/B a new feature: add a VARIANT
 // with its `planarFit` override (index.ts merges it last), or add a CASE in abCorpus.ts — or
-// just drop an image onto the page.
+// just drop an image onto the page. Three case lanes: the ⟐ fixtures, the ◆ gallery marks,
+// and the ⌇/◎ LINE-ART fixtures, which run the mono + centreline trace lanes only.
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -35,8 +36,10 @@ import type { PlanarFitOptions } from '../../lib/trace/planarFit'
 import {
   AB_CORPUS,
   AB_LANES,
+  AB_LINE_ART_CASES,
   AB_LOGO_CASES,
   abUrl,
+  caseLanes,
   conventionalPartner,
   laneFiles,
   pairSlug,
@@ -53,7 +56,7 @@ import { useLabState } from './useLabState'
 import { useLabSearch } from './useLabSearch'
 import { useLabRun } from './useLabRun'
 import { labTrace } from './labTrace'
-import { docStats, traceSvg } from './wire'
+import { docStats, frozenSvg, traceSvg } from './wire'
 import { serializeDoc, parseSvg } from '../../lib/path/model'
 import { parseGroundTruth, toRasterSpace, unscorable, type GroundShape } from '../../../bench/svgGround'
 import { inventedCorners, makeVisibleAt } from '../../../bench/geomScore'
@@ -216,6 +219,8 @@ interface AbCase {
   text?: string
   /** Composite the raster on this colour (the gallery lane's white). */
   background?: string
+  /** Which trace lanes this case runs (abCorpus `lanes`); absent ⇒ the default three. */
+  lanes?: AbLaneKey[]
 }
 
 // The case list is OWNED by bench/abCorpus.ts — the same list the snapshot
@@ -223,6 +228,18 @@ interface AbCase {
 // are authored as SVG (bench/genEdgeCases.ts), so the raster switch
 // re-rasterizes each at any size: same vector content, varying resolution.
 const FIXTURES: AbCase[] = AB_CORPUS.map((c) => ({ id: c.id, name: c.name, kind: c.kind, src: abUrl(c.path) }))
+
+// The LINE-ART lane — stroked fixtures for the centreline engine (bench/genLineArt.ts),
+// served from public/ like the fixtures, rasterized on white like the gallery, and traced
+// in the mono + line lanes only (abCorpus `lanes`).
+const LINE_ART: AbCase[] = AB_LINE_ART_CASES.map((c) => ({
+  id: c.id,
+  name: c.name,
+  kind: c.kind,
+  src: abUrl(c.path),
+  background: c.background,
+  lanes: c.lanes,
+}))
 
 // The GALLERY lane — the same brand marks /labs/gallery shows, so a tracer change can be
 // judged on art someone recognizes and not only on fixtures that are already good enough.
@@ -246,17 +263,19 @@ function svgBlobUrl(text: string): string {
 /** Which lane(s) to run — the gallery lane doubles the corpus, and in variants mode every
  *  case costs VARIANTS.length traces, so it is switchable rather than always on. */
 const LANES = [
-  { value: 'all', label: 'Fixtures + gallery' },
+  { value: 'all', label: 'Fixtures + gallery + line art' },
   { value: 'fixtures', label: 'Fixtures only' },
   { value: 'gallery', label: 'Gallery only' },
+  { value: 'lineart', label: 'Line art only' },
 ]
 
 /** Which corpusIndex places this lane IS, so "…also in" never offers a lane already on screen.
  *  Module-level and frozen per lane so the identity is stable across renders. */
 const LANE_PLACES: Record<string, readonly string[]> = {
-  all: ['ab:fixtures', 'ab:gallery'],
+  all: ['ab:fixtures', 'ab:gallery', 'ab:lineart'],
   fixtures: ['ab:fixtures'],
   gallery: ['ab:gallery'],
+  lineart: ['ab:lineart'],
 }
 
 /** Rasterization sizes offered by the raster switch (SVG cases re-render at each; raster
@@ -292,6 +311,15 @@ interface AbAnalysis {
    *  art or AB_SNAPSHOT_RES changed between them), so their traces are not comparable and
    *  the row is excluded from the changed/unchanged counts. */
   inputDiffers?: string
+  /**
+   * Snapshot modes only: the case exists on ONE side — a stamp frozen before the case (or
+   * its lane) existed has nothing to diff it against — so the row shows that side's lanes
+   * alone, with no verdict. The name of the side that has it: a stamp's name, or
+   * 'working tree'. A case a new lane brought in (the ⌇ line-art cases, against any stamp
+   * older than the lane) used to vanish from the page instead, which read as the lane
+   * having produced nothing.
+   */
+  onlyIn?: string
   /** `note` overrides the panel's stats line for a panel that has no live doc to count
    *  (a frozen stamp) — in pair mode BOTH panels are frozen and each carries its own rev. */
   variants: {
@@ -423,7 +451,8 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry): Promise<AbAnalysis> {
   const be = base.manifest.cases.find((s) => s.id === c.id)
   const he = head.manifest.cases.find((s) => s.id === c.id)
-  if (!be || !he) throw new Error(`case missing from ${be ? head.name : base.name} — rerun pnpm gen:absnapshot`)
+  if (!be && !he) throw new Error(`case in neither ${base.name} nor ${head.name} — rerun pnpm gen:absnapshot`)
+  if (!be || !he) return oneStampOnly(c, be ? base : head, be ? 'base' : 'shipped')
   const bDir = `/test/ab-snapshots/${base.name}`
   const hDir = `/test/ab-snapshots/${head.name}`
 
@@ -474,14 +503,14 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
       {
         name: `${base.name}${label(v)}`,
         tone: 'base',
-        svg: v.bSvg,
+        svg: frozenSvg(v.bSvg),
         note: `frozen ${base.manifest.rev} · ${base.manifest.date}`,
         invented: inv(v.bSvg),
       },
       {
         name: `${head.name}${label(v)}`,
         tone: 'shipped',
-        svg: v.hSvg,
+        svg: frozenSvg(v.hSvg),
         note: `frozen ${head.manifest.rev} · ${head.manifest.date}`,
         invented: inv(v.hSvg),
       },
@@ -528,7 +557,7 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
  *  pixels and pair it with the stored trace — same input file, two code revisions. */
 async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> {
   const entry = snap.manifest.cases.find((s) => s.id === c.id)
-  if (!entry) throw new Error(`case not in snapshot ${snap.name} — rerun pnpm gen:absnapshot`)
+  if (!entry) return workingTreeOnly(c)
   const dir = `/test/ab-snapshots/${snap.name}`
 
   // ONE PASS PER LANE THE STAMP CARRIES — a stamp freezes all of them, so all of them are
@@ -604,7 +633,12 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
     const gt = await shapesFor(v.f.width)
     const inv = (svg: string): number | undefined => inventedIn(svg, gt, v.image, v.f.width, v.f.height)
     variants.push(
-      { name: `Snapshot @ ${snap.manifest.rev}${label(v)}`, tone: 'base', svg: v.snapSvg, invented: inv(v.snapSvg) },
+      {
+        name: `Snapshot @ ${snap.manifest.rev}${label(v)}`,
+        tone: 'base',
+        svg: frozenSvg(v.snapSvg),
+        invented: inv(v.snapSvg),
+      },
       {
         name: `Working tree${label(v)}`,
         tone: 'shipped',
@@ -646,20 +680,121 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
     variants,
   }
 }
-async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<AbAnalysis> {
-  // Gallery cases carry their markup (c.text); fixtures are fetched from public/.
+/** The case's LIVE source rasterized at `raster` px — the input variants mode traces. Gallery
+ *  cases carry their markup (c.text); fixtures are fetched from public/. */
+async function liveImage(c: AbCase, raster: number): Promise<ImageData> {
   const svgText =
     c.kind === 'svg' ? (c.text ?? (await (c.file ? c.file.text() : (await fetch(c.src)).text()))) : undefined
-  const image = await labImageData(c.src, raster, svgText, c.background ? { background: c.background } : undefined)
+  return labImageData(c.src, raster, svgText, c.background ? { background: c.background } : undefined)
+}
+
+/**
+ * A ONE-SIDED pair row: the case is in only one of the two stamps, so its lanes from that
+ * stamp are shown alone — frozen, no verdict. What the row is for is SEEING the case (a
+ * lane's new fixtures against a baseline older than the lane); what it must not do is
+ * pretend to a comparison.
+ */
+async function oneStampOnly(c: AbCase, snap: SnapEntry, tone: 'base' | 'shipped'): Promise<AbAnalysis> {
+  const entry = snap.manifest.cases.find((s) => s.id === c.id)!
+  const dir = `/test/ab-snapshots/${snap.name}`
+  const lanes: { lane: AbLane; svg: string; png: string; width: number; height: number }[] = []
+  for (const lane of AB_LANES) {
+    const f = laneFiles(entry, lane.key)
+    if (!f) continue
+    const [svg, png] = await Promise.all([
+      snapFile(SNAP_SVGS, `${dir}/${f.svg}`),
+      snapFile(SNAP_PNGS, `${dir}/${f.png}`),
+    ])
+    if (svg && png) lanes.push({ lane, svg, png, width: f.width, height: f.height })
+  }
+  if (lanes.length === 0) throw new Error(`snapshot files missing from ${snap.name} — rerun pnpm gen:absnapshot`)
+  const primary = lanes[0]
+  return {
+    width: primary.width,
+    height: primary.height,
+    srcOverride: primary.png,
+    changed: undefined,
+    onlyIn: snap.name,
+    shownLanes: lanes.map((v) => v.lane.key),
+    heats: [],
+    variants: lanes.map((v) => ({
+      name: `${snap.name} · ${v.lane.label}`,
+      tone,
+      svg: frozenSvg(v.svg),
+      note: `frozen ${snap.manifest.rev} · ${snap.manifest.date} · only in this stamp`,
+    })),
+  }
+}
+
+/**
+ * A ONE-SIDED vs-working-tree row: the baseline stamp predates the case, so the working
+ * tree is traced from the case's LIVE source, one pass per lane the case runs, and shown
+ * alone. Not the stored-pixel contract (there are no stored pixels), so this is the input
+ * variants mode uses — said so in the panel's note.
+ */
+async function workingTreeOnly(c: AbCase): Promise<AbAnalysis> {
+  const lanes = caseLanes({ lanes: c.lanes })
+  const images = new Map<number, Promise<ImageData>>()
+  const imageAt = (res: number): Promise<ImageData> => {
+    const hit = images.get(res)
+    if (hit) return hit
+    const p = liveImage(c, res)
+    images.set(res, p)
+    return p
+  }
+  const variants: AbAnalysis['variants'] = []
+  let width = 0
+  let height = 0
+  for (const lane of lanes) {
+    const image = await imageAt(lane.res)
+    if (!width) {
+      width = image.width
+      height = image.height
+    }
+    const doc: EditableDoc = await labTrace(image, {
+      ...DEFAULT_VECTORIZE_OPTIONS,
+      engine: 'planar',
+      ...lane.opts,
+      ...lane.resolve?.(image),
+    })
+    variants.push({
+      name: `Working tree · ${lane.label}`,
+      tone: 'shipped',
+      svg: traceSvg(doc, image.width, image.height),
+      stats: docStats(doc),
+      note: `traced from the live source @ ${lane.res}px — not in the baseline stamp`,
+    })
+  }
+  if (variants.length === 0) throw new Error('the case runs no lane')
+  return {
+    width,
+    height,
+    changed: undefined,
+    onlyIn: 'working tree',
+    shownLanes: lanes.map((l) => l.key),
+    heats: [],
+    variants,
+  }
+}
+
+async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<AbAnalysis> {
+  const image = await liveImage(c, raster)
   const w = image.width
   const h = image.height
 
+  // A case that runs the LINE lane (line art) is traced through it in every variant —
+  // the centreline engine, at the cut the ink probe places — so a planarFit flag is still
+  // A/B'd on the strokes' fit rather than on an outline the case never ships as.
+  const lineLane = c.lanes?.includes('line') ? AB_LANES.find((l) => l.key === 'line') : undefined
+  const laneOpts: Partial<VectorizeOptions> = lineLane
+    ? { ...lineLane.opts, ...lineLane.resolve?.(image) }
+    : { gradients }
   const variants: AbAnalysis['variants'] = []
   for (const v of VARIANTS) {
     const doc: EditableDoc = await labTrace(image, {
       ...DEFAULT_VECTORIZE_OPTIONS,
       engine: 'planar',
-      gradients,
+      ...laneOpts,
       ...v.opts,
       planarFit: v.planarFit,
     })
@@ -719,25 +854,32 @@ export default function AbLab() {
   }
 
   const lane = useMemo(
-    () => [...(ui.lane === 'gallery' ? [] : FIXTURES), ...(ui.lane === 'fixtures' ? [] : GALLERY), ...extras],
+    () => [
+      ...(ui.lane === 'all' || ui.lane === 'fixtures' ? FIXTURES : []),
+      ...(ui.lane === 'all' || ui.lane === 'gallery' ? GALLERY : []),
+      ...(ui.lane === 'all' || ui.lane === 'lineart' ? LINE_ART : []),
+      ...extras,
+    ],
     [extras, ui.lane],
   )
   // The search filters the CORPUS, not the rows on screen — in variants mode every case costs
   // VARIANTS.length traces, so narrowing to `gear` has to mean tracing gear, not tracing all of
   // them and hiding the rest. `Changed only` still applies on top, to whatever matched.
   const found = useMemo(() => lane.filter((c) => search.match(c.name, c.id)), [lane, search.match])
-  // A snapshot frozen before a case existed (an older stamp, or one taken with a different
-  // --logos slice) simply doesn't have it. Hide those rather than filling the page with
-  // "case not in snapshot" errors — the count is reported in the summary line instead. In pair
-  // mode BOTH stamps must have the case, for the same reason.
+  // A snapshot frozen before a case existed (an older stamp, one taken with a different
+  // --logos slice, or one older than the case's LANE) simply doesn't have it. Such a case is
+  // still shown — as a ONE-SIDED row with no verdict (AbAnalysis.onlyIn): against the working
+  // tree it is traced live, in pair mode the stamp that has it shows it alone. Only a pair
+  // where NEITHER stamp has the case drops it; the summary counts those. Hiding every
+  // one-sided case, as this used to, made a new lane's fixtures vanish from the page.
   const cases = useMemo(
     () =>
-      selectedSnap
+      selectedSnap && vsSnap
         ? found.filter(
             (c) =>
               !c.id ||
-              (selectedSnap.manifest.cases.some((s) => s.id === c.id) &&
-                (!vsSnap || vsSnap.manifest.cases.some((s) => s.id === c.id))),
+              selectedSnap.manifest.cases.some((s) => s.id === c.id) ||
+              vsSnap.manifest.cases.some((s) => s.id === c.id),
           )
         : found,
     [found, selectedSnap, vsSnap],
@@ -774,8 +916,8 @@ export default function AbLab() {
         key: (c) => c.id ?? null,
         optionsKey: selectedSnap
           ? vsSnap
-            ? `pair:v1:${selectedSnap.name}:${vsSnap.name}`
-            : `snap:v5:${selectedSnap.name}`
+            ? `pair:v2:${selectedSnap.name}:${vsSnap.name}`
+            : `snap:v6:${selectedSnap.name}`
           : `var:r${ui.raster}:g${ui.gradients}:v${VARIANTS_HASH}`,
       },
     },
@@ -802,6 +944,7 @@ export default function AbLab() {
   })).filter((x) => x.n > 0)
   const unchangedN = run.results.filter((r) => r.value?.changed === false).length
   const mismatchN = run.results.filter((r) => r.value?.inputDiffers != null).length
+  const oneSidedN = run.results.filter((r) => r.value?.onlyIn != null).length
 
   return (
     <div
@@ -897,7 +1040,7 @@ export default function AbLab() {
                 value: l.value,
                 // An unfetched logo corpus is a fact worth showing, not an empty list.
                 label:
-                  l.value !== 'fixtures' && GALLERY.length === 0
+                  (l.value === 'all' || l.value === 'gallery') && GALLERY.length === 0
                     ? `${l.label} (no logos — npm run fetch:logos)`
                     : l.label,
               }))}
@@ -937,7 +1080,7 @@ export default function AbLab() {
         }
         about={<AbAbout />}
       >
-        {snapMode && (changedN > 0 || unchangedN > 0) && (
+        {snapMode && (changedN > 0 || unchangedN > 0 || oneSidedN > 0) && (
           // px-4 to sit on the same left edge as every CaseRow below it.
           <div className="px-4 pt-3 text-xs text-muted">
             <b className="text-fg">{changedN}</b> changed
@@ -970,10 +1113,13 @@ export default function AbLab() {
                 — {pairMode ? 'the two stamps agree' : 'working tree matches the snapshot'}, every lane
               </span>
             )}
+            {oneSidedN > 0 && (
+              <span className="text-faint"> · {oneSidedN} one-sided (in one stamp only — shown, not compared)</span>
+            )}
             {notInSnap > 0 && (
               <span className="text-faint">
                 {' '}
-                · {notInSnap} case{notInSnap === 1 ? '' : 's'} not in this stamp (re-run{' '}
+                · {notInSnap} case{notInSnap === 1 ? '' : 's'} in neither stamp (re-run{' '}
                 <code>pnpm gen:absnapshot {selectedSnap!.name}</code> to include them)
               </span>
             )}
@@ -998,6 +1144,13 @@ export default function AbLab() {
                     // different pixels cannot say anything about the CODE between them.
                     <span className="rounded bg-bad/20 px-1 py-0.5 text-[0.6rem] text-bad">
                       input differs · {a.inputDiffers}
+                    </span>
+                  )}
+                  {a.onlyIn && (
+                    // No verdict: nothing on the other side to diff against. Say which
+                    // side has it and which lanes are on screen.
+                    <span className="rounded bg-surface-3 px-1 py-0.5 text-[0.6rem] text-muted">
+                      only in {a.onlyIn} · showing {laneLabels(a.shownLanes)}
                     </span>
                   )}
                   {snapMode && a.changed != null && (

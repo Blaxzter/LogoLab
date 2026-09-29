@@ -13,18 +13,21 @@
 // own; `--pair <base>` records the same relationship explicitly for names that do not
 // follow it ("this stamp is the after of <base>").
 //
-// THREE TRACE LANES per case (AB_LANES in abCorpus.ts), each at the resolution PRODUCTION
-// uses for that kind of art rather than one convenient number: flat art at the flat cap,
-// gradient/photo at the gradient cap, and MONO — which is not a subset of the colour path
-// but the complement of it (see the AB_LANES comment). Their resolutions are recorded per
-// case, so stamps frozen under the old single-resolution rule keep comparing correctly.
+// FOUR TRACE LANES (AB_LANES in abCorpus.ts), each at the resolution PRODUCTION uses for
+// that kind of art rather than one convenient number: flat art at the flat cap,
+// gradient/photo at the gradient cap, MONO — which is not a subset of the colour path but
+// the complement of it (see the AB_LANES comment) — and LINE, the centreline engine at
+// 512. A case runs the lanes `caseLanes` says (the colour lanes + mono unless it says
+// otherwise); their resolutions are recorded per case, so stamps frozen under the old
+// single-resolution rule keep comparing correctly.
 //
-// TWO CASE LANES (both from abCorpus.ts): the handcrafted ⟐ fixtures, and a slice of the ◆
-// GALLERY corpus — the real brand marks the defects get reported on. The gallery lane
-// needs `npm run fetch:logos`; without it those files simply are not there and the lane
-// is skipped with a note. `--logos` overrides the curated slice for one run: `all` takes
-// every logo on disk (slow — 150+ marks, traced twice each), `none` skips the lane, and a
-// comma list picks specific marks (`--logos instagram,stripe` — .svg optional).
+// THREE CASE LANES (all from abCorpus.ts): the handcrafted ⟐ fixtures, a slice of the ◆
+// GALLERY corpus — the real brand marks the defects get reported on — and the ⌇/◎
+// LINE-ART cases (mono + line lanes only). The gallery lane needs `npm run fetch:logos`;
+// without it those files simply are not there and the lane is skipped with a note.
+// `--logos` overrides the curated slice for one run: `all` takes every logo on disk (slow
+// — 150+ marks, traced twice each), `none` skips the lane, and a comma list picks
+// specific marks (`--logos instagram,stripe` — .svg optional).
 //
 // Writes, per case, into test/ab-snapshots/<name>/ (which is GIT-IGNORED — these are
 // local working artifacts, and the gallery lane's inputs are trademarked art):
@@ -37,7 +40,8 @@
 //   <id>.r<res>.png — the same, for a lane production caps lower (the gradient lane).
 //   <id>.flat.svg   — serialized trace, gradients OFF (the flat-art default).
 //   <id>.grad.svg   — serialized trace, gradients ON.
-//   <id>.mono.svg   — serialized trace, mono (threshold → mask → crisp → beautify).
+//   <id>.mono.svg   — serialized trace, mono (the ink cut through the planar tracer).
+//   <id>.line.svg   — serialized trace, centreline (line-art cases only; input <id>.r512.png).
 //   manifest.json   — name, git rev (+dirty), date, resolution, case index.
 //
 // Intended workflow (also see CLAUDE.md): BEFORE a vectorizer change, freeze a baseline
@@ -58,14 +62,17 @@ import { serializeDoc } from '../src/lib/path/model.ts'
 import {
   AB_CORPUS,
   AB_LANES,
+  AB_LINE_ART_CASES,
   AB_LOGO_CASES,
   AB_SNAPSHOT_DIR,
   AB_SNAPSHOT_RES,
+  caseLanes,
   conventionalPartner,
   lanePngName,
   snapshotDirName,
   type AbCorpusCase,
   type AbLaneKey,
+  type AbSnapshotCase,
   type AbSnapshotManifest,
 } from './abCorpus.ts'
 
@@ -133,7 +140,7 @@ function galleryCases(): AbCorpusCase[] {
   return wanted.filter((c) => have.has(c.path.split('/').pop()!))
 }
 
-const cases: AbCorpusCase[] = [...AB_CORPUS, ...galleryCases()]
+const cases: AbCorpusCase[] = [...AB_CORPUS, ...galleryCases(), ...AB_LINE_ART_CASES]
 
 const manifest: AbSnapshotManifest = {
   name,
@@ -193,7 +200,8 @@ for (const c of cases) {
   const t0 = performance.now()
   const svgOf: Partial<Record<AbLaneKey, string>> = {}
   const timings: string[] = []
-  for (const lane of AB_LANES) {
+  const lanes = caseLanes(c)
+  for (const lane of lanes) {
     const r = rasterAt(lane.res)
     const lt0 = performance.now()
     svgOf[lane.key] = serializeDoc(
@@ -207,27 +215,39 @@ for (const c of cases) {
     timings.push(`${lane.key} @${lane.res} ${((performance.now() - lt0) / 1000).toFixed(1)}s`)
   }
 
-  for (const r of rasters.values()) writeFileSync(join(outDir, r.file), r.bytes)
-  for (const lane of AB_LANES) writeFileSync(join(outDir, `${c.id}.${lane.key}.svg`), svgOf[lane.key]!)
-
   // `png`/`width`/`height` describe the PRIMARY raster; a lane that traced something else
-  // records its own, and a reader resolves both through `laneFiles`.
+  // records its own, and a reader resolves both through `laneFiles`. A case only records
+  // the lanes it ran — `laneFiles` answers null for the rest.
   const primary = rasterAt(AB_SNAPSHOT_RES)
-  const gradLane = AB_LANES.find((l) => l.key === 'grad')!
-  const gradRaster = rasterAt(gradLane.res)
-  manifest.cases.push({
+  for (const r of rasters.values()) writeFileSync(join(outDir, r.file), r.bytes)
+  for (const lane of lanes) writeFileSync(join(outDir, `${c.id}.${lane.key}.svg`), svgOf[lane.key]!)
+  const entry: AbSnapshotCase = {
     id: c.id,
     name: c.name,
     png: primary.file,
-    flat: `${c.id}.flat.svg`,
-    grad: `${c.id}.grad.svg`,
-    mono: `${c.id}.mono.svg`,
     width: primary.img.width,
     height: primary.img.height,
-    ...(gradRaster.file !== primary.file
-      ? { gradPng: gradRaster.file, gradWidth: gradRaster.img.width, gradHeight: gradRaster.img.height }
-      : {}),
-  })
+  }
+  for (const lane of lanes) {
+    const r = rasterAt(lane.res)
+    const svg = `${c.id}.${lane.key}.svg`
+    if (lane.key === 'flat') entry.flat = svg
+    else if (lane.key === 'mono') entry.mono = svg
+    else if (lane.key === 'grad') {
+      entry.grad = svg
+      if (r.file !== primary.file) {
+        entry.gradPng = r.file
+        entry.gradWidth = r.img.width
+        entry.gradHeight = r.img.height
+      }
+    } else if (lane.key === 'line') {
+      entry.line = svg
+      entry.linePng = r.file
+      entry.lineWidth = r.img.width
+      entry.lineHeight = r.img.height
+    }
+  }
+  manifest.cases.push(entry)
   console.log(
     `${c.id.padEnd(14)} ${primary.img.width}×${primary.img.height}  ${timings.join(' · ')}  = ${((performance.now() - t0) / 1000).toFixed(1)}s`,
   )

@@ -21,7 +21,20 @@ export function useTraceOutput({
     if (!forceColorOn) return doc
     return {
       ...doc,
-      items: doc.items.map((it) => (it.kind === 'path' ? { ...it, fill: forceColor, gradient: undefined } : it)),
+      // A stroke-only path (a centreline trace) keeps `fill: 'none'` and takes the colour
+      // on its stroke; anything else takes it on its fill.
+      items: doc.items.map((it) =>
+        it.kind !== 'path'
+          ? it
+          : it.fill === 'none' && it.stroke
+            ? { ...it, stroke: { ...it.stroke, color: forceColor } }
+            : {
+                ...it,
+                fill: forceColor,
+                gradient: undefined,
+                ...(it.stroke ? { stroke: { ...it.stroke, color: forceColor } } : {}),
+              },
+      ),
     }
   }, [doc, forceColorOn, forceColor])
 
@@ -34,7 +47,7 @@ export function useTraceOutput({
     const out: { r: number; g: number; b: number; a?: number }[] = []
     for (const it of doc.items) {
       if (it.kind !== 'path' || it.gradient) continue
-      const hex = normalizeHex(it.fill)
+      const hex = normalizeHex(it.fill === 'none' && it.stroke ? it.stroke.color : it.fill)
       if (!hex) continue
       const a = it.fillOpacity !== undefined && it.fillOpacity < 1 ? Math.round(it.fillOpacity * 255) : 255
       const key = `${hex}-${a}`

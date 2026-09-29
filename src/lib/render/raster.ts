@@ -62,10 +62,23 @@ export function rasterizeDoc(
   const cov = new Float64Array(width * height)
   for (const item of doc.items) {
     if (item.kind !== 'path' || !item.visible) continue
-    cov.fill(0)
-    const polys = flattenItem(item, vbx, vby, scale)
-    fillCoverage(polys, item.fillRule, width, height, cov)
-    compositeItem(item, vbx, vby, scale, width, height, cov, R, G, B)
+    // The fill, unless the path is stroke-only (`fill: 'none'` — a centreline trace, or
+    // an outline drawn in the editor). parseHex would read 'none' as black.
+    if (item.fill !== 'none') {
+      cov.fill(0)
+      const polys = flattenItem(item, vbx, vby, scale)
+      fillCoverage(polys, item.fillRule, width, height, cov)
+      const paint = item.gradient ? makeGradientPaint(item.gradient, vbx, vby, scale) : makeSolidPaint(item.fill)
+      compositeCoverage(paint, item.fillOpacity ?? 1, width, height, cov, R, G, B)
+    }
+    // The stroke, painted over the fill as SVG does. Its coverage is the nonzero union of
+    // the outline polygons `strokePolygons` builds, so overlaps at joins never double-count.
+    const s = item.stroke
+    if (s && s.width > 0) {
+      cov.fill(0)
+      fillCoverage(strokePolygons(item, vbx, vby, scale), 'nonzero', width, height, cov)
+      compositeCoverage(makeSolidPaint(s.color), s.opacity ?? 1, width, height, cov, R, G, B)
+    }
   }
 
   const out = new Uint8ClampedArray(width * height * 4)
@@ -100,6 +113,167 @@ export function flattenItem(item: PathItem, vbx: number, vby: number, scale = 1)
     }
   }
   return polys
+}
+
+// ---------------------------------------------------------------------------
+// Stroke outlining
+// ---------------------------------------------------------------------------
+
+/**
+ * The polygons whose NONZERO union is the area a stroke paints: one quad per flattened
+ * segment, a join polygon at every interior vertex (and every vertex of a closed
+ * subpath), and a cap at each end of an open one. Every polygon is oriented the same
+ * way, so wherever they overlap — at every join, and along a curve where consecutive
+ * quads splay — the winding adds rather than cancelling to a hole.
+ *
+ * Joins: `round` is a disc; `bevel` the triangle across the outer corner; `miter` that
+ * triangle extended to the miter point unless the SVG default miter limit (4) is
+ * exceeded, where SVG itself falls back to bevel. Caps: `round` a disc, `square` a
+ * half-width extension, `butt` nothing. Dashes are not modelled (the tracer never emits
+ * them); a dashed stroke renders solid.
+ */
+function strokePolygons(item: PathItem, vbx: number, vby: number, scale: number): Vec[][] {
+  const s = item.stroke!
+  const hw = (s.width * scale) / 2
+  const tol = FLATNESS / (scale || 1)
+  const polys: Vec[][] = []
+  const push = (poly: Vec[]): void => {
+    if (poly.length >= 3) polys.push(ccw(poly))
+  }
+  const disc = (c: Vec): Vec[] => {
+    // Chord error hw·(1−cos(π/n)) stays under ~0.05px for any stroke width, and the
+    // area under 1.5% of the true disc's (an octagon on a 4 px cap was 10% short).
+    const n = Math.max(12, Math.min(96, Math.ceil(hw * 4)))
+    const out: Vec[] = []
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 2 * Math.PI
+      out.push({ x: c.x + hw * Math.cos(a), y: c.y + hw * Math.sin(a) })
+    }
+    return out
+  }
+  for (const sp of item.subPaths) {
+    if (sp.nodes.length < 2) continue
+    const raw = flattenSubPath(sp, tol)
+    const pts: Vec[] = []
+    for (const p of raw) {
+      const q = { x: (p.x - vbx) * scale, y: (p.y - vby) * scale }
+      const last = pts[pts.length - 1]
+      if (!last || Math.hypot(q.x - last.x, q.y - last.y) > 1e-9) pts.push(q)
+    }
+    // A closed subpath's flattening repeats its first point; drop it so the vertex list
+    // is a ring, and the closing segment is added below.
+    if (
+      sp.closed &&
+      pts.length > 1 &&
+      Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) < 1e-9
+    )
+      pts.pop()
+    const n = pts.length
+    if (n < 2) {
+      // A single point: only a round or square cap paints anything (SVG draws a dot).
+      if (n === 1 && s.cap === 'round') push(disc(pts[0]))
+      if (n === 1 && s.cap === 'square')
+        push([
+          { x: pts[0].x - hw, y: pts[0].y - hw },
+          { x: pts[0].x + hw, y: pts[0].y - hw },
+          { x: pts[0].x + hw, y: pts[0].y + hw },
+          { x: pts[0].x - hw, y: pts[0].y + hw },
+        ])
+      continue
+    }
+    const segs = sp.closed ? n : n - 1
+    const normal = (a: Vec, b: Vec): Vec => {
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const len = Math.hypot(dx, dy) || 1
+      return { x: (-dy / len) * hw, y: (dx / len) * hw }
+    }
+    for (let i = 0; i < segs; i++) {
+      const a = pts[i]
+      const b = pts[(i + 1) % n]
+      const nn = normal(a, b)
+      push([
+        { x: a.x + nn.x, y: a.y + nn.y },
+        { x: b.x + nn.x, y: b.y + nn.y },
+        { x: b.x - nn.x, y: b.y - nn.y },
+        { x: a.x - nn.x, y: a.y - nn.y },
+      ])
+    }
+    // Joins.
+    const first = sp.closed ? 0 : 1
+    const last = sp.closed ? n - 1 : n - 2
+    for (let i = first; i <= last; i++) {
+      const v = pts[i]
+      const p = pts[(i - 1 + n) % n]
+      const q = pts[(i + 1) % n]
+      if (s.join === 'round') {
+        push(disc(v))
+        continue
+      }
+      const n1 = normal(p, v)
+      const n2 = normal(v, q)
+      // The outer side is where the two offset lines diverge: the side the turn is away from.
+      const cross = (v.x - p.x) * (q.y - v.y) - (v.y - p.y) * (q.x - v.x)
+      const sgn = cross > 0 ? -1 : 1
+      const o1 = { x: v.x + sgn * n1.x, y: v.y + sgn * n1.y }
+      const o2 = { x: v.x + sgn * n2.x, y: v.y + sgn * n2.y }
+      if (s.join === 'miter') {
+        // Miter length / stroke width = 1 / sin(θ/2) with θ the angle between the segments.
+        const d1 = { x: v.x - p.x, y: v.y - p.y }
+        const d2 = { x: q.x - v.x, y: q.y - v.y }
+        const l1 = Math.hypot(d1.x, d1.y) || 1
+        const l2 = Math.hypot(d2.x, d2.y) || 1
+        const cosT = (d1.x * d2.x + d1.y * d2.y) / (l1 * l2)
+        const theta = Math.acos(Math.max(-1, Math.min(1, cosT))) // turn angle
+        const halfInner = (Math.PI - theta) / 2
+        const ratio = halfInner > 1e-6 ? 1 / Math.sin(halfInner) : Infinity
+        if (ratio <= 4) {
+          // Miter point along the bisector of the outer normals.
+          const bx = o1.x + o2.x - 2 * v.x
+          const by = o1.y + o2.y - 2 * v.y
+          const bl = Math.hypot(bx, by) || 1
+          const m = { x: v.x + (bx / bl) * ratio * hw, y: v.y + (by / bl) * ratio * hw }
+          push([v, o1, m, o2])
+          continue
+        }
+      }
+      push([v, o1, o2]) // bevel (and the miter fallback)
+    }
+    // Caps.
+    if (!sp.closed) {
+      for (const [end, prev] of [
+        [pts[0], pts[1]],
+        [pts[n - 1], pts[n - 2]],
+      ] as [Vec, Vec][]) {
+        if (s.cap === 'round') push(disc(end))
+        else if (s.cap === 'square') {
+          const dx = end.x - prev.x
+          const dy = end.y - prev.y
+          const len = Math.hypot(dx, dy) || 1
+          const t = { x: (dx / len) * hw, y: (dy / len) * hw }
+          const nn = { x: -t.y, y: t.x }
+          push([
+            { x: end.x + nn.x, y: end.y + nn.y },
+            { x: end.x + nn.x + t.x, y: end.y + nn.y + t.y },
+            { x: end.x - nn.x + t.x, y: end.y - nn.y + t.y },
+            { x: end.x - nn.x, y: end.y - nn.y },
+          ])
+        }
+      }
+    }
+  }
+  return polys
+}
+
+/** The polygon with a non-negative signed area (one consistent winding for the union). */
+function ccw(poly: Vec[]): Vec[] {
+  let area = 0
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]
+    const b = poly[(i + 1) % poly.length]
+    area += a.x * b.y - b.x * a.y
+  }
+  return area < 0 ? poly.slice().reverse() : poly
 }
 
 /** Flatten one subpath (closed implied) to a polyline of points. */
@@ -245,11 +419,10 @@ function addSpan(
 // Compositing
 // ---------------------------------------------------------------------------
 
-function compositeItem(
-  item: PathItem,
-  vbx: number,
-  vby: number,
-  scale: number,
+/** Composite one paint through a coverage buffer (a fill's or a stroke's) onto the accumulator. */
+function compositeCoverage(
+  paint: Paint,
+  opacity: number,
   width: number,
   height: number,
   cov: Float64Array,
@@ -257,16 +430,13 @@ function compositeItem(
   G: Float64Array,
   B: Float64Array,
 ): void {
-  const fillOpacity = item.fillOpacity ?? 1
-  const paint = item.gradient ? makeGradientPaint(item.gradient, vbx, vby, scale) : makeSolidPaint(item.fill)
-
   for (let py = 0; py < height; py++) {
     for (let px = 0; px < width; px++) {
       const i = py * width + px
       const c = cov[i]
       if (c <= 0) continue
       const col = paint(px + 0.5, py + 0.5)
-      const a = Math.min(1, c) * fillOpacity * col[3]
+      const a = Math.min(1, c) * opacity * col[3]
       if (a <= 0) continue
       const ia = 1 - a
       R[i] = col[0] * a + R[i] * ia
@@ -418,8 +588,10 @@ export function boundaryMask(doc: EditableDoc, width: number, height: number, di
   const mask = new Uint8Array(width * height)
   for (const item of doc.items) {
     if (item.kind !== 'path' || !item.visible) continue
-    // Same `scale` the render used, or the mask marks the wrong pixels.
-    const polys = flattenItem(item, vbx, vby, scale)
+    // Same `scale` the render used, or the mask marks the wrong pixels. A stroke's
+    // boundary is its outline, not its centreline.
+    const polys = item.fill !== 'none' ? flattenItem(item, vbx, vby, scale) : []
+    if (item.stroke && item.stroke.width > 0) polys.push(...strokePolygons(item, vbx, vby, scale))
     for (const poly of polys) {
       const n = poly.length
       for (let i = 0; i < n; i++) {

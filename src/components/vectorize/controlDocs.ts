@@ -8,8 +8,9 @@
 
 import type { VectorizeOptions } from '../../types'
 
-/** A bundled example the headless generator can rebuild without a browser. */
-export type ExampleKey = 'bloom' | 'nebula' | 'petals'
+/** A bundled example the headless generator can rebuild without a browser (`outline`
+ *  has no PNG twin and serves a live-only control, traced in the browser). */
+export type ExampleKey = 'bloom' | 'nebula' | 'petals' | 'outline'
 
 /** A synthesized demo scene (see bench/previewScenes.ts). */
 export type SceneName = 'smoothing' | 'despeckle' | 'fidelity' | 'threshold' | 'overlaps'
@@ -176,6 +177,20 @@ export const CONTROL_DOCS: ControlDoc[] = [
       { label: 'Off', patch: { invert: false } },
       { label: 'On', patch: { invert: true } },
     ],
+  },
+  {
+    id: 'centerline',
+    label: 'Strokes',
+    hint: 'Trace the ink as strokes with a width — for line art — instead of filled outlines.',
+    blurb:
+      'Line art — a monoline icon, a diagram, a sheet of music — is drawn with a pen of one width, and a filled outline of it is the silhouette of that pen: twice the edges, and no width to change. Strokes trace the middle of each line instead and measure how wide the ink is, so the result is open and closed paths with a stroke-width you can re-weight, and ends and corners you can move as single points. Ink that no stroke explains (a note head, the dot of an i) still becomes a fill. Mono only; the cut and the invert are shared.',
+    example: bundled('outline', 'outline.svg'),
+    baseOpts: { mode: 'mono', threshold: 128, invert: true },
+    variants: [
+      { label: 'Fills', patch: { centerline: false } },
+      { label: 'Strokes', patch: { centerline: true } },
+    ],
+    liveOnly: true,
   },
   {
     id: 'threshold',
