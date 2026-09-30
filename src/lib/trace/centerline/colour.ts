@@ -176,6 +176,9 @@ const winner = (votes: Map<number, number>): { label: number; n: number } => {
  *
  * Only pixels the cut called ink vote (`isInk`), so a stroke's overhang past a butt end
  * does not dilute it.
+ *
+ * The strokes come back STACKED as the source is (`stackByInk`): the engine emits them in
+ * assembly order, which put a purple bar over the green stem that ends in it.
  */
 export function paintStrokes(
   items: PathItem[],
@@ -195,9 +198,11 @@ export function paintStrokes(
     votes.set(inkOf[i], (votes.get(inkOf[i]) ?? 0) + 1)
   }
   const out: PathItem[] = []
+  const inkOfItem: number[] = []
   for (const it of items) {
     if (!it.stroke) {
       out.push(it)
+      inkOfItem.push(-1)
       continue
     }
     const pieces: { sp: SubPath; label: number }[] = []
@@ -207,18 +212,125 @@ export function paintStrokes(
     if (total.size <= 1) {
       const l = pieces[0]?.label ?? -1
       out.push({ ...it, stroke: { ...it.stroke, color: hexOf(l >= 0 ? l : fallback) } })
+      inkOfItem.push(l >= 0 ? l : fallback)
       continue
     }
-    pieces.forEach((p, k) =>
+    pieces.forEach((p, k) => {
       out.push({
         ...it,
         id: `${it.id}-${k}`,
         subPaths: [p.sp],
         stroke: { ...it.stroke!, color: hexOf(p.label >= 0 ? p.label : fallback) },
-      }),
-    )
+      })
+      inkOfItem.push(p.label >= 0 ? p.label : fallback)
+    })
   }
+  return stackByInk(out, inkOfItem, inkOf, isInk, width, height)
+}
+
+/**
+ * Stack the strokes the way the source does. Wherever strokes of two inks cover the same
+ * pixels, the source shows which one is on top; every such pixel is a vote for that ink
+ * over the other, and the inks are layered by the votes (a topological order of "A is
+ * over B" wherever A won more of their shared pixels than B; a cycle — two inks woven
+ * over and under each other — is broken at the weakest vote). Strokes keep their order
+ * within an ink; everything that is not a stroke keeps its place around them.
+ *
+ * Per INK, not per stroke: art stacks its colours as layers far more often than it
+ * weaves them, and a per-stroke order would have to be read off overlaps too small to
+ * vote. A woven pair keeps whichever ink is on top more often.
+ */
+function stackByInk(
+  items: PathItem[],
+  inkOfItem: number[],
+  inkOf: Int32Array,
+  isInk: (i: number) => boolean,
+  width: number,
+  height: number,
+): PathItem[] {
+  const inks = [...new Set(inkOfItem.filter((l) => l >= 0))]
+  if (inks.length < 2 || inks.length > 32) return items
+  const bit = new Map(inks.map((l, k) => [l, k]))
+  // Which inks' strokes cover each pixel: a disc of the stroke's half-width stamped along
+  // its centreline, samples about a quarter width apart.
+  const cover = new Uint32Array(width * height)
+  items.forEach((it, j) => {
+    const l = inkOfItem[j]
+    if (l < 0 || !it.stroke) return
+    const b = 1 << bit.get(l)!
+    const r = it.stroke.width / 2
+    const r2 = r * r
+    const step = Math.max(0.5, r / 2)
+    for (const sp of it.subPaths)
+      forSamples(sp, step, (cx, cy) => {
+        const x0 = Math.max(0, Math.floor(cx - r))
+        const x1 = Math.min(width - 1, Math.ceil(cx + r))
+        const y0 = Math.max(0, Math.floor(cy - r))
+        const y1 = Math.min(height - 1, Math.ceil(cy + r))
+        for (let y = y0; y <= y1; y++)
+          for (let x = x0; x <= x1; x++)
+            if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r2) cover[y * width + x] |= b
+      })
+  })
+  // over[a][b]: shared pixels where the source shows ink a.
+  const K = inks.length
+  const over = Array.from({ length: K }, () => new Float64Array(K))
+  for (let i = 0; i < cover.length; i++) {
+    const m = cover[i]
+    if ((m & (m - 1)) === 0 || !isInk(i)) continue // one ink or none here
+    const top = bit.get(inkOf[i])
+    if (top === undefined || !(m & (1 << top))) continue
+    for (let k = 0; k < K; k++) if (k !== top && m & (1 << k)) over[top][k]++
+  }
+  // Bottom to top: repeatedly take the ink that the fewest remaining inks lose to — the
+  // one with the least vote weight for being ABOVE anything left (ties: first seen).
+  const left = new Set(inks.map((_, k) => k))
+  const order: number[] = []
+  while (left.size > 0) {
+    let pick = -1
+    let pickCost = Infinity
+    for (const a of left) {
+      let cost = 0
+      for (const b of left) if (b !== a && over[a][b] > over[b][a]) cost += over[a][b] - over[b][a]
+      if (cost < pickCost) {
+        pickCost = cost
+        pick = a
+      }
+    }
+    order.push(pick)
+    left.delete(pick)
+  }
+  const layer = new Map(order.map((k, z) => [inks[k], z]))
+  // Only the strokes move: they are re-dealt, bottom layer first, into the slots strokes
+  // held, so the paper stays under them and the fills over them.
+  const strokeIdx = items.map((_, j) => j).filter((j) => inkOfItem[j] >= 0)
+  const sorted = [...strokeIdx].sort((a, b) => layer.get(inkOfItem[a])! - layer.get(inkOfItem[b])! || a - b)
+  const out = items.slice()
+  strokeIdx.forEach((slot, k) => (out[slot] = items[sorted[k]]))
   return out
+}
+
+/** Points about `step` apart along a sub-path's Béziers. */
+function forSamples(sp: SubPath, step: number, visit: (x: number, y: number) => void): void {
+  const { nodes, closed } = sp
+  if (nodes.length === 1) visit(nodes[0].x, nodes[0].y)
+  const segs = closed ? nodes.length : nodes.length - 1
+  for (let s = 0; s < segs; s++) {
+    const a = nodes[s]
+    const b = nodes[(s + 1) % nodes.length]
+    const c1 = a.hOut ?? a
+    const c2 = b.hIn ?? b
+    const len = Math.hypot(c1.x - a.x, c1.y - a.y) + Math.hypot(c2.x - c1.x, c2.y - c1.y) + Math.hypot(b.x - c2.x, b.y - c2.y)
+    const steps = Math.max(1, Math.min(4096, Math.ceil(len / step)))
+    for (let k = 0; k <= steps; k++) {
+      const t = k / steps
+      const u = 1 - t
+      visit(
+        u * u * u * a.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * b.x,
+        u * u * u * a.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * b.y,
+      )
+    }
+  }
 }
 
 /** A sub-path cut into runs of one ink at the nodes where the ink changes. */

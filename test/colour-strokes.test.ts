@@ -152,3 +152,22 @@ test('a line of one ink tied to a shape of another is cut where the ink changes'
   const pinkSpan = s.filter((it) => near(it.stroke!.color, PINK)).flatMap((it) => it.subPaths.flatMap((sp) => sp.nodes.map((n) => n.y)))
   assert.ok(Math.max(...pinkSpan) < 130, 'no pink runs down the string')
 })
+
+test('strokes come back stacked as the source stacks them', async () => {
+  // A green stem ending in a purple bar, the stem painted OVER the bar — then the reverse.
+  // The engine's assembly order is the same for both; only the paint tells them apart.
+  const PURPLE: RGBA = [128, 64, 190, 255]
+  const GREEN: RGBA = [39, 153, 84, 255]
+  const bar = { inside: hbar(20, 180, 150, 16) }
+  const stem = { inside: vbar(100, 30, 150, 16) }
+  const z = (doc: { items: unknown[] }, c: RGBA) => doc.items.findIndex((it) => (it as PathItem).stroke && near((it as PathItem).stroke!.color, c))
+  for (const [below, above] of [
+    [PURPLE, GREEN],
+    [GREEN, PURPLE],
+  ] as const) {
+    const shapes = below === PURPLE ? [{ c: PURPLE, ...bar }, { c: GREEN, ...stem }] : [{ c: GREEN, ...stem }, { c: PURPLE, ...bar }]
+    const doc = await traceImage(paint(200, 200, WHITE, shapes), opts())
+    assert.ok(z(doc, below) >= 0 && z(doc, above) >= 0, 'both strokes traced')
+    assert.ok(z(doc, above) > z(doc, below), `${above === GREEN ? 'green' : 'purple'} is painted over ${below === GREEN ? 'green' : 'purple'}`)
+  }
+})

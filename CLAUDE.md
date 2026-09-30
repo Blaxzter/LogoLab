@@ -204,6 +204,11 @@ never learns there was colour. Two things there are easy to undo:
   path round the kite and down the string. Each segment votes for the ink under it; runs
   split at the node between them, runs shorter than the stroke width fold into a neighbour
   (junction overlap). A change with no node at it stays one stroke in its majority ink.
+* **Strokes are STACKED as the source is** (`stackByInk`). The engine emits them in
+  assembly order, which painted a purple bar over the green stem that ends in it. Where two
+  inks' stroke discs overlap, the source pixel votes for the ink on top; the inks are
+  layered by those votes, per INK not per stroke. `before-colour-order` ⇄
+  `after-colour-order` moves the `cline` lane of five cases and nothing else.
 
 Dense overlapping LOOPS (five petal rings over a centre ring) trace badly in both modes —
 that is the engine's junction handling, not the paint; check mono before blaming colour.
