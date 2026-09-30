@@ -19,6 +19,7 @@ const EXAMPLES: Example[] = [
   { file: 'orbit.svg', name: 'Orbit', blurb: 'Solid background — Cleanup / By-color, holes and all.' },
   { file: 'petals.png', name: 'Petals', blurb: 'Solid-background PNG — Auto-remove + Vectorize.' },
   { file: 'outline.svg', name: 'Outline', blurb: 'White line-art — see the Background card fix.' },
+  { file: 'sketch.png', name: 'Sketch', blurb: 'One-ink line art — Vectorize with Strokes on for paths with a width.' },
   { file: 'summit.svg', name: 'Summit', blurb: 'Monochrome mark — try Recolor & Invert.' },
   { file: 'bloom.svg', name: 'Bloom', blurb: 'Multi-color shapes — great for Vectorize.' },
 ]
