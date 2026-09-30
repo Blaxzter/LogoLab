@@ -61,8 +61,9 @@ that ship with a baked background.
 
 ### ✏️ Vectorize — a small in-browser vector studio
 A **structure-first** tracer that segments the image by smoothness, fits a paint model
-(flat, gradient or layered glow) to each region, then traces clean curves — plus a full
-node editor, all client-side. The research behind each stage is in
+(flat, gradient or layered glow) to each region, then traces clean curves — or, for line
+art, traces the middle of every line as a real stroke — plus a full node editor, all
+client-side. The research behind each stage is in
 [🔬 Algorithms & papers](#-algorithms--papers) below.
 
 ![Vectorize](docs/vectorize.png)
@@ -75,9 +76,20 @@ node editor, all client-side. The research behind each stage is in
 - **Gradients:** detects linear / radial gradients and rebuilds soft "glow" backgrounds as a
   base paint under translucent radial layers — real, editable gradients, not flat
   posterized bands.
-- **Color** or **mono** tracing with **smoothing**, **despeckle** and **fidelity**
-  (shape-snapping) dials, optional **remove background**, and **region markers** to protect
-  spots the auto-merge would otherwise fuse.
+- **Mode: Auto / Color / Mono.** Auto counts the inks: one-ink art traces as a single clean
+  mono shape with a measured cut (and **Invert** for light ink on a dark ground), painted in
+  the ink's own colour; anything with more inks traces in colour.
+- **Line art as strokes:** turn on **Strokes** under Mono and a monoline icon, a diagram or a
+  page of sheet music comes back as the lines it was drawn with — open and closed **stroked
+  paths with a measured width** you can re-weight — instead of the filled outline of every
+  line. Ink no stroke explains (a dot, a note head) stays a fill.
+- **Find best settings:** one button traces five candidate setups (mono, strokes, flat, flat
+  on a gradient backdrop, full gradients) on a small copy of your image, scores each against
+  the original, applies the winner and lists the runners-up one click away. It only runs
+  when you press it.
+- **Smoothing**, **despeckle** and **fidelity** (shape-snapping) dials, optional **remove
+  background**, **region markers** to protect spots the auto-merge would otherwise fuse,
+  and **Reset** back to the settings a fresh upload of this image gets.
 - **Studio layout:** full-height workspace with **Split / Traced / Original / Overlay**
   (ghost) / **Difference** views, synced pan & zoom, a paths panel (select, recolor, hide,
   delete) and a **"How it works"** explainer that walks your image through every stage live.
@@ -95,6 +107,19 @@ node editor, all client-side. The research behind each stage is in
   trace. Off by default; inert on SVGs and on rasters large enough already.
 - Already-vector uploads can be **cleaned & edited directly** or re-traced from pixels.
 - **Download** or **copy** the optimized SVG.
+
+### 🖊️ Editor — draw and edit SVG
+A small vector editor for the logo itself: open an SVG (or your traced result), start from
+a blank artboard, or pick an example drawing.
+
+- **Move / Node / Pen** tools plus **rectangle, ellipse, line, polygon and star**, each on a
+  single-key shortcut; hold `Space` to pan with any tool.
+- **Layers** with groups, rename, reorder by drag, hide and duplicate; a **properties** rail
+  for fill, stroke, size and alignment; **snapping** and a grid.
+- Path operations: join, split at a node, break apart, combine, reverse — with full
+  **undo / redo**.
+- Edits become the working logo as you make them, so Preview and Export always show your
+  latest drawing; just opening a file changes nothing.
 
 ### 📦 Export — favicons & PWA icons
 Generate a complete, production-ready icon set as a single `.zip`.
@@ -159,7 +184,8 @@ npx -y logolab install --client cursor     # or Cursor / VS Code / --client prin
   **browser extensions** — with the real `favicon.ico` and `.icns` containers, the manifest,
   the `<head>` snippet, `Contents.json` and the adaptive-icon XML.
 - The same decisions the studio makes (colour vs mono, gradients, trace resolution), reported
-  back so the agent can overrule one without hand-tuning the rest.
+  back so the agent can overrule one without hand-tuning the rest — plus `strokes` to trace
+  line art as centreline strokes.
 
 The app has a button for it: **Export → Do this from your editor**. Full reference:
 [`docs/mcp.md`](docs/mcp.md); the package that ships is [`packages/mcp`](packages/mcp), which
@@ -179,26 +205,19 @@ pnpm mcp:build  # compile packages/mcp → the publishable `logolab` package
 
 > Uses **pnpm**, but `npm` / `yarn` work too.
 
-## ☁️ Deploy to Cloudflare Pages
+## ☁️ Deploy (Cloudflare Workers)
 
-It's a static SPA — the build output is `dist/`.
-
-**Dashboard (Git):** Workers & Pages → Create → Pages → Connect to Git, then:
-- **Framework preset:** Vite
-- **Build command:** `pnpm build`
-- **Build output directory:** `dist`
-
-**Wrangler (direct upload):**
-
-The deployed target is an assets-only **Worker** (`wrangler.jsonc`, name `logo-lab`) —
-not Pages — so it is plain `wrangler deploy`:
+It's a static SPA — the build output is `dist/` — served by an assets-only **Worker**
+(`wrangler.jsonc`, name `logo-lab`). **Workers Builds** is connected to the repo and deploys
+`main` on every push (build command `pnpm build`). To deploy by hand:
 
 ```bash
 pnpm build
 pnpm dlx wrangler deploy
 ```
 
-No environment variables or server routes required.
+No server routes. The Impressum / Datenschutz pages read the operator's details from
+`VITE_LEGAL_*` build variables (see `.env.example`); without them they show placeholders.
 
 ## 🛠️ Tech
 
@@ -242,6 +261,8 @@ gradient-aware Image Trace.
 | **Marker-controlled seeded region growing** | the **Mark** tool — each seed grows into its own region along the colour ridge | Adams & Bischof, [*Seeded Region Growing*](https://doi.org/10.1109/34.295913), IEEE TPAMI **1994** |
 | **Ramer–Douglas–Peucker** | reduce dense contours to key vertices | [Ramer 1972 / Douglas & Peucker 1973](https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm) |
 | **Schneider Bézier fitting + soft-corner DP** | fit minimal cubic Béziers and keep genuine corners sharp by evidence, not a threshold | Schneider, [*Graphics Gems*](https://github.com/erich666/GraphicsGems) **1990**; corner / DP recipe after Baran et al. (CGF **2010**) and Kopf & Lischinski, [*Depixelizing Pixel Art*](https://johanneskopf.de/publications/pixelart/), SIGGRAPH **2011** |
+| **Exact Euclidean distance transform** | Strokes: the local half-width of every line, and the scale every centreline rule is measured in | Felzenszwalb & Huttenlocher, [*Distance Transforms of Sampled Functions*](https://theoryofcomputing.org/articles/v008a019/), Theory of Computing **2012** |
+| **Zhang–Suen thinning** | Strokes: the ink thinned to a one-pixel skeleton — where the middle of each line is looked for, then re-centred on the anti-aliased edges with a sub-pixel width | Zhang & Suen, [*A Fast Parallel Algorithm for Thinning Digital Patterns*](https://doi.org/10.1145/357994.358023), CACM **1984** |
 | **Beautify / shape snapping** | snap near-circles, lines and shared centres to perfect primitives (algebraic circle fit) | Hoshyari et al., [SIGGRAPH **2018**](https://www.cs.ubc.ca/labs/imager/tr/2018/PerceptionDrivenVectorization/); [PolyFit](https://www.cs.ubc.ca/labs/imager/tr/2020/ClipArtVectorization/) (Dominici et al., SIGGRAPH **2020**); [ClipGen](https://arxiv.org/abs/2106.04912), TVCG **2021** |
 | **k-means++ (deterministic seeding)** | palette generation + fallback decomposition | Arthur & Vassilvitskii, [*k-means++*](https://theory.stanford.edu/~sergei/papers/kMeansPP-soda.pdf), SODA **2007** |
 | **AI super-resolution in front of the tracer** (opt-in) | enlarge a small raster ×2–×4 with a line-art model so the tracer's pixel lattice can place edges and corners it would otherwise round off; chosen over GAN upscalers because it keeps the flat colours exact and adds no edge rim (measured in `docs/vectorization-benchmarks.md` §32) | waifu2x **swin_unet** — nagadomi, [*nunif*](https://github.com/nagadomi/nunif) (Swin-transformer U-Net, MIT); runtime: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) |
