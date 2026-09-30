@@ -289,6 +289,136 @@ function lucideCase(name: string, why: string): Case {
 }
 
 // ---------------------------------------------------------------------------
+// ⌇ COLOUR line art — several inks, for Strokes in Colour (centerline/colour.ts)
+// ---------------------------------------------------------------------------
+//
+// Their own directory (public/examples/colour-line-art/), because the mono gate and
+// lineArtGround read every line-art case as ONE ink. Each case is one mechanism of the
+// colour path: crossings of two inks (the reason the union is traced, not a mask per
+// ink), a line of one ink tied to a shape of another (the paint split at the node), a
+// colour change with NO node (the known limit — majority ink), light ink on a coloured
+// paper, inks on transparency, and overlapping loops (the engine's weak spot, in both
+// modes). Plus Lucide icons with one ink per element.
+
+const C = {
+  red: 'rgb(214,48,49)',
+  blue: 'rgb(40,98,214)',
+  green: 'rgb(39,153,84)',
+  orange: 'rgb(240,150,20)',
+  purple: 'rgb(128,64,190)',
+  pink: 'rgb(224,69,123)',
+  ink: INK,
+}
+
+/** Strokes in one ink. */
+function inked(color: string, w: number, body: string, cap: 'butt' | 'round' = 'round'): string {
+  return `<g fill="none" stroke="${color}" stroke-width="${f(w)}" stroke-linecap="${cap}" stroke-linejoin="round">${body}</g>`
+}
+
+const COLOUR: Case[] = [
+  {
+    name: 'cl-crossings',
+    note: 'two inks crossing: a red/blue X at 90°, a green/orange X at 33°, a # of red rows over blue columns',
+    make: () =>
+      svg(
+        inked(C.blue, 4, path('M64,16 V112')) +
+          inked(C.red, 4, path('M16,64 H112')) +
+          inked(C.orange, 4, path('M150,20 L230,110')) +
+          inked(C.green, 4, path('M150,110 L230,20')) +
+          inked(C.blue, 4, path('M96,140 V240 M160,140 V240')) +
+          inked(C.red, 4, path('M64,172 H192 M64,208 H192')),
+      ),
+  },
+  {
+    name: 'cl-ties',
+    note: 'a line of one ink leaving a shape of another: a kite and its string, a balloon ring and its tail, a T of two inks',
+    make: () =>
+      svg(
+        inked(C.pink, 4, path('M60,20 L96,56 L60,92 L24,56 Z')) +
+          inked(C.ink, 3, path('M60,92 C50,130 80,150 66,200')) +
+          inked(C.blue, 4, `<circle cx="170" cy="60" r="34"/>`) +
+          inked(C.orange, 3, path('M170,94 C160,120 190,140 176,170')) +
+          inked(C.purple, 4, path('M110,236 H240')) +
+          inked(C.green, 4, path('M210,236 V190')),
+      ),
+  },
+  {
+    name: 'cl-handover',
+    note: 'a colour change with NO node (red then blue on one straight line — majority ink, the known limit) and one AT a corner (an L)',
+    make: () =>
+      svg(
+        inked(C.red, 4, path('M20,60 H128'), 'butt') +
+          inked(C.blue, 4, path('M128,60 H236'), 'butt') +
+          inked(C.green, 4, path('M40,120 V220')) +
+          inked(C.purple, 4, path('M40,220 H200')),
+      ),
+  },
+  {
+    name: 'cl-paper',
+    note: 'light inks on a navy paper: white and yellow strokes, a crossing between them',
+    make: () =>
+      svg(
+        `<rect width="${V}" height="${V}" fill="rgb(22,33,78)"/>` +
+          inked('rgb(255,255,255)', 4, path('M30,60 C90,20 160,100 226,60')) +
+          inked('rgb(250,210,60)', 4, path('M128,30 V226')) +
+          inked('rgb(255,255,255)', 4, `<circle cx="128" cy="170" r="44"/>`),
+      ),
+  },
+  {
+    name: 'cl-transparent',
+    note: 'inks on TRANSPARENCY (no paper colour): a white stroke beside a red and a blue one — coverage comes from alpha',
+    make: () =>
+      svg(
+        inked('rgb(255,255,255)', 5, path('M30,50 H226')) +
+          inked(C.red, 5, path('M30,128 C100,90 156,166 226,128')) +
+          inked(C.blue, 5, path('M30,206 H226')),
+      ),
+  },
+  {
+    name: 'cl-loops',
+    note: 'overlapping LOOPS of different inks: two interlocked rings, three petals over a centre ring — the engine is weak here in mono too',
+    make: () =>
+      svg(
+        inked(C.blue, 4, `<circle cx="70" cy="70" r="40"/>`) +
+          inked(C.red, 4, `<circle cx="120" cy="70" r="40"/>`) +
+          inked(C.pink, 4, `<circle cx="128" cy="160" r="30"/><circle cx="88" cy="196" r="30"/><circle cx="168" cy="196" r="30"/>`) +
+          inked(C.orange, 4, `<circle cx="128" cy="190" r="18"/>`),
+      ),
+  },
+]
+
+/** A Lucide icon with one ink per ELEMENT, in the order given (cycling). */
+function lucideColourCase(name: string, inks: string[], why: string): Case {
+  return {
+    name: `cl-lucide-${name}`,
+    note: `Lucide "${name}" in colour: ${why}`,
+    make: () => {
+      const els = lucideNodes(name)
+        .map(([tag, a], i) => {
+          const attrs = Object.entries(a)
+            .filter(([k]) => k !== 'key')
+            .map(([k, v]) => `${k}="${v}"`)
+            .join(' ')
+          return `<${tag} ${attrs} stroke="${inks[i % inks.length]}"/>`
+        })
+        .join('')
+      return svg(
+        `<!-- ${LUCIDE_LICENSE} -->` +
+          `<g transform="translate(32 32) scale(8)">${strokes(2, 'round', 'round', els)}</g>`,
+      )
+    },
+  }
+}
+
+const LUCIDE_COLOUR: Case[] = [
+  lucideColourCase('mail', [C.blue, C.red], 'a blue envelope crossed by a red V — three two-ink junctions on one edge'),
+  lucideColourCase('git-branch', [C.green, C.orange, C.purple, C.ink], 'rings and runs in four inks, joined end to end'),
+  lucideColourCase('search', [C.ink, C.blue], 'a blue ring with a dark handle leaving it tangentially'),
+  lucideColourCase('umbrella', [C.ink, C.ink, C.red], 'a red canopy with a dark stem running through it'),
+  lucideColourCase('camera', [C.ink, C.blue], 'a dark body with a blue lens ring inside'),
+]
+
+// ---------------------------------------------------------------------------
 // emit
 // ---------------------------------------------------------------------------
 
@@ -302,3 +432,12 @@ for (const c of CASES) {
   console.log(`  ${c.name}.svg  — ${c.note}`)
 }
 console.log(`\n${CASES.length} line-art SVGs written to public/examples/line-art/`)
+
+const colourDir = join(ROOT, 'public', 'examples', 'colour-line-art')
+mkdirSync(colourDir, { recursive: true })
+const COLOUR_CASES = [...COLOUR, ...LUCIDE_COLOUR]
+for (const c of COLOUR_CASES) {
+  writeFileSync(join(colourDir, `${c.name}.svg`), c.make())
+  console.log(`  ${c.name}.svg  — ${c.note}`)
+}
+console.log(`\n${COLOUR_CASES.length} colour line-art SVGs written to public/examples/colour-line-art/`)

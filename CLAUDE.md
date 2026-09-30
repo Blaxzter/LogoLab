@@ -210,6 +210,14 @@ that is the engine's junction handling, not the paint; check mono before blaming
 The mono path is untouched (`before-colour-strokes` ⇄ `after-colour-strokes`: every lane
 byte-identical). `test/colour-strokes.test.ts` is the gate.
 
+It has a **fifth A/B trace lane, `cline`** (colour + strokes, flat cap), and its own cases:
+`AB_COLOUR_LINE_CASES` — `bench/genLineArt.ts` writes them into
+`public/examples/colour-line-art/` (NOT `line-art/`: the mono gate and `lineArtGround` read
+every file there as one ink), plus the Doodle PNG. They run `flat` + `cline`, and the lab
+lists them under **Line art**. One is on transparency on purpose (`cl-transparent`: a white
+ink only alpha can find) — `colourLineArt(…, null)`, because an explicit `undefined` takes
+the `'white'` default and rasterizes the white line onto white.
+
 It has its own answer sheet because the outline lanes' cannot score it: `svgGround.ts`
 refuses strokes, and for the outline tracer that refusal is right. `bench/genLineArt.ts`
 writes `public/examples/line-art/` (eight synthetic ⌇ cases, twelve ◎ Lucide icons — ISC,
