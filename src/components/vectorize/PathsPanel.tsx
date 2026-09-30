@@ -131,11 +131,12 @@ export interface PathsPanelProps {
   onHighlight?: (fill: string | null) => void
 }
 
-/** Desktop right rail — the 260px column. Below md it's hidden; the same body
- *  renders inside the studio's "Paths" bottom sheet instead. */
+/** Desktop right rail — the 260px column, from xl up. Below that a third column
+ *  leaves the canvas too narrow, so the same body renders in the studio's Paths
+ *  slide-over (lg–xl) or bottom sheet (below lg) instead. */
 export function PathsPanel(props: PathsPanelProps) {
   return (
-    <aside className="hidden w-[260px] shrink-0 flex-col border-l border-line bg-surface md:flex">
+    <aside className="hidden w-[260px] shrink-0 flex-col border-l border-line bg-surface xl:flex">
       <PathsPanelBody {...props} />
     </aside>
   )

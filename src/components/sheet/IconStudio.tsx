@@ -177,9 +177,14 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
   const leading = (
     <div className="flex shrink-0 items-center gap-1">
       <Tooltip label="Back to all icons">
-        <button type="button" onClick={onBack} className="btn btn-secondary h-8 gap-1.5 px-2.5 text-xs">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="All icons"
+          className="btn btn-secondary h-8 gap-1.5 px-2 text-xs @min-[68rem]:px-2.5"
+        >
           <Grid2x2 size={14} />
-          All icons
+          <span className="hidden @min-[68rem]:inline">All icons</span>
         </button>
       </Tooltip>
       <div className="flex items-center rounded-lg bg-surface-3 p-0.5">

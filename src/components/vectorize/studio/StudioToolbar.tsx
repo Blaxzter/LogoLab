@@ -1,15 +1,38 @@
 // The desktop toolbar: view mode, tool, undo/redo, ghost opacity, zoom and the export buttons.
+//
+// Its width is whatever the rails leave the canvas column (≈700px at both lg and
+// xl), so it collapses on its CONTAINER: below LABELS the tool and export buttons
+// go icon-only, below SEGMENTS the view modes fold into a select.
 
 import type { ReactNode } from 'react'
-import { Check, Copy, Download, Hand, MapPin, MousePointer2, Redo2, Undo2 } from 'lucide-react'
+import { Check, Copy, Download, Hand, Layers, MapPin, MousePointer2, Redo2, Undo2 } from 'lucide-react'
 import type { PanZoom } from '../../../hooks/usePanZoom'
 import type { VectorizeOptions } from '../../../types'
 import { Button } from '../../ui/Button'
 import { CheckerToggle } from '../../ui/CheckerToggle'
 import { Segmented } from '../../ui/controls'
+import { Select } from '../../ui/Select'
 import { Tooltip } from '../../ui/Tooltip'
 import { ZoomControls } from '../../ui/ZoomControls'
+import { StudioDesktopToolbar } from '../../studio/StudioBar'
 import type { Tool, ViewMode } from './types'
+
+const VIEW_MODES: { value: ViewMode; label: string; title?: string }[] = [
+  { value: 'split', label: 'Split' },
+  { value: 'traced', label: 'Traced' },
+  { value: 'original', label: 'Original' },
+  { value: 'overlay', label: 'Overlay' },
+  { value: 'difference', label: 'Difference', title: 'Where the trace disagrees with the original' },
+]
+
+/** Written out in full so Tailwind's scanner sees each class. LABEL shows a
+ *  button's text from the container width that fits them; SEGMENTS / PICKER
+ *  swap the view-mode segmented control for a select below its width. */
+const LABEL = 'hidden @min-[68rem]:inline'
+const SEGMENTS = 'hidden @min-[59rem]:flex'
+const PICKER = '@min-[59rem]:hidden'
+/** Below this the fit button and the divider go; the zoom percentage still resets. */
+const ROOMY = '@max-[48rem]:hidden'
 
 export function StudioToolbar({
   leading,
@@ -36,6 +59,8 @@ export function StudioToolbar({
   copied,
   onCopy,
   svgText,
+  pathCount,
+  onOpenPaths,
 }: {
   leading?: ReactNode
   viewMode: ViewMode
@@ -61,25 +86,24 @@ export function StudioToolbar({
   copied: boolean
   onCopy: () => Promise<void>
   svgText: string | null
+  /** Paths in the trace, or null with no trace; drives the lg–xl Paths button. */
+  pathCount: number | null
+  onOpenPaths: () => void
 }) {
   return (
-    <div className="hidden h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 md:flex">
+    <StudioDesktopToolbar>
       {leading}
-      <Segmented<ViewMode>
-        value={viewMode}
-        onChange={setViewMode}
-        options={[
-          { value: 'split', label: 'Split' },
-          { value: 'traced', label: 'Traced' },
-          { value: 'original', label: 'Original' },
-          { value: 'overlay', label: 'Overlay' },
-          {
-            value: 'difference',
-            label: 'Difference',
-            title: 'Where the trace disagrees with the original',
-          },
-        ]}
-      />
+      <div className={SEGMENTS}>
+        <Segmented<ViewMode> value={viewMode} onChange={setViewMode} options={VIEW_MODES} />
+      </div>
+      <div className={PICKER}>
+        <Select<ViewMode>
+          value={viewMode}
+          onChange={setViewMode}
+          options={VIEW_MODES.map(({ value, label }) => ({ value, label }))}
+          className="h-8"
+        />
+      </div>
       <div className={viewMode === 'original' || viewMode === 'difference' ? 'pointer-events-none opacity-50' : ''}>
         <Segmented<Tool>
           value={tool}
@@ -90,7 +114,8 @@ export function StudioToolbar({
               title: 'Pan & zoom (V)',
               label: (
                 <>
-                  <Hand size={13} /> Pan
+                  <Hand size={13} />
+                  <span className={LABEL}>Pan</span>
                 </>
               ),
             },
@@ -99,7 +124,8 @@ export function StudioToolbar({
               title: 'Edit nodes (A)',
               label: (
                 <>
-                  <MousePointer2 size={13} /> Edit
+                  <MousePointer2 size={13} />
+                  <span className={LABEL}>Edit</span>
                 </>
               ),
             },
@@ -132,10 +158,10 @@ export function StudioToolbar({
           />
         </label>
       )}
-      <div className="ml-auto flex items-center gap-2">
-        <ZoomControls pz={pz} />
+      <div className="ml-auto flex items-center gap-1.5 @min-[48rem]:gap-2">
+        <ZoomControls pz={pz} fitClassName={ROOMY} />
         <CheckerToggle />
-        <span className="h-5 w-px bg-line" aria-hidden />
+        <span className={`h-5 w-px bg-line ${ROOMY}`} aria-hidden />
         <Button
           variant="primary"
           className="h-8 px-3 text-xs"
@@ -145,26 +171,45 @@ export function StudioToolbar({
         >
           {applied ? (appliedLabel ?? 'Applied') + ' \u2713' : (applyLabel ?? 'Apply to logo')}
         </Button>
-        <Button
-          variant="secondary"
-          className="h-8 px-3 text-xs"
-          icon={<Download size={14} />}
-          onClick={onDownload}
-          disabled={!svgText}
-        >
-          Download SVG
-        </Button>
-        <Button
-          variant="secondary"
-          className="h-8 px-3 text-xs"
-          icon={copied ? <Check size={14} /> : <Copy size={14} />}
-          onClick={() => void onCopy()}
-          disabled={!svgText}
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
+        <Tooltip label="Download SVG" side="bottom">
+          <Button
+            variant="secondary"
+            className="h-8 px-2 text-xs @min-[68rem]:px-3"
+            icon={<Download size={14} />}
+            onClick={onDownload}
+            disabled={!svgText}
+            aria-label="Download SVG"
+          >
+            <span className={LABEL}>Download SVG</span>
+          </Button>
+        </Tooltip>
+        <Tooltip label={copied ? 'Copied' : 'Copy SVG'} side="bottom">
+          <Button
+            variant="secondary"
+            className="h-8 px-2 text-xs @min-[68rem]:px-3"
+            icon={copied ? <Check size={14} /> : <Copy size={14} />}
+            onClick={() => void onCopy()}
+            disabled={!svgText}
+            aria-label="Copy SVG"
+          >
+            <span className={LABEL}>{copied ? 'Copied' : 'Copy'}</span>
+          </Button>
+        </Tooltip>
+        {pathCount != null && (
+          <Tooltip label="Paths & palette" side="bottom">
+            <Button
+              variant="secondary"
+              className="h-8 gap-1.5 px-2.5 text-xs tabular-nums xl:hidden"
+              icon={<Layers size={14} />}
+              onClick={onOpenPaths}
+              aria-label={`Paths (${pathCount})`}
+            >
+              {pathCount}
+            </Button>
+          </Tooltip>
+        )}
       </div>
-    </div>
+    </StudioDesktopToolbar>
   )
 }
 

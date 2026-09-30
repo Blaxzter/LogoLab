@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCheckerClass, useLogo, useStore } from '../../state/store'
 import { usePanZoom } from '../../hooks/usePanZoom'
-import { useIsMobile } from '../../hooks/useIsMobile'
+import { useIsStudioCompact } from '../../hooks/useIsMobile'
 import { useCleanupCanvas, type CleanupTool, type KeepRemoveMarker } from '../../hooks/useCleanupCanvas'
 import { Sheet } from '../ui/Sheet'
 import { CleanupControls, CleanupControlsBody } from './CleanupControls'
@@ -26,7 +26,7 @@ export function CleanupStudio() {
   const logo = useLogo()
   const checkerClass = useCheckerClass()
   const pz = usePanZoom({ maxScale: 16 })
-  const isMobile = useIsMobile()
+  const isMobile = useIsStudioCompact()
   const assetKey = useStore((s) => s.assetKey)
 
   // ----------------------------------------------------------- studio state
@@ -34,7 +34,7 @@ export function CleanupStudio() {
   // state initializers, so the rail is already the user's on the first frame.
   const stored = useRef(loadCleanupSettings()).current
   const [viewMode, setViewMode] = useState<ViewMode>(stored.viewMode)
-  // Below md the controls live in a bottom sheet opened from the action bar.
+  // Below lg the controls live in a bottom sheet opened from the action bar.
   const [toolsOpen, setToolsOpen] = useState(false)
   const [tool, setTool] = useState<CleanupTool>(stored.tool)
   const [tolerance, setTolerance] = useState(stored.tolerance)
@@ -218,7 +218,7 @@ export function CleanupStudio() {
 
   const originalSrc = logo.originalSrc ?? logo.src
 
-  // Below md the desktop-only split pane is unusably narrow, so fall back to the
+  // Below lg the desktop-only split pane is unusably narrow, so fall back to the
   // single result pane (the mobile view-mode strip omits "split" entirely).
   const view: ViewMode = isMobile && viewMode === 'split' ? 'result' : viewMode
 
@@ -367,7 +367,7 @@ export function CleanupStudio() {
       </div>
 
       {/* Mobile tool sheet — the full rail, in a bottom sheet. */}
-      <Sheet open={toolsOpen} onClose={() => setToolsOpen(false)} title="Tools" side="bottom">
+      <Sheet open={toolsOpen} onClose={() => setToolsOpen(false)} title="Tools" side="bottom" hideFrom="lg">
         <CleanupControlsBody {...controlProps} />
       </Sheet>
 

@@ -2,17 +2,32 @@ import type { ReactNode } from 'react'
 import { Tooltip } from '../ui/Tooltip'
 
 /**
- * Mobile-only chrome shared by the Cleanup & Vectorize studios so the two stay
- * visually consistent. Each studio composes its own controls into these shells;
- * the shells own the height, borders, safe-area, scroll behaviour, and the
- * `md:hidden` gate (desktop uses its own h-12 toolbar + h-9 footer).
+ * Chrome shared by the Cleanup, Vectorize and Icon sheet studios so the three
+ * stay visually consistent. Each studio composes its own controls into these
+ * shells; the shells own the height, borders, safe-area, scroll behaviour, and
+ * the breakpoint. The compact bars show below `lg` and the desktop toolbar from
+ * `lg` up — `useIsStudioCompact` is the same line in JS.
  */
+
+/** Desktop toolbar strip. A size CONTAINER, so a studio collapses its labels
+ *  with `@min-[…]:` variants on the width the canvas column actually has (the
+ *  rails take a different share at every viewport). Nothing in it shrinks or
+ *  wraps; if the icons-only form still does not fit it scrolls — with a visible
+ *  scrollbar, since a mouse has no other way to find out — rather than pushing
+ *  the page sideways or painting over the next column. */
+export function StudioDesktopToolbar({ children }: { children: ReactNode }) {
+  return (
+    <div className="@container hidden h-12 shrink-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap border-b border-line bg-surface px-3 [scrollbar-width:thin] lg:flex @min-[48rem]:gap-2 [&>*]:shrink-0">
+      {children}
+    </div>
+  )
+}
 
 /** Sticky strip under the header: view-mode + tool + undo/redo + zoom. Scrolls
  *  horizontally rather than wrapping, so it never forces page width. */
 export function StudioTopBar({ children }: { children: ReactNode }) {
   return (
-    <div className="no-scrollbar flex h-12 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-line bg-surface px-2 md:hidden">
+    <div className="@container no-scrollbar flex h-12 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-line bg-surface px-2 lg:hidden">
       {children}
     </div>
   )
@@ -22,7 +37,7 @@ export function StudioTopBar({ children }: { children: ReactNode }) {
  *  button(s) that open the control sheets. Clears the home indicator. */
 export function StudioActionBar({ children }: { children: ReactNode }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface px-3 py-2 pb-safe md:hidden">
+    <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface px-3 py-2 pb-safe lg:hidden">
       {children}
     </div>
   )

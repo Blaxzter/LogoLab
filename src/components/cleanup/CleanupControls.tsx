@@ -98,11 +98,11 @@ export interface CleanupControlsProps {
   aiDevice: 'webgpu' | 'wasm' | null
 }
 
-/** Desktop rail — the 320px column. Below md it's hidden; the same body renders
+/** Desktop rail — the 320px column. Below lg it's hidden; the same body renders
  *  inside the studio's bottom "Tools" sheet instead (see CleanupStudio). */
 export function CleanupControls(props: CleanupControlsProps) {
   return (
-    <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-surface md:flex">
+    <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-surface lg:flex">
       <CleanupControlsBody {...props} />
     </aside>
   )

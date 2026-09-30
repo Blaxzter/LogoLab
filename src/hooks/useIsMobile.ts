@@ -22,11 +22,18 @@ export function useMediaQuery(query: string) {
   return matches
 }
 
-/**
- * Tracks whether the viewport is below Tailwind's `md` breakpoint (the line at
- * which the studios switch from their three-column desktop layout to the
- * canvas-first mobile layout).
- */
+/** Tracks whether the viewport is below Tailwind's `md` breakpoint. */
 export function useIsMobile(query = '(max-width: 767px)') {
   return useMediaQuery(query)
+}
+
+/**
+ * Whether the raster studios (Cleanup, Vectorize, Icon sheet) are in their
+ * canvas-first compact layout: below Tailwind's `lg`, not `md`. At 768 a 320px
+ * rail left the canvas ~450px and the desktop toolbar could not fit, so those
+ * studios keep the bottom-bar layout through tablet widths. Must match the
+ * `lg:` gates in `studio/StudioBar.tsx` and the studios' rails.
+ */
+export function useIsStudioCompact() {
+  return useMediaQuery('(max-width: 1023px)')
 }

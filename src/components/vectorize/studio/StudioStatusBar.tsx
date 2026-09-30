@@ -39,7 +39,7 @@ export function StudioStatusBar({
   tool: Tool
 }) {
   return (
-    <footer className="hidden h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted md:flex">
+    <footer className="hidden h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted lg:flex">
       {stats && (
         <span className="shrink-0">
           {stats.paths} paths · {stats.nodes} nodes · {stats.colors} colors · {formatBytes(svgBytes)}
@@ -68,15 +68,16 @@ export function StudioStatusBar({
         <span className="flex shrink-0 items-center gap-1.5 text-accent">
           <Loader2 size={12} className="animate-spin" />
           {progress || 'Tracing…'}
-          <button
-            type="button"
-            onClick={stop}
-            className="ml-0.5 flex items-center gap-0.5 rounded px-1 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-bad"
-            title="Stop tracing (keeps the current result)"
-          >
-            <X size={11} />
-            Stop
-          </button>
+          <Tooltip label="Stop tracing (keeps the current result)">
+            <button
+              type="button"
+              onClick={stop}
+              className="ml-0.5 flex items-center gap-0.5 rounded px-1 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-bad"
+            >
+              <X size={11} />
+              Stop
+            </button>
+          </Tooltip>
         </span>
       )}
       {error && (

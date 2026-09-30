@@ -22,7 +22,7 @@ import { TraceControls, TraceControlsBody } from './TraceControls'
 import { PathsPanel, PathsPanelBody } from './PathsPanel'
 import { PipelineExplainer } from './PipelineExplainer'
 import { Sheet } from '../ui/Sheet'
-import { useIsMobile } from '../../hooks/useIsMobile'
+import { useIsStudioCompact, useMediaQuery } from '../../hooks/useIsMobile'
 import type { Tool, VectorizeSource, ViewMode } from './studio/types'
 import { useSessionSave, useStudioSession } from './studio/useStudioSession'
 import { useSelection } from './studio/useSelection'
@@ -109,7 +109,7 @@ export function VectorizeStudio({
   const pz = usePanZoom({ maxScale: 32 })
   // No Worker, no score: running it on the main thread would block the UI.
   const canScore = canScoreOffThread()
-  const isMobile = useIsMobile()
+  const isMobile = useIsStudioCompact()
 
   const [opts, setOpts] = useState<VectorizeOptions>(initialOptions ?? session.view?.opts ?? DEFAULT_VECTORIZE_OPTIONS)
   // Output coordinate precision (decimals). 3dp preserves sub-pixel geometry when
@@ -121,9 +121,13 @@ export function VectorizeStudio({
   const [retraceVector, setRetraceVector] = useState<'clean' | 'retrace'>(session.view?.retraceVector ?? 'clean')
   const [viewMode, setViewMode] = useState<ViewMode>(session.view?.viewMode ?? 'split')
   const [tool, setTool] = useState<Tool>('pan')
-  // Below md the rails live in bottom sheets opened from the action bar.
+  // Below lg the rails live in bottom sheets opened from the action bar.
   const [traceSheetOpen, setTraceSheetOpen] = useState(false)
   const [pathsSheetOpen, setPathsSheetOpen] = useState(false)
+  // lg–xl: the canvas has room for the left rail only, so Paths is a slide-over
+  // opened from the toolbar. From xl it is the inline right column.
+  const [pathsDrawerOpen, setPathsDrawerOpen] = useState(false)
+  const pathsInline = useMediaQuery('(min-width: 1280px)')
   const [overlayOpacity, setOverlayOpacity] = useState(session.view?.overlayOpacity ?? 60)
   // Markers have no enable switch: with none placed the trace is unchanged. The
   // only transient state is placement mode (tool === 'mark').
@@ -435,6 +439,10 @@ export function VectorizeStudio({
   useEffect(() => {
     if (!derivedDoc) setPathsSheetOpen(false)
   }, [derivedDoc])
+  // A slide-over hidden by `xl:hidden` would keep the page scroll-locked.
+  useEffect(() => {
+    if (!derivedDoc || pathsInline) setPathsDrawerOpen(false)
+  }, [derivedDoc, pathsInline])
 
   useStudioShortcuts({
     active,
@@ -476,7 +484,7 @@ export function VectorizeStudio({
     onRemoveMarker: removeMarker,
   }
 
-  // Below md the desktop-only split pane is too narrow — default to the single
+  // Below lg the desktop-only split pane is too narrow — default to the single
   // traced pane (the mobile view-mode strip omits "split").
   const view: ViewMode = isMobile && viewMode === 'split' ? 'traced' : viewMode
 
@@ -561,8 +569,23 @@ export function VectorizeStudio({
     },
   }
 
+  // One prop bag feeds the right rail, the slide-over and the bottom sheet.
+  const pathsProps = derivedDoc && {
+    doc: derivedDoc,
+    selectedPathId,
+    onSelectPath: handleSelectPath,
+    onRecolor: handleRecolor,
+    onToggleVisible: handleToggleVisible,
+    onDelete: handleDeleteItem,
+    showPalette: flatPaletteActive,
+    autoPalette,
+    lockedPalette,
+    onPaletteChange: handlePaletteChange,
+    onHighlight: setHighlightFill,
+  }
+
   return (
-    <div className="canvas-ui flex h-full min-h-0 shrink-0 animate-in-fade">
+    <div className="canvas-ui flex h-full min-h-0 w-full shrink-0 animate-in-fade">
       <TraceControls {...traceProps} />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -591,6 +614,8 @@ export function VectorizeStudio({
           copied={copied}
           onCopy={onCopy}
           svgText={svgText}
+          pathCount={derivedDoc ? (stats?.paths ?? 0) : null}
+          onOpenPaths={() => setPathsDrawerOpen(true)}
         />
 
         <StudioMobileTopBar
@@ -661,43 +686,41 @@ export function VectorizeStudio({
         />
       </div>
 
-      {/* Desktop right rail — hidden below md; its body shows in the Paths sheet. */}
-      {derivedDoc && (
-        <PathsPanel
-          doc={derivedDoc}
-          selectedPathId={selectedPathId}
-          onSelectPath={handleSelectPath}
-          onRecolor={handleRecolor}
-          onToggleVisible={handleToggleVisible}
-          onDelete={handleDeleteItem}
-          showPalette={flatPaletteActive}
-          autoPalette={autoPalette}
-          lockedPalette={lockedPalette}
-          onPaletteChange={handlePaletteChange}
-          onHighlight={setHighlightFill}
-        />
-      )}
+      {/* Desktop right rail from xl; below that its body shows in the Paths
+          slide-over (lg–xl) or the bottom sheet (below lg). */}
+      {pathsProps && <PathsPanel {...pathsProps} />}
 
       {/* Mobile control sheets. */}
-      <Sheet open={traceSheetOpen} onClose={() => setTraceSheetOpen(false)} title="Trace settings" side="bottom">
+      <Sheet
+        open={traceSheetOpen}
+        onClose={() => setTraceSheetOpen(false)}
+        title="Trace settings"
+        side="bottom"
+        hideFrom="lg"
+      >
         <TraceControlsBody {...traceProps} />
       </Sheet>
-      {derivedDoc && (
-        <Sheet open={pathsSheetOpen} onClose={() => setPathsSheetOpen(false)} title="Paths" side="bottom">
-          <PathsPanelBody
-            doc={derivedDoc}
-            selectedPathId={selectedPathId}
-            onSelectPath={handleSelectPath}
-            onRecolor={handleRecolor}
-            onToggleVisible={handleToggleVisible}
-            onDelete={handleDeleteItem}
-            showPalette={flatPaletteActive}
-            autoPalette={autoPalette}
-            lockedPalette={lockedPalette}
-            onPaletteChange={handlePaletteChange}
-            onHighlight={setHighlightFill}
-          />
-        </Sheet>
+      {pathsProps && (
+        <>
+          <Sheet
+            open={pathsSheetOpen}
+            onClose={() => setPathsSheetOpen(false)}
+            title="Paths"
+            side="bottom"
+            hideFrom="lg"
+          >
+            <PathsPanelBody {...pathsProps} />
+          </Sheet>
+          <Sheet
+            open={pathsDrawerOpen}
+            onClose={() => setPathsDrawerOpen(false)}
+            title="Paths"
+            side="right"
+            hideFrom="xl"
+          >
+            <PathsPanelBody {...pathsProps} />
+          </Sheet>
+        </>
       )}
 
       {showHelp && <PipelineExplainer opts={opts} source={logo} onClose={() => setShowHelp(false)} />}

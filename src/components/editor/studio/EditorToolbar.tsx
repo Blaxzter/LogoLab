@@ -47,7 +47,8 @@ export function EditorToolbar({
   onClose,
 }: EditorToolbarProps) {
   return (
-    <div className="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-surface px-2">
+    // Scrolls rather than wrapping on a phone: it never widens the page.
+    <div className="no-scrollbar flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-line bg-surface px-2 [&>*]:shrink-0">
       {/* Grouped by purpose: select/reshape, draw, view. */}
       <div className="flex items-center gap-1.5">
         <ToolPill>

@@ -12,7 +12,7 @@ import { Segmented } from '../ui/controls'
 import { CheckerToggle } from '../ui/CheckerToggle'
 import { ZoomControls } from '../ui/ZoomControls'
 import { Sheet } from '../ui/Sheet'
-import { StudioActionBar, StudioTopBar } from '../studio/StudioBar'
+import { StudioActionBar, StudioDesktopToolbar, StudioTopBar } from '../studio/StudioBar'
 import { LegalLinksInline } from '../legal/LegalFooter'
 import { ReportFailureLink } from '../report/ReportIssue'
 import { downloadBlob } from '../../lib/export/download'
@@ -249,7 +249,7 @@ export function SheetStudio() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* ---------------------------------------------- toolbar (desktop) */}
-        <div className="hidden h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 md:flex">
+        <StudioDesktopToolbar>
           <Segmented<View>
             value={view}
             onChange={setView}
@@ -333,7 +333,7 @@ export function SheetStudio() {
               </Button>
             )}
           </div>
-        </div>
+        </StudioDesktopToolbar>
 
         {/* ------------------------------------------------ top strip (mobile) */}
         <StudioTopBar>
@@ -398,7 +398,7 @@ export function SheetStudio() {
         </div>
 
         {/* ------------------------------------------------ status (desktop) */}
-        <footer className="hidden h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted md:flex">
+        <footer className="hidden h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted lg:flex">
           <span className="flex shrink-0 items-center gap-2">
             {tiles.length} boxes · {included} included · {traced} traced
             {failed > 0 && (
@@ -459,7 +459,7 @@ export function SheetStudio() {
         </StudioActionBar>
       </div>
 
-      <Sheet open={controlsOpen} onClose={() => setControlsOpen(false)} title="Icon sheet" side="bottom">
+      <Sheet open={controlsOpen} onClose={() => setControlsOpen(false)} title="Icon sheet" side="bottom" hideFrom="lg">
         <SheetControlsBody source={source} {...controlProps} />
       </Sheet>
 

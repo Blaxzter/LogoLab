@@ -395,7 +395,7 @@ export function App() {
             <Route path="/" element={<Navigate to="/preview" replace />} />
             <Route path="*" element={<Navigate to="/preview" replace />} />
           </Routes>
-          <LegalFooter className={`mt-auto ${isStudio ? 'md:hidden' : ''}`} />
+          <LegalFooter className={`mt-auto ${tab === 'editor' ? 'md:hidden' : isStudio ? 'lg:hidden' : ''}`} />
         </main>
       </div>
 

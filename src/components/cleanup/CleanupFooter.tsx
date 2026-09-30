@@ -17,18 +17,20 @@ export function CleanupStatusBar({
   tool: CleanupTool
 }) {
   return (
-    <footer className="hidden h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted md:flex">
+    <footer className="hidden h-9 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 font-mono text-xs tabular-nums text-muted lg:flex">
       <span className="truncate">
         {status || 'Scroll to zoom · Space- or middle-drag to pan · try AI or Auto first.'}
       </span>
       <LegalLinksInline className="mx-auto shrink-0" />
-      <span className="flex shrink-0 items-center gap-3">
+      {/* The hint gives way too, or the status beside it — progress and errors —
+          is the only thing that truncates. */}
+      <span className="flex min-w-0 items-center gap-3">
         {dims && (
-          <span>
+          <span className="shrink-0">
             {dims.w}×{dims.h}
           </span>
         )}
-        <span className="hidden sm:inline">{toolStatusHint(tool)}</span>
+        <span className="hidden min-w-0 truncate sm:block">{toolStatusHint(tool)}</span>
       </span>
     </footer>
   )

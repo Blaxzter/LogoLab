@@ -61,7 +61,7 @@ export interface SheetControlsProps {
 
 export function SheetControls(props: SheetControlsProps) {
   return (
-    <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-surface md:flex">
+    <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-surface lg:flex">
       <SheetControlsBody {...props} />
     </aside>
   )

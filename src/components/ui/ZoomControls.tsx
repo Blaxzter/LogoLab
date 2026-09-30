@@ -7,7 +7,16 @@ import { ActionButton, isOff } from './ActionButton'
  * percentage (or the Scan button) to snap back to 100% and re-centre. Wired to a
  * {@link PanZoom} controller, so it stays in sync with wheel + drag gestures.
  */
-export function ZoomControls({ pz, className = '' }: { pz: PanZoom; className?: string }) {
+export function ZoomControls({
+  pz,
+  className = '',
+  fitClassName = '',
+}: {
+  pz: PanZoom
+  className?: string
+  /** Lets a tight toolbar drop the fit button: the percentage resets the view too. */
+  fitClassName?: string
+}) {
   return (
     <div
       className={`flex items-center gap-0.5 rounded-lg border border-line-strong bg-surface/90 p-0.5 shadow-xs backdrop-blur ${className}`}
@@ -39,6 +48,7 @@ export function ZoomControls({ pz, className = '' }: { pz: PanZoom; className?: 
         title="Fit to view"
         onClick={pz.reset}
         reason={pz.atDefault ? 'The view is already fitted and centred.' : null}
+        className={fitClassName}
       >
         <Scan size={15} />
       </IconBtn>
@@ -50,11 +60,13 @@ function IconBtn({
   title,
   onClick,
   reason,
+  className = '',
   children,
 }: {
   title: string
   onClick: () => void
   reason?: string | null
+  className?: string
   children: React.ReactNode
 }) {
   // Hover styling is dropped rather than overridden when the button is off: a
@@ -67,7 +79,7 @@ function IconBtn({
       onClick={onClick}
       className={`flex h-7 w-7 items-center justify-center rounded-md text-ink-2 transition-colors ${
         off ? 'cursor-not-allowed opacity-40' : 'hover:bg-surface-3 hover:text-ink'
-      }`}
+      } ${className}`}
     >
       {children}
     </ActionButton>

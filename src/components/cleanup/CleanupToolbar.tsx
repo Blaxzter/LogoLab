@@ -7,7 +7,7 @@ import { CheckerToggle } from '../ui/CheckerToggle'
 import { Segmented } from '../ui/controls'
 import { Button } from '../ui/Button'
 import { PopoverSlider } from '../ui/PopoverSlider'
-import { StudioTopBar, BarIconButton } from '../studio/StudioBar'
+import { StudioDesktopToolbar, StudioTopBar, BarIconButton } from '../studio/StudioBar'
 import { Tooltip } from '../ui/Tooltip'
 
 export type ViewMode = 'split' | 'result' | 'original' | 'overlay'
@@ -51,7 +51,7 @@ export function CleanupToolbar({
   onDownload: () => void
 }) {
   return (
-    <div className="hidden h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 md:flex">
+    <StudioDesktopToolbar>
       <Segmented<ViewMode>
         value={viewMode}
         onChange={onViewMode}
@@ -94,17 +94,20 @@ export function CleanupToolbar({
         >
           {applied ? 'Applied ✓' : 'Apply to logo'}
         </Button>
-        <Button
-          variant="secondary"
-          className="h-8 px-3 text-xs"
-          icon={<Download size={14} />}
-          onClick={onDownload}
-          disabled={aiBusy || !ready}
-        >
-          Download PNG
-        </Button>
+        <Tooltip label="Download PNG" side="bottom">
+          <Button
+            variant="secondary"
+            className="h-8 px-2 text-xs @min-[50rem]:px-3"
+            icon={<Download size={14} />}
+            onClick={onDownload}
+            disabled={aiBusy || !ready}
+            aria-label="Download PNG"
+          >
+            <span className="hidden @min-[50rem]:inline">Download PNG</span>
+          </Button>
+        </Tooltip>
       </div>
-    </div>
+    </StudioDesktopToolbar>
   )
 }
 

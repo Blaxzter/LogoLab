@@ -97,11 +97,11 @@ function pct(f: number): string {
   return `${Math.round(f * 100)}%`
 }
 
-/** Desktop rail — the 320px column. Below md it's hidden; the same body renders
+/** Desktop rail — the 320px column. Below lg it's hidden; the same body renders
  *  inside the studio's "Trace" bottom sheet instead (see VectorizeStudio). */
 export function TraceControls(props: TraceControlsProps) {
   return (
-    <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-surface md:flex">
+    <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-surface lg:flex">
       <TraceControlsBody {...props} />
     </aside>
   )
