@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { hexToRgb, normalizeHex } from '../../../lib/colorUtils'
 import { docStats, serializeDoc } from '../../../lib/path/model'
 import type { EditableDoc } from '../../../lib/path/types'
+import { forceColorDoc } from './forceColorDoc'
 
 export function useTraceOutput({
   doc,
@@ -18,24 +19,7 @@ export function useTraceOutput({
 }) {
   const derivedDoc = useMemo(() => {
     if (!doc) return null
-    if (!forceColorOn) return doc
-    return {
-      ...doc,
-      // A stroke-only path (a centreline trace) keeps `fill: 'none'` and takes the colour
-      // on its stroke; anything else takes it on its fill.
-      items: doc.items.map((it) =>
-        it.kind !== 'path'
-          ? it
-          : it.fill === 'none' && it.stroke
-            ? { ...it, stroke: { ...it.stroke, color: forceColor } }
-            : {
-                ...it,
-                fill: forceColor,
-                gradient: undefined,
-                ...(it.stroke ? { stroke: { ...it.stroke, color: forceColor } } : {}),
-              },
-      ),
-    }
+    return forceColorOn ? forceColorDoc(doc, forceColor) : doc
   }, [doc, forceColorOn, forceColor])
 
   // Auto-extracted flat palette: the distinct solid fills of the base doc (not the
