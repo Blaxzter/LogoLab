@@ -183,7 +183,7 @@ export const CONTROL_DOCS: ControlDoc[] = [
     label: 'Strokes',
     hint: 'Trace the ink as strokes with a width — for line art — instead of filled outlines.',
     blurb:
-      'Line art — a monoline icon, a diagram, a sheet of music — is drawn with a pen of one width, and a filled outline of it is the silhouette of that pen: twice the edges, and no width to change. Strokes trace the middle of each line instead and measure how wide the ink is, so the result is open and closed paths with a stroke-width you can re-weight, and ends and corners you can move as single points. Ink that no stroke explains (a note head, the dot of an i) still becomes a fill. Mono only; the cut and the invert are shared.',
+      'Line art — a monoline icon, a diagram, a sheet of music — is drawn with a pen of one width, and a filled outline of it is the silhouette of that pen: twice the edges, and no width to change. Strokes trace the middle of each line instead and measure how wide the ink is, so the result is open and closed paths with a stroke-width you can re-weight, and ends and corners you can move as single points. Ink that no stroke explains (a note head, the dot of an i) still becomes a fill. In Mono the cut and the invert are shared; in Colour every ink is traced as one drawing, so crossing lines stay whole, and each stroke takes the colour it runs through.',
     example: bundled('outline', 'outline.svg'),
     baseOpts: { mode: 'mono', threshold: 128, invert: true },
     variants: [

@@ -190,6 +190,26 @@ the census; three things there were measured in and are easy to undo:
   collinear across one fill pair into one stroke (`assemble.ts`) — a staff line through a
   note head. §39.6.
 
+**Strokes work in Colour too, and colour is NOT a second engine** (`centerline/colour.ts`).
+The flat palette finds the inks, the border rule finds the paper, and every ink is folded
+into ONE coverage raster (distance from the paper relative to that ink's, or the alpha on
+transparency) that `monoLabels` cuts at 128 — so the engine sees one line drawing and
+never learns there was colour. Two things there are easy to undo:
+
+* **Trace the UNION, not a mask per ink.** A red line over a blue one cuts the blue mask
+  in two; in the union it is one crossing the junction pairing threads, so both lines come
+  back whole. Per-ink masks are the obvious version and the wrong one.
+* **Colour is painted AFTER, and a stroke is cut where its ink changes** (`paintStrokes`).
+  The pairing is geometric, so a dark string tied to a pink kite's corner comes back as one
+  path round the kite and down the string. Each segment votes for the ink under it; runs
+  split at the node between them, runs shorter than the stroke width fold into a neighbour
+  (junction overlap). A change with no node at it stays one stroke in its majority ink.
+
+Dense overlapping LOOPS (five petal rings over a centre ring) trace badly in both modes —
+that is the engine's junction handling, not the paint; check mono before blaming colour.
+The mono path is untouched (`before-colour-strokes` ⇄ `after-colour-strokes`: every lane
+byte-identical). `test/colour-strokes.test.ts` is the gate.
+
 It has its own answer sheet because the outline lanes' cannot score it: `svgGround.ts`
 refuses strokes, and for the outline tracer that refusal is right. `bench/genLineArt.ts`
 writes `public/examples/line-art/` (eight synthetic ⌇ cases, twelve ◎ Lucide icons — ISC,

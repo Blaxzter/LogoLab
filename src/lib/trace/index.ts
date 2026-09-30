@@ -20,6 +20,7 @@ import { uniteBackgroundGradient, type BackgroundUnion } from './backgroundLayer
 import { tracePlanar, type PlanarTrace } from './planarAssemble.ts'
 import { monoLabels, MONO_INK } from './mono.ts'
 import { traceCenterline } from './centerline/index.ts'
+import { colourInkCut, paintStrokes } from './centerline/colour.ts'
 import { type PlanarFitOptions, DEFAULT_PLANAR_FIT, FLAT_LINE_COST } from './planarFit.ts'
 import { planarBeautify } from './planarBeautify.ts'
 import { weldConvergedJunctions } from './planarReseat.ts'
@@ -472,6 +473,83 @@ export async function traceImage(
     }
     stage('materialize')
     return { viewBox: [0, 0, width, height], items, topology }
+  }
+
+  if (options.centerline) {
+    // Colour line art: the inks folded into one coverage cut, traced as ONE line
+    // drawing through the centreline engine, each stroke then painted in the ink it
+    // runs through (centerline/colour.ts). Strokes are flat, so gradients are moot.
+    onProgress?.({ phase: 'segment', fraction: 0.15, label: 'Reading colours' })
+    const locked = options.palette && options.palette.length > 0 ? options.palette : undefined
+    const fp = segmentFlatPalette(
+      imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
+      paletteOptionsFor(options),
+      locked,
+    )
+    const paperLabel = detectBorderBackground(fp.labels, width, height, fp.palette.length)
+    const cut = colourInkCut(imageData, fp.labels, fp.palette, paperLabel)
+    const seg = monoLabels(cut.coverage, 128, false, turdsize)
+    stage('segment')
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    onPlanarLabels?.({ labels: seg.labels, width, height })
+    const hexOf = (l: number) => {
+      const c = fp.palette[l]
+      return rgbToHex(c.r, c.g, c.b)
+    }
+    // The paper takes the label after the palette on transparency, so the fills' map
+    // always has one.
+    const paperId = paperLabel >= 0 ? paperLabel : fp.palette.length
+    const fillPalette = paperLabel >= 0 ? fp.palette : [...fp.palette, cut.paper]
+    const traceFills = (labels: Int32Array) => {
+      const map = new Int32Array(labels.length)
+      for (let i = 0; i < map.length; i++) map[i] = labels[i] === MONO_INK ? cut.inkOf[i] : paperId
+      const trace = tracePlanar(map, width, height, fitOpts, fillPalette, cut.image)
+      const { topology, edges } = finishPlanar(trace)
+      const items: PathItem[] = []
+      for (const l of cut.inks) {
+        const loops = trace.loopsByLabel.get(l)
+        if (!loops) continue
+        const subPaths = materializeRegion(loops, edges)
+        if (subPaths.length > 0)
+          items.push({ kind: 'path', id: `trace-${l}`, fill: hexOf(l), fillRule, loops, subPaths, visible: true })
+      }
+      return { items, topology }
+    }
+    const { doc } = traceCenterline({
+      seg,
+      width,
+      height,
+      fitOpts,
+      fidelity: beautifyOpts.fidelity,
+      traceFills,
+      onProgress: onProgress ? (fraction, label) => onProgress({ phase: 'trace', fraction, label }) : undefined,
+    })
+    stage('trace')
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const items = paintStrokes(
+      doc.items as PathItem[],
+      cut.inkOf,
+      (i) => seg.labels[i] === MONO_INK,
+      width,
+      height,
+      hexOf,
+      cut.inks[0] ?? 0,
+    )
+    // An opaque paper is part of the picture: one rectangle under the strokes, dropped
+    // with the background like the colour path's background region.
+    if (paperLabel >= 0 && !options.removeBackground) {
+      const corner = (x: number, y: number) => ({ x, y, hIn: null, hOut: null, kind: 'corner' as const })
+      items.unshift({
+        kind: 'path',
+        id: 'paper',
+        fill: hexOf(paperLabel),
+        fillRule,
+        subPaths: [{ nodes: [corner(0, 0), corner(width, 0), corner(width, height), corner(0, height)], closed: true }],
+        visible: true,
+      })
+    }
+    stage('materialize')
+    return { ...doc, items }
   }
 
   // Stage 1 — segmentation. Two paths:

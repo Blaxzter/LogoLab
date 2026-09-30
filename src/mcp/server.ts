@@ -53,7 +53,7 @@ const traceShape = {
     .boolean()
     .optional()
     .describe(
-      'Mono only. Trace LINE ART as centreline strokes with a measured stroke-width (open and closed stroked paths you can re-weight), instead of filled outlines of each line. Ink no stroke explains (a dot, a note head) still becomes a fill. Default off.',
+      'Trace LINE ART as centreline strokes with a measured stroke-width (open and closed stroked paths you can re-weight), instead of filled outlines of each line. Ink no stroke explains (a dot, a note head) still becomes a fill. In colour mode each stroke is painted in the ink it runs through. Default off.',
     ),
   flattenOnto: z
     .string()

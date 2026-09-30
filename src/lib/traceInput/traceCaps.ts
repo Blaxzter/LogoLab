@@ -30,7 +30,8 @@ export const RASTER_MAX_DIM_FLAT = 2048
 export const RASTER_MAX_DIM_HIGH = 4096
 
 export function rasterCapFor(opts: VectorizeOptions): number {
-  const isFlat = opts.mode === 'mono' || opts.gradients === false
+  // Strokes are flat paint whatever the gradients toggle says.
+  const isFlat = opts.mode === 'mono' || opts.gradients === false || opts.centerline === true
   const flatCap = opts.traceDetail === 'high' ? RASTER_MAX_DIM_HIGH : RASTER_MAX_DIM_FLAT
   return isFlat ? flatCap : RASTER_MAX_DIM
 }

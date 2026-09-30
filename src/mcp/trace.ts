@@ -129,7 +129,7 @@ export async function planTrace(
     invert: opts.invert === true,
     smoothing: opts.smoothing,
     inks: plan.inks,
-    strokes: opts.mode === 'mono' && opts.centerline === true,
+    strokes: opts.centerline === true,
     upscale: plan.scale,
     rasterCap,
     traced: scaled,
@@ -151,7 +151,9 @@ function summarize(
   bits.push(
     opts.mode === 'mono'
       ? `mono (${inks === 1 ? 'one ink' : `${inks} inks`} on paper${opts.invert ? ', light-on-dark so the cut is inverted' : ''}, cut at ${opts.threshold}${opts.centerline ? ', traced as centreline strokes with a measured width' : ''})`
-      : `colour (${inks} inks), gradients ${opts.gradients === false ? 'off — flat fills' : 'on — real SVG ramps'}${req_strokes_note(opts)}`,
+      : opts.centerline
+        ? `colour (${inks} inks)${req_strokes_note(opts)}`
+        : `colour (${inks} inks), gradients ${opts.gradients === false ? 'off — flat fills' : 'on — real SVG ramps'}`,
   )
   bits.push(
     `traced at ${traced.width}×${traced.height}${scale > 1 ? ` (source enlarged ×${scale} for sub-pixel edges)` : ''}`,
@@ -160,9 +162,9 @@ function summarize(
   return bits.join('; ')
 }
 
-/** `strokes` was asked for but the plan went colour: say so rather than silently ignore it. */
+/** Colour line art traced as strokes: the lines come back in their own inks. */
 function req_strokes_note(opts: VectorizeOptions): string {
-  return opts.centerline ? ' (strokes only apply to mono — force mode: "mono" to get them)' : ''
+  return opts.centerline ? ', traced as centreline strokes, each in the ink it runs through' : ''
 }
 
 /** Trace an image into an SVG string, reporting the plan it used. */
