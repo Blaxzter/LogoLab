@@ -5,7 +5,7 @@
 //
 // Keys are namespaced `logolab:`; `logolab-theme` (src/theme.ts) is separate.
 
-import { markFailed, markSaved } from './status'
+import { markFailed, markSaved } from './status.ts'
 
 const PREFIX = 'logolab:'
 
@@ -63,6 +63,8 @@ export function clearLocal(): void {
 /**
  * Trailing-edge debounce with a `flush()`, so a slider drag doesn't write on
  * every pointer move. The last call's arguments are always the ones written.
+ * `cancel()` drops a pending write, for a caller that is about to forget the
+ * value: flushing it later would bring back what was just cleared.
  */
 export function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: number) {
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -83,6 +85,12 @@ export function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: numb
     if (timer !== null) clearTimeout(timer)
     timer = setTimeout(flush, ms)
   }
+  const cancel = () => {
+    if (timer !== null) clearTimeout(timer)
+    timer = null
+    pending = null
+  }
   run.flush = flush
+  run.cancel = cancel
   return run
 }

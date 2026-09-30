@@ -10,6 +10,7 @@ import {
   type StoredLogo,
   type StoredMockShots,
 } from '../lib/persist/session'
+import { forgetStudioView } from '../components/vectorize/studioSession'
 
 export type Tab = 'preview' | 'cleanup' | 'vectorize' | 'editor' | 'sheet' | 'export'
 
@@ -41,6 +42,12 @@ interface AppState {
    * from.
    */
   assetKey: string
+  /**
+   * Bumped by `clearLogo`. The vectorize studio is keyed on it, so removing the
+   * logo (and so every upload, which removes the old one first) remounts it on
+   * default settings instead of carrying the last image's over.
+   */
+  studioEpoch: number
   appearance: Appearance
   env: Environment
 
@@ -192,6 +199,7 @@ export const useStore = create<AppState>((set) => ({
   logo: emptyLogo,
   originalMeta: null,
   assetKey: newAssetKey(),
+  studioEpoch: 0,
   appearance: readLocal(LS_APPEARANCE, defaultAppearance),
   env: readLocal(LS_ENV, defaultEnv),
   ...readLocal(LS_CHECKER, { checkerDark: false, checkerUserSet: false }),
@@ -239,7 +247,8 @@ export const useStore = create<AppState>((set) => ({
       if (s.logo.originalSrc && s.logo.originalSrc !== s.logo.src && s.logo.originalSrc.startsWith('blob:')) {
         URL.revokeObjectURL(s.logo.originalSrc)
       }
-      return { logo: emptyLogo, originalMeta: null, assetKey: newAssetKey() }
+      forgetStudioView()
+      return { logo: emptyLogo, originalMeta: null, assetKey: newAssetKey(), studioEpoch: s.studioEpoch + 1 }
     }),
   setProcessedLogo: (dataUrl, width, height) =>
     set((s) => {

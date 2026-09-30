@@ -2,12 +2,13 @@
 // vectorize studio.
 
 import { ImageOff } from 'lucide-react'
-import { useLogo } from '../../state/store'
+import { useLogo, useStore } from '../../state/store'
 import { PanelEmptyState } from '../intake/PanelEmptyState'
 import { VectorizeStudio } from '../vectorize/VectorizeStudio'
 
 export default function VectorizePanel() {
   const logo = useLogo()
+  const studioEpoch = useStore((s) => s.studioEpoch)
 
   if (!logo.src) {
     return (
@@ -22,6 +23,8 @@ export default function VectorizePanel() {
   }
 
   // Only this studio persists: it owns the working logo. The sheet's per-tile
-  // studios are persisted by the sheet store instead.
-  return <VectorizeStudio persist />
+  // studios are persisted by the sheet store instead. Keyed on the epoch so a
+  // removed logo takes its settings with it, even when the next upload lands
+  // before React ever renders the empty state in between.
+  return <VectorizeStudio key={studioEpoch} persist />
 }

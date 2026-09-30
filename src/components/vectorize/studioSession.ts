@@ -10,7 +10,7 @@
 import type { EditableDoc } from '../../lib/path/types'
 import type { VectorizeOptions } from '../../types'
 import type { InkColorMode } from '../../lib/traceInput/ink'
-import { debounce, readLocal, writeLocal } from '../../lib/persist/local'
+import { debounce, readLocal, removeLocal, writeLocal } from '../../lib/persist/local'
 import { claim, saveSlot, SLOTS, type StoredVectorize } from '../../lib/persist/session'
 
 const LS_KEY = 'vectorize'
@@ -69,6 +69,17 @@ export function loadStudioSeed(assetKey: string): StudioSeed {
 export const saveStudioView = debounce((view: StudioView) => {
   writeLocal(LS_KEY, { view })
 }, 300)
+
+/**
+ * Forget the stored settings, so the next image starts from the defaults and the
+ * probes rather than the last image's sliders. Called when the working logo is
+ * removed (which every upload and example load does first). The pending write is
+ * dropped too: flushed after this, it would restore exactly what was cleared.
+ */
+export function forgetStudioView(): void {
+  saveStudioView.cancel()
+  removeLocal(LS_KEY)
+}
 
 /**
  * Store the document. The debounce is longer than the other slots' because this
