@@ -8,7 +8,7 @@
 // The state and effects live in hooks under ./studio, called in the order the
 // effects must run; the chrome is split into the presentational parts there.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useCheckerClass, useLogo, useStore } from '../../state/store'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import { useHistory } from '../../hooks/useHistory'
@@ -37,6 +37,8 @@ import { useTraceOutput } from './studio/useTraceOutput'
 import { useEmptyNotice } from './studio/useEmptyNotice'
 import { useExportActions } from './studio/useExportActions'
 import { useFidelityScore } from './studio/useFidelityScore'
+import { useBestSettings } from './studio/useBestSettings'
+import { withCandidate, type Candidate } from './studio/bestSettings'
 import { useStudioShortcuts } from './studio/useStudioShortcuts'
 import { StudioToolbar } from './studio/StudioToolbar'
 import { StudioMobileActionBar, StudioMobileTopBar } from './studio/StudioMobileBars'
@@ -351,6 +353,54 @@ export function VectorizeStudio({
 
   useFidelityScore({ busy, canScore, derivedDoc, logo, setScore })
 
+  /**
+   * Apply a "Find best settings" candidate through the same paths the controls
+   * use, so the choice persists and a restore keeps it. Like Reset it releases the
+   * recolour pin (the candidate decides the recolour). Mode stays Auto when Auto
+   * already agrees.
+   *
+   * The gradients pin is set only while the content probe has not decided this
+   * image (decidedForRef), so a late probe can't overwrite the choice. Set it after,
+   * and the probe skips the image on every reload: no "why" line, no Reset target.
+   */
+  // biome-ignore lint/correctness/useExhaustiveDependencies(colorModeRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(colorModeRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(forceColorTouchedRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setColorMode): a state setter, stable
+  const applyCandidate = useCallback(
+    (c: Candidate) => {
+      if (decidedForRef.current !== assetKey) gradientsTouchedRef.current = true
+      forceColorTouchedRef.current = false
+      const mode: InkColorMode = colorModeRef.current === 'auto' && inkPlan?.mode === c.colorMode ? 'auto' : c.colorMode
+      setColorMode(mode)
+      colorModeRef.current = mode
+      setOpts((o) => withCandidate(o, c))
+      setForceColorOn(c.forceColorOn)
+      if (c.forceColor) setForceColor(c.forceColor)
+      // Refresh the "why" line under Mode without touching the options again.
+      applyInkDecision(mode, null, false)
+    },
+    [inkPlan, applyInkDecision, assetKey],
+  )
+  const best = useBestSettings({ logo, opts, probePixelsRef, applyCandidate })
+  const bestApplied =
+    best.state.status === 'done'
+      ? (best.state.ranked.find(
+          ({ candidate: c }) =>
+            sameSettings(withCandidate(opts, c), opts) &&
+            forceColorOn === c.forceColorOn &&
+            (!c.forceColorOn || forceColor === c.forceColor),
+        )?.id ?? null)
+      : null
+  const bestReason =
+    isVectorSource && retraceVector === 'clean'
+      ? 'A cleaned SVG is not traced. Switch Source to Re-trace to compare trace settings.'
+      : !best.available
+        ? 'This browser cannot trace in the background (no Web Workers).'
+        : busy
+          ? 'Wait for the current trace to finish, or stop it.'
+          : null
+
   // Report the current result / parameters to a host that is keeping them (the
   // icon sheet stores every tile's doc so it survives leaving the icon).
   useEffect(() => {
@@ -477,6 +527,8 @@ export function VectorizeStudio({
     staleOpts,
     onTrace: () => {
       setTraceSheetOpen(false)
+      // A normal trace wins over a search in flight.
+      best.cancel()
       void run()
     },
     onShowHelp: () => {
@@ -497,6 +549,15 @@ export function VectorizeStudio({
       if (fresh.forceColor) setForceColor(fresh.forceColor)
       // Refresh the "why" line under Mode without touching the options again.
       applyInkDecision(fresh.colorMode, null, false)
+    },
+    best: {
+      state: best.state,
+      reason: bestReason,
+      appliedId: bestApplied,
+      onStart: () => void best.start(),
+      onCancel: best.cancel,
+      onApply: (s: { candidate: Candidate }) => applyCandidate(s.candidate),
+      onDismiss: best.dismiss,
     },
   }
 

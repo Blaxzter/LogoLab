@@ -13,6 +13,7 @@ import type { VectorizeOptions } from '../../types'
 import type { InkColorMode, InkModePlan } from '../../lib/traceInput/ink'
 import { CONTROL_DOCS_BY_ID } from './controlDocs'
 import { ControlInfoDialog } from './ControlInfoDialog'
+import { BestSettings, type BestSettingsProps } from './BestSettings'
 import { AI_UPSCALE_MAX_PX, aiUpscaleFactor } from '../../lib/traceInput/aiUpscale'
 import {
   MONO_TARGET_STROKE_PX,
@@ -82,6 +83,8 @@ export interface TraceControlsProps {
   canReset: boolean
   /** Restore the settings a fresh upload of this image gets (markers stay). */
   onReset: () => void
+  /** "Find best settings": trace a few candidates, score them, apply the winner. */
+  best: BestSettingsProps
 }
 
 const d = CONTROL_DOCS_BY_ID
@@ -135,6 +138,7 @@ export function TraceControlsBody({
   onShowHelp,
   canReset,
   onReset,
+  best,
 }: TraceControlsProps) {
   const tracing = !isVectorSource || source === 'retrace'
   const [infoId, setInfoId] = useState<string | null>(null)
@@ -259,6 +263,8 @@ export function TraceControlsBody({
             </Tooltip>
           </div>
         </div>
+
+        <BestSettings {...best} />
 
         {isVectorSource && (
           <>
