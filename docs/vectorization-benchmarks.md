@@ -7283,3 +7283,99 @@ number per path — a brush stroke with pressure comes back at its median width.
 reads colour: the engine takes mono's cut, so a two-ink diagram traces its darker ink. And the
 Mode control's Auto never picks Strokes: the toggle is the user's, with the ink probe's
 thickness readout beside it as the hint.
+
+## 40. "Find best settings": five candidates on a 352px copy, scored against the user's pixels (B1, #51, 2026-09-30)
+
+**One line.** The Vectorize rail has a **Find best settings** button. It traces five candidate
+settings on a reduced copy of the image, scores each with the studio's own ΔE (§B2), applies the
+winner, and leaves a scoreboard with the runners-up one click away. Nothing here changes the
+tracer; this section is the measurement that fixed the button's four numbers. The census is
+`bench/bestSettingsDiag.ts`, and the candidates, winner rule and labels are the shipped
+`src/components/vectorize/studio/bestSettings.ts` (the bench imports it, so it measures what
+ships). The gate is `test/best-settings.test.ts`.
+
+### 40.1 Method
+
+Every case is traced with every candidate twice. First at the reduced size, scored against the
+source at that same size (what the studio does). Then at the production cap (`rasterCapFor`),
+scored at 1024 like the status bar. Mono gets the production enlargement (`monoTraceScale`) in
+both. Each candidate is scored in its own paint, recolour included, against the source WITH its
+alpha. "Agrees" means the reduced pick is the full-resolution pick under the same rule; "regret"
+is how much worse the reduced pick scores at full resolution than the full-resolution pick. Lanes:
+the bundled examples (9, on their alpha), line art (20, on white), the four example sheets cut at
+1024 (65 tiles), and the gallery (50 marks for the full-resolution comparison; all 152 for the
+timings).
+
+The candidates, simplest first (that order is also the tie-break):
+
+| id | settings | built from |
+|---|---|---|
+| strokes | Mono + `centerline` | the ink probe's raster, forced mono: measured cut + invert |
+| mono | Mono | same, painted in the probed ink |
+| flat | Colour, gradients off | — |
+| backplate | Colour, gradients off, `backgroundGradient` | — |
+| gradients | Colour, gradients on | — |
+
+### 40.2 Resolution: 352, not 256
+
+| lane | agrees @256 | agrees @352 | regret mean @352 |
+|---|---|---|---|
+| examples | 9/9 | 8/9 | 0.06 |
+| line art | 19/20 | 19/20 | 0.03 |
+| sheet tiles | 65/65 | 65/65 | 0 |
+| gallery (50) | 43/50 (86%) | 45/50 (90%) | 0.08 (256: 0.10) |
+
+256 is barely cheaper: at 256 the mono size rule enlarges ×2, so mono costs more there than at
+352. On the gallery, where the picks are close, 352 predicts the full-resolution pick more often.
+The five gallery disagreements at 352 are audi (Mono vs Strokes, 0.43 vs 0.52 at full), auth-js,
+canva, dracula (flat ⇄ gradients on gradient-heavy marks), and disney, the worst: Mono at 352,
+Flat at full, 1.22 vs 0.44 ΔE. That is the case the scoreboard's runners-up exist for.
+
+### 40.3 The winner rule: lowest ΔE, but a simpler candidate within 0.3 ΔE wins
+
+Gallery agreement at 352 is 84% with the margin at 0, **90% at 0.3**, and 88% at 0.5. 0.3 is
+well below the ΔE76 JND (~2.3), so a mono trace that looks the same as a colour one wins as the
+smaller, single-ink file. Node count only breaks exact ties. The margin is where parsimony
+enters, as simplicity of the MODE (one ink, no gradients) rather than a node penalty, which
+was not tried.
+
+### 40.4 What wins (352, margin 0.3, 246 cases)
+
+strokes 29 · mono 81 · flat 116 · backplate 2 · gradients 18.
+
+- **Strokes** wins 18/20 line-art cases (Mono the other two) and 9 sheet tiles. On everything
+  else it scores far worse (ΔE 8–95) and costs a median 80 ms, so it stays in the list.
+- **Mono is always a candidate**, not only when the probe says one ink. It wins 7 images the
+  probe called colour, at a median 71 ms.
+- **Backplate** wins exactly the art it was written for: aurora (at full resolution 0.86 vs
+  gradients 1.07) and nebula.png. It never wins a gallery mark and costs a median 115 ms, so it stays.
+  When it wins it sets `backgroundGradient`, which has no control of its own: the scoreboard is
+  the only place it shows, and Reset clears it.
+- **A mono candidate is painted in the probed ink even when that ink is near-black.**
+  `freshSettings` leaves a #14161c ink as the tracer's #000, which costs Summit 1.47 ΔE (the
+  status bar says so today). Scored that way, every dark-grey one-ink mark went to Flat.
+  Painted, Summit's Mono scores 0.01 and wins as the simpler file.
+- **The probe's Mono is sometimes the wrong answer, and the search catches it.** nebula.svg
+  and orbit.svg (a white glyph on a purple backplate) probe as one light ink → Mono inverted,
+  and a mono trace drops the backplate: ΔE 83 and 53. Flat scores 0.22–0.40.
+
+### 40.5 Time
+
+Node, one core per candidate, the 352 trace + render + score; clean run, nothing else loaded:
+
+| | median | p90 | max | under 2 s |
+|---|---|---|---|---|
+| sequential (sum of 5) | 775 ms | 2122 ms | 8135 ms | — |
+| **pool of 2, slowest first** (shipped) | **430 ms** | **1440 ms** | 6463 ms | **235/246** |
+| pool of 3 | 362 ms | 1440 ms | 6463 ms | 235/246 |
+
+Per candidate (median / max): strokes 80 / 359 ms, mono 71 / 355, flat 76 / 421, backplate
+115 / 1179, gradients 359 / 6463.
+
+The gradients candidate is the long pole on every one of the 11 misses (canva, dracula, huawei,
+ibm-wm, mastercard, raspberry-pi, swc, warner-bros, travel#14, la-score, and firefox-wm at 6.5 s).
+A third worker cannot shorten a single job, so the pool is 2 and starts gradients first
+(`TRACE_ORDER`), which lets the cheap candidates run beside it instead of after it. In the
+browser add a worker start per candidate and one decode. The trade-off for the tail would be
+tracing gradients at 256; that is not done, because gradient art is where the reduced pick is
+already least reliable (§40.2). The search can be cancelled, and any setting change cancels it.
