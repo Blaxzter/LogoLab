@@ -261,6 +261,23 @@ on a dependency version that drifts between the two manifests, and on the server
 being hard-coded again instead of read. **If it fails, fix the manifests — never the
 assertion.**
 
+## "Find best settings" scores candidates; it does not decide on load
+
+The Vectorize rail's **Find best settings** (`studio/bestSettings.ts` pure, `useBestSettings.ts`
+plumbing, benchmarks §40, `bench/bestSettingsDiag.ts`) traces five candidates on a 352px copy,
+scores them with the shipped `deltaEField` via `scoreOffThread`, and applies the winner. It runs
+ONLY when pressed. Three things that are easy to undo:
+
+* **A candidate is a PATCH, not a full options object.** It names only the keys it decides
+  (`undefined` = remove), and `withCandidate` applies it to the CURRENT options, so a runner-up
+  clicked after a slider moved keeps the slider, and a winner equal to a fresh upload's settings
+  leaves Reset off (`centerline: false` instead of absent is enough to break that).
+* **Mono candidates are painted in the probed ink even when it is near-black.** `freshSettings`
+  leaves #14161c as #000; scored that way every dark-grey one-ink mark loses to Flat by ~1.5 ΔE.
+* **Applying pins gradients only while the probe has not decided this image** (`decidedForRef`).
+  Pin it unconditionally and `useContentProbe` skips the image on every reload: no "why" line
+  under Mode and no Reset target.
+
 ## The session is persisted, so studio state has TWO homes now
 
 Every studio's state used to be session-only. It isn't: a reload restores the upload, the

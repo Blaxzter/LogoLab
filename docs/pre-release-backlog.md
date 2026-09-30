@@ -202,9 +202,10 @@ whose defects are invisible without it.
 
 ## B. A better automatic mode
 
-### B1. Self-scoring Auto — trace a few candidates, score them, pick the winner
+### B1. Self-scoring Auto — trace a few candidates, score them, pick the winner — SHIPPED 2026-09-30
 
-> Filed as [#51](https://github.com/Blaxzter/LogoLab/issues/51).
+> Filed as [#51](https://github.com/Blaxzter/LogoLab/issues/51). **Done** as an explicit
+> **Find best settings** button, not an on-load pass; see *What shipped* at the end.
 
 Today "automatic" is exactly **one** binary decision, made once per image:
 `suggestGradients` (a rampiness probe) flips the gradients toggle. Everything
@@ -246,6 +247,32 @@ the runners-up one click away. Candidates worth including:
 Two things this buys beyond a better first result: the choice becomes *visible
 and stable* instead of flipping with the raster (#20), and the user gets a reason
 rather than a mystery.
+
+**What shipped.** A **Find best settings** button under the Vectorize rail's header. It runs
+only when pressed: opening an image already runs the ink and rampiness probes, and a second
+automatic round would change the trace a moment after it appears and fight the user's own
+settings. It traces five candidates on a 352px copy (strokes · mono · flat · flat + gradient
+backdrop · gradients on; mono's cut and invert come from the ink probe's raster), scores each
+with B2's shipped scorer against the source with its alpha, applies the winner and leaves a
+scoreboard, e.g. *Flat · gradients off — ΔE 0.1 · 32 nodes*, where every runner-up is one click
+away. The winner is the lowest ΔE, except that a simpler candidate within 0.3 ΔE wins, which the
+scoreboard says in words. Progress reads "Trying 3 of 5…" and the search can be cancelled; a
+setting change, a Trace or a new image cancels it. It works in the mobile Trace sheet and in the
+icon sheet's studio. Candidates, winner rule and labels are pure
+(`studio/bestSettings.ts`, `test/best-settings.test.ts`); the plumbing is `useBestSettings.ts`.
+
+Measured (benchmarks **§40**, `bench/bestSettingsDiag.ts`, 246 cases): the whole search takes a
+median 0.43 s and p90 1.44 s in Node on a pool of two workers, 235/246 under 2 s. In the
+production build in the browser: Summit 0.85 s, Bloom 1.0 s, Aurora 1.9 s. The 11 slow cases
+are all the gradients candidate on detailed gradient marks (up to 6.5 s); it starts first so the
+rest run beside it. The 352 pick is the full-resolution pick on 45/50 gallery marks, 65/65
+sheet tiles and 19/20 line-art cases. What wins: flat 116, mono 81, strokes 29 (18 of 20
+line-art cases), gradients 18, gradient backdrop 2 (the AI-app-icon shape it is for).
+
+Two things the scoreboard found that the probes get wrong: a white glyph on a coloured backplate
+(nebula, orbit) probes as one-ink Mono and drops the backplate (ΔE 53–83, Flat 0.2–0.4), and a
+near-black ink left as the tracer's #000 costs Summit 1.47 ΔE (Mono painted in the ink: 0.01).
+Left out on purpose: the AI upscaler (it downloads a model), running on load, and presets (B3).
 
 ### B2. A fidelity readout, and a Difference view — SHIPPED 2026-09-20
 
@@ -420,6 +447,6 @@ lane in a fourth trace lane, `line`.
 2. ~~**A5** — CI, before anything else moves.~~ Done, see above.
 3. ~~**A4** — the error boundary.~~ Done, see above. (A3, persistence, is done too.)
 4. ~~**B2** — the fidelity number and the Difference view.~~ Done, see above.
-5. **B1** — self-scoring Auto, built on B2's scorer.
+5. ~~**B1** — self-scoring Auto, built on B2's scorer.~~ Done, see above.
 6. **C2 + C4 + C5** — the knobs, behind B3's presets (B3's Reset is done). (C1 rejected.)
 7. **D1 + D2**. (~~**D3**~~ done, see above.)
