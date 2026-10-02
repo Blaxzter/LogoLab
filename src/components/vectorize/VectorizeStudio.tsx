@@ -101,6 +101,10 @@ export function VectorizeStudio({
   const storeChecker = useCheckerClass()
   const setProcessedSvg = useStore((s) => s.setProcessedSvg)
   const assetKey = useStore((s) => s.assetKey)
+  // What the working logo's upload asked for (an example's own settings). A host that
+  // passes its own source (the icon sheet) decides its options itself.
+  const storeHints = useStore((s) => s.traceHints)
+  const traceHints = source ? null : storeHints
 
   const session = useStudioSession(persist, assetKey)
   // The image being traced: the app's working logo unless a host passed one.
@@ -186,16 +190,16 @@ export function VectorizeStudio({
   // inkPlan because the probe sets it from the same pixels it leaves in
   // probePixelsRef, which a memo can't observe directly.
   // biome-ignore lint/correctness/useExhaustiveDependencies(probePixelsRef.current): a ref, read when the code runs
-  const fresh = useMemo(
-    () =>
-      freshSettings(
-        initialOptions ?? DEFAULT_VECTORIZE_OPTIONS,
-        initialOptions ? initialOptions.mode : 'auto',
-        probePixelsRef.current,
-        !initialOptions,
-      ),
-    [inkPlan, initialOptions],
-  )
+  const fresh = useMemo(() => {
+    const f = freshSettings(
+      initialOptions ?? DEFAULT_VECTORIZE_OPTIONS,
+      initialOptions ? initialOptions.mode : 'auto',
+      probePixelsRef.current,
+      !initialOptions,
+    )
+    // An upload's own hints are part of what a fresh load of it gets, so Reset keeps them.
+    return traceHints ? { ...f, opts: { ...f.opts, ...traceHints } } : f
+  }, [inkPlan, initialOptions, traceHints])
   const atFreshSettings =
     sameSettings(opts, fresh.opts) && colorMode === fresh.colorMode && forceColorOn === fresh.forceColorOn
 
@@ -265,6 +269,7 @@ export function VectorizeStudio({
     decidedForRef,
     probePixelsRef,
     colorModeRef,
+    traceHints,
   })
 
   // Adopt a document the host already traced for this source (the icon sheet

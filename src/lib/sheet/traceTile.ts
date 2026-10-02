@@ -7,6 +7,7 @@
 // resolves specifiers literally.
 
 import { serializeDoc, docStats } from '../path/model.ts'
+import { isPaper } from '../path/paper.ts'
 import { suggestGradients, traceImage } from '../trace/index.ts'
 import { canTraceOffThread, traceImageOffThread } from '../trace/traceOffThread.ts'
 import { rasterCapFor } from '../traceInput/traceCaps.ts'
@@ -89,8 +90,9 @@ export function tileTraceInput(pixels: ImageDataLike, scale: number): ImageDataL
 export function repaintDoc(doc: EditableDoc, fill: string): EditableDoc {
   return {
     ...doc,
+    // The paper is the ground, not a shape (path/paper.ts).
     items: doc.items.map((item) =>
-      item.kind !== 'path'
+      item.kind !== 'path' || isPaper(item)
         ? item
         : item.fill === 'none' && item.stroke
           ? { ...item, stroke: { ...item.stroke, color: fill } }

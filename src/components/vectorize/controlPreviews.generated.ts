@@ -150,9 +150,9 @@ export const CONTROL_PREVIEWS: Record<string, ControlPreview> = {
       },
       {
         "label": "Mono",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 384 384\"><path fill=\"#000000\" d=\"M123.8 128C131.13 74 196.1 49.57 237.41 84.55C265.09 107.99 268.12 150.14 246.45 178.59C226.87 181 215.77 182.3 200.1 195.1L185.8 210.2C149 208.56 119.13 162.31 123.8 128ZM158.94 313.94C130.05 322.05 88.79 308.95 81.06 276.94C68.62 225.43 122.14 183 169.69 208.31C174.52 210.88 180.34 214.72 182 220C173.61 230.9 174.83 259.27 179.31 271.69C181.82 278.63 186.94 285.98 190.96 292.22C184.97 301.69 169.57 310.95 158.94 313.94Z\"/></svg>",
-        "paths": 1,
-        "nodes": 11
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 384 384\"><path fill=\"#eaecef\" d=\"M0 0L384 0L384 384L0 384Z\"/><path fill=\"#000000\" d=\"M123.8 128C131.13 74 196.1 49.57 237.41 84.55C265.09 107.99 268.12 150.14 246.45 178.59C226.87 181 215.77 182.3 200.1 195.1L185.8 210.2C149 208.56 119.13 162.31 123.8 128ZM158.94 313.94C130.05 322.05 88.79 308.95 81.06 276.94C68.62 225.43 122.14 183 169.69 208.31C174.52 210.88 180.34 214.72 182 220C173.61 230.9 174.83 259.27 179.31 271.69C181.82 278.63 186.94 285.98 190.96 292.22C184.97 301.69 169.57 310.95 158.94 313.94Z\"/></svg>",
+        "paths": 2,
+        "nodes": 15
       }
     ]
   },
@@ -161,15 +161,15 @@ export const CONTROL_PREVIEWS: Record<string, ControlPreview> = {
     "variants": [
       {
         "label": "Off",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><path fill=\"#000000\" d=\"M128 256L128 0L256 0L256 256Z\"/></svg>",
-        "paths": 1,
-        "nodes": 4
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><path fill=\"#bebebe\" d=\"M0 0L256 0L256 256L0 256Z\"/><path fill=\"#000000\" d=\"M128 256L128 0L256 0L256 256Z\"/></svg>",
+        "paths": 2,
+        "nodes": 8
       },
       {
         "label": "On",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><path fill=\"#000000\" d=\"M128 256L0 256L0 0L128 0Z\"/></svg>",
-        "paths": 1,
-        "nodes": 4
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><path fill=\"#3d3d3d\" d=\"M0 0L256 0L256 256L0 256Z\"/><path fill=\"#000000\" d=\"M128 256L0 256L0 0L128 0Z\"/></svg>",
+        "paths": 2,
+        "nodes": 8
       }
     ]
   },
@@ -178,21 +178,21 @@ export const CONTROL_PREVIEWS: Record<string, ControlPreview> = {
     "variants": [
       {
         "label": "Low",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><path fill=\"#000000\" d=\"M176 256L176 0L256 0L256 256Z\"/></svg>",
-        "paths": 1,
-        "nodes": 4
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><path fill=\"#a6a6a6\" d=\"M0 0L256 0L256 256L0 256Z\"/><path fill=\"#000000\" d=\"M176 256L176 0L256 0L256 256Z\"/></svg>",
+        "paths": 2,
+        "nodes": 8
       },
       {
         "label": "Mid",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><path fill=\"#000000\" d=\"M128 256L128 0L256 0L256 256Z\"/></svg>",
-        "paths": 1,
-        "nodes": 4
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><path fill=\"#bebebe\" d=\"M0 0L256 0L256 256L0 256Z\"/><path fill=\"#000000\" d=\"M128 256L128 0L256 0L256 256Z\"/></svg>",
+        "paths": 2,
+        "nodes": 8
       },
       {
         "label": "High",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><path fill=\"#000000\" d=\"M64 256L64 0L256 0L256 256Z\"/></svg>",
-        "paths": 1,
-        "nodes": 4
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\"><path fill=\"#dfdfdf\" d=\"M0 0L256 0L256 256L0 256Z\"/><path fill=\"#000000\" d=\"M64 256L64 0L256 0L256 256Z\"/></svg>",
+        "paths": 2,
+        "nodes": 8
       }
     ]
   }

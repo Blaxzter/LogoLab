@@ -24,6 +24,7 @@ import {
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { docStats } from '../src/lib/path/model.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'
+import { isPaper } from '../src/lib/path/paper.ts'
 import { ensureImageData, loadPng } from '../bench/nodeHarness.ts'
 
 // The mono path builds its mask with `new ImageData(w, h)`.
@@ -153,8 +154,11 @@ test('dark art on transparency, forced Mono: cut aimed the other way, not invert
 /* ------------------------------------------------------------- end to end */
 
 /** Fraction of the rendered doc that is inked, over white. */
+/** The trace without its paper: the ground is not ink (src/lib/path/paper.ts). */
+const inkOnly = (doc: Parameters<typeof rasterizeDoc>[0]) => ({ ...doc, items: doc.items.filter((it) => !isPaper(it)) })
+
 function inkCoverage(doc: Parameters<typeof rasterizeDoc>[0], w: number, h: number): number {
-  const px = rasterizeDoc(doc, w, h)
+  const px = rasterizeDoc(inkOnly(doc), w, h)
   let dark = 0
   for (let i = 0; i < px.length; i += 4) {
     if (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2] < 128) dark++
@@ -185,7 +189,7 @@ test('the whole point: light art forced to Mono traces the ART, not nothing and 
       threshold: plan.threshold,
       invert: plan.invert,
     })
-    assert.ok(docStats(doc).paths > 0, `${label}: traced to nothing (cut ${plan.threshold}, invert ${plan.invert})`)
+    assert.ok(docStats(inkOnly(doc)).paths > 0, `${label}: traced to nothing (cut ${plan.threshold}, invert ${plan.invert})`)
     const got = inkCoverage(doc, SIZE, SIZE)
     assert.ok(got > 0.15 && got < 0.4, `${label}: inked ${(got * 100).toFixed(1)}%, expected the ~25% rect`)
 
