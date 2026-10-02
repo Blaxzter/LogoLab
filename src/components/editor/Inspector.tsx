@@ -31,6 +31,7 @@ import type { AlignEdge, DistributeAxis } from '../../lib/editor/align'
 import type { Box } from '../../lib/editor/transform'
 import { TipLabel, Tooltip } from '../ui/Tooltip'
 import { ActionButton, isOff } from '../ui/ActionButton'
+import { NumberField } from '../ui/NumberField'
 import { normalizeHex } from '../../lib/colorUtils'
 import { docPalette } from './editorDoc'
 import { drawingBounds, fitArtboardToDrawing, resizeArtboard, setArtboardMode } from '../../lib/editor/artboard'
@@ -45,13 +46,13 @@ export interface InspectorProps {
   onFillOpacity: (v: number, live?: boolean) => void
   onFillRule: (rule: 'nonzero' | 'evenodd') => void
   onStroke: (stroke: Stroke | null, live?: boolean) => void
-  onGeometry: (patch: { x?: number; y?: number; w?: number; h?: number }) => void
+  onGeometry: (patch: { x?: number; y?: number; w?: number; h?: number }, live?: boolean) => void
   onAlign: (edge: AlignEdge) => void
   onDistribute: (axis: DistributeAxis) => void
   onFlip: (axis: 'x' | 'y') => void
   canDistribute: boolean
   /** Artboard edits (mode, size, fit) — offered while nothing is selected. */
-  onArtboard: (next: EditableDoc) => void
+  onArtboard: (next: EditableDoc, live?: boolean) => void
 }
 
 export function Inspector({
@@ -183,27 +184,27 @@ export function Inspector({
               label="X"
               tip="Left edge of the selection, in artboard units."
               value={box.x}
-              onCommit={(v) => onGeometry({ x: v })}
+              onCommit={(v, live) => onGeometry({ x: v }, live)}
             />
             <NumField
               label="Y"
               tip="Top edge of the selection, in artboard units."
               value={box.y}
-              onCommit={(v) => onGeometry({ y: v })}
+              onCommit={(v, live) => onGeometry({ y: v }, live)}
             />
             <NumField
               label="W"
               tip="Width. Resizes from the left edge, so X stays put."
               value={box.w}
               min={0.01}
-              onCommit={(v) => onGeometry({ w: v })}
+              onCommit={(v, live) => onGeometry({ w: v }, live)}
             />
             <NumField
               label="H"
               tip="Height. Resizes from the top edge, so Y stays put."
               value={box.h}
               min={0.01}
-              onCommit={(v) => onGeometry({ h: v })}
+              onCommit={(v, live) => onGeometry({ h: v }, live)}
             />
           </div>
         </Section>
@@ -314,7 +315,8 @@ function StrokeSection({
               tip="Outline thickness, in artboard units. It straddles the path — half inside, half outside."
               value={base.width}
               min={0}
-              onCommit={(v) => onStroke({ ...base, width: v })}
+              step={0.5}
+              onCommit={(v, live) => onStroke({ ...base, width: v }, live)}
             />
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
@@ -452,7 +454,13 @@ const DASHES = [
 /* ------------------------------------------------------------- controls */
 
 /** The artboard: a fixed size you set, or one that follows the drawing. */
-function ArtboardSection({ doc, onChange }: { doc: EditableDoc; onChange: (next: EditableDoc) => void }) {
+function ArtboardSection({
+  doc,
+  onChange,
+}: {
+  doc: EditableDoc
+  onChange: (next: EditableDoc, live?: boolean) => void
+}) {
   const grow = doc.artboard === 'grow'
   const [, , w, h] = doc.viewBox
   const empty = useMemo(() => drawingBounds(doc.items) === null, [doc.items])
@@ -487,14 +495,16 @@ function ArtboardSection({ doc, onChange }: { doc: EditableDoc; onChange: (next:
               tip="Artboard width. The top-left corner and the artwork stay where they are."
               value={w}
               min={MIN_ARTBOARD}
-              onCommit={(v) => onChange(resizeArtboard(doc, Math.min(MAX_ARTBOARD, v), h))}
+              max={MAX_ARTBOARD}
+              onCommit={(v, live) => onChange(resizeArtboard(doc, v, h), live)}
             />
             <NumField
               label="H"
               tip="Artboard height. The top-left corner and the artwork stay where they are."
               value={h}
               min={MIN_ARTBOARD}
-              onCommit={(v) => onChange(resizeArtboard(doc, w, Math.min(MAX_ARTBOARD, v)))}
+              max={MAX_ARTBOARD}
+              onCommit={(v, live) => onChange(resizeArtboard(doc, w, v), live)}
             />
           </div>
           <ActionButton
@@ -658,53 +668,8 @@ function HexField({ value, onCommit, tip }: { value: string; onCommit: (v: strin
   )
 }
 
-export function NumField({
-  label,
-  value,
-  onCommit,
-  min,
-  tip,
-}: {
-  label: string
-  value: number
-  onCommit: (v: number) => void
-  min?: number
-  tip: string
-}) {
-  const shown = String(Number(value.toFixed(2)))
-  const [draft, setDraft] = useState(shown)
-  useEffect(() => setDraft(shown), [shown])
-  const commit = () => {
-    const n = Number(draft)
-    if (Number.isFinite(n) && (min === undefined || n >= min)) onCommit(n)
-    else setDraft(shown)
-  }
-  // The tooltip goes on the input, not the surrounding <label>: a bubble opened
-  // by bubbled focus can be left stranded when focus leaves by another route.
-  return (
-    <label className="flex items-center gap-1.5">
-      <span className="w-8 shrink-0 text-[0.7rem] text-muted">{label}</span>
-      <Tooltip label={<TipLabel title={label} detail={tip} />}>
-        <input
-          value={draft}
-          inputMode="decimal"
-          aria-label={label}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur()
-            if (e.key === 'Escape') {
-              setDraft(shown)
-              e.currentTarget.blur()
-            }
-            e.stopPropagation()
-          }}
-          className="input h-8 min-w-0 flex-1 text-xs"
-        />
-      </Tooltip>
-    </label>
-  )
-}
+/** The editor's number input: the shared scrubbable field (drag the label, scroll, ↑/↓). */
+export const NumField = NumberField
 
 function SliderRow({
   label,

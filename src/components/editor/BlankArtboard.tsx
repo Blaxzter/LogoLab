@@ -5,6 +5,7 @@
 // not a requirement: "Grow" makes it the starting area of an artboard that then
 // follows the drawing in every direction.
 
+import { NumberField } from '../ui/NumberField'
 import { useState } from 'react'
 import { Expand, FilePlus2, Frame, RectangleHorizontal, RectangleVertical } from '../ui/icons'
 import { useCheckerClass } from '../../state/store'
@@ -101,31 +102,29 @@ export function BlankArtboard({ onCreate }: BlankArtboardProps) {
               <PresetRow label="Paper" presets={PAPER_PRESETS} width={w} height={h} onPick={applyPreset} />
 
               <div className="flex flex-wrap items-end gap-2">
-                <label className="flex flex-col gap-1">
-                  <span className="field-label">Width</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
+                <div className="w-36">
+                  <NumberField
+                    label="Width"
+                    labelClass="w-10"
+                    value={Number(wText) || MIN_ARTBOARD}
                     min={MIN_ARTBOARD}
                     max={MAX_ARTBOARD}
-                    value={wText}
-                    onChange={(e) => setWText(e.target.value)}
-                    className="input h-8 w-24 text-sm"
+                    tip="Artboard width, in units (pixels for an icon)."
+                    onCommit={(v) => setWText(String(Math.round(v)))}
                   />
-                </label>
+                </div>
                 <span className="pb-2 text-xs text-faint">×</span>
-                <label className="flex flex-col gap-1">
-                  <span className="field-label">Height</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
+                <div className="w-36">
+                  <NumberField
+                    label="Height"
+                    labelClass="w-10"
+                    value={Number(hText) || MIN_ARTBOARD}
                     min={MIN_ARTBOARD}
                     max={MAX_ARTBOARD}
-                    value={hText}
-                    onChange={(e) => setHText(e.target.value)}
-                    className="input h-8 w-24 text-sm"
+                    tip="Artboard height, in units (pixels for an icon)."
+                    onCommit={(v) => setHText(String(Math.round(v)))}
                   />
-                </label>
+                </div>
 
                 <div className="ml-1 flex flex-col gap-1">
                   <span className="field-label">Shape</span>

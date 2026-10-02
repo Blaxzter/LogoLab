@@ -297,12 +297,15 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
 
   /** Numeric geometry entry: resolve X/Y/W/H into a transform of the box. */
   const setGeometry = useCallback(
-    (patch: { x?: number; y?: number; w?: number; h?: number }) => {
+    (patch: { x?: number; y?: number; w?: number; h?: number }, live = false) => {
       if (!box) return
       const next = setSelectionGeometry(previewDoc, selection, box, patch)
-      if (next) commit(next)
+      if (!next) return
+      // A scrubbed field streams values: one merged undo step per drag.
+      if (live) commitLive(next, 'geometry')
+      else commit(next)
     },
-    [box, previewDoc, selection, commit],
+    [box, previewDoc, selection, commit, commitLive],
   )
 
   const nudge = useCallback(

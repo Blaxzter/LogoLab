@@ -67,7 +67,7 @@ export interface PropertiesRailProps {
   why: ActionReasons
   commit: (next: EditableDoc) => void
   commitLive: (next: EditableDoc, control: string) => void
-  setGeometry: (patch: { x?: number; y?: number; w?: number; h?: number }) => void
+  setGeometry: (patch: { x?: number; y?: number; w?: number; h?: number }, live?: boolean) => void
   align: (edge: AlignEdge) => void
   distribute: (axis: DistributeAxis) => void
   flip: (axis: 'x' | 'y') => void
@@ -144,7 +144,11 @@ export function PropertiesRail({
         onAlign={align}
         onDistribute={distribute}
         onFlip={flip}
-        onArtboard={(next) => next !== previewDoc && commit(next)}
+        onArtboard={(next, live) => {
+          if (next === previewDoc) return
+          if (live) commitLive(next, 'artboard')
+          else commit(next)
+        }}
       />
 
       <div className="border-t border-line p-3">

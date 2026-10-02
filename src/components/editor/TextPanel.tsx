@@ -166,26 +166,28 @@ export function TextPanel({
             label="Size"
             value={shown.size ?? data.style.size}
             min={0.1}
-            onCommit={(v) => set({ size: v })}
+            onCommit={(v, live) => set({ size: v }, live)}
             tip="Em size, in artboard units."
           />
           <NumField
             label="Track"
             value={shown.tracking ?? 0}
-            onCommit={(v) => set({ tracking: v })}
+            step={5}
+            onCommit={(v, live) => set({ tracking: v }, live)}
             tip="Letter spacing in thousandths of an em. Negative tightens."
           />
           <NumField
             label="Lead"
             value={data.lineHeight}
             min={0.1}
-            onCommit={(v) => text.setProps({ lineHeight: v })}
+            step={0.05}
+            onCommit={(v, live) => text.setProps({ lineHeight: v }, live)}
             tip="Line spacing, as a multiple of the size."
           />
           <NumField
             label="Shift"
             value={shown.baselineShift ?? 0}
-            onCommit={(v) => set({ baselineShift: v })}
+            onCommit={(v, live) => set({ baselineShift: v }, live)}
             tip="Baseline shift: raises (positive) or lowers the selected characters."
           />
         </div>
