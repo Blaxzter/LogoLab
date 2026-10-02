@@ -3,6 +3,7 @@
 // like the number fields beside it.
 
 import type { InputHTMLAttributes, Ref } from 'react'
+import { useFrameCoalesced } from './useFrameCoalesced'
 import { useWheelStep } from './useWheelStep'
 
 export function RangeInput({
@@ -26,7 +27,9 @@ export function RangeInput({
   /** Merged with the wheel's own ref — a Tooltip around the slider anchors through it. */
   ref?: Ref<HTMLInputElement>
 }) {
-  const wheelRef = useWheelStep<HTMLInputElement>({ value, step: wheelStep ?? step, min, max, onChange: onValue })
+  // A dragged slider fires faster than the screen draws; one update a frame.
+  const report = useFrameCoalesced(onValue)
+  const wheelRef = useWheelStep<HTMLInputElement>({ value, step: wheelStep ?? step, min, max, onChange: report })
   const setRef = (el: HTMLInputElement | null) => {
     wheelRef.current = el
     if (typeof outerRef === 'function') outerRef(el)
@@ -41,7 +44,7 @@ export function RangeInput({
       max={max}
       step={step}
       value={value}
-      onChange={(e) => onValue(Number(e.target.value))}
+      onChange={(e) => report(Number(e.target.value))}
     />
   )
 }

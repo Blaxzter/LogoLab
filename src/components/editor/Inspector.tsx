@@ -33,6 +33,7 @@ import { TipLabel, Tooltip } from '../ui/Tooltip'
 import { ActionButton, isOff } from '../ui/ActionButton'
 import { NumberField } from '../ui/NumberField'
 import { RangeInput } from '../ui/RangeInput'
+import { useFrameCoalesced } from '../ui/useFrameCoalesced'
 import { normalizeHex } from '../../lib/colorUtils'
 import { docPalette } from './editorDoc'
 import { drawingBounds, fitArtboardToDrawing, resizeArtboard, setArtboardMode } from '../../lib/editor/artboard'
@@ -434,16 +435,46 @@ const FILL_RULES = [
   },
 ]
 
+/**
+ * A cap, drawn: a thick stroke ending on a dashed line where the PATH ends, so
+ * what a round or square cap adds past the end point is visible.
+ */
+function CapGlyph({ cap }: { cap: Stroke['cap'] }) {
+  return (
+    <svg viewBox="0 0 24 14" width={24} height={14} aria-hidden>
+      <line x1={2} y1={7} x2={14} y2={7} stroke="currentColor" strokeWidth={8} strokeLinecap={cap} opacity={0.85} />
+      <line x1={14} y1={1} x2={14} y2={13} stroke="var(--color-accent)" strokeWidth={1} strokeDasharray="2 1.5" />
+    </svg>
+  )
+}
+
+/** A join, drawn: one thick corner. */
+function JoinGlyph({ join }: { join: Stroke['join'] }) {
+  return (
+    <svg viewBox="0 0 24 14" width={24} height={14} aria-hidden>
+      <polyline
+        points="5,12.5 12,4 19,12.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={4.5}
+        strokeLinejoin={join}
+        strokeMiterlimit={10}
+        opacity={0.85}
+      />
+    </svg>
+  )
+}
+
 const CAPS = [
-  { id: 'butt', label: 'Butt cap', note: 'The line stops dead at its end point.' },
-  { id: 'round', label: 'Round cap', note: 'A half-circle carries past each end.' },
-  { id: 'square', label: 'Square cap', note: 'A half-square carries past each end.' },
+  { id: 'butt', label: 'Butt cap', note: 'The line stops dead at its end point.', glyph: <CapGlyph cap="butt" /> },
+  { id: 'round', label: 'Round cap', note: 'A half-circle carries past each end.', glyph: <CapGlyph cap="round" /> },
+  { id: 'square', label: 'Square cap', note: 'A half-square carries past each end.', glyph: <CapGlyph cap="square" /> },
 ]
 
 const JOINS = [
-  { id: 'miter', label: 'Miter join', note: 'Corners run out to a sharp point.' },
-  { id: 'round', label: 'Round join', note: 'Corners are rounded off.' },
-  { id: 'bevel', label: 'Bevel join', note: 'Corners are cut flat.' },
+  { id: 'miter', label: 'Miter join', note: 'Corners run out to a sharp point.', glyph: <JoinGlyph join="miter" /> },
+  { id: 'round', label: 'Round join', note: 'Corners are rounded off.', glyph: <JoinGlyph join="round" /> },
+  { id: 'bevel', label: 'Bevel join', note: 'Corners are cut flat.', glyph: <JoinGlyph join="bevel" /> },
 ]
 
 const DASHES = [
@@ -610,6 +641,8 @@ function ColorWell({
   // `none` is no paint; don't show the picker's black fallback as if it were.
   const none = value.trim().toLowerCase() === 'none'
   const off = isOff(reason)
+  // The picker fires on every pointer move; the drawing only needs a frame's worth.
+  const change = useFrameCoalesced(onChange)
   // The tooltip goes on the well, not the input: a disabled input fires no
   // pointer events (see ui/ActionButton.tsx), while the well still gets hover
   // and the picker's bubbled focus.
@@ -631,7 +664,7 @@ function ColorWell({
           type="color"
           value={normalizeHex(value) ?? '#000000'}
           aria-disabled={off || undefined}
-          onChange={off ? undefined : (e) => onChange(e.target.value)}
+          onChange={off ? undefined : (e) => change(e.target.value)}
           className={`absolute inset-0 opacity-0 ${off ? 'cursor-not-allowed' : 'cursor-pointer'}`}
           aria-label={label}
         />
@@ -712,7 +745,7 @@ function SegRow({
 }: {
   label: string
   value: string
-  options: { id: string; label: string; note: string }[]
+  options: { id: string; label: string; note: string; glyph?: React.ReactNode }[]
   onChange: (v: string) => void
 }) {
   return (
@@ -725,11 +758,12 @@ function SegRow({
             label={o.label}
             note={o.note}
             onClick={() => onChange(o.id)}
-            className={`btn btn-secondary h-7 flex-1 px-1 text-[0.65rem] capitalize ${
-              value === o.id ? 'is-active' : ''
-            }`}
+            className={`btn btn-secondary min-w-0 flex-1 px-0.5 text-[0.6rem] capitalize ${
+              o.glyph ? 'h-auto flex-col gap-0.5 py-1' : 'h-7 text-[0.65rem]'
+            } ${value === o.id ? 'is-active' : ''}`}
           >
-            {o.id}
+            {o.glyph}
+            <span className="truncate leading-none">{o.id}</span>
           </ActionButton>
         ))}
       </div>

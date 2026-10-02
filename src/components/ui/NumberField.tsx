@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { TipLabel, Tooltip } from './Tooltip'
+import { useFrameCoalesced } from './useFrameCoalesced'
 import { decimalsOf, stepFactor as factor, stepped, useWheelStep } from './useWheelStep'
 
 /** Pointer travel before a press on the label counts as a scrub, not a click. */
@@ -54,6 +55,9 @@ export function NumberField({
 
   useEffect(() => setDraft(shown), [shown])
 
+  // Drag and wheel stream values faster than the screen draws; one commit a frame.
+  const commitLive = useFrameCoalesced((v: number) => live.current.onCommit(v, true))
+
   const rootRef = useWheelStep<HTMLLabelElement>({
     value,
     step,
@@ -61,7 +65,7 @@ export function NumberField({
     max,
     onChange: (v) => {
       setDraft(String(v))
-      onCommit(v, true)
+      commitLive(v)
     },
   })
 
@@ -100,7 +104,7 @@ export function NumberField({
       if (next !== last) {
         last = next
         setDraft(String(next))
-        live.current.onCommit(next, true)
+        commitLive(next)
       }
     }
     const up = () => {
