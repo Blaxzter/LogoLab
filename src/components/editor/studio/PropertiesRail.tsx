@@ -1,6 +1,8 @@
 // The right rail: the inspector over the selection, then the single-path operations.
 
-import type { EditableDoc, Stroke } from '../../../lib/path/types'
+import type { EditableDoc, Stroke, TextData } from '../../../lib/path/types'
+import { TextPanel } from '../TextPanel'
+import type { TextEditing } from './useTextEditing'
 import type { Box } from '../../../lib/editor/transform'
 import { canDistribute as canDist } from '../../../lib/editor/align'
 import type { AlignEdge, DistributeAxis } from '../../../lib/editor/align'
@@ -74,6 +76,10 @@ export interface PropertiesRailProps {
   doBreak: () => void
   doJoin: () => void
   doBoolean: (op: BooleanOp) => void
+  /** Set when a text is open or selected. */
+  panelText: TextData | null
+  text: TextEditing
+  convertText: () => void
 }
 
 export function PropertiesRail({
@@ -94,6 +100,9 @@ export function PropertiesRail({
   doBreak,
   doJoin,
   doBoolean,
+  panelText,
+  text,
+  convertText,
 }: PropertiesRailProps) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto border-l border-line bg-surface lg:flex">
@@ -101,6 +110,11 @@ export function PropertiesRail({
         <h3 className="field-label">Properties</h3>
         {selection.size > 0 && <span className="text-[0.68rem] text-faint">{selectedCount} selected</span>}
       </div>
+      {panelText && (
+        <div className="border-b border-line p-3">
+          <TextPanel data={panelText} text={text} onConvert={convertText} />
+        </div>
+      )}
       <Inspector
         doc={previewDoc}
         selection={selection}

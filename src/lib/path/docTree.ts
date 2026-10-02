@@ -15,6 +15,11 @@ import type { DocItem, EditableDoc, GroupItem, PathItem, RawItem } from './types
 export type Leaf = PathItem | RawItem
 
 /** True for the container kind — narrows so callers can reach `.children`. */
+/** A live text object — a group whose children are its laid-out glyphs. */
+export function isText(item: DocItem): item is GroupItem & { text: NonNullable<GroupItem['text']> } {
+  return item.kind === 'group' && !!item.text
+}
+
 export function isGroup(item: DocItem): item is GroupItem {
   return item.kind === 'group'
 }
@@ -151,6 +156,24 @@ export function mapLeaves(items: readonly DocItem[], fn: (item: DocItem) => DocI
       return { ...it, children: kids }
     }
     const next = fn(it)
+    if (next !== it) changed = true
+    return next
+  })
+  return changed ? out : (items as DocItem[])
+}
+
+/**
+ * Map over every item, groups included: `fn` sees a group before its children,
+ * and the children of whatever it returns are mapped in turn. Identity-stable.
+ */
+export function mapItems(items: readonly DocItem[], fn: (item: DocItem) => DocItem): DocItem[] {
+  let changed = false
+  const out = items.map((it) => {
+    let next = fn(it)
+    if (isGroup(next)) {
+      const kids = mapItems(next.children, fn)
+      if (kids !== next.children) next = { ...next, children: kids }
+    }
     if (next !== it) changed = true
     return next
   })

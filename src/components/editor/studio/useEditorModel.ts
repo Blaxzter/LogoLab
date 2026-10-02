@@ -2,8 +2,13 @@
 
 import type { BooleanOp } from '../../../lib/editor/boolean'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import type { EditableDoc } from '../../../lib/path/types'
-import { groupItems, moveItems, removeItems, reorderItems } from '../../../lib/path/docTree'
+import type { EditableDoc, Vec } from '../../../lib/path/types'
+import { findItem, groupItems, isText, mapItems, moveItems, removeItems, reorderItems } from '../../../lib/path/docTree'
+import { layoutGroup, textLabel } from '../../../lib/text/edit'
+import { lookupFace } from '../../../lib/text/fonts'
+import { caretIndexAt } from '../../../lib/text/layout'
+import { textToSvg } from '../../../lib/text/svgText'
+import { useTextEditing } from './useTextEditing'
 import { docStats, serializeDoc } from '../../../lib/path/model'
 import { flipAbout, selectionBox, transformItems, translation } from '../../../lib/editor/transform'
 import { alignItems, distributeItems } from '../../../lib/editor/align'
@@ -112,20 +117,46 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     [historyMerge, selectionKey],
   )
 
-  /** Switch tools. Leaving the pen abandons the path it was drawing. */
-  const pickTool = useCallback((next: EditorTool) => {
-    setTool(next)
-    if (next !== 'pen') setPenPathId(null)
-  }, [])
+  const commitKeyed = useCallback(
+    (next: EditableDoc, key: string) => historyMerge(fitGrowingArtboard(next), key),
+    [historyMerge],
+  )
+  const text = useTextEditing({ docRef, selection, commit, commitLive: commitKeyed, setSelection })
+  const { end: endText, begin: beginText } = text
 
-  /** Open one path for node editing — the double-click into a shape. */
+  // Selecting something else closes the open text.
+  useEffect(() => {
+    if (text.edit && !selection.has(text.edit.id)) endText()
+  }, [text.edit, selection, endText])
+
+  /** Switch tools. Leaving the pen abandons the path it was drawing. */
+  const pickTool = useCallback(
+    (next: EditorTool) => {
+      setTool(next)
+      if (next !== 'pen') setPenPathId(null)
+      if (next !== 'text') endText()
+    },
+    [endText],
+  )
+
+  /**
+   * Open one path for node editing — the double-click into a shape. A text
+   * opens for typing instead, with the caret where it was clicked: its nodes
+   * are glyphs, which take Convert to curves first (as in Affinity).
+   */
   const editNodes = useCallback(
-    (id: string) => {
+    (id: string, at?: Vec) => {
+      const it = findItem(docRef.current.items, id)
+      if (it && isText(it)) {
+        const carets = layoutGroup(it, lookupFace).layout.carets
+        beginText(id, at ? caretIndexAt(carets, at) : 'end')
+        return
+      }
       setSelection(new Set([id]))
       setNodeSel(new Set())
       pickTool('node')
     },
-    [pickTool],
+    [pickTool, beginText],
   )
 
   /** Back out of node editing to the Move tool; the shape stays selected. */
@@ -138,7 +169,13 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
   const stats = useMemo(() => docStats(previewDoc), [previewDoc])
   // Built on demand rather than memoized: serializing is expensive and only
   // download/copy need it, so a memo would rerun on every drag frame for nothing.
-  const buildSvg = useCallback(() => serializeDoc(previewDoc, 2), [previewDoc])
+  // Text as outlines (the default, renders the same everywhere) or as live
+  // <text> another editor can retype — chosen at export.
+  const [textAs, setTextAs] = useState<'outlines' | 'live'>('outlines')
+  const buildSvg = useCallback(
+    () => serializeDoc(previewDoc, 2, textAs === 'live' ? { group: textToSvg } : {}),
+    [previewDoc, textAs],
+  )
 
   /* --------------------------------------------------------- operations */
 
@@ -335,6 +372,19 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     [commit],
   )
 
+  /** Convert the selected texts to plain shapes: the outlines stay, the words go. */
+  const convertText = useCallback(() => {
+    const d = docRef.current
+    const items = mapItems(d.items, (it) => {
+      if (!isText(it) || !selectionRef.current.has(it.id)) return it
+      const { text: data, ...rest } = it
+      return { ...rest, name: it.name ?? textLabel(data), expanded: true }
+    })
+    if (items === d.items) return
+    endText()
+    commit({ ...d, items })
+  }, [commit, endText])
+
   /* ---------------------------------------------------------- keyboard */
 
   useEffect(() => {
@@ -344,6 +394,13 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
       }
       const mod = e.ctrlKey || e.metaKey
       const k = e.key
+
+      // A text is open but its input lost focus (a click in the rail): a
+      // letter must not switch tools or delete the selection mid-sentence.
+      if (text.edit && !mod) {
+        if (k === 'Escape') exitNodes()
+        return
+      }
 
       if (mod) {
         const lk = k.toLowerCase()
@@ -420,6 +477,8 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     penPathId,
     enteredGroupId,
     tool,
+    text.edit,
+    exitNodes,
     snap.grid,
     deleteSelection,
     duplicateSelection,
@@ -460,7 +519,11 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     stats,
     buildSvg,
     activePathId,
+    text,
+    textAs,
+    setTextAs,
     ops: {
+      convertText,
       editNodes,
       exitNodes,
       deleteSelection,

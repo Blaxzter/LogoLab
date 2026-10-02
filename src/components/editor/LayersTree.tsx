@@ -6,7 +6,7 @@
 // row stays a click target for selection and double-click renaming.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, GripVertical, Lock, Square, Trash2 } from '../ui/icons'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, GripVertical, Lock, Square, Trash2, Type } from '../ui/icons'
 import type { DocItem, EditableDoc, PathItem } from '../../lib/path/types'
 import { isGroup } from '../../lib/path/docTree'
 import { dropSpot, edgeAt, layerRows, rowsBetween, type DropEdge, type DropSpot } from '../../lib/editor/layerRows'
@@ -237,7 +237,9 @@ const LayerRowView = memo(function LayerRowView({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const group = isGroup(item)
+  const text = isGroup(item) && !!item.text
+  // A text is one layer, not a folder of glyphs.
+  const group = isGroup(item) && !text
 
   useEffect(() => {
     if (editing) inputRef.current?.select()
@@ -308,7 +310,9 @@ const LayerRowView = memo(function LayerRowView({
       )}
 
       <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-        {group ? (
+        {text ? (
+          <Type size={13} className="text-faint" />
+        ) : group ? (
           <Folder size={13} className="text-faint" />
         ) : item.kind === 'path' ? (
           <LayerThumb item={item} />

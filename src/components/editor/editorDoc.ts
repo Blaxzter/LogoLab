@@ -8,6 +8,7 @@
 
 import type { DocItem, EditableDoc, GradientFill, GroupItem, PathItem, Stroke, SubPath } from '../../lib/path/types'
 import { findItem, isGroup, mapLeaves, replaceItem, walkItems } from '../../lib/path/docTree'
+import { styleRange, textLabel } from '../../lib/text/edit'
 
 let counter = 0
 
@@ -91,11 +92,33 @@ export function patchSelected(
 
 /** Recolor: a solid fill replaces any gradient the path carried. */
 export function setFill(doc: EditableDoc, ids: ReadonlySet<string>, fill: string): EditableDoc {
-  return patchSelected(doc, ids, (it) => {
-    const next: PathItem = { ...it, fill }
-    delete next.gradient
-    return next
+  const next = patchSelected(doc, ids, (it) => {
+    const p: PathItem = { ...it, fill }
+    delete p.gradient
+    return p
   })
+  return syncTextFill(next, ids, fill)
+}
+
+/**
+ * Recolouring a whole text writes its STYLE too, or the next relayout (any
+ * keystroke) would paint it back in the colour it was typed in.
+ */
+function syncTextFill(doc: EditableDoc, ids: ReadonlySet<string>, fill: string): EditableDoc {
+  let touched = false
+  const map = (list: readonly DocItem[], on: boolean): DocItem[] =>
+    list.map((it) => {
+      if (!isGroup(it)) return it
+      const sel = on || ids.has(it.id)
+      if (it.text && sel) {
+        touched = true
+        return { ...it, text: styleRange(it.text, 0, Number.MAX_SAFE_INTEGER, { fill }) }
+      }
+      const kids = map(it.children, sel)
+      return { ...it, children: kids }
+    })
+  const items = map(doc.items, false)
+  return touched ? { ...doc, items } : doc
 }
 
 export function setGradient(doc: EditableDoc, ids: ReadonlySet<string>, gradient: GradientFill | null): EditableDoc {
@@ -161,7 +184,10 @@ export function toggleExpanded(doc: EditableDoc, id: string): EditableDoc {
 export function duplicateItems(items: readonly DocItem[]): DocItem[] {
   const clone = (it: DocItem): DocItem => {
     if (isGroup(it)) {
-      return { ...it, id: newId('g'), children: it.children.map(clone) }
+      const id = newId(it.text ? 't' : 'g')
+      // A text's glyph ids are derived from its own (see layoutGroup).
+      if (it.text) return { ...it, id, children: it.children.map((c, i) => ({ ...clone(c), id: `${id}~${i}` })) }
+      return { ...it, id, children: it.children.map(clone) }
     }
     if (it.kind === 'path') {
       const next: PathItem = {
@@ -182,6 +208,7 @@ export function duplicateItems(items: readonly DocItem[]): DocItem[] {
 /** A human label for a layer row. */
 export function itemLabel(item: DocItem, index: number): string {
   if (item.name) return item.name
+  if (isGroup(item) && item.text) return textLabel(item.text)
   if (isGroup(item)) return `Group ${index}`
   if (item.kind === 'raw') return 'Markup'
   const sub = item.subPaths.length

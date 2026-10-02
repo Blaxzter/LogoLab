@@ -1010,7 +1010,17 @@ function pointsSubPaths(el: Element, closed: boolean): SubPath[] | null {
  * Serialize a document to compact SVG markup. Hidden items are skipped; raw
  * items are re-wrapped in a <g> carrying their captured ancestor context.
  */
-export function serializeDoc(doc: EditableDoc, precision = 2): string {
+export interface SerializeOptions {
+  /**
+   * Write a group some other way — the editor's live text, exported as
+   * `<text>` instead of its outlines. Return null to serialize it as usual.
+   * Kept as a hook so this module (which ships in the npm package) does not
+   * depend on the text engine.
+   */
+  group?: (group: GroupItem, fmt: (v: number) => string) => { markup: string; defs?: string[] } | null
+}
+
+export function serializeDoc(doc: EditableDoc, precision = 2, opts: SerializeOptions = {}): string {
   const fmt = (v: number) => String(Number(v.toFixed(precision)))
   const [x, y, w, h] = doc.viewBox
   let out = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x)} ${fmt(y)} ${fmt(w)} ${fmt(h)}">`
@@ -1026,9 +1036,11 @@ export function serializeDoc(doc: EditableDoc, precision = 2): string {
       defs += gradientToSvgDef(item.gradient, id, precision)
     }
   }
+  const extraDefs: string[] = []
+  const body = serializeItems(doc.items, gradIds, precision, fmt, opts, extraDefs)
+  defs += [...new Set(extraDefs)].join('')
   if (defs) out += `<defs>${defs}</defs>`
-
-  out += serializeItems(doc.items, gradIds, precision, fmt)
+  out += body
   return out + '</svg>'
 }
 
@@ -1038,13 +1050,21 @@ function serializeItems(
   gradIds: Map<GradientFill, string>,
   precision: number,
   fmt: (v: number) => string,
+  opts: SerializeOptions = {},
+  extraDefs: string[] = [],
 ): string {
   let out = ''
   for (const item of items) {
     if (!item.visible) continue
     if (item.kind === 'group') {
+      const custom = opts.group?.(item, fmt)
+      if (custom) {
+        out += custom.markup
+        if (custom.defs) extraDefs.push(...custom.defs)
+        continue
+      }
       // An empty (or fully hidden) group is not emitted.
-      const inner = serializeItems(item.children, gradIds, precision, fmt)
+      const inner = serializeItems(item.children, gradIds, precision, fmt, opts, extraDefs)
       if (!inner) continue
       out += '<g'
       if (item.name) out += ` data-name="${escapeAttr(item.name)}"`

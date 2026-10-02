@@ -1,6 +1,6 @@
 // The studio's top bar: tools, undo/redo, snapping and grid, then view and export actions.
 
-import { ChevronDown, Copy, Download, Grid3x3, Layers, Magnet, Redo, Undo, X } from '../../ui/icons'
+import { ChevronDown, Copy, Download, Grid3x3, Layers, Magnet, Redo, Type, Undo, X } from '../../ui/icons'
 import type { SnapConfig } from '../../../lib/editor/snapping'
 import type { PanZoom } from '../../../hooks/usePanZoom'
 import { ZoomControls } from '../../ui/ZoomControls'
@@ -30,6 +30,10 @@ export interface EditorToolbarProps {
   download: (format?: VectorFormat) => void
   /** Visible items only the SVG can carry (imported text, images…). */
   svgOnlyItems: number
+  /** The drawing has live text, so the SVG can carry it either way. */
+  hasText: boolean
+  textAs: 'outlines' | 'live'
+  setTextAs: (v: 'outlines' | 'live') => void
   onClose: () => void
 }
 
@@ -49,6 +53,9 @@ export function EditorToolbar({
   copy,
   download,
   svgOnlyItems,
+  hasText,
+  textAs,
+  setTextAs,
   onClose,
 }: EditorToolbarProps) {
   return (
@@ -62,6 +69,7 @@ export function EditorToolbar({
         </ToolPill>
         <ToolPill>
           <ToolBtn id="pen" tool={tool} onPick={pickTool} />
+          <ToolBtn id="text" tool={tool} onPick={pickTool} />
           <ShapeFlyout tool={tool} onPick={pickTool} />
         </ToolPill>
         <ToolPill>
@@ -111,6 +119,22 @@ export function EditorToolbar({
         )}
         <CheckerToggle />
         <ZoomControls pz={pz} />
+        {hasText && (
+          <ActionButton
+            label={textAs === 'live' ? 'SVG text: live' : 'SVG text: outlines'}
+            note={
+              textAs === 'live'
+                ? 'Text is saved as <text>, so other editors can retype it — but it only looks right where its font is available. Click for outlines.'
+                : 'Text is saved as shapes: it looks the same everywhere, but can no longer be retyped elsewhere. Click to keep it as live <text>.'
+            }
+            pressed={textAs === 'live'}
+            onClick={() => setTextAs(textAs === 'live' ? 'outlines' : 'live')}
+            className={`btn h-8 gap-1 px-2 text-xs ${textAs === 'live' ? 'btn-secondary is-active' : 'btn-ghost'}`}
+          >
+            <Type size={14} />
+            {textAs === 'live' ? 'Live' : 'Outlines'}
+          </ActionButton>
+        )}
         <ActionButton
           label="Copy SVG markup"
           note="Puts the whole drawing on the clipboard as <svg> text."

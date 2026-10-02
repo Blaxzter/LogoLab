@@ -8,7 +8,7 @@
 
 import { useMemo } from 'react'
 import type { EditableDoc } from '../../lib/path/types'
-import { findItem, isGroup, topLevelSelection, walkItems } from '../../lib/path/docTree'
+import { findItem, isGroup, isText, topLevelSelection, walkItems } from '../../lib/path/docTree'
 import { downloadVector } from '../../lib/export/download'
 import { unsupportedItemCount, type VectorFormat } from '../../lib/export/vectorFormats'
 import { EditorStage } from './EditorStage'
@@ -66,6 +66,9 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
     stats,
     buildSvg,
     activePathId,
+    text,
+    textAs,
+    setTextAs,
     ops,
   } = useEditorModel(initialDoc, onChange)
 
@@ -100,6 +103,25 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
     return it && it.kind === 'path' ? it : null
   }, [activePathId, previewDoc.items])
 
+  /** The text the Text panel shows: the open one, else the first selected. */
+  const panelText = useMemo(() => {
+    const id =
+      text.edit?.id ??
+      [...selection].find((s) => {
+        const it = findItem(previewDoc.items, s)
+        return it && isText(it)
+      })
+    const it = id ? findItem(previewDoc.items, id) : null
+    return it && isText(it) ? it.text : null
+  }, [text.edit, selection, previewDoc.items])
+  const hasText = useMemo(() => {
+    let found = false
+    walkItems(previewDoc.items, (it) => {
+      if (isText(it) && it.visible) found = true
+    })
+    return found
+  }, [previewDoc.items])
+
   const why = actionReasons({
     canUndo: history.canUndo,
     canRedo: history.canRedo,
@@ -128,6 +150,9 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
         copy={copy}
         download={download}
         svgOnlyItems={unsupportedItemCount(previewDoc)}
+        hasText={hasText}
+        textAs={textAs}
+        setTextAs={setTextAs}
         onClose={onClose}
       />
 
@@ -167,6 +192,9 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
             onEnterGroup={setEnteredGroupId}
             onEditNodes={ops.editNodes}
             onExitNodes={ops.exitNodes}
+            text={text}
+            undo={history.undo}
+            redo={history.redo}
             onSelectionChange={(ids) => {
               setSelection(ids)
               if (ids.size !== 1) setNodeSel(new Set())
@@ -195,6 +223,9 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
           doSplit={ops.doSplit}
           doCombine={ops.doCombine}
           doBoolean={ops.doBoolean}
+          panelText={panelText}
+          text={text}
+          convertText={ops.convertText}
           doBreak={ops.doBreak}
           doJoin={ops.doJoin}
         />

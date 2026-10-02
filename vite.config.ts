@@ -85,8 +85,12 @@ export default defineConfig(({ command }) => ({
   // browser runtime fetches its WASM from the CDN on demand. (The AI upscaler in
   // src/lib/traceInput/aiUpscale.ts loads the same runtime straight from that CDN instead —
   // bundling onnxruntime-web made Vite emit its 13 + 24 MB WASM binaries as assets.)
+  //
+  // harfbuzzjs (the editor's text shaping) finds its WASM through
+  // `new URL('harfbuzz.wasm', import.meta.url)`; pre-bundling moves the module
+  // away from the file and the URL 404s in dev, so it is served as is.
   optimizeDeps: {
-    exclude: ['@huggingface/transformers'],
+    exclude: ['@huggingface/transformers', 'harfbuzzjs'],
   },
   server: {
     host: '127.0.0.1',

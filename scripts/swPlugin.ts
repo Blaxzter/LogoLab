@@ -58,6 +58,7 @@ const PUBLIC_SKIP = [
   'corpus', // lab fixtures
   'examples/edge-cases', // the tracer's ⟐ fixture corpus — labs only
   'examples/line-art', // the centreline tracer's ⌇ fixture corpus — labs only
+  'fonts', // the editor's text fonts (~5 MB): fetched when picked, then runtime-cached
   'examples/colour-line-art', // …and its several-ink cases — labs only
   'og.png', // link-preview card, never rendered in the app
 ]

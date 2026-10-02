@@ -2,7 +2,7 @@
 //
 // Single letters, matching the conventions of Affinity / Illustrator / Figma.
 
-export type EditorTool = 'select' | 'node' | 'pen' | 'rect' | 'ellipse' | 'line' | 'polygon' | 'star' | 'pan'
+export type EditorTool = 'select' | 'node' | 'pen' | 'text' | 'rect' | 'ellipse' | 'line' | 'polygon' | 'star' | 'pan'
 
 export interface ToolDef {
   id: EditorTool
@@ -16,6 +16,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'select', label: 'Move', key: 'v', hint: 'Select, move, scale and rotate' },
   { id: 'node', label: 'Node', key: 'a', hint: 'Edit anchors, handles and curves' },
   { id: 'pen', label: 'Pen', key: 'p', hint: 'Draw a path point by point' },
+  { id: 'text', label: 'Text', key: 't', hint: 'Click to type; click a shape to type along its outline' },
   { id: 'rect', label: 'Rectangle', key: 'r', hint: 'Drag a rectangle (Shift = square)' },
   { id: 'ellipse', label: 'Ellipse', key: 'e', hint: 'Drag an ellipse (Shift = circle)' },
   { id: 'line', label: 'Line', key: 'l', hint: 'Drag a line (Shift = 45°)' },

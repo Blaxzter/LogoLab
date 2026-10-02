@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import type { EditableDoc, PathItem, Vec } from '../../../lib/path/types'
-import { findItem } from '../../../lib/path/docTree'
-import { angleOf, selectionBox, type Box, type Grip } from '../../../lib/editor/transform'
+import { findItem, isText } from '../../../lib/path/docTree'
+import { angleOf, itemBox, selectionBox, type Box, type Grip } from '../../../lib/editor/transform'
+import { layoutGroup, plainText } from '../../../lib/text/edit'
+import { lookupFace } from '../../../lib/text/fonts'
+import { caretIndexAt, wordAt } from '../../../lib/text/layout'
+import type { TextEditing } from '../studio/useTextEditing'
 import {
   boxFromPoints,
   hitGrip,
@@ -48,8 +52,9 @@ export interface StageGestureInput {
   onPenPathChange: (id: string | null) => void
   onToolDone: () => void
   onEnterGroup: (id: string | null) => void
-  /** Open one path for node editing (Affinity / Photoshop: double-click a shape). */
-  onEditNodes: (id: string) => void
+  /** Open one path for node editing (Affinity / Photoshop: double-click a shape); a text opens for typing at `at`. */
+  onEditNodes: (id: string, at?: Vec) => void
+  text: TextEditing
   /** Leave node editing for the Move tool, keeping the selection. */
   onExitNodes: () => void
 }
@@ -78,6 +83,7 @@ export function useStageGestures({
   onEnterGroup,
   onEditNodes,
   onExitNodes,
+  text,
 }: StageGestureInput) {
   const [gesture, setGesture] = useState<Gesture | null>(null)
   const [guides, setGuides] = useState<Guides>({
@@ -102,6 +108,38 @@ export function useStageGestures({
       e.currentTarget.setPointerCapture(e.pointerId)
     } catch {
       /* capture unavailable */
+    }
+
+    /* ---- the open text: a click places the caret, a drag selects ---- */
+    if (text.edit && text.layout) {
+      const open = findItem(doc.items, text.edit.id)
+      const b = open ? itemBox(open) : null
+      const pad = r(ITEM_TOL_PX * HIT)
+      const idx = caretIndexAt(text.layout.carets, p)
+      const c = text.layout.carets[idx]
+      const inBox = !!b && p.x >= b.x - pad && p.x <= b.x + b.w + pad && p.y >= b.y - pad && p.y <= b.y + b.h + pad
+      // An empty text has no box yet: its caret is the target.
+      const onCaret =
+        !!c &&
+        Math.hypot(p.x - c.top.x, p.y - (c.top.y + c.bottom.y) / 2) <=
+          Math.hypot(c.bottom.x - c.top.x, c.bottom.y - c.top.y)
+      if (inBox || onCaret) {
+        const anchor = e.shiftKey ? text.edit.anchor : idx
+        text.setRange(anchor, idx)
+        setGesture({ kind: 'text-select', anchor })
+        return
+      }
+      text.end()
+    }
+
+    /* ---- text tool: type into a text, along a shape, or somewhere new ---- */
+    if (tool === 'text') {
+      const hit = pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: false })
+      const it = hit ? findItem(doc.items, hit.leafId) : null
+      if (it && isText(it)) text.begin(it.id, caretIndexAt(layoutGroup(it, lookupFace).layout.carets, p))
+      else if (it && it.kind === 'path') text.create(p, it.id)
+      else text.create(p)
+      return
     }
 
     /* ---- pen: build a path click by click ---- */
@@ -334,6 +372,10 @@ export function useStageGestures({
       return
     }
     e.stopPropagation()
+    if (gesture.kind === 'text-select') {
+      if (text.layout) text.setRange(gesture.anchor, caretIndexAt(text.layout.carets, p))
+      return
+    }
     dragGesture(gesture, p, e, { selection, snap, r, setGesture, setGuides, onDocChange })
   }
 
@@ -415,6 +457,16 @@ export function useStageGestures({
     e.stopPropagation()
     const p = toDoc(e)
 
+    // In the open text a double-click selects the word under it.
+    if (text.edit && text.layout) {
+      const open = findItem(doc.items, text.edit.id)
+      if (open && isText(open)) {
+        const [a, b] = wordAt(plainText(open.text), caretIndexAt(text.layout.carets, p))
+        text.setRange(a, b)
+      }
+      return
+    }
+
     if (tool === 'node') {
       for (const path of nodePaths) {
         const hit = pickNodePart(path, p, {
@@ -445,7 +497,7 @@ export function useStageGestures({
       // Off every node and curve: another shape switches to it, empty space
       // ends node editing — the double-click that got you in gets you out.
       const other = pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: false })
-      if (other) onEditNodes(other.leafId)
+      if (other) onEditNodes(other.leafId, p)
       else onExitNodes()
       return
     }
@@ -466,7 +518,7 @@ export function useStageGestures({
       onSelectionChange(new Set([hit.leafId]))
       return
     }
-    onEditNodes(hit.leafId)
+    onEditNodes(hit.leafId, p)
   }
 
   return { gesture, guides, hoverId, hoverGrip, onPointerDown, onPointerMove, onPointerUp, onDoubleClick }

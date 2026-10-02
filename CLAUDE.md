@@ -411,6 +411,42 @@ route, so every tab click unmounts it, and the stored session can't stand in: th
 is claim-once and the first mount already took it. Without the slot, clicking to Preview and
 back dropped the drawing and showed the intake screen.
 
+## Live text is a GROUP whose children are a cache; booleans and shaping load on demand
+
+A text object (`T` tool, `src/lib/text/`) is a `GroupItem` with a `text` field. Its children
+are the laid-out glyph outlines, one compound path per fill, rebuilt from `text` on every
+change (`layoutGroup`). That is the whole trick: rendering, hit-testing, bounds, transforms,
+booleans and outline export all read the children and know nothing about text, and dropping
+`text` IS "Convert to curves". Four things that are easy to undo:
+
+* **`TextData.matrix` is the one transform in the model.** Every other coordinate is
+  absolute, but a relayout from absolute glyphs can't keep a scale, so `transformItem` composes
+  onto the matrix as well as moving the cached outlines. Forget either half and the next
+  keystroke snaps the text back.
+* **Paint the text model doesn't own is carried, colour is written back.** A gradient, stroke
+  or fill opacity on a text's outlines survives a relayout (`layoutGroup` copies it from the
+  old first child); a plain recolour goes into the STYLE too (`setFill` → `syncTextFill`),
+  or the next keystroke repaints the old colour.
+* **The typing is a real hidden `<textarea>`** (`stage/TextEditLayer.tsx`), so IME, the
+  clipboard and word deletes work. It is focused a frame LATE on purpose: focused during the
+  pointerdown that opened the text, the browser's own mousedown handling took focus back and
+  every typed letter ran as a tool shortcut. The global shortcuts also ignore bare keys while
+  a text is open, for the same failure.
+* **Text survives a reload only through the editor's own slot.** The logo is written as
+  outlines, so a stale `seenKey` (the slot not re-saved after the editor's own logo write)
+  reopened the drawing from the SVG and silently converted every text to curves.
+  `EditorPanel.applyToLogo` re-saves the slot with the new key.
+
+Shaping is HarfBuzz (`harfbuzzjs`, ~430 KB WASM: GSUB/GPOS features, kerning, variable
+axes) behind `ShapingFace`, so `test/text-layout.test.ts` runs the real engine on the real
+bundled font. Fonts are OFL files in `public/fonts/`, kept OUT of the precache and fetched
+when picked; uploads go to IndexedDB. Booleans are paper.js (`src/lib/editor/boolean.ts`,
+`test/editor-boolean.test.ts`). Both are reached only through dynamic `import()`, so neither
+is in the editor's chunk, and `harfbuzzjs` is excluded from Vite's dep pre-bundling because
+it finds its WASM via `import.meta.url`. The SVG export can write text as live `<text>`
+(the toolbar's "SVG text" toggle) through `serializeDoc`'s `group` hook. `model.ts` ships in
+the npm package and must not import the text engine.
+
 ## A crash costs you ONE panel, and the report is the point
 
 There is an `ErrorBoundary` per route (`src/components/report/ErrorBoundary.tsx`, wired in `App.tsx`,

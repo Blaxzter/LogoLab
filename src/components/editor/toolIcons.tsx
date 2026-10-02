@@ -11,6 +11,7 @@ import {
   Spline,
   Square as SquareIcon,
   Star,
+  Type,
 } from '../ui/icons'
 import type { EditorTool } from './tools'
 
@@ -18,6 +19,7 @@ export const TOOL_ICON: Record<EditorTool, React.ReactNode> = {
   select: <MousePointer2 size={15} />,
   node: <Spline size={15} />,
   pen: <PenTool size={15} />,
+  text: <Type size={15} />,
   rect: <SquareIcon size={15} />,
   ellipse: <CircleIcon size={15} />,
   line: <Slash size={15} />,

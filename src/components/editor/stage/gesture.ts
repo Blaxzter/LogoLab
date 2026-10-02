@@ -40,5 +40,7 @@ export type Gesture =
     }
   | { kind: 'draw'; start: Vec; current: Vec }
   | { kind: 'pen-handle'; start: Vec; base: EditableDoc; itemId: string; sub: number; idx: number }
+  /** Drag-selecting characters in the open text. */
+  | { kind: 'text-select'; anchor: number }
 
 export type Guides = { x: SnapCandidate | null; y: SnapCandidate | null }

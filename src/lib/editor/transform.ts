@@ -97,7 +97,11 @@ function transformStroke(s: Stroke, m: Affine): Stroke {
 /** Apply an affine to one item, recursing into groups. */
 export function transformItem(item: DocItem, m: Affine): DocItem {
   if (isGroup(item)) {
-    return { ...item, children: item.children.map((c) => transformItem(c, m)) }
+    const next = { ...item, children: item.children.map((c) => transformItem(c, m)) }
+    // A text's outlines are a cache of its layout; the matrix is what the
+    // next relayout reads, so it has to move with them.
+    if (item.text) next.text = { ...item.text, matrix: composeAffine(m, item.text.matrix) }
+    return next
   }
   if (item.kind === 'path') {
     const next: PathItem = { ...item, subPaths: transformSubPaths(item.subPaths, m) }

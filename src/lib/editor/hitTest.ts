@@ -188,6 +188,15 @@ export function pickItem(
     for (let i = list.length - 1; i >= 0; i--) {
       const it = list[i]
       if (!it.visible || skip?.has(it.id)) continue
+      // A text is hit anywhere in its box, as in every editor: between the
+      // letters and inside a counter included. It is always one target.
+      if (isGroup(it) && it.text) {
+        const b = itemBox(it)
+        if (b && p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol) {
+          return { id: atomic ? (topGroupId ?? it.id) : it.id, leafId: it.id }
+        }
+        continue
+      }
       if (isGroup(it)) {
         const hit = search(it.children, atomic ? (topGroupId ?? it.id) : null)
         if (hit) return hit
@@ -314,7 +323,7 @@ export function marqueeItems(
   const walk = (list: readonly DocItem[]) => {
     for (const it of list) {
       if (!it.visible) continue
-      if (isGroup(it)) {
+      if (isGroup(it) && !it.text) {
         if (opts.groupsAreAtomic !== false) {
           const b = itemBox(it)
           if (b && test(box, b)) {

@@ -46,7 +46,8 @@ export function layerRows(items: readonly DocItem[]): LayerRow[] {
     for (let i = list.length - 1; i >= 0; i--) {
       const item = list[i]
       rows.push({ item, depth, parentId, siblingIndex: i, number: numbers.get(item.id) ?? 0 })
-      if (isGroup(item) && item.expanded !== false) walk(item.children, depth + 1, item.id)
+      // A text's children are its glyph cache, not layers.
+      if (isGroup(item) && !item.text && item.expanded !== false) walk(item.children, depth + 1, item.id)
     }
   }
   walk(items, 0, null)

@@ -516,7 +516,7 @@ function ArtboardSection({ doc, onChange }: { doc: EditableDoc; onChange: (next:
   )
 }
 
-function ModeBtn({
+export function ModeBtn({
   label,
   icon,
   note,
@@ -545,7 +545,7 @@ function ModeBtn({
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
       <h4 className="field-label mb-1.5">{title}</h4>
@@ -658,7 +658,7 @@ function HexField({ value, onCommit, tip }: { value: string; onCommit: (v: strin
   )
 }
 
-function NumField({
+export function NumField({
   label,
   value,
   onCommit,

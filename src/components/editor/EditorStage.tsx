@@ -28,6 +28,8 @@ import { buildShape as buildShapeFor } from './stage/buildShape'
 import { ACCENT, GRIP_CURSOR } from './stage/stageConstants'
 import { GridOverlay, NodeOverlay, SelectionOutline, SnapGuides, TransformBox } from './stage/StageOverlays'
 import { useSpaceHeld } from './stage/useSpaceHeld'
+import { TextEditOverlay, TextInput } from './stage/TextEditLayer'
+import type { TextEditing } from './studio/useTextEditing'
 import { useStageGestures } from './stage/useStageGestures'
 
 // Node keys live in the pure core; re-exported for existing importers.
@@ -64,10 +66,13 @@ export interface EditorStageProps {
   /** Double-clicking a group enters it so its children become selectable. */
   enteredGroupId: string | null
   onEnterGroup: (id: string | null) => void
-  /** Double-clicking a shape opens it for node editing. */
-  onEditNodes: (id: string) => void
+  /** Double-clicking a shape opens it for node editing (a text, for typing at `at`). */
+  onEditNodes: (id: string, at?: Vec) => void
   /** Double-clicking empty space in node editing returns to Move. */
   onExitNodes: () => void
+  text: TextEditing
+  undo: () => void
+  redo: () => void
 }
 
 export function EditorStage({
@@ -91,6 +96,9 @@ export function EditorStage({
   onEnterGroup,
   onEditNodes,
   onExitNodes,
+  text,
+  undo,
+  redo,
 }: EditorStageProps) {
   const [vx, vy, vw, vh] = doc.viewBox
   const grow = doc.artboard === 'grow'
@@ -178,6 +186,7 @@ export function EditorStage({
       onEnterGroup,
       onEditNodes,
       onExitNodes,
+      text,
     })
 
   /* ---------------------------------------------------------- rendering */
@@ -188,13 +197,15 @@ export function EditorStage({
   const cursor =
     spaceHeld || tool === 'pan'
       ? 'grab'
-      : tool === 'pen' || isDrawTool
-        ? 'crosshair'
-        : hoverGrip
-          ? GRIP_CURSOR[hoverGrip]
-          : hoverId
-            ? 'move'
-            : 'default'
+      : tool === 'text' || text.edit
+        ? 'text'
+        : tool === 'pen' || isDrawTool
+          ? 'crosshair'
+          : hoverGrip
+            ? GRIP_CURSOR[hoverGrip]
+            : hoverId
+              ? 'move'
+              : 'default'
 
   const gridStep = snap.grid > 0 ? snap.grid : 0
 
@@ -257,7 +268,9 @@ export function EditorStage({
                   <SelectionOutline key={id} doc={doc} id={id} width={r(1.25)} color={ACCENT} />
                 ))}
 
-                {tool === 'select' && box && !gesture && <TransformBox box={box} r={r} />}
+                <TextEditOverlay text={text} doc={doc} r={r} />
+
+                {tool === 'select' && box && !gesture && !text.edit && <TransformBox box={box} r={r} />}
                 {tool === 'select' && box && gesture?.kind === 'move' && <TransformBox box={box} r={r} />}
 
                 {tool === 'node' &&
@@ -293,6 +306,7 @@ export function EditorStage({
                 <SnapGuides guides={guides} vx={fx} vy={fy} vw={fw} vh={fh} width={r(1)} />
               </g>
             </svg>
+            <TextInput text={text} doc={doc} frame={[fx, fy, fw, fh]} undo={undo} redo={redo} onEscape={onExitNodes} />
           </div>
         </div>
       </ZoomSurface>

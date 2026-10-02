@@ -108,7 +108,15 @@ export default function EditorPanel() {
       if (useStore.getState().logo.svgText === svgText) return
       setProcessedSvg(svgText, doc.viewBox[2], doc.viewBox[3])
       // Our own write: the key moved, but the editor already shows this drawing.
-      if (session) session = { ...session, seenKey: useStore.getState().assetKey }
+      // Stored too: a slot left on the old key reads, after a reload, as "the
+      // logo changed elsewhere" and reopens the drawing from its SVG — which
+      // is outlines only, so live text would come back as shapes.
+      if (session) {
+        session = { ...session, seenKey: useStore.getState().assetKey }
+        if (session.open) {
+          saveSlot(SLOTS.editor, { ...session.open, seenKey: session.seenKey } satisfies Omit<StoredEditor, 'v'>, 0)
+        }
+      }
     }, APPLY_MS),
   ).current
 
