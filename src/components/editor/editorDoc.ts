@@ -31,9 +31,14 @@ export function adoptIds(doc: EditableDoc): void {
 
 export const DEFAULT_FILL = '#4f46e5'
 
-/** An empty document with an artboard of the given size (square by default). */
-export function blankDoc(width = 512, height = width): EditableDoc {
-  return { viewBox: [0, 0, width, height], items: [] }
+/**
+ * An empty document with an artboard of the given size (square by default).
+ * A growing one starts at that size and then follows the drawing.
+ */
+export function blankDoc(width = 512, height = width, grow = false): EditableDoc {
+  const doc: EditableDoc = { viewBox: [0, 0, width, height], items: [] }
+  if (grow) doc.artboard = 'grow'
+  return doc
 }
 
 /** Wrap freshly-drawn subpaths as a path item. */

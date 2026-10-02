@@ -27,6 +27,8 @@ import { TipLabel, Tooltip } from '../ui/Tooltip'
 import { ActionButton, isOff } from '../ui/ActionButton'
 import { normalizeHex } from '../../lib/colorUtils'
 import { docPalette } from './editorDoc'
+import { drawingBounds, fitArtboardToDrawing, resizeArtboard, setArtboardMode } from '../../lib/editor/artboard'
+import { MAX_ARTBOARD, MIN_ARTBOARD } from './artboards'
 
 export interface InspectorProps {
   doc: EditableDoc
@@ -42,6 +44,8 @@ export interface InspectorProps {
   onDistribute: (axis: DistributeAxis) => void
   onFlip: (axis: 'x' | 'y') => void
   canDistribute: boolean
+  /** Artboard edits (mode, size, fit) — offered while nothing is selected. */
+  onArtboard: (next: EditableDoc) => void
 }
 
 export function Inspector({
@@ -57,6 +61,7 @@ export function Inspector({
   onDistribute,
   onFlip,
   canDistribute,
+  onArtboard,
 }: InspectorProps) {
   // Representative paint: the first selected path (walking into groups), which
   // is what the swatches show and what editing them uses as the base.
@@ -86,6 +91,9 @@ export function Inspector({
           <kbd className="rounded border border-line px-1">Ctrl</kbd>+
           <kbd className="rounded border border-line px-1">A</kbd>.
         </p>
+        <div className="mt-4">
+          <ArtboardSection doc={doc} onChange={onArtboard} />
+        </div>
         {palette.length > 0 && (
           <div className="mt-4">
             <h4 className="field-label mb-1.5">Document colours</h4>
@@ -434,6 +442,84 @@ const DASHES = [
 ]
 
 /* ------------------------------------------------------------- controls */
+
+/** The artboard: a fixed size you set, or one that follows the drawing. */
+function ArtboardSection({ doc, onChange }: { doc: EditableDoc; onChange: (next: EditableDoc) => void }) {
+  const grow = doc.artboard === 'grow'
+  const [, , w, h] = doc.viewBox
+  const empty = useMemo(() => drawingBounds(doc.items) === null, [doc.items])
+  return (
+    <Section title="Artboard">
+      <div className="mb-2 grid grid-cols-2 gap-0.5 rounded-lg bg-surface-3 p-0.5">
+        <ModeBtn
+          label="Fixed"
+          note="A set size. Anything drawn outside it is cropped from the export."
+          on={!grow}
+          onClick={() => onChange(setArtboardMode(doc, false))}
+        />
+        <ModeBtn
+          label="Grow"
+          note="No size limit: the artboard follows the drawing in every direction, and the export is cropped to the artwork."
+          on={grow}
+          onClick={() => onChange(setArtboardMode(doc, true))}
+        />
+      </div>
+      {grow ? (
+        <p className="text-[0.7rem] leading-relaxed text-faint">
+          {empty ? 'Draw anywhere — the artboard wraps whatever you draw.' : `${w} × ${h}, wrapped around the drawing.`}{' '}
+          Switch to Fixed to keep a size.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <NumField
+              label="W"
+              tip="Artboard width. The top-left corner and the artwork stay where they are."
+              value={w}
+              min={MIN_ARTBOARD}
+              onCommit={(v) => onChange(resizeArtboard(doc, Math.min(MAX_ARTBOARD, v), h))}
+            />
+            <NumField
+              label="H"
+              tip="Artboard height. The top-left corner and the artwork stay where they are."
+              value={h}
+              min={MIN_ARTBOARD}
+              onCommit={(v) => onChange(resizeArtboard(doc, w, Math.min(MAX_ARTBOARD, v)))}
+            />
+          </div>
+          <ActionButton
+            label="Fit to drawing"
+            note="Shrink-wraps the artboard around the visible artwork, once. The size stays fixed afterwards."
+            reason={empty ? 'There is nothing drawn to fit around yet.' : null}
+            onClick={() => {
+              const next = fitArtboardToDrawing(doc)
+              if (next) onChange(next)
+            }}
+            className="btn btn-secondary h-7 px-1.5 text-[0.68rem]"
+          >
+            Fit to drawing
+          </ActionButton>
+        </div>
+      )}
+    </Section>
+  )
+}
+
+function ModeBtn({ label, note, on, onClick }: { label: string; note: string; on: boolean; onClick: () => void }) {
+  return (
+    <ActionButton
+      label={label}
+      note={note}
+      pressed={on}
+      onClick={onClick}
+      className={`h-7 rounded-md text-[0.7rem] font-medium transition-colors ${
+        on ? 'bg-surface text-accent shadow-xs' : 'text-ink-2 hover:text-ink'
+      }`}
+    >
+      {label}
+    </ActionButton>
+  )
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

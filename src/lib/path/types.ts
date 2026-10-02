@@ -213,6 +213,12 @@ export type DocItem = PathItem | RawItem | GroupItem
 export interface EditableDoc {
   /** [minX, minY, width, height] */
   viewBox: [number, number, number, number]
+  /**
+   * Editor-only: `'grow'` makes the viewBox follow the drawing (it is refitted
+   * to the visible artwork on every committed edit) instead of being a fixed
+   * size. Absent ⇒ a fixed artboard. Never serialized.
+   */
+  artboard?: 'grow'
   /** Paint order: first = bottom. */
   items: DocItem[]
   /**

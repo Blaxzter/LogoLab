@@ -5,10 +5,13 @@ import type { EditorTool } from '../tools'
 export function EditorStatusBar({
   stats,
   viewBox,
+  grow,
   tool,
 }: {
   stats: { paths: number; nodes: number; colors: number }
   viewBox: readonly number[]
+  /** The artboard follows the drawing. */
+  grow: boolean
   tool: EditorTool
 }) {
   return (
@@ -18,6 +21,7 @@ export function EditorStatusBar({
       <span>{stats.colors} colours</span>
       <span className="text-faint">
         {viewBox[2]} × {viewBox[3]}
+        {grow && ' · grows'}
       </span>
       <span className="ml-auto text-faint">
         {tool === 'pen'

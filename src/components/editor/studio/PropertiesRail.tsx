@@ -77,6 +77,7 @@ export function PropertiesRail({
         onAlign={align}
         onDistribute={distribute}
         onFlip={flip}
+        onArtboard={(next) => next !== previewDoc && commit(next)}
       />
 
       <div className="border-t border-line p-3">

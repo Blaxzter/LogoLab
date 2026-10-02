@@ -172,7 +172,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
       {/* Nothing to open: start from an empty artboard… */}
       <Divider>Or start from a blank artboard</Divider>
       <div className="w-full">
-        <BlankArtboard onCreate={(w, h) => onOpen(blankDoc(w, h), 'drawing')} />
+        <BlankArtboard onCreate={(w, h, grow) => onOpen(blankDoc(w, h, grow), 'drawing')} />
       </div>
 
       {/* …or from a drawing that already has something to pull on. */}

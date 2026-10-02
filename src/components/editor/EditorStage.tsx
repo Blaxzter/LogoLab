@@ -16,7 +16,7 @@
 import { useCallback, useMemo, useRef } from 'react'
 import type { EditableDoc, PathItem, Vec } from '../../lib/path/types'
 import { findItem, isGroup, allPaths } from '../../lib/path/docTree'
-import { selectionBox } from '../../lib/editor/transform'
+import { selectionBox, type Box } from '../../lib/editor/transform'
 import { boxFromPoints } from '../../lib/editor/hitTest'
 import type { SnapConfig } from '../../lib/editor/snapping'
 import { ZoomSurface } from '../ui/ZoomSurface'
@@ -36,6 +36,12 @@ export { nodeKey, parseNodeKey } from '../../lib/editor/nodeEdit'
 export interface EditorStageProps {
   doc: EditableDoc
   pz: PanZoom
+  /**
+   * A growing artboard's camera view, in document units: the stage then fills
+   * its pane and shows this rect, so there is no edge to the board. Null for a
+   * fixed artboard (and for one frame while the pane is first measured).
+   */
+  boardView: Box | null
   tool: EditorTool
   selection: ReadonlySet<string>
   nodeSel: ReadonlySet<string>
@@ -63,6 +69,7 @@ export interface EditorStageProps {
 export function EditorStage({
   doc,
   pz,
+  boardView,
   tool,
   selection,
   nodeSel,
@@ -80,12 +87,23 @@ export function EditorStage({
   onEnterGroup,
 }: EditorStageProps) {
   const [vx, vy, vw, vh] = doc.viewBox
-  const { parentRef, width: boxW, height: boxH } = useFitBox(vw, vh)
+  const grow = doc.artboard === 'grow'
+
+  // What the stage shows and takes pointer input over, in document units: the
+  // artboard itself, or on the infinite board whatever the camera looks at.
+  const board = grow ? boardView : null
+  const [fx, fy, fw, fh] = board ? [board.x, board.y, board.w, board.h] : [vx, vy, vw, vh]
+
+  // Snapping to a growing artboard's edges would snap a shape to its own bounds.
+  const stageSnap = useMemo(() => (grow ? { ...snap, toArtboard: false } : snap), [grow, snap])
+
+  const { parentRef, width: boxW, height: boxH } = useFitBox(fw, fh)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const spaceHeld = useSpaceHeld()
 
-  /** ViewBox units per screen pixel; sizes all on-canvas chrome. */
-  const upp = vw / Math.max(1, boxW * pz.scale)
+  /** Document units per screen pixel; sizes all on-canvas chrome. On the board
+   *  the fitted box IS the pane (same aspect) and the zoom is in the view. */
+  const upp = board ? fw / Math.max(1, boxW) : fw / Math.max(1, boxW * pz.scale)
   const r = useCallback((px: number) => px * upp, [upp])
 
   /* ------------------------------------------------------ coordinates */
@@ -95,11 +113,11 @@ export function EditorStage({
       const rect = svgRef.current?.getBoundingClientRect()
       if (!rect || rect.width === 0) return { x: 0, y: 0 }
       return {
-        x: vx + ((e.clientX - rect.left) / rect.width) * vw,
-        y: vy + ((e.clientY - rect.top) / rect.height) * vh,
+        x: fx + ((e.clientX - rect.left) / rect.width) * fw,
+        y: fy + ((e.clientY - rect.top) / rect.height) * fh,
       }
     },
-    [vx, vy, vw, vh],
+    [fx, fy, fw, fh],
   )
 
   /* ----------------------------------------------------- derived state */
@@ -135,7 +153,7 @@ export function EditorStage({
       tool,
       selection,
       nodeSel,
-      snap,
+      snap: stageSnap,
       penPathId,
       enteredGroupId,
       spaceHeld,
@@ -176,10 +194,13 @@ export function EditorStage({
     <div ref={parentRef} className="relative h-full w-full">
       <ZoomSurface pz={pz} primary className="h-full w-full">
         <div className="flex h-full w-full items-center justify-center">
-          <div className={`relative shadow-sm ${checkerClass}`} style={{ width: boxW || 1, height: boxH || 1 }}>
+          <div
+            className={`relative ${board ? '' : 'shadow-sm'} ${checkerClass}`}
+            style={{ width: boxW || 1, height: boxH || 1, ...(board ? boardChecker(board, upp) : null) }}
+          >
             <svg
               ref={svgRef}
-              viewBox={`${vx} ${vy} ${vw} ${vh}`}
+              viewBox={`${fx} ${fy} ${fw} ${fh}`}
               width={boxW || 1}
               height={boxH || 1}
               className="absolute inset-0 touch-none"
@@ -191,15 +212,32 @@ export function EditorStage({
               onDoubleClick={onDoubleClick}
             >
               {/* Catches empty-space clicks; transparent so the checker shows. */}
-              <rect x={vx} y={vy} width={vw} height={vh} fill="transparent" />
+              <rect x={fx} y={fy} width={fw} height={fh} fill="transparent" />
 
               {showGrid && gridStep > 0 && (
-                <GridOverlay vx={vx} vy={vy} vw={vw} vh={vh} step={gridStep} width={r(0.6)} />
+                <GridOverlay vx={fx} vy={fy} vw={fw} vh={fh} step={gridStep} width={r(0.6)} />
               )}
 
               <g style={{ pointerEvents: 'none' }}>
                 <ItemsView items={doc.items} />
               </g>
+
+              {/* A growing artboard's edge: what the export will crop to. An
+                  empty board has none yet — it grows from what is drawn. */}
+              {grow && doc.items.length > 0 && (
+                <rect
+                  x={vx}
+                  y={vy}
+                  width={vw}
+                  height={vh}
+                  fill="none"
+                  stroke={ACCENT}
+                  strokeWidth={r(1)}
+                  strokeDasharray={`${r(5)} ${r(4)}`}
+                  opacity={0.6}
+                  style={{ pointerEvents: 'none' }}
+                />
+              )}
 
               <g style={{ pointerEvents: 'none' }}>
                 {/* Hover echo, so you know what a click would take. */}
@@ -244,7 +282,7 @@ export function EditorStage({
                   />
                 )}
 
-                <SnapGuides guides={guides} vx={vx} vy={vy} vw={vw} vh={vh} width={r(1)} />
+                <SnapGuides guides={guides} vx={fx} vy={fy} vw={fw} vh={fh} width={r(1)} />
               </g>
             </svg>
           </div>
@@ -252,4 +290,16 @@ export function EditorStage({
       </ZoomSurface>
     </div>
   )
+}
+
+/**
+ * Pin the checker to the DOCUMENT, not the pane, so panning slides the board
+ * under the cursor instead of the art over a still backdrop.
+ */
+function boardChecker(view: Box, upp: number): React.CSSProperties {
+  const ox = -view.x / upp
+  const oy = -view.y / upp
+  return {
+    backgroundPosition: `${ox}px ${oy}px, ${ox}px ${oy + 8}px, ${ox + 8}px ${oy - 8}px, ${ox - 8}px ${oy}px`,
+  }
 }

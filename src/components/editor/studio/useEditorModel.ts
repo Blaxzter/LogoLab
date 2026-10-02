@@ -6,6 +6,7 @@ import { groupItems, moveItems, removeItems, reorderItems } from '../../../lib/p
 import { docStats, serializeDoc } from '../../../lib/path/model'
 import { flipAbout, selectionBox, transformItems, translation } from '../../../lib/editor/transform'
 import { alignItems, distributeItems } from '../../../lib/editor/align'
+import { fitGrowingArtboard } from '../../../lib/editor/artboard'
 import type { AlignEdge, DistributeAxis } from '../../../lib/editor/align'
 import { DEFAULT_SNAP, nudgeStep, type SnapConfig } from '../../../lib/editor/snapping'
 import type { DropSpot } from '../../../lib/editor/layerRows'
@@ -28,6 +29,7 @@ import {
   ungroupSelected,
 } from '../selectionOps'
 import { isTypingTarget } from '../stage/useSpaceHeld'
+import { useBoardCamera } from '../stage/useBoardCamera'
 
 export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: EditableDoc) => void) | undefined) {
   const history = useHistory<EditableDoc>(120)
@@ -38,7 +40,7 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
   const [showGrid, setShowGrid] = useState(false)
   const [penPathId, setPenPathId] = useState<string | null>(null)
   const [enteredGroupId, setEnteredGroupId] = useState<string | null>(null)
-  const pz = usePanZoom({ minScale: 1, maxScale: 40, zoomStep: 1.4 })
+  const fixedPz = usePanZoom({ minScale: 1, maxScale: 40, zoomStep: 1.4 })
   const checkerClass = useCheckerClass()
   const autoChecker = useStore((s) => s.autoChecker)
 
@@ -71,6 +73,14 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
   const doc = history.value
   const previewDoc = doc ?? initialDoc
 
+  // A fixed artboard pans and zooms within itself; a growing one is an
+  // infinite board with a free camera. Both hooks always run (hook order);
+  // only one drives the stage.
+  const grow = previewDoc.artboard === 'grow'
+  const board = useBoardCamera(previewDoc.viewBox, grow)
+  const pz = grow ? board.pz : fixedPz
+  const boardView = grow ? board.view : null
+
   useEffect(() => {
     if (doc) onChange?.(doc)
   }, [doc, onChange])
@@ -84,7 +94,9 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
   // the methods keeps every callback built from them stable.
   const { set: historySet, commitMerged: historyMerge } = history
 
-  const commit = useCallback((next: EditableDoc) => historySet(next, true), [historySet])
+  // A growing artboard refits on COMMIT only: a drag's previews keep the
+  // viewBox they started with, so the frame doesn't move under the pointer.
+  const commit = useCallback((next: EditableDoc) => historySet(fitGrowingArtboard(next), true), [historySet])
   const preview = useCallback((next: EditableDoc) => historySet(next), [historySet])
 
   /**
@@ -95,7 +107,7 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
    */
   const selectionKey = useMemo(() => [...selection].sort().join(','), [selection])
   const commitLive = useCallback(
-    (next: EditableDoc, control: string) => historyMerge(next, `${control}:${selectionKey}`),
+    (next: EditableDoc, control: string) => historyMerge(fitGrowingArtboard(next), `${control}:${selectionKey}`),
     [historyMerge, selectionKey],
   )
 
@@ -398,6 +410,7 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     enteredGroupId,
     setEnteredGroupId,
     pz,
+    boardView,
     checkerClass,
     previewDoc,
     railDoc,

@@ -53,6 +53,7 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
     enteredGroupId,
     setEnteredGroupId,
     pz,
+    boardView,
     checkerClass,
     previewDoc,
     railDoc,
@@ -152,6 +153,7 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
           <EditorStage
             doc={previewDoc}
             pz={pz}
+            boardView={boardView}
             tool={tool}
             selection={selection}
             nodeSel={nodeSel}
@@ -194,7 +196,7 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
       </div>
 
       {/* Status */}
-      <EditorStatusBar stats={stats} viewBox={previewDoc.viewBox} tool={tool} />
+      <EditorStatusBar stats={stats} viewBox={previewDoc.viewBox} grow={previewDoc.artboard === 'grow'} tool={tool} />
     </div>
   )
 }
