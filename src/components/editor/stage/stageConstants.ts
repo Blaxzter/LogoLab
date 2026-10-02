@@ -6,6 +6,8 @@ export const ACCENT = '#5b5bd6'
 export const ACCENT_SEL = '#f25f2e'
 export const GUIDE = '#e11d8f'
 export const HALO = '#ffffff'
+/** The boolean BASE among several selected shapes: what Subtract cuts from. */
+export const BASE = '#0d9488'
 
 /** Hit radii in screen pixels (converted through `upp`). */
 export const ANCHOR_PX = 9

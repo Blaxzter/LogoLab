@@ -13,6 +13,9 @@ import { parseNodeKey } from '../../lib/editor/nodeEdit'
 import { downloadVector } from '../../lib/export/download'
 import { unsupportedItemCount, type VectorFormat } from '../../lib/export/vectorFormats'
 import { EditorStage } from './EditorStage'
+import { booleanBase } from '../../lib/editor/booleanOrder'
+import { layerRows } from '../../lib/editor/layerRows'
+import { itemLabel } from './editorDoc'
 import { actionReasons } from './studio/actionReasons'
 import { EditorStatusBar } from './studio/EditorStatusBar'
 import { EditorToolbar } from './studio/EditorToolbar'
@@ -123,6 +126,16 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
     return found
   }, [previewDoc.items])
 
+  // The boolean base: marked on the canvas and named in the Shape section, so
+  // it is never a guess what Subtract cuts from.
+  const base = useMemo(() => {
+    if (tool !== 'select') return null
+    const id = booleanBase(previewDoc, selection)
+    if (!id) return null
+    const row = layerRows(previewDoc.items).find((r) => r.item.id === id)
+    return { id, label: row ? itemLabel(row.item, row.number) : 'the first shape' }
+  }, [tool, previewDoc, selection])
+
   const why = actionReasons({
     canUndo: history.canUndo,
     canRedo: history.canRedo,
@@ -194,6 +207,7 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
             onEditNodes={ops.editNodes}
             onExitNodes={ops.exitNodes}
             text={text}
+            baseId={base?.id ?? null}
             undo={history.undo}
             redo={history.redo}
             onSelectionChange={(ids) => {
@@ -234,6 +248,7 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
           doCombine={ops.doCombine}
           doBoolean={ops.doBoolean}
           panelText={panelText}
+          baseLabel={base?.label ?? null}
           text={text}
           convertText={ops.convertText}
           doBreak={ops.doBreak}

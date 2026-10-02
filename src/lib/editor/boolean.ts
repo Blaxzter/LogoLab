@@ -7,19 +7,23 @@
 // module is only ever reached through a dynamic import (the studio's
 // `runBoolean`); nothing else in the editor's chunk pulls it in.
 //
-// Rules, following Affinity:
-//   * operands are the selected top-level items in PAINT order; a group is one
-//     operand (the union of its paths);
-//   * the result takes the paint of the BACK-MOST operand and lands where that
-//     operand was, so a boolean never moves anything up or down the stack;
-//   * Subtract removes every other operand from the back-most one;
+// Rules:
+//   * operands are the selected top-level items; a group is one operand (the
+//     union of its paths);
+//   * the BASE is the shape selected first (`booleanOrder.ts`; with no click
+//     order — a marquee — that is the back-most one, Affinity's rule). The
+//     stage marks it in its own colour while a boolean is possible;
+//   * the result takes the base's paint and lands where the base was, so a
+//     boolean never moves anything else up or down the stack;
+//   * Subtract removes every other operand from the base;
 //   * Divide cuts the operands at every crossing into separate pieces, each
 //     painted like the front-most operand covering it;
 //   * open subpaths count as closed (their fill area), like a filled open curve.
 
 import paper from 'paper/dist/paper-core.js'
 import type { DocItem, EditableDoc, PathItem, PathNode, SubPath } from '../path/types.ts'
-import { allPaths, findItem, isGroup, removeItems, topLevelSelection, walkItems } from '../path/docTree.ts'
+import { allPaths, findItem, isGroup, removeItems } from '../path/docTree.ts'
+import { booleanOperandIds } from './booleanOrder.ts'
 
 export type BooleanOp = 'add' | 'subtract' | 'intersect' | 'xor' | 'divide'
 
@@ -196,27 +200,21 @@ export function booleanGeometry(
   }
 }
 
-function collectOperands(doc: EditableDoc, selection: ReadonlySet<string>, build: boolean): Operand[] {
-  const top = new Set(topLevelSelection(doc.items, selection))
-  const order: string[] = []
-  walkItems(doc.items, (it) => {
-    if (top.has(it.id)) order.push(it.id)
-  })
+function collectOperands(doc: EditableDoc, selection: ReadonlySet<string>, paintOrder: boolean): Operand[] {
+  const order = booleanOperandIds(doc, selection, paintOrder)
   const out: Operand[] = []
   for (const id of order) {
     const it = findItem(doc.items, id)
     if (!it) continue
     const paths = isGroup(it) ? allPaths(it.children).filter((p) => p.visible) : it.kind === 'path' ? [it] : []
     if (paths.length === 0) continue
-    const geom = build ? operandGeometry(paths) : null
-    out.push({ id, geom: geom as PItem, style: paths[0] })
+    out.push({ id, geom: operandGeometry(paths) as PItem, style: paths[0] })
   }
   return out
 }
 
 /**
- * Run a boolean on the selection. The result replaces the back-most operand in
- * place; the others are removed. Null when fewer than two shapes are selected.
+ * Run a boolean on the selection. The result replaces the base in place; the others are removed. Null when fewer than two shapes are selected.
  * An empty result (an Intersect of shapes that don't touch) removes them all,
  * as in Affinity — Ctrl+Z brings them back.
  */
@@ -226,7 +224,8 @@ export function booleanSelected(
   op: BooleanOp,
   nextId: () => string,
 ): { doc: EditableDoc; ids: Set<string> } | null {
-  const operands = collectOperands(doc, selection, true)
+  // Base first (the shape selected first); Divide goes by paint order instead.
+  const operands = collectOperands(doc, selection, op === 'divide')
   if (operands.length < 2) return null
   const pieces = booleanGeometry(
     op,
@@ -237,7 +236,7 @@ export function booleanSelected(
     const src = operands[p.style].style
     const item: PathItem = {
       ...src,
-      // The back-most shape keeps its id (and so its layer row) for a single
+      // The base keeps its id (and so its layer row) for a single
       // result; Divide's pieces are new shapes.
       id: pieces.length === 1 && i === 0 ? operands[0].style.id : nextId(),
       subPaths: fromPaper(p.geom),

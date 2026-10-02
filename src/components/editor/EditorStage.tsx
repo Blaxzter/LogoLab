@@ -25,7 +25,7 @@ import { useFitBox } from '../vectorize/useFitBox'
 import { ItemsView, pathD } from '../vector/DocRender'
 import type { EditorTool } from './tools'
 import { buildShape as buildShapeFor } from './stage/buildShape'
-import { ACCENT, GRIP_CURSOR } from './stage/stageConstants'
+import { ACCENT, BASE, GRIP_CURSOR } from './stage/stageConstants'
 import { GridOverlay, NodeOverlay, SelectionOutline, SnapGuides, TransformBox } from './stage/StageOverlays'
 import { useSpaceHeld } from './stage/useSpaceHeld'
 import { TextEditOverlay, TextInput } from './stage/TextEditLayer'
@@ -71,6 +71,8 @@ export interface EditorStageProps {
   /** Double-clicking empty space in node editing returns to Move. */
   onExitNodes: () => void
   text: TextEditing
+  /** With several shapes selected, the one a boolean works on (selected first). */
+  baseId: string | null
   undo: () => void
   redo: () => void
 }
@@ -97,6 +99,7 @@ export function EditorStage({
   onEditNodes,
   onExitNodes,
   text,
+  baseId,
   undo,
   redo,
 }: EditorStageProps) {
@@ -270,9 +273,13 @@ export function EditorStage({
                   <SelectionOutline doc={doc} id={hoverId} width={r(1)} color={ACCENT} opacity={0.5} />
                 )}
 
-                {[...selection].map((id) => (
-                  <SelectionOutline key={id} doc={doc} id={id} width={r(1.25)} color={ACCENT} />
-                ))}
+                {[...selection].map((id) =>
+                  id === baseId ? (
+                    <SelectionOutline key={id} doc={doc} id={id} width={r(2.25)} color={BASE} />
+                  ) : (
+                    <SelectionOutline key={id} doc={doc} id={id} width={r(1.25)} color={ACCENT} />
+                  ),
+                )}
 
                 <TextEditOverlay text={text} doc={doc} r={r} />
 

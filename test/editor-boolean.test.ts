@@ -144,8 +144,8 @@ test('a group is one operand, its paths united first', () => {
     children: [square('g1', 0, 0, 20), square('g2', 10, 0, 20)],
     visible: true,
   } as GroupItem
-  const res = run(doc(g, square('b', 0, 0, 30)), 'subtract', ['b', 'g'])
-  // g is at the back: 30x20 union minus the 30x30 square → nothing left
+  const res = run(doc(g, square('b', 0, 0, 30)), 'subtract', ['g', 'b'])
+  // g is the base: its 30x20 union minus the 30x30 square → nothing left
   assert.equal(res.doc.items.length, 0)
 })
 
@@ -179,4 +179,23 @@ test('a script font word merges at its joins without changing what it paints', a
   const merged = mergeOverlaps(glyphs)
   assert.ok(merged.subPaths.length < glyphs.subPaths.length, `${glyphs.subPaths.length} → ${merged.subPaths.length}`)
   assert.ok(Math.abs(area(merged) - area(glyphs)) < 1, `${area(glyphs)} → ${area(merged)}`)
+})
+
+test('the shape selected FIRST is the base, wherever it sits in the stack', () => {
+  // b is on top but selected first: the result is b minus a, in b's paint and place.
+  const d = doc(square('a', 0, 0, 20, '#ff0000'), square('b', 10, 10, 20, '#0000ff'))
+  const res = run(d, 'subtract', ['b', 'a'])
+  const out = paths(res.doc)
+  assert.equal(out.length, 1)
+  assert.equal(out[0].id, 'b')
+  assert.equal(out[0].fill, '#0000ff')
+  assert.ok(Math.abs(area(out[0]) - 300) < 1e-6, `${area(out[0])}`)
+})
+
+test('with no click order (a marquee adds in paint order) the base is the back-most shape', async () => {
+  const { booleanBase } = await import('../src/lib/editor/booleanOrder.ts')
+  const d = doc(square('a', 0, 0, 20), square('b', 10, 10, 20), square('c', 5, 5, 5))
+  assert.equal(booleanBase(d, new Set(['a', 'b', 'c'])), 'a')
+  assert.equal(booleanBase(d, new Set(['c', 'a'])), 'c')
+  assert.equal(booleanBase(d, new Set(['c'])), null, 'one shape is no boolean')
 })
