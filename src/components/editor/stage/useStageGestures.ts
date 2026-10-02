@@ -92,6 +92,8 @@ export function useStageGestures({
   })
   const [hoverId, setHoverId] = useState<string | null>(null)
   const [hoverGrip, setHoverGrip] = useState<Grip | 'rotate' | null>(null)
+  /** The pointer is over the open text — the only place the I-beam belongs while typing. */
+  const [hoverText, setHoverText] = useState(false)
   const vw = doc.viewBox[2]
 
   /* ---------------------------------------------------------- pointers */
@@ -112,24 +114,21 @@ export function useStageGestures({
 
     /* ---- the open text: a click places the caret, a drag selects ---- */
     if (text.edit && text.layout) {
-      const open = findItem(doc.items, text.edit.id)
-      const b = open ? itemBox(open) : null
-      const pad = r(ITEM_TOL_PX * HIT)
-      const idx = caretIndexAt(text.layout.carets, p)
-      const c = text.layout.carets[idx]
-      const inBox = !!b && p.x >= b.x - pad && p.x <= b.x + b.w + pad && p.y >= b.y - pad && p.y <= b.y + b.h + pad
-      // An empty text has no box yet: its caret is the target.
-      const onCaret =
-        !!c &&
-        Math.hypot(p.x - c.top.x, p.y - (c.top.y + c.bottom.y) / 2) <=
-          Math.hypot(c.bottom.x - c.top.x, c.bottom.y - c.top.y)
-      if (inBox || onCaret) {
+      if (overOpenText(p)) {
+        const idx = caretIndexAt(text.layout.carets, p)
         const anchor = e.shiftKey ? text.edit.anchor : idx
         text.setRange(anchor, idx)
         setGesture({ kind: 'text-select', anchor })
         return
       }
+      // A click outside finishes typing. With the Text tool that is ALL it
+      // does — the text is deselected, and the NEXT click starts a new one —
+      // rather than closing this text and opening an empty one in one go.
       text.end()
+      if (tool === 'text') {
+        onSelectionChange(new Set())
+        return
+      }
     }
 
     /* ---- text tool: type into a text, along a shape, or somewhere new ---- */
@@ -309,6 +308,22 @@ export function useStageGestures({
     }
   }
 
+  /** Over the open text (its box, or the caret of an empty one): where a click edits it. */
+  const overOpenText = (p: Vec): boolean => {
+    if (!text.edit || !text.layout) return false
+    const open = findItem(doc.items, text.edit.id)
+    const b = open ? itemBox(open) : null
+    const pad = r(ITEM_TOL_PX * HIT)
+    if (b && p.x >= b.x - pad && p.x <= b.x + b.w + pad && p.y >= b.y - pad && p.y <= b.y + b.h + pad) return true
+    // An empty text has no box yet: its caret is the target.
+    const c = text.layout.carets[caretIndexAt(text.layout.carets, p)]
+    return (
+      !!c &&
+      Math.hypot(p.x - c.top.x, p.y - (c.top.y + c.bottom.y) / 2) <=
+        Math.hypot(c.bottom.x - c.top.x, c.bottom.y - c.top.y)
+    )
+  }
+
   const handlePenDown = (p: Vec) => {
     const snapped = snap.enabled
       ? snapPoint(p, collectTargets(doc.items, doc.viewBox, new Set(penPathId ? [penPathId] : []), snap), snap).point
@@ -364,6 +379,8 @@ export function useStageGestures({
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const p = toDoc(e)
     if (!gesture) {
+      const onText = overOpenText(p)
+      if (onText !== hoverText) setHoverText(onText)
       if (tool === 'select') {
         // Grips first, matching pointerdown: they can sit on the artwork, and
         // the cursor must show what a press would actually do.
@@ -534,5 +551,5 @@ export function useStageGestures({
     onEditNodes(hit.leafId, p)
   }
 
-  return { gesture, guides, hoverId, hoverGrip, onPointerDown, onPointerMove, onPointerUp, onDoubleClick }
+  return { gesture, guides, hoverId, hoverGrip, hoverText, onPointerDown, onPointerMove, onPointerUp, onDoubleClick }
 }

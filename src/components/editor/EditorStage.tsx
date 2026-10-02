@@ -161,7 +161,7 @@ export function EditorStage({
     [tool, vw],
   )
 
-  const { gesture, guides, hoverId, hoverGrip, onPointerDown, onPointerMove, onPointerUp, onDoubleClick } =
+  const { gesture, guides, hoverId, hoverGrip, hoverText, onPointerDown, onPointerMove, onPointerUp, onDoubleClick } =
     useStageGestures({
       doc,
       tool,
@@ -197,15 +197,21 @@ export function EditorStage({
   const cursor =
     spaceHeld || tool === 'pan'
       ? 'grab'
-      : tool === 'text' || text.edit
+      : // While typing, the I-beam only over the text: outside it a click
+        // finishes the text, so the cursor says what the tool would do.
+        hoverText || gesture?.kind === 'text-select'
         ? 'text'
-        : tool === 'pen' || isDrawTool
-          ? 'crosshair'
-          : hoverGrip
-            ? GRIP_CURSOR[hoverGrip]
-            : hoverId
-              ? 'move'
-              : 'default'
+        : text.edit && tool === 'text'
+          ? 'default'
+          : tool === 'text'
+            ? 'text'
+            : tool === 'pen' || isDrawTool
+              ? 'crosshair'
+              : hoverGrip
+                ? GRIP_CURSOR[hoverGrip]
+                : hoverId
+                  ? 'move'
+                  : 'default'
 
   const gridStep = snap.grid > 0 ? snap.grid : 0
 
