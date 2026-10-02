@@ -77,7 +77,8 @@
     <!-- For search engines and AI assistants (ChatGPT, Claude, Perplexity…): most of
          their crawlers do not run JavaScript, so this, the static copy in #root and
          /llms.txt are all they ever learn about an SPA. Keep them in step with what
-         the app actually does. -->
+         the app actually does. The title, description, og/twitter tags and canonical
+         below are rewritten per route at build time (scripts/routePages.ts). -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -109,26 +110,9 @@
   <body>
     <div id="root">
       <!-- Replaced by the app on its first render; this is what a crawler that does
-           not run JavaScript reads. -->
-      <main style="max-width: 40rem; margin: 4rem auto; padding: 0 1rem; font: 14px/1.6 system-ui, sans-serif; opacity: 0.75">
-        <h1>LogoLab — free online image to SVG vectorizer</h1>
-        <p>
-          Convert a PNG, JPG or WebP logo or icon into a clean, editable SVG, right in your
-          browser. No upload, no sign-up, no watermark, free and open source (MIT).
-        </p>
-        <ul>
-          <li><strong>Vectorize:</strong> real tracing (region segmentation and curve fitting), not an image embedded in an SVG. Flat colour, one-ink and gradient art; line art comes back as strokes.</li>
-          <li><strong>Clean up:</strong> remove a baked-in background with a flood fill, brushes or an in-browser AI cutout.</li>
-          <li><strong>Edit:</strong> a built-in SVG editor with node editing, booleans and live text.</li>
-          <li><strong>Preview:</strong> see the logo on devices, websites, browser tabs, app stores and avatars, from 16px up.</li>
-          <li><strong>Export:</strong> favicons, apple-touch, PWA and Android icon sets; split an AI-generated icon sheet into separate icons.</li>
-        </ul>
-        <p>
-          The same vectorizer runs from coding agents as an MCP server:
-          <code>npx -y logolab</code>. Source:
-          <a href="https://github.com/Blaxzter/LogoLab">github.com/Blaxzter/LogoLab</a>.
-        </p>
-      </main>
+           not run JavaScript reads. The build fills it in per route, with the
+           route's own head (scripts/routePages.ts holds the copy for every page). -->
+      <main></main>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

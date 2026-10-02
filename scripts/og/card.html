@@ -1,0 +1,106 @@
+<!doctype html>
+<!--
+  The 1200×630 link-preview card for one studio route, public/og/<route>.png.
+  Same layout as the home page's public/og.png, with the route's own headline
+  and a screenshot of THAT tab, so a link to /vectorize previews the vectorizer.
+
+  To re-render: run the dev server, screenshot each tab at 1440×830 into
+  .playwright-mcp/og-shot-<route>.png, open
+  http://127.0.0.1:5646/scripts/og/card.html?route=<route> at 1200×630 and
+  screenshot the viewport. The routes and their pages are scripts/routePages.ts.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;800&display=swap" rel="stylesheet" />
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      html, body { width: 1200px; height: 630px; overflow: hidden; }
+      body {
+        font-family: Inter, system-ui, sans-serif;
+        background: linear-gradient(135deg, #f6f6fa 0%, #ececf3 100%);
+        color: #14161c;
+        position: relative;
+      }
+      body::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 8px; background: #5b5bd6; }
+      .left { position: absolute; left: 72px; top: 104px; width: 470px; }
+      .brand { display: flex; align-items: center; gap: 16px; font-weight: 800; font-size: 34px; letter-spacing: -0.5px; }
+      .brand img { width: 44px; height: 44px; }
+      h1 { margin-top: 34px; font-size: 50px; line-height: 1.08; font-weight: 800; letter-spacing: -1.5px; }
+      h1 em { font-style: normal; color: #5b5bd6; }
+      .sub { margin-top: 22px; font-size: 22px; line-height: 1.45; color: #4b5060; font-weight: 500; }
+      .chips { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 10px; }
+      .chip { padding: 8px 15px; border-radius: 999px; background: #e7e7fb; border: 1.5px solid #c9c9f3; color: #4646b8; font-size: 16px; font-weight: 600; }
+      .url { position: absolute; left: 72px; bottom: 48px; font-size: 19px; color: #6b7080; font-weight: 500; }
+      .frame {
+        position: absolute; left: 584px; top: 150px; width: 560px; height: 330px;
+        border-radius: 14px; background: #fff; overflow: hidden;
+        box-shadow: 0 30px 60px -20px rgba(20, 22, 40, 0.35), 0 0 0 1px rgba(20, 22, 40, 0.08);
+      }
+      .bar { height: 34px; display: flex; align-items: center; gap: 7px; padding: 0 14px; background: #f3f3f6; border-bottom: 1px solid #e3e3ea; }
+      .dot { width: 11px; height: 11px; border-radius: 50%; }
+      .addr { margin-left: 14px; flex: 1; height: 20px; border-radius: 10px; background: #fff; border: 1px solid #e0e0e8; font-size: 11.5px; color: #5d6170; padding: 2px 12px; }
+      .shot { display: block; width: 100%; height: calc(100% - 34px); object-fit: cover; object-position: top left; }
+    </style>
+  </head>
+  <body>
+    <div class="left">
+      <div class="brand"><img src="/favicon.svg" alt="" />LogoLab</div>
+      <h1 id="h1"></h1>
+      <p class="sub" id="sub"></p>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="url">logolab.fabraham.dev</div>
+    <div class="frame">
+      <div class="bar">
+        <span class="dot" style="background: #ff5f57"></span>
+        <span class="dot" style="background: #febc2e"></span>
+        <span class="dot" style="background: #28c840"></span>
+        <span class="addr" id="addr"></span>
+      </div>
+      <img class="shot" id="shot" alt="" />
+    </div>
+    <script>
+      const CARDS = {
+        vectorize: {
+          h1: 'Turn any PNG into a <em>clean SVG</em>',
+          sub: 'Real tracing with sharp corners and shared edges. Free, in your browser.',
+          chips: ['PNG · JPG · WebP → SVG', 'Colour, mono, gradients', 'Line art as strokes', 'No watermark'],
+        },
+        cleanup: {
+          h1: '<em>Remove the background</em> from your logo',
+          sub: 'One-click AI cutout that runs on your device. Nothing is uploaded.',
+          chips: ['AI cutout in the browser', 'Magic wand', 'Erase & restore brushes', 'Defringe'],
+        },
+        editor: {
+          h1: 'A free <em>SVG editor</em> for logos',
+          sub: 'Fix a traced logo by hand, without installing anything.',
+          chips: ['Node editing', 'Booleans', 'Live text', 'Gradients & strokes'],
+        },
+        sheet: {
+          h1: 'One icon sheet → <em>separate SVGs</em>',
+          sub: 'Every icon found, named from its caption and traced on its own.',
+          chips: ['Finds every icon', 'Names by caption', 'Traces each one', 'Download the set'],
+        },
+        export: {
+          h1: '<em>Favicons & PWA icons</em> from one logo',
+          sub: 'Every icon file a site or installable web app needs, crisp at 16px.',
+          chips: ['favicon.ico', 'apple-touch-icon', 'Maskable PWA icons', 'Android'],
+        },
+        preview: {
+          h1: 'See your logo <em>in real contexts</em>',
+          sub: 'Is it legible at 16px? Does it vanish on white? Check before you ship.',
+          chips: ['Phone home screens', 'Website & tabs', 'App Store listing', '16–128px check'],
+        },
+      }
+      const route = new URLSearchParams(location.search).get('route') || 'vectorize'
+      const card = CARDS[route]
+      document.getElementById('h1').innerHTML = card.h1
+      document.getElementById('sub').textContent = card.sub
+      document.getElementById('chips').innerHTML = card.chips.map((c) => `<span class="chip">${c}</span>`).join('')
+      document.getElementById('addr').textContent = `logolab.fabraham.dev/${route}`
+      document.getElementById('shot').src = `/.playwright-mcp/og-shot-${route}.png`
+    </script>
+  </body>
+</html>

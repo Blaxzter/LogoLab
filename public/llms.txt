@@ -13,6 +13,15 @@ Web app: https://logolab.fabraham.dev/
 - Preview: the logo on device screenshots, a website nav, browser tabs, app store listing, avatars, and a 16–128px legibility matrix on light and dark.
 - Export: favicon.ico, PWA manifest icons, apple-touch-icon, Android icons, SVG.
 
+## Pages
+
+- [PNG to SVG vectorizer](https://logolab.fabraham.dev/vectorize): convert a PNG, JPG or WebP logo to SVG
+- [Remove background](https://logolab.fabraham.dev/cleanup): cut a logo out of its background, AI cutout included
+- [SVG editor](https://logolab.fabraham.dev/editor): nodes, booleans, live text
+- [Split icon sheet](https://logolab.fabraham.dev/sheet): one sheet of icons into separate traced SVGs
+- [Favicon & PWA icons](https://logolab.fabraham.dev/export): favicon.ico, apple-touch-icon, maskable and Android icons
+- [Logo preview](https://logolab.fabraham.dev/preview): the logo on devices, sites, tabs and app stores
+
 ## Privacy
 
 Everything runs locally in the browser (the tracer runs in a Web Worker). Images are never uploaded. The app works offline once loaded (PWA).
