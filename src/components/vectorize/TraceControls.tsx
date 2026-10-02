@@ -147,12 +147,12 @@ export function TraceControlsBody({
   const detailSummary = tracing
     ? opts.mode === 'mono'
       ? `Mono · threshold ${opts.threshold}${opts.invert ? ' · inverted' : ''}${opts.centerline ? ' · strokes' : ''}`
-      : `Smoothing ${opts.smoothing}`
+      : `Smoothing ${opts.smoothing}${opts.centerline ? ' · strokes' : ''}`
     : 'Cleaning SVG markup'
   // Force colour repaints every shape; a collapsed "Flat fills" hid where the colours went.
   const colorSummary = forceColorOn
     ? `All shapes ${forceColor}`
-    : opts.mode === 'color' && opts.gradients !== false
+    : opts.mode === 'color' && opts.gradients !== false && !opts.centerline
       ? 'Gradients on'
       : 'Flat fills'
 
@@ -162,7 +162,7 @@ export function TraceControlsBody({
   // from a smaller image) stays in place so the setting can still be undone.
   // The rules come from traceCaps.ts and aiUpscale.ts, so the reasons match what
   // the pipeline does.
-  const flatArt = opts.mode === 'mono' || opts.gradients === false
+  const flatArt = opts.mode === 'mono' || opts.gradients === false || opts.centerline === true
   const detailWhy = !flatArt
     ? `High only lifts the cap for flat art; gradient and photo colour stays at ${RASTER_MAX_DIM}px so the region merge cannot bog down. Turn Gradients off, or switch to Mono, and it applies.`
     : sourceMaxDim != null && sourceMaxDim <= RASTER_MAX_DIM_FLAT
@@ -219,11 +219,17 @@ export function TraceControlsBody({
         label: 'Region detail, Region markers, Gradients',
         why: 'Mono traces one ink against the background, so there are no colour regions to split, to seed, or to fit a gradient into. Switch Mode to Color.',
       })
-    else
+    else {
       inert.push({
         label: 'Threshold, Invert',
         why: 'The two halves of the mono black/white cut: where it falls, and which side of it becomes solid. Switch Mode to Mono.',
       })
+      if (opts.centerline)
+        inert.push({
+          label: 'Gradients, Region markers',
+          why: 'Strokes paint every line in one flat ink, the colour it runs through, and read the inks from the palette alone. Turn Strokes off to fit gradients or seed regions.',
+        })
+    }
     if (detailWhy && !showDetail) inert.push({ label: 'Detail — Balanced / High', why: detailWhy })
     if (upscaleWhy && !showUpscale) inert.push({ label: 'Upscale — Auto / AI', why: upscaleWhy })
   }
@@ -384,19 +390,20 @@ export function TraceControlsBody({
                     </p>
                   )}
                 </Field>
-
-                {/* Line art: the centreline engine (src/lib/trace/centerline/) instead of
-                      filled outlines. The consequence is in the result itself — stroked
-                      paths with a width — so the hint says what to expect, not what happened. */}
-                <Field label="Strokes" hint={d.centerline.hint} onInfo={info('centerline')}>
-                  <Toggle
-                    checked={opts.centerline === true}
-                    onChange={(v) => onPatch({ centerline: v })}
-                    label="Trace lines as strokes with a width"
-                  />
-                </Field>
               </>
             )}
+
+            {/* Line art: the centreline engine (src/lib/trace/centerline/) instead of
+                  filled outlines — one ink in Mono, each line in its own ink in Colour
+                  (centerline/colour.ts). The consequence is in the result itself — stroked
+                  paths with a width — so the hint says what to expect, not what happened. */}
+            <Field label="Strokes" hint={d.centerline.hint} onInfo={info('centerline')}>
+              <Toggle
+                checked={opts.centerline === true}
+                onChange={(v) => onPatch({ centerline: v })}
+                label="Trace lines as strokes with a width"
+              />
+            </Field>
 
             <Field label="Smoothing" hint={d.smoothing.hint} onInfo={info('smoothing')}>
               <Slider value={opts.smoothing} min={0} max={100} onChange={(v) => onPatch({ smoothing: v })} />
@@ -524,7 +531,7 @@ export function TraceControlsBody({
         )}
 
         <Collapsible title="Color & background" summary={colorSummary}>
-          {tracing && opts.mode === 'color' && (
+          {tracing && opts.mode === 'color' && !opts.centerline && (
             <Field label="Gradients" hint={d.gradients.hint} onInfo={info('gradients')}>
               <Toggle
                 checked={opts.gradients !== false}

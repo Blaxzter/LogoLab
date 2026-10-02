@@ -37,6 +37,7 @@ import {
   AB_CORPUS,
   AB_LANES,
   AB_LINE_ART_CASES,
+  AB_COLOUR_LINE_CASES,
   AB_LOGO_CASES,
   abUrl,
   caseLanes,
@@ -232,7 +233,9 @@ const FIXTURES: AbCase[] = AB_CORPUS.map((c) => ({ id: c.id, name: c.name, kind:
 // The LINE-ART lane — stroked fixtures for the centreline engine (bench/genLineArt.ts),
 // served from public/ like the fixtures, rasterized on white like the gallery, and traced
 // in the mono + line lanes only (abCorpus `lanes`).
-const LINE_ART: AbCase[] = AB_LINE_ART_CASES.map((c) => ({
+// The colour line-art cases (flat + cline lanes) ride in the same case lane: "line art"
+// means both the one-ink and the several-ink kind.
+const LINE_ART: AbCase[] = [...AB_LINE_ART_CASES, ...AB_COLOUR_LINE_CASES].map((c) => ({
   id: c.id,
   name: c.name,
   kind: c.kind,
@@ -785,7 +788,8 @@ async function analyze(c: AbCase, raster: number, gradients: boolean): Promise<A
   // A case that runs the LINE lane (line art) is traced through it in every variant —
   // the centreline engine, at the cut the ink probe places — so a planarFit flag is still
   // A/B'd on the strokes' fit rather than on an outline the case never ships as.
-  const lineLane = c.lanes?.includes('line') ? AB_LANES.find((l) => l.key === 'line') : undefined
+  const lineKey = c.lanes?.includes('line') ? 'line' : c.lanes?.includes('cline') ? 'cline' : undefined
+  const lineLane = lineKey ? AB_LANES.find((l) => l.key === lineKey) : undefined
   const laneOpts: Partial<VectorizeOptions> = lineLane
     ? { ...lineLane.opts, ...lineLane.resolve?.(image) }
     : { gradients }

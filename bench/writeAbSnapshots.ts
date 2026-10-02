@@ -13,17 +13,17 @@
 // own; `--pair <base>` records the same relationship explicitly for names that do not
 // follow it ("this stamp is the after of <base>").
 //
-// FOUR TRACE LANES (AB_LANES in abCorpus.ts), each at the resolution PRODUCTION uses for
+// FIVE TRACE LANES (AB_LANES in abCorpus.ts), each at the resolution PRODUCTION uses for
 // that kind of art rather than one convenient number: flat art at the flat cap,
 // gradient/photo at the gradient cap, MONO — which is not a subset of the colour path but
-// the complement of it (see the AB_LANES comment) — and LINE, the centreline engine at
-// 512. A case runs the lanes `caseLanes` says (the colour lanes + mono unless it says
+// the complement of it (see the AB_LANES comment) — LINE, the centreline engine, and
+// CLINE, the centreline engine in colour. A case runs the lanes `caseLanes` says (the colour lanes + mono unless it says
 // otherwise); their resolutions are recorded per case, so stamps frozen under the old
 // single-resolution rule keep comparing correctly.
 //
 // THREE CASE LANES (all from abCorpus.ts): the handcrafted ⟐ fixtures, a slice of the ◆
-// GALLERY corpus — the real brand marks the defects get reported on — and the ⌇/◎
-// LINE-ART cases (mono + line lanes only). The gallery lane needs `npm run fetch:logos`;
+// GALLERY corpus — the real brand marks the defects get reported on — the ⌇/◎
+// LINE-ART cases (mono + line lanes only) and the COLOUR line-art cases (flat + cline). The gallery lane needs `npm run fetch:logos`;
 // without it those files simply are not there and the lane is skipped with a note.
 // `--logos` overrides the curated slice for one run: `all` takes every logo on disk (slow
 // — 150+ marks, traced twice each), `none` skips the lane, and a comma list picks
@@ -42,6 +42,7 @@
 //   <id>.grad.svg   — serialized trace, gradients ON.
 //   <id>.mono.svg   — serialized trace, mono (the ink cut through the planar tracer).
 //   <id>.line.svg   — serialized trace, centreline (line-art cases only; input <id>.r512.png).
+//   <id>.cline.svg  — serialized trace, centreline in colour (colour line-art cases only).
 //   manifest.json   — name, git rev (+dirty), date, resolution, case index.
 //
 // Intended workflow (also see CLAUDE.md): BEFORE a vectorizer change, freeze a baseline
@@ -63,6 +64,7 @@ import {
   AB_CORPUS,
   AB_LANES,
   AB_LINE_ART_CASES,
+  AB_COLOUR_LINE_CASES,
   AB_LOGO_CASES,
   AB_SNAPSHOT_DIR,
   AB_SNAPSHOT_RES,
@@ -140,7 +142,7 @@ function galleryCases(): AbCorpusCase[] {
   return wanted.filter((c) => have.has(c.path.split('/').pop()!))
 }
 
-const cases: AbCorpusCase[] = [...AB_CORPUS, ...galleryCases(), ...AB_LINE_ART_CASES]
+const cases: AbCorpusCase[] = [...AB_CORPUS, ...galleryCases(), ...AB_LINE_ART_CASES, ...AB_COLOUR_LINE_CASES]
 
 const manifest: AbSnapshotManifest = {
   name,
@@ -233,6 +235,7 @@ for (const c of cases) {
     const svg = `${c.id}.${lane.key}.svg`
     if (lane.key === 'flat') entry.flat = svg
     else if (lane.key === 'mono') entry.mono = svg
+    else if (lane.key === 'cline') entry.cline = svg
     else if (lane.key === 'grad') {
       entry.grad = svg
       if (r.file !== primary.file) {

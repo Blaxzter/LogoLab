@@ -1114,14 +1114,16 @@ export function representativePaint(item: PathItem): string {
 export function docStats(doc: EditableDoc): { paths: number; nodes: number; colors: number } {
   let paths = 0
   let nodes = 0
-  const fills = new Set<string>()
+  const colors = new Set<string>()
   for (const item of leafItems(doc.items)) {
     if (item.kind !== 'path') continue
     paths++
     for (const sp of item.subPaths) nodes += sp.nodes.length
-    // A stroke-only path contributes no fill colour.
+    // A stroke-only path contributes no fill colour, but its stroke is a colour the
+    // picture is painted in (a colour centreline trace is mostly strokes).
     const f = item.fill.trim().toLowerCase()
-    if (f !== 'none') fills.add(f)
+    if (f !== 'none') colors.add(f)
+    if (item.stroke) colors.add(item.stroke.color.trim().toLowerCase())
   }
-  return { paths, nodes, colors: fills.size }
+  return { paths, nodes, colors: colors.size }
 }

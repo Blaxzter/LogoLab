@@ -117,7 +117,9 @@ export interface VectorizeOptions {
    * Mono: trace the ink as CENTRELINE STROKES — open and closed stroked paths with a
    * measured width, plus filled paths for ink no stroke explains (a note head, a dot)
    * — instead of as filled outlines (src/lib/trace/centerline/). For line art: monoline
-   * icons, diagrams, sheet music. Default off. Ignored in colour mode.
+   * icons, diagrams, sheet music. Default off. In colour mode the inks are traced as one
+   * line drawing and each stroke is painted in the ink it runs through
+   * (centerline/colour.ts); gradients are then ignored.
    */
   centerline?: boolean
   /** Drop the detected background layer for transparent output. */

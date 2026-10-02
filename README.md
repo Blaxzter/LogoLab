@@ -79,10 +79,11 @@ client-side. The research behind each stage is in
 - **Mode: Auto / Color / Mono.** Auto counts the inks: one-ink art traces as a single clean
   mono shape with a measured cut (and **Invert** for light ink on a dark ground), painted in
   the ink's own colour; anything with more inks traces in colour.
-- **Line art as strokes:** turn on **Strokes** under Mono and a monoline icon, a diagram or a
+- **Line art as strokes:** turn on **Strokes** and a monoline icon, a diagram or a
   page of sheet music comes back as the lines it was drawn with — open and closed **stroked
   paths with a measured width** you can re-weight — instead of the filled outline of every
-  line. Ink no stroke explains (a dot, a note head) stays a fill.
+  line. Ink no stroke explains (a dot, a note head) stays a fill. In Colour mode every line
+  keeps its own ink, and lines of different colours that cross stay whole.
 - **Find best settings:** one button traces five candidate setups (mono, strokes, flat, flat
   on a gradient backdrop, full gradients) on a small copy of your image, scores each against
   the original, applies the winner and lists the runners-up one click away. It only runs

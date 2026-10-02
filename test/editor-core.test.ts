@@ -268,14 +268,18 @@ test('serializeDoc emits fill="none" rather than inventing an interior', () => {
   assert.match(svg, /stroke-linecap="round"/)
 })
 
-test('a stroke-only path contributes no colour to the palette count', () => {
+test('a stroke-only path counts its stroke, not its "none" fill, in the colour count', () => {
   const stroked = square('a', 0, 0, 10)
   stroked.fill = 'none'
   stroked.stroke = { color: '#ffffff', width: 2, cap: 'butt', join: 'miter' }
   const filled = square('b', 20, 0, 10, '#112233')
   const stats = docStats(doc([stroked, filled]))
   assert.equal(stats.paths, 2)
-  assert.equal(stats.colors, 1, '"none" is not a colour')
+  assert.equal(stats.colors, 2, '"none" is not a colour; the stroke is')
+  const same = square('c', 40, 0, 10)
+  same.fill = 'none'
+  same.stroke = { color: '#FFFFFF', width: 4, cap: 'round', join: 'round' }
+  assert.equal(docStats(doc([stroked, same])).colors, 1, 'one ink on two strokes is one colour')
 })
 
 test('affineScale is the area-preserving scale, and exact when uniform', () => {

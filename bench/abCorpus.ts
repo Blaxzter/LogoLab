@@ -311,6 +311,46 @@ export const AB_LINE_ART_CASES: AbCorpusCase[] = [
   lineArt('lucide-star', '◎ Lucide star — ten sharp corners on one closed polyline'),
 ]
 
+// ---------------------------------------------------------------------------
+// The COLOUR line-art lane — several inks, for Strokes in Colour (centerline/colour.ts)
+//
+// bench/genLineArt.ts writes these into public/examples/colour-line-art/ (their own dir:
+// the mono gate and lineArtGround read every line-art case as ONE ink), plus the Doodle
+// example PNG. They run in `flat` (the colour outline the app draws with Strokes off, for
+// the side-by-side) and `cline` (the centreline engine in colour).
+// ---------------------------------------------------------------------------
+
+/** `background: null` keeps the raster transparent (an explicit `undefined` would take the default). */
+const colourLineArt = (id: string, name: string, background: string | null = 'white'): AbCorpusCase => ({
+  id,
+  name,
+  kind: 'svg',
+  path: `public/examples/colour-line-art/${id}.svg`,
+  ...(background ? { background } : {}),
+  lanes: ['flat', 'cline'],
+})
+
+export const AB_COLOUR_LINE_CASES: AbCorpusCase[] = [
+  colourLineArt('cl-crossings', '⌇ cl-crossings — two inks crossing at 90° and 33°, a # of red rows over blue columns'),
+  colourLineArt('cl-ties', '⌇ cl-ties — one ink tied to a shape of another: kite + string, balloon + tail, a two-ink T'),
+  colourLineArt('cl-handover', '⌇ cl-handover — a colour change with NO node (known limit: majority ink), and one at a corner'),
+  colourLineArt('cl-paper', '⌇ cl-paper — white and yellow inks on a navy paper, crossing'),
+  colourLineArt('cl-transparent', '⌇ cl-transparent — white, red and blue inks on TRANSPARENCY (coverage from alpha)', null),
+  colourLineArt('cl-loops', '⌇ cl-loops — interlocked rings, petals over a centre ring (weak in mono too)'),
+  colourLineArt('cl-lucide-mail', '◎ Lucide mail in colour — a blue envelope crossed by a red V'),
+  colourLineArt('cl-lucide-git-branch', '◎ Lucide git-branch in colour — rings and runs in four inks'),
+  colourLineArt('cl-lucide-search', '◎ Lucide search in colour — a blue ring, a dark handle leaving it'),
+  colourLineArt('cl-lucide-umbrella', '◎ Lucide umbrella in colour — a red canopy, a dark stem through it'),
+  colourLineArt('cl-lucide-camera', '◎ Lucide camera in colour — a dark body, a blue lens ring inside'),
+  {
+    id: 'doodle',
+    name: '◎ doodle (example PNG) — kite, sun, mountains, waves in five inks',
+    kind: 'png',
+    path: 'public/examples/doodle.png',
+    lanes: ['flat', 'cline'],
+  },
+]
+
 /**
  * THE LANES A STAMP FREEZES — each traced at the resolution PRODUCTION uses for that kind
  * of art (src/lib/traceInput/traceCaps.ts), rather than one convenient number for all of them.
@@ -329,7 +369,7 @@ export const AB_LINE_ART_CASES: AbCorpusCase[] = [
  * executed, and a mono-side change showed up as an all-green corpus.
  */
 export interface AbLane {
-  key: 'flat' | 'grad' | 'mono' | 'line'
+  key: 'flat' | 'grad' | 'mono' | 'line' | 'cline'
   /** What the A/B view calls this lane in a badge or a panel title. */
   label: string
   /** Long side (px) of the raster this lane traces. */
@@ -379,6 +419,15 @@ export const AB_LANES: AbLane[] = [
       const plan = decideInkMode(px, 128, { colorMode: 'mono' })
       return { threshold: plan.threshold, invert: plan.invert }
     },
+  },
+  {
+    // The centreline engine in COLOUR (centerline/colour.ts): the inks folded into one
+    // coverage cut, each stroke painted in the ink it runs through. The flat cap, because
+    // rasterCapFor treats Strokes as flat paint whatever the gradients toggle says.
+    key: 'cline',
+    label: 'colour strokes',
+    res: RASTER_MAX_DIM_FLAT,
+    opts: { mode: 'color', gradients: false, centerline: true },
   },
 ]
 
@@ -460,6 +509,10 @@ export interface AbSnapshotCase {
   linePng?: string
   lineWidth?: number
   lineHeight?: number
+  /** The COLOUR centreline lane's trace (`cline`). It traces at the flat cap, i.e. the
+   *  primary raster, so it needs no input of its own. Absent outside the colour line-art
+   *  cases and in every stamp older than the lane. */
+  cline?: string
 }
 
 /** One lane's files inside a stamp. */
@@ -486,6 +539,7 @@ export function laneFiles(e: AbSnapshotCase, key: AbLaneKey): AbLaneFiles | null
     return e.line && e.linePng && e.lineWidth && e.lineHeight
       ? { svg: e.line, png: e.linePng, width: e.lineWidth, height: e.lineHeight }
       : null
+  if (key === 'cline') return e.cline ? { svg: e.cline, png: e.png, width: e.width, height: e.height } : null
   if (key === 'grad')
     return e.grad
       ? { svg: e.grad, png: e.gradPng ?? e.png, width: e.gradWidth ?? e.width, height: e.gradHeight ?? e.height }
