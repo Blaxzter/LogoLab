@@ -245,12 +245,25 @@ export function useStageGestures({
         }
       }
       // A click on another shape moves node editing to it, as in Affinity:
-      // no trip back to the Move tool to pick the next path.
+      // no trip back to the Move tool to pick the next path. Shift-click adds
+      // it to (or takes it out of) the shapes being edited, nodes kept.
       const other = pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: false })
-      if (other && !additive && !selection.has(other.leafId)) {
-        onNodeSelChange(new Set())
-        onSelectionChange(new Set([other.leafId]))
-        return
+      const otherItem = other ? findItem(doc.items, other.leafId) : null
+      if (other && otherItem?.kind === 'path') {
+        if (additive) {
+          const next = new Set(selection)
+          if (next.has(other.leafId)) {
+            next.delete(other.leafId)
+            onNodeSelChange(new Set([...nodeSel].filter((k) => parseNodeKey(k).itemId !== other.leafId)))
+          } else next.add(other.leafId)
+          onSelectionChange(next)
+          return
+        }
+        if (!selection.has(other.leafId)) {
+          onNodeSelChange(new Set())
+          onSelectionChange(new Set([other.leafId]))
+          return
+        }
       }
       // Nothing under the pointer — rubber-band select nodes.
       if (!additive) onNodeSelChange(new Set())

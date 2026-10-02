@@ -8,7 +8,8 @@
 
 import { useMemo } from 'react'
 import type { EditableDoc } from '../../lib/path/types'
-import { findItem, isGroup, isText, topLevelSelection, walkItems } from '../../lib/path/docTree'
+import { ancestorsOf, findItem, isGroup, isText, topLevelSelection, walkItems } from '../../lib/path/docTree'
+import { parseNodeKey } from '../../lib/editor/nodeEdit'
 import { downloadVector } from '../../lib/export/download'
 import { unsupportedItemCount, type VectorFormat } from '../../lib/export/vectorFormats'
 import { EditorStage } from './EditorStage'
@@ -197,7 +198,16 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
             redo={history.redo}
             onSelectionChange={(ids) => {
               setSelection(ids)
-              if (ids.size !== 1) setNodeSel(new Set())
+              // Keep the selected nodes of shapes that stay selected: shift-adding
+              // a second shape in node editing must not drop the first one's.
+              setNodeSel((prev) => {
+                const kept = [...prev].filter((k) => {
+                  const id = parseNodeKey(k).itemId
+                  // A node of a path inside a selected group is still in play.
+                  return ids.has(id) || ancestorsOf(previewDoc.items, id).some((g) => ids.has(g.id))
+                })
+                return kept.length === prev.size ? prev : new Set(kept)
+              })
             }}
             onNodeSelChange={setNodeSel}
             onDocChange={preview}
