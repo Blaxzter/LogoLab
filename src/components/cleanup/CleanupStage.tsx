@@ -1,6 +1,6 @@
 // The cleanup studio's pan/zoom stage: source pane, the always-mounted painting canvas, pins and overlays.
 
-import { Loader2, MapPin } from 'lucide-react'
+import { Check, Loader2, MapPin } from '../ui/icons'
 import type { CleanupTool, KeepRemoveMarker } from '../../hooks/useCleanupCanvas'
 import type { PanZoom } from '../../hooks/usePanZoom'
 import type { ViewMode } from './CleanupToolbar'
@@ -113,8 +113,9 @@ export function CleanupStage({
             <button
               type="button"
               onClick={onDone}
-              className="pointer-events-auto -mr-1 ml-1 rounded-full px-2 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+              className="pointer-events-auto -mr-1 ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
             >
+              <Check size={12} />
               Done
             </button>
           </span>

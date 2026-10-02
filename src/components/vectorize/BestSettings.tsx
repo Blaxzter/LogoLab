@@ -2,7 +2,7 @@
 // candidates run, and the scoreboard they leave behind. Controlled: the search
 // lives in useBestSettings, the words in studio/bestSettings.ts.
 
-import { Check, Loader2, Sparkles, X } from 'lucide-react'
+import { Check, Loader2, Sparkles, X } from '../ui/icons'
 import { ActionButton, isOff } from '../ui/ActionButton'
 import { Tooltip } from '../ui/Tooltip'
 import { SEARCH_MAX_DIM, scoreLine, winnerNote, type CandidateId } from './studio/bestSettings'
@@ -30,7 +30,8 @@ export function BestSettings({ state, reason, appliedId, onStart, onCancel, onAp
         <span className="flex-1" aria-live="polite">
           Trying {Math.min(state.done + 1, state.total)} of {state.total}…
         </span>
-        <button type="button" onClick={onCancel} className="btn btn-ghost h-6 px-2 text-xs">
+        <button type="button" onClick={onCancel} className="btn btn-ghost h-6 gap-1 px-2 text-xs">
+          <X size={12} />
           Cancel
         </button>
       </div>

@@ -1,4 +1,4 @@
-import { Circle, RotateCcw, Square, Squircle } from 'lucide-react'
+import { Circle, Moon, RotateCcw, Square, Squircle, Sun } from '../ui/icons'
 import { isDefaultAppearance, useAppearance, useEnv, useStore } from '../../state/store'
 import { useActiveTab } from '../../hooks/useActiveTab'
 import { UploadDropzone } from '../intake/UploadDropzone'
@@ -145,8 +145,22 @@ function SidebarBody() {
                   <Segmented
                     value={env.theme}
                     options={[
-                      { value: 'light', label: 'Light' },
-                      { value: 'dark', label: 'Dark' },
+                      {
+                        value: 'light',
+                        label: (
+                          <>
+                            <Sun size={13} /> Light
+                          </>
+                        ),
+                      },
+                      {
+                        value: 'dark',
+                        label: (
+                          <>
+                            <Moon size={13} /> Dark
+                          </>
+                        ),
+                      },
                     ]}
                     onChange={(v) => setEnv({ theme: v })}
                   />

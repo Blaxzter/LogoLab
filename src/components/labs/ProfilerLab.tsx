@@ -18,7 +18,7 @@
 // reading whenever you want one.
 
 import { useMemo } from 'react'
-import { RotateCw } from 'lucide-react'
+import { RotateCw } from '../ui/icons'
 import { labImageData } from './resvgRaster'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { VectorizeOptions } from '../../types'

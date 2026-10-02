@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { X } from './icons'
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock'
 import { Tooltip } from './Tooltip'
 

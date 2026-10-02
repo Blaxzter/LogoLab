@@ -3,7 +3,7 @@
 // is opened — the full vectorizer on that single icon.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Grid2x2, Layers, Loader2, MousePointer2, Play, Scissors, SlidersHorizontal, Square } from 'lucide-react'
+import { Grid2x2, Layers, Loader2, MousePointer2, Play, Scissors, SlidersHorizontal, Square } from '../ui/icons'
 import { useCheckerClass } from '../../state/store'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import { useSheetStore } from '../../state/sheetStore'
@@ -341,8 +341,22 @@ export function SheetStudio() {
             value={view}
             onChange={setView}
             options={[
-              { value: 'icons', label: `Icons (${tiles.length})` },
-              { value: 'sheet', label: 'Sheet' },
+              {
+                value: 'icons',
+                label: (
+                  <>
+                    <Grid2x2 size={13} /> Icons ({tiles.length})
+                  </>
+                ),
+              },
+              {
+                value: 'sheet',
+                label: (
+                  <>
+                    <Layers size={13} /> Sheet
+                  </>
+                ),
+              },
             ]}
           />
           {view === 'sheet' && (
@@ -350,8 +364,22 @@ export function SheetStudio() {
               value={draw ? 'draw' : 'select'}
               onChange={(v) => setDraw(v === 'draw')}
               options={[
-                { value: 'select', label: 'Select' },
-                { value: 'draw', label: 'Draw' },
+                {
+                  value: 'select',
+                  label: (
+                    <>
+                      <MousePointer2 size={13} /> Select
+                    </>
+                  ),
+                },
+                {
+                  value: 'draw',
+                  label: (
+                    <>
+                      <Scissors size={13} /> Draw
+                    </>
+                  ),
+                },
               ]}
             />
           )}

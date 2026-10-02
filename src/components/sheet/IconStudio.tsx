@@ -6,7 +6,7 @@
 // markers, palette, undo — it does here to one icon of the sheet.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Grid2x2, ImageDown, Loader2 } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Grid2x2, ImageDown, Loader2 } from '../ui/icons'
 import { useNavigate } from 'react-router-dom'
 import { VectorizeStudio, type VectorizeSource } from '../vectorize/VectorizeStudio'
 import { Tooltip } from '../ui/Tooltip'
@@ -225,7 +225,8 @@ export function IconStudio({ tile, image, background, index, total, onBack, onSt
         {cutError ? (
           <>
             <p className="text-bad">{cutError}</p>
-            <button type="button" onClick={onBack} className="btn btn-secondary h-8 px-3 text-xs">
+            <button type="button" onClick={onBack} className="btn btn-secondary h-8 gap-1.5 px-3 text-xs">
+              <ArrowLeft size={14} />
               Back to all icons
             </button>
           </>

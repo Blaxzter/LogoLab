@@ -5,7 +5,7 @@
 // mirrors it; only the destination differs.
 
 import { useRef, useState } from 'react'
-import { Loader2, LayoutGrid } from 'lucide-react'
+import { ImageDown, Loader2, LayoutGrid } from '../ui/icons'
 import { useLogo } from '../../state/store'
 import { useSheetStore } from '../../state/sheetStore'
 import { getImageData } from '../../lib/image'
@@ -108,7 +108,8 @@ export function SheetIntake() {
       {error && <p className="text-sm text-bad">{error}</p>}
 
       {logo.src && (
-        <button type="button" onClick={() => void openCurrentLogo()} className="btn btn-secondary h-9 text-xs">
+        <button type="button" onClick={() => void openCurrentLogo()} className="btn btn-secondary h-9 max-w-full text-xs">
+          <ImageDown size={15} className="shrink-0" />
           Use the loaded image ({logo.fileName ?? 'current logo'})
         </button>
       )}

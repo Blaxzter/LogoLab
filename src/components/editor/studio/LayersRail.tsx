@@ -1,6 +1,6 @@
 // The left rail: the layers list and the layer operations that act on its selection.
 
-import { ChevronsDown, ChevronsUp, Copy, Group as GroupIcon, Trash2, Ungroup } from 'lucide-react'
+import { ChevronsDown, ChevronsUp, Copy, Group as GroupIcon, Trash2, Ungroup } from '../../ui/icons'
 import type { EditableDoc } from '../../../lib/path/types'
 import type { DropSpot } from '../../../lib/editor/layerRows'
 import { LayersTree } from '../LayersTree'

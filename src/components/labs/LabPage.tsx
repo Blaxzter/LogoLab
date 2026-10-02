@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useMemo, useRef } from 'react'
 import type { CSSProperties, MutableRefObject, ReactNode, RefObject } from 'react'
-import { ArrowLeft, ChevronDown, Loader2, Search, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Loader2, Search, X } from '../ui/icons'
 import { Link } from 'react-router-dom'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import type { PanZoom } from '../../hooks/usePanZoom'

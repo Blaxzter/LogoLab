@@ -14,7 +14,7 @@
 //     and stack (see lib/report/issueReport).
 
 import { Component, Fragment, useState, type ErrorInfo, type ReactNode } from 'react'
-import { AlertTriangle, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { AlertTriangle, RefreshCw, RotateCcw, Trash2 } from '../ui/icons'
 import { logError } from '../../lib/report/errorLog'
 import { collectReportContext } from '../../lib/report/reportContext'
 import { errorLabel, errorStack, isChunkLoadError } from '../../lib/report/issueReport'

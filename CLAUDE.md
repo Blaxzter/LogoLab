@@ -495,6 +495,24 @@ While you are in there: `cursor: pointer` is a base rule on every enabled `butto
 bespoke icon buttons don't use — so the anchors in that row got a pointer from the browser and
 the buttons beside them didn't.
 
+## Icons come from `ui/icons`, and the animated ones are PORTED, not hand-written
+
+Import every icon from `src/components/ui/icons`, never from `lucide-react` (that is
+`test/animated-icons.test.ts`'s first gate). That module is all of lucide-react with ~60
+icons shadowed by animated versions, ported from **@respeak/lucide-motion-vue** by
+`scripts/port-motion-icons.mjs`: its Vue SFCs carry Motion variants that `motion/react` reads
+unchanged, so the script lifts the variants + element tree into `motionData.ts` (generated —
+re-run, don't edit) and one wrapper (`AnimatedIcon.tsx`) renders them. To animate another
+icon, add it to the script's `ICONS` and re-run; an icon with no upstream animation stays
+static. Three things that are easy to undo:
+
+* **The trigger is the CONTROL, not the glyph** — the icon listens on its closest button /
+  link / tab (hover, keyboard focus), skips a disabled one, and an icon outside any control
+  never animates.
+* **Reduced motion renders the static lucide icon**, not a Motion tree told to stand still.
+* **Check a port's geometry against lucide before adding it**: animate-ui's `flask` is a
+  512-unit custom drawing, not lucide's flask, and would have shipped as a different icon.
+
 ## Offline: the precache list is computed, not globbed
 
 The app is a PWA. The service worker is hand-written (`src/pwa/sw.js`) and its precache list is

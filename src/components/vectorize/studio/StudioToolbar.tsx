@@ -5,7 +5,7 @@
 // go icon-only, below SEGMENTS the view modes fold into a select.
 
 import type { ReactNode } from 'react'
-import { Check, Copy, Download, Hand, Layers, MapPin, MousePointer2, Redo2, Undo2 } from 'lucide-react'
+import { Check, CheckCheck, Copy, Download, Hand, Layers, MapPin, MousePointer2, Redo, Undo } from '../../ui/icons'
 import type { PanZoom } from '../../../hooks/usePanZoom'
 import type { VectorizeOptions } from '../../../types'
 import { Button } from '../../ui/Button'
@@ -140,10 +140,10 @@ export function StudioToolbar({
         </span>
       )}
       <ToolButton title="Undo (Ctrl+Z)" onClick={undo} disabled={!canUndo}>
-        <Undo2 size={15} />
+        <Undo size={15} />
       </ToolButton>
       <ToolButton title="Redo (Ctrl+Shift+Z)" onClick={redo} disabled={!canRedo}>
-        <Redo2 size={15} />
+        <Redo size={15} />
       </ToolButton>
       {viewMode === 'overlay' && (
         <label className="flex items-center gap-2 text-xs text-muted">
@@ -165,11 +165,11 @@ export function StudioToolbar({
         <Button
           variant="primary"
           className="h-8 px-3 text-xs"
-          icon={applied ? <Check size={14} /> : undefined}
+          icon={applied ? <CheckCheck size={14} /> : <Check size={14} />}
           onClick={onApply}
           disabled={!svgText}
         >
-          {applied ? (appliedLabel ?? 'Applied') + ' \u2713' : (applyLabel ?? 'Apply to logo')}
+          {applied ? (appliedLabel ?? 'Applied') : (applyLabel ?? 'Apply to logo')}
         </Button>
         <Tooltip label="Download SVG" side="bottom">
           <Button

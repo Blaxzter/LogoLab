@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Coffee, Heart } from 'lucide-react'
+import { Coffee, Heart } from '../ui/icons'
 import { COFFEE_URL, SPONSOR_URL, GithubMark } from './navItems'
 import { Tooltip } from '../ui/Tooltip'
 

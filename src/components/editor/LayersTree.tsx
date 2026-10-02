@@ -6,7 +6,7 @@
 // row stays a click target for selection and double-click renaming.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, GripVertical, Lock, Square, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, GripVertical, Lock, Square, Trash2 } from '../ui/icons'
 import type { DocItem, EditableDoc, PathItem } from '../../lib/path/types'
 import { isGroup } from '../../lib/path/docTree'
 import { dropSpot, edgeAt, layerRows, rowsBetween, type DropEdge, type DropSpot } from '../../lib/editor/layerRows'

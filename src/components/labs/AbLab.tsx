@@ -25,7 +25,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Upload, X } from 'lucide-react'
+import { Upload, X } from '../ui/icons'
 import { labImageData, rasterizeSvgResvg } from './resvgRaster'
 import { rgbaToUrl } from './raster'
 import { heatColor, HEAT_BG, HEAT_BG_RGB } from '../../lib/heat'

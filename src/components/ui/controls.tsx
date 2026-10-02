@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronDown, Info } from 'lucide-react'
+import { Ban, ChevronDown, Info } from './icons'
 import { isValidHex, normalizeHex, SWATCHES } from '../../lib/colorUtils'
 import { Tooltip } from './Tooltip'
 
@@ -270,7 +270,7 @@ export function ColorField({
               onClick={() => onChange(transparent ? '#ffffff' : 'transparent')}
               className={`btn ${transparent ? 'btn-primary' : 'btn-secondary'} h-9 px-2.5`}
             >
-              <span className="text-xs">∅</span>
+              <Ban size={14} />
             </button>
           </Tooltip>
         )}

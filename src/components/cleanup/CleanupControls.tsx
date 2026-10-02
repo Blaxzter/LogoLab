@@ -2,7 +2,24 @@
 // sections, plus a pinned footer with the usage tip and Reset. Fully controlled:
 // all cleanup state lives in CleanupStudio.
 
-import { Bot, Loader2, MapPin, RotateCcw, Sparkles, Wand2, X } from 'lucide-react'
+import type { ReactNode } from 'react'
+import {
+  Blend,
+  Bot,
+  Brush,
+  Eraser,
+  Expand,
+  Feather,
+  Loader2,
+  MapPin,
+  PaintBucket,
+  Pipette,
+  RotateCcw,
+  Shrink,
+  Sparkles,
+  WandSparkles,
+  X,
+} from '../ui/icons'
 import { Button } from '../ui/Button'
 import { ColorField, Collapsible, Field, Segmented, Slider, Toggle } from '../ui/controls'
 import type { CleanupTool } from '../../hooks/useCleanupCanvas'
@@ -15,13 +32,41 @@ import type { CleanupTool } from '../../hooks/useCleanupCanvas'
 type ManualTool = 'magic' | 'color' | 'restore' | 'erase'
 type RemoveTool = 'magic' | 'color'
 type BrushTool = 'erase' | 'restore'
-const REMOVE_TOOLS: { value: RemoveTool; label: string }[] = [
-  { value: 'magic', label: 'Magic' },
-  { value: 'color', label: 'By color' },
+const REMOVE_TOOLS: { value: RemoveTool; label: ReactNode }[] = [
+  {
+    value: 'magic',
+    label: (
+      <>
+        <WandSparkles size={13} /> Magic
+      </>
+    ),
+  },
+  {
+    value: 'color',
+    label: (
+      <>
+        <Pipette size={13} /> By color
+      </>
+    ),
+  },
 ]
-const BRUSH_TOOLS: { value: BrushTool; label: string }[] = [
-  { value: 'erase', label: 'Erase' },
-  { value: 'restore', label: 'Restore' },
+const BRUSH_TOOLS: { value: BrushTool; label: ReactNode }[] = [
+  {
+    value: 'erase',
+    label: (
+      <>
+        <Eraser size={13} /> Erase
+      </>
+    ),
+  },
+  {
+    value: 'restore',
+    label: (
+      <>
+        <Brush size={13} /> Restore
+      </>
+    ),
+  },
 ]
 
 /** Per-tool help copy. */
@@ -311,6 +356,7 @@ export function CleanupControlsBody({
               variant="secondary"
               onClick={onApplyEdgeShift}
               disabled={aiBusy || !ready || edgeShift === 0}
+              icon={edgeShift < 0 ? <Shrink size={14} /> : <Expand size={14} />}
               className="mt-2 h-8 text-xs"
               block
             >
@@ -324,6 +370,7 @@ export function CleanupControlsBody({
               variant="secondary"
               onClick={onApplyFeather}
               disabled={aiBusy || !ready || feather === 0}
+              icon={<Feather size={14} />}
               className="mt-2 h-8 text-xs"
               block
             >
@@ -343,6 +390,7 @@ export function CleanupControlsBody({
               variant="secondary"
               onClick={onApplyDefringe}
               disabled={aiBusy || !ready || defringeAmt === 0}
+              icon={<Blend size={14} />}
               className="mt-2 h-8 text-xs"
               block
             >
@@ -362,6 +410,7 @@ export function CleanupControlsBody({
               variant="secondary"
               onClick={onRecolor}
               disabled={aiBusy || !ready}
+              icon={<PaintBucket size={14} />}
               className="mt-2 h-8 text-xs"
               block
             >
@@ -375,7 +424,7 @@ export function CleanupControlsBody({
           <Field label="Padding" hint="Transparent margin kept around the trimmed cutout.">
             <Slider value={trimPad} min={0} max={128} unit="px" onChange={onTrimPad} />
           </Field>
-          <Button variant="secondary" icon={<Wand2 size={15} />} onClick={onAutoTrim} disabled={aiBusy || !ready} block>
+          <Button variant="secondary" icon={<WandSparkles size={15} />} onClick={onAutoTrim} disabled={aiBusy || !ready} block>
             Auto-trim & pad
           </Button>
         </Collapsible>

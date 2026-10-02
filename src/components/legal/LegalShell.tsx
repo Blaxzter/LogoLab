@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from '../ui/icons'
 import { Link } from 'react-router-dom'
 import { LegalFooter } from './LegalFooter'
 

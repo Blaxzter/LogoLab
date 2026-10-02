@@ -1,7 +1,7 @@
 // The mobile chrome: the top strip (view, tool, undo, export) and the bottom action bar.
 
 import type { ReactNode } from 'react'
-import { Check, Copy, Download, Hand, Layers, MousePointer2, Redo2, SlidersHorizontal, Undo2 } from 'lucide-react'
+import { Check, CheckCheck, Copy, Download, Ghost, Hand, Layers, MousePointer2, Redo, SlidersHorizontal, Undo } from '../../ui/icons'
 import type { PanZoom } from '../../../hooks/usePanZoom'
 import type { EditableDoc } from '../../../lib/path/types'
 import { Button } from '../../ui/Button'
@@ -86,10 +86,10 @@ export function StudioMobileTopBar({
         />
       </div>
       <BarIconButton title="Undo" onClick={undo} disabled={!canUndo}>
-        <Undo2 size={17} />
+        <Undo size={17} />
       </BarIconButton>
       <BarIconButton title="Redo" onClick={redo} disabled={!canRedo}>
-        <Redo2 size={17} />
+        <Redo size={17} />
       </BarIconButton>
       {view === 'overlay' && (
         <PopoverSlider
@@ -102,6 +102,7 @@ export function StudioMobileTopBar({
           placement="bottom"
           className="shrink-0"
         >
+          <Ghost size={14} />
           Ghost
         </PopoverSlider>
       )}
@@ -163,7 +164,7 @@ export function StudioMobileActionBar({
       <Button
         variant="primary"
         className="h-10"
-        icon={applied ? <Check size={16} /> : undefined}
+        icon={applied ? <CheckCheck size={16} /> : <Check size={16} />}
         onClick={onApply}
         disabled={!svgText}
       >

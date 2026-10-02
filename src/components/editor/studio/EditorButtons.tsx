@@ -71,11 +71,16 @@ export function BarBtn({
 
 export function MiniBtn({
   label,
+  icon,
+  shortcut,
   note,
   onClick,
   reason,
 }: {
   label: string
+  icon: React.ReactNode
+  /** Shown in the tooltip only — "Join (Ctrl+J)" did not fit a half-rail button. */
+  shortcut?: string
   note?: string
   onClick: () => void
   reason?: string | null
@@ -83,12 +88,13 @@ export function MiniBtn({
   // `.btn` handles its own disabled styling via `aria-disabled` (index.css).
   return (
     <ActionButton
-      label={label}
+      label={shortcut ? `${label} (${shortcut})` : label}
       note={note}
       reason={reason}
       onClick={onClick}
-      className="btn btn-secondary h-7 px-1.5 text-[0.68rem]"
+      className="btn btn-secondary h-7 justify-start gap-1 px-1.5 text-[0.68rem]"
     >
+      {icon}
       {label}
     </ActionButton>
   )

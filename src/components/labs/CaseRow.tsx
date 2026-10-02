@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import type { ReactNode } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2 } from '../ui/icons'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import { ZoomControls } from '../ui/ZoomControls'
 import { LabZoomContext } from './LabPage'

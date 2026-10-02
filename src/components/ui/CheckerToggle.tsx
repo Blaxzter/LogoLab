@@ -1,4 +1,4 @@
-import { Contrast } from 'lucide-react'
+import { Contrast } from './icons'
 import { useStore } from '../../state/store'
 import { Tooltip } from './Tooltip'
 

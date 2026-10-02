@@ -1,6 +1,6 @@
 // The studio's top bar: tools, undo/redo, snapping and grid, then view and export actions.
 
-import { Copy, Download, Grid3x3, Layers, Magnet, Redo2, Undo2, X } from 'lucide-react'
+import { Copy, Download, Grid3x3, Layers, Magnet, Redo, Undo, X } from '../../ui/icons'
 import type { SnapConfig } from '../../../lib/editor/snapping'
 import type { PanZoom } from '../../../hooks/usePanZoom'
 import { ZoomControls } from '../../ui/ZoomControls'
@@ -67,10 +67,10 @@ export function EditorToolbar({
       <Divider />
 
       <BarBtn label="Undo (Ctrl+Z)" onClick={undo} reason={why.undo}>
-        <Undo2 size={15} />
+        <Undo size={15} />
       </BarBtn>
       <BarBtn label="Redo (Ctrl+Shift+Z)" onClick={redo} reason={why.redo}>
-        <Redo2 size={15} />
+        <Redo size={15} />
       </BarBtn>
 
       <Divider />

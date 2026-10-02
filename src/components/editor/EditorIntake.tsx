@@ -4,7 +4,7 @@
 // you already have, then a blank artboard and the example drawings.
 
 import { useRef, useState } from 'react'
-import { ClipboardPaste, ImageDown, Loader2, PenTool, X } from 'lucide-react'
+import { ClipboardPaste, Code, ImageDown, Loader2, PenTool, X } from '../ui/icons'
 import type { EditableDoc } from '../../lib/path/types'
 import { parseSvg } from '../../lib/path/model'
 import { useLogo } from '../../state/store'
@@ -164,6 +164,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
             onClick={() => open(markup, 'pasted')}
             className="btn btn-primary h-9 w-full text-sm"
           >
+            <Code size={15} />
             Open markup
           </ActionButton>
         </div>

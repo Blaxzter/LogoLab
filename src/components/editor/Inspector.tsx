@@ -18,7 +18,13 @@ import {
   AlignVerticalSpaceAround,
   FlipHorizontal,
   FlipVertical,
-} from 'lucide-react'
+  Ban,
+  Expand,
+  Frame,
+  Shrink,
+  ToggleLeft,
+  ToggleRight,
+} from '../ui/icons'
 import type { EditableDoc, PathItem, Stroke } from '../../lib/path/types'
 import { allPaths, findItem, isGroup } from '../../lib/path/docTree'
 import type { AlignEdge, DistributeAxis } from '../../lib/editor/align'
@@ -222,8 +228,9 @@ export function Inspector({
             note="Clears the fill so the shape paints only its stroke, if it has one."
             reason={paintReason}
             onClick={() => onFill('none')}
-            className={`btn btn-secondary h-8 px-2 text-xs ${lead?.fill === 'none' ? 'is-active' : ''}`}
+            className={`btn btn-secondary h-8 gap-1 px-2 text-xs ${lead?.fill === 'none' ? 'is-active' : ''}`}
           >
+            <Ban size={13} />
             None
           </ActionButton>
         </div>
@@ -292,8 +299,9 @@ function StrokeSection({
           label={on ? 'Stroke on' : 'Stroke off'}
           note={on ? 'Click to remove the outline entirely.' : 'Click to give the selection an outline.'}
           onClick={() => onStroke(on ? null : base)}
-          className={`btn btn-secondary h-8 px-2 text-xs ${on ? 'is-active' : ''}`}
+          className={`btn btn-secondary h-8 gap-1 px-2 text-xs ${on ? 'is-active' : ''}`}
         >
+          {on ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
           {on ? 'On' : 'Off'}
         </ActionButton>
       </div>
@@ -453,12 +461,14 @@ function ArtboardSection({ doc, onChange }: { doc: EditableDoc; onChange: (next:
       <div className="mb-2 grid grid-cols-2 gap-0.5 rounded-lg bg-surface-3 p-0.5">
         <ModeBtn
           label="Fixed"
+          icon={<Frame size={12} />}
           note="A set size. Anything drawn outside it is cropped from the export."
           on={!grow}
           onClick={() => onChange(setArtboardMode(doc, false))}
         />
         <ModeBtn
           label="Grow"
+          icon={<Expand size={12} />}
           note="No size limit: the artboard follows the drawing in every direction, and the export is cropped to the artwork."
           on={grow}
           onClick={() => onChange(setArtboardMode(doc, true))}
@@ -495,8 +505,9 @@ function ArtboardSection({ doc, onChange }: { doc: EditableDoc; onChange: (next:
               const next = fitArtboardToDrawing(doc)
               if (next) onChange(next)
             }}
-            className="btn btn-secondary h-7 px-1.5 text-[0.68rem]"
+            className="btn btn-secondary h-7 gap-1 px-1.5 text-[0.68rem]"
           >
+            <Shrink size={13} />
             Fit to drawing
           </ActionButton>
         </div>
@@ -505,17 +516,30 @@ function ArtboardSection({ doc, onChange }: { doc: EditableDoc; onChange: (next:
   )
 }
 
-function ModeBtn({ label, note, on, onClick }: { label: string; note: string; on: boolean; onClick: () => void }) {
+function ModeBtn({
+  label,
+  icon,
+  note,
+  on,
+  onClick,
+}: {
+  label: string
+  icon: React.ReactNode
+  note: string
+  on: boolean
+  onClick: () => void
+}) {
   return (
     <ActionButton
       label={label}
       note={note}
       pressed={on}
       onClick={onClick}
-      className={`h-7 rounded-md text-[0.7rem] font-medium transition-colors ${
+      className={`inline-flex h-7 items-center justify-center gap-1 rounded-md text-[0.7rem] font-medium transition-colors ${
         on ? 'bg-surface text-accent shadow-xs' : 'text-ink-2 hover:text-ink'
       }`}
     >
+      {icon}
       {label}
     </ActionButton>
   )

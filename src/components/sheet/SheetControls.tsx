@@ -4,7 +4,8 @@
 // feel like one app.
 
 import type { ReactNode } from 'react'
-import { Loader2, Play, RefreshCw, Square, Trash2, Download } from 'lucide-react'
+import { CheckCheck, ImageUp, ListX, Loader2, Play, RefreshCw, Square, Trash2, Download } from '../ui/icons'
+import { Tooltip } from '../ui/Tooltip'
 import { Button } from '../ui/Button'
 import { Collapsible, Field, Segmented, Slider, TextField, Toggle } from '../ui/controls'
 import { CAPTION_UNSURE_BELOW } from '../../state/sheetStore'
@@ -126,12 +127,15 @@ export function SheetControlsBody({
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-ink">Icon sheet</h2>
           <div className="flex items-center gap-1">
-            <button type="button" onClick={onReplace} className="btn btn-ghost h-7 px-2 text-xs">
+            <button type="button" onClick={onReplace} className="btn btn-ghost h-7 gap-1.5 px-2 text-xs">
+              <ImageUp size={13} />
               Replace
             </button>
-            <button type="button" onClick={onClear} title="Remove the sheet" className="btn btn-ghost h-7 w-7 px-0">
-              <Trash2 size={13} />
-            </button>
+            <Tooltip label="Remove the sheet">
+              <button type="button" onClick={onClear} aria-label="Remove the sheet" className="btn btn-ghost h-7 w-7 px-0">
+                <Trash2 size={13} />
+              </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -436,10 +440,12 @@ export function SheetControlsBody({
         )}
 
         <div className="flex items-center gap-2 text-xs text-muted">
-          <button type="button" onClick={() => onSetAllIncluded(true)} className="btn btn-ghost h-7 px-2 text-xs">
+          <button type="button" onClick={() => onSetAllIncluded(true)} className="btn btn-ghost h-7 gap-1.5 px-2 text-xs">
+            <CheckCheck size={13} />
             Include all
           </button>
-          <button type="button" onClick={() => onSetAllIncluded(false)} className="btn btn-ghost h-7 px-2 text-xs">
+          <button type="button" onClick={() => onSetAllIncluded(false)} className="btn btn-ghost h-7 gap-1.5 px-2 text-xs">
+            <ListX size={13} />
             None
           </button>
         </div>

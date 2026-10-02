@@ -1,6 +1,6 @@
 // The cleanup studio's bottom bars: the desktop status bar and the mobile action bar.
 
-import { Check, Download, SlidersHorizontal } from 'lucide-react'
+import { Check, CheckCheck, Download, SlidersHorizontal } from '../ui/icons'
 import type { CleanupTool } from '../../hooks/useCleanupCanvas'
 import { Button } from '../ui/Button'
 import { StudioActionBar, BarIconButton } from '../studio/StudioBar'
@@ -66,7 +66,7 @@ export function CleanupActionBar({
       <Button
         variant="primary"
         className="h-10"
-        icon={applied ? <Check size={16} /> : undefined}
+        icon={applied ? <CheckCheck size={16} /> : <Check size={16} />}
         onClick={onApply}
         disabled={(!modified && !applied) || aiBusy || !ready}
       >

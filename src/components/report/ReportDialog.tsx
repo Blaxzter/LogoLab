@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bug, ChevronLeft, ExternalLink, Lightbulb, X } from 'lucide-react'
+import { Bug, ChevronLeft, ExternalLink, Lightbulb, X } from '../ui/icons'
 import { diagnosticsText, type ReportKind } from '../../lib/report/issueReport'
 import { buildReport, CopyReportButton, ReportIssueLink, type ReportSubject } from './ReportIssue'
 

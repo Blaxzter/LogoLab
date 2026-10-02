@@ -6,7 +6,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown } from '../ui/icons'
 import { TipLabel, Tooltip } from '../ui/Tooltip'
 import { ActionButton } from '../ui/ActionButton'
 import { SHAPE_TOOLS, isDrawTool, type EditorTool } from './tools'

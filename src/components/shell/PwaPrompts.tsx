@@ -1,6 +1,6 @@
 // The "Install app" button. The service worker's notices live in Toasts.tsx.
 
-import { Download } from 'lucide-react'
+import { Download } from '../ui/icons'
 import { usePwa } from '../../pwa/register'
 import { Tooltip } from '../ui/Tooltip'
 

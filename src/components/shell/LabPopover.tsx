@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { FlaskConical } from 'lucide-react'
+import { ArrowRight, FlaskConical } from '../ui/icons'
 import { Link } from 'react-router-dom'
 import { LAB_VIEWS } from './navItems'
 import { Tooltip } from '../ui/Tooltip'
@@ -109,9 +109,10 @@ export function LabPopover() {
             <Link
               to="/labs"
               onClick={() => setOpen(false)}
-              className="mt-1 block rounded-lg px-2 py-1.5 text-[0.7rem] font-medium text-accent transition-colors hover:bg-surface-3"
+              className="mt-1 flex items-center gap-1 rounded-lg px-2 py-1.5 text-[0.7rem] font-medium text-accent transition-colors hover:bg-surface-3"
             >
-              All labs →
+              All labs
+              <ArrowRight size={12} />
             </Link>
           </div>,
           document.body,

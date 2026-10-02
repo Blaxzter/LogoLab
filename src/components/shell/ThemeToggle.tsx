@@ -1,5 +1,5 @@
-import { Monitor, Moon, Sun } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { Monitor, Moon, Sun } from '../ui/icons'
+import type { LucideIcon } from '../ui/icons'
 import { useTheme, type ThemeMode } from '../../theme'
 import { Tooltip } from '../ui/Tooltip'
 

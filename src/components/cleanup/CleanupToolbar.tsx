@@ -1,6 +1,6 @@
 // The cleanup studio's top bars: the desktop toolbar and the mobile top strip (view mode, undo/redo, ghost, zoom).
 
-import { Check, Download, Redo2, Undo2 } from 'lucide-react'
+import { Check, CheckCheck, Download, Ghost, Redo, Undo } from '../ui/icons'
 import type { PanZoom } from '../../hooks/usePanZoom'
 import { ZoomControls } from '../ui/ZoomControls'
 import { CheckerToggle } from '../ui/CheckerToggle'
@@ -63,10 +63,10 @@ export function CleanupToolbar({
         ]}
       />
       <ToolButton title="Undo (Ctrl+Z)" onClick={onUndo} disabled={undoLen === 0 || aiBusy}>
-        <Undo2 size={15} />
+        <Undo size={15} />
       </ToolButton>
       <ToolButton title="Redo (Ctrl+Shift+Z)" onClick={onRedo} disabled={redoLen === 0 || aiBusy}>
-        <Redo2 size={15} />
+        <Redo size={15} />
       </ToolButton>
       {viewMode === 'overlay' && (
         <label className="flex items-center gap-2 text-xs text-muted">
@@ -88,11 +88,11 @@ export function CleanupToolbar({
         <Button
           variant="primary"
           className="h-8 px-3 text-xs"
-          icon={applied ? <Check size={14} /> : undefined}
+          icon={applied ? <CheckCheck size={14} /> : <Check size={14} />}
           onClick={onApply}
           disabled={(!modified && !applied) || aiBusy || !ready}
         >
-          {applied ? 'Applied ✓' : 'Apply to logo'}
+          {applied ? 'Applied' : 'Apply to logo'}
         </Button>
         <Tooltip label="Download PNG" side="bottom">
           <Button
@@ -142,10 +142,10 @@ export function CleanupTopStrip({
         ]}
       />
       <BarIconButton title="Undo" onClick={onUndo} disabled={undoLen === 0 || aiBusy}>
-        <Undo2 size={17} />
+        <Undo size={17} />
       </BarIconButton>
       <BarIconButton title="Redo" onClick={onRedo} disabled={redoLen === 0 || aiBusy}>
-        <Redo2 size={17} />
+        <Redo size={17} />
       </BarIconButton>
       {view === 'overlay' && (
         <PopoverSlider
@@ -158,6 +158,7 @@ export function CleanupTopStrip({
           placement="bottom"
           className="shrink-0"
         >
+          <Ghost size={14} />
           Ghost
         </PopoverSlider>
       )}

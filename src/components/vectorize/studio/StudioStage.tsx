@@ -1,7 +1,7 @@
 // The stage: the active view's panes, the empty-result notice, trace progress and the mark cue.
 
 import type { ComponentProps } from 'react'
-import { AlertTriangle, Loader2, MapPin, X } from 'lucide-react'
+import { AlertTriangle, Check, Loader2, MapPin, X } from '../../ui/icons'
 import type { PanZoom } from '../../../hooks/usePanZoom'
 import type { EditableDoc } from '../../../lib/path/types'
 import type { TraceScore } from '../../../lib/render/scoreOffThread'
@@ -199,8 +199,9 @@ export function StudioStage({
             <button
               type="button"
               onClick={() => setTool('pan')}
-              className="pointer-events-auto -mr-1 ml-1 rounded-full px-2 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+              className="pointer-events-auto -mr-1 ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
             >
+              <Check size={12} />
               Done
             </button>
           </span>

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Bug, Loader2, Menu, SlidersHorizontal, X } from 'lucide-react'
+import { Bug, Loader2, Menu, SlidersHorizontal, X } from './components/ui/icons'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useLogo, useStore } from './state/store'
 import { useActiveTab } from './hooks/useActiveTab'

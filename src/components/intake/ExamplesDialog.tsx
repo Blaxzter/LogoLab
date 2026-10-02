@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, Shapes, X } from 'lucide-react'
+import { Loader2, Shapes, X } from '../ui/icons'
 import { useStore } from '../../state/store'
 import { loadLogoFile, prefersDarkChecker } from '../../lib/image'
 import { Tooltip } from '../ui/Tooltip'

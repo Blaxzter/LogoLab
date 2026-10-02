@@ -1,4 +1,4 @@
-import { Bug, Coffee, Heart, X } from 'lucide-react'
+import { Bug, Coffee, Heart, X } from '../ui/icons'
 import { NavLink } from 'react-router-dom'
 import { useLogo, useStore } from '../../state/store'
 import { AgentSetupButton } from './AgentSetup'

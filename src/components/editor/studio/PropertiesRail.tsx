@@ -7,6 +7,7 @@ import type { AlignEdge, DistributeAxis } from '../../../lib/editor/align'
 import { Inspector } from '../Inspector'
 import { setFill, setFillOpacity, setFillRule, setStroke } from '../editorDoc'
 import type { ActionReasons } from './actionReasons'
+import { ArrowRightLeft, Combine, Link2, Scissors, Split } from '../../ui/icons'
 import { MiniBtn } from './EditorButtons'
 
 export interface PropertiesRailProps {
@@ -85,30 +86,36 @@ export function PropertiesRail({
         <div className="grid grid-cols-2 gap-1">
           <MiniBtn
             label="Reverse"
+            icon={<ArrowRightLeft size={13} />}
             note="Flips the direction the path is drawn in. Changes which side a non-zero fill treats as inside."
             onClick={doReverse}
             reason={why.reverse}
           />
           <MiniBtn
             label="Split"
+            icon={<Split size={13} />}
             note="Breaks a compound path into one separate shape per subpath."
             onClick={doSplit}
             reason={why.split}
           />
           <MiniBtn
             label="Combine"
+            icon={<Combine size={13} />}
             note="Merges the selected paths into one compound path, set to even-odd so overlaps cut holes."
             onClick={doCombine}
             reason={why.combine}
           />
           <MiniBtn
             label="Break node"
+            icon={<Scissors size={13} />}
             note="Splits the path open at the selected node, leaving two loose ends."
             onClick={doBreak}
             reason={why.breakNode}
           />
           <MiniBtn
-            label="Join (Ctrl+J)"
+            label="Join"
+            icon={<Link2 size={13} />}
+            shortcut="Ctrl+J"
             note="Welds two loose ends of the same path back together."
             onClick={doJoin}
             reason={why.join}

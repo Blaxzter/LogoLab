@@ -2,7 +2,7 @@
 // full-height cleanup studio (removal controls, painting canvas, status bar)
 // takes over the whole viewport. Mirrors VectorizePanel.
 
-import { Eraser } from 'lucide-react'
+import { Eraser } from '../ui/icons'
 import { useLogo } from '../../state/store'
 import { PanelEmptyState } from '../intake/PanelEmptyState'
 import { CleanupStudio } from '../cleanup/CleanupStudio'

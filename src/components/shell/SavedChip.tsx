@@ -5,7 +5,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Check, Loader2, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, Loader2, Trash2 } from '../ui/icons'
 import { getSaveStatus, startFreshSession, subscribeSaveStatus } from '../../lib/persist/session'
 import { Tooltip } from '../ui/Tooltip'
 

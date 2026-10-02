@@ -9,7 +9,7 @@
 // `npm run fetch:logos` and shows an empty-state hint in any build that didn't fetch them.
 
 import { useMemo, useRef, useState } from 'react'
-import { Upload } from 'lucide-react'
+import { Upload } from '../ui/icons'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { EditableDoc } from '../../lib/path/types'
 import { LOGO_CORPUS, LOGO_CORPUS_AVAILABLE } from '../../../bench/logoCorpus'

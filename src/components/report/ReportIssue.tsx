@@ -8,7 +8,7 @@
 // posts themselves.
 
 import { useState, type ReactNode } from 'react'
-import { Bug, Check, Copy, ExternalLink } from 'lucide-react'
+import { Bug, Check, Copy, ExternalLink } from '../ui/icons'
 import { recentErrors } from '../../lib/report/errorLog'
 import { collectReportContext } from '../../lib/report/reportContext'
 import { issueReportText, issueReportUrl, type IssueReportInput, type ReportKind } from '../../lib/report/issueReport'

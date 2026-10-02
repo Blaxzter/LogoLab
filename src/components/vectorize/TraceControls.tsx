@@ -4,7 +4,7 @@
 // the open info dialog is local.
 
 import { useState } from 'react'
-import { Wand2, HelpCircle, AlertTriangle, MapPin, RotateCcw, X } from 'lucide-react'
+import { WandSparkles, CircleHelp, AlertTriangle, MapPin, RotateCcw, X } from '../ui/icons'
 import { ActionButton } from '../ui/ActionButton'
 import { Button } from '../ui/Button'
 import { ColorField, Collapsible, Field, Segmented, Slider, Toggle } from '../ui/controls'
@@ -263,7 +263,7 @@ export function TraceControlsBody({
             </ActionButton>
             <Tooltip label="See how vectorize turns your image into shapes">
               <button type="button" onClick={onShowHelp} className="btn btn-ghost h-7 gap-1 px-2 text-xs text-ink-2">
-                <HelpCircle size={14} />
+                <CircleHelp size={14} />
                 How it works
               </button>
             </Tooltip>
@@ -599,7 +599,7 @@ export function TraceControlsBody({
         <Button
           variant="primary"
           block
-          icon={<Wand2 size={16} />}
+          icon={<WandSparkles size={16} />}
           onClick={onTrace}
           disabled={busy}
           className="h-11 text-[0.95rem] font-semibold shadow-sm"

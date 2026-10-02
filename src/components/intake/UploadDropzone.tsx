@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ImageUp, Loader2, X } from 'lucide-react'
+import { ImageUp, Loader2, X } from '../ui/icons'
 import { useCheckerClass, useLogo, useStore } from '../../state/store'
 import { useLogoUpload } from '../../hooks/useLogoUpload'
 import { ReportFailureLink } from '../report/ReportIssue'
@@ -28,7 +28,8 @@ export function UploadDropzone() {
             {logo.isSvg ? '' : ' px'}
           </p>
         </div>
-        <button type="button" onClick={() => inputRef.current?.click()} className="btn btn-ghost h-8 px-2 text-xs">
+        <button type="button" onClick={() => inputRef.current?.click()} className="btn btn-ghost h-8 gap-1.5 px-2 text-xs">
+          <ImageUp size={14} />
           Replace
         </button>
         <Tooltip label="Remove logo">

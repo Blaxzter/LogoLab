@@ -10,7 +10,7 @@
 // "Edit", `opts.palette` is undefined and extraction is fully automatic.
 
 import { useState } from 'react'
-import { Pipette, Plus, RotateCcw, X } from 'lucide-react'
+import { Pipette, Plus, RotateCcw, X } from '../ui/icons'
 import { hexToRgb, rgbToHex } from '../../lib/colorUtils'
 
 type RGB = { r: number; g: number; b: number; a?: number }

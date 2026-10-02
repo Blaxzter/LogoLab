@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Download, ImageOff, Package, Sparkles, Layers } from 'lucide-react'
+import { Download, ImageOff, Box, Sparkles, Layers } from '../ui/icons'
 import { AgentSetupButton } from '../shell/AgentSetup'
 import { useAppearance, useCheckerClass, useEnv, useLogo } from '../../state/store'
 import type { ExportTarget, RenderIconOptions } from '../../types'
@@ -233,7 +233,7 @@ export default function ExportPanel(): ReactNode {
               <Button
                 variant="secondary"
                 active={activePreset === 'pwa'}
-                icon={<Package size={15} />}
+                icon={<Box size={15} />}
                 onClick={() => applyPreset('pwa')}
               >
                 Full PWA

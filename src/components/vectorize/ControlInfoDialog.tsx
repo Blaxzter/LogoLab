@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ImageIcon, Loader2, X } from 'lucide-react'
+import { ImageIcon, Loader2, X } from '../ui/icons'
 import { useCheckerClass, useLogo } from '../../state/store'
 import { getImageData } from '../../lib/image'
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from '../../lib/trace'

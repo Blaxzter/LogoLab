@@ -1,4 +1,4 @@
-import { Minus, Plus, Scan } from 'lucide-react'
+import { Minus, Plus, Scan } from './icons'
 import type { PanZoom } from '../../hooks/usePanZoom'
 import { ActionButton, isOff } from './ActionButton'
 

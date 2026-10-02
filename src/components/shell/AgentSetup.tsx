@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bot, Check, Copy, ExternalLink, Terminal, X } from 'lucide-react'
+import { Bot, Check, Copy, ExternalLink, Terminal, X } from '../ui/icons'
 import { Tooltip } from '../ui/Tooltip'
 
 /**

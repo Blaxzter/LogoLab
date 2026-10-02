@@ -4,7 +4,7 @@
 
 import type { CSSProperties } from 'react'
 import { useEffect, useRef } from 'react'
-import { AlertTriangle, Eye, EyeOff, Info, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Eye, EyeOff, Info, Trash2, X } from '../ui/icons'
 import type { DocItem, EditableDoc, PathItem, RawItem } from '../../lib/path/types'
 import { normalizeHex } from '../../lib/colorUtils'
 import { isStrokeOnly, representativePaint } from '../../lib/path/model'

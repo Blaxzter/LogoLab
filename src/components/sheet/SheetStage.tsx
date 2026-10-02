@@ -7,7 +7,7 @@
 // `--pz-scale` so they stay thin at high zoom.
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2 } from '../ui/icons'
 import { ZoomSurface } from '../ui/ZoomSurface'
 import { useFitBox } from '../vectorize/useFitBox'
 import type { PanZoom } from '../../hooks/usePanZoom'

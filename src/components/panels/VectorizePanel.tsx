@@ -1,7 +1,7 @@
 // Vectorize tab: the empty state until a logo is loaded, then the full-height
 // vectorize studio.
 
-import { ImageOff } from 'lucide-react'
+import { ImageOff } from '../ui/icons'
 import { useLogo, useStore } from '../../state/store'
 import { PanelEmptyState } from '../intake/PanelEmptyState'
 import { VectorizeStudio } from '../vectorize/VectorizeStudio'

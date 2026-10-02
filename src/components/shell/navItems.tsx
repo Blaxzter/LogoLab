@@ -9,15 +9,15 @@ import {
   LayoutGrid,
   PenTool,
   Timer,
-  Wand2,
-} from 'lucide-react'
+  WandSparkles,
+} from '../ui/icons'
 import type { Tab } from '../../state/store'
 
 /** The panel tabs — shared by the desktop header nav and the mobile menu. */
 export const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'preview', label: 'Preview', icon: <Eye size={15} /> },
   { id: 'cleanup', label: 'Cleanup', icon: <Eraser size={15} /> },
-  { id: 'vectorize', label: 'Vectorize', icon: <Wand2 size={15} /> },
+  { id: 'vectorize', label: 'Vectorize', icon: <WandSparkles size={15} /> },
   // Standalone vector editor; opens any SVG, not just the app's logo (see EditorPanel).
   { id: 'editor', label: 'Editor', icon: <PenTool size={15} /> },
   { id: 'sheet', label: 'Icon sheet', icon: <LayoutGrid size={15} /> },

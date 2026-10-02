@@ -11,7 +11,7 @@ import {
   Spline,
   Square as SquareIcon,
   Star,
-} from 'lucide-react'
+} from '../ui/icons'
 import type { EditorTool } from './tools'
 
 export const TOOL_ICON: Record<EditorTool, React.ReactNode> = {

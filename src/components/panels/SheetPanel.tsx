@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2 } from '../ui/icons'
 import { useSheetStore } from '../../state/sheetStore'
 import { claim, type StoredSheet } from '../../lib/persist/session'
 import { SheetIntake } from '../sheet/SheetIntake'

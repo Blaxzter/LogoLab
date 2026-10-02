@@ -6,7 +6,7 @@
 // follows the drawing in every direction.
 
 import { useState } from 'react'
-import { FilePlus2, RectangleHorizontal, RectangleVertical } from 'lucide-react'
+import { Expand, FilePlus2, Frame, RectangleHorizontal, RectangleVertical } from '../ui/icons'
 import { useCheckerClass } from '../../state/store'
 import { ActionButton } from '../ui/ActionButton'
 import {
@@ -77,8 +77,9 @@ export function BlankArtboard({ onCreate }: BlankArtboardProps) {
               note="The artboard is exactly this size. Anything drawn outside it is cropped from the export."
               pressed={!grow}
               onClick={() => setGrow(false)}
-              className={`btn btn-secondary h-8 px-2.5 text-xs ${grow ? '' : 'is-active'}`}
+              className={`btn btn-secondary h-8 gap-1.5 px-2.5 text-xs ${grow ? '' : 'is-active'}`}
             >
+              <Frame size={13} />
               Fixed
             </ActionButton>
             <ActionButton
@@ -86,8 +87,9 @@ export function BlankArtboard({ onCreate }: BlankArtboardProps) {
               note="No size to pick. An endless board you can pan and zoom anywhere; the artboard wraps whatever you draw."
               pressed={grow}
               onClick={() => setGrow(true)}
-              className={`btn btn-secondary h-8 px-2.5 text-xs ${grow ? 'is-active' : ''}`}
+              className={`btn btn-secondary h-8 gap-1.5 px-2.5 text-xs ${grow ? 'is-active' : ''}`}
             >
+              <Expand size={13} />
               Grow
             </ActionButton>
           </div>

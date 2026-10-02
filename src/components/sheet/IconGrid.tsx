@@ -5,7 +5,7 @@
 // traced / failed) and its remote control (include, rename, open, download).
 
 import { memo, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Check, Download, Loader2, Pencil, ScanText, Type } from 'lucide-react'
+import { AlertTriangle, Check, Download, Loader2, Pencil, ScanText, Type } from '../ui/icons'
 import { cleanAffix, cropTile, exportName, toImageData, type ImageDataLike, type Rect } from '../../lib/sheet'
 import { downloadText } from '../../lib/export/download'
 import { CAPTION_UNSURE_BELOW, type SheetIcon, type SheetNaming } from '../../state/sheetStore'

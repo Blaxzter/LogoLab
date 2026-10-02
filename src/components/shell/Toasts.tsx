@@ -2,7 +2,7 @@
 // out of the layout, lifted clear of the studios' bottom action bar.
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { AlertTriangle, History, RefreshCw, WifiOff, X } from 'lucide-react'
+import { AlertTriangle, History, Loader2, RefreshCw, WifiOff, X } from '../ui/icons'
 import { sessionWasRestored } from '../../lib/persist/session'
 import { dismissFailure, getFailure, subscribeFailure } from '../../lib/report/failureNotice'
 import { ReportIssueLink } from '../report/ReportIssue'
@@ -77,8 +77,10 @@ function PwaToast() {
             type="button"
             onClick={update}
             disabled={updating}
-            className="btn btn-primary h-7 shrink-0 px-2.5 text-xs"
+            className="btn btn-primary h-7 shrink-0 gap-1.5 px-2.5 text-xs"
           >
+            {/* No idle icon: the toast's own RefreshCw already sits beside it. */}
+            {updating && <Loader2 size={13} className="animate-spin" />}
             {updating ? 'Reloading…' : 'Reload'}
           </button>
         </span>

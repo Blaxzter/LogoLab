@@ -1,6 +1,6 @@
 // The desktop status bar: result stats, the ΔE readout, trace progress, errors and hints.
 
-import { Loader2, X } from 'lucide-react'
+import { Loader2, X } from '../../ui/icons'
 import type { TraceScore } from '../../../lib/render/scoreOffThread'
 import { LegalLinksInline } from '../../legal/LegalFooter'
 import { ReportFailureLink } from '../../report/ReportIssue'

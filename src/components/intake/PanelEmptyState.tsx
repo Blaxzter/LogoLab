@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2 } from '../ui/icons'
 import { useLogoUpload } from '../../hooks/useLogoUpload'
 import { ExampleGrid } from './ExamplesDialog'
 import { ReportFailureLink } from '../report/ReportIssue'

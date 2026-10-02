@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ImageUp, Maximize2, RotateCcw, Smartphone } from 'lucide-react'
+import { ImageUp, Maximize2, RotateCcw, Smartphone } from '../ui/icons'
 import { LogoMark } from './LogoMark'
 import { PopoverSlider } from '../ui/PopoverSlider'
 import { Tooltip } from '../ui/Tooltip'
