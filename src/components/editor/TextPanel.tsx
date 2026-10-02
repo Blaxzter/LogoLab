@@ -14,6 +14,7 @@ import { ActionButton } from '../ui/ActionButton'
 import { TipLabel, Tooltip } from '../ui/Tooltip'
 import { AlignCenter, AlignLeft, AlignRight, FlipVertical2, Italic, Spline } from '../ui/icons'
 import { FontPicker } from './FontPicker'
+import { RangeInput } from '../ui/RangeInput'
 import { NumField, Section } from './Inspector'
 import type { TextEditing } from './studio/useTextEditing'
 
@@ -131,14 +132,14 @@ export function TextPanel({
           <span className="w-8 shrink-0 text-[0.7rem] text-muted">Weight</span>
           {wght ? (
             <Tooltip label={<TipLabel title="Weight" detail="This font is variable: any weight in its range." />}>
-              <input
-                type="range"
+              <RangeInput
                 aria-label="Weight"
                 min={wght.min}
                 max={wght.max}
                 step={1}
+                wheelStep={10}
                 value={shown.weight ?? wght.default}
-                onChange={(e) => set({ weight: Number(e.target.value) }, true)}
+                onValue={(v) => set({ weight: v }, true)}
                 className="min-w-0 flex-1 accent-[var(--color-accent)]"
               />
             </Tooltip>
@@ -228,14 +229,14 @@ export function TextPanel({
           <label key={a.tag} className="flex items-center gap-1.5">
             <span className="w-16 shrink-0 truncate text-[0.7rem] text-muted">{AXIS_LABEL[a.tag] ?? a.tag}</span>
             <Tooltip label={<TipLabel title={AXIS_LABEL[a.tag] ?? `Axis ${a.tag}`} detail="A variable-font axis." />}>
-              <input
-                type="range"
+              <RangeInput
                 aria-label={AXIS_LABEL[a.tag] ?? a.tag}
                 min={a.min}
                 max={a.max}
                 step={(a.max - a.min) / 100}
+                wheelStep={(a.max - a.min) / 50}
                 value={shown.variations?.[a.tag] ?? a.default}
-                onChange={(e) => set({ variations: { [a.tag]: Number(e.target.value) } }, true)}
+                onValue={(v) => set({ variations: { [a.tag]: v } }, true)}
                 className="min-w-0 flex-1 accent-[var(--color-accent)]"
               />
             </Tooltip>
@@ -267,14 +268,14 @@ export function TextPanel({
           <div className="flex items-center gap-1.5">
             <span className="w-8 shrink-0 text-[0.7rem] text-muted">Start</span>
             <Tooltip label={<TipLabel title="Start on path" detail="Slides the text along its curve." />}>
-              <input
-                type="range"
+              <RangeInput
                 aria-label="Start on path"
                 min={0}
                 max={1}
                 step={0.005}
+                wheelStep={0.01}
                 value={data.onPath.start}
-                onChange={(e) => text.setProps({ onPath: { ...data.onPath!, start: Number(e.target.value) } }, true)}
+                onValue={(v) => text.setProps({ onPath: { ...data.onPath!, start: v } }, true)}
                 className="min-w-0 flex-1 accent-[var(--color-accent)]"
               />
             </Tooltip>

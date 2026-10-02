@@ -135,9 +135,7 @@ function IconNode({
   variants: Record<string, Variants>
   current: Current
 }): ReactNode {
-  const kids = el.children?.map((child, i) => (
-    <IconNode key={i} el={child} variants={variants} current={current} />
-  ))
+  const kids = el.children?.map((child, i) => <IconNode key={i} el={child} variants={variants} current={current} />)
   const v = el.key ? variants[el.key] : undefined
   if (v && Object.keys(v).length) {
     const Tag = MOTION_TAGS[el.tag] as typeof m.path

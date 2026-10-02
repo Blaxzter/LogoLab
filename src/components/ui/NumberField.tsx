@@ -6,47 +6,16 @@
 // caller can fold the whole gesture into ONE undo step (the editor's
 // `commitLive`); a typed value or an arrow key reports `live = false`.
 //
-// The wheel only takes over when the pointer has been resting on the field: a
-// panel being scrolled past a field keeps scrolling (`lastForeignWheel`), or
-// every number in a rail would snag the scroll wheel on the way down.
+// The wheel only takes over when the pointer has been resting on the field
+// (`useWheelStep`, shared with the sliders): a panel scrolled past a field keeps
+// scrolling.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { TipLabel, Tooltip } from './Tooltip'
+import { decimalsOf, stepFactor as factor, stepped, useWheelStep } from './useWheelStep'
 
-/** Last time a wheel event went to something other than a number field. */
-let lastForeignWheel = 0
-let wheelWatch = false
-function watchWheel() {
-  if (wheelWatch || typeof window === 'undefined') return
-  wheelWatch = true
-  window.addEventListener(
-    'wheel',
-    (e) => {
-      if (!(e.target instanceof Element) || !e.target.closest('[data-number-field]')) lastForeignWheel = Date.now()
-    },
-    { capture: true, passive: true },
-  )
-}
-/** A scroll that started elsewhere within this long keeps scrolling. */
-const SCROLL_LATCH_MS = 450
-/** A wheel burst ends (and its undo step closes) after this much quiet. */
-const WHEEL_IDLE_MS = 500
 /** Pointer travel before a press on the label counts as a scrub, not a click. */
 const SCRUB_THRESHOLD_PX = 3
-
-function decimalsOf(step: number): number {
-  if (step >= 1) return 0
-  return Math.min(6, Math.ceil(-Math.log10(step) - 1e-9))
-}
-
-/** Shift: ten steps; Alt: a tenth of one. */
-const factor = (e: { shiftKey: boolean; altKey: boolean }) => (e.shiftKey ? 10 : e.altKey ? 0.1 : 1)
-
-/** `from` moved by `n` steps of size `unit`, clamped, with float noise trimmed. */
-function stepped(from: number, n: number, unit: number, min?: number, max?: number): number {
-  const v = Number((from + n * unit).toFixed(decimalsOf(unit) + 1))
-  return Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v))
-}
 
 export interface NumberFieldProps {
   label: ReactNode
@@ -79,13 +48,22 @@ export function NumberField({
   const [draft, setDraft] = useState(shown)
   const [scrubbing, setScrubbing] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const rootRef = useRef<HTMLLabelElement | null>(null)
   // The latest props for the native wheel listener, which is bound once.
   const live = useRef({ value, onCommit, min, max, step })
   live.current = { value, onCommit, min, max, step }
 
   useEffect(() => setDraft(shown), [shown])
-  useEffect(watchWheel, [])
+
+  const rootRef = useWheelStep<HTMLLabelElement>({
+    value,
+    step,
+    min,
+    max,
+    onChange: (v) => {
+      setDraft(String(v))
+      onCommit(v, true)
+    },
+  })
 
   /* ---- typing ---- */
   const commitDraft = () => {
@@ -139,36 +117,10 @@ export function NumberField({
     e.preventDefault()
   }
 
-  /* ---- the wheel (native: React's is passive and can't stop the scroll) ---- */
-  useEffect(() => {
-    const el = rootRef.current
-    if (!el) return
-    let burst: { value: number; timer: number } | null = null
-    const onWheel = (e: WheelEvent) => {
-      if (Date.now() - lastForeignWheel < SCROLL_LATCH_MS) return
-      const dir = Math.sign(e.deltaY || e.deltaX)
-      if (!dir) return
-      e.preventDefault()
-      const from = burst ? burst.value : live.current.value
-      const next = stepped(from, -dir, live.current.step * factor(e), live.current.min, live.current.max)
-      if (burst) clearTimeout(burst.timer)
-      burst = { value: next, timer: window.setTimeout(() => (burst = null), WHEEL_IDLE_MS) }
-      if (next !== from) {
-        setDraft(String(next))
-        live.current.onCommit(next, true)
-      }
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => {
-      el.removeEventListener('wheel', onWheel)
-      if (burst) clearTimeout(burst.timer)
-    }
-  }, [])
-
   const title = name ?? (typeof label === 'string' ? label : '')
 
   return (
-    <label ref={rootRef} data-number-field className="flex items-center gap-1.5">
+    <label ref={rootRef} className="flex items-center gap-1.5">
       <span
         onPointerDown={onLabelDown}
         className={`${labelClass} shrink-0 cursor-ew-resize select-none text-[0.7rem] ${

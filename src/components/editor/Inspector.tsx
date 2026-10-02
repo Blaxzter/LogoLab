@@ -32,6 +32,7 @@ import type { Box } from '../../lib/editor/transform'
 import { TipLabel, Tooltip } from '../ui/Tooltip'
 import { ActionButton, isOff } from '../ui/ActionButton'
 import { NumberField } from '../ui/NumberField'
+import { RangeInput } from '../ui/RangeInput'
 import { normalizeHex } from '../../lib/colorUtils'
 import { docPalette } from './editorDoc'
 import { drawingBounds, fitArtboardToDrawing, resizeArtboard, setArtboardMode } from '../../lib/editor/artboard'
@@ -688,13 +689,13 @@ function SliderRow({
     <label className="flex items-center gap-2">
       <span className="w-14 shrink-0 text-[0.7rem] text-muted">{label}</span>
       <Tooltip label={<TipLabel title={tip} detail={note} />}>
-        <input
-          type="range"
+        <RangeInput
           min={0}
           max={100}
+          wheelStep={5}
           value={value}
           aria-label={tip}
-          onChange={(e) => onChange(Number(e.target.value))}
+          onValue={onChange}
           className="min-w-0 flex-1 accent-[var(--color-accent)]"
         />
       </Tooltip>

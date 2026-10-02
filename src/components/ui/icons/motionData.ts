@@ -7,26 +7,26 @@ import type { MotionIconData } from './motionTypes'
 
 /** arrow-left (animate-ui) */
 export const ArrowLeft: MotionIconData = {
-  name: "arrow-left",
+  name: 'arrow-left',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M19 12H5",
+            d: 'M19 12H5',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m12 19-7-7 7-7",
+            d: 'm12 19-7-7 7-7',
           },
-          key: "path2",
+          key: 'path2',
         },
       ],
     },
@@ -36,14 +36,14 @@ export const ArrowLeft: MotionIconData = {
       initial: {
         x: 0,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.3,
         },
       },
       animate: {
-        x: "-25%",
+        x: '-25%',
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.3,
         },
       },
@@ -55,26 +55,26 @@ export const ArrowLeft: MotionIconData = {
 
 /** arrow-right (animate-ui) */
 export const ArrowRight: MotionIconData = {
-  name: "arrow-right",
+  name: 'arrow-right',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M5 12h14",
+            d: 'M5 12h14',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m12 5 7 7-7 7",
+            d: 'm12 5 7 7-7 7',
           },
-          key: "path2",
+          key: 'path2',
         },
       ],
     },
@@ -84,14 +84,14 @@ export const ArrowRight: MotionIconData = {
       initial: {
         x: 0,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.3,
         },
       },
       animate: {
-        x: "25%",
+        x: '25%',
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.3,
         },
       },
@@ -103,17 +103,17 @@ export const ArrowRight: MotionIconData = {
 
 /** bot (hand-written) */
 export const Bot: MotionIconData = {
-  name: "bot",
+  name: 'bot',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M12 8V4H8",
+        d: 'M12 8V4H8',
       },
-      key: "path1",
+      key: 'path1',
     },
     {
-      tag: "rect",
+      tag: 'rect',
       attrs: {
         width: 16,
         height: 12,
@@ -121,35 +121,35 @@ export const Bot: MotionIconData = {
         y: 8,
         rx: 2,
       },
-      key: "rect",
+      key: 'rect',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M2 14h2",
+        d: 'M2 14h2',
       },
-      key: "path2",
+      key: 'path2',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M20 14h2",
+        d: 'M20 14h2',
       },
-      key: "path3",
+      key: 'path3',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M15 13v2",
+        d: 'M15 13v2',
       },
-      key: "path4",
+      key: 'path4',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M9 13v2",
+        d: 'M9 13v2',
       },
-      key: "path5",
+      key: 'path5',
     },
   ],
   variants: {
@@ -166,7 +166,7 @@ export const Bot: MotionIconData = {
         x: [0, -1.5, 1.5, 0],
         y: [0, 1.5, 1.5, 0],
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 1.3,
         },
       },
@@ -180,7 +180,7 @@ export const Bot: MotionIconData = {
         x: [0, -1.5, 1.5, 0],
         y: [0, 1.5, 1.5, 0],
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 1.3,
         },
       },
@@ -190,28 +190,28 @@ export const Bot: MotionIconData = {
 
 /** box (animate-ui) */
 export const Box: MotionIconData = {
-  name: "box",
+  name: 'box',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z",
+        d: 'M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z',
       },
-      key: "path",
+      key: 'path',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m3.3 7 8.7 5 8.7-5",
+        d: 'm3.3 7 8.7 5 8.7-5',
       },
-      key: "path",
+      key: 'path',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M12 22V12",
+        d: 'M12 22V12',
       },
-      key: "path",
+      key: 'path',
     },
   ],
   variants: {
@@ -242,33 +242,33 @@ export const Box: MotionIconData = {
 
 /** brush (animate-ui) */
 export const Brush: MotionIconData = {
-  name: "brush",
+  name: 'brush',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m11 10 3 3",
+            d: 'm11 10 3 3',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M6.5 21A3.5 3.5 0 1 0 3 17.5a2.62 2.62 0 0 1-.708 1.792A1 1 0 0 0 3 21z",
+            d: 'M6.5 21A3.5 3.5 0 1 0 3 17.5a2.62 2.62 0 0 1-.708 1.792A1 1 0 0 0 3 21z',
           },
-          key: "path2",
+          key: 'path2',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M9.969 17.031 21.378 5.624a1 1 0 0 0-3.002-3.002L6.967 14.031",
+            d: 'M9.969 17.031 21.378 5.624a1 1 0 0 0-3.002-3.002L6.967 14.031',
           },
-          key: "path3",
+          key: 'path3',
         },
       ],
     },
@@ -279,15 +279,15 @@ export const Brush: MotionIconData = {
         rotate: 0,
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
         rotate: [0, -6, 6, 0],
-        transformOrigin: "top right",
+        transformOrigin: 'top right',
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -299,14 +299,14 @@ export const Brush: MotionIconData = {
 
 /** check (animate-ui) */
 export const Check: MotionIconData = {
-  name: "check",
+  name: 'check',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m4 12 5 5L20 6",
+        d: 'm4 12 5 5L20 6',
       },
-      key: "path",
+      key: 'path',
     },
   ],
   variants: {
@@ -322,7 +322,7 @@ export const Check: MotionIconData = {
         scale: [1, 1.1, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -331,26 +331,26 @@ export const Check: MotionIconData = {
 
 /** check-check (animate-ui) */
 export const CheckCheck: MotionIconData = {
-  name: "check-check",
+  name: 'check-check',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m2 12 5 5L18 6",
+            d: 'm2 12 5 5L18 6',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m13 16 1.5 1.5L22 10",
+            d: 'm13 16 1.5 1.5L22 10',
           },
-          key: "path2",
+          key: 'path2',
         },
       ],
     },
@@ -364,7 +364,7 @@ export const CheckCheck: MotionIconData = {
         scale: [1, 1.1, 1],
         transition: {
           duration: 0.8,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -378,7 +378,7 @@ export const CheckCheck: MotionIconData = {
         opacity: [0, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -392,7 +392,7 @@ export const CheckCheck: MotionIconData = {
         opacity: [0, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           delay: 0.2,
         },
       },
@@ -402,14 +402,14 @@ export const CheckCheck: MotionIconData = {
 
 /** chevron-down (animate-ui) */
 export const ChevronDown: MotionIconData = {
-  name: "chevron-down",
+  name: 'chevron-down',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m6 9 6 6 6-6",
+        d: 'm6 9 6 6 6-6',
       },
-      key: "path",
+      key: 'path',
     },
   ],
   variants: {
@@ -418,14 +418,14 @@ export const ChevronDown: MotionIconData = {
         y: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
         y: 4,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -434,14 +434,14 @@ export const ChevronDown: MotionIconData = {
 
 /** chevron-left (animate-ui) */
 export const ChevronLeft: MotionIconData = {
-  name: "chevron-left",
+  name: 'chevron-left',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m15 18-6-6 6-6",
+        d: 'm15 18-6-6 6-6',
       },
-      key: "path",
+      key: 'path',
     },
   ],
   variants: {
@@ -450,14 +450,14 @@ export const ChevronLeft: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
         x: -4,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -466,14 +466,14 @@ export const ChevronLeft: MotionIconData = {
 
 /** chevron-right (animate-ui) */
 export const ChevronRight: MotionIconData = {
-  name: "chevron-right",
+  name: 'chevron-right',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m9 18 6-6-6-6",
+        d: 'm9 18 6-6-6-6',
       },
-      key: "path",
+      key: 'path',
     },
   ],
   variants: {
@@ -482,14 +482,14 @@ export const ChevronRight: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
         x: 4,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -498,36 +498,36 @@ export const ChevronRight: MotionIconData = {
 
 /** circle-help (animate-ui) */
 export const CircleHelp: MotionIconData = {
-  name: "circle-help",
+  name: 'circle-help',
   elements: [
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
-        cx: "12",
-        cy: "12",
-        r: "10",
+        cx: '12',
+        cy: '12',
+        r: '10',
       },
     },
     {
-      tag: "g",
+      tag: 'g',
       attrs: {
         transition: {
           duration: 0.5,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
-      key: "variants",
+      key: 'variants',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3",
+            d: 'M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3',
           },
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M12 17h.01",
+            d: 'M12 17h.01',
           },
         },
       ],
@@ -547,21 +547,21 @@ export const CircleHelp: MotionIconData = {
 
 /** code (hand-written) */
 export const Code: MotionIconData = {
-  name: "code",
+  name: 'code',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m16 18 6-6-6-6",
+        d: 'm16 18 6-6-6-6',
       },
-      key: "right",
+      key: 'right',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m8 6-6 6 6 6",
+        d: 'm8 6-6 6 6 6',
       },
-      key: "left",
+      key: 'left',
     },
   ],
   variants: {
@@ -575,7 +575,7 @@ export const Code: MotionIconData = {
         pathLength: [0.2, 1],
         transition: {
           duration: 0.7,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
     },
@@ -590,7 +590,7 @@ export const Code: MotionIconData = {
         transition: {
           duration: 0.82,
           delay: 0.06,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
     },
@@ -599,36 +599,36 @@ export const Code: MotionIconData = {
 
 /** coffee (animate-ui) */
 export const Coffee: MotionIconData = {
-  name: "coffee",
+  name: 'coffee',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
         custom: 0.2,
-        d: "M10 2v2",
+        d: 'M10 2v2',
       },
-      key: "path",
+      key: 'path',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
         custom: 0.4,
-        d: "M14 2v2",
+        d: 'M14 2v2',
       },
-      key: "path",
+      key: 'path',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
         custom: 0,
-        d: "M6 2v2",
+        d: 'M6 2v2',
       },
-      key: "path",
+      key: 'path',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1",
+        d: 'M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1',
       },
     },
   ],
@@ -639,38 +639,38 @@ export const Coffee: MotionIconData = {
         opacity: 1,
       },
       animate: (custom: any) => ({
-    y: -3,
-    opacity: [0, 1, 0],
-    transition: {
-      repeat: Number.POSITIVE_INFINITY,
-      duration: 1.5,
-      ease: "easeInOut",
-      delay: 0.2 * custom,
-    },
-  }),
+        y: -3,
+        opacity: [0, 1, 0],
+        transition: {
+          repeat: Number.POSITIVE_INFINITY,
+          duration: 1.5,
+          ease: 'easeInOut',
+          delay: 0.2 * custom,
+        },
+      }),
     },
   },
 }
 
 /** contrast (animate-ui) */
 export const Contrast: MotionIconData = {
-  name: "contrast",
+  name: 'contrast',
   elements: [
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
         cx: 12,
         cy: 12,
         r: 10,
       },
-      key: "circle",
+      key: 'circle',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M12 18a6 6 0 0 0 0-12v12z",
+        d: 'M12 18a6 6 0 0 0 0-12v12z',
       },
-      key: "path",
+      key: 'path',
     },
   ],
   variants: {
@@ -681,9 +681,9 @@ export const Contrast: MotionIconData = {
       },
       animate: {
         rotate: 180,
-        transformOrigin: "left center",
+        transformOrigin: 'left center',
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 80,
           damping: 10,
         },
@@ -694,10 +694,10 @@ export const Contrast: MotionIconData = {
 
 /** copy (animate-ui) */
 export const Copy: MotionIconData = {
-  name: "copy",
+  name: 'copy',
   elements: [
     {
-      tag: "rect",
+      tag: 'rect',
       attrs: {
         width: 14,
         height: 14,
@@ -706,14 +706,14 @@ export const Copy: MotionIconData = {
         rx: 2,
         ry: 2,
       },
-      key: "rect",
+      key: 'rect',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2",
+        d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2',
       },
-      key: "path",
+      key: 'path',
     },
   ],
   variants: {
@@ -727,7 +727,7 @@ export const Copy: MotionIconData = {
         x: -3,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -741,7 +741,7 @@ export const Copy: MotionIconData = {
         x: 3,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -750,35 +750,35 @@ export const Copy: MotionIconData = {
 
 /** download (animate-ui) */
 export const Download: MotionIconData = {
-  name: "download",
+  name: 'download',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M12 15V3",
+            d: 'M12 15V3',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m7 10 5 5 5-5",
+            d: 'm7 10 5 5 5-5',
           },
-          key: "path2",
+          key: 'path2',
         },
       ],
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4",
+        d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4',
       },
-      key: "path3",
+      key: 'path3',
     },
   ],
   variants: {
@@ -787,14 +787,14 @@ export const Download: MotionIconData = {
         y: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
         y: 2,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -806,89 +806,89 @@ export const Download: MotionIconData = {
 
 /** expand (animate-ui) */
 export const Expand: MotionIconData = {
-  name: "expand",
+  name: 'expand',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group1",
+      key: 'group1',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m15 15 6 6",
+            d: 'm15 15 6 6',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M21 16v5h-5",
+            d: 'M21 16v5h-5',
           },
-          key: "path3",
+          key: 'path3',
         },
       ],
     },
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group2",
+      key: 'group2',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m15 9 6-6",
+            d: 'm15 9 6-6',
           },
-          key: "path2",
+          key: 'path2',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M21 8V3h-5",
+            d: 'M21 8V3h-5',
           },
-          key: "path4",
+          key: 'path4',
         },
       ],
     },
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group3",
+      key: 'group3',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M3 16v5h5",
+            d: 'M3 16v5h5',
           },
-          key: "path5",
+          key: 'path5',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m3 21 6-6",
+            d: 'm3 21 6-6',
           },
-          key: "path6",
+          key: 'path6',
         },
       ],
     },
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group4",
+      key: 'group4',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M3 8V3h5",
+            d: 'M3 8V3h5',
           },
-          key: "path7",
+          key: 'path7',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M9 9 3 3",
+            d: 'M9 9 3 3',
           },
-          key: "path8",
+          key: 'path8',
         },
       ],
     },
@@ -900,7 +900,7 @@ export const Expand: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
@@ -908,7 +908,7 @@ export const Expand: MotionIconData = {
         x: 2,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -918,7 +918,7 @@ export const Expand: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
@@ -926,7 +926,7 @@ export const Expand: MotionIconData = {
         x: 2,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -936,7 +936,7 @@ export const Expand: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
@@ -944,7 +944,7 @@ export const Expand: MotionIconData = {
         x: -2,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -954,7 +954,7 @@ export const Expand: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
@@ -962,7 +962,7 @@ export const Expand: MotionIconData = {
         x: -2,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -979,35 +979,35 @@ export const Expand: MotionIconData = {
 
 /** external-link (animate-ui) */
 export const ExternalLink: MotionIconData = {
-  name: "external-link",
+  name: 'external-link',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M15 3h6v6",
+            d: 'M15 3h6v6',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M10 14 21 3",
+            d: 'M10 14 21 3',
           },
-          key: "path2",
+          key: 'path2',
         },
       ],
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",
+        d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
       },
-      key: "path3",
+      key: 'path3',
     },
   ],
   variants: {
@@ -1017,7 +1017,7 @@ export const ExternalLink: MotionIconData = {
         y: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
@@ -1025,7 +1025,7 @@ export const ExternalLink: MotionIconData = {
         y: -2,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -1037,34 +1037,34 @@ export const ExternalLink: MotionIconData = {
 
 /** eye (animate-ui) */
 export const Eye: MotionIconData = {
-  name: "eye",
+  name: 'eye',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0",
+        d: 'M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0',
         style: {
-          originY: "50%",
+          originY: '50%',
         },
         transition: {
           duration: 0.4,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
-      key: "path",
+      key: 'path',
     },
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
-        cx: "12",
-        cy: "12",
-        r: "3",
+        cx: '12',
+        cy: '12',
+        r: '3',
         transition: {
           duration: 0.4,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
-      key: "path2",
+      key: 'path2',
     },
   ],
   variants: {
@@ -1093,32 +1093,32 @@ export const Eye: MotionIconData = {
 
 /** eye-off (animate-ui) */
 export const EyeOff: MotionIconData = {
-  name: "eye-off",
+  name: 'eye-off',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49",
+        d: 'M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49',
       },
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M14.084 14.158a3 3 0 0 1-4.242-4.242",
+        d: 'M14.084 14.158a3 3 0 0 1-4.242-4.242',
       },
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143",
+        d: 'M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143',
       },
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m2 2 20 20",
+        d: 'm2 2 20 20',
       },
-      key: "path",
+      key: 'path',
     },
   ],
   variants: {
@@ -1142,29 +1142,29 @@ export const EyeOff: MotionIconData = {
 
 /** feather (animate-ui) */
 export const Feather: MotionIconData = {
-  name: "feather",
+  name: 'feather',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "feather",
+      key: 'feather',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M12.67 19a2 2 0 0 0 1.416-.588l6.154-6.172a6 6 0 0 0-8.49-8.49L5.586 9.914A2 2 0 0 0 5 11.328V18a1 1 0 0 0 1 1z",
+            d: 'M12.67 19a2 2 0 0 0 1.416-.588l6.154-6.172a6 6 0 0 0-8.49-8.49L5.586 9.914A2 2 0 0 0 5 11.328V18a1 1 0 0 0 1 1z',
           },
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M16 8 2 22",
+            d: 'M16 8 2 22',
           },
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M17.5 15H9",
+            d: 'M17.5 15H9',
           },
         },
       ],
@@ -1183,7 +1183,7 @@ export const Feather: MotionIconData = {
         x: [0, 2, -2, 1, 0],
         transition: {
           duration: 1.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -1192,24 +1192,24 @@ export const Feather: MotionIconData = {
 
 /** folder (hand-written) */
 export const Folder: MotionIconData = {
-  name: "folder",
+  name: 'folder',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z",
+        d: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z',
         style: {
-          transformBox: "view-box",
+          transformBox: 'view-box',
         },
       },
-      key: "folder",
+      key: 'folder',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M8 10h8M8 13h5",
+        d: 'M8 10h8M8 13h5',
       },
-      key: "document",
+      key: 'document',
     },
   ],
   variants: {
@@ -1221,10 +1221,10 @@ export const Folder: MotionIconData = {
       animate: {
         scaleY: [1, 0.94, 1.03, 1],
         pathLength: [0.2, 1],
-        transformOrigin: "12px 20px",
+        transformOrigin: '12px 20px',
         transition: {
           duration: 0.82,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
     },
@@ -1241,7 +1241,7 @@ export const Folder: MotionIconData = {
         transition: {
           duration: 0.68,
           delay: 0.18,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
     },
@@ -1250,47 +1250,47 @@ export const Folder: MotionIconData = {
 
 /** frame (animate-ui) */
 export const Frame: MotionIconData = {
-  name: "frame",
+  name: 'frame',
   elements: [
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "22",
-        x2: "2",
-        y1: "6",
-        y2: "6",
+        x1: '22',
+        x2: '2',
+        y1: '6',
+        y2: '6',
       },
-      key: "line1",
+      key: 'line1',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "22",
-        x2: "2",
-        y1: "18",
-        y2: "18",
+        x1: '22',
+        x2: '2',
+        y1: '18',
+        y2: '18',
       },
-      key: "line2",
+      key: 'line2',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "6",
-        x2: "6",
-        y1: "2",
-        y2: "22",
+        x1: '6',
+        x2: '6',
+        y1: '2',
+        y2: '22',
       },
-      key: "line3",
+      key: 'line3',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "18",
-        x2: "18",
-        y1: "2",
-        y2: "22",
+        x1: '18',
+        x2: '18',
+        y1: '2',
+        y2: '22',
       },
-      key: "line4",
+      key: 'line4',
     },
   ],
   variants: {
@@ -1298,7 +1298,7 @@ export const Frame: MotionIconData = {
       initial: {
         y: 0,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 15,
         },
@@ -1306,7 +1306,7 @@ export const Frame: MotionIconData = {
       animate: {
         y: -4,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 15,
         },
@@ -1316,7 +1316,7 @@ export const Frame: MotionIconData = {
       initial: {
         y: 0,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 15,
         },
@@ -1324,7 +1324,7 @@ export const Frame: MotionIconData = {
       animate: {
         y: 4,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 15,
         },
@@ -1334,7 +1334,7 @@ export const Frame: MotionIconData = {
       initial: {
         x: 0,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 15,
         },
@@ -1342,7 +1342,7 @@ export const Frame: MotionIconData = {
       animate: {
         x: -4,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 15,
         },
@@ -1352,7 +1352,7 @@ export const Frame: MotionIconData = {
       initial: {
         x: 0,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 15,
         },
@@ -1360,7 +1360,7 @@ export const Frame: MotionIconData = {
       animate: {
         x: 4,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 15,
         },
@@ -1371,79 +1371,79 @@ export const Frame: MotionIconData = {
 
 /** grip-vertical (animate-ui) */
 export const GripVertical: MotionIconData = {
-  name: "grip-vertical",
+  name: 'grip-vertical',
   elements: [
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
         custom: {
           index: 0,
         },
         cx: 9,
         cy: 5,
-        r: "1",
+        r: '1',
       },
-      key: "part",
+      key: 'part',
     },
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
         custom: {
           index: 1,
         },
         cx: 9,
         cy: 12,
-        r: "1",
+        r: '1',
       },
-      key: "part",
+      key: 'part',
     },
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
         custom: {
           index: 2,
         },
         cx: 9,
         cy: 19,
-        r: "1",
+        r: '1',
       },
-      key: "part",
+      key: 'part',
     },
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
         custom: {
           index: 3,
         },
         cx: 15,
         cy: 5,
-        r: "1",
+        r: '1',
       },
-      key: "part",
+      key: 'part',
     },
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
         custom: {
           index: 4,
         },
         cx: 15,
         cy: 12,
-        r: "1",
+        r: '1',
       },
-      key: "part",
+      key: 'part',
     },
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
         custom: {
           index: 5,
         },
         cx: 15,
         cy: 19,
-        r: "1",
+        r: '1',
       },
-      key: "part",
+      key: 'part',
     },
   ],
   variants: {
@@ -1453,89 +1453,89 @@ export const GripVertical: MotionIconData = {
         scale: 1,
         transition: {
           duration: 0.25,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
       animate: ((ROWS: any) => (data: any) => {
-    const row = data.index % ROWS;
-    const col = Math.floor(data.index / ROWS);
-    const delay = row * 0.15 + col * (ROWS * 0.15 - 0.2);
+        const row = data.index % ROWS
+        const col = Math.floor(data.index / ROWS)
+        const delay = row * 0.15 + col * (ROWS * 0.15 - 0.2)
 
-    return {
-      opacity: [1, 0.4, 1],
-      scale: [1, 0.85, 1],
-      transition: { delay, duration: 1, ease: "easeInOut" },
-    };
-  })(3),
+        return {
+          opacity: [1, 0.4, 1],
+          scale: [1, 0.85, 1],
+          transition: { delay, duration: 1, ease: 'easeInOut' },
+        }
+      })(3),
     },
   },
 }
 
 /** group (hand-written) */
 export const Group: MotionIconData = {
-  name: "group",
+  name: 'group',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M3 7V5c0-1.1.9-2 2-2h2",
+        d: 'M3 7V5c0-1.1.9-2 2-2h2',
         style: {
-          transformBox: "view-box",
+          transformBox: 'view-box',
         },
       },
-      key: "frame",
+      key: 'frame',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M17 3h2c1.1 0 2 .9 2 2v2",
+        d: 'M17 3h2c1.1 0 2 .9 2 2v2',
         style: {
-          transformBox: "view-box",
+          transformBox: 'view-box',
         },
       },
-      key: "frame",
+      key: 'frame',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M21 17v2c0 1.1-.9 2-2 2h-2",
+        d: 'M21 17v2c0 1.1-.9 2-2 2h-2',
         style: {
-          transformBox: "view-box",
+          transformBox: 'view-box',
         },
       },
-      key: "frame",
+      key: 'frame',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M7 21H5c-1.1 0-2-.9-2-2v-2",
+        d: 'M7 21H5c-1.1 0-2-.9-2-2v-2',
         style: {
-          transformBox: "view-box",
+          transformBox: 'view-box',
         },
       },
-      key: "frame",
+      key: 'frame',
     },
     {
-      tag: "rect",
+      tag: 'rect',
       attrs: {
-        width: "7",
-        height: "5",
-        x: "7",
-        y: "7",
-        rx: "1",
+        width: '7',
+        height: '5',
+        x: '7',
+        y: '7',
+        rx: '1',
       },
-      key: "first",
+      key: 'first',
     },
     {
-      tag: "rect",
+      tag: 'rect',
       attrs: {
-        width: "7",
-        height: "5",
-        x: "10",
-        y: "12",
-        rx: "1",
+        width: '7',
+        height: '5',
+        x: '10',
+        y: '12',
+        rx: '1',
       },
-      key: "second",
+      key: 'second',
     },
   ],
   variants: {
@@ -1547,10 +1547,10 @@ export const Group: MotionIconData = {
       animate: {
         scale: [0.88, 1.05, 1],
         opacity: [0.45, 1, 1],
-        transformOrigin: "12px 12px",
+        transformOrigin: '12px 12px',
         transition: {
           duration: 0.72,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
     },
@@ -1567,7 +1567,7 @@ export const Group: MotionIconData = {
         transition: {
           duration: 0.56,
           delay: 0.18,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
     },
@@ -1584,7 +1584,7 @@ export const Group: MotionIconData = {
         transition: {
           duration: 0.68,
           delay: 0.3,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
     },
@@ -1593,35 +1593,35 @@ export const Group: MotionIconData = {
 
 /** hand (animate-ui) */
 export const Hand: MotionIconData = {
-  name: "hand",
+  name: 'hand',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "path",
+      key: 'path',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2",
+            d: 'M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2',
           },
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2",
+            d: 'M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2',
           },
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8",
+            d: 'M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8',
           },
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15",
+            d: 'M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15',
           },
         },
       ],
@@ -1631,14 +1631,14 @@ export const Hand: MotionIconData = {
     path: {
       initial: {
         rotate: 0,
-        originX: "50%",
-        originY: "90%",
+        originX: '50%',
+        originY: '90%',
       },
       animate: {
         rotate: [0, -15, 10, -5, 0],
         transition: {
           duration: 0.8,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -1647,19 +1647,19 @@ export const Hand: MotionIconData = {
 
 /** heart (animate-ui) */
 export const Heart: MotionIconData = {
-  name: "heart",
+  name: 'heart',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z",
+            d: 'M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z',
           },
-          key: "path",
+          key: 'path',
         },
       ],
     },
@@ -1673,7 +1673,7 @@ export const Heart: MotionIconData = {
         scale: [1, 0.9, 1.2, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -1683,93 +1683,93 @@ export const Heart: MotionIconData = {
 
 /** history (animate-ui) */
 export const History: MotionIconData = {
-  name: "history",
+  name: 'history',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 250,
           damping: 25,
         },
       },
-      key: "arrow",
+      key: 'arrow',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8",
+            d: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8',
           },
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M3 3v5h5",
+            d: 'M3 3v5h5',
           },
         },
       ],
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         transition: {
           duration: 0.6,
           ease: [0.4, 0, 0.2, 1],
         },
-        x1: "12",
-        x2: "12",
-        y1: "12",
-        y2: "7",
+        x1: '12',
+        x2: '12',
+        y1: '12',
+        y2: '7',
       },
-      key: "hand",
+      key: 'hand',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         transition: {
           duration: 0.5,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
-        x1: "12",
-        x2: "16",
-        y1: "12",
-        y2: "14",
+        x1: '12',
+        x2: '16',
+        y1: '12',
+        y2: '14',
       },
-      key: "minuteHand",
+      key: 'minuteHand',
     },
   ],
   variants: {
     arrow: {
       initial: {
-        rotate: "0deg",
+        rotate: '0deg',
       },
       animate: {
-        rotate: "-50deg",
+        rotate: '-50deg',
       },
     },
     hand: {
       initial: {
         rotate: 0,
-        originX: "0%",
-        originY: "100%",
+        originX: '0%',
+        originY: '100%',
       },
       animate: {
         rotate: -360,
-        originX: "0%",
-        originY: "100%",
+        originX: '0%',
+        originY: '100%',
       },
     },
     minuteHand: {
       initial: {
         rotate: 0,
-        originX: "0%",
-        originY: "0%",
+        originX: '0%',
+        originY: '0%',
       },
       animate: {
         rotate: -45,
-        originX: "0%",
-        originY: "0%",
+        originX: '0%',
+        originY: '0%',
       },
     },
   },
@@ -1777,28 +1777,28 @@ export const History: MotionIconData = {
 
 /** layers (animate-ui) */
 export const Layers: MotionIconData = {
-  name: "layers",
+  name: 'layers',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z",
+        d: 'M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z',
       },
-      key: "path1",
+      key: 'path1',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12",
+        d: 'M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12',
       },
-      key: "path2",
+      key: 'path2',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17",
+        d: 'M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17',
       },
-      key: "path3",
+      key: 'path3',
     },
   ],
   variants: {
@@ -1810,7 +1810,7 @@ export const Layers: MotionIconData = {
         y: 5,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -1823,7 +1823,7 @@ export const Layers: MotionIconData = {
         y: -5,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -1832,51 +1832,51 @@ export const Layers: MotionIconData = {
 
 /** layout-grid (animate-ui) */
 export const LayoutGrid: MotionIconData = {
-  name: "layout-grid",
+  name: 'layout-grid',
   elements: [
     {
-      tag: "rect",
+      tag: 'rect',
       attrs: {
-        height: "7",
-        rx: "1",
-        width: "7",
-        x: "3",
-        y: "3",
+        height: '7',
+        rx: '1',
+        width: '7',
+        x: '3',
+        y: '3',
       },
-      key: "rect_1",
+      key: 'rect_1',
     },
     {
-      tag: "rect",
+      tag: 'rect',
       attrs: {
-        height: "7",
-        rx: "1",
-        width: "7",
-        x: "14",
-        y: "3",
+        height: '7',
+        rx: '1',
+        width: '7',
+        x: '14',
+        y: '3',
       },
-      key: "rect_2",
+      key: 'rect_2',
     },
     {
-      tag: "rect",
+      tag: 'rect',
       attrs: {
-        height: "7",
-        rx: "1",
-        width: "7",
-        x: "14",
-        y: "14",
+        height: '7',
+        rx: '1',
+        width: '7',
+        x: '14',
+        y: '14',
       },
-      key: "rect_3",
+      key: 'rect_3',
     },
     {
-      tag: "rect",
+      tag: 'rect',
       attrs: {
-        height: "7",
-        rx: "1",
-        width: "7",
-        x: "3",
-        y: "14",
+        height: '7',
+        rx: '1',
+        width: '7',
+        x: '3',
+        y: '14',
       },
-      key: "rect_4",
+      key: 'rect_4',
     },
   ],
   variants: {
@@ -1890,7 +1890,7 @@ export const LayoutGrid: MotionIconData = {
         translateY: [0, 0, 0, 0],
         transition: {
           duration: 0.8,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           times: [0, 0.4, 0.6, 1],
         },
       },
@@ -1905,7 +1905,7 @@ export const LayoutGrid: MotionIconData = {
         translateY: [0, 11, 11, 0],
         transition: {
           duration: 0.8,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           times: [0, 0.4, 0.6, 1],
         },
       },
@@ -1920,7 +1920,7 @@ export const LayoutGrid: MotionIconData = {
         translateY: [0, 0, 0, 0],
         transition: {
           duration: 0.8,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           times: [0, 0.4, 0.6, 1],
         },
       },
@@ -1935,7 +1935,7 @@ export const LayoutGrid: MotionIconData = {
         translateY: [0, -11, -11, 0],
         transition: {
           duration: 0.8,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           times: [0, 0.4, 0.6, 1],
         },
       },
@@ -1945,52 +1945,52 @@ export const LayoutGrid: MotionIconData = {
 
 /** lightbulb (animate-ui) */
 export const Lightbulb: MotionIconData = {
-  name: "lightbulb",
+  name: 'lightbulb',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5",
+        d: 'M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5',
       },
-      key: "path1",
+      key: 'path1',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M9 18h6",
+        d: 'M9 18h6',
       },
-      key: "path2",
+      key: 'path2',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M10 22h4",
+        d: 'M10 22h4',
       },
-      key: "path3",
+      key: 'path3',
     },
   ],
   variants: {
     path1: {
       initial: {
         rotate: 0,
-        fill: "transparent",
+        fill: 'transparent',
       },
       animate: {
-        transformOrigin: "bottom center",
-        fill: "currentColor",
+        transformOrigin: 'bottom center',
+        fill: 'currentColor',
         rotate: [0, -20, 15, -7, 0],
         fillOpacity: [0, 1, 0, 1, 0],
         transition: {
           duration: 0.8,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           rotate: {
             duration: 0.8,
-            ease: "easeInOut",
+            ease: 'easeInOut',
             times: [0, 0.4, 0.6, 0.8, 1],
           },
           fillOpacity: {
             duration: 0.3,
-            ease: "easeInOut",
+            ease: 'easeInOut',
             times: [0, 0.4, 0.6, 0.8, 1],
             delay: 0.4,
           },
@@ -2002,11 +2002,11 @@ export const Lightbulb: MotionIconData = {
         rotate: 0,
       },
       animate: {
-        transformOrigin: "bottom center",
+        transformOrigin: 'bottom center',
         rotate: [0, 0, 10, -5, 0],
         transition: {
           duration: 0.8,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           times: [0, 0.4, 0.6, 0.8, 1],
         },
       },
@@ -2017,101 +2017,101 @@ export const Lightbulb: MotionIconData = {
 
 /** link-2 (animate-ui) */
 export const Link2: MotionIconData = {
-  name: "link-2",
+  name: 'link-2',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M9 17H7A5 5 0 0 1 7 7h2",
+        d: 'M9 17H7A5 5 0 0 1 7 7h2',
       },
-      key: "left",
+      key: 'left',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M15 7h2a5 5 0 1 1 0 10h-2",
+        d: 'M15 7h2a5 5 0 1 1 0 10h-2',
       },
-      key: "right",
+      key: 'right',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 8,
         y1: 12,
         x2: 16,
         y2: 12,
         style: {
-          transformOrigin: "12px 12px",
-          transformBox: "view-box",
+          transformOrigin: '12px 12px',
+          transformBox: 'view-box',
         },
       },
-      key: "middle",
+      key: 'middle',
     },
     {
-      tag: "g",
+      tag: 'g',
       attrs: {
         style: {
           rotate: 45,
-          transformOrigin: "12px 12px",
-          transformBox: "view-box",
+          transformOrigin: '12px 12px',
+          transformBox: 'view-box',
         },
       },
       children: [
         {
-          tag: "line",
+          tag: 'line',
           attrs: {
             x1: 8,
             y1: 2,
             x2: 8,
             y2: 5,
             style: {
-              transformOrigin: "8px 3.5px",
-              transformBox: "view-box",
+              transformOrigin: '8px 3.5px',
+              transformBox: 'view-box',
             },
           },
-          key: "burstTop",
+          key: 'burstTop',
         },
         {
-          tag: "line",
+          tag: 'line',
           attrs: {
             x1: 2,
             y1: 8,
             x2: 5,
             y2: 8,
             style: {
-              transformOrigin: "3.5px 8px",
-              transformBox: "view-box",
+              transformOrigin: '3.5px 8px',
+              transformBox: 'view-box',
             },
           },
-          key: "burstLeft",
+          key: 'burstLeft',
         },
         {
-          tag: "line",
+          tag: 'line',
           attrs: {
             x1: 16,
             y1: 19,
             x2: 16,
             y2: 22,
             style: {
-              transformOrigin: "16px 20.5px",
-              transformBox: "view-box",
+              transformOrigin: '16px 20.5px',
+              transformBox: 'view-box',
             },
           },
-          key: "burstBottom",
+          key: 'burstBottom',
         },
         {
-          tag: "line",
+          tag: 'line',
           attrs: {
             x1: 19,
             y1: 16,
             x2: 22,
             y2: 16,
             style: {
-              transformOrigin: "20.5px 16px",
-              transformBox: "view-box",
+              transformOrigin: '20.5px 16px',
+              transformBox: 'view-box',
             },
           },
-          key: "burstRight",
+          key: 'burstRight',
         },
       ],
     },
@@ -2120,28 +2120,28 @@ export const Link2: MotionIconData = {
     left: {
       initial: {
         rotate: 0,
-        transformOrigin: "9px 12px",
+        transformOrigin: '9px 12px',
       },
       animate: {
         rotate: [0, 10, 0],
-        transformOrigin: "9px 12px",
+        transformOrigin: '9px 12px',
         transition: {
           duration: 0.4,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
     right: {
       initial: {
         rotate: 0,
-        transformOrigin: "15px 12px",
+        transformOrigin: '15px 12px',
       },
       animate: {
         rotate: [0, -6, 0],
-        transformOrigin: "15px 12px",
+        transformOrigin: '15px 12px',
         transition: {
           duration: 0.4,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -2153,7 +2153,7 @@ export const Link2: MotionIconData = {
         rotate: [0, 12, 0],
         transition: {
           duration: 0.4,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -2194,31 +2194,31 @@ export const Link2: MotionIconData = {
 
 /** lock (animate-ui) */
 export const Lock: MotionIconData = {
-  name: "lock",
+  name: 'lock',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "rect",
+          tag: 'rect',
           attrs: {
-            width: "18",
-            height: "11",
-            x: "3",
-            y: "11",
-            rx: "2",
-            ry: "2",
+            width: '18',
+            height: '11',
+            x: '3',
+            y: '11',
+            rx: '2',
+            ry: '2',
           },
-          key: "rect",
+          key: 'rect',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M7 11V7a5 5 0 0 1 10 0v4",
+            d: 'M7 11V7a5 5 0 0 1 10 0v4',
           },
-          key: "path",
+          key: 'path',
         },
       ],
     },
@@ -2234,7 +2234,7 @@ export const Lock: MotionIconData = {
         scale: [1, 0.9, 1, 1],
         transition: {
           duration: 1.2,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -2246,7 +2246,7 @@ export const Lock: MotionIconData = {
         pathLength: [1, 0.8, 1, 1],
         transition: {
           duration: 1.2,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -2256,28 +2256,28 @@ export const Lock: MotionIconData = {
 
 /** map-pin (animate-ui) */
 export const MapPin: MotionIconData = {
-  name: "map-pin",
+  name: 'map-pin',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "circle",
+          tag: 'circle',
           attrs: {
             cx: 12,
             cy: 10,
             r: 3,
           },
-          key: "circle",
+          key: 'circle',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0",
+            d: 'M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0',
           },
-          key: "path",
+          key: 'path',
         },
       ],
     },
@@ -2289,16 +2289,16 @@ export const MapPin: MotionIconData = {
         rotate: 0,
         x: 0,
         y: 0,
-        transformOrigin: "bottom center",
+        transformOrigin: 'bottom center',
       },
       animate: {
         scale: [1, 0.75, 1, 1],
         rotate: [0, 30, -15, 0],
         x: [0, 0, 0, 0],
         y: [0, -6, 0, 0],
-        transformOrigin: "bottom center",
+        transformOrigin: 'bottom center',
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 1,
         },
       },
@@ -2310,52 +2310,52 @@ export const MapPin: MotionIconData = {
 
 /** maximize-2 (animate-ui) */
 export const Maximize2: MotionIconData = {
-  name: "maximize-2",
+  name: 'maximize-2',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M3 16.2V21m0 0h4.8M3 21l6-6",
+        d: 'M3 16.2V21m0 0h4.8M3 21l6-6',
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 250,
           damping: 25,
         },
       },
-      key: "path",
+      key: 'path',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M21 7.8V3m0 0h-4.8M21 3l-6 6",
+        d: 'M21 7.8V3m0 0h-4.8M21 3l-6 6',
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 250,
           damping: 25,
         },
       },
-      key: "path2",
+      key: 'path2',
     },
   ],
   variants: {
     path: {
       initial: {
-        translateX: "0%",
-        translateY: "0%",
+        translateX: '0%',
+        translateY: '0%',
       },
       animate: {
-        translateX: "-2px",
-        translateY: "2px",
+        translateX: '-2px',
+        translateY: '2px',
       },
     },
     path2: {
       initial: {
-        translateX: "0%",
-        translateY: "0%",
+        translateX: '0%',
+        translateY: '0%',
       },
       animate: {
-        translateX: "2px",
-        translateY: "-2px",
+        translateX: '2px',
+        translateY: '-2px',
       },
     },
   },
@@ -2363,37 +2363,37 @@ export const Maximize2: MotionIconData = {
 
 /** menu (animate-ui) */
 export const Menu: MotionIconData = {
-  name: "menu",
+  name: 'menu',
   elements: [
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 4,
         y1: 6,
         x2: 20,
         y2: 6,
       },
-      key: "line1",
+      key: 'line1',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 4,
         y1: 12,
         x2: 20,
         y2: 12,
       },
-      key: "line2",
+      key: 'line2',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 4,
         y1: 18,
         x2: 20,
         y2: 18,
       },
-      key: "line3",
+      key: 'line3',
     },
   ],
   variants: {
@@ -2407,9 +2407,9 @@ export const Menu: MotionIconData = {
         rotate: -45,
         x: -2.35,
         y: 0.35,
-        transformOrigin: "top right",
+        transformOrigin: 'top right',
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 200,
           damping: 20,
         },
@@ -2422,7 +2422,7 @@ export const Menu: MotionIconData = {
       animate: {
         opacity: 0,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.2,
         },
       },
@@ -2437,9 +2437,9 @@ export const Menu: MotionIconData = {
         rotate: 45,
         x: -2.35,
         y: -0.35,
-        transformOrigin: "bottom right",
+        transformOrigin: 'bottom right',
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 200,
           damping: 20,
         },
@@ -2450,14 +2450,14 @@ export const Menu: MotionIconData = {
 
 /** moon (hand-written) */
 export const Moon: MotionIconData = {
-  name: "moon",
+  name: 'moon',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401",
+        d: 'M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401',
       },
-      key: "path",
+      key: 'path',
     },
   ],
   variants: {
@@ -2466,7 +2466,7 @@ export const Moon: MotionIconData = {
         rotate: 0,
         transition: {
           duration: 0.5,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
@@ -2474,7 +2474,7 @@ export const Moon: MotionIconData = {
         transition: {
           duration: 1.2,
           times: [0, 0.25, 0.75, 1],
-          ease: ["easeInOut", "easeInOut", "easeInOut"],
+          ease: ['easeInOut', 'easeInOut', 'easeInOut'],
         },
       },
     },
@@ -2483,41 +2483,41 @@ export const Moon: MotionIconData = {
 
 /** pen-tool (animate-ui) */
 export const PenTool: MotionIconData = {
-  name: "pen-tool",
+  name: 'pen-tool',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "svg",
+      key: 'svg',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M15.707 21.293a1 1 0 0 1-1.414 0l-1.586-1.586a1 1 0 0 1 0-1.414l5.586-5.586a1 1 0 0 1 1.414 0l1.586 1.586a1 1 0 0 1 0 1.414z",
+            d: 'M15.707 21.293a1 1 0 0 1-1.414 0l-1.586-1.586a1 1 0 0 1 0-1.414l5.586-5.586a1 1 0 0 1 1.414 0l1.586 1.586a1 1 0 0 1 0 1.414z',
           },
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m18 13-1.375-6.874a1 1 0 0 0-.746-.776L3.235 2.028a1 1 0 0 0-1.207 1.207L5.35 15.879a1 1 0 0 0 .776.746L13 18",
+            d: 'm18 13-1.375-6.874a1 1 0 0 0-.746-.776L3.235 2.028a1 1 0 0 0-1.207 1.207L5.35 15.879a1 1 0 0 0 .776.746L13 18',
           },
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m2.3 2.3 7.286 7.286",
+            d: 'm2.3 2.3 7.286 7.286',
             transition: {
               duration: 0.8,
             },
           },
-          key: "path",
+          key: 'path',
         },
         {
-          tag: "circle",
+          tag: 'circle',
           attrs: {
-            cx: "11",
-            cy: "11",
-            r: "2",
+            cx: '11',
+            cy: '11',
+            r: '2',
           },
         },
       ],
@@ -2552,14 +2552,14 @@ export const PenTool: MotionIconData = {
 
 /** play (animate-ui) */
 export const Play: MotionIconData = {
-  name: "play",
+  name: 'play',
   elements: [
     {
-      tag: "polygon",
+      tag: 'polygon',
       attrs: {
-        points: "6 3 20 12 6 21 6 3",
+        points: '6 3 20 12 6 21 6 3',
       },
-      key: "polygon",
+      key: 'polygon',
     },
   ],
   variants: {
@@ -2568,14 +2568,14 @@ export const Play: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
         x: 3,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -2584,27 +2584,27 @@ export const Play: MotionIconData = {
 
 /** plus (hand-written) */
 export const Plus: MotionIconData = {
-  name: "plus",
+  name: 'plus',
   elements: [
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 12,
         y1: 19,
         x2: 12,
         y2: 5,
       },
-      key: "line1",
+      key: 'line1',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 5,
         y1: 12,
         x2: 19,
         y2: 12,
       },
-      key: "line2",
+      key: 'line2',
     },
   ],
   variants: {
@@ -2612,7 +2612,7 @@ export const Plus: MotionIconData = {
       initial: {
         rotate: 0,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
           delay: 0.1,
         },
@@ -2620,7 +2620,7 @@ export const Plus: MotionIconData = {
       animate: {
         rotate: 90,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
           delay: 0.1,
         },
@@ -2630,14 +2630,14 @@ export const Plus: MotionIconData = {
       initial: {
         rotate: 0,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
       animate: {
         rotate: 90,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -2647,29 +2647,29 @@ export const Plus: MotionIconData = {
 
 /** redo (animate-ui) */
 export const Redo: MotionIconData = {
-  name: "redo",
+  name: 'redo',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M21 7v6h-6",
+        d: 'M21 7v6h-6',
         transition: {
           duration: 0.6,
           ease: [0.25, 0.1, 0.25, 1],
         },
       },
-      key: "path",
+      key: 'path',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7",
+        d: 'M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7',
         transition: {
           duration: 0.6,
           ease: [0.25, 0.1, 0.25, 1],
         },
       },
-      key: "path2",
+      key: 'path2',
     },
   ],
   variants: {
@@ -2698,40 +2698,40 @@ export const Redo: MotionIconData = {
 
 /** refresh-cw (animate-ui) */
 export const RefreshCw: MotionIconData = {
-  name: "refresh-cw",
+  name: 'refresh-cw',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8",
+            d: 'M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M21 3v5h-5",
+            d: 'M21 3v5h-5',
           },
-          key: "path2",
+          key: 'path2',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16",
+            d: 'M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16',
           },
-          key: "path3",
+          key: 'path3',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M8 16H3v5",
+            d: 'M8 16H3v5',
           },
-          key: "path4",
+          key: 'path4',
         },
       ],
     },
@@ -2741,7 +2741,7 @@ export const RefreshCw: MotionIconData = {
       initial: {
         rotate: 0,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 25,
         },
@@ -2749,7 +2749,7 @@ export const RefreshCw: MotionIconData = {
       animate: {
         rotate: 45,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 25,
         },
@@ -2764,26 +2764,26 @@ export const RefreshCw: MotionIconData = {
 
 /** rotate-ccw (animate-ui) */
 export const RotateCcw: MotionIconData = {
-  name: "rotate-ccw",
+  name: 'rotate-ccw',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8",
+            d: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M3 3v5h5",
+            d: 'M3 3v5h5',
           },
-          key: "path2",
+          key: 'path2',
         },
       ],
     },
@@ -2793,7 +2793,7 @@ export const RotateCcw: MotionIconData = {
       initial: {
         rotate: 0,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 25,
         },
@@ -2801,7 +2801,7 @@ export const RotateCcw: MotionIconData = {
       animate: {
         rotate: -45,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 25,
         },
@@ -2814,26 +2814,26 @@ export const RotateCcw: MotionIconData = {
 
 /** rotate-cw (animate-ui) */
 export const RotateCw: MotionIconData = {
-  name: "rotate-cw",
+  name: 'rotate-cw',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8",
+            d: 'M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M21 3v5h-5",
+            d: 'M21 3v5h-5',
           },
-          key: "path2",
+          key: 'path2',
         },
       ],
     },
@@ -2843,7 +2843,7 @@ export const RotateCw: MotionIconData = {
       initial: {
         rotate: 0,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 25,
         },
@@ -2851,7 +2851,7 @@ export const RotateCw: MotionIconData = {
       animate: {
         rotate: 45,
         transition: {
-          type: "spring",
+          type: 'spring',
           stiffness: 150,
           damping: 25,
         },
@@ -2864,58 +2864,58 @@ export const RotateCw: MotionIconData = {
 
 /** scissors (animate-ui) */
 export const Scissors: MotionIconData = {
-  name: "scissors",
+  name: 'scissors',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group1",
+      key: 'group1',
       children: [
         {
-          tag: "circle",
+          tag: 'circle',
           attrs: {
-            cx: "6",
-            cy: "6",
-            r: "3",
+            cx: '6',
+            cy: '6',
+            r: '3',
           },
-          key: "circle1",
+          key: 'circle1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M8.12 8.12 12 12",
+            d: 'M8.12 8.12 12 12',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M14.8 14.8 20 20",
+            d: 'M14.8 14.8 20 20',
           },
-          key: "path2",
+          key: 'path2',
         },
       ],
     },
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group2",
+      key: 'group2',
       children: [
         {
-          tag: "circle",
+          tag: 'circle',
           attrs: {
-            cx: "6",
-            cy: "18",
-            r: "3",
+            cx: '6',
+            cy: '18',
+            r: '3',
           },
-          key: "circle2",
+          key: 'circle2',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M20 4 8.12 15.88",
+            d: 'M20 4 8.12 15.88',
           },
-          key: "path3",
+          key: 'path3',
         },
       ],
     },
@@ -2929,7 +2929,7 @@ export const Scissors: MotionIconData = {
         rotate: [0, -26, 0],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -2941,7 +2941,7 @@ export const Scissors: MotionIconData = {
         rotate: [0, 26, 0],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -2953,28 +2953,28 @@ export const Scissors: MotionIconData = {
 
 /** search (animate-ui) */
 export const Search: MotionIconData = {
-  name: "search",
+  name: 'search',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m21 21-4.34-4.34",
+            d: 'm21 21-4.34-4.34',
           },
-          key: "path",
+          key: 'path',
         },
         {
-          tag: "circle",
+          tag: 'circle',
           attrs: {
             cx: 11,
             cy: 11,
             r: 8,
           },
-          key: "circle",
+          key: 'circle',
         },
       ],
     },
@@ -2985,11 +2985,11 @@ export const Search: MotionIconData = {
         rotate: 0,
       },
       animate: {
-        transformOrigin: "bottom right",
+        transformOrigin: 'bottom right',
         rotate: [0, 17, -10, 5, -1, 0],
         transition: {
           duration: 0.8,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3000,35 +3000,35 @@ export const Search: MotionIconData = {
 
 /** shrink (animate-ui) */
 export const Shrink: MotionIconData = {
-  name: "shrink",
+  name: 'shrink',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m15 15 6 6m-6-6v4.8m0-4.8h4.8",
+        d: 'm15 15 6 6m-6-6v4.8m0-4.8h4.8',
       },
-      key: "path1",
+      key: 'path1',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M9 19.8V15m0 0H4.2M9 15l-6 6",
+        d: 'M9 19.8V15m0 0H4.2M9 15l-6 6',
       },
-      key: "path3",
+      key: 'path3',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M15 4.2V9m0 0h4.8M15 9l6-6",
+        d: 'M15 4.2V9m0 0h4.8M15 9l6-6',
       },
-      key: "path2",
+      key: 'path2',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M9 4.2V9m0 0H4.2M9 9 3 3",
+        d: 'M9 4.2V9m0 0H4.2M9 9 3 3',
       },
-      key: "path4",
+      key: 'path4',
     },
   ],
   variants: {
@@ -3038,7 +3038,7 @@ export const Shrink: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
@@ -3046,7 +3046,7 @@ export const Shrink: MotionIconData = {
         x: -1,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3056,7 +3056,7 @@ export const Shrink: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
@@ -3064,7 +3064,7 @@ export const Shrink: MotionIconData = {
         x: -1,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3074,7 +3074,7 @@ export const Shrink: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
@@ -3082,7 +3082,7 @@ export const Shrink: MotionIconData = {
         x: 1,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3092,7 +3092,7 @@ export const Shrink: MotionIconData = {
         x: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
@@ -3100,7 +3100,7 @@ export const Shrink: MotionIconData = {
         x: 1,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3109,97 +3109,97 @@ export const Shrink: MotionIconData = {
 
 /** sliders-horizontal (animate-ui) */
 export const SlidersHorizontal: MotionIconData = {
-  name: "sliders-horizontal",
+  name: 'sliders-horizontal',
   elements: [
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "3",
-        y1: "5",
-        x2: "10",
-        y2: "5",
+        x1: '3',
+        y1: '5',
+        x2: '10',
+        y2: '5',
       },
-      key: "line1",
+      key: 'line1',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "14",
-        y1: "3",
-        x2: "14",
-        y2: "7",
+        x1: '14',
+        y1: '3',
+        x2: '14',
+        y2: '7',
       },
-      key: "line2",
+      key: 'line2',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "14",
-        y1: "5",
-        x2: "21",
-        y2: "5",
+        x1: '14',
+        y1: '5',
+        x2: '21',
+        y2: '5',
       },
-      key: "line3",
+      key: 'line3',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "3",
-        y1: "12",
-        x2: "8",
-        y2: "12",
+        x1: '3',
+        y1: '12',
+        x2: '8',
+        y2: '12',
       },
-      key: "line4",
+      key: 'line4',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "8",
-        y1: "10",
-        x2: "8",
-        y2: "14",
+        x1: '8',
+        y1: '10',
+        x2: '8',
+        y2: '14',
       },
-      key: "line5",
+      key: 'line5',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "12",
-        y1: "12",
-        x2: "21",
-        y2: "12",
+        x1: '12',
+        y1: '12',
+        x2: '21',
+        y2: '12',
       },
-      key: "line6",
+      key: 'line6',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "3",
-        y1: "19",
-        x2: "12",
-        y2: "19",
+        x1: '3',
+        y1: '19',
+        x2: '12',
+        y2: '19',
       },
-      key: "line7",
+      key: 'line7',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "16",
-        y1: "17",
-        x2: "16",
-        y2: "21",
+        x1: '16',
+        y1: '17',
+        x2: '16',
+        y2: '21',
       },
-      key: "line8",
+      key: 'line8',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "16",
-        y1: "19",
-        x2: "21",
-        y2: "19",
+        x1: '16',
+        y1: '19',
+        x2: '21',
+        y2: '19',
       },
-      key: "line9",
+      key: 'line9',
     },
   ],
   variants: {
@@ -3210,7 +3210,7 @@ export const SlidersHorizontal: MotionIconData = {
       animate: {
         x2: 4,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -3224,7 +3224,7 @@ export const SlidersHorizontal: MotionIconData = {
         x1: 8,
         x2: 8,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -3236,7 +3236,7 @@ export const SlidersHorizontal: MotionIconData = {
       animate: {
         x1: 8,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -3248,7 +3248,7 @@ export const SlidersHorizontal: MotionIconData = {
       animate: {
         x2: 16,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -3262,7 +3262,7 @@ export const SlidersHorizontal: MotionIconData = {
         x1: 16,
         x2: 16,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -3274,7 +3274,7 @@ export const SlidersHorizontal: MotionIconData = {
       animate: {
         x1: 20,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -3286,7 +3286,7 @@ export const SlidersHorizontal: MotionIconData = {
       animate: {
         x2: 7,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -3300,7 +3300,7 @@ export const SlidersHorizontal: MotionIconData = {
         x1: 11,
         x2: 11,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -3312,7 +3312,7 @@ export const SlidersHorizontal: MotionIconData = {
       animate: {
         x1: 11,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -3322,37 +3322,37 @@ export const SlidersHorizontal: MotionIconData = {
 
 /** sparkles (animate-ui) */
 export const Sparkles: MotionIconData = {
-  name: "sparkles",
+  name: 'sparkles',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z",
+            d: 'M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z',
           },
-          key: "path",
+          key: 'path',
         },
       ],
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M20 2v4 M22 4h-4",
+        d: 'M20 2v4 M22 4h-4',
       },
-      key: "plus",
+      key: 'plus',
     },
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
-        cx: "4",
-        cy: "20",
-        r: "2",
+        cx: '4',
+        cy: '20',
+        r: '2',
       },
-      key: "circle",
+      key: 'circle',
     },
   ],
   variants: {
@@ -3364,7 +3364,7 @@ export const Sparkles: MotionIconData = {
         scale: [1, 0.9, 1.1, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3380,17 +3380,17 @@ export const Sparkles: MotionIconData = {
         transition: {
           opacity: {
             duration: 0.2,
-            ease: "easeInOut",
+            ease: 'easeInOut',
             repeat: 1,
-            repeatType: "reverse",
+            repeatType: 'reverse',
             repeatDelay: 0.2,
             delay: 0.15,
           },
           scale: {
             duration: 0.2,
-            ease: "easeInOut",
+            ease: 'easeInOut',
             repeat: 1,
-            repeatType: "reverse",
+            repeatType: 'reverse',
             repeatDelay: 0.2,
             delay: 0.15,
           },
@@ -3408,16 +3408,16 @@ export const Sparkles: MotionIconData = {
         transition: {
           opacity: {
             duration: 0.2,
-            ease: "easeInOut",
+            ease: 'easeInOut',
             repeat: 1,
-            repeatType: "reverse",
+            repeatType: 'reverse',
             repeatDelay: 0.2,
           },
           scale: {
             duration: 0.2,
-            ease: "easeInOut",
+            ease: 'easeInOut',
             repeat: 1,
-            repeatType: "reverse",
+            repeatType: 'reverse',
             repeatDelay: 0.2,
           },
         },
@@ -3428,19 +3428,19 @@ export const Sparkles: MotionIconData = {
 
 /** star (animate-ui) */
 export const Star: MotionIconData = {
-  name: "star",
+  name: 'star',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z",
+            d: 'M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z',
           },
-          key: "path",
+          key: 'path',
         },
       ],
     },
@@ -3454,7 +3454,7 @@ export const Star: MotionIconData = {
         scale: [1, 0.9, 1.2, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3464,96 +3464,96 @@ export const Star: MotionIconData = {
 
 /** sun (hand-written) */
 export const Sun: MotionIconData = {
-  name: "sun",
+  name: 'sun',
   elements: [
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
-        cx: "12",
-        cy: "12",
-        r: "4",
+        cx: '12',
+        cy: '12',
+        r: '4',
       },
-      key: "circle",
+      key: 'circle',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "12",
-        y1: "4",
-        x2: "12",
-        y2: "2",
+        x1: '12',
+        y1: '4',
+        x2: '12',
+        y2: '2',
       },
-      key: "line1",
+      key: 'line1',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "17.7",
-        y1: "6.3",
-        x2: "19.1",
-        y2: "4.9",
+        x1: '17.7',
+        y1: '6.3',
+        x2: '19.1',
+        y2: '4.9',
       },
-      key: "line2",
+      key: 'line2',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "20",
-        y1: "12",
-        x2: "22",
-        y2: "12",
+        x1: '20',
+        y1: '12',
+        x2: '22',
+        y2: '12',
       },
-      key: "line3",
+      key: 'line3',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "17.7",
-        y1: "17.7",
-        x2: "19.1",
-        y2: "19.1",
+        x1: '17.7',
+        y1: '17.7',
+        x2: '19.1',
+        y2: '19.1',
       },
-      key: "line4",
+      key: 'line4',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "12",
-        y1: "20",
-        x2: "12",
-        y2: "22",
+        x1: '12',
+        y1: '20',
+        x2: '12',
+        y2: '22',
       },
-      key: "line5",
+      key: 'line5',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "6.3",
-        y1: "17.7",
-        x2: "4.9",
-        y2: "19.1",
+        x1: '6.3',
+        y1: '17.7',
+        x2: '4.9',
+        y2: '19.1',
       },
-      key: "line6",
+      key: 'line6',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "4",
-        y1: "12",
-        x2: "2",
-        y2: "12",
+        x1: '4',
+        y1: '12',
+        x2: '2',
+        y2: '12',
       },
-      key: "line7",
+      key: 'line7',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
-        x1: "6.3",
-        y1: "6.3",
-        x2: "4.9",
-        y2: "4.9",
+        x1: '6.3',
+        y1: '6.3',
+        x2: '4.9',
+        y2: '4.9',
       },
-      key: "line8",
+      key: 'line8',
     },
   ],
   variants: {
@@ -3568,7 +3568,7 @@ export const Sun: MotionIconData = {
         pathLength: [0, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           delay: 0,
         },
       },
@@ -3583,7 +3583,7 @@ export const Sun: MotionIconData = {
         pathLength: [0, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           delay: 0.15,
         },
       },
@@ -3598,7 +3598,7 @@ export const Sun: MotionIconData = {
         pathLength: [0, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           delay: 0.3,
         },
       },
@@ -3613,7 +3613,7 @@ export const Sun: MotionIconData = {
         pathLength: [0, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           delay: 0.44999999999999996,
         },
       },
@@ -3628,7 +3628,7 @@ export const Sun: MotionIconData = {
         pathLength: [0, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           delay: 0.6,
         },
       },
@@ -3643,7 +3643,7 @@ export const Sun: MotionIconData = {
         pathLength: [0, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           delay: 0.75,
         },
       },
@@ -3658,7 +3658,7 @@ export const Sun: MotionIconData = {
         pathLength: [0, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           delay: 0.8999999999999999,
         },
       },
@@ -3673,7 +3673,7 @@ export const Sun: MotionIconData = {
         pathLength: [0, 1],
         transition: {
           duration: 0.6,
-          ease: "easeInOut",
+          ease: 'easeInOut',
           delay: 1.05,
         },
       },
@@ -3683,21 +3683,21 @@ export const Sun: MotionIconData = {
 
 /** terminal (hand-written) */
 export const Terminal: MotionIconData = {
-  name: "terminal",
+  name: 'terminal',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M12 19h8",
+        d: 'M12 19h8',
       },
-      key: "path1",
+      key: 'path1',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m4 17 6-6-6-6",
+        d: 'm4 17 6-6-6-6',
       },
-      key: "path2",
+      key: 'path2',
     },
   ],
   variants: {
@@ -3709,7 +3709,7 @@ export const Terminal: MotionIconData = {
         opacity: [1, 0, 1, 0, 1],
         transition: {
           duration: 1.5,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3719,36 +3719,36 @@ export const Terminal: MotionIconData = {
 
 /** timer (animate-ui) */
 export const Timer: MotionIconData = {
-  name: "timer",
+  name: 'timer',
   elements: [
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
         cx: 12,
         cy: 14,
         r: 8,
       },
-      key: "circle",
+      key: 'circle',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 12,
         x2: 15,
         y1: 14,
         y2: 11,
       },
-      key: "line1",
+      key: 'line1',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 10,
         x2: 14,
         y1: 2,
         y2: 2,
       },
-      key: "line2",
+      key: 'line2',
     },
   ],
   variants: {
@@ -3757,15 +3757,15 @@ export const Timer: MotionIconData = {
       initial: {
         rotate: 0,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.6,
         },
       },
       animate: {
-        transformOrigin: "bottom left",
+        transformOrigin: 'bottom left',
         rotate: 360,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.6,
           delay: 0.15,
         },
@@ -3778,7 +3778,7 @@ export const Timer: MotionIconData = {
       animate: {
         y: [0, 1.5, 0],
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.3,
         },
       },
@@ -3788,10 +3788,10 @@ export const Timer: MotionIconData = {
 
 /** toggle-left (animate-ui) */
 export const ToggleLeft: MotionIconData = {
-  name: "toggle-left",
+  name: 'toggle-left',
   elements: [
     {
-      tag: "rect",
+      tag: 'rect',
       attrs: {
         width: 20,
         height: 14,
@@ -3799,16 +3799,16 @@ export const ToggleLeft: MotionIconData = {
         y: 5,
         rx: 7,
       },
-      key: "rect",
+      key: 'rect',
     },
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
         cx: 9,
         cy: 12,
         r: 3,
       },
-      key: "circle",
+      key: 'circle',
     },
   ],
   variants: {
@@ -3821,7 +3821,7 @@ export const ToggleLeft: MotionIconData = {
         x: [0, 7, 6],
         transition: {
           duration: 0.5,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3830,10 +3830,10 @@ export const ToggleLeft: MotionIconData = {
 
 /** toggle-right (animate-ui) */
 export const ToggleRight: MotionIconData = {
-  name: "toggle-right",
+  name: 'toggle-right',
   elements: [
     {
-      tag: "rect",
+      tag: 'rect',
       attrs: {
         width: 20,
         height: 14,
@@ -3841,16 +3841,16 @@ export const ToggleRight: MotionIconData = {
         y: 5,
         rx: 7,
       },
-      key: "rect",
+      key: 'rect',
     },
     {
-      tag: "circle",
+      tag: 'circle',
       attrs: {
         cx: 15,
         cy: 12,
         r: 3,
       },
-      key: "circle",
+      key: 'circle',
     },
   ],
   variants: {
@@ -3863,7 +3863,7 @@ export const ToggleRight: MotionIconData = {
         x: [0, -7, -6],
         transition: {
           duration: 0.5,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3872,55 +3872,55 @@ export const ToggleRight: MotionIconData = {
 
 /** trash-2 (animate-ui) */
 export const Trash2: MotionIconData = {
-  name: "trash-2",
+  name: 'trash-2',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2",
+            d: 'M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M3 6h18",
+            d: 'M3 6h18',
           },
-          key: "path2",
+          key: 'path2',
         },
       ],
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6",
+        d: 'M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6',
       },
-      key: "path3",
+      key: 'path3',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 10,
         x2: 10,
         y1: 11,
         y2: 17,
       },
-      key: "line1",
+      key: 'line1',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 14,
         x2: 14,
         y1: 11,
         y2: 17,
       },
-      key: "line2",
+      key: 'line2',
     },
   ],
   variants: {
@@ -3932,7 +3932,7 @@ export const Trash2: MotionIconData = {
         y: -1,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3941,14 +3941,14 @@ export const Trash2: MotionIconData = {
     path3: {
       initial: {
         y: 0,
-        d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6",
+        d: 'M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6',
       },
       animate: {
         y: 1,
-        d: "M19 8v12c0 1-1 2-2 2H7c-1 0-2-1-2-2V8",
+        d: 'M19 8v12c0 1-1 2-2 2H7c-1 0-2-1-2-2V8',
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3960,7 +3960,7 @@ export const Trash2: MotionIconData = {
         y: 1,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3972,7 +3972,7 @@ export const Trash2: MotionIconData = {
         y: 1,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -3981,29 +3981,29 @@ export const Trash2: MotionIconData = {
 
 /** undo (animate-ui) */
 export const Undo: MotionIconData = {
-  name: "undo",
+  name: 'undo',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M3 7v6h6",
+        d: 'M3 7v6h6',
         transition: {
           duration: 0.6,
           ease: [0.25, 0.1, 0.25, 1],
         },
       },
-      key: "path",
+      key: 'path',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13",
+        d: 'M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13',
         transition: {
           duration: 0.6,
           ease: [0.25, 0.1, 0.25, 1],
         },
       },
-      key: "path2",
+      key: 'path2',
     },
   ],
   variants: {
@@ -4032,35 +4032,35 @@ export const Undo: MotionIconData = {
 
 /** upload (animate-ui) */
 export const Upload: MotionIconData = {
-  name: "upload",
+  name: 'upload',
   elements: [
     {
-      tag: "g",
+      tag: 'g',
       attrs: {},
-      key: "group",
+      key: 'group',
       children: [
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "M12 3v12",
+            d: 'M12 3v12',
           },
-          key: "path1",
+          key: 'path1',
         },
         {
-          tag: "path",
+          tag: 'path',
           attrs: {
-            d: "m17 8-5-5-5 5",
+            d: 'm17 8-5-5-5 5',
           },
-          key: "path2",
+          key: 'path2',
         },
       ],
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4",
+        d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4',
       },
-      key: "path3",
+      key: 'path3',
     },
   ],
   variants: {
@@ -4069,14 +4069,14 @@ export const Upload: MotionIconData = {
         y: 0,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
       animate: {
         y: -2,
         transition: {
           duration: 0.3,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -4088,81 +4088,81 @@ export const Upload: MotionIconData = {
 
 /** wand-sparkles (hand-written) */
 export const WandSparkles: MotionIconData = {
-  name: "wand-sparkles",
+  name: 'wand-sparkles',
   elements: [
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72",
+        d: 'm21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72',
       },
-      key: "wand",
+      key: 'wand',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "m14 7 3 3",
+        d: 'm14 7 3 3',
       },
-      key: "wand",
+      key: 'wand',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M5 6v4",
+        d: 'M5 6v4',
       },
       style: {
-        transformOrigin: "5px 8px",
+        transformOrigin: '5px 8px',
       },
-      key: "sparkleA",
+      key: 'sparkleA',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M7 8H3",
+        d: 'M7 8H3',
       },
       style: {
-        transformOrigin: "5px 8px",
+        transformOrigin: '5px 8px',
       },
-      key: "sparkleA",
+      key: 'sparkleA',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M10 2v2",
+        d: 'M10 2v2',
       },
       style: {
-        transformOrigin: "10px 3px",
+        transformOrigin: '10px 3px',
       },
-      key: "sparkleB",
+      key: 'sparkleB',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M11 3H9",
+        d: 'M11 3H9',
       },
       style: {
-        transformOrigin: "10px 3px",
+        transformOrigin: '10px 3px',
       },
-      key: "sparkleB",
+      key: 'sparkleB',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M19 14v4",
+        d: 'M19 14v4',
       },
       style: {
-        transformOrigin: "19px 16px",
+        transformOrigin: '19px 16px',
       },
-      key: "sparkleC",
+      key: 'sparkleC',
     },
     {
-      tag: "path",
+      tag: 'path',
       attrs: {
-        d: "M21 16h-4",
+        d: 'M21 16h-4',
       },
       style: {
-        transformOrigin: "19px 16px",
+        transformOrigin: '19px 16px',
       },
-      key: "sparkleC",
+      key: 'sparkleC',
     },
   ],
   variants: {
@@ -4176,10 +4176,10 @@ export const WandSparkles: MotionIconData = {
         x: [0, -0.6, 0.5, -0.4, 0.4, -0.3, 0.2, 0],
         y: [0, 0.4, -0.5, 0.3, -0.3, 0.2, -0.1, 0],
         rotate: [0, -1.5, 1.2, -1, 0.8, -0.5, 0.3, 0],
-        transformOrigin: "19.5px 4.5px",
+        transformOrigin: '19.5px 4.5px',
         transition: {
           duration: 1.1,
-          ease: "easeInOut",
+          ease: 'easeInOut',
         },
       },
     },
@@ -4196,7 +4196,7 @@ export const WandSparkles: MotionIconData = {
         transition: {
           duration: 0.45,
           delay: 0.15,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
     },
@@ -4213,7 +4213,7 @@ export const WandSparkles: MotionIconData = {
         transition: {
           duration: 0.45,
           delay: 0.35,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
     },
@@ -4230,7 +4230,7 @@ export const WandSparkles: MotionIconData = {
         transition: {
           duration: 0.45,
           delay: 0.55,
-          ease: "easeOut",
+          ease: 'easeOut',
         },
       },
     },
@@ -4239,27 +4239,27 @@ export const WandSparkles: MotionIconData = {
 
 /** x (hand-written) */
 export const X: MotionIconData = {
-  name: "x",
+  name: 'x',
   elements: [
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 6,
         y1: 18,
         x2: 18,
         y2: 6,
       },
-      key: "line1",
+      key: 'line1',
     },
     {
-      tag: "line",
+      tag: 'line',
       attrs: {
         x1: 6,
         y1: 6,
         x2: 18,
         y2: 18,
       },
-      key: "line2",
+      key: 'line2',
     },
   ],
   variants: {
@@ -4267,14 +4267,14 @@ export const X: MotionIconData = {
       initial: {
         rotate: 0,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
       animate: {
         rotate: 90,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
         },
       },
@@ -4283,7 +4283,7 @@ export const X: MotionIconData = {
       initial: {
         rotate: 0,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
           delay: 0.1,
         },
@@ -4291,7 +4291,7 @@ export const X: MotionIconData = {
       animate: {
         rotate: 90,
         transition: {
-          ease: "easeInOut",
+          ease: 'easeInOut',
           duration: 0.4,
           delay: 0.1,
         },
