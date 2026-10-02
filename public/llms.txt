@@ -1,0 +1,32 @@
+# LogoLab
+
+> Free, open-source (MIT) online vectorizer: converts PNG, JPG and WebP logos and icons into clean, editable SVG entirely in the browser. No upload, no account, no watermark, no usage limit. Also removes backgrounds, previews a logo in real contexts and exports favicon / PWA / Android icon sets.
+
+Web app: https://logolab.fabraham.dev/
+
+## What it does
+
+- Vectorize (raster → SVG): real tracing (region segmentation, shared-edge planar tracing, curve fitting with sharp corners kept), not a bitmap wrapped in an SVG. Modes: flat colour, one-ink (mono) and gradients. Line art can be traced as stroked centrelines instead of outlines. "Find best settings" scores candidate settings against the source.
+- Cleanup: remove a baked-in background (flood fill, by colour, brushes, or an AI cutout model that runs in the browser).
+- Editor: SVG editor with node editing, boolean operations and live text.
+- Icon sheet: split one AI-generated sheet of many icons into separate traced icons.
+- Preview: the logo on device screenshots, a website nav, browser tabs, app store listing, avatars, and a 16–128px legibility matrix on light and dark.
+- Export: favicon.ico, PWA manifest icons, apple-touch-icon, Android icons, SVG.
+
+## Privacy
+
+Everything runs locally in the browser (the tracer runs in a Web Worker). Images are never uploaded. The app works offline once loaded (PWA).
+
+## For coding agents
+
+The same vectorizer and icon exporter is published to npm as an MCP server, `logolab`:
+
+    claude mcp add logolab -- npx -y logolab
+
+Tools: make_app_icons (trace + a full PWA, Tauri, Android or iOS icon set in one call), trace_icon, inspect_icon, export_icons, split_icon_sheet. Runs on your machine over stdio; nothing is uploaded.
+
+## Links
+
+- Source code: https://github.com/Blaxzter/LogoLab
+- npm package (MCP server): https://www.npmjs.com/package/logolab
+- Issues: https://github.com/Blaxzter/LogoLab/issues

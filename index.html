@@ -42,9 +42,9 @@
     </script>
     <meta
       name="description"
-      content="LogoLab — drop in a logo, preview it in real-world contexts, vectorize to clean SVG, and export PWA-ready icons."
+      content="Free online vectorizer: turn a PNG or JPG logo into a clean SVG in your browser — no upload, no sign-up, no watermark. Preview it in real contexts, remove the background, and export favicons and PWA icons."
     />
-    <title>LogoLab — preview & export your logo</title>
+    <title>LogoLab — free image to SVG vectorizer, logo preview & icon export</title>
 
     <!-- Open Graph / Twitter Card — link-preview cards when shared on
          HN, Reddit, X, Bluesky, Discord, Slack, LinkedIn, etc. -->
@@ -73,9 +73,63 @@
     />
     <meta name="twitter:image" content="https://logolab.fabraham.dev/og.png" />
     <link rel="canonical" href="https://logolab.fabraham.dev/" />
+
+    <!-- For search engines and AI assistants (ChatGPT, Claude, Perplexity…): most of
+         their crawlers do not run JavaScript, so this, the static copy in #root and
+         /llms.txt are all they ever learn about an SPA. Keep them in step with what
+         the app actually does. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "LogoLab",
+        "url": "https://logolab.fabraham.dev/",
+        "description": "Free in-browser vectorizer that converts PNG/JPG logos and icons into clean SVG (shared-edge tracing, curve fitting, line art as strokes), with background removal, an SVG editor, logo previews in real contexts and favicon/PWA icon export. Nothing is uploaded.",
+        "applicationCategory": "DesignApplication",
+        "operatingSystem": "Any (web browser)",
+        "browserRequirements": "Requires JavaScript",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "featureList": [
+          "Raster to SVG vectorization (PNG, JPG, WebP)",
+          "Colour, one-ink (mono) and gradient tracing",
+          "Line art traced as stroked centrelines",
+          "AI background removal in the browser",
+          "SVG editor with booleans and live text",
+          "Split an icon sheet into separate icons",
+          "Favicon, apple-touch, PWA and Android icon export",
+          "Works offline; no upload, no account, no watermark"
+        ],
+        "license": "https://opensource.org/licenses/MIT",
+        "codeRepository": "https://github.com/Blaxzter/LogoLab",
+        "sameAs": ["https://github.com/Blaxzter/LogoLab", "https://www.npmjs.com/package/logolab"]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Replaced by the app on its first render; this is what a crawler that does
+           not run JavaScript reads. -->
+      <main style="max-width: 40rem; margin: 4rem auto; padding: 0 1rem; font: 14px/1.6 system-ui, sans-serif; opacity: 0.75">
+        <h1>LogoLab — free online image to SVG vectorizer</h1>
+        <p>
+          Convert a PNG, JPG or WebP logo or icon into a clean, editable SVG, right in your
+          browser. No upload, no sign-up, no watermark, free and open source (MIT).
+        </p>
+        <ul>
+          <li><strong>Vectorize:</strong> real tracing (region segmentation and curve fitting), not an image embedded in an SVG. Flat colour, one-ink and gradient art; line art comes back as strokes.</li>
+          <li><strong>Clean up:</strong> remove a baked-in background with a flood fill, brushes or an in-browser AI cutout.</li>
+          <li><strong>Edit:</strong> a built-in SVG editor with node editing, booleans and live text.</li>
+          <li><strong>Preview:</strong> see the logo on devices, websites, browser tabs, app stores and avatars, from 16px up.</li>
+          <li><strong>Export:</strong> favicons, apple-touch, PWA and Android icon sets; split an AI-generated icon sheet into separate icons.</li>
+        </ul>
+        <p>
+          The same vectorizer runs from coding agents as an MCP server:
+          <code>npx -y logolab</code>. Source:
+          <a href="https://github.com/Blaxzter/LogoLab">github.com/Blaxzter/LogoLab</a>.
+        </p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
