@@ -1,4 +1,4 @@
-// Apply / Download (SVG, AI, DXF) / Copy for the traced SVG, and the badges they leave behind.
+// A host's Apply / Download (SVG, AI, DXF) / Copy for the traced SVG, and the badges they leave behind.
 
 import { useEffect, useState } from 'react'
 import { downloadVector } from '../../../lib/export/download'
@@ -16,8 +16,8 @@ export function useExportActions({
   svgText: string | null
   derivedDoc: EditableDoc | null
   fileName: string | null
-  /** Where Apply sends the SVG. */
-  apply: (svgText: string, width: number, height: number) => void
+  /** Where a host's Apply sends the SVG; absent when the trace is published as it changes. */
+  apply?: (svgText: string, width: number, height: number) => void
   setError: (message: string | null) => void
   setFailure: (failure: unknown) => void
 }) {
@@ -36,7 +36,7 @@ export function useExportActions({
   }
 
   const onApply = () => {
-    if (!svgText || !derivedDoc) return
+    if (!svgText || !derivedDoc || !apply) return
     const [, , w, h] = derivedDoc.viewBox
     apply(svgText, w, h)
     setApplied(true)

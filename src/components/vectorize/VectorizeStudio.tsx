@@ -2,8 +2,10 @@
 // split / traced / original / overlay / difference views and a status bar, and
 // the per-path list (right rail). The traced doc lives in undo/redo history.
 //
-// Traces the app's working logo by default. Every store binding is also a prop,
-// so the icon sheet reuses the same studio to edit one tile.
+// Traces the app's working logo by default and writes the trace back into it as
+// it changes (no Apply step; the store keeps the traced-from image as
+// `traceInput`). Every store binding is also a prop, so the icon sheet reuses the
+// same studio to edit one tile.
 //
 // The state and effects live in hooks under ./studio, called in the order the
 // effects must run; the chrome is split into the presentational parts there.
@@ -37,6 +39,7 @@ import { useTraceRun } from './studio/useTraceRun'
 import { useTraceOutput } from './studio/useTraceOutput'
 import { useEmptyNotice } from './studio/useEmptyNotice'
 import { useExportActions } from './studio/useExportActions'
+import { usePublishTrace } from './studio/usePublishTrace'
 import { useFidelityScore } from './studio/useFidelityScore'
 import { useBestSettings } from './studio/useBestSettings'
 import { withCandidate, type Candidate } from './studio/bestSettings'
@@ -53,7 +56,10 @@ export interface VectorizeStudioProps {
   source?: VectorizeSource
   /** Transparency backdrop class. Defaults to the global checker preference. */
   checkerClass?: string
-  /** What the Apply button does. Defaults to replacing the app's working logo. */
+  /**
+   * A host's own Apply button (the icon sheet's "Done"). Without one there is no
+   * button: the trace is written into the app's working logo as it changes.
+   */
   onApply?: (svgText: string, width: number, height: number) => void
   applyLabel?: string
   appliedLabel?: string
@@ -100,8 +106,11 @@ export function VectorizeStudio({
 }: VectorizeStudioProps = {}) {
   const storeLogo = useLogo()
   const storeChecker = useCheckerClass()
-  const setProcessedSvg = useStore((s) => s.setProcessedSvg)
-  const assetKey = useStore((s) => s.assetKey)
+  const storeAssetKey = useStore((s) => s.assetKey)
+  // While the working logo is this studio's own trace, the image it was traced
+  // from. Tracing the working logo then would trace the trace.
+  const traceInput = useStore((s) => s.traceInput)
+  const assetKey = source ? storeAssetKey : (traceInput?.assetKey ?? storeAssetKey)
   // What the working logo's upload asked for (an example's own settings). A host that
   // passes its own source (the icon sheet) decides its options itself.
   const storeHints = useStore((s) => s.traceHints)
@@ -109,7 +118,7 @@ export function VectorizeStudio({
 
   const session = useStudioSession(persist, assetKey)
   // The image being traced: the app's working logo unless a host passed one.
-  const logo = source ?? storeLogo
+  const logo = source ?? traceInput?.logo ?? storeLogo
   const checkerClass = checkerClassProp ?? storeChecker
   const pz = usePanZoom({ maxScale: 32 })
   // No Worker, no score: running it on the main thread would block the UI.
@@ -354,11 +363,22 @@ export function VectorizeStudio({
     svgText,
     derivedDoc,
     fileName: logo.fileName,
-    // Default: become the app's working logo. The icon sheet passes its own sink,
-    // since replacing the logo would destroy the sheet.
-    apply: onApplyProp ?? setProcessedSvg,
+    apply: onApplyProp,
     setError,
     setFailure,
+  })
+
+  // No host sink: the trace IS the working logo. (The icon sheet passes its own,
+  // since replacing the logo would destroy the sheet.)
+  usePublishTrace({
+    enabled: !onApplyProp && !source,
+    inputKey: assetKey,
+    svgText,
+    derivedDoc,
+    busy,
+    cleanFromExisting,
+    forceColorOn,
+    dirtyRef,
   })
 
   useFidelityScore({ busy, canScore, derivedDoc, logo, setScore })
@@ -615,7 +635,7 @@ export function VectorizeStudio({
           applied={applied}
           applyLabel={applyLabel}
           appliedLabel={appliedLabel}
-          onApply={onApply}
+          onApply={onApplyProp && onApply}
           onDownload={onDownload}
           copied={copied}
           onCopy={onCopy}
@@ -687,7 +707,7 @@ export function VectorizeStudio({
           applied={applied}
           applyLabel={applyLabel}
           appliedLabel={appliedLabel}
-          onApply={onApply}
+          onApply={onApplyProp && onApply}
           svgText={svgText}
         />
       </div>

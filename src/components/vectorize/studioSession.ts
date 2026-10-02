@@ -49,6 +49,14 @@ export interface StudioSeed {
 }
 
 /**
+ * The studio's document, kept at module scope as well as in IndexedDB. The route
+ * is lazy, so every tab switch unmounts the studio, and the boot payload is
+ * claim-once: without this, coming back to the tab re-traced from scratch — and
+ * since the trace IS the working logo, that threw away node edits made here.
+ */
+let live: Pick<StoredVectorize, 'assetKey' | 'doc' | 'dirty'> | null = null
+
+/**
  * Read the studio's stored state, once, for the image identified by `assetKey`.
  *
  * The document is *claimed*: taken out of the boot payload so that navigating
@@ -56,7 +64,9 @@ export interface StudioSeed {
  * of re-seeding the trace the user has since moved past.
  */
 export function loadStudioSeed(assetKey: string): StudioSeed {
-  const stored: StoredVectorize | null = claim('vectorize')
+  const claimed: StoredVectorize | null = claim('vectorize')
+  // The in-memory document wins: it holds the edits made since the boot payload.
+  const stored = live ?? claimed
   const raw = readLocal<{ view: StudioView | null }>(LS_KEY, { view: null })
   return {
     view: raw.view ?? null,
@@ -77,6 +87,7 @@ export const saveStudioView = debounce((view: StudioView) => {
  * dropped too: flushed after this, it would restore exactly what was cleared.
  */
 export function forgetStudioView(): void {
+  live = null
   saveStudioView.cancel()
   removeLocal(LS_KEY)
 }
@@ -87,6 +98,7 @@ export function forgetStudioView(): void {
  * document; `pagehide` flushes any pending write.
  */
 export function saveStudioDoc(assetKey: string, doc: EditableDoc | null, dirty: boolean): void {
+  live = doc ? { assetKey, doc, dirty } : null
   if (!doc) {
     saveSlot(SLOTS.vectorize, null)
     return

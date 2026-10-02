@@ -95,7 +95,8 @@ export function StudioToolbar({
   applied: boolean
   applyLabel?: string
   appliedLabel?: string
-  onApply: () => void
+  /** A host's Apply (the icon sheet's "Done"); no button without one. */
+  onApply?: () => void
   onDownload: (format?: VectorFormat) => void
   copied: boolean
   onCopy: () => Promise<void>
@@ -176,15 +177,17 @@ export function StudioToolbar({
         <ZoomControls pz={pz} fitClassName={ROOMY} />
         <CheckerToggle />
         <span className={`h-5 w-px bg-line ${ROOMY}`} aria-hidden />
-        <Button
-          variant="primary"
-          className="h-8 px-3 text-xs"
-          icon={applied ? <CheckCheck size={14} /> : <Check size={14} />}
-          onClick={onApply}
-          disabled={!svgText}
-        >
-          {applied ? (appliedLabel ?? 'Applied') : (applyLabel ?? 'Apply to logo')}
-        </Button>
+        {onApply && (
+          <Button
+            variant="primary"
+            className="h-8 px-3 text-xs"
+            icon={applied ? <CheckCheck size={14} /> : <Check size={14} />}
+            onClick={onApply}
+            disabled={!svgText}
+          >
+            {applied ? (appliedLabel ?? 'Applied') : (applyLabel ?? 'Apply')}
+          </Button>
+        )}
         <div className="flex items-center">
           <Tooltip label="Download SVG" side="bottom">
             <Button

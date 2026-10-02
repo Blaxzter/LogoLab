@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLogo, useStore } from '../state/store'
+import { debounce } from '../lib/persist/local'
 import { canvasToBlob, getImageData } from '../lib/image'
 import {
   autoRemove,
@@ -47,6 +48,8 @@ export type { CleanupTool, KeepRemoveMarker }
 // mask is computed at the model's 1024 and upscaled to fit (see aiRemove.ts).
 const MAX_DIM = 2048
 const HISTORY_LIMIT = 30
+/** A brush stroke is one write to the working logo, not one per pointer move (each bakes a PNG). */
+const PUBLISH_MS = 400
 
 export interface UseCleanupCanvasParams {
   pz: PanZoom
@@ -95,6 +98,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
 
   const logo = useLogo()
   const setProcessedLogo = useStore((s) => s.setProcessedLogo)
+  const setProcessedSvg = useStore((s) => s.setProcessedSvg)
   const restoreOriginal = useStore((s) => s.restoreOriginal)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -110,10 +114,18 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const undoRef = useRef<ImageData[]>([])
   const redoRef = useRef<ImageData[]>([])
   const lastKeyRef = useRef<{ r: number; g: number; b: number } | null>(null)
-  // The data URL we last Applied. When logo.src equals it, the reload effect
-  // skips the redundant re-decode and preserves the "Applied" state. Matching on
-  // the value (not a boolean) is idempotent — a re-upload never collides.
+  // The working-logo src this studio last wrote. When logo.src equals it, the
+  // reload effect skips the redundant re-decode, keeping the undo history.
+  // Matching on the value (not a boolean) is idempotent — a re-upload never collides.
   const appliedSrcRef = useRef<string | null>(null)
+  // The working logo as this tab found it (the pristine pixels' source), so undoing
+  // every edit can put exactly that back — an SVG stays an SVG.
+  const entryRef = useRef<{ src: string; svgText: string | null; w: number; h: number } | null>(null)
+  // True while the working logo holds something this studio wrote since it loaded.
+  const publishedRef = useRef(false)
+  // `publish` (below) through a ref, so the debounced wrapper runs the latest closure.
+  const publishRef = useRef<() => void>(() => {})
+  const publishSoon = useRef(debounce(() => publishRef.current(), PUBLISH_MS)).current
   // The restore seed, held in a ref so consuming it can't be undone by a
   // re-render and so the decode effect doesn't re-run when the caller's closure
   // changes identity.
@@ -136,12 +148,14 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const [revision, setRevision] = useState(0)
   const [undoLen, setUndoLen] = useState(0)
   const [redoLen, setRedoLen] = useState(0)
-  // True when the working pixels differ from the pristine upload. Drives the
-  // Apply button — derived from real pixel divergence (not undo depth), so the
-  // 30-step cap can never make an edited image read as "unmodified".
+  // True when the working pixels differ from the pixels the tab opened on —
+  // derived from real pixel divergence (not undo depth), so the 30-step cap can
+  // never make an edited image read as "unmodified".
   const [modified, setModified] = useState(false)
   const [status, setStatus] = useState<string>('')
-  const [applied, setApplied] = useState(false)
+  // Bumped each time the working pixels are (re)loaded from a NEW source — not by
+  // this studio's own writes — so the studio knows when its pins went stale.
+  const [loads, setLoads] = useState(0)
   const [aiBusy, setAiBusy] = useState(false)
   const [aiStatus, setAiStatus] = useState('')
   // The backend the last AI run actually used (set once a device produced a
@@ -199,8 +213,12 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     // pixels. Skip the re-decode and keep the "Applied" UI state intact.
     if (logo.src && logo.src === appliedSrcRef.current) return
     let cancelled = false
+    // A write still pending belongs to the image being replaced.
+    publishSoon.cancel()
+    publishedRef.current = false
+    entryRef.current = null
+    setLoads((n) => n + 1)
     setReady(false)
-    setApplied(false)
     setModified(false)
     undoRef.current = []
     redoRef.current = []
@@ -217,6 +235,12 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     getImageData(logo.src, MAX_DIM, logo.isSvg ? logo.svgText : null, { upscale: false })
       .then(async (data) => {
         if (cancelled) return
+        entryRef.current = {
+          src: logo.src!,
+          svgText: logo.isSvg ? logo.svgText : null,
+          w: logo.naturalWidth,
+          h: logo.naturalHeight,
+        }
         pristineRef.current = cloneImageData(data)
         lastKeyRef.current = sampleCornerColor(data)
         // A restored session's un-applied pixels replace the working buffer (see
@@ -321,7 +345,6 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     setUndoLen(undoRef.current.length)
     setRedoLen(0)
     setModified(true)
-    setApplied(false)
     setRevision((n) => n + 1)
   }, [])
 
@@ -341,7 +364,6 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       pz.reset()
       syncDims()
     }
-    setApplied(false)
     setModified(!equalsPristine())
     setRevision((n) => n + 1)
     setStatus('Undid last change')
@@ -361,7 +383,6 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       pz.reset()
       syncDims()
     }
-    setApplied(false)
     setModified(!equalsPristine())
     setRevision((n) => n + 1)
     setStatus('Redid change')
@@ -604,6 +625,14 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
 
   const handleReset = useCallback(() => {
     if (aiBusy) return
+    publishSoon.cancel()
+    // The tab opened on something other than the upload (a trace, an earlier
+    // cleanup): the upload is a new source, so let the reload effect decode it.
+    if (entryRef.current && entryRef.current.src !== logo.originalSrc) {
+      restoreOriginal()
+      setStatus('Reset to original')
+      return
+    }
     undoRef.current = []
     redoRef.current = []
     setUndoLen(0)
@@ -618,12 +647,12 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       pz.reset()
       syncDims()
     }
-    setApplied(false)
     setModified(false)
     setRevision((n) => n + 1)
     // Pre-arm the reload guard so restoreOriginal's src change skips a redundant
     // re-decode (the in-memory pristine is already correct) and doesn't flicker.
     if (logo.originalSrc) appliedSrcRef.current = logo.originalSrc
+    publishedRef.current = false
     restoreOriginal()
     setStatus('Reset to original')
   }, [aiBusy, restoreOriginal, redraw, pz.reset, syncDims, logo.originalSrc])
@@ -639,19 +668,44 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     return imageDataToCanvas(matteOn ? compositeOver(working, matteColor) : working)
   }, [matteOn, matteColor])
 
-  const handleApply = useCallback(() => {
+  /**
+   * Write the working pixels into the app's working logo, so every other tab
+   * shows them. There is no Apply step: this runs (debounced) after each change.
+   * Undoing back to the pixels the tab opened on puts the original source back
+   * rather than a PNG of it, so an SVG that was only looked at stays an SVG.
+   */
+  const publish = () => {
     const working = workingRef.current
-    const canvas = bakeCanvas()
-    if (!working || !canvas) return
-    // Lets the reload effect recognise this src as our own and skip it.
-    const dataUrl = canvas.toDataURL('image/png')
-    appliedSrcRef.current = dataUrl
-    setProcessedLogo(dataUrl, working.width, working.height)
-    setApplied(true)
-    // Keep the undo/redo history so edits made before Apply remain reversible
-    // (an undo afterwards flips `applied` off, signalling the store is stale).
-    setStatus('Applied — used everywhere (previews, vectorize, export)')
-  }, [bakeCanvas, setProcessedLogo])
+    const entry = entryRef.current
+    if (!working || !entry) return
+    const edited = matteOn || !equalsPristine()
+    if (!edited && !publishedRef.current) return
+    if (edited) {
+      const canvas = bakeCanvas()
+      if (!canvas) return
+      setProcessedLogo(canvas.toDataURL('image/png'), working.width, working.height)
+    } else if (entry.src === logo.originalSrc) {
+      restoreOriginal()
+    } else if (entry.svgText) {
+      setProcessedSvg(entry.svgText, entry.w, entry.h)
+    } else {
+      const canvas = pristineRef.current && imageDataToCanvas(pristineRef.current)
+      if (!canvas) return
+      setProcessedLogo(canvas.toDataURL('image/png'), canvas.width, canvas.height)
+    }
+    publishedRef.current = edited
+    // Lets the reload effect recognise this src as our own and skip it; the
+    // working buffer already holds these pixels and keeps its undo history.
+    appliedSrcRef.current = useStore.getState().logo.src
+  }
+  publishRef.current = publish
+
+  useEffect(() => {
+    if (!ready || aiBusy) return
+    publishSoon()
+  }, [ready, aiBusy, revision, modified, matteOn, matteColor, publishSoon])
+  // Leaving the tab right after a stroke still lands it.
+  useEffect(() => () => publishSoon.flush(), [publishSoon])
 
   /**
    * The working pixels as PNG bytes — what the studio stores so an un-applied
@@ -742,7 +796,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     undoLen,
     redoLen,
     modified,
-    applied,
+    loads,
     aiBusy,
     aiStatus,
     aiDevice,
@@ -760,7 +814,6 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     handleUndo,
     handleRedo,
     handleReset,
-    handleApply,
     handleDownload,
     handleAuto,
     handleAi,

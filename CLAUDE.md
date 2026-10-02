@@ -371,6 +371,27 @@ Two things to keep in mind when touching a studio:
   (one-ink sheet music traced colour + gradients at 1024 while the panel said “One ink →
   Mono”). `test/probe-ledger.test.ts` is the gate.
 
+## Every tab writes the ONE working logo — there is no Apply
+
+Cleanup, Vectorize and the Editor all edit the same plate (`logo` in the store) and write it
+themselves, debounced; switching tabs carries whatever is on it. Three things that are easy to undo:
+
+* **Vectorize must not trace its own output.** Its writes go through `publishTrace`, which keeps
+  the image it replaced as `traceInput` (persisted with the logo); the studio traces
+  `traceInput ?? logo` under `traceInput.assetKey`. Every OTHER write drops it, so after a
+  cleanup or editor change Vectorize traces that. Route a trace through `setProcessedSvg`
+  and the next slider move re-traces the trace.
+* **A write is never a visit.** Cleanup writes only once its pixels differ from what it opened
+  on (undoing everything puts that source back, an SVG as an SVG); Vectorize skips an
+  unchanged Clean-SVG pass; the Editor keeps its `doc !== opened` guard (below).
+* **A tab that remounts must come back to its own state**, or the next write overwrites edits:
+  Vectorize keeps its doc in a module slot (`studioSession.ts` `live`), the Editor follows the
+  plate by `seenKey` (another tab moved `assetKey` → reopen from the logo), Cleanup's reload
+  guard (`appliedSrcRef`) and `loads` tell its own writes from a new source.
+
+The icon sheet's per-tile studio is the exception: it passes `onApply`, keeps its "Done"
+button, and never touches the logo.
+
 ## The Editor tab IS the working logo — on CHANGE, never on open
 
 `EditorPanel` pushes its document into the app's logo by itself (debounced); there is no

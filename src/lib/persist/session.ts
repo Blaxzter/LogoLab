@@ -61,9 +61,15 @@ export interface StoredLogo extends Stamped {
   /** The pristine upload. */
   original: Blob
   originalMeta: LogoMeta
-  /** The working image when it differs from the upload (cleanup result, applied trace); null otherwise. */
+  /** The working image when it differs from the upload (cleanup result, trace, edit); null otherwise. */
   working: Blob | null
   workingMeta: LogoMeta | null
+  /**
+   * The vectorize studio's input while the working image is its trace (store
+   * `traceInput`). `blob` is null when that input is the upload itself. Absent in
+   * records written before the tabs shared the working image automatically.
+   */
+  traceInput?: { blob: Blob | null; meta: LogoMeta; assetKey: string } | null
 }
 
 /** Custom device screenshots dropped onto the mockups. */
@@ -84,6 +90,8 @@ export interface StoredVectorize extends Stamped {
 export interface StoredEditor extends Stamped {
   doc: EditableDoc
   name: string
+  /** The working logo's `assetKey` when the editor last saw it; a different one means another tab changed it. */
+  seenKey?: string
 }
 
 /**

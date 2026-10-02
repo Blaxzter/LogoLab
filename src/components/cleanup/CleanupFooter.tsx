@@ -1,6 +1,6 @@
 // The cleanup studio's bottom bars: the desktop status bar and the mobile action bar.
 
-import { Check, CheckCheck, Download, SlidersHorizontal } from '../ui/icons'
+import { Download, SlidersHorizontal } from '../ui/icons'
 import type { CleanupTool } from '../../hooks/useCleanupCanvas'
 import { Button } from '../ui/Button'
 import { StudioActionBar, BarIconButton } from '../studio/StudioBar'
@@ -36,21 +36,15 @@ export function CleanupStatusBar({
   )
 }
 
-/** Mobile action bar: open the tool sheet, Download, Apply. */
+/** Mobile action bar: open the tool sheet, Download. */
 export function CleanupActionBar({
   onTools,
   onDownload,
-  onApply,
-  applied,
-  modified,
   aiBusy,
   ready,
 }: {
   onTools: () => void
   onDownload: () => void
-  onApply: () => void
-  applied: boolean
-  modified: boolean
   aiBusy: boolean
   ready: boolean
 }) {
@@ -63,15 +57,6 @@ export function CleanupActionBar({
       <BarIconButton title="Download PNG" onClick={onDownload} disabled={aiBusy || !ready}>
         <Download size={18} />
       </BarIconButton>
-      <Button
-        variant="primary"
-        className="h-10"
-        icon={applied ? <CheckCheck size={16} /> : <Check size={16} />}
-        onClick={onApply}
-        disabled={(!modified && !applied) || aiBusy || !ready}
-      >
-        {applied ? 'Applied' : 'Apply'}
-      </Button>
     </StudioActionBar>
   )
 }

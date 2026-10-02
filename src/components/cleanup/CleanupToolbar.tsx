@@ -1,6 +1,6 @@
 // The cleanup studio's top bars: the desktop toolbar and the mobile top strip (view mode, undo/redo, ghost, zoom).
 
-import { Check, CheckCheck, Download, Ghost, Redo, Undo } from '../ui/icons'
+import { Download, Ghost, Redo, Undo } from '../ui/icons'
 import type { PanZoom } from '../../hooks/usePanZoom'
 import { ZoomControls } from '../ui/ZoomControls'
 import { CheckerToggle } from '../ui/CheckerToggle'
@@ -21,7 +21,7 @@ interface HistoryProps {
   aiBusy: boolean
 }
 
-/** Desktop toolbar (md and up): view mode, undo/redo, ghost, zoom, Apply / Download. */
+/** Desktop toolbar (md and up): view mode, undo/redo, ghost, zoom, Download. */
 export function CleanupToolbar({
   viewMode,
   onViewMode,
@@ -33,10 +33,7 @@ export function CleanupToolbar({
   ghostOpacity,
   onGhostOpacity,
   pz,
-  applied,
-  modified,
   ready,
-  onApply,
   onDownload,
 }: HistoryProps & {
   viewMode: ViewMode
@@ -44,10 +41,7 @@ export function CleanupToolbar({
   ghostOpacity: number
   onGhostOpacity: (v: number) => void
   pz: PanZoom
-  applied: boolean
-  modified: boolean
   ready: boolean
-  onApply: () => void
   onDownload: () => void
 }) {
   return (
@@ -85,15 +79,6 @@ export function CleanupToolbar({
         <ZoomControls pz={pz} />
         <CheckerToggle />
         <span className="h-5 w-px bg-line" aria-hidden />
-        <Button
-          variant="primary"
-          className="h-8 px-3 text-xs"
-          icon={applied ? <CheckCheck size={14} /> : <Check size={14} />}
-          onClick={onApply}
-          disabled={(!modified && !applied) || aiBusy || !ready}
-        >
-          {applied ? 'Applied' : 'Apply to logo'}
-        </Button>
         <Tooltip label="Download PNG" side="bottom">
           <Button
             variant="secondary"

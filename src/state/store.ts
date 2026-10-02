@@ -27,6 +27,12 @@ export interface MockPlacement {
   size: number
 }
 
+/** The vectorize studio's input while the working image is its trace (see `traceInput`). */
+export interface TraceInput {
+  logo: LogoAsset
+  assetKey: string
+}
+
 /** Pristine logo fields snapshotted at upload, so Reset can fully restore them. */
 type OriginalMeta = Pick<LogoAsset, 'mime' | 'isSvg' | 'svgText' | 'naturalWidth' | 'naturalHeight' | 'fileName'>
 
@@ -36,7 +42,7 @@ interface AppState {
   originalMeta: OriginalMeta | null
   /**
    * Identity of the working image, reissued whenever its pixels change
-   * (upload, cleanup Apply, trace Apply, Reset). Anything derived from the
+   * (upload, a cleanup / trace / editor write, Reset). Anything derived from the
    * image is persisted with this key; check it before adopting a restored
    * value, or a trace ends up shown over a different image than it was cut
    * from.
@@ -55,6 +61,16 @@ interface AppState {
    * Reset target. Session-only: after a reload the restored options already hold it.
    */
   traceHints: Partial<VectorizeOptions> | null
+  /**
+   * What the vectorize studio traces FROM while the working image is its own
+   * output: the image (and its key) as it was before the studio's first
+   * `publishTrace`. Null whenever the last write came from anywhere else; then
+   * the working image itself is the input.
+   *
+   * Every tab writes the one working image automatically, so without this the
+   * studio would re-trace its own trace on the next settings change.
+   */
+  traceInput: TraceInput | null
   appearance: Appearance
   env: Environment
 
@@ -77,8 +93,14 @@ interface AppState {
   clearLogo: () => void
   /** Replace the working image (e.g. after background removal) with a PNG data URL. */
   setProcessedLogo: (dataUrl: string, width: number, height: number) => void
-  /** Replace the working image with a traced SVG. */
+  /** Replace the working image with an SVG (the editor's drawing, a cleanup reset). */
   setProcessedSvg: (svgText: string, width: number, height: number) => void
+  /**
+   * Replace the working image with the vectorize studio's trace. Unlike every
+   * other write it keeps what was there before as `traceInput`, so the studio
+   * goes on tracing the image it started from instead of its own output.
+   */
+  publishTrace: (svgText: string, width: number, height: number) => void
   /** Restore the working image back to the pristine upload. */
   restoreOriginal: () => void
   setAppearance: (patch: Partial<Appearance>) => void
@@ -146,13 +168,26 @@ export const defaultMockups: Record<DeviceId, MockPlacement> = {
  * Rebuild the working logo from the restored bytes. The object URLs live as
  * long as the tab, like the ones an upload creates.
  */
-function restoreLogo(stored: StoredLogo | null): Pick<AppState, 'logo' | 'originalMeta' | 'assetKey'> {
-  if (!stored) return { logo: emptyLogo, originalMeta: null, assetKey: newAssetKey() }
+function restoreLogo(stored: StoredLogo | null): Pick<AppState, 'logo' | 'originalMeta' | 'assetKey' | 'traceInput'> {
+  if (!stored) return { logo: emptyLogo, originalMeta: null, assetKey: newAssetKey(), traceInput: null }
   try {
     const originalSrc = URL.createObjectURL(stored.original)
     const src = stored.working ? URL.createObjectURL(stored.working) : originalSrc
     const meta = stored.workingMeta ?? stored.originalMeta
+    const input = stored.traceInput
+    const traceInput: TraceInput | null = input
+      ? {
+          logo: {
+            src: input.blob ? URL.createObjectURL(input.blob) : originalSrc,
+            originalSrc,
+            fileName: stored.fileName,
+            ...input.meta,
+          },
+          assetKey: input.assetKey,
+        }
+      : null
     return {
+      traceInput,
       logo: {
         src,
         originalSrc,
@@ -168,7 +203,7 @@ function restoreLogo(stored: StoredLogo | null): Pick<AppState, 'logo' | 'origin
       assetKey: stored.assetKey,
     }
   } catch {
-    return { logo: emptyLogo, originalMeta: null, assetKey: newAssetKey() }
+    return { logo: emptyLogo, originalMeta: null, assetKey: newAssetKey(), traceInput: null }
   }
 }
 
@@ -202,12 +237,35 @@ function withShots(
   }
 }
 
+/** An SVG working image over `logo`'s upload. */
+function svgLogo(logo: LogoAsset, svgText: string, width: number, height: number): LogoAsset {
+  const src = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' }))
+  return { ...logo, src, mime: 'image/svg+xml', isSvg: true, svgText, naturalWidth: width, naturalHeight: height }
+}
+
+/** Revoke a blob URL unless it is one of the URLs still in use. */
+function revoke(src: string | null | undefined, ...keep: (string | null | undefined)[]): void {
+  if (src && src.startsWith('blob:') && !keep.includes(src)) URL.revokeObjectURL(src)
+}
+
+/** The working image is about to be replaced: free its blob (never the upload's, nor the trace input's). */
+function retireWorking(s: AppState): void {
+  revoke(s.logo.src, s.logo.originalSrc, s.traceInput?.logo.src)
+}
+
+/** Patch that drops the trace input, freeing its blob unless the working image still shows it. */
+function dropTraceInput(s: AppState): Pick<AppState, 'traceInput'> {
+  if (s.traceInput) revoke(s.traceInput.logo.src, s.logo.originalSrc, s.logo.src)
+  return { traceInput: null }
+}
+
 export const useStore = create<AppState>((set) => ({
   logo: emptyLogo,
   originalMeta: null,
   assetKey: newAssetKey(),
   studioEpoch: 0,
   traceHints: null,
+  traceInput: null,
   appearance: readLocal(LS_APPEARANCE, defaultAppearance),
   env: readLocal(LS_ENV, defaultEnv),
   ...readLocal(LS_CHECKER, { checkerDark: false, checkerUserSet: false }),
@@ -218,7 +276,7 @@ export const useStore = create<AppState>((set) => ({
       const mockups = withShots(s.mockups, session.mockShots)
       // Seed the stored signatures so the subscription below doesn't
       // write the just-restored bytes straight back.
-      storedLogoSig = logo.logo.originalSrc ? `${logo.assetKey}|${logo.logo.originalSrc}|${logo.logo.src ?? ''}` : ''
+      storedLogoSig = logo.logo.originalSrc ? logoSig(logo) : ''
       storedShotSig = `${mockups.ios.shot ?? ''}|${mockups.android.shot ?? ''}`
       return { ...logo, mockups }
     }),
@@ -249,7 +307,8 @@ export const useStore = create<AppState>((set) => ({
       const assetKey = patch.originalSrc ? newAssetKey() : s.assetKey
       // A fresh upload brings its own hints or none; a metadata patch keeps them.
       const hints = patch.originalSrc ? (traceHints ?? null) : s.traceHints
-      return { logo, originalMeta, assetKey, traceHints: hints, ...autoChecker }
+      const input = patch.originalSrc ? dropTraceInput(s) : {}
+      return { logo, originalMeta, assetKey, traceHints: hints, ...input, ...autoChecker }
     }),
   clearLogo: () =>
     set((s) => {
@@ -259,6 +318,7 @@ export const useStore = create<AppState>((set) => ({
       }
       forgetStudioView()
       return {
+        ...dropTraceInput(s),
         logo: emptyLogo,
         originalMeta: null,
         assetKey: newAssetKey(),
@@ -268,11 +328,9 @@ export const useStore = create<AppState>((set) => ({
     }),
   setProcessedLogo: (dataUrl, width, height) =>
     set((s) => {
-      // Revoke a previous *processed* blob (never the pristine original).
-      if (s.logo.src && s.logo.src !== s.logo.originalSrc && s.logo.src.startsWith('blob:')) {
-        URL.revokeObjectURL(s.logo.src)
-      }
+      retireWorking(s)
       return {
+        ...dropTraceInput(s),
         logo: {
           ...s.logo,
           src: dataUrl,
@@ -287,33 +345,25 @@ export const useStore = create<AppState>((set) => ({
     }),
   setProcessedSvg: (svgText, width, height) =>
     set((s) => {
-      // Revoke a previous *processed* blob (never the pristine original).
-      if (s.logo.src && s.logo.src !== s.logo.originalSrc && s.logo.src.startsWith('blob:')) {
-        URL.revokeObjectURL(s.logo.src)
-      }
-      const blob = new Blob([svgText], { type: 'image/svg+xml' })
-      const src = URL.createObjectURL(blob)
-      return {
-        logo: {
-          ...s.logo,
-          src,
-          mime: 'image/svg+xml',
-          isSvg: true,
-          svgText,
-          naturalWidth: width,
-          naturalHeight: height,
-        },
-        assetKey: newAssetKey(),
-      }
+      retireWorking(s)
+      return { ...dropTraceInput(s), logo: svgLogo(s.logo, svgText, width, height), assetKey: newAssetKey() }
+    }),
+  publishTrace: (svgText, width, height) =>
+    set((s) => {
+      if (!s.logo.src) return {}
+      // The first trace keeps the image it was cut from; later ones replace the
+      // previous trace and leave that input alone.
+      const traceInput = s.traceInput ?? { logo: s.logo, assetKey: s.assetKey }
+      if (s.traceInput) retireWorking(s)
+      return { traceInput, logo: svgLogo(s.logo, svgText, width, height), assetKey: newAssetKey() }
     }),
   restoreOriginal: () =>
     set((s) => {
       if (!s.logo.originalSrc) return {}
-      if (s.logo.src && s.logo.src !== s.logo.originalSrc && s.logo.src.startsWith('blob:')) {
-        URL.revokeObjectURL(s.logo.src)
-      }
-      // Restore the original metadata too; Apply may have rewritten it.
+      retireWorking(s)
+      // Restore the original metadata too; an edit may have rewritten it.
       return {
+        ...dropTraceInput(s),
         logo: {
           ...s.logo,
           src: s.logo.originalSrc,
@@ -355,6 +405,8 @@ export const useStore = create<AppState>((set) => ({
 
 /** Convenience selector hooks (stable references, avoid re-render churn). */
 export const useLogo = () => useStore((s) => s.logo)
+/** What the vectorize tab traces: the image before its own trace replaced it, else the working logo. */
+export const useTraceSource = () => useStore((s) => s.traceInput?.logo ?? s.logo)
 export const useAppearance = () => useStore((s) => s.appearance)
 export const useEnv = () => useStore((s) => s.env)
 
@@ -392,6 +444,9 @@ const savePlacements = debounce((mockups: Record<DeviceId, MockPlacement>) => {
  */
 let storedLogoSig = ''
 
+const logoSig = (s: Pick<AppState, 'assetKey' | 'logo' | 'traceInput'>): string =>
+  `${s.assetKey}|${s.logo.originalSrc}|${s.logo.src ?? ''}|${s.traceInput?.assetKey ?? ''}`
+
 async function persistLogo(s: AppState): Promise<void> {
   if (!s.logo.originalSrc) {
     storedLogoSig = ''
@@ -402,7 +457,7 @@ async function persistLogo(s: AppState): Promise<void> {
     saveSlot(SLOTS.cleanup, null)
     return
   }
-  const sig = `${s.assetKey}|${s.logo.originalSrc}|${s.logo.src ?? ''}`
+  const sig = logoSig(s)
   if (sig === storedLogoSig) return
   storedLogoSig = sig
 
@@ -410,6 +465,9 @@ async function persistLogo(s: AppState): Promise<void> {
   if (!original) return
   const isProcessed = Boolean(s.logo.src && s.logo.src !== s.logo.originalSrc)
   const working = isProcessed ? await srcToBlob(s.logo.src!) : null
+  const input = s.traceInput
+  const inputIsOriginal = input?.logo.src === s.logo.originalSrc
+  const inputBlob = input && !inputIsOriginal && input.logo.src ? await srcToBlob(input.logo.src) : null
   // A newer image landed while we were reading; that write owns the slot.
   if (sig !== storedLogoSig) return
 
@@ -435,6 +493,20 @@ async function persistLogo(s: AppState): Promise<void> {
           naturalHeight: s.logo.naturalHeight,
         }
       : null,
+    traceInput:
+      input && (inputIsOriginal || inputBlob)
+        ? {
+            blob: inputBlob,
+            assetKey: input.assetKey,
+            meta: {
+              mime: input.logo.mime,
+              isSvg: input.logo.isSvg,
+              svgText: input.logo.svgText,
+              naturalWidth: input.logo.naturalWidth,
+              naturalHeight: input.logo.naturalHeight,
+            },
+          }
+        : null,
   }
   saveSlot(SLOTS.logo, record, 0)
 }
@@ -466,5 +538,5 @@ useStore.subscribe((s, prev) => {
     savePlacements(s.mockups)
     void persistMockShots(s)
   }
-  if (s.logo !== prev.logo || s.assetKey !== prev.assetKey) void persistLogo(s)
+  if (s.logo !== prev.logo || s.assetKey !== prev.assetKey || s.traceInput !== prev.traceInput) void persistLogo(s)
 })

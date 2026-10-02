@@ -8,7 +8,9 @@
 //
 // Keep/remove markers are studio state; the hook reports placements via
 // onMarkerPlaced, and the pins are cleared whenever the working buffer changes
-// (source swap, Reset, Apply, AI, or a resize).
+// (source swap, Reset, AI, or a resize).
+//
+// There is no Apply: the hook writes every change into the app's working logo.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCheckerClass, useLogo, useStore } from '../../state/store'
@@ -90,7 +92,7 @@ export function CleanupStudio() {
     undoLen,
     redoLen,
     modified,
-    applied,
+    loads,
     aiBusy,
     aiStatus,
     aiDevice,
@@ -106,7 +108,6 @@ export function CleanupStudio() {
     handleUndo,
     handleRedo,
     handleReset,
-    handleApply,
     handleDownload,
     handleAuto,
     handleAi,
@@ -166,9 +167,10 @@ export function CleanupStudio() {
   // -------------------------------------------------- marker lifecycle clears
   // The hook owns no marker state, so pins are dropped here whenever the pixels
   // are replaced; otherwise they'd float over a different image.
+  // `loads`, not logo.src: this studio's own writes change the src too.
   useEffect(() => {
     clearMarkers()
-  }, [logo.src, clearMarkers])
+  }, [loads, clearMarkers])
   // A dims change (crop, differently-sized undo/redo) invalidates pin positions.
   const dimsKey = dims ? `${dims.w}x${dims.h}` : 'none'
   useEffect(() => {
@@ -179,10 +181,6 @@ export function CleanupStudio() {
     clearMarkers()
     handleReset()
   }, [clearMarkers, handleReset])
-  const onApply = useCallback(() => {
-    clearMarkers()
-    handleApply()
-  }, [clearMarkers, handleApply])
   // AI replaces the whole working buffer, so any pins now point at stale regions.
   const onAi = useCallback(() => {
     clearMarkers()
@@ -311,10 +309,7 @@ export function CleanupStudio() {
           ghostOpacity={ghostOpacity}
           onGhostOpacity={setGhostOpacity}
           pz={pz}
-          applied={applied}
-          modified={modified}
           ready={ready}
-          onApply={onApply}
           onDownload={() => void handleDownload()}
         />
 
@@ -358,9 +353,6 @@ export function CleanupStudio() {
         <CleanupActionBar
           onTools={() => setToolsOpen(true)}
           onDownload={() => void handleDownload()}
-          onApply={onApply}
-          applied={applied}
-          modified={modified}
           aiBusy={aiBusy}
           ready={ready}
         />

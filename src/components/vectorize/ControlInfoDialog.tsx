@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ImageIcon, Loader2, X } from '../ui/icons'
-import { useCheckerClass, useLogo } from '../../state/store'
+import { useCheckerClass, useTraceSource } from '../../state/store'
 import { getImageData } from '../../lib/image'
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from '../../lib/trace'
 import { canTraceOffThread, traceImageOffThread } from '../../lib/trace/traceOffThread'
@@ -29,7 +29,8 @@ const exampleUrl = (file: string) => `${import.meta.env.BASE_URL}examples/${file
 
 export function ControlInfoDialog({ controlId, onClose }: { controlId: string; onClose: () => void }) {
   const doc = CONTROL_DOCS_BY_ID[controlId]
-  const logo = useLogo()
+  // The image the studio traces, not its own trace.
+  const logo = useTraceSource()
   const hasUpload = Boolean(logo.src)
 
   // Precomputed spread (lazy). Null until loaded; liveOnly controls never load it.

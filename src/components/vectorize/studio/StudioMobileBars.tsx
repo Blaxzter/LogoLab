@@ -156,7 +156,8 @@ export function StudioMobileActionBar({
   applied: boolean
   applyLabel?: string
   appliedLabel?: string
-  onApply: () => void
+  /** A host's Apply (the icon sheet's "Done"); no button without one. */
+  onApply?: () => void
   svgText: string | null
 }) {
   return (
@@ -180,15 +181,17 @@ export function StudioMobileActionBar({
         </Button>
       )}
       <div className="flex-1" />
-      <Button
-        variant="primary"
-        className="h-10"
-        icon={applied ? <CheckCheck size={16} /> : <Check size={16} />}
-        onClick={onApply}
-        disabled={!svgText}
-      >
-        {applied ? (appliedLabel ?? 'Applied') : (applyLabel ?? 'Apply')}
-      </Button>
+      {onApply && (
+        <Button
+          variant="primary"
+          className="h-10"
+          icon={applied ? <CheckCheck size={16} /> : <Check size={16} />}
+          onClick={onApply}
+          disabled={!svgText}
+        >
+          {applied ? (appliedLabel ?? 'Applied') : (applyLabel ?? 'Apply')}
+        </Button>
+      )}
     </StudioActionBar>
   )
 }
