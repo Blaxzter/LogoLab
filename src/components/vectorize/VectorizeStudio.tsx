@@ -19,6 +19,7 @@ import type { VectorizeOptions } from '../../types'
 import { restoredDecision } from './probeLedger'
 import type { EditableDoc } from '../../lib/path/types'
 import { TraceControls, TraceControlsBody } from './TraceControls'
+import type { CanvasHighlight } from './EditorCanvas'
 import { PathsPanel, PathsPanelBody } from './PathsPanel'
 import { PipelineExplainer } from './PipelineExplainer'
 import { Sheet } from '../ui/Sheet'
@@ -154,9 +155,9 @@ export function VectorizeStudio({
   // arm the "re-trace discards edits" notice instead of re-tracing.
   const dirtyRef = useRef(false)
 
-  // Fill currently hovered in the palette / paths list — the canvas lights up every
-  // region painted exactly this colour so the user can locate (and then delete) it.
-  const [highlightFill, setHighlightFill] = useState<string | null>(null)
+  // Path row / palette colour currently hovered — the canvas lights up that path
+  // (or every region of that colour) so the user can locate (and then delete) it.
+  const [highlight, setHighlight] = useState<CanvasHighlight>(null)
   // Distance from the source, measured off-thread. The status-bar mean ΔE and the
   // Difference heat come from one field so they can't disagree.
   const [score, setScore] = useState<TraceScore | null>(null)
@@ -479,7 +480,7 @@ export function VectorizeStudio({
     markers,
     markMode,
     preMerge,
-    highlightFill,
+    highlight,
     onSelectPath: handleSelectPath,
     onSelectNodes: handleSelectNodes,
     onRegionSeed: handleRegionSeed,
@@ -586,7 +587,7 @@ export function VectorizeStudio({
     autoPalette,
     lockedPalette,
     onPaletteChange: handlePaletteChange,
-    onHighlight: setHighlightFill,
+    onHighlight: setHighlight,
   }
 
   return (

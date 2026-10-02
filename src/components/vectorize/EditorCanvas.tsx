@@ -21,6 +21,11 @@ import { NodeOverlay } from './editorCanvas/NodeOverlay'
 import { GhostMarker, HighlightOverlay, MarkerPins } from './editorCanvas/overlays'
 import { useCanvasInteraction } from './editorCanvas/useCanvasInteraction'
 
+/** What the canvas lights up on hover: every path of one colour (a palette
+ *  swatch) or ONE path (its row in the paths list — a mono trace paints every
+ *  path the same ink, so locating a row by colour lit up all of them). */
+export type CanvasHighlight = { fill: string } | { id: string } | null
+
 export interface EditorCanvasProps {
   doc: EditableDoc
   pz: PanZoom
@@ -39,9 +44,8 @@ export interface EditorCanvasProps {
   /** Pre-merge region map (fine regions before the field-merge) from the last
    *  trace; the mark tool highlights the region under the cursor from it. */
   preMerge?: { labels: Int32Array; width: number; height: number } | null
-  /** Hovering a palette swatch / path row sets this fill; every visible path with
-   *  it lights up. null ⇒ none. */
-  highlightFill?: string | null
+  /** Hovering a palette swatch / path row; null ⇒ none. */
+  highlight?: CanvasHighlight
   onSelectPath: (id: string | null) => void
   onSelectNodes: (keys: Set<string>) => void
   /** Records the in-region click point that selected a path — the seed for a
@@ -70,7 +74,7 @@ export function EditorCanvas({
   markers,
   markMode = 'separate',
   preMerge,
-  highlightFill,
+  highlight,
   onSelectPath,
   onSelectNodes,
   onRegionSeed,
@@ -122,15 +126,17 @@ export function EditorCanvas({
   // pan/zoom transform multiplies it on screen). Guard the pre-measure frame.
   const screenScale = fit.width > 0 ? (fit.width * pz.scale) / vbW : 1
 
-  // Colour-locator highlight: every visible path painted exactly `highlightFill`
-  // (set while hovering its palette swatch / path row).
-  const highlightItems = highlightFill
+  // Locator highlight: the hovered row's path, or every visible path painted
+  // exactly the hovered palette colour.
+  const highlightItems = highlight
     ? (doc.items.filter(
         (it) =>
           it.kind === 'path' &&
           it.visible &&
-          // A stroke-only path's colour is its stroke; its fill is "none".
-          representativePaint(it) === highlightFill,
+          ('id' in highlight
+            ? it.id === highlight.id
+            : // A stroke-only path's colour is its stroke; its fill is "none".
+              representativePaint(it) === highlight.fill),
       ) as PathItem[])
     : []
 
@@ -194,7 +200,7 @@ export function EditorCanvas({
                 visiblePaths(doc.items).map((item) => <HitPath key={item.id} item={item} width={r(10)} />)}
             </g>
 
-            {/* Colour-locator highlight for the hovered palette colour. */}
+            {/* Locator highlight for the hovered path row / palette colour. */}
             {highlightItems.length > 0 && fit.width > 0 && <HighlightOverlay items={highlightItems} r={r} />}
 
             {/* Selection overlay, drawn as a few batched paths (see

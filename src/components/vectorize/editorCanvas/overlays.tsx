@@ -1,5 +1,6 @@
 // Non-interactive canvas overlays: colour-locator highlight, region marker pins, ghost marker.
 
+import { isStrokeOnly } from '../../../lib/path/model'
 import type { PathItem, Vec } from '../../../lib/path/types'
 import { pathD } from '../../vector/DocRender'
 import { ACCENT, FLAT_MARKER, HALO, MARKER, REMOVE_MARKER } from './constants'
@@ -8,13 +9,27 @@ import type { RegionMarker } from './geometry'
 /** Screen px → viewBox units at the current zoom. */
 type ToUnits = (px: number) => number
 
-/** Colour-locator highlight for the hovered palette colour. */
+/** Locator highlight for the hovered path row / palette colour. */
 export function HighlightOverlay({ items, r }: { items: PathItem[]; r: ToUnits }) {
   return (
     <g style={{ pointerEvents: 'none' }}>
       {items.map((it) => (
         <g key={it.id}>
-          <path d={pathD(it)} fill={HALO} fillOpacity={0.35} fillRule={it.fillRule} />
+          {/* The painted area: a stroke's band, not the region its (open) centreline
+              would enclose if filled. */}
+          {isStrokeOnly(it) && it.stroke ? (
+            <path
+              d={pathD(it)}
+              fill="none"
+              stroke={HALO}
+              strokeOpacity={0.35}
+              strokeWidth={it.stroke.width}
+              strokeLinecap={it.stroke.cap}
+              strokeLinejoin={it.stroke.join}
+            />
+          ) : (
+            <path d={pathD(it)} fill={HALO} fillOpacity={0.35} fillRule={it.fillRule} />
+          )}
           <path
             d={pathD(it)}
             fill="none"

@@ -9,6 +9,7 @@ import type { DocItem, EditableDoc, PathItem, RawItem } from '../../lib/path/typ
 import { normalizeHex } from '../../lib/colorUtils'
 import { isStrokeOnly, representativePaint } from '../../lib/path/model'
 import { Tooltip } from '../ui/Tooltip'
+import type { CanvasHighlight } from './EditorCanvas'
 import { PaletteEditor } from './PaletteEditor'
 
 type RGB = { r: number; g: number; b: number; a?: number }
@@ -126,9 +127,9 @@ export interface PathsPanelProps {
   lockedPalette?: RGB[] | null
   /** Patch opts.palette: an array locks it; null reverts to automatic. */
   onPaletteChange?: (palette: RGB[] | null) => void
-  /** Hovering a path row / palette swatch passes its fill so the canvas lights up
-   *  every region of that colour; null on leave. */
-  onHighlight?: (fill: string | null) => void
+  /** Hovering a path row lights up that path; a palette swatch, every region of
+   *  its colour. null on leave. */
+  onHighlight?: (highlight: CanvasHighlight) => void
 }
 
 /** Desktop right rail — the 260px column, from xl up. Below that a third column
@@ -236,7 +237,7 @@ export function PathsPanelBody({
               autoPalette={autoPalette ?? []}
               locked={lockedPalette ?? null}
               onChange={onPaletteChange}
-              onHighlight={onHighlight}
+              onHighlight={onHighlight && ((fill) => onHighlight(fill ? { fill } : null))}
             />
           </div>
         </div>
@@ -268,7 +269,7 @@ function PathRow({
   onRecolor: (fill: string, commit: boolean) => void
   onToggleVisible: () => void
   onDelete: () => void
-  onHighlight?: (fill: string | null) => void
+  onHighlight?: (highlight: CanvasHighlight) => void
 }) {
   let nodes = 0
   for (const sp of item.subPaths) nodes += sp.nodes.length
@@ -279,8 +280,8 @@ function PathRow({
       role="button"
       tabIndex={0}
       onClick={onSelect}
-      // Hovering the row locates its region(s) on the canvas (and clears on leave).
-      onPointerEnter={() => onHighlight?.(representativePaint(item))}
+      // Hovering the row locates THIS path on the canvas (and clears on leave).
+      onPointerEnter={() => onHighlight?.({ id: item.id })}
       onPointerLeave={() => onHighlight?.(null)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
