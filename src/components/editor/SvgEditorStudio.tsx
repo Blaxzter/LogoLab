@@ -194,6 +194,7 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
           doReverse={ops.doReverse}
           doSplit={ops.doSplit}
           doCombine={ops.doCombine}
+          doBoolean={ops.doBoolean}
           doBreak={ops.doBreak}
           doJoin={ops.doJoin}
         />

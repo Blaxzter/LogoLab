@@ -64,6 +64,12 @@ export function actionReasons({ canUndo, canRedo, selection, nodeSel, selectedCo
             nodeSel.size === 0 ? 'none are selected' : `${nodeSel.size} are selected`
           }.`,
     join: joinReason(nodeSel),
+    boolean:
+      selectedCount >= 2
+        ? null
+        : `Select two or more shapes to combine — ${
+            selectedCount === 0 ? 'nothing is selected' : 'only one is selected'
+          }. A group counts as one shape.`,
   }
 }
 

@@ -1,5 +1,6 @@
 // The studio's state: undoable document, selection, tool and view, every command, and the keyboard.
 
+import type { BooleanOp } from '../../../lib/editor/boolean'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { EditableDoc } from '../../../lib/path/types'
 import { groupItems, moveItems, removeItems, reorderItems } from '../../../lib/path/docTree'
@@ -315,6 +316,25 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     setSelection(new Set([res.id]))
   }, [selection, previewDoc, commit])
 
+  /**
+   * Add / Subtract / Intersect / Xor / Divide. The curve maths (paper.js) is
+   * loaded on the first use, so the editor doesn't carry it until then; the
+   * selection is read again after the load, in case it moved meanwhile.
+   */
+  const selectionRef = useRef(selection)
+  selectionRef.current = selection
+  const doBoolean = useCallback(
+    async (op: BooleanOp) => {
+      const { booleanSelected } = await import('../../../lib/editor/boolean')
+      const res = booleanSelected(docRef.current, selectionRef.current, op, () => newId('p'))
+      if (!res) return
+      commit(res.doc)
+      setNodeSel(new Set())
+      setSelection(res.ids)
+    },
+    [commit],
+  )
+
   /* ---------------------------------------------------------- keyboard */
 
   useEffect(() => {
@@ -463,6 +483,7 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
       doJoin,
       doSplit,
       doCombine,
+      doBoolean,
     },
   }
 }

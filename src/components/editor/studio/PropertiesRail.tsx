@@ -7,8 +7,54 @@ import type { AlignEdge, DistributeAxis } from '../../../lib/editor/align'
 import { Inspector } from '../Inspector'
 import { setFill, setFillOpacity, setFillRule, setStroke } from '../editorDoc'
 import type { ActionReasons } from './actionReasons'
-import { ArrowRightLeft, Combine, Link2, Scissors, Split } from '../../ui/icons'
-import { MiniBtn } from './EditorButtons'
+import type { BooleanOp } from '../../../lib/editor/boolean'
+import {
+  ArrowRightLeft,
+  Combine,
+  Link2,
+  Scissors,
+  Split,
+  SquareSplitHorizontal,
+  SquaresExclude,
+  SquaresIntersect,
+  SquaresSubtract,
+  SquaresUnite,
+} from '../../ui/icons'
+import { BarBtn, MiniBtn } from './EditorButtons'
+
+/** The shape booleans, in Affinity's toolbar order. */
+const BOOLEANS: { op: BooleanOp; label: string; note: string; icon: React.ReactNode }[] = [
+  {
+    op: 'add',
+    label: 'Add',
+    note: 'Merges the selected shapes into one outline. Keeps the paint of the bottom shape.',
+    icon: <SquaresUnite size={15} />,
+  },
+  {
+    op: 'subtract',
+    label: 'Subtract',
+    note: 'Cuts every other selected shape out of the bottom one.',
+    icon: <SquaresSubtract size={15} />,
+  },
+  {
+    op: 'intersect',
+    label: 'Intersect',
+    note: 'Keeps only where all the selected shapes overlap.',
+    icon: <SquaresIntersect size={15} />,
+  },
+  {
+    op: 'xor',
+    label: 'Xor',
+    note: 'Keeps where the shapes do NOT overlap; the overlaps become holes.',
+    icon: <SquaresExclude size={15} />,
+  },
+  {
+    op: 'divide',
+    label: 'Divide',
+    note: 'Cuts the shapes apart at every crossing into separate pieces, each keeping the paint it showed.',
+    icon: <SquareSplitHorizontal size={15} />,
+  },
+]
 
 export interface PropertiesRailProps {
   previewDoc: EditableDoc
@@ -27,6 +73,7 @@ export interface PropertiesRailProps {
   doCombine: () => void
   doBreak: () => void
   doJoin: () => void
+  doBoolean: (op: BooleanOp) => void
 }
 
 export function PropertiesRail({
@@ -46,6 +93,7 @@ export function PropertiesRail({
   doCombine,
   doBreak,
   doJoin,
+  doBoolean,
 }: PropertiesRailProps) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto border-l border-line bg-surface lg:flex">
@@ -80,6 +128,17 @@ export function PropertiesRail({
         onFlip={flip}
         onArtboard={(next) => next !== previewDoc && commit(next)}
       />
+
+      <div className="border-t border-line p-3">
+        <h4 className="field-label mb-1.5">Shape</h4>
+        <div className="flex items-center gap-0.5">
+          {BOOLEANS.map((b) => (
+            <BarBtn key={b.op} label={b.label} note={b.note} onClick={() => doBoolean(b.op)} reason={why.boolean}>
+              {b.icon}
+            </BarBtn>
+          ))}
+        </div>
+      </div>
 
       <div className="border-t border-line p-3">
         <h4 className="field-label mb-1.5">Path</h4>
