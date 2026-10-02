@@ -30,6 +30,31 @@ export function adoptIds(doc: EditableDoc): void {
   counter += 1000 + maxLen
 }
 
+/**
+ * Give every repeated id a fresh one, in place (later copies are renamed; a
+ * text's glyph children follow their parent). Repairs drawings saved while ids
+ * could collide after a reload. Call after `adoptIds`.
+ */
+export function repairIds(doc: EditableDoc): void {
+  const seen = new Set<string>()
+  const visit = (list: DocItem[]) => {
+    for (let i = 0; i < list.length; i++) {
+      let it = list[i]
+      if (seen.has(it.id)) {
+        const id = newId(it.id.replace(/[^a-z].*$/i, '') || 'e')
+        it =
+          isGroup(it) && it.text
+            ? { ...it, id, children: it.children.map((c, k) => ({ ...c, id: `${id}~${k}` })) }
+            : { ...it, id }
+        list[i] = it
+      }
+      seen.add(it.id)
+      if (isGroup(it) && !it.text) visit(it.children)
+    }
+  }
+  visit(doc.items)
+}
+
 export const DEFAULT_FILL = '#4f46e5'
 
 /**

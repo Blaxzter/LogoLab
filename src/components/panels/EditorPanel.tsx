@@ -18,7 +18,7 @@ import { debounce } from '../../lib/persist/local'
 import { claim, saveSlot, SLOTS, type StoredEditor } from '../../lib/persist/session'
 import { EditorIntake } from '../editor/EditorIntake'
 import { SvgEditorStudio } from '../editor/SvgEditorStudio'
-import { adoptIds } from '../editor/editorDoc'
+import { adoptIds, repairIds } from '../editor/editorDoc'
 
 /** The document the studio opens with. Edits flow out through `onChange`; keep
  *  this object stable while open, because the studio re-seeds its history (and
@@ -63,7 +63,14 @@ function initialSession(): EditorSession {
   const stored = claim('editor')
   const { assetKey } = useStore.getState()
   // A record from before the tabs shared the logo has no key: take it as current.
-  if (stored) return follow({ open: { doc: stored.doc, name: stored.name }, seenKey: stored.seenKey ?? assetKey })
+  if (stored) {
+    // The id counter starts from zero on every page load; without this the
+    // first shape drawn after a reload reused an id the restored drawing
+    // already had (two layers sharing one id, edits landing on the wrong one).
+    adoptIds(stored.doc)
+    repairIds(stored.doc)
+    return follow({ open: { doc: stored.doc, name: stored.name }, seenKey: stored.seenKey ?? assetKey })
+  }
   return follow(null)
 }
 
