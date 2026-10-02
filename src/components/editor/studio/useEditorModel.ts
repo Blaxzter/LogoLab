@@ -117,6 +117,22 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     if (next !== 'pen') setPenPathId(null)
   }, [])
 
+  /** Open one path for node editing — the double-click into a shape. */
+  const editNodes = useCallback(
+    (id: string) => {
+      setSelection(new Set([id]))
+      setNodeSel(new Set())
+      pickTool('node')
+    },
+    [pickTool],
+  )
+
+  /** Back out of node editing to the Move tool; the shape stays selected. */
+  const exitNodes = useCallback(() => {
+    setNodeSel(new Set())
+    pickTool('select')
+  }, [pickTool])
+
   const box = useMemo(() => selectionBox(previewDoc.items, selection), [previewDoc.items, selection])
   const stats = useMemo(() => docStats(previewDoc), [previewDoc])
   // Built on demand rather than memoized: serializing is expensive and only
@@ -351,6 +367,7 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
           setPenPathId(null)
           setTool('select')
         } else if (nodeSel.size > 0) setNodeSel(new Set())
+        else if (tool === 'node') setTool('select')
         else if (enteredGroupId) setEnteredGroupId(null)
         else setSelection(new Set())
         return
@@ -382,6 +399,7 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     nodeSel,
     penPathId,
     enteredGroupId,
+    tool,
     snap.grid,
     deleteSelection,
     duplicateSelection,
@@ -423,6 +441,8 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     buildSvg,
     activePathId,
     ops: {
+      editNodes,
+      exitNodes,
       deleteSelection,
       duplicateSelection,
       doGroup,

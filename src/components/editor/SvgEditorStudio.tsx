@@ -165,6 +165,8 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
             penPathId={penPathId}
             enteredGroupId={enteredGroupId}
             onEnterGroup={setEnteredGroupId}
+            onEditNodes={ops.editNodes}
+            onExitNodes={ops.exitNodes}
             onSelectionChange={(ids) => {
               setSelection(ids)
               if (ids.size !== 1) setNodeSel(new Set())

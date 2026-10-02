@@ -27,8 +27,8 @@ export function EditorStatusBar({
         {tool === 'pen'
           ? 'Click to add points · drag for curves · click the first point to close · Enter to finish'
           : tool === 'node'
-            ? 'Drag a curve to bend it · double-click a segment to insert · double-click a node for corner/smooth · Alt-drag a handle to break the joint'
-            : 'Hold Space to pan · Shift to constrain · Alt to scale from centre · Ctrl to bypass snapping'}
+            ? 'Drag a curve to bend it · double-click a segment to insert · double-click a node for corner/smooth · Alt-drag a handle to break the joint · Esc or double-click empty space to finish'
+            : 'Double-click a shape to edit its nodes · hold Space to pan · Shift to constrain · Alt to scale from centre · Ctrl to bypass snapping'}
       </span>
     </div>
   )

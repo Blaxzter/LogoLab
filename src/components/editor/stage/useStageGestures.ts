@@ -48,6 +48,10 @@ export interface StageGestureInput {
   onPenPathChange: (id: string | null) => void
   onToolDone: () => void
   onEnterGroup: (id: string | null) => void
+  /** Open one path for node editing (Affinity / Photoshop: double-click a shape). */
+  onEditNodes: (id: string) => void
+  /** Leave node editing for the Move tool, keeping the selection. */
+  onExitNodes: () => void
 }
 
 export function useStageGestures({
@@ -72,6 +76,8 @@ export function useStageGestures({
   onPenPathChange,
   onToolDone,
   onEnterGroup,
+  onEditNodes,
+  onExitNodes,
 }: StageGestureInput) {
   const [gesture, setGesture] = useState<Gesture | null>(null)
   const [guides, setGuides] = useState<Guides>({
@@ -199,6 +205,14 @@ export function useStageGestures({
           })
           return
         }
+      }
+      // A click on another shape moves node editing to it, as in Affinity:
+      // no trip back to the Move tool to pick the next path.
+      const other = pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: false })
+      if (other && !additive && !selection.has(other.leafId)) {
+        onNodeSelChange(new Set())
+        onSelectionChange(new Set([other.leafId]))
+        return
       }
       // Nothing under the pointer — rubber-band select nodes.
       if (!additive) onNodeSelChange(new Set())
@@ -428,17 +442,31 @@ export function useStageGestures({
           return
         }
       }
+      // Off every node and curve: another shape switches to it, empty space
+      // ends node editing — the double-click that got you in gets you out.
+      const other = pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: false })
+      if (other) onEditNodes(other.leafId)
+      else onExitNodes()
       return
     }
 
-    // Select tool: double-click enters a group so its children are selectable.
-    const hit = pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: true })
-    if (hit && hit.id !== hit.leafId) {
-      onEnterGroup(hit.id)
-      onSelectionChange(new Set([hit.leafId]))
-    } else if (!hit) {
+    if (tool !== 'select') return
+
+    // Select tool: double-click a group to enter it (its children become
+    // selectable); double-click a shape to edit its nodes. Inside a group the
+    // first double-click already lands on the shape, so it goes straight in.
+    const hit = pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: enteredGroupId === null })
+    if (!hit) {
       onEnterGroup(null)
+      return
     }
+    const target = resolveTarget(doc, hit, enteredGroupId)
+    if (target !== hit.leafId) {
+      onEnterGroup(target)
+      onSelectionChange(new Set([hit.leafId]))
+      return
+    }
+    onEditNodes(hit.leafId)
   }
 
   return { gesture, guides, hoverId, hoverGrip, onPointerDown, onPointerMove, onPointerUp, onDoubleClick }

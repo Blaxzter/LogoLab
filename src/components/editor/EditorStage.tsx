@@ -64,6 +64,10 @@ export interface EditorStageProps {
   /** Double-clicking a group enters it so its children become selectable. */
   enteredGroupId: string | null
   onEnterGroup: (id: string | null) => void
+  /** Double-clicking a shape opens it for node editing. */
+  onEditNodes: (id: string) => void
+  /** Double-clicking empty space in node editing returns to Move. */
+  onExitNodes: () => void
 }
 
 export function EditorStage({
@@ -85,6 +89,8 @@ export function EditorStage({
   onToolDone,
   enteredGroupId,
   onEnterGroup,
+  onEditNodes,
+  onExitNodes,
 }: EditorStageProps) {
   const [vx, vy, vw, vh] = doc.viewBox
   const grow = doc.artboard === 'grow'
@@ -170,6 +176,8 @@ export function EditorStage({
       onPenPathChange,
       onToolDone,
       onEnterGroup,
+      onEditNodes,
+      onExitNodes,
     })
 
   /* ---------------------------------------------------------- rendering */
