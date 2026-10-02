@@ -9,7 +9,8 @@
 import { useMemo } from 'react'
 import type { EditableDoc } from '../../lib/path/types'
 import { findItem, isGroup, topLevelSelection, walkItems } from '../../lib/path/docTree'
-import { downloadText } from '../../lib/export/download'
+import { downloadVector } from '../../lib/export/download'
+import { unsupportedItemCount, type VectorFormat } from '../../lib/export/vectorFormats'
 import { EditorStage } from './EditorStage'
 import { actionReasons } from './studio/actionReasons'
 import { EditorStatusBar } from './studio/EditorStatusBar'
@@ -70,7 +71,7 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
 
   /* ------------------------------------------------------------ export */
 
-  const download = () => downloadText(buildSvg(), `${fileName}.svg`, 'image/svg+xml')
+  const download = (format: VectorFormat = 'svg') => downloadVector(format, previewDoc, buildSvg(), fileName)
   const copy = () => void navigator.clipboard?.writeText(buildSvg())
 
   /* ------------------------------------------------------------ render */
@@ -126,6 +127,7 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
         pz={pz}
         copy={copy}
         download={download}
+        svgOnlyItems={unsupportedItemCount(previewDoc)}
         onClose={onClose}
       />
 

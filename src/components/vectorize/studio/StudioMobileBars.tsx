@@ -1,7 +1,21 @@
 // The mobile chrome: the top strip (view, tool, undo, export) and the bottom action bar.
 
 import type { ReactNode } from 'react'
-import { Check, CheckCheck, Copy, Download, Ghost, Hand, Layers, MousePointer2, Redo, SlidersHorizontal, Undo } from '../../ui/icons'
+import { FormatMenu } from '../../ui/FormatMenu'
+import type { VectorFormat } from '../../../lib/export/vectorFormats'
+import {
+  Check,
+  CheckCheck,
+  Copy,
+  Download,
+  Ghost,
+  Hand,
+  Layers,
+  MousePointer2,
+  Redo,
+  SlidersHorizontal,
+  Undo,
+} from '../../ui/icons'
 import type { PanZoom } from '../../../hooks/usePanZoom'
 import type { EditableDoc } from '../../../lib/path/types'
 import { Button } from '../../ui/Button'
@@ -43,7 +57,7 @@ export function StudioMobileTopBar({
   pz: PanZoom
   copied: boolean
   onCopy: () => Promise<void>
-  onDownload: () => void
+  onDownload: (format?: VectorFormat) => void
   svgText: string | null
 }) {
   return (
@@ -111,9 +125,14 @@ export function StudioMobileTopBar({
         <BarIconButton title="Copy SVG" onClick={() => void onCopy()} disabled={!svgText}>
           {copied ? <Check size={17} /> : <Copy size={17} />}
         </BarIconButton>
-        <BarIconButton title="Download SVG" onClick={onDownload} disabled={!svgText}>
+        <FormatMenu
+          label="Download"
+          onPick={onDownload}
+          disabled={!svgText}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+        >
           <Download size={17} />
-        </BarIconButton>
+        </FormatMenu>
       </div>
     </StudioTopBar>
   )

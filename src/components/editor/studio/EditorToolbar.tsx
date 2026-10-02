@@ -1,11 +1,13 @@
 // The studio's top bar: tools, undo/redo, snapping and grid, then view and export actions.
 
-import { Copy, Download, Grid3x3, Layers, Magnet, Redo, Undo, X } from '../../ui/icons'
+import { ChevronDown, Copy, Download, Grid3x3, Layers, Magnet, Redo, Undo, X } from '../../ui/icons'
 import type { SnapConfig } from '../../../lib/editor/snapping'
 import type { PanZoom } from '../../../hooks/usePanZoom'
 import { ZoomControls } from '../../ui/ZoomControls'
 import { CheckerToggle } from '../../ui/CheckerToggle'
 import { ActionButton } from '../../ui/ActionButton'
+import { FormatMenu } from '../../ui/FormatMenu'
+import type { VectorFormat } from '../../../lib/export/vectorFormats'
 import { ShapeFlyout } from '../ShapeFlyout'
 import type { EditorTool } from '../tools'
 import type { ActionReasons } from './actionReasons'
@@ -25,7 +27,9 @@ export interface EditorToolbarProps {
   setEnteredGroupId: (id: string | null) => void
   pz: PanZoom
   copy: () => void
-  download: () => void
+  download: (format?: VectorFormat) => void
+  /** Visible items only the SVG can carry (imported text, images…). */
+  svgOnlyItems: number
   onClose: () => void
 }
 
@@ -44,6 +48,7 @@ export function EditorToolbar({
   pz,
   copy,
   download,
+  svgOnlyItems,
   onClose,
 }: EditorToolbarProps) {
   return (
@@ -114,15 +119,29 @@ export function EditorToolbar({
         >
           <Copy size={15} />
         </ActionButton>
-        <ActionButton
-          label="Download SVG"
-          note="Saves the drawing as a file. Hidden layers are left out."
-          onClick={download}
-          className="btn btn-primary h-8 gap-1.5 px-2.5 text-xs"
-        >
-          <Download size={14} />
-          SVG
-        </ActionButton>
+        <div className="flex items-center">
+          <ActionButton
+            label="Download SVG"
+            note="Saves the drawing as a file. Hidden layers are left out."
+            onClick={() => download()}
+            className="btn btn-primary h-8 gap-1.5 rounded-r-none px-2.5 text-xs"
+          >
+            <Download size={14} />
+            SVG
+          </ActionButton>
+          <FormatMenu
+            label="Other formats: Illustrator, PDF, DXF"
+            onPick={download}
+            footnote={
+              svgOnlyItems > 0
+                ? `${svgOnlyItems} imported element${svgOnlyItems === 1 ? '' : 's'} (text, images…) only the SVG can carry; AI, PDF and DXF leave ${svgOnlyItems === 1 ? 'it' : 'them'} out.`
+                : null
+            }
+            className="btn btn-primary h-8 rounded-l-none border-l border-white/25 px-1"
+          >
+            <ChevronDown size={13} />
+          </FormatMenu>
+        </div>
         <ActionButton
           label="Close this drawing"
           note="Back to the start screen. Unsaved changes are lost."

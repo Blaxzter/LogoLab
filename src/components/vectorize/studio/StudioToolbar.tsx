@@ -5,10 +5,24 @@
 // go icon-only, below SEGMENTS the view modes fold into a select.
 
 import type { ReactNode } from 'react'
-import { Check, CheckCheck, Copy, Download, Hand, Layers, MapPin, MousePointer2, Redo, Undo } from '../../ui/icons'
+import {
+  Check,
+  CheckCheck,
+  ChevronDown,
+  Copy,
+  Download,
+  Hand,
+  Layers,
+  MapPin,
+  MousePointer2,
+  Redo,
+  Undo,
+} from '../../ui/icons'
 import type { PanZoom } from '../../../hooks/usePanZoom'
 import type { VectorizeOptions } from '../../../types'
 import { Button } from '../../ui/Button'
+import { FormatMenu } from '../../ui/FormatMenu'
+import type { VectorFormat } from '../../../lib/export/vectorFormats'
 import { CheckerToggle } from '../../ui/CheckerToggle'
 import { Segmented } from '../../ui/controls'
 import { Select } from '../../ui/Select'
@@ -82,7 +96,7 @@ export function StudioToolbar({
   applyLabel?: string
   appliedLabel?: string
   onApply: () => void
-  onDownload: () => void
+  onDownload: (format?: VectorFormat) => void
   copied: boolean
   onCopy: () => Promise<void>
   svgText: string | null
@@ -171,18 +185,28 @@ export function StudioToolbar({
         >
           {applied ? (appliedLabel ?? 'Applied') : (applyLabel ?? 'Apply to logo')}
         </Button>
-        <Tooltip label="Download SVG" side="bottom">
-          <Button
-            variant="secondary"
-            className="h-8 px-2 text-xs @min-[68rem]:px-3"
-            icon={<Download size={14} />}
-            onClick={onDownload}
+        <div className="flex items-center">
+          <Tooltip label="Download SVG" side="bottom">
+            <Button
+              variant="secondary"
+              className="h-8 rounded-r-none px-2 text-xs @min-[68rem]:px-3"
+              icon={<Download size={14} />}
+              onClick={() => onDownload()}
+              disabled={!svgText}
+              aria-label="Download SVG"
+            >
+              <span className={LABEL}>Download SVG</span>
+            </Button>
+          </Tooltip>
+          <FormatMenu
+            label="Other formats: Illustrator, PDF, DXF"
+            onPick={onDownload}
             disabled={!svgText}
-            aria-label="Download SVG"
+            className="btn btn-secondary -ml-px h-8 rounded-l-none px-1"
           >
-            <span className={LABEL}>Download SVG</span>
-          </Button>
-        </Tooltip>
+            <ChevronDown size={13} />
+          </FormatMenu>
+        </div>
         <Tooltip label={copied ? 'Copied' : 'Copy SVG'} side="bottom">
           <Button
             variant="secondary"

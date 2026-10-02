@@ -1,7 +1,8 @@
-// Apply / Download / Copy for the traced SVG, and the badges they leave behind.
+// Apply / Download (SVG, AI, DXF) / Copy for the traced SVG, and the badges they leave behind.
 
 import { useEffect, useState } from 'react'
-import { downloadText } from '../../../lib/export/download'
+import { downloadVector } from '../../../lib/export/download'
+import type { VectorFormat } from '../../../lib/export/vectorFormats'
 import type { EditableDoc } from '../../../lib/path/types'
 
 export function useExportActions({
@@ -28,10 +29,10 @@ export function useExportActions({
     setApplied(false)
   }, [svgText])
 
-  const onDownload = () => {
-    if (!svgText) return
+  const onDownload = (format: VectorFormat = 'svg') => {
+    if (!svgText || !derivedDoc) return
     const base = (fileName?.replace(/\.[^.]+$/, '') || 'logo').trim() || 'logo'
-    downloadText(svgText, `${base}.svg`, 'image/svg+xml')
+    downloadVector(format, derivedDoc, svgText, base)
   }
 
   const onApply = () => {
