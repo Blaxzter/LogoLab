@@ -239,3 +239,15 @@ test('an offline navigation with nothing cached still answers, rather than hangi
   assert.ok(response)
   assert.equal(response.status, 503)
 })
+
+test('opening a file directly is not answered with the shell', async () => {
+  // /sitemap.xml typed into the address bar is a navigation too. Answered with
+  // the shell, it showed the app instead of the file, to anyone who had visited.
+  const worker = loadWorker({ precache: ['/index.html'], fetch: cloudflareLike })
+  await worker.install()
+
+  for (const file of ['/sitemap.xml', '/robots.txt', '/llms.txt']) {
+    assert.equal(await worker.navigate(file), undefined, `${file} was answered by the worker`)
+  }
+  assert.ok(await worker.navigate('/vectorize'), 'a route must still get the shell')
+})

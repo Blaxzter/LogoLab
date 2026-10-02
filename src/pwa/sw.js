@@ -113,7 +113,11 @@ self.addEventListener('fetch', (event) => {
 
   // Every route is the SPA shell. Cache-first, because the shell and the hashed
   // chunks it references are one versioned set; a fresher index.html could point
-  // at chunks this cache lacks.
+  // at chunks this cache lacks. A path with a file extension is not a route but
+  // a file opened directly (/sitemap.xml, /robots.txt, /llms.txt): answering it
+  // with the shell showed the app instead of the file, so it goes to the network,
+  // uncached — the asset cache would keep serving yesterday's sitemap.
+  if (request.mode === 'navigate' && /\.[a-z0-9]+$/i.test(url.pathname)) return
   if (request.mode === 'navigate') {
     event.respondWith(
       (async () => {
