@@ -2,7 +2,7 @@
 
 import type { EditableDoc, PathItem } from '../../../lib/path/types'
 import { allPaths, findItem, isGroup } from '../../../lib/path/docTree'
-import { GRIPS, gripPoint, type Box } from '../../../lib/editor/transform'
+import { GRIPS, gripPoint, itemBox, type Box } from '../../../lib/editor/transform'
 import type { SnapCandidate } from '../../../lib/editor/snapping'
 import { handleKeysFor, nodeKey } from '../../../lib/editor/nodeEdit'
 import { pathD } from '../../vector/DocRender'
@@ -56,6 +56,14 @@ export function SelectionOutline({
 }) {
   const item = findItem(doc.items, id)
   if (!item) return null
+  // A live text is outlined by its box, as in Affinity: tracing every glyph
+  // draws the contours a script face overlaps at its joins, which the fill hides.
+  if (isGroup(item) && item.text) {
+    const b = itemBox(item)
+    return b ? (
+      <rect x={b.x} y={b.y} width={b.w} height={b.h} fill="none" stroke={color} strokeWidth={width} opacity={opacity} />
+    ) : null
+  }
   const paths = isGroup(item) ? allPaths(item.children) : item.kind === 'path' ? [item] : []
   return (
     <g fill="none" stroke={color} strokeWidth={width} opacity={opacity}>

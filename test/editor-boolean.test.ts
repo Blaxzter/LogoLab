@@ -6,7 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { DocItem, EditableDoc, GroupItem, PathItem } from '../src/lib/path/types.ts'
-import { booleanSelected } from '../src/lib/editor/boolean.ts'
+import { booleanSelected, mergeOverlaps } from '../src/lib/editor/boolean.ts'
 import { ellipseShape, rectShape } from '../src/lib/editor/shapes.ts'
 import { flattenSubPath } from '../src/lib/editor/hitTest.ts'
 
@@ -147,4 +147,36 @@ test('a group is one operand, its paths united first', () => {
   const res = run(doc(g, square('b', 0, 0, 30)), 'subtract', ['b', 'g'])
   // g is at the back: 30x20 union minus the 30x30 square → nothing left
   assert.equal(res.doc.items.length, 0)
+})
+
+test('mergeOverlaps: crossing contours become one outline, a counter stays a hole', () => {
+  // An "o" (outline + counter) with a bar overlapping its right side.
+  const o = path('o', [
+    ...square('a', 0, 0, 40).subPaths,
+    // the counter, wound the other way, as a font draws it
+    { nodes: [...square('b', 10, 10, 20).subPaths[0].nodes].reverse(), closed: true },
+    ...rectShape({ x: 30, y: 15 }, { x: 70, y: 25 }),
+  ])
+  const merged = mergeOverlaps(o)
+  assert.equal(merged.subPaths.length, 2, 'outline + counter, the bar folded in')
+  assert.ok(Math.abs(area(merged) - area(o)) < 1e-6, `${area(o)} → ${area(merged)}`)
+})
+
+test('mergeOverlaps leaves a single contour alone', () => {
+  const s = square('a', 0, 0, 10)
+  assert.equal(mergeOverlaps(s), s)
+})
+
+test('a script font word merges at its joins without changing what it paints', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { faceFromBytes } = await import('../src/lib/text/engine.ts')
+  const { makeTextGroup, newTextData, replaceText } = await import('../src/lib/text/edit.ts')
+  const b = readFileSync(new URL('../public/fonts/pacifico.ttf', import.meta.url))
+  const face = faceFromBytes(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer)
+  const data = replaceText(newTextData({ x: 5, y: 60 }, 40, { font: 'p' }), 0, 0, 'Xor')
+  const g = makeTextGroup('t', data, () => ({ face, synthItalic: false }))
+  const glyphs = g.children[0] as PathItem
+  const merged = mergeOverlaps(glyphs)
+  assert.ok(merged.subPaths.length < glyphs.subPaths.length, `${glyphs.subPaths.length} → ${merged.subPaths.length}`)
+  assert.ok(Math.abs(area(merged) - area(glyphs)) < 1, `${area(glyphs)} → ${area(merged)}`)
 })

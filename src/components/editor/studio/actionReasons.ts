@@ -64,6 +64,11 @@ export function actionReasons({ canUndo, canRedo, selection, nodeSel, selectedCo
             nodeSel.size === 0 ? 'none are selected' : `${nodeSel.size} are selected`
           }.`,
     join: joinReason(nodeSel),
+    // With one shape, Add merges that shape's own overlapping contours.
+    add:
+      selectedCount >= 2 || (selectedCount === 1 && (sel.paths > 0 || sel.groups > 0))
+        ? null
+        : 'Select two or more shapes to merge — or one shape to merge its own overlapping contours.',
     boolean:
       selectedCount >= 2
         ? null

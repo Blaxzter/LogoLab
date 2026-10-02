@@ -3,7 +3,16 @@
 import type { BooleanOp } from '../../../lib/editor/boolean'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { EditableDoc, Vec } from '../../../lib/path/types'
-import { findItem, groupItems, isText, mapItems, moveItems, removeItems, reorderItems } from '../../../lib/path/docTree'
+import {
+  findItem,
+  groupItems,
+  isText,
+  mapItems,
+  moveItems,
+  removeItems,
+  reorderItems,
+  topLevelSelection,
+} from '../../../lib/path/docTree'
 import { layoutGroup, textLabel } from '../../../lib/text/edit'
 import { lookupFace } from '../../../lib/text/fonts'
 import { caretIndexAt } from '../../../lib/text/layout'
@@ -362,7 +371,13 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
   selectionRef.current = selection
   const doBoolean = useCallback(
     async (op: BooleanOp) => {
-      const { booleanSelected } = await import('../../../lib/editor/boolean')
+      const { booleanSelected, mergeSelected } = await import('../../../lib/editor/boolean')
+      // Add on a single shape merges that shape's own overlapping contours.
+      if (op === 'add' && topLevelSelection(docRef.current.items, selectionRef.current).length === 1) {
+        const merged = mergeSelected(docRef.current, selectionRef.current)
+        if (merged) commit(merged)
+        return
+      }
       const res = booleanSelected(docRef.current, selectionRef.current, op, () => newId('p'))
       if (!res) return
       commit(res.doc)
@@ -372,13 +387,20 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     [commit],
   )
 
-  /** Convert the selected texts to plain shapes: the outlines stay, the words go. */
-  const convertText = useCallback(() => {
+  /**
+   * Convert the selected texts to plain shapes: the outlines stay, the words
+   * go. Overlapping glyph contours are merged on the way (a script face's
+   * joins, touching letters), so the shapes you then node-edit are the ones
+   * that paint rather than a stack of hidden loops.
+   */
+  const convertText = useCallback(async () => {
+    const { mergeOverlaps } = await import('../../../lib/editor/boolean')
     const d = docRef.current
     const items = mapItems(d.items, (it) => {
       if (!isText(it) || !selectionRef.current.has(it.id)) return it
       const { text: data, ...rest } = it
-      return { ...rest, name: it.name ?? textLabel(data), expanded: true }
+      const children = it.children.map((c) => (c.kind === 'path' ? mergeOverlaps(c) : c))
+      return { ...rest, children, name: it.name ?? textLabel(data), expanded: true }
     })
     if (items === d.items) return
     endText()

@@ -29,7 +29,7 @@ const BOOLEANS: { op: BooleanOp; label: string; note: string; icon: React.ReactN
   {
     op: 'add',
     label: 'Add',
-    note: 'Merges the selected shapes into one outline. Keeps the paint of the bottom shape.',
+    note: 'Merges the selected shapes into one outline, keeping the bottom shape’s paint. With one shape selected, merges its own overlapping contours.',
     icon: <SquaresUnite size={15} />,
   },
   {
@@ -147,7 +147,13 @@ export function PropertiesRail({
         <h4 className="field-label mb-1.5">Shape</h4>
         <div className="flex items-center gap-0.5">
           {BOOLEANS.map((b) => (
-            <BarBtn key={b.op} label={b.label} note={b.note} onClick={() => doBoolean(b.op)} reason={why.boolean}>
+            <BarBtn
+              key={b.op}
+              label={b.label}
+              note={b.note}
+              onClick={() => doBoolean(b.op)}
+              reason={b.op === 'add' ? why.add : why.boolean}
+            >
               {b.icon}
             </BarBtn>
           ))}

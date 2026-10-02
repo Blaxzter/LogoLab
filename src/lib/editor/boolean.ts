@@ -140,7 +140,11 @@ function components(item: PItem): PItem[] {
     if (best) holes.get(best)!.push(k)
   })
   return outers.map(
-    (o) => new P.CompoundPath({ children: [o.clone({ insert: false }), ...holes.get(o)!.map((h) => h.clone({ insert: false }))], insert: false }),
+    (o) =>
+      new P.CompoundPath({
+        children: [o.clone({ insert: false }), ...holes.get(o)!.map((h) => h.clone({ insert: false }))],
+        insert: false,
+      }),
   )
 }
 
@@ -157,7 +161,10 @@ interface Operand {
  * The geometry of a boolean over operands given back→front. Each output piece
  * names the operand whose paint it takes.
  */
-export function booleanGeometry(op: BooleanOp, operands: { geom: PItem; style: number }[]): { geom: PItem; style: number }[] {
+export function booleanGeometry(
+  op: BooleanOp,
+  operands: { geom: PItem; style: number }[],
+): { geom: PItem; style: number }[] {
   const [base, ...rest] = operands
   if (!base) return []
   const o = { insert: false }
@@ -247,6 +254,40 @@ export function booleanSelected(
   const others = new Set(operands.slice(1).map((o) => o.id))
   const items = replaceWithMany(removeItems(doc.items, others), anchor, results)
   return { doc: { ...doc, items }, ids: new Set(results.map((r) => r.id)) }
+}
+
+/**
+ * One path's own overlaps merged: contours that cross or stack (a script
+ * font's joining strokes, glyphs that touch) become one outline, while holes —
+ * a letter's counters — stay holes. The fill is unchanged under nonzero; the
+ * outline you see and node-edit is the one that paints. Unchanged (the same
+ * object) for a single contour.
+ */
+export function mergeOverlaps(item: PathItem): PathItem {
+  if (item.subPaths.length < 2) return item
+  const P = scope()
+  const merged = toPaper(item).unite(new P.Path({ insert: false }), { insert: false })
+  return { ...item, subPaths: fromPaper(merged), fillRule: 'nonzero', loops: undefined }
+}
+
+/**
+ * Add with ONE shape selected: merge each selected path's own overlaps (paths
+ * inside a selected group included; a live text is left alone). Null when
+ * nothing changed.
+ */
+export function mergeSelected(doc: EditableDoc, selection: ReadonlySet<string>): EditableDoc | null {
+  let changed = false
+  const walk = (list: readonly DocItem[], on: boolean): DocItem[] =>
+    list.map((it) => {
+      const sel = on || selection.has(it.id)
+      if (isGroup(it)) return it.text ? it : { ...it, children: walk(it.children, sel) }
+      if (!sel || it.kind !== 'path') return it
+      const next = mergeOverlaps(it)
+      if (next !== it) changed = true
+      return next
+    })
+  const items = walk(doc.items, false)
+  return changed ? { ...doc, items } : null
 }
 
 /** Put `next` where `id` was, in its parent, in order. */
