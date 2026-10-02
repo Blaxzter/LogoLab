@@ -138,7 +138,8 @@ function segmentVotes(
 ): { votes: Map<number, number>; len: number } {
   const c1 = a.hOut ?? a
   const c2 = b.hIn ?? b
-  const len = Math.hypot(c1.x - a.x, c1.y - a.y) + Math.hypot(c2.x - c1.x, c2.y - c1.y) + Math.hypot(b.x - c2.x, b.y - c2.y)
+  const len =
+    Math.hypot(c1.x - a.x, c1.y - a.y) + Math.hypot(c2.x - c1.x, c2.y - c1.y) + Math.hypot(b.x - c2.x, b.y - c2.y)
   const steps = Math.max(1, Math.min(256, Math.ceil(len)))
   const votes = new Map<number, number>()
   for (let k = 0; k <= steps; k++) {
@@ -268,8 +269,7 @@ function stackByInk(
         const y0 = Math.max(0, Math.floor(cy - r))
         const y1 = Math.min(height - 1, Math.ceil(cy + r))
         for (let y = y0; y <= y1; y++)
-          for (let x = x0; x <= x1; x++)
-            if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r2) cover[y * width + x] |= b
+          for (let x = x0; x <= x1; x++) if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r2) cover[y * width + x] |= b
       })
   })
   // over[a][b]: shared pixels where the source shows ink a.
@@ -320,7 +320,8 @@ function forSamples(sp: SubPath, step: number, visit: (x: number, y: number) => 
     const b = nodes[(s + 1) % nodes.length]
     const c1 = a.hOut ?? a
     const c2 = b.hIn ?? b
-    const len = Math.hypot(c1.x - a.x, c1.y - a.y) + Math.hypot(c2.x - c1.x, c2.y - c1.y) + Math.hypot(b.x - c2.x, b.y - c2.y)
+    const len =
+      Math.hypot(c1.x - a.x, c1.y - a.y) + Math.hypot(c2.x - c1.x, c2.y - c1.y) + Math.hypot(b.x - c2.x, b.y - c2.y)
     const steps = Math.max(1, Math.min(4096, Math.ceil(len / step)))
     for (let k = 0; k <= steps; k++) {
       const t = k / steps
@@ -374,7 +375,11 @@ function inkRuns(
     const prev = k > 0 ? runs[k - 1] : closed ? runs[runs.length - 1] : null
     const next = k < runs.length - 1 ? runs[k + 1] : closed ? runs[0] : null
     const into =
-      prev && next ? ((runs[k].votes.get(prev.label) ?? 0) >= (runs[k].votes.get(next.label) ?? 0) ? prev : next) : (prev ?? next)!
+      prev && next
+        ? (runs[k].votes.get(prev.label) ?? 0) >= (runs[k].votes.get(next.label) ?? 0)
+          ? prev
+          : next
+        : (prev ?? next)!
     if (into === prev) into.to = runs[k].to
     else into.from = runs[k].from
     into.len += runs[k].len
@@ -399,7 +404,12 @@ function inkRuns(
     const ns: PathNode[] = []
     for (let i = r.from; i <= r.to; i++) {
       const n = at(i)
-      ns.push({ ...n, hIn: i === r.from ? null : n.hIn, hOut: i === r.to ? null : n.hOut, kind: i === r.from || i === r.to ? 'corner' : n.kind })
+      ns.push({
+        ...n,
+        hIn: i === r.from ? null : n.hIn,
+        hOut: i === r.to ? null : n.hOut,
+        kind: i === r.from || i === r.to ? 'corner' : n.kind,
+      })
     }
     return { sp: { nodes: ns, closed: false }, label: r.label }
   })

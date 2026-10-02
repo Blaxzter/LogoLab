@@ -6,6 +6,7 @@ import { suggestGradients } from '../../../lib/trace'
 import type { InkColorMode } from '../../../lib/traceInput/ink'
 import { probeShouldApply } from '../probeLedger'
 import type { SetOpts, VectorizeSource } from './types'
+import type { VectorizeOptions } from '../../../types'
 
 export function useContentProbe({
   logo,
@@ -20,6 +21,7 @@ export function useContentProbe({
   decidedForRef,
   probePixelsRef,
   colorModeRef,
+  traceHints,
 }: {
   logo: VectorizeSource
   assetKey: string
@@ -33,6 +35,8 @@ export function useContentProbe({
   decidedForRef: RefObject<string | null>
   probePixelsRef: RefObject<ImageData | null>
   colorModeRef: RefObject<InkColorMode>
+  /** Settings the upload asked for (an example's own), applied over the probes' decision. */
+  traceHints: Partial<VectorizeOptions> | null
 }) {
   // Auto-default the gradients toggle from image content: flat art ⇒ off, real
   // ramps ⇒ on. Only a suggestion: a manual flip is never overridden, and each
@@ -84,6 +88,9 @@ export function useContentProbe({
           const currentlyOn = o.gradients !== false
           return currentlyOn === on ? o : { ...o, gradients: on }
         })
+        // The upload's own settings win over what the probes guessed: an example that
+        // is line art is meant to be seen as strokes. Fresh images only, like the probes.
+        if (traceHints) setOpts((o) => ({ ...o, ...traceHints }))
       } catch {
         // Best-effort: on decode failure leave the default in place.
       }
@@ -91,5 +98,5 @@ export function useContentProbe({
     return () => {
       cancelled = true
     }
-  }, [logo.src, logo.isSvg, logo.svgText, assetKey, isVectorSource, retraceVector, applyInkDecision])
+  }, [logo.src, logo.isSvg, logo.svgText, assetKey, isVectorSource, retraceVector, applyInkDecision, traceHints])
 }

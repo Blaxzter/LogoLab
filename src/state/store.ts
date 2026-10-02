@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Appearance, Environment, LogoAsset } from '../types'
+import type { Appearance, Environment, LogoAsset, VectorizeOptions } from '../types'
 import { debounce, readLocal, writeLocal } from '../lib/persist/local'
 import {
   newAssetKey,
@@ -48,6 +48,13 @@ interface AppState {
    * default settings instead of carrying the last image's over.
    */
   studioEpoch: number
+  /**
+   * Trace settings the CURRENT upload asked for — a bundled example that knows it is
+   * line art brings `{ centerline: true }`. Set by a fresh upload (an ordinary one
+   * clears it), applied by the vectorize studio on top of its probes and kept as the
+   * Reset target. Session-only: after a reload the restored options already hold it.
+   */
+  traceHints: Partial<VectorizeOptions> | null
   appearance: Appearance
   env: Environment
 
@@ -66,7 +73,7 @@ interface AppState {
    */
   hydrate: (session: RestoredSession) => void
 
-  setLogo: (logo: Partial<LogoAsset> & { isLight?: boolean }) => void
+  setLogo: (logo: Partial<LogoAsset> & { isLight?: boolean; traceHints?: Partial<VectorizeOptions> }) => void
   clearLogo: () => void
   /** Replace the working image (e.g. after background removal) with a PNG data URL. */
   setProcessedLogo: (dataUrl: string, width: number, height: number) => void
@@ -200,6 +207,7 @@ export const useStore = create<AppState>((set) => ({
   originalMeta: null,
   assetKey: newAssetKey(),
   studioEpoch: 0,
+  traceHints: null,
   appearance: readLocal(LS_APPEARANCE, defaultAppearance),
   env: readLocal(LS_ENV, defaultEnv),
   ...readLocal(LS_CHECKER, { checkerDark: false, checkerUserSet: false }),
@@ -219,7 +227,7 @@ export const useStore = create<AppState>((set) => ({
 
   autoChecker: (dark) => set((s) => (s.checkerUserSet ? {} : { checkerDark: dark })),
 
-  setLogo: ({ isLight, ...patch }) =>
+  setLogo: ({ isLight, traceHints, ...patch }) =>
     set((s) => {
       const logo = { ...s.logo, ...patch }
       // A fresh upload carries originalSrc — snapshot its metadata for Reset.
@@ -239,7 +247,9 @@ export const useStore = create<AppState>((set) => ({
         patch.originalSrc && !s.checkerUserSet && isLight !== undefined ? { checkerDark: isLight } : null
       // Only a fresh upload is a new image; a metadata-only patch keeps the key.
       const assetKey = patch.originalSrc ? newAssetKey() : s.assetKey
-      return { logo, originalMeta, assetKey, ...autoChecker }
+      // A fresh upload brings its own hints or none; a metadata patch keeps them.
+      const hints = patch.originalSrc ? (traceHints ?? null) : s.traceHints
+      return { logo, originalMeta, assetKey, traceHints: hints, ...autoChecker }
     }),
   clearLogo: () =>
     set((s) => {
@@ -248,7 +258,13 @@ export const useStore = create<AppState>((set) => ({
         URL.revokeObjectURL(s.logo.originalSrc)
       }
       forgetStudioView()
-      return { logo: emptyLogo, originalMeta: null, assetKey: newAssetKey(), studioEpoch: s.studioEpoch + 1 }
+      return {
+        logo: emptyLogo,
+        originalMeta: null,
+        assetKey: newAssetKey(),
+        studioEpoch: s.studioEpoch + 1,
+        traceHints: null,
+      }
     }),
   setProcessedLogo: (dataUrl, width, height) =>
     set((s) => {

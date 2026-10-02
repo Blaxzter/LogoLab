@@ -34,6 +34,7 @@
 // names the ones a score exceeds, so the diag table and the test read the same verdict.
 
 import type { EditableDoc, SubPath } from '../src/lib/path/types.ts'
+import { isPaper } from '../src/lib/path/paper.ts'
 import { fidelity } from '../src/lib/render/fidelity.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'
 import { flattenSubPath } from './geomScore.ts'
@@ -293,7 +294,8 @@ export function scoreCenterline(
   const tracedFills: SubPath[][] = []
   const tracedWidths: number[] = []
   for (const it of doc.items) {
-    if (it.kind !== 'path' || !it.visible) continue
+    // The paper is the ground the ink was cut from, not ink (path/paper.ts).
+    if (it.kind !== 'path' || !it.visible || isPaper(it)) continue
     if (it.stroke && it.fill === 'none') {
       sampleSubPaths(it.subPaths, it.stroke.width, traced)
       tracedWidths.push(it.stroke.width)

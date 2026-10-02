@@ -18,7 +18,8 @@ import { fitPaintLadder, type PaintLadderResult, type RegionSamples } from './gr
 import { DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
 import { uniteBackgroundGradient, type BackgroundUnion } from './backgroundLayer.ts'
 import { tracePlanar, type PlanarTrace } from './planarAssemble.ts'
-import { monoLabels, MONO_INK } from './mono.ts'
+import { monoLabels, MONO_INK, MONO_PAPER } from './mono.ts'
+import { hasOpaqueBorder, paperColor, paperItem } from '../path/paper.ts'
 import { traceCenterline } from './centerline/index.ts'
 import { colourInkCut, paintStrokes } from './centerline/colour.ts'
 import { type PlanarFitOptions, DEFAULT_PLANAR_FIT, FLAT_LINE_COST } from './planarFit.ts'
@@ -444,6 +445,12 @@ export async function traceImage(
       }
       return { items, topology }
     }
+    // Mono traces the ink alone; an opaque ground is part of the picture, so it comes
+    // back as one rectangle under the ink (path/paper.ts) — the paper's median colour over
+    // the composited source — unless the background is being removed. Repaints skip it.
+    const paperRgb =
+      !options.removeBackground && hasOpaqueBorder(imageData) ? paperColor(seg.image, seg.labels, MONO_PAPER) : null
+    const paper = paperRgb ? paperItem(width, height, rgbToHex(paperRgb.r, paperRgb.g, paperRgb.b)) : null
     if (options.centerline) {
       // Line art: strokes with a width, fills for the rest (centerline/index.ts).
       const { doc } = traceCenterline({
@@ -457,7 +464,7 @@ export async function traceImage(
       })
       stage('trace')
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-      return doc
+      return paper ? { ...doc, items: [paper, ...doc.items] } : doc
     }
     onProgress?.({ phase: 'trace', fraction: PROGRESS_PAINT_END, label: 'Tracing shapes' })
     const trace = tracePlanar(seg.labels, width, height, fitOpts, seg.palette, seg.image)
@@ -467,7 +474,7 @@ export async function traceImage(
     stage('beautify')
     const loops = trace.loopsByLabel.get(MONO_INK) ?? []
     const subPaths = materializeRegion(loops, edges)
-    const items: PathItem[] = []
+    const items: PathItem[] = paper ? [paper] : []
     if (subPaths.length > 0) {
       items.push({ kind: 'path', id: 'trace-0', fill: '#000000', fillRule, loops, subPaths, visible: true })
     }
@@ -537,17 +544,7 @@ export async function traceImage(
     )
     // An opaque paper is part of the picture: one rectangle under the strokes, dropped
     // with the background like the colour path's background region.
-    if (paperLabel >= 0 && !options.removeBackground) {
-      const corner = (x: number, y: number) => ({ x, y, hIn: null, hOut: null, kind: 'corner' as const })
-      items.unshift({
-        kind: 'path',
-        id: 'paper',
-        fill: hexOf(paperLabel),
-        fillRule,
-        subPaths: [{ nodes: [corner(0, 0), corner(width, 0), corner(width, height), corner(0, height)], closed: true }],
-        visible: true,
-      })
-    }
+    if (paperLabel >= 0 && !options.removeBackground) items.unshift(paperItem(width, height, hexOf(paperLabel)))
     stage('materialize')
     return { ...doc, items }
   }

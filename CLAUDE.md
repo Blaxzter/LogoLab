@@ -156,8 +156,32 @@ was also twice as slow and not fewer nodes.
 So: `mono.ts` turns the cut into a two-label map (ink/paper, despeckled by component area at
 the old `turdsize` floor, and the source COMPOSITED over the paper so §15/§18 see a real ramp
 on transparent art) and hands it to `tracePlanar` like any segmentation. Mono's contract holds
-— one path, `#000000`, repainted by the caller — and it now carries the shared-edge
-`topology`. `VectorizeOptions.engine` is vestigial (`'planar'` only, kept so stored options
+— one INK path, `#000000`, repainted by the caller — and it now carries the shared-edge
+`topology`.
+
+**An opaque ground comes back as the PAPER** (`src/lib/path/paper.ts`): one rectangle under
+the ink, id `paper`, in mono and line art alike (colour strokes too), dropped by Remove
+background — so a mark on a white page no longer traces onto transparency while the colour
+path keeps its background region. Three things that are easy to undo:
+
+* **Every repaint skips it** (`forceColorDoc`, the sheet/MCP `repaintDoc`): painted in the
+  ink it is a solid square. Anything that measures INK must skip it too — the centreline
+  scorer and `ink-mode.test.ts`'s coverage did not, and read the paper as ink.
+* **Its colour is the per-channel MEDIAN of the paper pixels, not the mean**: the edge
+  anti-aliasing is labelled paper and pulled a white page to `#fefefe`, which flipped 143
+  edge pixels across the centreline gate's 128 cut and failed `la-score @512`.
+* **"Opaque" is the border rule** (`hasOpaqueBorder`, ≥ half the ring visible), the same
+  test the colour path's background uses. Art on transparency gets no paper.
+
+`before-mono-paper` ⇄ `after-mono-paper`: 79 mono/line files gain the rectangle and nothing
+else (checked by stripping it); flat, grad and cline byte-identical. The icon sheet defaults
+to Remove background, so its tiles stay transparent. `test/mono-paper.test.ts` is the gate.
+
+**A bundled example can bring its own settings** (`Example.trace` → the store's
+`traceHints`): Sketch and Doodle load with Strokes on. The studio applies them over the
+probes on a FRESH image only and folds them into the Reset target, so Reset stays off after
+load. A fresh upload without hints clears them; they are session-only (a reload restores the
+options themselves). `VectorizeOptions.engine` is vestigial (`'planar'` only, kept so stored options
 parse); the stacked colour path, the V6 translucent decomposition that only ran on it, the
 `esm-potrace-wasm` dependency and the main-thread special case in `canTraceOffThread` went
 with the engines. A stacked output — regions painted over one another rather than tiled — is

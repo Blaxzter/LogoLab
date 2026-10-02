@@ -4,6 +4,7 @@ import { Loader2, Shapes, X } from 'lucide-react'
 import { useStore } from '../../state/store'
 import { loadLogoFile, prefersDarkChecker } from '../../lib/image'
 import { Tooltip } from '../ui/Tooltip'
+import type { VectorizeOptions } from '../../types'
 
 interface Example {
   /** File under public/examples/. */
@@ -11,6 +12,8 @@ interface Example {
   name: string
   /** One-liner: which part of LogoLab this one is good for showing off. */
   blurb: string
+  /** Trace settings this example is meant to be seen with (the store's `traceHints`). */
+  trace?: Partial<VectorizeOptions>
 }
 
 const EXAMPLES: Example[] = [
@@ -19,8 +22,18 @@ const EXAMPLES: Example[] = [
   { file: 'orbit.svg', name: 'Orbit', blurb: 'Solid background — Cleanup / By-color, holes and all.' },
   { file: 'petals.png', name: 'Petals', blurb: 'Solid-background PNG — Auto-remove + Vectorize.' },
   { file: 'outline.svg', name: 'Outline', blurb: 'White line-art — see the Background card fix.' },
-  { file: 'sketch.png', name: 'Sketch', blurb: 'One-ink line art — Vectorize with Strokes on for paths with a width.' },
-  { file: 'doodle.png', name: 'Doodle', blurb: 'Coloured line art — Strokes keeps every line in its own ink.' },
+  {
+    file: 'sketch.png',
+    name: 'Sketch',
+    blurb: 'One-ink line art — Vectorize traces it as strokes with a width.',
+    trace: { centerline: true },
+  },
+  {
+    file: 'doodle.png',
+    name: 'Doodle',
+    blurb: 'Coloured line art — traced as strokes, every line in its own ink.',
+    trace: { centerline: true },
+  },
   { file: 'summit.svg', name: 'Summit', blurb: 'Monochrome mark — try Recolor & Invert.' },
   { file: 'bloom.svg', name: 'Bloom', blurb: 'Multi-color shapes — great for Vectorize.' },
 ]
@@ -157,7 +170,7 @@ export function ExampleGrid({
         const file = new File([blob], ex.file, { type: blob.type || 'image/svg+xml' })
         clearLogo()
         const patch = await loadLogoFile(file)
-        setLogo(patch)
+        setLogo({ ...patch, traceHints: ex.trace })
         onPicked?.()
       } catch {
         setError('Could not load that example. Check your connection and try again.')
