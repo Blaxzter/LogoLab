@@ -31,6 +31,7 @@
     "gen:golden": "node bench/writeTraceGolden.ts",
     "gen:absnapshot": "node bench/writeAbSnapshots.ts",
     "gen:pwaicons": "node scripts/gen-pwa-icons.mjs",
+    "gen:fontpreviews": "node scripts/gen-font-previews.ts",
     "fetch:logos": "node scripts/fetch-logos.mjs"
   },
   "engines": {

@@ -7,32 +7,15 @@
 // and variable axes are read from the FONT, so the list only ever offers what
 // the face can actually do.
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import type { TextData, TextStyle } from '../../lib/path/types'
-import {
-  addUploadedFont,
-  allFonts,
-  FONT_ACCEPT,
-  fontsVersion,
-  loadedFace,
-  loadFont,
-  subscribeFonts,
-  type FontCategory,
-} from '../../lib/text/fonts'
+import { addUploadedFont, fontsVersion, loadedFace, loadFont, subscribeFonts } from '../../lib/text/fonts'
 import { ActionButton } from '../ui/ActionButton'
 import { TipLabel, Tooltip } from '../ui/Tooltip'
-import { AlignCenter, AlignLeft, AlignRight, FlipVertical2, Italic, Spline, Upload } from '../ui/icons'
+import { AlignCenter, AlignLeft, AlignRight, FlipVertical2, Italic, Spline } from '../ui/icons'
+import { FontPicker } from './FontPicker'
 import { NumField, Section } from './Inspector'
 import type { TextEditing } from './studio/useTextEditing'
-
-const CATEGORY: Record<FontCategory, string> = {
-  sans: 'Sans serif',
-  serif: 'Serif',
-  display: 'Display',
-  script: 'Script',
-  mono: 'Monospace',
-  yours: 'Your fonts',
-}
 
 /** Features a user turns on and off, by tag, with what they do. */
 const FEATURE_LABEL: Record<string, string> = {
@@ -102,9 +85,6 @@ export function TextPanel({
     if (!face) void loadFont(font)
   }, [face, font])
 
-  const fileRef = useRef<HTMLInputElement | null>(null)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-
   const set = (patch: Partial<TextStyle>, live = false) => text.restyle(patch, live)
   const wght = face?.axes.find((a) => a.tag === 'wght') ?? null
   const otherAxes = face?.axes.filter((a) => a.tag !== 'wght' && a.tag !== 'ital') ?? []
@@ -129,64 +109,22 @@ export function TextPanel({
       </ActionButton>
     )
   }
-  const fonts = allFonts()
-  const categories = [...new Set(fonts.map((f) => f.category))]
 
   return (
     <Section title={text.edit ? 'Text — selection' : 'Text'}>
       <div className="flex flex-col gap-2">
-        {/* Family */}
-        <div className="flex items-center gap-1">
-          <Tooltip label={<TipLabel title="Font" detail="Bundled open-source fonts, plus any you upload." />}>
-            <select
-              aria-label="Font"
-              value={shown.font ?? ''}
-              onChange={(e) => {
-                if (e.target.value) set({ font: e.target.value })
-              }}
-              className="input h-8 min-w-0 flex-1 text-xs"
-            >
-              {!shown.font && <option value="">Mixed</option>}
-              {categories.map((c) => (
-                <optgroup key={c} label={CATEGORY[c]}>
-                  {fonts
-                    .filter((f) => f.category === c)
-                    .map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.family}
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
-            </select>
-          </Tooltip>
-          <ActionButton
-            label="Upload a font"
-            note="A .ttf, .otf or .woff file. It stays in this browser and appears under Your fonts."
-            onClick={() => fileRef.current?.click()}
-            className="btn btn-secondary h-8 w-8 shrink-0 px-0"
-          >
-            <Upload size={13} />
-          </ActionButton>
-          <input
-            ref={fileRef}
-            type="file"
-            accept={FONT_ACCEPT}
-            className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0]
-              e.target.value = ''
-              if (!file) return
+        <div className="flex">
+          <FontPicker
+            value={shown.font}
+            onPick={(id) => set({ font: id })}
+            onUpload={async (file) => {
               const res = await addUploadedFont(file)
-              if ('error' in res) setUploadError(res.error)
-              else {
-                setUploadError(null)
-                set({ font: res.id })
-              }
+              if ('error' in res) return res.error
+              set({ font: res.id })
+              return null
             }}
           />
         </div>
-        {uploadError && <p className="text-[0.7rem] text-red-600 dark:text-red-400">{uploadError}</p>}
 
         {/* Weight + italic */}
         <div className="flex items-center gap-1.5">
