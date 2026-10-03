@@ -28,7 +28,11 @@ export function UploadDropzone() {
             {logo.isSvg ? '' : ' px'}
           </p>
         </div>
-        <button type="button" onClick={() => inputRef.current?.click()} className="btn btn-ghost h-8 gap-1.5 px-2 text-xs">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="btn btn-ghost h-8 gap-1.5 px-2 text-xs"
+        >
           <ImageUp size={14} />
           Replace
         </button>

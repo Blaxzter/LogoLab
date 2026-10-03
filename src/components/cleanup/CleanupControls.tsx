@@ -424,7 +424,13 @@ export function CleanupControlsBody({
           <Field label="Padding" hint="Transparent margin kept around the trimmed cutout.">
             <Slider value={trimPad} min={0} max={128} unit="px" onChange={onTrimPad} />
           </Field>
-          <Button variant="secondary" icon={<WandSparkles size={15} />} onClick={onAutoTrim} disabled={aiBusy || !ready} block>
+          <Button
+            variant="secondary"
+            icon={<WandSparkles size={15} />}
+            onClick={onAutoTrim}
+            disabled={aiBusy || !ready}
+            block
+          >
             Auto-trim & pad
           </Button>
         </Collapsible>

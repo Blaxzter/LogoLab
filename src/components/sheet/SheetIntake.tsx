@@ -108,7 +108,11 @@ export function SheetIntake() {
       {error && <p className="text-sm text-bad">{error}</p>}
 
       {logo.src && (
-        <button type="button" onClick={() => void openCurrentLogo()} className="btn btn-secondary h-9 max-w-full text-xs">
+        <button
+          type="button"
+          onClick={() => void openCurrentLogo()}
+          className="btn btn-secondary h-9 max-w-full text-xs"
+        >
           <ImageDown size={15} className="shrink-0" />
           Use the loaded image ({logo.fileName ?? 'current logo'})
         </button>

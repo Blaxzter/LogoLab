@@ -189,7 +189,10 @@ test('the whole point: light art forced to Mono traces the ART, not nothing and 
       threshold: plan.threshold,
       invert: plan.invert,
     })
-    assert.ok(docStats(inkOnly(doc)).paths > 0, `${label}: traced to nothing (cut ${plan.threshold}, invert ${plan.invert})`)
+    assert.ok(
+      docStats(inkOnly(doc)).paths > 0,
+      `${label}: traced to nothing (cut ${plan.threshold}, invert ${plan.invert})`,
+    )
     const got = inkCoverage(doc, SIZE, SIZE)
     assert.ok(got > 0.15 && got < 0.4, `${label}: inked ${(got * 100).toFixed(1)}%, expected the ~25% rect`)
 

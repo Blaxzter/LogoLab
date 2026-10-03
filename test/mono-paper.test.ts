@@ -32,8 +32,7 @@ function bar(bg: RGBA, ink: RGBA): ImageData {
       const t = inside / 16
       const a = bg[3] * (1 - t) + ink[3] * t
       const p = (y * w + x) * 4
-      for (let c = 0; c < 3; c++)
-        data[p + c] = a > 0 ? (bg[c] * bg[3] * (1 - t) + ink[c] * ink[3] * t) / a : 0
+      for (let c = 0; c < 3; c++) data[p + c] = a > 0 ? (bg[c] * bg[3] * (1 - t) + ink[c] * ink[3] * t) / a : 0
       data[p + 3] = Math.round(a)
     }
   return { width: w, height: h, data, colorSpace: 'srgb' } as ImageData

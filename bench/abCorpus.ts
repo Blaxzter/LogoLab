@@ -332,10 +332,20 @@ const colourLineArt = (id: string, name: string, background: string | null = 'wh
 
 export const AB_COLOUR_LINE_CASES: AbCorpusCase[] = [
   colourLineArt('cl-crossings', '⌇ cl-crossings — two inks crossing at 90° and 33°, a # of red rows over blue columns'),
-  colourLineArt('cl-ties', '⌇ cl-ties — one ink tied to a shape of another: kite + string, balloon + tail, a two-ink T'),
-  colourLineArt('cl-handover', '⌇ cl-handover — a colour change with NO node (known limit: majority ink), and one at a corner'),
+  colourLineArt(
+    'cl-ties',
+    '⌇ cl-ties — one ink tied to a shape of another: kite + string, balloon + tail, a two-ink T',
+  ),
+  colourLineArt(
+    'cl-handover',
+    '⌇ cl-handover — a colour change with NO node (known limit: majority ink), and one at a corner',
+  ),
   colourLineArt('cl-paper', '⌇ cl-paper — white and yellow inks on a navy paper, crossing'),
-  colourLineArt('cl-transparent', '⌇ cl-transparent — white, red and blue inks on TRANSPARENCY (coverage from alpha)', null),
+  colourLineArt(
+    'cl-transparent',
+    '⌇ cl-transparent — white, red and blue inks on TRANSPARENCY (coverage from alpha)',
+    null,
+  ),
   colourLineArt('cl-loops', '⌇ cl-loops — interlocked rings, petals over a centre ring (weak in mono too)'),
   colourLineArt('cl-lucide-mail', '◎ Lucide mail in colour — a blue envelope crossed by a red V'),
   colourLineArt('cl-lucide-git-branch', '◎ Lucide git-branch in colour — rings and runs in four inks'),

@@ -15,7 +15,7 @@
 // Output: src/components/ui/icons/motionData.ts (generated — re-run, don't edit).
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -109,7 +109,7 @@ function scriptConsts(src) {
     const m = /^const (\w+)\b/.exec(lines[i])
     if (!m || RUNTIME.has(m[1])) continue
     let j = i + 1
-    while (j < lines.length && !/^\S/.test(lines[j]) || /^[}\])]/.test(lines[j] ?? '')) j++
+    while ((j < lines.length && !/^\S/.test(lines[j])) || /^[}\])]/.test(lines[j] ?? '')) j++
     decls.push({ name: m[1], text: lines.slice(i, j).join('\n') })
   }
   const js = stripTypeScriptTypes(decls.map((d) => d.text).join('\n'))
@@ -134,7 +134,8 @@ function styleObject(css) {
 function convertAttrs(raw, file, scope) {
   const el = { attrs: {} }
   for (const [, name, value] of raw.matchAll(/([:@]?[\w-]+)(?:="([^"]*)")?/g)) {
-    if (name.startsWith('@') || name === 'initial' || name === ':animate' || name === ':key' || name.startsWith('v-')) continue
+    if (name.startsWith('@') || name === 'initial' || name === ':animate' || name === ':key' || name.startsWith('v-'))
+      continue
     if (name === ':variants') {
       const m = /^variants\.(\w+)$/.exec(value)
       if (!m) throw new Error(`${file}: unexpected :variants="${value}"`)
@@ -267,7 +268,9 @@ const lines = [
 for (const [name, exportName] of Object.entries(ICONS)) {
   const data = port(name)
   lines.push(`/** ${name} (${data.source}) */`)
-  lines.push(`export const ${exportName}: MotionIconData = ${toJs({ name, elements: data.elements, variants: data.variants })}`)
+  lines.push(
+    `export const ${exportName}: MotionIconData = ${toJs({ name, elements: data.elements, variants: data.variants })}`,
+  )
   lines.push('')
 }
 const out = 'src/components/ui/icons/motionData.ts'

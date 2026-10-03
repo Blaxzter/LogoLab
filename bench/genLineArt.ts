@@ -381,7 +381,11 @@ const COLOUR: Case[] = [
       svg(
         inked(C.blue, 4, `<circle cx="70" cy="70" r="40"/>`) +
           inked(C.red, 4, `<circle cx="120" cy="70" r="40"/>`) +
-          inked(C.pink, 4, `<circle cx="128" cy="160" r="30"/><circle cx="88" cy="196" r="30"/><circle cx="168" cy="196" r="30"/>`) +
+          inked(
+            C.pink,
+            4,
+            `<circle cx="128" cy="160" r="30"/><circle cx="88" cy="196" r="30"/><circle cx="168" cy="196" r="30"/>`,
+          ) +
           inked(C.orange, 4, `<circle cx="128" cy="190" r="18"/>`),
       ),
   },
@@ -412,7 +416,11 @@ function lucideColourCase(name: string, inks: string[], why: string): Case {
 
 const LUCIDE_COLOUR: Case[] = [
   lucideColourCase('mail', [C.blue, C.red], 'a blue envelope crossed by a red V — three two-ink junctions on one edge'),
-  lucideColourCase('git-branch', [C.green, C.orange, C.purple, C.ink], 'rings and runs in four inks, joined end to end'),
+  lucideColourCase(
+    'git-branch',
+    [C.green, C.orange, C.purple, C.ink],
+    'rings and runs in four inks, joined end to end',
+  ),
   lucideColourCase('search', [C.ink, C.blue], 'a blue ring with a dark handle leaving it tangentially'),
   lucideColourCase('umbrella', [C.ink, C.ink, C.red], 'a red canopy with a dark stem running through it'),
   lucideColourCase('camera', [C.ink, C.blue], 'a dark body with a blue lens ring inside'),

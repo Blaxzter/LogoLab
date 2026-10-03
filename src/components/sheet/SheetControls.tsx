@@ -132,7 +132,12 @@ export function SheetControlsBody({
               Replace
             </button>
             <Tooltip label="Remove the sheet">
-              <button type="button" onClick={onClear} aria-label="Remove the sheet" className="btn btn-ghost h-7 w-7 px-0">
+              <button
+                type="button"
+                onClick={onClear}
+                aria-label="Remove the sheet"
+                className="btn btn-ghost h-7 w-7 px-0"
+              >
                 <Trash2 size={13} />
               </button>
             </Tooltip>
@@ -440,11 +445,19 @@ export function SheetControlsBody({
         )}
 
         <div className="flex items-center gap-2 text-xs text-muted">
-          <button type="button" onClick={() => onSetAllIncluded(true)} className="btn btn-ghost h-7 gap-1.5 px-2 text-xs">
+          <button
+            type="button"
+            onClick={() => onSetAllIncluded(true)}
+            className="btn btn-ghost h-7 gap-1.5 px-2 text-xs"
+          >
             <CheckCheck size={13} />
             Include all
           </button>
-          <button type="button" onClick={() => onSetAllIncluded(false)} className="btn btn-ghost h-7 gap-1.5 px-2 text-xs">
+          <button
+            type="button"
+            onClick={() => onSetAllIncluded(false)}
+            className="btn btn-ghost h-7 gap-1.5 px-2 text-xs"
+          >
             <ListX size={13} />
             None
           </button>

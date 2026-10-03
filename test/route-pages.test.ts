@@ -49,7 +49,10 @@ test('the page still boots the app', () => {
 
 test('the sitemap lists exactly the pages that exist', () => {
   const locs = [...sitemapXml().matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1])
-  assert.deepEqual(locs, ROUTE_PAGES.map((p) => ORIGIN + p.path))
+  assert.deepEqual(
+    locs,
+    ROUTE_PAGES.map((p) => ORIGIN + p.path),
+  )
   assert.equal(new Set(ROUTE_PAGES.map(fileFor)).size, ROUTE_PAGES.length)
 })
 
