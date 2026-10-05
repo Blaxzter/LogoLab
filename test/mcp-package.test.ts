@@ -166,3 +166,17 @@ test('the tarball ships the build, and nothing else', () => {
   assert.equal(appPkg.private, true)
   assert.notEqual(appPkg.name, mcpPkg.name, 'two workspace projects cannot share a name')
 })
+
+// The official MCP registry lists the package from packages/mcp/server.json,
+// and proves we own it by reading `mcpName` out of the PUBLISHED package.json.
+// A drift between the two is not caught by anything until the registry step of
+// a release fails — after npm already has the version, which cannot be reused.
+test('the MCP registry entry names this package, at this version', () => {
+  const server = readJson(join(ROOT, 'packages/mcp/server.json'))
+  assert.equal(server.name, mcpPkg.mcpName, 'server.json name must equal package.json mcpName')
+  assert.equal(server.version, mcpPkg.version, 'server.json version must equal the package version')
+  const [npm] = server.packages
+  assert.equal(npm.identifier, mcpPkg.name)
+  assert.equal(npm.version, mcpPkg.version)
+  assert.ok(server.description.length <= 100, 'the registry rejects a description over 100 characters')
+})

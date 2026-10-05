@@ -155,3 +155,22 @@ jobs:
       - name: Publish
         run: npm publish --provenance --access public
         working-directory: packages/mcp
+
+      # List the release in the official MCP registry (registry.modelcontextprotocol.io),
+      # where MCP clients and directories look servers up. No token: the publisher
+      # logs in with this job's GitHub OIDC identity, which owns the
+      # io.github.Blaxzter/* namespace. The registry checks ownership by reading
+      # `mcpName` from the package npm now serves, so this runs after Publish and
+      # retries while the new version propagates.
+      - name: Publish to the MCP registry
+        working-directory: packages/mcp
+        run: |
+          set -euo pipefail
+          curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher login github-oidc
+          for attempt in 1 2 3 4 5 6; do
+            ./mcp-publisher publish && exit 0
+            echo "registry publish failed (attempt $attempt), waiting for npm to serve the new version"
+            sleep 20
+          done
+          exit 1
