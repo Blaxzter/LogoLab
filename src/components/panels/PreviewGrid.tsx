@@ -22,25 +22,25 @@ const SCENES: SceneDef[] = [
   {
     id: 'ios',
     title: 'iOS home screen',
-    desc: 'Real screenshot — drag your icon into a slot',
+    desc: 'Real screenshot: drag your icon into a slot',
     Component: PhoneHomeIOS,
   },
   {
     id: 'android',
     title: 'Android home screen',
-    desc: 'Real screenshot — drag your icon into a slot',
+    desc: 'Real screenshot: drag your icon into a slot',
     Component: PhoneHomeAndroid,
   },
-  { id: 'splash', title: 'App splash screen', desc: 'Launch / startup screen', Component: SplashScreen },
+  { id: 'splash', title: 'App splash screen', desc: 'What shows while the app starts', Component: SplashScreen },
   {
     id: 'desktop',
-    title: 'Website — desktop',
-    desc: 'Full-width nav, logo top-left',
+    title: 'Website on desktop',
+    desc: 'Full-width nav with the logo top left',
     Component: DesktopBrowser,
     span: 'md:col-span-2 2xl:col-span-2',
   },
-  { id: 'tabs', title: 'Browser tabs & favicon', desc: 'Legibility at 16px', Component: BrowserTabs },
-  { id: 'store', title: 'App Store listing', desc: 'Icon, title & screenshots', Component: AppStoreListing },
+  { id: 'tabs', title: 'Browser tabs & favicon', desc: 'How it reads at 16px', Component: BrowserTabs },
+  { id: 'store', title: 'App Store listing', desc: 'Icon, title and screenshots', Component: AppStoreListing },
   { id: 'social', title: 'Social profile', desc: 'Circular avatar crop', Component: SocialAvatar },
   {
     id: 'sizes',
@@ -61,8 +61,8 @@ export function PreviewGrid() {
           <h2 className="text-lg font-semibold tracking-tight text-ink">Previews</h2>
           <p className="text-sm text-muted">
             {logo.src
-              ? 'Your logo, rendered across real-world contexts. Tweak it in the sidebar.'
-              : 'Drop a logo in the sidebar — every scene updates live. (Showing placeholders.)'}
+              ? 'Your logo in the places it will show up. Adjust it in the sidebar.'
+              : 'Drop a logo in the sidebar and every scene updates as you go. Placeholders are shown until then.'}
           </p>
         </div>
         <span className="hidden rounded-full bg-surface-3 px-2.5 py-1 text-xs font-medium text-muted sm:inline">

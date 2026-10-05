@@ -66,12 +66,12 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
       grid: null,
       gap: 0,
       scale,
-      warnings: ['The sheet looks empty — nothing differs from the background.'],
+      warnings: ['The sheet looks empty. Nothing differs from the background.'],
     }
   }
   if (mask.inkCells / (mw * mh) > 0.9) {
     warnings.push(
-      'Almost every pixel differs from the background — if this is a photo or a full-bleed design, splitting will not find icons.',
+      'Almost every pixel differs from the background. If this is a photo or a full-bleed design, splitting will not find any icons.',
     )
   }
 
@@ -84,7 +84,7 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
       grid: null,
       gap: 0,
       scale,
-      warnings: [...warnings, 'Only dust-sized specks found.'],
+      warnings: [...warnings, 'Found only dust-sized specks.'],
     }
   }
   if (blobs.length !== solid.length)
@@ -159,7 +159,7 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
   const tiles = buildTiles(all, img, background, threshold, mask, opts)
   const grid = inferGrid(tiles)
   if (!grid && tiles.some((t) => t.kind === 'icon')) {
-    warnings.push('Icons are not on a regular grid — boxes follow the artwork instead.')
+    warnings.push('The icons are not on a regular grid, so the boxes follow the artwork instead.')
   }
 
   applyBoxes(tiles, grid, opts, warnings)
@@ -351,7 +351,7 @@ function buildLinkage(bands: Band[], warnings: string[]): Linkage {
       .slice()
       .sort((a, b) => b.weight - a.weight)
       .slice(0, MAX_BLOBS)
-    warnings.push(`The sheet has ${total} separate pieces of artwork — only the ${MAX_BLOBS} largest were grouped.`)
+    warnings.push(`The sheet has ${total} separate pieces of artwork. Only the ${MAX_BLOBS} largest were grouped.`)
   }
 
   const edges: { a: number; b: number; gap: number }[] = []
@@ -705,7 +705,7 @@ function applyBoxes(tiles: SheetTile[], grid: SheetGrid | null, opts: DetectOpti
   }
   if (crowded > 0) {
     warnings.push(
-      `${crowded} icon${crowded === 1 ? '' : 's'} sit${crowded === 1 ? 's' : ''} tight against a neighbour — those crops may catch a sliver of what is next to them.`,
+      `${crowded} icon${crowded === 1 ? '' : 's'} sit${crowded === 1 ? 's' : ''} right up against a neighbour, so those crops may catch a sliver of whatever is next to them.`,
     )
   }
 }

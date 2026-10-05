@@ -73,21 +73,21 @@ function RawNotices({ items, pathCount }: { items: DocItem[]; pathCount: number 
   if (cats.has('text'))
     notices.push({
       warn: true,
-      text: 'Text isn’t node-editable and renders with the viewer’s fonts — convert it to outlines before exporting to preserve the look.',
+      text: 'Text can’t be edited node by node and renders in the viewer’s fonts. Convert it to outlines before exporting to keep the look.',
     })
   if (cats.has('stroke'))
-    notices.push({ warn: false, text: 'Stroked shapes render and export, but aren’t node-editable yet.' })
+    notices.push({ warn: false, text: 'Stroked shapes render and export, but can’t be edited node by node yet.' })
   if (cats.has('gradient'))
     notices.push({ warn: false, text: 'A gradient or pattern fill couldn’t be modeled, so it’s kept as-is.' })
   if (cats.has('image'))
-    notices.push({ warn: false, text: 'Embedded bitmap — switch SOURCE to Re-trace to vectorize it.' })
+    notices.push({ warn: false, text: 'This SVG contains an embedded bitmap. Switch Source to Re-trace to vectorize it.' })
   if (cats.has('use')) notices.push({ warn: false, text: '<use> references render but aren’t editable.' })
   if (notices.length === 0) return null
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-line px-3 py-2.5">
       {pathCount === 0 && (
-        <p className="text-[11px] text-muted">Nothing here is node-editable — the SVG is preserved as-is below.</p>
+        <p className="text-[11px] text-muted">Nothing here can be edited node by node, so the SVG is kept as it is below.</p>
       )}
       {notices.map((n, i) => (
         <div
@@ -304,7 +304,7 @@ function PathRow({
               isStrokeOnly(item)
                 ? 'Recolor stroke'
                 : item.gradient
-                  ? 'Recolor (replaces gradient with a solid)'
+                  ? 'Recolor (replaces the gradient with a solid colour)'
                   : translucent
                     ? `Recolor · ${Math.round((item.fillOpacity ?? 1) * 100)}% opacity`
                     : 'Recolor'
@@ -338,7 +338,7 @@ function PathRow({
       <span className={`truncate text-xs ${item.visible ? 'text-ink' : 'text-faint'}`}>Path {index}</span>
       <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted">{nodes}</span>
 
-      <RowIconBtn title={item.visible ? 'Hide (excluded from export)' : 'Show'} onClick={onToggleVisible}>
+      <RowIconBtn title={item.visible ? 'Hide (left out of the export)' : 'Show'} onClick={onToggleVisible}>
         {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
       </RowIconBtn>
       <RowIconBtn title="Delete path" onClick={onDelete}>
@@ -363,7 +363,7 @@ function RawRow({
       <span className="h-[18px] w-[18px] shrink-0 rounded border border-dashed border-line-strong" />
       <span className={`truncate font-mono text-[11px] ${item.visible ? 'text-muted' : 'text-faint'}`}>{label}</span>
       <span className="ml-auto" />
-      <RowIconBtn title={item.visible ? 'Hide (excluded from export)' : 'Show'} onClick={onToggleVisible}>
+      <RowIconBtn title={item.visible ? 'Hide (left out of the export)' : 'Show'} onClick={onToggleVisible}>
         {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
       </RowIconBtn>
       <RowIconBtn title="Delete" onClick={onDelete}>

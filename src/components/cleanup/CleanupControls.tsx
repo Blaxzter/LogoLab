@@ -73,13 +73,13 @@ const BRUSH_TOOLS: { value: BrushTool; label: ReactNode }[] = [
 function toolHint(tool: ManualTool): string {
   switch (tool) {
     case 'magic':
-      return 'Click the background: erases the connected blob of similar color you click. Bump Tolerance if it stops too soon, lower it if it eats into the logo.'
+      return 'Click the background to erase the connected patch of similar color. Raise Tolerance if it stops too soon, lower it if it eats into the logo.'
     case 'color':
-      return 'Click a color: erases that color everywhere at once — including enclosed gaps a single flood can’t reach.'
+      return 'Click a color to erase it everywhere at once, including enclosed gaps a single flood can’t reach.'
     case 'erase':
-      return 'Drag to rub out pixels by hand. Best for stray specks and the holes auto-remove misses.'
+      return 'Drag to rub out pixels by hand. Good for stray specks and holes that auto-remove misses.'
     case 'restore':
-      return 'Drag to paint the original image back — fix any spot you erased too much.'
+      return 'Drag to paint the original image back where you erased too much.'
   }
 }
 
@@ -235,8 +235,8 @@ export function CleanupControlsBody({
               {aiBusy ? aiStatus || 'Working…' : 'AI auto-remove'}
             </Button>
             <p className="text-[0.7rem] leading-snug text-faint">
-              AI handles tricky backgrounds & holes the flood misses. First run downloads a model (~few sec), then it’s
-              cached & offline.
+              AI handles tricky backgrounds and holes the flood misses. The first run downloads a model (a few seconds),
+              then it works offline.
             </p>
             {aiDevice && !aiBusy && <p className="text-[0.7rem] leading-snug text-muted">AI ready ({aiDevice})</p>}
           </div>
@@ -268,7 +268,7 @@ export function CleanupControlsBody({
 
           <Field
             label="Defringe"
-            hint="How hard each removal scrubs the leftover background color out of the soft edge. Higher = cleaner halo but a slightly harder edge; 0 = off."
+            hint="How much leftover background color each removal scrubs out of the soft edge. Higher gives a cleaner halo but a slightly harder edge. 0 is off."
           >
             <Slider
               value={Math.round(defringeStrength * 100)}
@@ -284,7 +284,7 @@ export function CleanupControlsBody({
         <Collapsible title="Guided markers" summary={markerSummary}>
           <Field
             label="Marker"
-            hint="Click the image to keep (green) or remove (red) the region under the marker — each placement is one undo step. Pins mark your seeds; Clear removes them (they also clear on Reset, Apply or AI)."
+            hint="Click the image to keep (green) or remove (red) the region under the marker. Each click is one undo step. Pins show where you clicked; Clear removes them, and so do Reset and AI."
           >
             <Segmented<'keep' | 'remove'>
               value={tool === 'remove' ? 'remove' : 'keep'}
@@ -344,7 +344,7 @@ export function CleanupControlsBody({
 
         {/* --------------------------------------------------- edge refine */}
         <Collapsible title="Edge refine" summary="Grow · feather · defringe">
-          <Field label="Shrink ↔ Grow" hint="Tighten (negative) or fill out (positive) the cutout edge, then Apply.">
+          <Field label="Shrink ↔ Grow" hint="Pull the cutout edge in (negative) or push it out (positive), then apply.">
             <Slider
               value={edgeShift}
               min={-16}
@@ -364,7 +364,7 @@ export function CleanupControlsBody({
             </Button>
           </Field>
 
-          <Field label="Feather" hint="Soft-blur the alpha edge to hide jaggies, then Apply.">
+          <Field label="Feather" hint="Blur the edge slightly to hide jaggies, then apply.">
             <Slider value={feather} min={0} max={16} unit="px" onChange={onFeather} />
             <Button
               variant="secondary"
@@ -378,7 +378,7 @@ export function CleanupControlsBody({
             </Button>
           </Field>
 
-          <Field label="Defringe strength" hint="Pull leftover background color out of the soft edge, then Apply.">
+          <Field label="Defringe strength" hint="Remove leftover background color from the soft edge, then apply.">
             <Slider
               value={Math.round(defringeAmt * 100)}
               min={0}
@@ -403,7 +403,7 @@ export function CleanupControlsBody({
         <Collapsible title="Recolor" summary={`To ${recolorColor}`}>
           <Field
             label="Flat color"
-            hint="Paints every visible pixel one color (alpha kept), then Apply. Cleans a monochrome logo and wipes any leftover edge rim — for single-color art only, since it flattens real colors."
+            hint="Paints every visible pixel one color and keeps the transparency. It cleans up a one-color logo and any leftover edge rim. Use it only on one-color art, since it flattens real colors."
           >
             <ColorField value={recolorColor} onChange={onRecolorColor} />
             <Button
@@ -421,7 +421,7 @@ export function CleanupControlsBody({
 
         {/* -------------------------------------------------- trim & padding */}
         <Collapsible title="Trim & padding" summary={`Pad ${trimPad}px`}>
-          <Field label="Padding" hint="Transparent margin kept around the trimmed cutout.">
+          <Field label="Padding" hint="Transparent margin left around the trimmed cutout.">
             <Slider value={trimPad} min={0} max={128} unit="px" onChange={onTrimPad} />
           </Field>
           <Button
@@ -439,14 +439,14 @@ export function CleanupControlsBody({
         <Collapsible title="Background fill" summary={matteOn ? `Matte ${matteColor}` : 'Transparent'}>
           <Field
             label="Matte color"
-            hint="Preview the cutout over a solid color — baked into Apply / Download when on."
+            hint="Shows the cutout over a solid color. While on, the color is baked into the logo and the download."
             right={<Toggle checked={matteOn} onChange={onMatteOn} />}
           >
             {matteOn ? (
               <ColorField value={matteColor} onChange={onMatteColor} />
             ) : (
               <p className="text-xs leading-snug text-muted">
-                Off — the cutout stays transparent (checkerboard preview).
+                Off: the cutout stays transparent (shown on a checkerboard).
               </p>
             )}
           </Field>
@@ -454,7 +454,7 @@ export function CleanupControlsBody({
 
         <div className="mt-auto border-t border-line pt-4">
           <p className="text-[0.7rem] leading-relaxed text-faint">
-            Try AI or Auto first, then touch up with Erase / Restore. Space- or middle-drag to pan · scroll to zoom · ⌘Z
+            Try AI or Auto first, then touch up with Erase and Restore. Space- or middle-drag to pan · scroll to zoom · ⌘Z
             to undo.
           </p>
         </div>

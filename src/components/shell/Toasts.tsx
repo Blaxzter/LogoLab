@@ -85,7 +85,7 @@ function PwaToast() {
           </button>
         </span>
       ) : (
-        'Installed — LogoLab now works offline.'
+        'Installed. LogoLab now works offline.'
       )}
     </Toast>
   )

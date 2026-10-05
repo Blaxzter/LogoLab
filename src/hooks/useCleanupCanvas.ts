@@ -579,9 +579,9 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       finishRemoval(working, color, defringeStrength)
       commit(pre)
       redraw()
-      setStatus(`Auto-removed corner background — ${affected.toLocaleString()} px`)
+      setStatus(`Auto-removed the corner background (${affected.toLocaleString()} px)`)
     } else {
-      setStatus('Nothing to auto-remove — the corners are already clear.')
+      setStatus('Nothing to auto-remove. The corners are already clear.')
     }
   }, [aiBusy, opts, defringeStrength, commit, redraw])
 
@@ -612,7 +612,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       redraw()
       setAiDevice(device)
       setStatus(
-        `AI removed the background${device ? ` (${device})` : ''} — touch up with the Erase / Restore brushes if needed.`,
+        `AI removed the background${device ? ` (${device})` : ''}. Touch up with the Erase and Restore brushes if needed.`,
       )
     } catch (err) {
       console.error('[cleanup] AI background removal failed', err)
@@ -766,11 +766,11 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       if (!working || aiBusy) return
       const bounds = trimBounds(working, pad)
       if (bounds === 'empty') {
-        setStatus('Nothing to trim — the image is fully transparent.')
+        setStatus('Nothing to trim. The image is fully transparent.')
         return
       }
       if (bounds === 'tight') {
-        setStatus('Nothing to trim — already cropped tight.')
+        setStatus('Nothing to trim. It is already cropped tight.')
         return
       }
       const pre = cloneImageData(working)

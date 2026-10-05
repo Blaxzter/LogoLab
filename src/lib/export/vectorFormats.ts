@@ -78,9 +78,9 @@ export const VECTOR_FORMATS = [
     id: 'ai',
     label: 'Adobe Illustrator (.ai)',
     ext: 'ai',
-    note: 'PDF-compatible; opens in Illustrator, Inkscape, Affinity.',
+    note: 'PDF-compatible. Opens in Illustrator, Inkscape and Affinity.',
   },
-  { id: 'pdf', label: 'PDF', ext: 'pdf', note: 'Vector, for print and for sending to people. Same file as the .ai.' },
+  { id: 'pdf', label: 'PDF', ext: 'pdf', note: 'Vector, for printing or sending to people. Same file as the .ai.' },
   { id: 'dxf', label: 'DXF', ext: 'dxf', note: 'Outlines for CAD, laser and vinyl cutters. One layer per colour.' },
 ] as const
 

@@ -424,7 +424,7 @@ export function VectorizeStudio({
       : null
   const bestReason =
     isVectorSource && retraceVector === 'clean'
-      ? 'A cleaned SVG is not traced. Switch Source to Re-trace to compare trace settings.'
+      ? 'Cleaning an SVG doesn’t trace it. Switch Source to Re-trace to compare settings.'
       : !best.available
         ? 'This browser cannot trace in the background (no Web Workers).'
         : busy

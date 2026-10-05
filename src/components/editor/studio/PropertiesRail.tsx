@@ -30,13 +30,13 @@ const BOOLEANS: { op: BooleanOp; label: string; note: string; icon: React.ReactN
   {
     op: 'add',
     label: 'Add',
-    note: 'Merges the selected shapes into one outline, in the base’s paint (the shape you selected first). With one shape selected, merges its own overlapping contours.',
+    note: 'Merges the selected shapes into one outline in the base’s paint (the shape you selected first). With one shape selected, it merges that shape’s overlapping contours.',
     icon: <SquaresUnite size={15} />,
   },
   {
     op: 'subtract',
     label: 'Subtract',
-    note: 'Cuts the other shapes out of the base — the one you selected first, outlined in teal.',
+    note: 'Cuts the other shapes out of the base (the one you selected first, outlined in teal).',
     icon: <SquaresSubtract size={15} />,
   },
   {
@@ -48,7 +48,7 @@ const BOOLEANS: { op: BooleanOp; label: string; note: string; icon: React.ReactN
   {
     op: 'xor',
     label: 'Xor',
-    note: 'Keeps where the shapes do NOT overlap; the overlaps become holes.',
+    note: 'Keeps the parts where the shapes don’t overlap. The overlaps become holes.',
     icon: <SquaresExclude size={15} />,
   },
   {
@@ -170,8 +170,8 @@ export function PropertiesRail({
           <p className="mt-1.5 flex items-start gap-1.5 text-[0.68rem] leading-snug text-muted">
             <span className="mt-[3px] h-2 w-2 shrink-0 rounded-full" style={{ background: BASE }} />
             <span>
-              Base: <span className="font-medium text-ink">{baseLabel}</span> — selected first. Subtract cuts the others
-              out of it; the result keeps its colour.
+              Base: <span className="font-medium text-ink">{baseLabel}</span> (selected first). Subtract cuts the others
+              out of it, and the result keeps its colour.
             </span>
           </p>
         )}

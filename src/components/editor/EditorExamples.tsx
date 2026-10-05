@@ -23,32 +23,32 @@ export const EDITOR_EXAMPLES: EditorExample[] = [
   {
     file: 'summit.svg',
     name: 'Summit',
-    blurb: 'Two flat shapes — the simplest thing to pull nodes on.',
+    blurb: 'Two flat shapes, the simplest place to start pulling nodes.',
   },
   {
     file: 'bloom.svg',
     name: 'Bloom',
-    blurb: 'Three translucent circles — restack them, group them, recolour.',
+    blurb: 'Three see-through circles to restack, group and recolour.',
   },
   {
     file: 'orbit.svg',
     name: 'Orbit',
-    blurb: 'A ring and a backdrop — strokes, width and caps.',
+    blurb: 'A ring and a backdrop, for trying strokes, widths and caps.',
   },
   {
     file: 'outline.svg',
     name: 'Outline',
-    blurb: 'Stroke-only line art — every corner is an editable node.',
+    blurb: 'Line art drawn only with strokes. Every corner is a node you can edit.',
   },
   {
     file: 'aurora.svg',
     name: 'Aurora',
-    blurb: 'A gradient app icon — edit the stops, keep the rounded frame.',
+    blurb: 'A gradient app icon. Edit the stops and keep the rounded frame.',
   },
   {
     file: 'nebula.svg',
     name: 'Nebula',
-    blurb: 'Exported from a design tool — its layer folder survives the import.',
+    blurb: 'Exported from a design tool, with its layer folder intact.',
   },
 ]
 

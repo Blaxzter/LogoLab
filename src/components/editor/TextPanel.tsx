@@ -112,7 +112,7 @@ export function TextPanel({
   }
 
   return (
-    <Section title={text.edit ? 'Text — selection' : 'Text'}>
+    <Section title={text.edit ? 'Text (selection)' : 'Text'}>
       <div className="flex flex-col gap-2">
         <div className="flex">
           <FontPicker
@@ -131,7 +131,7 @@ export function TextPanel({
         <div className="flex items-center gap-1.5">
           <span className="w-8 shrink-0 text-[0.7rem] text-muted">Weight</span>
           {wght ? (
-            <Tooltip label={<TipLabel title="Weight" detail="This font is variable: any weight in its range." />}>
+            <Tooltip label={<TipLabel title="Weight" detail="This is a variable font, so any weight in its range works." />}>
               <RangeInput
                 aria-label="Weight"
                 min={wght.min}
@@ -215,7 +215,7 @@ export function TextPanel({
           ))}
           <ActionButton
             label={data.kerning ? 'Kerning on' : 'Kerning off'}
-            note="Pair kerning from the font: AV, To and the like tuck together."
+            note="Uses the font's pair kerning, so pairs like AV and To sit closer together."
             pressed={data.kerning}
             onClick={() => text.setProps({ kerning: !data.kerning })}
             className={`btn btn-secondary ml-auto h-7 px-2 text-[0.7rem] ${data.kerning ? 'is-active' : ''}`}

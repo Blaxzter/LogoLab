@@ -506,7 +506,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         ocr: {
           ...IDLE_OCR,
           status: 'error',
-          error: 'Reading captions needs Web Workers and WebAssembly, which this browser does not offer.',
+          error: 'Reading captions needs Web Workers and WebAssembly, which this browser does not support.',
         },
       })
       return
@@ -544,7 +544,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       } catch (err) {
         if (token === ocrToken) {
           set((s) => ({
-            ocr: { ...s.ocr, status: 'error', error: err instanceof Error ? err.message : 'Reading a caption failed' },
+            ocr: { ...s.ocr, status: 'error', error: err instanceof Error ? err.message : 'Could not read a caption' },
           }))
         }
         return

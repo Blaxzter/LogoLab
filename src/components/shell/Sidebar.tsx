@@ -84,8 +84,8 @@ function SidebarBody() {
                   right={<Toggle checked={app.cardInFlat} onChange={(v) => setAppearance({ cardInFlat: v })} />}
                 >
                   <p className="text-xs leading-snug text-muted">
-                    Adds a colored backplate behind the logo (great for white line-art). Always on for app-icon scenes;
-                    toggle controls flat scenes like nav bars &amp; favicons.
+                    Adds a colored backplate behind the logo, which helps white line art. App-icon scenes always have
+                    it; this toggle covers flat scenes like nav bars &amp; favicons.
                   </p>
                 </Field>
               )}
@@ -126,7 +126,7 @@ function SidebarBody() {
                 right={<Toggle checked={app.tintEnabled} onChange={(v) => setAppearance({ tintEnabled: v })} />}
               >
                 <p className="text-xs leading-snug text-muted">
-                  Paint a monochrome logo a single color via its alpha — preview a white mark in any brand color.
+                  Paints a one-color logo in a single color using its alpha, so you can preview a white mark in any brand color.
                 </p>
               </Field>
               {app.tintEnabled && (

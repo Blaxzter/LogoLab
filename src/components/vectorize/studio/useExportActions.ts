@@ -49,7 +49,7 @@ export function useExportActions({
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
     } catch {
-      setError('Clipboard copy was blocked by the browser.')
+      setError('The browser blocked copying to the clipboard.')
       setFailure(null)
     }
   }

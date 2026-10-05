@@ -63,9 +63,9 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'smoothing',
     label: 'Smoothing',
-    hint: 'Curve fitting — higher melts detail into smooth curves.',
+    hint: 'Higher values trade small detail for smoother curves.',
     blurb:
-      'How hard the tracer fits curves to the pixel edges. None hugs every pixel — lots of nodes, jagged edges kept faithfully. Medium balances clean curves against fidelity. High melts small wiggles into long, sweeping Béziers: the fewest nodes, but fine detail and subtle inflections soften. It is the pre-smoothing of the pixel staircase before the fit; the fit tolerance itself stays at one pixel.',
+      'How much the pixel staircase along each edge is smoothed before curves are fitted to it. None follows every pixel: lots of nodes, with jagged edges kept as they are. Medium balances clean curves against accuracy. High melts small wiggles into long, sweeping Bézier curves with the fewest nodes, but fine detail and subtle bends soften. The fit itself always stays within one pixel; this only changes how much the edge is smoothed first.',
     example: synthetic('smoothing'),
     variants: [
       { label: 'None', patch: { smoothing: 0 } },
@@ -76,9 +76,9 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'despeckle',
     label: 'Despeckle',
-    hint: 'Suppresses anti-aliasing slivers and speckles.',
+    hint: 'Removes anti-aliasing slivers and stray specks.',
     blurb:
-      'Removes tiny stray regions before tracing. None keeps every speck, including the anti-aliasing slivers along edges — faithful but messy and node-heavy. Medium drops stray dots and fringe. High aggressively merges small areas and near-identical colours: the cleanest output, but it can swallow intentional small details like dots, thin outlines or punctuation.',
+      'Removes tiny stray regions before tracing. None keeps every speck, including the anti-aliasing slivers along edges: accurate, but messy and heavy on nodes. Medium drops stray dots and fringe. High also merges small areas and near-identical colours. That gives the cleanest output, but it can swallow small details you meant to keep, like dots, thin outlines or punctuation.',
     example: synthetic('despeckle'),
     variants: [
       { label: 'None', patch: { despeckle: 0 } },
@@ -89,9 +89,9 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'fidelity',
     label: 'Fidelity',
-    hint: 'Snap near-circles, lines and shared centers to perfect geometry.',
+    hint: 'Snaps near-circles, near-lines and shared centres to exact shapes.',
     blurb:
-      'After tracing, near-circles, near-lines and shared centres are snapped to perfect shapes — but only if the snap moves the outline less than this many pixels. Off keeps the raw traced outline exactly. Default (1.5px) straightens the obvious circles and lines. High (6px) allows more drift for very regular geometry — great for clean icons, risky for organic artwork where it can over-regularise.',
+      'After tracing, near-circles, near-lines and shared centres are snapped to perfect shapes, but only when the snap moves the outline by less than this many pixels. Off keeps the traced outline exactly as it came out. The default (1.5px) straightens the obvious circles and lines. High (6px) lets shapes move further, which suits clean, regular icons; on organic artwork it can make shapes too regular.',
     example: synthetic('fidelity'),
     variants: [
       { label: 'Off', patch: { fidelity: 0 } },
@@ -104,7 +104,7 @@ export const CONTROL_DOCS: ControlDoc[] = [
     label: 'Region detail',
     hint: 'How finely the image is split into shapes.',
     blurb:
-      'How finely the image is split into shapes before tracing. Auto merges similar colours into a few macro-regions — best for smooth gradients. Medium and High keep subtler regions, like the soft blend where translucent shapes overlap, as their own shapes. Higher recovers those overlaps but can fragment a smooth gradient into flat bands, and is slower. Placing Mark seeds is the surgical alternative to cranking this up everywhere.',
+      'How finely the image is split into shapes before tracing. Auto merges similar colours into a few large regions, which suits smooth gradients. Medium and High keep subtler regions as shapes of their own, like the soft blend where translucent shapes overlap. Higher values recover those overlaps but can break a smooth gradient into flat bands, and they trace more slowly. To keep just one area, place a region marker there instead of raising this for the whole image.',
     example: bundled('petals', 'petals.png'),
     baseOpts: { mode: 'color' },
     variants: [
@@ -116,9 +116,9 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'markers',
     label: 'Mark regions',
-    hint: 'Pin a spot to keep it separate — or flat.',
+    hint: 'Pin a spot to keep it separate, or to make it flat.',
     blurb:
-      'Region markers are seeds for the segmentation, in two kinds. “Keep separate” means “keep a distinct shape here”: two regions with different markers never merge and a marked region is never absorbed — the surgical way to recover something the automatic merge would swallow, like the soft blend where translucent shapes overlap. “Flat colour” does that AND paints the region one solid colour instead of a fitted gradient — so when the tracer fuses two flat sections under a “weird gradient”, mark each side as Flat to get two clean, distinct solids. Turn on Place markers, pick the kind, then click the image (either pane) to drop a marker; click a marker to remove it. To split a region from its neighbour, mark BOTH sides. Unmarked areas trace exactly as before.',
+      'A region marker tells the tracer how to treat one spot when it splits the image into regions. Separate keeps a distinct shape there: two regions with different markers never merge, and a marked region is never absorbed. Use it to recover something the automatic merge would swallow, like the soft blend where translucent shapes overlap. Flat does the same and also paints the region one solid colour instead of a fitted gradient. If the tracer has fused two flat sections into one “weird gradient”, mark each side as Flat to get two clean solids. Turn on Place markers, pick the kind, then click the image (either pane) to drop a marker; click a marker to remove it. To split a region from its neighbour, mark both sides. Areas without markers trace exactly as before.',
     example: synthetic('overlaps'),
     baseOpts: { mode: 'color' },
     exampleOnly: true,
@@ -143,9 +143,9 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'gradients',
     label: 'Gradients',
-    hint: 'Export smooth color ramps as real SVG gradients, not flat bands.',
+    hint: 'Export smooth colour ramps as real SVG gradients instead of flat bands.',
     blurb:
-      'When on, a region whose pixels follow a smooth colour ramp is exported as one real SVG linear/radial gradient instead of being chopped into flat colour bands. Off forces flat fills — more shapes, simpler each. On reproduces smooth blends with a single gradient: fewer shapes, a smaller file and a truer match to the source. Turn it off only when you specifically want a posterised, banded look.',
+      'When on, a region whose pixels follow a smooth colour ramp is exported as one SVG linear or radial gradient instead of being cut into flat colour bands. Off forces flat fills: more shapes, each one simpler. On reproduces a smooth blend with a single gradient, so you get fewer shapes, a smaller file and a closer match to the source. Turn it off only if you want a posterised, banded look.',
     example: bundled('nebula', 'nebula.png'),
     baseOpts: { mode: 'color' },
     variants: [
@@ -156,9 +156,9 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'mode',
     label: 'Mode',
-    hint: 'Auto counts the inks: one ⇒ Mono (one clean shape), more ⇒ Color.',
+    hint: 'Auto counts the inks: one ink gives Mono (one clean shape), more give Color.',
     blurb:
-      'Whether the art is traced as colour regions or as a single-ink silhouette. Auto counts the inks the image actually uses — fusing tones that are only shading of the same ink — and picks Mono when there is exactly one, because a one-ink mark traced in colour gets CARVED along the line where its light side flips to its shadow side. Auto also sets the mono cut from the ink and background it measured, flips it when the ink is the lighter of the two, and paints the result in the ink’s own colour instead of black. Color and Mono force the choice; a forced Mono still gets the measured cut and the flip.',
+      'Whether the art is traced as colour regions or as a single-ink silhouette. Auto counts the inks the image actually uses, counting tones that are only shading of one ink as that ink. It picks Mono when there is exactly one, because a one-ink mark traced in colour gets cut in two along the line where its light side turns into its shadow side. Auto also sets the mono cut from the ink and background it measured, flips it when the ink is the lighter of the two, and paints the result in the ink’s own colour instead of black. Color and Mono force the choice; a forced Mono still gets the measured cut and the flip.',
     example: bundled('petals', 'petals.png'),
     variants: [
       { label: 'Color', patch: { mode: 'color' } },
@@ -168,9 +168,9 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'invert',
     label: 'Invert',
-    hint: 'Ink is lighter than the background — flip which side of the cut is solid.',
+    hint: 'For ink lighter than its background: flips which side of the cut becomes solid.',
     blurb:
-      'Mono makes every pixel DARKER than the threshold solid and drops the rest, which assumes dark ink on light paper. White line-art on a dark ground is the other way round: every pixel of the art sits above the cut, so without this the trace comes back empty (or as the background traced around a hole). Invert flips which side becomes solid. Auto mode sets it for you from the measured ink and background luminance; this is the manual override.',
+      'Mono makes every pixel darker than the threshold solid and drops the rest, which assumes dark ink on light paper. White line art on a dark background is the other way round: every pixel of the art sits above the cut, so without Invert the trace comes back empty (or as the background traced around a hole). Invert flips which side becomes solid. In Auto mode it is set for you from the measured brightness of the ink and the background; this switch is the manual override.',
     example: synthetic('threshold'),
     baseOpts: { mode: 'mono', threshold: 128 },
     variants: [
@@ -181,9 +181,9 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'centerline',
     label: 'Strokes',
-    hint: 'Trace the ink as strokes with a width — for line art — instead of filled outlines.',
+    hint: 'For line art: trace each line as a stroke with a width instead of a filled outline.',
     blurb:
-      'Line art — a monoline icon, a diagram, a sheet of music — is drawn with a pen of one width, and a filled outline of it is the silhouette of that pen: twice the edges, and no width to change. Strokes trace the middle of each line instead and measure how wide the ink is, so the result is open and closed paths with a stroke-width you can re-weight, and ends and corners you can move as single points. Ink that no stroke explains (a note head, the dot of an i) still becomes a fill. In Mono the cut and the invert are shared; in Colour every ink is traced as one drawing, so crossing lines stay whole, and each stroke takes the colour it runs through.',
+      'Line art (a monoline icon, a diagram, a sheet of music) is drawn with a pen of one width. A filled outline traces both edges of every pen line, so you get twice the edges and no width you can change. Strokes traces the middle of each line instead and measures how wide the ink is. The result is open and closed paths with a stroke width you can adjust, and ends and corners you can move as single points. Ink that no stroke explains (a note head, the dot of an i) still becomes a fill. In Mono, Strokes uses the same cut and Invert setting. In Colour, all the inks are traced as one drawing so crossing lines stay whole, and each stroke takes the colour it runs through.',
     example: bundled('outline', 'outline.svg'),
     baseOpts: { mode: 'mono', threshold: 128, invert: true },
     variants: [
@@ -197,7 +197,7 @@ export const CONTROL_DOCS: ControlDoc[] = [
     label: 'Threshold',
     hint: 'Pixels darker than this become solid; lighter ones drop out.',
     blurb:
-      'The black/white cutoff in Mono mode. Every pixel darker than the threshold becomes solid; lighter ones drop out entirely. Low keeps only the darkest core (thin, may break up). Mid is balanced. High captures lighter greys too — thicker, more connected shapes, but it also starts picking up background noise and anti-aliasing.',
+      'The black/white cutoff in Mono mode. Every pixel darker than the threshold becomes solid; lighter ones drop out entirely. Low keeps only the darkest core, so shapes get thin and may break up. Mid is balanced. High also picks up lighter greys, giving thicker, better-connected shapes, but it starts to catch background noise and anti-aliasing too.',
     example: synthetic('threshold'),
     baseOpts: { mode: 'mono' },
     variants: [

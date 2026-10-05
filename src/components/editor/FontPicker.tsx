@@ -323,7 +323,7 @@ export function FontPicker({
                 <span className="min-w-0 flex-1">
                   <span className="block">Upload a font…</span>
                   <span className="block text-[0.62rem] leading-tight text-faint">
-                    .ttf, .otf or .woff — kept in this browser, under Your fonts
+                    .ttf, .otf or .woff, saved in this browser under Your fonts
                   </span>
                 </span>
               </button>

@@ -116,7 +116,7 @@ function IconCard({
 
         {tile.kind === 'label' && (
           <span
-            title="The detector read this as caption text, not an icon"
+            title="Detected as caption text, not an icon"
             className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-surface/85 px-1.5 py-0.5 text-[0.6rem] font-semibold text-muted backdrop-blur"
           >
             <Type size={9} /> text
@@ -142,7 +142,7 @@ function IconCard({
           type="checkbox"
           checked={tile.included}
           onChange={(e) => onToggleInclude(tile.id, e.target.checked)}
-          title={tile.included ? 'Included in trace & export' : 'Excluded'}
+          title={tile.included ? 'Included in trace and export' : 'Excluded'}
           className="size-3.5 shrink-0 accent-[var(--color-accent)]"
         />
         <div className="flex min-w-0 flex-1 items-center">
@@ -167,9 +167,9 @@ function IconCard({
           <span
             title={
               caption.text === ''
-                ? 'The caption under this icon could not be read — numbered instead'
+                ? 'Could not read the caption under this icon, so it is numbered instead'
                 : unsure
-                  ? `Read from the caption with low confidence (${confidence}%): “${caption.text}” — check the name`
+                  ? `Read from the caption with low confidence (${confidence}%): “${caption.text}”. Check the name.`
                   : `Named from its caption “${caption.text}” (${confidence}%)`
             }
             className={`flex h-6 w-6 shrink-0 items-center justify-center ${unsure ? 'text-warn' : 'text-faint'}`}

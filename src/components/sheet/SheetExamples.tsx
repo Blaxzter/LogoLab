@@ -20,22 +20,22 @@ export const SHEET_EXAMPLES: SheetExample[] = [
   {
     file: 'weather.webp',
     name: 'Weather',
-    blurb: 'Black glyphs with a title and captions — the text rows are set aside.',
+    blurb: 'Black glyphs with a title and captions. The text rows are left out.',
   },
   {
     file: 'travel.webp',
     name: 'Travel',
-    blurb: 'Sixteen flat colour icons on cream paper — the colour path.',
+    blurb: 'Sixteen flat colour icons on cream paper, traced in colour.',
   },
   {
     file: 'smart-home.webp',
     name: 'Smart home',
-    blurb: 'White glyphs and captions on dark paper — a dark background.',
+    blurb: 'White glyphs and captions on dark paper.',
   },
   {
     file: 'productivity.webp',
     name: 'Productivity',
-    blurb: 'Thin line icons — each one is several pieces, grouped back into one.',
+    blurb: 'Thin line icons. Each is made of several pieces that get grouped back into one.',
   },
 ]
 

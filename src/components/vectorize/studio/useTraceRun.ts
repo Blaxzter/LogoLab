@@ -126,7 +126,7 @@ export function useTraceRun({
               if (runId !== runIdRef.current) return
               setProgress(
                 p.phase === 'download'
-                  ? `Downloading upscaler${p.percent != null ? ` — ${p.percent}%` : '…'}`
+                  ? `Downloading upscaler${p.percent != null ? ` (${p.percent}%)` : '…'}`
                   : `Upscaling ×${p.factor}…`,
               )
             },
@@ -177,7 +177,7 @@ export function useTraceRun({
       if (err instanceof DOMException && err.name === 'AbortError') return
       logError('trace', err)
       if (runId === runIdRef.current) {
-        const message = 'Could not vectorize this image — try different settings or another file.'
+        const message = 'Could not vectorize this image. Try other settings or another file.'
         setError(message)
         setFailure(err)
         // Also ask whether to report it; the status line alone is easy to miss.

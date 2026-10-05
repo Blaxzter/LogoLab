@@ -25,23 +25,23 @@ export type ActionReasons = ReturnType<typeof actionReasons>
  * Each reason says what would make the action available.
  */
 export function actionReasons({ canUndo, canRedo, selection, nodeSel, selectedCount, sel, activePath }: ActionState) {
-  const nothing = 'Nothing is selected — click a shape on the canvas or a row in the layers list.'
+  const nothing = 'Nothing is selected. Click a shape on the canvas or a row in the layers list.'
   const onePath =
     selection.size === 0
       ? 'Select one path.'
       : selection.size > 1
-        ? `Select just one path — ${selection.size} items are selected.`
-        : 'The selected item is a group or imported markup, not an editable path.'
+        ? `Select just one path (${selection.size} items are selected).`
+        : 'The selected item is a group or imported markup, so it can\u2019t be edited as a path.'
 
   return {
-    undo: canUndo ? null : 'Nothing to undo — this is the oldest state of the drawing.',
-    redo: canRedo ? null : 'Nothing to redo — this is the newest state of the drawing.',
+    undo: canUndo ? null : 'Nothing to undo. This is the oldest state of the drawing.',
+    redo: canRedo ? null : 'Nothing to redo. This is the newest state of the drawing.',
     group:
       selectedCount >= 2
         ? null
-        : `Select two or more items to put in a group — ${
+        : `Select two or more items to group (${
             selectedCount === 0 ? 'nothing is selected' : 'only one is selected'
-          }.`,
+          }).`,
     ungroup: sel.groups > 0 ? null : 'Select a group. A plain shape has nothing to ungroup.',
     selection: selection.size > 0 ? null : nothing,
     remove: selection.size > 0 || nodeSel.size > 0 ? null : nothing,
@@ -49,32 +49,32 @@ export function actionReasons({ canUndo, canRedo, selection, nodeSel, selectedCo
     split: !activePath
       ? onePath
       : activePath.subPaths.length < 2
-        ? 'This path has a single subpath, so there is nothing to split apart. Compound paths (a shape with holes) can be split.'
+        ? 'This path has only one subpath, so there is nothing to split. Only compound paths (a shape with holes) can be split.'
         : null,
     combine:
       sel.paths >= 2
         ? null
-        : `Select two or more paths to merge into one compound path — ${
+        : `Select two or more paths to merge into one compound path (${
             sel.paths === 1 ? 'only one path is selected' : 'none are selected'
-          }.`,
+          }).`,
     breakNode:
       nodeSel.size === 1
         ? null
-        : `Switch to the Node tool (A) and select exactly one node — ${
+        : `Switch to the Node tool (A) and select exactly one node (${
             nodeSel.size === 0 ? 'none are selected' : `${nodeSel.size} are selected`
-          }.`,
+          }).`,
     join: joinReason(nodeSel),
     // With one shape, Add merges that shape's own overlapping contours.
     add:
       selectedCount >= 2 || (selectedCount === 1 && (sel.paths > 0 || sel.groups > 0))
         ? null
-        : 'Select two or more shapes to merge — or one shape to merge its own overlapping contours.',
+        : 'Select two or more shapes to merge, or one shape to merge its own overlapping contours.',
     boolean:
       selectedCount >= 2
         ? null
-        : `Select two or more shapes to combine — ${
+        : `Select two or more shapes to combine (${
             selectedCount === 0 ? 'nothing is selected' : 'only one is selected'
-          }. A group counts as one shape.`,
+          }). A group counts as one shape.`,
   }
 }
 
@@ -84,9 +84,9 @@ export function actionReasons({ canUndo, canRedo, selection, nodeSel, selectedCo
  */
 function joinReason(nodeSel: ReadonlySet<string>): string | null {
   if (nodeSel.size !== 2) {
-    return `Switch to the Node tool (A) and select the two end nodes to weld — ${
+    return `Switch to the Node tool (A) and select the two end nodes to weld (${
       nodeSel.size === 0 ? 'none are selected' : `${nodeSel.size} are selected`
-    }.`
+    }).`
   }
   const [a, b] = [...nodeSel].map(parseNodeKey)
   return a.itemId === b.itemId

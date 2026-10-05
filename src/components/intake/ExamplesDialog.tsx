@@ -17,25 +17,25 @@ interface Example {
 }
 
 const EXAMPLES: Example[] = [
-  { file: 'aurora.svg', name: 'Aurora', blurb: 'Gradient app icon — preview & export an icon set.' },
-  { file: 'nebula.png', name: 'Nebula', blurb: 'Gradient-background PNG — the AI cutout’s specialty.' },
-  { file: 'orbit.svg', name: 'Orbit', blurb: 'Solid background — Cleanup / By-color, holes and all.' },
-  { file: 'petals.png', name: 'Petals', blurb: 'Solid-background PNG — Auto-remove + Vectorize.' },
-  { file: 'outline.svg', name: 'Outline', blurb: 'White line-art — see the Background card fix.' },
+  { file: 'aurora.svg', name: 'Aurora', blurb: 'Gradient app icon. Preview it and export an icon set.' },
+  { file: 'nebula.png', name: 'Nebula', blurb: 'PNG on a gradient background, a good test for the AI cutout.' },
+  { file: 'orbit.svg', name: 'Orbit', blurb: 'Solid background. Try Cleanup’s By-color mode, holes and all.' },
+  { file: 'petals.png', name: 'Petals', blurb: 'PNG on a solid background. Try Auto-remove, then Vectorize.' },
+  { file: 'outline.svg', name: 'Outline', blurb: 'White line art. See how the Background card fixes it.' },
   {
     file: 'sketch.png',
     name: 'Sketch',
-    blurb: 'One-ink line art — Vectorize traces it as strokes with a width.',
+    blurb: 'Line art in one ink. Vectorize traces it as strokes with a width.',
     trace: { centerline: true },
   },
   {
     file: 'doodle.png',
     name: 'Doodle',
-    blurb: 'Coloured line art — traced as strokes, every line in its own ink.',
+    blurb: 'Coloured line art, traced as strokes with every line in its own ink.',
     trace: { centerline: true },
   },
-  { file: 'summit.svg', name: 'Summit', blurb: 'Monochrome mark — try Recolor & Invert.' },
-  { file: 'bloom.svg', name: 'Bloom', blurb: 'Multi-color shapes — great for Vectorize.' },
+  { file: 'summit.svg', name: 'Summit', blurb: 'One-color mark. Try Recolor & Invert.' },
+  { file: 'bloom.svg', name: 'Bloom', blurb: 'Shapes in several colors. Good for Vectorize.' },
 ]
 
 /** The badge on a card: the file's extension, as people say it. */
@@ -234,7 +234,7 @@ function ExamplesDialog({ onClose }: { onClose: () => void }) {
           <div>
             <h2 className="text-base font-semibold text-ink">Example logos</h2>
             <p className="mt-1 text-sm text-muted">
-              No logo handy? Load one of ours and experiment — clean it up, vectorize it, export an icon set.
+              No logo handy? Load one of ours to try cleaning it up, vectorizing it and exporting an icon set.
             </p>
           </div>
           <Tooltip label="Close">

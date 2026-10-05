@@ -16,7 +16,7 @@ export default function CleanupPanel() {
         <PanelEmptyState
           icon={<Eraser size={26} />}
           title="No image to clean up"
-          subtitle="Drop a PNG/JPG logo (or load an example) to remove its background."
+          subtitle="Drop in a PNG or JPG logo, or load an example, to remove its background."
         />
       </div>
     )

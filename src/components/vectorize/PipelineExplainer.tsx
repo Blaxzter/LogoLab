@@ -88,7 +88,7 @@ export function PipelineExplainer({
           <div>
             <h2 className="text-base font-semibold text-ink">How vectorize works</h2>
             <p className="mt-1 text-sm text-muted">
-              Your image, walked through the stages — with your current settings — that turn pixels into clean, editable
+              Your image, run with your current settings through each stage that turns pixels into clean, editable
               vector shapes.
             </p>
           </div>
@@ -144,7 +144,7 @@ function Steps({
     <div className="flex flex-col gap-6">
       {opts.mode === 'mono' && (
         <p className="rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-xs leading-snug text-ink-2">
-          You're in <b>Mono</b> mode — the image is cut at one threshold into ink and paper, and that two-region map
+          You're in <b>Mono</b> mode: the image is cut at one threshold into ink and paper, and that two-region map
           goes through the same outline tracer as colour. The colour-grouping stages below show how <b>Color</b> mode
           works; your actual result in step 5 is the mono shape.
         </p>
@@ -153,7 +153,7 @@ function Steps({
       <Step
         n={1}
         title="Start from pixels"
-        body={`We rasterize your image to ${width}×${height}px and work from those pixels. Vectorizing means rebuilding it from a few flat/gradient shapes instead of a grid of dots.`}
+        body={`We render your image at ${width}×${height}px and work from those pixels. Vectorizing rebuilds it from a few flat or gradient shapes instead of a grid of dots.`}
       >
         <Visual label="Your image">
           <img src={logoSrc} alt="" className="h-full w-full object-contain" />
@@ -164,7 +164,7 @@ function Steps({
         n={2}
         title="Smooth, and find the real edges"
         controls={['automatic']}
-        body="First we denoise the image into smooth colour fields (a Mumford–Shah solver) and, as a by-product, get a map of the strong edges between them — the borders worth keeping. Anti-aliasing fuzz and sensor noise are smoothed away so they don't become jagged shapes. (This stage runs the same way every time — no knob.)"
+        body="First we smooth the image into even patches of colour (a Mumford–Shah solver). Along the way this gives a map of the strong edges between the patches, which are the borders worth keeping. Anti-aliasing fuzz and sensor noise are smoothed away so they don't turn into jagged shapes. This stage always runs the same way and has no setting."
       >
         <Visual label="Smoothed">
           <StageCanvas rgba={a.smoothed} width={width} height={height} />
@@ -181,9 +181,9 @@ function Steps({
           `Region detail: ${(opts.regionDetail ?? 0) === 0 ? 'auto' : opts.regionDetail}`,
           ...(markerCount > 0 ? [`Markers: ${markerCount}`] : []),
         ]}
-        body={`Pixels belonging to one smooth field are merged into a handful of macro-regions — each will become one shape. With your current settings your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. The Region detail control tunes this merge: at the default, areas similar enough get fused — so subtle differences, like the soft blends where translucent shapes overlap, can merge into a neighbour instead of becoming their own shape. Raise it to keep those finer regions (at the cost of possibly fragmenting smooth gradients into flat bands).${
+        body={`Pixels in the same smooth patch are merged into a handful of regions, and each region becomes one shape. With your current settings your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. Region detail controls this merge. At the default, areas that are similar enough are fused, so subtle differences (like the soft blends where translucent shapes overlap) can merge into a neighbour instead of becoming shapes of their own. Raise it to keep those finer regions, though it may break smooth gradients into flat bands.${
           markerCount > 0
-            ? ` You've placed ${markerCount} region marker${markerCount === 1 ? '' : 's'} — each one is kept as its own region (two differently-marked spots never merge), a surgical way to protect just those areas without raising Region detail everywhere.`
+            ? ` You've placed ${markerCount} region marker${markerCount === 1 ? '' : 's'}. Each one is kept as its own region (two spots with different markers never merge), which protects just those areas without raising Region detail everywhere.`
             : ''
         }`}
       >
@@ -196,7 +196,7 @@ function Steps({
         n={4}
         title="Fit the simplest paint that matches"
         controls={[`Gradients: ${gradientsOn ? 'on' : 'off'}`]}
-        body={`Each region gets the cheapest paint that still fits it well: a flat colour, a smooth gradient, or a layered “glow” stack — whichever reproduces the region with the fewest knobs.${
+        body={`Each region gets the simplest paint that still matches it well: a flat colour, a smooth gradient, or a layered “glow” stack, whichever reproduces the region with the fewest parameters.${
           gradientsOn
             ? ' (Coloured tags below show what each region matched.)'
             : ' Gradients are off, so every region here is a single flat colour.'
@@ -234,7 +234,7 @@ function Steps({
         n={5}
         title="Trace clean outlines, then tidy them"
         controls={[`Smoothing ${opts.smoothing}`, `Despeckle ${opts.despeckle}`, `Fidelity ${fidelity}px`]}
-        body={`Finally each region's outline is traced into smooth Bézier curves — with sharp corners kept sharp — and a beautify pass (Fidelity) snaps near-circles, near-lines and shared centres to perfect shapes. Result with your settings: ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'}, ${a.stats.nodes} nodes.`}
+        body={`Next, each region's outline is traced into smooth Bézier curves, keeping sharp corners sharp, and a tidy-up pass (Fidelity) snaps near-circles, near-lines and shared centres to perfect shapes. With your settings that gives ${a.stats.paths} path${a.stats.paths === 1 ? '' : 's'} and ${a.stats.nodes} nodes.`}
       >
         <Visual label="Vector result">
           <div className="h-full w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: a.svg }} />
@@ -245,7 +245,7 @@ function Steps({
         n={6}
         title="Keep peaks sharp, heal the seams"
         controls={['automatic']}
-        body="The tracer draws every boundary two regions share once — so neighbouring shapes meet exactly, with no seam or overlap — then does two finishing touches. Sharp features (a mountain's peak, a V-valley, a frame corner) are found on the raw outline and snapped to their exact sub-pixel point, so they stay crisp instead of being rounded into a soft bevel. And where two colours meet through a soft, blurry edge, stray boundary pixels whose colour clearly belongs to one side are healed back to it — so a continuous stroke doesn't pick up a thin background notch at the junction. Both run automatically (no knob)."
+        body="The tracer draws each border between two regions only once, so neighbouring shapes meet exactly with no seam or overlap. Then it adds two finishing touches. Sharp features (a mountain's peak, a V-shaped valley, a frame corner) are found on the raw outline and snapped to their exact sub-pixel point, so they stay crisp instead of being rounded off into a soft bevel. Where two colours meet along a soft, blurry edge, stray border pixels that clearly belong to one side are given back to that side, so a continuous stroke doesn't pick up a thin notch of background where the colours meet. Both happen automatically and have no setting."
       >
         <Visual label="Before">
           <CornerIllustration variant="before" />
@@ -256,9 +256,9 @@ function Steps({
       </Step>
 
       <p className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
-        Tip: if overlapping or finely-detailed areas don't come through, it's usually step 3 — those areas merged into a
-        neighbouring region before they could become their own shape. Raise <b>Region detail</b> or place
-        <b> Mark</b> seeds to keep them.
+        Tip: if overlapping or finely detailed areas go missing, it's usually step 3: they merged into a neighbouring
+        region before they could become shapes of their own. Raise <b>Region detail</b> or place{' '}
+        <b>Region markers</b> to keep them.
       </p>
 
       <References />
@@ -358,8 +358,8 @@ function GradientDetection({
         </span>
       </div>
       <p className="mb-2 text-[10px] leading-snug text-muted">
-        On only if the colours change gradually <b className="text-ink-2">and</b> the palette is genuinely spread — so
-        flat art with soft edges (rampy, but few colours) stays off.
+        Turns on only when colours change gradually <b className="text-ink-2">and</b> the palette is spread out, so
+        flat art with soft edges (gentle ramps, but few colours) stays off.
       </p>
       <div className="flex flex-wrap gap-x-5 gap-y-3">
         <div className="min-w-[180px] flex-1">
@@ -391,7 +391,7 @@ function GradientDetection({
           </div>
           {overridden && (
             <div className="mt-1 text-[10px] leading-snug text-warn">
-              Active: gradients {gradientsOn ? 'on' : 'off'} — detection suggested {ramp.suggestion ? 'on' : 'off'} (set
+              Active: gradients {gradientsOn ? 'on' : 'off'}, though detection suggested {ramp.suggestion ? 'on' : 'off'} (set
               by hand, or the default for an SVG you’re cleaning rather than tracing).
             </div>
           )}

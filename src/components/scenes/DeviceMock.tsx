@@ -335,11 +335,11 @@ export function DeviceMock({ id }: { id: DeviceId }) {
             aria-label="Icon size"
           />
         )}
-        <Tooltip label="Toggle device frame">
+        <Tooltip label="Show or hide the device frame">
           <button
             type="button"
             onClick={() => setUseFrame((v) => !v)}
-            aria-label="Toggle device frame"
+            aria-label="Show or hide the device frame"
             className={`btn h-8 px-2 ${useFrame ? 'btn-primary' : 'btn-secondary'}`}
           >
             <Smartphone size={14} />
@@ -355,11 +355,11 @@ export function DeviceMock({ id }: { id: DeviceId }) {
             <ImageUp size={14} />
           </button>
         </Tooltip>
-        <Tooltip label="Reset placement & screenshot">
+        <Tooltip label="Reset position and screenshot">
           <button
             type="button"
             onClick={() => resetMock(id)}
-            aria-label="Reset placement & screenshot"
+            aria-label="Reset position and screenshot"
             className="btn btn-ghost h-8 px-2"
           >
             <RotateCcw size={14} />

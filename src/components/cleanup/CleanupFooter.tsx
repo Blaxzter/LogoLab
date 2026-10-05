@@ -65,7 +65,7 @@ export function CleanupActionBar({
 function toolStatusHint(tool: CleanupTool): string {
   switch (tool) {
     case 'magic':
-      return 'Click to flood-remove the connected background'
+      return 'Click to remove the connected background'
     case 'color':
       return 'Click a color to remove it everywhere'
     case 'erase':

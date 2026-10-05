@@ -209,7 +209,7 @@ export const FONT_ACCEPT = '.ttf,.otf,.woff,font/ttf,font/otf,font/woff'
  */
 export async function addUploadedFont(file: File): Promise<{ id: string } | { error: string }> {
   if (/\.woff2$/i.test(file.name)) {
-    return { error: 'WOFF2 fonts are not supported yet — use the .ttf or .otf version of the font.' }
+    return { error: 'WOFF2 fonts aren\'t supported yet. Use the .ttf or .otf version of the font.' }
   }
   let bytes = await file.arrayBuffer()
   try {

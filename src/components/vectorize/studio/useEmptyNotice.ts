@@ -54,7 +54,7 @@ export function useEmptyNotice({
     // Nothing in the source to begin with; no setting recovers that.
     if (inkPlan?.inks === 0) {
       return {
-        text: 'This image looks empty — every pixel matches its background, so there is nothing to trace.',
+        text: 'This image looks empty. Every pixel matches the background, so there is nothing to trace.',
       }
     }
 
@@ -65,7 +65,7 @@ export function useEmptyNotice({
       const there = opts.invert ? monoGuide.fracOff : monoGuide.fracOn
       if (here === 0 && there > 0) {
         return {
-          text: `This cut selects no pixels, so nothing was traced. Inverting it selects ${
+          text: `This cut selects no pixels, so nothing was traced. Inverted, it would select ${
             there < 0.01 ? (there * 100).toFixed(1) : Math.round(there * 100)
           }% of the visible pixels.`,
           action: {
@@ -84,7 +84,7 @@ export function useEmptyNotice({
 
     // Everything else: say so plainly rather than guess at a cause.
     return {
-      text: 'The trace came back empty — nothing in the image matched these settings.',
+      text: 'The trace came back empty. Nothing in the image matched these settings.',
       action:
         colorMode !== 'auto'
           ? {

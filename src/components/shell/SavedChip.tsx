@@ -195,7 +195,7 @@ export function SavedChip({ className = '' }: { className?: string }) {
                   Not being saved
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                  This browser isn't letting LogoLab store anything — usually a private window, or storage that's full.
+                  This browser isn't letting LogoLab store anything, usually because of a private window or full storage.
                   Everything still works, but a reload will lose it. Download what you want to keep.
                 </p>
               </>
