@@ -27,6 +27,8 @@ export interface TraceRequest {
   strokes?: boolean
   /** 'auto' probes for real colour ramps; 'flat' forces solid fills; 'rich' forces gradient fitting. */
   gradients?: 'auto' | 'flat' | 'rich'
+  /** Colour only: 'stacked' paints each shape solid under the shapes inside it; 'tiled' (default) cuts holes. */
+  layering?: 'tiled' | 'stacked'
   /** Composite a transparent source onto this colour before tracing (e.g. '#ffffff'). */
   background?: string | null
   /** Drop the detected background layer, so the SVG comes back transparent. */
@@ -82,6 +84,7 @@ function baseOptions(req: TraceRequest): VectorizeOptions {
   if (req.removeBackground != null) base.removeBackground = req.removeBackground
   if (req.detail) base.traceDetail = req.detail
   if (req.strokes) base.centerline = true
+  if (req.layering === 'stacked') base.layering = 'stacked'
   return base
 }
 

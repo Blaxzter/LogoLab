@@ -7379,3 +7379,44 @@ A third worker cannot shorten a single job, so the pool is 2 and starts gradient
 browser add a worker start per candidate and one decode. The trade-off for the tail would be
 tracing gradients at 256; that is not done, because gradient art is where the reduced pick is
 already least reliable (§40.2). The search can be cancelled, and any setting change cancels it.
+
+## 41. Stacked output: the planar graph re-layered by containment (2026-10-05)
+
+`layering: 'stacked'` (the **Layering** control under Color, MCP `layering`) is a post-pass
+over the finished planar trace, `src/lib/trace/planarStack.ts`. Nothing is refitted: a region
+whose hole is fully covered by opaque regions painted later stops referencing that hole's
+edges, and paints solid under them. Tiled stays the default.
+
+### 41.1 The rule
+
+* A **shape** is one face: an outer loop and the holes nested directly in it. A label can own
+  several (the white page and the white counter of an O).
+* Across an outer loop's edge is a sibling's outer loop (same level), the hole of the
+  container (one level up), or transparency (EXT, or a removed background). Siblings joined
+  outer↔outer are a group with one parent hole; depth = parent depth + 1; layers paint by
+  depth, then label. A label therefore splits into one item per depth (`trace-<l>`,
+  `trace-<l>-d<depth>`) — without that, the O's counter (page label) cannot go above the ring.
+* A hole drops only when nothing see-through is inside it: no transparency on its own edges
+  or between its children, every child opaque (no `fill-opacity`, no stop with opacity) and
+  with all of ITS holes dropped. One transparent pocket deep inside keeps every enclosing hole
+  open, or the regions below would show through it.
+* Side-by-side neighbours are not touched: which of two touching regions should extend under
+  the other needs a rule of its own.
+
+### 41.2 Census (`bench/stackDiag.ts`, the `before-stacked` inputs @1024)
+
+| lane | cases | worse > 0.02 ΔE (over white) | holes closed | trace time tiled → stacked |
+|---|---|---|---|---|
+| flat | 44 | 0 | 392 | 39.0 s → 37.7 s |
+| gradients | 44 | 0 | 367 | 175 s → 184 s (noise: run beside a stamp) |
+
+Over a backdrop the art never uses (pure green) stacking is better wherever a hole closed:
+a tiled shared edge is two half-covered pixels composited in turn, so the backdrop bleeds
+through the seam. Examples (flat): acute-counter 0.22 → 0.10, concentric 0.34 → 0.05,
+coca-cola 1.06 → 0.72, ibm 0.36 → 0.25 ΔE. The worst move over white is wedge-counter
++0.014. Orbit in the studio: 2 paths / 48 nodes / 2.36 KB tiled → 4 paths / 26 nodes /
+1.36 KB stacked, ΔE 0.02 both.
+
+`before-stacked` ⇄ `after-stacked`: every lane byte-identical (tiled is unchanged).
+`test/planar-stack.test.ts` is the gate, including remove & heal on a stacked document — the
+lower region no longer references the top region's rim, so deleting the top region reveals it.

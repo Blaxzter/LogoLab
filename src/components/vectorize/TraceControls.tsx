@@ -211,13 +211,13 @@ export function TraceControlsBody({
   if (!tracing) {
     inert.push({
       label: 'Everything that traces pixels',
-      why: 'Engine, Detail, Upscale, Smoothing, Despeckle, Fidelity, Region detail, Region markers and Gradients all read the raster. Cleaning keeps the SVG’s own paths instead — switch Source to Re-trace to rebuild them from pixels.',
+      why: 'Engine, Detail, Upscale, Smoothing, Despeckle, Fidelity, Region detail, Region markers, Gradients and Layering all read the raster. Cleaning keeps the SVG’s own paths instead — switch Source to Re-trace to rebuild them from pixels.',
     })
   } else {
     if (opts.mode === 'mono')
       inert.push({
-        label: 'Region detail, Region markers, Gradients',
-        why: 'Mono traces one ink against the background, so there are no colour regions to split, to seed, or to fit a gradient into. Switch Mode to Color.',
+        label: 'Region detail, Region markers, Gradients, Layering',
+        why: 'Mono traces one ink against the background, so there are no colour regions to split, to seed, to fit a gradient into or to stack. Switch Mode to Color.',
       })
     else {
       inert.push({
@@ -226,8 +226,8 @@ export function TraceControlsBody({
       })
       if (opts.centerline)
         inert.push({
-          label: 'Gradients, Region markers',
-          why: 'Strokes paint every line in one flat ink, the colour it runs through, and read the inks from the palette alone. Turn Strokes off to fit gradients or seed regions.',
+          label: 'Gradients, Region markers, Layering',
+          why: 'Strokes paint every line in one flat ink, the colour it runs through, and read the inks from the palette alone; strokes always sit on top of each other. Turn Strokes off to fit gradients, seed regions or choose the layering.',
         })
     }
     if (detailWhy && !showDetail) inert.push({ label: 'Detail — Balanced / High', why: detailWhy })
@@ -537,6 +537,26 @@ export function TraceControlsBody({
                 checked={opts.gradients !== false}
                 onChange={(v) => onPatch({ gradients: v })}
                 label="Fit smooth gradients"
+              />
+            </Field>
+          )}
+
+          {tracing && opts.mode === 'color' && !opts.centerline && (
+            <Field
+              label="Layering"
+              hint={
+                opts.layering === 'stacked'
+                  ? 'A shape paints solid under the shapes inside it: no holes cut around them, no hairline seams between colours.'
+                  : 'Shapes fit edge to edge like a jigsaw: nothing overlaps, and a shape has a hole wherever another sits inside it.'
+              }
+            >
+              <Segmented<'tiled' | 'stacked'>
+                value={opts.layering ?? 'tiled'}
+                onChange={(v) => onPatch({ layering: v === 'tiled' ? undefined : v })}
+                options={[
+                  { value: 'tiled', label: 'Tiled' },
+                  { value: 'stacked', label: 'Stacked' },
+                ]}
               />
             </Field>
           )}

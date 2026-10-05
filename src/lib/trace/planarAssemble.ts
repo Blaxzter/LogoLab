@@ -428,7 +428,7 @@ function flipLoop(loop: EdgeRef[]): void {
 }
 
 /** Flatten an EdgeRef loop into a dense polygon for winding/containment tests. */
-function flattenEdgeRefLoop(loop: EdgeRef[], edges: Map<number, SharedEdge>): Vec[] {
+export function flattenEdgeRefLoop(loop: EdgeRef[], edges: Map<number, SharedEdge>): Vec[] {
   const nodes: PathNode[] = []
   for (const ref of loop) {
     const e = edges.get(ref.edge)
@@ -488,7 +488,7 @@ function staircaseCorners(pts: Vec[]): PathNode[] {
   return out.length >= 3 ? out : ring.map((p) => ({ x: p.x, y: p.y, hIn: null, hOut: null, kind: 'corner' as const }))
 }
 
-function polySignedArea(poly: Vec[]): number {
+export function polySignedArea(poly: Vec[]): number {
   let a = 0
   const n = poly.length
   for (let i = 0; i < n; i++) {
@@ -499,7 +499,7 @@ function polySignedArea(poly: Vec[]): number {
   return a / 2
 }
 
-function loopInside(inner: Vec[], outer: Vec[]): boolean {
+export function loopInside(inner: Vec[], outer: Vec[]): boolean {
   const samples = Math.min(9, inner.length)
   let inside = 0
   let total = 0

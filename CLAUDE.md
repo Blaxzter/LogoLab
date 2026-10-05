@@ -184,9 +184,26 @@ load. A fresh upload without hints clears them; they are session-only (a reload 
 options themselves). `VectorizeOptions.engine` is vestigial (`'planar'` only, kept so stored options
 parse); the stacked colour path, the V6 translucent decomposition that only ran on it, the
 `esm-potrace-wasm` dependency and the main-thread special case in `canTraceOffThread` went
-with the engines. A stacked output — regions painted over one another rather than tiled — is
-a PAINT-ORDER question the planar graph can answer later as a post-pass, not a second tracer.
-`test/mono-labels.test.ts` and `test/harness.test.ts` are the gates.
+with the engines. `test/mono-labels.test.ts` and `test/harness.test.ts` are the gates.
+
+**A stacked output is a PAINT-ORDER post-pass, not a second tracer** (`layering: 'stacked'`,
+the **Layering** control under Color, MCP `layering`; `src/lib/trace/planarStack.ts`,
+benchmarks §41). The same graph, re-layered by containment: a hole whose interior is all
+opaque regions painted later is dropped, so the container paints solid under them. No edge
+is refitted or copied — the lower region just stops referencing the shared edge. Three
+things that are easy to undo:
+
+* **A label splits by DEPTH.** The white page and the white counter of an O are one label,
+  and the counter must paint above the black ring, so a stacked label is one item per
+  nesting depth (`trace-<l>` for the lowest, `trace-<l>-d<depth>` above it).
+* **A hole drops only if NOTHING see-through is anywhere inside it** — no transparency (EXT
+  or a removed background) on its edges or between its children, and every child solid in
+  turn. A translucent child counts as see-through. Otherwise the region below shows through.
+* **Side-by-side neighbours still tile.** Which of two touching regions extends under the
+  other is a separate rule nobody has written yet.
+
+Tiled stays the default and is byte-identical (`before-stacked` ⇄ `after-stacked`).
+`test/planar-stack.test.ts` is the gate; `bench/stackDiag.ts` the corpus census.
 
 ## Line art traces as STROKES — the centreline engine, and its own lane
 
