@@ -26,8 +26,8 @@ import { install, isMain, parseInstallArgs } from './install.ts'
 import { presetCatalogue, PRESETS } from './presets.ts'
 import { prepareSource, prepareTraced, type PreparedLogo } from './render.ts'
 import { ensureImageData, ensureParent, humanBytes, log, packageVersion, runningFromSource } from './runtime.ts'
-import { splitSheet } from './sheet.ts'
-import { describeSource, planTrace, traceIcon, type TraceRequest } from './trace.ts'
+import { splitSheet, type SheetReport } from './sheet.ts'
+import { describeSource, INK_PAINT, normalizeSpecFrom, planTrace, traceIcon, type TraceRequest } from './trace.ts'
 
 ensureImageData()
 
@@ -90,6 +90,35 @@ const traceShape = {
     .describe('Shape-beautification tolerance in px; 0 disables snapping to circles/lines.'),
 }
 
+/** What the SVG comes back AS — its paint and its viewBox — for the tools that write one. */
+const outputShape = {
+  ink: z
+    .string()
+    .regex(INK_PAINT, 'ink must be a hex colour like #1f2937 or "currentColor"')
+    .optional()
+    .describe(
+      'Paint a MONO trace in this instead of the ink the probe read: a hex colour, or "currentColor" so the icon takes the CSS text colour (what an icon set wants). Colour traces keep their colours.',
+    ),
+  normalize: z
+    .number()
+    .positive()
+    .optional()
+    .describe(
+      'Refit the SVG into a square viewBox of this many units: normalize: 24 fits the art into "0 0 24 24", centred, with `inset` units clear on every side, coordinates rounded to 2 decimals — so every icon of a set shares one grid. Stroke widths scale with it. Omit to keep the viewBox at the traced pixel size.',
+    ),
+  inset: z
+    .number()
+    .min(0)
+    .optional()
+    .describe('With normalize: units kept clear on each side. Default size/12 (2 on a 24 grid, as Lucide draws).'),
+  quiet: z
+    .boolean()
+    .optional()
+    .describe(
+      'Return only the summary (one line per icon for a sheet) and skip the JSON block. For batches, where the JSON repeats what the summary says.',
+    ),
+}
+
 const appearanceShape = {
   background: z
     .string()
@@ -142,14 +171,41 @@ function traceRequestFrom(input: Record<string, unknown>): TraceRequest {
     smoothing: input.smoothing as number | undefined,
     despeckle: input.despeckle as number | undefined,
     fidelity: input.fidelity as number | undefined,
+    ink: input.ink as string | undefined,
+    normalize: normalizeSpecFrom(input.normalize, input.inset),
   }
 }
 
-/** A tool result: a readable summary first, the machine-readable facts after. */
-function reply(summary: string, data: unknown) {
+/**
+ * A tool result: a readable summary first, the machine-readable facts after —
+ * or the summary alone when the caller asked for `quiet` (a batch of eight
+ * parallel calls should not carry eight copies of the same facts).
+ */
+function reply(summary: string, data: unknown, quiet = false) {
+  if (quiet) return { content: [{ type: 'text' as const, text: summary }] }
   return {
     content: [{ type: 'text' as const, text: `${summary}\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`` }],
   }
+}
+
+/** A sheet's summary: the headline, then one line per icon — enough on its own for `quiet`. */
+function sheetSummary(src: string, report: SheetReport): string {
+  const grid = report.grid ? `${report.grid.rows}×${report.grid.cols} grid` : 'free layout'
+  const labels = report.labels.length ? `, ignoring ${report.labels.length} caption tiles` : ''
+  const lines = [
+    `Split ${src} (${grid}) into ${report.icons.length} traced icons in ${rel(report.outDir)}${labels}${report.ink ? `, ink ${report.ink}` : ''}. Took ${(report.ms / 1000).toFixed(1)}s.`,
+  ]
+  for (const icon of report.icons) {
+    const place = icon.row >= 0 ? `r${icon.row}c${icon.col}` : 'free'
+    lines.push(
+      `  ${icon.svgPath}  ${place}  ${icon.mode}${icon.ink ? ` ${icon.ink}` : ''}  ${icon.stats.paths} path${icon.stats.paths === 1 ? '' : 's'} / ${icon.stats.nodes} nodes`,
+    )
+  }
+  if (report.removed.length) {
+    lines.push(`Removed ${report.removed.length} stale file(s) of the previous run: ${report.removed.join(', ')}.`)
+  }
+  for (const w of report.warnings) lines.push(`Note: ${w}`)
+  return lines.join('\n')
 }
 
 function fail(err: unknown) {
@@ -250,6 +306,7 @@ export function createServer(): McpServer {
           .optional()
           .describe('Also return the SVG markup in the response (only do this for small icons).'),
         ...traceShape,
+        ...outputShape,
       },
     },
     async (input) => {
@@ -269,6 +326,7 @@ export function createServer(): McpServer {
         return reply(
           `Traced ${rel(src.path)} → ${rel(outPath)} (${humanBytes(Buffer.byteLength(result.svg))}, ${result.stats.paths} paths / ${result.stats.nodes} nodes / ${result.stats.colors} colours, ${(result.ms / 1000).toFixed(1)}s).\nPlan: ${result.plan.summary}.`,
           data,
+          input.quiet === true,
         )
       } catch (err) {
         return fail(err)
@@ -390,15 +448,46 @@ export function createServer(): McpServer {
     {
       title: 'Split a sheet of icons',
       description:
-        'Cut a CONTACT SHEET — a grid of many icons on one canvas, which is what image models usually return for "a set of icons" — into individual traced SVGs. Detects the tiles (grid or free layout), crops each with the sheet\'s own paper colour, and traces each one with its own plan: a one-ink glyph goes mono, a shaded badge goes colour. Caption text under the icons is detected and reported, but not read (OCR is browser-only), so tiles are named by position.',
+        'Cut a CONTACT SHEET — a grid of many icons on one canvas, which is what image models usually return for "a set of icons" — into individual traced SVGs. Detects the tiles (grid or free layout; pass `grid` when you know the layout, which also keeps an icon drawn as separate pieces whole), crops each with the sheet\'s own paper colour, and traces each one with its own plan: a one-ink glyph goes mono, a shaded badge goes colour. Tiles come back transparent (removeBackground is ON here) and every mono tile of the same ink is painted in ONE ink, so a set stays consistent; `ink: "currentColor"` and `normalize: 24` give you icon-set-ready files in one call. Caption text under the icons is detected and reported, but not read (OCR is browser-only), so tiles are named by position — or by `names`, in reading order. Each run records what it wrote in logolab-sheet.json and removes what a previous run with the same prefix left behind.',
       inputSchema: {
         sheet: z.string().describe('Path to the sheet image.'),
         outDir: z.string().describe('Directory to write one SVG per detected icon into.'),
         prefix: z.string().optional().describe('File-name stem: <prefix>-01.svg. Default: the sheet file name.'),
+        names: z
+          .array(z.string().min(1))
+          .optional()
+          .describe(
+            'File names for the icons in READING order (row-major, top-left first): ["home", "search", …] writes home.svg, search.svg, …. Icons past the end of the list keep <prefix>-nn.',
+          ),
+        grid: z
+          .object({ rows: z.number().int().min(1), cols: z.number().int().min(1) })
+          .optional()
+          .describe(
+            'The layout, when you know it: { rows, cols }. Everything inside one cell is one icon, however far apart its pieces are (a dashed curve, four corner brackets, a dashboard of four rectangles) — the case no `gap` value can express. Omit to detect the layout.',
+          ),
         mode: z.enum(['auto', 'color', 'mono']).optional().describe('Per-tile colour decision. Default auto.'),
         gradients: z.enum(['auto', 'flat', 'rich']).optional().describe('Default auto.'),
+        strokes: traceShape.strokes,
+        layering: traceShape.layering,
+        removeBackground: z
+          .boolean()
+          .optional()
+          .describe(
+            "Default TRUE on a sheet: tiles come back transparent. Pass false to keep each tile's paper as a rectangle under the ink.",
+          ),
+        detail: traceShape.detail,
+        smoothing: traceShape.smoothing,
+        despeckle: traceShape.despeckle,
+        fidelity: traceShape.fidelity,
         keepCrops: z.boolean().optional().describe('Also write each tile as a PNG next to its SVG.'),
-        limit: z.number().int().min(1).optional().describe('Trace at most this many tiles (tracing is the slow part).'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe(
+            'Trace at most this many tiles (tracing is the slow part). A limited run is a preview: it removes nothing.',
+          ),
         padding: z
           .number()
           .min(0)
@@ -411,29 +500,41 @@ export function createServer(): McpServer {
           .max(255)
           .optional()
           .describe('How far from the paper colour a pixel counts as ink. Default 24.'),
-        gap: z.number().optional().describe('Force the grouping gap in source px. Omit to detect it (recommended).'),
+        gap: z
+          .number()
+          .optional()
+          .describe('Force the grouping gap in source px. Omit to detect it; prefer `grid` when the layout is known.'),
+        ...outputShape,
       },
     },
     async (input) => {
       try {
         const src = loadSource(input.sheet as string)
+        const grid = input.grid as { rows: number; cols: number } | undefined
         const report = await splitSheet(src, input.outDir as string, {
           detect: {
             padding: input.padding as number | undefined,
             threshold: input.threshold as number | undefined,
             gap: input.gap as number | undefined,
+            grid,
           },
           mode: input.mode as 'auto' | 'color' | 'mono' | undefined,
           gradients: input.gradients as 'auto' | 'flat' | 'rich' | undefined,
+          strokes: input.strokes as boolean | undefined,
+          layering: input.layering as 'tiled' | 'stacked' | undefined,
+          removeBackground: input.removeBackground as boolean | undefined,
+          detail: input.detail as 'balanced' | 'high' | undefined,
+          smoothing: input.smoothing as number | undefined,
+          despeckle: input.despeckle as number | undefined,
+          fidelity: input.fidelity as number | undefined,
+          ink: input.ink as string | undefined,
+          normalize: normalizeSpecFrom(input.normalize, input.inset),
           keepCrops: input.keepCrops as boolean | undefined,
           prefix: input.prefix as string | undefined,
+          names: input.names as string[] | undefined,
           limit: input.limit as number | undefined,
         })
-        const grid = report.grid ? `${report.grid.rows}×${report.grid.cols} grid` : 'free layout'
-        return reply(
-          `Split ${rel(src.path)} (${grid}) into ${report.icons.length} traced icons in ${rel(report.outDir)}${report.labels.length ? `, ignoring ${report.labels.length} caption tiles` : ''}. Took ${(report.ms / 1000).toFixed(1)}s.`,
-          report,
-        )
+        return reply(sheetSummary(rel(src.path), report), report, input.quiet === true)
       } catch (err) {
         return fail(err)
       }

@@ -127,7 +127,7 @@ export function isInkPixel(data: Uint8ClampedArray, i: number, bg: PaperColor, t
 /* -------------------------------------------------------------- the probe */
 
 /** Ink colours closer than this (CIE76) are one ink under shading, not two. */
-const SAME_INK_DE = 14
+export const SAME_INK_DE = 14
 /** Fused inks holding less than this share of the ink are not a colour the art
  *  is made of. Applied after fusion (see `probeInk`). */
 const MIN_INK_SHARE = 0.02

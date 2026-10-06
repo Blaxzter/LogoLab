@@ -43,7 +43,7 @@ Then ask your agent: *"trace icon.png and export a PWA icon set into public/"*.
 | `make_app_icons` | image → traced SVG → a full icon set. The one call that does the job. |
 | `trace_icon` | just the vectorization: a clean, editable SVG. |
 | `export_icons` | an existing SVG/PNG → PWA, favicon, Tauri, Electron, Android, iOS or extension icons. |
-| `split_icon_sheet` | a grid of icons on one canvas → one traced SVG per icon. |
+| `split_icon_sheet` | a grid of icons on one canvas → one traced SVG per icon, icon-set ready: `grid` hint, `names`, `normalize: 24`, `ink: "currentColor"`, transparent tiles. |
 | `inspect_icon` | what the tracer would decide, before it runs. |
 
 Presets: `pwa`, `favicon`, `web`, `tauri`, `electron`, `android`, `ios`, `extension`.

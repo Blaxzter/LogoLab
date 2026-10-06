@@ -120,7 +120,41 @@ What models actually return for "a set of icons". Detects the tiles (grid or fre
 layout), crops each with the sheet's own paper colour, and traces each with its own
 plan — a one-ink glyph goes mono (one clean shape), a shaded badge goes colour.
 Caption text is detected and *reported*, but not read: OCR is browser-only, so the
-tab names icons from captions and this names them by position.
+tab names icons from captions and this names them by position — or by `names`.
+
+It is built for an icon SET, which a single trace is not:
+
+```jsonc
+{ "sheet": "sheets/nav.jpg", "outDir": "src/icons", "grid": { "rows": 2, "cols": 4 },
+  "names": ["home", "search", "settings", "fit-screen", "undo", "redo", "share", "help"],
+  "normalize": 24, "ink": "currentColor" }
+```
+
+- **`grid: { rows, cols }`** says what the layout is. Everything in a cell is one
+  icon, however far apart its pieces — a dashed curve, four corner brackets, a
+  dashboard of four rectangles. Auto-detection groups by gap, and no gap joins
+  pieces 100px apart while keeping icons 60px apart; with a hint the gap question
+  is never asked. In a free layout `row`/`col` are `-1`, not stale numbers.
+- **`names`** in reading order (row-major, top-left first) become the file names.
+- **`normalize: 24`** refits every icon into `0 0 24 24`, centred, with `inset` units
+  clear (default a twelfth of the box: 2, as Lucide draws), rounded to two decimals,
+  stroke widths scaled along. `trace_icon` takes the same two.
+- **One ink.** Tiles are probed one by one, and a JPEG reads `#010101` on one tile and
+  `#000000` on the next. A tile whose ink is the sheet's ink under noise is written in
+  the sheet's, and an ink a hair off pure black or white is snapped to it. `ink` names
+  the paint outright — a hex, or `currentColor` for a set that follows the text colour.
+- **Transparent tiles.** `removeBackground` defaults to ON here (the sheet tab's
+  default too); `false` keeps each tile's paper as a rectangle under the ink.
+- **No orphans.** Each run writes `logolab-sheet.json` and removes what a previous run
+  with the same prefix wrote and this one did not — a free-layout run's `t-09`…`t-14`
+  after the 2×4 re-run. Only files the manifest lists; a `limit`ed run is a preview and
+  removes nothing. `removed` in the report says what went.
+- `strokes`, `layering`, `detail`, `smoothing`, `despeckle`, `fidelity` pass through to
+  every tile, so a line-art sheet traces as strokes in one call instead of one
+  `trace_icon` per kept crop.
+- `inkThickness` is reported per tile (the stroke weight the mono planner measured,
+  in crop px) whether or not the tile was traced as strokes.
+- **`quiet: true`** returns the per-icon summary alone, without the JSON block.
 
 ### `inspect_icon` — what would happen
 
@@ -129,8 +163,9 @@ Size, format, transparency, and the plan the tracer would use, without tracing.
 ## The decisions it makes for you
 
 Every tool takes the same overrides (`mode`, `gradients`, `flattenOnto`,
-`removeBackground`, `detail`, `smoothing`, `despeckle`, `fidelity`) and reports what
-it chose, so an agent can overrule one thing without hand-tuning the rest:
+`removeBackground`, `detail`, `smoothing`, `despeckle`, `fidelity`; the tools that write
+an SVG also `ink`, `normalize`/`inset` and `quiet`) and reports what it chose, so an
+agent can overrule one thing without hand-tuning the rest:
 
 - **colour vs mono** — the ink probe counts distinct inks. One ink on paper traces
   mono: one shape, a fraction of the nodes, no anti-alias slivers. Light ink on dark

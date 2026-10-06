@@ -111,7 +111,10 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
   // ---- 5. grouping --------------------------------------------------------
   const linkage = buildLinkage(iconBands, warnings)
   const gapMask = opts.gap != null ? opts.gap * scale : pickGap(linkage, Math.min(mw, mh))
-  const groups = groupsAtGap(linkage, gapMask)
+  // A declared lattice replaces the gap question: every blob joins the cell its
+  // centre falls in, so an icon's pieces can be further apart than its neighbours.
+  const hint = opts.grid ? sanitizeHint(opts.grid) : null
+  const groups = hint ? mergeByLattice(groupsAtGap(linkage, 0), hint) : groupsAtGap(linkage, gapMask)
 
   // Caption text that shares a band with its icon (side-by-side layouts) never
   // reaches the band filter, so the same question gets asked per group.
@@ -157,12 +160,12 @@ export function detectSheetIcons(img: ImageDataLike, opts: DetectOptions = {}): 
   }
 
   const tiles = buildTiles(all, img, background, threshold, mask, opts)
-  const grid = inferGrid(tiles)
-  if (!grid && tiles.some((t) => t.kind === 'icon')) {
+  const grid = hint ? hintedGrid(tiles, hint, warnings) : inferGrid(tiles)
+  if (!grid && !hint && tiles.some((t) => t.kind === 'icon')) {
     warnings.push('The icons are not on a regular grid, so the boxes follow the artwork instead.')
   }
 
-  applyBoxes(tiles, grid, opts, warnings)
+  applyBoxes(tiles, grid, opts, warnings, img)
 
   return { tiles, background, grid, gap: gapMask / scale, scale, warnings }
 }
@@ -589,28 +592,138 @@ function inferGrid(tiles: SheetTile[]): SheetGrid | null {
     medianW * 0.6,
   )
 
-  for (const t of icons) {
-    t.row = nearestIndex(rowCentres, t.ink.y + t.ink.h / 2)
-    t.col = nearestIndex(colCentres, t.ink.x + t.ink.w / 2)
-  }
-  // Re-sort row-major now that positions are known.
-  tiles.sort((a, b) => a.row - b.row || a.col - b.col || a.ink.y - b.ink.y || a.ink.x - b.ink.x)
+  const rows = icons.map((t) => nearestIndex(rowCentres, t.ink.y + t.ink.h / 2))
+  const cols = icons.map((t) => nearestIndex(colCentres, t.ink.x + t.ink.w / 2))
 
   const seen = new Set<string>()
   let collision = false
-  for (const t of icons) {
-    const key = `${t.row}:${t.col}`
+  for (let i = 0; i < icons.length; i++) {
+    const key = `${rows[i]}:${cols[i]}`
     if (seen.has(key)) collision = true
     seen.add(key)
   }
+  // Reading order — by row cluster, then column — is right for a free layout
+  // too (a sort by raw y puts an icon drawn 18px lower after the whole row).
+  const place = new Map<SheetTile, [number, number]>()
+  icons.forEach((t, i) => place.set(t, [rows[i], cols[i]]))
+  const at = (t: SheetTile): [number, number] => place.get(t) ?? [-1, -1]
+  tiles.sort((a, b) => at(a)[0] - at(b)[0] || at(a)[1] - at(b)[1] || a.ink.y - b.ink.y || a.ink.x - b.ink.x)
+
+  // A rejected lattice leaves every tile at row/col -1 (the contract), rather
+  // than carrying the positions it was rejected for.
   if (collision || rowCentres.length < 1 || colCentres.length < 1) return null
   if (rowCentres.length === 1 && colCentres.length === 1) return null
+
+  icons.forEach((t, i) => {
+    t.row = rows[i]
+    t.col = cols[i]
+  })
 
   return {
     rows: rowCentres.length,
     cols: colCentres.length,
     pitchY: medianStep(rowCentres),
     pitchX: medianStep(colCentres),
+  }
+}
+
+interface GridHint {
+  rows: number
+  cols: number
+}
+
+function sanitizeHint(hint: GridHint): GridHint {
+  return { rows: Math.max(1, Math.round(hint.rows)), cols: Math.max(1, Math.round(hint.cols)) }
+}
+
+/**
+ * Which cell of a hinted lattice a coordinate falls in. The lattice spans the
+ * artwork's extent — the first icon's left edge to the last icon's right edge —
+ * so on a regular pitch every icon lies inside its own cell (each cell is one
+ * pitch minus a share of the margin, and the icons sit at the cells' near
+ * edges), and a piece of an icon is placed by its centre.
+ */
+function latticeCell(v: number, origin: number, cell: number, count: number): number {
+  if (!(cell > 0)) return 0
+  return Math.max(0, Math.min(count - 1, Math.floor((v - origin) / cell)))
+}
+
+/** Join every blob in a cell into one group — the hinted answer to "which pieces are one icon". */
+function mergeByLattice(groups: Group[], hint: GridHint): Group[] {
+  if (groups.length === 0) return groups
+  let x0 = Infinity
+  let y0 = Infinity
+  let x1 = -Infinity
+  let y1 = -Infinity
+  for (const g of groups) {
+    x0 = Math.min(x0, g.x0)
+    y0 = Math.min(y0, g.y0)
+    x1 = Math.max(x1, g.x1)
+    y1 = Math.max(y1, g.y1)
+  }
+  const cellW = (x1 - x0 + 1) / hint.cols
+  const cellH = (y1 - y0 + 1) / hint.rows
+  const cells = new Map<number, Group>()
+  for (const g of groups) {
+    const col = latticeCell((g.x0 + g.x1 + 1) / 2, x0, cellW, hint.cols)
+    const row = latticeCell((g.y0 + g.y1 + 1) / 2, y0, cellH, hint.rows)
+    const key = row * hint.cols + col
+    const cell = cells.get(key)
+    if (!cell) cells.set(key, { ...g })
+    else {
+      cell.x0 = Math.min(cell.x0, g.x0)
+      cell.y0 = Math.min(cell.y0, g.y0)
+      cell.x1 = Math.max(cell.x1, g.x1)
+      cell.y1 = Math.max(cell.y1, g.y1)
+      cell.weight += g.weight
+    }
+  }
+  return [...cells.values()].sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0)
+}
+
+/**
+ * Rows and columns as DECLARED: each icon's place is the cell its centre falls
+ * in. Always a grid (the hint is the user's statement), with a warning when the
+ * artwork does not fill it.
+ */
+function hintedGrid(tiles: SheetTile[], hint: GridHint, warnings: string[]): SheetGrid | null {
+  const icons = tiles.filter((t) => t.kind === 'icon')
+  if (icons.length === 0) return null
+  let x0 = Infinity
+  let y0 = Infinity
+  let x1 = -Infinity
+  let y1 = -Infinity
+  for (const t of icons) {
+    x0 = Math.min(x0, t.ink.x)
+    y0 = Math.min(y0, t.ink.y)
+    x1 = Math.max(x1, t.ink.x + t.ink.w)
+    y1 = Math.max(y1, t.ink.y + t.ink.h)
+  }
+  const cellW = (x1 - x0) / hint.cols
+  const cellH = (y1 - y0) / hint.rows
+  const filled = new Set<number>()
+  let shared = 0
+  for (const t of icons) {
+    t.col = latticeCell(t.ink.x + t.ink.w / 2, x0, cellW, hint.cols)
+    t.row = latticeCell(t.ink.y + t.ink.h / 2, y0, cellH, hint.rows)
+    const key = t.row * hint.cols + t.col
+    if (filled.has(key)) shared++
+    filled.add(key)
+  }
+  tiles.sort((a, b) => a.row - b.row || a.col - b.col || a.ink.y - b.ink.y || a.ink.x - b.ink.x)
+
+  const empty = hint.rows * hint.cols - filled.size
+  if (empty > 0 || shared > 0) {
+    const parts: string[] = []
+    if (empty > 0) parts.push(`${empty} cell${empty === 1 ? ' holds' : 's hold'} no artwork`)
+    if (shared > 0) parts.push(`${shared} icon${shared === 1 ? ' shares' : 's share'} a cell with another`)
+    warnings.push(`The ${hint.rows}×${hint.cols} grid hint does not fit the sheet: ${parts.join('; ')}.`)
+  }
+  return {
+    rows: hint.rows,
+    cols: hint.cols,
+    pitchX: hint.cols > 1 ? cellW : 0,
+    pitchY: hint.rows > 1 ? cellH : 0,
   }
 }
 
@@ -656,7 +769,13 @@ function medianStep(centres: number[]): number {
  * every icon the same box so relative sizes survive into the export. Uniform
  * boxes are capped at the grid pitch so a tile never eats its neighbour.
  */
-function applyBoxes(tiles: SheetTile[], grid: SheetGrid | null, opts: DetectOptions, warnings: string[]): void {
+function applyBoxes(
+  tiles: SheetTile[],
+  grid: SheetGrid | null,
+  opts: DetectOptions,
+  warnings: string[],
+  sheet: { width: number; height: number },
+): void {
   const padding = opts.padding ?? DETECT_DEFAULTS.padding
   const square = opts.square ?? DETECT_DEFAULTS.square
   const uniform = opts.uniform ?? DETECT_DEFAULTS.uniform
@@ -693,14 +812,16 @@ function applyBoxes(tiles: SheetTile[], grid: SheetGrid | null, opts: DetectOpti
     } else {
       w = t.ink.w * (1 + 2 * padding)
       h = t.ink.h * (1 + 2 * padding)
-      if (square) {
+      // A caption is a line of text: squaring it made a 640px box around a 20px
+      // line, reaching above the top of the sheet.
+      if (square && t.kind === 'icon') {
         w = Math.max(w, h)
         h = w
       }
     }
     const others = blockers.filter((o) => o !== t).map((o) => o.ink)
     const placed = placeBox(t.ink, w, h, others)
-    t.box = placed.box
+    t.box = insideSheet(placed.box, t.ink, others, sheet)
     if (!placed.clear) crowded++
   }
   if (crowded > 0) {
@@ -708,6 +829,21 @@ function applyBoxes(tiles: SheetTile[], grid: SheetGrid | null, opts: DetectOpti
       `${crowded} icon${crowded === 1 ? '' : 's'} sit${crowded === 1 ? 's' : ''} right up against a neighbour, so those crops may catch a sliver of whatever is next to them.`,
     )
   }
+}
+
+/**
+ * A box that slid off the sheet is pulled back on when it can be: a box that
+ * holds the icon still holds it after the clamp (the icon is on the sheet), so
+ * the only reason to stay out is a neighbour the slide was avoiding — then the
+ * overhang, filled with paper by the crop, is the lesser evil.
+ */
+function insideSheet(box: Rect, ink: Rect, others: Rect[], sheet: { width: number; height: number }): Rect {
+  const x = box.w <= sheet.width ? clamp(box.x, 0, sheet.width - box.w) : box.x
+  const y = box.h <= sheet.height ? clamp(box.y, 0, sheet.height - box.h) : box.y
+  if (x === box.x && y === box.y) return box
+  if (x > ink.x || x + box.w < ink.x + ink.w || y > ink.y || y + box.h < ink.y + ink.h) return box
+  if (worstOverlap(x, y, box.w, box.h, others)) return box
+  return { ...box, x, y }
 }
 
 /**

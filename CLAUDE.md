@@ -441,6 +441,38 @@ on a dependency version that drifts between the two manifests, and on the server
 being hard-coded again instead of read. **If it fails, fix the manifests — never the
 assertion.**
 
+### `split_icon_sheet` is an icon-SET tool, and the set's rules live in `src/mcp/sheet.ts`
+
+An agent that split ten generated sheets for an evening wrote down what it had to work around
+(2026-10-07); `docs/mcp.md` lists what came of it and `test/mcp-sheet.test.ts` is the gate.
+The rules that are easy to undo:
+
+* **A `grid: { rows, cols }` hint replaces the gap question, it does not tune it**
+  (`DetectOptions.grid`, `mergeByLattice` in `detect.ts`): blobs are grouped at gap 0 and every
+  blob joins the cell its CENTRE falls in, on a lattice spanning the artwork's extent. Four of
+  the ten sheets had an icon whose pieces were further apart (dashed curve, corner brackets
+  ~100px) than its neighbours (~60px) — no `gap` can join one without the other. The merge
+  runs BEFORE noise/label classification, or a dashboard's wide bottom bar is read as caption
+  text and left out of its icon.
+* **A rejected lattice reports `row`/`col` as -1.** `inferGrid` used to write the positions it
+  was about to reject; the free-layout report then carried a lattice that did not exist.
+  Reading order (row cluster, then column) is still used to sort — a raw y-sort puts an icon
+  drawn 18px lower after its whole row.
+* **One ink per sheet** (`unifyInk`): tiles are probed one by one and a JPEG reads `#010101`
+  on one and `#000000` on the next. A tile's ink within the probe's own `SAME_INK_DE` of the
+  sheet's dominant ink is written as the sheet's; an ink within 3/255 of pure black or white
+  snaps to it. `ink` (hex or `currentColor`) overrides both, on `trace_icon` too.
+* **`normalize` is a post-pass on the MODEL** (`src/lib/path/normalize.ts`, ships in the
+  package): art bounds (strokes count half their width), one uniform scale, centred; the paper
+  becomes the whole box; gradients and the planar topology are transformed too, so the doc stays
+  consistent. Serialized at TWO decimals (`NORMALIZED_PRECISION`), the crop-sized trace keeps three.
+* **The manifest only ever deletes its own files**: plain names, `.svg`/`.png`, listed by the
+  previous run with the same prefix; a `limit`ed run ADDS to the record instead of replacing it
+  (a preview between two full runs must not make the second forget the first).
+* **`removeBackground` defaults ON for sheets** — `DEFAULT_SHEET_TRACE` in the app does the
+  same — and off everywhere else. A caption's box is the padded text line, never squared
+  (`applyBoxes`): squaring a 20px line gave a 640px box above the top of the sheet.
+
 ## "Find best settings" scores candidates; it does not decide on load
 
 The Vectorize rail's **Find best settings** (`studio/bestSettings.ts` pure, `useBestSettings.ts`

@@ -8,16 +8,29 @@
 // the single-icon editor run. The plan is reported back so an agent can
 // overrule one decision without hand-tuning the rest.
 
+import { docStats, serializeDoc } from '../lib/path/model.ts'
+import { defaultInset, normalizeDoc, type NormalizeSpec } from '../lib/path/normalize.ts'
 import { estimateBackground } from '../lib/sheet/detect.ts'
-import { planTileTrace, tileTraceInput, traceTile } from '../lib/sheet/traceTile.ts'
+import { planTileTrace, tileTraceInput, traceTile, type TileTrace } from '../lib/sheet/traceTile.ts'
 import { rasterCapFor } from '../lib/traceInput/traceCaps.ts'
 import { PRODUCT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
+import type { EditableDoc } from '../lib/path/types'
 import type { ImageDataLike } from '../lib/sheet/types'
 import type { VectorizeOptions } from '../types'
 import { hasAlpha, rasterizeSource, type LoadedSource } from './image.ts'
 
 /** Long side of the raster the planner probes before it knows the trace cap. */
 const PLAN_PROBE_PX = 512
+
+/**
+ * Coordinate precision of a NORMALIZED SVG. On a 24-unit grid two decimals is
+ * 1/2400 of the icon — what hand-authored icon sets ship with — where the
+ * crop-sized viewBox of a plain trace keeps the studio's three.
+ */
+export const NORMALIZED_PRECISION = 2
+
+/** The paint an `ink` request may name: a hex colour, or CSS's currentColor. */
+export const INK_PAINT = /^(?:currentColor|#(?:[0-9a-f]{3}|[0-9a-f]{6}))$/i
 
 /** What the caller asked for. Every field is optional — the defaults are the studio's. */
 export interface TraceRequest {
@@ -43,6 +56,31 @@ export interface TraceRequest {
   fidelity?: number
   /** Colour-mode segmentation detail 0–100; higher keeps subtler regions. */
   regionDetail?: number
+  /**
+   * Paint a MONO trace in this instead of the ink the probe read: a hex colour, or
+   * `currentColor` so the icon takes the CSS text colour. Colour traces keep their
+   * colours.
+   */
+  ink?: string
+  /** Refit the result into a `size`×`size` viewBox, the art centred inside `inset`. */
+  normalize?: NormalizeSpec | null
+}
+
+/** The `normalize` a tool call asked for: a box size, with the grid's usual inset unless given. */
+export function normalizeSpecFrom(size: unknown, inset: unknown): NormalizeSpec | null {
+  if (typeof size !== 'number' || !(size > 0)) return null
+  return { size, inset: typeof inset === 'number' ? inset : defaultInset(size) }
+}
+
+/**
+ * The SVG and its stats, refitted when asked. The trace itself is already
+ * serialized at the studio's precision; a normalized doc is re-serialized at the
+ * grid's, and the stats describe the document that was written.
+ */
+export function finishTrace(traced: TileTrace, normalize: NormalizeSpec | null | undefined): TileTrace {
+  if (!normalize) return traced
+  const doc: EditableDoc = normalizeDoc(traced.doc, normalize)
+  return { doc, svg: serializeDoc(doc, NORMALIZED_PRECISION), stats: docStats(doc) }
 }
 
 /** The decisions, reported so the agent can see why it got this SVG. */
@@ -59,10 +97,20 @@ export interface TracePlanReport {
   strokes: boolean
   /** Enlargement applied before tracing (mono only; sub-pixel edges from AA). */
   upscale: number
+  /**
+   * The thin ink's thickness in traced px before enlargement (mono only; null
+   * when not measured) — the stroke weight of the art, whether or not it was
+   * traced as strokes.
+   */
+  inkThickness: number | null
+  /** The paint a mono trace is written in (the probed ink, or the `ink` asked for); null in colour. */
+  ink: string | null
   /** Long-side cap the source was rasterized to. */
   rasterCap: number
   /** Pixels the tracer actually saw. */
   traced: { width: number; height: number }
+  /** The viewBox the SVG was refitted to, when `normalize` was asked for. */
+  normalized: NormalizeSpec | null
   /** One sentence an agent can relay to a human. */
   summary: string
 }
@@ -75,7 +123,7 @@ export interface TraceOutcome {
 }
 
 /** Merge the request onto the studio's defaults. */
-function baseOptions(req: TraceRequest): VectorizeOptions {
+export function baseOptions(req: TraceRequest): VectorizeOptions {
   const base: VectorizeOptions = { ...PRODUCT_VECTORIZE_OPTIONS }
   if (req.smoothing != null) base.smoothing = clamp(req.smoothing, 0, 100)
   if (req.despeckle != null) base.despeckle = clamp(req.despeckle, 0, 100)
@@ -136,6 +184,10 @@ export async function planTrace(
     plan.scale > 1
       ? { width: pixels.width * plan.scale, height: pixels.height * plan.scale }
       : { width: pixels.width, height: pixels.height }
+  // `recolor` rides along: a mono trace comes back black, and the plan is the only
+  // thing that knows the ink's real colour — unless the caller named the paint.
+  const recolor = opts.mode === 'mono' ? (inkPaint(req.ink) ?? plan.recolor) : null
+  const normalized = req.normalize ?? null
   const report: TracePlanReport = {
     mode: opts.mode,
     gradients: opts.gradients !== false,
@@ -145,13 +197,24 @@ export async function planTrace(
     inks: plan.inks,
     strokes: opts.centerline === true,
     upscale: plan.scale,
+    inkThickness: plan.thickness,
+    ink: recolor,
     rasterCap,
     traced: scaled,
-    summary: summarize(src, plan.inks, opts, plan.scale, scaled),
+    normalized,
+    summary: summarize(src, plan.inks, opts, plan.scale, scaled, recolor, normalized),
   }
-  // `recolor` rides along: a mono trace comes back black, and the plan is the only
-  // thing that knows the ink's real colour.
-  return { plan: report, opts, pixels, recolor: plan.recolor }
+  return { plan: report, opts, pixels, recolor }
+}
+
+/** A requested ink, validated: hex colours are lower-cased, `currentColor` kept as CSS spells it. */
+export function inkPaint(ink: string | undefined): string | null {
+  if (ink == null) return null
+  const v = ink.trim()
+  if (!INK_PAINT.test(v)) {
+    throw new Error(`ink must be a hex colour like #1f2937 or "currentColor", not "${ink}".`)
+  }
+  return v.toLowerCase() === 'currentcolor' ? 'currentColor' : v.toLowerCase()
 }
 
 function summarize(
@@ -160,11 +223,13 @@ function summarize(
   opts: VectorizeOptions,
   scale: number,
   traced: { width: number; height: number },
+  ink: string | null,
+  normalized: NormalizeSpec | null,
 ): string {
   const bits: string[] = []
   bits.push(
     opts.mode === 'mono'
-      ? `mono (${inks === 1 ? 'one ink' : `${inks} inks`} on paper${opts.invert ? ', light-on-dark so the cut is inverted' : ''}, cut at ${opts.threshold}${opts.centerline ? ', traced as centreline strokes with a measured width' : ''})`
+      ? `mono (${inks === 1 ? 'one ink' : `${inks} inks`} on paper${opts.invert ? ', light-on-dark so the cut is inverted' : ''}, cut at ${opts.threshold}${opts.centerline ? ', traced as centreline strokes with a measured width' : ''}${ink ? `, painted ${ink}` : ''})`
       : opts.centerline
         ? `colour (${inks} inks)${req_strokes_note(opts)}`
         : `colour (${inks} inks), gradients ${opts.gradients === false ? 'off — flat fills' : 'on — real SVG ramps'}`,
@@ -172,6 +237,7 @@ function summarize(
   bits.push(
     `traced at ${traced.width}×${traced.height}${scale > 1 ? ` (source enlarged ×${scale} for sub-pixel edges)` : ''}`,
   )
+  if (normalized) bits.push(`fitted to a ${normalized.size}×${normalized.size} viewBox, inset ${normalized.inset}`)
   if (src.kind === 'svg') bits.push('source is already vector — it was rasterized and re-traced')
   return bits.join('; ')
 }
@@ -189,7 +255,7 @@ export async function traceIcon(src: LoadedSource, req: TraceRequest = {}): Prom
   // A mono trace comes back black; repaint it with the ink the probe found (the
   // same recolour the sheet batch applies).
   const input = tileTraceInput(pixels, plan.upscale)
-  const traced = await traceTile(input, opts, undefined, undefined, recolor)
+  const traced = finishTrace(await traceTile(input, opts, undefined, undefined, recolor), req.normalize)
 
   return { svg: traced.svg, plan, stats: traced.stats, ms: Date.now() - started }
 }

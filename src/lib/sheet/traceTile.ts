@@ -51,6 +51,8 @@ export interface TilePlan {
   inks: number
   /** Enlarge the crop by this factor before tracing. */
   scale: number
+  /** The thin ink's thickness in crop px, when the stroke rule measured it. */
+  thickness: number | null
 }
 
 /**
@@ -73,6 +75,7 @@ export function planTileTrace(
     recolor: plan.recolor,
     inks: plan.inks,
     scale: plan.scale,
+    thickness: plan.thickness,
   }
 }
 

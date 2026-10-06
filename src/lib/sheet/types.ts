@@ -59,6 +59,13 @@ export interface DetectOptions {
   dropLabels?: boolean
   /** Blobs smaller than this fraction of the median icon area are noise. */
   noiseFraction?: number
+  /**
+   * The sheet IS a lattice of this many rows and columns of icons. Every piece of
+   * artwork in a cell is one icon, whatever gap separates the pieces — so an icon
+   * drawn as four corner brackets further apart than its neighbours stays one
+   * icon, which no `gap` value can express. Captions are still set aside.
+   */
+  grid?: { rows: number; cols: number }
 }
 
 export interface SheetGrid {

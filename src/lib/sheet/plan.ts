@@ -38,6 +38,12 @@ export interface TileBasePlan {
   color: boolean
   /** Enlarge the crop by this integer factor before tracing (see `traceScale`). */
   scale: number
+  /**
+   * The thin ink's thickness in crop px (the stroke rule's reading, `inkThickness`),
+   * or null when it was not measured (colour, or enlargement off). Reported so a
+   * caller can weight-normalise a set without tracing it as strokes.
+   */
+  thickness: number | null
 }
 
 /**
@@ -57,10 +63,12 @@ export function planTileBase(
   const long = Math.max(pixels.width, pixels.height)
   // Only mono tiles are enlarged (see traceCaps.ts); colour segmentation would
   // follow every interpolated tone.
-  const scale =
+  const enlarge =
     settings.hiRes !== false && wantMono
-      ? monoTraceScale(pixels, { ...base, mode: 'mono', threshold: ink.threshold, invert: ink.invert }).scale
-      : 1
+      ? monoTraceScale(pixels, { ...base, mode: 'mono', threshold: ink.threshold, invert: ink.invert })
+      : null
+  const scale = enlarge?.scale ?? 1
+  const thickness = enlarge?.thickness ?? null
   const opts: VectorizeOptions = {
     // Smoothing follows the raster the tracer actually sees, so enlargement and
     // smoothing scaling compose.
@@ -75,6 +83,7 @@ export function planTileBase(
         inks: ink.inks,
         color: false,
         scale,
+        thickness,
       }
-    : { opts: { ...opts, mode: 'color' }, recolor: null, inks: ink.inks, color: true, scale }
+    : { opts: { ...opts, mode: 'color' }, recolor: null, inks: ink.inks, color: true, scale, thickness }
 }
