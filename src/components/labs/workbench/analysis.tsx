@@ -31,7 +31,7 @@ import {
   type DistPoint,
 } from '../../../../bench/geomScore'
 import { scoreDoc } from '../../../../bench/scoreboard'
-import { TIER_TOL, evaluateTruthGates, inventedMaxFor } from '../../../../bench/truthCorpus'
+import { TIER_TOL, evaluateTruthGates, inventedMaxFor, tangentBreaksMaxFor } from '../../../../bench/truthCorpus'
 import { Panel, RawArt } from '../Panel'
 import { traceSvg, subPathsWire } from '../wire'
 import { Badge, CaseRow, NoteBox } from '../CaseRow'
@@ -246,6 +246,9 @@ function gateRows(
     // note in truthCorpus. Passed here so the view shows the same number CI gates on.
     cornersInvented: geom.cornersInvented,
     inventedMax: inventedMaxFor(name),
+    // §42's lens: the same question below the 60° corner bar.
+    tangentBreaks: geom.tangentBreaks,
+    tangentBreaksMax: tangentBreaksMaxFor(name),
     paintMean: paint?.mean,
     paintP95: paint?.p95,
     worstInk: regions.worstInk,
@@ -288,9 +291,11 @@ function gateRows(
           ? `${geom.cornersRecovered}/${geom.gtCorners}`
           : g.key === 'invented'
             ? `${geom.cornersInvented}`
-            : g.key === 'ink'
-              ? `${(g.value * 100).toFixed(0)}%`
-              : g.value.toFixed(g.digits) + (g.key === 'parsimony' ? '×' : isPaint ? 'ΔE' : 'px')
+            : g.key === 'breaks'
+              ? `${geom.tangentBreaks}`
+              : g.key === 'ink'
+                ? `${(g.value * 100).toFixed(0)}%`
+                : g.value.toFixed(g.digits) + (g.key === 'parsimony' ? '×' : isPaint ? 'ΔE' : 'px')
     const unit =
       g.key === 'parsimony'
         ? '×'

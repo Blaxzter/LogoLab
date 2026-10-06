@@ -2,6 +2,7 @@
 
 import type { Vec } from '../../path/types'
 import type { ApexDiag } from './apex.ts'
+import type { FilletDiag } from './fillet.ts'
 import type { PinDiag } from './pin.ts'
 
 export interface PlanarFitOptions {
@@ -85,6 +86,15 @@ export interface PlanarFitOptions {
   /** Refuse the sub-pixel estimator at any chain point whose sample window is not fully
    *  inside the raster (see planarSubpixel's truncated-window guard). */
   subpixelWindowGuard: boolean
+  /**
+   * Rounded polygons (planarFit/fillet.ts): a closed loop that is nothing but straight
+   * runs joined by tangent arcs — a rounded rectangle, a pill — is emitted as exactly
+   * those lines and arcs, G¹ at every join, instead of going to the general loop fit.
+   */
+  fillets: boolean
+  /** Diagnostic sink, called once per closed loop the rounded-polygon fit weighed, with
+   *  each gap's reading (`bench/filletDiag.ts`). Never changes the fit. */
+  filletDiag?: FilletDiag
   /**
    * Internal, set per edge by assemblePlanar: pin each snapped apex's handle directions
    * onto its fitted arm lines. Only meaningful on a sub-pixel displaced chain, where the
@@ -200,6 +210,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   cornerJunctions: true,
   subpixelEdges: true,
   subpixelWindowGuard: true,
+  fillets: true,
   arcArms: true,
 }
 

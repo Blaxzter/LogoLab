@@ -140,6 +140,11 @@ export interface SnapOptions {
   /** Diagnostic override for the re-seat's certification constants. */
   reseatTune?: ReseatTune
   onArcLoop?: ArcLoopObserver
+  /** Ids of closed edges already emitted as rounded polygons (planarFit/fillet.ts) —
+   *  1a leaves them alone. Their sides are certified straight against the arcs that join
+   *  them, so they are not a disc; "within fidelity of an ellipse" is still true of a
+   *  thin bar with round caps, and that snap turned SoundCloud's into spindles. */
+  rounded?: ReadonlySet<number>
 }
 
 /**
@@ -359,6 +364,7 @@ export function planarBeautify(
     if (e.nodes.length < 2 || arcSnapped.has(e.id)) continue
 
     if (e.closed) {
+      if (snap.rounded?.has(e.id)) continue
       // --- 1a. Disc edge → circle / ellipse --------------------------------
       const raw = flatten({ nodes: e.nodes, closed: true })
       const positive = anchorSignedArea(e.nodes) > 0

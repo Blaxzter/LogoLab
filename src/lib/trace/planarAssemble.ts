@@ -14,6 +14,7 @@ import {
   discExplainsLoop,
   fitCorneredLoop,
   fitCorneredOpen,
+  fitFilletLoop,
   fitLoopEdge,
   fitOpenArc,
   presmooth,
@@ -23,7 +24,7 @@ import {
 } from './planarFit.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
 import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
-import { subpixelEdgeChains, type SourceImage } from './planarSubpixel.ts'
+import { subpixelEdgeChains, type RawSubpixelChain, type SourceImage } from './planarSubpixel.ts'
 import { threadJunctions, type ThreadColor } from './planarThread.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
 
@@ -32,6 +33,9 @@ export interface PlanarTrace {
   edges: SharedEdge[]
   /** Per region label → its boundary loops (outer + holes), oriented for nonzero. */
   loopsByLabel: Map<number, EdgeRef[][]>
+  /** Ids of the closed edges emitted as rounded polygons (planarFit/fillet.ts). Their
+   *  sides are certified straight, so the circle / ellipse snap must leave them alone. */
+  rounded: Set<number>
 }
 
 /** Direction rotation that selects the next half-edge keeping the face on one
@@ -136,11 +140,12 @@ export function tracePlanar(
   // Read the sub-pixel edge position out of the source anti-aliasing
   // (planarSubpixel.ts). Computed on the raw network, before junction placement, so
   // threadJunctions still reads the raw lattice chains it is calibrated on.
+  const raw = image && opts.subpixelEdges && opts.fillets ? new Map<number, RawSubpixelChain>() : undefined
   const subpix =
     image && opts.subpixelEdges
-      ? subpixelEdgeChains(net, labels, image, undefined, opts.subpixelWindowGuard)
+      ? subpixelEdgeChains(net, labels, image, undefined, opts.subpixelWindowGuard, raw)
       : undefined
-  return assemblePlanar(net, opts, palette, subpix, image)
+  return assemblePlanar(net, opts, palette, subpix, image, raw)
 }
 
 export function assemblePlanar(
@@ -150,6 +155,9 @@ export function assemblePlanar(
   subpix?: ReadonlyMap<number, Vec[]>,
   /** Source raster read by the apex evidence probe. Absent ⇒ no probe. */
   image?: SourceImage,
+  /** Closed chains as the sub-pixel estimator read them, before its corner guard — what
+   *  the rounded-polygon fit reads. Absent ⇒ it reads the lattice chain. */
+  raw?: ReadonlyMap<number, RawSubpixelChain>,
 ): PlanarTrace {
   const cw = net.width + 1
   // --- vertices: one per junction corner ---
@@ -176,6 +184,7 @@ export function assemblePlanar(
   }
 
   // --- fit every edge once ---
+  const rounded = new Set<number>()
   const edges: SharedEdge[] = []
   interface EdgeMeta {
     left: number
@@ -250,10 +259,19 @@ export function assemblePlanar(
         loopCorners = []
         loopPins = new Set()
       }
+      // A loop that is straight runs joined by tangent arcs is emitted as exactly that;
+      // it reads the estimator's own points, which the corner guard reverts on any tight
+      // arc (see RawSubpixelChain).
+      const rawChain = raw?.get(e.id)
+      const polygon = opts.fillets
+        ? fitFilletLoop(rawChain ? rawChain.pts : latticePts, rawChain ? rawChain.measured : null, opts.filletDiag)
+        : null
       nodes =
-        loopCorners.length >= 2
+        polygon ??
+        (loopCorners.length >= 2
           ? fitCorneredLoop(pts, loopCorners, edgeOpts)
-          : fitLoopEdge(presmooth(pts, opts.smoothPasses, false, loopPins), opts)
+          : fitLoopEdge(presmooth(pts, opts.smoothPasses, false, loopPins), opts))
+      let isPolygon = polygon !== null
       // Area guard. A fit can keep every sample within ε and still pinch a thin
       // loop's two walls together: a thin bar's cap corners (1–2px apart) fuse into
       // one apex, the wall arcs pin to the same point, and the region collapses to a
@@ -264,10 +282,11 @@ export function assemblePlanar(
       // read the lattice chain: the reference area is the label map's own.
       const rawArea = Math.abs(polySignedArea(latticePts))
       if (rawArea >= 4 && Math.abs(polySignedArea(flattenNodes(nodes))) < rawArea * 0.75) {
+        isPolygon = false
         // If the fit used displaced points, first refit from the lattice chain; only
         // a fit that pinches there too falls back to the staircase, which costs many
         // more nodes.
-        if (sub) {
+        if (sub || polygon) {
           nodes =
             loopCorners.length >= 2
               ? fitCorneredLoop(latticePts, loopCorners, opts)
@@ -277,6 +296,7 @@ export function assemblePlanar(
           nodes = staircaseCorners(latticePts)
         }
       }
+      if (isPolygon) rounded.add(e.id)
     } else {
       // An open edge with sharp interior corners gets the same corner-first fit as
       // closed loops (fitCorneredOpen); otherwise the smooth open-arc fit.
@@ -399,7 +419,7 @@ export function assemblePlanar(
   // refineJunctions: weld straight-through junctions to a shared G¹ tangent.
   if (opts.refineJunctions) smoothThroughJunctions(edges, loopsByLabel)
 
-  return { vertices, edges, loopsByLabel }
+  return { vertices, edges, loopsByLabel, rounded }
 }
 
 // ---------------------------------------------------------------------------

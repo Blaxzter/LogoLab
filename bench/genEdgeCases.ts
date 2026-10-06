@@ -1143,6 +1143,205 @@ const CASES: { name: string; note: string; make: () => string }[] = [
     },
   },
   {
+    // ROUNDED POLYGONS — §42's fixture (planarFit/fillet.ts, 2026-10-06). A rounded
+    // rectangle is four lines and four arcs, each arc tangent to the lines it joins, and
+    // until §42 no path through the fitter could say so: the general loop fit joined every
+    // line to its arc with a hard node and a 3–24° tangent break. `smooth-radii` has ten
+    // rounded rects but they are all axis-aligned, all 90°, and half of them sit under
+    // 4px at 512 where "corner or curve" is the raster's question rather than the
+    // tracer's. This rack is the shape family at the sizes an icon actually has, and it
+    // holds BOTH sides of the reading in one picture:
+    //   • rows 1–2 — rounded rects and stadiums, upright and at five rotations (a slanted
+    //     side is certified on sub-pixel points; nothing here leans on the lattice);
+    //   • row 3 — what "polygon" has to mean beyond four right angles: a tab with two
+    //     round corners and two sharp ones, a rounded triangle (120° turns), a map pin
+    //     whose head goes the LONG way round (a 245° arc tangent to both flanks), an L
+    //     with a concave fillet in its elbow, and a rounded hexagon (60° turns, where the
+    //     arc stands only 1.9px off its corner at 512);
+    //   • row 4 — the controls that must NOT be read as rounded polygons, each the
+    //     false positive one of the fit's rules exists for: a sharp rectangle, a disc
+    //     (its flat extremes certify as "runs"), an ellipse, a sector (an arc meeting its
+    //     lines at CORNERS, not tangents), a sharp octagon (shallow 45° vertices);
+    //   • row 5 — the edge of the regime: r = 2 and r = 1.25 units (4 and 2.5px at 512,
+    //     either side of the radius floor), a narrow rect whose corners leave 2 units of
+    //     flat between them, a squircle (smooth, and not made of arcs), a chamfered rect.
+    // Quarter-unit phases throughout, two colours, for the usual AA-lottery reason.
+    //
+    // Read it with the `tangentBreaks` term of the truth gate — kinks the trace asserts on
+    // boundary the art draws smooth, at ANY size (`cornersInvented` only counts ≥ 60°) —
+    // and with `bench/filletDiag.ts`, which prints every gap's reading.
+    name: 'round-polys',
+    note: 'rounded rects, stadiums, pin, tab, concave fillet — and the discs/sectors/squircles that must not be read as them (§42)',
+    make: () => {
+      const f3 = (v: number): string => v.toFixed(3)
+      type P = [number, number]
+      const rot = (pts: P[], cx: number, cy: number, deg: number): P[] => {
+        const a = (deg * Math.PI) / 180
+        const c = Math.cos(a)
+        const s = Math.sin(a)
+        return pts.map(([x, y]) => [cx + (x - cx) * c - (y - cy) * s, cy + (x - cx) * s + (y - cy) * c])
+      }
+      /** A polygon with a tangent arc of radius `radii[i]` at vertex i (0 ⇒ sharp). The
+       *  arcs are authored as arcs, so the ground truth carries the blend. */
+      const rounded = (pts: P[], radii: number[], fill: string): string => {
+        const n = pts.length
+        let d = ''
+        for (let i = 0; i < n; i++) {
+          const [px, py] = pts[(i - 1 + n) % n]
+          const [vx, vy] = pts[i]
+          const [qx, qy] = pts[(i + 1) % n]
+          const li = Math.hypot(vx - px, vy - py)
+          const lo = Math.hypot(qx - vx, qy - vy)
+          const ux = (vx - px) / li
+          const uy = (vy - py) / li
+          const wx = (qx - vx) / lo
+          const wy = (qy - vy) / lo
+          const r = radii[i] ?? 0
+          if (r <= 0) {
+            d += `${i === 0 ? 'M' : 'L'} ${f3(vx)},${f3(vy)} `
+            continue
+          }
+          const cross = ux * wy - uy * wx
+          const t = r * Math.tan(Math.acos(Math.max(-1, Math.min(1, ux * wx + uy * wy))) / 2)
+          d += `${i === 0 ? 'M' : 'L'} ${f3(vx - ux * t)},${f3(vy - uy * t)} `
+          d += `A ${f3(r)},${f3(r)} 0 0 ${cross > 0 ? 1 : 0} ${f3(vx + wx * t)},${f3(vy + wy * t)} `
+        }
+        return `<path d="${d}Z" fill="${fill}"/>`
+      }
+      const box = (cx: number, cy: number, w: number, h: number): P[] => [
+        [cx - w / 2, cy - h / 2],
+        [cx + w / 2, cy - h / 2],
+        [cx + w / 2, cy + h / 2],
+        [cx - w / 2, cy + h / 2],
+      ]
+      const ring = (cx: number, cy: number, R: number, k: number, a0: number): P[] =>
+        Array.from({ length: k }, (_, i): P => {
+          const a = a0 + (i * 2 * Math.PI) / k
+          return [cx + R * Math.cos(a), cy + R * Math.sin(a)]
+        })
+      const col = (i: number): number => 28 + i * 50
+      const ink = (i: number): string => (i % 2 ? INK : RED)
+      const body: string[] = [`<rect width="${V}" height="${V}" fill="${WHITE}"/>`]
+
+      // Row 1 — upright rounded rects and stadiums.
+      body.push(rounded(box(col(0) + 0.25, 28, 40, 36), [10, 10, 10, 10], ink(0)))
+      body.push(rounded(box(col(1), 28.5, 42, 30), [6, 6, 6, 6], ink(1)))
+      body.push(rounded(box(col(2) + 0.5, 28.25, 40, 34), [4, 4, 4, 4], ink(2)))
+      body.push(rounded(box(col(3) + 0.75, 28, 42, 20), [10, 10, 10, 10], ink(3)))
+      body.push(rounded(box(col(4), 28.75, 18, 44), [9, 9, 9, 9], ink(4)))
+
+      // Row 2 — the same family at five rotations.
+      body.push(rounded(rot(box(col(0), 80, 38, 24), col(0), 80, 20), [6, 6, 6, 6], ink(1)))
+      body.push(rounded(rot(box(col(1) + 0.25, 80.5, 30, 30), col(1) + 0.25, 80.5, 45), [7, 7, 7, 7], ink(2)))
+      body.push(rounded(rot(box(col(2), 80.25, 44, 14), col(2), 80.25, 30), [7, 7, 7, 7], ink(3)))
+      body.push(rounded(rot(box(col(3) + 0.5, 80, 40, 12), col(3) + 0.5, 80, -35), [6, 6, 6, 6], ink(4)))
+      body.push(rounded(rot(box(col(4), 80.75, 36, 22), col(4), 80.75, 70), [5, 5, 5, 5], ink(5)))
+
+      // Row 3 — beyond four right angles.
+      body.push(rounded(box(col(0) + 0.25, 132, 40, 36), [9, 9, 0, 0], ink(0))) // tab
+      body.push(rounded(ring(col(1), 135.5, 23, 3, -Math.PI / 2), [6, 6, 6], ink(1))) // rounded triangle
+      {
+        // Map pin: a head of radius 15 and two flanks tangent to it, meeting 28 below its
+        // centre. The head's arc is the long way round: 180° + 2·asin(15/28).
+        const cx = col(2) + 0.5
+        const cy = 126.25
+        const r = 15
+        const dTip = 28
+        const al = Math.asin(r / dTip)
+        const px = r * Math.cos(al)
+        const py = r * Math.sin(al)
+        body.push(
+          `<path d="M ${f3(cx)},${f3(cy + dTip)} L ${f3(cx + px)},${f3(cy + py)} ` +
+            `A ${r},${r} 0 1 0 ${f3(cx - px)},${f3(cy + py)} Z" fill="${ink(2)}"/>`,
+        )
+      }
+      {
+        // L with a concave fillet in the elbow; every outer corner sharp.
+        const x = col(3) - 20 + 0.75
+        const y = 114
+        body.push(
+          rounded(
+            [
+              [x, y],
+              [x + 16, y],
+              [x + 16, y + 20],
+              [x + 40, y + 20],
+              [x + 40, y + 36],
+              [x, y + 36],
+            ],
+            [0, 0, 7, 0, 0, 0],
+            ink(3),
+          ),
+        )
+      }
+      body.push(rounded(ring(col(4), 132.5, 21, 6, 0), [6, 6, 6, 6, 6, 6], ink(4))) // rounded hexagon
+
+      // Row 4 — controls: none of these is a rounded polygon.
+      body.push(rounded(box(col(0), 184.25, 40, 30), [0, 0, 0, 0], ink(1)))
+      body.push(`<circle cx="${f3(col(1) + 0.25)}" cy="184" r="18" fill="${ink(2)}"/>`)
+      body.push(`<ellipse cx="${f3(col(2))}" cy="184.5" rx="22" ry="13" fill="${ink(3)}"/>`)
+      {
+        // Sector: two radii and the arc between them — the arc meets each line at a 90°
+        // CORNER, which is exactly what a tangent arc is not.
+        const cx = col(3) - 8
+        const cy = 196
+        const R = 26
+        const a0 = (-80 * Math.PI) / 180
+        const a1 = (-5 * Math.PI) / 180
+        body.push(
+          `<path d="M ${f3(cx)},${f3(cy)} L ${f3(cx + R * Math.cos(a0))},${f3(cy + R * Math.sin(a0))} ` +
+            `A ${R},${R} 0 0 1 ${f3(cx + R * Math.cos(a1))},${f3(cy + R * Math.sin(a1))} Z" fill="${ink(4)}"/>`,
+        )
+      }
+      body.push(rounded(ring(col(4) + 0.5, 184, 19, 8, Math.PI / 8), [], ink(5))) // sharp octagon
+
+      // Row 5 — the edge of the regime.
+      body.push(rounded(box(col(0) + 0.5, 232, 40, 24), [2, 2, 2, 2], ink(0)))
+      body.push(rounded(box(col(1), 232.25, 40, 24), [1.25, 1.25, 1.25, 1.25], ink(1)))
+      body.push(rounded(box(col(2) + 0.25, 232, 40, 13), [5.5, 5.5, 5.5, 5.5], ink(2)))
+      {
+        // Squircle |x/a|^4 + |y/a|^4 = 1 as a 96-gon: smooth, and not arcs.
+        const cx = col(3)
+        const cy = 232.5
+        const a = 15
+        const pts: string[] = []
+        for (let i = 0; i < 96; i++) {
+          const t = (i * 2 * Math.PI) / 96
+          const c = Math.cos(t)
+          const sn = Math.sin(t)
+          pts.push(
+            `${f3(cx + a * Math.sign(c) * Math.sqrt(Math.abs(c)))},${f3(cy + a * Math.sign(sn) * Math.sqrt(Math.abs(sn)))}`,
+          )
+        }
+        body.push(`<polygon points="${pts.join(' ')}" fill="${ink(3)}"/>`)
+      }
+      {
+        const cx = col(4) + 0.75
+        const cy = 232
+        const w = 20
+        const h = 13
+        const c = 6
+        body.push(
+          rounded(
+            [
+              [cx - w + c, cy - h],
+              [cx + w - c, cy - h],
+              [cx + w, cy - h + c],
+              [cx + w, cy + h - c],
+              [cx + w - c, cy + h],
+              [cx - w + c, cy + h],
+              [cx - w, cy + h - c],
+              [cx - w, cy - h + c],
+            ],
+            [],
+            ink(4),
+          ),
+        )
+      }
+      return svg(body.join(''))
+    },
+  },
+  {
     // SMALL-DISC LADDER (planarFit `discExplainsLoop`, 2026-09-23). The ±win chord reading
     // minted 2–5 corners on the staircase of any disc under r ≈ 6px, so sheet music's
     // i-dots and repeat dots traced as lumpy polygons while their 13px neighbours were

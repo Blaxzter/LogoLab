@@ -58,9 +58,13 @@ node --test test/truth-gate.test.ts
 
 Gates: boundary chamfer/p95, node parsimony, region recovery, **corner recovery** (a
 distance-blind topology check — catches a shape rounded while every px stays sub-tolerance,
-e.g. a checker cell melted to a blob), and **paint fidelity** (gradient tier 0 only: the
-trace is RENDERED and scored in ΔE against the source raster — catches a paint-only failure
-like a re-centred glow, which every geometry gate is blind to on gradient art, §10.3).
+e.g. a checker cell melted to a blob), its two precision halves — **corners invented** (a
+60° kink the art does not have) and **tangent breaks** (a kink of ANY size, from 5°, on
+boundary the art draws smooth: a rounded rect whose sides meet its corners at 15° has no
+"invented corner" and is still not the shape that was drawn, §42) — and **paint fidelity**
+(gradient tier 0 only: the trace is RENDERED and scored in ΔE against the source raster —
+catches a paint-only failure like a re-centred glow, which every geometry gate is blind to
+on gradient art, §10.3).
 Open defects + the method are tracked in ONE place:
 **`docs/vectorization-benchmarks.md` §0**, with `KNOWN_DEFECTS` in the test as the
 machine-checked status. A case not in `KNOWN_DEFECTS` must pass every applicable gate.
@@ -253,6 +257,59 @@ Tiled is byte-identical to before the feature (`before-stacked` ⇄ `after-stack
 lab has a sixth lane, **`stack`** (flat + stacked); `before-sidebyside` ⇄ `after-sidebyside`
 moves only that lane. `test/planar-stack.test.ts` is the gate; `bench/stackDiag.ts` the
 census; `bench/stackExplode.ts` paints every layer alone so a completion is visible.
+
+## A rounded polygon is read as lines and arcs BEFORE the general fit
+
+`src/lib/trace/planarFit/fillet.ts` (benchmarks §42). A closed loop that is nothing but
+straight runs joined by tangent arcs — a rounded rect, a stadium, a map pin — is emitted as
+exactly those lines and arcs, `smooth` tangent nodes carrying ONE handle. The general loop
+fit could not say that: its line candidates are C⁰ at both ends, so every side→corner join
+was a hard node with a 3–24° break, and under r ≈ 7px the corner detector made the arc one
+sharp node. `PlanarFitOptions.fillets` (on; off with Smoothing 0 or fidelity 0). A loop it
+cannot explain WHOLE returns null and takes the old path untouched, so a miss is the status
+quo and a false positive is a regression — every rule below was a measured false positive
+first, and each is easy to undo:
+
+* **It reads the estimator's points BEFORE the corner self-guard** (`RawSubpixelChain`).
+  That guard reverts any arc under r ≈ 9px to the lattice — the one stretch a radius is
+  read from. Points the estimator declined are strays: wider tolerance, a fifth of the
+  weight, never the end of a run, and run seeds are polygonalised from the measured points
+  ALONE (a 20° side has a stray every third step; with them in there is not one seed).
+* **A weak run is never kept.** A run that would not visibly leave the circle of the arc
+  beside it (sagitta L²/8r under 0.75px; 1.5 on a lattice chain) may be a chord of that arc
+  — the four flat extremes of a disc certify as runs. Weak runs go back to being gap, to a
+  fixpoint. Three rules for KEEPING one were built and each turned on hundredths of a pixel:
+  the same test kept a real 4px flat and three chords of a circle.
+* **Which way round is read off the chain, a point's place by its ORDER in it**, and the
+  turns must sum to 360°. A radial residual cannot tell the short arc between two runs from
+  the long way round the same circle.
+* **Two floors, then one answer per loop.** An arc needs r ≥ 3.5px AND a stand-off of 1px
+  from its corner (at a 45° turn r = 4 stands 0.33px off — what anti-aliasing does to a
+  sharp vertex); under them the node goes on the line intersection. A corner left sharp
+  that reads nearly the radius of one that was rounded makes both sharp, or a hexagon comes
+  back five sharp and one round.
+* **A sharp corner needs L·θ/8 of line each side** above that same sagitta — a 9° vertex
+  37px, a 90° one 4 — or a gentle curve is read as a polygon of its own chords.
+* **Emitted loops are exempt from beautify's circle / ellipse snap** (`PlanarTrace.rounded`).
+  A loop with no 60° corner no longer vetoes it, and "within 1.5px of an ellipse" turned a
+  correctly read SoundCloud bar into a spindle.
+* **Verdicts tolerate outliers, not a wrong model**: 5% of the points a test reads may be
+  over tolerance, none by more than 0.4px. On the single worst point, a triangle reading
+  48.01 / 48.03 / 48.04 for an authored 48 was thrown out for one point 0.01 over.
+
+Scope: CLOSED loops (a rounded rect cut by another shape is open edges and takes the general
+fit), and a SLANTED side needs measured points — on art over transparency the silhouette is
+an EXT-sided chain that stays on the lattice, so only upright shapes read there. Both are
+named in §42.5 with the next lever.
+
+The number is `tangentBreaks` (above): tier-0 flat @512 101 → 33, and exactly three cases
+move. `round-polys` is the fixture — the shapes and, in the same picture, the disc, sector,
+squircle and octagon that must NOT be read as them. `bench/filletDiag.ts` is the census
+(it checks every emitted arc against the AUTHORED art: one on a vertex the artist drew sharp
+is the false-positive count, and it is zero), `--list` the per-loop autopsy, `--breaks` the
+gate's table; `bench/nodeLook.ts` draws the nodes on a zoomed crop, which is how a 15° break
+is seen at all. `test/planar-fillet.test.ts` is the gate. With the fit off the tree is
+byte-identical to `before-fillets` (240 files); `before-fillets` ⇄ `after-fillets` is the pair.
 
 ## Line art traces as STROKES — the centreline engine, and its own lane
 

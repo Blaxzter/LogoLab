@@ -355,6 +355,11 @@ export interface GeomScore {
   /** The worst invented corner's excess turn, deg over the authored boundary's own turn
    *  across ±KINK_WIN px. */
   worstInventedExcess: number
+  /** Tangent breaks the trace asserts on boundary the art draws SMOOTH, at any size
+   *  (`tangentBreaks`, §42) — `cornersInvented` only counts kinks of 60° and up. */
+  tangentBreaks: number
+  /** The largest of them (deg). */
+  worstTangentBreak: number
 }
 
 /** Turn angle (rad) at/above which a boundary vertex is a "sharp corner". 60°: a circle's
@@ -397,10 +402,12 @@ export interface Corner {
  * polygons carry no handles, so the GT side is unchanged for polygonal art.
  * Each corner carries its incoming/outgoing unit tangents so GT corners can be visibility-
  * tested against the truth raster. Open subpaths skip their two endpoints. `minEdge` gates
- * on CHORD length (feature size), never handle length.
+ * on CHORD length (feature size), never handle length. `minTurn` (rad) lowers the bar for
+ * callers that read tangent breaks at any size (`tangentBreaks`); every corner gate keeps
+ * the default.
  */
-export function sharpCorners(sets: SubPath[][], minEdge = 0): Corner[] {
-  const cosMax = Math.cos(CORNER_MIN_TURN) // turn ≥ MIN_TURN  ⇔  dot ≤ cos(MIN_TURN)
+export function sharpCorners(sets: SubPath[][], minEdge = 0, minTurn = CORNER_MIN_TURN): Corner[] {
+  const cosMax = Math.cos(minTurn) // turn ≥ minTurn  ⇔  dot ≤ cos(minTurn)
   const out: Corner[] = []
   for (const set of sets) {
     for (const sp of set) {
@@ -1059,6 +1066,136 @@ export function inventedCorners(
 }
 
 // ---------------------------------------------------------------------------
+// TANGENT BREAKS (§42) — a kink of ANY size on boundary the art draws smooth.
+//
+// `cornersInvented` asks the corner question: a traced node turning ≥ 60° where the art
+// does not. It was built for §22, and it reads `smooth-radii` as 12. The same case at the
+// flat cap carries 35 traced nodes with a tangent break of 5° or more on art that has no
+// tangent break anywhere — every line→arc join of every rounded rectangle, at 3–24° —
+// and all but one of them is under the 60° bar. Smooth is not "no sharp corners": a
+// rounded rect with a 15° break where each side meets its corner is visibly not the
+// shape that was drawn, at any zoom a vector is opened at.
+//
+// So this counts the traced kink ITSELF, from 5° up, wherever the art is smooth at the
+// node's own scale. Two things take a site out, both read off the AUTHORED geometry:
+//   • an authored kink (≥ 3°) within CORNER_MATCH_R — the trace is right to break there,
+//     and that includes a shallow vertex the 60° corner lens does not call a corner (the
+//     9° bend in a bar, an octagon's 45°);
+//   • an authored turn of ≥ 40° over ±KINK_WIN px — a corner, or an arc under ~3px, where
+//     "corner or curve" is `cornersInvented`'s like-for-like question, not this one.
+// It deliberately does NOT subtract the authored window turn the way `cornersInvented`
+// does: on an r = 12 arc the art turns 9.5° per ±1px, and a 15° kink laid on it is a 15°
+// defect, not a 5° one. The same four exemptions apply (border, occluded, traced junction,
+// authored crossing).
+// ---------------------------------------------------------------------------
+/** Smallest traced kink (deg) counted. Under ~3° a break is within what the fit's own
+ *  tangent noise leaves at a correct smooth join. */
+export const BREAK_MIN = 5
+/** An authored kink at least this large (deg) explains a traced one beside it. */
+const BREAK_AUTHORED_MIN = 3
+/** Authored turn over ±KINK_WIN px at or above which the art is not smooth at this scale. */
+const BREAK_SMOOTH_MAX = 40
+
+export interface TangentBreak {
+  x: number
+  y: number
+  /** The traced node's C⁰ kink (deg). */
+  kink: number
+}
+
+/** Traced tangent breaks on smooth authored boundary. See the block comment above. */
+export function tangentBreaks(
+  gt: GroundShape[],
+  docSets: SubPath[][],
+  w: number,
+  h: number,
+  visible: (q: QueryPt) => boolean,
+): { count: number; worst: number; sites: TangentBreak[] } {
+  const chains: TurnChain[] = []
+  gt.forEach((sh, si) => {
+    for (const sp of sh.subPaths) {
+      const c = turnChain(sp, si)
+      if (c) chains.push(c)
+    }
+  })
+  if (!chains.length) return { count: 0, worst: 0, sites: [] }
+  const deg = Math.PI / 180
+  const gtKinks = sharpCorners(
+    gt.map((sh) => sh.subPaths),
+    0,
+    BREAK_AUTHORED_MIN * deg,
+  )
+  const uniq: Corner[] = []
+  for (const c of sharpCorners(
+    docSets.flat().map((sp) => [sp]),
+    0,
+    BREAK_MIN * deg,
+  ))
+    if (!uniq.some((u) => Math.hypot(u.x - c.x, u.y - c.y) <= 0.35)) uniq.push(c)
+
+  const CELL = Math.max(KINK_NEAR, KINK_CROSS, CORNER_MATCH_R) + 0.5
+  const key = (gx: number, gy: number): number => gx * 100003 + gy
+  const cellOf = (v: number): number => Math.floor(v / CELL)
+  const grid = new Map<number, { ch: TurnChain; i: number }[]>()
+  for (const ch of chains)
+    for (let i = 0; i < ch.pts.length; i++) {
+      const k = key(cellOf(ch.pts[i].x), cellOf(ch.pts[i].y))
+      const bucket = grid.get(k)
+      if (bucket) bucket.push({ ch, i })
+      else grid.set(k, [{ ch, i }])
+    }
+  // Traced boundary by path, for the junction exemption: three or more paths at a site.
+  const docGrid = new Map<number, { x: number; y: number; path: number }[]>()
+  docSets.flat().forEach((sp, path) => {
+    for (const q of flattenSubPath(sp)) {
+      const k = key(cellOf(q.x), cellOf(q.y))
+      const bucket = docGrid.get(k)
+      if (bucket) bucket.push({ x: q.x, y: q.y, path })
+      else docGrid.set(k, [{ x: q.x, y: q.y, path }])
+    }
+  })
+
+  const sites: TangentBreak[] = []
+  for (const c of uniq) {
+    if (c.x < BORDER_EPS || c.y < BORDER_EPS || c.x > w - BORDER_EPS || c.y > h - BORDER_EPS) continue
+    const gx = cellOf(c.x)
+    const gy = cellOf(c.y)
+    let bch: TurnChain | null = null
+    let bi = -1
+    let bd = Infinity
+    const near: { ch: TurnChain; d: number }[] = []
+    const paths = new Set<number>()
+    for (let ox = -1; ox <= 1; ox++)
+      for (let oy = -1; oy <= 1; oy++) {
+        const k = key(gx + ox, gy + oy)
+        for (const e of grid.get(k) ?? []) {
+          const d = Math.hypot(e.ch.pts[e.i].x - c.x, e.ch.pts[e.i].y - c.y)
+          if (d <= CELL) near.push({ ch: e.ch, d })
+          if (d < bd) {
+            bd = d
+            bch = e.ch
+            bi = e.i
+          }
+        }
+        for (const q of docGrid.get(k) ?? []) if (Math.hypot(q.x - c.x, q.y - c.y) <= KINK_JUNCTION) paths.add(q.path)
+      }
+    if (!bch || bd > KINK_NEAR) continue
+    if (paths.size >= 3) continue
+    let otherShape = Infinity
+    for (const e of near) if (e.ch.shape !== bch.shape && e.d < otherShape) otherShape = e.d
+    if (otherShape <= KINK_CROSS) continue
+    const s = bch.pts[bi]
+    if (!visible({ x: s.x, y: s.y, tx: s.tx, ty: s.ty })) continue
+    if (gtKinks.some((g) => Math.hypot(g.x - c.x, g.y - c.y) <= CORNER_MATCH_R)) continue
+    if (chainTurn(bch, bi, KINK_WIN) >= BREAK_SMOOTH_MAX) continue
+    const kink = Math.acos(Math.max(-1, Math.min(1, c.itx * c.otx + c.ity * c.oty))) / deg
+    sites.push({ x: c.x, y: c.y, kink })
+  }
+  sites.sort((a, b) => b.kink - a.kink)
+  return { count: sites.length, worst: sites.length ? sites[0].kink : 0, sites }
+}
+
+// ---------------------------------------------------------------------------
 // CIRCLE RECOVERY (§24 / issue #10) — a boundary the artist drew as ONE circle
 // must come back as that circle, whether or not crossings cut it into arcs.
 //
@@ -1622,6 +1759,7 @@ export function scoreGeometry(
   const cornersRecovered = matchCorners(gtCornerVis, sharpCorners(docSets), CORNER_MATCH_R)
   // …and the PRECISION half of the same question, blind in this corpus until §23.
   const invented = inventedCorners(gt, docSets, w, h, visible)
+  const breaks = tangentBreaks(gt, docSets, w, h, visible)
 
   const gGrid = new SegGrid(G.segs)
   const dGrid = new SegGrid(D.segs)
@@ -1663,6 +1801,8 @@ export function scoreGeometry(
     cornersRecovered,
     cornersInvented: invented.count,
     worstInventedExcess: invented.worstExcess,
+    tangentBreaks: breaks.count,
+    worstTangentBreak: breaks.worst,
     diagnostics: { gtPoints, docPoints },
   }
 }

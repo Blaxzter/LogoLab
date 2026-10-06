@@ -323,6 +323,24 @@ export const TRUTH_CORPUS: TruthCase[] = [
     gradients: false,
     tier: 0,
   },
+  // §42's fixture: rounded polygons at the sizes an icon has them — rounded rects and
+  // stadiums upright and rotated, a tab, a rounded triangle, a map pin whose head goes the
+  // long way round, a concave fillet, a rounded hexagon — with the shapes that must NOT be
+  // read as them in the same picture (disc, ellipse, sector, sharp octagon, squircle,
+  // chamfered rect). `smooth-radii` could not carry this: its ten rounded rects are all
+  // upright, all 90°, and half of them under 4px at this raster. The gate that reads it is
+  // `tangentBreaks`: 36 with the rounded-polygon fit off, 9 with it on, and the 9 are the
+  // two shapes authored at the edge of the regime (an r = 2.5px rect and a rect whose
+  // corners leave 4px of flat between them); at the flat cap it is 0. genEdgeCases.ts
+  // documents the rack.
+  {
+    name: 'round-polys',
+    svg: 'public/examples/edge-cases/round-polys.svg',
+    note: 'rounded polygons, and the discs / sectors / squircles that are not (§42)',
+    gradients: false,
+    tier: 0,
+    gated: true,
+  },
   {
     name: 'shaded-ink',
     svg: 'public/examples/edge-cases/shaded-ink.svg',
@@ -620,6 +638,7 @@ const LOWRES_TIER0_UNSCORABLE = ['peak-drop']
 
 /** Cases whose §23 per-case allowance applies (see INVENTED_ALLOWED). */
 export const inventedMaxFor = (name: string): number | undefined => INVENTED_ALLOWED[name]
+export const tangentBreaksMaxFor = (name: string): number | undefined => TANGENT_BREAKS_ALLOWED[name]
 
 /** Cases whose §24 per-case allowance applies (see CIRCLE_SPREAD_ALLOWED). */
 export const circleSpreadMaxFor = (name: string): number | undefined => CIRCLE_SPREAD_ALLOWED[name]
@@ -755,6 +774,48 @@ const INVENTED_ALLOWED: Record<string, number> = {
   // ends and the 2px-radius rounded corners. This is the defect the metric was built to
   // see, measured on a case authored to hold still while it is fixed.
   'smooth-radii': 12,
+}
+
+/**
+ * §42 — TANGENT BREAKS. Kinks the trace asserts on boundary the art draws smooth, from 5°
+ * up (`geomScore.tangentBreaks`); `cornersInvented` above only counts kinks of 60° and
+ * more, so a rounded rectangle whose every side met its corner at a 15° break scored as
+ * clean. Zero tolerance for the same reason as that gate: the art is smooth there.
+ *
+ * CALIBRATED @512 on 2026-10-06 over the tier-0 flat corpus, with the rounded-polygon fit
+ * off and on: 101 → 33 in total, and the fit moves exactly three cases (`smooth-radii`
+ * 41 → 12, `shaded-ink` 12 → 0, `round-polys` 36 → 9) with every other number unmoved.
+ * Sixteen of the corpus's flat cases read 0.
+ *
+ * FLAT art, @512 only — §23's scoping, for §23's reasons.
+ */
+const TANGENT_BREAKS_MAX = 0
+
+/**
+ * Cases that carry tangent breaks on the SHIPPED tracer, with the count measured at
+ * authoring. Allowances rather than KNOWN_DEFECTS entries for INVENTED_ALLOWED's reason
+ * (KNOWN_DEFECTS is keyed by case and would switch every other gate off on them), and
+ * with the same contract: named, explained, and they can only come down.
+ */
+const TANGENT_BREAKS_ALLOWED: Record<string, number> = {
+  // What the rounded-polygon fit does not reach here: the two r = 2 / 3 px rect pairs
+  // (under its radius floor at this raster — the corner is traced sharp), and the 1:4 to
+  // 1:8 ellipse ends, which are §0 #16's other anatomy and not a polygon at all.
+  'smooth-radii': 12,
+  // Row 5 of the rack, authored at the edge of the regime: the r = 1.25-unit rect (2.5px
+  // here, under the radius floor) and the narrow rect whose two corners leave 4px of flat
+  // between them (weak against r = 11, and not one arc either). Both read 0 at the flat cap.
+  'round-polys': 9,
+  // The two AA-seam nodes `cornersInvented` already counts for this case.
+  'peak-drop': 2,
+  // Sub-pixel bar caps — the four `cornersInvented` counts plus one 7° cap join.
+  hairlines: 5,
+  // Three joins on the nested blobs' free-form outlines (59° / 30° / 12°): the general
+  // loop fit's own C⁰ joins, on curves that are not arcs. The open half of §0 #16.
+  nebula: 3,
+  // One 38° node on a sector's arc, one 8° node on a fan stem.
+  'corner-turns': 1,
+  'border-cross': 1,
 }
 
 /**
@@ -926,6 +987,11 @@ export function evaluateTruthGates(s: {
   cornersInvented?: number
   /** Per-case allowance for the above — see INVENTED_ALLOWED. */
   inventedMax?: number
+  /** Tangent breaks on smooth authored boundary (geomScore.tangentBreaks). Omitted ⇒ the
+   *  gate reports n/a. */
+  tangentBreaks?: number
+  /** Per-case allowance for the above — see TANGENT_BREAKS_ALLOWED. */
+  tangentBreaksMax?: number
   /** Authored circles found (geomScore.circleRecovery.circles) and the worst per-circle
    *  co-circularity spread. Omitted, or 0 circles ⇒ the circle gate reports n/a. */
   circles?: number
@@ -1077,6 +1143,24 @@ export function evaluateTruthGates(s: {
       pass: !(s.flatArt && s.cornersInvented !== undefined) || s.cornersInvented <= (s.inventedMax ?? INVENTED_MAX),
       headroom:
         !(s.flatArt && s.cornersInvented !== undefined) || s.cornersInvented <= (s.inventedMax ?? INVENTED_MAX)
+          ? 1
+          : -1,
+      digits: 0,
+    },
+    {
+      // §42 — the same question below the corner bar. A rounded rectangle whose every
+      // side meets its corner at a 15° break has no "invented corner" and is still not
+      // the shape that was drawn; this counts the break itself, from 5° up.
+      key: 'breaks',
+      label: 'tangent breaks',
+      rule: `≤ ${s.tangentBreaksMax ?? TANGENT_BREAKS_MAX}`,
+      value: s.tangentBreaks ?? 0,
+      limit: s.tangentBreaksMax ?? TANGENT_BREAKS_MAX,
+      applicable: s.flatArt && s.tangentBreaks !== undefined,
+      pass:
+        !(s.flatArt && s.tangentBreaks !== undefined) || s.tangentBreaks <= (s.tangentBreaksMax ?? TANGENT_BREAKS_MAX),
+      headroom:
+        !(s.flatArt && s.tangentBreaks !== undefined) || s.tangentBreaks <= (s.tangentBreaksMax ?? TANGENT_BREAKS_MAX)
           ? 1
           : -1,
       digits: 0,

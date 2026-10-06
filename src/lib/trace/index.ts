@@ -348,11 +348,14 @@ function planarFitOptionsFor(options: VectorizeOptions): PlanarFitOptions {
   // smoothing 0 means no pre-smoothing at all (a raw staircase trace); the default
   // of 50 suits most art. Flat (gradients-off) art uses a higher line cost so curves
   // prefer cubics over faceted chords; gradient art keeps the conservative default.
+  // The rounded-polygon reading is a snap to primitives, so it follows the two dials that
+  // ask for none: smoothing 0 (a raw staircase) and fidelity 0 (no beautify).
   // `options.planarFit` (advanced) overrides any tunable.
   return {
     ...DEFAULT_PLANAR_FIT,
     lineCost: options.gradients === false ? FLAT_LINE_COST : DEFAULT_PLANAR_FIT.lineCost,
     smoothPasses: s === 0 ? 0 : Math.max(1, Math.round(s * 4)),
+    fillets: s > 0 && (options.fidelity ?? DEFAULT_BEAUTIFY_OPTIONS.fidelity) > 0,
     ...(options.planarFit ?? {}),
   }
 }
@@ -433,6 +436,7 @@ export async function traceImage(
         onReseatVerdict: fitOpts.onReseatVerdict,
         reseatTune: fitOpts.reseatTune,
         onArcLoop: fitOpts.onArcLoop,
+        rounded: trace.rounded,
       },
     )
     weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, width, height, reseated)

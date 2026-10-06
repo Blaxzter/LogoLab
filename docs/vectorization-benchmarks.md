@@ -32,7 +32,7 @@ guardrails):
 | 9 | **Gradient banding** — a stack of translucent gradients traced as regions the art does not contain. *Deprioritised: off the product target* | `fluent-olive` (tier 1, gated, in `KNOWN_DEFECTS`); `black-circle` (ungated) | olive p95 97px; black-circle 31.3px invented; 10.8× invented vs flat | §8.3, §8.5 |
 | 10 | **Dropped gradient boundary** — verified-visible authored edges simply lost on gradient art. *Deprioritised, distinct from banding* | `speaker-low-volume`, `chart-decreasing` (tier 1, ungated) | missed 16.9 / 15.3px — re-verified 2026-07-15 under visibility-aware scoring (§9.6): survives occlusion exclusion, so it is REAL | §8.5 |
 | 15 | **CLOSED — not planned** (2026-08-23). The turn IS under-read on the lattice (§21, unretracted: `detectCorners` reads two chords ±4 POINTS on the integer staircase, and recovery falls from 96.3% at 90–105° of authored turn to **55.1%** at 60–65°). The ISSUE is what closed, on four grounds: its target metric is corner RECALL, which has no precision term — so “find more corners” and “invent corners” are the same instruction, and §22 optimising it produced visible kinks; a missed 60° corner is a gentle bend drawn as a gentle curve while an invented one is a visible kink, so it spends the detector's budget on the invisible direction; row #16 shows the tracer already errs the OTHER way on the SAME knob (12 invented corners on art with none), so the two rows pulled one lever in opposite directions; and the framing was refuted twice (§21's seam truncation, §22's reading) with a named witness authored at exactly 60.0° — the detector's bar AND the scorer's bar — which no reading can reliably clear. The one defensible remnant is `gear-teeth` **53/60**, where the corners are unambiguous (67.3° roots on a mechanical shape); it carries on as a narrow case, not a corpus-wide detector change | `corner-turns` (tier 0, gated — kept: an authored-turn sweep is a good corner-recall case regardless); `gear-teeth` 53/60 | the cliff, unchanged and still measurable with `needleDiag --turns` / `turnDiag` | **§21**, **§22**, issue [#23](https://github.com/Blaxzter/LogoLab/issues/23) (closed not-planned). **Corner work continues at row #16** |
-| 16 | **The trace INVENTS corners on smooth art** — sharp nodes the authored geometry does not contain, on ellipse ends and straight→arc blends. Newly VISIBLE rather than newly introduced: `cornersRecovered` is a recall number with no precision term, so this was free by every gate here until §23 built `cornersInvented`. It is the measured form of “every nice radius has a kink in it”, and it is why §22 was rejected on sight after passing CI. The metric asks a like-for-like question at the corner's own scale — the traced node's C⁰ kink minus the AUTHORED boundary's turn over ±1px — and exempts the four places a trace is right to corner (canvas border, occluded boundary, traced junctions of degree ≥3, authored crossings) | `smooth-radii` (tier 0, **gated**, authored for this: art with NO corners at all — ellipses 1:1→1:8 in both orientations, rounded rects at 2/3/5/8/12px radii, curvature-ramp eggs) | **12** invented on a case with zero authored corners; corpus-wide over the 23 gated tier-0 cases, flat lane: p50 0, p90 2, max 12, **18 over 3 cases** (`smooth-radii` 12, `hairlines` 4, `peak-drop` 2). The rejected §22 reading takes `smooth-radii` to **18** | **§23**; instrument `bench/kinkDiag.ts` (`--gate`, `--probe x,y`, `--compare`). Gate scope today: FLAT art, @512 only — gradient banding and the halved radii at @256 are each their own calibration (§23.3) |
+| 16 | **The trace kinks smooth art** — HALF CLOSED 2026-10-06 (§42). The row was filed on `cornersInvented`, a count of kinks ≥ 60°, and that count understated it threefold: at the flat cap `smooth-radii` carries 36 traced nodes with a tangent break ≥ 5° on art that has none, 35 of them under the bar — the line→arc joins of its rounded rectangles. `geomScore.tangentBreaks` is the lens for that (§42.4) and is gated beside `cornersInvented`. WHAT CLOSED: a closed loop that is straight runs joined by tangent arcs — rounded rect, stadium, tab, map pin, concave fillet — is read as exactly those primitives before the general fit (`planarFit/fillet.ts`); tier-0 flat @512 **101 → 33** breaks with three cases moving and no other number changing, `round-polys` 36 → 9 @512 and 40 → **0** at the flat cap. WHAT REMAINS, each named in §42.5: (a) **ellipse ends** — six of `smooth-radii`'s twelve invented corners, thin ellipses traced as lenses or chamfered tips; an ellipse is not a polygon and this fit does not touch it; (b) corners **under r = 3.5px** stay sharp (the other six @512); (c) the general fit's **line→curve joins on free-form outlines** are still C⁰ (`nebula` 3) — a G¹ line candidate in the DP is the fix; (d) **open edges**: a rounded rect cut by another shape; (e) **slanted sides on transparent art**: EXT-sided chains stay on the lattice, so only upright shapes read there | `smooth-radii` (tier 0, **gated**: ellipses 1:1→1:8, rounded rects 2–12px, eggs), `round-polys` (tier 0, **gated**, authored for §42: the polygon family at icon sizes, with the discs / sectors / squircles that must not be read as it) | invented: `smooth-radii` **12** (unchanged @512: six sub-floor corners, six ellipse ends), `hairlines` 4, `peak-drop` 2. Tangent breaks, allowed per case: `smooth-radii` 12, `round-polys` 9, `hairlines` 5, `nebula` 3, `peak-drop` 2, `corner-turns` 1, `border-cross` 1; sixteen flat cases read 0 | **§23**, **§42**; instruments `bench/kinkDiag.ts` (`--gate`, `--probe x,y`), `bench/filletDiag.ts` (census against the authored art, `--list`, `--breaks`), `bench/nodeLook.ts` (the nodes, drawn) |
 | 18 | **Near-colour flats fused into a gentle "ramp"** (gradient lane) — the residue of §26. Two flat objects whose colours differ by a small Oklab step are still unioned by the Step-3c field merge and painted as one shallow gradient, because at the veto's window scale (1/24 of the fitted axis) a step of ≤ 0.09 is indistinguishable from a real steep ramp piece: the honest reunites in gradient-authoring art reach 0.078 (`logo-firefox`), the fakes in this family read 0.019–0.086, and the census found no scale-W separation. §26 raised the catch rate of the flat∪flat fusion family from 0 to 41 of 60 labelled rows; these are the 19 it does not reach. The product exposure is bounded: `suggestGradients` keeps flat art out of the lane, so this is the mixed-art case only | `flute-flat` (A/B fixture lane, ungated: 16 of its 19 flat∪flat unions read ≤ 0.080), `logo-chrome` (gallery, 0.086), `seam-corner` (0.030), `bloom` (0.019) | fakes 0.019–0.086 vs the real maximum 0.078 — no threshold separates them | **§26.6**; instrument `stepRampDiag --census` (labelled by the SOURCE's authored paint) |
 | 17 | **A circle's whole boundary sits off its authored radius by a near-constant amount** — a BIAS, not a wobble: the trace is perfectly round and in the wrong place. Found by §24's circle lens on the day it landed, and only because that lens reports the mean residual SEPARATELY from the spread — the raw p95 reads 0.81 and looks exactly like the ring wobble, while the co-circularity spread is 0.03. Every other gate is blind: 0.8px is far inside chamfer/p95, and the shape is still round, so no corner or region lens sees it either. NOT a size law and not yet explained — the two worst circles are the same size and disagree in SIGN. Untouched by §24, whose family pass only reaches circles cut into arcs | `acute-counter` (tier 0, gated, passes — the gate is on spread, not bias) | seven authored circles read |bias| 0.09–**0.79**px: r=40.5 at **−0.79** (traced inside) against r=39.5 at **+0.19** (outside) and r=58.6 at +0.16 | **§24.3**, **§25.3**; instrument `ringDiag --circles` (the `bias` column, and since §25 the `centre` / `round` columns — a circle in the wrong PLACE is a third term `spread` folds in, and on `olympic-rings` it is now the whole residue: measured identical under an algebraic and a geometric fit, so the evidence is displaced and no estimator recovers it) |
 | 19 | **The junction re-seat moves a junction AWAY from its authored crossing** — the residue of §29 after the through-pair veto: 16 of 62 gallery re-seats on scorable crossings (128 marks, 512/1024/2048) still land further from the crossing than the lattice corner they left. Three mechanisms, none of them the certification constant issue #39 was filed on: a cap-skip that drops a REAL short terminal (an authored r=6 curve, 11.6 px at 1024) and extrapolates the line beyond it to the junction — audit recipe 10, `CAP_MAX`'s zero-margin populations; two huge-radius circle arms (r≈535 × r≈1104) whose intersection is ill-conditioned; and stub arms of 8 native px paired at a 14° angle. Visible on the mark at 1×: the junction sits 1.8–3.1 px off a crossing the lattice had within 0.3 | `logo-brave-browser` @512 (258,474) and @1024 (259,474) artwork px (gallery, ungated — the §29 gate covers the witness junction only); the answer sheet is `authoredCrossings` | 3.12 px off vs 0.29 lattice (C+C @512); 1.78 vs 0.18 (cap-skip @1024); gallery-wide 16 / 62 | **§29.4**; instruments `reseatDiag --lanes` (census, `--json`) and `reseatSelect --worse` (offline, per pair) |
@@ -7536,3 +7536,174 @@ showing through" and was left out too (ΔE 0.57 → 2.26 on the gate's Orbit). A
 side-by-side completion involves is never left out — something other than the plate may
 lie under it. Nested rings of two colours: every ring stays a ring, one item per colour.
 
+---
+
+## 42. Rounded polygons: straight runs joined by tangent arcs (§0 #16, 2026-10-06)
+
+§0 #16 was filed on a count — twelve invented corners on `smooth-radii`, art with none — and
+that count understated it by a factor of three. `cornersInvented` only sees a kink of 60° or
+more. Traced at the flat cap, the same case carries **36** nodes with a tangent break of 5° or
+more on boundary that has no tangent break anywhere, and all but one of them is under the bar:
+they are the line→arc joins of the rounded rectangles, at 3–24°. `shaded-ink`'s three rounded
+bars read 15 the same way, with zero "invented corners". That is the measured form of "every
+nice radius has a kink in it", and it is the most common shape an icon has.
+
+### 42.1 Why the fitter could not say "rounded rectangle"
+
+Three paths, all wrong on this shape, by construction rather than by tuning:
+
+* **Above r ≈ 7.6px** the loop has no detected corner and goes to `fitClosedLoop`, whose DP
+  offers a LINE between adjacent key vertices as C⁰ at both ends and nothing else. A line can
+  therefore never join an arc G¹: every side→corner join is a `corner` node, and the two
+  curves either side of it were fitted free. The arc itself runs between two RDP key
+  vertices that sit a few px INSIDE the real arc (a 12px corner is fitted over 9×10 instead
+  of 12×12 and bulges to make up for it).
+* **Under it** the ±4-point turn reading fires and the corner goes to the apex snap: one
+  sharp node on the arm intersection, 1.2px outside a 3px arc.
+* **And the evidence was being discarded on the way in.** The sub-pixel pass reverts any zone
+  that turns more than 35° over ±4 chain steps to the lattice, so that a sharp apex is not
+  melted. On a diagonal a chain step is 0.7px, so that guard takes the middle of every arc up
+  to r ≈ 9px — the one stretch a radius has to be read from. Where the estimator's points
+  survive they sit 0.00–0.19px off the authored arc.
+
+### 42.2 The fit (`src/lib/trace/planarFit/fillet.ts`)
+
+A closed loop is read as primitives BEFORE the general fit, and taken only if that reading
+explains all of it:
+
+1. **Runs.** RDP at 0.3px over the MEASURED points seeds the straight runs; each is certified
+   by a least-squares line that holds every point within 0.2px, walking outward from its
+   middle (a key vertex is exactly where the chain leaves the line, so trimming inward from
+   the ends keeps the wrong point).
+2. **Gaps.** Between two consecutive runs the only circle that joins them G¹ is tangent to
+   both lines. That is a ONE-parameter family, so the fit is a 1-D least squares on the gap's
+   own points, not a free circle fit over a short arc: with the first tangent point `u` px
+   past run A's end, r(u) = s·n₂·(T₁ − c_B) / (1 − cos θ) is linear in `u`. The same formula
+   holds at θ = 180° (r is the half-separation and `u` slides the cap — a stadium) and the
+   long way round (a map pin's head), where a parametrisation by the line intersection has
+   nothing to hold on to.
+3. **Verdict.** Every gap must be an arc, or a corner (an arc under the floors below: the node
+   goes on the line intersection), and at least one must be an arc. Anything else returns
+   null and the loop takes the general fit untouched. Arcs are emitted as kappa pieces of at
+   most 100° between `smooth` tangent nodes that carry ONE handle, the arc's.
+
+The loop reads `RawSubpixelChain` — the estimator's points before the corner guard, with a
+`measured` flag per point. A point the estimator declined is a stray: 0.75px of tolerance
+instead of 0.35, a fifth of the weight, and never the end of a run.
+
+Radius recovery on `smooth-radii`, authored → read in that raster's px: @512 5 / 8 / 12 →
+5.2 / 8.1 / 12.1; @1024 10 / 16 / 24 → 10.1 / 16.1 / 24.0; @2048 20 / 32 / 48 → 20.0 / 32.0 /
+48.1. The +0.1–0.2 at small radii is the raster's own rounding (r̂² ≈ r² + 1.6) and is left in.
+
+### 42.3 The rules that were false positives first
+
+A miss here is the status quo; a false positive is a regression. Each of these was measured
+on the fixtures or the gallery before the rule existed.
+
+| reading | what it really was | the rule |
+|---|---|---|
+| a rounded SQUARE, four 90° arcs r = 38.9 | a **disc** r = 40: its four flat extremes certify as runs (12.5px of chord or more each) | a run is WEAK when it would not visibly leave the circle of the arc beside it (sagitta L²/8r < 0.75px — above the 2·0.2 a certified run can hide; 1.5 on a chain that was never measured, where a row of cracks stands for a whole pixel), or when the two tangent points leave under 4px of it |
+| a rounded TRIANGLE, 90° + 93° + 180° | the same disc, three chords left | weak runs go back to being gap, all at once, to a fixpoint; a weak run is **never kept**. Three rules for keeping one were built (a free circle over the stretch, the joined arc's excess, the straight length left) and each turned on a few hundredths of a pixel: the same test kept the 4px flat between a narrow rect's two corners and three chords of a circle |
+| two runs and two "87° arcs" | a disc, the long way round | which way round is read off the CHAIN's own turning, a point's place (run A / arc / run B) by its order in the chain, and the turns must sum to 360° |
+| corner, short line, 90° arc, short line, corner | a **sector**: its arc meets the lines at corners | falls out of "never kept": the chord after the corner is weak and no tangent arc replaces it |
+| a 4.0px "fillet" at a 45° turn (`twitch`) | a sharp vertex: at 45° an r = 4 arc stands 0.33px off its corner | two floors — r ≥ 3.5px AND a stand-off r·(sec(θ/2) − 1) ≥ 1px. The radius read at 404 real corners on the fixtures: p50 0.43, p99 2.22, max 2.82 |
+| five sharp corners and one round (`hack-the-box` @1024) | six corners reading r = 5.8–6.5 across the floor | one loop, one answer: a corner the floors left sharp that reads ≥ 0.7× the radius of one they rounded, at the same turn, makes both sharp |
+| two chords with a 10° "corner" between them | a gentle curve | a sharp corner needs L·θ/8 ≥ the same sagitta on both runs — a 9° vertex needs 37px of line each side (a SoundCloud bar's waist has 70), a 90° one 4 |
+| a correctly read bar → a spindle | beautify's "within 1.5px of an ellipse" snap, which a loop with no 60° corner no longer vetoes | emitted loops are exempt from 1a (`PlanarTrace.rounded`) |
+| `gap-unexplained`, excess 0.01px | a triangle reading 48.01 / 48.03 / 48.04 for an authored 48, with ONE point 0.36 off | up to 5% of the points a test reads may exceed tolerance, none by more than 0.4px. A wrong model is not a few points: a squircle read as four arcs misses by 1.2px along a whole corner |
+| no run at all on a 20° side | the estimator declines at the inside corner of every stair step — a stray every third point, half a pixel off | seeds are polygonalised from the measured points only |
+
+### 42.4 What it measures
+
+`geomScore.tangentBreaks` is the lens the row needed: the traced kink ITSELF, from 5° up,
+wherever the art is smooth at the node's scale. An authored kink (≥ 3°) within
+`CORNER_MATCH_R` explains it — including a shallow vertex the 60° lens does not call a corner
+— and an authored turn of 40° or more over ±1px takes the site out (a corner, or an arc under
+~3px). It does not subtract the authored window turn the way `cornersInvented` does: on an
+r = 12 arc the art turns 9.5° per ±1px, and a 15° kink laid on it is a 15° defect.
+
+Tier-0 flat corpus @512, fit off → on (`filletDiag --breaks`): **101 → 33**. Exactly three
+cases move and nothing else changes in any column:
+
+| case | breaks 512 | 1024 | 2048 | chamfer 512 | 1024 | 2048 |
+|---|---|---|---|---|---|---|
+| `smooth-radii` | 41 → 12 | 45 → 4 | 36 → 6 | 0.200 → 0.153 | 0.183 → 0.120 | 0.194 → 0.147 |
+| `round-polys` (new) | 36 → 9 | 24 → 0 | 40 → 0 | 0.262 → 0.117 | 0.217 → 0.044 | 0.185 → 0.045 |
+| `shaded-ink` | 12 → 0 | 9 → 0 | 15 → 0 | 0.131 → 0.054 | 0.077 → 0.041 | 0.091 → 0.054 |
+
+Corner recall is unchanged on every case (round-polys 14/14 both ways); `cornersInvented`
+is unchanged (`smooth-radii` stays 12 @512: six are r = 3px corners, under the radius floor
+at that raster, and six are ellipse ends).
+
+**`round-polys`** (tier 0, gated) is the fixture: rounded rects and stadiums upright and at
+five rotations, a tab, a rounded triangle, a map pin, a concave fillet, a rounded hexagon —
+and, in the same picture, the disc, ellipse, sector, sharp octagon, squircle and chamfered
+rect that must not be read as them. `smooth-radii` could not carry it: its rounded rects are
+all upright, all 90°, and half of them under 4px at 512. What the general fit does to a
+rotated rounded rect 80px across is not subtle — lumpy asymmetric corners, a pin with
+S-curved flanks, a hexagon with curved sides — and is the before half of the pair.
+
+The gallery (`filletDiag --logos`, 152 marks, white ground):
+
+| lane | loops weighed | emitted (marks) | arcs | checked against the authored art | on an authored sharp corner |
+|---|---|---|---|---|---|
+| colour @1024 | 1,207 | 37 (20) | 98 | 69 | **0** |
+| mono @1024 | 1,182 | 27 (16) | 61 | 41 | **0** |
+| colour @2048 | 1,246 | 46 (20) | 131 | 109 | **0** |
+
+What it reads is what a designer would name: LINE's and Snapchat's plates (r = 100 and 40 at
+1024), Oracle's O as a stadium, Android's body and limbs, daisyUI's pill, CNN's whole
+logotype as ONE loop of sixteen arcs and corners, the SoundCloud bars with the 9° vertex at
+their waist. The radius read at the 2,758 corners it leaves sharp at 1024: p50 1.03, p90 1.84,
+p99 3.68 — the tail is authored micro-rounding (LINE's letters read r = 3.3 at 1024 and are
+sharp there; at 2048 they read 6.5 and are arcs).
+
+Every arc is checked against the AUTHORED art: one whose apex sits on a vertex the artist
+drew sharp would have rounded a real corner. Zero of 219 across the three runs. (Not
+checked: U-turns, which round no corner, and marks whose SVG the ground-truth reader cannot
+score.) The check has to look AT the apex: the first version searched the arc's whole
+stand-off radius and reported thirteen hits, every one an unrelated corner inside the 40–7,000px
+"stand-off" of a 170° cap.
+
+### 42.5 Scope, and what is left
+
+* **Closed loops only.** A rounded rect that another shape cuts is open edges between
+  junctions and still takes the general fit.
+* **A slanted side needs measured points.** On art over TRANSPARENCY the silhouette is an
+  EXT-sided chain, which the sub-pixel pass leaves on the lattice (it has no second colour to
+  read; the alpha it does have is not used). Upright shapes still read — `round-polys` on
+  alpha @2048: the ten upright ones of sixteen — but a rotated side is a staircase and
+  certifies nothing. Giving EXT chains a crossing from their alpha is the next lever, and it
+  is its own change: every corner threshold downstream is calibrated on that staircase.
+* **Under r = 3.5px** a corner is sharp: the radius read at a real one reaches 2.8.
+* **Enlarged art mostly does not read.** The sub-pixel estimator's window assumes a
+  one-pixel ramp, so on a bilinear-enlarged raster (the mono upscale) it declines, the chain
+  is unmeasured, and a slanted or curved stretch certifies nothing: the fixtures at 256
+  enlarged ×2 / ×3 / ×4 emit 7 / 3 / 0 loops in mono (none on an authored corner, and the
+  largest radius read at a sharp one is 2.2 enlarged px).
+* **A weak side is a miss.** A rect whose corners leave a flat shorter than √(6r) between
+  them (4px between two r = 22 corners) is neither a polygon nor one arc, and takes the old
+  path. `round-polys` row 5 holds one, and it is 4 of the case's 9 allowed breaks at 512.
+* **Free-form curves** are untouched: `nebula`'s three breaks, the ellipse ends, the eggs.
+  The general fit's lines are still C⁰ at both ends; a G¹ line→curve join in the DP is the
+  other half of #16.
+
+`test/planar-fillet.test.ts` is the gate (14 tests on synthetic outlines, one per rule);
+`before-fillets` ⇄ `after-fillets` is the pair: **33 of 244 files move**, and in every one
+the render is as close to its own input as before or closer (`before-fillets` ⇄ `after-fillets`;
+with the fit switched off the working tree is byte-identical to `before-fillets` on all 240
+files it shares, so the plumbing — the raw chain, the measured mask, the exemption — is inert).
+The three fixtures and `logo-android` move in every lane, `logo-affinity-designer` in mono and
+grad, `aurora` in grad. The part that was not designed for is the other half: **fourteen
+line-art outlines** (the mono lane of five ⌇ cases, five ◎ Lucide icons and `outline`; the flat
+lane of four colour line-art cases). A stroke with round caps and joins IS a rounded polygon,
+so with Strokes off a Lucide icon's outline comes back as the lines and arcs it was stroked
+with: `cl-lucide-camera` flat, mean |ΔRGB| against its input 0.087 → 0.009; the five Lucide mono
+icons' share of pixels off by more than 48, 0.03–0.08% → 0.011% or less. On the user's own
+`schild.png` (2048, the golden corpus's `schild-flat`) four pill bars and one filleted counter
+read; that golden entry moves with this change and is not re-blessed here (`bloom-flat` and
+`aurora-flat` were already advisory before it — same hashes with the fit off).
+
+Cost: none that a stamp can see — `smooth-radii` @2048 traces in 2.7 s both ways; the pass is
+one RDP and a handful of 1-D fits per closed loop, and a loop with no straight run leaves at
+the first step.

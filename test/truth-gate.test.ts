@@ -47,6 +47,7 @@ import {
   LOWRES_RES,
   LOWRES_TOL,
   inventedMaxFor,
+  tangentBreaksMaxFor,
   circleSpreadMaxFor,
   TIER2_REGION_CORPUS,
   TIER2_REGION_RES,
@@ -198,7 +199,13 @@ async function runCase(
   // Named in §23.3 as the next thing to extend.
   const precision =
     res === RES && !(opts.skipTier2Corners && c.tier === 2)
-      ? { cornersInvented: g.cornersInvented, inventedMax: inventedMaxFor(c.name) }
+      ? {
+          cornersInvented: g.cornersInvented,
+          inventedMax: inventedMaxFor(c.name),
+          // §42's lens rides the same scoping: flat art, @512.
+          tangentBreaks: g.tangentBreaks,
+          tangentBreaksMax: tangentBreaksMaxFor(c.name),
+        }
       : {}
   // §24's circle recovery, @512 only for §23's reason (every radius halves at 256, so the
   // same relative error is half the pixels there — its own calibration, not this one's).

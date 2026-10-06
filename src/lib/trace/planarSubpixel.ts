@@ -117,6 +117,18 @@ export interface SubpixelDiagRecord {
 export type SubpixelDiag = (r: SubpixelDiagRecord) => void
 
 /**
+ * A closed chain as the estimator read it, BEFORE the corner self-guard: `pts[i]` is the
+ * displaced point wherever `measured[i]` is 1 (a zero displacement is a measurement too)
+ * and the lattice point elsewhere. The guard reverts every zone that turns sharply, which
+ * includes any arc under r ≈ 9px — the stretch the rounded-polygon fit (planarFit/fillet)
+ * has to read; it carries its own protection against a rounded apex.
+ */
+export interface RawSubpixelChain {
+  pts: Vec[]
+  measured: Uint8Array
+}
+
+/**
  * Compute sub-pixel positions for every edge chain in the network. Returns edgeId →
  * displaced pts (same length, same indices — corner indices detected on the raw chain
  * remain valid). Open-edge endpoints are never displaced: junction placement is handled
@@ -133,6 +145,8 @@ export function subpixelEdgeChains(
   image: SourceImage,
   diag?: SubpixelDiag,
   windowGuard = true,
+  /** Filled, when given, with every closed chain's `RawSubpixelChain`. */
+  raw?: Map<number, RawSubpixelChain>,
 ): Map<number, Vec[]> {
   const { width: w, height: h, data } = image
   const labelAt = (x: number, y: number): number => {
@@ -196,6 +210,7 @@ export function subpixelEdgeChains(
     if (n < 3) continue
 
     let displaced: Vec[] | null = null
+    const measured = raw && e.closed ? new Uint8Array(n) : null
     const lo = e.closed ? 0 : 1
     const hi = e.closed ? n - 1 : n - 2
 
@@ -321,6 +336,7 @@ export function subpixelEdgeChains(
         say('max-disp', Number.isFinite(delta) ? delta : 0)
         continue
       }
+      if (measured) measured[i] = 1
       if (delta === 0) {
         say('zero')
         continue
@@ -331,6 +347,8 @@ export function subpixelEdgeChains(
       say('moved', delta)
     }
 
+    // revertCorners replaces elements, so a shallow copy keeps the measured points.
+    if (measured && raw) raw.set(e.id, { pts: displaced ? displaced.slice() : pts, measured })
     if (displaced) {
       const reverted = revertCorners(displaced, pts, e.closed)
       if (diag)

@@ -171,6 +171,12 @@ export const AB_CORPUS: AbCorpusCase[] = [
     path: 'public/examples/edge-cases/corner-turns.svg',
   },
   {
+    id: 'round-polys',
+    name: '⟐ round-polys — rounded rects, stadiums, a pin; and the discs / sectors that are not (§42)',
+    kind: 'svg',
+    path: 'public/examples/edge-cases/round-polys.svg',
+  },
+  {
     id: 'dot-ladder',
     name: '⟐ dot-ladder — 5–32px discs vs squares/diamonds/triangles, the small-disc veto',
     kind: 'svg',
