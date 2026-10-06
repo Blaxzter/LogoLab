@@ -189,6 +189,7 @@ export function VectorizeStudio({
     setColorMode,
     colorModeRef,
     inkPlan,
+    suggestedPlan,
     probePixelsRef,
     forceColorTouchedRef,
     applyInkDecision,
@@ -266,6 +267,15 @@ export function VectorizeStudio({
     retraceVector,
   })
 
+  // A Color/Mono pick is for THIS image: a new one goes back to what the probe reads.
+  // A host that plans the mode itself (the icon sheet) keeps its own.
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setColorMode): a state setter, stable
+  // biome-ignore lint/correctness/useExhaustiveDependencies(colorModeRef): a ref, read when the code runs
+  const onFreshImage = useCallback(() => {
+    setColorMode('auto')
+    colorModeRef.current = 'auto'
+  }, [])
+
   useContentProbe({
     logo,
     assetKey,
@@ -279,6 +289,7 @@ export function VectorizeStudio({
     decidedForRef,
     probePixelsRef,
     colorModeRef,
+    onFreshImage,
     traceHints,
   })
 
@@ -537,6 +548,7 @@ export function VectorizeStudio({
       applyInkDecision(m)
     },
     inkPlan,
+    suggestedPlan,
     monoGuide,
     forceColorOn,
     onForceColorOn: (on: boolean) => {

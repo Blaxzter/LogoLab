@@ -156,9 +156,9 @@ export const CONTROL_DOCS: ControlDoc[] = [
   {
     id: 'mode',
     label: 'Mode',
-    hint: 'Auto counts the inks: one ⇒ Mono (one clean shape), more ⇒ Color.',
+    hint: 'Picked for each image by counting its inks: one ⇒ Mono (one clean shape), more ⇒ Color.',
     blurb:
-      'Whether the art is traced as colour regions or as a single-ink silhouette. Auto counts the inks the image actually uses — fusing tones that are only shading of the same ink — and picks Mono when there is exactly one, because a one-ink mark traced in colour gets CARVED along the line where its light side flips to its shadow side. Auto also sets the mono cut from the ink and background it measured, flips it when the ink is the lighter of the two, and paints the result in the ink’s own colour instead of black. Color and Mono force the choice; a forced Mono still gets the measured cut and the flip.',
+      'Whether the art is traced as colour regions or as a single-ink silhouette. Each image picks for itself: the studio counts the inks it actually uses — fusing tones that are only shading of the same ink — and picks Mono when there is exactly one, because a one-ink mark traced in colour gets CARVED along the line where its light side flips to its shadow side. It also sets the mono cut from the ink and background it measured, flips it when the ink is the lighter of the two, and paints the result in the ink’s own colour instead of black. Clicking the other mode overrides the pick for this image (a picked Mono still gets the measured cut and the flip); the next image is decided afresh.',
     example: bundled('petals', 'petals.png'),
     variants: [
       { label: 'Color', patch: { mode: 'color' } },
@@ -170,7 +170,7 @@ export const CONTROL_DOCS: ControlDoc[] = [
     label: 'Invert',
     hint: 'Ink is lighter than the background — flip which side of the cut is solid.',
     blurb:
-      'Mono makes every pixel DARKER than the threshold solid and drops the rest, which assumes dark ink on light paper. White line-art on a dark ground is the other way round: every pixel of the art sits above the cut, so without this the trace comes back empty (or as the background traced around a hole). Invert flips which side becomes solid. Auto mode sets it for you from the measured ink and background luminance; this is the manual override.',
+      'Mono makes every pixel DARKER than the threshold solid and drops the rest, which assumes dark ink on light paper. White line-art on a dark ground is the other way round: every pixel of the art sits above the cut, so without this the trace comes back empty (or as the background traced around a hole). Invert flips which side becomes solid. The studio sets it for you from the measured ink and background luminance; this is the manual override.',
     example: synthetic('threshold'),
     baseOpts: { mode: 'mono', threshold: 128 },
     variants: [

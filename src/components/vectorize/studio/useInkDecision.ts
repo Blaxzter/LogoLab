@@ -41,6 +41,9 @@ export function useInkDecision({
   // What the probe last saw — drives the "why" line under Mode, and the offer to
   // paint a mono trace in the ink's own colour instead of #000.
   const [inkPlan, setInkPlan] = useState<InkModePlan | null>(null)
+  // What the image reads as with nobody overriding it: the plan the panel offers to go
+  // back to after a manual Color/Mono pick. Equal to `inkPlan` while the probe decides.
+  const [suggestedPlan, setSuggestedPlan] = useState<InkModePlan | null>(null)
   // The probed 512px raster, kept so a Mode flip re-decides without re-decoding.
   const probePixelsRef = useRef<ImageData | null>(null)
   // Pins the force-colour toggle once the user touches it, so the ink offer
@@ -72,6 +75,9 @@ export function useInkDecision({
       colorMode: mode,
     })
     setInkPlan(plan)
+    setSuggestedPlan(
+      mode === 'auto' ? plan : decideInkMode(img, DEFAULT_VECTORIZE_OPTIONS.threshold, { colorMode: 'auto' }),
+    )
     if (!apply) return
     setOpts((o) => {
       const next = applyInkMode(o, plan)
@@ -128,6 +134,7 @@ export function useInkDecision({
     setColorMode,
     colorModeRef,
     inkPlan,
+    suggestedPlan,
     probePixelsRef,
     forceColorTouchedRef,
     applyInkDecision,

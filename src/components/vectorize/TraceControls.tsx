@@ -37,9 +37,12 @@ export interface TraceControlsProps {
   /** What Auto enlargement decided on the last run (null before one, or on the AI path). */
   autoUpscale?: MonoUpscalePlan | null
   /** Colour-vs-mono choice: `auto` defers to the ink probe (src/lib/traceInput/ink.ts). */
+  /** `auto` while the image's own reading decides; a manual Color/Mono pick otherwise. */
   colorMode: InkColorMode
   onColorMode: (m: InkColorMode) => void
-  /** What the ink probe last saw, so Auto can say what it decided and why. */
+  /** What the image reads as with nobody overriding it (offered back after a pick). */
+  suggestedPlan: InkModePlan | null
+  /** What the ink probe last saw, so the panel can say what it decided and why. */
   inkPlan: InkModePlan | null
   /**
    * What the current mono cut admits, so Threshold and Invert can show which
@@ -87,6 +90,17 @@ export interface TraceControlsProps {
   best: BestSettingsProps
 }
 
+/** Why the ink probe reads an image as Mono or Colour, in one line. */
+function readingOf(p: InkModePlan): string {
+  if (p.inks === 0) return 'nothing but background, so Color.'
+  if (p.mode === 'mono')
+    return `one ink${p.invert ? ', lighter than the background' : ''} → Mono, cut at ${p.threshold}${
+      p.hairlines && p.hairlines.cut !== p.hairlines.from ? ` (raised from ${p.hairlines.from} to keep hairlines)` : ''
+    }${p.invert ? ' and inverted' : ''}${p.recolor ? `, painted ${p.recolor}` : ''}.`
+  // One ink too close to the background in luminance for a cut (common on transparency).
+  return p.inks === 1 ? 'one ink, too close to the background to cut → Color.' : `${p.inks} inks → Color.`
+}
+
 const d = CONTROL_DOCS_BY_ID
 
 /** A fraction as a percentage, keeping one decimal for small values: "0.4%" is a
@@ -117,6 +131,7 @@ export function TraceControlsBody({
   autoUpscale,
   colorMode,
   onColorMode,
+  suggestedPlan,
   inkPlan,
   monoGuide,
   forceColorOn,
@@ -294,31 +309,29 @@ export function TraceControlsBody({
 
         {tracing && (
           <Field label="Mode" hint={d.mode.hint} onInfo={info('mode')}>
-            <Segmented<InkColorMode>
-              value={colorMode}
+            {/* Shows what the trace IS. The image picks it (the ink probe); clicking the
+                other one overrides it for this image only. */}
+            <Segmented<'color' | 'mono'>
+              value={opts.mode}
               onChange={onColorMode}
               options={[
-                { value: 'auto', label: 'Auto' },
                 { value: 'color', label: 'Color' },
                 { value: 'mono', label: 'Mono' },
               ]}
             />
-            {/* What Auto decided and why, so the user can overrule it. */}
             {colorMode === 'auto' && inkPlan && (
+              <p className="text-xs leading-snug text-muted">Picked for this image: {readingOf(inkPlan)}</p>
+            )}
+            {colorMode !== 'auto' && suggestedPlan && suggestedPlan.mode !== opts.mode && (
               <p className="text-xs leading-snug text-muted">
-                {inkPlan.inks === 0
-                  ? 'Nothing but background found — tracing in colour.'
-                  : inkPlan.mode === 'mono'
-                    ? `One ink${inkPlan.invert ? ', lighter than the background' : ''} → Mono, cut at ${inkPlan.threshold}${
-                        inkPlan.hairlines && inkPlan.hairlines.cut !== inkPlan.hairlines.from
-                          ? ` (raised from ${inkPlan.hairlines.from} to keep hairlines)`
-                          : ''
-                      }${inkPlan.invert ? ' and inverted' : ''}${inkPlan.recolor ? `, painted ${inkPlan.recolor}` : ''}.`
-                    : inkPlan.inks === 1
-                      ? // One ink, too close to the background in luminance
-                        // for a cut (common for art on transparency).
-                        'One ink, too close to the background to cut → Color.'
-                      : `${inkPlan.inks} inks → Color.`}
+                You picked {opts.mode === 'mono' ? 'Mono' : 'Color'}. The image reads as {readingOf(suggestedPlan)}{' '}
+                <button
+                  type="button"
+                  onClick={() => onColorMode('auto')}
+                  className="font-medium text-accent underline-offset-2 hover:underline"
+                >
+                  Use {suggestedPlan.mode === 'mono' ? 'Mono' : 'Color'}
+                </button>
               </p>
             )}
           </Field>
@@ -541,7 +554,7 @@ export function TraceControlsBody({
             </Field>
           )}
 
-          {/* `opts.mode` is what the trace resolved to, so Auto → Color shows it too. */}
+          {/* `opts.mode` is what the trace resolved to, whoever picked it. */}
           {tracing && opts.mode === 'color' && !opts.centerline && (
             <Field
               label="Layering"

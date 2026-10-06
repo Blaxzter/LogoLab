@@ -88,7 +88,7 @@ export function useEmptyNotice({
       action:
         colorMode !== 'auto'
           ? {
-              label: 'Let Auto decide',
+              label: 'Use what the image reads as',
               run: () => {
                 setColorMode('auto')
                 colorModeRef.current = 'auto'
