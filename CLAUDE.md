@@ -184,9 +184,75 @@ load. A fresh upload without hints clears them; they are session-only (a reload 
 options themselves). `VectorizeOptions.engine` is vestigial (`'planar'` only, kept so stored options
 parse); the stacked colour path, the V6 translucent decomposition that only ran on it, the
 `esm-potrace-wasm` dependency and the main-thread special case in `canTraceOffThread` went
-with the engines. A stacked output — regions painted over one another rather than tiled — is
-a PAINT-ORDER question the planar graph can answer later as a post-pass, not a second tracer.
-`test/mono-labels.test.ts` and `test/harness.test.ts` are the gates.
+with the engines. `test/mono-labels.test.ts` and `test/harness.test.ts` are the gates.
+
+**A stacked output is a PAINT-ORDER post-pass, not a second tracer** (`layering: 'stacked'`,
+the **Layering** control under Color, MCP `layering`; `src/lib/trace/planarStack.ts`,
+benchmarks §41). The same graph, re-layered so a shape paints under the shapes in front of
+it; the rendered picture cannot change, only how it is built up. Two rules:
+
+* **Containment.** A hole whose interior is all opaque regions painted later is dropped, so
+  the container paints solid under them. No edge is refitted or copied — the lower region
+  just stops referencing the shared edge.
+* **Side by side: the T-junction.** Where one shape is in front, its outline runs THROUGH
+  the junction and the outline behind it STOPS and turns. The shape whose outline breaks
+  off is completed under its neighbours — along existing edges when its outline visibly
+  carries on (Mastercard: red's arc continues as the overlap's edge), else along a NEW
+  hidden edge between the two cut-off stems (a square behind a circle), accepted only if it
+  stays under the occluder. Contradictions resolve smallest hidden area first; paint order
+  is a DAG and an item is one (layer, label).
+
+Six things that are easy to undo:
+
+* **A label splits by LAYER.** The white page and the white counter of an O are one label,
+  and the counter must paint above the black ring (`trace-<l>`, then `trace-<l>-d<layer>`).
+* **A hole drops / a completion passes only under SOLID shapes** — nothing see-through
+  anywhere inside (EXT, a removed background, a translucent fill), or the region below
+  shows through.
+* **A completion along existing edges needs the FAR side of each followed edge painted
+  above it.** Otherwise both shapes anti-alias that edge over the page and the lower one's
+  colour fringes the other's rim (a disc split in two colours must stay tiled). This is
+  why only ONE of Mastercard's circles completes.
+* **Split crossings are part of their junction**: a crossing is often two vertices joined
+  by a micro-edge (≤ 1 px at 2048), so arms pair per cluster and chains carry the micro refs.
+* **A completion may only ADD to its shape.** Positive added area is not enough (a span
+  looping round the far side of a bridge dropped half of mercedes' star arm): every point
+  of the replaced span must lie inside the completed outline. The gate's
+  `keepsEveryRegion` renders each label both ways and fails on any pixel lost.
+* **Two halves completed along one line share ONE hidden edge** (aa-seam: both halves of a
+  seam a disc covers), so moving the junction moves both, like any planar boundary.
+
+**Users get STACKED; the tracer's default stays TILED.** `PRODUCT_VECTORIZE_OPTIONS`
+(`layering: 'stacked'`) is what the studio, the icon sheet (`DEFAULT_SHEET_TRACE`) and the MCP
+server start from; `DEFAULT_VECTORIZE_OPTIONS` has no `layering`, so the truth gate, the
+golden baseline, the labs and the A/B flat/grad lanes keep measuring the regions the tracer
+FOUND rather than the paint order laid over them. Don't merge the two: the gates score
+regions against the authored SVG, and a stacked region is bigger than what was drawn. A
+stored session without the key stays tiled until Reset or a new upload.
+
+**Mono ignores it.** Mono already lies the ink over ONE paper rectangle — the ring in Orbit is
+a ring, its hole shows the paper under it — so stacking there only added a paper-coloured
+disc on top of an ink one (tried and reverted 2026-10-06). The control shows when the trace
+RESOLVES to Colour and folds into "Looking for another option?" under Mono with that reason.
+
+**A shape the colour of what lies beneath it is the page showing through** — left out, and
+the shape around it keeps its hole. Without this, stacked colour filled every ring in and
+painted the counter back on top (Orbit: teal plate, white DISC, teal disc, white dot; an O:
+a black disc with a white one on it). With it, Orbit in colour is exactly the mono output —
+plate, then one white path. Two things that are easy to undo: it runs OUTSIDE IN, and a hole
+it re-opened no longer counts as "beneath" (Orbit's white dot read as "the white ring showing
+through" and vanished); and a shape any side-by-side completion involves is never left out.
+
+**There is no Auto button.** Mode is Color | Mono and shows what the trace IS; the ink probe
+picks it per image (the line under it says why), a click overrides it for THAT image, and a
+new image goes back to the probe (`onFreshImage` in `useContentProbe`; the icon sheet plans
+its own mode and keeps it). Internally `colorMode: 'auto'` still means "the probe decides" —
+it is just no longer a button, and "Use Mono/Color" under the control hands it back.
+
+Tiled is byte-identical to before the feature (`before-stacked` ⇄ `after-stacked`). The A/B
+lab has a sixth lane, **`stack`** (flat + stacked); `before-sidebyside` ⇄ `after-sidebyside`
+moves only that lane. `test/planar-stack.test.ts` is the gate; `bench/stackDiag.ts` the
+census; `bench/stackExplode.ts` paints every layer alone so a completion is visible.
 
 ## Line art traces as STROKES — the centreline engine, and its own lane
 

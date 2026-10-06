@@ -55,6 +55,12 @@ const traceShape = {
     .describe(
       'Trace LINE ART as centreline strokes with a measured stroke-width (open and closed stroked paths you can re-weight), instead of filled outlines of each line. Ink no stroke explains (a dot, a note head) still becomes a fill. In colour mode each stroke is painted in the ink it runs through. Default off.',
     ),
+  layering: z
+    .enum(['tiled', 'stacked'])
+    .optional()
+    .describe(
+      'Colour mode. stacked (default): a shape paints under the shapes in front of it — fewer nodes, no hairline seams between colours, shapes stay whole in a design tool. tiled: shapes fit edge to edge, with a hole wherever another sits inside. Same edges either way; mono ignores it.',
+    ),
   flattenOnto: z
     .string()
     .regex(HEX_COLOR, 'flattenOnto must be a hex colour like #ffffff')
@@ -129,6 +135,7 @@ function traceRequestFrom(input: Record<string, unknown>): TraceRequest {
     mode: input.mode as TraceRequest['mode'],
     strokes: input.strokes as boolean | undefined,
     gradients: input.gradients as TraceRequest['gradients'],
+    layering: input.layering as TraceRequest['layering'],
     background: (input.flattenOnto as string) ?? null,
     removeBackground: input.removeBackground as boolean | undefined,
     detail: input.detail as TraceRequest['detail'],

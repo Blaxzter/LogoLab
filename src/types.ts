@@ -122,6 +122,17 @@ export interface VectorizeOptions {
    * (centerline/colour.ts); gradients are then ignored.
    */
   centerline?: boolean
+  /**
+   * Colour mode: how regions relate in the output. 'tiled' (default): every region
+   * owns exactly its own pixels and two regions share each boundary — nothing
+   * overlaps. 'stacked': a region whose holes are entirely covered by opaque regions
+   * paints under them as one solid shape, and those regions are painted on top
+   * (planarStack.ts). Same edges either way; only the paint order and the holes
+   * differ. The tracer's default is tiled; the product's (PRODUCT_VECTORIZE_OPTIONS)
+   * is stacked. Mono ignores it — the ink already lies over one paper rectangle — and so
+   * do Strokes.
+   */
+  layering?: 'tiled' | 'stacked'
   /** Drop the detected background layer for transparent output. */
   removeBackground: boolean
   /**

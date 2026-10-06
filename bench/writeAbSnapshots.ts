@@ -236,6 +236,7 @@ for (const c of cases) {
     if (lane.key === 'flat') entry.flat = svg
     else if (lane.key === 'mono') entry.mono = svg
     else if (lane.key === 'cline') entry.cline = svg
+    else if (lane.key === 'stack') entry.stack = svg
     else if (lane.key === 'grad') {
       entry.grad = svg
       if (r.file !== primary.file) {

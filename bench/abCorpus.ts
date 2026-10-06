@@ -379,7 +379,7 @@ export const AB_COLOUR_LINE_CASES: AbCorpusCase[] = [
  * executed, and a mono-side change showed up as an all-green corpus.
  */
 export interface AbLane {
-  key: 'flat' | 'grad' | 'mono' | 'line' | 'cline'
+  key: 'flat' | 'grad' | 'mono' | 'line' | 'cline' | 'stack'
   /** What the A/B view calls this lane in a badge or a panel title. */
   label: string
   /** Long side (px) of the raster this lane traces. */
@@ -439,10 +439,19 @@ export const AB_LANES: AbLane[] = [
     res: RASTER_MAX_DIM_FLAT,
     opts: { mode: 'color', gradients: false, centerline: true },
   },
+  {
+    // The flat lane with `layering: 'stacked'` (src/lib/trace/planarStack.ts): the same
+    // edges re-layered so a shape paints under the shapes in front of it. Rendered it
+    // should match the flat lane (minus the tiled seams); what moves is the item list.
+    key: 'stack',
+    label: 'stacked',
+    res: RASTER_MAX_DIM_FLAT,
+    opts: { gradients: false, layering: 'stacked' },
+  },
 ]
 
 /** The lanes a case runs in when it does not say (`AbCorpusCase.lanes`). */
-export const DEFAULT_CASE_LANES: AbLaneKey[] = ['flat', 'grad', 'mono']
+export const DEFAULT_CASE_LANES: AbLaneKey[] = ['flat', 'grad', 'mono', 'stack']
 
 /** The trace lanes of a case. */
 export const caseLanes = (c: Pick<AbCorpusCase, 'lanes'>): AbLane[] =>
@@ -523,6 +532,9 @@ export interface AbSnapshotCase {
    *  primary raster, so it needs no input of its own. Absent outside the colour line-art
    *  cases and in every stamp older than the lane. */
   cline?: string
+  /** The STACKED lane's trace (flat + `layering: 'stacked'`), on the primary raster.
+   *  Absent in every stamp older than the lane. */
+  stack?: string
 }
 
 /** One lane's files inside a stamp. */
@@ -550,6 +562,7 @@ export function laneFiles(e: AbSnapshotCase, key: AbLaneKey): AbLaneFiles | null
       ? { svg: e.line, png: e.linePng, width: e.lineWidth, height: e.lineHeight }
       : null
   if (key === 'cline') return e.cline ? { svg: e.cline, png: e.png, width: e.width, height: e.height } : null
+  if (key === 'stack') return e.stack ? { svg: e.stack, png: e.png, width: e.width, height: e.height } : null
   if (key === 'grad')
     return e.grad
       ? { svg: e.grad, png: e.gradPng ?? e.png, width: e.gradWidth ?? e.width, height: e.gradHeight ?? e.height }

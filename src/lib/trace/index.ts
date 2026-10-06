@@ -26,6 +26,7 @@ import { type PlanarFitOptions, DEFAULT_PLANAR_FIT, FLAT_LINE_COST } from './pla
 import { planarBeautify } from './planarBeautify.ts'
 import { weldConvergedJunctions } from './planarReseat.ts'
 import { materializeRegion, edgeMap } from '../path/topology.ts'
+import { stackRegions, type StackLayer, type StackResult } from './planarStack.ts'
 
 export {
   suggestGradients,
@@ -46,6 +47,19 @@ export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   gradients: true,
   engine: 'planar',
   fidelity: DEFAULT_BEAUTIFY_OPTIONS.fidelity,
+}
+
+/**
+ * What a USER gets: the tracer's defaults with colour output STACKED (planarStack.ts —
+ * ~10% fewer nodes, no hairline seams where a shape sits on another, and shapes that
+ * stay whole when moved in an editor). The studio, the icon sheet and the MCP server
+ * start from this. The tracer's own default stays tiled, so the truth gate, the golden
+ * baseline and the A/B flat/grad lanes keep measuring the regions the tracer FOUND, not
+ * the paint order laid over them.
+ */
+export const PRODUCT_VECTORIZE_OPTIONS: VectorizeOptions = {
+  ...DEFAULT_VECTORIZE_OPTIONS,
+  layering: 'stacked',
 }
 
 // Progress-bar span split (overall [0,1]): segmentation dominates the run time,
@@ -734,21 +748,48 @@ export async function traceImage(
     if (bgUnion) for (const l of bgUnion.set) dropped.add(l)
     order = order.filter((l) => !dropped.has(l))
   }
+  // Tiled (default): one item per label, its loops as traced. Stacked: the same graph
+  // re-layered by containment (planarStack.ts) — a region whose holes are fully covered
+  // paints under them, one item per label and nesting depth, bottom to top.
+  const opaqueLabel = (l: number): boolean => {
+    const c = q.palette[l]
+    if (c.a !== undefined && c.a < 255) return false
+    const g = bgUnion && l === bgUnion.seed ? bgUnion.gradient : labelPaint[l]?.gradient
+    return !g || g.stops.every((st) => st.opacity === undefined || st.opacity >= 1)
+  }
+  const named = new Set<number>()
+  // Hidden edges a side-by-side completion created join the topology (each is drawn by
+  // the one shape it completes, under its neighbours).
+  const stacked = (r: StackResult): StackLayer[] => {
+    for (const e of r.edges) {
+      topology.edges.push(e)
+      edges.set(e.id, e)
+    }
+    return r.layers
+  }
+  const layers =
+    options.layering === 'stacked'
+      ? stacked(stackRegions(trace.loopsByLabel, edges, order, opaqueLabel)).map((l) => {
+          // The label's bottom layer keeps the tiled id; layers above it are suffixed.
+          const id = named.has(l.label) ? `trace-${l.label}-d${l.depth}` : `trace-${l.label}`
+          named.add(l.label)
+          return { label: l.label, loops: l.loops, id }
+        })
+      : order.map((label) => ({ label, loops: trace.loopsByLabel.get(label)!, id: `trace-${label}` }))
   const items: PathItem[] = []
   let traced = 0
   let lastTracePct = -1
-  for (const label of order) {
+  for (const { label, loops, id } of layers) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    const pct = Math.floor((++traced / order.length) * 100)
+    const pct = Math.floor((++traced / layers.length) * 100)
     if (pct > lastTracePct) {
       lastTracePct = pct
       onProgress?.({
         phase: 'trace',
-        fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * (traced / order.length),
+        fraction: PROGRESS_PAINT_END + (1 - PROGRESS_PAINT_END) * (traced / layers.length),
         label: 'Tracing shapes',
       })
     }
-    const loops = trace.loopsByLabel.get(label)!
     const subPaths = materializeRegion(loops, edges)
     if (subPaths.length === 0) continue
     const c = q.palette[label]
@@ -756,7 +797,7 @@ export async function traceImage(
     applyPaint(paint, labelPaint[label])
     const base: PathItem = {
       kind: 'path',
-      id: 'trace-' + label,
+      id,
       fill: rgbToHex(c.r, c.g, c.b),
       fillRule,
       loops,
@@ -769,14 +810,15 @@ export async function traceImage(
     if (bgUnion && label === bgUnion.seed) base.gradient = bgUnion.gradient
     // The flat palette path may give a region an alpha (its alpha mode, or a locked
     // RGBA swatch). Planar regions tile without overlap, so a single fill-opacity
-    // composites correctly.
+    // composites correctly; stacking never paints a translucent region over another
+    // or anything over the parts of it that show.
     if (c.a !== undefined && c.a < 255) base.fillOpacity = c.a / 255
     items.push(base)
     if (paint.overlays) {
       paint.overlays.forEach((ov, k) => {
         items.push({
           kind: 'path',
-          id: `trace-${label}-glow-${k}`,
+          id: `${id}-glow-${k}`,
           fill: rgbToHex(c.r, c.g, c.b),
           fillRule,
           subPaths: cloneSubPaths(subPaths),

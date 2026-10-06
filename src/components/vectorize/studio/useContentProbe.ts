@@ -21,6 +21,7 @@ export function useContentProbe({
   decidedForRef,
   probePixelsRef,
   colorModeRef,
+  onFreshImage,
   traceHints,
 }: {
   logo: VectorizeSource
@@ -35,6 +36,10 @@ export function useContentProbe({
   decidedForRef: RefObject<string | null>
   probePixelsRef: RefObject<ImageData | null>
   colorModeRef: RefObject<InkColorMode>
+  /** A new image is about to be decided: a Color/Mono pick belonged to the last image,
+   *  so the studio hands the decision back to the probe (the icon sheet, which plans its
+   *  own mode, passes nothing). */
+  onFreshImage?: () => void
   /** Settings the upload asked for (an example's own), applied over the probes' decision. */
   traceHints: Partial<VectorizeOptions> | null
 }) {
@@ -78,6 +83,7 @@ export function useContentProbe({
         // On a restore the probe only measures (see decidedForRef). Either way the
         // options now stand decided for this image, so a new upload probes afresh.
         decidedForRef.current = assetKey
+        if (!restoring) onFreshImage?.()
         applyInkDecision(colorModeRef.current, img, !restoring)
         if (restoring) return
         const on = suggestGradients(img)
@@ -98,5 +104,15 @@ export function useContentProbe({
     return () => {
       cancelled = true
     }
-  }, [logo.src, logo.isSvg, logo.svgText, assetKey, isVectorSource, retraceVector, applyInkDecision, traceHints])
+  }, [
+    logo.src,
+    logo.isSvg,
+    logo.svgText,
+    assetKey,
+    isVectorSource,
+    retraceVector,
+    applyInkDecision,
+    traceHints,
+    onFreshImage,
+  ])
 }
