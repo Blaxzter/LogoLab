@@ -197,10 +197,13 @@ export function healColorSpikes(
     const db = data[o + 2] - c.b
     return dr * dr + dg * dg + db * db
   }
-  let out: Int32Array | null = null // allocated lazily on the first reassignment
+  // Pass-synchronous: each pass READS `cur` (the previous pass's labels, never written
+  // during the scan) and WRITES a fresh copy, allocated lazily on its first reassignment.
+  // Writing into the array being read would let a move be seen later in the same scan,
+  // so a strand would heal further along +x/+y than along -x/-y.
   let cur = labels
   for (let pass = 0; pass < 6; pass++) {
-    let changed = 0
+    let out: Int32Array | null = null
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const i = y * width + x
@@ -227,16 +230,15 @@ export function healColorSpikes(
           }
         }
         if (bestB >= 0) {
-          if (!out) out = labels.slice()
+          if (!out) out = cur.slice()
           out[i] = bestB
-          changed++
         }
       }
     }
-    if (changed === 0) break
-    cur = out as Int32Array // next pass reads the updated labels (pass-synchronous)
+    if (!out) break
+    cur = out // next pass reads this pass's result
   }
-  return out ?? labels
+  return cur
 }
 
 /**
