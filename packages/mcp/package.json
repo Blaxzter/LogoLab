@@ -1,6 +1,6 @@
 {
   "name": "logolab",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "mcpName": "io.github.Blaxzter/logolab",
   "description": "MCP server for LogoLab: trace an image to a clean SVG and export a full app-icon set, locally, from your coding agent.",
   "keywords": [
