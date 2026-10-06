@@ -91,9 +91,9 @@ export function PaletteEditor({ autoPalette, locked, onChange, onHighlight }: Pa
     return (
       <>
         <p className="text-xs leading-snug text-muted">
-          The flat colours your art reduces to. Click <em>Edit</em> to take over: eyedrop, change a hex, set an
-          opacity, or add and remove colours. Left on automatic, they snap to the design’s real colours (and each
-          region's opacity).
+          The flat colours your art reduces to. Click <em>Edit</em> to take over: eyedrop, change a hex, set an opacity,
+          or add and remove colours. Left on automatic, they snap to the design’s real colours (and each region's
+          opacity).
         </p>
         {autoPalette.length > 0 ? (
           <>

@@ -80,14 +80,19 @@ function RawNotices({ items, pathCount }: { items: DocItem[]; pathCount: number 
   if (cats.has('gradient'))
     notices.push({ warn: false, text: 'A gradient or pattern fill couldn’t be modeled, so it’s kept as-is.' })
   if (cats.has('image'))
-    notices.push({ warn: false, text: 'This SVG contains an embedded bitmap. Switch Source to Re-trace to vectorize it.' })
+    notices.push({
+      warn: false,
+      text: 'This SVG contains an embedded bitmap. Switch Source to Re-trace to vectorize it.',
+    })
   if (cats.has('use')) notices.push({ warn: false, text: '<use> references render but aren’t editable.' })
   if (notices.length === 0) return null
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-line px-3 py-2.5">
       {pathCount === 0 && (
-        <p className="text-[11px] text-muted">Nothing here can be edited node by node, so the SVG is kept as it is below.</p>
+        <p className="text-[11px] text-muted">
+          Nothing here can be edited node by node, so the SVG is kept as it is below.
+        </p>
       )}
       {notices.map((n, i) => (
         <div
@@ -130,6 +135,9 @@ export interface PathsPanelProps {
   /** Hovering a path row lights up that path; a palette swatch, every region of
    *  its colour. null on leave. */
   onHighlight?: (highlight: CanvasHighlight) => void
+  /** A trace is running: its result will replace the document, so an edit made
+   *  now would be thrown away. Recolour / hide / delete are disabled, like the canvas. */
+  readOnly?: boolean
 }
 
 /** Desktop right rail — the 260px column, from xl up. Below that a third column
@@ -155,6 +163,7 @@ export function PathsPanelBody({
   lockedPalette,
   onPaletteChange,
   onHighlight,
+  readOnly = false,
 }: PathsPanelProps) {
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
 
@@ -203,6 +212,7 @@ export function PathsPanelBody({
               onToggleVisible={() => onToggleVisible(item.id)}
               onDelete={() => onDelete(item.id)}
               onHighlight={onHighlight}
+              readOnly={readOnly}
             />
           ) : item.kind === 'raw' ? (
             <RawRow
@@ -210,6 +220,7 @@ export function PathsPanelBody({
               item={item}
               onToggleVisible={() => onToggleVisible(item.id)}
               onDelete={() => onDelete(item.id)}
+              readOnly={readOnly}
             />
           ) : null,
         )}
@@ -260,6 +271,7 @@ function PathRow({
   onToggleVisible,
   onDelete,
   onHighlight,
+  readOnly,
 }: {
   item: PathItem
   index: number
@@ -270,6 +282,7 @@ function PathRow({
   onToggleVisible: () => void
   onDelete: () => void
   onHighlight?: (highlight: CanvasHighlight) => void
+  readOnly: boolean
 }) {
   let nodes = 0
   for (const sp of item.subPaths) nodes += sp.nodes.length
@@ -327,6 +340,7 @@ function PathRow({
                 value={normalizeHex(representativePaint(item)) ?? '#000000'}
                 onChange={(e) => onRecolor(e.target.value, false)}
                 onBlur={(e) => onRecolor(e.target.value, true)}
+                disabled={readOnly}
                 className="absolute inset-0 cursor-pointer opacity-0"
                 aria-label={`Path ${index} ${isStrokeOnly(item) ? 'stroke' : 'fill'} color`}
               />
@@ -338,10 +352,14 @@ function PathRow({
       <span className={`truncate text-xs ${item.visible ? 'text-ink' : 'text-faint'}`}>Path {index}</span>
       <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted">{nodes}</span>
 
-      <RowIconBtn title={item.visible ? 'Hide (left out of the export)' : 'Show'} onClick={onToggleVisible}>
+      <RowIconBtn
+        title={item.visible ? 'Hide (left out of the export)' : 'Show'}
+        onClick={onToggleVisible}
+        disabled={readOnly}
+      >
         {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
       </RowIconBtn>
-      <RowIconBtn title="Delete path" onClick={onDelete}>
+      <RowIconBtn title="Delete path" onClick={onDelete} disabled={readOnly}>
         <Trash2 size={13} />
       </RowIconBtn>
     </div>
@@ -352,10 +370,12 @@ function RawRow({
   item,
   onToggleVisible,
   onDelete,
+  readOnly,
 }: {
   item: RawItem
   onToggleVisible: () => void
   onDelete: () => void
+  readOnly: boolean
 }) {
   const { label } = classifyRaw(item)
   return (
@@ -363,27 +383,42 @@ function RawRow({
       <span className="h-[18px] w-[18px] shrink-0 rounded border border-dashed border-line-strong" />
       <span className={`truncate font-mono text-[11px] ${item.visible ? 'text-muted' : 'text-faint'}`}>{label}</span>
       <span className="ml-auto" />
-      <RowIconBtn title={item.visible ? 'Hide (left out of the export)' : 'Show'} onClick={onToggleVisible}>
+      <RowIconBtn
+        title={item.visible ? 'Hide (left out of the export)' : 'Show'}
+        onClick={onToggleVisible}
+        disabled={readOnly}
+      >
         {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
       </RowIconBtn>
-      <RowIconBtn title="Delete" onClick={onDelete}>
+      <RowIconBtn title="Delete" onClick={onDelete} disabled={readOnly}>
         <Trash2 size={13} />
       </RowIconBtn>
     </div>
   )
 }
 
-function RowIconBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
+function RowIconBtn({
+  title,
+  onClick,
+  disabled = false,
+  children,
+}: {
+  title: string
+  onClick: () => void
+  disabled?: boolean
+  children: React.ReactNode
+}) {
   return (
     <Tooltip label={title}>
       <button
         type="button"
         aria-label={title}
+        disabled={disabled}
         onClick={(e) => {
           e.stopPropagation()
           onClick()
         }}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-3 hover:text-ink"
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-3 hover:text-ink disabled:pointer-events-none disabled:opacity-40"
       >
         {children}
       </button>

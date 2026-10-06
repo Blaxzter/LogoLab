@@ -370,7 +370,12 @@ export function DeviceMock({ id }: { id: DeviceId }) {
           type="file"
           accept="image/*"
           className="hidden"
-          onChange={(e) => onReplace(e.target.files?.[0])}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            // Cleared so picking the SAME file again (a retry, a re-pick after Reset) still fires.
+            e.target.value = ''
+            onReplace(file)
+          }}
         />
       </div>
     </div>

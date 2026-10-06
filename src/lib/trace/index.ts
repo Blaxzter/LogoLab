@@ -57,8 +57,8 @@ const PROGRESS_PAINT_END = 0.88
  *  flat art: high flat coverage (not continuous-tone) and few dominant colours. A
  *  rich flat illustration can still have coverage near 1, but is better served by
  *  the smoothness segmenter, which does not over-posterize it. */
-const FLAT_PALETTE_MIN_COVERAGE = 0.7
-const FLAT_PALETTE_MAX_COLORS = 14
+export const FLAT_PALETTE_MIN_COVERAGE = 0.7
+export const FLAT_PALETTE_MAX_COLORS = 14
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n))
 
@@ -937,7 +937,7 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
  * subtler flats survive); despeckle sheds more (a higher drop threshold). The
  * default (detail 0) keeps only the dominant flats.
  */
-function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
+export function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
   const detail = clamp(options.regionDetail ?? 0, 0, 100) / 100
   const despeckle = clamp(options.despeckle ?? 0, 0, 100) / 100
   return {

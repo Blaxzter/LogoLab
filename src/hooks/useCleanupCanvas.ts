@@ -3,7 +3,9 @@
 // re-render); the returned state is the reactive slice the UI binds to.
 //
 // History is its own capped stack of full ImageData snapshots rather than
-// useHistory, because each entry is a whole buffer and needs the cap.
+// useHistory, because each entry is a whole buffer and needs the cap. Each entry
+// carries the buffer's ORIGIN in pristine (see restoreFrame.ts): a trim moves it,
+// and undoing a trim has to move it back with the pixels.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLogo, useStore } from '../state/store'
@@ -37,6 +39,7 @@ import {
   type KeepRemoveMarker,
 } from '../lib/cleanup/cleanupOps'
 import { downloadBlob } from '../lib/export/download'
+import { alignedSource, NO_ORIGIN, trimmedOrigin, type Origin } from '../components/cleanup/restoreFrame'
 import type { PanZoom } from './usePanZoom'
 import { usePinchZoom } from './usePinchZoom'
 import { useUndoShortcuts } from './useUndoShortcuts'
@@ -50,6 +53,19 @@ const MAX_DIM = 2048
 const HISTORY_LIMIT = 30
 /** A brush stroke is one write to the working logo, not one per pointer move (each bakes a PNG). */
 const PUBLISH_MS = 400
+
+/** One history entry: a working buffer and where it sits in pristine. */
+interface Snapshot {
+  img: ImageData
+  origin: Origin
+}
+
+/** The working buffer's placement in pristine, for the overlay ghost. */
+export interface CleanupFrame {
+  origin: Origin
+  pw: number
+  ph: number
+}
 
 export interface UseCleanupCanvasParams {
   pz: PanZoom
@@ -105,14 +121,17 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const stageRef = useRef<HTMLDivElement | null>(null)
   const workingRef = useRef<ImageData | null>(null)
   const pristineRef = useRef<ImageData | null>(null)
+  // Pristine coordinates of working pixel (0,0). Moves only with a trim (and the
+  // undo/redo/reset/AI swaps that replace the buffer wholesale).
+  const originRef = useRef<Origin>(NO_ORIGIN)
   // View-pan state (Space-held or middle-button drag moves the stage, not pixels).
   const panningViewRef = useRef(false)
   const lastPanRef = useRef({ x: 0, y: 0 })
   const spaceHeldRef = useRef(false)
   // undoRef holds snapshots taken before each change (oldest→newest); redoRef
   // holds states undone past. Any new change clears redo.
-  const undoRef = useRef<ImageData[]>([])
-  const redoRef = useRef<ImageData[]>([])
+  const undoRef = useRef<Snapshot[]>([])
+  const redoRef = useRef<Snapshot[]>([])
   const lastKeyRef = useRef<{ r: number; g: number; b: number } | null>(null)
   // The working-logo src this studio last wrote. When logo.src equals it, the
   // reload effect skips the redundant re-decode, keeping the undo history.
@@ -140,6 +159,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   // many the stroke actually changed, so a dead tap/drag commits no history.
   const strokePreRef = useRef<ImageData | null>(null)
   const strokeAffectedRef = useRef(0)
+  // The Restore brush's source for the current stroke: pristine on the working grid.
+  const strokeSrcRef = useRef<ImageData | null>(null)
 
   const [ready, setReady] = useState(false)
   // Bumped by every change to the working pixels. `undoLen` can't stand in for
@@ -168,6 +189,9 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   // null until the first decode; updated whenever the buffer is resized (crop or
   // a differently-sized undo/redo snapshot).
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null)
+  // Where that buffer sits in pristine (a trim moves it) — what lines the overlay
+  // ghost up with the result. null until the first decode.
+  const [frame, setFrame] = useState<CleanupFrame | null>(null)
 
   const isBrush = tool === 'erase' || tool === 'restore'
   // Memoized so the tool callbacks below keep their identity between renders.
@@ -181,10 +205,28 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     return (pane ?? stageRef.current)?.getBoundingClientRect() ?? null
   })
 
-  /** Sync reactive `dims` to the current working buffer (call after any resize). */
+  /**
+   * Sync reactive `dims` and `frame` to the current working buffer. Call after
+   * any swap of the buffer: a trim can move the origin without changing the size.
+   */
   const syncDims = useCallback(() => {
     const w = workingRef.current
-    setDims(w ? { w: w.width, h: w.height } : null)
+    const p = pristineRef.current
+    const origin = originRef.current
+    setDims((d) => (!w ? null : d && d.w === w.width && d.h === w.height ? d : { w: w.width, h: w.height }))
+    setFrame((f) =>
+      !w || !p
+        ? null
+        : f && f.origin === origin && f.pw === p.width && f.ph === p.height
+          ? f
+          : { origin, pw: p.width, ph: p.height },
+    )
+  }, [])
+
+  /** Pristine laid out on the working buffer's grid — the source every restore reads. */
+  const restoreSource = useCallback((working: ImageData) => {
+    const p = pristineRef.current
+    return p ? alignedSource(p, originRef.current, working.width, working.height) : null
   }, [])
 
   const redraw = useCallback(() => {
@@ -224,10 +266,12 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     redoRef.current = []
     setUndoLen(0)
     setRedoLen(0)
+    originRef.current = NO_ORIGIN
     if (!logo.src) {
       workingRef.current = null
       pristineRef.current = null
       setDims(null)
+      setFrame(null)
       return
     }
     // Rasterize an SVG at its intrinsic size (capped to MAX_DIM), never upscaled,
@@ -258,7 +302,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
           }
         }
         workingRef.current = working
-        setDims({ w: working.width, h: working.height })
+        originRef.current = NO_ORIGIN
+        syncDims()
         setReady(true)
         // Drawing happens in the [ready] effect, after React commits the
         // (re)mounted <canvas>, so it never targets a detached element.
@@ -269,7 +314,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     return () => {
       cancelled = true
     }
-  }, [logo.src, logo.isSvg, logo.svgText])
+  }, [logo.src, logo.isSvg, logo.svgText, syncDims])
 
   useEffect(() => {
     if (ready) redraw()
@@ -336,10 +381,11 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
 
   /**
    * Commit a completed change to history. `pre` is the snapshot taken before the
-   * mutation. Call only when pixels changed, so dead clicks leave no undo step.
+   * mutation, at `origin` (the current one unless the change moved it). Call only
+   * when pixels changed, so dead clicks leave no undo step.
    */
-  const commit = useCallback((pre: ImageData) => {
-    undoRef.current.push(pre)
+  const commit = useCallback((pre: ImageData, origin: Origin = originRef.current) => {
+    undoRef.current.push({ img: pre, origin })
     if (undoRef.current.length > HISTORY_LIMIT) undoRef.current.shift()
     redoRef.current = []
     setUndoLen(undoRef.current.length)
@@ -351,19 +397,18 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const handleUndo = useCallback(() => {
     if (!undoRef.current.length) return
     const working = workingRef.current
-    if (working) redoRef.current.push(working)
-    const next = undoRef.current.pop()!
+    if (working) redoRef.current.push({ img: working, origin: originRef.current })
+    const { img: next, origin } = undoRef.current.pop()!
     // A differently-sized snapshot means a crop is being undone — re-fit the view
     // and refresh `dims` so the stage doesn't clamp against stale dimensions.
     const resized = !working || working.width !== next.width || working.height !== next.height
     workingRef.current = next
+    originRef.current = origin
     setUndoLen(undoRef.current.length)
     setRedoLen(redoRef.current.length)
     redraw()
-    if (resized) {
-      pz.reset()
-      syncDims()
-    }
+    if (resized) pz.reset()
+    syncDims()
     setModified(!equalsPristine())
     setRevision((n) => n + 1)
     setStatus('Undid last change')
@@ -372,17 +417,16 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
   const handleRedo = useCallback(() => {
     if (!redoRef.current.length) return
     const working = workingRef.current
-    if (working) undoRef.current.push(working)
-    const next = redoRef.current.pop()!
+    if (working) undoRef.current.push({ img: working, origin: originRef.current })
+    const { img: next, origin } = redoRef.current.pop()!
     const resized = !working || working.width !== next.width || working.height !== next.height
     workingRef.current = next
+    originRef.current = origin
     setUndoLen(undoRef.current.length)
     setRedoLen(redoRef.current.length)
     redraw()
-    if (resized) {
-      pz.reset()
-      syncDims()
-    }
+    if (resized) pz.reset()
+    syncDims()
     setModified(!equalsPristine())
     setRevision((n) => n + 1)
     setStatus('Redid change')
@@ -451,7 +495,8 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         if (ix < 0 || iy < 0 || ix >= working.width || iy >= working.height) return
         const pre = cloneImageData(working)
         // Keep restores from the pristine pixels; the rest key the clicked color.
-        const { affected, key } = applyClickTool(tool, working, pristineRef.current, ix, iy, opts, defringeStrength)
+        const src = tool === 'keep' ? restoreSource(working) : null
+        const { affected, key } = applyClickTool(tool, working, src, ix, iy, opts, defringeStrength)
         if (key) lastKeyRef.current = key
         if (affected > 0) {
           commit(pre)
@@ -468,7 +513,9 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       strokeAffectedRef.current = 0
       paintingRef.current = true
       lastPtRef.current = p
-      const src = tool === 'restore' ? pristineRef.current : undefined
+      // Aligned once per stroke: after a trim, pristine's own grid is the wrong one.
+      const src = tool === 'restore' ? restoreSource(working) : null
+      strokeSrcRef.current = src
       strokeAffectedRef.current += brushStamp(working, p.x, p.y, brushSize / 2, 1 - softness, tool as BrushMode, src)
       scheduleRedraw()
     },
@@ -480,6 +527,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       brushSize,
       softness,
       imgCoords,
+      restoreSource,
       commit,
       redraw,
       scheduleRedraw,
@@ -508,7 +556,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       const working = workingRef.current
       if (!working || !p) return
       const last = lastPtRef.current
-      const src = tool === 'restore' ? pristineRef.current : undefined
+      const src = tool === 'restore' ? strokeSrcRef.current : undefined
       strokeAffectedRef.current += brushStroke(
         working,
         last.x,
@@ -559,6 +607,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         setStatus(tool === 'erase' ? 'Erased with brush' : 'Restored with brush')
       }
       strokePreRef.current = null
+      strokeSrcRef.current = null
       strokeAffectedRef.current = 0
     },
     [tool, redraw, commit, pinch],
@@ -604,12 +653,18 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       if (pristineRef.current !== pristine || !workingRef.current) return
       // Commit the pre-AI state only now that we have a result (a failed run
       // leaves history untouched), then swap in the AI output.
-      commit(cloneImageData(workingRef.current))
+      const prev = workingRef.current
+      commit(cloneImageData(prev))
       // RMBG's soft matte keeps a tint of the old background (a coloured halo);
       // defringe it against the original corner color.
       if (defringeStrength > 0) defringe(result, sampleCornerColor(pristine), defringeStrength)
+      // The result is cut from the WHOLE pristine image, so it replaces a trim:
+      // back to pristine's frame, and a re-fit if that changed the size.
       workingRef.current = result
+      originRef.current = NO_ORIGIN
       redraw()
+      if (prev.width !== result.width || prev.height !== result.height) pz.reset()
+      syncDims()
       setAiDevice(device)
       setStatus(
         `AI removed the background${device ? ` (${device})` : ''}. Touch up with the Erase and Restore brushes if needed.`,
@@ -621,7 +676,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
       setAiBusy(false)
       setAiStatus('')
     }
-  }, [aiBusy, defringeStrength, commit, redraw])
+  }, [aiBusy, defringeStrength, commit, redraw, pz.reset, syncDims])
 
   const handleReset = useCallback(() => {
     if (aiBusy) return
@@ -641,6 +696,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     // rely on logo.src changing identity (it won't if nothing was Applied).
     if (pristineRef.current) {
       workingRef.current = cloneImageData(pristineRef.current)
+      originRef.current = NO_ORIGIN
       redraw()
       // A prior trim may have changed dims; re-fit so the stage doesn't clamp
       // against stale dimensions.
@@ -774,8 +830,10 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
         return
       }
       const pre = cloneImageData(working)
+      const preOrigin = originRef.current
       workingRef.current = cropPad(working, bounds, pad)
-      commit(pre)
+      originRef.current = trimmedOrigin(preOrigin, bounds, pad)
+      commit(pre, preOrigin)
       redraw()
       pz.reset()
       syncDims()
@@ -804,6 +862,7 @@ export function useCleanupCanvas(params: UseCleanupCanvasParams) {
     brushCursor,
     spacePan,
     dims,
+    frame,
     scaleRef,
     // Pointer + lifecycle handlers for the <canvas>.
     handlePointerDown,

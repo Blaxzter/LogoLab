@@ -454,8 +454,8 @@ export function CleanupControlsBody({
 
         <div className="mt-auto border-t border-line pt-4">
           <p className="text-[0.7rem] leading-relaxed text-faint">
-            Try AI or Auto first, then touch up with Erase and Restore. Space- or middle-drag to pan · scroll to zoom · ⌘Z
-            to undo.
+            Try AI or Auto first, then touch up with Erase and Restore. Space- or middle-drag to pan · scroll to zoom ·
+            ⌘Z to undo.
           </p>
         </div>
       </div>

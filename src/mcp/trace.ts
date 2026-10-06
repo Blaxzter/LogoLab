@@ -82,7 +82,18 @@ function baseOptions(req: TraceRequest): VectorizeOptions {
   if (req.removeBackground != null) base.removeBackground = req.removeBackground
   if (req.detail) base.traceDetail = req.detail
   if (req.strokes) base.centerline = true
-  return base
+  return withGradientMode(base, req.gradients)
+}
+
+/**
+ * A forced gradient mode, written into the options the way the sheet tab's
+ * control does (`setGradientMode`): 'flat' off, 'rich' on. The planner reads its
+ * `gradientMode` only to decide whether to PROBE ('auto'); for the other two it
+ * keeps `opts.gradients` as given, so without this the defaults (gradients on)
+ * won and 'flat' traced with ramps, at the gradient raster cap.
+ */
+export function withGradientMode(opts: VectorizeOptions, mode: TraceRequest['gradients']): VectorizeOptions {
+  return !mode || mode === 'auto' ? opts : { ...opts, gradients: mode === 'rich' }
 }
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n))

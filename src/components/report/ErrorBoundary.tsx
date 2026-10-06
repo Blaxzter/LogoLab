@@ -183,8 +183,8 @@ function CrashScreen({
             <p className="mt-1.5 text-sm leading-relaxed text-muted">
               {chunk ? (
                 <>
-                  The code for this tab couldn't be downloaded. Usually a new version went live while this page was open,
-                  or the connection dropped. Reloading fetches it again.
+                  The code for this tab couldn't be downloaded. Usually a new version went live while this page was
+                  open, or the connection dropped. Reloading fetches it again.
                 </>
               ) : again ? (
                 <>

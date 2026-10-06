@@ -60,6 +60,8 @@ export interface Preset {
   text?: (ctx: PresetContext) => TextFileSpec[]
   /** Where a copy of the traced SVG belongs in this layout, if anywhere. */
   svgPath?: string
+  /** A web preset's targets — kept so several can be merged into one (`mergeWebPresets`). */
+  web?: ExportTarget[]
 }
 
 /* ------------------------------------------------------------------ the web */
@@ -93,7 +95,31 @@ function webPreset(id: string, label: string, summary: string, targets: ExportTa
       { path: 'head-snippet.html', content: buildHtmlSnippet(targets) },
     ],
     svgPath: 'public/icons/icon.svg',
+    web: targets,
   }
+}
+
+/**
+ * Collapse every web preset in a request into ONE over the union of their
+ * targets. They share a folder, a manifest and a <head> snippet, so run one
+ * after another the last silently rewrote the others' text files: pwa + favicon
+ * came back with favicon's manifest, without the 192/512 or maskable icons.
+ * The merged preset sits where the first web preset was; the order of the
+ * targets is the catalogue's.
+ */
+export function mergeWebPresets(presets: Preset[]): Preset[] {
+  const web = [...new Set(presets.filter((p) => p.web))]
+  if (web.length < 2) return presets
+  const names = new Set(web.flatMap((p) => p.web?.map((t) => t.fileName) ?? []))
+  const targets = DEFAULT_TARGETS.filter((t) => names.has(t.fileName)).map((t) => ({ ...t, enabled: true }))
+  const merged = webPreset(
+    web.map((p) => p.id).join('+'),
+    web.map((p) => p.label).join(' + '),
+    web.map((p) => p.summary).join(' '),
+    targets,
+  )
+  const first = presets.indexOf(web[0])
+  return presets.flatMap((p, i) => (i === first ? [merged] : p.web ? [] : [p]))
 }
 
 /* --------------------------------------------------------------- native app */

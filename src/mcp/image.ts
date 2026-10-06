@@ -257,12 +257,20 @@ export function flattenOnto(img: ImageDataLike, hex: string): ImageDataLike {
   return { width: img.width, height: img.height, data: out }
 }
 
-/** `#rgb` / `#rrggbb` → [r, g, b]. Unknown input reads as white. */
+/** What `parseHexColor` (and so `flattenOnto`) accepts: `#rgb` / `#rrggbb`, `#` optional. */
+export const HEX_COLOR = /^#?(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
+
+/**
+ * `#rgb` / `#rrggbb` → [r, g, b]. Anything else THROWS: a named or CSS colour
+ * used to parse to NaN channels, and NaN survives even an opaque pixel's
+ * composite (NaN × 0), so 'red' wiped every red channel of the image.
+ */
 export function parseHexColor(hex: string): [number, number, number] {
-  const h = hex.trim().replace('#', '')
-  if (h.length === 3) return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)]
-  if (h.length >= 6) return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
-  return [255, 255, 255]
+  const h = hex.trim()
+  if (!HEX_COLOR.test(h)) throw new Error(`"${hex}" is not a hex colour; use #rgb or #rrggbb, e.g. #ffffff.`)
+  const d = h.replace('#', '')
+  const full = d.length === 3 ? [...d].map((c) => c + c).join('') : d
+  return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)]
 }
 
 /** Does any pixel carry partial or zero alpha? */

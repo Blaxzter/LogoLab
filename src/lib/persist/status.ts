@@ -11,7 +11,10 @@ export interface SaveStatus {
   pending: boolean
   /** When a write last landed (epoch ms), or null if nothing has been stored yet. */
   savedAt: number | null
-  /** The last attempt failed — quota, private mode, a blocked origin. */
+  /**
+   * Some store's latest write failed — quota, private mode, a blocked origin —
+   * and that same store has not been written successfully since.
+   */
   failed: boolean
 }
 
@@ -22,6 +25,14 @@ export interface SaveStatus {
  */
 const armed = new Map<string, number>()
 const done = new Map<string, number>()
+
+/**
+ * Stores whose latest write failed. Per key, because a failure is only undone by
+ * that same store landing a write: a slider's localStorage write succeeding says
+ * nothing about the logo that did not fit in IndexedDB, and a failed slot is not
+ * retried until its own value changes.
+ */
+const failedKeys = new Set<string>()
 
 const listeners = new Set<() => void>()
 let snapshot: SaveStatus = { pending: false, savedAt: null, failed: false }
@@ -55,11 +66,24 @@ export function markArmed(key: string): number {
  */
 export function markSettled(key: string, upTo: number, ok: boolean): void {
   done.set(key, Math.max(done.get(key) ?? 0, upTo))
+  if (ok) failedKeys.delete(key)
+  else failedKeys.add(key)
   publish({
     pending: anyPending(),
     savedAt: ok ? Date.now() : snapshot.savedAt,
-    failed: !ok,
+    failed: failedKeys.size > 0,
   })
+}
+
+/**
+ * The store for `key` was deleted, its pending write cancelled. Nothing is owed
+ * for it any more — neither the cancelled write nor an earlier failure — but
+ * nothing was saved either, so the timestamp stays.
+ */
+export function markDropped(key: string): void {
+  done.set(key, armed.get(key) ?? 0)
+  failedKeys.delete(key)
+  publish({ ...snapshot, pending: anyPending(), failed: failedKeys.size > 0 })
 }
 
 /**
@@ -71,13 +95,15 @@ export function markRestored(at: number): void {
   publish({ ...snapshot, savedAt: at })
 }
 
-/** A synchronous (localStorage) write landed; there is no pending phase. */
-export function markSaved(): void {
-  publish({ ...snapshot, savedAt: Date.now(), failed: false })
+/** A synchronous (localStorage) write for `key` landed; there is no pending phase. */
+export function markSaved(key: string): void {
+  failedKeys.delete(key)
+  publish({ ...snapshot, savedAt: Date.now(), failed: failedKeys.size > 0 })
 }
 
-/** A synchronous store threw. */
-export function markFailed(): void {
+/** A synchronous store for `key` threw. */
+export function markFailed(key: string): void {
+  failedKeys.add(key)
   publish({ ...snapshot, failed: true })
 }
 
@@ -85,6 +111,7 @@ export function markFailed(): void {
 export function resetSaveStatus(): void {
   armed.clear()
   done.clear()
+  failedKeys.clear()
   publish({ pending: false, savedAt: null, failed: false })
 }
 

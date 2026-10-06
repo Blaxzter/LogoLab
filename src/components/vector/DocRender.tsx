@@ -5,10 +5,11 @@
 // learning to draw strokes while the other drops them). Interaction (hit layers,
 // gestures, overlays) stays with each studio because it genuinely differs.
 
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import type { DocItem, GradientFill, PathItem, RawItem } from '../../lib/path/types'
 import { subPathsToD } from '../../lib/path/model'
 import { isGroup } from '../../lib/path/docTree'
+import { sanitizeSvgMarkup } from './sanitizeMarkup'
 
 /** Cached path data, keyed by the immutable subPaths array. */
 const dCache = new WeakMap<object, string>()
@@ -147,9 +148,12 @@ export const RawView = memo(function RawView({ item }: { item: RawItem }) {
     for (const key of keys) open += ` ${key}="${escapeAttr(inherited[key])}"`
     html = `${open}>${item.markup}</g>`
   }
+  // Rebuilt from an allowlist before it becomes live DOM: this is uploaded markup,
+  // and an `onerror` in it would run in the app's origin (see sanitizeMarkup.ts).
+  const safe = useMemo(() => ({ __html: sanitizeSvgMarkup(html) }), [html])
   // Raw markup is never a pointer target: it is geometry we deliberately don't
   // model, so we can't say anything useful about where it was clicked.
-  return <g style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: html }} />
+  return <g style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={safe} />
 })
 
 /** Draw a list of items in paint order, recursing into groups. */

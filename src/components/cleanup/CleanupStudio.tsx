@@ -100,6 +100,7 @@ export function CleanupStudio() {
     brushCursor,
     spacePan,
     dims,
+    frame,
     scaleRef,
     handlePointerDown,
     handlePointerMove,
@@ -334,6 +335,8 @@ export function CleanupStudio() {
           isMarker={isMarker}
           view={view}
           originalSrc={originalSrc}
+          dims={dims}
+          frame={frame}
           markers={markers}
           pz={pz}
           canvasHidden={canvasHidden}

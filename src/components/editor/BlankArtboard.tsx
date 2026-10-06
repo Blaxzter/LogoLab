@@ -154,8 +154,8 @@ export function BlankArtboard({ onCreate }: BlankArtboardProps) {
               </div>
 
               <p className="text-xs leading-relaxed text-faint">
-                Sizes are in artboard units, which a browser draws as pixels. Paper presets convert millimetres at
-                96 dpi, so they print at the real sheet size. You can resize the artboard or switch to Grow later.
+                Sizes are in artboard units, which a browser draws as pixels. Paper presets convert millimetres at 96
+                dpi, so they print at the real sheet size. You can resize the artboard or switch to Grow later.
               </p>
             </>
           )}
@@ -188,9 +188,7 @@ export function BlankArtboard({ onCreate }: BlankArtboardProps) {
                 : 'Opens an empty document at this size. Press R or E and drag to draw the first shape.'
             }
             reason={
-              grow || sized
-                ? null
-                : `Width and height must be whole numbers from ${MIN_ARTBOARD} to ${MAX_ARTBOARD}.`
+              grow || sized ? null : `Width and height must be whole numbers from ${MIN_ARTBOARD} to ${MAX_ARTBOARD}.`
             }
             onClick={() => {
               if (grow) onCreate(GROW_START, GROW_START, true)
@@ -227,8 +225,8 @@ function GrowNotes() {
         direction, and the export is cropped to exactly that.
       </li>
       <li>
-        <span className="text-ink">Need a set size after all?</span> Switch to Fixed in the Properties panel at any time.
-        The artboard keeps the size it has grown to, and you can type a new one there.
+        <span className="text-ink">Need a set size after all?</span> Switch to Fixed in the Properties panel at any
+        time. The artboard keeps the size it has grown to, and you can type a new one there.
       </li>
     </ul>
   )

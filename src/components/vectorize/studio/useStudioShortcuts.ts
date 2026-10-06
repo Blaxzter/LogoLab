@@ -40,6 +40,7 @@ export function useStudioShortcuts({
   isVectorSource,
   retraceVector,
   opts,
+  busy,
 }: {
   active: boolean
   doc: EditableDoc | null
@@ -55,6 +56,12 @@ export function useStudioShortcuts({
   isVectorSource: boolean
   retraceVector: 'clean' | 'retrace'
   opts: VectorizeOptions
+  /**
+   * A trace is running. Its result REPLACES the document (and the history), so an
+   * edit made now would vanish when it lands, undo entry and all. The canvas is
+   * read-only meanwhile; the keyboard edits (undo/redo, delete, nudge) are too.
+   */
+  busy: boolean
 }) {
   // Window-level, so a studio that is mounted but not in charge must stand down,
   // or two studios would both undo on one Ctrl+Z.
@@ -76,6 +83,10 @@ export function useStudioShortcuts({
       const k = e.key
       if (mod) {
         const lk = k.toLowerCase()
+        if ((lk === 'z' || lk === 'y') && busy) {
+          e.preventDefault()
+          return
+        }
         if (lk === 'z') {
           e.preventDefault()
           if (e.shiftKey) redo()
@@ -105,7 +116,7 @@ export function useStudioShortcuts({
         else if (selectedPathId) handleSelectPath(null)
         return
       }
-      if (!doc) return
+      if (!doc || busy) return
       if (k === 'Delete' || k === 'Backspace') {
         if (!selectedPathId) return
         const item = doc.items.find((it) => it.id === selectedPathId)
@@ -212,5 +223,6 @@ export function useStudioShortcuts({
     isVectorSource,
     retraceVector,
     opts.mode,
+    busy,
   ])
 }

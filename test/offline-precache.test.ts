@@ -23,7 +23,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { Rollup } from 'vite'
-import { bundlePrecache } from '../scripts/swPlugin.ts'
+import { bundlePrecache, precacheBuildId } from '../scripts/swPlugin.ts'
 
 type Bundle = Rollup.OutputBundle
 
@@ -140,4 +140,40 @@ test('a WASM binary is stored when it is small and skipped when it is huge', () 
   const files = bundlePrecache(bundle)
   assert.ok(files.includes('/assets/small-iii.wasm'))
   assert.ok(!files.includes('/assets/ort-jjj.wasm'))
+})
+
+test('the build id moves when an unhashed file changes in place', () => {
+  // /index.html and public/ carry no content hash in their names, so a deploy
+  // that only edits the shell's <head> keeps the URL list identical. If the id
+  // were the list alone, sw.js would be byte-identical, no new worker would ever
+  // install, and installed users would keep the old shell from the precache.
+  const urls = ['/index.html', '/assets/index-abc123.js', '/examples/logo.png']
+  const files: Record<string, string | Uint8Array> = {
+    '/index.html': '<head><title>LogoLab</title></head>',
+    '/assets/index-abc123.js': 'console.log(1)',
+    '/examples/logo.png': new Uint8Array([1, 2, 3]),
+  }
+  const before = precacheBuildId(urls, (u) => files[u] ?? null)
+
+  assert.equal(
+    precacheBuildId([...urls].reverse(), (u) => files[u] ?? null),
+    before,
+    'order-independent',
+  )
+
+  const shell = precacheBuildId(urls, (u) =>
+    u === '/index.html' ? '<head><meta name="referrer" content="no-referrer"></head>' : (files[u] ?? null),
+  )
+  assert.notEqual(shell, before, 'a <head>-only edit must ship a new worker')
+
+  const image = precacheBuildId(urls, (u) =>
+    u === '/examples/logo.png' ? new Uint8Array([1, 2, 4]) : (files[u] ?? null),
+  )
+  assert.notEqual(image, before, 'a public file replaced in place must ship a new worker')
+
+  assert.notEqual(
+    precacheBuildId([...urls, '/llms.txt'], (u) => files[u] ?? null),
+    before,
+    'a new URL still counts',
+  )
 })

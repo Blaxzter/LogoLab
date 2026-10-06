@@ -7,6 +7,7 @@
 import type { EditableDoc } from '../path/types'
 import type { VectorizeOptions } from '../../types'
 import type { TraceProgress } from './types'
+import type { StageAnalysis } from './explainStages.ts'
 
 /** True when this environment can run the trace off the main thread (the tracer is
  *  pure JS, so any environment with Web Workers). `options` is currently unused. */
@@ -75,19 +76,8 @@ export function traceImageOffThread(
   })
 }
 
-/** Stage visualisations + result for the "How it works" explainer (off-thread). */
-export interface OffThreadAnalysis {
-  width: number
-  height: number
-  smoothed: Uint8ClampedArray
-  disc: Uint8ClampedArray
-  segs: Uint8ClampedArray
-  fills: Uint8ClampedArray
-  regionCount: number
-  paints: ({ model: string; solid: [number, number, number] } | null)[]
-  svg: string
-  stats: { paths: number; nodes: number }
-}
+/** Stage visualisations + result for the "How it works" explainer (off-thread, explainStages.ts). */
+export type OffThreadAnalysis = StageAnalysis
 
 /**
  * Run the pipeline + intermediate stages off-thread for the explainer, so it

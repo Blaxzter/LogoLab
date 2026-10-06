@@ -87,7 +87,8 @@ export function TextInput({
   const ref = useRef<HTMLTextAreaElement | null>(null)
   const { edit, layout } = text
   const open = edit ? findItem(doc.items, edit.id) : null
-  const value = open && isText(open) ? plainText(open.text) : ''
+  // Ahead of the document while typed edits wait on a font.
+  const value = text.pendingText ?? (open && isText(open) ? plainText(open.text) : '')
 
   // Keep the textarea's own value and selection in step with the document
   // (undo, a style change, a click on the canvas) and keep focus in it.

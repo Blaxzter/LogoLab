@@ -165,40 +165,85 @@ export function bundlePrecache(bundle: OutputBundle): string[] {
   return [...precache]
 }
 
+/**
+ * The worker's build id: every precached URL AND its bytes. A byte-different
+ * sw.js is what makes the browser install a new version, and the URL list alone
+ * misses every file whose name carries no content hash — /index.html and all of
+ * public/. A deploy that only edited the shell's <head>, or replaced an example
+ * image in place, left sw.js byte-identical, and installed users kept the old
+ * file from the precache with no update ever offered.
+ *
+ * `contentOf` answers null for a URL it has no bytes for; that URL still counts
+ * by name.
+ */
+export function precacheBuildId(
+  urls: readonly string[],
+  contentOf: (url: string) => string | Uint8Array | null,
+): string {
+  const entries = [...urls].sort().map((url) => {
+    const bytes = contentOf(url)
+    return bytes === null ? url : `${url}:${hashBytes(bytes)}`
+  })
+  return hash(entries.join('\n'))
+}
+
 export function serviceWorker(): Plugin {
   return {
     name: 'logolab:service-worker',
     apply: 'build',
-    generateBundle(_options, bundle) {
-      const precache = new Set<string>(bundlePrecache(bundle))
-      for (const file of publicFiles(here('../public'))) precache.add(file)
+    // Last of all, so index.html is hashed as it ships: after Vite's HTML plugin
+    // and after scripts/routePages.ts rewrites the shell.
+    enforce: 'post',
+    generateBundle: {
+      order: 'post',
+      handler(_options, bundle) {
+        const publicRoot = here('../public')
+        const precache = new Set<string>(bundlePrecache(bundle))
+        for (const file of publicFiles(publicRoot)) precache.add(file)
 
-      // The build id IS the precache list: any change to the app changes a
-      // content hash inside it, which changes this string, which changes sw.js —
-      // and a byte-different sw.js is exactly what makes the browser notice
-      // there is a new version to install.
-      const urls = [...precache].sort()
-      const buildId = hash(urls.join('\n'))
+        const urls = [...precache].sort()
+        const buildId = precacheBuildId(urls, (url) => {
+          const output = bundle[url.slice(1)]
+          if (output?.type === 'asset') return output.source
+          if (output?.type === 'chunk') return output.code
+          try {
+            return readFileSync(join(publicRoot, url.slice(1)))
+          } catch {
+            return null
+          }
+        })
 
-      // The worker's source lives in src/pwa/ with the registration code it
-      // pairs with; only this build step, which is a build script like the
-      // others in scripts/, lives here.
-      //
-      // Anchored to the declaration lines, not to the bare placeholder names: the
-      // file's own header explains what gets substituted, so a plain string
-      // replace rewrote the COMMENT and left the constants untouched — and the
-      // result was a worker that still parsed.
-      const template = readFileSync(here('../src/pwa/sw.js'), 'utf8')
-      const source = template
-        .replace(/^const BUILD = '__BUILD_ID__'$/m, `const BUILD = ${JSON.stringify(buildId)}`)
-        .replace(/^const PRECACHE_URLS = __PRECACHE__$/m, `const PRECACHE_URLS = ${JSON.stringify(urls, null, 2)}`)
-      if (source.includes('__BUILD_ID__') || source.includes('__PRECACHE__')) {
-        this.error('service worker: a placeholder declaration in src/pwa/sw.js was not substituted')
-      }
+        // The worker's source lives in src/pwa/ with the registration code it
+        // pairs with; only this build step, which is a build script like the
+        // others in scripts/, lives here.
+        //
+        // Anchored to the declaration lines, not to the bare placeholder names: the
+        // file's own header explains what gets substituted, so a plain string
+        // replace rewrote the COMMENT and left the constants untouched — and the
+        // result was a worker that still parsed.
+        const template = readFileSync(here('../src/pwa/sw.js'), 'utf8')
+        const source = template
+          .replace(/^const BUILD = '__BUILD_ID__'$/m, `const BUILD = ${JSON.stringify(buildId)}`)
+          .replace(/^const PRECACHE_URLS = __PRECACHE__$/m, `const PRECACHE_URLS = ${JSON.stringify(urls, null, 2)}`)
+        if (source.includes('__BUILD_ID__') || source.includes('__PRECACHE__')) {
+          this.error('service worker: a placeholder declaration in src/pwa/sw.js was not substituted')
+        }
 
-      this.emitFile({ type: 'asset', fileName: 'sw.js', source })
+        this.emitFile({ type: 'asset', fileName: 'sw.js', source })
+      },
     },
   }
+}
+
+/** FNV-1a over raw bytes; a string is hashed as its UTF-8. */
+function hashBytes(data: string | Uint8Array): string {
+  const bytes = typeof data === 'string' ? Buffer.from(data, 'utf8') : data
+  let h = 0x811c9dc5
+  for (let i = 0; i < bytes.length; i++) {
+    h ^= bytes[i]
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(36)
 }
 
 /** FNV-1a. Short, stable, and nothing here is adversarial. */

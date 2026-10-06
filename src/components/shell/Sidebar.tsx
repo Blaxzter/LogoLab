@@ -126,7 +126,8 @@ function SidebarBody() {
                 right={<Toggle checked={app.tintEnabled} onChange={(v) => setAppearance({ tintEnabled: v })} />}
               >
                 <p className="text-xs leading-snug text-muted">
-                  Paints a one-color logo in a single color using its alpha, so you can preview a white mark in any brand color.
+                  Paints a one-color logo in a single color using its alpha, so you can preview a white mark in any
+                  brand color.
                 </p>
               </Field>
               {app.tintEnabled && (

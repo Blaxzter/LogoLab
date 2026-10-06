@@ -18,6 +18,7 @@ import type {
   Vec,
 } from '../path/types'
 import { segmentControls } from '../path/geometry.ts'
+import { parseCssColor } from '../path/cssColor.ts'
 
 /** Vertical supersampling factor (sub-scanlines per pixel row). */
 const SS = 4
@@ -560,7 +561,11 @@ function sampleStops(stops: PreppedStop[], t: number): [number, number, number, 
   return [last.r, last.g, last.b, last.a]
 }
 
-/** Parse #rgb / #rrggbb to [r,g,b] (0–255). Unknown input → black. */
+/**
+ * Parse #rgb / #rrggbb to [r,g,b] (0–255); any other CSS colour (`red`,
+ * `rgb(…)`, `#rrggbbaa`…) through the import's parser, alpha dropped. Unknown
+ * input → black.
+ */
 export function parseHex(hex: string): [number, number, number] {
   const h = hex.trim()
   if (h.length === 7 && h[0] === '#') {
@@ -572,7 +577,8 @@ export function parseHex(hex: string): [number, number, number] {
     const b = parseInt(h[3], 16)
     return [r * 17, g * 17, b * 17]
   }
-  return [0, 0, 0]
+  const c = parseCssColor(h)
+  return c ? [Math.round(c.r), Math.round(c.g), Math.round(c.b)] : [0, 0, 0]
 }
 
 // ---------------------------------------------------------------------------

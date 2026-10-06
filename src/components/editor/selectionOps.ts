@@ -4,7 +4,7 @@ import type { DocItem, EditableDoc, PathItem } from '../../lib/path/types'
 import { findItem, isGroup, removeItems, topLevelSelection, ungroup } from '../../lib/path/docTree'
 import { scaleAbout, transformItems, translation, type Box } from '../../lib/editor/transform'
 import { breakAt, combinePaths, joinEnds, reversePath, splitCompound } from '../../lib/editor/pathOps'
-import { parseNodeKey, refsByItem, replaceIn } from '../../lib/editor/nodeEdit'
+import { parseNodeKey, refsByItem, replaceIn, replaceWithMany } from '../../lib/editor/nodeEdit'
 import { deleteNodes } from '../../lib/path/geometry'
 import { duplicateItems, newId } from './editorDoc'
 
@@ -113,12 +113,13 @@ export function joinNodesIn(doc: EditableDoc, keys: readonly string[]): Editable
   return { ...doc, items: replaceIn(doc.items, next) }
 }
 
-/** Break a compound path into one top-level shape per subpath. */
+/** Break a compound path into one shape per subpath, where it was (inside its group, if any). */
 export function splitPathIn(doc: EditableDoc, id: string): { doc: EditableDoc; ids: Set<string> } | null {
   const item = pathAt(doc, id)
   if (!item || item.subPaths.length < 2) return null
   const parts = splitCompound(item, () => newId('p'))
-  const items = doc.items.flatMap((it) => (it.id === item.id ? parts : [it]))
+  const items = replaceWithMany(doc.items, item.id, parts)
+  if (items === doc.items) return null
   return { doc: { ...doc, items }, ids: new Set(parts.map((p) => p.id)) }
 }
 
@@ -134,6 +135,8 @@ export function combineSelected(
   const merged = combinePaths(paths as never)
   if (!merged) return null
   const keep = new Set(paths.slice(1).map((p) => p.id))
-  const items = removeItems(doc.items, keep).map((it) => (it.id === merged.id ? merged : it))
+  // Recursive: the first path may sit inside a group, and the merged path
+  // takes its place there (it keeps that path's id).
+  const items = replaceIn(removeItems(doc.items, keep), merged)
   return { doc: { ...doc, items }, id: merged.id }
 }

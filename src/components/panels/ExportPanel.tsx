@@ -294,8 +294,8 @@ export default function ExportPanel(): ReactNode {
               </label>
             </div>
             <p className="mt-3 rounded-md bg-surface-3 px-3 py-2 text-xs leading-snug text-muted">
-              Maskable icons fill the whole square with no transparency, and keep your mark inside a larger safe zone, so
-              Android can crop them to any shape without cutting it off. The dashed circle in the preview shows that
+              Maskable icons fill the whole square with no transparency, and keep your mark inside a larger safe zone,
+              so Android can crop them to any shape without cutting it off. The dashed circle in the preview shows that
               crop: the centre 66% that Android always keeps, as a circle.
             </p>
           </section>

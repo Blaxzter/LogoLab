@@ -16,6 +16,7 @@
 // and hidden items, exactly as the SVG export leaves hidden ones out.
 
 import type { DocItem, EditableDoc, GradientFill, PathItem, SubPath, Vec } from '../path/types'
+import { parseCssColor } from '../path/cssColor.ts'
 
 /** A visible path, with its group opacities folded in. */
 interface Leaf {
@@ -46,11 +47,18 @@ export function unsupportedItemCount(doc: EditableDoc): number {
   return n
 }
 
-const isNone = (paint: string) => paint.trim().toLowerCase() === 'none'
+const isNone = (paint: string) => {
+  const p = paint.trim().toLowerCase()
+  return p === 'none' || p === 'transparent'
+}
 
 function hexRgb(hex: string): [number, number, number] {
   const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(hex.trim())
-  if (!m) return [0, 0, 0]
+  if (!m) {
+    // Paint the import did not reduce to hex (`red`, `rgb(…)`): read it, don't paint black.
+    const c = parseCssColor(hex)
+    return c ? [Math.round(c.r), Math.round(c.g), Math.round(c.b)] : [0, 0, 0]
+  }
   const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1]
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number]
 }

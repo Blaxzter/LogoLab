@@ -11,7 +11,7 @@ import { join, posix, relative } from 'node:path'
 import { encodeIcoBytes, type RenderIconOpts } from '../lib/export/iconSpec.ts'
 import type { IconShape } from '../types'
 import { encodeIcns } from './icns.ts'
-import { customPreset, presetById, type IconFileSpec, type Preset } from './presets.ts'
+import { customPreset, mergeWebPresets, presetById, type IconFileSpec, type Preset } from './presets.ts'
 import { renderIconPng, type PreparedLogo } from './render.ts'
 import { ensureDir, ensureParent, humanBytes } from './runtime.ts'
 
@@ -98,7 +98,17 @@ function optsFor(spec: IconFileSpec, app: Appearance): RenderIconOpts {
   }
 }
 
-/** Resolve the requested preset ids (plus a custom-size preset when asked). */
+/**
+ * The notes written at the export root. Not README.md: the presets lay files out
+ * from a PROJECT root (public/, src-tauri/icons/, …), so that is the outDir an
+ * agent passes, and a README.md there is the project's own.
+ */
+export const NOTES_FILE = 'logolab-icons.md'
+
+/**
+ * Resolve the requested preset ids (plus a custom-size preset when asked). Web
+ * presets asked for together become one, since they share a manifest and snippet.
+ */
 export function resolvePresets(req: ExportRequest): Preset[] {
   const ids = req.presets?.length ? req.presets : ['pwa']
   const out: Preset[] = []
@@ -111,7 +121,7 @@ export function resolvePresets(req: ExportRequest): Preset[] {
     out.push(preset)
   }
   if (req.sizes?.length) out.push(customPreset(req.sizes))
-  return out
+  return mergeWebPresets(out)
 }
 
 /** Render and write one collection. Returns what landed on disk. */
@@ -132,12 +142,24 @@ export function exportCollection(logo: PreparedLogo, outDir: string, req: Export
   }
 
   const files: WrittenFile[] = []
+  // Presets can share a path: a path written twice is reported once, with the
+  // bytes of the last write, and is `replaced` only when it was on disk BEFORE
+  // this export — never because of our own earlier write.
+  const byPath = new Map<string, WrittenFile>()
   const write = (relPath: string, bytes: Uint8Array | string): void => {
+    const path = posix.join(...relPath.split(/[\\/]/))
     const full = ensureParent(join(root, relPath))
-    const replaced = existsSync(full)
+    const earlier = byPath.get(path)
+    const replaced = earlier ? earlier.replaced : existsSync(full)
     writeFileSync(full, bytes)
     const size = typeof bytes === 'string' ? Buffer.byteLength(bytes) : bytes.byteLength
-    files.push({ path: posix.join(...relPath.split(/[\\/]/)), bytes: size, replaced })
+    if (earlier) {
+      earlier.bytes = size
+      return
+    }
+    const entry: WrittenFile = { path, bytes: size, replaced }
+    byPath.set(path, entry)
+    files.push(entry)
   }
 
   for (const preset of presets) {
@@ -161,7 +183,7 @@ export function exportCollection(logo: PreparedLogo, outDir: string, req: Export
     if (req.svg && preset.svgPath) write(preset.svgPath, req.svg)
   }
 
-  write('README.md', readme(appName, presets, app, files, root))
+  write(NOTES_FILE, readme(appName, presets, app, files, root))
 
   const totalBytes = files.reduce((n, f) => n + f.bytes, 0)
   return {

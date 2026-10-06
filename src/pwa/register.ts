@@ -113,7 +113,12 @@ export function registerServiceWorker(): void {
           })
         })
 
-        setInterval(() => void reg.update(), UPDATE_INTERVAL_MS)
+        setInterval(() => {
+          // Rejects whenever the script can't be fetched — offline, which this app
+          // supports — and an unhandled rejection would land in the error log and
+          // in every later issue report. The next interval tries again.
+          reg.update().catch(() => {})
+        }, UPDATE_INTERVAL_MS)
       } catch {
         /* blocked or plain http: the app works, just not offline */
       }

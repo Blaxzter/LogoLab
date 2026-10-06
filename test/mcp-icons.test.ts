@@ -171,7 +171,7 @@ test('a pwa + tauri export writes the layout each platform expects', () => {
     'src-tauri/icons/icon.ico',
     'src-tauri/icons/icon.icns',
     'src-tauri/icons/StoreLogo.png',
-    'README.md',
+    'logolab-icons.md',
   ]
   for (const path of expected) {
     assert.ok(existsSync(join(out, path)), `wrote ${path}`)

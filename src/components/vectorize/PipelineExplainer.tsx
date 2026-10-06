@@ -1,7 +1,9 @@
 // "How it works": a teaching overlay that runs the current image through the
 // vectorize pipeline with the user's current settings and explains each stage.
 // The analysis runs in the trace worker ('analyze' job) with the same options as
-// the real trace, so its region count matches the output.
+// the real trace, and its region pictures come from the segmenter that trace ran
+// (ink cut, palette-first or smoothness — explainStages.ts), so the stages are
+// worded by `a.segmenter` and the region count matches the output.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -135,18 +137,34 @@ function Steps({
   opts: VectorizeOptions
   detect: { ramp: RampinessReport; hist: ColorHistogram } | null
 }) {
-  const { width, height, regionCount, paints } = a
+  const { width, height, regionCount, paints, segmenter } = a
   const gradientsOn = opts.gradients !== false
+  // Only the smoothness segmenter feeds the gradient ladder; the ink cut and the
+  // palette are flat by construction.
+  const paintsFlat = segmenter !== 'smooth' || !gradientsOn
+  const strokes = opts.centerline === true
+  // Strokes in Colour cut a coverage raster at a fixed level, not the Threshold slider.
+  const colourStrokes = strokes && opts.mode !== 'mono'
   const fidelity = opts.fidelity ?? 1.5
   const markerCount = opts.markers?.length ?? 0
 
   return (
     <div className="flex flex-col gap-6">
-      {opts.mode === 'mono' && (
+      {segmenter === 'ink' && (
         <p className="rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-xs leading-snug text-ink-2">
-          You're in <b>Mono</b> mode: the image is cut at one threshold into ink and paper, and that two-region map
-          goes through the same outline tracer as colour. The colour-grouping stages below show how <b>Color</b> mode
-          works; your actual result in step 5 is the mono shape.
+          {strokes ? (
+            <>
+              <b>Strokes</b> are on: the image is cut into ink and paper
+              {opts.mode === 'mono' ? ' at one threshold' : ' (every colour folded into one ink first)'}, and the middle
+              of each line is drawn as a stroked path with a measured width. Ink no stroke explains, like a dot, is
+              traced as a shape. The stages below show that cut.
+            </>
+          ) : (
+            <>
+              You're in <b>Mono</b> mode: the image is cut at one threshold into ink and paper, and that two-region map
+              goes through the same outline tracer as colour. The stages below show that cut.
+            </>
+          )}
         </p>
       )}
 
@@ -160,19 +178,36 @@ function Steps({
         </Visual>
       </Step>
 
-      <Step
-        n={2}
-        title="Smooth, and find the real edges"
-        controls={['automatic']}
-        body="First we smooth the image into even patches of colour (a Mumford–Shah solver). Along the way this gives a map of the strong edges between the patches, which are the borders worth keeping. Anti-aliasing fuzz and sensor noise are smoothed away so they don't turn into jagged shapes. This stage always runs the same way and has no setting."
-      >
-        <Visual label="Smoothed">
-          <StageCanvas rgba={a.smoothed} width={width} height={height} />
-        </Visual>
-        <Visual label="Detected edges">
-          <StageCanvas rgba={a.disc} width={width} height={height} />
-        </Visual>
-      </Step>
+      {a.smoothed && a.disc ? (
+        <Step
+          n={2}
+          title="Smooth, and find the real edges"
+          controls={['automatic']}
+          body="First we smooth the image into even patches of colour (a Mumford–Shah solver). Along the way this gives a map of the strong edges between the patches, which are the borders worth keeping. Anti-aliasing fuzz and sensor noise are smoothed away so they don't turn into jagged shapes. This stage always runs the same way and has no setting."
+        >
+          <Visual label="Smoothed">
+            <StageCanvas rgba={a.smoothed} width={width} height={height} />
+          </Visual>
+          <Visual label="Detected edges">
+            <StageCanvas rgba={a.disc} width={width} height={height} />
+          </Visual>
+        </Step>
+      ) : (
+        <Step
+          n={2}
+          title={segmenter === 'ink' ? 'Cut ink from paper' : 'Read the flat colours'}
+          controls={segmenter === 'ink' && !colourStrokes ? [`Threshold ${opts.threshold}`] : ['automatic']}
+          body={
+            segmenter === 'ink'
+              ? colourStrokes
+                ? 'There is no smoothing stage here. The flat colours are read first, then every ink is folded into one coverage map: how far each pixel is from the paper toward its ink. Every pixel past halfway is ink, so a line keeps its drawn width whatever its colour.'
+                : 'There is no smoothing stage here. Every pixel is either ink or paper, decided by how dark it is against the threshold, with soft edges read as partial coverage so a line keeps its drawn width.'
+              : "Your image is flat art and Gradients are off, so there is no smoothing stage. We pick the image's dominant flat colours and give every pixel, anti-aliasing included, to the nearest one, so a soft edge becomes one clean border instead of a thin blend sliver."
+          }
+        >
+          {null}
+        </Step>
+      )}
 
       <Step
         n={3}
@@ -181,11 +216,21 @@ function Steps({
           `Region detail: ${(opts.regionDetail ?? 0) === 0 ? 'auto' : opts.regionDetail}`,
           ...(markerCount > 0 ? [`Markers: ${markerCount}`] : []),
         ]}
-        body={`Pixels in the same smooth patch are merged into a handful of regions, and each region becomes one shape. With your current settings your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. Region detail controls this merge. At the default, areas that are similar enough are fused, so subtle differences (like the soft blends where translucent shapes overlap) can merge into a neighbour instead of becoming shapes of their own. Raise it to keep those finer regions, though it may break smooth gradients into flat bands.${
-          markerCount > 0
-            ? ` You've placed ${markerCount} region marker${markerCount === 1 ? '' : 's'}. Each one is kept as its own region (two spots with different markers never merge), which protects just those areas without raising Region detail everywhere.`
-            : ''
-        }`}
+        body={
+          segmenter === 'ink'
+            ? `The cut leaves ${regionCount} region${regionCount === 1 ? '' : 's'}: the ink, and the paper around it. Specks smaller than the Despeckle floor are folded into whichever side surrounds them.`
+            : segmenter === 'palette'
+              ? `Each dominant colour, and every pixel given to it, is a region, and each region becomes one shape. With your current settings your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. Region detail keeps more colours (subtler flats survive as their own shapes); Despeckle drops more of the small ones.${
+                  markerCount > 0
+                    ? ` You've placed ${markerCount} region marker${markerCount === 1 ? '' : 's'}; keeping areas apart steers the smoothness grouping, which flat art with Gradients off does not use (Remove still applies).`
+                    : ''
+                }`
+              : `Pixels in the same smooth patch are merged into a handful of regions, and each region becomes one shape. With your current settings your image became ${regionCount} region${regionCount === 1 ? '' : 's'}. Region detail controls this merge. At the default, areas that are similar enough are fused, so subtle differences (like the soft blends where translucent shapes overlap) can merge into a neighbour instead of becoming shapes of their own. Raise it to keep those finer regions, though it may break smooth gradients into flat bands.${
+                  markerCount > 0
+                    ? ` You've placed ${markerCount} region marker${markerCount === 1 ? '' : 's'}. Each one is kept as its own region (two spots with different markers never merge), which protects just those areas without raising Region detail everywhere.`
+                    : ''
+                }`
+        }
       >
         <Visual label={`${regionCount} regions`}>
           <StageCanvas rgba={a.segs} width={width} height={height} />
@@ -197,9 +242,13 @@ function Steps({
         title="Fit the simplest paint that matches"
         controls={[`Gradients: ${gradientsOn ? 'on' : 'off'}`]}
         body={`Each region gets the simplest paint that still matches it well: a flat colour, a smooth gradient, or a layered “glow” stack, whichever reproduces the region with the fewest parameters.${
-          gradientsOn
+          !paintsFlat
             ? ' (Coloured tags below show what each region matched.)'
-            : ' Gradients are off, so every region here is a single flat colour.'
+            : segmenter === 'ink'
+              ? colourStrokes
+                ? ' Each stroke is then painted in the colour it runs through, and split where that colour changes.'
+                : ' The ink is one flat colour, repainted in the colour the probe found.'
+              : ' Gradients are off, so every region here is a single flat colour.'
         }`}
       >
         {detect && <GradientDetection ramp={detect.ramp} hist={detect.hist} gradientsOn={gradientsOn} />}
@@ -210,9 +259,12 @@ function Steps({
           <div className="mb-1 text-[11px] text-muted">Paint per region</div>
           <div className="flex max-h-[148px] flex-wrap content-start gap-1.5 overflow-y-auto">
             {paints.map((p, i) => {
+              // Indexed by label so the outline matches the region's hue; a label the
+              // traced map no longer holds has no chip.
+              if (!p) return null
               const [r, g, b] = labelColor(i)
-              const model = p?.model ?? 'solid'
-              const [sr, sg, sb] = p?.solid ?? [200, 200, 200]
+              const model = p.model
+              const [sr, sg, sb] = p.solid
               return (
                 <span
                   key={i}
@@ -257,8 +309,8 @@ function Steps({
 
       <p className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
         Tip: if overlapping or finely detailed areas go missing, it's usually step 3: they merged into a neighbouring
-        region before they could become shapes of their own. Raise <b>Region detail</b> or place{' '}
-        <b>Region markers</b> to keep them.
+        region before they could become shapes of their own. Raise <b>Region detail</b> or place <b>Region markers</b>{' '}
+        to keep them.
       </p>
 
       <References />
@@ -358,8 +410,8 @@ function GradientDetection({
         </span>
       </div>
       <p className="mb-2 text-[10px] leading-snug text-muted">
-        Turns on only when colours change gradually <b className="text-ink-2">and</b> the palette is spread out, so
-        flat art with soft edges (gentle ramps, but few colours) stays off.
+        Turns on only when colours change gradually <b className="text-ink-2">and</b> the palette is spread out, so flat
+        art with soft edges (gentle ramps, but few colours) stays off.
       </p>
       <div className="flex flex-wrap gap-x-5 gap-y-3">
         <div className="min-w-[180px] flex-1">
@@ -391,8 +443,9 @@ function GradientDetection({
           </div>
           {overridden && (
             <div className="mt-1 text-[10px] leading-snug text-warn">
-              Active: gradients {gradientsOn ? 'on' : 'off'}, though detection suggested {ramp.suggestion ? 'on' : 'off'} (set
-              by hand, or the default for an SVG you’re cleaning rather than tracing).
+              Active: gradients {gradientsOn ? 'on' : 'off'}, though detection suggested{' '}
+              {ramp.suggestion ? 'on' : 'off'} (set by hand, or the default for an SVG you’re cleaning rather than
+              tracing).
             </div>
           )}
         </div>

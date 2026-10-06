@@ -31,7 +31,18 @@ function ago(at: number, now: number): string {
 export function SavedStatusRow({ className = '', onAct }: { className?: string; onAct?: () => void }) {
   const status = useSaveStatus()
   const [clearing, setClearing] = useState(false)
-  const [now] = useState(() => Date.now())
+  const [now, setNow] = useState(() => Date.now())
+
+  // The mobile menu translates this row off-screen rather than unmounting it, so
+  // it lives for the whole session: a `now` frozen at mount read every later save
+  // as "just now" forever. Re-read it whenever the status changes, and tick like
+  // the chip so the label ages while it is on screen.
+  useEffect(() => {
+    setNow(Date.now())
+    if (status.savedAt === null) return
+    const id = setInterval(() => setNow(Date.now()), TICK_MS)
+    return () => clearInterval(id)
+  }, [status.savedAt])
 
   if (status.savedAt === null && !status.failed && !status.pending) return null
 
@@ -195,8 +206,8 @@ export function SavedChip({ className = '' }: { className?: string }) {
                   Not being saved
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                  This browser isn't letting LogoLab store anything, usually because of a private window or full storage.
-                  Everything still works, but a reload will lose it. Download what you want to keep.
+                  This browser isn't letting LogoLab store anything, usually because of a private window or full
+                  storage. Everything still works, but a reload will lose it. Download what you want to keep.
                 </p>
               </>
             ) : (

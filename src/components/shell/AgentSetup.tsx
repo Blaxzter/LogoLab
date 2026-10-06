@@ -15,6 +15,9 @@ import { Tooltip } from '../ui/Tooltip'
 const PACKAGE = 'logolab'
 /** The stdio launch every client config wraps. Mirrors `launchSpec` in src/mcp/install.ts. */
 const LAUNCH = { command: 'npx', args: ['-y', PACKAGE] }
+/** Claude Code on native Windows spawns without a shell, so `npx` (a .cmd) needs `cmd /c`. */
+const IS_WINDOWS = typeof navigator !== 'undefined' && /Win/i.test(navigator.platform || navigator.userAgent)
+const CLAUDE_LAUNCH = IS_WINDOWS ? `cmd /c npx -y ${PACKAGE}` : `npx -y ${PACKAGE}`
 
 /** Dev builds know where the checkout is; a hosted build cannot (see vite.config.ts). */
 declare const __LOGOLAB_ROOT__: string
@@ -173,7 +176,7 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
               {client === 'claude' && (
                 <>
                   <p className="text-xs text-muted">Run this in the project you want the icons in:</p>
-                  <Command>{`claude mcp add ${PACKAGE} -- npx -y ${PACKAGE}`}</Command>
+                  <Command>{`claude mcp add ${PACKAGE} -- ${CLAUDE_LAUNCH}`}</Command>
                   <p className="text-xs text-muted">
                     Or let the server register itself. This writes <code className="font-mono">.mcp.json</code> in the
                     current project (add <code className="font-mono">--scope user</code> for every project):
@@ -209,7 +212,9 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
 
               {client === 'json' && (
                 <>
-                  <p className="text-xs text-muted">Any MCP client. It is a stdio server, with no ports and no network:</p>
+                  <p className="text-xs text-muted">
+                    Any MCP client. It is a stdio server, with no ports and no network:
+                  </p>
                   <Command>{JSON.stringify({ mcpServers: { [PACKAGE]: LAUNCH } }, null, 2)}</Command>
                 </>
               )}

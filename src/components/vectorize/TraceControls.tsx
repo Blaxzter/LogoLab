@@ -190,7 +190,9 @@ export function TraceControlsBody({
     if (upscaleMode === 'off') return 'Traced at its own size, without enlarging.'
     if (upscaleMode === 'ai' && sourceMaxDim != null && !aiCanBite)
       return `AI only enlarges images up to ${AI_UPSCALE_MAX_PX}px. At ${sourceMaxDim}px it steps aside and Auto's rule applies${
-        autoUpscale && autoUpscale.scale > 1 ? ` (this image was enlarged ×${autoUpscale.scale} with plain bilinear scaling)` : ''
+        autoUpscale && autoUpscale.scale > 1
+          ? ` (this image was enlarged ×${autoUpscale.scale} with plain bilinear scaling)`
+          : ''
       }.`
     if (upscaleMode === 'ai')
       return `AI enlarges a small image ×${sourceMaxDim ? aiUpscaleFactor(sourceMaxDim) || 2 : '2–4'} before tracing (waifu2x, running in your browser: a one-time ~17–19 MB download, then a few seconds per trace). In our tests it gave cleaner corners and fewer nodes than tracing the image small.`
@@ -286,8 +288,8 @@ export function TraceControlsBody({
             </Field>
             {!tracing && (
               <div className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
-                This is already a vector, so the existing SVG is cleaned up. Switch to Re-trace to rebuild the paths from
-                pixels.
+                This is already a vector, so the existing SVG is cleaned up. Switch to Re-trace to rebuild the paths
+                from pixels.
               </div>
             )}
           </>

@@ -43,22 +43,30 @@ export function SheetIntake() {
     if (!logo.src) return
     setError(null)
     setLoading(true)
+    let src: string | null = null
     try {
       const image = await getImageData(logo.src, SHEET_MAX_DIM, logo.isSvg ? logo.svgText : null)
+      // The sheet gets its OWN copy of the bytes. Sharing the store's blob URL
+      // left the sheet showing a broken image once the logo was replaced or
+      // removed on another tab, because the store revokes that URL.
+      const blob =
+        logo.isSvg && logo.svgText
+          ? new Blob([logo.svgText], { type: 'image/svg+xml' })
+          : await (await fetch(logo.src)).blob()
+      src = URL.createObjectURL(blob)
       setSource(
         {
-          // Not ours to revoke — the store owns this URL — so it is passed as-is
-          // and `setSource` only revokes URLs it created.
-          src: logo.src,
+          src,
           fileName: logo.fileName,
           width: image.width,
           height: image.height,
           svgText: logo.isSvg ? logo.svgText : null,
-          owned: false,
+          owned: true,
         },
         image,
       )
     } catch {
+      if (src) URL.revokeObjectURL(src)
       setError('Could not read the current image.')
     } finally {
       setLoading(false)
@@ -96,8 +104,8 @@ export function SheetIntake() {
         <div>
           <p className="text-base font-medium text-ink">{dragging ? 'Drop to split it' : 'Drop an icon sheet'}</p>
           <p className="mt-1 max-w-md text-sm text-muted">
-            One image with a set of icons on it, like the ones image models make. Each icon is found, cropped and
-            traced to its own clean SVG.
+            One image with a set of icons on it, like the ones image models make. Each icon is found, cropped and traced
+            to its own clean SVG.
           </p>
           <p className="mt-2 text-xs text-faint">
             Drop a file or <span className="font-medium text-muted">click to browse</span> · PNG, SVG, JPG, WebP
@@ -134,8 +142,8 @@ export function SheetIntake() {
         <h3 className="mb-1 text-sm font-semibold text-ink">How it works</h3>
         <ol className="ml-4 list-decimal space-y-1">
           <li>
-            LogoLab measures the sheet's paper colour and groups the artwork on it into icons. Captions and titles
-            are recognised and left out.
+            LogoLab measures the sheet's paper colour and groups the artwork on it into icons. Captions and titles are
+            recognised and left out.
           </li>
           <li>
             Check the split in the <strong>Sheet</strong> view: drag or resize a box, or draw one that is missing.

@@ -15,6 +15,8 @@ import { Sheet } from '../ui/Sheet'
 import { StudioActionBar, StudioDesktopToolbar, StudioTopBar } from '../studio/StudioBar'
 import { LegalLinksInline } from '../legal/LegalFooter'
 import { ReportFailureLink } from '../report/ReportIssue'
+import { logError } from '../../lib/report/errorLog'
+import { raiseFailure } from '../../lib/report/failureNotice'
 import { downloadBlob } from '../../lib/export/download'
 import { exportName } from '../../lib/sheet'
 import { SheetControls, SheetControlsBody } from './SheetControls'
@@ -127,9 +129,16 @@ export function SheetStudio() {
 
   const onReplaceFile = async (file: File | undefined) => {
     if (!file || !isImageFile(file)) return
-    const intake = await readSheetFile(file)
-    setSource(intake.source, intake.image)
-    setOpenId(null)
+    // Called with `void`: an uncaught decode failure here was an unhandled
+    // rejection — nothing on screen, and nothing for a report to pick up.
+    try {
+      const intake = await readSheetFile(file)
+      setSource(intake.source, intake.image)
+      setOpenId(null)
+    } catch (err) {
+      logError('sheet', err)
+      raiseFailure('the icon sheet', 'Could not read that file.', err)
+    }
   }
 
   const onExport = useCallback(async () => {
@@ -147,6 +156,9 @@ export function SheetStudio() {
       const blob = await buildSheetZip(items, { svg: exportSvg, png: exportPng, transparent: transparentPng })
       const base = (source?.fileName ?? 'sheet').replace(/\.[^.]+$/, '') || 'sheet'
       downloadBlob(blob, `${base}-icons.zip`)
+    } catch (err) {
+      logError('sheet', err)
+      raiseFailure('the icon sheet', 'Could not build the zip.', err)
     } finally {
       setExporting(false)
     }

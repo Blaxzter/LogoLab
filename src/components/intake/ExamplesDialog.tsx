@@ -168,8 +168,9 @@ export function ExampleGrid({
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const blob = await res.blob()
         const file = new File([blob], ex.file, { type: blob.type || 'image/svg+xml' })
-        clearLogo()
+        // Decode before clearing, so a failure leaves the current logo alone.
         const patch = await loadLogoFile(file)
+        clearLogo()
         setLogo({ ...patch, traceHints: ex.trace })
         onPicked?.()
       } catch {

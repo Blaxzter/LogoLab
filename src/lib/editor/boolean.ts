@@ -24,6 +24,7 @@ import paper from 'paper/dist/paper-core.js'
 import type { DocItem, EditableDoc, PathItem, PathNode, SubPath } from '../path/types.ts'
 import { allPaths, findItem, isGroup, removeItems } from '../path/docTree.ts'
 import { booleanOperandIds } from './booleanOrder.ts'
+import { replaceWithMany } from './nodeEdit.ts'
 
 export type BooleanOp = 'add' | 'subtract' | 'intersect' | 'xor' | 'divide'
 
@@ -287,13 +288,4 @@ export function mergeSelected(doc: EditableDoc, selection: ReadonlySet<string>):
     })
   const items = walk(doc.items, false)
   return changed ? { ...doc, items } : null
-}
-
-/** Put `next` where `id` was, in its parent, in order. */
-function replaceWithMany(items: readonly DocItem[], id: string, next: DocItem[]): DocItem[] {
-  return items.flatMap((it): DocItem[] => {
-    if (it.id === id) return next
-    if (isGroup(it)) return [{ ...it, children: replaceWithMany(it.children, id, next) }]
-    return [it]
-  })
 }

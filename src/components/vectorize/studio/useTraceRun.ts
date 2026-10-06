@@ -30,6 +30,8 @@ export function useTraceRun({
   dirtyRef,
   skipRetraceRef,
   setScore,
+  inputKey,
+  docKeyRef,
 }: {
   logo: VectorizeSource
   opts: VectorizeOptions
@@ -42,6 +44,10 @@ export function useTraceRun({
   dirtyRef: RefObject<boolean>
   skipRetraceRef: RefObject<boolean>
   setScore: (score: TraceScore | null) => void
+  /** `assetKey` of the image being traced. */
+  inputKey: string
+  /** Set to the key a landed run started on: which image the doc now belongs to. */
+  docKeyRef: RefObject<string | null>
 }) {
   const [staleEdits, setStaleEdits] = useState(false)
   // Settings changed since the last completed trace but not applied: set when a
@@ -67,14 +73,20 @@ export function useTraceRun({
   // Pending debounced auto-run timer, shared so Stop can cancel it (otherwise a
   // re-trace armed just before Stop fires ~DEBOUNCE_MS later and clobbers the doc).
   const autoRunTimerRef = useRef<number | null>(null)
+  // Read at run start rather than a dependency of `run`: the key moves with the
+  // image, and the image (logo) already re-creates `run`.
+  const inputKeyRef = useRef(inputKey)
+  inputKeyRef.current = inputKey
 
   // biome-ignore lint/correctness/useExhaustiveDependencies(precision): a constant
   // biome-ignore lint/correctness/useExhaustiveDependencies(dirtyRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(docKeyRef): a ref, read when the code runs
   // biome-ignore lint/correctness/useExhaustiveDependencies(setScore): a state setter, stable
   // biome-ignore lint/correctness/useExhaustiveDependencies(setSelectedNodes): a state setter, stable
   const run = useCallback(async () => {
     if (!logo.src) return
     const runId = ++runIdRef.current
+    const key = inputKeyRef.current
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -169,6 +181,7 @@ export function useTraceRun({
       }
       if (runId !== runIdRef.current) return
       historyReset(next)
+      docKeyRef.current = key
       handleSelectPath(null)
       setSelectedNodes(new Set())
       dirtyRef.current = false

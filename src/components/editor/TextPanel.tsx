@@ -131,7 +131,9 @@ export function TextPanel({
         <div className="flex items-center gap-1.5">
           <span className="w-8 shrink-0 text-[0.7rem] text-muted">Weight</span>
           {wght ? (
-            <Tooltip label={<TipLabel title="Weight" detail="This is a variable font, so any weight in its range works." />}>
+            <Tooltip
+              label={<TipLabel title="Weight" detail="This is a variable font, so any weight in its range works." />}
+            >
               <RangeInput
                 aria-label="Weight"
                 min={wght.min}
