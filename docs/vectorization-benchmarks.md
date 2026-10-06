@@ -7501,3 +7501,17 @@ the colours. On posterized chrome (mercedes-benz, seams everywhere) it is within
 
 `before-sidebyside` ⇄ `after-sidebyside` (the A/B lab's new `stack` lane: flat +
 stacked) moves only that lane; flat, grad, mono, line and cline are byte-identical.
+
+### 41.4 Mono stacks the same way
+
+Mono is a two-label map, so the question is the same: is the teal page one big area with
+the white ring on it, or is the white carved out of it? On an opaque paper the same pass
+runs over ink and paper. The paper's bottom layer is the rectangle already emitted; its
+islands (the teal inside Orbit's ring) come back on top as `paper-d<layer>`, painted the
+paper colour, and `isPaper` covers them so force colour and the sheet's repaint skip them.
+Orbit at 2048: `paper, trace-0, paper-d2, trace-0-d3`, 784 ms against 813 ms tiled. On
+transparency (or with the background removed) the ink's holes show the void, nothing is
+stacked, and the document is byte-identical to tiled. The mono A/B lane runs tiled and
+does not move. The Layering control is shown for what the trace IS, so Auto → Mono shows
+it; before this it sat behind an explicit Color pick and read as missing.
+

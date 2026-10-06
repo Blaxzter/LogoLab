@@ -222,6 +222,12 @@ Six things that are easy to undo:
 * **Two halves completed along one line share ONE hidden edge** (aa-seam: both halves of a
   seam a disc covers), so moving the junction moves both, like any planar boundary.
 
+**Mono stacks too**, on an opaque paper: the ink paints solid and the paper's colour sits on
+top where it had holes, as `paper-d<layer>` islands that `isPaper` recognises — every repaint
+skips them like the rectangle, or force colour fills each counter with ink. The paper's
+bottom layer IS the rectangle. The control shows for what the trace IS (Auto → Mono
+included), only Strokes hides it — hidden behind "Color" it read as missing under Auto.
+
 Tiled stays the default and is byte-identical (`before-stacked` ⇄ `after-stacked`). The A/B
 lab has a sixth lane, **`stack`** (flat + stacked); `before-sidebyside` ⇄ `after-sidebyside`
 moves only that lane. `test/planar-stack.test.ts` is the gate; `bench/stackDiag.ts` the

@@ -59,7 +59,7 @@ const traceShape = {
     .enum(['tiled', 'stacked'])
     .optional()
     .describe(
-      'Colour mode. tiled (default): shapes fit edge to edge, a shape has a hole wherever another sits inside it. stacked: a shape paints solid under the shapes inside it — no holes, no hairline seams between colours, easier to edit in a design tool. Same edges either way.',
+      'Colour and mono. tiled (default): shapes fit edge to edge, a shape has a hole wherever another sits inside it. stacked: a shape paints solid under the shapes inside it — no holes, no hairline seams between colours, easier to edit in a design tool. Same edges either way.',
     ),
   flattenOnto: z
     .string()
