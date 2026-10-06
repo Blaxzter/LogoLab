@@ -23,7 +23,7 @@
 import type { PathItem, SubPath, Vec } from '../../path/types'
 import type { PlanarFitOptions } from '../planarFit/options.ts'
 import type { StrokeRun } from './blobs.ts'
-import { applyEnd, outwardTangent, readEnd, type CapKind } from './ends.ts'
+import { applyEnd, outwardTangent, readEnd, type CapKind, type EndRead } from './ends.ts'
 import { armLineOf, fitClosedCentreline, fitOpenCentreline, type FitContext } from './fit.ts'
 import type { SkeletonGraph } from './graph.ts'
 import { gaussSmooth, type CoverageField } from './profile.ts'
@@ -492,18 +492,49 @@ export function assembleStrokes(
     let capA: CapKind = 'butt'
     let capB: CapKind = 'butt'
     let P = pts
+    // A free flat end, kept so it can be re-placed if the path goes out round (below).
+    type FlatEnd = { read: EndRead; t: Vec; r: number }
+    let readA: EndRead | null = null
+    let readB: EndRead | null = null
+    let flatA: FlatEnd | null = null
+    let flatB: FlatEnd | null = null
+    const flatEnd = (src: Vec[], side: 'a' | 'b', read: EndRead, r: number, intoFill: boolean): FlatEnd | null => {
+      if (intoFill || read.cap !== 'butt') return null
+      const t = outwardTangent(src, side, Math.max(3, 3 * r))
+      return t ? { read, t, r } : null
+    }
     if (!startAtJunction) {
       const intoFill = startSide === 'a' ? run0.blobAtA : run0.blobAtB
-      const read = readEnd(P, 'a', halfWidthNear(ws, W), f, blobMask, intoFill)
+      const r = halfWidthNear(ws, W)
+      const read = readEnd(P, 'a', r, f, blobMask, intoFill)
+      flatA = flatEnd(P, 'a', read, r, intoFill)
       P = applyEnd(P, 'a', read)
       capA = read.cap
+      readA = read
     }
     if (!endAtJunction) {
       const runE = runs[endRun]
       const intoFill = endSide === 'a' ? runE.blobAtA : runE.blobAtB
-      const read = readEnd(P, 'b', halfWidthNear(ws.slice().reverse(), W), f, blobMask, intoFill)
+      const r = halfWidthNear(ws.slice().reverse(), W)
+      const read = readEnd(P, 'b', r, f, blobMask, intoFill)
+      flatB = flatEnd(P, 'b', read, r, intoFill)
       P = applyEnd(P, 'b', read)
       capB = read.cap
+      readB = read
+    }
+    // A path carries ONE linecap and mixed ends go out round (emit). readEnd placed a free
+    // flat end AT the ink's end, so drawn round it would paint a half-width of ink past the
+    // source: pull it back by r, where readEnd puts a round end. (An into-fill end is butt
+    // by construction and overlaps its fill on purpose, so it stays.)
+    if (capA !== capB && (flatA || flatB)) {
+      const pulled = (e: FlatEnd): EndRead => ({
+        end: { x: e.read.end.x - e.r * e.t.x, y: e.read.end.y - e.r * e.t.y },
+        cap: 'round',
+        advance: e.read.advance - e.r,
+      })
+      P = pts
+      if (readA) P = applyEnd(P, 'a', flatA ? pulled(flatA) : readA)
+      if (readB) P = applyEnd(P, 'b', flatB ? pulled(flatB) : readB)
     }
     emit(P, ws, false, capA, capB)
   }
