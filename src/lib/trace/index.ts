@@ -26,7 +26,7 @@ import { type PlanarFitOptions, DEFAULT_PLANAR_FIT, FLAT_LINE_COST } from './pla
 import { planarBeautify } from './planarBeautify.ts'
 import { weldConvergedJunctions } from './planarReseat.ts'
 import { materializeRegion, edgeMap } from '../path/topology.ts'
-import { stackRegions } from './planarStack.ts'
+import { stackRegions, type StackLayer, type StackResult } from './planarStack.ts'
 
 export {
   suggestGradients,
@@ -743,9 +743,18 @@ export async function traceImage(
     return !g || g.stops.every((st) => st.opacity === undefined || st.opacity >= 1)
   }
   const named = new Set<number>()
+  // Hidden edges a side-by-side completion created join the topology (each is drawn by
+  // the one shape it completes, under its neighbours).
+  const stacked = (r: StackResult): StackLayer[] => {
+    for (const e of r.edges) {
+      topology.edges.push(e)
+      edges.set(e.id, e)
+    }
+    return r.layers
+  }
   const layers =
     options.layering === 'stacked'
-      ? stackRegions(trace.loopsByLabel, edges, order, opaqueLabel).map((l) => {
+      ? stacked(stackRegions(trace.loopsByLabel, edges, order, opaqueLabel)).map((l) => {
           // The label's bottom layer keeps the tiled id; layers above it are suffixed.
           const id = named.has(l.label) ? `trace-${l.label}-d${l.depth}` : `trace-${l.label}`
           named.add(l.label)

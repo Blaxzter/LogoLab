@@ -7380,7 +7380,7 @@ browser add a worker start per candidate and one decode. The trade-off for the t
 tracing gradients at 256; that is not done, because gradient art is where the reduced pick is
 already least reliable (§40.2). The search can be cancelled, and any setting change cancels it.
 
-## 41. Stacked output: the planar graph re-layered by containment (2026-10-05)
+## 41. Stacked output: the planar graph re-layered by containment and by T-junctions (2026-10-05)
 
 `layering: 'stacked'` (the **Layering** control under Color, MCP `layering`) is a post-pass
 over the finished planar trace, `src/lib/trace/planarStack.ts`. Nothing is refitted: a region
@@ -7400,8 +7400,7 @@ edges, and paints solid under them. Tiled stays the default.
   or between its children, every child opaque (no `fill-opacity`, no stop with opacity) and
   with all of ITS holes dropped. One transparent pocket deep inside keeps every enclosing hole
   open, or the regions below would show through it.
-* Side-by-side neighbours are not touched: which of two touching regions should extend under
-  the other needs a rule of its own.
+* Side-by-side neighbours are §41.3.
 
 ### 41.2 Census (`bench/stackDiag.ts`, the `before-stacked` inputs @1024)
 
@@ -7420,3 +7419,85 @@ coca-cola 1.06 → 0.72, ibm 0.36 → 0.25 ΔE. The worst move over white is wed
 `before-stacked` ⇄ `after-stacked`: every lane byte-identical (tiled is unchanged).
 `test/planar-stack.test.ts` is the gate, including remove & heal on a stacked document — the
 lower region no longer references the top region's rim, so deleting the top region reveals it.
+
+### 41.3 Side by side: completing the shape whose outline breaks off
+
+Which of two touching shapes is in front is read off their outlines at the junctions, the
+way vision reads occlusion: the front shape's outline runs THROUGH a junction, and the one
+behind STOPS there and turns (a T-junction). Arms are paired per junction by straightness
+(ranked, within 20°, the same "rank, not threshold" lesson as §25); an outline that turns
+more than 8° from where it arrived, while its arriving arm pairs with something else or with
+nothing, breaks off there and gets a completion candidate:
+
+* **Its outline carries on as a drawn edge** — follow the through chain until it rejoins
+  the outline. Mastercard: red's arc continues as the overlap's edge with yellow, so red
+  becomes a full circle under the overlap. No new geometry.
+* **Nothing carries it on** — bridge to where the outline resumes with the curve the two
+  cut-off stems agree on: a line when they are collinear, else the cubic through their
+  tangent rays' meeting point (rays that do not meet ahead, or a bend past 90°, are not
+  relatable). Accepted only if every interior sample lies under the shapes across the span
+  it replaces. A square behind a circle comes back as a square.
+
+A candidate passes only under SOLID shapes (as in 41.1); the regions it passes under, and
+for a chain the shapes on the far side of every followed edge, go into the paint-order DAG
+above it. Candidates are accepted smallest hidden area first, each only if the DAG stays
+acyclic; a shape's layer is its longest path from a source and an item is one (layer, label).
+
+Five things the first version got wrong, each visible in an exploded view
+(`bench/stackExplode.ts` paints every layer alone over a checkerboard, its tiled outline in
+red):
+
+* **The fringe.** A disc split into a red and a blue half: red completed along blue's rim
+  became a full disc, and ΔE over white DOUBLED (0.081 → 0.162). Both shapes then
+  anti-alias that rim over the page, and red shows round blue's edge. A chain completion is
+  only fringe-free if the shape on the FAR side of each followed edge is opaque and painted
+  above the completed one. The split disc stays tiled; Mastercard completes ONE circle
+  (both would need each other on top).
+* **Split crossings.** An X crossing is often two vertices joined by a micro-edge (welded
+  to a point at 1024, still 1 px long at 2048), so no vertex saw all four arms and no
+  circle ever paired. Edges under 1.5 px are part of their junction: arms pair per
+  cluster, chains carry the micro refs so the loop stays connected, and the flood never
+  crosses one (its two sides only touch).
+* **A tangent read round the corner.** A stem 4 px long (the square's side above the
+  circle) read its tangent 4 px along the edge, round the square's corner: a diagonal, not
+  relatable. The tangent stops at the edge's first corner node.
+* **Shallow occluders.** seam-corner's posterized bands kept V-shaped bites wherever a thin
+  triangle's tip crossed a seam: its sides meet the seam at < 35°, the first break
+  threshold, and a "no through partner at the far stem" condition vetoed the rest. Both
+  went: the break needs only 8°, and relatability plus the under-test decide.
+
+* **A completion that lost part of its own shape.** Raising the micro-edge limit let
+  mercedes-benz through a bridge that rejoined the ref it left, across the shape's own
+  span: ΔE 0.78 → 1.16, half a star arm gone. Its added area was positive, the bridge lay
+  under the shapes across the span (one of which held the arm in a HOLE, so its outer
+  outline contained the arm itself), and the signed-area identity of span-vs-bridge is
+  true of any closed figure. What catches it is containment: every point of the replaced
+  span must lie inside the completed outline, a bridge's samples must lie in an occluder's
+  REGION (outer minus holes) and outside the shape itself, and a chain's hidden area must
+  equal the area of the shapes it passes under. `keepsEveryRegion` in the gate renders
+  each label tiled and stacked and fails on any pixel lost.
+
+Two halves completed along one line under the same occluder share ONE hidden edge (aa-seam:
+both halves of the diagonal under the disc), so moving the junction moves both.
+
+| lane (`before-stacked` inputs @1024) | cases | worse > 0.02 ΔE | holes closed | hidden edges | nodes tiled → stacked |
+|---|---|---|---|---|---|
+| flat | 44 | 0 | 392 | 17 | 25 955 → 23 426 |
+| gradients | 44 | 0 | 367 | 5 | 31 434 → 28 339 |
+
+At 2048 (the A/B `stack` lane) the side-by-side rule moves 12 of 44 cases: aa-seam, aurora,
+border-cross, checker, hairlines, firefox, mastercard, mercedes-benz, olympic-rings,
+overlap, petals and seam-corner (8 hidden edges there: every band a clean strip, the
+triangles one layer on top). Mastercard completes red at 1024 and yellow at 2048 — the two
+circles are a near-tie on hidden area and either is a correct stack. Checker at 2048 has
+one light face that wraps three sides of a dark cell (diagonal cells joined at a corner)
+and completes under it: odd, legitimate, same picture. Most real art is containment; true
+occlusion with the hidden outline undrawn is rarer in flat icons than in illustrations.
+
+**What stays is conflation.** Where two shapes painted over a completed one meet, their
+seam leaks a little of the completed shape's colour, where tiled leaked the page's;
+renderers composite each fill alone, so neither is exact and which is closer depends on
+the colours. On posterized chrome (mercedes-benz, seams everywhere) it is within 0.02 ΔE.
+
+`before-sidebyside` ⇄ `after-sidebyside` (the A/B lab's new `stack` lane: flat +
+stacked) moves only that lane; flat, grad, mono, line and cline are byte-identical.

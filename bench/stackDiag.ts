@@ -40,6 +40,8 @@ const opts = (layering: 'tiled' | 'stacked'): VectorizeOptions => ({
   gradients: grad,
   layering,
 })
+const nodeCount = (doc: EditableDoc) =>
+  doc.items.reduce((n, it) => n + (it.kind === 'path' ? it.subPaths.reduce((m, sp) => m + sp.nodes.length, 0) : 0), 0)
 const loopCount = (doc: EditableDoc) =>
   doc.items.reduce((n, it) => n + (it.kind === 'path' && it.loops ? it.loops.length : 0), 0)
 const err = (src: ImageData, doc: EditableDoc, bg: [number, number, number]) =>
@@ -48,10 +50,16 @@ const err = (src: ImageData, doc: EditableDoc, bg: [number, number, number]) =>
   ).meanDeltaE
 
 console.log(`stamp ${stamp}, ${grad ? 'gradients on' : 'flat'} @1024, ${cases.length} cases`)
-console.log('case'.padEnd(26), 'ΔE tiled  stacked   | green tiled stacked | loops     | ms tiled stacked')
+console.log(
+  'case'.padEnd(26),
+  'ΔE tiled  stacked   | green tiled stacked | loops     | nodes       | +edges | ms tiled stacked',
+)
 let worse = 0
 let closed = 0
 let tMs = 0
+let hiddenTotal = 0
+let nodesT = 0
+let nodesS = 0
 let sMs = 0
 for (const id of cases) {
   const png = decodePng(readFileSync(join(dir, `${id}.r1024.png`)))
@@ -70,6 +78,12 @@ for (const id of cases) {
   const es = err(img, stacked, W)
   const gt = err(img, tiled, G)
   const gs = err(img, stacked, G)
+  const hidden = stacked.topology!.edges.length - tiled.topology!.edges.length
+  hiddenTotal += hidden
+  const nt = nodeCount(tiled)
+  const nsk = nodeCount(stacked)
+  nodesT += nt
+  nodesS += nsk
   const lt = loopCount(tiled)
   const ls = loopCount(stacked)
   closed += lt - ls
@@ -78,11 +92,13 @@ for (const id of cases) {
   console.log(
     `${bad ? '!' : ' '} ${id.padEnd(24)} ${et.toFixed(3).padStart(6)} ${es.toFixed(3).padStart(8)}   | ${gt
       .toFixed(2)
-      .padStart(6)} ${gs.toFixed(2).padStart(7)}  | ${String(lt).padStart(4)} → ${String(ls).padEnd(4)} | ${tm
+      .padStart(
+        6,
+      )} ${gs.toFixed(2).padStart(7)}  | ${String(lt).padStart(4)} → ${String(ls).padEnd(4)} | ${String(nt).padStart(5)} → ${String(nsk).padEnd(5)} | ${String(hidden).padStart(6)} | ${tm
       .toFixed(0)
       .padStart(6)} ${sm.toFixed(0).padStart(7)}`,
   )
 }
 console.log(
-  `\n${worse} case(s) worse by > 0.02 ΔE; ${closed} holes closed; trace time ${(tMs / 1000).toFixed(1)} s tiled vs ${(sMs / 1000).toFixed(1)} s stacked`,
+  `\n${worse} case(s) worse by > 0.02 ΔE; ${closed} holes closed; ${hiddenTotal} hidden edges; nodes ${nodesT} → ${nodesS}; trace time ${(tMs / 1000).toFixed(1)} s tiled vs ${(sMs / 1000).toFixed(1)} s stacked`,
 )

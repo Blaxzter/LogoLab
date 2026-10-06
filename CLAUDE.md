@@ -188,22 +188,44 @@ with the engines. `test/mono-labels.test.ts` and `test/harness.test.ts` are the 
 
 **A stacked output is a PAINT-ORDER post-pass, not a second tracer** (`layering: 'stacked'`,
 the **Layering** control under Color, MCP `layering`; `src/lib/trace/planarStack.ts`,
-benchmarks §41). The same graph, re-layered by containment: a hole whose interior is all
-opaque regions painted later is dropped, so the container paints solid under them. No edge
-is refitted or copied — the lower region just stops referencing the shared edge. Three
-things that are easy to undo:
+benchmarks §41). The same graph, re-layered so a shape paints under the shapes in front of
+it; the rendered picture cannot change, only how it is built up. Two rules:
 
-* **A label splits by DEPTH.** The white page and the white counter of an O are one label,
-  and the counter must paint above the black ring, so a stacked label is one item per
-  nesting depth (`trace-<l>` for the lowest, `trace-<l>-d<depth>` above it).
-* **A hole drops only if NOTHING see-through is anywhere inside it** — no transparency (EXT
-  or a removed background) on its edges or between its children, and every child solid in
-  turn. A translucent child counts as see-through. Otherwise the region below shows through.
-* **Side-by-side neighbours still tile.** Which of two touching regions extends under the
-  other is a separate rule nobody has written yet.
+* **Containment.** A hole whose interior is all opaque regions painted later is dropped, so
+  the container paints solid under them. No edge is refitted or copied — the lower region
+  just stops referencing the shared edge.
+* **Side by side: the T-junction.** Where one shape is in front, its outline runs THROUGH
+  the junction and the outline behind it STOPS and turns. The shape whose outline breaks
+  off is completed under its neighbours — along existing edges when its outline visibly
+  carries on (Mastercard: red's arc continues as the overlap's edge), else along a NEW
+  hidden edge between the two cut-off stems (a square behind a circle), accepted only if it
+  stays under the occluder. Contradictions resolve smallest hidden area first; paint order
+  is a DAG and an item is one (layer, label).
 
-Tiled stays the default and is byte-identical (`before-stacked` ⇄ `after-stacked`).
-`test/planar-stack.test.ts` is the gate; `bench/stackDiag.ts` the corpus census.
+Six things that are easy to undo:
+
+* **A label splits by LAYER.** The white page and the white counter of an O are one label,
+  and the counter must paint above the black ring (`trace-<l>`, then `trace-<l>-d<layer>`).
+* **A hole drops / a completion passes only under SOLID shapes** — nothing see-through
+  anywhere inside (EXT, a removed background, a translucent fill), or the region below
+  shows through.
+* **A completion along existing edges needs the FAR side of each followed edge painted
+  above it.** Otherwise both shapes anti-alias that edge over the page and the lower one's
+  colour fringes the other's rim (a disc split in two colours must stay tiled). This is
+  why only ONE of Mastercard's circles completes.
+* **Split crossings are part of their junction**: a crossing is often two vertices joined
+  by a micro-edge (≤ 1 px at 2048), so arms pair per cluster and chains carry the micro refs.
+* **A completion may only ADD to its shape.** Positive added area is not enough (a span
+  looping round the far side of a bridge dropped half of mercedes' star arm): every point
+  of the replaced span must lie inside the completed outline. The gate's
+  `keepsEveryRegion` renders each label both ways and fails on any pixel lost.
+* **Two halves completed along one line share ONE hidden edge** (aa-seam: both halves of a
+  seam a disc covers), so moving the junction moves both, like any planar boundary.
+
+Tiled stays the default and is byte-identical (`before-stacked` ⇄ `after-stacked`). The A/B
+lab has a sixth lane, **`stack`** (flat + stacked); `before-sidebyside` ⇄ `after-sidebyside`
+moves only that lane. `test/planar-stack.test.ts` is the gate; `bench/stackDiag.ts` the
+census; `bench/stackExplode.ts` paints every layer alone so a completion is visible.
 
 ## Line art traces as STROKES — the centreline engine, and its own lane
 
