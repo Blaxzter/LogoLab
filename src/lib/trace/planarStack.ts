@@ -364,6 +364,67 @@ export function stackRegions(
     accepted.set(c.shape, mine)
   }
 
+  // --- the page showing through: a shape the colour of what lies beneath it ---
+  // Orbit: a teal plate, a white ring, a teal counter, a white dot. Stacked naively, the
+  // ring fills in and the counter is painted back on top as a teal disc — the plate's own
+  // colour drawn again over a white disc. The counter IS the plate showing through, so it
+  // is left out and the ring keeps its hole: plate, ring, dot — what a designer draws, and
+  // what mono gives. "Beneath" is the shape owning the hole the ring sits in, when that
+  // hole is dropped (it extends under the whole ring). A shape any completion involves is
+  // kept: something other than the plate may be under it.
+  const involved = new Set<number>()
+  for (const cs of accepted.values())
+    for (const c of cs) {
+      involved.add(c.shape)
+      for (const x of c.under) involved.add(x)
+    }
+  const keepHole = new Set<number>()
+  const omitted = new Map<number, number>() // shape → the shape it shows through to
+  // (Nested rings of two colours: the shape beneath can itself be one left out.)
+  const shown = (b: number): number => {
+    for (let guard = 0; omitted.has(b) && guard < shapes.length; guard++) b = omitted.get(b)!
+    return b
+  }
+  // Outside in, because each omission re-opens a hole: once the counter is left out the
+  // ring is a ring again, and the white dot inside no longer lies on white — it must not
+  // be left out as "the ring showing through" (it was, and Orbit lost its dot).
+  const groupDepth = new Map<number, number>()
+  const depthOfGroup = (g: number, guard = 0): number => {
+    const hit = groupDepth.get(g)
+    if (hit !== undefined) return hit
+    const hp = groupParent.get(g)
+    const d = hp === undefined || guard > shapes.length ? 0 : depthOfGroup(shapes[loops[hp].shape].group, guard + 1) + 1
+    groupDepth.set(g, d)
+    return d
+  }
+  const outsideIn = [...groupParent].sort((a, b) => depthOfGroup(a[0]) - depthOfGroup(b[0]))
+  for (const [g, hp] of outsideIn) {
+    if (!droppable(hp) || keepHole.has(hp)) continue
+    const beneath = shown(loops[hp].shape)
+    const bl = shapes[beneath].label
+    if (!painted.has(bl) || !opaque(bl)) continue
+    for (const r of members.get(g)!) {
+      if (involved.has(r) || omitted.has(r)) continue
+      for (const h of shapes[r].holes) {
+        if (!droppable(h)) continue
+        const same: number[] = []
+        for (const cg of childrenOfHole.get(h) ?? [])
+          for (const c of members.get(cg)!) if (shapes[c].label === bl && !involved.has(c) && solid(c)) same.push(c)
+        if (same.length === 0) continue
+        keepHole.add(h)
+        for (const c of same) omitted.set(c, beneath)
+      }
+    }
+  }
+  // What sat on an omitted shape now sits on the shape it showed through to: it no longer
+  // has to clear the ring around the hole (that hole is open again), so the dot can share
+  // the ring's layer and item.
+  for (const [c, beneath] of omitted) {
+    for (const x of above.get(c) ?? []) if (!omitted.has(x)) addAbove(shown(beneath), x)
+    above.delete(c)
+    for (const his of above.values()) his.delete(c)
+  }
+
   // --- layers: longest path from a source, one item per (layer, label) ---
   const layerMemo = new Map<number, number>()
   const below = new Map<number, number[]>()
@@ -385,7 +446,7 @@ export function stackRegions(
 
   const byKey = new Map<string, { label: number; depth: number; keep: { idx: number; refs: EdgeRef[] }[] }>()
   shapes.forEach((s, si) => {
-    if (!painted.has(s.label)) return
+    if (!painted.has(s.label) || omitted.has(si)) return
     const depth = layerOf(si)
     const key = `${depth}:${s.label}`
     let layer = byKey.get(key)
@@ -394,7 +455,7 @@ export function stackRegions(
       const done = accepted.get(si)
       layer.keep.push({ idx: s.outer, refs: done ? spliceLoop(loops[s.outer].refs, done) : loops[s.outer].refs })
     }
-    for (const h of s.holes) if (!droppable(h)) layer.keep.push({ idx: h, refs: loops[h].refs })
+    for (const h of s.holes) if (!droppable(h) || keepHole.has(h)) layer.keep.push({ idx: h, refs: loops[h].refs })
   })
   const layers = [...byKey.values()]
     .sort((a, b) => a.depth - b.depth || a.label - b.label)

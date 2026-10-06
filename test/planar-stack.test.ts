@@ -118,24 +118,45 @@ test('nested discs: each container paints solid under what it holds, same pictur
   samePicture(img, tiled, stacked, true)
 })
 
-test('a counter the colour of the page goes on top as its own layer', async () => {
-  // An "O": white page, black ring, white counter. The counter is the page's label
-  // but must paint ABOVE the ring, so the label splits by depth.
+test('a counter the colour of the page is the page showing through', async () => {
+  // An "O": white page, black ring, white counter. The counter is the page's colour, and
+  // the page lies whole under the ring, so the ring keeps its hole and the counter is not
+  // drawn again: page, ring — never a black disc with a white one on top.
   const img = rings(WHITE, [
     [36, BLACK],
     [20, WHITE],
   ])
   const { tiled, stacked } = await both(img)
-  const whites = itemOf(stacked, WHITE)
-  assert.equal(whites.length, 2)
-  assert.ok(!whites[0].id.includes('-d') && whites[1].id.endsWith('-d2'), whites.map((w) => w.id).join())
-  const ids = paths(stacked).map((p) => p.id)
-  const ring = itemOf(stacked, BLACK)[0]
-  assert.ok(ids.indexOf(whites[0].id) < ids.indexOf(ring.id) && ids.indexOf(ring.id) < ids.indexOf(whites[1].id))
-  assert.equal(ring.loops!.length, 1)
+  assert.deepEqual(
+    paths(stacked).map((p) => [p.fill, p.loops!.length]),
+    [
+      [itemOf(stacked, WHITE)[0].fill, 1],
+      [itemOf(stacked, BLACK)[0].fill, 2],
+    ],
+  )
   samePicture(img, tiled, stacked, true)
-  // Tiled keeps one item per colour, ids unchanged.
-  assert.equal(byFill(tiled, whites[0].fill).length, 1)
+  keepsEveryRegion(tiled, stacked)
+})
+
+test('Orbit in colour comes out as mono does: a plate, and the white on it', async () => {
+  // Teal plate, white ring, teal inside it, white dot. The teal inside is the plate; the
+  // dot no longer has to clear the ring, so it shares the ring's item.
+  const TEAL: RGBA = [16, 116, 140, 255]
+  const img = rings(TEAL, [
+    [36, WHITE],
+    [26, TEAL],
+    [10, WHITE],
+  ])
+  const { tiled, stacked } = await both(img)
+  assert.deepEqual(
+    paths(stacked).map((p) => [p.fill, p.loops!.length]),
+    [
+      [itemOf(stacked, TEAL)[0].fill, 1],
+      [itemOf(stacked, WHITE)[0].fill, 3],
+    ],
+  )
+  samePicture(img, tiled, stacked, true)
+  keepsEveryRegion(tiled, stacked)
 })
 
 test('a hole onto transparency stays open', async () => {
@@ -370,4 +391,25 @@ test('mono ignores layering: the ink already lies on one paper rectangle', async
 test('users get stacked colour; the tracer and its gates stay tiled', () => {
   assert.equal(PRODUCT_VECTORIZE_OPTIONS.layering, 'stacked')
   assert.equal(DEFAULT_VECTORIZE_OPTIONS.layering, undefined)
+})
+
+test('nested rings of two colours: every ring stays a ring, nothing is drawn twice', async () => {
+  // White page, black ring, white, black ring, white centre: the whites inside are all the
+  // page showing through, each ring keeps its hole, and the picture holds.
+  const img = rings(WHITE, [
+    [40, BLACK],
+    [32, WHITE],
+    [24, BLACK],
+    [16, WHITE],
+  ])
+  const { tiled, stacked } = await both(img)
+  assert.deepEqual(
+    paths(stacked).map((p) => [p.fill, p.loops!.length]),
+    [
+      [itemOf(stacked, WHITE)[0].fill, 1],
+      [itemOf(stacked, BLACK)[0].fill, 4],
+    ],
+  )
+  samePicture(img, tiled, stacked, true)
+  keepsEveryRegion(tiled, stacked)
 })

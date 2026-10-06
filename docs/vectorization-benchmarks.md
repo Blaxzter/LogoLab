@@ -7517,3 +7517,22 @@ Mono was tried and reverted. It already lies the ink over one paper rectangle, s
 shared seam to fix: Orbit's white ring IS a ring, and stacking only re-drew it as a white disc
 with a teal disc on top — one more shape, a less faithful drawing. `layering` is ignored in
 mono.
+
+### 41.5 The page showing through
+
+Stacked as built so far filled every ring in: a hole whose contents were all opaque was
+dropped, so Orbit came back as a teal plate, a white DISC, a teal disc on top and the white
+dot (an O: a black disc with a white disc on it). The teal on top is the plate's own colour
+drawn twice — what mono, and any designer, draws as a ring with a hole.
+
+The rule: a shape whose colour is the colour of the shape lying beneath it (the owner of the
+hole its container sits in, when that hole is dropped) is left out, and the hole it sat in
+stays open. What sat on it now sits on the shape beneath, so Orbit's dot shares the ring's
+layer and item: plate + one white path with three loops, the mono output exactly.
+
+It runs outside in. Each omission re-opens a hole, and a re-opened hole no longer extends
+the shape around it underneath: run in any order, the white dot read as "the white ring
+showing through" and was left out too (ΔE 0.57 → 2.26 on the gate's Orbit). A shape that a
+side-by-side completion involves is never left out — something other than the plate may
+lie under it. Nested rings of two colours: every ring stays a ring, one item per colour.
+

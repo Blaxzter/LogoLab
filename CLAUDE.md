@@ -233,8 +233,21 @@ stored session without the key stays tiled until Reset or a new upload.
 **Mono ignores it.** Mono already lies the ink over ONE paper rectangle — the ring in Orbit is
 a ring, its hole shows the paper under it — so stacking there only added a paper-coloured
 disc on top of an ink one (tried and reverted 2026-10-06). The control shows when the trace
-RESOLVES to Colour (Auto → Color included) and folds into "Looking for another option?"
-under Mono with that reason.
+RESOLVES to Colour and folds into "Looking for another option?" under Mono with that reason.
+
+**A shape the colour of what lies beneath it is the page showing through** — left out, and
+the shape around it keeps its hole. Without this, stacked colour filled every ring in and
+painted the counter back on top (Orbit: teal plate, white DISC, teal disc, white dot; an O:
+a black disc with a white one on it). With it, Orbit in colour is exactly the mono output —
+plate, then one white path. Two things that are easy to undo: it runs OUTSIDE IN, and a hole
+it re-opened no longer counts as "beneath" (Orbit's white dot read as "the white ring showing
+through" and vanished); and a shape any side-by-side completion involves is never left out.
+
+**There is no Auto button.** Mode is Color | Mono and shows what the trace IS; the ink probe
+picks it per image (the line under it says why), a click overrides it for THAT image, and a
+new image goes back to the probe (`onFreshImage` in `useContentProbe`; the icon sheet plans
+its own mode and keeps it). Internally `colorMode: 'auto'` still means "the probe decides" —
+it is just no longer a button, and "Use Mono/Color" under the control hands it back.
 
 Tiled is byte-identical to before the feature (`before-stacked` ⇄ `after-stacked`). The A/B
 lab has a sixth lane, **`stack`** (flat + stacked); `before-sidebyside` ⇄ `after-sidebyside`
