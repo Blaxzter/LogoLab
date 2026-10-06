@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { cropTile, defaultTileName } from '../lib/sheet/crop.ts'
 import { detectSheetIcons } from '../lib/sheet/detect.ts'
 import { planTileTrace, tileTraceInput, traceTile } from '../lib/sheet/traceTile.ts'
-import { DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
+import { PRODUCT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import type { DetectOptions, ImageDataLike, SheetTile } from '../lib/sheet/types'
 import type { VectorizeOptions } from '../types'
 import { pngFrom, rasterizeSource, type LoadedSource } from './image.ts'
@@ -88,7 +88,7 @@ export async function splitSheet(src: LoadedSource, outDir: string, req: SheetRe
   const { image, detection } = await detectSheet(src, req)
   const root = ensureDir(outDir)
 
-  const base: VectorizeOptions = { ...DEFAULT_VECTORIZE_OPTIONS }
+  const base: VectorizeOptions = { ...PRODUCT_VECTORIZE_OPTIONS }
   if (req.smoothing != null) base.smoothing = req.smoothing
   if (req.despeckle != null) base.despeckle = req.despeckle
 

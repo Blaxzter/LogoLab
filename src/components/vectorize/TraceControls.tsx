@@ -216,8 +216,8 @@ export function TraceControlsBody({
   } else {
     if (opts.mode === 'mono')
       inert.push({
-        label: 'Region detail, Region markers, Gradients',
-        why: 'Mono traces one ink against the background, so there are no colour regions to split, to seed, or to fit a gradient into. Switch Mode to Color.',
+        label: 'Region detail, Region markers, Gradients, Layering',
+        why: 'Mono traces one ink against the background, so there are no colour regions to split, to seed, or to fit a gradient into — and the ink already lies on top of one paper rectangle, so there is nothing to stack. Switch Mode to Color.',
       })
     else {
       inert.push({
@@ -541,26 +541,19 @@ export function TraceControlsBody({
             </Field>
           )}
 
-          {/* Shown for whatever the trace IS (Auto → Mono included), not only when Color
-              is picked: mono asks the same question of the ink and the paper. */}
-          {tracing && !opts.centerline && (
+          {/* `opts.mode` is what the trace resolved to, so Auto → Color shows it too. */}
+          {tracing && opts.mode === 'color' && !opts.centerline && (
             <Field
               label="Layering"
               hint={
-                opts.mode === 'mono'
-                  ? opts.removeBackground
-                    ? 'With the background removed the ink’s holes show transparency, so there is nothing to stack.'
-                    : opts.layering === 'stacked'
-                      ? 'The ink paints solid; where it had holes, the paper’s colour sits on top as its own shape.'
-                      : 'The ink is one shape with holes cut where the paper shows through.'
-                  : opts.layering === 'stacked'
-                    ? 'A shape paints under the shapes in front of it: no holes cut around them, no hairline seams between colours.'
-                    : 'Shapes fit edge to edge like a jigsaw: nothing overlaps, and a shape has a hole wherever another sits inside it.'
+                opts.layering === 'stacked'
+                  ? 'A shape paints under the shapes in front of it: fewer nodes, no hairline seams between colours, shapes stay whole when you move them.'
+                  : 'Shapes fit edge to edge like a jigsaw: nothing overlaps, and a shape has a hole wherever another sits inside it.'
               }
             >
               <Segmented<'tiled' | 'stacked'>
                 value={opts.layering ?? 'tiled'}
-                onChange={(v) => onPatch({ layering: v === 'tiled' ? undefined : v })}
+                onChange={(v) => onPatch({ layering: v })}
                 options={[
                   { value: 'tiled', label: 'Tiled' },
                   { value: 'stacked', label: 'Stacked' },

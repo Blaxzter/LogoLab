@@ -128,9 +128,9 @@ export interface VectorizeOptions {
    * overlaps. 'stacked': a region whose holes are entirely covered by opaque regions
    * paints under them as one solid shape, and those regions are painted on top
    * (planarStack.ts). Same edges either way; only the paint order and the holes
-   * differ. In mono on an opaque paper the ink paints solid and the paper's colour
-   * sits on top where it had holes; on transparency there is nothing to stack.
-   * Strokes ignore it.
+   * differ. The tracer's default is tiled; the product's (PRODUCT_VECTORIZE_OPTIONS)
+   * is stacked. Mono ignores it — the ink already lies over one paper rectangle — and so
+   * do Strokes.
    */
   layering?: 'tiled' | 'stacked'
   /** Drop the detected background layer for transparent output. */

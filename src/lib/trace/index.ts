@@ -19,7 +19,7 @@ import { DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
 import { uniteBackgroundGradient, type BackgroundUnion } from './backgroundLayer.ts'
 import { tracePlanar, type PlanarTrace } from './planarAssemble.ts'
 import { monoLabels, MONO_INK, MONO_PAPER } from './mono.ts'
-import { hasOpaqueBorder, PAPER_ID, paperColor, paperItem } from '../path/paper.ts'
+import { hasOpaqueBorder, paperColor, paperItem } from '../path/paper.ts'
 import { traceCenterline } from './centerline/index.ts'
 import { colourInkCut, paintStrokes } from './centerline/colour.ts'
 import { type PlanarFitOptions, DEFAULT_PLANAR_FIT, FLAT_LINE_COST } from './planarFit.ts'
@@ -47,6 +47,19 @@ export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   gradients: true,
   engine: 'planar',
   fidelity: DEFAULT_BEAUTIFY_OPTIONS.fidelity,
+}
+
+/**
+ * What a USER gets: the tracer's defaults with colour output STACKED (planarStack.ts —
+ * ~10% fewer nodes, no hairline seams where a shape sits on another, and shapes that
+ * stay whole when moved in an editor). The studio, the icon sheet and the MCP server
+ * start from this. The tracer's own default stays tiled, so the truth gate, the golden
+ * baseline and the A/B flat/grad lanes keep measuring the regions the tracer FOUND, not
+ * the paint order laid over them.
+ */
+export const PRODUCT_VECTORIZE_OPTIONS: VectorizeOptions = {
+  ...DEFAULT_VECTORIZE_OPTIONS,
+  layering: 'stacked',
 }
 
 // Progress-bar span split (overall [0,1]): segmentation dominates the run time,
@@ -473,41 +486,11 @@ export async function traceImage(
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     const { topology, edges } = finishPlanar(trace)
     stage('beautify')
+    const loops = trace.loopsByLabel.get(MONO_INK) ?? []
+    const subPaths = materializeRegion(loops, edges)
     const items: PathItem[] = paper ? [paper] : []
-    if (paper && options.layering === 'stacked') {
-      // Stacked mono is the same question as stacked colour with two labels: the ink
-      // paints solid, and where it had holes the paper's colour sits on top as its own
-      // island (`paper-d<layer>`, skipped by every repaint like the rectangle). The
-      // paper's BOTTOM layer is the rectangle already under everything. Without an
-      // opaque paper the holes show transparency, and there is nothing to stack.
-      const r = stackRegions(trace.loopsByLabel, edges, [MONO_INK, MONO_PAPER], () => true)
-      for (const e of r.edges) {
-        topology.edges.push(e)
-        edges.set(e.id, e)
-      }
-      const bottomPaper = Math.min(...r.layers.filter((l) => l.label === MONO_PAPER).map((l) => l.depth))
-      let inkLayers = 0
-      for (const l of r.layers) {
-        if (l.label === MONO_PAPER && l.depth === bottomPaper) continue
-        const subPaths = materializeRegion(l.loops, edges)
-        if (subPaths.length === 0) continue
-        const ink = l.label === MONO_INK
-        items.push({
-          kind: 'path',
-          id: ink ? (inkLayers++ === 0 ? 'trace-0' : `trace-0-d${l.depth}`) : `${PAPER_ID}-d${l.depth}`,
-          fill: ink ? '#000000' : paper.fill,
-          fillRule,
-          loops: l.loops,
-          subPaths,
-          visible: true,
-        })
-      }
-    } else {
-      const loops = trace.loopsByLabel.get(MONO_INK) ?? []
-      const subPaths = materializeRegion(loops, edges)
-      if (subPaths.length > 0) {
-        items.push({ kind: 'path', id: 'trace-0', fill: '#000000', fillRule, loops, subPaths, visible: true })
-      }
+    if (subPaths.length > 0) {
+      items.push({ kind: 'path', id: 'trace-0', fill: '#000000', fillRule, loops, subPaths, visible: true })
     }
     stage('materialize')
     return { viewBox: [0, 0, width, height], items, topology }

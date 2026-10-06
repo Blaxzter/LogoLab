@@ -9,14 +9,11 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
+import { traceImage, DEFAULT_VECTORIZE_OPTIONS, PRODUCT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'
 import { deltaEField, deltaEStats } from '../src/lib/render/fidelity.ts'
 import { removeRegionAndHeal } from '../src/lib/path/topologyEdit.ts'
 import { cubicAt, segmentControls, segmentCount } from '../src/lib/path/geometry.ts'
-import { isPaper, PAPER_ID } from '../src/lib/path/paper.ts'
-import { forceColorDoc } from '../src/components/vectorize/studio/forceColorDoc.ts'
-import { repaintDoc } from '../src/lib/sheet/traceTile.ts'
 import type { EditableDoc, PathItem } from '../src/lib/path/types.ts'
 import type { VectorizeOptions } from '../src/types.ts'
 
@@ -352,52 +349,25 @@ test('a shape behind several, in a ring: completions keep every region', async (
   samePicture(img, tiled, stacked, true)
 })
 
-// --- mono -----------------------------------------------------------------------
+// --- mono and the defaults -----------------------------------------------------
 
-const TEAL: RGBA = [16, 116, 140, 255]
-const monoOpts = (patch: Partial<VectorizeOptions> = {}): VectorizeOptions => ({
-  ...DEFAULT_VECTORIZE_OPTIONS,
-  mode: 'mono',
-  threshold: 176,
-  invert: true,
-  ...patch,
-})
-
-test('mono on a paper: the ink paints solid, the paper sits on top where it had holes', async () => {
-  // Orbit: a white ring and dot on a teal page. Tiled, the ring is ink with a hole the
-  // page shows through; stacked, the ring is a solid white disc, a teal island covers
-  // its middle, and the dot sits on that.
+test('mono ignores layering: the ink already lies on one paper rectangle', async () => {
+  // Orbit as mono: a teal page, a white ring and dot. The ring is a ring — its hole shows
+  // the paper under it — so stacking would only add a teal disc on top of a white one.
+  const TEAL: RGBA = [16, 116, 140, 255]
   const img = rings(TEAL, [
     [36, WHITE],
     [26, TEAL],
     [10, WHITE],
   ])
-  const tiled = await traceImage(img, monoOpts())
-  const stacked = await traceImage(img, monoOpts({ layering: 'stacked' }))
-  const ids = paths(stacked).map((p) => p.id)
-  assert.deepEqual(ids, [PAPER_ID, 'trace-0', `${PAPER_ID}-d2`, 'trace-0-d3'])
-  for (const p of paths(stacked)) assert.equal(p.loops?.length ?? 1, 1, `${p.id} keeps a hole`)
-  assert.equal(paths(stacked)[2].fill, paths(stacked)[0].fill, 'the island is the paper colour')
-  assert.ok(isPaper(paths(stacked)[2]))
-  // The paper rectangle covers the canvas, so no backdrop shows through a seam either way.
-  samePicture(img, tiled, stacked, false)
-  // Every repaint paints the ink and leaves the page AND its islands alone.
-  for (const [name, painted] of [
-    ['forceColorDoc', forceColorDoc(stacked, '#e0457b')],
-    ['repaintDoc', repaintDoc(stacked, '#e0457b')],
-  ] as const) {
-    for (const p of paths(painted))
-      assert.equal(p.fill, isPaper(p) ? paths(stacked)[0].fill : '#e0457b', `${name}: ${p.id}`)
-  }
+  const mono = { ...DEFAULT_VECTORIZE_OPTIONS, mode: 'mono' as const, threshold: 176, invert: true }
+  assert.deepEqual(
+    await traceImage(img, { ...mono, layering: 'stacked' }),
+    await traceImage(img, { ...mono, layering: 'tiled' }),
+  )
 })
 
-test('mono with no paper has nothing to stack', async () => {
-  const img = rings(TEAL, [
-    [36, WHITE],
-    [26, TEAL],
-    [10, WHITE],
-  ])
-  const a = await traceImage(img, monoOpts({ removeBackground: true }))
-  const b = await traceImage(img, monoOpts({ removeBackground: true, layering: 'stacked' }))
-  assert.deepEqual(b, a)
+test('users get stacked colour; the tracer and its gates stay tiled', () => {
+  assert.equal(PRODUCT_VECTORIZE_OPTIONS.layering, 'stacked')
+  assert.equal(DEFAULT_VECTORIZE_OPTIONS.layering, undefined)
 })

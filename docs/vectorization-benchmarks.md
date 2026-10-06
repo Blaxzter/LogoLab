@@ -7502,16 +7502,18 @@ the colours. On posterized chrome (mercedes-benz, seams everywhere) it is within
 `before-sidebyside` ⇄ `after-sidebyside` (the A/B lab's new `stack` lane: flat +
 stacked) moves only that lane; flat, grad, mono, line and cline are byte-identical.
 
-### 41.4 Mono stacks the same way
+### 41.4 Stacked is the product default; mono stays as it is
 
-Mono is a two-label map, so the question is the same: is the teal page one big area with
-the white ring on it, or is the white carved out of it? On an opaque paper the same pass
-runs over ink and paper. The paper's bottom layer is the rectangle already emitted; its
-islands (the teal inside Orbit's ring) come back on top as `paper-d<layer>`, painted the
-paper colour, and `isPaper` covers them so force colour and the sheet's repaint skip them.
-Orbit at 2048: `paper, trace-0, paper-d2, trace-0-d3`, 784 ms against 813 ms tiled. On
-transparency (or with the background removed) the ink's holes show the void, nothing is
-stacked, and the document is byte-identical to tiled. The mono A/B lane runs tiled and
-does not move. The Layering control is shown for what the trace IS, so Auto → Mono shows
-it; before this it sat behind an explicit Color pick and read as missing.
+Stacked colour is what a user gets: `PRODUCT_VECTORIZE_OPTIONS` (studio, icon sheet, MCP)
+carries `layering: 'stacked'`. The census is the reason: on both colour lanes no case scored
+worse over white, nodes fell ~10% (25 955 → 23 426 flat, 31 434 → 28 339 gradients), and over
+a backdrop the art never uses the tiled seams (two half-covered pixels composited in turn)
+disappear wherever a shape now sits on another. The tracer's own default stays tiled, so the
+truth gate, the golden baseline and the A/B flat/grad lanes still score the regions the
+tracer found — a stacked region is bigger than what was drawn, and a region gate would read
+it as a defect. The A/B `stack` lane is what users get.
 
+Mono was tried and reverted. It already lies the ink over one paper rectangle, so it has no
+shared seam to fix: Orbit's white ring IS a ring, and stacking only re-drew it as a white disc
+with a teal disc on top — one more shape, a less faithful drawing. `layering` is ignored in
+mono.

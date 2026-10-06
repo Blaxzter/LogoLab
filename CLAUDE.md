@@ -222,13 +222,21 @@ Six things that are easy to undo:
 * **Two halves completed along one line share ONE hidden edge** (aa-seam: both halves of a
   seam a disc covers), so moving the junction moves both, like any planar boundary.
 
-**Mono stacks too**, on an opaque paper: the ink paints solid and the paper's colour sits on
-top where it had holes, as `paper-d<layer>` islands that `isPaper` recognises — every repaint
-skips them like the rectangle, or force colour fills each counter with ink. The paper's
-bottom layer IS the rectangle. The control shows for what the trace IS (Auto → Mono
-included), only Strokes hides it — hidden behind "Color" it read as missing under Auto.
+**Users get STACKED; the tracer's default stays TILED.** `PRODUCT_VECTORIZE_OPTIONS`
+(`layering: 'stacked'`) is what the studio, the icon sheet (`DEFAULT_SHEET_TRACE`) and the MCP
+server start from; `DEFAULT_VECTORIZE_OPTIONS` has no `layering`, so the truth gate, the
+golden baseline, the labs and the A/B flat/grad lanes keep measuring the regions the tracer
+FOUND rather than the paint order laid over them. Don't merge the two: the gates score
+regions against the authored SVG, and a stacked region is bigger than what was drawn. A
+stored session without the key stays tiled until Reset or a new upload.
 
-Tiled stays the default and is byte-identical (`before-stacked` ⇄ `after-stacked`). The A/B
+**Mono ignores it.** Mono already lies the ink over ONE paper rectangle — the ring in Orbit is
+a ring, its hole shows the paper under it — so stacking there only added a paper-coloured
+disc on top of an ink one (tried and reverted 2026-10-06). The control shows when the trace
+RESOLVES to Colour (Auto → Color included) and folds into "Looking for another option?"
+under Mono with that reason.
+
+Tiled is byte-identical to before the feature (`before-stacked` ⇄ `after-stacked`). The A/B
 lab has a sixth lane, **`stack`** (flat + stacked); `before-sidebyside` ⇄ `after-sidebyside`
 moves only that lane. `test/planar-stack.test.ts` is the gate; `bench/stackDiag.ts` the
 census; `bench/stackExplode.ts` paints every layer alone so a completion is visible.

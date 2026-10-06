@@ -6,7 +6,7 @@
 // redo after a reload.
 
 import { create } from 'zustand'
-import { DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace'
+import { PRODUCT_VECTORIZE_OPTIONS } from '../lib/trace'
 import { cropTile, defaultTileName, detectSheetIcons, gridTiles, nameStem } from '../lib/sheet'
 import { captionToName, matchCaptions, prepareCaption } from '../lib/sheet/captions.ts'
 import { captionOcrSupported, loadCaptionReader, type CaptionRead } from '../lib/sheet/ocr.ts'
@@ -153,7 +153,7 @@ const IDLE_OCR: OcrState = { status: 'idle', progress: 0, done: 0, total: 0, err
  * the trace leaves no fringe, unlike knocking pixels out beforehand.
  */
 export const DEFAULT_SHEET_TRACE: VectorizeOptions = {
-  ...DEFAULT_VECTORIZE_OPTIONS,
+  ...PRODUCT_VECTORIZE_OPTIONS,
   removeBackground: true,
 }
 

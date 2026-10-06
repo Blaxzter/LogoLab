@@ -11,7 +11,7 @@
 import { estimateBackground } from '../lib/sheet/detect.ts'
 import { planTileTrace, tileTraceInput, traceTile } from '../lib/sheet/traceTile.ts'
 import { rasterCapFor } from '../lib/traceInput/traceCaps.ts'
-import { DEFAULT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
+import { PRODUCT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import type { ImageDataLike } from '../lib/sheet/types'
 import type { VectorizeOptions } from '../types'
 import { hasAlpha, rasterizeSource, type LoadedSource } from './image.ts'
@@ -27,7 +27,7 @@ export interface TraceRequest {
   strokes?: boolean
   /** 'auto' probes for real colour ramps; 'flat' forces solid fills; 'rich' forces gradient fitting. */
   gradients?: 'auto' | 'flat' | 'rich'
-  /** Colour only: 'stacked' paints each shape solid under the shapes inside it; 'tiled' (default) cuts holes. */
+  /** Colour only: 'stacked' (default) paints a shape under the shapes in front of it; 'tiled' cuts holes. */
   layering?: 'tiled' | 'stacked'
   /** Composite a transparent source onto this colour before tracing (e.g. '#ffffff'). */
   background?: string | null
@@ -76,7 +76,7 @@ export interface TraceOutcome {
 
 /** Merge the request onto the studio's defaults. */
 function baseOptions(req: TraceRequest): VectorizeOptions {
-  const base: VectorizeOptions = { ...DEFAULT_VECTORIZE_OPTIONS }
+  const base: VectorizeOptions = { ...PRODUCT_VECTORIZE_OPTIONS }
   if (req.smoothing != null) base.smoothing = clamp(req.smoothing, 0, 100)
   if (req.despeckle != null) base.despeckle = clamp(req.despeckle, 0, 100)
   if (req.fidelity != null) base.fidelity = Math.max(0, req.fidelity)
@@ -84,7 +84,7 @@ function baseOptions(req: TraceRequest): VectorizeOptions {
   if (req.removeBackground != null) base.removeBackground = req.removeBackground
   if (req.detail) base.traceDetail = req.detail
   if (req.strokes) base.centerline = true
-  if (req.layering === 'stacked') base.layering = 'stacked'
+  if (req.layering) base.layering = req.layering
   return base
 }
 

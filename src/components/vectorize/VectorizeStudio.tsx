@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useCheckerClass, useLogo, useStore } from '../../state/store'
 import { usePanZoom } from '../../hooks/usePanZoom'
 import { useHistory } from '../../hooks/useHistory'
-import { DEFAULT_VECTORIZE_OPTIONS } from '../../lib/trace'
+import { PRODUCT_VECTORIZE_OPTIONS } from '../../lib/trace'
 import type { InkColorMode } from '../../lib/traceInput/ink'
 import { canScoreOffThread, type TraceScore } from '../../lib/render/scoreOffThread'
 import type { VectorizeOptions } from '../../types'
@@ -125,7 +125,7 @@ export function VectorizeStudio({
   const canScore = canScoreOffThread()
   const isMobile = useIsStudioCompact()
 
-  const [opts, setOpts] = useState<VectorizeOptions>(initialOptions ?? session.view?.opts ?? DEFAULT_VECTORIZE_OPTIONS)
+  const [opts, setOpts] = useState<VectorizeOptions>(initialOptions ?? session.view?.opts ?? PRODUCT_VECTORIZE_OPTIONS)
   // Output coordinate precision (decimals). 3dp preserves sub-pixel geometry when
   // the SVG is scaled past its trace resolution. Not a user knob.
   const precision = 3
@@ -202,7 +202,7 @@ export function VectorizeStudio({
   // biome-ignore lint/correctness/useExhaustiveDependencies(probePixelsRef.current): a ref, read when the code runs
   const fresh = useMemo(() => {
     const f = freshSettings(
-      initialOptions ?? DEFAULT_VECTORIZE_OPTIONS,
+      initialOptions ?? PRODUCT_VECTORIZE_OPTIONS,
       initialOptions ? initialOptions.mode : 'auto',
       probePixelsRef.current,
       !initialOptions,

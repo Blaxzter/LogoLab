@@ -9,12 +9,10 @@
 
 import type { PathItem } from './types'
 
-/** The id the paper rectangle carries; repaints recognise it by this. A STACKED mono
- *  trace adds the paper's islands on top of the ink (`paper-d<layer>`, the counter of an
- *  O): paper too, and skipped the same way, or a repaint fills every counter with ink. */
+/** The id the paper rectangle carries; repaints recognise it by this. */
 export const PAPER_ID = 'paper'
 
-export const isPaper = (item: { id: string }): boolean => item.id === PAPER_ID || item.id.startsWith(`${PAPER_ID}-d`)
+export const isPaper = (item: { id: string }): boolean => item.id === PAPER_ID
 
 /** A `width`×`height` rectangle at the origin, filled with `fill`. */
 export function paperItem(width: number, height: number, fill: string): PathItem {
