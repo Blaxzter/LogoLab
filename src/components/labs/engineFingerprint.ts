@@ -25,6 +25,8 @@
 // non-scaling wireframe after the markers were made zoom-scaled). Clearing the cache hides it;
 // widening the hash fixes it at the source. `.tsx` is included so the view components count.
 
+import { fnv1a } from './fnv1a.ts'
+
 const SOURCES = {
   ...import.meta.glob('/src/lib/**/*.ts', { query: '?raw', import: 'default', eager: true }),
   ...import.meta.glob('/bench/**/*.ts', { query: '?raw', import: 'default', eager: true }),
@@ -35,15 +37,7 @@ const SOURCES = {
   }),
 } as Record<string, string>
 
-/** FNV-1a over a string → 8 hex chars. The same hash bench/metrics.ts uses for `hashDoc`. */
-export function fnv1a(str: string): string {
-  let h = 0x811c9dc5
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return (h >>> 0).toString(16).padStart(8, '0')
-}
+export { fnv1a }
 
 /**
  * The vectorizer/scoring fingerprint — stable within a build, changes on any source edit.

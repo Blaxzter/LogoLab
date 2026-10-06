@@ -39,16 +39,65 @@ function byteLength(s: string): number {
 const SHAPE_TAGS = ['path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse', 'line']
 const COORD_ATTRS = ['d', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height']
 
-const FLOAT_RE = /-?\d*\.\d+(?:e[-+]?\d+)?/gi
+/** One number in the SVG grammar (sticky: read at `lastIndex`). */
+const NUMBER_RE = /[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/iy
+const PATH_COMMAND = /[MmZzLlHhVvCcSsQqTtAa]/
 
-/** Round every floating-point token in a coordinate string to `precision`. */
-function roundNumbers(value: string, precision: number): string {
-  return value.replace(FLOAT_RE, (m) => {
-    const n = Number(m)
-    if (!Number.isFinite(n)) return m
-    // Number() drops trailing zeros (e.g. 7.30 → "7.3"), so result stays compact.
-    return String(Number(n.toFixed(precision)))
-  })
+/**
+ * Round every fractional number in a coordinate string to `precision`, reading
+ * it with the SVG number grammar rather than a find-and-replace. Minified path
+ * data separates numbers only by the next one's '.' or '-' (`1.004.5`), so a
+ * token that rounds to an integer loses the very character that ended it: the
+ * replace version turned `1.004.5` into `10.5` and `l.999.25` into `l10.25`. A
+ * space goes back in wherever two numbers would otherwise touch. With `path`,
+ * an arc's two flags are read as the single '0'/'1' characters they are, not as
+ * the start of a number (`a5 5 0 01.5.5` is flags 0, 1 then x .5).
+ */
+export function roundCoordinates(value: string, precision: number, path = false): string {
+  let out = ''
+  let afterNumber = false
+  let command = ''
+  let arg = 0
+  let i = 0
+  while (i < value.length) {
+    const ch = value[i]
+    if (path && PATH_COMMAND.test(ch)) {
+      out += ch
+      command = ch.toLowerCase()
+      arg = 0
+      afterNumber = false
+      i++
+      continue
+    }
+    const flag = path && command === 'a' && (arg % 7 === 3 || arg % 7 === 4)
+    let token: string | null = null
+    if (flag && (ch === '0' || ch === '1')) {
+      token = ch
+      i++
+    } else {
+      NUMBER_RE.lastIndex = i
+      const m = NUMBER_RE.exec(value)
+      if (m) {
+        const n = Number(m[0])
+        // Only fractional tokens are rounded; Number() drops trailing zeros
+        // (7.30 → "7.3"), so the result stays compact.
+        token = /[.e]/i.test(m[0]) && Number.isFinite(n) ? String(Number(n.toFixed(precision))) : m[0]
+        i = NUMBER_RE.lastIndex
+      }
+    }
+    if (token === null) {
+      // A separator (or anything else) is kept as written.
+      out += ch
+      afterNumber = false
+      i++
+      continue
+    }
+    if (afterNumber && token[0] !== '-' && token[0] !== '+') out += ' '
+    out += token
+    afterNumber = true
+    arg++
+  }
+  return out
 }
 
 /** Resolve the effective fill of an element (attribute or inline style). */
@@ -248,11 +297,7 @@ export function cleanSvg(svg: string, opts: CleanOptions): CleanResult {
     for (const el of els) {
       for (const attr of COORD_ATTRS) {
         const v = el.getAttribute(attr)
-        if (v && FLOAT_RE.test(v)) {
-          FLOAT_RE.lastIndex = 0
-          el.setAttribute(attr, roundNumbers(v, precision))
-        }
-        FLOAT_RE.lastIndex = 0
+        if (v && v.includes('.')) el.setAttribute(attr, roundCoordinates(v, precision, attr === 'd'))
       }
     }
   }

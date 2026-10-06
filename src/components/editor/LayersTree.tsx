@@ -289,7 +289,7 @@ const LayerRowView = memo(function LayerRowView({
           label={
             <TipLabel
               title={item.expanded === false ? 'Expand group' : 'Collapse group'}
-              detail="Only changes what this list shows — the artwork is untouched."
+              detail="Only changes what this list shows. The artwork stays as it is."
             />
           }
         >

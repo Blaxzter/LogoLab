@@ -28,10 +28,10 @@ const PATHS: Record<
   problem: {
     icon: Bug,
     title: 'Something is broken',
-    blurb: 'A crash, a control that does nothing — or a trace that came out wrong.',
+    blurb: 'A crash, a control that does nothing, or a trace that came out wrong.',
     asks: [
       'What you did, and what LogoLab did instead.',
-      'What you expected — for a wrong-looking trace this is the important half.',
+      'What you expected. For a trace that looks wrong, this is the part we need most.',
       'A screenshot of the result, if you have one. Paste it straight into the form.',
     ],
     cta: 'Continue on GitHub',
@@ -39,9 +39,9 @@ const PATHS: Record<
   idea: {
     icon: Lightbulb,
     title: 'Something is missing',
-    blurb: 'A feature, a preset, an export format — anything LogoLab should do and does not.',
+    blurb: 'A feature, a preset, an export format: anything LogoLab doesn’t do yet.',
     asks: [
-      'What you were trying to get done, not only the feature you pictured.',
+      'What you were trying to get done, as well as the feature you pictured.',
       'How you imagine it working, if you have a picture of it.',
     ],
     cta: 'Open a feature request',
@@ -80,7 +80,7 @@ export function ReportDialog({ onClose }: { onClose: () => void }) {
             <p className="mt-1 text-xs leading-relaxed text-muted">
               {choice
                 ? 'The next step opens GitHub with a form. Nothing is sent until you post it there.'
-                : 'Both end up as a GitHub issue — the form is just different.'}
+                : 'Both become a GitHub issue, each with its own form.'}
             </p>
           </div>
           <button
@@ -169,7 +169,7 @@ function Guidance({ choice, onBack, onClose }: { choice: Choice; onBack: () => v
             Show me exactly what gets attached
           </summary>
           <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-surface-3 p-3 font-mono text-[0.68rem] leading-relaxed text-ink-2">
-            {attached || 'Nothing to attach yet — no logo is loaded.'}
+            {attached || 'Nothing to attach yet. No logo is loaded.'}
           </pre>
         </details>
       </div>

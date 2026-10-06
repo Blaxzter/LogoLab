@@ -153,7 +153,7 @@ export function SheetControlsBody({
         </div>
 
         {/* ------------------------------------------------------------ split */}
-        <Field label="Split" hint="Auto reads the icons off the paper; Grid divides the sheet evenly.">
+        <Field label="Split" hint="Auto finds the icons on the paper. Grid cuts the sheet into equal cells.">
           <Segmented<DetectMode>
             value={detect.mode}
             onChange={(v) => onDetect({ mode: v })}
@@ -172,7 +172,7 @@ export function SheetControlsBody({
           >
             <Field
               label="Ink threshold"
-              hint="How far a pixel must differ from the paper colour to count as artwork. Raise it if the paper texture is being picked up."
+              hint="How different from the paper colour a pixel must be to count as artwork. Raise it if the paper texture gets picked up."
             >
               <Slider value={detect.threshold} min={4} max={96} onChange={(v) => onDetect({ threshold: v })} />
             </Field>
@@ -180,8 +180,8 @@ export function SheetControlsBody({
               label="Merge gap"
               hint={
                 detect.gap === null
-                  ? 'Automatic: the gap that holds each icon together longest as it grows. Override if parts of one icon land in separate boxes.'
-                  : 'Pieces closer than this (sheet px) belong to the same icon.'
+                  ? 'Automatic: picks the gap that keeps each icon in one piece. Set it by hand if parts of one icon land in separate boxes.'
+                  : 'Pieces closer together than this (in sheet px) count as one icon.'
               }
               right={
                 <Toggle
@@ -197,7 +197,7 @@ export function SheetControlsBody({
             </Field>
             <Field
               label="Keep caption text"
-              hint="Sheets usually label every icon. Captions are detected and set aside; turn this on to get boxes for them too."
+              hint="Sheets usually label every icon. Captions are found and left out; turn this on to get boxes for them too."
               right={
                 <Toggle
                   checked={detect.keepLabels}
@@ -217,7 +217,7 @@ export function SheetControlsBody({
             <Field label="Columns">
               <Slider value={detect.cols} min={1} max={16} onChange={(v) => onDetect({ cols: v })} />
             </Field>
-            <Field label="Margin" hint="Border of the sheet to skip before the first cell.">
+            <Field label="Margin" hint="Sheet border to skip before the first cell.">
               <Slider
                 value={detect.margin}
                 min={0}
@@ -244,7 +244,7 @@ export function SheetControlsBody({
             title="Crop"
             summary={`${Math.round(detect.padding * 100)}% padding${detect.square ? ' · square' : ''}${detect.uniform ? ' · uniform' : ''}`}
           >
-            <Field label="Padding" hint="Breathing room around the artwork, as a share of the icon's size.">
+            <Field label="Padding" hint="Space around the artwork, as a share of the icon's size.">
               <Slider
                 value={Math.round(detect.padding * 100)}
                 min={0}
@@ -255,14 +255,14 @@ export function SheetControlsBody({
             </Field>
             <Field
               label="Square crops"
-              hint="What an icon export almost always wants."
+              hint="Icon exports almost always want square images."
               right={<Toggle checked={detect.square} onChange={(v) => onDetect({ square: v })} label="Square crops" />}
             >
               <></>
             </Field>
             <Field
               label="Uniform size"
-              hint="Give every icon the same box, so a small glyph stays smaller than a big one instead of being blown up to match."
+              hint="Gives every icon the same box, so a small glyph stays smaller than a big one instead of being scaled up to match."
               right={
                 <Toggle checked={detect.uniform} onChange={(v) => onDetect({ uniform: v })} label="Uniform size" />
               }
@@ -279,7 +279,7 @@ export function SheetControlsBody({
         >
           <Field
             label="Name from captions"
-            hint="Reads the caption under each icon and uses it as the icon's name. The OCR engine (~5 MB) is downloaded the first time a sheet has captions, then cached; the sheet itself never leaves this tab."
+            hint="Reads the caption under each icon and uses it as the icon's name. The OCR engine (~5 MB) downloads the first time a sheet has captions and is cached after that. Your sheet never leaves this tab."
             right={
               <Toggle
                 checked={naming.fromCaptions}
@@ -326,12 +326,12 @@ export function SheetControlsBody({
           defaultOpen
         >
           <div className="rounded-md border border-line bg-surface-2 px-3 py-2 text-xs leading-snug text-muted">
-            Applies to every icon. Open a single icon for the full vectorizer — its own settings, node editing and
-            markers.
+            These apply to every icon. Open a single icon to get the full vectorizer, with its own settings, node
+            editing and markers.
           </div>
           <Field
             label="Mode"
-            hint="Auto counts the colours in each icon: one ink ⇒ mono (one clean shape, in the ink's own colour), more ⇒ colour. Sheet icons are usually one ink whose shading would otherwise split the shapes."
+            hint="Auto counts the colours in each icon. One ink traces as Mono (one clean shape in that ink's colour), more traces as Color. Sheet icons are usually one ink, and Mono keeps its shading from splitting the shapes."
           >
             <Segmented<SheetColorMode>
               value={colorMode}
@@ -346,7 +346,7 @@ export function SheetControlsBody({
           {colorMode !== 'mono' && (
             <Field
               label="Gradients"
-              hint="Auto decides per icon from its own pixels — a flat glyph traces flat, a shaded badge doesn't."
+              hint="Auto decides for each icon from its own pixels: a flat glyph traces flat, a shaded badge keeps its gradients."
             >
               <Segmented<GradientMode>
                 value={gradientMode}
@@ -361,14 +361,14 @@ export function SheetControlsBody({
           )}
           <Field
             label="Trace enlarged"
-            hint="Traces each crop at ~512px instead of its native size. Anti-aliased edges carry sub-pixel detail a small crop's pixel grid cannot use — measured over 54 icons: the traced area matches the source 6× more closely, for ~2.5× the trace time and somewhat more nodes."
+            hint="Traces each crop at ~512px instead of its native size, so the tracer can use the detail in soft edges. On 54 test icons the traced area matched the source 6× more closely, at ~2.5× the trace time and a few more nodes."
             right={<Toggle checked={hiRes} onChange={onHiRes} label="Trace enlarged" />}
           >
             <></>
           </Field>
           <Field
             label="Transparent background"
-            hint="Drops the sheet's paper colour from every traced icon."
+            hint="Removes the sheet's paper colour from every traced icon."
             right={
               <Toggle
                 checked={traceOptions.removeBackground}
@@ -381,7 +381,7 @@ export function SheetControlsBody({
           </Field>
           <Field
             label="Smoothing"
-            hint="Low keeps corners crisp; high sweeps out detail. Scaled down per icon: smoothing is an absolute tolerance, and a 170px crop would lose its interior details at the full-size setting."
+            hint="Low keeps corners crisp; high smooths away detail. It is scaled down for each icon, because a 170px crop would lose its inner details at the full-size setting."
           >
             <Slider
               value={traceOptions.smoothing}
@@ -390,7 +390,7 @@ export function SheetControlsBody({
               onChange={(v) => onTraceOptions({ smoothing: v })}
             />
           </Field>
-          <Field label="Despeckle" hint="Drops specks and stray anti-aliasing colours.">
+          <Field label="Despeckle" hint="Removes specks and stray edge colours.">
             <Slider
               value={traceOptions.despeckle}
               min={0}
@@ -412,7 +412,7 @@ export function SheetControlsBody({
           <Field
             label="Cropped PNG"
             right={<Toggle checked={exportPng} onChange={onExportPng} label="Export cropped PNG" />}
-            hint="The pixels as cut from the sheet — useful even before tracing."
+            hint="The pixels as cut from the sheet. Useful even before tracing."
           >
             <></>
           </Field>
@@ -420,7 +420,7 @@ export function SheetControlsBody({
             <Field
               label="Knock out background"
               right={<Toggle checked={transparentPng} onChange={onTransparentPng} label="Knock out background" />}
-              hint="Floods the paper colour away from the PNG edges."
+              hint="Removes the paper colour around the edges of each PNG."
             >
               <></>
             </Field>
@@ -516,17 +516,17 @@ function CaptionStatus({ ocr, tiles, onRetry }: { ocr: OcrState; tiles: SheetIco
   } else if (ocr.status === 'error') {
     body = (
       <span className="text-bad">
-        {ocr.error ?? 'Reading the captions failed.'}{' '}
+        {ocr.error ?? 'Could not read the captions.'}{' '}
         <button type="button" onClick={onRetry} className="underline underline-offset-2">
           Retry
         </button>
       </span>
     )
   } else if (captioned === 0) {
-    body = 'No captions were found under the icons on this sheet — names stay numbered.'
+    body = 'No captions found under the icons on this sheet, so names stay numbered.'
   } else {
     body = `${captioned} of ${icons.length} icons have a caption${
-      unsure > 0 ? ` · ${unsure} read with low confidence — check ${unsure === 1 ? 'it' : 'them'} in the grid` : ''
+      unsure > 0 ? ` · ${unsure} may be misread (check ${unsure === 1 ? 'it' : 'them'} in the grid)` : ''
     }.`
   }
   return <p className="flex items-center gap-1.5 text-xs leading-snug text-muted">{body}</p>

@@ -24,7 +24,14 @@ export interface SheetIntake {
 
 export async function readSheetFile(file: File): Promise<SheetIntake> {
   const loaded = await loadLogoFile(file)
-  const image = await getImageData(loaded.src, SHEET_MAX_DIM, loaded.isSvg ? loaded.svgText : null)
+  let image: ImageDataLike
+  try {
+    image = await getImageData(loaded.src, SHEET_MAX_DIM, loaded.isSvg ? loaded.svgText : null)
+  } catch (err) {
+    // Nothing will ever own the URL `loadLogoFile` minted for a sheet that failed.
+    if (loaded.src.startsWith('blob:')) URL.revokeObjectURL(loaded.src)
+    throw err
+  }
   return {
     source: {
       src: loaded.src,

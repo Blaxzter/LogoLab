@@ -11,7 +11,7 @@ export function CheckerToggle({ className = '' }: { className?: string }) {
   const dark = useStore((s) => s.checkerDark)
   const toggle = useStore((s) => s.toggleChecker)
   return (
-    <Tooltip label={`Flip preview background (currently ${dark ? 'dark' : 'light'}) — see white logos better`}>
+    <Tooltip label={`Flip preview background (now ${dark ? 'dark' : 'light'}) to see white logos better`}>
       <button
         type="button"
         onClick={toggle}

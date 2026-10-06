@@ -71,8 +71,8 @@ const PROGRESS_PAINT_END = 0.88
  *  flat art: high flat coverage (not continuous-tone) and few dominant colours. A
  *  rich flat illustration can still have coverage near 1, but is better served by
  *  the smoothness segmenter, which does not over-posterize it. */
-const FLAT_PALETTE_MIN_COVERAGE = 0.7
-const FLAT_PALETTE_MAX_COLORS = 14
+export const FLAT_PALETTE_MIN_COVERAGE = 0.7
+export const FLAT_PALETTE_MAX_COLORS = 14
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n))
 
@@ -211,10 +211,13 @@ export function healColorSpikes(
     const db = data[o + 2] - c.b
     return dr * dr + dg * dg + db * db
   }
-  let out: Int32Array | null = null // allocated lazily on the first reassignment
+  // Pass-synchronous: each pass READS `cur` (the previous pass's labels, never written
+  // during the scan) and WRITES a fresh copy, allocated lazily on its first reassignment.
+  // Writing into the array being read would let a move be seen later in the same scan,
+  // so a strand would heal further along +x/+y than along -x/-y.
   let cur = labels
   for (let pass = 0; pass < 6; pass++) {
-    let changed = 0
+    let out: Int32Array | null = null
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const i = y * width + x
@@ -241,16 +244,15 @@ export function healColorSpikes(
           }
         }
         if (bestB >= 0) {
-          if (!out) out = labels.slice()
+          if (!out) out = cur.slice()
           out[i] = bestB
-          changed++
         }
       }
     }
-    if (changed === 0) break
-    cur = out as Int32Array // next pass reads the updated labels (pass-synchronous)
+    if (!out) break
+    cur = out // next pass reads this pass's result
   }
-  return out ?? labels
+  return cur
 }
 
 /**
@@ -979,7 +981,7 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
  * subtler flats survive); despeckle sheds more (a higher drop threshold). The
  * default (detail 0) keeps only the dominant flats.
  */
-function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
+export function paletteOptionsFor(options: VectorizeOptions): PaletteSegmentOptions {
   const detail = clamp(options.regionDetail ?? 0, 0, 100) / 100
   const despeckle = clamp(options.despeckle ?? 0, 0, 100) / 100
   return {

@@ -183,14 +183,13 @@ function CrashScreen({
             <p className="mt-1.5 text-sm leading-relaxed text-muted">
               {chunk ? (
                 <>
-                  The code for this tab couldn't be downloaded — usually a new version was deployed while this page was
+                  The code for this tab couldn't be downloaded. Usually a new version went live while this page was
                   open, or the connection dropped. Reloading fetches it again.
                 </>
               ) : again ? (
                 <>
-                  It crashed again as soon as it came back, so whatever is wrong is in the state being restored, not in
-                  the panel. Starting over clears the saved session — logo, traces and edits — and reloads onto a clean
-                  app.
+                  It crashed again as soon as it came back, so the problem is in the restored state rather than the
+                  panel. Starting over clears the saved session (logo, traces and edits) and reloads a clean app.
                 </>
               ) : kind === 'app' ? (
                 <>
@@ -199,8 +198,8 @@ function CrashScreen({
                 </>
               ) : (
                 <>
-                  The rest of LogoLab is still running — your logo and the other tabs are untouched. Resetting gives
-                  this panel a clean start and keeps everything else.
+                  The rest of LogoLab is still running, and your logo and the other tabs are untouched. Resetting
+                  restarts this panel and keeps everything else.
                 </>
               )}
             </p>
@@ -244,9 +243,9 @@ function CrashScreen({
         </div>
 
         <p className="mt-3 text-[0.68rem] leading-snug text-faint">
-          The report opens a prefilled GitHub issue — the options, the image size, the build, this session's errors and
-          the stack, nothing else, and nothing is sent until you post it. Start over discards everything stored in this
-          browser.
+          The report opens a prefilled GitHub issue with the options, the image size, the build, this session's errors
+          and the stack. Nothing else is included, and nothing is sent until you post it. Start over discards everything
+          stored in this browser.
         </p>
 
         <details className="mt-4 border-t border-line pt-3">

@@ -18,6 +18,7 @@ import { getImageData } from '../lib/image'
 import { logError } from '../lib/report/errorLog'
 import { raiseFailure } from '../lib/report/failureNotice'
 import { saveSlot, SLOTS, srcToBlob, type StoredSheet } from '../lib/persist/session'
+import { runPool, traceInputsMoved, type TileTraceInputs } from './sheetRun'
 
 export type TileStatus = 'idle' | 'queued' | 'tracing' | 'done' | 'error'
 
@@ -506,7 +507,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         ocr: {
           ...IDLE_OCR,
           status: 'error',
-          error: 'Reading captions needs Web Workers and WebAssembly, which this browser does not offer.',
+          error: 'Reading captions needs Web Workers and WebAssembly, which this browser does not support.',
         },
       })
       return
@@ -544,7 +545,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       } catch (err) {
         if (token === ocrToken) {
           set((s) => ({
-            ocr: { ...s.ocr, status: 'error', error: err instanceof Error ? err.message : 'Reading a caption failed' },
+            ocr: { ...s.ocr, status: 'error', error: err instanceof Error ? err.message : 'Could not read a caption' },
           }))
         }
         return
@@ -630,82 +631,95 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       tiles: s.tiles.map((t) => (queue.includes(t.id) ? { ...t, status: 'queued', progress: 0, error: null } : t)),
     }))
 
-    let cursor = 0
-    const next = async (): Promise<void> => {
-      while (cursor < queue.length) {
-        if (token !== runToken) return
-        const id = queue[cursor++]
-        const tile = get().tiles.find((t) => t.id === id)
-        const pixels = get().crop(id)
-        if (!tile || !pixels) continue
-        const controller = new AbortController()
-        controllers.set(id, controller)
-        get().updateTile(id, { status: 'tracing', progress: 0 })
-        try {
-          const state = get()
-          const plan = planTileTrace(pixels, tile.opts ?? state.traceOptions, {
-            colorMode: tile.opts ? tile.opts.mode : state.colorMode,
-            gradientMode: tile.opts ? 'flat' : state.gradientMode,
-            background: state.background,
-            hiRes: state.hiRes,
-          })
-          const opts = tile.opts
-            ? // A hand-tuned tile keeps its own options; only the resolution and
-              // the size-scaled smoothing still come from the planner.
-              { ...tile.opts, smoothing: plan.opts.smoothing }
-            : plan.opts
-          const result = await traceTile(
-            tileTraceInput(pixels, plan.scale),
-            opts,
-            controller.signal,
-            (p) => {
-              if (token === runToken) get().updateTile(id, { progress: p.fraction })
-            },
-            tile.opts ? null : plan.recolor,
-          )
-          if (token !== runToken) return
-          set((s) => ({
-            tiles: s.tiles.map((t) =>
-              t.id === id
-                ? {
-                    ...t,
-                    status: 'done',
-                    progress: 1,
-                    doc: result.doc,
-                    svg: result.svg,
-                    stats: result.stats,
-                    error: null,
-                    stale: false,
-                    // `opts` stays null for a tile following the sheet defaults
-                    // (so a defaults change marks it stale); `resolved` is what
-                    // this run used and what the studio opens with.
-                    opts: t.opts,
-                    resolved: opts,
-                  }
-                : t,
-            ),
-          }))
-        } catch (err) {
-          if (err instanceof DOMException && err.name === 'AbortError') return
-          // Logged even if this run was superseded, so a later issue report
-          // still sees the failure.
-          logError('sheet-tile', err)
-          if (token === runToken) {
-            get().updateTile(id, {
-              status: 'error',
-              error: err instanceof Error ? err.message : 'Trace failed',
-            })
-            // raiseFailure keys on what+message, so many tiles failing the
-            // same way ask only once.
-            raiseFailure('the icon sheet', 'An icon in the sheet could not be traced.', err)
-          }
-        } finally {
-          controllers.delete(id)
-        }
+    // What a tile's trace is cut from, read off the tile and the sheet as they are now.
+    const inputsOf = (tile: SheetIcon): TileTraceInputs => {
+      const s = get()
+      return {
+        rect: tile.rect,
+        opts: tile.opts,
+        traceOptions: s.traceOptions,
+        colorMode: s.colorMode,
+        gradientMode: s.gradientMode,
+        hiRes: s.hiRes,
+        background: s.background,
       }
     }
 
-    await Promise.all(Array.from({ length: Math.min(concurrency(), queue.length) }, next))
+    await runPool(queue, concurrency(), async (id) => {
+      if (token !== runToken) return 'stop'
+      const tile = get().tiles.find((t) => t.id === id)
+      const pixels = get().crop(id)
+      if (!tile || !pixels) return
+      const started = inputsOf(tile)
+      const controller = new AbortController()
+      controllers.set(id, controller)
+      get().updateTile(id, { status: 'tracing', progress: 0 })
+      try {
+        const state = get()
+        const plan = planTileTrace(pixels, tile.opts ?? state.traceOptions, {
+          colorMode: tile.opts ? tile.opts.mode : state.colorMode,
+          gradientMode: tile.opts ? 'flat' : state.gradientMode,
+          background: state.background,
+          hiRes: state.hiRes,
+        })
+        const opts = tile.opts
+          ? // A hand-tuned tile keeps its own options; only the resolution and
+            // the size-scaled smoothing still come from the planner.
+            { ...tile.opts, smoothing: plan.opts.smoothing }
+          : plan.opts
+        const result = await traceTile(
+          tileTraceInput(pixels, plan.scale),
+          opts,
+          controller.signal,
+          (p) => {
+            if (token === runToken) get().updateTile(id, { progress: p.fraction })
+          },
+          tile.opts ? null : plan.recolor,
+        )
+        if (token !== runToken) return 'stop'
+        set((s) => ({
+          tiles: s.tiles.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  status: 'done',
+                  progress: 1,
+                  doc: result.doc,
+                  svg: result.svg,
+                  stats: result.stats,
+                  error: null,
+                  // The box was moved or the settings changed while this traced:
+                  // the doc describes the OLD crop, so it lands stale, not done.
+                  stale: traceInputsMoved(started, inputsOf(t)),
+                  // `opts` stays null for a tile following the sheet defaults
+                  // (so a defaults change marks it stale); `resolved` is what
+                  // this run used and what the studio opens with.
+                  opts: t.opts,
+                  resolved: opts,
+                }
+              : t,
+          ),
+        }))
+      } catch (err) {
+        // A dead run stops every worker; a single tile aborted (its box was
+        // deleted mid-trace) only skips that tile — see runPool.
+        if (err instanceof DOMException && err.name === 'AbortError') return token === runToken ? undefined : 'stop'
+        // Logged even if this run was superseded, so a later issue report
+        // still sees the failure.
+        logError('sheet-tile', err)
+        if (token === runToken) {
+          get().updateTile(id, {
+            status: 'error',
+            error: err instanceof Error ? err.message : 'Trace failed',
+          })
+          // raiseFailure keys on what+message, so many tiles failing the
+          // same way ask only once.
+          raiseFailure('the icon sheet', 'An icon in the sheet could not be traced.', err)
+        }
+      } finally {
+        controllers.delete(id)
+      }
+    })
     if (token === runToken) set({ running: false })
   },
 

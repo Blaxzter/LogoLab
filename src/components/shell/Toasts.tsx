@@ -31,19 +31,39 @@ function Toast({ icon, children, onDismiss }: { icon: ReactNode; children: React
   )
 }
 
+/**
+ * The restore notice's life, kept for the page load rather than per mount: the
+ * toast stack remounts whenever the app moves between /labs and a studio, and a
+ * notice read fresh from `sessionWasRestored` at every mount came back each time,
+ * dismissed or not.
+ */
+let restoreShownAt: number | null = null
+let restoreDone = false
+
 function RestoreToast() {
-  // Read once at mount: the flag describes this page load.
-  const [show, setShow] = useState(sessionWasRestored)
+  const [show, setShow] = useState(() => sessionWasRestored() && !restoreDone)
 
   useEffect(() => {
     if (!show) return
-    const id = setTimeout(() => setShow(false), RESTORE_MS)
+    restoreShownAt ??= Date.now()
+    // A remount picks up the time the notice has left, not a fresh one.
+    const left = Math.max(0, RESTORE_MS - (Date.now() - restoreShownAt))
+    const id = setTimeout(() => {
+      restoreDone = true
+      setShow(false)
+    }, left)
     return () => clearTimeout(id)
   }, [show])
 
   if (!show) return null
   return (
-    <Toast icon={<History size={15} />} onDismiss={() => setShow(false)}>
+    <Toast
+      icon={<History size={15} />}
+      onDismiss={() => {
+        restoreDone = true
+        setShow(false)
+      }}
+    >
       Picked up where you left off.
     </Toast>
   )
@@ -85,7 +105,7 @@ function PwaToast() {
           </button>
         </span>
       ) : (
-        'Installed — LogoLab now works offline.'
+        'Installed. LogoLab now works offline.'
       )}
     </Toast>
   )

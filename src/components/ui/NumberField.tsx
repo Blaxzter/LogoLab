@@ -14,6 +14,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { TipLabel, Tooltip } from './Tooltip'
 import { useFrameCoalesced } from './useFrameCoalesced'
 import { decimalsOf, stepFactor as factor, stepped, useWheelStep } from './useWheelStep'
+import { parseNumberDraft } from './numberDraft'
 
 /** Pointer travel before a press on the label counts as a scrub, not a click. */
 const SCRUB_THRESHOLD_PX = 3
@@ -71,8 +72,8 @@ export function NumberField({
 
   /* ---- typing ---- */
   const commitDraft = () => {
-    const n = Number(draft)
-    if (Number.isFinite(n) && (min === undefined || n >= min) && (max === undefined || n <= max)) {
+    const n = parseNumberDraft(draft, min, max)
+    if (n !== null) {
       if (n !== value) onCommit(n, false)
     } else setDraft(shown)
   }

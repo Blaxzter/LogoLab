@@ -26,15 +26,34 @@ export function readLocal<T extends object>(key: string, defaults: T): T {
   }
 }
 
+/**
+ * Set once the session is being forgotten (Start fresh): from then until the
+ * reload, a late write would put back what was just cleared.
+ */
+let frozen = false
+
+/** Refuse every later write; the page is about to reload into an empty session. */
+export function freezeWrites(): void {
+  frozen = true
+}
+
+/** Whether `freezeWrites` has been called. */
+export function writesFrozen(): boolean {
+  return frozen
+}
+
 export function writeLocal(key: string, value: unknown): void {
+  if (frozen) return
+  // Status key, namespaced apart from the IndexedDB slot names.
+  const statusKey = `ls:${key}`
   try {
     localStorage.setItem(PREFIX + key, JSON.stringify(value))
     // Synchronous, so no pending phase, but still a save to report.
-    markSaved()
+    markSaved(statusKey)
   } catch {
     // Quota, private mode or a blocked origin. Best effort, but the UI must
     // not keep claiming the work is saved.
-    markFailed()
+    markFailed(statusKey)
   }
 }
 
@@ -60,6 +79,43 @@ export function clearLocal(): void {
   }
 }
 
+interface Pending {
+  flush: () => void
+  cancel: () => void
+}
+
+/**
+ * Every debounce holding a value it has not written yet. A page that is closing
+ * runs no timers and unmounts no components, so this is the only way the
+ * `pagehide` flush can reach a settings write or a component's publish into the
+ * working logo — not just the IndexedDB slot writers.
+ */
+const armedDebounces = new Set<Pending>()
+
+/**
+ * Run every armed debounce now. Repeats until none is left, because a flush can
+ * arm another (publishing a trace into the logo queues the logo slot's write).
+ */
+export function flushAllDebounces(): void {
+  // Bounded: a debounce that re-arms itself on flush must not hang the page.
+  for (let round = 0; round < 8 && armedDebounces.size > 0; round++) {
+    for (const d of [...armedDebounces]) {
+      // One throwing publish must not cost the page every write after it —
+      // the slot writers flushed last included.
+      try {
+        d.flush()
+      } catch {
+        /* this one is lost; the rest still land */
+      }
+    }
+  }
+}
+
+/** Drop every armed debounce's value unwritten (Start fresh). */
+export function cancelAllDebounces(): void {
+  for (const d of [...armedDebounces]) d.cancel()
+}
+
 /**
  * Trailing-edge debounce with a `flush()`, so a slider drag doesn't write on
  * every pointer move. The last call's arguments are always the ones written.
@@ -74,6 +130,7 @@ export function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: numb
       clearTimeout(timer)
       timer = null
     }
+    armedDebounces.delete(handle)
     if (pending) {
       const args = pending
       pending = null
@@ -84,12 +141,15 @@ export function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: numb
     pending = args
     if (timer !== null) clearTimeout(timer)
     timer = setTimeout(flush, ms)
+    armedDebounces.add(handle)
   }
   const cancel = () => {
     if (timer !== null) clearTimeout(timer)
     timer = null
     pending = null
+    armedDebounces.delete(handle)
   }
+  const handle: Pending = { flush, cancel }
   run.flush = flush
   run.cancel = cancel
   return run

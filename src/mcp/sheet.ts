@@ -19,6 +19,7 @@ import type { DetectOptions, ImageDataLike, SheetTile } from '../lib/sheet/types
 import type { VectorizeOptions } from '../types'
 import { pngFrom, rasterizeSource, type LoadedSource } from './image.ts'
 import { ensureDir, ensureParent } from './runtime.ts'
+import { withGradientMode } from './trace.ts'
 
 /**
  * Long side the sheet is decoded at. A sheet is a mosaic — one icon's crop is a
@@ -88,9 +89,10 @@ export async function splitSheet(src: LoadedSource, outDir: string, req: SheetRe
   const { image, detection } = await detectSheet(src, req)
   const root = ensureDir(outDir)
 
-  const base: VectorizeOptions = { ...PRODUCT_VECTORIZE_OPTIONS }
+  let base: VectorizeOptions = { ...PRODUCT_VECTORIZE_OPTIONS }
   if (req.smoothing != null) base.smoothing = req.smoothing
   if (req.despeckle != null) base.despeckle = req.despeckle
+  base = withGradientMode(base, req.gradients)
 
   const background = detection.background
   // Overhang is filled with the sheet's own paper colour, so an icon at the edge

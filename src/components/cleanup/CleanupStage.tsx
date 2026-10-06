@@ -1,9 +1,10 @@
 // The cleanup studio's pan/zoom stage: source pane, the always-mounted painting canvas, pins and overlays.
 
 import { Check, Loader2, MapPin } from '../ui/icons'
-import type { CleanupTool, KeepRemoveMarker } from '../../hooks/useCleanupCanvas'
+import type { CleanupFrame, CleanupTool, KeepRemoveMarker } from '../../hooks/useCleanupCanvas'
 import type { PanZoom } from '../../hooks/usePanZoom'
 import type { ViewMode } from './CleanupToolbar'
+import { pristineFrame } from './restoreFrame'
 
 /** Marker-pin colours, mirroring the vectorize pin glyph (green keep / red remove). */
 const KEEP_FILL = '#10b981'
@@ -20,6 +21,8 @@ export function CleanupStage({
   isMarker,
   view,
   originalSrc,
+  dims,
+  frame,
   markers,
   pz,
   canvasHidden,
@@ -36,6 +39,9 @@ export function CleanupStage({
   isMarker: boolean
   view: ViewMode
   originalSrc: string | null
+  /** The working buffer's size and where it sits in pristine — places the overlay ghost. */
+  dims: { w: number; h: number } | null
+  frame: CleanupFrame | null
   markers: KeepRemoveMarker[]
   pz: PanZoom
   canvasHidden: boolean
@@ -75,6 +81,10 @@ export function CleanupStage({
         hidden={canvasHidden}
         ghostOpacity={ghostOpacity}
         ghostSrc={view === 'overlay' ? originalSrc : null}
+        // The ghost covers PRISTINE's frame, not the canvas box: after a trim the
+        // canvas is a crop of it, and stretching the whole source into the crop
+        // put no source pixel over its result pixel.
+        ghostFrame={dims && frame ? pristineFrame(frame.origin, { w: frame.pw, h: frame.ph }, dims) : null}
         contentStyle={pz.contentStyle}
         label={view === 'split' ? 'Result' : null}
         markers={markers}
@@ -192,6 +202,7 @@ function CanvasHost({
   hidden,
   ghostOpacity,
   ghostSrc,
+  ghostFrame,
   contentStyle,
   label,
   markers,
@@ -202,6 +213,7 @@ function CanvasHost({
   hidden: boolean
   ghostOpacity: number
   ghostSrc: string | null
+  ghostFrame: React.CSSProperties | null
   contentStyle: React.CSSProperties
   label: string | null
   markers: KeepRemoveMarker[]
@@ -219,13 +231,16 @@ function CanvasHost({
       <div className="absolute inset-0 flex items-center justify-center p-4" style={contentStyle}>
         <div className="relative">
           {ghostSrc && (
-            <img
-              src={ghostSrc}
-              alt=""
-              draggable={false}
-              className="pointer-events-none absolute inset-0 h-full w-full select-none"
-              style={{ opacity: ghostOpacity / 100 }}
-            />
+            // Clipped to the canvas box: the trimmed-away margin stays out of view.
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              <img
+                src={ghostSrc}
+                alt=""
+                draggable={false}
+                className="absolute inset-0 h-full w-full max-w-none select-none"
+                style={{ ...ghostFrame, opacity: ghostOpacity / 100 }}
+              />
+            </div>
           )}
           {children}
           <MarkerPins markers={markers} scale={scale} />

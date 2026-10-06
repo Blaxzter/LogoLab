@@ -64,7 +64,7 @@ export function BlankArtboard({ onCreate }: BlankArtboardProps) {
   const portrait = sized && h > w
   const landscape = sized && w > h
   const noSize = 'Type a width and a height first.'
-  const sameShape = 'The artboard is square — portrait and landscape are the same shape.'
+  const sameShape = 'The artboard is square, so portrait and landscape are the same.'
 
   return (
     <section className="rounded-xl border border-line bg-surface p-4">
@@ -85,7 +85,7 @@ export function BlankArtboard({ onCreate }: BlankArtboardProps) {
             </ActionButton>
             <ActionButton
               label="Grow with the drawing"
-              note="No size to pick. An endless board you can pan and zoom anywhere; the artboard wraps whatever you draw."
+              note="No size to pick. Pan and zoom an endless board, and the artboard wraps whatever you draw."
               pressed={grow}
               onClick={() => setGrow(true)}
               className={`btn btn-secondary h-8 gap-1.5 px-2.5 text-xs ${grow ? 'is-active' : ''}`}
@@ -154,8 +154,8 @@ export function BlankArtboard({ onCreate }: BlankArtboardProps) {
               </div>
 
               <p className="text-xs leading-relaxed text-faint">
-                Sizes are artboard units, which a browser draws as pixels — so the paper presets are their millimetres
-                at 96 dpi and print at the real sheet size. The artboard can be resized, or switched to Grow, later.
+                Sizes are in artboard units, which a browser draws as pixels. Paper presets convert millimetres at 96
+                dpi, so they print at the real sheet size. You can resize the artboard or switch to Grow later.
               </p>
             </>
           )}
@@ -188,9 +188,7 @@ export function BlankArtboard({ onCreate }: BlankArtboardProps) {
                 : 'Opens an empty document at this size. Press R or E and drag to draw the first shape.'
             }
             reason={
-              grow || sized
-                ? null
-                : `An artboard edge is a whole number from ${MIN_ARTBOARD} to ${MAX_ARTBOARD} — one of the two fields is not.`
+              grow || sized ? null : `Width and height must be whole numbers from ${MIN_ARTBOARD} to ${MAX_ARTBOARD}.`
             }
             onClick={() => {
               if (grow) onCreate(GROW_START, GROW_START, true)
@@ -227,8 +225,8 @@ function GrowNotes() {
         direction, and the export is cropped to exactly that.
       </li>
       <li>
-        <span className="text-ink">Need a set size after all?</span> Switch to Fixed in the Properties panel at any time
-        — the artboard keeps the size it has grown to, and you can type a new one there.
+        <span className="text-ink">Need a set size after all?</span> Switch to Fixed in the Properties panel at any
+        time. The artboard keeps the size it has grown to, and you can type a new one there.
       </li>
     </ul>
   )
@@ -283,7 +281,7 @@ function PresetRow({
         return (
           <ActionButton
             key={p.id}
-            label={`${p.label} — ${p.width} × ${p.height}`}
+            label={`${p.label} (${p.width} × ${p.height})`}
             note={p.note}
             pressed={on}
             onClick={() => onPick(p)}

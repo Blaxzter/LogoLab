@@ -76,7 +76,12 @@ export function PanelEmptyState({ icon, title, subtitle }: { icon: ReactNode; ti
         type="file"
         accept="image/*,.svg"
         className="hidden"
-        onChange={(e) => handleFile(e.target.files?.[0])}
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          // Cleared so picking the SAME file again (a retry, a re-pick after Reset) still fires.
+          e.target.value = ''
+          void handleFile(file)
+        }}
       />
     </div>
   )

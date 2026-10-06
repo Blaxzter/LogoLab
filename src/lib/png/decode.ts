@@ -8,7 +8,7 @@
 //
 // Supports the common non-interlaced cases: bit depth 8/16, colour types 0
 // (gray), 2 (RGB), 3 (palette), 4 (gray+alpha), 6 (RGBA), and sub-byte palette/
-// gray depths (1/2/4). Interlaced (Adam7) PNGs throw — the corpus is not
+// gray depths (1/2/4), with tRNS for palette AND the grey/RGB colour key. Interlaced (Adam7) PNGs throw — the corpus is not
 // interlaced.
 
 import { inflateSync } from 'node:zlib'
@@ -179,6 +179,19 @@ function toRgba(
   // For grayscale, scale the small range up to 0–255.
   const grayScale = bitDepth < 8 ? 255 / maxVal : 1
 
+  // The UNSCALED sample (full 16-bit value, sub-byte value as stored): what a
+  // tRNS colour key is compared against. Optimizers (oxipng/optipng) turn binary-
+  // alpha RGBA into RGB/grey + a key, so ignoring the key decodes a transparent
+  // background as an opaque colour (usually black).
+  const rawSample = (y: number, x: number, c: number): number => {
+    if (bitDepth !== 16) return sample(y, x, c)
+    const i = y * rowBytes + (x * channels + c) * 2
+    return (s[i] << 8) | s[i + 1]
+  }
+  const key16 = (i: number): number => ((trns as Uint8Array)[i] << 8) | (trns as Uint8Array)[i + 1]
+  const grayKey = colorType === 0 && trns && trns.length >= 2 ? key16(0) : -1
+  const rgbKey = colorType === 2 && trns && trns.length >= 6 ? [key16(0), key16(2), key16(4)] : null
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const o = (y * width + x) * 4
@@ -194,7 +207,7 @@ function toRgba(
         out[o] = g
         out[o + 1] = g
         out[o + 2] = g
-        out[o + 3] = 255
+        out[o + 3] = grayKey >= 0 && rawSample(y, x, 0) === grayKey ? 0 : 255
       } else if (colorType === 4) {
         const g = sample(y, x, 0) * grayScale
         out[o] = g
@@ -205,7 +218,12 @@ function toRgba(
         out[o] = sample(y, x, 0)
         out[o + 1] = sample(y, x, 1)
         out[o + 2] = sample(y, x, 2)
-        out[o + 3] = 255
+        const keyed =
+          rgbKey !== null &&
+          rawSample(y, x, 0) === rgbKey[0] &&
+          rawSample(y, x, 1) === rgbKey[1] &&
+          rawSample(y, x, 2) === rgbKey[2]
+        out[o + 3] = keyed ? 0 : 255
       } else {
         out[o] = sample(y, x, 0)
         out[o + 1] = sample(y, x, 1)

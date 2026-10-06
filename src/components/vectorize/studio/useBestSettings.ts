@@ -119,7 +119,7 @@ export function useBestSettings({
       abortRef.current = null
       startedFromRef.current = null
       if (!ranked.length) {
-        setState({ status: 'error', message: 'None of the settings could trace this image.' })
+        setState({ status: 'error', message: 'None of the candidate settings could trace this image.' })
         return
       }
       setState({ status: 'done', ranked, ms: performance.now() - t0 })

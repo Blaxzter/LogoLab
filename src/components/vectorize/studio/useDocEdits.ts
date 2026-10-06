@@ -11,6 +11,7 @@ export function useDocEdits({
   doc,
   forceColorOn,
   historySet,
+  historyCommitMerged,
   dirtyRef,
   optsRef,
   docRef,
@@ -22,6 +23,7 @@ export function useDocEdits({
   doc: EditableDoc | null
   forceColorOn: boolean
   historySet: (next: EditableDoc, commit?: boolean) => void
+  historyCommitMerged: (next: EditableDoc, key: string) => void
   dirtyRef: RefObject<boolean>
   optsRef: RefObject<VectorizeOptions>
   docRef: RefObject<EditableDoc | null>
@@ -87,20 +89,27 @@ export function useDocEdits({
           if (fo(palette![i]) !== fo(old![i])) remap.set(rgbToHex(palette![i]), fo(palette![i]))
         }
         if (remap.size > 0) {
-          historySet({
-            ...cur!,
-            items: cur!.items.map((it) => {
-              if (it.kind !== 'path') return it
-              const hex = normalizeHex(it.fill)
-              return hex && remap.has(hex) ? { ...it, fillOpacity: remap.get(hex) } : it
-            }),
-          })
+          // A COMMIT, merged per swatch: the slider fires on every move and has no
+          // release event. A bare preview left the opacity out of history, so the
+          // next edit's undo entry was cut from before it and undoing that edit
+          // stripped the opacity too.
+          historyCommitMerged(
+            {
+              ...cur!,
+              items: cur!.items.map((it) => {
+                if (it.kind !== 'path') return it
+                const hex = normalizeHex(it.fill)
+                return hex && remap.has(hex) ? { ...it, fillOpacity: remap.get(hex) } : it
+              }),
+            },
+            `palette-alpha:${[...remap.keys()].join(',')}`,
+          )
           skipRetraceRef.current = true // canvas already updated; no re-trace needed
         }
       }
       setOpts((o) => ({ ...o, palette: palette ?? undefined }))
     },
-    [historySet],
+    [historyCommitMerged],
   )
 
   const handleCanvasChange = useCallback((d: EditableDoc) => historySet(mergeFills(d)), [historySet, mergeFills])

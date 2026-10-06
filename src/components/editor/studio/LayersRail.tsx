@@ -97,7 +97,7 @@ export function LayersRail({
         </BarBtn>
         <BarBtn
           label="Delete (Del)"
-          note="Removes the selected shapes — or, with the Node tool, just the selected nodes."
+          note="Removes the selected shapes. With the Node tool, removes just the selected nodes."
           onClick={deleteSelection}
           reason={why.remove}
         >

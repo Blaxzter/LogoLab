@@ -8,6 +8,7 @@
 //   logolab install --client cursor     → .cursor/mcp.json
 //   logolab install --client vscode     → .vscode/mcp.json
 //   logolab install --scope user        → the client's user-level config
+//                                         (VS Code: <profile>/Code/User/mcp.json)
 //   logolab install --client print      → print the JSON, change nothing
 //
 // The config it writes must match how it was run, or the client would launch a
@@ -53,10 +54,19 @@ export function serverEntry(): string {
  * `node`, not `process.execPath`: a version manager moves the absolute path out
  * from under the config, and every client resolves `node` on PATH the way a
  * shell does.
+ *
+ * On native Windows the published command goes through `cmd /c`: `npx` there is
+ * `npx.cmd`, a batch shim, and a client that spawns without a shell (Claude Code
+ * does) gets ENOENT for a bare `npx`. `node` is a real `node.exe`, so the
+ * checkout spec needs no wrapper.
  */
-export function launchSpec(): { command: string; args: string[] } {
-  return runningFromSource()
-    ? { command: 'node', args: [serverEntry()] }
+export function launchSpec(
+  platform: NodeJS.Platform = process.platform,
+  fromSource: boolean = runningFromSource(),
+): { command: string; args: string[] } {
+  if (fromSource) return { command: 'node', args: [serverEntry()] }
+  return platform === 'win32'
+    ? { command: 'cmd', args: ['/c', 'npx', '-y', PACKAGE_NAME] }
     : { command: 'npx', args: ['-y', PACKAGE_NAME] }
 }
 
@@ -93,13 +103,28 @@ function mergeInto(file: string, key: string, entry: Record<string, unknown>): {
   return { file, replaced }
 }
 
+/**
+ * VS Code's user-level MCP config: `mcp.json` in the profile's User folder (what
+ * "MCP: Open User Configuration" opens). Not `~/.vscode`, which holds extensions
+ * and is never read for it.
+ */
+export function vscodeUserDir(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir(),
+): string {
+  if (platform === 'win32') return join(env.APPDATA || join(home, 'AppData', 'Roaming'), 'Code', 'User')
+  if (platform === 'darwin') return join(home, 'Library', 'Application Support', 'Code', 'User')
+  return join(env.XDG_CONFIG_HOME || join(home, '.config'), 'Code', 'User')
+}
+
 /** Where each client keeps its config. */
 export function configPath(client: InstallClient, scope: InstallScope, dir: string): string {
   const home = homedir()
   if (client === 'claude') return scope === 'user' ? join(home, '.claude.json') : join(dir, '.mcp.json')
   if (client === 'cursor')
     return scope === 'user' ? join(home, '.cursor', 'mcp.json') : join(dir, '.cursor', 'mcp.json')
-  return scope === 'user' ? join(home, '.vscode', 'mcp.json') : join(dir, '.vscode', 'mcp.json')
+  return scope === 'user' ? join(vscodeUserDir(), 'mcp.json') : join(dir, '.vscode', 'mcp.json')
 }
 
 export interface InstallResult {

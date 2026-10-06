@@ -37,8 +37,10 @@ export function useLogoUpload() {
       clearFailure()
       setLoading(true)
       try {
-        clearLogo()
+        // Decode FIRST: clearing up front meant a file this browser cannot read
+        // had already thrown away the working logo, its trace and its edits.
         const patch = await loadLogoFile(file)
+        clearLogo()
         setLogo(patch)
       } catch (err) {
         // A format this browser cannot decode is the likeliest cause, and which

@@ -14,12 +14,12 @@
 
 import type { EditableDoc } from '../path/types'
 import type { VectorizeOptions } from '../../types'
-import { idbClear, idbDelete, idbGetMany, idbSet } from './idb'
-import { clearLocal, debounce } from './local'
-import { markArmed, markRestored, markSettled, resetSaveStatus } from './status'
+import { idbClear, idbDelete, idbGetMany, idbSet } from './idb.ts'
+import { cancelAllDebounces, clearLocal, debounce, flushAllDebounces, freezeWrites, writesFrozen } from './local.ts'
+import { markArmed, markDropped, markRestored, markSettled, resetSaveStatus } from './status.ts'
 
 // Re-exported so the UI has a single persistence entry point.
-export { getSaveStatus, subscribeSaveStatus, type SaveStatus } from './status'
+export { getSaveStatus, subscribeSaveStatus, type SaveStatus } from './status.ts'
 
 /**
  * Bump when a stored shape changes incompatibly. Records with a different
@@ -217,9 +217,21 @@ function writerFor(slot: Slot, ms: number) {
   return writer
 }
 
-/** Queue a slot write. `value === null` deletes the slot instead. */
+/**
+ * Queue a slot write. `value === null` deletes the slot instead. `ms` is the
+ * slot's debounce, fixed by its first write; `0` writes now whatever the slot's
+ * debounce is (a caller that must not leave the slot stale even briefly).
+ */
 export function saveSlot(slot: Slot, value: object | null, ms = 500): void {
+  if (writesFrozen()) return
   if (value === null) {
+    // Cancel, not just forget, the slot's writer: its timer is still armed, and
+    // firing after the delete would write the forgotten value back.
+    const writer = writers.get(slot)
+    if (writer) {
+      writer.cancel()
+      markDropped(slot)
+    }
     writers.delete(slot)
     void idbDelete([slot])
     return
@@ -227,11 +239,19 @@ export function saveSlot(slot: Slot, value: object | null, ms = 500): void {
   // Armed here as well as at write time, so the status turns to "saving" as
   // soon as an edit lands rather than after the debounce.
   markArmed(slot)
-  writerFor(slot, ms)({ ...value, v: SESSION_VERSION, t: Date.now() })
+  const writer = writerFor(slot, ms)
+  writer({ ...value, v: SESSION_VERSION, t: Date.now() })
+  if (ms === 0) writer.flush()
 }
 
-/** Write every pending slot now; the page is hiding and may not come back. */
+/**
+ * Write everything pending now; the page is hiding and may not come back. That
+ * is every armed debounce — settings, a trace or drawing not yet published into
+ * the working logo — not only the slot writers, or a reload restores a document
+ * and a logo that disagree.
+ */
 export function flushSession(): void {
+  flushAllDebounces()
   for (const writer of writers.values()) writer.flush()
 }
 
@@ -245,8 +265,16 @@ export async function startFreshSession(): Promise<void> {
   location.reload()
 }
 
-/** Forget the stored session. The theme is stored separately and survives. */
+/**
+ * Forget the stored session. The theme is stored separately and survives.
+ * Every later write is refused, so the caller must reload (startFreshSession).
+ */
 export async function clearSession(): Promise<void> {
+  // Every armed write is dropped and later ones refused: a timer firing during
+  // the clear, or a flush on the reload's `pagehide`, would put the forgotten
+  // work back.
+  freezeWrites()
+  cancelAllDebounces()
   writers.clear()
   restored = EMPTY
   didRestore = false

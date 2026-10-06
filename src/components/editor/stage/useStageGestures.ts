@@ -457,8 +457,10 @@ export function useStageGestures({
       case 'segment':
       case 'pen-handle':
         // The live preview already holds the final document; committing it
-        // makes the whole gesture one undo step.
-        onDocCommit(doc)
+        // makes the whole gesture one undo step. A plain click (nothing
+        // dragged) left `base` as it was: committing it would push an empty
+        // undo step and clear redo.
+        if (doc !== gesture.base) onDocCommit(doc)
         break
     }
     setGesture(null)

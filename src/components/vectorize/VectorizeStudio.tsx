@@ -148,7 +148,15 @@ export function VectorizeStudio({
 
   const history = useHistory<EditableDoc>()
   const doc = history.value
-  const { set: historySet, reset: historyReset, undo, redo, canUndo, canRedo } = history
+  const {
+    set: historySet,
+    commitMerged: historyCommitMerged,
+    reset: historyReset,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+  } = history
 
   const {
     selectedPathId,
@@ -229,6 +237,10 @@ export function VectorizeStudio({
   // Set just before an opacity-only palette edit so the auto-run effect skips the
   // (now-redundant) re-trace — the canvas was already recoloured live.
   const skipRetraceRef = useRef(false)
+  // The `assetKey` of the image the doc on screen was traced from (a restored
+  // doc: the key it was stored under; a run: the key it started on). null while
+  // that is unknown — and then nothing is published as this image's trace.
+  const docKeyRef = useRef<string | null>(null)
 
   const {
     commitDoc,
@@ -242,6 +254,7 @@ export function VectorizeStudio({
     doc,
     forceColorOn,
     historySet,
+    historyCommitMerged,
     dirtyRef,
     optsRef,
     docRef,
@@ -308,9 +321,26 @@ export function VectorizeStudio({
     dirtyRef.current = initialDoc ? false : session.dirty
     if (initialDoc) gradientsTouchedRef.current = true
     autoGradientsSrcRef.current = initialDoc ? logo.src : null
+    // The image this render (the one that read the seed) was looking at.
+    if (!initialDoc) docKeyRef.current = assetKey
     // Mount only: a later prop change means the host swapped tiles, and that
     // remounts the studio (keyed by tile id) rather than mutating this one.
   }, [])
+
+  // The seed can be read off an image that is already gone. Cleanup and the
+  // Editor flush their last write when they UNMOUNT — after this studio's first
+  // render has read the store — so the restored doc can belong to the image that
+  // write just replaced. Shown and published, it is the old trace over the new
+  // pixels (and with hand edits it would stay). Drop it and trace this image.
+  // Runs before the auto-run effect below, which then sees a clean doc.
+  // biome-ignore lint/correctness/useExhaustiveDependencies(historyReset): stable
+  useEffect(() => {
+    if (source || docKeyRef.current === null || docKeyRef.current === assetKey) return
+    docKeyRef.current = null
+    historyReset(null)
+    dirtyRef.current = false
+    skipRetraceRef.current = false
+  }, [source, assetKey])
 
   const {
     staleEdits,
@@ -338,6 +368,8 @@ export function VectorizeStudio({
     dirtyRef,
     skipRetraceRef,
     setScore,
+    inputKey: assetKey,
+    docKeyRef,
   })
 
   /* ------------------------------------------------------------- derived */
@@ -384,6 +416,7 @@ export function VectorizeStudio({
   usePublishTrace({
     enabled: !onApplyProp && !source,
     inputKey: assetKey,
+    docKeyRef,
     svgText,
     derivedDoc,
     busy,
@@ -435,7 +468,7 @@ export function VectorizeStudio({
       : null
   const bestReason =
     isVectorSource && retraceVector === 'clean'
-      ? 'A cleaned SVG is not traced. Switch Source to Re-trace to compare trace settings.'
+      ? 'Cleaning an SVG doesn’t trace it. Switch Source to Re-trace to compare settings.'
       : !best.available
         ? 'This browser cannot trace in the background (no Web Workers).'
         : busy
@@ -496,6 +529,7 @@ export function VectorizeStudio({
     isVectorSource,
     retraceVector,
     opts,
+    busy,
   })
 
   /* -------------------------------------------------------------- render */
@@ -620,6 +654,7 @@ export function VectorizeStudio({
     lockedPalette,
     onPaletteChange: handlePaletteChange,
     onHighlight: setHighlight,
+    readOnly: busy,
   }
 
   return (
@@ -639,8 +674,8 @@ export function VectorizeStudio({
           markers={markers}
           undo={undo}
           redo={redo}
-          canUndo={canUndo}
-          canRedo={canRedo}
+          canUndo={canUndo && !busy}
+          canRedo={canRedo && !busy}
           overlayOpacity={overlayOpacity}
           setOverlayOpacity={setOverlayOpacity}
           pz={pz}
@@ -664,8 +699,8 @@ export function VectorizeStudio({
           setTool={setTool}
           undo={undo}
           redo={redo}
-          canUndo={canUndo}
-          canRedo={canRedo}
+          canUndo={canUndo && !busy}
+          canRedo={canRedo && !busy}
           overlayOpacity={overlayOpacity}
           setOverlayOpacity={setOverlayOpacity}
           pz={pz}

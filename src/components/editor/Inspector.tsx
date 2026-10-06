@@ -117,7 +117,7 @@ export function Inspector({
   // without one the selection is only empty groups or raw markup.
   const paintReason = lead
     ? null
-    : 'Nothing paintable is selected — imported markup keeps the paint it came with and can\u2019t be recoloured here.'
+    : 'Nothing paintable is selected. Imported markup keeps its own paint and can\u2019t be recoloured here.'
   const spreadReason = canDistribute
     ? null
     : 'Select three or more items. Spacing two of them evenly is the same as aligning them.'
@@ -216,7 +216,7 @@ export function Inspector({
         <div className="flex items-center gap-2">
           <ColorWell
             label="Fill colour"
-            note="Drag in the picker to preview live — the whole drag is one undo step."
+            note="Drag in the picker to preview live. The whole drag is one undo step."
             reason={paintReason}
             value={lead?.fill ?? '#000000'}
             onChange={(c) => onFill(c, true)}
@@ -244,7 +244,7 @@ export function Inspector({
           <SliderRow
             label="Opacity"
             tip="Fill opacity"
-            note="How see-through the FILL is. The stroke has its own opacity, further down."
+            note="How see-through the fill is. The stroke has its own opacity setting below."
             value={Math.round((lead?.fillOpacity ?? 1) * 100)}
             onChange={(v) => onFillOpacity(v / 100, true)}
           />
@@ -289,7 +289,7 @@ function StrokeSection({
       <div className="flex items-center gap-2">
         <ColorWell
           label="Stroke colour"
-          note="Drag in the picker to preview live — the whole drag is one undo step."
+          note="Drag in the picker to preview live. The whole drag is one undo step."
           value={base.color}
           onChange={(c) => onStroke({ ...base, color: c }, true)}
         />
@@ -314,7 +314,7 @@ function StrokeSection({
           <div className="mt-2">
             <NumField
               label="Width"
-              tip="Outline thickness, in artboard units. It straddles the path — half inside, half outside."
+              tip="Outline thickness in artboard units. It straddles the path: half inside, half outside."
               value={base.width}
               min={0}
               step={0.5}
@@ -339,7 +339,7 @@ function StrokeSection({
             <SliderRow
               label="Opacity"
               tip="Stroke opacity"
-              note="How see-through the OUTLINE is, independently of the fill."
+              note="How see-through the outline is, separate from the fill."
               value={Math.round((base.opacity ?? 1) * 100)}
               onChange={(v) => onStroke({ ...base, opacity: v / 100 }, true)}
             />
@@ -396,7 +396,7 @@ const Palette = memo(function Palette({
           <button
             key={p.color}
             type="button"
-            title={`${p.color} — click to apply to the selection (${p.count} path${p.count === 1 ? '' : 's'} use it)`}
+            title={`${p.color}: click to apply to the selection (${p.count} path${p.count === 1 ? '' : 's'} use it)`}
             onClick={() => onPick(p.color)}
             className="h-5 w-5 rounded ring-1 ring-line transition-transform hover:scale-110"
             style={{ backgroundColor: p.color }}
@@ -431,7 +431,7 @@ const FILL_RULES = [
     id: 'evenodd' as const,
     short: 'Even-odd',
     label: 'Even-odd fill rule',
-    note: 'Counts overlaps regardless of direction: every second layer of overlap becomes a hole. Reach for it when a counter fills in solid.',
+    note: 'Counts overlaps regardless of direction: every second layer of overlap becomes a hole. Try it when a hole fills in solid.',
   },
 ]
 
@@ -516,7 +516,7 @@ function ArtboardSection({
       </div>
       {grow ? (
         <p className="text-[0.7rem] leading-relaxed text-faint">
-          {empty ? 'Draw anywhere — the artboard wraps whatever you draw.' : `${w} × ${h}, wrapped around the drawing.`}{' '}
+          {empty ? 'Draw anywhere. The artboard wraps whatever you draw.' : `${w} × ${h}, wrapped around the drawing.`}{' '}
           Switch to Fixed to keep a size.
         </p>
       ) : (
@@ -541,7 +541,7 @@ function ArtboardSection({
           </div>
           <ActionButton
             label="Fit to drawing"
-            note="Shrink-wraps the artboard around the visible artwork, once. The size stays fixed afterwards."
+            note="Shrinks the artboard to fit the visible artwork, once. The size stays fixed afterwards."
             reason={empty ? 'There is nothing drawn to fit around yet.' : null}
             onClick={() => {
               const next = fitArtboardToDrawing(doc)
@@ -647,7 +647,7 @@ function ColorWell({
   // pointer events (see ui/ActionButton.tsx), while the well still gets hover
   // and the picker's bubbled focus.
   return (
-    <Tooltip label={<TipLabel title={none ? `${label} — none` : label} detail={off ? reason : note} />}>
+    <Tooltip label={<TipLabel title={none ? `${label}: none` : label} detail={off ? reason : note} />}>
       <span
         className={`relative h-8 w-8 shrink-0 overflow-hidden rounded-md ring-1 ring-line-strong ${
           none ? 'checkerboard' : ''

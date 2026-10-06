@@ -16,7 +16,7 @@ export default function VectorizePanel() {
         <PanelEmptyState
           icon={<ImageOff size={26} />}
           title="No logo to vectorize"
-          subtitle="Drop a PNG, JPG, or SVG (or load an example) to trace it to clean vector paths."
+          subtitle="Drop in a PNG, JPG or SVG, or load an example, to trace it into clean vector paths."
         />
       </div>
     )

@@ -58,7 +58,7 @@ export function LabPopover() {
   return (
     <>
       {/* Empty label while open, so no bubble hovers over the card it just opened. */}
-      <Tooltip label={open ? '' : 'Dev views — the vectorizer’s harnesses'} side="bottom">
+      <Tooltip label={open ? '' : 'Dev views: the vectorizer’s test harnesses'} side="bottom">
         <button
           ref={btnRef}
           type="button"
@@ -85,7 +85,7 @@ export function LabPopover() {
             <div className="px-2 pb-1.5 pt-1">
               <div className="text-sm font-semibold text-ink">Under the hood</div>
               <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                The harnesses the vectorizer is built and tested against — they run the real tracer, right here.
+                The harnesses the vectorizer is built and tested against. They run the real tracer, right here.
               </p>
             </div>
             <div className="flex flex-col">

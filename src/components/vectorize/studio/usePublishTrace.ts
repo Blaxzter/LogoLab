@@ -15,6 +15,7 @@ const PUBLISH_MS = 300
 export function usePublishTrace({
   enabled,
   inputKey,
+  docKeyRef,
   svgText,
   derivedDoc,
   busy,
@@ -26,6 +27,12 @@ export function usePublishTrace({
   enabled: boolean
   /** `assetKey` of the image being traced; a write for any other image is dropped. */
   inputKey: string
+  /**
+   * `assetKey` of the image the doc was traced from. A doc of any other image
+   * (a restored session that a cleanup write overtook) is never published as this
+   * one's trace, even for the one commit before the studio drops it.
+   */
+  docKeyRef: RefObject<string | null>
   svgText: string | null
   derivedDoc: EditableDoc | null
   busy: boolean
@@ -47,9 +54,11 @@ export function usePublishTrace({
   // Leaving the tab mid-debounce still lands the last edit.
   useEffect(() => () => publish.flush(), [publish])
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies(dirtyRef): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(dirtyRef.current): a ref, read when the code runs
+  // biome-ignore lint/correctness/useExhaustiveDependencies(docKeyRef.current): a ref, read when the code runs
   useEffect(() => {
     if (!enabled || busy || !svgText || !derivedDoc) return
+    if (docKeyRef.current !== inputKey) return
     // A Clean SVG pass the user hasn't changed is the working image already, just
     // re-serialized: writing it would turn merely opening the tab into an edit.
     if (cleanFromExisting && !dirtyRef.current && !forceColorOn) return

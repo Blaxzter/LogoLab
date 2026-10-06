@@ -33,10 +33,13 @@ import {
 import { gradientToSvgDef } from '../trace/gradient.ts'
 import {
   collectGradientElements,
+  gradientChain,
   gradientRefId,
   representativeStopColor,
   resolveGradientFill,
 } from './gradientImport.ts'
+import { parseCssColor, rgbaToHex } from './cssColor.ts'
+import { inlineStylesheets } from './svgStyle.ts'
 
 /** Stable <defs> id for a path's gradient paint server. */
 const gradientId = (itemId: string): string => 'grad-' + itemId
@@ -450,6 +453,12 @@ interface PaintContext {
   strokeOpacity: number | null
   /** Group opacity multiplies down the tree (unlike the inherited props). */
   opacity: number
+  /** The CSS `color` that `currentColor` paint resolves to. */
+  color: string | null
+  /** `visibility` inherits, and a descendant can turn itself back on. */
+  visibility: string | null
+  /** Inherited text properties, carried for raw leaves (`<text>`) only. */
+  text: Record<string, string>
 }
 
 const SHAPE_TAGS = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line'])
@@ -472,6 +481,29 @@ const UNMODELLABLE_ATTRS = [
   'stroke-dashoffset',
   'pathLength',
   'transform-origin',
+]
+
+/**
+ * The subset that acts on a `<g>` as a whole. Flattening the group would apply
+ * each to nothing — masked or clipped art drawn unmasked — so such a group stays
+ * raw. (The others inherit or do nothing on a group.)
+ */
+const GROUP_EFFECT_ATTRS = ['filter', 'mask', 'clip-path', 'transform-origin']
+
+/** Inherited text properties a raw `<text>` still needs once its `<g>` is gone. */
+const TEXT_PROPS = [
+  'font-family',
+  'font-size',
+  'font-weight',
+  'font-style',
+  'font-variant',
+  'font-stretch',
+  'text-anchor',
+  'letter-spacing',
+  'word-spacing',
+  'dominant-baseline',
+  'writing-mode',
+  'direction',
 ]
 
 /** Options for {@link parseSvg}. */
@@ -500,6 +532,9 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
   }
   const root = dom.documentElement
   if (!root || root.nodeName.toLowerCase() !== 'svg' || dom.querySelector('parsererror')) return null
+  // Internal CSS (Illustrator's `.cls-1{fill:…}`) folded into each element's
+  // style, so the walk sees the paint; elements a rule can't be resolved for stay raw.
+  const cssTainted = inlineStylesheets(dom)
 
   let viewBox: [number, number, number, number] | null = null
   const vbAttr = root.getAttribute('viewBox')
@@ -536,6 +571,10 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
     consumedGradients,
     deferredDefs,
     preserveGroups: options.preserveGroups === true,
+    viewport: { w: viewBox[2], h: viewBox[3] },
+    cssTainted,
+    // A rule we could not resolve on the root itself would reach every shape.
+    cssTaintAll: cssTainted.has(root),
   }
   const rootCtx = childContext(root, {
     transform: [1, 0, 0, 1, 0, 0],
@@ -549,6 +588,9 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
     strokeDash: null,
     strokeOpacity: null,
     opacity: 1,
+    color: null,
+    visibility: null,
+    text: {},
   })
   walkChildren(root, rootCtx, ctx)
 
@@ -581,6 +623,11 @@ interface WalkContext {
   consumedGradients: Set<string>
   deferredDefs: { item: RawItem; el: Element }[]
   preserveGroups: boolean
+  /** Root viewBox size: what a userSpaceOnUse gradient's percentages resolve against. */
+  viewport: { w: number; h: number }
+  /** Elements a stylesheet rule could not be resolved for (see svgStyle.ts). */
+  cssTainted: Set<Element>
+  cssTaintAll: boolean
 }
 
 function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void {
@@ -602,8 +649,21 @@ function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void 
       w.deferredDefs.push({ item, el })
       continue
     }
+    if (presentationProp(el, 'display')?.toLowerCase() === 'none') {
+      // Renders nothing, but may hold what something else references (a hidden
+      // layer's gradients, a <use> target): kept raw, where it stays hidden.
+      w.items.push(makeRawItem(w.nextId(), el, ctx))
+      continue
+    }
     if (tag === 'g') {
       if (el.children.length === 0) continue
+      if (hasGroupEffect(el) || w.cssTainted.has(el)) {
+        // Masked / clipped / filtered as a whole: flattened, its children would be
+        // drawn without it. The PARENT context goes on the wrapper; the group's own
+        // attributes stay in its markup.
+        w.items.push(makeRawItem(w.nextId(), el, ctx))
+        continue
+      }
       if (!w.preserveGroups) {
         walkChildren(el, childContext(el, ctx), w)
         continue
@@ -627,8 +687,17 @@ function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void 
     }
     if (SHAPE_TAGS.has(tag)) {
       const shapeCtx = childContext(el, ctx)
-      // Anything carrying paint we can't re-emit stays raw.
-      const lossy = hasUnmodellableAttrs(el) || hasUnmodellableStroke(shapeCtx)
+      // Anything carrying paint we can't re-emit stays raw — as does a hidden shape
+      // (the model has no `visibility`) and one a stylesheet rule may still paint.
+      const visibility = shapeCtx.visibility?.toLowerCase()
+      const lossy =
+        hasUnmodellableAttrs(el) ||
+        hasUnmodellableStroke(shapeCtx) ||
+        hasUnresolvableFill(shapeCtx) ||
+        visibility === 'hidden' ||
+        visibility === 'collapse' ||
+        w.cssTaintAll ||
+        w.cssTainted.has(el)
 
       if (!lossy && hasPlainFill(shapeCtx)) {
         const subPaths = shapeToSubPaths(el, tag)
@@ -642,10 +711,16 @@ function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void 
       // rides along; an unmodellable one already forced `lossy`.
       const gradId = !lossy ? gradientRefId(shapeCtx.fill) : null
       const gradEl = gradId ? w.gradients.get(gradId) : null
-      if (gradId && gradEl) {
+      if (gradId && gradEl && !gradientCssTainted(gradEl, w)) {
         const subPaths = shapeToSubPaths(el, tag)
         if (!subPaths || subPaths.length === 0) continue
-        const gradient = resolveGradientFill(gradEl, w.gradients, subPathsTightBounds(subPaths), shapeCtx.transform)
+        const gradient = resolveGradientFill(
+          gradEl,
+          w.gradients,
+          subPathsTightBounds(subPaths),
+          shapeCtx.transform,
+          w.viewport,
+        )
         if (gradient) {
           const item = makePathItem(w.nextId(), subPaths, {
             ...shapeCtx,
@@ -660,6 +735,18 @@ function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void 
     }
     w.items.push(makeRawItem(w.nextId(), el, ctx))
   }
+}
+
+/**
+ * A gradient (or a stop of one along its href chain) that a stylesheet rule could
+ * not be resolved for: its stop colours may not be what the walk reads, so the
+ * shape stays raw beside the paint server rather than being lifted with them.
+ */
+function gradientCssTainted(gradEl: Element, w: WalkContext): boolean {
+  if (w.cssTainted.size === 0) return false
+  return gradientChain(gradEl, w.gradients).some(
+    (g) => w.cssTainted.has(g) || Array.from(g.children).some((c) => w.cssTainted.has(c)),
+  )
 }
 
 /** Ids referenced by markup via url(#id) or (xlink:)href="#id". */
@@ -694,20 +781,54 @@ function stripGradients(el: Element, remove: Set<string>): string | null {
 /** Compose an element's transform + presentation props onto its parent context. */
 function childContext(el: Element, ctx: PaintContext): PaintContext {
   const t = el.getAttribute('transform')
-  const opacity = parseOpacity(presentationProp(el, 'opacity'))
+  // `inherit` is the parent's value, which is what an absent property gives too.
+  const prop = (name: string) => {
+    const v = presentationProp(el, name)
+    return v !== null && v.toLowerCase() === 'inherit' ? null : v
+  }
+  const opacity = parseOpacity(prop('opacity'))
+  let text = ctx.text
+  for (const name of TEXT_PROPS) {
+    const v = prop(name)
+    if (v !== null) text = { ...text, [name]: v }
+  }
   return {
     transform: t ? composeAffine(ctx.transform, parseTransformAttr(t)) : ctx.transform,
-    fill: presentationProp(el, 'fill') ?? ctx.fill,
-    fillRule: presentationProp(el, 'fill-rule') ?? ctx.fillRule,
-    fillOpacity: parseOpacity(presentationProp(el, 'fill-opacity')) ?? ctx.fillOpacity,
-    stroke: presentationProp(el, 'stroke') ?? ctx.stroke,
-    strokeWidth: presentationProp(el, 'stroke-width') ?? ctx.strokeWidth,
-    strokeCap: presentationProp(el, 'stroke-linecap') ?? ctx.strokeCap,
-    strokeJoin: presentationProp(el, 'stroke-linejoin') ?? ctx.strokeJoin,
-    strokeDash: presentationProp(el, 'stroke-dasharray') ?? ctx.strokeDash,
-    strokeOpacity: parseOpacity(presentationProp(el, 'stroke-opacity')) ?? ctx.strokeOpacity,
+    fill: prop('fill') ?? ctx.fill,
+    fillRule: prop('fill-rule') ?? ctx.fillRule,
+    fillOpacity: parseOpacity(prop('fill-opacity')) ?? ctx.fillOpacity,
+    stroke: prop('stroke') ?? ctx.stroke,
+    strokeWidth: prop('stroke-width') ?? ctx.strokeWidth,
+    strokeCap: prop('stroke-linecap') ?? ctx.strokeCap,
+    strokeJoin: prop('stroke-linejoin') ?? ctx.strokeJoin,
+    strokeDash: prop('stroke-dasharray') ?? ctx.strokeDash,
+    strokeOpacity: parseOpacity(prop('stroke-opacity')) ?? ctx.strokeOpacity,
     opacity: opacity !== null ? ctx.opacity * opacity : ctx.opacity,
+    color: prop('color') ?? ctx.color,
+    visibility: prop('visibility') ?? ctx.visibility,
+    text,
   }
+}
+
+/**
+ * A solid paint as the model stores it: `#rrggbb` (a hex the source already
+ * wrote as `#rgb`/`#rrggbb` is kept verbatim) with any alpha of its own split out,
+ * `'none'` for `none` and fully transparent colours, or null for paint this
+ * can't reduce (`var()`, garbage) — the shape then stays raw. `currentColor`
+ * resolves through the inherited `color`, black when there is none.
+ */
+function resolvePaint(paint: string, color: string | null): { hex: string; alpha: number } | 'none' | null {
+  const p = paint.trim()
+  const lower = p.toLowerCase()
+  if (lower === 'none') return 'none'
+  if (/^#(?:[0-9a-f]{3}){1,2}$/i.test(p)) return { hex: p, alpha: 1 }
+  if (lower === 'currentcolor') {
+    if (color === null || color.trim().toLowerCase() === 'currentcolor') return { hex: '#000000', alpha: 1 }
+    return resolvePaint(color, null)
+  }
+  const c = parseCssColor(p)
+  if (!c) return null
+  return c.a <= 0 ? 'none' : { hex: rgbaToHex(c), alpha: c.a }
 }
 
 /**
@@ -717,8 +838,8 @@ function childContext(el: Element, ctx: PaintContext): PaintContext {
  */
 function resolveStroke(ctx: PaintContext): Stroke | null {
   if (ctx.stroke === null) return null
-  const paint = ctx.stroke.trim().toLowerCase()
-  if (paint === 'none' || paint === 'transparent' || paint.startsWith('url(')) return null
+  const paint = resolvePaint(ctx.stroke, ctx.color)
+  if (paint === null || paint === 'none') return null
 
   // SVG's own default is 1 when the attribute is absent.
   const width = ctx.strokeWidth === null ? 1 : parseFloat(ctx.strokeWidth)
@@ -730,7 +851,7 @@ function resolveStroke(ctx: PaintContext): Stroke | null {
   const cap = ctx.strokeCap?.trim().toLowerCase()
   const join = ctx.strokeJoin?.trim().toLowerCase()
   const stroke: Stroke = {
-    color: ctx.stroke.trim(),
+    color: paint.hex,
     width,
     cap: cap === 'round' || cap === 'square' ? cap : 'butt',
     join: join === 'round' || join === 'bevel' ? join : 'miter',
@@ -749,8 +870,9 @@ function resolveStroke(ctx: PaintContext): Stroke | null {
     }
   }
 
-  // Element opacity multiplies the stroke as well as the fill.
-  const alpha = (ctx.strokeOpacity ?? 1) * ctx.opacity
+  // Element opacity multiplies the stroke as well as the fill (and so does the
+  // colour's own alpha, `rgba()` / `#rrggbbaa`).
+  const alpha = (ctx.strokeOpacity ?? 1) * ctx.opacity * paint.alpha
   if (alpha < 1) stroke.opacity = alpha
   return stroke
 }
@@ -765,8 +887,8 @@ function scaleStroke(stroke: Stroke, m: Affine): Stroke {
 }
 
 /** True when the element carries paint we would drop on the way back out. */
-function hasUnmodellableAttrs(el: Element): boolean {
-  for (const name of UNMODELLABLE_ATTRS) {
+function hasUnmodellableAttrs(el: Element, names: readonly string[] = UNMODELLABLE_ATTRS): boolean {
+  for (const name of names) {
     const v = el.getAttribute(name)
     if (v !== null && v.trim() !== '' && v.trim().toLowerCase() !== 'none') return true
     // The same properties can arrive through `style`.
@@ -774,6 +896,11 @@ function hasUnmodellableAttrs(el: Element): boolean {
     if (style && new RegExp(`(?:^|;)\\s*${name}\\s*:`, 'i').test(style)) return true
   }
   return false
+}
+
+/** A group-wide effect (mask, clip, filter) that flattening would lose. */
+function hasGroupEffect(el: Element): boolean {
+  return hasUnmodellableAttrs(el, GROUP_EFFECT_ATTRS)
 }
 
 /** Resolve a presentation property: inline style wins over the attribute. */
@@ -810,21 +937,27 @@ function hasPlainFill(ctx: PaintContext): boolean {
 /** A stroke that exists but this model can't express ⇒ the shape stays raw. */
 function hasUnmodellableStroke(ctx: PaintContext): boolean {
   if (ctx.stroke === null) return false
-  const s = ctx.stroke.trim().toLowerCase()
-  if (s === 'none' || s === 'transparent') return false
+  if (resolvePaint(ctx.stroke, ctx.color) === 'none') return false
   return resolveStroke(ctx) === null
 }
 
+/** A solid fill the model can't hold (`var()`, garbage) ⇒ the shape stays raw. */
+function hasUnresolvableFill(ctx: PaintContext): boolean {
+  if (ctx.fill === null || ctx.fill.trim().toLowerCase().startsWith('url(')) return false
+  return resolvePaint(ctx.fill, ctx.color) === null
+}
+
 function makePathItem(id: string, subPaths: SubPath[], ctx: PaintContext): PathItem {
-  const fillOpacity = (ctx.fillOpacity ?? 1) * ctx.opacity
   // `fill` is the SVG keyword when the shape is stroke-only, so a line drawn
   // as pure outline round-trips as one instead of gaining a black interior.
-  const fill = ctx.fill === null ? '#000000' : ctx.fill.trim()
-  const filled = fill.toLowerCase() !== 'none'
+  // Every other paint is reduced to hex here: the renderers read nothing else.
+  const paint = ctx.fill === null ? { hex: '#000000', alpha: 1 } : (resolvePaint(ctx.fill, ctx.color) ?? 'none')
+  const filled = paint !== 'none'
+  const fillOpacity = (ctx.fillOpacity ?? 1) * ctx.opacity * (filled ? paint.alpha : 1)
   const item: PathItem = {
     kind: 'path',
     id,
-    fill: filled ? fill : 'none',
+    fill: filled ? paint.hex : 'none',
     fillRule: ctx.fillRule?.toLowerCase() === 'evenodd' ? 'evenodd' : 'nonzero',
     subPaths: transformSubPaths(subPaths, ctx.transform),
     visible: true,
@@ -844,6 +977,16 @@ function makeRawItem(id: string, el: Element, ctx: PaintContext): RawItem {
   if (ctx.fillRule !== null) inherited['fill-rule'] = ctx.fillRule
   if (ctx.fillOpacity !== null) inherited['fill-opacity'] = String(ctx.fillOpacity)
   if (ctx.stroke !== null) inherited['stroke'] = ctx.stroke
+  // The rest of what a flattened <g> handed down: a raw stroke keeps its width and
+  // ends, a raw <text> its font, a hidden layer's leaf stays hidden.
+  if (ctx.strokeWidth !== null) inherited['stroke-width'] = ctx.strokeWidth
+  if (ctx.strokeCap !== null) inherited['stroke-linecap'] = ctx.strokeCap
+  if (ctx.strokeJoin !== null) inherited['stroke-linejoin'] = ctx.strokeJoin
+  if (ctx.strokeDash !== null) inherited['stroke-dasharray'] = ctx.strokeDash
+  if (ctx.strokeOpacity !== null) inherited['stroke-opacity'] = String(ctx.strokeOpacity)
+  if (ctx.color !== null) inherited['color'] = ctx.color
+  if (ctx.visibility !== null) inherited['visibility'] = ctx.visibility
+  for (const name of Object.keys(ctx.text)) inherited[name] = ctx.text[name]
   if (ctx.opacity < 1) inherited['opacity'] = String(Number(ctx.opacity.toFixed(4)))
   if (Object.keys(inherited).length > 0) item.inherited = inherited
   return item

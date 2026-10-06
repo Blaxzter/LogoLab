@@ -278,6 +278,15 @@ export function useCanvasInteraction({
   // --- drag tracking on the svg root (pointer capture retargets here) ----------
 
   const handleSvgPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    // --- a gesture whose release we never saw ---
+    // Capture waits for the drag threshold (see beginDrag), so a press that left
+    // the svg on its first move and was released outside sends no pointerup
+    // here. Back over the canvas with no button held, that gesture is over:
+    // cancel it, or the hover would drag the nodes and the next click commit it.
+    if ((dragRef.current || marqueeRef.current) && e.buttons === 0) {
+      handleSvgPointerCancel()
+      return
+    }
     // --- anchor / handle hover (node tool, nothing in flight) ---
     if (interactive && selectedItem && !dragRef.current && !marqueeRef.current) {
       const k = grabAt(e.clientX, e.clientY)

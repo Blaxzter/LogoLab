@@ -18,6 +18,7 @@ import assert from 'node:assert/strict'
 import {
   getSaveStatus,
   markArmed,
+  markDropped,
   markFailed,
   markRestored,
   markSaved,
@@ -67,7 +68,7 @@ test('one slot settling does not clear another slot', () => {
   assert.equal(getSaveStatus().pending, true, 'the sheet is still unwritten')
 })
 
-test('a failed write is reported, and a later success clears it', () => {
+test('a failed write is reported, and a later success of the SAME store clears it', () => {
   const seq = markArmed('sheet')
   markSettled('sheet', seq, false)
   const failed = getSaveStatus()
@@ -75,13 +76,47 @@ test('a failed write is reported, and a later success clears it', () => {
   assert.equal(failed.pending, false)
   assert.equal(failed.savedAt, null, 'a failed write must not stamp a save time')
 
-  markSaved()
+  const retry = markArmed('sheet')
+  markSettled('sheet', retry, true)
   assert.equal(getSaveStatus().failed, false)
   assert.ok(getSaveStatus().savedAt !== null)
 })
 
+test("another store's success does not hide a failure", () => {
+  // The logo did not fit in IndexedDB and is not retried until it changes; a
+  // slider's localStorage write landing a moment later says nothing about it.
+  // One global flag let any success flip the chip back to "Saved" while a
+  // reload would lose the logo.
+  const seq = markArmed('logo')
+  markSettled('logo', seq, false)
+  markSaved('ls:appearance')
+  assert.equal(getSaveStatus().failed, true, 'a localStorage save must not clear the logo failure')
+  const sheet = markArmed('sheet')
+  markSettled('sheet', sheet, true)
+  assert.equal(getSaveStatus().failed, true, 'nor another slot landing')
+
+  // A localStorage failure is cleared by that key alone, too.
+  resetSaveStatus()
+  markFailed('ls:export')
+  markSaved('ls:appearance')
+  assert.equal(getSaveStatus().failed, true)
+  markSaved('ls:export')
+  assert.equal(getSaveStatus().failed, false)
+})
+
+test('dropping a store forgets its pending write and its failure', () => {
+  const seq = markArmed('sheet')
+  markSettled('sheet', seq, false)
+  markArmed('sheet')
+  assert.equal(getSaveStatus().pending, true)
+  markDropped('sheet')
+  assert.equal(getSaveStatus().pending, false, 'a cancelled write is not owed any more')
+  assert.equal(getSaveStatus().failed, false, 'a deleted slot cannot be unsaved')
+  assert.equal(getSaveStatus().savedAt, null, 'nothing was saved, so no timestamp')
+})
+
 test('a synchronous store that throws is reported too', () => {
-  markFailed()
+  markFailed('ls:appearance')
   assert.equal(getSaveStatus().failed, true)
 })
 
@@ -96,7 +131,7 @@ test('a restored session already counts as saved', () => {
 })
 
 test('a restore never moves the timestamp backwards', () => {
-  markSaved()
+  markSaved('ls:appearance')
   const live = getSaveStatus().savedAt
   markRestored(Date.now() - 600_000)
   assert.equal(getSaveStatus().savedAt, live, 'an older stored slot must not age a fresh save')

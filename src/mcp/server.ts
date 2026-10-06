@@ -16,12 +16,12 @@
 // stdout belongs to the protocol; everything human goes to stderr (see `log`).
 
 import { writeFileSync } from 'node:fs'
-import { basename, dirname, extname, join, relative } from 'node:path'
+import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { exportCollection, type Appearance, type ExportRequest } from './export.ts'
-import { loadSource } from './image.ts'
+import { HEX_COLOR, loadSource } from './image.ts'
 import { install, isMain, parseInstallArgs } from './install.ts'
 import { presetCatalogue, PRESETS } from './presets.ts'
 import { prepareSource, prepareTraced, type PreparedLogo } from './render.ts'
@@ -63,6 +63,7 @@ const traceShape = {
     ),
   flattenOnto: z
     .string()
+    .regex(HEX_COLOR, 'flattenOnto must be a hex colour like #ffffff')
     .optional()
     .describe(
       'Composite a TRANSPARENT source onto this colour before tracing, e.g. "#ffffff". Omit to keep the alpha. (Not the card colour — that is appearance.background.)',
@@ -155,9 +156,25 @@ function fail(err: unknown) {
   return { content: [{ type: 'text' as const, text: `LogoLab: ${(err as Error).message}` }], isError: true }
 }
 
-/** Default output path for a trace: next to the source, as .svg. */
-function defaultSvgPath(sourcePath: string): string {
-  return join(dirname(sourcePath), `${basename(sourcePath, extname(sourcePath))}.svg`)
+/**
+ * Default output path for a trace: next to the source, as .svg — or
+ * `<name>.traced.svg` when that IS the source. trace_icon re-traces SVGs, and
+ * writing `logo.svg`'s trace to `logo.svg` silently replaced the authored
+ * original with an approximation of it.
+ */
+export function defaultSvgPath(sourcePath: string): string {
+  const stem = basename(sourcePath, extname(sourcePath))
+  const plain = join(dirname(sourcePath), `${stem}.svg`)
+  return samePath(plain, sourcePath) ? join(dirname(sourcePath), `${stem}.traced.svg`) : plain
+}
+
+/** Path equality as the filesystem sees it (Windows and macOS default to case-insensitive). */
+function samePath(a: string, b: string): boolean {
+  const norm = (p: string): string => {
+    const abs = resolve(p)
+    return process.platform === 'win32' || process.platform === 'darwin' ? abs.toLowerCase() : abs
+  }
+  return norm(a) === norm(b)
 }
 
 const rel = (p: string): string => relative(process.cwd(), p) || p
@@ -225,7 +242,9 @@ export function createServer(): McpServer {
         out: z
           .string()
           .optional()
-          .describe('Where to write the SVG. Default: next to the source, same name, .svg extension.'),
+          .describe(
+            'Where to write the SVG. Default: next to the source, same name, .svg extension (<name>.traced.svg when the source is itself that .svg, so it is never overwritten).',
+          ),
         inline: z
           .boolean()
           .optional()
@@ -281,7 +300,10 @@ export function createServer(): McpServer {
           .array(z.number().int().min(1).max(4096))
           .optional()
           .describe('Extra arbitrary sizes, written to icons/icon-<n>.png.'),
-        appName: z.string().optional().describe('Name used in the webmanifest and the README. Default "App".'),
+        appName: z
+          .string()
+          .optional()
+          .describe('Name used in the webmanifest and the logolab-icons.md notes. Default "App".'),
         appearance: z
           .object(appearanceShape)
           .optional()
@@ -322,7 +344,7 @@ export function createServer(): McpServer {
         outDir: z.string().describe('Directory to write the icon set into.'),
         presets: z.array(presetEnum).optional().describe('Collections to write. Default ["pwa"].'),
         sizes: z.array(z.number().int().min(1).max(4096)).optional().describe('Extra arbitrary PNG sizes.'),
-        appName: z.string().optional().describe('Name used in the webmanifest and README.'),
+        appName: z.string().optional().describe('Name used in the webmanifest and the logolab-icons.md notes.'),
         appearance: z
           .object(appearanceShape)
           .optional()

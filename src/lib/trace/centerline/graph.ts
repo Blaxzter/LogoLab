@@ -493,9 +493,13 @@ export function weldCrossings(g: SkeletonGraph, dt: Float32Array, maxK = 12, tur
       const ok = (through(aA[0], aB[0]) && through(aA[1], aB[1])) || (through(aA[0], aB[1]) && through(aA[1], aB[0]))
       if (!ok) continue
       // Contract: B's other chains move to A; the mid chain dies; A sits between.
+      // Read both positions BEFORE the merge: mergeNodes already moves A to the
+      // pixel-weighted centroid, and averaging that with B again put A 3/4 of the way to B.
+      const mx = (A.x + B.x) / 2
+      const my = (A.y + B.y) / 2
       mergeNodes(g, A, B, mid, dt)
-      A.x = (A.x + B.x) / 2
-      A.y = (A.y + B.y) / 2
+      A.x = mx
+      A.y = my
       welded = true
     }
     if (!welded) break

@@ -47,6 +47,13 @@ const APPLY_MS = 500
  */
 let session: EditorSession | null = null
 
+/**
+ * Opened documents whose edits this tab has already written into the logo.
+ * Coming back to such a document (undo to the start) is then a change the logo
+ * must follow; coming back to one never written (Esc on a first drag) is not.
+ */
+const wroteFor = new WeakSet<EditableDoc>()
+
 /** Bring a session up to the current working logo: if another tab changed it, open that. */
 function follow(prev: EditorSession | null): EditorSession {
   const { logo, assetKey } = useStore.getState()
@@ -104,6 +111,8 @@ export default function EditorPanel() {
   }, [assetKey, setState])
 
   const setProcessedSvg = useStore((s) => s.setProcessedSvg)
+  // The document the studio was seeded with, for the debounced write to record.
+  const openedRef = useRef<EditableDoc | null>(null)
 
   const applyToLogo = useRef(
     debounce((doc: EditableDoc) => {
@@ -114,6 +123,7 @@ export default function EditorPanel() {
       // because the same drawing serializes differently after a parse round-trip.
       if (useStore.getState().logo.svgText === svgText) return
       setProcessedSvg(svgText, doc.viewBox[2], doc.viewBox[3])
+      if (openedRef.current) wroteFor.add(openedRef.current)
       // Our own write: the key moved, but the editor already shows this drawing.
       // Stored too: a slot left on the old key reads, after a reload, as "the
       // logo changed elsewhere" and reopens the drawing from its SVG — which
@@ -135,6 +145,7 @@ export default function EditorPanel() {
   // The document the studio was seeded with; `onChange` fires once with this
   // exact object before any edit.
   const opened = open?.doc ?? null
+  openedRef.current = opened
   const onChange = useCallback(
     (doc: EditableDoc) => {
       // Not setState: re-seeding the studio with its own output would drop undo.
@@ -146,6 +157,12 @@ export default function EditorPanel() {
       // cleanup keyed to it. Don't swap this for a text comparison against
       // `logo.svgText` either; that doesn't survive the round-trip.
       if (doc !== opened) applyToLogo(doc)
+      // Back on the seed after edits already reached the logo (undo to the
+      // start): the logo follows. Back on it before any did (Esc on a first
+      // drag, whose preview frames armed the write): drop the pending write, or
+      // the cancelled edit lands in the logo half a second later.
+      else if (wroteFor.has(doc)) applyToLogo(doc)
+      else applyToLogo.cancel()
     },
     [name, opened, applyToLogo],
   )

@@ -20,11 +20,11 @@ const GROUP_ORDER = ['favicon', 'apple', 'android', 'maskable', 'windows'] as co
 type Group = (typeof GROUP_ORDER)[number]
 
 const GROUP_META: Record<Group, { title: string; blurb: string }> = {
-  favicon: { title: 'Favicon', blurb: 'Browser tab & bookmark icons (bundled into favicon.ico).' },
-  apple: { title: 'Apple touch', blurb: 'Home-screen icons for iOS / iPadOS Safari.' },
-  android: { title: 'Android / PWA', blurb: 'Standard install icons (purpose "any").' },
-  maskable: { title: 'Maskable', blurb: 'Full-bleed adaptive icons Android can mask to any shape.' },
-  windows: { title: 'Windows tiles', blurb: 'Pinned Start-menu tiles for legacy Windows / Edge.' },
+  favicon: { title: 'Favicon', blurb: 'Icons for browser tabs and bookmarks, bundled into favicon.ico.' },
+  apple: { title: 'Apple touch', blurb: 'Home screen icons for Safari on iOS and iPadOS.' },
+  android: { title: 'Android / PWA', blurb: 'Standard icons for the installed app (purpose "any").' },
+  maskable: { title: 'Maskable', blurb: 'Edge-to-edge icons that Android can crop to any shape.' },
+  windows: { title: 'Windows tiles', blurb: 'Pinned Start menu tiles for older Windows and Edge.' },
 }
 
 /** Representative sizes shown in the live preview grid. */
@@ -192,7 +192,7 @@ export default function ExportPanel(): ReactNode {
         <PanelEmptyState
           icon={<ImageOff size={26} />}
           title="No logo yet"
-          subtitle="Drop a logo here to generate a full favicon & PWA icon set — every size, a real favicon.ico, and a webmanifest, all in one zip."
+          subtitle="Drop a logo here to get a full favicon and PWA icon set: every size, a real favicon.ico and a webmanifest, in one zip."
         />
       </div>
     )
@@ -205,8 +205,8 @@ export default function ExportPanel(): ReactNode {
       <header className="mb-6">
         <h1 className="text-lg font-semibold text-ink">Export icons</h1>
         <p className="mt-1 text-sm text-muted">
-          Generate a production-ready favicon &amp; PWA icon set. Icon look follows the sidebar appearance (card color,
-          shape, radius, padding, scale &amp; tint).
+          Make a favicon and PWA icon set ready to ship. The icons use the appearance from the sidebar (card color,
+          shape, radius, padding, scale and tint).
         </p>
       </header>
 
@@ -294,9 +294,9 @@ export default function ExportPanel(): ReactNode {
               </label>
             </div>
             <p className="mt-3 rounded-md bg-surface-3 px-3 py-2 text-xs leading-snug text-muted">
-              Maskable icons are drawn full-bleed and opaque with an enlarged safe-zone so Android can crop them to any
-              shape without clipping your mark. The dashed circle in the preview is that crop — the centre 66% Android
-              guarantees, a circle rather than a square.
+              Maskable icons fill the whole square with no transparency, and keep your mark inside a larger safe zone,
+              so Android can crop them to any shape without cutting it off. The dashed circle in the preview shows that
+              crop: the centre 66% that Android always keeps, as a circle.
             </p>
           </section>
         </div>

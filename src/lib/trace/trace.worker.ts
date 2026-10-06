@@ -2,15 +2,12 @@
 // responsive while computing. Two jobs (the pipeline is pure JS, so worker-safe):
 //   - 'trace':   run the full pipeline, return the EditableDoc (the studio result).
 //   - 'analyze': run the pipeline and the intermediate stages, returning the
-//                stage visualisations (smoothed / discontinuity / regions / region
-//                fills as RGBA buffers) + paint models + the final SVG, for the
-//                "How it works" explainer.
+//                stage visualisations (regions / region fills as RGBA buffers, plus
+//                smoothed / discontinuity when the smoothness segmenter ran) + paint
+//                models + the final SVG, for the "How it works" explainer.
 
-import { traceImage, segmentOptionsFor } from './index.ts'
-import { segmentImage } from './segment.ts'
-import { fitPaintLadder } from './gradient.ts'
-import { serializeDoc, docStats } from '../path/model.ts'
-import { smoothedToRgba, discontinuityToRgba, segmentsToRgba, regionFillsToRgba } from './stageViz.ts'
+import { traceImage } from './index.ts'
+import { analyzeStages } from './explainStages.ts'
 import type { VectorizeOptions } from '../../types'
 
 interface Req {
@@ -30,31 +27,9 @@ self.onmessage = async (e: MessageEvent<Req>) => {
   try {
     const imageData = toImageData(image)
     if (type === 'analyze') {
-      // Same segmentation the pipeline uses (honours regionDetail), so the
-      // explainer's region count matches the actual output.
-      const seg = segmentImage(
-        imageData as unknown as { width: number; height: number; data: Uint8ClampedArray },
-        segmentOptionsFor(options),
-      )
-      const gradientsOn = options.gradients !== false
-      const paints = gradientsOn ? seg.regionSamples.map((s) => fitPaintLadder(s)) : seg.regionSamples.map(() => null)
-      const doc = await traceImage(imageData, options)
-      const st = docStats(doc)
-      const w = seg.ms.width
-      const h = seg.ms.height
-      self.postMessage({
-        type: 'analysis',
-        width: w,
-        height: h,
-        smoothed: smoothedToRgba(seg.ms),
-        disc: discontinuityToRgba(seg.ms),
-        segs: segmentsToRgba(seg.labels, w, h),
-        fills: regionFillsToRgba(seg.labels, seg.palette, w, h),
-        regionCount: seg.palette.length,
-        paints: paints.map((p) => (p ? { model: p.model, solid: p.solid } : null)),
-        svg: serializeDoc(doc, 3),
-        stats: { paths: st.paths, nodes: st.nodes },
-      })
+      // Stage pictures from the segmentation the trace actually ran (explainStages.ts),
+      // so the explainer's region count matches the output beside it.
+      self.postMessage({ type: 'analysis', ...(await analyzeStages(imageData, options)) })
       return
     }
     let preMerge: { labels: Int32Array; width: number; height: number } | null = null

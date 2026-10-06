@@ -35,18 +35,37 @@ function innerSvg(svgText: string): string {
 
 const attr = (n: number): string => String(Number(n.toFixed(3)))
 
-/** A vector logo: nested `<svg>`, positioned by x/y/width/height. */
+/** The root attributes `place` owns; an authored copy of any of them would be a duplicate. */
+const PLACED_ATTRS = /\s(?:x|y|width|height|preserveAspectRatio)\s*=\s*(?:"[^"]*"|'[^']*')/g
+
+/**
+ * A vector logo: nested `<svg>`, positioned by x/y/width/height.
+ *
+ * Most authored SVGs already carry width/height on the root (Lucide, Figma,
+ * Illustrator), and a second copy is an XML error resvg refuses — so the root's
+ * own placement attributes are stripped first. Without a viewBox those were what
+ * set the user space, so the intrinsic size becomes the viewBox and the art
+ * still scales into the rect.
+ */
 export function prepareVector(svgText: string, width: number, height: number): PreparedLogo {
   const inner = innerSvg(svgText)
+  const root = /<svg\b[^>]*>/.exec(inner)
+  if (!root) throw new Error('Not an SVG: no <svg> element found.')
+  let head = root[0].replace(PLACED_ATTRS, '')
+  if (!/\sviewBox\s*=/.test(head)) head = head.replace(/^<svg\b/, `<svg viewBox="0 0 ${attr(width)} ${attr(height)}"`)
+  const before = inner.slice(0, root.index)
+  const after = inner.slice(root.index + root[0].length)
   return {
     kind: 'vector',
     width,
     height,
     place: (r) =>
-      inner.replace(
-        /<svg\b/,
+      before +
+      head.replace(
+        /^<svg\b/,
         `<svg x="${attr(r.x)}" y="${attr(r.y)}" width="${attr(r.width)}" height="${attr(r.height)}" preserveAspectRatio="xMidYMid meet"`,
-      ),
+      ) +
+      after,
   }
 }
 

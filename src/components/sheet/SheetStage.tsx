@@ -8,6 +8,7 @@
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Trash2 } from '../ui/icons'
+import { Tooltip } from '../ui/Tooltip'
 import { ZoomSurface } from '../ui/ZoomSurface'
 import { useFitBox } from '../vectorize/useFitBox'
 import type { PanZoom } from '../../hooks/usePanZoom'
@@ -245,26 +246,31 @@ export function SheetStage({
                           }}
                         />
                       ))}
-                      <button
-                        type="button"
-                        title="Remove this box"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onDelete(tile.id)
-                        }}
-                        className="absolute flex items-center justify-center rounded-full bg-bad text-white"
-                        style={{
-                          width: `calc(16px / var(--pz-scale, 1))`,
-                          height: `calc(16px / var(--pz-scale, 1))`,
-                          right: `calc(-8px / var(--pz-scale, 1))`,
-                          top: `calc(-8px / var(--pz-scale, 1))`,
-                        }}
-                      >
-                        <Trash2
-                          style={{ width: `calc(9px / var(--pz-scale, 1))`, height: `calc(9px / var(--pz-scale, 1))` }}
-                        />
-                      </button>
+                      <Tooltip label="Remove this box">
+                        <button
+                          type="button"
+                          aria-label="Remove this box"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onDelete(tile.id)
+                          }}
+                          className="absolute flex items-center justify-center rounded-full bg-bad text-white"
+                          style={{
+                            width: `calc(16px / var(--pz-scale, 1))`,
+                            height: `calc(16px / var(--pz-scale, 1))`,
+                            right: `calc(-8px / var(--pz-scale, 1))`,
+                            top: `calc(-8px / var(--pz-scale, 1))`,
+                          }}
+                        >
+                          <Trash2
+                            style={{
+                              width: `calc(9px / var(--pz-scale, 1))`,
+                              height: `calc(9px / var(--pz-scale, 1))`,
+                            }}
+                          />
+                        </button>
+                      </Tooltip>
                     </>
                   )}
                 </div>

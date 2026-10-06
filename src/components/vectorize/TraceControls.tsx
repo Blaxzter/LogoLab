@@ -92,7 +92,7 @@ export interface TraceControlsProps {
 
 /** Why the ink probe reads an image as Mono or Colour, in one line. */
 function readingOf(p: InkModePlan): string {
-  if (p.inks === 0) return 'nothing but background, so Color.'
+  if (p.inks === 0) return 'only background found, so Color.'
   if (p.mode === 'mono')
     return `one ink${p.invert ? ', lighter than the background' : ''} → Mono, cut at ${p.threshold}${
       p.hairlines && p.hairlines.cut !== p.hairlines.from ? ` (raised from ${p.hairlines.from} to keep hairlines)` : ''
@@ -179,9 +179,9 @@ export function TraceControlsBody({
   // the pipeline does.
   const flatArt = opts.mode === 'mono' || opts.gradients === false || opts.centerline === true
   const detailWhy = !flatArt
-    ? `High only lifts the cap for flat art; gradient and photo colour stays at ${RASTER_MAX_DIM}px so the region merge cannot bog down. Turn Gradients off, or switch to Mono, and it applies.`
+    ? `High only raises the size limit for flat art. Gradient and photo colour stays at ${RASTER_MAX_DIM}px so merging regions doesn't get bogged down. Turn Gradients off or switch to Mono to use it.`
     : sourceMaxDim != null && sourceMaxDim <= RASTER_MAX_DIM_FLAT
-      ? `Your image is ${sourceMaxDim}px on its longest side — already inside the ${RASTER_MAX_DIM_FLAT}px Balanced cap, and rasters are never upscaled, so High has no extra pixels to read.`
+      ? `Your image is ${sourceMaxDim}px on its longest side, already within the ${RASTER_MAX_DIM_FLAT}px Balanced limit. Detail never enlarges an image, so High has no extra pixels to read.`
       : null
   const showDetail = detailWhy == null || (opts.traceDetail ?? 'balanced') !== 'balanced'
 
@@ -192,61 +192,63 @@ export function TraceControlsBody({
   const autoCanBite = opts.mode === 'mono' && room >= 2
   const aiCanBite = sourceMaxDim != null && aiUpscaleFactor(sourceMaxDim) > 0
   const upscaleWhy = isVectorSource
-    ? 'SVG sources rasterize at full detail already — there is nothing to enlarge.'
+    ? 'An SVG is already rendered at full detail, so there is nothing to enlarge.'
     : sourceMaxDim == null || autoCanBite || aiCanBite
       ? null
       : opts.mode === 'mono'
-        ? `Your image is ${sourceMaxDim}px on its longest side — within a factor of the ${cap}px cap, so there is no room to enlarge it.`
-        : `Auto enlarges mono art only, and at ${sourceMaxDim}px your image is above the ${AI_UPSCALE_MAX_PX}px where AI enlargement stops paying for itself. Switch Mode to Mono and Auto applies.`
+        ? `Your image is ${sourceMaxDim}px on its longest side, more than half the ${cap}px limit, so there is no room to enlarge it.`
+        : `Auto enlarges mono art only, and at ${sourceMaxDim}px your image is past the ${AI_UPSCALE_MAX_PX}px point where AI enlargement stops helping. Switch Mode to Mono to use Auto.`
   const upscaleMode = opts.upscale ?? 'auto'
   const showUpscale = upscaleWhy == null || upscaleMode !== 'auto'
   const upscaleHint = (() => {
     if (upscaleWhy) return upscaleWhy
-    if (upscaleMode === 'off') return 'Traced at its own size — no enlargement.'
+    if (upscaleMode === 'off') return 'Traced at its own size, without enlarging.'
     if (upscaleMode === 'ai' && sourceMaxDim != null && !aiCanBite)
-      return `AI enlarges rasters up to ${AI_UPSCALE_MAX_PX}px; at ${sourceMaxDim}px it stands aside and Auto's rule applies${
-        autoUpscale && autoUpscale.scale > 1 ? ` (this image was enlarged ×${autoUpscale.scale} bilinearly)` : ''
+      return `AI only enlarges images up to ${AI_UPSCALE_MAX_PX}px. At ${sourceMaxDim}px it steps aside and Auto's rule applies${
+        autoUpscale && autoUpscale.scale > 1
+          ? ` (this image was enlarged ×${autoUpscale.scale} with plain bilinear scaling)`
+          : ''
       }.`
     if (upscaleMode === 'ai')
-      return `AI enlarges a small raster ×${sourceMaxDim ? aiUpscaleFactor(sourceMaxDim) || 2 : '2–4'} before tracing (waifu2x, in your browser: ~17–19 MB once, a few seconds per trace). Measured: cleaner corners and fewer nodes than tracing it small.`
+      return `AI enlarges a small image ×${sourceMaxDim ? aiUpscaleFactor(sourceMaxDim) || 2 : '2–4'} before tracing (waifu2x, running in your browser: a one-time ~17–19 MB download, then a few seconds per trace). In our tests it gave cleaner corners and fewer nodes than tracing the image small.`
     if (opts.mode !== 'mono')
-      return 'Auto enlarges mono art only — colour segmentation follows every interpolated tone. AI is the option for a small colour raster.'
+      return 'Auto enlarges mono art only, because colour tracing would pick up every blended in-between tone. For a small colour image, use AI.'
     if (!autoUpscale)
-      return `Auto enlarges a mono raster before tracing when it is small (toward ${TRACE_TARGET_PX}px) or its strokes are thin (toward ${MONO_TARGET_STROKE_PX}px) — plain bilinear, never past the cap.`
+      return `Auto enlarges a mono image before tracing when it is small (toward ${TRACE_TARGET_PX}px) or its strokes are thin (toward ${MONO_TARGET_STROKE_PX}px). It uses plain bilinear scaling and never goes past the size limit.`
     if (autoUpscale.scale > 1)
       return autoUpscale.by === 'stroke'
-        ? `Auto enlarged this image ×${autoUpscale.scale} before tracing: its thin strokes are ${autoUpscale.thickness}px, and the tracer wants about ${MONO_TARGET_STROKE_PX}px.`
-        : `Auto enlarged this image ×${autoUpscale.scale} before tracing: at ${sourceMaxDim}px it is small, and small rasters trace better toward ${TRACE_TARGET_PX}px.`
+        ? `Auto enlarged this image ×${autoUpscale.scale} before tracing: its thin strokes are ${autoUpscale.thickness}px, and the tracer works best at about ${MONO_TARGET_STROKE_PX}px.`
+        : `Auto enlarged this image ×${autoUpscale.scale} before tracing: at ${sourceMaxDim}px it is small, and small images trace better enlarged toward ${TRACE_TARGET_PX}px.`
     if (autoUpscale.room < 2)
-      return `Auto traced this image as it is: at ${sourceMaxDim}px it sits within a factor of the ${cap}px cap.`
-    return `Auto traced this image as it is: its strokes are ${autoUpscale.thickness ?? '—'}px, thick enough for the tracer.`
+      return `Auto traced this image at its own size: at ${sourceMaxDim}px it is more than half the ${cap}px limit.`
+    return `Auto traced this image at its own size: its strokes are ${autoUpscale.thickness ?? '—'}px, thick enough for the tracer.`
   })()
 
   const inert: { label: string; why: string }[] = []
   if (!tracing) {
     inert.push({
       label: 'Everything that traces pixels',
-      why: 'Engine, Detail, Upscale, Smoothing, Despeckle, Fidelity, Region detail, Region markers, Gradients and Layering all read the raster. Cleaning keeps the SVG’s own paths instead — switch Source to Re-trace to rebuild them from pixels.',
+      why: 'Detail, Upscale, Smoothing, Despeckle, Fidelity, Region detail, Region markers, Gradients and Layering all work on pixels. Cleaning keeps the SVG’s own paths. Switch Source to Re-trace to rebuild them from pixels.',
     })
   } else {
     if (opts.mode === 'mono')
       inert.push({
         label: 'Region detail, Region markers, Gradients, Layering',
-        why: 'Mono traces one ink against the background, so there are no colour regions to split, to seed, or to fit a gradient into — and the ink already lies on top of one paper rectangle, so there is nothing to stack. Switch Mode to Color.',
+        why: 'Mono traces one ink against the background, so there are no colour regions to split, mark or fill with a gradient, and the ink already sits on one paper rectangle, so there is nothing to stack. Switch Mode to Color to use them.',
       })
     else {
       inert.push({
         label: 'Threshold, Invert',
-        why: 'The two halves of the mono black/white cut: where it falls, and which side of it becomes solid. Switch Mode to Mono.',
+        why: 'These set the Mono black/white cut: where it falls, and which side becomes solid. Switch Mode to Mono to use them.',
       })
       if (opts.centerline)
         inert.push({
           label: 'Gradients, Region markers, Layering',
-          why: 'Strokes paint every line in one flat ink, the colour it runs through, and read the inks from the palette alone; strokes always sit on top of each other. Turn Strokes off to fit gradients, seed regions or choose the layering.',
+          why: 'Strokes paints each line in one flat colour (the ink it runs through), finds the inks from the palette alone, and always lays strokes over each other. Turn Strokes off to use gradients, region markers or layering.',
         })
     }
-    if (detailWhy && !showDetail) inert.push({ label: 'Detail — Balanced / High', why: detailWhy })
-    if (upscaleWhy && !showUpscale) inert.push({ label: 'Upscale — Auto / AI', why: upscaleWhy })
+    if (detailWhy && !showDetail) inert.push({ label: 'Detail (Balanced / High)', why: detailWhy })
+    if (upscaleWhy && !showUpscale) inert.push({ label: 'Upscale (Auto / AI)', why: upscaleWhy })
   }
 
   // The mono cut can yield nothing when all the ink sits on one side of it. Show
@@ -269,7 +271,7 @@ export function TraceControlsBody({
             <ActionButton
               label="Reset"
               reason={canReset ? null : 'These are already the settings this image starts with.'}
-              note="Back to the settings a fresh upload of this image gets. Markers stay."
+              note="Return to the starting settings for this image. Markers stay."
               onClick={onReset}
               className="btn btn-ghost h-7 gap-1 px-2 text-xs text-ink-2"
             >
@@ -289,7 +291,7 @@ export function TraceControlsBody({
 
         {isVectorSource && (
           <>
-            <Field label="Source" hint="Re-tracing rasterizes the SVG, then rebuilds vector paths.">
+            <Field label="Source" hint="Re-trace turns the SVG into pixels, then traces new paths from them.">
               <Segmented<'clean' | 'retrace'>
                 value={source}
                 onChange={onSourceChange}
@@ -301,7 +303,8 @@ export function TraceControlsBody({
             </Field>
             {!tracing && (
               <div className="rounded-md border border-accent-soft bg-accent-soft px-3 py-2 text-xs leading-snug text-ink-2">
-                Already vector — cleaning the existing SVG. Switch to Re-trace to rebuild paths from pixels instead.
+                This is already a vector, so the existing SVG is cleaned up. Switch to Re-trace to rebuild the paths
+                from pixels.
               </div>
             )}
           </>
@@ -344,7 +347,7 @@ export function TraceControlsBody({
                 label="Detail"
                 hint={
                   detailWhy ??
-                  `High traces this image at up to ${RASTER_MAX_DIM_HIGH}px instead of ${RASTER_MAX_DIM_FLAT} — crisper edges, roughly 4× the trace time.`
+                  `High traces this image at up to ${RASTER_MAX_DIM_HIGH}px instead of ${RASTER_MAX_DIM_FLAT}px, for crisper edges at roughly 4× the trace time.`
                 }
               >
                 <Segmented<'balanced' | 'high'>
@@ -390,15 +393,15 @@ export function TraceControlsBody({
                   <Toggle
                     checked={opts.invert === true}
                     onChange={(v) => onPatch({ invert: v })}
-                    label="Light ink on a dark ground"
+                    label="Light ink on a dark background"
                   />
                   {/* What both positions admit, so an empty one is visible before
                         it is picked. */}
                   {monoGuide && (
                     <p className="text-xs leading-snug text-muted tabular-nums">
-                      At this cut — off takes{' '}
+                      At this cut, Off keeps{' '}
                       <span className={opts.invert ? '' : 'font-semibold text-ink-2'}>{pct(monoGuide.fracOff)}</span> of
-                      the visible pixels, on takes{' '}
+                      the visible pixels and On keeps{' '}
                       <span className={opts.invert ? 'font-semibold text-ink-2' : ''}>{pct(monoGuide.fracOn)}</span>.
                     </p>
                   )}
@@ -465,9 +468,8 @@ export function TraceControlsBody({
           >
             {/* No master switch: with no markers placed the trace is unchanged. */}
             <p className="text-xs leading-snug text-muted">
-              Seed the segmentation per spot: keep a region <em>separate</em> from its neighbour, paint it one{' '}
-              <em>flat</em> colour, or <em>remove</em> it and heal the neighbours into the gap. No markers ⇒ output
-              unchanged.
+              Mark a spot to keep its region <em>separate</em> from its neighbour, paint it one <em>flat</em> colour, or{' '}
+              <em>remove</em> it and let the neighbours fill the gap. With no markers, the output is unchanged.
             </p>
 
             {/* Placement mode: click to seed (on) vs pan freely (off). */}
@@ -482,11 +484,11 @@ export function TraceControlsBody({
               }`}
             >
               <MapPin size={14} />
-              {marking ? 'Placing — click the image' : 'Place markers'}
+              {marking ? 'Placing: click the image' : 'Place markers'}
             </button>
             <p className="text-xs leading-snug text-muted">
               {marking
-                ? 'Click either pane to drop a marker; click a marker to remove it. Turn off to pan and edit — markers stay active.'
+                ? 'Click either pane to drop a marker; click a marker to remove it. Turn this off to pan and edit. Markers stay active.'
                 : 'Markers stay active while you pan, zoom and edit. Turn on to place more.'}
             </p>
 
@@ -519,8 +521,8 @@ export function TraceControlsBody({
               {markMode === 'flat'
                 ? 'Flat: paints the section one solid colour. If it was fused with a different colour into a fake gradient, one marker splits it off along the colour edge.'
                 : markMode === 'remove'
-                  ? 'Remove: dissolves the clicked section and grows its bordering colours into the gap (split along the middle) — heals instead of leaving a hole. Re-traces on next run.'
-                  : 'Separate: keep this region distinct; its gradient/flat paint is left as fitted. Mark both sides of an over-merge to set the boundary on the colour ridge.'}
+                  ? 'Remove: dissolves the clicked section and grows the colours around it into the gap until they meet in the middle, so no hole is left. Applies on the next trace.'
+                  : 'Separate: keeps this region distinct and leaves its fitted paint (gradient or flat) as it is. If two regions merged that should not have, mark both sides to put the border on the colour edge.'}
             </p>
 
             {markerCount > 0 && (
@@ -579,7 +581,7 @@ export function TraceControlsBody({
             <Toggle
               checked={opts.removeBackground}
               onChange={(v) => onPatch({ removeBackground: v })}
-              label="Drop the dominant backplate"
+              label="Drop the main background"
             />
           </Field>
 
@@ -587,7 +589,7 @@ export function TraceControlsBody({
             {forceColorOn ? (
               <ColorField value={forceColor} onChange={onForceColor} />
             ) : (
-              <p className="text-xs leading-snug text-muted">Recolor every shape to one fill.</p>
+              <p className="text-xs leading-snug text-muted">Paint every shape in one colour.</p>
             )}
           </Field>
         </Collapsible>
@@ -596,7 +598,7 @@ export function TraceControlsBody({
         {inert.length > 0 && (
           <Collapsible title="Looking for another option?" summary={`${inert.length} don’t apply to this image`}>
             <p className="text-xs leading-snug text-muted">
-              Folded away because they cannot change this trace. Each one says what would bring it back.
+              These can’t change this trace, so they are tucked away here. Each one says what would make it apply.
             </p>
             <ul className="flex flex-col gap-3">
               {inert.map((c) => (
@@ -611,8 +613,8 @@ export function TraceControlsBody({
 
         <div className="mt-auto border-t border-line pt-4">
           <p className="text-[0.7rem] leading-relaxed text-faint">
-            V pan · A edit nodes · M mark regions · ⌫ delete nodes — or, with none selected, dissolve the clicked region
-            and heal it into its neighbour · double-click a segment to add a node.
+            V pan · A edit nodes · M mark regions · ⌫ delete nodes (with none selected, removes the clicked region and
+            fills it from its neighbour) · double-click a segment to add a node.
           </p>
         </div>
       </div>
@@ -624,7 +626,7 @@ export function TraceControlsBody({
             <AlertTriangle size={14} className="mt-px shrink-0" />
             <span>
               {staleEdits
-                ? 'Settings changed since the last trace. Re-trace to apply them — this discards your path edits.'
+                ? 'Settings changed since the last trace. Re-tracing applies them and discards your path edits.'
                 : 'Tracing was stopped, so this result may not match the current settings. Re-trace to apply them.'}
             </span>
           </div>

@@ -49,6 +49,7 @@ import {
   type AbSnapshotManifest,
 } from '../../../bench/abCorpus'
 import { LOGO_CORPUS } from '../../../bench/logoCorpus'
+import { snapOptionsKey } from './abCacheKey'
 import { fnv1a } from './engineFingerprint'
 import { LabPage, LabCheck, LabSelect } from './LabPage'
 import { Panel, RawArt } from './Panel'
@@ -112,6 +113,8 @@ function snapFile(map: SnapLoader, path: string): Promise<string> | null {
 interface SnapEntry {
   name: string
   manifest: AbSnapshotManifest
+  /** The manifest text as on disk — the stamp's identity for the cache (abCacheKey.ts). */
+  raw: string
 }
 
 /** Every snapshot found under test/ab-snapshots/<name>/, newest first (the dropdown
@@ -124,7 +127,7 @@ const SNAPSHOTS: SnapEntry[] = Object.entries(SNAP_META)
   .map(([path, raw]) => {
     // /test/ab-snapshots/<name>/manifest.json → <name>
     const name = path.split('/').slice(-2, -1)[0]
-    return { name, manifest: JSON.parse(raw) as AbSnapshotManifest }
+    return { name, manifest: JSON.parse(raw) as AbSnapshotManifest, raw }
   })
   .sort((a, b) => (stampedAt(a) < stampedAt(b) ? 1 : stampedAt(a) > stampedAt(b) ? -1 : a.name.localeCompare(b.name)))
 
@@ -452,6 +455,9 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
  * with a new one says "512×512 vs 2048×2048", it does not invent a verdict.
  */
 async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry): Promise<AbAnalysis> {
+  // A dropped image (no id) is in no stamp and never can be — re-stamping will not help — so
+  // it is traced live and shown one-sided, as vs-working-tree mode does.
+  if (!c.id) return workingTreeOnly(c, 'a dropped image, in neither stamp')
   const be = base.manifest.cases.find((s) => s.id === c.id)
   const he = head.manifest.cases.find((s) => s.id === c.id)
   if (!be && !he) throw new Error(`case in neither ${base.name} nor ${head.name} — rerun pnpm gen:absnapshot`)
@@ -482,7 +488,7 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
       const [bb, hb] = await Promise.all([snapPngBytes(bPng), snapPngBytes(hPng)])
       if (!sameBytes(bb, hb)) differs = `${lane.label}: same size, different pixels`
     }
-    return { lane, bf, hf, bSvg, hSvg, bPng, differs, changed: bSvg !== hSvg }
+    return { lane, bf, hf, bSvg, hSvg, bPng, hPng, differs, changed: bSvg !== hSvg }
   }
   const lanes = (await Promise.all(AB_LANES.map(view))).filter((v) => v != null)
   if (lanes.length === 0) throw new Error('snapshot files missing — rerun pnpm gen:absnapshot')
@@ -496,26 +502,31 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
   if (views.length === 0) views.push(lanes[0])
   const label = (v: { lane: AbLane }): string => ` · ${v.lane.label}`
 
-  // Authored geometry is raster-space, so it is resolved per lane now that lanes differ.
+  // Authored geometry is raster-space, so it is resolved per lane now that lanes differ —
+  // and per SIDE, because two stamps can trace one lane at different resolutions (the
+  // "W×H vs W×H" drift above). Scored against the base's space, a head traced at 2048 over
+  // a 512 base counted nearly every corner as invented.
   const variants: AbAnalysis['variants'] = []
   for (const v of views) {
+    const sameSpace = v.bf.width === v.hf.width && v.bf.height === v.hf.height
     const gt = await authoredShapes(c, v.bf.width)
     const img = await labImageData(v.bPng, Math.max(v.bf.width, v.bf.height))
-    const inv = (svg: string): number | undefined => inventedIn(svg, gt, img, v.bf.width, v.bf.height)
+    const gtH = sameSpace ? gt : await authoredShapes(c, v.hf.width)
+    const imgH = sameSpace ? img : await labImageData(v.hPng, Math.max(v.hf.width, v.hf.height))
     variants.push(
       {
         name: `${base.name}${label(v)}`,
         tone: 'base',
         svg: frozenSvg(v.bSvg),
         note: `frozen ${base.manifest.rev} · ${base.manifest.date}`,
-        invented: inv(v.bSvg),
+        invented: inventedIn(v.bSvg, gt, img, v.bf.width, v.bf.height),
       },
       {
         name: `${head.name}${label(v)}`,
         tone: 'shipped',
         svg: frozenSvg(v.hSvg),
         note: `frozen ${head.manifest.rev} · ${head.manifest.date}`,
-        invented: inv(v.hSvg),
+        invented: inventedIn(v.hSvg, gtH, imgH, v.hf.width, v.hf.height),
       },
     )
   }
@@ -735,7 +746,7 @@ async function oneStampOnly(c: AbCase, snap: SnapEntry, tone: 'base' | 'shipped'
  * alone. Not the stored-pixel contract (there are no stored pixels), so this is the input
  * variants mode uses — said so in the panel's note.
  */
-async function workingTreeOnly(c: AbCase): Promise<AbAnalysis> {
+async function workingTreeOnly(c: AbCase, why = 'not in the baseline stamp'): Promise<AbAnalysis> {
   const lanes = caseLanes({ lanes: c.lanes })
   const images = new Map<number, Promise<ImageData>>()
   const imageAt = (res: number): Promise<ImageData> => {
@@ -765,7 +776,7 @@ async function workingTreeOnly(c: AbCase): Promise<AbAnalysis> {
       tone: 'shipped',
       svg: traceSvg(doc, image.width, image.height),
       stats: docStats(doc),
-      note: `traced from the live source @ ${lane.res}px — not in the baseline stamp`,
+      note: `traced from the live source @ ${lane.res}px — ${why}`,
     })
   }
   if (variants.length === 0) throw new Error('the case runs no lane')
@@ -912,16 +923,15 @@ export default function AbLab() {
             ? `Done — ${n} cases, working tree vs snapshot ${selectedSnap.name} @ ${selectedSnap.manifest.rev} (${selectedSnap.manifest.date}) · every lane it carries compared, whichever moved is on screen · each lane pinned to its own stored pixels.`
             : `Done — ${n} cases × ${VARIANTS.length} variants · gradients ${ui.gradients ? 'on' : 'off'} @ ${ui.raster}px. Drop an image anywhere to add it.`,
       deps: [ui.raster, ui.gradients, cases, ui.snapName, ui.vsName],
-      // Cache corpus cases (stable `id`); skip session-dropped images (no id). BOTH snapshot
-      // names are in the key so switching either side (or re-blessing one) invalidates results —
-      // the frozen SVGs live outside src/, so ENGINE_HASH alone wouldn't catch a re-bless.
+      // Cache corpus cases (stable `id`); skip session-dropped images (no id). BOTH stamps are
+      // in the key, by name AND manifest hash, so switching either side or re-blessing one
+      // under the same name invalidates results — the frozen SVGs live outside src/, so
+      // ENGINE_HASH alone wouldn't catch a re-bless (abCacheKey.ts).
       cache: {
         id: 'ab',
         key: (c) => c.id ?? null,
         optionsKey: selectedSnap
-          ? vsSnap
-            ? `pair:v2:${selectedSnap.name}:${vsSnap.name}`
-            : `snap:v6:${selectedSnap.name}`
+          ? snapOptionsKey(selectedSnap, vsSnap ?? undefined)
           : `var:r${ui.raster}:g${ui.gradients}:v${VARIANTS_HASH}`,
       },
     },

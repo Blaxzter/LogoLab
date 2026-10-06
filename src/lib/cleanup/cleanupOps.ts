@@ -98,9 +98,9 @@ export function clickToolStatus(tool: ClickTool, affected: number): string {
   if (tool === 'keep') {
     return affected > 0
       ? `Kept ${affected.toLocaleString()} px (restored region)`
-      : 'Nothing to restore there — raise tolerance or pick a clearer spot.'
+      : 'Nothing to restore there. Raise the tolerance or pick a clearer spot.'
   }
-  if (affected === 0) return 'Nothing within tolerance there — try raising tolerance.'
+  if (affected === 0) return 'Nothing there is within tolerance. Try raising it.'
   if (tool === 'remove') return `Removed ${affected.toLocaleString()} px (marker region)`
   return `Removed ${affected.toLocaleString()} px (${tool === 'magic' ? 'contiguous' : 'by color'})`
 }
@@ -108,7 +108,7 @@ export function clickToolStatus(tool: ClickTool, affected: number): string {
 /** The AI run's progress line. */
 export function aiProgressLabel(p: AiProgress): string {
   return p.phase === 'download'
-    ? `Downloading model${p.percent != null ? ` — ${p.percent}%` : '…'}`
+    ? `Downloading model${p.percent != null ? ` (${p.percent}%)` : '…'}`
     : 'Removing background…'
 }
 
@@ -138,17 +138,17 @@ export interface EdgeOp {
 export const edgeOps = {
   grow: (radius: number): EdgeOp => ({
     run: (w) => growMatte(w, radius),
-    label: (n) => `Grew the edge by ${radius}px — ${n.toLocaleString()} px`,
-    empty: 'Edge already filled — nothing to grow.',
+    label: (n) => `Grew the edge by ${radius}px (${n.toLocaleString()} px)`,
+    empty: 'The edge is already filled. Nothing to grow.',
   }),
   shrink: (radius: number): EdgeOp => ({
     run: (w) => shrinkMatte(w, radius),
-    label: (n) => `Shrank the edge by ${radius}px — ${n.toLocaleString()} px`,
-    empty: 'Nothing to shrink — the edge is already tight.',
+    label: (n) => `Shrank the edge by ${radius}px (${n.toLocaleString()} px)`,
+    empty: 'Nothing to shrink. The edge is already tight.',
   }),
   feather: (radius: number): EdgeOp => ({
     run: (w) => featherAlpha(w, radius),
-    label: (n) => `Feathered the edge by ${radius}px — ${n.toLocaleString()} px`,
+    label: (n) => `Feathered the edge by ${radius}px (${n.toLocaleString()} px)`,
     empty: 'Nothing to feather.',
   }),
   defringe: (amount: number): EdgeOp => ({
@@ -159,12 +159,12 @@ export const edgeOps = {
       return alphaBounds(w) ? 1 : 0
     },
     label: () => `Defringed the edges (strength ${amount.toFixed(1)})`,
-    empty: 'Nothing to defringe — no soft edges.',
+    empty: 'Nothing to defringe. There are no soft edges.',
   }),
   recolor: (hex: string): EdgeOp => ({
     run: (w) => recolor(w, hex),
     label: (n) => `Recolored ${n.toLocaleString()} px to ${hex}`,
-    empty: 'Nothing to recolor — the cutout is empty.',
+    empty: 'Nothing to recolor. The cutout is empty.',
   }),
 }
 

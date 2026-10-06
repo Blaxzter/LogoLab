@@ -52,7 +52,7 @@ export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.
     to: '/labs/workbench',
     label: 'Workbench',
     blurb:
-      'Is it correct? Scored against the authored SVG — boundary error, node economy, dropped regions. Pick the corpus.',
+      'Is it correct? Scored against the authored SVG for boundary error, node economy and dropped regions. Pick the corpus.',
     icon: <FlaskConical size={15} />,
   },
   {

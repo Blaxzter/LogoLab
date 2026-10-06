@@ -194,7 +194,7 @@ export function StudioStage({
             {markMode === 'flat'
               ? 'Click a region to paint it one flat colour'
               : markMode === 'remove'
-                ? 'Click a section to remove it and heal the neighbours in'
+                ? 'Click a section to remove it and let its neighbours fill the gap'
                 : 'Click a region to keep it as its own shape'}
             <button
               type="button"

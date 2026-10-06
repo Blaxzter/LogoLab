@@ -4,8 +4,10 @@
 // Every change goes through `apply`, which makes sure the faces the NEW text
 // needs are loaded before laying it out — a font picked from the list, or the
 // italic of a family, is fetched first and the text is laid out once, in the
-// right face, rather than drawn in a fallback and swapped. Typing is committed
-// as a merged history entry per text, so a burst of keystrokes is one undo.
+// right face, rather than drawn in a fallback and swapped. Edits that wait on a
+// face queue in order (`faceQueue`), and one whose face can't be loaded is
+// dropped rather than laid out without its glyphs. Typing is committed as a
+// merged history entry per text, so a burst of keystrokes is one undo.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { EditableDoc, GroupItem, TextData, TextStyle, Vec } from '../../../lib/path/types'
@@ -21,6 +23,8 @@ import {
   styleRange,
 } from '../../../lib/text/edit'
 import { fontsVersion, loadFontsFor, lookupFace, subscribeFonts } from '../../../lib/text/fonts'
+import { createFaceQueue } from '../../../lib/text/faceQueue'
+import { raiseFailure } from '../../../lib/report/failureNotice'
 import { pathFraction, type TextLayout } from '../../../lib/text/layout'
 import { newId } from '../editorDoc'
 
@@ -35,6 +39,12 @@ export interface TextEditing {
   edit: TextEditState | null
   /** The open text's layout (carets for the overlay), or null. */
   layout: TextLayout | null
+  /**
+   * The open text's words once the queued edits land, while some wait on a
+   * font; null when nothing is queued. The textarea shows this, not the stale
+   * document, so the next keystroke is read against what was really typed.
+   */
+  pendingText: string | null
   /** Style picked with a bare caret: applies to what is typed next. */
   typing: Partial<TextStyle> | null
   begin: (id: string, caret?: number | 'end' | 'all') => void
@@ -83,13 +93,29 @@ export function useTextEditing({
   selRef.current = selection
   // Re-render (and re-lay-out the open text's carets) when a face arrives.
   const fontsV = useSyncExternalStore(subscribeFonts, fontsVersion)
+  // What the textarea last reported for the open text while edits are queued.
+  const pendingRef = useRef<{ id: string; text: string } | null>(null)
+  const [, setDrained] = useState(0)
+  const [queue] = useState(() =>
+    createFaceQueue({
+      ready: (f) => lookupFace(f.font, f.italic) !== null,
+      load: loadFontsFor,
+      // Re-render so the textarea falls back to the document's words (they
+      // differ when a queued edit was dropped).
+      onIdle: () => {
+        pendingRef.current = null
+        setDrained((n) => n + 1)
+      },
+    }),
+  )
 
   /**
    * Replace texts by id with `fn(data)`, laid out. Loads any face the result
-   * needs first; `live` merges the commit into the running undo entry.
+   * needs first; `live` merges the commit into the running undo entry. Returns
+   * true when the edit was queued behind a font load rather than applied now.
    */
   const apply = useCallback(
-    (ids: readonly string[], fn: (data: TextData, id: string) => TextData, live: string | null) => {
+    (ids: readonly string[], fn: (data: TextData, id: string) => TextData, live: string | null): boolean => {
       const run = () => {
         let doc = docRef.current
         for (const id of ids) {
@@ -101,15 +127,23 @@ export function useTextEditing({
         if (doc === docRef.current) return
         commitNow(doc, live)
       }
-      const docNow = docRef.current
-      const needs = ids.flatMap((id) => {
-        const it = findItem(docNow.items, id)
-        return it && isText(it) ? facesUsed(fn(it.text, id)) : []
-      })
-      if (needs.every((f) => lookupFace(f.font, f.italic))) run()
-      else void loadFontsFor(needs).then(run)
+      // Read when the edit's turn comes: earlier queued edits change the text.
+      const needs = () => {
+        const docNow = docRef.current
+        return ids.flatMap((id) => {
+          const it = findItem(docNow.items, id)
+          return it && isText(it) ? facesUsed(fn(it.text, id)) : []
+        })
+      }
+      return queue.run(needs, run, (missing) =>
+        raiseFailure(
+          'the text editor',
+          'Could not load that font.',
+          new Error(`font not loaded: ${missing.map((f) => f.font + (f.italic ? ' italic' : '')).join(', ')}`),
+        ),
+      )
     },
-    [docRef, commitNow],
+    [docRef, commitNow, queue],
   )
 
   const begin = useCallback(
@@ -181,7 +215,11 @@ export function useTextEditing({
       if (!e) return
       const it = findItem(docRef.current.items, e.id)
       if (!it || !isText(it)) return
-      const old = plainText(it.text)
+      // While edits wait on a font the document lags the textarea; diff against
+      // what the queued edits will produce, or two keystrokes read as two
+      // insertions at the same offset.
+      const pending = pendingRef.current
+      const old = pending && pending.id === e.id ? pending.text : plainText(it.text)
       if (value !== old) {
         // The textarea owns the editing (IME, clipboard, word deletes); read the
         // change back as one replaced span.
@@ -195,11 +233,12 @@ export function useTextEditing({
         )
           suf++
         const typed = typing ?? undefined
-        apply(
+        const queued = apply(
           [e.id],
           (d) => replaceText(d, pre, old.length - suf, value.slice(pre, value.length - suf), typed),
           `text:${e.id}`,
         )
+        if (queued) pendingRef.current = { id: e.id, text: value }
       }
       setEdit({ id: e.id, anchor: selStart, focus: selEnd })
     },
@@ -266,5 +305,7 @@ export function useTextEditing({
     [open, fontsV],
   )
 
-  return { edit, layout, typing, begin, create, end, setRange, input, restyle, setProps, shownStyle }
+  const pendingText = edit && pendingRef.current?.id === edit.id ? pendingRef.current.text : null
+
+  return { edit, layout, pendingText, typing, begin, create, end, setRange, input, restyle, setProps, shownStyle }
 }

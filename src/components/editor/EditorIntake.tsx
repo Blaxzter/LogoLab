@@ -30,7 +30,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
   const open = (svg: string, name: string) => {
     const doc = parseSvg(svg, { preserveGroups: true })
     if (!doc) {
-      setError("That doesn't parse as SVG. Check the file, or paste the markup instead.")
+      setError("That isn't valid SVG. Check the file, or paste the markup instead.")
       return
     }
     adoptIds(doc)
@@ -40,7 +40,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
 
   const openFile = async (file: File) => {
     if (!/svg/i.test(file.type) && !/\.svg$/i.test(file.name)) {
-      setError('The editor works on SVG. Use Vectorize to turn a bitmap into one first.')
+      setError('The editor only opens SVG. Use Vectorize to turn a bitmap into one first.')
       return
     }
     setBusy(true)
@@ -74,7 +74,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
       <header className="text-center">
         <h1 className="text-lg font-bold tracking-tight text-ink">SVG editor</h1>
         <p className="mt-1 text-sm text-muted">
-          Draw, fix and rearrange vector artwork — nodes, shapes, layers and colour. Everything stays in your browser.
+          Draw, fix and rearrange vector artwork: nodes, shapes, layers and colour. Everything stays in your browser.
         </p>
       </header>
 
@@ -98,8 +98,8 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
         <div>
           <p className="text-base font-medium text-ink">{dragging ? 'Drop to open it' : 'Drop an SVG to edit'}</p>
           <p className="mt-1 max-w-md text-sm text-muted">
-            Its layer groups, gradients and strokes come across as editable objects — anything this editor can't model
-            round-trips untouched.
+            Its layer groups, gradients and strokes become objects you can edit. Anything this editor can't handle is
+            kept as it was.
           </p>
           <p className="mt-2 text-xs text-faint">
             Drop a file or <span className="font-medium text-muted">click to browse</span> · SVG only
@@ -118,7 +118,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
             logoIsSvg
               ? null
               : logo.src
-                ? 'The loaded logo is a bitmap. Trace it on the Vectorize tab first — that produces the SVG this editor works on.'
+                ? 'The loaded logo is a bitmap. Trace it on the Vectorize tab first to get an SVG this editor can open.'
                 : 'No logo is loaded. Drop one on the Preview tab, or open an SVG file here.'
           }
           onClick={() => logo.svgText && open(logo.svgText, logo.fileName?.replace(/\.[^.]+$/, '') ?? 'logo')}
@@ -135,7 +135,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
           note={
             pasting
               ? 'Hides the box again.'
-              : 'Opens a box for raw <svg> text — from a design tool, a codebase, anywhere.'
+              : 'Opens a box to paste raw <svg> text from a design tool, a codebase or anywhere else.'
           }
           pressed={pasting}
           onClick={() => setPasting((v) => !v)}
@@ -160,7 +160,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
           <ActionButton
             label="Open markup"
             note="Parses the text above into an editable drawing."
-            reason={markup.trim() ? null : 'The box above is empty — paste some <svg> markup into it first.'}
+            reason={markup.trim() ? null : 'The box above is empty. Paste some <svg> markup into it first.'}
             onClick={() => open(markup, 'pasted')}
             className="btn btn-primary h-9 w-full text-sm"
           >

@@ -49,11 +49,11 @@ export function StudioStatusBar({
                 are the same measurement. */}
       {score && (
         <Tooltip
-          label={`Mean colour difference from the original: ${score.meanDeltaE.toFixed(
+          label={`Average colour difference from the original: ${score.meanDeltaE.toFixed(
             2,
-          )} ΔE, with 95% of pixels under ${score.p95DeltaE.toFixed(
+          )} ΔE, and 95% of pixels are under ${score.p95DeltaE.toFixed(
             2,
-          )}. Below about 2.3 ΔE the eye cannot tell two colours apart. Click to see where.`}
+          )}. Below about 2.3 ΔE the eye can't tell two colours apart. Click to see where they differ.`}
         >
           <button
             type="button"
@@ -89,9 +89,9 @@ export function StudioStatusBar({
       <LegalLinksInline className="mx-auto shrink-0" />
       <span className="hidden truncate sm:block">
         {tool === 'node'
-          ? 'Drag anchors · double-click segment to add a node · Del removes'
+          ? 'Drag anchors · double-click a segment to add a node · Del deletes'
           : tool === 'mark'
-            ? 'Click to keep a region as its own shape · click a marker to remove · mark both sides of an overlap'
+            ? 'Click to keep a region as its own shape · click a marker to remove it · mark both sides of an overlap'
             : 'Scroll to zoom · drag to pan'}
       </span>
     </footer>

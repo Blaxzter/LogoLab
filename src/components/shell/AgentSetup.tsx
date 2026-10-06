@@ -15,20 +15,23 @@ import { Tooltip } from '../ui/Tooltip'
 const PACKAGE = 'logolab'
 /** The stdio launch every client config wraps. Mirrors `launchSpec` in src/mcp/install.ts. */
 const LAUNCH = { command: 'npx', args: ['-y', PACKAGE] }
+/** Claude Code on native Windows spawns without a shell, so `npx` (a .cmd) needs `cmd /c`. */
+const IS_WINDOWS = typeof navigator !== 'undefined' && /Win/i.test(navigator.platform || navigator.userAgent)
+const CLAUDE_LAUNCH = IS_WINDOWS ? `cmd /c npx -y ${PACKAGE}` : `npx -y ${PACKAGE}`
 
 /** Dev builds know where the checkout is; a hosted build cannot (see vite.config.ts). */
 declare const __LOGOLAB_ROOT__: string
 const BUILT_IN_ROOT = typeof __LOGOLAB_ROOT__ === 'string' ? __LOGOLAB_ROOT__ : ''
 
 const TOOLS: { name: string; blurb: string }[] = [
-  { name: 'make_app_icons', blurb: 'image → traced SVG → a full icon set. The one call that does the job.' },
-  { name: 'trace_icon', blurb: 'just the vectorization: a clean, editable SVG.' },
+  { name: 'make_app_icons', blurb: 'image → traced SVG → a full icon set, in one call.' },
+  { name: 'trace_icon', blurb: 'only the vectorization: a clean, editable SVG.' },
   {
     name: 'export_icons',
     blurb: 'an existing SVG/PNG → PWA, favicon, Tauri, Electron, Android, iOS or extension icons.',
   },
   { name: 'split_icon_sheet', blurb: 'a grid of icons on one canvas → one traced SVG per icon.' },
-  { name: 'inspect_icon', blurb: 'what the tracer would decide, before it runs.' },
+  { name: 'inspect_icon', blurb: 'shows what the tracer would decide, before it runs.' },
 ]
 
 type Client = 'claude' | 'cursor' | 'vscode' | 'json'
@@ -122,9 +125,9 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
               Use LogoLab from your AI agent
             </h2>
             <p className="mt-1 text-sm text-muted">
-              LogoLab ships an MCP server: the same tracer and icon exporter, driven by your coding agent. “Trace{' '}
-              <code className="font-mono text-xs">icon.png</code> and give me a PWA icon set” becomes one tool call —
-              nothing is uploaded, it all runs here.
+              LogoLab comes with an MCP server, so your coding agent can use the same tracer and icon exporter. “Trace{' '}
+              <code className="font-mono text-xs">icon.png</code> and give me a PWA icon set” becomes one tool call.
+              Everything runs on your machine; nothing is uploaded.
             </p>
           </div>
           <Tooltip label="Close">
@@ -173,9 +176,9 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
               {client === 'claude' && (
                 <>
                   <p className="text-xs text-muted">Run this in the project you want the icons in:</p>
-                  <Command>{`claude mcp add ${PACKAGE} -- npx -y ${PACKAGE}`}</Command>
+                  <Command>{`claude mcp add ${PACKAGE} -- ${CLAUDE_LAUNCH}`}</Command>
                   <p className="text-xs text-muted">
-                    Or let the server register itself — writes <code className="font-mono">.mcp.json</code> in the
+                    Or let the server register itself. This writes <code className="font-mono">.mcp.json</code> in the
                     current project (add <code className="font-mono">--scope user</code> for every project):
                   </p>
                   <Command>{`npx -y ${PACKAGE} install`}</Command>
@@ -185,7 +188,7 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
               {client === 'cursor' && (
                 <>
                   <p className="text-xs text-muted">
-                    One click — Cursor opens its install prompt with this server filled in:
+                    One click opens Cursor's install prompt with this server filled in:
                   </p>
                   <a href={cursorLink} className="btn btn-primary h-9 w-full text-xs">
                     <ExternalLink size={14} />
@@ -209,7 +212,9 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
 
               {client === 'json' && (
                 <>
-                  <p className="text-xs text-muted">Any MCP client — a stdio server, no ports and no network:</p>
+                  <p className="text-xs text-muted">
+                    Any MCP client. It is a stdio server, with no ports and no network:
+                  </p>
                   <Command>{JSON.stringify({ mcpServers: { [PACKAGE]: LAUNCH } }, null, 2)}</Command>
                 </>
               )}
@@ -221,7 +226,7 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
               Then ask your agent: <em>“trace icon.png and export a PWA icon set into public/”</em>.
             </p>
             <p>
-              Needs Node 22+. The server runs on your machine and reads and writes your files directly — nothing is
+              Needs Node 22+. The server runs on your machine and reads and writes your files directly. Nothing is
               uploaded.
             </p>
           </div>

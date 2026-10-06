@@ -15,7 +15,7 @@
 
 import { useCallback, useMemo, useRef } from 'react'
 import type { EditableDoc, PathItem, Vec } from '../../lib/path/types'
-import { findItem, isGroup, allPaths } from '../../lib/path/docTree'
+import { nodeEditablePaths } from '../../lib/editor/nodeEdit'
 import { selectionBox, type Box } from '../../lib/editor/transform'
 import { boxFromPoints } from '../../lib/editor/hitTest'
 import type { SnapConfig } from '../../lib/editor/snapping'
@@ -141,19 +141,11 @@ export function EditorStage({
 
   const box = useMemo(() => selectionBox(doc.items, selection), [doc.items, selection])
 
-  /** Paths whose nodes the node tool shows: the selection, or all when empty. */
-  const nodePaths = useMemo((): PathItem[] => {
-    if (tool !== 'node') return []
-    if (selection.size === 0) return allPaths(doc.items).filter((p) => p.visible)
-    const out: PathItem[] = []
-    for (const id of selection) {
-      const item = findItem(doc.items, id)
-      if (!item) continue
-      if (isGroup(item)) out.push(...allPaths(item.children))
-      else if (item.kind === 'path') out.push(item)
-    }
-    return out
-  }, [tool, selection, doc.items])
+  /** Paths whose nodes the node tool shows: the selection, or all when empty (never a live text's glyphs). */
+  const nodePaths = useMemo(
+    (): PathItem[] => (tool === 'node' ? nodeEditablePaths(doc.items, selection) : []),
+    [tool, selection, doc.items],
+  )
 
   const isDrawTool = tool === 'rect' || tool === 'ellipse' || tool === 'line' || tool === 'polygon' || tool === 'star'
 

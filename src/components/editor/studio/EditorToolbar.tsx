@@ -124,8 +124,8 @@ export function EditorToolbar({
             label={textAs === 'live' ? 'SVG text: live' : 'SVG text: outlines'}
             note={
               textAs === 'live'
-                ? 'Text is saved as <text>, so other editors can retype it — but it only looks right where its font is available. Click for outlines.'
-                : 'Text is saved as shapes: it looks the same everywhere, but can no longer be retyped elsewhere. Click to keep it as live <text>.'
+                ? 'Text is saved as <text>, so other editors can retype it, but it only looks right where its font is installed. Click for outlines.'
+                : 'Text is saved as shapes. It looks the same everywhere, but other editors can\u2019t retype it. Click to keep it as live <text>.'
             }
             pressed={textAs === 'live'}
             onClick={() => setTextAs(textAs === 'live' ? 'outlines' : 'live')}
@@ -158,7 +158,7 @@ export function EditorToolbar({
             onPick={download}
             footnote={
               svgOnlyItems > 0
-                ? `${svgOnlyItems} imported element${svgOnlyItems === 1 ? '' : 's'} (text, images…) only the SVG can carry; AI, PDF and DXF leave ${svgOnlyItems === 1 ? 'it' : 'them'} out.`
+                ? `${svgOnlyItems} imported element${svgOnlyItems === 1 ? '' : 's'} (text, images…) can only be saved as SVG. AI, PDF and DXF leave ${svgOnlyItems === 1 ? 'it' : 'them'} out.`
                 : null
             }
             className="btn btn-primary h-8 rounded-l-none border-l border-white/25 px-1"
