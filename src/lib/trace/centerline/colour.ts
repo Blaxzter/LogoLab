@@ -380,8 +380,10 @@ function inkRuns(
           ? prev
           : next
         : (prev ?? next)!
-    if (into === prev) into.to = runs[k].to
-    else into.from = runs[k].from
+    // Across a closed path's seam the neighbour is at the other end of the list: carry the
+    // indices past `segs` (or below 0) — `at()` wraps them — instead of inverting the run.
+    if (into === prev) into.to = runs[k].to + (k === 0 ? segs : 0)
+    else into.from = runs[k].from - (k === runs.length - 1 ? segs : 0)
     into.len += runs[k].len
     for (const [l, v] of runs[k].votes) into.votes.set(l, (into.votes.get(l) ?? 0) + v)
     runs.splice(k, 1)
