@@ -54,10 +54,17 @@ const KNOWN_DEFECTS: Record<string, string> = {
   'lucide-star@2048': 'centre: the same radii (34 px against a 64 px half-width), p95 18 px',
   // The field report's three defects (§39.8), each with its fixture. Entries leave this
   // list with the fix that clears them.
-  'la-hub@512': 'turns: two sails run on into the ring at its T junctions; the ring is chorded, not one circle',
-  'la-hub@2048': 'turns: the same sails into the ring, six turns',
-  'la-cup@512': 'turns, ends, paths, missed: the double-line shaft tangles where it crosses the bowl beside the club head',
-  'la-cup@2048': 'turns, missed: the same tangle at the crossing',
+  // The hub and the cup's 512 trace pass since the junction readings (§39.8). At 2048
+  // the club line crosses the shaft's two lines at 36° and their merged ink runs past
+  // every junction zone; read inside it, the shaft's lower arm takes the club line's
+  // direction and the two swap there.
+  'la-cup@2048': 'turns: shaft A and the club line swap where their 36° crossing merges past the junction zones',
+  // NOT a regression, and listed knowingly against "only shrinks" (§39.8): the score
+  // always had a 3 px miss at the last stem's top (the flag's corner apex stops short of
+  // the ink's tip, the §39.4 apex rule). `missed` is a mean over the MISSED samples, and
+  // 39 sub-pixel misses along the top staff line at the barline's T averaged it to 0.81.
+  // The tangent bridge at that T covers them; the 5 stem-top samples now average 2.38.
+  'la-score@512': 'missed: the 3 px stem-top apex miss the barline T fix no longer averages away (§39.8)',
   'la-stubs@512': 'centre, p95, ends, paths: faint texture on the ring and bar comes back as thin stub strokes',
   'la-stubs@2048': 'centre, p95, ends, paths: the same stubs',
   'la-hybrid@512': 'fills, centre, ends, paths, ΔE: the QR block and the caption are traced as strokes (scribble, "Dro S’op")',

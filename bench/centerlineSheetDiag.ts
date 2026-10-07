@@ -36,6 +36,7 @@ import { decodePng } from '../src/lib/png/decode.ts'
 import { encodePng } from '../src/lib/png/encode.ts'
 import { serializeDoc, subPathsToD } from '../src/lib/path/model.ts'
 import type { EditableDoc, PathItem, Vec } from '../src/lib/path/types.ts'
+import { rasterizeDoc } from '../src/lib/render/raster.ts'
 import { cropTile, downscaleImageData } from '../src/lib/sheet/crop.ts'
 import { planTileTrace, tileTraceInput } from '../src/lib/sheet/traceTile.ts'
 import type { ImageDataLike } from '../src/lib/sheet/types'
@@ -240,6 +241,139 @@ function look(
   return new Resvg(sv, { fitTo: { mode: 'width', value: w * z } }).render().asPng()
 }
 
+/** Per ink component (8-connected): the features a stroke/fill confidence could read. */
+function componentRows(
+  tile: string,
+  labels: Int32Array,
+  width: number,
+  height: number,
+  st: CenterlineStages,
+  W: number,
+  drawn: Uint8Array,
+): void {
+  const n = width * height
+  const comp = new Int32Array(n).fill(-1)
+  const boxes: { x0: number; y0: number; x1: number; y1: number; px: number }[] = []
+  const stack: number[] = []
+  for (let s0 = 0; s0 < n; s0++) {
+    if (labels[s0] !== 0 || comp[s0] >= 0) continue
+    const id = boxes.length
+    const b = { x0: width, y0: height, x1: 0, y1: 0, px: 0 }
+    comp[s0] = id
+    stack.push(s0)
+    while (stack.length) {
+      const p = stack.pop()!
+      const x = p % width
+      const y = (p / width) | 0
+      b.px++
+      b.x0 = Math.min(b.x0, x)
+      b.y0 = Math.min(b.y0, y)
+      b.x1 = Math.max(b.x1, x)
+      b.y1 = Math.max(b.y1, y)
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const qx = x + dx
+          const qy = y + dy
+          if (qx < 0 || qy < 0 || qx >= width || qy >= height) continue
+          const q = qy * width + qx
+          if (labels[q] === 0 && comp[q] < 0) {
+            comp[q] = id
+            stack.push(q)
+          }
+        }
+    }
+    boxes.push(b)
+  }
+  type Agg = { L: number; ws: number[]; nan: number; pts: number; ends: number; nodes: Set<number> }
+  const agg = boxes.map((): Agg => ({ L: 0, ws: [], nan: 0, pts: 0, ends: 0, nodes: new Set() }))
+  const g = st.graph
+  for (const l of st.lines) {
+    if (l.pts.length === 0) continue
+    const c = comp[l.chain.pixels[0]]
+    if (c < 0) continue
+    const a = agg[c]
+    for (let k = 0; k < l.pts.length; k++) {
+      if (k) a.L += Math.hypot(l.pts[k].x - l.pts[k - 1].x, l.pts[k].y - l.pts[k - 1].y)
+      a.pts++
+      if (Number.isFinite(l.w[k])) {
+        a.ws.push(l.w[k])
+        continue
+      }
+      const nearNode = [l.a, l.b].some((id) => id >= 0 && Math.hypot(l.pts[k].x - g.nodes[id].x - 0.5, l.pts[k].y - g.nodes[id].y - 0.5) < g.nodes[id].r + 1.5)
+      if (!nearNode) a.nan++
+    }
+    if (!l.closed) {
+      if (l.a < 0) a.ends++
+      else a.nodes.add(l.a)
+      if (l.b < 0) a.ends++
+      else a.nodes.add(l.b)
+    }
+  }
+  // Render IoU per component: its ink vs the stroke render within its box grown by W.
+  const iou = boxes.map((b, i) => {
+    const m = Math.ceil(W)
+    let inter = 0
+    let union = 0
+    for (let y = Math.max(0, b.y0 - m); y <= Math.min(height - 1, b.y1 + m); y++)
+      for (let x = Math.max(0, b.x0 - m); x <= Math.min(width - 1, b.x1 + m); x++) {
+        const p = y * width + x
+        const ink = comp[p] === i ? 1 : 0
+        // Rendered ink belongs to this component unless it sits on another one's ink.
+        const d = drawn[p] && (comp[p] === i || comp[p] < 0) ? 1 : 0
+        if (ink && d) inter++
+        if (ink || d) union++
+      }
+    return union ? inter / union : 1
+  })
+  // Missed ink / invented paint: pixels of one with nothing of the other within a reach
+  // that swallows the anti-aliased fringe (a fifth of the width, at least 1.5 px).
+  const near = (mask: (p: number) => boolean, x: number, y: number, r: number): boolean => {
+    const R = Math.ceil(r)
+    for (let dy = -R; dy <= R; dy++)
+      for (let dx = -R; dx <= R; dx++) {
+        if (dx * dx + dy * dy > r * r) continue
+        const qx = x + dx
+        const qy = y + dy
+        if (qx >= 0 && qy >= 0 && qx < width && qy < height && mask(qy * width + qx)) return true
+      }
+    return false
+  }
+  const missX = boxes.map((b, i) => {
+    const wcI = agg[i].ws.length ? agg[i].ws.slice().sort((p, q) => p - q)[agg[i].ws.length >> 1] : W
+    const r = Math.max(1.5, 0.2 * wcI)
+    let ink = 0
+    let miss = 0
+    let paint = 0
+    let extra = 0
+    const m = Math.ceil(W)
+    for (let y = Math.max(0, b.y0 - m); y <= Math.min(height - 1, b.y1 + m); y++)
+      for (let x = Math.max(0, b.x0 - m); x <= Math.min(width - 1, b.x1 + m); x++) {
+        const p = y * width + x
+        if (comp[p] === i) {
+          ink++
+          if (!near((q) => drawn[q] === 1, x, y, r)) miss++
+        }
+        if (drawn[p] && (comp[p] === i || comp[p] < 0) && near((q) => comp[q] === i, x, y, W)) {
+          paint++
+          if (!near((q) => comp[q] === i, x, y, r)) extra++
+        }
+      }
+    return { miss: ink ? miss / ink : 0, extra: paint ? extra / paint : 0 }
+  })
+  boxes.forEach((b, i) => {
+    const a = agg[i]
+    if (a.pts < 4) return
+    a.ws.sort((p, q) => p - q)
+    const q = (f: number): number => a.ws[Math.min(a.ws.length - 1, Math.floor(f * (a.ws.length - 1)))]
+    const wc = a.ws.length ? q(0.5) : W
+    console.log(
+      `COMP ${tile} box ${b.x0},${b.y0},${b.x1 - b.x0 + 1},${b.y1 - b.y0 + 1} px ${b.px} W ${W.toFixed(1)} wc ${wc.toFixed(1)} Lw ${(a.L / wc).toFixed(1)} ` +
+        `junc ${a.nodes.size} ends ${a.ends} jd ${((a.nodes.size + a.ends) / Math.max(1, a.L / wc)).toFixed(2)} nan ${(a.nan / a.pts).toFixed(2)} ` +
+        `spread ${a.ws.length > 4 ? (q(0.9) / Math.max(0.1, q(0.1))).toFixed(2) : '—'} ext ${(Math.max(b.x1 - b.x0, b.y1 - b.y0) / wc).toFixed(1)} fillr ${(b.px / Math.max(1, a.L * wc)).toFixed(2)} iou ${iou[i].toFixed(2)} miss ${missX[i].miss.toFixed(3)} extra ${missX[i].extra.toFixed(3)}`,
+    )
+  })
+}
+
 interface Row {
   sheet: string
   tile: number
@@ -322,7 +456,25 @@ for (const sheetPath of sheets) {
       },
     })
     const stubs = stubCensus(doc)
+    if (argv.includes('--components') && stages) {
+      // The trace rendered (strokes and fills, not the paper): how much of each
+      // component's ink it reproduces.
+      const ink: EditableDoc = { ...doc, items: doc.items.filter((it) => it.kind === 'path' && it.id !== 'paper') }
+      const px = rasterizeDoc(ink, input.width, input.height)
+      const drawn = new Uint8Array(input.width * input.height)
+      for (let i = 0; i < drawn.length; i++) drawn[i] = px[i * 4] < 128 ? 1 : 0
+      componentRows(`${stem}-${String(n).padStart(2, '0')}`, seg.labels, input.width, input.height, stages, diag.report.strokeWidth, drawn)
+    }
     const near = flag('--near')
+    if (near) {
+      const [nx, ny, nr] = near.split(',').map(Number)
+      for (const j of junctions) {
+        if (Math.hypot(j.at.x - nx, j.at.y - ny) > nr) continue
+        const deg = (v: Vec): string => ((Math.atan2(v.y, v.x) * 180) / Math.PI).toFixed(0)
+        console.log(`  junction @${j.at.x.toFixed(0)},${j.at.y.toFixed(0)} meet ${j.meet.x.toFixed(0)},${j.meet.y.toFixed(0)}${j.welded ? ' welded' : ''} through ${JSON.stringify(j.through)} corner ${JSON.stringify(j.corner)} dropped ${JSON.stringify(j.dropped)}`)
+        j.arms.forEach((a, i) => console.log(`    arm ${i}: run ${a.run}${a.side} dir ${deg(a.dir)}° at ${a.at.x.toFixed(0)},${a.at.y.toFixed(0)} ${a.ok ? 'ok' : 'UNREAD'} len ${a.len.toFixed(0)}`))
+      }
+    }
     if (near && stages) {
       const [nx, ny, nr] = near.split(',').map(Number)
       const st = stages as CenterlineStages

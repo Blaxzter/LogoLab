@@ -15,6 +15,14 @@
 // dropped first. Where two split-crossing nodes were welded into one the skeleton in
 // between is not the stroke, so every arm there is cut back and re-joined at the meet.
 //
+// Three readings go past one node's arms (§39.8). Two arms that lie along the ring a
+// round HOLE implies are one stroke, bridged along that circle, and what else meets there
+// ends on it (a windmill's sails on its hub). A through pair at a junction where other
+// arms end is cut back and re-joined along its own tangents, not along the skeleton,
+// which bends toward the stem. And junctions joined by runs that never leave their zones
+// are read as ONE junction, its outer arms paired into lines through it (a putter's
+// double-line shaft crossing a cup), where the bridges cover every link they replace.
+//
 // Free ends are read by ends.ts (cap and true end); the paths are then fitted (fit.ts)
 // and given their width: the median of the run's readable point widths, snapped to the
 // picture's stroke width when within 15% of it — a monoline icon comes out as one
@@ -26,6 +34,7 @@ import type { StrokeRun } from './blobs.ts'
 import { applyEnd, outwardTangent, readEnd, type CapKind, type EndRead } from './ends.ts'
 import { armLineOf, fitClosedCentreline, fitOpenCentreline, type FitContext } from './fit.ts'
 import type { SkeletonGraph } from './graph.ts'
+import type { Hole } from './holes.ts'
 import { gaussSmooth, type CoverageField } from './profile.ts'
 
 /** A run end continues into another when the stroke turns no more than this through the node. */
@@ -54,6 +63,9 @@ interface End {
   /** Index of the first point outside the junction zone (from the run's far end) — the trim point. */
   keep: number
   ok: boolean
+  /** The arm's own points between the two junction zones (at most 3 W of them), nearest
+   *  the node first — what `ringPair` holds against a ring's circle. */
+  ringPts: Vec[]
   /** The run's arc length, and whether its OTHER end is free (a candidate tip spur). */
   len: number
   freeOther: boolean
@@ -76,7 +88,27 @@ function readArm(g: SkeletonGraph, runs: StrokeRun[], r: number, side: 'a' | 'b'
   const otherNode = side === 'a' ? run.b : run.a
   const otherFill = side === 'a' ? run.blobAtB : run.blobAtA
   const keep = side === 'a' ? start : run.pts.length - 1 - start
-  const base = { run: r, side, node: nodeId, keep, len, freeOther: otherNode < 0 && !otherFill }
+  // The arm short of the FAR junction's zone too: there the skeleton bends toward the
+  // strokes meeting that node, off any circle the arm is on.
+  const ringPts: Vec[] = []
+  const farJ = otherNode >= 0 ? nodePos(g, otherNode) : null
+  const farZone = otherNode >= 0 ? Math.max(g.nodes[otherNode].r + 1, 0.6 * W) : 0
+  for (let k = start, arc = 0; k < seq.length && arc <= 3 * W; k++) {
+    if (farJ && dist(seq[k], farJ) < farZone) break
+    if (k > start) arc += dist(seq[k], seq[k - 1])
+    ringPts.push(seq[k])
+  }
+  // A ring with four strokes ending on it can leave no point between two junction zones
+  // (the windmill's hub: 23 px arcs between welded nodes); then the arm is read up to the
+  // far node itself, its bend within the ring test's tolerance.
+  if (ringPts.length < 3) {
+    ringPts.length = 0
+    for (let k = start, arc = 0; k < seq.length && arc <= 3 * W; k++) {
+      if (k > start) arc += dist(seq[k], seq[k - 1])
+      ringPts.push(seq[k])
+    }
+  }
+  const base = { run: r, side, node: nodeId, keep, len, freeOther: otherNode < 0 && !otherFill, ringPts }
   const line = armLineOf(seq.slice(start), W, Math.max(0.5, 0.06 * W), J)
   if (line) return { ...base, dir: line.dir, at: line.at, ok: true }
   const far = seq[seq.length - 1]
@@ -108,6 +140,245 @@ function meetLines(lines: { at: Vec; dir: Vec }[], fallback: Vec): Vec {
   return { x: (d * rx - b * ry) / det, y: (a * ry - b * rx) / det }
 }
 
+interface Circle {
+  cx: number
+  cy: number
+  r: number
+}
+
+/** Every point of both arms within this share of the stroke width (or 1.5 px) of the
+ *  ring's centreline circle. The skeleton of a ring that strokes end on runs as chords
+ *  between the junctions; the two windmills' sit up to 0.11 W and 0.155 W off it. */
+export const RING_ARM_TOL_W = 0.2
+
+/**
+ * Two arms of ONE ring meeting at a junction from either side: a ring with strokes ending
+ * on it. The arms cannot say so themselves. Read a zone's length back around a ring of
+ * 1.4 W (a windmill's hub) the two halves' tangents turn 60° through the junction and
+ * never pair, and each pairs with a stroke ending there instead; and where the strokes'
+ * ink merges with the ring's, the skeleton between junctions is a chord, so no circle can
+ * be read from it either (two chords at a junction ARE a corner, to the skeleton). The
+ * round HOLE the ring encloses says it (holes.ts): its centreline is the hole's edge
+ * grown by half the width. Two arms that lie along that circle, coming at the junction
+ * from opposite sides, are one stroke. Returns the centreline circle, or null.
+ */
+function ringPair(A: End, B: End, J: Vec, W: number, holes: Hole[]): (Circle & { fit: number }) | null {
+  if (!A.ok || !B.ok || A.ringPts.length < 3 || B.ringPts.length < 3) return null
+  const pts = [...A.ringPts, ...B.ringPts]
+  const tol = Math.max(1.5, RING_ARM_TOL_W * W)
+  for (const h of holes) {
+    // The centreline radius, read from the arms themselves (the ring's own width), and
+    // checked against the hole's edge plus half the picture's width.
+    const ds = pts.map((p) => Math.hypot(p.x - h.cx, p.y - h.cy)).sort((p, q) => p - q)
+    const r = ds[ds.length >> 1]
+    if (Math.abs(r - (h.r + W / 2)) > 0.25 * W + 1) continue
+    if (ds[0] < r - tol || ds[ds.length - 1] > r + tol) continue
+    // How well, as a share of the tolerance: the best-fitting pair at a node wins.
+    const c = { cx: h.cx, cy: h.cy, r, fit: Math.max(r - ds[0], ds[ds.length - 1] - r) / tol }
+    // The junction sits on the circle, and the arms come at it from OPPOSITE sides.
+    if (Math.abs(Math.hypot(J.x - c.cx, J.y - c.cy) - r) > Math.max(2, 0.5 * W)) continue
+    const ang = (p: Vec): number => Math.atan2(p.y - c.cy, p.x - c.cx)
+    const wrap = (t: number): number => Math.atan2(Math.sin(t), Math.cos(t))
+    const tJ = ang(J)
+    const dA = wrap(tJ - ang(A.ringPts[0]))
+    const dB = wrap(tJ - ang(B.ringPts[0]))
+    if (dA * dB >= 0 || Math.abs(dA) > Math.PI / 2 || Math.abs(dB) > Math.PI / 2) continue
+    return c
+  }
+  return null
+}
+
+/** Points along `c` strictly between `p` and `q` (the short way), every `step` px of arc;
+ *  the radius runs from p's to q's so the bridge meets both ends exactly. */
+function arcBridge(c: Circle, p: Vec, q: Vec, step: number): Vec[] {
+  const tp = Math.atan2(p.y - c.cy, p.x - c.cx)
+  let dt = Math.atan2(q.y - c.cy, q.x - c.cx) - tp
+  dt = Math.atan2(Math.sin(dt), Math.cos(dt))
+  const rp = Math.hypot(p.x - c.cx, p.y - c.cy)
+  const rq = Math.hypot(q.x - c.cx, q.y - c.cy)
+  const n = Math.max(1, Math.ceil((Math.abs(dt) * c.r) / step))
+  const out: Vec[] = []
+  for (let k = 1; k < n; k++) {
+    const t = k / n
+    const rr = rp + (rq - rp) * t
+    out.push({ x: c.cx + rr * Math.cos(tp + dt * t), y: c.cy + rr * Math.sin(tp + dt * t) })
+  }
+  return out
+}
+
+/** Points strictly between `p` (heading `t0`) and `q` (arriving heading `t1`) on the
+ *  cubic Hermite curve between them, every `step` px of chord: a straight line when the
+ *  two tangents lie along the chord, a smooth bend when they turn. */
+function hermiteBridge(p: Vec, t0: Vec, q: Vec, t1: Vec, step: number): Vec[] {
+  const m = dist(p, q)
+  const n = Math.max(1, Math.ceil(m / step))
+  const out: Vec[] = []
+  for (let k = 1; k < n; k++) {
+    const s = k / n
+    const s2 = s * s
+    const s3 = s2 * s
+    const h00 = 2 * s3 - 3 * s2 + 1
+    const h10 = s3 - 2 * s2 + s
+    const h01 = -2 * s3 + 3 * s2
+    const h11 = s3 - s2
+    out.push({
+      x: h00 * p.x + h10 * m * t0.x + h01 * q.x + h11 * m * t1.x,
+      y: h00 * p.y + h10 * m * t0.y + h01 * q.y + h11 * m * t1.y,
+    })
+  }
+  return out
+}
+
+/** Where a line meets a circle, the crossing nearest `near`; null when it misses. */
+function ringMeet(c: Circle, l: { at: Vec; dir: Vec }, near: Vec): Vec | null {
+  const fx = l.at.x - c.cx
+  const fy = l.at.y - c.cy
+  const b = fx * l.dir.x + fy * l.dir.y
+  const disc = b * b - (fx * fx + fy * fy - c.r * c.r)
+  if (disc < 0) return null
+  const sq = Math.sqrt(disc)
+  const p1 = { x: l.at.x + (-b - sq) * l.dir.x, y: l.at.y + (-b - sq) * l.dir.y }
+  const p2 = { x: l.at.x + (-b + sq) * l.dir.x, y: l.at.y + (-b + sq) * l.dir.y }
+  return dist(p1, near) <= dist(p2, near) ? p1 : p2
+}
+
+/** A run between two junctions no longer than this many of its own widths can be a link. */
+export const CLUSTER_LINK_W = 3
+/** A link's points must lie within this share of its width of some pair's bridge. */
+export const CLUSTER_COVER_W = 0.5
+
+/** Every point near the ring a hole's edge implies: within the ring pairing's tolerance
+ *  and a quarter width more, since a link is read through its junctions' zones. */
+function onRing(pts: Vec[], h: Hole, W: number): boolean {
+  if (pts.length === 0) return false
+  const r = h.r + W / 2
+  const tol = Math.max(1.5, RING_ARM_TOL_W * W) + 0.25 * W
+  return pts.every((p) => Math.abs(Math.hypot(p.x - h.cx, p.y - h.cy) - r) <= tol)
+}
+
+/** Median readable width of a run, or `W`. */
+function widthOfRun(run: StrokeRun, W: number): number {
+  const ws = Array.from(run.w)
+    .filter((w) => Number.isFinite(w) && w > 0)
+    .sort((a, b) => a - b)
+  return ws.length ? ws[ws.length >> 1] : W
+}
+
+/**
+ * Groups of two or more junctions joined by LINKS — runs between two different nodes that
+ * never leave the junctions' own zones, or are no longer than three of their own widths
+ * (a shallow crossing's split) — and not an arc of a ring.
+ */
+function junctionClusters(
+  g: SkeletonGraph,
+  runs: StrokeRun[],
+  endsAt: Map<number, End[]>,
+  W: number,
+  holes: Hole[],
+): { nodes: number[]; links: Set<number> }[] {
+  const zone = (id: number): number => Math.max(g.nodes[id].r + 1, 0.6 * W)
+  const parent = new Map<number, number>()
+  const find = (i: number): number => {
+    let r = i
+    while (parent.get(r) !== r) r = parent.get(r)!
+    return r
+  }
+  for (const id of endsAt.keys()) parent.set(id, id)
+  const linkRuns: number[] = []
+  for (let r = 0; r < runs.length; r++) {
+    const run = runs[r]
+    if (run.closed || run.a < 0 || run.b < 0 || run.a === run.b) continue
+    if (run.blobAtA || run.blobAtB || !parent.has(run.a) || !parent.has(run.b)) continue
+    let len = 0
+    for (let k = 1; k < run.pts.length; k++) len += dist(run.pts[k], run.pts[k - 1])
+    // Inside both zones — or within three of its OWN widths: a crossing at a shallow
+    // angle splits into junctions w / sin θ apart (84 px for 32 px strokes at 36°), and
+    // the zones are sized by the picture's width, which on mixed widths is another's.
+    if (len > Math.max(zone(run.a) + zone(run.b) + 0.5 * W, CLUSTER_LINK_W * widthOfRun(run, W))) continue
+    // An arc of a ring around a round hole is the ring, however short (holes.ts).
+    if (holes.some((h) => onRing(run.pts, h, W))) continue
+    linkRuns.push(r)
+    parent.set(find(run.a), find(run.b))
+  }
+  const groups = new Map<number, { nodes: number[]; links: Set<number> }>()
+  for (const id of endsAt.keys()) {
+    const root = find(id)
+    const gr = groups.get(root) ?? { nodes: [], links: new Set<number>() }
+    gr.nodes.push(id)
+    groups.set(root, gr)
+  }
+  for (const r of linkRuns) groups.get(find(runs[r].a))!.links.add(r)
+  return [...groups.values()].filter((gr) => gr.nodes.length >= 2)
+}
+
+/** The connected parts of a set of nodes under the given links. */
+function splitCluster(nodes: number[], links: Set<number>, runs: StrokeRun[]): { nodes: number[]; links: Set<number> }[] {
+  const parent = new Map<number, number>(nodes.map((id) => [id, id]))
+  const find = (i: number): number => {
+    let r = i
+    while (parent.get(r) !== r) r = parent.get(r)!
+    return r
+  }
+  for (const r of links) parent.set(find(runs[r].a), find(runs[r].b))
+  const parts = new Map<number, { nodes: number[]; links: Set<number> }>()
+  for (const id of nodes) {
+    const root = find(id)
+    const part = parts.get(root) ?? { nodes: [], links: new Set<number>() }
+    part.nodes.push(id)
+    parts.set(root, part)
+  }
+  for (const r of links) parts.get(find(runs[r].a))!.links.add(r)
+  return [...parts.values()]
+}
+
+/**
+ * Pair a cluster's outer arms into lines through it: a pair turns no more than the
+ * through bar AND lies on one line — each arm's point within half its width (plus a
+ * tenth of the way across) of the other's line, and each ahead of the other, as the
+ * pairing across a fill reads it. Ranked by that line fit. Null unless at least two lines
+ * go through and at most one arm is left to end inside.
+ */
+function clusterPairs(
+  outer: End[],
+  runs: StrokeRun[],
+  W: number,
+  cosThrough: number,
+): { pairs: [number, number][]; unpaired: number[] } | null {
+  if (outer.length < 4) return null
+  const lateral = (p: Vec, at: Vec, dir: Vec): number => Math.abs((p.x - at.x) * dir.y - (p.y - at.y) * dir.x)
+  const cands: { i: number; j: number; off: number }[] = []
+  for (let i = 0; i < outer.length; i++) {
+    const A = outer[i]
+    if (!A.ok) continue
+    for (let j = i + 1; j < outer.length; j++) {
+      const B = outer[j]
+      if (!B.ok || A.run === B.run) continue
+      const cos = -(A.dir.x * B.dir.x + A.dir.y * B.dir.y)
+      if (cos < cosThrough) continue
+      const ab = { x: B.at.x - A.at.x, y: B.at.y - A.at.y }
+      if (ab.x * A.dir.x + ab.y * A.dir.y <= 0 || -(ab.x * B.dir.x + ab.y * B.dir.y) <= 0) continue
+      const tol = Math.max(1.5, 0.25 * (widthOfRun(runs[A.run], W) + widthOfRun(runs[B.run], W))) + 0.1 * Math.hypot(ab.x, ab.y)
+      const off = Math.max(lateral(B.at, A.at, A.dir), lateral(A.at, B.at, B.dir)) / tol
+      if (off > 1) continue
+      cands.push({ i, j, off })
+    }
+  }
+  // Best on ONE line first: two parallel strokes a gap apart are equally straight with
+  // their own continuation and with the other's, and only the line tells them apart.
+  cands.sort((p, q) => p.off - q.off)
+  const used = new Set<number>()
+  const pairs: [number, number][] = []
+  for (const c of cands) {
+    if (used.has(c.i) || used.has(c.j)) continue
+    used.add(c.i)
+    used.add(c.j)
+    pairs.push([c.i, c.j])
+  }
+  const unpaired = outer.map((_, i) => i).filter((i) => !used.has(i))
+  if (pairs.length < 2 || unpaired.length > 1) return null
+  return { pairs, unpaired }
+}
+
 export interface AssembleResult {
   paths: StrokePath[]
   junctions: number
@@ -134,6 +405,7 @@ export function assembleStrokes(
   f: CoverageField,
   blobMask: Uint8Array | null,
   dt: Float32Array,
+  holes: Hole[],
   opts: PlanarFitOptions,
   fidelity: number,
   onCorner?: FitContext['onCorner'],
@@ -165,11 +437,139 @@ export function assembleStrokes(
   // Pair arms per node; place the junction.
   const partner = new Map<string, string>()
   const junctionAt = new Map<number, Vec>()
+  const clustered = new Set<number>()
+  /** Run ends paired as two arcs of one circle, and that circle. */
+  const ringOf = new Map<string, Circle>()
+  /** Run ends paired THROUGH a junction where other arms end: re-joined by a bridge along
+   *  the two arms' own tangents, not by the skeleton between them. */
+  const bridged = new Set<string>()
   /** Run ends paired as a CORNER (not a through continuation). */
   const cornerJoin = new Set<string>()
   const dead = new Set<number>()
   let junctions = 0
+
+  // Junction CLUSTERS first: several junctions joined by runs too short to leave their
+  // zones (a stroke crossing two others a gap apart — a putter's double-line shaft — or
+  // a split crossing beside a third arm). Read node by node, those links are taken for
+  // arms and the strokes swap lines through them; read as ONE junction, only its outer
+  // arms count, and lines through it pair by direction AND by lying on one line, so
+  // two parallel strokes a gap apart cannot swap (`clusterPairs`). Accepted only where
+  // the bridges of the pairs cover every link — the junction then loses no ink — else
+  // its nodes pair one by one as before. A ring's arcs between the strokes ending on it
+  // are never links (`onRing`): straight strokes ending on a small ring pass within half
+  // a width of its quarter arcs, and would take the ring for their own crossing.
+  const queue = junctionClusters(g, runs, endsAt, W, holes)
+  // A cluster that does not read as lines through it is split — each of its links
+  // dropped in turn, each part tried again: a shallow crossing's two junctions may sit
+  // one link from an unrelated one (a club head's foot below the crossing). Clusters are
+  // a handful of nodes, so the splits are few.
+  const tried = new Set<string>()
+  const reject = (cl: { nodes: number[]; links: Set<number> }): void => {
+    for (const drop of cl.links) {
+      const links = new Set([...cl.links].filter((r) => r !== drop))
+      for (const part of splitCluster(cl.nodes, links, runs)) {
+        if (part.nodes.length < 2) continue
+        const key = part.nodes.slice().sort((a, b) => a - b).join(',')
+        if (tried.has(key)) continue
+        tried.add(key)
+        queue.push(part)
+      }
+    }
+  }
+  for (const cl of queue) tried.add(cl.nodes.slice().sort((a, b) => a - b).join(','))
+  while (queue.length) {
+    const cl = queue.shift()!
+    if (cl.nodes.some((id) => clustered.has(id))) continue
+    const outer: End[] = []
+    for (const id of cl.nodes) for (const e of endsAt.get(id)!) if (!cl.links.has(e.run)) outer.push(e)
+    const res = clusterPairs(outer, runs, W, cosThrough)
+    if (!res) {
+      reject(cl)
+      continue
+    }
+    // Each outer arm is cut back out of EVERY junction zone in the cluster, not only its
+    // own: a neighbouring junction bends its last points as much as its own does.
+    const zones = cl.nodes.map((id) => ({ at: nodePos(g, id), r: Math.max(g.nodes[id].r + 1, 0.6 * W) }))
+    const cutKeep = new Map<End, number>()
+    for (const e of outer) {
+      const pts = runs[e.run].pts
+      const n = pts.length
+      let k = e.keep
+      const step = e.side === 'a' ? 1 : -1
+      while (k + step >= 0 && k + step < n && zones.some((z) => dist(pts[k], z.at) < z.r)) k += step
+      cutKeep.set(e, k)
+    }
+    // Coverage: every point of every link within reach of some pair's bridge.
+    const bridges: Vec[] = []
+    for (const [i, j] of res.pairs) {
+      const A = outer[i]
+      const B = outer[j]
+      const pA = runs[A.run].pts[cutKeep.get(A)!]
+      const pB = runs[B.run].pts[cutKeep.get(B)!]
+      bridges.push(pA, ...hermiteBridge(pA, A.dir, pB, { x: -B.dir.x, y: -B.dir.y }, 1), pB)
+    }
+    let covered = true
+    for (const r of cl.links) {
+      // A bridge that replaces a link runs along it, within half the link's width.
+      const reach = Math.max(1.5, CLUSTER_COVER_W * widthOfRun(runs[r], W))
+      for (const p of runs[r].pts)
+        if (!bridges.some((q) => dist(p, q) <= reach)) {
+          covered = false
+          break
+        }
+      if (!covered) break
+    }
+    if (!covered) {
+      reject(cl)
+      continue
+    }
+    for (const [e, k] of cutKeep) e.keep = k
+    for (const r of cl.links) dead.add(r)
+    for (const [i, j] of res.pairs) {
+      const ka = `${outer[i].run}${outer[i].side}`
+      const kb = `${outer[j].run}${outer[j].side}`
+      partner.set(ka, kb)
+      partner.set(kb, ka)
+      bridged.add(ka)
+      bridged.add(kb)
+    }
+    // A stroke ending in the cluster ends where its line meets the nearest pair's chord.
+    for (const id of cl.nodes) {
+      clustered.add(id)
+      junctionAt.set(id, nodePos(g, id))
+    }
+    for (const u of res.unpaired) {
+      const e = outer[u]
+      let best: Vec | null = null
+      let bd = Infinity
+      for (const [i, j] of res.pairs) {
+        const pA = runs[outer[i].run].pts[outer[i].keep]
+        const pB = runs[outer[j].run].pts[outer[j].keep]
+        const l = dist(pA, pB)
+        if (l < 1e-6) continue
+        const m = meetLines([{ at: e.at, dir: e.dir }, { at: pA, dir: { x: (pB.x - pA.x) / l, y: (pB.y - pA.y) / l } }], e.at)
+        const d = dist(m, nodePos(g, e.node))
+        if (d < bd) {
+          bd = d
+          best = m
+        }
+      }
+      if (best && bd <= Math.max(2, 1.5 * g.nodes[e.node].r + 1)) junctionAt.set(e.node, best)
+    }
+    junctions++
+    onJunction?.({
+      at: nodePos(g, cl.nodes[0]),
+      meet: nodePos(g, cl.nodes[0]),
+      welded: true,
+      arms: outer.map((e) => ({ run: e.run, side: e.side, dir: e.dir, at: e.at, ok: e.ok, len: e.len })),
+      through: res.pairs,
+      corner: null,
+      dropped: [...cl.links],
+    })
+  }
+
   for (const [nodeId, endsAll] of endsAt) {
+    if (clustered.has(nodeId)) continue
     junctions++
     const node = g.nodes[nodeId]
     const centroid = nodePos(g, nodeId)
@@ -184,6 +584,8 @@ export function assembleStrokes(
         if (!S.freeOther) continue
         const [A, B] = ends.filter((_, i) => i !== si)
         if (!A.ok || !B.ok) continue
+        // Two arcs of one circle are no corner, so the third arm is no corner's tip.
+        if (ringPair(A, B, centroid, W, holes)) continue
         // Only a CORNER has a tip: the two arms must turn by at least the sharp bar
         // (an arc's two halves meeting at its top read as a 150° pair, and the nub on
         // an umbrella is a real stroke, not that pair's spur).
@@ -214,11 +616,18 @@ export function assembleStrokes(
     // An arm too short to read (`ok` false — a two-pixel stub) has a guessed direction and
     // never pairs: it ends at the meet on its own. Paired, a stub at a zigzag's tip took
     // one arm as its continuation and left the other to end there, splitting the stroke.
-    const cands: { i: number; j: number; cos: number }[] = []
+    // Two arcs of one ring rank above any tangent (2 less their misfit, a share of the
+    // tolerance), so they take their pair before any straight continuation is weighed.
+    const cands: { i: number; j: number; cos: number; ring?: Circle }[] = []
     for (let i = 0; i < ends.length; i++) {
       if (!ends[i].ok) continue
       for (let j = i + 1; j < ends.length; j++) {
         if (!ends[j].ok) continue
+        const ring = ringPair(ends[i], ends[j], centroid, W, holes)
+        if (ring) {
+          cands.push({ i, j, cos: 2 - ring.fit, ring })
+          continue
+        }
         const cos = -(ends[i].dir.x * ends[j].dir.x + ends[i].dir.y * ends[j].dir.y)
         if (cos >= cosThrough) cands.push({ i, j, cos })
       }
@@ -232,10 +641,21 @@ export function assembleStrokes(
       partner.set(`${ends[j].run}${ends[j].side}`, `${ends[i].run}${ends[i].side}`)
     }
     const through: [number, number][] = []
+    let ring: Circle | null = null
+    const inRing = new Set<number>()
     for (const c of cands) {
       if (used.has(c.i) || used.has(c.j)) continue
       pairUp(c.i, c.j)
       through.push([c.i, c.j])
+      if (c.ring) {
+        ringOf.set(`${ends[c.i].run}${ends[c.i].side}`, c.ring)
+        ringOf.set(`${ends[c.j].run}${ends[c.j].side}`, c.ring)
+        if (!ring) {
+          ring = c.ring
+          inRing.add(c.i)
+          inRing.add(c.j)
+        }
+      }
     }
     // A corner: exactly two arms left over (a K's two strokes off one point, a V) —
     // unless the node sits on a fill, where two leftover arms are two strokes that
@@ -254,12 +674,36 @@ export function assembleStrokes(
       cornerJoin.add(`${ends[left[1]].run}${ends[left[1]].side}`)
       cornerPair = [left[0], left[1]]
     }
-    // Junction point: the least-squares meet of every arm's own line.
-    const lines = ends.filter((e) => e.ok).map((e) => ({ at: e.at, dir: e.dir }))
-    let J = lines.length >= 2 ? meetLines(lines, centroid) : centroid
+    // A through pair where other arms END (a T's bar, a sail edge passing the top of a
+    // wall) is not a symmetric crossing: the medial axis of the bar bends toward the stem
+    // across the zone, and kept, that bend is drawn — a notch in a straight edge. Its
+    // ends are cut back and joined along their own tangents instead.
+    if (left.length > 0 && !node.welded)
+      for (const [i, j] of through) {
+        if (inRing.has(i)) continue
+        bridged.add(`${ends[i].run}${ends[i].side}`)
+        bridged.add(`${ends[j].run}${ends[j].side}`)
+      }
+    // Junction point: the least-squares meet of every arm's own line. On a ring, the
+    // ring's tangents (read a zone back round the circle) would drag that meet into the
+    // hole: the other arms' meet is placed ON the ring instead, where they end.
+    const lines = ends.filter((e, i) => e.ok && !inRing.has(i)).map((e) => ({ at: e.at, dir: e.dir }))
+    let J = ring
+      ? lines.length >= 2
+        ? meetLines(lines, centroid)
+        : lines.length === 1
+          ? (ringMeet(ring, lines[0], centroid) ?? centroid)
+          : centroid
+      : lines.length >= 2
+        ? meetLines(lines, centroid)
+        : centroid
     // A meet far outside the junction's own zone is an ill-conditioned set of near-
     // parallel lines; the centroid is the honest answer then.
     if (dist(J, centroid) > Math.max(2, 1.5 * node.r + 1)) J = centroid
+    if (ring) {
+      const d = Math.hypot(J.x - ring.cx, J.y - ring.cy) || 1
+      J = { x: ring.cx + ((J.x - ring.cx) / d) * ring.r, y: ring.cy + ((J.y - ring.cy) / d) * ring.r }
+    }
     junctionAt.set(nodeId, J)
     onJunction?.({
       at: centroid,
@@ -358,6 +802,9 @@ export function assembleStrokes(
     if (!e) return false
     if (g.nodes[e.node].welded) return true
     if (!partner.has(key)) return true
+    // Inside the zone a ring's skeleton bends toward the strokes ending on it, and a
+    // bar's toward the stem.
+    if (ringOf.has(key) || bridged.has(key)) return true
     return cornerJoin.has(key)
   }
   const trimmed = (r: number): { pts: Vec[]; w: number[] } => {
@@ -372,8 +819,18 @@ export function assembleStrokes(
     }
     const pts: Vec[] = []
     const w: number[] = []
+    // A run paired along the SAME ring at both ends is an arc of that ring: between the
+    // junctions on it the skeleton runs as a chord (the strokes' ink merged with the
+    // ring's), and the points go onto the circle, as the arc bridges at its ends do.
+    const ra = ringOf.get(`${r}a`)
+    const rb = ringOf.get(`${r}b`)
+    const arc = ra && rb && ra.cx === rb.cx && ra.cy === rb.cy ? { ...ra, r: (ra.r + rb.r) / 2 } : null
     for (let k = lo; k <= hi; k++) {
-      pts.push(run.pts[k])
+      const p = run.pts[k]
+      if (arc) {
+        const d = Math.hypot(p.x - arc.cx, p.y - arc.cy) || 1
+        pts.push({ x: arc.cx + ((p.x - arc.cx) / d) * arc.r, y: arc.cy + ((p.y - arc.cy) / d) * arc.r })
+      } else pts.push(p)
       w.push(run.w[k])
     }
     return { pts, w }
@@ -457,12 +914,30 @@ export function assembleStrokes(
         // Through a junction: where the arms were cut back (a welded node, a corner
         // join) the junction point bridges them; a through pair's own points already
         // touch.
-        if (leaveNode >= 0 && cutBack(`${r}${leaveSide}`)) {
+        const nr = Number.parseInt(next.slice(0, -1), 10)
+        const ns = next.slice(-1) as 'a' | 'b'
+        const ringC = ringOf.get(`${r}${leaveSide}`)
+        if (ringC && pts.length) {
+          // Two arcs of one circle: bridged along it, end to end.
+          const t = trimmed(nr)
+          const q = ns === 'a' ? t.pts[0] : t.pts[t.pts.length - 1]
+          for (const p of arcBridge(ringC, pts[pts.length - 1], q, Math.max(1, W / 4))) {
+            pts.push(p)
+            ws.push(NaN)
+          }
+        } else if (bridged.has(`${r}${leaveSide}`) && pts.length) {
+          const t = trimmed(nr)
+          const q = ns === 'a' ? t.pts[0] : t.pts[t.pts.length - 1]
+          const eA = endOf.get(`${r}${leaveSide}`)!
+          const eB = endOf.get(next)!
+          for (const p of hermiteBridge(pts[pts.length - 1], eA.dir, q, { x: -eB.dir.x, y: -eB.dir.y }, Math.max(1, W / 4))) {
+            pts.push(p)
+            ws.push(NaN)
+          }
+        } else if (leaveNode >= 0 && cutBack(`${r}${leaveSide}`)) {
           pts.push(junctionAt.get(leaveNode)!)
           ws.push(NaN)
         }
-        const nr = Number.parseInt(next.slice(0, -1), 10)
-        const ns = next.slice(-1) as 'a' | 'b'
         if (nr === startRun && ns === startSide) {
           closed = true
           break

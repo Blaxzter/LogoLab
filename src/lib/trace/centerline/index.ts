@@ -15,6 +15,8 @@
 //   blobs.ts      the ink the strokes do not explain becomes fills (through the planar
 //                 tracer, so a note head is beautified like any region);
 //   ends.ts       free ends walked out to the ink's end, caps read (butt / round);
+//   holes.ts      the round holes rings enclose — a ring's evidence where the skeleton
+//                 between the junctions on it has gone straight;
 //   assemble.ts   arms paired through junctions by rank, junctions placed at the arm
 //                 lines' meet, paths stitched, fitted (fit.ts) and given one width each.
 //
@@ -28,6 +30,7 @@ import { assembleStrokes, strokeItems, type JunctionDiag, type StrokePath } from
 import type { FitContext } from './fit.ts'
 import { splitBlobs, strokeRuns, type BlobSplit, type StrokeRun } from './blobs.ts'
 import { distanceTransform } from './distance.ts'
+import { roundHoles } from './holes.ts'
 import { contractClusterLinks, pruneSpurs, skeletonGraph, weldCrossings, type SkeletonGraph } from './graph.ts'
 import { coverageField, refineChain, type Centreline } from './profile.ts'
 import { thinZhangSuen } from './thin.ts'
@@ -108,7 +111,8 @@ export function traceCenterline(input: CenterlineInput): { doc: EditableDoc; rep
   const runs = strokeRuns(lines, split, width)
 
   onProgress?.(0.75, 'Fitting the strokes')
-  const asm = assembleStrokes(g, runs, split.W, f, split.blobMask, dt, fitOpts, fidelity, onCorner, onJunction)
+  const holes = roundHoles(ink, width, height)
+  const asm = assembleStrokes(g, runs, split.W, f, split.blobMask, dt, holes, fitOpts, fidelity, onCorner, onJunction)
   const strokes = strokeItems(asm.paths, CENTERLINE_INK)
   onStages?.({ graph: g, lines, split, runs, paths: asm.paths })
 
