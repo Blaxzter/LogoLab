@@ -7428,7 +7428,7 @@ arrowhead commit and each with its own pair:
 #### Census and pairs
 
 Gate before (8d3ba58: fixtures, engine untouched) → after: 18 → 22 of 25 pass at 512 and
-at 2048 (tables in the PR). Four pairs, each moving only the `line` / `cline`
+at 2048 (tables in the PR). Six pairs, each moving only the `line` / `cline`
 lanes, every outline lane byte-identical:
 
 | pair | moves |
@@ -7437,6 +7437,11 @@ lanes, every outline lane byte-identical:
 | `before-line-stubs` ⇄ `after-line-stubs` | la-stubs.line |
 | `before-line-arrows` ⇄ `after-line-arrows` | 15 line, 7 cline |
 | `before-line-hybrid` ⇄ `after-line-hybrid` | la-hybrid.line |
+| `before-weld-chords` ⇄ `after-weld-chords` | 5 line (cup, curves, junctions, loops, score), 3 cline (cl-loops, cl-paper, doodle) |
+| `before-end-hook` ⇄ `after-end-hook` | la-hairline.line |
+
+The whole branch is one entry, `before-icon-set` ⇄ `after-icon-set` (refreshed after the
+review fixes): 19 line and 9 cline traces move, every outline lane byte-identical.
 
 ### 39.5 What it is not, yet
 
