@@ -7398,6 +7398,33 @@ line art and stays a stroke — with the raster pixel-identical. On the sheets 2
 something: every QR, the captions, the list's and scorecard's digits, two keyholes; of the
 80 clean Gemini icons only those keyholes and one 3 px "T" (which renders the same).
 
+#### The A/B review
+
+Two things the review of `before-icon-set` ⇄ `after-icon-set` found, both introduced by the
+arrowhead commit and each with its own pair:
+
+* **A welded crossing went through its meet.** Sampling a corner join's chords every pixel
+  applied to every cut-back pair, WELDED through pairs included, and la-junctions' 33° X
+  (@2048) came back as two bent arms with near-horizontal chords through the junction. The
+  arms were cut back only to the node's zone, but at a split crossing the skeleton bends
+  toward the other stroke for as long as its ink is within reach — at 33° about 1.4 widths
+  out. Each through pair at a welded node is now cut back past every point within one width
+  of another through stroke's line (`WELD_REACH_W`, at most `WELD_CUT_MAX_W` = 4 widths,
+  never past the run's middle), its line re-read there, and joined along it by the Hermite
+  bridge a T's bar gets. The X is two straight lines (54 → 42 nodes); cl-loops had the
+  same cause — its interlocked rings come back as circles, four arcs each, and the centre
+  ring loses its bumps where the petals cross it. Pair `before-weld-chords` ⇄
+  `after-weld-chords`.
+* **A flat end hooked.** Lü–Wang keeps a free end's corner pixels, so a butt-capped
+  chain's own last points curl into one corner of the cap — not a branch, so pruning never
+  sees it — and the end read along that curl stops short (la-hairline@2048's missed 3.93).
+  `dropEndHook` (`ends.ts`) cuts the trailing points within two half-widths of the end
+  that lie more than 0.15 r off the line the run follows before them, and keeps the cut
+  only when the end then reads FLAT: a round cap has no corner to curl into, and a curve's
+  end would otherwise lose points to its own curvature. la-hairline@2048: missed 3.93 → 0,
+  centre p95 0.67 → 0.31 px, every line ends square on its authored point. Pair
+  `before-end-hook` ⇄ `after-end-hook`.
+
 #### Census and pairs
 
 Gate before (8d3ba58: fixtures, engine untouched) → after: 18 → 22 of 25 pass at 512 and

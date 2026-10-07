@@ -407,7 +407,8 @@ and nothing else; `before-fill-join` ⇄ `after-fill-join` is the fill-rim bridg
 pairing across a fill (§39.6); `before-line-2048` ⇄ `after-line-2048` is the first pair at
 the lane's real resolution — the flare cap and the surrounded-island rule that closed the
 holes 2048 exposed in a note head (§39.7). The icon-set field report (§39.8) is four pairs:
-`-line-junctions`, `-line-stubs`, `-line-arrows`, `-line-hybrid`.
+`-line-junctions`, `-line-stubs`, `-line-arrows`, `-line-hybrid`, and its review two more:
+`-weld-chords`, `-end-hook`.
 
 **What the icon-set field report taught the engine (§39.8)**, each easy to undo:
 
@@ -427,6 +428,12 @@ holes 2048 exposed in a note head (§39.7). The icon-set field report (§39.8) i
   long. "Shorter than the neighbour's width" catches none of them (they run 1.8–2.4).
 * **Hybrid routing needs a broken member for a caption** (`confidence.ts`). A row of like
   marks is also a trash can's bars or a broadcast's arcs.
+* **A welded crossing's pairs are cut back past the OTHER stroke's ink** (`recutWelded`):
+  one width from its line, and bridged along their own lines. Cut back only to the node's
+  zone and chorded through the meet, a 33° X drew two bent arms.
+* **A free end's hook goes only where the end reads flat** (`dropEndHook`): thinning curls a
+  butt end into its cap's corner. A round cap has none, and on a curve the same test eats
+  the curvature.
 
 ## The tracer ships TWICE, and only one of them is automatic
 
