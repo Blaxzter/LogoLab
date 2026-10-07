@@ -372,10 +372,14 @@ the `'white'` default and rasterizes the white line onto white.
 
 It has its own answer sheet because the outline lanes' cannot score it: `svgGround.ts`
 refuses strokes, and for the outline tracer that refusal is right. `bench/genLineArt.ts`
-writes `public/examples/line-art/` (eight synthetic ⌇ cases, twelve ◎ Lucide icons — ISC,
-already a dependency), authored WITH strokes because here the `d` IS the answer;
+writes `public/examples/line-art/` (thirteen synthetic ⌇ cases, twelve ◎ Lucide icons — ISC,
+already a dependency), authored WITH strokes because here the `d` IS the answer (an element
+marked `data-ground="none"` is drawn and never scored: texture a fixture puts in on purpose);
 `bench/lineArtGround.ts` reads them and `bench/centerlineScore.ts` scores centre / missed /
-width / topology / fill IoU / rendered ΔE. `test/centerline-gate.test.ts` is the gate
+width / topology / `turns` / fill IoU / rendered ΔE. `turns` counts traced paths that leave
+one authored stroke for another anywhere but an end-to-end join — an X traced as two Vs has
+an X's ends and paths and every point on SOME stroke, so nothing else sees it. `missed` is
+a mean over the MISSED samples: covering more ink can raise it (§39.8). `test/centerline-gate.test.ts` is the gate
 (KNOWN_DEFECTS, boolean, only shrinks); `bench/centerlineDiag.ts` is the table plus a contact
 strip per case with the score's losses drawn on it. `rasterizeDoc` paints strokes now
 (`test/raster-stroke.test.ts`), so the studio's ΔE and the Difference view work on a stroked
@@ -402,7 +406,27 @@ fix (§39.3), which moves four line lanes (polylines, loops, score, and the star
 and nothing else; `before-fill-join` ⇄ `after-fill-join` is the fill-rim bridge and the
 pairing across a fill (§39.6); `before-line-2048` ⇄ `after-line-2048` is the first pair at
 the lane's real resolution — the flare cap and the surrounded-island rule that closed the
-holes 2048 exposed in a note head (§39.7).
+holes 2048 exposed in a note head (§39.7). The icon-set field report (§39.8) is four pairs:
+`-line-junctions`, `-line-stubs`, `-line-arrows`, `-line-hybrid`.
+
+**What the icon-set field report taught the engine (§39.8)**, each easy to undo:
+
+* **A ring is read from its HOLE** (`holes.ts`, `ringPair`). Where strokes end on a small
+  ring the skeleton between them is a chord, and two chords at a junction are a corner to
+  the skeleton; no fit of the arms can say "ring". Don't replace it with a circle fit
+  through the arms — that was tried and the windmills read sagitta 0.
+* **A ring's arcs are never cluster links** (`onRing`). Straight sails ending on a small
+  ring pass within half a width of its quarter arcs; without the guard the cluster pass
+  took the ring for their crossing and deleted it.
+* **Cluster pairs rank by lying on ONE line**, not by straightness: two parallel strokes a
+  gap apart are equally straight with either continuation. The search is bounded.
+* **`thin.ts` is Lü–Wang (3 ≤ B ≤ 6), not Zhang–Suen's 2 ≤ B ≤ 6**: the original erases
+  2-pixel diagonal lines, and an arrowhead arm vanished with it. Going back moves the whole
+  line lane.
+* **Micro-stubs are relative AND measured**: ≤ 0.4 of the neighbours' width and ≤ 3 of it
+  long. "Shorter than the neighbour's width" catches none of them (they run 1.8–2.4).
+* **Hybrid routing needs a broken member for a caption** (`confidence.ts`). A row of like
+  marks is also a trash can's bars or a broadcast's arcs.
 
 ## The tracer ships TWICE, and only one of them is automatic
 
