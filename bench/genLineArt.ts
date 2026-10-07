@@ -315,6 +315,20 @@ const SYNTHETIC: Case[] = [
     },
   },
   {
+    name: 'la-arrows',
+    note: 'three thick down-arrows whose arrowhead arms run 2, 2.5 and 3 widths from the tip: where three strokes merge, a real arm must not be pruned as a spur',
+    make: () => {
+      const w = 10
+      let body = ''
+      ;[2, 2.5, 3].forEach((k, i) => {
+        const x = 52 + i * 76
+        const a = (k * w) / Math.SQRT2
+        body += path(`M${x},40 V180`) + path(`M${f(x - a)},${f(180 - a)} L${x},180 L${f(x + a)},${f(180 - a)}`)
+      })
+      return svg(strokes(w, 'round', 'round', body))
+    },
+  },
+  {
     name: 'la-hybrid',
     note: 'a QR-like block of filled modules and a bold caption ("Pro Shop", Inter Bold outlines) beside clean strokes: block and caption come back as fills, the strokes as strokes',
     make: () => {
