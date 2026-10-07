@@ -43,6 +43,10 @@ export const THROUGH_DEG = 35
 export const WIDTH_SNAP = 0.15
 /** A free-ending third arm within this angle of a corner's bisector is the corner's tip spur. */
 export const TIP_SPUR_DEG = 25
+/** A free-ending arm no wider than this share of the strokes it hangs off… */
+export const STUB_WIDTH_K = 0.4
+/** …and no longer than this many of their widths is a stub of texture, not a stroke. */
+export const STUB_LEN_K = 3
 
 export interface StrokePath {
   subPath: SubPath
@@ -447,6 +451,29 @@ export function assembleStrokes(
   const cornerJoin = new Set<string>()
   const dead = new Set<number>()
   let junctions = 0
+
+  // Micro-stubs (§39.8). Faint texture touching a stroke — the dimples of a golf ball
+  // drawn against its outline — thins into a branch off the stroke that pruning keeps
+  // (it reaches past the junction's radius), and the profile reads its partial coverage
+  // as a stroke a quarter as wide: a 6 px path at 2.66 beside 8.5 px strokes. Measured
+  // on the field report's sheets those run 0.22–0.31 of the width of the strokes they
+  // hang off and 1.8–2.4 of those widths long; the thinner strokes an icon really draws
+  // read 0.53–0.6 and run many widths, a dash or a dot touches nothing, and "shorter than
+  // the neighbour's width" (the first guess) catches none of the stubs. Dropped before
+  // any pairing, so the stroke they hung off pairs through as if they were never there.
+  for (const [, ends] of endsAt) {
+    if (ends.length < 2) continue
+    for (const S of ends) {
+      if (!S.freeOther) continue
+      const others = ends.filter((e) => e !== S && e.run !== S.run).map((e) => widthOfRun(runs[e.run], W))
+      if (others.length === 0) continue
+      others.sort((a, b) => a - b)
+      const wN = others[others.length >> 1]
+      if (widthOfRun(runs[S.run], W) > STUB_WIDTH_K * wN || S.len > STUB_LEN_K * wN) continue
+      dead.add(S.run)
+    }
+  }
+  for (const [id, ends] of endsAt) endsAt.set(id, ends.filter((e) => !dead.has(e.run)))
 
   // Junction CLUSTERS first: several junctions joined by runs too short to leave their
   // zones (a stroke crossing two others a gap apart — a putter's double-line shaft — or
