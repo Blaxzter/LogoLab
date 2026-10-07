@@ -65,8 +65,6 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // 39 sub-pixel misses along the top staff line at the barline's T averaged it to 0.81.
   // The tangent bridge at that T covers them; the 5 stem-top samples now average 2.38.
   'la-score@512': 'missed: the 3 px stem-top apex miss the barline T fix no longer averages away (§39.8)',
-  'la-hybrid@512': 'fills, centre, ends, paths, ΔE: the QR block and the caption are traced as strokes (scribble, "Dro S’op")',
-  'la-hybrid@2048': 'fills, centre, ends, paths: the same',
 }
 
 for (const RES of RESOLUTIONS)

@@ -330,19 +330,24 @@ const SYNTHETIC: Case[] = [
   },
   {
     name: 'la-hybrid',
-    note: 'a QR-like block of filled modules and a bold caption ("Pro Shop", Inter Bold outlines) beside clean strokes: block and caption come back as fills, the strokes as strokes',
+    note: 'a QR-like block of filled modules and a bold caption ("Pro Shop", Inter Bold outlines) beside clean strokes: block and caption come back as fills, the strokes — and the finder squares, clean square rings — as strokes',
     make: () => {
       // 21×21 modules of 5 u, three finder patterns, a fixed pseudo-random fill.
       const M = 5
       const x0 = 14
       const y0 = 14
       const N = 21
+      const finders = [
+        [0, 0],
+        [0, N - 7],
+        [N - 7, 0],
+      ]
       const on = (r: number, c: number): boolean => {
-        // The three finder patterns, each with its one-module separator.
-        for (const [fr, fc] of [[0, 0], [0, N - 7], [N - 7, 0]]) {
+        // The three finder patterns (drawn below), each with its one-module separator; the
+        // modules here are only their 3×3 centres.
+        for (const [fr, fc] of finders) {
           if (r < fr - 1 || r > fr + 7 || c < fc - 1 || c > fc + 7) continue
-          if (r < fr || r > fr + 6 || c < fc || c > fc + 6) return false
-          return Math.max(Math.abs(r - fr - 3), Math.abs(c - fc - 3)) !== 2
+          return Math.max(Math.abs(r - fr - 3), Math.abs(c - fc - 3)) <= 1
         }
         let x = (r * 73856093) ^ (c * 19349663) ^ 0x5bd1e995
         x = Math.imul(x ^ (x >>> 13), 0x5bd1e995)
@@ -350,8 +355,14 @@ const SYNTHETIC: Case[] = [
       }
       let rects = ''
       for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (on(r, c)) rects += `<rect x="${x0 + c * M}" y="${y0 + r * M}" width="${M}" height="${M}"/>`
+      // A finder's outer ring is a square ring one module wide: line art, and the answer
+      // says so (a stroked square on its centreline).
+      const rings = finders
+        .map(([fr, fc]) => `<rect x="${x0 + fc * M + M / 2}" y="${y0 + fr * M + M / 2}" width="${6 * M}" height="${6 * M}"/>`)
+        .join('')
       return svg(
         fills(rects + caption('Pro Shop', 18, 172, 30, 700)) +
+          strokes(M, 'butt', 'miter', rings) +
           strokes(5, 'round', 'round', `<circle cx="196" cy="62" r="34"/>` + path('M176,200 L194,218 L238,168') + path('M18,236 H238')),
       )
     },

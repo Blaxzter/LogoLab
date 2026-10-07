@@ -18,6 +18,7 @@
 //            every thin stroke that touches a thicker one; `--stubs` prints them)
 //   fills    filled paths, and the share of the ink they paint
 //   junc     junctions the assembly placed
+//   rt       ink components sent to the fills whole (centerline/confidence.ts)
 //
 // `--look t:x,y,w,h` renders tile t's window (trace px) at zoom z (default 6) with the
 // skeleton chains, the junction nodes and their radii (welded ones violet), each arm's
@@ -387,6 +388,7 @@ interface Row {
   fills: number
   fillShare: number
   junctions: number
+  routed: number
   nodes: number
 }
 const rows: Row[] = []
@@ -507,6 +509,7 @@ for (const sheetPath of sheets) {
       fills,
       fillShare: Math.round(diag.report.fillShare * 100) / 100,
       junctions: diag.report.junctions,
+      routed: diag.report.routed,
       nodes,
     })
     if (argv.includes('--stubs') && stubs.relList.length) console.log(`  ${stem}-${n} rel stubs`, JSON.stringify(stubs.relList))
@@ -520,7 +523,7 @@ for (const sheetPath of sheets) {
 
 if (json) console.log(JSON.stringify(rows, null, 1))
 else {
-  console.log('tile'.padEnd(12) + 'r,c'.padStart(6) + 'res'.padStart(6) + 'W'.padStart(7) + 'strokes'.padStart(8) + 'abs'.padStart(5) + 'rel'.padStart(5) + 'fills'.padStart(6) + 'fill%'.padStart(7) + 'junc'.padStart(6) + 'nodes'.padStart(7))
+  console.log('tile'.padEnd(12) + 'r,c'.padStart(6) + 'res'.padStart(6) + 'W'.padStart(7) + 'strokes'.padStart(8) + 'abs'.padStart(5) + 'rel'.padStart(5) + 'fills'.padStart(6) + 'fill%'.padStart(7) + 'junc'.padStart(6) + 'rt'.padStart(4) + 'nodes'.padStart(7))
   for (const r of rows)
     console.log(
       `${r.sheet}-${String(r.tile).padStart(2, '0')}`.padEnd(12) +
@@ -533,6 +536,7 @@ else {
         String(r.fills).padStart(6) +
         (r.fillShare * 100).toFixed(0).padStart(7) +
         String(r.junctions).padStart(6) +
+        String(r.routed).padStart(4) +
         String(r.nodes).padStart(7),
     )
   const sum = (k: keyof Row): number => rows.reduce((s, r) => s + (r[k] as number), 0)
