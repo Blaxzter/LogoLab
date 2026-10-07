@@ -77,6 +77,8 @@ interface End {
 
 const nodePos = (g: SkeletonGraph, id: number): Vec => ({ x: g.nodes[id].x + 0.5, y: g.nodes[id].y + 0.5 })
 const dist = (a: Vec, b: Vec): number => Math.hypot(a.x - b.x, a.y - b.y)
+/** Distance of `p` from the line through `at` along unit `dir`. */
+const lineDist = (p: Vec, at: Vec, dir: Vec): number => Math.abs((p.x - at.x) * dir.y - (p.y - at.y) * dir.x)
 
 /** The arm of run `r` at `side`. */
 function readArm(g: SkeletonGraph, runs: StrokeRun[], r: number, side: 'a' | 'b', W: number): End {
@@ -120,6 +122,40 @@ function readArm(g: SkeletonGraph, runs: StrokeRun[], r: number, side: 'a' | 'b'
   const dy = J.y - far.y
   const l = Math.hypot(dx, dy) || 1
   return { ...base, dir: { x: dx / l, y: dy / l }, at: seq[start], ok: false }
+}
+
+/** Reach of another stroke's line, in widths, within which an arm's skeleton is bent. */
+export const WELD_REACH_W = 1
+/** At most this many widths of an arm are cut back at a welded crossing. */
+export const WELD_CUT_MAX_W = 4
+
+/** Cut a welded crossing's arm back past every point within `WELD_REACH_W` widths of
+ *  another through stroke's line (never more than `WELD_CUT_MAX_W` widths, never past
+ *  the run's middle) and re-read its line from there. Mutates `e`. */
+function recutWelded(e: End, others: End[], runs: StrokeRun[], W: number): void {
+  const pts = runs[e.run].pts
+  const n = pts.length
+  const step = e.side === 'a' ? 1 : -1
+  const reach = WELD_REACH_W * W
+  const near = (p: Vec): boolean => others.some((o) => lineDist(p, o.at, o.dir) < reach)
+  const mid = n >> 1
+  let k = e.keep
+  let arc = 0
+  while (near(pts[k]) && arc < WELD_CUT_MAX_W * W) {
+    const nk = k + step
+    if (step > 0 ? nk > mid : nk < mid) break
+    arc += dist(pts[nk], pts[k])
+    k = nk
+  }
+  if (k === e.keep) return
+  const seq: Vec[] = []
+  for (let q = k; q >= 0 && q < n; q += step) seq.push(pts[q])
+  const line = armLineOf(seq, W, Math.max(0.5, 0.06 * W))
+  e.keep = k
+  if (line) {
+    e.at = line.at
+    e.dir = line.dir
+  }
 }
 
 /** Least-squares point nearest all the given lines (exact intersection for two). */
@@ -768,6 +804,24 @@ export function assembleStrokes(
     if (left.length > 0 && !node.welded)
       for (const [i, j] of through) {
         if (inRing.has(i)) continue
+        bridged.add(`${ends[i].run}${ends[i].side}`)
+        bridged.add(`${ends[j].run}${ends[j].side}`)
+      }
+    // A welded crossing: each through pair is one stroke passing under the others, and
+    // its skeleton bends toward theirs as long as their ink is within reach — at a 33° X
+    // that is nearly two widths out, far past the node's zone. Cut each arm back to where no
+    // other pair's line comes within a width of it, re-read its line there, and join the
+    // pair along those lines. Through the meet instead, the bent arms were kept and
+    // chorded to the junction point: two strokes kinking toward each other (§39.8).
+    if (node.welded && through.length >= 2)
+      for (const [i, j] of through) {
+        if (inRing.has(i)) continue
+        const others = through
+          .filter(([a]) => a !== i)
+          .flatMap(([a, b]) => [ends[a], ends[b]])
+          .filter((e) => e.ok)
+        if (others.length === 0) continue
+        for (const k of [i, j]) recutWelded(ends[k], others, runs, W)
         bridged.add(`${ends[i].run}${ends[i].side}`)
         bridged.add(`${ends[j].run}${ends[j].side}`)
       }
