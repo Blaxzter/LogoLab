@@ -52,6 +52,16 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // skeleton (any medial axis) rounds it wider, and the fit follows the skeleton (§39.4).
   'lucide-star@512': 'centre: authored corner radii below the half-width round wider than drawn',
   'lucide-star@2048': 'centre: the same radii (34 px against a 64 px half-width), p95 18 px',
+  // The field report's three defects (§39.8), each with its fixture. Entries leave this
+  // list with the fix that clears them.
+  'la-hub@512': 'turns: two sails run on into the ring at its T junctions; the ring is chorded, not one circle',
+  'la-hub@2048': 'turns: the same sails into the ring, six turns',
+  'la-cup@512': 'turns, ends, paths, missed: the double-line shaft tangles where it crosses the bowl beside the club head',
+  'la-cup@2048': 'turns, missed: the same tangle at the crossing',
+  'la-stubs@512': 'centre, p95, ends, paths: faint texture on the ring and bar comes back as thin stub strokes',
+  'la-stubs@2048': 'centre, p95, ends, paths: the same stubs',
+  'la-hybrid@512': 'fills, centre, ends, paths, ΔE: the QR block and the caption are traced as strokes (scribble, "Dro S’op")',
+  'la-hybrid@2048': 'fills, centre, ends, paths: the same',
 }
 
 for (const RES of RESOLUTIONS)
@@ -70,7 +80,7 @@ for (const RES of RESOLUTIONS)
         invert: plan.invert,
       })
       const s = scoreCenterline(svg, doc, img, centerlineTol(RES))
-      const line = `centre ${s.centreMean.toFixed(2)}/${s.centreP95.toFixed(2)} missed ${s.missedMean.toFixed(2)} width ${(s.widthErr * 100).toFixed(0)}% ends ${s.endsDelta} paths ${s.pathsDelta} fills ${Number.isFinite(s.fillIoU) ? s.fillIoU.toFixed(2) : '—'} ΔE ${s.deltaE.toFixed(2)}`
+      const line = `centre ${s.centreMean.toFixed(2)}/${s.centreP95.toFixed(2)} missed ${s.missedMean.toFixed(2)} width ${(s.widthErr * 100).toFixed(0)}% ends ${s.endsDelta} paths ${s.pathsDelta} turns ${s.turns} fills ${Number.isFinite(s.fillIoU) ? s.fillIoU.toFixed(2) : '—'} ΔE ${s.deltaE.toFixed(2)}`
       const known = KNOWN_DEFECTS[`${c.id}@${RES}`]
       if (known) {
         assert.ok(

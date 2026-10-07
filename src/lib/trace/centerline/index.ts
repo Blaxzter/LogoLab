@@ -24,11 +24,11 @@
 import type { EditableDoc, PathItem, Topology } from '../../path/types'
 import type { PlanarFitOptions } from '../planarFit/options.ts'
 import { MONO_INK, MONO_PAPER, type MonoSegmentation } from '../mono.ts'
-import { assembleStrokes, strokeItems, type JunctionDiag } from './assemble.ts'
+import { assembleStrokes, strokeItems, type JunctionDiag, type StrokePath } from './assemble.ts'
 import type { FitContext } from './fit.ts'
-import { splitBlobs, strokeRuns } from './blobs.ts'
+import { splitBlobs, strokeRuns, type BlobSplit, type StrokeRun } from './blobs.ts'
 import { distanceTransform } from './distance.ts'
-import { contractClusterLinks, pruneSpurs, skeletonGraph, weldCrossings } from './graph.ts'
+import { contractClusterLinks, pruneSpurs, skeletonGraph, weldCrossings, type SkeletonGraph } from './graph.ts'
 import { coverageField, refineChain, type Centreline } from './profile.ts'
 import { thinZhangSuen } from './thin.ts'
 
@@ -56,13 +56,25 @@ export interface CenterlineInput {
   onCorner?: FitContext['onCorner']
   /** Diagnostic sink for every junction's arms and pairing (never changes output). */
   onJunction?: (r: JunctionDiag) => void
+  /** Diagnostic sink for the intermediate stages — the skeleton graph, the refined
+   *  centrelines, the stroke/fill split, the runs and the assembly (never changes output). */
+  onStages?: (s: CenterlineStages) => void
+}
+
+/** What `onStages` receives: every stage's output, for bench/centerlineSheetDiag.ts. */
+export interface CenterlineStages {
+  graph: SkeletonGraph
+  lines: Centreline[]
+  split: BlobSplit
+  runs: StrokeRun[]
+  paths: StrokePath[]
 }
 
 /** The stroke colour a centreline trace comes back in — repainted by the caller, like mono. */
 export const CENTERLINE_INK = '#000000'
 
 export function traceCenterline(input: CenterlineInput): { doc: EditableDoc; report: CenterlineReport } {
-  const { seg, width, height, fitOpts, fidelity, traceFills, onProgress, onCorner, onJunction } = input
+  const { seg, width, height, fitOpts, fidelity, traceFills, onProgress, onCorner, onJunction, onStages } = input
   const n = width * height
   const ink = new Uint8Array(n)
   let inkPixels = 0
@@ -98,6 +110,7 @@ export function traceCenterline(input: CenterlineInput): { doc: EditableDoc; rep
   onProgress?.(0.75, 'Fitting the strokes')
   const asm = assembleStrokes(g, runs, split.W, f, split.blobMask, dt, fitOpts, fidelity, onCorner, onJunction)
   const strokes = strokeItems(asm.paths, CENTERLINE_INK)
+  onStages?.({ graph: g, lines, split, runs, paths: asm.paths })
 
   let fills: PathItem[] = []
   let topology: Topology | undefined

@@ -24,6 +24,9 @@
 // Dev/test only; never bundled (scripts/swPlugin.ts skips examples/line-art).
 
 import { writeFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { subPathsToD } from '../src/lib/path/model.ts'
+import { faceFromBytes } from '../src/lib/text/engine.ts'
+import { makeTextGroup, newTextData, replaceText } from '../src/lib/text/edit.ts'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -75,6 +78,18 @@ function spiral(cx: number, cy: number, a: number, b: number, turns: number): st
     d += ` C${f(c1.x)},${f(c1.y)} ${f(c2.x)},${f(c2.y)} ${f(p2.x)},${f(p2.y)}`
   }
   return d
+}
+
+/** A line of text as glyph OUTLINES (fills), laid out by the app's own HarfBuzz engine on
+ *  the bundled Inter — deterministic, no system fonts. Baseline starts at (x, y). */
+function caption(text: string, x: number, y: number, size: number, weight: number): string {
+  const bytes = readFileSync(join(ROOT, 'public', 'fonts', 'inter.ttf'))
+  const face = faceFromBytes(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
+  const data = replaceText(newTextData({ x, y }, size, { weight }), 0, 0, text)
+  const group = makeTextGroup('caption', data, () => ({ face, synthItalic: false }))
+  return group.children
+    .map((c) => (c.kind === 'path' ? `<path d="${subPathsToD(c.subPaths, 3)}"/>` : ''))
+    .join('')
 }
 
 /** One S-curve, its own width — the ladder's repeating unit. */
@@ -225,6 +240,107 @@ const SYNTHETIC: Case[] = [
           strokes(1.25, 'butt', 'miter', path('M20,160 L236,180')) +
           strokes(0.75, 'butt', 'miter', `<circle cx="128" cy="215" r="30"/>`),
       ),
+  },
+  // ---- The field report's three defects (§39.8): an agent turned ten Gemini icon sheets
+  // into a set with `split_icon_sheet` + strokes and named what came back wrong. One
+  // mechanism each, scaled to the art that showed it.
+  {
+    name: 'la-hub',
+    note: 'a windmill hub: four outlined sails whose edges meet a small ring (centreline radius 1.4 W) in V pairs ON the ring',
+    make: () => {
+      // Ring of centreline radius R; each sail's edges sit ±h off its axis, h = R/√2, so
+      // two neighbouring sails' edges cross exactly on the ring (as the windmills draw it).
+      const cx = 128
+      const cy = 128
+      const R = 13
+      const h = R / Math.SQRT2
+      const tip = 96
+      let body = ''
+      for (const deg of [-135, -45, 45, 135]) {
+        const a = (deg * Math.PI) / 180
+        const u = { x: Math.cos(a), y: Math.sin(a) }
+        const n = { x: -u.y, y: u.x }
+        const at = (side: number, t: number) => `${f(cx + side * h * n.x + t * u.x)},${f(cy + side * h * n.y + t * u.y)}`
+        body += path(`M${at(1, h)} L${at(1, tip)} L${at(-1, tip)} L${at(-1, h)}`)
+      }
+      return svg(strokes(9, 'round', 'round', `<circle cx="${cx}" cy="${cy}" r="${R}"/>` + body))
+    },
+  },
+  {
+    name: 'la-cup',
+    note: 'a trophy crossed by a putter whose shaft is a DOUBLE line (two thin strokes, a one-unit gap) crossing the bowl where it turns into the stem, its club head looped back beside the crossing',
+    make: () =>
+      svg(
+        // The cup: rim, bowl sides curving into the stem, a flat foot (T-joined, no acute corners).
+        strokes(
+          7.5,
+          'round',
+          'round',
+          path('M56,40 H200 C200,104 166,136 142,150 V214') +
+            path('M56,40 C56,104 90,136 114,150 V214') +
+            path('M86,214 H170'),
+        ) +
+          // The shaft: two 4 u strokes 5 u apart — a 1 u gap, which at the sheet's 86 px tile
+          // was under a pixel and half closed by the cut.
+          strokes(4, 'round', 'round', path('M190,10 L60,186') + path('M194.02,12.97 L64.02,188.97')) +
+          // The club head: a loop leaving the shaft's foot and coming back up beside it.
+          strokes(5, 'round', 'round', path('M62,187.5 C44,206 22,200 30,184 C36,172 70,170 104,150')),
+      ),
+  },
+  {
+    name: 'la-stubs',
+    note: 'faint texture touching thick strokes (no thin stub strokes may come of it) beside a thin line hanging off a thick bar, a dashed line and dots (all kept)',
+    make: () => {
+      // The texture is drawn but is not part of the answer (data-ground="none"): faint
+      // radial specks on the inside of a ring and under a bar, like the dimples on the
+      // sheet's golf balls where they touch the ball's outline. Read by the profile they
+      // are ~0.25 W wide and run ~2 W from the stroke they hang off (§39.8).
+      const speck = (cx: number, cy: number, deg: number): string =>
+        `<ellipse cx="${f(cx)}" cy="${f(cy)}" rx="1.6" ry="6" transform="rotate(${deg} ${f(cx)} ${f(cy)})"/>`
+      const ring = { cx: 80, cy: 80 }
+      const onRing = (deg: number): string => {
+        const a = (deg * Math.PI) / 180
+        return speck(ring.cx + 25 * Math.cos(a), ring.cy + 25 * Math.sin(a), deg + 90)
+      }
+      const texture = `<g fill="rgb(110,110,118)" stroke="none" data-ground="none">${onRing(40)}${onRing(165)}${speck(176, 55.5, 0)}</g>`
+      return svg(
+        strokes(8, 'round', 'round', `<circle cx="${ring.cx}" cy="${ring.cy}" r="34"/>` + path('M140,46 H236')) +
+          texture +
+          // A thin line hanging off the bar: thinner than the bar, but long — a stroke.
+          strokes(2.5, 'round', 'round', path('M212,46 V120')) +
+          strokes(2.5, 'butt', 'round', path(Array.from({ length: 12 }, (_, i) => `M${f(20 + i * 18)},170 h9`).join(' '))) +
+          strokes(2.5, 'round', 'round', path(Array.from({ length: 6 }, (_, i) => `M${f(132 + i * 12)},${f(126 + (i % 2) * 8)} l3,2`).join(' '))) +
+          fills(Array.from({ length: 6 }, (_, i) => `<circle cx="${f(40 + i * 32)}" cy="214" r="2.2"/>`).join('')),
+      )
+    },
+  },
+  {
+    name: 'la-hybrid',
+    note: 'a QR-like block of filled modules and a bold caption ("Pro Shop", Inter Bold outlines) beside clean strokes: block and caption come back as fills, the strokes as strokes',
+    make: () => {
+      // 21×21 modules of 5 u, three finder patterns, a fixed pseudo-random fill.
+      const M = 5
+      const x0 = 14
+      const y0 = 14
+      const N = 21
+      const on = (r: number, c: number): boolean => {
+        // The three finder patterns, each with its one-module separator.
+        for (const [fr, fc] of [[0, 0], [0, N - 7], [N - 7, 0]]) {
+          if (r < fr - 1 || r > fr + 7 || c < fc - 1 || c > fc + 7) continue
+          if (r < fr || r > fr + 6 || c < fc || c > fc + 6) return false
+          return Math.max(Math.abs(r - fr - 3), Math.abs(c - fc - 3)) !== 2
+        }
+        let x = (r * 73856093) ^ (c * 19349663) ^ 0x5bd1e995
+        x = Math.imul(x ^ (x >>> 13), 0x5bd1e995)
+        return ((x ^ (x >>> 15)) & 7) < 4
+      }
+      let rects = ''
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (on(r, c)) rects += `<rect x="${x0 + c * M}" y="${y0 + r * M}" width="${M}" height="${M}"/>`
+      return svg(
+        fills(rects + caption('Pro Shop', 18, 172, 30, 700)) +
+          strokes(5, 'round', 'round', `<circle cx="196" cy="62" r="34"/>` + path('M176,200 L194,218 L238,168') + path('M18,236 H238')),
+      )
+    },
   },
 ]
 
