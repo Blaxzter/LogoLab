@@ -233,6 +233,14 @@ function hermiteBridge(p: Vec, t0: Vec, q: Vec, t1: Vec, step: number): Vec[] {
   return out
 }
 
+/** Points strictly between `p` and `q` on the segment, about one pixel apart. */
+function lineBridge(p: Vec, q: Vec): Vec[] {
+  const n = Math.ceil(dist(p, q))
+  const out: Vec[] = []
+  for (let k = 1; k < n; k++) out.push({ x: p.x + ((q.x - p.x) * k) / n, y: p.y + ((q.y - p.y) * k) / n })
+  return out
+}
+
 /** Where a line meets a circle, the crossing nearest `near`; null when it misses. */
 function ringMeet(c: Circle, l: { at: Vec; dir: Vec }, near: Vec): Vec | null {
   const fx = l.at.x - c.cx
@@ -246,6 +254,10 @@ function ringMeet(c: Circle, l: { at: Vec; dir: Vec }, near: Vec): Vec | null {
   return dist(p1, near) <= dist(p2, near) ? p1 : p2
 }
 
+/** Junctions read as one at most: a crossing of two double lines is four. */
+export const CLUSTER_MAX_NODES = 6
+/** Cluster readings tried per picture, splits included. */
+export const CLUSTER_TRIES = 256
 /** A run between two junctions no longer than this many of its own widths can be a link. */
 export const CLUSTER_LINK_W = 3
 /** A link's points must lie within this share of its width of some pair's bridge. */
@@ -258,6 +270,16 @@ function onRing(pts: Vec[], h: Hole, W: number): boolean {
   const r = h.r + W / 2
   const tol = Math.max(1.5, RING_ARM_TOL_W * W) + 0.25 * W
   return pts.every((p) => Math.abs(Math.hypot(p.x - h.cx, p.y - h.cy) - r) <= tol)
+}
+
+/** A run with readable widths along at least half a width of its points, their median
+ *  at least 0.75 of the given arms' — a stroke, however short. */
+function readsAsStroke(run: StrokeRun, armWidths: number[]): boolean {
+  const ws = Array.from(run.w).filter((w) => Number.isFinite(w) && w > 0)
+  const wArm = Math.min(...armWidths)
+  if (ws.length < Math.max(3, 0.5 * wArm)) return false
+  ws.sort((a, b) => a - b)
+  return ws[ws.length >> 1] >= 0.75 * wArm
 }
 
 /** Median readable width of a run, or `W`. */
@@ -449,6 +471,8 @@ export function assembleStrokes(
   const bridged = new Set<string>()
   /** Run ends paired as a CORNER (not a through continuation). */
   const cornerJoin = new Set<string>()
+  /** Run ends paired across a fill, bridged by a straight chord under it. */
+  const acrossFill = new Set<string>()
   const dead = new Set<number>()
   let junctions = 0
 
@@ -491,7 +515,11 @@ export function assembleStrokes(
   // one link from an unrelated one (a club head's foot below the crossing). Clusters are
   // a handful of nodes, so the splits are few.
   const tried = new Set<string>()
+  // Bounded: a pathological skeleton (a QR block's lattice of junctions) has as many
+  // connected node subsets as it likes; clusters are only ever worth a few nodes.
+  let budget = CLUSTER_TRIES
   const reject = (cl: { nodes: number[]; links: Set<number> }): void => {
+    if (cl.nodes.length > CLUSTER_MAX_NODES) return
     for (const drop of cl.links) {
       const links = new Set([...cl.links].filter((r) => r !== drop))
       for (const part of splitCluster(cl.nodes, links, runs)) {
@@ -504,8 +532,12 @@ export function assembleStrokes(
     }
   }
   for (const cl of queue) tried.add(cl.nodes.slice().sort((a, b) => a - b).join(','))
-  while (queue.length) {
+  while (queue.length && budget-- > 0) {
     const cl = queue.shift()!
+    if (cl.nodes.length > CLUSTER_MAX_NODES) {
+      reject(cl)
+      continue
+    }
     if (cl.nodes.some((id) => clustered.has(id))) continue
     const outer: End[] = []
     for (const id of cl.nodes) for (const e of endsAt.get(id)!) if (!cl.links.has(e.run)) outer.push(e)
@@ -619,8 +651,12 @@ export function assembleStrokes(
         const cosI = A.dir.x * B.dir.x + A.dir.y * B.dir.y
         if (cosI < cosCorner) continue
         // Shorter than a stroke is wide: thinning's branch toward the join, whatever
-        // direction its two pixels happen to read (a run that short is unreadable).
-        const stub = S.len <= 2 * node.r + 2
+        // direction its two pixels happen to read (a run that short is unreadable) —
+        // unless it READS as a stroke, its own width measured along it as wide as the
+        // corner's arms: where an arrowhead's arms meet its stem at one tip, an arm two
+        // widths long sits under this bar and was dropped as the tip of the corner the
+        // other arm and the stem make (§39.8).
+        const stub = S.len <= 2 * node.r + 2 && !readsAsStroke(runs[S.run], [A, B].map((e) => widthOfRun(runs[e.run], W)))
         if (!stub) {
           if (!S.ok) continue
           const bx = A.dir.x + B.dir.x
@@ -695,11 +731,35 @@ export function assembleStrokes(
       node.pixels.some(
         (px) => blobMask[px] === 1 || blobMask[Math.floor(centroid.y) * f.width + Math.floor(centroid.x)] === 1,
       )
-    if (left.length === 2 && !onFill) {
-      pairUp(left[0], left[1])
-      cornerJoin.add(`${ends[left[0]].run}${ends[left[0]].side}`)
-      cornerJoin.add(`${ends[left[1]].run}${ends[left[1]].side}`)
-      cornerPair = [left[0], left[1]]
+    // An arrowhead or a Y: three arms left, ONE on the bisector of the other two, which
+    // turn by at least the sharp bar. The two are a V and the third ends at its apex —
+    // the reading the tip-spur rule above makes before it drops a short bisector arm,
+    // here for one long enough to keep (an arrow's stem). Read as three ends, an
+    // arrowhead came back as three strokes meeting at a point. A symmetric Y, where
+    // every arm qualifies, stays three.
+    let corner2 = left.length === 2 ? left : null
+    if (left.length === 3) {
+      const vs: number[][] = []
+      for (let si = 0; si < 3; si++) {
+        const S = ends[left[si]]
+        const [ia, ib] = left.filter((_, k) => k !== si)
+        const A = ends[ia]
+        const B = ends[ib]
+        if (!S.ok || !A.ok || !B.ok) continue
+        if (A.dir.x * B.dir.x + A.dir.y * B.dir.y < cosCorner) continue
+        const bx = A.dir.x + B.dir.x
+        const by = A.dir.y + B.dir.y
+        const bl = Math.hypot(bx, by)
+        if (bl < 1e-6 || Math.abs((S.dir.x * bx + S.dir.y * by) / bl) < cosTip) continue
+        vs.push([ia, ib])
+      }
+      if (vs.length === 1) corner2 = vs[0]
+    }
+    if (corner2 && !onFill) {
+      pairUp(corner2[0], corner2[1])
+      cornerJoin.add(`${ends[corner2[0]].run}${ends[corner2[0]].side}`)
+      cornerJoin.add(`${ends[corner2[1]].run}${ends[corner2[1]].side}`)
+      cornerPair = [corner2[0], corner2[1]]
     }
     // A through pair where other arms END (a T's bar, a sail edge passing the top of a
     // wall) is not a symmetric crossing: the medial axis of the bar bends toward the stem
@@ -814,6 +874,8 @@ export function assembleStrokes(
       usedFill.add(c.j)
       partner.set(fillEnds[c.i].key, fillEnds[c.j].key)
       partner.set(fillEnds[c.j].key, fillEnds[c.i].key)
+      acrossFill.add(fillEnds[c.i].key)
+      acrossFill.add(fillEnds[c.j].key)
     }
   }
 
@@ -961,9 +1023,26 @@ export function assembleStrokes(
             pts.push(p)
             ws.push(NaN)
           }
+        } else if (acrossFill.has(`${r}${leaveSide}`) && pts.length) {
+          // Across a fill: a straight chord under it, never through a junction inside the
+          // fill (the head's own thicket), whose meet is off the stroke's line.
+          const t = trimmed(nr)
+          const q = ns === 'a' ? t.pts[0] : t.pts[t.pts.length - 1]
+          for (const p of lineBridge(pts[pts.length - 1], q)) {
+            pts.push(p)
+            ws.push(NaN)
+          }
         } else if (leaveNode >= 0 && cutBack(`${r}${leaveSide}`)) {
-          pts.push(junctionAt.get(leaveNode)!)
-          ws.push(NaN)
+          // Through the meet, sampled every pixel on both chords: the smoothing before the
+          // fit counts its σ in POINTS, and a lone meet between two arms cut back a zone
+          // apart was averaged into the chord — an arrowhead's V came back a smile.
+          const J = junctionAt.get(leaveNode)!
+          const t = trimmed(nr)
+          const q = ns === 'a' ? t.pts[0] : t.pts[t.pts.length - 1]
+          for (const p of [...lineBridge(pts[pts.length - 1], J), J, ...lineBridge(J, q)]) {
+            pts.push(p)
+            ws.push(NaN)
+          }
         }
         if (nr === startRun && ns === startSide) {
           closed = true
