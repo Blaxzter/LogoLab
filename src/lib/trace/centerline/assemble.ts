@@ -31,7 +31,7 @@
 import type { PathItem, SubPath, Vec } from '../../path/types'
 import type { PlanarFitOptions } from '../planarFit/options.ts'
 import type { StrokeRun } from './blobs.ts'
-import { applyEnd, outwardTangent, readEnd, type CapKind, type EndRead } from './ends.ts'
+import { applyEnd, dropEndHook, outwardTangent, readEnd, type CapKind, type EndRead } from './ends.ts'
 import { armLineOf, fitClosedCentreline, fitOpenCentreline, type FitContext } from './fit.ts'
 import type { SkeletonGraph } from './graph.ts'
 import type { Hole } from './holes.ts'
@@ -1126,7 +1126,18 @@ export function assembleStrokes(
     }
     let capA: CapKind = 'butt'
     let capB: CapKind = 'butt'
-    let P = pts
+    // A free end's hook (its corner pixels kept by thinning) goes before the end is read.
+    // Only a FLAT end has corners to curl into, so the hook is cut only when the end it
+    // leaves reads flat; a round end, or a curve's end, keeps every point.
+    let body = pts
+    const unhook = (side: 'a' | 'b', r: number): void => {
+      const cut = dropEndHook(body, side, r)
+      if (cut !== body && readEnd(cut, side, r, f, blobMask, false).cap === 'butt') body = cut
+    }
+    if (!startAtJunction && !(startSide === 'a' ? run0.blobAtA : run0.blobAtB)) unhook('a', halfWidthNear(ws, W))
+    if (!endAtJunction && !(endSide === 'a' ? runs[endRun].blobAtA : runs[endRun].blobAtB))
+      unhook('b', halfWidthNear(ws.slice().reverse(), W))
+    let P = body
     // A free flat end, kept so it can be re-placed if the path goes out round (below).
     type FlatEnd = { read: EndRead; t: Vec; r: number }
     let readA: EndRead | null = null
@@ -1167,7 +1178,7 @@ export function assembleStrokes(
         cap: 'round',
         advance: e.read.advance - e.r,
       })
-      P = pts
+      P = body
       if (readA) P = applyEnd(P, 'a', flatA ? pulled(flatA) : readA)
       if (readB) P = applyEnd(P, 'b', flatB ? pulled(flatB) : readB)
     }
