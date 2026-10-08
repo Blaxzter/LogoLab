@@ -7424,6 +7424,17 @@ arrowhead commit and each with its own pair:
   end would otherwise lose points to its own curvature. la-hairline@2048: missed 3.93 → 0,
   centre p95 0.67 → 0.31 px, every line ends square on its authored point. Pair
   `before-end-hook` ⇄ `after-end-hook`.
+* **A Y nothing crosses left wedges.** A stroke whose two ends both sit on junctions read
+  no cap and went out butt. Where a pair runs through the node that end is buried in its
+  ink, but where nothing pairs — a generated mail icon whose V ends ON the rect's rounded
+  corner: top, side and V at one node, no two in line — the three butt ends left notches
+  between them. Such a stroke now goes out round when neither of its nodes is crossed by a
+  through pair; a crossed node keeps butt, because a round end bulges past the through
+  stroke wherever the node sits off its centre (the first, unconditional version put knobs
+  under a printer's bar). Fixture `la-y-corner`, on `KNOWN_DEFECTS` for what is left: the
+  rect is still not paired round that corner, so it comes back as two open strokes with
+  the corner arc cut to a chord (`ends`). Pair `before-junction-caps` ⇄
+  `after-junction-caps`.
 
 #### Census and pairs
 
@@ -7439,6 +7450,7 @@ lanes, every outline lane byte-identical:
 | `before-line-hybrid` ⇄ `after-line-hybrid` | la-hybrid.line |
 | `before-weld-chords` ⇄ `after-weld-chords` | 5 line (cup, curves, junctions, loops, score), 3 cline (cl-loops, cl-paper, doodle) |
 | `before-end-hook` ⇄ `after-end-hook` | la-hairline.line |
+| `before-junction-caps` ⇄ `after-junction-caps` | la-y-corner.line (the fixture is on both stamps) |
 
 The whole branch is one entry, `before-icon-set` ⇄ `after-icon-set` (refreshed after the
 review fixes): 19 line and 9 cline traces move, every outline lane byte-identical.

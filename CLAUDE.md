@@ -408,7 +408,7 @@ pairing across a fill (§39.6); `before-line-2048` ⇄ `after-line-2048` is the 
 the lane's real resolution — the flare cap and the surrounded-island rule that closed the
 holes 2048 exposed in a note head (§39.7). The icon-set field report (§39.8) is four pairs:
 `-line-junctions`, `-line-stubs`, `-line-arrows`, `-line-hybrid`, and its review two more:
-`-weld-chords`, `-end-hook`.
+`-weld-chords`, `-end-hook`; `-junction-caps` is a Y junction nothing crosses (round ends).
 
 **What the icon-set field report taught the engine (§39.8)**, each easy to undo:
 

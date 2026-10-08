@@ -65,6 +65,13 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // 39 sub-pixel misses along the top staff line at the barline's T averaged it to 0.81.
   // The tangent bridge at that T covers them; the 5 stem-top samples now average 2.38.
   'la-score@512': 'missed: the 3 px stem-top apex miss the barline T fix no longer averages away (§39.8)',
+  // A V ending ON a rect's rounded corner (the style-reference sheet's mail): top, side
+  // and V meet at one node and no two are in line, so nothing pairs and the rect comes
+  // back as two open strokes, its corner arc cut to a chord into the node. The wedges
+  // the butt ends left there are filled (round caps on a junction nothing crosses); the
+  // pairing is open.
+  'la-y-corner@512': 'ends: the rect is not paired round the corner the V ends on — two open strokes, a chord',
+  'la-y-corner@2048': 'ends: the same corner, the same two strokes',
 }
 
 for (const RES of RESOLUTIONS)

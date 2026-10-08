@@ -338,6 +338,31 @@ const SYNTHETIC: Case[] = [
     },
   },
   {
+    name: 'la-y-corner',
+    note: 'an envelope whose V ends ON the rounded corners (as a generated mail icon draws it, not as Lucide does): top, side and V meet with no two in line, so no stroke runs through the junction to cover the ends',
+    make: () => {
+      const x = 40
+      const y = 64
+      const w = 176
+      const r = 23
+      // The V's ends: 70° round each corner arc from the top (near where the side starts),
+      // on the rect's centreline; its arms fall at 34°. The style-reference sheet's mail.
+      const t = (70 * Math.PI) / 180
+      const ex = r - r * Math.sin(t)
+      const ey = r - r * Math.cos(t)
+      const vy = y + ey + (w / 2 - ex) * Math.tan((34 * Math.PI) / 180)
+      return svg(
+        strokes(
+          16,
+          'round',
+          'round',
+          path(roundedRect(x, y, w, 128, r)) +
+            path(`M${f(x + ex)},${f(y + ey)} L128,${f(vy)} L${f(x + w - ex)},${f(y + ey)}`),
+        ),
+      )
+    },
+  },
+  {
     name: 'la-hybrid',
     note: 'a QR-like block of filled modules and a bold caption ("Pro Shop", Inter Bold outlines) beside clean strokes: block and caption come back as fills, the strokes — and the finder squares, clean square rings — as strokes',
     make: () => {

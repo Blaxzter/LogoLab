@@ -307,6 +307,10 @@ export const AB_LINE_ART_CASES: AbCorpusCase[] = [
   lineArt('la-cup', '⌇ la-cup — a trophy crossed by a putter: crossings beside a junction and a curve'),
   lineArt('la-stubs', '⌇ la-stubs — faint texture on thick strokes (no stubs) beside dashes and dots (kept)'),
   lineArt('la-arrows', '⌇ la-arrows — thick arrowheads: arms 2–3 widths long meet a stem at one tip'),
+  lineArt(
+    'la-y-corner',
+    '⌇ la-y-corner — an envelope whose V ends ON the rounded corners: Y junctions nothing runs through',
+  ),
   lineArt('la-hybrid', '⌇ la-hybrid — a QR-like block (fills) beside clean strokes (strokes)'),
   lineArt('lucide-house', '◎ Lucide house — a door inside a roof: a closed outline with a T on each side'),
   lineArt('lucide-bell', '◎ Lucide bell — one long symmetric sweep, a tiny clapper arc'),

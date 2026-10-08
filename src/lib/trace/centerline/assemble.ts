@@ -1054,6 +1054,18 @@ export function assembleStrokes(
     }
   }
 
+  // Nodes some paired stroke passes THROUGH (both of the pair's ends on that node).
+  const crossed = new Set<number>()
+  for (const [key, other] of partner) {
+    const node = endNode(key)
+    if (node >= 0 && node === endNode(other)) crossed.add(node)
+  }
+  function endNode(key: string): number {
+    const run = runs[Number(key.slice(0, -1))]
+    return key.endsWith('a') ? run.a : run.b
+  }
+  const crossedAt = (node: number): boolean => crossed.has(node)
+
   const follow = (startRun: number, startSide: 'a' | 'b'): void => {
     // Walk from an end: enter the run at `startSide`, leave at the other side, hop to
     // the partner run, until an unpaired end (or the start again, for a loop).
@@ -1216,6 +1228,14 @@ export function assembleStrokes(
       P = body
       if (readA) P = applyEnd(P, 'a', flatA ? pulled(flatA) : readA)
       if (readB) P = applyEnd(P, 'b', flatB ? pulled(flatB) : readB)
+    }
+    // Both ends on junctions and neither is crossed by a stroke running through it (a Y:
+    // a V meeting a rect ON its rounded corner, no two arms in line). Nothing there
+    // covers a butt end, so the arms leave wedges between them; round fills the meet.
+    // Where a pair DOES run through, it buries the butt end, and a round one would bulge
+    // past it wherever the node sits off the through-stroke's centre.
+    if (startAtJunction && endAtJunction && !crossedAt(enterNode0) && !crossedAt(runs[endRun][endSide])) {
+      capA = capB = 'round'
     }
     emit(P, ws, false, capA, capB)
   }
