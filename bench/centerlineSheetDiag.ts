@@ -130,7 +130,8 @@ export function stubCensus(doc: EditableDoc): StubCensus {
   let abs = 0
   let rel = 0
   const relList: StubCensus['relList'] = []
-  const near = (p: Vec, q: { pts: Vec[] }, d: number): boolean => q.pts.some((r) => Math.hypot(r.x - p.x, r.y - p.y) <= d)
+  const near = (p: Vec, q: { pts: Vec[] }, d: number): boolean =>
+    q.pts.some((r) => Math.hypot(r.x - p.x, r.y - p.y) <= d)
   for (let i = 0; i < lines.length; i++) {
     const L = lines[i]
     let x0 = Infinity
@@ -154,7 +155,12 @@ export function stubCensus(doc: EditableDoc): StubCensus {
     const len = polyLen(L.pts)
     if (nw > 0 && L.w < 0.6 * nw && (len < nw || argv.includes('--thin'))) {
       rel++
-      relList.push({ len: Math.round(len * 10) / 10, w: L.w, nw, at: `${L.pts[0].x.toFixed(0)},${L.pts[0].y.toFixed(0)}` })
+      relList.push({
+        len: Math.round(len * 10) / 10,
+        w: L.w,
+        nw,
+        at: `${L.pts[0].x.toFixed(0)},${L.pts[0].y.toFixed(0)}`,
+      })
     }
   }
   return { strokes: lines.length, abs, rel, relList }
@@ -213,7 +219,8 @@ function look(
   if (st.split.blobMask)
     for (let py = y; py < y + h; py++)
       for (let px = x; px < x + w; px++)
-        if (st.split.blobMask[py * W + px]) body += `<rect x="${px}" y="${py}" width="1" height="1" fill="#2563eb" opacity="0.25"/>`
+        if (st.split.blobMask[py * W + px])
+          body += `<rect x="${px}" y="${py}" width="1" height="1" fill="#2563eb" opacity="0.25"/>`
   // Skeleton chains, one hue each.
   st.graph.chains.forEach((c, i) => {
     if (!c.alive) return
@@ -300,7 +307,11 @@ function componentRows(
         a.ws.push(l.w[k])
         continue
       }
-      const nearNode = [l.a, l.b].some((id) => id >= 0 && Math.hypot(l.pts[k].x - g.nodes[id].x - 0.5, l.pts[k].y - g.nodes[id].y - 0.5) < g.nodes[id].r + 1.5)
+      const nearNode = [l.a, l.b].some(
+        (id) =>
+          id >= 0 &&
+          Math.hypot(l.pts[k].x - g.nodes[id].x - 0.5, l.pts[k].y - g.nodes[id].y - 0.5) < g.nodes[id].r + 1.5,
+      )
       if (!nearNode) a.nan++
     }
     if (!l.closed) {
@@ -409,7 +420,13 @@ function fixtureJob(svgPath: string): Job {
   const svg = readFileSync(svgPath, 'utf8')
   const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: res }, background: 'white' }).render().asPng())
   const plan = decideInkMode(img, 128, { colorMode: 'mono' })
-  const opts = { ...DEFAULT_VECTORIZE_OPTIONS, mode: 'mono' as const, centerline: true, threshold: plan.threshold, invert: plan.invert }
+  const opts = {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    mode: 'mono' as const,
+    centerline: true,
+    threshold: plan.threshold,
+    invert: plan.invert,
+  }
   return { stem: basename(svgPath, '.svg'), n: 1, row: 0, col: 0, input: img, opts }
 }
 
@@ -421,7 +438,10 @@ async function sheetJobs(sheetPath: string): Promise<Job[]> {
     background && !background.transparent ? { r: background.r, g: background.g, b: background.b, a: 255 } : null
   const base = baseOptions({ strokes: true, removeBackground: true })
   const tiles = detection.tiles.filter((t) => t.kind === 'icon')
-  const stem = basename(sheetPath).replace(/\.[^.]+$/, '').replace(/^Gemini_Generated_Image_/, '').slice(0, 6)
+  const stem = basename(sheetPath)
+    .replace(/\.[^.]+$/, '')
+    .replace(/^Gemini_Generated_Image_/, '')
+    .slice(0, 6)
   const jobs: Job[] = []
   for (let i = 0; i < tiles.length; i++) {
     const n = i + 1
@@ -442,7 +462,12 @@ for (const sheetPath of sheets) {
     const doc = await traceImage(input as unknown as ImageData, opts)
     // The same engine once more, with the diagnostic sinks attached (fills skipped).
     const despeckle = Math.max(0, Math.min(100, opts.despeckle))
-    const seg = monoLabels(input, opts.threshold, opts.invert === true, Math.max(1, Math.round((despeckle / 100) ** 2 * 64)))
+    const seg = monoLabels(
+      input,
+      opts.threshold,
+      opts.invert === true,
+      Math.max(1, Math.round((despeckle / 100) ** 2 * 64)),
+    )
     let stages: CenterlineStages | null = null
     const junctions: JunctionDiag[] = []
     const diag = traceCenterline({
@@ -465,7 +490,15 @@ for (const sheetPath of sheets) {
       const px = rasterizeDoc(ink, input.width, input.height)
       const drawn = new Uint8Array(input.width * input.height)
       for (let i = 0; i < drawn.length; i++) drawn[i] = px[i * 4] < 128 ? 1 : 0
-      componentRows(`${stem}-${String(n).padStart(2, '0')}`, seg.labels, input.width, input.height, stages, diag.report.strokeWidth, drawn)
+      componentRows(
+        `${stem}-${String(n).padStart(2, '0')}`,
+        seg.labels,
+        input.width,
+        input.height,
+        stages,
+        diag.report.strokeWidth,
+        drawn,
+      )
     }
     const near = flag('--near')
     if (near) {
@@ -473,8 +506,14 @@ for (const sheetPath of sheets) {
       for (const j of junctions) {
         if (Math.hypot(j.at.x - nx, j.at.y - ny) > nr) continue
         const deg = (v: Vec): string => ((Math.atan2(v.y, v.x) * 180) / Math.PI).toFixed(0)
-        console.log(`  junction @${j.at.x.toFixed(0)},${j.at.y.toFixed(0)} meet ${j.meet.x.toFixed(0)},${j.meet.y.toFixed(0)}${j.welded ? ' welded' : ''} through ${JSON.stringify(j.through)} corner ${JSON.stringify(j.corner)} dropped ${JSON.stringify(j.dropped)}`)
-        j.arms.forEach((a, i) => console.log(`    arm ${i}: run ${a.run}${a.side} dir ${deg(a.dir)}° at ${a.at.x.toFixed(0)},${a.at.y.toFixed(0)} ${a.ok ? 'ok' : 'UNREAD'} len ${a.len.toFixed(0)}`))
+        console.log(
+          `  junction @${j.at.x.toFixed(0)},${j.at.y.toFixed(0)} meet ${j.meet.x.toFixed(0)},${j.meet.y.toFixed(0)}${j.welded ? ' welded' : ''} through ${JSON.stringify(j.through)} corner ${JSON.stringify(j.corner)} dropped ${JSON.stringify(j.dropped)}`,
+        )
+        j.arms.forEach((a, i) =>
+          console.log(
+            `    arm ${i}: run ${a.run}${a.side} dir ${deg(a.dir)}° at ${a.at.x.toFixed(0)},${a.at.y.toFixed(0)} ${a.ok ? 'ok' : 'UNREAD'} len ${a.len.toFixed(0)}`,
+          ),
+        )
       }
     }
     if (near && stages) {
@@ -485,8 +524,11 @@ for (const sheetPath of sheets) {
         if (d > nr) continue
         const ws = Array.from(r.w).filter(Number.isFinite)
         const len = polyLen(r.pts)
-        const node = (id: number): string => (id < 0 ? 'free' : `n${id}(r${st.graph.nodes[id].r.toFixed(1)}${st.graph.nodes[id].welded ? ',w' : ''})`)
-        console.log(`  run ${node(r.a)}→${node(r.b)} len ${len.toFixed(1)} pts ${r.pts.length} w̃ ${ws.length ? ws.sort((a, b) => a - b)[ws.length >> 1].toFixed(2) : '—'} [${ws.map((w) => w.toFixed(1)).join(' ')}] blob ${r.blobAtA ? 'A' : ''}${r.blobAtB ? 'B' : ''} from ${r.pts[0].x.toFixed(0)},${r.pts[0].y.toFixed(0)} to ${r.pts[r.pts.length - 1].x.toFixed(0)},${r.pts[r.pts.length - 1].y.toFixed(0)}`)
+        const node = (id: number): string =>
+          id < 0 ? 'free' : `n${id}(r${st.graph.nodes[id].r.toFixed(1)}${st.graph.nodes[id].welded ? ',w' : ''})`
+        console.log(
+          `  run ${node(r.a)}→${node(r.b)} len ${len.toFixed(1)} pts ${r.pts.length} w̃ ${ws.length ? ws.sort((a, b) => a - b)[ws.length >> 1].toFixed(2) : '—'} [${ws.map((w) => w.toFixed(1)).join(' ')}] blob ${r.blobAtA ? 'A' : ''}${r.blobAtB ? 'B' : ''} from ${r.pts[0].x.toFixed(0)},${r.pts[0].y.toFixed(0)} to ${r.pts[r.pts.length - 1].x.toFixed(0)},${r.pts[r.pts.length - 1].y.toFixed(0)}`,
+        )
       }
     }
     let fills = 0
@@ -512,7 +554,8 @@ for (const sheetPath of sheets) {
       routed: diag.report.routed,
       nodes,
     })
-    if (argv.includes('--stubs') && stubs.relList.length) console.log(`  ${stem}-${n} rel stubs`, JSON.stringify(stubs.relList))
+    if (argv.includes('--stubs') && stubs.relList.length)
+      console.log(`  ${stem}-${n} rel stubs`, JSON.stringify(stubs.relList))
     const name = `${stem}-${String(n).padStart(2, '0')}`
     writeFileSync(join(outDir, `${name}.svg`), serializeDoc(doc, 2))
     writeFileSync(join(outDir, `${name}.png`), strip(input, doc, Math.min(600, Math.max(300, input.width))))
@@ -523,7 +566,20 @@ for (const sheetPath of sheets) {
 
 if (json) console.log(JSON.stringify(rows, null, 1))
 else {
-  console.log('tile'.padEnd(12) + 'r,c'.padStart(6) + 'res'.padStart(6) + 'W'.padStart(7) + 'strokes'.padStart(8) + 'abs'.padStart(5) + 'rel'.padStart(5) + 'fills'.padStart(6) + 'fill%'.padStart(7) + 'junc'.padStart(6) + 'rt'.padStart(4) + 'nodes'.padStart(7))
+  console.log(
+    'tile'.padEnd(12) +
+      'r,c'.padStart(6) +
+      'res'.padStart(6) +
+      'W'.padStart(7) +
+      'strokes'.padStart(8) +
+      'abs'.padStart(5) +
+      'rel'.padStart(5) +
+      'fills'.padStart(6) +
+      'fill%'.padStart(7) +
+      'junc'.padStart(6) +
+      'rt'.padStart(4) +
+      'nodes'.padStart(7),
+  )
   for (const r of rows)
     console.log(
       `${r.sheet}-${String(r.tile).padStart(2, '0')}`.padEnd(12) +
@@ -540,5 +596,7 @@ else {
         String(r.nodes).padStart(7),
     )
   const sum = (k: keyof Row): number => rows.reduce((s, r) => s + (r[k] as number), 0)
-  console.log(`\n${rows.length} tiles: ${sum('strokes')} strokes, abs-flagged ${sum('abs')}, rel-flagged ${sum('rel')}, ${sum('fills')} fills, ${sum('nodes')} nodes`)
+  console.log(
+    `\n${rows.length} tiles: ${sum('strokes')} strokes, abs-flagged ${sum('abs')}, rel-flagged ${sum('rel')}, ${sum('fills')} fills, ${sum('nodes')} nodes`,
+  )
 }

@@ -87,9 +87,7 @@ function caption(text: string, x: number, y: number, size: number, weight: numbe
   const face = faceFromBytes(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
   const data = replaceText(newTextData({ x, y }, size, { weight }), 0, 0, text)
   const group = makeTextGroup('caption', data, () => ({ face, synthItalic: false }))
-  return group.children
-    .map((c) => (c.kind === 'path' ? `<path d="${subPathsToD(c.subPaths, 3)}"/>` : ''))
-    .join('')
+  return group.children.map((c) => (c.kind === 'path' ? `<path d="${subPathsToD(c.subPaths, 3)}"/>` : '')).join('')
 }
 
 /** One S-curve, its own width — the ladder's repeating unit. */
@@ -260,7 +258,8 @@ const SYNTHETIC: Case[] = [
         const a = (deg * Math.PI) / 180
         const u = { x: Math.cos(a), y: Math.sin(a) }
         const n = { x: -u.y, y: u.x }
-        const at = (side: number, t: number) => `${f(cx + side * h * n.x + t * u.x)},${f(cy + side * h * n.y + t * u.y)}`
+        const at = (side: number, t: number) =>
+          `${f(cx + side * h * n.x + t * u.x)},${f(cy + side * h * n.y + t * u.y)}`
         body += path(`M${at(1, h)} L${at(1, tip)} L${at(-1, tip)} L${at(-1, h)}`)
       }
       return svg(strokes(9, 'round', 'round', `<circle cx="${cx}" cy="${cy}" r="${R}"/>` + body))
@@ -308,8 +307,18 @@ const SYNTHETIC: Case[] = [
           texture +
           // A thin line hanging off the bar: thinner than the bar, but long — a stroke.
           strokes(2.5, 'round', 'round', path('M212,46 V120')) +
-          strokes(2.5, 'butt', 'round', path(Array.from({ length: 12 }, (_, i) => `M${f(20 + i * 18)},170 h9`).join(' '))) +
-          strokes(2.5, 'round', 'round', path(Array.from({ length: 6 }, (_, i) => `M${f(132 + i * 12)},${f(126 + (i % 2) * 8)} l3,2`).join(' '))) +
+          strokes(
+            2.5,
+            'butt',
+            'round',
+            path(Array.from({ length: 12 }, (_, i) => `M${f(20 + i * 18)},170 h9`).join(' ')),
+          ) +
+          strokes(
+            2.5,
+            'round',
+            'round',
+            path(Array.from({ length: 6 }, (_, i) => `M${f(132 + i * 12)},${f(126 + (i % 2) * 8)} l3,2`).join(' ')),
+          ) +
           fills(Array.from({ length: 6 }, (_, i) => `<circle cx="${f(40 + i * 32)}" cy="214" r="2.2"/>`).join('')),
       )
     },
@@ -354,16 +363,26 @@ const SYNTHETIC: Case[] = [
         return ((x ^ (x >>> 15)) & 7) < 4
       }
       let rects = ''
-      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (on(r, c)) rects += `<rect x="${x0 + c * M}" y="${y0 + r * M}" width="${M}" height="${M}"/>`
+      for (let r = 0; r < N; r++)
+        for (let c = 0; c < N; c++)
+          if (on(r, c)) rects += `<rect x="${x0 + c * M}" y="${y0 + r * M}" width="${M}" height="${M}"/>`
       // A finder's outer ring is a square ring one module wide: line art, and the answer
       // says so (a stroked square on its centreline).
       const rings = finders
-        .map(([fr, fc]) => `<rect x="${x0 + fc * M + M / 2}" y="${y0 + fr * M + M / 2}" width="${6 * M}" height="${6 * M}"/>`)
+        .map(
+          ([fr, fc]) =>
+            `<rect x="${x0 + fc * M + M / 2}" y="${y0 + fr * M + M / 2}" width="${6 * M}" height="${6 * M}"/>`,
+        )
         .join('')
       return svg(
         fills(rects + caption('Pro Shop', 18, 172, 30, 700)) +
           strokes(M, 'butt', 'miter', rings) +
-          strokes(5, 'round', 'round', `<circle cx="196" cy="62" r="34"/>` + path('M176,200 L194,218 L238,168') + path('M18,236 H238')),
+          strokes(
+            5,
+            'round',
+            'round',
+            `<circle cx="196" cy="62" r="34"/>` + path('M176,200 L194,218 L238,168') + path('M18,236 H238'),
+          ),
       )
     },
   },

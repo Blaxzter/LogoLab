@@ -374,7 +374,11 @@ function junctionClusters(
 }
 
 /** The connected parts of a set of nodes under the given links. */
-function splitCluster(nodes: number[], links: Set<number>, runs: StrokeRun[]): { nodes: number[]; links: Set<number> }[] {
+function splitCluster(
+  nodes: number[],
+  links: Set<number>,
+  runs: StrokeRun[],
+): { nodes: number[]; links: Set<number> }[] {
   const parent = new Map<number, number>(nodes.map((id) => [id, id]))
   const find = (i: number): number => {
     let r = i
@@ -419,7 +423,8 @@ function clusterPairs(
       if (cos < cosThrough) continue
       const ab = { x: B.at.x - A.at.x, y: B.at.y - A.at.y }
       if (ab.x * A.dir.x + ab.y * A.dir.y <= 0 || -(ab.x * B.dir.x + ab.y * B.dir.y) <= 0) continue
-      const tol = Math.max(1.5, 0.25 * (widthOfRun(runs[A.run], W) + widthOfRun(runs[B.run], W))) + 0.1 * Math.hypot(ab.x, ab.y)
+      const tol =
+        Math.max(1.5, 0.25 * (widthOfRun(runs[A.run], W) + widthOfRun(runs[B.run], W))) + 0.1 * Math.hypot(ab.x, ab.y)
       const off = Math.max(lateral(B.at, A.at, A.dir), lateral(A.at, B.at, B.dir)) / tol
       if (off > 1) continue
       cands.push({ i, j, off })
@@ -533,7 +538,11 @@ export function assembleStrokes(
       dead.add(S.run)
     }
   }
-  for (const [id, ends] of endsAt) endsAt.set(id, ends.filter((e) => !dead.has(e.run)))
+  for (const [id, ends] of endsAt)
+    endsAt.set(
+      id,
+      ends.filter((e) => !dead.has(e.run)),
+    )
 
   // Junction CLUSTERS first: several junctions joined by runs too short to leave their
   // zones (a stroke crossing two others a gap apart — a putter's double-line shaft — or
@@ -560,14 +569,23 @@ export function assembleStrokes(
       const links = new Set([...cl.links].filter((r) => r !== drop))
       for (const part of splitCluster(cl.nodes, links, runs)) {
         if (part.nodes.length < 2) continue
-        const key = part.nodes.slice().sort((a, b) => a - b).join(',')
+        const key = part.nodes
+          .slice()
+          .sort((a, b) => a - b)
+          .join(',')
         if (tried.has(key)) continue
         tried.add(key)
         queue.push(part)
       }
     }
   }
-  for (const cl of queue) tried.add(cl.nodes.slice().sort((a, b) => a - b).join(','))
+  for (const cl of queue)
+    tried.add(
+      cl.nodes
+        .slice()
+        .sort((a, b) => a - b)
+        .join(','),
+    )
   while (queue.length && budget-- > 0) {
     const cl = queue.shift()!
     if (cl.nodes.length > CLUSTER_MAX_NODES) {
@@ -642,7 +660,13 @@ export function assembleStrokes(
         const pB = runs[outer[j].run].pts[outer[j].keep]
         const l = dist(pA, pB)
         if (l < 1e-6) continue
-        const m = meetLines([{ at: e.at, dir: e.dir }, { at: pA, dir: { x: (pB.x - pA.x) / l, y: (pB.y - pA.y) / l } }], e.at)
+        const m = meetLines(
+          [
+            { at: e.at, dir: e.dir },
+            { at: pA, dir: { x: (pB.x - pA.x) / l, y: (pB.y - pA.y) / l } },
+          ],
+          e.at,
+        )
         const d = dist(m, nodePos(g, e.node))
         if (d < bd) {
           bd = d
@@ -692,7 +716,12 @@ export function assembleStrokes(
         // corner's arms: where an arrowhead's arms meet its stem at one tip, an arm two
         // widths long sits under this bar and was dropped as the tip of the corner the
         // other arm and the stem make (§39.8).
-        const stub = S.len <= 2 * node.r + 2 && !readsAsStroke(runs[S.run], [A, B].map((e) => widthOfRun(runs[e.run], W)))
+        const stub =
+          S.len <= 2 * node.r + 2 &&
+          !readsAsStroke(
+            runs[S.run],
+            [A, B].map((e) => widthOfRun(runs[e.run], W)),
+          )
         if (!stub) {
           if (!S.ok) continue
           const bx = A.dir.x + B.dir.x
@@ -1073,7 +1102,13 @@ export function assembleStrokes(
           const q = ns === 'a' ? t.pts[0] : t.pts[t.pts.length - 1]
           const eA = endOf.get(`${r}${leaveSide}`)!
           const eB = endOf.get(next)!
-          for (const p of hermiteBridge(pts[pts.length - 1], eA.dir, q, { x: -eB.dir.x, y: -eB.dir.y }, Math.max(1, W / 4))) {
+          for (const p of hermiteBridge(
+            pts[pts.length - 1],
+            eA.dir,
+            q,
+            { x: -eB.dir.x, y: -eB.dir.y },
+            Math.max(1, W / 4),
+          )) {
             pts.push(p)
             ws.push(NaN)
           }

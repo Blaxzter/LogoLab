@@ -80,7 +80,19 @@ export function readComponents(
   for (let s = 0; s < n; s++) {
     if (!ink[s] || comp[s] >= 0) continue
     const id = feats.length
-    const f: Feature = { x0: width, y0: height, x1: 0, y1: 0, px: 0, len: 0, ws: [], nodes: new Set(), ends: 0, strokes: 0, miss: 0 }
+    const f: Feature = {
+      x0: width,
+      y0: height,
+      x1: 0,
+      y1: 0,
+      px: 0,
+      len: 0,
+      ws: [],
+      nodes: new Set(),
+      ends: 0,
+      strokes: 0,
+      miss: 0,
+    }
     comp[s] = id
     stack.push(s)
     while (stack.length) {
@@ -136,7 +148,8 @@ export function readComponents(
       const a = pts[k]
       const b = pts[Math.min(pts.length - 1, k + 1)]
       const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)))
-      for (let s = 0; s < steps; s++) disc(drawn, width, height, a.x + ((b.x - a.x) * s) / steps, a.y + ((b.y - a.y) * s) / steps, r)
+      for (let s = 0; s < steps; s++)
+        disc(drawn, width, height, a.x + ((b.x - a.x) * s) / steps, a.y + ((b.y - a.y) * s) / steps, r)
     }
   })
   const away = new Uint8Array(n)
@@ -167,7 +180,8 @@ export function readComponents(
     if (spread >= TEXTURE_SPREAD && jd >= TEXTURE_JUNCTIONS) routed.set(c, 'texture')
     else if (lw <= SMALL_MARK_LW && f.miss >= BROKEN_MISS) routed.set(c, 'broken')
     const h = (f.y1 - f.y0 + 1) / wc[c]
-    if (lw <= SMALL_MARK_LW && h >= GLYPH_MIN_H && h <= GLYPH_MAX_H && f.x1 - f.x0 <= 2 * (f.y1 - f.y0 + 1)) small.push(c)
+    if (lw <= SMALL_MARK_LW && h >= GLYPH_MIN_H && h <= GLYPH_MAX_H && f.x1 - f.x0 <= 2 * (f.y1 - f.y0 + 1))
+      small.push(c)
   })
 
   // Captions: glyph-sized marks side by side on one line — sharing most of their height,

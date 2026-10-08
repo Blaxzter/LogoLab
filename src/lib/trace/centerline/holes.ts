@@ -49,7 +49,12 @@ export function roundHoles(ink: Uint8Array, width: number, height: number): Hole
       const y = (p / width) | 0
       if (x === 0 || y === 0 || x === width - 1 || y === height - 1) open = true
       let onEdge = false
-      for (const q of [x > 0 ? p - 1 : -1, x < width - 1 ? p + 1 : -1, y > 0 ? p - width : -1, y < height - 1 ? p + width : -1]) {
+      for (const q of [
+        x > 0 ? p - 1 : -1,
+        x < width - 1 ? p + 1 : -1,
+        y > 0 ? p - width : -1,
+        y < height - 1 ? p + width : -1,
+      ]) {
         if (q < 0) continue
         if (ink[q]) {
           onEdge = true
