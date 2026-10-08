@@ -1,0 +1,16 @@
+#!/bin/sh
+# What CI runs before the test suite, on the whole tree: typecheck, lint, format.
+# (The suite itself takes minutes; it stays CI's job.) Skip once with `git push --no-verify`.
+bin=node_modules/.bin
+[ -x "$bin/biome" ] || exit 0
+"$bin/tsc" -b --noEmit || { echo "pre-push: typecheck failed." >&2; exit 1; }
+"$bin/biome" lint --diagnostic-level=error . >/dev/null 2>&1 || {
+  "$bin/biome" lint --diagnostic-level=error . >&2
+  echo "pre-push: Biome lint failed." >&2
+  exit 1
+}
+"$bin/biome" format . >/dev/null 2>&1 || {
+  "$bin/biome" format . >&2
+  echo "pre-push: not formatted — run 'pnpm format' and commit." >&2
+  exit 1
+}
