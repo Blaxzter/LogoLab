@@ -61,7 +61,6 @@ const flat = (patch: Partial<VectorizeOptions> = {}): VectorizeOptions => ({
   ...patch,
 })
 const paths = (doc: EditableDoc) => doc.items.filter((it): it is PathItem => it.kind === 'path')
-const byFill = (doc: EditableDoc, hex: string) => paths(doc).filter((p) => p.fill === hex)
 const near = (fill: string, c: RGBA) => {
   const n = parseInt(fill.slice(1), 16)
   return Math.abs((n >> 16) - c[0]) + Math.abs(((n >> 8) & 255) - c[1]) + Math.abs((n & 255) - c[2]) < 40

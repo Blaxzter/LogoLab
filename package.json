@@ -14,6 +14,7 @@
     "url": "https://github.com/Blaxzter/LogoLab/issues"
   },
   "scripts": {
+    "prepare": "node -e \"try{require('node:child_process').execSync('git config core.hooksPath .githooks',{stdio:'ignore'})}catch{}\"",
     "dev": "vite",
     "gen:previews": "node bench/genControlPreviews.ts",
     "build": "node scripts/gen-previews.mjs && tsc -b && vite build",

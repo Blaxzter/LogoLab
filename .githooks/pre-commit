@@ -1,0 +1,15 @@
+#!/bin/sh
+# The CI's Biome steps (pnpm lint, pnpm format:check), on the STAGED files only — a second
+# or so. Every red CI run on record died here, minutes before the tests would have run.
+# Fix with `pnpm format` (formatting) or by hand (lint), re-stage, commit again.
+# Skip once with `git commit --no-verify`.
+biome=node_modules/.bin/biome
+[ -x "$biome" ] || exit 0
+"$biome" lint --staged --diagnostic-level=error --no-errors-on-unmatched || {
+  echo "pre-commit: Biome lint failed on staged files (CI's 'pnpm lint' would too)." >&2
+  exit 1
+}
+"$biome" format --staged --no-errors-on-unmatched || {
+  echo "pre-commit: staged files are not formatted — run 'pnpm format', re-stage, commit again." >&2
+  exit 1
+}
