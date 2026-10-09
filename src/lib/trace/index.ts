@@ -331,7 +331,7 @@ function healDebris(
 }
 
 /** Map the user fidelity dial onto the beautify pass. */
-function beautifyOptionsFor(options: VectorizeOptions): BeautifyOptions {
+export function beautifyOptionsFor(options: VectorizeOptions): BeautifyOptions {
   return {
     ...DEFAULT_BEAUTIFY_OPTIONS,
     fidelity: Math.max(0, options.fidelity ?? DEFAULT_BEAUTIFY_OPTIONS.fidelity),
@@ -343,7 +343,7 @@ const rgbToHex = (r: number, g: number, b: number): string =>
 
 /** Map the user dials onto the planar tracer's edge-fit tunables. More smoothing
  *  ⇒ more staircase pre-smoothing passes; ε stays at the default. */
-function planarFitOptionsFor(options: VectorizeOptions): PlanarFitOptions {
+export function planarFitOptionsFor(options: VectorizeOptions): PlanarFitOptions {
   const s = clamp(options.smoothing, 0, 100) / 100
   // smoothing 0 means no pre-smoothing at all (a raw staircase trace); the default
   // of 50 suits most art. Flat (gradients-off) art uses a higher line cost so curves

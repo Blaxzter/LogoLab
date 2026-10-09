@@ -7274,6 +7274,208 @@ one-pixel sliver of its rim above the pocket that the planar tracer pinches off 
 loop. At 512 the score's fill IoU moved 0.85 → 0.84 and nothing else in the census moved.
 The pair `before-line-2048` ⇄ `after-line-2048` holds it, at the new resolution.
 
+### 39.8 The icon-set field report: junctions, micro-stubs, hybrid output (2026-10-07)
+
+An agent turned ten Gemini icon sheets (2×4 grids of monoline icons, ~300 px tiles) and
+one 58-icon contact sheet (~86 px tiles with captions) into a set with `split_icon_sheet`
++ `strokes`, and wrote down what came back wrong. The API half was fixed in a3b3f6d; this
+is the tracer half. The witness is `bench/centerlineSheetDiag.ts`, which runs a sheet (or
+a fixture) through the sheet's own pipeline, with a junction/skeleton zoom (`--look`), a
+run dump (`--near`), a stub census (`--stubs`) and a per-component dump (`--components`).
+The sheets are not in the repo.
+
+**The gate learned to see a broken junction.** An X traced as two Vs has the ends and
+paths of an X, and every point of it lies on some authored stroke, so neither the topology
+counts nor the centre error notices. `turns` (`centerlineScore.ts`) counts the traced paths
+that leave one authored stroke for another anywhere but an end-to-end join, read over runs
+of 1.5 W so the instant at a crossing where the other stroke is nearer does not count. It
+reads 0 on all twenty earlier cases at both resolutions. Five fixtures, one per mechanism:
+`la-hub` (a windmill hub: four sails meet a ring of centreline radius 1.4 W in V pairs on
+the ring), `la-cup` (a trophy crossed by a putter whose shaft is a double line with a 1 u
+gap), `la-stubs` (faint texture on thick strokes beside a long thin line, dashes and dots;
+the texture is `data-ground="none"`, drawn and never scored), `la-arrows` (arrowheads
+whose arms run 2, 2.5 and 3 widths from the tip) and `la-hybrid` (a QR block and a bold
+caption, Inter outlines laid out by the app's own HarfBuzz engine, beside clean strokes).
+
+#### Junctions
+
+* **A ring is read from its hole.** Read a zone's length back round a ring of 1.4 W, its
+  two halves' tangents turn 60° through the junction and never pair, and each pairs with a
+  sail ending there: the hub came back as chords crossed by sails. A joint circle fit
+  through both arms does not rescue it — on the windmills the strokes' ink merges with
+  the ring's and the skeleton between junctions is a CHORD (sagitta 0); two chords at a
+  junction are exactly what a corner looks like to the skeleton. The round hole the ring
+  encloses (`holes.ts`: an enclosed paper component whose edge fits a circle and whose area
+  is that disc's) says it. Two arms lying along the hole's edge grown by W/2 (within
+  0.2 W — the two windmills sit 0.11 W and 0.155 W off), from opposite sides, are one
+  stroke: bridged along the circle, ranked above any tangent pair, the other arms ending
+  ON the ring, and a run paired along the same ring at both ends projected onto it.
+* **A bar is not bent toward its stem.** A through pair at a junction where other arms end
+  is cut back to its zone and joined by a Hermite bridge along the two arms' tangents; kept,
+  the medial axis bent toward the stem and drew a notch in every straight edge passing a
+  T (the sails at the tower's walls). This moved every Lucide case that has a T, all toward
+  the answer: git-branch@2048 2.42 → 1.85 px with 45 → 26 nodes, search 0.55 → 0.14 px.
+* **Junctions that never leave each other's zones are one junction.** A putter's double
+  shaft crossed by its club line thins into three junctions 9–21 px apart (84 px at 2048:
+  a 36° crossing splits w / sin θ wide), and read one by one the links between them were
+  taken for arms: the bowl came back as a V, the shaft ran into the stem. Read as one, only
+  the OUTER arms pair, by direction AND by lying on one line, ranked by that line fit — the
+  shaft's two lines a gap apart are equally straight with their own continuation and with
+  the other's (lateral 1.7 px against 9 px). A cluster is accepted only where the pairs'
+  bridges cover every link they replace, a rejected one is split link by link, a ring's
+  arcs are never links (straight sails pass within half a width of a small ring's quarter
+  arcs and would take the ring for their crossing — the first version deleted la-hub's
+  ring), and the search is bounded (6 nodes, 256 readings: a lattice of junctions has as
+  many node subsets as it likes).
+* **An arrowhead.** The report's download icon lost an arm, two ways. Zhang–Suen's
+  deletion test (2 ≤ B ≤ 6) erases 2-pixel-thick diagonal lines entirely — the flaw Lü and
+  Wang pointed out in 1986 — and a thick diagonal stroke passes through that stage as it is
+  peeled: the arm had no skeleton past its first 41 px. `thin.ts` takes their fix
+  (3 ≤ B ≤ 6). And the tip-spur rule dropped any third arm shorter than 2 r + 2 "whatever
+  its two pixels read"; an arm that reads a full stroke width along it is now held to the
+  bisector test. Three arms with exactly one on the bisector of the other two now read as a
+  V with a stem ending at its apex (la-junctions' Y matches its authored V + stem: ends /
+  paths +2/+1 → 0/0); a corner join's chords are sampled every pixel (the smoothing counts
+  σ in points, and a lone meet was averaged into a smile); a pair across a fill is bridged
+  straight, never through a junction inside the fill.
+
+What was left: **la-cup@2048** kept two turns, read as the 36° crossing's merged ink running
+past every junction zone. That reading was wrong — the two turns were a bogus WELD (below,
+"A split crossing welded five widths apart"), and the cup passes every gate at both
+resolutions since.
+
+**la-score@512 is listed against "only shrinks", knowingly.** Its 3 px miss at the last
+stem's top (the flag's corner apex stops short of the ink's tip — the §39.4 apex rule) was
+always there. `missed` is a mean over the MISSED samples, and 39 sub-pixel misses along the
+top staff line at the barline's T averaged it to 0.81; the tangent bridge covers them and
+the 5 stem-top samples read 2.15 alone. A mean over missed samples can rise when coverage
+improves; the measure is worth a second look, not a quiet re-calibration.
+
+#### Micro-stubs
+
+The report's "6-px path with stroke-width 2.66 beside 8.5-px strokes" is a branch off a
+junction on a golf ball's outline into the faint dimple texture beside it: pruning keeps it
+(it reaches past the junction's radius) and the profile reads its partial coverage as a
+quarter-width stroke. The census over 134 tiles, every thin stroke touching a thicker one:
+
+| | width / neighbour's | length / neighbour's width |
+|---|---|---|
+| the stubs (envelope, Pro Shop card, alert triangle balls) | 0.22–0.31 | 1.8–2.4 |
+| thinner strokes an icon really draws (a bag inside a box, a pencil's ferrule) | 0.53–0.6 | many |
+| long thin strokes | 0.3–0.55 | 6–160 |
+
+The first guess — "shorter than the neighbour's width" — catches none of the stubs (the
+absolute bbox rule flags 45 of 330 strokes on the Gemini sheets, all dashes, dots and
+dimples). A run with a free far end at a junction is dropped, before any pairing, when it
+is no wider than 0.4 of the strokes it hangs off and no longer than 3 of their widths
+(`STUB_WIDTH_K`, `STUB_LEN_K`). A dash touches nothing and stays. Three sheet tiles change,
+all golf balls: each a clean ring with its dimple dots.
+
+#### Hybrid output
+
+`confidence.ts` reads every ink COMPONENT after assembly and sends a whole one to the
+fills when its strokes are not to be trusted. The brief's three features measured on
+components: width spread and lopsided share separate a QR block, but NOT caption letters —
+letters are strokes, 4–7 widths tall, whose centreline topology goes ambiguous; they read
+spread 1.1–1.5, lopsided ≤ 0.11, like clean icons. Render IoU does not separate either at
+these resolutions (icon parts 0.74–0.89, letters 0.62–0.81; the anti-aliased edge
+dominates). What does is the share of a component's ink its strokes, drawn at their widths,
+leave further than a fifth of a width away: clean icon parts 0.000–0.019, QR modules
+0.15–0.42, and exactly the mangled letters ('g', 'd', 'P', 'h': 0.12–0.18; 'o', 'S', 'l'
+read 0.000 and are not mangled). Alone it is too blunt — a long chevron missing its miter
+tip reads 0.17, a trash can that lost its lid handle 0.08 — so three readings:
+
+* **texture**: spread ≥ 2.2 AND junction density ≥ 0.2 (every QR; a width ladder, a thin
+  line off a bar, target rings read ≤ 0.11 junctions per width);
+* **broken**: miss ≥ 0.08 on a mark of ≤ 20 widths of skeleton (letters, a keyhole read as
+  a bar, slider lines the strokes lost);
+* **caption**: three or more glyph-sized marks in a row, ONE of them broken, go together.
+  Without the broken member the rule routed a broadcast icon's arcs, a link's pieces and a
+  trash can's bars.
+
+la-hybrid's answer authors the QR finder rings as stroked squares — a clean square ring is
+line art and stays a stroke — with the raster pixel-identical. On the sheets 20 tiles route
+something: every QR, the captions, the list's and scorecard's digits, two keyholes; of the
+80 clean Gemini icons only those keyholes and one 3 px "T" (which renders the same).
+
+#### The A/B review
+
+Two things the review of `before-icon-set` ⇄ `after-icon-set` found, both introduced by the
+arrowhead commit and each with its own pair:
+
+* **A welded crossing went through its meet.** Sampling a corner join's chords every pixel
+  applied to every cut-back pair, WELDED through pairs included, and la-junctions' 33° X
+  (@2048) came back as two bent arms with near-horizontal chords through the junction. The
+  arms were cut back only to the node's zone, but at a split crossing the skeleton bends
+  toward the other stroke for as long as its ink is within reach — at 33° about 1.4 widths
+  out. Each through pair at a welded node is now cut back past every point within one width
+  of another through stroke's line (`WELD_REACH_W`, at most `WELD_CUT_MAX_W` = 4 widths,
+  never past the run's middle), its line re-read there, and joined along it by the Hermite
+  bridge a T's bar gets. The X is two straight lines (54 → 42 nodes); cl-loops had the
+  same cause — its interlocked rings come back as circles, four arcs each, and the centre
+  ring loses its bumps where the petals cross it. Pair `before-weld-chords` ⇄
+  `after-weld-chords`.
+* **A flat end hooked.** Lü–Wang keeps a free end's corner pixels, so a butt-capped
+  chain's own last points curl into one corner of the cap — not a branch, so pruning never
+  sees it — and the end read along that curl stops short (la-hairline@2048's missed 3.93).
+  `dropEndHook` (`ends.ts`) cuts the trailing points within two half-widths of the end
+  that lie more than 0.15 r off the line the run follows before them, and keeps the cut
+  only when the end then reads FLAT: a round cap has no corner to curl into, and a curve's
+  end would otherwise lose points to its own curvature. la-hairline@2048: missed 3.93 → 0,
+  centre p95 0.67 → 0.31 px, every line ends square on its authored point. Pair
+  `before-end-hook` ⇄ `after-end-hook`.
+* **A Y nothing crosses left wedges.** A stroke whose two ends both sit on junctions read
+  no cap and went out butt. Where a pair runs through the node that end is buried in its
+  ink, but where nothing pairs — a generated mail icon whose V ends ON the rect's rounded
+  corner: top, side and V at one node, no two in line — the three butt ends left notches
+  between them. Such a stroke now goes out round when neither of its nodes is crossed by a
+  through pair; a crossed node keeps butt, because a round end bulges past the through
+  stroke wherever the node sits off its centre (the first, unconditional version put knobs
+  under a printer's bar). Fixture `la-y-corner`, on `KNOWN_DEFECTS` for what is left: the
+  rect is still not paired round that corner, so it comes back as two open strokes with
+  the corner arc cut to a chord (`ends`). Pair `before-junction-caps` ⇄
+  `after-junction-caps`.
+* **A split crossing welded five widths apart.** `weldCrossings` (`graph.ts`) merges two
+  degree-3 nodes whose outer arms continue each other — a split X. Its comment said the line
+  through one node's arm must pass near the other, but only DIRECTIONS were compared, up to
+  12 r apart. At la-cup@2048 the club line's start at the shaft's foot and its loop's return
+  over the shaft, ~210 px up the shaft, passed that and became one welded node MID-SHAFT.
+  The weld-chords cut-back (above) then cut every arm toward it: the shaft lost its lower
+  third (`missed` 29.94 px) — and the gate said nothing, because the case was listed for
+  `turns`. Each continuation now also has to pass within 2 r + 1 of the other node,
+  measured from the arm's OWN pixels: a split X's two nodes sit on the acute bisector,
+  r / sin(θ/2) from the crossing, so each is r off each stroke's centreline. (The first
+  version measured from the arrival chord, which runs through the node itself — there the
+  other node is 2r off, one pixel inside the limit, and `audit-tracer-4`'s fixture, whose
+  arms were bent and whose r did not match its split, failed CI. The fixture is a real X
+  now, and a second case with B off both lines pins the guard.) la-cup@2048 passes
+  every gate, its entry is gone, and nothing else moves. Pair `before-cup-weld` ⇄
+  `after-cup-weld`.
+* **A listed case may fail only what it is listed for.** A `KNOWN_DEFECTS` entry starts with
+  the gates it fails (`missed: …`, `centre, p95: …`); failing any other gate is a new defect
+  behind the old one, and the gate now says so. Checked against the old weld: la-cup@2048
+  fails `[missed] beyond its entry`. (lucide-star's entries said `centre` for a `p95` failure.)
+
+#### Census and pairs
+
+Gate before (8d3ba58: fixtures, engine untouched) → after: 18 → 22 of 25 pass at 512 and
+at 2048 (tables in the PR). Six pairs, each moving only the `line` / `cline`
+lanes, every outline lane byte-identical:
+
+| pair | moves |
+|---|---|
+| `before-line-junctions` ⇄ `after-line-junctions` | 11 line, 7 cline |
+| `before-line-stubs` ⇄ `after-line-stubs` | la-stubs.line |
+| `before-line-arrows` ⇄ `after-line-arrows` | 15 line, 7 cline |
+| `before-line-hybrid` ⇄ `after-line-hybrid` | la-hybrid.line |
+| `before-weld-chords` ⇄ `after-weld-chords` | 5 line (cup, curves, junctions, loops, score), 3 cline (cl-loops, cl-paper, doodle) |
+| `before-end-hook` ⇄ `after-end-hook` | la-hairline.line |
+| `before-junction-caps` ⇄ `after-junction-caps` | la-y-corner.line (the fixture is on both stamps) |
+| `before-cup-weld` ⇄ `after-cup-weld` | la-cup.line |
+
+The whole branch is one entry, `before-icon-set` ⇄ `after-icon-set` (refreshed after the
+review fixes): 19 line and 9 cline traces move, every outline lane byte-identical.
+
 ### 39.5 What it is not, yet
 
 Butt is never told from square (the ink is identical; the end is placed at the ink's end).

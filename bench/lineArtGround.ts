@@ -50,6 +50,8 @@ interface Ctx {
   cap: string | null
   join: string | null
   fill: string | null
+  /** Inside a `data-ground="none"` group: rendered, never scored. */
+  noise?: boolean
 }
 
 const inherit = (a: Record<string, string>, ctx: Ctx, name: string, cur: string | null): string | null => {
@@ -93,6 +95,7 @@ export function parseLineArt(svg: string): LineArtGround {
           cap: inherit(a, top, 'stroke-linecap', top.cap),
           join: inherit(a, top, 'stroke-linejoin', top.join),
           fill: inherit(a, top, 'fill', top.fill),
+          noise: top.noise || a['data-ground'] === 'none',
         })
         if (selfClose) stack.pop()
       }
@@ -101,6 +104,9 @@ export function parseLineArt(svg: string): LineArtGround {
     if (close || !SHAPES.has(tag)) continue
     const a = attrs(body)
     const ctx = stack[stack.length - 1]
+    // Drawn but not part of the answer: texture a fixture puts in the ink on purpose
+    // (la-stubs' grey bumps), which the tracer must not turn into strokes.
+    if (ctx.noise || a['data-ground'] === 'none') continue
     const m2 = composeAffine(ctx.m, parseTransformAttr(a.transform))
     const stroke = inherit(a, ctx, 'stroke', ctx.stroke)
     const fill = inherit(a, ctx, 'fill', ctx.fill)

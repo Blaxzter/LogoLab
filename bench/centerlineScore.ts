@@ -24,6 +24,15 @@
 //                           is counted after joining paths that meet end to end
 //                           (`mergedTopology`): the ink cannot say whether a corner was
 //                           one element or two, and the tracer joins it.
+//   turns                   traced paths that leave one authored stroke for another
+//                           anywhere but an end-to-end join: a crossing taken as a
+//                           corner, a ring that runs off along a stroke ending on it.
+//                           The topology counts cannot see this — an X traced as two
+//                           Vs has the ends and paths of an X — and the centre error
+//                           hardly can, since every point is still on SOME authored
+//                           stroke. A switch is read over runs of at least 1.5 W of
+//                           samples, so the instant at a crossing where the nearest
+//                           authored stroke is the other one does not count.
 //   fillIoU                 authored fills vs traced fills, as rasters; NaN when neither.
 //   deltaE                  the trace RENDERED (rasterizeDoc, strokes included) against
 //                           the source raster — the one number blind to how the ink was
@@ -49,6 +58,7 @@ export interface CenterlineScore {
   widthAuthored: number
   endsDelta: number
   pathsDelta: number
+  turns: number
   fillIoU: number
   deltaE: number
   /** Stroke samples on each side. */
@@ -59,6 +69,8 @@ export interface CenterlineScore {
    *  explain, and traced samples off their authored centreline by more than 1.5 px. */
   missedPts: { x: number; y: number; d: number }[]
   offPts: { x: number; y: number; d: number }[]
+  /** Where each counted turn leaves its stroke. */
+  turnPts: { x: number; y: number }[]
 }
 
 export interface CenterlineTol {
@@ -68,6 +80,7 @@ export interface CenterlineTol {
   widthErr: number
   endsDelta: number
   pathsDelta: number
+  turns: number
   fillIoU: number
   deltaE: number
 }
@@ -80,6 +93,7 @@ export const CENTERLINE_TOL: CenterlineTol = {
   widthErr: 0.15,
   endsDelta: 2,
   pathsDelta: 2,
+  turns: 0,
   fillIoU: 0.8,
   deltaE: 3.0,
 }
@@ -102,11 +116,29 @@ interface Sample {
   x: number
   y: number
   w: number
+  /** Which subpath the sample is on (numbered by the `keys` it was sampled with). */
+  key: number
 }
 
-/** Resample polylines at ~1px spacing, carrying a width. */
-function sampleSubPaths(subPaths: SubPath[], width: number, out: Sample[]): void {
+/** Subpath numbering for `sampleSubPaths`, with each subpath's open ends ([] if closed). */
+interface SampleKeys {
+  next: number
+  ends: { x: number; y: number }[][]
+}
+
+/** Resample polylines at ~1px spacing, carrying a width and the subpath's key. */
+function sampleSubPaths(
+  subPaths: SubPath[],
+  width: number,
+  out: Sample[],
+  keys: SampleKeys = { next: 0, ends: [] },
+): void {
   for (const sp of subPaths) {
+    const key = keys.next++
+    keys.ends[key] =
+      sp.closed || sp.nodes.length < 2
+        ? []
+        : [sp.nodes[0], sp.nodes[sp.nodes.length - 1]].map((n) => ({ x: n.x, y: n.y }))
     const poly = flattenSubPath(sp)
     if (sp.closed && poly.length > 1) poly.push(poly[0])
     for (let i = 0; i + 1 < poly.length; i++) {
@@ -116,11 +148,11 @@ function sampleSubPaths(subPaths: SubPath[], width: number, out: Sample[]): void
       const steps = Math.max(1, Math.ceil(len))
       for (let s = 0; s < steps; s++) {
         const t = s / steps
-        out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, w: width })
+        out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, w: width, key })
       }
     }
     const last = poly[poly.length - 1]
-    if (last && !sp.closed) out.push({ x: last.x, y: last.y, w: width })
+    if (last && !sp.closed) out.push({ x: last.x, y: last.y, w: width, key })
   }
 }
 
@@ -285,10 +317,17 @@ export function scoreCenterline(
   // on a centreline that long would; the ink cannot tell them apart and the tracer
   // reads butt, so the answer sheet extends a square-capped end by w/2.
   const authored: Sample[] = []
+  const authoredKeys: SampleKeys = { next: 0, ends: [] }
   for (const st of gt.strokes)
-    sampleSubPaths(st.cap === 'square' ? extendEnds(st.subPaths, st.width / 2) : st.subPaths, st.width, authored)
+    sampleSubPaths(
+      st.cap === 'square' ? extendEnds(st.subPaths, st.width / 2) : st.subPaths,
+      st.width,
+      authored,
+      authoredKeys,
+    )
   const { paths: authoredPaths, ends: authoredEnds } = mergedTopology(gt)
   const traced: Sample[] = []
+  const tracedKeys: SampleKeys = { next: 0, ends: [] }
   let tracedEnds = 0
   let tracedPaths = 0
   const tracedFills: SubPath[][] = []
@@ -297,7 +336,7 @@ export function scoreCenterline(
     // The paper is the ground the ink was cut from, not ink (path/paper.ts).
     if (it.kind !== 'path' || !it.visible || isPaper(it)) continue
     if (it.stroke && it.fill === 'none') {
-      sampleSubPaths(it.subPaths, it.stroke.width, traced)
+      sampleSubPaths(it.subPaths, it.stroke.width, traced, tracedKeys)
       tracedWidths.push(it.stroke.width)
       for (const sp of it.subPaths) {
         tracedPaths++
@@ -347,6 +386,69 @@ export function scoreCenterline(
     if (d > 1.5) offPts.push({ x: s.x, y: s.y, d })
     if (a && d <= Math.max(2, 0.5 * a.w)) werr.push(Math.abs(s.w - a.w) / a.w)
   }
+  // Turns: along each traced subpath, which authored subpath it is following.
+  const turnPts: CenterlineScore['turnPts'] = []
+  const authoredWidth = new Map<number, number>()
+  for (const a of authored) authoredWidth.set(a.key, a.w)
+  const bySub = new Map<number, Sample[]>()
+  for (const s of traced) {
+    const list = bySub.get(s.key)
+    if (list) list.push(s)
+    else bySub.set(s.key, [s])
+  }
+  for (const [key, seq] of bySub) {
+    const closed = tracedKeys.ends[key].length === 0
+    // Runs of samples following one authored subpath: first and last sample index.
+    const runs: { key: number; n: number; first: number; last: number }[] = []
+    for (let i = 0; i < seq.length; i++) {
+      const { d, s: a } = toAuthored(seq[i].x, seq[i].y)
+      if (!a || d > Math.max(2, 0.6 * a.w)) continue
+      const last = runs[runs.length - 1]
+      if (last && last.key === a.key) {
+        last.n++
+        last.last = i
+      } else runs.push({ key: a.key, n: 1, first: i, last: i })
+    }
+    // Transients out (at a crossing the nearest stroke is briefly the other one), then
+    // neighbours that are the same stroke again merge.
+    const w = seq[0].w
+    const minRun = Math.max(3, 1.5 * w)
+    const kept: typeof runs = []
+    for (const r of runs) {
+      if (r.n < minRun) continue
+      const last = kept[kept.length - 1]
+      if (last && last.key === r.key) {
+        last.n += r.n
+        last.last = r.last
+      } else kept.push({ ...r })
+    }
+    if (closed && kept.length > 1 && kept[0].key === kept[kept.length - 1].key) kept.pop()
+    const nearEnd = (k: number, p: Sample): boolean => {
+      const reach = 1.5 * Math.max(w, authoredWidth.get(k) ?? w)
+      return authoredKeys.ends[k].some((e) => Math.hypot(e.x - p.x, e.y - p.y) <= reach)
+    }
+    const n = kept.length
+    for (let i = closed ? 0 : 1; i < n; i++) {
+      const A = kept[(i - 1 + n) % n]
+      const B = kept[i]
+      if (A.key === B.key) continue
+      // End to end — a corner the ink cannot tell from two strokes meeting — is a join,
+      // wherever in the hand-over between the two runs it happens (the transients
+      // dropped above can put a run's first kept sample well past the join itself).
+      let join = false
+      for (let k = A.last; ; k = (k + 1) % seq.length) {
+        if (nearEnd(A.key, seq[k]) && nearEnd(B.key, seq[k])) {
+          join = true
+          break
+        }
+        if (k === B.first) break
+      }
+      if (join) continue
+      const at = seq[B.first]
+      turnPts.push({ x: at.x, y: at.y })
+    }
+  }
+
   // Render fidelity: the trace as pixels vs the source.
   const render = rasterizeDoc(doc, W, H)
   const fid = fidelity(source.data, render, W, H)
@@ -378,6 +480,7 @@ export function scoreCenterline(
     widthAuthored: median(gt.strokes.map((s) => s.width)),
     endsDelta: tracedEnds - authoredEnds,
     pathsDelta: tracedPaths - authoredPaths,
+    turns: turnPts.length,
     fillIoU,
     deltaE: fid.meanDeltaE,
     tracedSamples: traced.length,
@@ -385,6 +488,7 @@ export function scoreCenterline(
     failures: [],
     missedPts,
     offPts,
+    turnPts,
   }
   const f: string[] = []
   if (authored.length > 0 && !(score.centreMean <= tol.centreMean)) f.push('centre')
@@ -393,6 +497,7 @@ export function scoreCenterline(
   if (werr.length > 0 && !(score.widthErr <= tol.widthErr)) f.push('width')
   if (Math.abs(score.endsDelta) > tol.endsDelta) f.push('ends')
   if (Math.abs(score.pathsDelta) > tol.pathsDelta) f.push('paths')
+  if (score.turns > tol.turns) f.push('turns')
   if (Number.isFinite(fillIoU) && fillIoU < tol.fillIoU) f.push('fills')
   if (!(score.deltaE <= tol.deltaE)) f.push('ΔE')
   score.failures = f

@@ -364,6 +364,28 @@ function recomputeLen(c: SkelChain, width: number): void {
   c.len = L
 }
 
+/** A chain's own centreline near one end: through the pixel `span` back and the end
+ *  pixel itself — the chain's pixels, not the node it ends on. Null when degenerate. */
+type ArmLine = { at: { x: number; y: number }; dir: { x: number; y: number } }
+function armLine(g: SkeletonGraph, c: SkelChain, span: number, end: 'a' | 'b'): ArmLine | null {
+  const w = g.width
+  const pts = end === 'b' ? c.pixels : c.pixels.slice().reverse()
+  if (pts.length < 2) return null
+  let acc = 0
+  let k = pts.length - 1
+  while (k > 0 && acc < span) {
+    const d = Math.abs(pts[k] - pts[k - 1])
+    acc += d === 1 || d === w ? 1 : Math.SQRT2
+    k--
+  }
+  const q = pts[pts.length - 1]
+  const at = { x: pts[k] % w, y: (pts[k] / w) | 0 }
+  const dx = (q % w) - at.x
+  const dy = ((q / w) | 0) - at.y
+  const len = Math.hypot(dx, dy)
+  return len < 1e-6 ? null : { at, dir: { x: dx / len, y: dy / len } }
+}
+
 /** Direction (unit) a chain travels as it ARRIVES at `node`, read over the last `span` px. */
 export function arrivalDirection(
   g: SkeletonGraph,
@@ -469,8 +491,9 @@ export function weldCrossings(g: SkeletonGraph, dt: Float32Array, maxK = 12, tur
       // Every arm END at the node, not every chain: a lobe of a figure-8 is one chain
       // with BOTH ends on the same node, and read by chain id it gave one direction
       // twice — so the crossing never welded and the loop fell open.
-      const arms = (node: SkelNode): { c: SkelChain; d: { x: number; y: number } }[] => {
-        const out: { c: SkelChain; d: { x: number; y: number } }[] = []
+      type Arm = { c: SkelChain; d: { x: number; y: number }; line: ArmLine | null }
+      const arms = (node: SkelNode): Arm[] => {
+        const out: Arm[] = []
         for (const id of new Set(node.chains)) {
           if (id === mid.id) continue
           const c = g.chains[id]
@@ -478,7 +501,7 @@ export function weldCrossings(g: SkeletonGraph, dt: Float32Array, maxK = 12, tur
           for (const end of ['a', 'b'] as const) {
             if ((end === 'a' ? c.a : c.b) !== node.id) continue
             const d = arrivalDirection(g, c, node, span, end)
-            if (d) out.push({ c, d })
+            if (d) out.push({ c, d, line: armLine(g, c, span, end) })
           }
         }
         return out
@@ -487,9 +510,19 @@ export function weldCrossings(g: SkeletonGraph, dt: Float32Array, maxK = 12, tur
       const aB = arms(B)
       if (aA.length !== 2 || aB.length !== 2) continue
       // Arm i at A continues into arm j at B when the direction INTO A equals the
-      // direction OUT of B (= −arrival at B), and the line through A's arm passes near B.
-      const through = (a: { d: { x: number; y: number } }, b: { d: { x: number; y: number } }): boolean =>
-        a.d.x * -b.d.x + a.d.y * -b.d.y >= cosMin
+      // direction OUT of B (= −arrival at B), and the line OF A's arm passes near B.
+      // The two nodes of a split X sit on the acute bisector, r / sin(θ/2) from the
+      // crossing, so each is r off each stroke's centreline — and the arm's own pixels
+      // ARE that centreline. Measure from them, not from a chord into the node: the
+      // chord runs through A, and B is 2r off it, which left one pixel of margin. Read
+      // by direction alone, a club line's start at a shaft's foot and its loop's return
+      // over the shaft five widths up welded into one node mid-shaft, and every arm was
+      // cut back toward it (la-cup@2048).
+      const reach = 2 * r + 1
+      const near = (l: ArmLine | null, Q: SkelNode): boolean =>
+        l === null || Math.abs((Q.x - l.at.x) * l.dir.y - (Q.y - l.at.y) * l.dir.x) <= reach
+      const through = (a: Arm, b: Arm): boolean =>
+        a.d.x * -b.d.x + a.d.y * -b.d.y >= cosMin && near(a.line, B) && near(b.line, A)
       const ok = (through(aA[0], aB[0]) && through(aA[1], aB[1])) || (through(aA[0], aB[1]) && through(aA[1], aB[0]))
       if (!ok) continue
       // Contract: B's other chains move to A; the mid chain dies; A sits between.
