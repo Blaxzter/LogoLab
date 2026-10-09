@@ -7442,8 +7442,13 @@ arrowhead commit and each with its own pair:
   over the shaft, ~210 px up the shaft, passed that and became one welded node MID-SHAFT.
   The weld-chords cut-back (above) then cut every arm toward it: the shaft lost its lower
   third (`missed` 29.94 px) — and the gate said nothing, because the case was listed for
-  `turns`. Each continuation now also has to pass within 2 r + 1 of the other node (both
-  halves of a split X sit r / cos(θ/2) off each line, ≤ 1.42 r to 90°). la-cup@2048 passes
+  `turns`. Each continuation now also has to pass within 2 r + 1 of the other node,
+  measured from the arm's OWN pixels: a split X's two nodes sit on the acute bisector,
+  r / sin(θ/2) from the crossing, so each is r off each stroke's centreline. (The first
+  version measured from the arrival chord, which runs through the node itself — there the
+  other node is 2r off, one pixel inside the limit, and `audit-tracer-4`'s fixture, whose
+  arms were bent and whose r did not match its split, failed CI. The fixture is a real X
+  now, and a second case with B off both lines pins the guard.) la-cup@2048 passes
   every gate, its entry is gone, and nothing else moves. Pair `before-cup-weld` ⇄
   `after-cup-weld`.
 * **A listed case may fail only what it is listed for.** A `KNOWN_DEFECTS` entry starts with
