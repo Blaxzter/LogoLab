@@ -50,15 +50,10 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // Lucide's star rounds every vertex with a 0.53 u arc — 8.5 px at 512, HALF the stroke's
   // 16 px half-width. A centreline arc tighter than r has no inner boundary, so the
   // skeleton (any medial axis) rounds it wider, and the fit follows the skeleton (§39.4).
-  'lucide-star@512': 'centre: authored corner radii below the half-width round wider than drawn',
-  'lucide-star@2048': 'centre: the same radii (34 px against a 64 px half-width), p95 18 px',
+  'lucide-star@512': 'centre, p95: authored corner radii below the half-width round wider than drawn',
+  'lucide-star@2048': 'p95: the same radii (34 px against a 64 px half-width), p95 18 px',
   // The field report's three defects (§39.8), each with its fixture. Entries leave this
   // list with the fix that clears them.
-  // The hub and the cup's 512 trace pass since the junction readings (§39.8). At 2048
-  // the club line crosses the shaft's two lines at 36° and their merged ink runs past
-  // every junction zone; read inside it, the shaft's lower arm takes the club line's
-  // direction and the two swap there.
-  'la-cup@2048': 'turns: shaft A and the club line swap where their 36° crossing merges past the junction zones',
   // NOT a regression, and listed knowingly against "only shrinks" (§39.8): the score
   // always had a 3 px miss at the last stem's top (the flag's corner apex stops short of
   // the ink's tip, the §39.4 apex rule). `missed` is a mean over the MISSED samples, and
@@ -97,6 +92,15 @@ for (const RES of RESOLUTIONS)
           s.failures.length > 0,
           `${c.id} @${RES} PASSES every gate now (${line}) — delete its KNOWN_DEFECTS entry: "${known}"`,
         )
+        // An entry names the gates it fails ("missed: …", "centre, turns: …"); failing
+        // any OTHER gate is a new defect hiding behind the old one. la-cup@2048 was listed
+        // for `turns` when a weld cut away a third of its shaft, and nothing said so.
+        const listed = known
+          .slice(0, known.indexOf(':'))
+          .split(',')
+          .map((g) => g.trim())
+        const fresh = s.failures.filter((g) => !listed.includes(g))
+        assert.deepEqual(fresh, [], `${c.id} @${RES} fails [${fresh.join(', ')}] beyond its entry "${known}": ${line}`)
         return
       }
       assert.deepEqual(s.failures, [], `${c.id} @${RES} fails [${s.failures.join(', ')}]: ${line}`)

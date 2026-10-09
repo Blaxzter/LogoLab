@@ -488,8 +488,15 @@ export function weldCrossings(g: SkeletonGraph, dt: Float32Array, maxK = 12, tur
       if (aA.length !== 2 || aB.length !== 2) continue
       // Arm i at A continues into arm j at B when the direction INTO A equals the
       // direction OUT of B (= −arrival at B), and the line through A's arm passes near B.
+      // Both halves of a split X lie on both lines: B sits r / cos(θ/2) off the line of
+      // A's arm (≤ 1.42 r to 90°). Read by direction alone, a club line's start at a
+      // shaft's foot and its loop's return over the shaft five widths up welded into one
+      // node mid-shaft, and every arm was cut back toward it (la-cup@2048).
+      const reach = 2 * r + 1
+      const offLine = (P: SkelNode, d: { x: number; y: number }, Q: SkelNode): number =>
+        Math.abs((Q.x - P.x) * d.y - (Q.y - P.y) * d.x)
       const through = (a: { d: { x: number; y: number } }, b: { d: { x: number; y: number } }): boolean =>
-        a.d.x * -b.d.x + a.d.y * -b.d.y >= cosMin
+        a.d.x * -b.d.x + a.d.y * -b.d.y >= cosMin && offLine(A, a.d, B) <= reach && offLine(B, b.d, A) <= reach
       const ok = (through(aA[0], aB[0]) && through(aA[1], aB[1])) || (through(aA[0], aB[1]) && through(aA[1], aB[0]))
       if (!ok) continue
       // Contract: B's other chains move to A; the mid chain dies; A sits between.

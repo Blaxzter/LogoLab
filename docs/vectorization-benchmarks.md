@@ -7339,10 +7339,10 @@ caption, Inter outlines laid out by the app's own HarfBuzz engine, beside clean 
   σ in points, and a lone meet was averaged into a smile); a pair across a fill is bridged
   straight, never through a junction inside the fill.
 
-What is left: **la-cup@2048** keeps two turns. Its 36° crossing's merged ink runs past
-every junction zone, and an arm read inside it takes the other stroke's direction; re-reading
-the arms outside the cluster changed nothing (their first points are outside every zone).
-At 512 the cup passes every gate.
+What was left: **la-cup@2048** kept two turns, read as the 36° crossing's merged ink running
+past every junction zone. That reading was wrong — the two turns were a bogus WELD (below,
+"A split crossing welded five widths apart"), and the cup passes every gate at both
+resolutions since.
 
 **la-score@512 is listed against "only shrinks", knowingly.** Its 3 px miss at the last
 stem's top (the flag's corner apex stops short of the ink's tip — the §39.4 apex rule) was
@@ -7435,6 +7435,21 @@ arrowhead commit and each with its own pair:
   rect is still not paired round that corner, so it comes back as two open strokes with
   the corner arc cut to a chord (`ends`). Pair `before-junction-caps` ⇄
   `after-junction-caps`.
+* **A split crossing welded five widths apart.** `weldCrossings` (`graph.ts`) merges two
+  degree-3 nodes whose outer arms continue each other — a split X. Its comment said the line
+  through one node's arm must pass near the other, but only DIRECTIONS were compared, up to
+  12 r apart. At la-cup@2048 the club line's start at the shaft's foot and its loop's return
+  over the shaft, ~210 px up the shaft, passed that and became one welded node MID-SHAFT.
+  The weld-chords cut-back (above) then cut every arm toward it: the shaft lost its lower
+  third (`missed` 29.94 px) — and the gate said nothing, because the case was listed for
+  `turns`. Each continuation now also has to pass within 2 r + 1 of the other node (both
+  halves of a split X sit r / cos(θ/2) off each line, ≤ 1.42 r to 90°). la-cup@2048 passes
+  every gate, its entry is gone, and nothing else moves. Pair `before-cup-weld` ⇄
+  `after-cup-weld`.
+* **A listed case may fail only what it is listed for.** A `KNOWN_DEFECTS` entry starts with
+  the gates it fails (`missed: …`, `centre, p95: …`); failing any other gate is a new defect
+  behind the old one, and the gate now says so. Checked against the old weld: la-cup@2048
+  fails `[missed] beyond its entry`. (lucide-star's entries said `centre` for a `p95` failure.)
 
 #### Census and pairs
 
@@ -7451,6 +7466,7 @@ lanes, every outline lane byte-identical:
 | `before-weld-chords` ⇄ `after-weld-chords` | 5 line (cup, curves, junctions, loops, score), 3 cline (cl-loops, cl-paper, doodle) |
 | `before-end-hook` ⇄ `after-end-hook` | la-hairline.line |
 | `before-junction-caps` ⇄ `after-junction-caps` | la-y-corner.line (the fixture is on both stamps) |
+| `before-cup-weld` ⇄ `after-cup-weld` | la-cup.line |
 
 The whole branch is one entry, `before-icon-set` ⇄ `after-icon-set` (refreshed after the
 review fixes): 19 line and 9 cline traces move, every outline lane byte-identical.
