@@ -123,6 +123,13 @@ export interface VectorizeOptions {
    */
   centerline?: boolean
   /**
+   * With `centerline`: NO filled paths at all. The ink no stroke explains (a note head, a
+   * dot, a solid shape) is drawn as strokes too — round-capped strokes along its own
+   * skeleton, as wide as it is there; a dot as a round-capped point — and no ink is routed
+   * to the fills. Nothing is dropped. Default off.
+   */
+  strokesOnly?: boolean
+  /**
    * Colour mode: how regions relate in the output. 'tiled' (default): every region
    * owns exactly its own pixels and two regions share each boundary — nothing
    * overlaps. 'stacked': a region whose holes are entirely covered by opaque regions

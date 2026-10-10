@@ -290,10 +290,11 @@ const SYNTHETIC: Case[] = [
     name: 'la-stubs',
     note: 'faint texture touching thick strokes (no thin stub strokes may come of it) beside a thin line hanging off a thick bar, a dashed line and dots (all kept)',
     make: () => {
-      // The texture is drawn but is not part of the answer (data-ground="none"): faint
-      // radial specks on the inside of a ring and under a bar, like the dimples on the
-      // sheet's golf balls where they touch the ball's outline. Read by the profile they
-      // are ~0.25 W wide and run ~2 W from the stroke they hang off (§39.8).
+      // Faint radial specks on the inside of a ring and under a bar, like the dimples on
+      // the sheet's golf balls where they touch the ball's outline. Read by the profile
+      // they are ~0.25 W wide and run ~2 W from the stroke they hang off (§39.8). They are
+      // not strokes (no thin stub stroke may come of them) but they ARE in the picture:
+      // the answer has them as FILLS, so a trace that drops them fails `fills`.
       const speck = (cx: number, cy: number, deg: number): string =>
         `<ellipse cx="${f(cx)}" cy="${f(cy)}" rx="1.6" ry="6" transform="rotate(${deg} ${f(cx)} ${f(cy)})"/>`
       const ring = { cx: 80, cy: 80 }
@@ -301,7 +302,7 @@ const SYNTHETIC: Case[] = [
         const a = (deg * Math.PI) / 180
         return speck(ring.cx + 25 * Math.cos(a), ring.cy + 25 * Math.sin(a), deg + 90)
       }
-      const texture = `<g fill="rgb(110,110,118)" stroke="none" data-ground="none">${onRing(40)}${onRing(165)}${speck(176, 55.5, 0)}</g>`
+      const texture = `<g fill="rgb(110,110,118)" stroke="none">${onRing(40)}${onRing(165)}${speck(176, 55.5, 0)}</g>`
       return svg(
         strokes(8, 'round', 'round', `<circle cx="${ring.cx}" cy="${ring.cy}" r="34"/>` + path('M140,46 H236')) +
           texture +

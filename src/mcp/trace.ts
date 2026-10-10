@@ -38,6 +38,8 @@ export interface TraceRequest {
   mode?: 'auto' | 'color' | 'mono'
   /** Mono only: trace the ink as centreline STROKES with a measured width (line art), not filled outlines. */
   strokes?: boolean
+  /** With `strokes`: no filled paths — dots and solid marks are drawn as strokes too. */
+  strokesOnly?: boolean
   /** 'auto' probes for real colour ramps; 'flat' forces solid fills; 'rich' forces gradient fitting. */
   gradients?: 'auto' | 'flat' | 'rich'
   /** Colour only: 'stacked' (default) paints a shape under the shapes in front of it; 'tiled' cuts holes. */
@@ -132,6 +134,7 @@ export function baseOptions(req: TraceRequest): VectorizeOptions {
   if (req.removeBackground != null) base.removeBackground = req.removeBackground
   if (req.detail) base.traceDetail = req.detail
   if (req.strokes) base.centerline = true
+  if (req.strokes && req.strokesOnly) base.strokesOnly = true
   if (req.layering) base.layering = req.layering
   return withGradientMode(base, req.gradients)
 }

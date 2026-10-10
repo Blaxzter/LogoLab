@@ -428,6 +428,12 @@ fail only the gates its prefix names.
   line lane.
 * **Micro-stubs are relative AND measured**: ≤ 0.4 of the neighbours' width and ≤ 3 of it
   long. "Shorter than the neighbour's width" catches none of them (they run 1.8–2.4).
+  The stub is not a stroke, but its INK is in the picture: it goes to the fills
+  (`stubInk.ts`). Dropping it silently was the first version; la-stubs now scores the
+  specks as fills, so it fails if they vanish.
+* **`strokesOnly` means no fills, not less ink** (`blobStrokes.ts`): every fill region is
+  drawn as round-capped strokes of its own skeleton, a dot as a point, and nothing is
+  routed to the fills. Don't implement it by dropping the fills.
 * **Hybrid routing needs a broken member for a caption** (`confidence.ts`). A row of like
   marks is also a trash can's bars or a broadcast's arcs.
 * **A welded crossing's pairs are cut back past the OTHER stroke's ink** (`recutWelded`):

@@ -36,6 +36,7 @@ import { armLineOf, fitClosedCentreline, fitOpenCentreline, type FitContext } fr
 import type { SkeletonGraph } from './graph.ts'
 import type { Hole } from './holes.ts'
 import { gaussSmooth, type CoverageField } from './profile.ts'
+import type { DroppedStub } from './stubInk.ts'
 
 /** A run end continues into another when the stroke turns no more than this through the node. */
 export const THROUGH_DEG = 35
@@ -449,6 +450,8 @@ function clusterPairs(
 export interface AssembleResult {
   paths: StrokePath[]
   junctions: number
+  /** Micro-stubs dropped as texture; their ink goes to the fills (stubInk.ts). */
+  stubs: DroppedStub[]
 }
 
 /** One junction's record (bench/centerlineDiag.ts prints these). */
@@ -515,6 +518,7 @@ export function assembleStrokes(
   /** Run ends paired across a fill, bridged by a straight chord under it. */
   const acrossFill = new Set<string>()
   const dead = new Set<number>()
+  const stubs: DroppedStub[] = []
   let junctions = 0
 
   // Micro-stubs (§39.8). Faint texture touching a stroke — the dimples of a golf ball
@@ -536,6 +540,8 @@ export function assembleStrokes(
       const wN = others[others.length >> 1]
       if (widthOfRun(runs[S.run], W) > STUB_WIDTH_K * wN || S.len > STUB_LEN_K * wN) continue
       dead.add(S.run)
+      // Not a stroke — but its ink is still in the picture, and goes to the fills (stubInk.ts).
+      stubs.push({ pts: runs[S.run].pts, neighbourWidth: wN })
     }
   }
   for (const [id, ends] of endsAt)
@@ -1253,7 +1259,7 @@ export function assembleStrokes(
     if (visited.has(r) || runs[r].closed) continue
     follow(r, 'a')
   }
-  return { paths, junctions }
+  return { paths, junctions, stubs }
 }
 
 /** 4-connected components of the fill mask, labelled from 1; 0 where there is no fill. */

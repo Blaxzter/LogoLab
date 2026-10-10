@@ -22,6 +22,7 @@ import type { SheetColorMode } from '../../lib/sheet/traceTile'
 import { cleanAffix, exportName } from '../../lib/sheet'
 import type { SheetGrid } from '../../lib/sheet'
 import type { VectorizeOptions } from '../../types'
+import { CONTROL_DOCS_BY_ID } from '../vectorize/controlDocs'
 
 export interface SheetControlsProps {
   source: SheetSource
@@ -322,7 +323,7 @@ export function SheetControlsBody({
             colorMode === 'mono'
               ? ''
               : ` · ${gradientMode === 'auto' ? 'gradients auto' : gradientMode === 'flat' ? 'flat fills' : 'gradients on'}`
-          }`}
+          }${traceOptions.centerline ? (traceOptions.strokesOnly ? ' · strokes only' : ' · strokes') : ''}`}
           defaultOpen
         >
           <div className="rounded-md border border-line bg-surface-2 px-3 py-2 text-xs leading-snug text-muted">
@@ -357,6 +358,36 @@ export function SheetControlsBody({
                   { value: 'rich', label: 'Rich' },
                 ]}
               />
+            </Field>
+          )}
+          {/* The same switch as the vectorize rail's (and split_icon_sheet's `strokes`): a
+              sheet of line icons traces as stroked paths in one go instead of tile by tile. */}
+          <Field
+            label="Strokes"
+            hint={CONTROL_DOCS_BY_ID.centerline.hint}
+            right={
+              <Toggle
+                checked={traceOptions.centerline === true}
+                onChange={(v) => onTraceOptions({ centerline: v })}
+                label="Trace lines as strokes with a width"
+              />
+            }
+          >
+            <></>
+          </Field>
+          {traceOptions.centerline === true && (
+            <Field
+              label="Strokes only"
+              hint={CONTROL_DOCS_BY_ID.strokesOnly.hint}
+              right={
+                <Toggle
+                  checked={traceOptions.strokesOnly === true}
+                  onChange={(v) => onTraceOptions({ strokesOnly: v })}
+                  label="No filled shapes, only strokes"
+                />
+              }
+            >
+              <></>
             </Field>
           )}
           <Field

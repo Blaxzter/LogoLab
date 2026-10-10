@@ -7455,6 +7455,23 @@ arrowhead commit and each with its own pair:
   the gates it fails (`missed: …`, `centre, p95: …`); failing any other gate is a new defect
   behind the old one, and the gate now says so. Checked against the old weld: la-cup@2048
   fails `[missed] beyond its entry`. (lucide-star's entries said `centre` for a `p95` failure.)
+* **A dropped stub's ink goes to the fills** (`stubInk.ts`). The micro-stub rule is right
+  that a quarter-width branch off a ring is not a STROKE, but dropping it dropped the ink:
+  la-stubs' grey specks simply vanished, and nothing said so, because the fixture marked
+  them `data-ground="none"`. Now the uncovered ink connected to a dropped stub (flooded
+  from its points, past every kept stroke's disc and within the stub's length plus one
+  width) joins the fill mask and comes back as the mark it is. The fixture's specks are
+  part of the answer as fills: with the stub ink dropped again, la-stubs fails `fills`
+  (IoU 0.48 @512, 0.50 @2048). Pair `before-stub-fills` ⇄ `after-stub-fills`.
+* **Strokes only** (`strokesOnly`, `blobStrokes.ts`; the toggle under Strokes, the sheet
+  rail, MCP `strokesOnly`). No filled path at all: every fill region — a note head, a dot,
+  stub ink — is read on its own (its own distance transform and skeleton) and each chain
+  becomes a round-capped stroke at the 80th percentile of its inscribed diameter; a region
+  with no chain is a round-capped point. Nothing is routed to the fills (`confidence.ts`
+  is skipped: a component the strokes read badly keeps those strokes). Approximated, not
+  dropped — @1024 ΔE: la-score 0.36 → 0.50 (heads read as short wide strokes), la-stubs
+  0.68 → 0.72, la-hybrid 1.78 → 3.48 (the QR block is a tangle; the caption reads).
+  `test/strokes-only.test.ts` is the gate. Off by default, so no lane moves.
 
 #### Census and pairs
 
@@ -7472,6 +7489,7 @@ lanes, every outline lane byte-identical:
 | `before-end-hook` ⇄ `after-end-hook` | la-hairline.line |
 | `before-junction-caps` ⇄ `after-junction-caps` | la-y-corner.line (the fixture is on both stamps) |
 | `before-cup-weld` ⇄ `after-cup-weld` | la-cup.line |
+| `before-stub-fills` ⇄ `after-stub-fills` | la-stubs.line |
 
 The whole branch is one entry, `before-icon-set` ⇄ `after-icon-set` (refreshed after the
 review fixes): 19 line and 9 cline traces move, every outline lane byte-identical.

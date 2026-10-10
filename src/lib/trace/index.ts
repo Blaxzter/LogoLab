@@ -479,6 +479,7 @@ export async function traceImage(
         height,
         fitOpts,
         fidelity: beautifyOpts.fidelity,
+        strokesOnly: options.strokesOnly === true,
         traceFills: traceInkRegions,
         onProgress: onProgress ? (fraction, label) => onProgress({ phase: 'trace', fraction, label }) : undefined,
       })
@@ -548,6 +549,7 @@ export async function traceImage(
       height,
       fitOpts,
       fidelity: beautifyOpts.fidelity,
+      strokesOnly: options.strokesOnly === true,
       traceFills,
       onProgress: onProgress ? (fraction, label) => onProgress({ phase: 'trace', fraction, label }) : undefined,
     })
