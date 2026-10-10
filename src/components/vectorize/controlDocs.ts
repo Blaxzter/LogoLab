@@ -193,6 +193,20 @@ export const CONTROL_DOCS: ControlDoc[] = [
     liveOnly: true,
   },
   {
+    id: 'strokesOnly',
+    label: 'Strokes only',
+    hint: 'No filled shapes at all: dots and solid marks are drawn as strokes too.',
+    blurb:
+      'Strokes still sends the ink that is not a line (a note head, a dot, a solid shape) to the outline tracer, so the result can mix stroked and filled paths. Strokes only turns that off. Every mark is drawn as a stroke: a dot becomes a round stroke of its diameter, and a solid shape becomes a stroke along its middle, as wide as the shape is there. Nothing is left out, but a shape that is not a line is only approximated: a square comes back with round ends, and dense marks like a QR code turn into a tangle. Use it when the result must contain only strokes, for example for a plotter or a stroke-only icon set.',
+    example: bundled('outline', 'outline.svg'),
+    baseOpts: { mode: 'mono', threshold: 128, invert: true, centerline: true },
+    variants: [
+      { label: 'Strokes + fills', patch: { strokesOnly: false } },
+      { label: 'Strokes only', patch: { strokesOnly: true } },
+    ],
+    liveOnly: true,
+  },
+  {
     id: 'threshold',
     label: 'Threshold',
     hint: 'Pixels darker than this become solid; lighter ones drop out.',

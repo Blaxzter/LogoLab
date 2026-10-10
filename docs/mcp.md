@@ -149,7 +149,7 @@ It is built for an icon SET, which a single trace is not:
   with the same prefix wrote and this one did not — a free-layout run's `t-09`…`t-14`
   after the 2×4 re-run. Only files the manifest lists; a `limit`ed run is a preview and
   removes nothing. `removed` in the report says what went.
-- `strokes`, `layering`, `detail`, `smoothing`, `despeckle`, `fidelity` pass through to
+- `strokes`, `strokesOnly`, `layering`, `detail`, `smoothing`, `despeckle`, `fidelity` pass through to
   every tile, so a line-art sheet traces as strokes in one call instead of one
   `trace_icon` per kept crop.
 - `inkThickness` is reported per tile (the stroke weight the mono planner measured,

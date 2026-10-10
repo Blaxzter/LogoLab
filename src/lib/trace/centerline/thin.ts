@@ -42,7 +42,7 @@ export function thinZhangSuen(mask: Uint8Array, width: number, height: number): 
           const p8 = s[i - 1]
           const p9 = s[i - w - 1]
           const b = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9
-          if (b < 2 || b > 6) continue
+          if (b < 3 || b > 6) continue
           // Transitions 0→1 around the ring.
           let a = 0
           if (!p2 && p3) a++

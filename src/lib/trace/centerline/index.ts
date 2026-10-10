@@ -15,8 +15,16 @@
 //   blobs.ts      the ink the strokes do not explain becomes fills (through the planar
 //                 tracer, so a note head is beautified like any region);
 //   ends.ts       free ends walked out to the ink's end, caps read (butt / round);
+//   holes.ts      the round holes rings enclose — a ring's evidence where the skeleton
+//                 between the junctions on it has gone straight;
 //   assemble.ts   arms paired through junctions by rank, junctions placed at the arm
-//                 lines' meet, paths stitched, fitted (fit.ts) and given one width each.
+//                 lines' meet, paths stitched, fitted (fit.ts) and given one width each;
+//   confidence.ts a whole ink component the strokes read badly (a QR block, a caption,
+//                 a mangled mark) goes to the fills;
+//   stubInk.ts    the ink of a micro-stub assemble.ts dropped goes to the fills — not a
+//                 stroke, but still in the picture;
+//   blobStrokes.ts `strokesOnly`: no fills at all — every fill region is read as strokes
+//                 of its own skeleton, a dot as a round-capped point.
 //
 // Everything scales with the measured stroke width, never with a constant in px, so a
 // 2px staff line and a 40px icon stroke go through the same rules.
@@ -24,11 +32,15 @@
 import type { EditableDoc, PathItem, Topology } from '../../path/types'
 import type { PlanarFitOptions } from '../planarFit/options.ts'
 import { MONO_INK, MONO_PAPER, type MonoSegmentation } from '../mono.ts'
-import { assembleStrokes, strokeItems, type JunctionDiag } from './assemble.ts'
+import { assembleStrokes, strokeItems, type JunctionDiag, type StrokePath } from './assemble.ts'
+import { blobStrokes } from './blobStrokes.ts'
 import type { FitContext } from './fit.ts'
-import { splitBlobs, strokeRuns } from './blobs.ts'
+import { splitBlobs, strokeRuns, type BlobSplit, type StrokeRun } from './blobs.ts'
+import { pathComponents, readComponents, type ComponentReading } from './confidence.ts'
 import { distanceTransform } from './distance.ts'
-import { contractClusterLinks, pruneSpurs, skeletonGraph, weldCrossings } from './graph.ts'
+import { roundHoles } from './holes.ts'
+import { stubInk } from './stubInk.ts'
+import { contractClusterLinks, pruneSpurs, skeletonGraph, weldCrossings, type SkeletonGraph } from './graph.ts'
 import { coverageField, refineChain, type Centreline } from './profile.ts'
 import { thinZhangSuen } from './thin.ts'
 
@@ -40,6 +52,8 @@ export interface CenterlineReport {
   junctions: number
   /** Share of the ink painted as fills. */
   fillShare: number
+  /** Ink components sent to the fills whole (confidence.ts). */
+  routed: number
 }
 
 export interface CenterlineInput {
@@ -49,6 +63,9 @@ export interface CenterlineInput {
   fitOpts: PlanarFitOptions
   /** Beautify tolerance (px); 0 disables the circle snap on rings. */
   fidelity: number
+  /** No fills: the ink no stroke explains is drawn as strokes too (blobStrokes.ts), and
+   *  no ink component is routed to the fills. */
+  strokesOnly?: boolean
   /** Trace a two-label map (MONO_INK / MONO_PAPER) of the fills through the planar tracer. */
   traceFills: (labels: Int32Array) => { items: PathItem[]; topology?: Topology }
   onProgress?: (fraction: number, label: string) => void
@@ -56,13 +73,28 @@ export interface CenterlineInput {
   onCorner?: FitContext['onCorner']
   /** Diagnostic sink for every junction's arms and pairing (never changes output). */
   onJunction?: (r: JunctionDiag) => void
+  /** Diagnostic sink for the intermediate stages — the skeleton graph, the refined
+   *  centrelines, the stroke/fill split, the runs and the assembly (never changes output). */
+  onStages?: (s: CenterlineStages) => void
+}
+
+/** What `onStages` receives: every stage's output, for bench/centerlineSheetDiag.ts. */
+export interface CenterlineStages {
+  graph: SkeletonGraph
+  lines: Centreline[]
+  split: BlobSplit
+  runs: StrokeRun[]
+  paths: StrokePath[]
+  /** Ink components sent to the fills, and why. */
+  routed: ComponentReading['routed']
 }
 
 /** The stroke colour a centreline trace comes back in — repainted by the caller, like mono. */
 export const CENTERLINE_INK = '#000000'
 
 export function traceCenterline(input: CenterlineInput): { doc: EditableDoc; report: CenterlineReport } {
-  const { seg, width, height, fitOpts, fidelity, traceFills, onProgress, onCorner, onJunction } = input
+  const { seg, width, height, fitOpts, fidelity, traceFills, strokesOnly, onProgress, onCorner, onJunction, onStages } =
+    input
   const n = width * height
   const ink = new Uint8Array(n)
   let inkPixels = 0
@@ -72,7 +104,7 @@ export function traceCenterline(input: CenterlineInput): { doc: EditableDoc; rep
       inkPixels++
     }
   const empty = { viewBox: [0, 0, width, height] as [number, number, number, number], items: [] }
-  const none: CenterlineReport = { strokeWidth: 0, strokes: 0, fills: 0, junctions: 0, fillShare: 0 }
+  const none: CenterlineReport = { strokeWidth: 0, strokes: 0, fills: 0, junctions: 0, fillShare: 0, routed: 0 }
   if (inkPixels === 0) return { doc: empty, report: none }
 
   onProgress?.(0.35, 'Finding the stroke centres')
@@ -96,15 +128,54 @@ export function traceCenterline(input: CenterlineInput): { doc: EditableDoc; rep
   const runs = strokeRuns(lines, split, width)
 
   onProgress?.(0.75, 'Fitting the strokes')
-  const asm = assembleStrokes(g, runs, split.W, f, split.blobMask, dt, fitOpts, fidelity, onCorner, onJunction)
-  const strokes = strokeItems(asm.paths, CENTERLINE_INK)
+  const holes = roundHoles(ink, width, height)
+  const asm = assembleStrokes(g, runs, split.W, f, split.blobMask, dt, holes, fitOpts, fidelity, onCorner, onJunction)
+  // Strokes where the reading is confident, fills for the rest (confidence.ts): a QR
+  // block, a caption, a mark the strokes mangle goes to the fills whole.
+  const reading = readComponents(ink, width, height, g, lines, asm.paths, split.blobMask)
+  // Strokes only: a component the strokes read badly keeps its strokes — there is no
+  // fill to send it to.
+  if (strokesOnly) reading.routed.clear()
+  let paths = asm.paths
+  let blobMask = split.blobMask
+  let blobPixels = split.blobPixels
+  if (reading.routed.size > 0) {
+    blobMask = blobMask ? blobMask.slice() : new Uint8Array(n)
+    for (let i = 0; i < n; i++)
+      if (ink[i] && !blobMask[i] && reading.routed.has(reading.comp[i])) {
+        blobMask[i] = 1
+        blobPixels++
+      }
+    const owner = pathComponents(asm.paths, reading.comp, width, height)
+    paths = asm.paths.filter((_, k) => !reading.routed.has(owner[k]))
+  }
+  // A dropped micro-stub's ink is not a stroke, but it is in the picture: it goes to the
+  // fills as the mark it is (stubInk.ts).
+  const stubbed = stubInk(asm.stubs, ink, paths, blobMask, width, height)
+  if (stubbed) {
+    blobMask = blobMask ? blobMask.slice() : new Uint8Array(n)
+    for (let i = 0; i < n; i++)
+      if (stubbed[i] && !blobMask[i]) {
+        blobMask[i] = 1
+        blobPixels++
+      }
+  }
+  // Strokes only: every fill region becomes strokes of its own (blobStrokes.ts).
+  if (strokesOnly && blobMask) {
+    onProgress?.(0.85, 'Reading the fills as strokes')
+    paths = [...paths, ...blobStrokes(blobMask, width, height, fitOpts, fidelity)]
+    blobMask = null
+    blobPixels = 0
+  }
+  const strokes = strokeItems(paths, CENTERLINE_INK)
+  onStages?.({ graph: g, lines, split, runs, paths, routed: reading.routed })
 
   let fills: PathItem[] = []
   let topology: Topology | undefined
-  if (split.blobMask) {
+  if (blobMask) {
     onProgress?.(0.85, 'Tracing the fills')
     const labels = new Int32Array(n)
-    for (let i = 0; i < n; i++) labels[i] = split.blobMask[i] ? MONO_INK : MONO_PAPER
+    for (let i = 0; i < n; i++) labels[i] = blobMask[i] ? MONO_INK : MONO_PAPER
     const traced = traceFills(labels)
     fills = traced.items.map((it, i) => ({ ...it, id: `fill-${i}` }))
     topology = traced.topology
@@ -121,7 +192,8 @@ export function traceCenterline(input: CenterlineInput): { doc: EditableDoc; rep
       strokes: strokes.length,
       fills: fills.length,
       junctions: asm.junctions,
-      fillShare: split.blobPixels / inkPixels,
+      fillShare: blobPixels / inkPixels,
+      routed: reading.routed.size,
     },
   }
 }

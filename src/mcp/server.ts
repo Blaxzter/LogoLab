@@ -55,6 +55,12 @@ const traceShape = {
     .describe(
       'Trace LINE ART as centreline strokes with a measured stroke-width (open and closed stroked paths you can re-weight), instead of filled outlines of each line. Ink no stroke explains (a dot, a note head) still becomes a fill. In colour mode each stroke is painted in the ink it runs through. Default off.',
     ),
+  strokesOnly: z
+    .boolean()
+    .optional()
+    .describe(
+      'With `strokes`: NO filled paths at all — the ink no stroke explains (a dot, a note head, a solid shape) is drawn as round-capped strokes too, along its own middle and as wide as it is there; a dot is a round-capped point. Nothing is dropped, but a shape that is not a line is approximated (a square comes back with round ends). For plotters and stroke-only icon sets. Default off.',
+    ),
   layering: z
     .enum(['tiled', 'stacked'])
     .optional()
@@ -163,6 +169,7 @@ function traceRequestFrom(input: Record<string, unknown>): TraceRequest {
   return {
     mode: input.mode as TraceRequest['mode'],
     strokes: input.strokes as boolean | undefined,
+    strokesOnly: input.strokesOnly as boolean | undefined,
     gradients: input.gradients as TraceRequest['gradients'],
     layering: input.layering as TraceRequest['layering'],
     background: (input.flattenOnto as string) ?? null,
@@ -468,6 +475,7 @@ export function createServer(): McpServer {
         mode: z.enum(['auto', 'color', 'mono']).optional().describe('Per-tile colour decision. Default auto.'),
         gradients: z.enum(['auto', 'flat', 'rich']).optional().describe('Default auto.'),
         strokes: traceShape.strokes,
+        strokesOnly: traceShape.strokesOnly,
         layering: traceShape.layering,
         removeBackground: z
           .boolean()
@@ -521,6 +529,7 @@ export function createServer(): McpServer {
           mode: input.mode as 'auto' | 'color' | 'mono' | undefined,
           gradients: input.gradients as 'auto' | 'flat' | 'rich' | undefined,
           strokes: input.strokes as boolean | undefined,
+          strokesOnly: input.strokesOnly as boolean | undefined,
           layering: input.layering as 'tiled' | 'stacked' | undefined,
           removeBackground: input.removeBackground as boolean | undefined,
           detail: input.detail as 'balanced' | 'high' | undefined,

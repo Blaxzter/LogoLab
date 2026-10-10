@@ -159,7 +159,12 @@ const SNAP_PAIRS: SnapPair[] = (() => {
     if (!s.name.startsWith('before-')) continue
     add(s, byName.get(conventionalPartner(s.name)!))
   }
-  return out
+  // One list, newest AFTER-stamp first. The two sources above are a dedupe order, not a
+  // display order: kept as built, every `--pair` set listed above every conventional one,
+  // however old it was. Stable, so a tie keeps that order.
+  return out.sort((a, b) =>
+    stampedAt(a.head) < stampedAt(b.head) ? 1 : stampedAt(a.head) > stampedAt(b.head) ? -1 : 0,
+  )
 })()
 
 /** One trace configuration rendered per case. `planarFit` overrides the fit tunables;

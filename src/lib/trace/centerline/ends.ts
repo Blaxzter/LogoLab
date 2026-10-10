@@ -70,6 +70,44 @@ export function outwardTangent(pts: Vec[], side: 'a' | 'b', span: number): Vec |
   return { x: dx / len, y: dy / len }
 }
 
+/** How far back from a free end, in half-widths, a hook may reach. */
+export const END_HOOK_R = 2
+/** A hook point lies more than this many half-widths off the run's line. */
+export const END_HOOK_TOL_R = 0.15
+
+/**
+ * Drop a free end's HOOK: thinning keeps a flat end's corner pixels, so the chain's own
+ * last points curl into one corner of the butt cap (not a branch, so spur pruning never
+ * sees it). Within `END_HOOK_R` half-widths of the end, trailing points more than
+ * `END_HOOK_TOL_R` half-widths off the line the run follows before them are cut;
+ * `readEnd` then walks the end out along that line. Returns `pts` itself when nothing is
+ * cut.
+ */
+export function dropEndHook(pts: Vec[], side: 'a' | 'b', r: number): Vec[] {
+  const n = pts.length
+  const seq = side === 'b' ? pts : pts.slice().reverse()
+  const reach = Math.max(2, END_HOOK_R * r)
+  // The body: the points before the last `reach` px.
+  let k = n - 1
+  let acc = 0
+  while (k > 0 && acc < reach) {
+    acc += Math.hypot(seq[k].x - seq[k - 1].x, seq[k].y - seq[k - 1].y)
+    k--
+  }
+  if (k < 2) return pts
+  const body = seq.slice(0, k + 1)
+  const t = outwardTangent(body, 'b', Math.max(3, 3 * r))
+  if (!t) return pts
+  const at = body[body.length - 1]
+  const tol = Math.max(0.5, END_HOOK_TOL_R * r)
+  const off = (p: Vec): number => Math.abs((p.x - at.x) * t.y - (p.y - at.y) * t.x)
+  let m = n
+  while (m - 1 > k && off(seq[m - 1]) > tol) m--
+  if (m === n) return pts
+  const kept = seq.slice(0, m)
+  return side === 'b' ? kept : kept.reverse()
+}
+
 export interface EndRead {
   /** Where the centreline ends. */
   end: Vec

@@ -420,6 +420,15 @@ export function TraceControlsBody({
                 label="Trace lines as strokes with a width"
               />
             </Field>
+            {opts.centerline === true && (
+              <Field label="Strokes only" hint={d.strokesOnly.hint} onInfo={info('strokesOnly')}>
+                <Toggle
+                  checked={opts.strokesOnly === true}
+                  onChange={(v) => onPatch({ strokesOnly: v })}
+                  label="No filled shapes, only strokes"
+                />
+              </Field>
+            )}
 
             <Field label="Smoothing" hint={d.smoothing.hint} onInfo={info('smoothing')}>
               <Slider value={opts.smoothing} min={0} max={100} onChange={(v) => onPatch({ smoothing: v })} />

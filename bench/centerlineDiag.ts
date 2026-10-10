@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { Resvg } from '@resvg/resvg-js'
 import { decodePng } from '../src/lib/png/decode.ts'
 import { serializeDoc, subPathsToD } from '../src/lib/path/model.ts'
+import { isPaper } from '../src/lib/path/paper.ts'
 import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from '../src/lib/trace/index.ts'
 import { decideInkMode } from '../src/lib/traceInput/ink.ts'
 import { ensureImageData } from './nodeHarness.ts'
@@ -74,7 +75,7 @@ for (const c of cases) {
       // Wire: centrelines in magenta over the faded source; fills in blue.
       let wire = ''
       for (const it of doc.items) {
-        if (it.kind !== 'path') continue
+        if (it.kind !== 'path' || isPaper(it)) continue
         const d = subPathsToD(it.subPaths, 2)
         if (it.stroke && it.fill === 'none') {
           wire += `<path d="${d}" fill="none" stroke="#e11d48" stroke-width="1.5" stroke-linecap="round"/>`
@@ -89,6 +90,8 @@ for (const c of cases) {
       // samples in green (radius grows with the error).
       for (const m of score.missedPts)
         wire += `<circle cx="${m.x.toFixed(1)}" cy="${m.y.toFixed(1)}" r="${Math.min(6, 1.5 + m.d / 4).toFixed(1)}" fill="none" stroke="#f97316" stroke-width="1"/>`
+      for (const t of score.turnPts)
+        wire += `<rect x="${(t.x - 5).toFixed(1)}" y="${(t.y - 5).toFixed(1)}" width="10" height="10" fill="none" stroke="#7c3aed" stroke-width="1.5"/>`
       for (const o of score.offPts)
         wire += `<circle cx="${o.x.toFixed(1)}" cy="${o.y.toFixed(1)}" r="${Math.min(6, 1 + o.d / 2).toFixed(1)}" fill="none" stroke="#16a34a" stroke-width="1"/>`
       const overlay = `<svg xmlns="http://www.w3.org/2000/svg" width="${res}" height="${res}" viewBox="0 0 ${res} ${res}"><rect width="${res}" height="${res}" fill="white"/><image href="data:image/png;base64,${Buffer.from(png).toString('base64')}" width="${res}" height="${res}" opacity="0.25"/>${wire}</svg>`
@@ -122,6 +125,7 @@ if (json) {
       'width%'.padStart(8) +
       'ends Δ'.padStart(7) +
       'paths Δ'.padStart(8) +
+      'turns'.padStart(6) +
       'fillIoU'.padStart(8) +
       'ΔE'.padStart(6) +
       '  gate',
@@ -140,6 +144,7 @@ if (json) {
         f(r.widthErr * 100, 0).padStart(8) +
         String(r.endsDelta).padStart(7) +
         String(r.pathsDelta).padStart(8) +
+        String(r.turns).padStart(6) +
         f(r.fillIoU).padStart(8) +
         f(r.deltaE).padStart(6) +
         '  ' +
