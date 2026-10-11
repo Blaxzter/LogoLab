@@ -1,0 +1,9 @@
+{
+  "name": "logolab",
+  "description": "Turn an image into a clean SVG and a full app-icon set (favicon, PWA, Tauri, Electron, Android, iOS, extension), or split an icon sheet into one SVG per icon. Runs locally via npx; nothing is uploaded.",
+  "author": { "name": "Frederic Abraham" },
+  "homepage": "https://github.com/Blaxzter/LogoLab/tree/main/plugins/logolab",
+  "repository": "https://github.com/Blaxzter/LogoLab",
+  "license": "MIT",
+  "keywords": ["svg", "vectorize", "trace", "favicon", "pwa", "icons", "logo"]
+}

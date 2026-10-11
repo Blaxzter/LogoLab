@@ -179,6 +179,13 @@ claude mcp add logolab -- npx -y logolab   # Claude Code
 npx -y logolab install --client cursor     # or Cursor / VS Code / --client print
 ```
 
+Or as a **skill** (no server; the agent runs `npx -y logolab call …` itself):
+
+```bash
+/plugin install logolab --marketplace Blaxzter/LogoLab   # Claude Code plugin
+npx -y logolab install --skill                           # .claude/skills/, or --skills-dir <dir> for other agents
+```
+
 - `make_app_icons` (trace + export in one call), `trace_icon`, `export_icons`,
   `split_icon_sheet`, `inspect_icon`.
 - Collections for **PWA / favicon / web**, **Tauri**, **Electron**, **Android**, **iOS** and

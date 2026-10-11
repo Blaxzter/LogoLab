@@ -468,6 +468,23 @@ rest (trusted publishing over OIDC, no npm token, provenance attached) and refus
 version disagrees with the manifest. Do not let the GitHub UI create the tag for you: one made
 server-side is unsigned, and the workflow verifies the signature.
 
+### The package is also an Agent SKILL, and the skill is the CLI
+
+`npx -y logolab call <tool> key=value …` runs one MCP tool from a shell (`src/mcp/call.ts`
+connects a client to `createServer()` in-process — no second CLI surface), and
+`src/mcp/skill.ts` is a `SKILL.md` telling an agent when and how to use it.
+`logolab install --skill` writes it; `.claude-plugin/marketplace.json` →
+`plugins/logolab/` ships the same text as a Claude Code plugin. Two things that are easy
+to undo:
+
+* **The plugin's SKILL.md is a COPY** — edit `skill.ts`, then
+  `node src/mcp/server.ts skill > plugins/logolab/skills/logolab/SKILL.md`.
+  `test/mcp-skill.test.ts` fails on drift, and on any shown command naming an input the
+  tool does not have.
+* **The skill runs `logolab@latest`**, so a skill change that needs a new CLI feature is
+  broken for everyone until a release — the plugin goes live the moment it is on `main`.
+  `call` rejects unknown keys on purpose: zod strips them, and from a shell nobody sees it.
+
 ### `test/mcp-package.test.ts` is what stops you shipping a broken package
 
 The package's dependency list is decided by IMPORTS, in files nobody edits with npm in mind.

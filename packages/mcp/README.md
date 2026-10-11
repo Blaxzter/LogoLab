@@ -36,6 +36,23 @@ Any other client wants the usual three facts:
 
 Then ask your agent: *"trace icon.png and export a PWA icon set into public/"*.
 
+### …or as a skill
+
+No server at all: an [Agent Skill](https://agentskills.io) that runs this package's CLI.
+
+```bash
+/plugin install logolab --marketplace Blaxzter/LogoLab   # Claude Code plugin
+npx -y logolab install --skill                           # .claude/skills/logolab/ (--scope user: every project)
+npx -y logolab install --skills-dir <dir>                # any agent that reads skills from a folder
+```
+
+The CLI it drives is usable by hand as well:
+
+```bash
+npx -y logolab tools                      # the tools, or `tools <name>` for one tool's inputs
+npx -y logolab call trace_icon image=icon.png strokes=true
+```
+
 ## Tools
 
 | Tool | What it does |

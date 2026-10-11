@@ -48,6 +48,47 @@ Check it without a client at all:
 npx -y logolab try ./icon.png ./out
 ```
 
+### As a skill instead (no MCP server)
+
+The same tools as an [Agent Skill](https://agentskills.io): a `SKILL.md` that tells the
+agent when to reach for LogoLab and runs `npx -y logolab@latest call <tool> key=value …`
+from its shell. Nothing stays running and no tool schemas sit in the context until the
+agent needs them.
+
+```bash
+# Claude Code: the plugin from this repo's marketplace
+/plugin marketplace add Blaxzter/LogoLab
+/plugin install logolab@logolab
+
+# …or write the skill into a project (or --scope user for every project)
+npx -y logolab install --skill
+
+# any other agent that reads skills from a folder
+npx -y logolab install --skills-dir <that folder>
+npx -y logolab skill > SKILL.md      # or just print it
+```
+
+The CLI it uses works on its own too:
+
+```bash
+npx -y logolab tools                       # the tools; `tools trace_icon` lists one tool's inputs
+npx -y logolab call make_app_icons image=icon.png outDir=. presets=pwa,favicon appName="My App"
+npx -y logolab call split_icon_sheet sheet=sheet.png outDir=icons 'grid={"rows":3,"cols":4}' normalize=24
+```
+
+A value is JSON when it parses and a string otherwise; a comma list is an array; quote a
+value with braces. `'{…json…}'`, `@args.json` or `-` (stdin) pass the whole input as JSON.
+`call` refuses an input the tool does not have instead of dropping it — over MCP the client
+reads the schema, from a shell nobody would notice the typo. Every reply is the same
+summary + ```json block an MCP client gets: `call` connects a client to the server
+in-process (`src/mcp/call.ts`), so there is no second CLI to drift from the tools.
+
+The skill's text lives in `src/mcp/skill.ts` (what `install --skill` writes);
+`plugins/logolab/skills/logolab/SKILL.md` is a copy, regenerated with
+`node src/mcp/server.ts skill > plugins/logolab/skills/logolab/SKILL.md`.
+`test/mcp-skill.test.ts` fails when they differ, and when a command the skill shows names
+an input the tool does not have.
+
 ### From a checkout
 
 A contributor wants their client running their working tree, not the release. The

@@ -1,0 +1,11 @@
+{
+  "name": "logolab",
+  "owner": { "name": "Frederic Abraham" },
+  "plugins": [
+    {
+      "name": "logolab",
+      "source": "./plugins/logolab",
+      "description": "Image → clean SVG → app icons, locally. A skill that drives the logolab CLI (npx); no MCP server needed."
+    }
+  ]
+}

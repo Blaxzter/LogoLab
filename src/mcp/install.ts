@@ -10,6 +10,10 @@
 //   logolab install --scope user        → the client's user-level config
 //                                         (VS Code: <profile>/Code/User/mcp.json)
 //   logolab install --client print      → print the JSON, change nothing
+//   logolab install --skill             → .claude/skills/logolab/SKILL.md (no server:
+//                                         the skill runs `logolab call` itself)
+//   logolab install --skills-dir <dir>  → <dir>/logolab/SKILL.md, for any agent
+//                                         that reads Agent Skills from a folder
 //
 // The config it writes must match how it was run, or the client would launch a
 // copy the user never chose: from a checkout it writes the path to
@@ -22,6 +26,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ensureParent, projectRoot, resolvePath, runningFromSource } from './runtime.ts'
+import { SKILL_CLI, SKILL_MD } from './skill.ts'
 
 export type InstallClient = 'claude' | 'cursor' | 'vscode' | 'print'
 export type InstallScope = 'project' | 'user'
@@ -33,6 +38,10 @@ export interface InstallOptions {
   dir: string
   /** Server name as the client will show it. */
   name: string
+  /** Install the agent SKILL (`skill.ts`) instead of registering the server. */
+  skill?: boolean
+  /** With `skill`: the skills folder to write into, for an agent other than Claude Code. */
+  skillsDir?: string
 }
 
 /** The package name on npm. `npx -y <this>` is the install everyone else uses. */
@@ -154,7 +163,35 @@ function claudeCliAdd(name: string, command: string, args: string[]): boolean {
   return false
 }
 
+/** Where `install --skill` writes SKILL.md: `<skills folder>/logolab/SKILL.md`. */
+export function skillPath(scope: InstallScope, dir: string, skillsDir?: string): string {
+  const root = skillsDir
+    ? resolvePath(skillsDir)
+    : scope === 'user'
+      ? join(homedir(), '.claude', 'skills')
+      : join(dir, '.claude', 'skills')
+  return join(root, 'logolab', 'SKILL.md')
+}
+
+function installSkill(opts: InstallOptions): InstallResult {
+  const file = skillPath(opts.scope, resolvePath(opts.dir), opts.skillsDir)
+  const replaced = existsSync(file)
+  writeFileSync(ensureParent(file), SKILL_MD)
+  const where = opts.skillsDir
+    ? 'Point your agent at that folder if it does not already read it.'
+    : opts.scope === 'user'
+      ? 'Claude Code picks it up in every project; restart a running session.'
+      : 'Claude Code picks it up in this project; restart a running session.'
+  return {
+    client: opts.client,
+    file,
+    replaced,
+    message: `${replaced ? 'Updated' : 'Added'} the logolab skill in ${file}. ${where} It runs \`${SKILL_CLI} call …\` — no MCP server needed.`,
+  }
+}
+
 export function install(opts: InstallOptions): InstallResult {
+  if (opts.skill || opts.skillsDir) return installSkill(opts)
   const { client, scope, name } = opts
   const dir = resolvePath(opts.dir)
   const { command, args } = launchSpec()
@@ -219,7 +256,14 @@ export function parseInstallArgs(argv: string[]): InstallOptions {
   }
   const scope = (flag('scope') ?? 'project') as InstallScope
   if (!['project', 'user'].includes(scope)) throw new Error(`--scope must be project or user (got "${scope}")`)
-  return { client, scope, dir: flag('dir') ?? process.cwd(), name: flag('name') ?? 'logolab' }
+  return {
+    client,
+    scope,
+    dir: flag('dir') ?? process.cwd(),
+    name: flag('name') ?? 'logolab',
+    skill: argv.includes('--skill'),
+    skillsDir: flag('skills-dir'),
+  }
 }
 
 /**

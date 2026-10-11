@@ -9,6 +9,8 @@
 //   logolab                             serve over stdio (what a client runs)
 //   logolab install                     register this server with your client
 //   logolab try <image> [outDir]        one-shot local check, no client
+//   logolab call <tool> key=value …     one tool from the shell (what the SKILL uses)
+//   logolab tools [tool] / skill        the tools' inputs / the agent SKILL.md
 //
 // From a checkout that is `node src/mcp/server.ts <same args>`; published, the
 // npm bin is `logolab`, which is what `npx -y logolab` runs.
@@ -20,6 +22,7 @@ import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
+import { callTool, describeTools, parseCallArgs } from './call.ts'
 import { exportCollection, type Appearance, type ExportRequest } from './export.ts'
 import { HEX_COLOR, loadSource } from './image.ts'
 import { install, isMain, parseInstallArgs } from './install.ts'
@@ -27,6 +30,7 @@ import { presetCatalogue, PRESETS } from './presets.ts'
 import { prepareSource, prepareTraced, type PreparedLogo } from './render.ts'
 import { ensureImageData, ensureParent, humanBytes, log, packageVersion, runningFromSource } from './runtime.ts'
 import { splitSheet, type SheetReport } from './sheet.ts'
+import { SKILL_MD } from './skill.ts'
 import { describeSource, INK_PAINT, normalizeSpecFrom, planTrace, traceIcon, type TraceRequest } from './trace.ts'
 
 ensureImageData()
@@ -566,6 +570,13 @@ const HELP = `LogoLab MCP server ${VERSION}
       --scope  project|user
       --dir    <project directory>       (project scope; default: cwd)
       --name   <server name>             (default: logolab)
+      --skill                            install the agent SKILL instead of the server:
+                                         .claude/skills/logolab/ (~/.claude/skills with --scope user)
+      --skills-dir <dir>                 the skill into <dir>/logolab/, for any agent that reads skills
+  ${CLI} call <tool> key=value …        run one tool from the shell and print its reply
+                                         (or one '<json>' object, @args.json, or - for JSON on stdin)
+  ${CLI} tools [tool]                   list the tools, or one tool's inputs
+  ${CLI} skill                          print the agent SKILL.md
   ${CLI} try <image> [outDir]
                                          trace + export a PWA set locally, no client involved
 
@@ -608,6 +619,24 @@ async function main(): Promise<void> {
     await tryRun(argv.slice(1))
     return
   }
+  if (cmd === 'call') {
+    const name = argv[1]
+    if (!name) throw new Error(`usage: ${CLI} call <tool> key=value …   (${CLI} tools lists them)`)
+    const result = await callTool(createServer, name, parseCallArgs(argv.slice(2)))
+    process.stdout.write(result.text + '\n')
+    if (result.isError) process.exitCode = 1
+    return
+  }
+  if (cmd === 'tools') {
+    process.stdout.write((await describeTools(createServer, argv[1])) + '\n')
+    return
+  }
+  if (cmd === 'skill') {
+    process.stdout.write(SKILL_MD)
+    return
+  }
+  // A typo used to start a stdio server that sat waiting for a client.
+  if (cmd && !cmd.startsWith('-')) throw new Error(`unknown command "${cmd}" — see ${CLI} --help`)
 
   const server = createServer()
   await server.connect(new StdioServerTransport())
