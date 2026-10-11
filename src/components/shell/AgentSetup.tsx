@@ -8,7 +8,8 @@ import { Tooltip } from '../ui/Tooltip'
  * published to npm as `logolab` (source in src/mcp, packaged by packages/mcp).
  *
  * Shows the one-line install command per client, plus Cursor's install
- * deeplink. On a dev server it also offers a command that runs the local
+ * deeplink, and the Agent Skill (src/mcp/skill.ts) for agents that use skills
+ * instead of a server. On a dev server it also offers a command that runs the local
  * checkout instead of the published release.
  */
 
@@ -34,14 +35,18 @@ const TOOLS: { name: string; blurb: string }[] = [
   { name: 'inspect_icon', blurb: 'shows what the tracer would decide, before it runs.' },
 ]
 
-type Client = 'claude' | 'cursor' | 'vscode' | 'json'
+type Client = 'claude' | 'cursor' | 'vscode' | 'json' | 'skill'
 
 const CLIENTS: { id: Client; label: string }[] = [
   { id: 'claude', label: 'Claude Code' },
   { id: 'cursor', label: 'Cursor' },
   { id: 'vscode', label: 'VS Code' },
   { id: 'json', label: 'Other / JSON' },
+  { id: 'skill', label: 'As a skill' },
 ]
+
+/** The repo's Claude Code plugin marketplace (.claude-plugin/marketplace.json). */
+const MARKETPLACE = 'Blaxzter/LogoLab'
 
 /** Quote a path for a shell only when it needs it (Windows paths have spaces). */
 const q = (p: string) => (/\s/.test(p) ? `"${p}"` : p)
@@ -125,9 +130,9 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
               Use LogoLab from your AI agent
             </h2>
             <p className="mt-1 text-sm text-muted">
-              LogoLab comes with an MCP server, so your coding agent can use the same tracer and icon exporter. “Trace{' '}
-              <code className="font-mono text-xs">icon.png</code> and give me a PWA icon set” becomes one tool call.
-              Everything runs on your machine; nothing is uploaded.
+              LogoLab comes with an MCP server (or a skill, if your agent prefers those), so your coding agent can use
+              the same tracer and icon exporter. “Trace <code className="font-mono text-xs">icon.png</code> and give me
+              a PWA icon set” becomes one tool call. Everything runs on your machine; nothing is uploaded.
             </p>
           </div>
           <Tooltip label="Close">
@@ -218,16 +223,48 @@ export function AgentSetupDialog({ onClose }: { onClose: () => void }) {
                   <Command>{JSON.stringify({ mcpServers: { [PACKAGE]: LAUNCH } }, null, 2)}</Command>
                 </>
               )}
+
+              {/* The Agent Skill (src/mcp/skill.ts): no server, the agent runs
+                  `npx -y logolab call …` itself. */}
+              {client === 'skill' && (
+                <>
+                  <p className="text-xs text-muted">
+                    No server: a skill tells your agent when to use LogoLab, and the agent runs{' '}
+                    <code className="font-mono">npx -y {PACKAGE} call …</code> in its own terminal. Nothing loads into
+                    its context until it needs the skill.
+                  </p>
+                  <p className="text-xs text-muted">Claude Code, as a plugin (in a Claude Code session):</p>
+                  <Command>{`/plugin marketplace add ${MARKETPLACE}`}</Command>
+                  <Command>{`/plugin install ${PACKAGE}@${PACKAGE}`}</Command>
+                  <p className="text-xs text-muted">
+                    Or write the skill into this project's <code className="font-mono">.claude/skills/</code> (add{' '}
+                    <code className="font-mono">--scope user</code> for every project):
+                  </p>
+                  <Command>{`npx -y ${PACKAGE} install --skill`}</Command>
+                  <p className="text-xs text-muted">
+                    Any other agent that reads skills from a folder (the open{' '}
+                    <a
+                      href="https://agentskills.io"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline decoration-line underline-offset-2 hover:text-ink"
+                    >
+                      Agent Skills
+                    </a>{' '}
+                    format):
+                  </p>
+                  <Command>{`npx -y ${PACKAGE} install --skills-dir <that folder>`}</Command>
+                </>
+              )}
             </div>
           </div>
 
           <div className="flex flex-col gap-2 text-[0.7rem] text-muted">
             <p>
-              Then ask your agent: <em>“trace icon.png and export a PWA icon set into public/”</em>.
+              Then ask your agent: <em>“turn icon.png into this site's favicon and PWA icons”</em>.
             </p>
             <p>
-              Needs Node 22+. The server runs on your machine and reads and writes your files directly. Nothing is
-              uploaded.
+              Needs Node 22+. It runs on your machine and reads and writes your files directly. Nothing is uploaded.
             </p>
           </div>
 
