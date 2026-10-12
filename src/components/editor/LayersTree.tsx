@@ -289,7 +289,9 @@ const LayerRowView = memo(function LayerRowView({
     <div
       data-layer-row={item.id}
       onPointerDown={(e) => {
-        if (editing) return
+        // Only the main button selects: a right-click's pointerdown would
+        // collapse a multi-selection before its menu opened on it.
+        if (editing || e.button !== 0) return
         onPick(item.id, e)
       }}
       onDoubleClick={() => onEditing(item.id)}
