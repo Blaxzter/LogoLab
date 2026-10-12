@@ -23,9 +23,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { callTool, describeTools, parseCallArgs } from './call.ts'
-import { exportCollection, type Appearance, type ExportRequest } from './export.ts'
+import { exportCollection, opaqueLine, type Appearance, type ExportReport, type ExportRequest } from './export.ts'
 import { HEX_COLOR, loadSource } from './image.ts'
 import { install, isMain, parseInstallArgs } from './install.ts'
+import { seeThroughNote } from './logoProbe.ts'
 import { presetCatalogue, PRESETS } from './presets.ts'
 import { prepareSource, prepareTraced, type PreparedLogo } from './render.ts'
 import { ensureImageData, ensureParent, humanBytes, log, packageVersion, runningFromSource } from './runtime.ts'
@@ -150,6 +151,32 @@ const appearanceShape = {
   scale: z.number().min(0.1).max(1.5).optional().describe('Logo scale inside the safe box. Default 1.'),
   tintColor: z.string().nullable().optional().describe('Recolour a monochrome logo through its alpha, e.g. "#5b5bd6".'),
   invert: z.boolean().optional().describe('Invert the logo colours (a dark mark for a light context).'),
+  opaque: z
+    .object({
+      background: z.string().optional().describe('Fill colour of the opaque icons, e.g. your brand background.'),
+      paddingPct: z
+        .number()
+        .min(0)
+        .max(45)
+        .optional()
+        .describe('Safe-zone inset of the opaque icons, as % of size. Default: paddingPct.'),
+    })
+    .optional()
+    .describe(
+      'The icons a platform will not take transparent: apple-touch (iOS draws alpha as black), the maskable pair, the iOS set, the Play icon and the Android adaptive foreground. Favicons and the "any" PWA icons keep `background`. Without a colour here or in `background`, one is picked from the logo and reported.',
+    ),
+}
+
+const webShape = {
+  themeColor: z
+    .string()
+    .optional()
+    .describe('theme_color in the manifest and <meta name="theme-color">. Default: backgroundColor.'),
+  backgroundColor: z
+    .string()
+    .optional()
+    .describe('background_color (splash screen) in the manifest. Default: the opaque icons’ fill.'),
+  startUrl: z.string().optional().describe('start_url in the manifest; the scope is its directory. Default "/".'),
 }
 
 const presetEnum = z.enum(['pwa', 'favicon', 'web', 'tauri', 'electron', 'android', 'ios', 'extension'])
@@ -166,7 +193,32 @@ function appearanceFrom(input: Record<string, unknown> | undefined): Partial<App
   if (typeof input.scale === 'number') out.scale = input.scale
   if (input.tintColor === null || typeof input.tintColor === 'string') out.tintColor = input.tintColor
   if (typeof input.invert === 'boolean') out.invert = input.invert
+  if (input.opaque && typeof input.opaque === 'object') {
+    const o = input.opaque as Record<string, unknown>
+    out.opaque = {
+      ...(typeof o.background === 'string' ? { background: o.background } : {}),
+      ...(typeof o.paddingPct === 'number' ? { paddingPct: o.paddingPct } : {}),
+    }
+  }
   return out
+}
+
+function webFrom(input: Record<string, unknown>): ExportRequest['web'] {
+  return {
+    themeColor: input.themeColor as string | undefined,
+    backgroundColor: input.backgroundColor as string | undefined,
+    startUrl: input.startUrl as string | undefined,
+  }
+}
+
+/** The lines every export summary ends with: the opaque fill, the manifest colours, the warnings. */
+function exportNotes(report: ExportReport): string {
+  const lines = [opaqueLine(report.opaqueBackground)]
+  if (report.web) {
+    lines.push(`Manifest: theme_color ${report.web.themeColor}, background_color ${report.web.backgroundColor}.`)
+  }
+  for (const w of report.warnings) lines.push(`Note: ${w}`)
+  return lines.join('\n')
 }
 
 function traceRequestFrom(input: Record<string, unknown>): TraceRequest {
@@ -286,8 +338,9 @@ export function createServer(): McpServer {
         const src = loadSource(input.image as string)
         const facts = await describeSource(src)
         const { plan } = await planTrace(src, traceRequestFrom(input))
+        const holes = seeThroughNote(facts.seeThrough)
         return reply(
-          `${rel(facts.path)} — ${facts.width}×${facts.height} ${facts.kind === 'svg' ? 'SVG' : facts.mime.replace('image/', '').toUpperCase()}${facts.transparent ? ', transparent' : ''}.\nThe tracer would go ${plan.summary}.`,
+          `${rel(facts.path)} — ${facts.width}×${facts.height} ${facts.kind === 'svg' ? 'SVG' : facts.mime.replace('image/', '').toUpperCase()}${facts.transparent ? ', transparent' : ''}.\nThe tracer would go ${plan.summary}.${holes ? `\nNote: ${holes}` : ''}`,
           { source: facts, plan },
         )
       } catch (err) {
@@ -376,7 +429,10 @@ export function createServer(): McpServer {
         appearance: z
           .object(appearanceShape)
           .optional()
-          .describe('How the logo sits in the icon. Defaults keep the source art full-bleed and transparent.'),
+          .describe(
+            'How the logo sits in the icon. Defaults keep the source art full-bleed and transparent; the icons that must be opaque take `opaque`.',
+          ),
+        ...webShape,
       },
     },
     async (input) => {
@@ -389,10 +445,11 @@ export function createServer(): McpServer {
           appName: input.appName as string | undefined,
           appearance: appearanceFrom(input.appearance as Record<string, unknown> | undefined),
           svg: src.kind === 'svg' ? src.svgText : null,
+          web: webFrom(input),
         }
         const report = exportCollection(logo, input.outDir as string, req)
         return reply(
-          `Exported ${report.files.length} files (${humanBytes(report.totalBytes)}) to ${rel(report.outDir)} — presets: ${report.presets.join(', ')}.`,
+          `Exported ${report.files.length} files (${humanBytes(report.totalBytes)}) to ${rel(report.outDir)} — presets: ${report.presets.join(', ')}.\n${exportNotes(report)}`,
           report,
         )
       } catch (err) {
@@ -417,7 +474,10 @@ export function createServer(): McpServer {
         appearance: z
           .object(appearanceShape)
           .optional()
-          .describe('How the logo sits in the icon. Default: full-bleed, transparent.'),
+          .describe(
+            'How the logo sits in the icon. Default: full-bleed, transparent; the icons that must be opaque take `opaque`.',
+          ),
+        ...webShape,
         keepSvg: z
           .string()
           .optional()
@@ -437,13 +497,14 @@ export function createServer(): McpServer {
           appName: input.appName as string | undefined,
           appearance: appearanceFrom(input.appearance as Record<string, unknown> | undefined),
           svg: traced.svg,
+          web: webFrom(input),
         })
 
         return reply(
           [
             `Traced ${rel(src.path)} (${traced.stats.paths} paths / ${traced.stats.nodes} nodes, ${traced.plan.summary})`,
             `and exported ${report.files.length} files (${humanBytes(report.totalBytes)}) to ${rel(report.outDir)} — presets: ${report.presets.join(', ')}.`,
-          ].join(' '),
+          ].join(' ') + `\n${exportNotes(report)}`,
           { trace: { stats: traced.stats, plan: traced.plan, ms: traced.ms }, export: report },
         )
       } catch (err) {

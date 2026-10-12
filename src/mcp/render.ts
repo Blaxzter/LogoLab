@@ -11,6 +11,7 @@
 
 import { Resvg } from '@resvg/resvg-js'
 import { iconLayout, type RenderIconOpts } from '../lib/export/iconSpec.ts'
+import { decodePng } from '../lib/png/decode.ts'
 import { downscaleImageData } from '../lib/sheet/crop.ts'
 import type { ImageDataLike } from '../lib/sheet/types'
 import { pngFrom, rasterizeSource, type LoadedSource } from './image.ts'
@@ -164,6 +165,15 @@ export function composeIcon(logo: PreparedLogo, opts: RenderIconOpts): string {
     body.join('') +
     `</svg>`
   )
+}
+
+/** Render one icon to raw RGBA (straight alpha) — what the export's probes read. */
+export function renderIconPixels(
+  logo: PreparedLogo,
+  opts: RenderIconOpts,
+): { width: number; height: number; data: Uint8ClampedArray } {
+  // Through the PNG, not `.pixels`: those are tiny-skia's premultiplied buffer.
+  return decodePng(renderIconPng(logo, opts))
 }
 
 /** Render one icon to PNG bytes. */

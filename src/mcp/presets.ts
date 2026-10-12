@@ -9,7 +9,7 @@
 // src/lib/export/iconSpec.ts, the catalogue the browser export offers, so the two
 // cannot drift.
 
-import { DEFAULT_TARGETS, buildHtmlSnippet, buildManifest } from '../lib/export/iconSpec.ts'
+import { DEFAULT_TARGETS, buildHtmlSnippet, buildManifest, type WebAppColors } from '../lib/export/iconSpec.ts'
 import { ICNS_SIZES } from './icns.ts'
 import type { ExportTarget, IconShape } from '../types'
 
@@ -23,12 +23,13 @@ export interface IconFileSpec {
   /** Override the card shape for this file (Android's round launcher icon). */
   shape?: IconShape
   /**
-   * What to paint behind the logo when the caller asked for transparent and the
-   * platform will not take it (iOS rejects alpha; the Play listing icon must be
-   * a flat square). A chosen card colour still wins: this is a floor, not an
-   * override.
+   * The platform will not take transparency (iOS draws alpha as black and the
+   * App Store rejects it; the Play listing icon must be a flat square). Opaque
+   * files are drawn with the appearance's `opaque` group — its own background
+   * and padding — so a transparent favicon and a filled apple-touch icon come
+   * out of ONE export. Maskable files are always opaque.
    */
-  opaqueBackground?: string
+  opaque?: boolean
 }
 
 /** A multi-image container assembled from already-rendered PNGs. */
@@ -46,8 +47,10 @@ export interface TextFileSpec {
 /** What the text assets need to know about this export. */
 export interface PresetContext {
   appName: string
-  /** The card colour, so the Android adaptive background matches the PNGs. */
-  background: string
+  /** The colour the opaque files were filled with, so the Android adaptive background matches them. */
+  opaqueBackground: string
+  /** The manifest / <head> snippet colours, already resolved. */
+  colors: WebAppColors
 }
 
 export interface Preset {
@@ -70,6 +73,8 @@ const webIcon = (t: ExportTarget): IconFileSpec => ({
   path: `public/icons/${t.fileName}`,
   size: t.size,
   maskable: t.maskable,
+  // iOS paints an apple-touch icon's transparency black.
+  opaque: t.group === 'apple' || t.maskable,
 })
 
 /** The app's own catalogue, filtered to a group set, with `enabled` rewritten. */
@@ -91,8 +96,8 @@ function webPreset(id: string, label: string, summary: string, targets: ExportTa
       ? [{ path: 'public/favicon.ico', kind: 'ico', sizes: faviconSizes.sort((a, b) => a - b) }]
       : [],
     text: (ctx) => [
-      { path: 'public/manifest.webmanifest', content: buildManifest(ctx.appName, targets) },
-      { path: 'head-snippet.html', content: buildHtmlSnippet(targets) },
+      { path: 'public/manifest.webmanifest', content: buildManifest(ctx.appName, targets, ctx.colors) },
+      { path: 'head-snippet.html', content: buildHtmlSnippet(targets, ctx.colors) },
     ],
     svgPath: 'public/icons/icon.svg',
     web: targets,
@@ -188,7 +193,7 @@ const android: Preset = {
       { path: `res/${d.dir}/ic_launcher_foreground.png`, size: d.foreground, maskable: true },
     ]),
     // Play wants a flat, opaque 512 square — no alpha, no rounding of our own.
-    { path: 'play-store-icon.png', size: 512, shape: 'square' as IconShape, opaqueBackground: '#ffffff' },
+    { path: 'play-store-icon.png', size: 512, shape: 'square' as IconShape, opaque: true },
   ],
   text: (ctx) => [
     {
@@ -214,7 +219,7 @@ const android: Preset = {
       path: 'res/values/ic_launcher_background.xml',
       content: `<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">${ctx.background === 'transparent' ? '#ffffff' : ctx.background}</color>
+    <color name="ic_launcher_background">${ctx.opaqueBackground}</color>
 </resources>
 `,
     },
@@ -225,7 +230,7 @@ const android: Preset = {
 
 /**
  * The classic AppIcon set: idiom, point size and scale. iOS rejects alpha, so
- * every entry is forced opaque when the caller asked for a transparent card.
+ * every entry is opaque (the appearance's `opaque` group).
  */
 const IOS_ENTRIES: { idiom: string; point: number; scale: number }[] = [
   { idiom: 'iphone', point: 20, scale: 2 },
@@ -261,7 +266,7 @@ const ios: Preset = {
     path: `AppIcon.appiconset/${iosFile(e)}`,
     size: iosPx(e),
     shape: 'square' as IconShape,
-    opaqueBackground: '#ffffff',
+    opaque: true,
   })),
   text: () => [
     {

@@ -18,6 +18,7 @@ import type { EditableDoc } from '../lib/path/types'
 import type { ImageDataLike } from '../lib/sheet/types'
 import type { VectorizeOptions } from '../types'
 import { hasAlpha, rasterizeSource, type LoadedSource } from './image.ts'
+import { seeThroughAreas, type SeeThroughArea } from './logoProbe.ts'
 
 /** Long side of the raster the planner probes before it knows the trace cap. */
 const PLAN_PROBE_PX = 512
@@ -271,14 +272,18 @@ export async function describeSource(src: LoadedSource): Promise<{
   width: number
   height: number
   transparent: boolean
+  /** Transparent areas the art encloses (see logoProbe.ts) — they show what is behind the icon. */
+  seeThrough: SeeThroughArea[]
 }> {
   const probe = await rasterizeSource(src, Math.min(256, Math.max(src.width, src.height)))
+  const transparent = hasAlpha(probe)
   return {
     path: src.path,
     kind: src.kind,
     mime: src.mime,
     width: src.width,
     height: src.height,
-    transparent: hasAlpha(probe),
+    transparent,
+    seeThrough: transparent ? seeThroughAreas(probe) : [],
   }
 }

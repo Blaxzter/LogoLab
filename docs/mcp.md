@@ -149,7 +149,29 @@ The default is deliberately nothing: full-bleed, transparent, no padding — a
 generated icon already *is* the icon. Ask for a background and padding to get the
 studio's card look.
 
-Maskable and adaptive icons ignore that padding and use their own floor. Android
+Some files can't be transparent: **apple-touch** (iOS draws alpha as black), the
+**maskable** pair, the iOS set, the Play icon and the Android adaptive foreground.
+They take `appearance.opaque`, which has its own `background` and `paddingPct`. The
+favicons and the "any" PWA icons keep `background`, so one call gives you both:
+
+```jsonc
+{ "image": "logo.svg", "outDir": ".", "presets": ["pwa"],
+  "appearance": { "opaque": { "background": "#f3ece0", "paddingPct": 12 } },
+  "themeColor": "#f3ece0", "startUrl": "/" }
+```
+
+Without a colour (in `opaque` or in `background`), one is picked from the logo: the
+logo's own ground if it sits on one (border ring and all four corners opaque),
+otherwise white or black, whichever contrasts more with the ink. A full-bleed rounded
+tile counts as the mark, not as a ground. The reply and `logolab-icons.md` say which
+colour was used and why.
+
+`themeColor`, `backgroundColor` and `startUrl` go into the manifest and the `<head>`
+snippet. Both colours default to the opaque fill, and the scope is `startUrl`'s
+directory. Every export also reports enclosed see-through areas (a window left
+transparent shows the taskbar through the icon), and so does `inspect_icon`.
+
+Maskable and adaptive icons raise the padding to their own floor. Android
 keeps only the centre **72dp of 108dp** — a circle of ~66% diameter — and art that
 fills its box sits at the box's half *diagonal*, so those targets are full-bleed
 with the mark clamped inside that circle. Same numbers as the UI: both renderers

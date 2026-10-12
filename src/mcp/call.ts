@@ -105,6 +105,22 @@ function relaxedJson(raw: string): unknown {
   }
 }
 
+/**
+ * `presets=pwa` is a list of one: a comma list reads as an array, a single word
+ * cannot, so an array input given one value gets it wrapped. Only from the shell;
+ * an MCP client sends the schema's own shape.
+ */
+export function wrapLoneItems(
+  args: Record<string, unknown>,
+  props: Record<string, Record<string, unknown>>,
+): Record<string, unknown> {
+  const out = { ...args }
+  for (const [key, value] of Object.entries(out)) {
+    if (props[key]?.type === 'array' && value !== undefined && !Array.isArray(value)) out[key] = [value]
+  }
+  return out
+}
+
 /** Run one tool and return its reply text. */
 export async function callTool(
   createServer: () => McpServer,
@@ -120,7 +136,11 @@ export async function callTool(
     // The server's schemas strip keys they do not know, so a typo (`outdir=`) or an
     // option of another tool would be dropped without a word. Over MCP the client
     // reads the schema; from a shell this is the only place to say so.
-    const known = Object.keys(tools.find((t) => t.name === name)?.inputSchema.properties ?? {})
+    const props = (tools.find((t) => t.name === name)?.inputSchema.properties ?? {}) as Record<
+      string,
+      Record<string, unknown>
+    >
+    const known = Object.keys(props)
     const unknown = Object.keys(args).filter((k) => !known.includes(k))
     if (unknown.length) {
       return {
@@ -128,6 +148,7 @@ export async function callTool(
         isError: true,
       }
     }
+    args = wrapLoneItems(args, props)
     const result = (await client.callTool({ name, arguments: args })) as {
       content?: { type: string; text?: string }[]
       isError?: boolean
