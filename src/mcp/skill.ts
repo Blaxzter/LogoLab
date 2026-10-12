@@ -80,6 +80,33 @@ static files from somewhere else, export to a scratch folder and move the files.
 Pass \`appName\` (from package.json, the page title, or ask): the web manifest is written
 with it and says "App" without it.
 
+### Brand colours: two kinds of icon in one export
+
+Favicons and the "any" PWA icons are drawn on whatever is behind them, so they stay
+transparent (\`appearance.background\`, default \`transparent\`). Some icons can't be
+transparent: apple-touch (iOS draws alpha as black), the maskable pair (Android crops it
+to a shape), the iOS set, the Play icon and the adaptive foreground. Those take
+\`appearance.opaque\`. Give it the brand's background colour (from the CSS, the existing
+manifest, or ask), and give the manifest the same colours:
+
+\`\`\`
+${SKILL_CLI} call export_icons image=logo.svg outDir=. presets=pwa 'appearance={"opaque":{"background":"#f3ece0","paddingPct":12}}' themeColor=#f3ece0
+\`\`\`
+
+- \`opaque.paddingPct\` pads only those icons. Maskable raises it to its own safe-zone
+  floor anyway.
+- \`themeColor\` / \`backgroundColor\` / \`startUrl\` go into \`manifest.webmanifest\` and the
+  \`<head>\` snippet. Both colours default to the opaque fill. Pass \`startUrl\` when the
+  app is not served from \`/\`.
+- Without a colour, LogoLab picks one: the logo's own background if it has one, otherwise
+  white or black for contrast. The reply's "Opaque icons … filled #…" line says which.
+  If it was picked, check it fits the brand.
+- \`background=<colour>\` puts a card behind EVERY icon, favicons included. Use it only
+  when that is the look you want.
+- A "Note: … see-through" line means the art has an enclosed transparent area (a window
+  left unfilled), which shows the taskbar or wallpaper through the icon. Tell the user;
+  it is fine for a ring or a letter's counter, wrong when that area should be white.
+
 After an export:
 
 - \`head-snippet.html\` (pwa / favicon) holds the \`<link>\` tags: put them in the app's
