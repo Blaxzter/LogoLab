@@ -36,12 +36,7 @@ export function actionReasons({ canUndo, canRedo, selection, nodeSel, selectedCo
   return {
     undo: canUndo ? null : 'Nothing to undo. This is the oldest state of the drawing.',
     redo: canRedo ? null : 'Nothing to redo. This is the newest state of the drawing.',
-    group:
-      selectedCount >= 2
-        ? null
-        : `Select two or more items to group (${
-            selectedCount === 0 ? 'nothing is selected' : 'only one is selected'
-          }).`,
+    group: selectedCount >= 1 ? null : 'Select one or more items to group.',
     ungroup: sel.groups > 0 ? null : 'Select a group. A plain shape has nothing to ungroup.',
     selection: selection.size > 0 ? null : nothing,
     remove: selection.size > 0 || nodeSel.size > 0 ? null : nothing,

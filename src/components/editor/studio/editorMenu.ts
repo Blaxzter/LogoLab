@@ -143,7 +143,7 @@ export function editorMenu(target: MenuTarget, ctx: EditorMenuContext): EditorMe
     item('toggleHidden', ctx.allHidden ? 'Show' : 'Hide', why.selection),
     item('delete', 'Delete', why.remove, { shortcut: 'Del', danger: true }),
     SEP,
-    // Always offered: one item is "not yet" (select another), not "never".
+    // Always offered: one item groups into a folder of one.
     item('group', 'Group', why.group, { shortcut: 'Ctrl+G' }),
     why.ungroup === null && item('ungroup', 'Ungroup', null, { shortcut: 'Ctrl+Shift+G' }),
     SEP,

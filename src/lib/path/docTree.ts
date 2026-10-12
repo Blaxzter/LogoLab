@@ -227,7 +227,8 @@ function clampIndex(i: number, len: number): number {
  * Collect `ids` into a new group. The group lands where the frontmost member
  * was, in that member's parent, so grouping never changes what the user sees.
  * Members keep their relative order; ids nested inside another selected id are
- * skipped (the ancestor takes them).
+ * skipped (the ancestor takes them). One member is enough: a group of one is
+ * how you start a folder in Figma and Affinity, and drop more into it later.
  */
 export function groupItems(
   items: readonly DocItem[],
@@ -236,7 +237,7 @@ export function groupItems(
   name?: string,
 ): { items: DocItem[]; groupId: string } | null {
   const top = topLevelSelection(items, ids)
-  if (top.length < 2) return null
+  if (top.length === 0) return null
 
   // Paint order of the survivors, so the group's children keep their stacking.
   const order = new Map<string, number>()
@@ -249,7 +250,7 @@ export function groupItems(
     .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))
     .map((id) => findItem(items, id))
     .filter((it): it is DocItem => it !== null)
-  if (members.length < 2) return null
+  if (members.length === 0) return null
 
   const frontId = members[members.length - 1].id
   const anchor = findParent(items, frontId)

@@ -125,11 +125,30 @@ test('grouping preserves paint order and lands at the frontmost member', () => {
   )
 })
 
-test('grouping needs two members and ignores ids nested in a selected group', () => {
-  const items = [square('a', 0, 0, 10), group('g', [square('b', 0, 0, 10)])]
-  assert.equal(groupItems(items, ids('a'), 'x'), null)
-  // 'b' is inside 'g', so selecting both is really selecting just 'g'.
-  assert.equal(groupItems(items, ids('g', 'b'), 'x'), null)
+test('grouping one item wraps it in place, and ids nested in a selected group are skipped', () => {
+  const items = [square('a', 0, 0, 10), group('g', [square('b', 0, 0, 10)]), square('c', 0, 0, 10)]
+  assert.equal(groupItems(items, ids(), 'x'), null)
+
+  const one = groupItems(items, ids('a'), 'x')
+  assert.ok(one)
+  assert.deepEqual(
+    one.items.map((i) => i.id),
+    ['x', 'g', 'c'],
+  )
+  assert.deepEqual(
+    leafItems(one.items).map((i) => i.id),
+    ['a', 'b', 'c'],
+  )
+
+  // 'b' is inside 'g', so selecting both is really selecting just 'g': g is wrapped whole.
+  const nested = groupItems(items, ids('g', 'b'), 'y')
+  assert.ok(nested)
+  const y = nested.items[1]
+  assert.ok(isGroup(y))
+  assert.deepEqual(
+    y.children.map((i) => i.id),
+    ['g'],
+  )
 })
 
 test('ungroup splices children back in place and keeps a hidden group hidden', () => {
