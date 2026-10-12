@@ -6,16 +6,22 @@
 // controls. The keyboard lives here rather than on the canvas so shortcuts
 // (notably Delete) also work while focus is in the layers list.
 
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { EditableDoc } from '../../lib/path/types'
 import { ancestorsOf, findItem, isGroup, isText, topLevelSelection, walkItems } from '../../lib/path/docTree'
-import { parseNodeKey } from '../../lib/editor/nodeEdit'
+import { parseNodeKey, replaceIn } from '../../lib/editor/nodeEdit'
+import { insertNode } from '../../lib/path/geometry'
 import { downloadVector } from '../../lib/export/download'
 import { unsupportedItemCount, type VectorFormat } from '../../lib/export/vectorFormats'
 import { EditorStage } from './EditorStage'
 import { booleanBase } from '../../lib/editor/booleanOrder'
+import type { BooleanOp } from '../../lib/editor/boolean'
 import { layerRows } from '../../lib/editor/layerRows'
-import { itemLabel } from './editorDoc'
+import { itemLabel, toggleVisible } from './editorDoc'
+import { setSelectedNodesKind } from './selectionOps'
+import { ContextMenu } from '../ui/ContextMenu'
+import { editorMenu, type EditorAction, type MenuTarget } from './studio/editorMenu'
+import type { StageMenuTarget } from './stage/useStageGestures'
 import { actionReasons } from './studio/actionReasons'
 import { EditorStatusBar } from './studio/EditorStatusBar'
 import { EditorToolbar } from './studio/EditorToolbar'
@@ -136,6 +142,28 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
     return { id, label: row ? itemLabel(row.item, row.number) : 'the first shape' }
   }, [tool, previewDoc, selection])
 
+  /* ------------------------------------------------- hover + context menu */
+
+  // The canvas and the layers list echo each other's hover.
+  const [canvasHover, setCanvasHover] = useState<string | null>(null)
+  const [railHover, setRailHover] = useState<string | null>(null)
+
+  const [menu, setMenu] = useState<{
+    target: MenuTarget
+    at: { x: number; y: number }
+    segment?: { pathId: string; sub: number; seg: number; t: number }
+    rename?: () => void
+  } | null>(null)
+  const openStageMenu = useCallback((target: StageMenuTarget, at: { x: number; y: number }) => {
+    if (target.kind === 'segment') {
+      const { kind: _, ...segment } = target
+      setMenu({ target: { kind: 'segment' }, at, segment })
+    } else setMenu({ target: target.kind === 'items' ? { kind: 'items', from: 'canvas' } : target, at })
+  }, [])
+  const openRowMenu = useCallback((_id: string, at: { x: number; y: number }, rename: () => void) => {
+    setMenu({ target: { kind: 'items', from: 'layers' }, at, rename })
+  }, [])
+
   const why = actionReasons({
     canUndo: history.canUndo,
     canRedo: history.canRedo,
@@ -145,6 +173,152 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
     sel,
     activePath,
   })
+
+  const menuEntries = useMemo(() => {
+    if (!menu) return []
+    const top = topLevelSelection(previewDoc.items, selection)
+    const items = top.map((id) => findItem(previewDoc.items, id))
+    const one = items.length === 1 ? items[0] : null
+    let hasSelText = false
+    for (const it of items) {
+      if (!it) continue
+      walkItems([it], (c) => {
+        if (isText(c)) hasSelText = true
+      })
+    }
+    const nodeKinds = { smooth: 0, corner: 0 }
+    for (const k of nodeSel) {
+      const ref = parseNodeKey(k)
+      const it = findItem(previewDoc.items, ref.itemId)
+      const node = it?.kind === 'path' ? it.subPaths[ref.sub]?.nodes[ref.idx] : null
+      if (node) nodeKinds[node.kind]++
+    }
+    return editorMenu(menu.target, {
+      why,
+      selectedCount: top.length,
+      single: !one ? null : isText(one) ? 'text' : isGroup(one) ? 'group' : one.kind === 'path' ? 'path' : 'other',
+      hasText: hasSelText,
+      allHidden: items.length > 0 && items.every((it) => it && !it.visible),
+      enteredGroup: enteredGroupId !== null,
+      nodeTool: tool === 'node',
+      showGrid,
+      snapOn: snap.enabled,
+      nodeKinds,
+    })
+  }, [menu, previewDoc.items, selection, nodeSel, why, enteredGroupId, tool, showGrid, snap.enabled])
+
+  const run = (action: EditorAction) => {
+    const top = topLevelSelection(previewDoc.items, selection)
+    switch (action) {
+      case 'editNodes':
+      case 'editText':
+        if (top.length === 1) ops.editNodes(top[0])
+        break
+      case 'enterGroup':
+        if (top.length === 1) {
+          setEnteredGroupId(top[0])
+          setSelection(new Set())
+        }
+        break
+      case 'leaveGroup':
+        setEnteredGroupId(null)
+        break
+      case 'doneNodes':
+        ops.exitNodes()
+        break
+      case 'rename':
+        menu?.rename?.()
+        break
+      case 'toggleHidden': {
+        // One undo step for the whole selection, every item to the same state.
+        const show = top.every((id) => findItem(previewDoc.items, id)?.visible === false)
+        let next = previewDoc
+        for (const id of top) {
+          if (findItem(next.items, id)?.visible !== show) next = toggleVisible(next, id)
+        }
+        if (next !== previewDoc) commit(next)
+        break
+      }
+      case 'duplicate':
+        ops.duplicateSelection()
+        break
+      case 'delete':
+        ops.deleteSelection()
+        break
+      case 'group':
+        ops.doGroup()
+        break
+      case 'ungroup':
+        ops.doUngroup()
+        break
+      case 'front':
+      case 'forward':
+      case 'backward':
+      case 'back':
+        ops.reorder(action)
+        break
+      case 'flipX':
+        ops.flip('x')
+        break
+      case 'flipY':
+        ops.flip('y')
+        break
+      case 'bool:add':
+      case 'bool:subtract':
+      case 'bool:intersect':
+      case 'bool:xor':
+      case 'bool:divide':
+        void ops.doBoolean(action.slice(5) as BooleanOp)
+        break
+      case 'combine':
+        ops.doCombine()
+        break
+      case 'split':
+        ops.doSplit()
+        break
+      case 'reverse':
+        ops.doReverse()
+        break
+      case 'convertText':
+        void ops.convertText()
+        break
+      case 'selectAll':
+        setSelection(new Set(previewDoc.items.map((it) => it.id)))
+        break
+      case 'undo':
+        history.undo()
+        break
+      case 'redo':
+        history.redo()
+        break
+      case 'toggleSnap':
+        setSnap((v) => ({ ...v, enabled: !v.enabled }))
+        break
+      case 'toggleGrid':
+        setShowGrid((g) => !g)
+        break
+      case 'smooth':
+      case 'corner': {
+        const next = setSelectedNodesKind(previewDoc, nodeSel, action)
+        if (next) commit(next)
+        break
+      }
+      case 'breakNode':
+        ops.doBreak()
+        break
+      case 'join':
+        ops.doJoin()
+        break
+      case 'addNode': {
+        const seg = menu?.segment
+        const it = seg ? findItem(previewDoc.items, seg.pathId) : null
+        if (seg && it?.kind === 'path') {
+          commit({ ...previewDoc, items: replaceIn(previewDoc.items, insertNode(it, seg.sub, seg.seg, seg.t)) })
+        }
+        break
+      }
+    }
+  }
 
   return (
     <div className="canvas-ui flex h-full min-h-0 w-full shrink-0 flex-col animate-in-fade">
@@ -188,6 +362,9 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
           reorder={ops.reorder}
           duplicateSelection={ops.duplicateSelection}
           deleteSelection={ops.deleteSelection}
+          hoverId={canvasHover}
+          onHover={setRailHover}
+          onRowMenu={openRowMenu}
         />
 
         <div className="relative min-w-0 flex-1 bg-bg">
@@ -210,6 +387,9 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
             baseId={base?.id ?? null}
             undo={history.undo}
             redo={history.redo}
+            railHoverId={railHover}
+            onHoverChange={setCanvasHover}
+            onMenu={openStageMenu}
             onSelectionChange={(ids) => {
               setSelection(ids)
               // Keep the selected nodes of shapes that stay selected: shift-adding
@@ -258,6 +438,28 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
 
       {/* Status */}
       <EditorStatusBar stats={stats} viewBox={previewDoc.viewBox} grow={previewDoc.artboard === 'grow'} tool={tool} />
+
+      {menu && menuEntries.length > 0 && (
+        <ContextMenu
+          at={menu.at}
+          label={menu.target.kind === 'canvas' ? 'Canvas' : menu.target.kind === 'items' ? 'Selection' : 'Nodes'}
+          onClose={() => setMenu(null)}
+          entries={menuEntries.map((e, i) =>
+            e.kind === 'sep'
+              ? e
+              : {
+                  kind: 'item',
+                  id: `${e.action}-${i}`,
+                  label: e.label,
+                  shortcut: e.shortcut,
+                  reason: e.reason,
+                  danger: e.danger,
+                  checked: e.checked,
+                  onSelect: () => run(e.action),
+                },
+          )}
+        />
+      )}
     </div>
   )
 }

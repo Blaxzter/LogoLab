@@ -24,6 +24,9 @@ export interface LayersRailProps {
   reorder: (how: 'front' | 'back' | 'forward' | 'backward') => void
   duplicateSelection: () => void
   deleteSelection: () => void
+  hoverId: string | null
+  onHover: (id: string | null) => void
+  onRowMenu: (id: string, at: { x: number; y: number }, rename: () => void) => void
 }
 
 export function LayersRail({
@@ -42,6 +45,9 @@ export function LayersRail({
   reorder,
   duplicateSelection,
   deleteSelection,
+  hoverId,
+  onHover,
+  onRowMenu,
 }: LayersRailProps) {
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
@@ -59,6 +65,9 @@ export function LayersRail({
           onRename={rowRename}
           onMove={doMove}
           onDelete={rowDelete}
+          hoverId={hoverId}
+          onHover={onHover}
+          onRowMenu={onRowMenu}
         />
       </div>
 

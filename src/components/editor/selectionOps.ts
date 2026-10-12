@@ -5,7 +5,7 @@ import { findItem, isGroup, removeItems, topLevelSelection, ungroup } from '../.
 import { scaleAbout, transformItems, translation, type Box } from '../../lib/editor/transform'
 import { breakAt, combinePaths, joinEnds, reversePath, splitCompound } from '../../lib/editor/pathOps'
 import { parseNodeKey, refsByItem, replaceIn, replaceWithMany } from '../../lib/editor/nodeEdit'
-import { deleteNodes } from '../../lib/path/geometry'
+import { deleteNodes, setNodeKind } from '../../lib/path/geometry'
 import { duplicateItems, newId } from './editorDoc'
 
 /** Delete the selected nodes; a path left with too few nodes is removed. */
@@ -20,6 +20,25 @@ export function deleteSelectedNodes(doc: EditableDoc, nodeSel: ReadonlySet<strin
     else dropped.add(itemId)
   }
   if (dropped.size > 0) items = removeItems(items, dropped)
+  return items !== doc.items ? { ...doc, items } : null
+}
+
+/** Make every selected node smooth or a corner (the menu's version of double-clicking one). */
+export function setSelectedNodesKind(
+  doc: EditableDoc,
+  nodeSel: ReadonlySet<string>,
+  kind: 'smooth' | 'corner',
+): EditableDoc | null {
+  let items = doc.items
+  for (const [itemId, refs] of refsByItem([...nodeSel].map(parseNodeKey))) {
+    const found = findItem(items, itemId)
+    if (!found || found.kind !== 'path') continue
+    let item: PathItem = found
+    for (const ref of refs) {
+      if (item.subPaths[ref.sub]?.nodes[ref.idx]?.kind !== kind) item = setNodeKind(item, ref, kind)
+    }
+    if (item !== found) items = replaceIn(items, item)
+  }
   return items !== doc.items ? { ...doc, items } : null
 }
 

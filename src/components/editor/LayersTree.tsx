@@ -26,6 +26,12 @@ export interface LayersTreeProps {
   onDelete: (id: string) => void
   /** Drop `ids` at a paint-order insertion point. */
   onMove: (ids: ReadonlySet<string>, to: DropSpot) => void
+  /** The item the canvas pointer is over: its row lights up as if hovered. */
+  hoverId: string | null
+  /** The row under the pointer, for the canvas to echo (null on leave). */
+  onHover: (id: string | null) => void
+  /** Right-click on a row (already selected by then); `rename` opens the row's name field. */
+  onRowMenu: (id: string, at: { x: number; y: number }, rename: () => void) => void
 }
 
 interface DragState {
@@ -43,6 +49,7 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
   rowsRef.current = rows
 
   const [drag, setDrag] = useState<DragState | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const dragRef = useRef<DragState | null>(null)
   const anchorRef = useRef<string | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -90,6 +97,17 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
   const toggleExpanded = useCallback((id: string) => propsRef.current.onToggleExpanded(id), [])
   const rename = useCallback((id: string, name: string) => propsRef.current.onRename(id, name), [])
   const remove = useCallback((id: string) => propsRef.current.onDelete(id), [])
+  const hover = useCallback((id: string | null) => propsRef.current.onHover(id), [])
+  const menu = useCallback((id: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    const p = propsRef.current
+    // Like the canvas: a right-click on an unselected row selects it, one on the selection keeps it whole.
+    if (!p.selection.has(id)) {
+      anchorRef.current = id
+      p.onSelect(new Set([id]))
+    }
+    p.onRowMenu(id, { x: e.clientX, y: e.clientY }, () => setEditingId(id))
+  }, [])
 
   /* ---------------------------------------------------------------- drag */
 
@@ -181,7 +199,11 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
   }
 
   return (
-    <div ref={rootRef} className={`flex flex-col gap-px py-1 ${dragging ? 'cursor-grabbing' : ''}`}>
+    <div
+      ref={rootRef}
+      onPointerLeave={() => hover(null)}
+      className={`flex flex-col gap-px py-1 ${dragging ? 'cursor-grabbing' : ''}`}
+    >
       {rows.map((row) => (
         <LayerRowView
           key={row.item.id}
@@ -189,6 +211,11 @@ export const LayersTree = memo(function LayersTree(props: LayersTreeProps) {
           depth={row.depth}
           number={row.number}
           selected={props.selection.has(row.item.id)}
+          hovered={props.hoverId === row.item.id}
+          editing={editingId === row.item.id}
+          onEditing={setEditingId}
+          onHover={hover}
+          onMenu={menu}
           dragging={drag?.ids.has(row.item.id) ?? false}
           over={drag?.over?.rowId === row.item.id ? drag.over.edge : null}
           onPick={clickRow}
@@ -212,6 +239,11 @@ const LayerRowView = memo(function LayerRowView({
   depth,
   number,
   selected,
+  hovered,
+  editing,
+  onEditing,
+  onHover,
+  onMenu,
   dragging,
   over,
   onPick,
@@ -225,6 +257,11 @@ const LayerRowView = memo(function LayerRowView({
   depth: number
   number: number
   selected: boolean
+  hovered: boolean
+  editing: boolean
+  onEditing: (id: string | null) => void
+  onHover: (id: string | null) => void
+  onMenu: (id: string, e: React.MouseEvent) => void
   dragging: boolean
   over: DropEdge | null
   onPick: (id: string, e: React.PointerEvent) => void
@@ -234,8 +271,6 @@ const LayerRowView = memo(function LayerRowView({
   onRename: (id: string, name: string) => void
   onDelete: (id: string) => void
 }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
   const text = isGroup(item) && !!item.text
   // A text is one layer, not a folder of glyphs.
@@ -246,8 +281,8 @@ const LayerRowView = memo(function LayerRowView({
   }, [editing])
 
   const commitName = () => {
-    setEditing(false)
-    onRename(item.id, draft)
+    onEditing(null)
+    onRename(item.id, inputRef.current?.value ?? '')
   }
 
   return (
@@ -257,12 +292,13 @@ const LayerRowView = memo(function LayerRowView({
         if (editing) return
         onPick(item.id, e)
       }}
-      onDoubleClick={() => {
-        setDraft(itemLabel(item, number))
-        setEditing(true)
+      onDoubleClick={() => onEditing(item.id)}
+      onPointerEnter={() => onHover(item.id)}
+      onContextMenu={(e) => {
+        if (!editing) onMenu(item.id, e)
       }}
       className={`group relative flex h-8 shrink-0 cursor-default items-center gap-1 rounded-md pr-1 text-xs transition-colors ${
-        selected ? 'bg-accent-soft text-accent' : 'text-ink-2 hover:bg-surface-3'
+        selected ? 'bg-accent-soft text-accent' : `text-ink-2 hover:bg-surface-3 ${hovered ? 'bg-surface-3' : ''}`
       } ${dragging ? 'opacity-40' : ''} ${over === 'into' ? 'ring-1 ring-accent' : ''}`}
       style={{ paddingLeft: depth * 12 }}
     >
@@ -324,12 +360,11 @@ const LayerRowView = memo(function LayerRowView({
       {editing ? (
         <input
           ref={inputRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          defaultValue={itemLabel(item, number)}
           onBlur={commitName}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commitName()
-            if (e.key === 'Escape') setEditing(false)
+            if (e.key === 'Escape') onEditing(null)
             e.stopPropagation()
           }}
           className="min-w-0 flex-1 rounded border border-line bg-surface px-1 py-0.5 text-xs text-ink outline-none"

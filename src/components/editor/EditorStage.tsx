@@ -13,7 +13,7 @@
 // pointer delta, never incrementally from the previous frame, which would
 // accumulate drift and make a snapped drag stick to its own snap.
 
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { EditableDoc, PathItem, Vec } from '../../lib/path/types'
 import { nodeEditablePaths } from '../../lib/editor/nodeEdit'
 import { selectionBox, type Box } from '../../lib/editor/transform'
@@ -26,11 +26,20 @@ import { ItemsView, pathD } from '../vector/DocRender'
 import type { EditorTool } from './tools'
 import { buildShape as buildShapeFor } from './stage/buildShape'
 import { ACCENT, BASE, GRIP_CURSOR } from './stage/stageConstants'
-import { GridOverlay, NodeOverlay, SelectionOutline, SnapGuides, TransformBox } from './stage/StageOverlays'
+import {
+  GridOverlay,
+  HoverEcho,
+  NodeHoverMark,
+  NodeOverlay,
+  SelectionOutline,
+  SnapGuides,
+  TransformBox,
+} from './stage/StageOverlays'
 import { useSpaceHeld } from './stage/useSpaceHeld'
 import { TextEditOverlay, TextInput } from './stage/TextEditLayer'
 import type { TextEditing } from './studio/useTextEditing'
-import { useStageGestures } from './stage/useStageGestures'
+import { useStageGestures, type StageMenuTarget } from './stage/useStageGestures'
+import { isTypingTarget } from './stage/useSpaceHeld'
 
 // Node keys live in the pure core; re-exported for existing importers.
 export { nodeKey, parseNodeKey } from '../../lib/editor/nodeEdit'
@@ -75,6 +84,12 @@ export interface EditorStageProps {
   baseId: string | null
   undo: () => void
   redo: () => void
+  /** A row hovered in the layers list: echoed on the canvas like a hover there. */
+  railHoverId: string | null
+  /** What the canvas hover would take, for the layers list to light up its row. */
+  onHoverChange: (id: string | null) => void
+  /** Open the context menu at a screen point. */
+  onMenu: (target: StageMenuTarget, at: { x: number; y: number }) => void
 }
 
 export function EditorStage({
@@ -102,6 +117,9 @@ export function EditorStage({
   baseId,
   undo,
   redo,
+  railHoverId,
+  onHoverChange,
+  onMenu,
 }: EditorStageProps) {
   const [vx, vy, vw, vh] = doc.viewBox
   const grow = doc.artboard === 'grow'
@@ -156,33 +174,72 @@ export function EditorStage({
     [tool, vw],
   )
 
-  const { gesture, guides, hoverId, hoverGrip, hoverText, onPointerDown, onPointerMove, onPointerUp, onDoubleClick } =
-    useStageGestures({
-      doc,
-      tool,
-      selection,
-      nodeSel,
-      snap: stageSnap,
-      penPathId,
-      enteredGroupId,
-      spaceHeld,
-      isDrawTool,
-      box,
-      nodePaths,
-      r,
-      toDoc,
-      buildShape,
-      onSelectionChange,
-      onNodeSelChange,
-      onDocChange,
-      onDocCommit,
-      onPenPathChange,
-      onToolDone,
-      onEnterGroup,
-      onEditNodes,
-      onExitNodes,
-      text,
-    })
+  const {
+    gesture,
+    guides,
+    hoverId,
+    hoverGrip,
+    hoverPart,
+    hoverText,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerLeave,
+    onDoubleClick,
+    onContextMenu,
+  } = useStageGestures({
+    doc,
+    tool,
+    selection,
+    nodeSel,
+    snap: stageSnap,
+    penPathId,
+    enteredGroupId,
+    spaceHeld,
+    isDrawTool,
+    box,
+    nodePaths,
+    r,
+    toDoc,
+    buildShape,
+    onSelectionChange,
+    onNodeSelChange,
+    onDocChange,
+    onDocCommit,
+    onPenPathChange,
+    onToolDone,
+    onEnterGroup,
+    onEditNodes,
+    onExitNodes,
+    onMenu,
+    text,
+  })
+
+  useEffect(() => onHoverChange(hoverId), [hoverId, onHoverChange])
+  useEffect(() => () => onHoverChange(null), [onHoverChange])
+
+  // The keyboard's menu key (and Shift+F10) opens the menu on the selection,
+  // or on the middle of the canvas when nothing is selected.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey))) return
+      if (isTypingTarget(e.target) || text.edit) return
+      const rect = svgRef.current?.getBoundingClientRect()
+      if (!rect || rect.width === 0) return
+      e.preventDefault()
+      const sel = tool === 'node' && nodeSel.size > 0 ? 'nodes' : selection.size > 0 ? 'items' : 'canvas'
+      const c = sel !== 'canvas' && box ? { x: box.x + box.w / 2, y: box.y + box.h / 2 } : null
+      const at = c
+        ? { x: rect.left + ((c.x - fx) / fw) * rect.width, y: rect.top + ((c.y - fy) / fh) * rect.height }
+        : { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      // Keep the point on screen: a selection can be scrolled out of view.
+      at.x = Math.min(Math.max(at.x, rect.left), rect.right)
+      at.y = Math.min(Math.max(at.y, rect.top), rect.bottom)
+      onMenu({ kind: sel }, at)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [tool, nodeSel, selection, box, fx, fy, fw, fh, text.edit, onMenu])
 
   /* ---------------------------------------------------------- rendering */
 
@@ -204,9 +261,15 @@ export function EditorStage({
               ? 'crosshair'
               : hoverGrip
                 ? GRIP_CURSOR[hoverGrip]
-                : hoverId
-                  ? 'move'
-                  : 'default'
+                : hoverPart
+                  ? hoverPart.kind === 'segment'
+                    ? 'default'
+                    : 'move'
+                  : hoverId
+                    ? tool === 'node'
+                      ? 'pointer'
+                      : 'move'
+                    : 'default'
 
   const gridStep = snap.grid > 0 ? snap.grid : 0
 
@@ -229,7 +292,9 @@ export function EditorStage({
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
+              onPointerLeave={onPointerLeave}
               onDoubleClick={onDoubleClick}
+              onContextMenu={onContextMenu}
             >
               {/* Catches empty-space clicks; transparent so the checker shows. */}
               <rect x={fx} y={fy} width={fw} height={fh} fill="transparent" />
@@ -261,9 +326,10 @@ export function EditorStage({
 
               <g style={{ pointerEvents: 'none' }}>
                 {/* Hover echo, so you know what a click would take. */}
-                {hoverId && !selection.has(hoverId) && !gesture && (
-                  <SelectionOutline doc={doc} id={hoverId} width={r(1)} color={ACCENT} opacity={0.5} />
-                )}
+                {(() => {
+                  const echo = hoverId ?? railHoverId
+                  return echo && !selection.has(echo) && !gesture ? <HoverEcho doc={doc} id={echo} r={r} /> : null
+                })()}
 
                 {[...selection].map((id) =>
                   id === baseId ? (
@@ -282,6 +348,13 @@ export function EditorStage({
                   nodePaths.map((path) => (
                     <NodeOverlay key={path.id} path={path} nodeSel={nodeSel} r={r} penTip={penPathId === path.id} />
                   ))}
+                {tool === 'node' &&
+                  hoverPart &&
+                  !gesture &&
+                  (() => {
+                    const path = nodePaths.find((n) => n.id === hoverPart.pathId)
+                    return path ? <NodeHoverMark path={path} hover={hoverPart} r={r} /> : null
+                  })()}
 
                 {drawPreview && (
                   <path

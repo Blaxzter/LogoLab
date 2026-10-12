@@ -1,6 +1,6 @@
 // Every pointer gesture on the stage: who owns a pointerdown, the live drag, the commit, Escape and double-click.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EditableDoc, PathItem, Vec } from '../../../lib/path/types'
 import { findItem, isText } from '../../../lib/path/docTree'
 import { angleOf, itemBox, selectionBox, type Box, type Grip } from '../../../lib/editor/transform'
@@ -25,6 +25,7 @@ import { makePath } from '../editorDoc'
 import type { EditorTool } from '../tools'
 import { dragGesture } from './dragGesture'
 import type { Gesture, Guides } from './gesture'
+import type { NodeHover } from './StageOverlays'
 import { ANCHOR_PX, GRIP_PX, HANDLE_PX, HIT, ITEM_TOL_PX, ROTATE_OFFSET_PX, SEGMENT_PX } from './stageConstants'
 
 export interface StageGestureInput {
@@ -57,7 +58,20 @@ export interface StageGestureInput {
   text: TextEditing
   /** Leave node editing for the Move tool, keeping the selection. */
   onExitNodes: () => void
+  /** Right-click (or a touch held still): open the context menu for what is under the pointer. */
+  onMenu: (target: StageMenuTarget, at: { x: number; y: number }) => void
 }
+
+/** What a context menu on the stage acts on; the selection has already been moved onto it. */
+export type StageMenuTarget =
+  | { kind: 'canvas' }
+  | { kind: 'items' }
+  | { kind: 'nodes' }
+  | { kind: 'segment'; pathId: string; sub: number; seg: number; t: number }
+
+/** A touch held this long without moving opens the context menu (no right button on a tablet). */
+const LONG_PRESS_MS = 550
+const LONG_PRESS_SLOP_PX = 8
 
 export function useStageGestures({
   doc,
@@ -83,6 +97,7 @@ export function useStageGestures({
   onEnterGroup,
   onEditNodes,
   onExitNodes,
+  onMenu,
   text,
 }: StageGestureInput) {
   const [gesture, setGesture] = useState<Gesture | null>(null)
@@ -92,8 +107,13 @@ export function useStageGestures({
   })
   const [hoverId, setHoverId] = useState<string | null>(null)
   const [hoverGrip, setHoverGrip] = useState<Grip | 'rotate' | null>(null)
+  /** The node-tool part a press would grab. */
+  const [hoverPart, setHoverPart] = useState<NodeHover | null>(null)
   /** The pointer is over the open text — the only place the I-beam belongs while typing. */
   const [hoverText, setHoverText] = useState(false)
+  const longPress = useRef<{ timer: number; x: number; y: number } | null>(null)
+  /** When a long press last opened the menu: Android follows it with its own contextmenu event. */
+  const longPressFiredAt = useRef(0)
   const vw = doc.viewBox[2]
 
   /* ---------------------------------------------------------- pointers */
@@ -106,6 +126,7 @@ export function useStageGestures({
     const p = toDoc(e)
     const additive = e.shiftKey
     e.stopPropagation()
+    if (e.pointerType === 'touch') armLongPress(e.clientX, e.clientY)
     try {
       e.currentTarget.setPointerCapture(e.pointerId)
     } catch {
@@ -395,11 +416,25 @@ export function useStageGestures({
           groupsAreAtomic: enteredGroupId === null,
         })
         setHoverId(hit ? resolveTarget(doc, hit, enteredGroupId) : null)
+        if (hoverPart) setHoverPart(null)
+      } else if (tool === 'node') {
+        if (hoverGrip) setHoverGrip(null)
+        const part = nodePartAt(p)
+        setHoverPart((prev) => (sameHover(prev, part) ? prev : part))
+        // Off the open paths, another shape is what a click would switch to.
+        const other = part ? null : pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: false })
+        const otherItem = other ? findItem(doc.items, other.leafId) : null
+        setHoverId(otherItem?.kind === 'path' && !nodePaths.some((n) => n.id === otherItem.id) ? otherItem.id : null)
       } else {
         if (hoverId) setHoverId(null)
         if (hoverGrip) setHoverGrip(null)
+        if (hoverPart) setHoverPart(null)
       }
       return
+    }
+    if (longPress.current) {
+      const lp = longPress.current
+      if (Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > LONG_PRESS_SLOP_PX) cancelLongPress()
     }
     e.stopPropagation()
     if (gesture.kind === 'text-select') {
@@ -409,7 +444,17 @@ export function useStageGestures({
     dragGesture(gesture, p, e, { selection, snap, r, setGesture, setGuides, onDocChange })
   }
 
+  /** The pointer left the canvas: nothing on it would take a click any more. */
+  const onPointerLeave = () => {
+    if (gesture) return
+    setHoverId(null)
+    setHoverPart(null)
+    setHoverGrip(null)
+    setHoverText(false)
+  }
+
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    cancelLongPress()
     if (!gesture) return
     e.stopPropagation()
     try {
@@ -482,6 +527,105 @@ export function useStageGestures({
     return () => window.removeEventListener('keydown', onKey, true)
   }, [gesture, onDocChange])
 
+  /* ------------------------------------------------------ hover + menu */
+
+  const nodeHit = (path: PathItem, p: Vec) =>
+    pickNodePart(path, p, {
+      anchorTol: r(ANCHOR_PX * HIT),
+      handleTol: r(HANDLE_PX * HIT),
+      segmentTol: r(SEGMENT_PX * HIT),
+      handlesVisibleFor: handleKeysFor(path, nodeSel),
+    })
+
+  /** The node-tool part under `p` on any open path: handle, then anchor, then curve. */
+  const nodePartAt = (p: Vec): NodeHover | null => {
+    for (const path of nodePaths) {
+      const hit = nodeHit(path, p)
+      if (!hit) continue
+      if (hit.kind === 'segment') return { kind: 'segment', pathId: path.id, sub: hit.sub!, seg: hit.seg! }
+      if (hit.kind === 'anchor' || hit.kind === 'handle') {
+        return { kind: hit.kind, pathId: path.id, sub: hit.sub!, idx: hit.idx!, which: hit.handle }
+      }
+    }
+    return null
+  }
+
+  /**
+   * Resolve what a menu at `p` acts on, moving the selection onto it the way a
+   * click would: a right-click on something unselected selects it, one on the
+   * selection keeps it whole.
+   */
+  const openMenuAt = (p: Vec, at: { x: number; y: number }) => {
+    if (tool === 'node') {
+      for (const path of nodePaths) {
+        const hit = nodeHit(path, p)
+        if (!hit) continue
+        if (hit.kind === 'segment') {
+          onMenu({ kind: 'segment', pathId: path.id, sub: hit.sub!, seg: hit.seg!, t: hit.t! }, at)
+          return
+        }
+        const key = nodeKey(path.id, hit.sub!, hit.idx!)
+        if (!nodeSel.has(key)) onNodeSelChange(new Set([key]))
+        onMenu({ kind: 'nodes' }, at)
+        return
+      }
+      const other = pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: false })
+      if (other) {
+        if (!selection.has(other.leafId)) {
+          onNodeSelChange(new Set())
+          onSelectionChange(new Set([other.leafId]))
+        }
+        onMenu({ kind: 'items' }, at)
+        return
+      }
+      onMenu({ kind: 'canvas' }, at)
+      return
+    }
+    const hit = pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: enteredGroupId === null })
+    if (!hit) {
+      onMenu({ kind: 'canvas' }, at)
+      return
+    }
+    const target = resolveTarget(doc, hit, enteredGroupId)
+    if (!selection.has(target)) onSelectionChange(new Set([target]))
+    onMenu({ kind: 'items' }, at)
+  }
+
+  const live = useRef({ gesture, openMenuAt })
+  live.current = { gesture, openMenuAt }
+
+  const onContextMenu = (e: React.MouseEvent<SVGSVGElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (gesture || text.edit) return
+    if (performance.now() - longPressFiredAt.current < 1000) return
+    openMenuAt(toDoc(e), { x: e.clientX, y: e.clientY })
+  }
+
+  const cancelLongPress = () => {
+    if (!longPress.current) return
+    clearTimeout(longPress.current.timer)
+    longPress.current = null
+  }
+
+  /** A touch held still opens the menu; whatever the press started is undone first. */
+  const armLongPress = (x: number, y: number) => {
+    cancelLongPress()
+    const timer = window.setTimeout(() => {
+      longPress.current = null
+      longPressFiredAt.current = performance.now()
+      // The timer outlives the render that armed it: read the live gesture and handlers.
+      const g = live.current.gesture
+      if (g && 'base' in g) onDocChange(g.base)
+      setGesture(null)
+      setGuides({ x: null, y: null })
+      live.current.openMenuAt(toDoc({ clientX: x, clientY: y }), { x, y })
+    }, LONG_PRESS_MS)
+    longPress.current = { timer, x, y }
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies(cancelLongPress): only touches a ref
+  useEffect(() => () => cancelLongPress(), [])
+
   /* ------------------------------------------------------ double click */
 
   const onDoubleClick = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -553,5 +697,27 @@ export function useStageGestures({
     onEditNodes(hit.leafId, p)
   }
 
-  return { gesture, guides, hoverId, hoverGrip, hoverText, onPointerDown, onPointerMove, onPointerUp, onDoubleClick }
+  return {
+    gesture,
+    guides,
+    hoverId,
+    hoverGrip,
+    hoverPart,
+    hoverText,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerLeave,
+    onDoubleClick,
+    onContextMenu,
+  }
+}
+
+function sameHover(a: NodeHover | null, b: NodeHover | null): boolean {
+  if (a === b) return true
+  if (!a || !b || a.pathId !== b.pathId || a.sub !== b.sub) return false
+  if (a.kind === 'segment' || b.kind === 'segment') {
+    return a.kind === 'segment' && b.kind === 'segment' && a.seg === b.seg
+  }
+  return a.kind === b.kind && a.idx === b.idx && a.which === b.which
 }

@@ -1,5 +1,6 @@
 // The stage's non-interactive SVG overlays: grid, selection outlines, transform box, nodes, snap guides.
 
+import { useId } from 'react'
 import type { EditableDoc, PathItem } from '../../../lib/path/types'
 import { allPaths, findItem, isGroup } from '../../../lib/path/docTree'
 import { GRIPS, gripPoint, itemBox, type Box } from '../../../lib/editor/transform'
@@ -71,6 +72,117 @@ export function SelectionOutline({
         <path key={p.id} d={pathD(p)} />
       ))}
     </g>
+  )
+}
+
+/**
+ * The hover echo: what a click would take. A fill is outlined on its edge, but
+ * a stroke's centreline runs down the middle of its own ink, where a thin line
+ * disappears, so a stroked path gets a rim drawn just OUTSIDE the ink instead:
+ * a band wider than the stroke, masked by the stroke itself.
+ */
+export function HoverEcho({ doc, id, r }: { doc: EditableDoc; id: string; r: (px: number) => number }) {
+  // useId's characters are not all valid inside url(#…).
+  const maskId = `hover-${useId().replace(/[^\w-]/g, '')}`
+  const item = findItem(doc.items, id)
+  if (!item) return null
+  const width = r(1.5)
+  if (isGroup(item) && item.text) {
+    const b = itemBox(item)
+    return b ? <rect x={b.x} y={b.y} width={b.w} height={b.h} fill="none" stroke={ACCENT} strokeWidth={width} /> : null
+  }
+  const paths = isGroup(item) ? allPaths(item.children) : item.kind === 'path' ? [item] : []
+  const stroked = paths.filter((p) => p.stroke && p.stroke.width > 0)
+  const rim = r(2)
+
+  // The mask's own extent: every stroked path's box, padded past its rim.
+  let area: Box | null = null
+  for (const p of stroked) {
+    const b = itemBox(p)
+    if (!b) continue
+    const pad = p.stroke!.width / 2 + rim * 2
+    const x0 = Math.min(area ? area.x : Infinity, b.x - pad)
+    const y0 = Math.min(area ? area.y : Infinity, b.y - pad)
+    const x1 = Math.max(area ? area.x + area.w : -Infinity, b.x + b.w + pad)
+    const y1 = Math.max(area ? area.y + area.h : -Infinity, b.y + b.h + pad)
+    area = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+  }
+  const strokeProps = (p: PathItem, w: number, color: string) => ({
+    d: pathD(p),
+    fill: 'none',
+    stroke: color,
+    strokeWidth: w,
+    strokeLinecap: p.stroke!.cap,
+    strokeLinejoin: p.stroke!.join,
+    strokeDasharray: p.stroke!.dash?.length ? p.stroke!.dash.join(' ') : undefined,
+  })
+
+  return (
+    <g>
+      {paths
+        .filter((p) => !stroked.includes(p))
+        .map((p) => (
+          <path key={p.id} d={pathD(p)} fill="none" stroke={ACCENT} strokeWidth={width} />
+        ))}
+      {area && (
+        <>
+          <defs>
+            <mask id={maskId} maskUnits="userSpaceOnUse" x={area.x} y={area.y} width={area.w} height={area.h}>
+              <rect x={area.x} y={area.y} width={area.w} height={area.h} fill="#fff" />
+              {stroked.map((p) => (
+                <path key={p.id} {...strokeProps(p, p.stroke!.width, '#000')} />
+              ))}
+            </mask>
+          </defs>
+          <g mask={`url(#${maskId})`}>
+            {stroked.map((p) => (
+              <path key={p.id} {...strokeProps(p, p.stroke!.width + rim * 2, ACCENT)} />
+            ))}
+          </g>
+        </>
+      )}
+    </g>
+  )
+}
+
+/** What a press in the node tool would grab: an anchor, a handle or a segment. */
+export type NodeHover =
+  | { kind: 'anchor' | 'handle'; pathId: string; sub: number; idx: number; which?: 'in' | 'out' }
+  | { kind: 'segment'; pathId: string; sub: number; seg: number }
+
+/** The node-tool hover: a ring round the anchor or handle, or the one segment a drag would bend. */
+export function NodeHoverMark({ path, hover, r }: { path: PathItem; hover: NodeHover; r: (px: number) => number }) {
+  const sp = path.subPaths[hover.sub]
+  if (!sp) return null
+  if (hover.kind === 'segment') {
+    const a = sp.nodes[hover.seg]
+    const b = sp.nodes[(hover.seg + 1) % sp.nodes.length]
+    if (!a || !b) return null
+    const c1 = a.hOut ?? a
+    const c2 = b.hIn ?? b
+    return (
+      <path
+        d={`M${a.x} ${a.y}C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`}
+        fill="none"
+        stroke={ACCENT}
+        strokeWidth={r(2.5)}
+        strokeLinecap="round"
+      />
+    )
+  }
+  const node = sp.nodes[hover.idx]
+  if (!node) return null
+  const at = hover.kind === 'handle' ? (hover.which === 'in' ? node.hIn : node.hOut) : node
+  if (!at) return null
+  return (
+    <circle
+      cx={at.x}
+      cy={at.y}
+      r={r(hover.kind === 'handle' ? 6 : 7.5)}
+      fill="none"
+      stroke={ACCENT}
+      strokeWidth={r(1.25)}
+    />
   )
 }
 
