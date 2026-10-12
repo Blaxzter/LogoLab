@@ -63,11 +63,15 @@ const ctx = (over: Partial<EditorMenuContext> = {}): EditorMenuContext => ({
 const actions = (entries: ReturnType<typeof editorMenu>) =>
   entries.filter((e): e is EditorMenuItem => e.kind === 'item').map((e) => e.action)
 
-test('one path: node editing and path commands, no group or boolean commands', () => {
-  const a = actions(editorMenu({ kind: 'items', from: 'canvas' }, ctx()))
+test('one path: node editing and path commands, no ungroup or boolean commands', () => {
+  const entries = editorMenu({ kind: 'items', from: 'canvas' }, ctx())
+  const a = actions(entries)
   assert.ok(a.includes('editNodes'))
   assert.ok(a.includes('reverse'))
-  for (const absent of ['group', 'ungroup', 'bool:add', 'bool:subtract', 'split', 'combine', 'rename']) {
+  // Group stays, disabled: one item is "select another", not "never".
+  const group = entries.find((e) => e.kind === 'item' && e.action === 'group') as EditorMenuItem
+  assert.equal(group.reason, reasons.group)
+  for (const absent of ['ungroup', 'bool:add', 'bool:subtract', 'split', 'combine', 'rename']) {
     assert.ok(!a.includes(absent as never), `${absent} should not be offered on one path`)
   }
 })
