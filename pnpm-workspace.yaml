@@ -5,6 +5,7 @@ packages:
   - packages/*
 
 allowBuilds:
+  esbuild: true
   onnxruntime-node: true
   protobufjs: true
   sharp: true
@@ -13,3 +14,4 @@ allowBuilds:
   # hard `ERR_PNPM_IGNORED_BUILDS` failure on any clean `--frozen-lockfile`
   # install, which is to say: on CI, and on anyone's first clone.
   tesseract.js: false
+  workerd: true
