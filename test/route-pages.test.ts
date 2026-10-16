@@ -56,6 +56,12 @@ test('the sitemap lists exactly the pages that exist', () => {
   assert.equal(new Set(ROUTE_PAGES.map(fileFor)).size, ROUTE_PAGES.length)
 })
 
+test('the sitemap carries a lastmod only when one is known', () => {
+  assert.ok(!sitemapXml().includes('<lastmod>'))
+  const xml = sitemapXml(ROUTE_PAGES, '2026-10-17')
+  assert.equal([...xml.matchAll(/<lastmod>2026-10-17<\/lastmod>/g)].length, ROUTE_PAGES.length)
+})
+
 test('every link-preview card exists', () => {
   for (const page of ROUTE_PAGES) {
     const file = ogImageFor(page).slice(ORIGIN.length + 1)

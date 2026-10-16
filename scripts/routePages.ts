@@ -15,6 +15,7 @@
 //
 // The copy describes what the app does; keep it true when a feature moves.
 
+import { execFileSync } from 'node:child_process'
 import type { Plugin } from 'vite'
 
 export const ORIGIN = 'https://logolab.fabraham.dev'
@@ -195,8 +196,27 @@ export function renderRoutePage(shell: string, page: RoutePage, pages: RoutePage
   return html
 }
 
-export function sitemapXml(pages: RoutePage[] = ROUTE_PAGES): string {
-  const urls = pages.map((p) => `  <url>\n    <loc>${urlFor(p)}</loc>\n  </url>`).join('\n')
+/**
+ * `lastmod` is the day this file last changed in git: the copy in this table is
+ * what a crawler reads on every page, so it is the date the pages changed. Not
+ * the build date — Google ignores a lastmod that moves on every deploy. Null
+ * (no lastmod) when git can't say, e.g. a shallow clone that doesn't reach it.
+ */
+export function pagesLastModified(): string | null {
+  try {
+    const day = execFileSync('git', ['log', '-1', '--format=%cs', '--', 'scripts/routePages.ts'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null
+  } catch {
+    return null
+  }
+}
+
+export function sitemapXml(pages: RoutePage[] = ROUTE_PAGES, lastmod: string | null = null): string {
+  const mod = lastmod ? `\n    <lastmod>${lastmod}</lastmod>` : ''
+  const urls = pages.map((p) => `  <url>\n    <loc>${urlFor(p)}</loc>${mod}\n  </url>`).join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`
 }
 
@@ -216,7 +236,7 @@ export function routePages(): Plugin {
         if (page.path === '/') shell.source = html
         else this.emitFile({ type: 'asset', fileName: fileFor(page), source: html })
       }
-      this.emitFile({ type: 'asset', fileName: 'sitemap.xml', source: sitemapXml() })
+      this.emitFile({ type: 'asset', fileName: 'sitemap.xml', source: sitemapXml(ROUTE_PAGES, pagesLastModified()) })
     },
   }
 }
