@@ -137,18 +137,18 @@ export const ROUTE_PAGES: RoutePage[] = [
   {
     path: '/benchmark',
     nav: 'Vectorizer benchmark',
-    title: 'Why pixel scores can’t judge an SVG — a vectorizer benchmark | LogoLab',
+    title: 'Why pixel scores can’t judge an SVG: a vectorizer benchmark | LogoLab',
     description:
-      'LogoLab, VTracer, Potrace and StarVector on 100 held-out SVG-Bench emoji, scored against the authored SVG: colour error, edge error, nodes and kinks next to DINO, LPIPS and SSIM — with the cases where each metric gets it wrong.',
+      'LogoLab, VTracer, Potrace and StarVector on 100 held-out SVG-Bench emoji, scored against the authored SVG. Colour error, edge error, nodes and kinks sit next to DINO, LPIPS and SSIM, with the cases where each metric gets it wrong.',
     h1: 'Pixel scores can’t see the SVG',
     intro:
-      'The published image-to-SVG benchmarks render each SVG back to pixels and compare pictures. On flat icons that saturates: traces with three times the nodes and visibly kinked curves get the same score. This benchmark also scores the drawing, against the vector art that produced the image.',
+      'The published image-to-SVG benchmarks render each SVG back to pixels and compare pictures. On flat icons that comparison saturates, so traces with three times the nodes and visibly kinked curves get the same score. This benchmark also scores the drawing, against the vector art that produced the image.',
     points: [
-      '<strong>Same score, different file:</strong> DINO 0.9999 vs 0.9998 for traces with 68 and 235 nodes.',
-      '<strong>The metric picks the worse trace:</strong> LPIPS and DINO prefer a trace three times further off the drawing.',
-      '<strong>A black silhouette scores 0.967:</strong> every colour wrong, and a recognition network still calls it the same image.',
-      '<strong>Where LogoLab loses:</strong> the cases where its ink detection merges two tones, shown next to the tool that gets them right.',
-      'Open source and reproducible: pinned dataset, pinned tools, every output scored.',
+      'DINO scores two traces of the same emoji 0.9999 and 0.9998, though one has 68 nodes and the other 235.',
+      'On some cases LPIPS and DINO prefer a trace whose outline is three times further from the drawing.',
+      'A black silhouette of a brown leg scores 0.967, because a recognition network still sees a leg.',
+      'LogoLab loses on the cases where its ink detection merges two tones, and the page shows them next to the tool that gets them right.',
+      'The dataset and tools are pinned, every output is scored, and the harness is open source.',
     ],
   },
 ]

@@ -71,8 +71,8 @@ export default function BenchmarkPage() {
         <p className="mt-4 max-w-[68ch] text-[0.95rem] leading-relaxed text-ink-2">
           The published image-to-SVG benchmarks render each tool’s SVG back to pixels and compare pictures. On flat
           icons that comparison saturates: files that differ three- or four-fold in nodes, with visibly different
-          curves, get the same score. So we score the <em>drawing</em> as well, against the vector art that produced the
-          image. Below are real outputs from both kinds of score, including the ones where LogoLab loses.
+          curves, get the same score. So we also score the <em>drawing</em>, against the vector art that produced the
+          image. Every example below is a real output, and two of them are cases LogoLab gets wrong.
         </p>
 
         <Figure
@@ -81,11 +81,11 @@ export default function BenchmarkPage() {
           caption={
             <>
               Three traces of the same emoji. The DINO score, the headline metric of StarVector’s SVG-Bench, calls them
-              0.9999, 0.9998 and 0.9996: the same picture. They are not the same file. The artist drew it with{' '}
+              0.9999, 0.9998 and 0.9996, so by that score the three are interchangeable. The artist drew it with{' '}
               {hero.authoredNodes.length / 2} nodes; the traces use{' '}
               {hero.tools.map((t) => n(t.metrics, 'docNodes')).join(', ')}, and VTracer puts{' '}
               {n(hero.tools[1].metrics, 'tangentBreaks')} kinks (red rings) on curves the artist drew smooth. StarVector
-              is the most economical and the furthest off the outline. Click a panel to zoom.
+              uses the fewest nodes, and its outline is the furthest from the drawing. Click a panel to zoom.
             </>
           }
         />
@@ -104,22 +104,18 @@ export default function BenchmarkPage() {
             source, and compares the two images with four numbers, plus the SVG’s token count:
           </p>
           <ul>
+            <li>MSE and SSIM measure pixel and structural difference.</li>
+            <li>LPIPS is a distance between deep-network features, tuned to how people judge similar photos.</li>
             <li>
-              <b>MSE</b> and <b>SSIM</b>: pixel and structural difference.
-            </li>
-            <li>
-              <b>LPIPS</b>: distance between deep-network features, tuned to human judgments of similar photos.
-            </li>
-            <li>
-              <b>DINO score</b>: cosine similarity of DINOv2 embeddings, a network trained to recognise what is in an
-              image.
+              The DINO score is the cosine similarity of DINOv2 embeddings, from a network trained to recognise what is
+              in an image.
             </li>
           </ul>
           <p>
-            All four answer one question: does the picture look like the picture? That is the right question for a
-            photo, and the wrong one for a vector file. None of them can see how many nodes the file has, whether a
-            circle is a circle, whether two curves meet smoothly or with a kink, or whether the colours are right. A
-            network trained to recognise objects is, by design, forgiving of colour: a bat is a bat in grey or in black.
+            All four ask whether the rendered picture looks like the source picture. For a photo that is enough. For a
+            vector file it leaves out most of what matters: none of them can see how many nodes the file has, whether a
+            circle is still a circle, whether two curves meet smoothly or with a kink, or whether the colours are right.
+            DINO in particular was trained to recognise objects, and it will recognise a bat in grey or in black.
           </p>
         </Section>
 
@@ -140,7 +136,7 @@ export default function BenchmarkPage() {
         <Section title="A black silhouette scores 0.967">
           <p>
             SVG-Bench runs Potrace the way Potrace works: the image is cut to black and white first. Every colour on
-            this leg is wrong (ΔE 15, where 1 is barely visible), and DINO still gives it 0.967 — higher than
+            this leg is wrong (ΔE 15, where 1 is barely visible), and DINO still gives it 0.967. That is higher than
             StarVector’s median across the whole set (0.930). StarVector’s own trace scores 0.998 while its outline sits
             3.3 px from the drawing.
           </p>
@@ -149,15 +145,15 @@ export default function BenchmarkPage() {
 
         <Section title="Where LogoLab loses">
           <p>
-            The same rules apply to us. On the bat, LogoLab merged the two greys into one silhouette and the wings are
-            gone; VTracer gets it right. On the camera, it dropped the grey parts entirely (ΔE 5.8 against VTracer’s
-            0.4). Both are failures of the step that decides how many inks an image has, and they are why LogoLab’s
-            average edge error is not significantly better than VTracer’s even though its median is.
+            On the bat, LogoLab merged the two greys into one silhouette and lost the wings; VTracer gets it right. On
+            the camera, it dropped the grey parts entirely (ΔE 5.8 against VTracer’s 0.4). Both are failures of the step
+            that decides how many inks an image has, and they are why LogoLab’s average edge error is not significantly
+            better than VTracer’s even though its median is.
           </p>
           <Figure example={byslug('bat')} />
           <p>
-            Note what DINO does with the bat: it ranks Potrace’s black outline (0.970) above LogoLab’s flat grey
-            silhouette (0.963). Both are wrong. The score cannot say how.
+            DINO ranks Potrace’s black outline of the bat (0.970) above LogoLab’s flat grey silhouette (0.963). Both
+            traces are wrong in different ways, and the score gives no hint of either.
           </p>
           <Figure example={byslug('camera')} />
         </Section>
@@ -168,26 +164,24 @@ export default function BenchmarkPage() {
             against that drawing as well as against the picture:
           </p>
           <ul>
+            <li>Colour error (ΔE) is the mean CIE colour difference of the render. Under 1 is invisible.</li>
             <li>
-              <b>Colour error (ΔE)</b>: mean CIE colour difference of the render. Under 1 is invisible.
+              Edge error is the mean distance between the traced outline and the authored one, measured both ways, in
+              pixels of a 512 px render.
             </li>
             <li>
-              <b>Edge error</b>: mean distance between the traced outline and the authored one, both ways, in pixels of
-              a 512 px render.
+              Nodes are counted against the artist’s count, because they are what you edit and what the file weighs.
             </li>
             <li>
-              <b>Nodes</b>, against the artist’s count: what you edit, and what the file weighs.
+              A kink on a smooth curve is a corner of 5° or more where the drawing is smooth. You won’t see one at icon
+              size, but you will when you scale the file up or edit it.
             </li>
             <li>
-              <b>Kinks on smooth curves</b>: a corner of 5° or more where the drawing is smooth. Invisible at icon size,
-              obvious the moment someone scales or edits the file.
-            </li>
-            <li>
-              <b>Invented corners</b> and <b>regions recovered</b>: sharp corners the art doesn’t have, and shapes that
-              went missing.
+              Invented corners are sharp corners the art doesn’t have, and regions recovered counts the shapes that
+              survived the trace.
             </li>
           </ul>
-          <p>The SVG-Bench metrics are reported next to them, measured the same way, so both views are on the table.</p>
+          <p>The SVG-Bench metrics are measured on the same renders and reported next to these.</p>
         </Section>
 
         <Section title={`Results on ${data.cases} held-out emoji`}>
@@ -202,36 +196,38 @@ export default function BenchmarkPage() {
         <Section title="How it was run">
           <ul>
             <li>
-              <b>Data</b>: <code>{data.dataset.id}</code> @ <code>{data.dataset.revision.slice(0, 12)}</code>,{' '}
+              The data is <code>{data.dataset.id}</code> @ <code>{data.dataset.revision.slice(0, 12)}</code>,{' '}
               {data.dataset.split} split, parquet sha256 <code>{data.dataset.parquetSha256.slice(0, 16)}…</code>. Each
               SVG rendered with resvg on white at {data.res} px; every tool gets that same image.
             </li>
             <li>
-              <b>Tools</b>:{' '}
+              Tools:{' '}
               {Object.entries(data.versions)
                 .map(([t, v]) => `${label(t)} (${v.replace(/\. Copyright.*?Selinger\./, '')})`)
                 .join('; ')}
               .
             </li>
             <li>
-              <b>Settings</b>: LogoLab as its MCP server ships (no per-image tuning). VTracer at its defaults, and the
-              best of a 54-configuration sweep on these cases. StarVector with the generation settings from its own
-              repository; the 8B model does not fit in 16 GB of GPU memory. Potrace binarised, as SVG-Bench runs it.
+              LogoLab runs as its MCP server ships, with no per-image tuning. VTracer runs at its defaults and at the
+              best of a 54-configuration sweep on these cases. StarVector uses the generation settings from its own
+              repository; the 8B model does not fit in 16 GB of GPU memory. Potrace gets a binarised image, as in
+              SVG-Bench.
             </li>
             <li>
-              <b>Every output is scored</b>: a file that fails to parse or render counts as a failure, never as a skip.
-              Comparisons are paired by case, with 95% bootstrap intervals.
+              A file that fails to parse or render counts as a failure and stays in the results. Comparisons are paired
+              by case, with 95% bootstrap intervals.
             </li>
             <li>
-              <b>Not comparable to the paper’s table</b>: SVG-Bench rendered with cairosvg and fed the classic tracers
-              128 px images; this run uses resvg at 512 px and a 100-case subset.
+              These numbers can’t be compared with the paper’s table. SVG-Bench rendered with cairosvg and fed the
+              classic tracers 128 px images; this run uses resvg at 512 px and a 100-case subset.
             </li>
             <li>
-              <b>Not included</b>: commercial vectorizers. Their terms restrict benchmarking or automated use.
+              Commercial vectorizers are left out. They can’t be pinned to a version and run locally, and at least one
+              forbids benchmarking in its terms.
             </li>
             <li>
-              <b>Our bias</b>: we built LogoLab and chose these metrics. The kink count in particular is our lens. That
-              is why the SVG-Bench numbers sit beside ours, and why the losses are on this page.
+              We built LogoLab and chose these metrics, and the kink count in particular is our own measure. That is why
+              the SVG-Bench numbers sit beside ours and why the losses are shown.
             </li>
           </ul>
           <p>
@@ -244,8 +240,7 @@ export default function BenchmarkPage() {
             >
               bench/compare <ExternalLink size={11} className="inline" />
             </a>
-            ; <code>bench/compare/py/setup.sh</code> pins every tool and model, and a full run takes about an hour on
-            one consumer GPU.
+            , and <code>bench/compare/py/setup.sh</code> pins every tool and model. A full run needs one consumer GPU.
           </p>
         </Section>
 
@@ -596,10 +591,10 @@ function PairedNote() {
   return (
     <p>
       Paired case by case, VTracer minus LogoLab (mean, 95% interval): DINO {s('sbDino', 4)}, in VTracer’s favour; LPIPS{' '}
-      {s('sbLpips', 4)}, no difference. On the drawing: ΔE {s('meanDeltaE', 2)}, nodes {s('docNodes', 0)}, kinks{' '}
-      {s('tangentBreaks', 0)}. Edge error {s('chamfer', 2)} — LogoLab’s median is better, but its failures (the bat, the
-      camera) keep the mean difference inside the noise. By the standard benchmark’s numbers, the two tools are the
-      same. By the drawing, they are not.
+      {s('sbLpips', 4)}, no difference. So on the SVG-Bench metrics the two tools tie, with a slight edge to VTracer. On
+      the drawing VTracer is worse: ΔE {s('meanDeltaE', 2)}, nodes {s('docNodes', 0)}, kinks {s('tangentBreaks', 0)}.
+      Edge error is the exception at {s('chamfer', 2)}: LogoLab’s median is better, but its failures (the bat, the
+      camera) keep the mean difference inside the noise.
     </p>
   )
 }
