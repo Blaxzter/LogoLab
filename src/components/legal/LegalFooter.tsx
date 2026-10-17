@@ -72,6 +72,12 @@ export function LegalFooter({ className = '' }: { className?: string }) {
       <span aria-hidden className="opacity-50">
         ·
       </span>
+      <NavLink to="/benchmark" className={TARGET}>
+        Benchmark
+      </NavLink>
+      <span aria-hidden className="opacity-50">
+        ·
+      </span>
       <NavLink to="/impressum" className={TARGET}>
         Impressum
       </NavLink>

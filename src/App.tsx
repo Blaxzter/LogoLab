@@ -40,6 +40,7 @@ const LabsIndex = lazy(() => import('./components/labs/LabsIndex'))
 const PipelineLab = lazy(() => import('./components/labs/PipelineLab'))
 const AbLab = lazy(() => import('./components/labs/AbLab'))
 const BenchLab = lazy(() => import('./components/labs/bench/BenchLab'))
+const BenchmarkPage = lazy(() => import('./components/benchmark/BenchmarkPage'))
 // Workbench scores traces against their source art over a switchable corpus;
 // raster-only art lives in the Gallery, revision comparison in Feature A/B.
 const Workbench = lazy(() => import('./components/labs/workbench/Workbench'))
@@ -276,6 +277,26 @@ export function App() {
         <Route path="/impressum" element={<Impressum />} />
         <Route path="/datenschutz" element={<Datenschutz />} />
       </Routes>
+    )
+  }
+
+  // The benchmark write-up is an article: the header for getting back to the app, no
+  // studio chrome, one scrolling column.
+  if (pathname === '/benchmark') {
+    return (
+      <div className="flex h-full flex-col overflow-x-hidden">
+        <Header onOpenMenu={() => setMenuOpen(true)} onReport={() => setReportOpen(true)} />
+        <AppMenu open={menuOpen} onClose={() => setMenuOpen(false)} onReport={() => setReportOpen(true)} />
+        {reportOpen && <ReportDialog onClose={() => setReportOpen(false)} />}
+        <Toasts />
+        <main className="min-h-0 flex-1 overflow-y-auto bg-bg">
+          <ErrorBoundary what="this page" resetKey={pathname}>
+            <Suspense fallback={null}>
+              <BenchmarkPage />
+            </Suspense>
+          </ErrorBoundary>
+        </main>
+      </div>
     )
   }
 

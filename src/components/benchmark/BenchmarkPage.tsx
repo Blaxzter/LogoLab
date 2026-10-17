@@ -1,0 +1,605 @@
+import { useState } from 'react'
+import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { ExternalLink } from '../ui/icons'
+import { LegalFooter } from '../legal/LegalFooter'
+import { SHOWCASE as data } from './showcase.generated'
+import type { ShowExample, ShowMetrics, ShowTool } from './showcaseTypes'
+
+/**
+ * /benchmark — why the published image-to-SVG benchmarks cannot tell a good SVG from a bad
+ * one, argued with real outputs.
+ *
+ * Everything on this page is a frozen slice of one bench/compare run: the SVGs in
+ * public/benchmark/ and the numbers in showcase.generated.json, both written by
+ * bench/compare/showcase.ts. Nothing is traced or scored here; /labs/bench is where a local
+ * run is explored in full. The node dots and the red rings are the anchors and the tangent
+ * breaks the scorer counted — the same parse, the same locator — so a ring on the picture is
+ * a unit in the table under it.
+ */
+
+type Example = ShowExample
+type ToolOut = ShowTool
+type Metrics = ShowMetrics
+
+const TOOL_LABEL: Record<string, string> = {
+  'logolab-auto': 'LogoLab',
+  'vtracer-default': 'VTracer',
+  'vtracer-swept': 'VTracer (tuned)',
+  'starvector-1b': 'StarVector-1B',
+  'potrace-bin': 'Potrace',
+}
+const label = (tool: string) => TOOL_LABEL[tool] ?? tool
+const byslug = (slug: string): Example => {
+  const e = data.examples.find((x) => x.slug === slug)
+  if (!e) throw new Error(`showcase: no example ${slug}`)
+  return e
+}
+
+interface Row {
+  key: string
+  label: string
+  better: 'lower' | 'higher'
+  digits: number
+  kind: 'picture' | 'drawing'
+}
+
+const PICTURE_ROWS: Row[] = [
+  { key: 'sbDino', label: 'DINO score', better: 'higher', digits: 4, kind: 'picture' },
+  { key: 'sbLpips', label: 'LPIPS', better: 'lower', digits: 4, kind: 'picture' },
+  { key: 'sbSsim', label: 'SSIM', better: 'higher', digits: 3, kind: 'picture' },
+]
+const DRAWING_ROWS: Row[] = [
+  { key: 'meanDeltaE', label: 'Colour error (ΔE)', better: 'lower', digits: 2, kind: 'drawing' },
+  { key: 'chamfer', label: 'Edge error (px)', better: 'lower', digits: 2, kind: 'drawing' },
+  { key: 'docNodes', label: 'Nodes', better: 'lower', digits: 0, kind: 'drawing' },
+  { key: 'tangentBreaks', label: 'Kinks on smooth curves', better: 'lower', digits: 0, kind: 'drawing' },
+]
+
+const n = (m: Metrics, k: string): number | null => (typeof m[k] === 'number' ? (m[k] as number) : null)
+const fmt = (v: number | null, d: number) => (v === null ? '—' : v.toFixed(d))
+
+export default function BenchmarkPage() {
+  const hero = byslug('smiling-face')
+  return (
+    <div className="bg-bg">
+      <article className="mx-auto max-w-5xl px-4 pb-16 pt-10 sm:px-6">
+        <p className="text-xs font-semibold uppercase tracking-wide text-accent">Benchmark</p>
+        <h1 className="mt-2 max-w-[22ch] text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+          Pixel scores can’t see the SVG
+        </h1>
+        <p className="mt-4 max-w-[68ch] text-[0.95rem] leading-relaxed text-ink-2">
+          The published image-to-SVG benchmarks render each tool’s SVG back to pixels and compare pictures. On flat
+          icons that comparison saturates: files that differ three- or four-fold in nodes, with visibly different
+          curves, get the same score. So we score the <em>drawing</em> as well, against the vector art that produced the
+          image. Below are real outputs from both kinds of score, including the ones where LogoLab loses.
+        </p>
+
+        <Figure
+          example={hero}
+          initialNodes
+          caption={
+            <>
+              Three traces of the same emoji. The DINO score, the headline metric of StarVector’s SVG-Bench, calls them
+              0.9999, 0.9998 and 0.9996: the same picture. They are not the same file. The artist drew it with{' '}
+              {hero.authoredNodes.length / 2} nodes; the traces use{' '}
+              {hero.tools.map((t) => n(t.metrics, 'docNodes')).join(', ')}, and VTracer puts{' '}
+              {n(hero.tools[1].metrics, 'tangentBreaks')} kinks (red rings) on curves the artist drew smooth. StarVector
+              is the most economical and the furthest off the outline. Click a panel to zoom.
+            </>
+          }
+        />
+
+        <Section title="What the standard benchmarks measure">
+          <p>
+            <a
+              className="text-accent underline-offset-2 hover:underline"
+              href="https://arxiv.org/abs/2312.11556"
+              target="_blank"
+              rel="noreferrer"
+            >
+              StarVector’s SVG-Bench
+            </a>{' '}
+            (CVPR 2025) is the benchmark image-to-SVG papers report against. It rasterizes the generated SVG and the
+            source, and compares the two images with four numbers, plus the SVG’s token count:
+          </p>
+          <ul>
+            <li>
+              <b>MSE</b> and <b>SSIM</b>: pixel and structural difference.
+            </li>
+            <li>
+              <b>LPIPS</b>: distance between deep-network features, tuned to human judgments of similar photos.
+            </li>
+            <li>
+              <b>DINO score</b>: cosine similarity of DINOv2 embeddings, a network trained to recognise what is in an
+              image.
+            </li>
+          </ul>
+          <p>
+            All four answer one question: does the picture look like the picture? That is the right question for a
+            photo, and the wrong one for a vector file. None of them can see how many nodes the file has, whether a
+            circle is a circle, whether two curves meet smoothly or with a kink, or whether the colours are right. A
+            network trained to recognise objects is, by design, forgiving of colour: a bat is a bat in grey or in black.
+          </p>
+        </Section>
+
+        <Section title="Same score, worse drawing">
+          <p>
+            On the shushing face, DINO cannot separate the two traces (0.9997 each) and LPIPS slightly prefers
+            VTracer’s. Measured against the authored outline, VTracer’s edges are three times further off, and its file
+            has 54 kinks on curves that have none.
+          </p>
+          <Figure example={byslug('shushing-face')} />
+          <p>
+            The crystal ball goes further: DINO <em>and</em> LPIPS both rank VTracer first, on a trace with 3.3× the
+            nodes and 3.6× the edge error.
+          </p>
+          <Figure example={byslug('crystal-ball')} />
+        </Section>
+
+        <Section title="A black silhouette scores 0.967">
+          <p>
+            SVG-Bench runs Potrace the way Potrace works: the image is cut to black and white first. Every colour on
+            this leg is wrong (ΔE 15, where 1 is barely visible), and DINO still gives it 0.967 — higher than
+            StarVector’s median across the whole set (0.930). StarVector’s own trace scores 0.998 while its outline sits
+            3.3 px from the drawing.
+          </p>
+          <Figure example={byslug('leg')} />
+        </Section>
+
+        <Section title="Where LogoLab loses">
+          <p>
+            The same rules apply to us. On the bat, LogoLab merged the two greys into one silhouette and the wings are
+            gone; VTracer gets it right. On the camera, it dropped the grey parts entirely (ΔE 5.8 against VTracer’s
+            0.4). Both are failures of the step that decides how many inks an image has, and they are why LogoLab’s
+            average edge error is not significantly better than VTracer’s even though its median is.
+          </p>
+          <Figure example={byslug('bat')} />
+          <p>
+            Note what DINO does with the bat: it ranks Potrace’s black outline (0.970) above LogoLab’s flat grey
+            silhouette (0.963). Both are wrong. The score cannot say how.
+          </p>
+          <Figure example={byslug('camera')} />
+        </Section>
+
+        <Section title="What we measure instead">
+          <p>
+            Every case comes with the SVG the artist drew. Each tool traces a raster of it, and its output is scored
+            against that drawing as well as against the picture:
+          </p>
+          <ul>
+            <li>
+              <b>Colour error (ΔE)</b>: mean CIE colour difference of the render. Under 1 is invisible.
+            </li>
+            <li>
+              <b>Edge error</b>: mean distance between the traced outline and the authored one, both ways, in pixels of
+              a 512 px render.
+            </li>
+            <li>
+              <b>Nodes</b>, against the artist’s count: what you edit, and what the file weighs.
+            </li>
+            <li>
+              <b>Kinks on smooth curves</b>: a corner of 5° or more where the drawing is smooth. Invisible at icon size,
+              obvious the moment someone scales or edits the file.
+            </li>
+            <li>
+              <b>Invented corners</b> and <b>regions recovered</b>: sharp corners the art doesn’t have, and shapes that
+              went missing.
+            </li>
+          </ul>
+          <p>The SVG-Bench metrics are reported next to them, measured the same way, so both views are on the table.</p>
+        </Section>
+
+        <Section title={`Results on ${data.cases} held-out emoji`}>
+          <p>
+            Medians over {data.cases} Twemoji from SVG-Bench’s own <code>svg-emoji</code> test split, chosen by a fixed
+            rule (fill-only, one per base emoji, in hash order). LogoLab was never tuned on them.
+          </p>
+          <ResultsTable />
+          <PairedNote />
+        </Section>
+
+        <Section title="How it was run">
+          <ul>
+            <li>
+              <b>Data</b>: <code>{data.dataset.id}</code> @ <code>{data.dataset.revision.slice(0, 12)}</code>,{' '}
+              {data.dataset.split} split, parquet sha256 <code>{data.dataset.parquetSha256.slice(0, 16)}…</code>. Each
+              SVG rendered with resvg on white at {data.res} px; every tool gets that same image.
+            </li>
+            <li>
+              <b>Tools</b>:{' '}
+              {Object.entries(data.versions)
+                .map(([t, v]) => `${label(t)} (${v.replace(/\. Copyright.*?Selinger\./, '')})`)
+                .join('; ')}
+              .
+            </li>
+            <li>
+              <b>Settings</b>: LogoLab as its MCP server ships (no per-image tuning). VTracer at its defaults, and the
+              best of a 54-configuration sweep on these cases. StarVector with the generation settings from its own
+              repository; the 8B model does not fit in 16 GB of GPU memory. Potrace binarised, as SVG-Bench runs it.
+            </li>
+            <li>
+              <b>Every output is scored</b>: a file that fails to parse or render counts as a failure, never as a skip.
+              Comparisons are paired by case, with 95% bootstrap intervals.
+            </li>
+            <li>
+              <b>Not comparable to the paper’s table</b>: SVG-Bench rendered with cairosvg and fed the classic tracers
+              128 px images; this run uses resvg at 512 px and a 100-case subset.
+            </li>
+            <li>
+              <b>Not included</b>: commercial vectorizers. Their terms restrict benchmarking or automated use.
+            </li>
+            <li>
+              <b>Our bias</b>: we built LogoLab and chose these metrics. The kink count in particular is our lens. That
+              is why the SVG-Bench numbers sit beside ours, and why the losses are on this page.
+            </li>
+          </ul>
+          <p>
+            The harness, the case list and the scorer are open source in{' '}
+            <a
+              className="text-accent underline-offset-2 hover:underline"
+              href="https://github.com/Blaxzter/LogoLab/tree/main/bench/compare"
+              target="_blank"
+              rel="noreferrer"
+            >
+              bench/compare <ExternalLink size={11} className="inline" />
+            </a>
+            ; <code>bench/compare/py/setup.sh</code> pins every tool and model, and a full run takes about an hour on
+            one consumer GPU.
+          </p>
+        </Section>
+
+        <div className="mt-12 flex flex-wrap items-center gap-3">
+          <Link to="/vectorize" className="btn btn-primary h-10 px-4 text-sm">
+            Try the vectorizer
+          </Link>
+          <span className="text-xs text-muted">Free, in your browser, nothing uploaded.</span>
+        </div>
+
+        <p className="mt-10 border-t border-line pt-4 text-[0.7rem] leading-relaxed text-faint">
+          Emoji: Twemoji, Copyright 2019 Twitter, Inc and other contributors, licensed under{' '}
+          <a
+            className="text-accent underline-offset-2 hover:underline"
+            href="https://creativecommons.org/licenses/by/4.0/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            CC-BY 4.0
+          </a>{' '}
+          (
+          <a
+            className="text-accent underline-offset-2 hover:underline"
+            href="https://github.com/jdecked/twemoji"
+            target="_blank"
+            rel="noreferrer"
+          >
+            github.com/jdecked/twemoji
+          </a>
+          ), via StarVector’s SVG-Bench. The traces shown are modified versions: rasterized and re-vectorized by each
+          tool. Run {data.run}, {new Date(data.date).toISOString().slice(0, 10)}.
+        </p>
+      </article>
+      <LegalFooter />
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="mt-14">
+      <h2 className="text-xl font-bold tracking-tight text-ink">{title}</h2>
+      <div className="mt-3 space-y-3 text-[0.92rem] leading-relaxed text-ink-2 [&_code]:rounded [&_code]:bg-surface-3 [&_code]:px-1 [&_code]:text-[0.85em] [&_li]:mt-1 [&_ul]:list-disc [&_ul]:pl-5 [&>p]:max-w-[72ch] [&>ul]:max-w-[72ch]">
+        {children}
+      </div>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// One example: the authored drawing and each tool's SVG, the real files, side by side.
+
+const ZOOM = 4
+
+function Figure({
+  example,
+  caption,
+  initialNodes = false,
+}: {
+  example: Example
+  caption?: ReactNode
+  initialNodes?: boolean
+}) {
+  const [nodes, setNodes] = useState(initialNodes)
+  // One focus point per figure, so every panel zooms onto the same spot of the art.
+  const [focus, setFocus] = useState<{ x: number; y: number } | null>(null)
+  const base = `/benchmark/${example.slug}`
+  const toggle = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (focus) return setFocus(null)
+    const r = e.currentTarget.getBoundingClientRect()
+    setFocus({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })
+  }
+  const panels = [
+    {
+      key: 'authored',
+      title: 'Drawn by the artist',
+      src: `${base}/authored.svg`,
+      anchors: example.authoredNodes,
+      breaks: [] as number[],
+    },
+    ...example.tools.map((t) => ({
+      key: t.tool,
+      title: label(t.tool),
+      src: `${base}/${t.tool}.svg`,
+      anchors: t.anchors,
+      breaks: t.breaks,
+    })),
+  ]
+  return (
+    // Panels stay about icon-sized however many there are: the figure is as wide as its
+    // panels, not as wide as the page.
+    <figure className="my-6" style={{ maxWidth: panels.length * 250 }}>
+      <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-muted">
+        <span className="font-mono text-[0.7rem] text-faint">
+          {example.caseId.slice(example.caseId.indexOf('/') + 1)}
+        </span>
+        <label className="inline-flex cursor-pointer select-none items-center gap-1.5">
+          <input
+            type="checkbox"
+            checked={nodes}
+            onChange={(e) => setNodes(e.target.checked)}
+            className="h-3.5 w-3.5 accent-[var(--color-accent)]"
+          />
+          Show nodes and kinks
+        </label>
+        {focus && (
+          <button type="button" className="text-accent hover:underline" onClick={() => setFocus(null)}>
+            Zoom out
+          </button>
+        )}
+      </div>
+      <div
+        className="grid grid-cols-2 gap-3 sm:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
+        style={{ '--cols': panels.length } as React.CSSProperties}
+      >
+        {panels.map((p) => (
+          <div key={p.key} className="min-w-0">
+            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 text-xs">
+              <b className="font-semibold text-ink">{p.title}</b>
+              {nodes && (
+                <span className="shrink-0 tabular-nums text-faint">
+                  {p.anchors.length / 2} nodes
+                  {p.breaks.length > 0 && <span className="text-bad"> · {p.breaks.length / 3} kinks</span>}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={focus ? 'Zoom out' : `Zoom into ${p.title}`}
+              className={`relative block aspect-square w-full overflow-hidden rounded-lg border border-line bg-white ${focus ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
+            >
+              <div
+                className="absolute inset-0 transition-transform duration-300 ease-out"
+                style={
+                  focus
+                    ? {
+                        transformOrigin: `${focus.x * 100}% ${focus.y * 100}%`,
+                        transform: `scale(${ZOOM})`,
+                      }
+                    : undefined
+                }
+              >
+                <img src={p.src} alt="" className="h-full w-full" loading="lazy" draggable={false} />
+                {nodes && (
+                  <NodeOverlay
+                    w={example.width}
+                    h={example.height}
+                    anchors={p.anchors}
+                    breaks={p.breaks}
+                    scale={focus ? ZOOM : 1}
+                  />
+                )}
+              </div>
+            </button>
+          </div>
+        ))}
+      </div>
+      <MetricTable example={example} />
+      {caption && (
+        <figcaption className="mt-3 max-w-[72ch] text-[0.85rem] leading-relaxed text-muted">{caption}</figcaption>
+      )}
+    </figure>
+  )
+}
+
+/** Anchors as dots and counted tangent breaks as red rings, sized in SCREEN pixels whatever
+ *  the zoom (the overlay scales with the art, so radii are divided back out). */
+function NodeOverlay({
+  w,
+  h,
+  anchors,
+  breaks,
+  scale,
+}: {
+  w: number
+  h: number
+  anchors: number[]
+  breaks: number[]
+  scale: number
+}) {
+  // viewBox units per screen pixel at the panel's ~220px width.
+  const unit = w / 220 / scale
+  const dots: ReactNode[] = []
+  for (let i = 0; i < anchors.length; i += 2)
+    dots.push(<circle key={i} cx={anchors[i]} cy={anchors[i + 1]} r={1.6 * unit} />)
+  const rings: ReactNode[] = []
+  for (let i = 0; i < breaks.length; i += 3)
+    rings.push(<circle key={i} cx={breaks[i]} cy={breaks[i + 1]} r={5 * unit} />)
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+      <g fill="#4f46e5" stroke="#fff" strokeWidth={0.6 * unit}>
+        {dots}
+      </g>
+      <g fill="none" stroke="#dc2626" strokeWidth={1.6 * unit}>
+        {rings}
+      </g>
+    </svg>
+  )
+}
+
+/** Both kinds of score for one example, the winner of each row marked — the whole argument
+ *  is that the two halves of this table disagree. */
+function MetricTable({ example }: { example: Example }) {
+  const tools: ToolOut[] = example.tools
+  const rows = [...PICTURE_ROWS, ...DRAWING_ROWS]
+  return (
+    <div className="mt-3 overflow-x-auto rounded-lg border border-line bg-surface">
+      <table className="w-full min-w-[460px] text-xs tabular-nums">
+        <thead className="border-b border-line bg-surface-2 text-[0.68rem] text-muted">
+          <tr>
+            <th className="px-2.5 py-1.5 text-left font-medium" />
+            {tools.map((t) => (
+              <th key={t.tool} className="px-2.5 py-1.5 text-right font-medium">
+                {label(t.tool)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const vals = tools.map((t) => n(t.metrics, r.key))
+            const present = vals.filter((v): v is number => v !== null)
+            const best = present.length ? (r.better === 'lower' ? Math.min(...present) : Math.max(...present)) : null
+            const tie = present.filter((v) => v.toFixed(r.digits) === best?.toFixed(r.digits)).length > 1
+            return (
+              <tr
+                key={r.key}
+                className={`border-t border-line ${i === PICTURE_ROWS.length ? 'border-t-2 border-t-line-strong' : ''}`}
+              >
+                <td className="whitespace-nowrap px-2.5 py-1.5 text-muted">
+                  {r.label}
+                  {i === 0 && (
+                    <span className="ml-1.5 rounded bg-surface-3 px-1 py-0.5 text-[0.6rem] uppercase tracking-wide">
+                      picture
+                    </span>
+                  )}
+                  {i === PICTURE_ROWS.length && (
+                    <span className="ml-1.5 rounded bg-accent-soft px-1 py-0.5 text-[0.6rem] uppercase tracking-wide text-accent">
+                      drawing
+                    </span>
+                  )}
+                </td>
+                {vals.map((v, k) => (
+                  <td
+                    key={tools[k].tool}
+                    className={`px-2.5 py-1.5 text-right ${v !== null && v === best && !tie ? 'font-semibold text-good' : 'text-ink-2'}`}
+                  >
+                    {fmt(v, r.digits)}
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+const TABLE: (Row & { group: string })[] = [
+  { ...PICTURE_ROWS[0], group: 'SVG-Bench' },
+  { ...PICTURE_ROWS[1], group: 'SVG-Bench' },
+  { ...PICTURE_ROWS[2], group: 'SVG-Bench' },
+  { key: 'meanDeltaE', label: 'ΔE', better: 'lower', digits: 2, kind: 'drawing', group: 'Drawing' },
+  { key: 'chamfer', label: 'Edge px', better: 'lower', digits: 2, kind: 'drawing', group: 'Drawing' },
+  { key: 'nodeRatio', label: 'Nodes ÷ artist', better: 'lower', digits: 1, kind: 'drawing', group: 'Drawing' },
+  { key: 'tangentBreaks', label: 'Kinks', better: 'lower', digits: 0, kind: 'drawing', group: 'Drawing' },
+  { key: 'bytes', label: 'KB', better: 'lower', digits: 1, kind: 'drawing', group: 'Drawing' },
+]
+
+function ResultsTable() {
+  const cell = (k: string, v: number | null, d: number) =>
+    v === null ? '—' : k === 'bytes' ? (v / 1024).toFixed(1) : v.toFixed(d)
+  const best = new Map<string, number>()
+  for (const r of TABLE) {
+    const vals = data.summary
+      .filter((s) => s.scored[r.key] >= data.cases / 2)
+      .map((s) => s.median[r.key])
+      .filter((v): v is number => v !== null)
+    if (vals.length) best.set(r.key, r.better === 'lower' ? Math.min(...vals) : Math.max(...vals))
+  }
+  return (
+    <div className="not-prose my-4 overflow-x-auto rounded-lg border border-line bg-surface">
+      <table className="w-full min-w-[640px] text-xs tabular-nums">
+        <thead className="bg-surface-2 text-[0.68rem] text-muted">
+          <tr>
+            <th />
+            <th colSpan={3} className="border-l border-line px-2.5 pt-1.5 text-left font-medium">
+              Picture (SVG-Bench)
+            </th>
+            <th colSpan={5} className="border-l border-line px-2.5 pt-1.5 text-left font-medium">
+              Drawing (against the authored SVG)
+            </th>
+          </tr>
+          <tr className="border-b border-line">
+            <th className="px-2.5 py-1.5 text-left font-medium">Tool</th>
+            {TABLE.map((r, i) => (
+              <th
+                key={r.key}
+                className={`px-2.5 py-1.5 text-right font-medium ${i === 0 || i === 3 ? 'border-l border-line' : ''}`}
+              >
+                {r.label} {r.better === 'lower' ? '↓' : '↑'}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.summary.map((s) => (
+            <tr key={s.tool} className={`border-t border-line ${s.tool === 'logolab-auto' ? 'bg-accent-soft/40' : ''}`}>
+              <td className="whitespace-nowrap px-2.5 py-1.5 font-medium text-ink">{label(s.tool)}</td>
+              {TABLE.map((r, i) => {
+                const v = s.median[r.key]
+                const scored = s.scored[r.key]
+                const isBest = v !== null && v === best.get(r.key) && scored >= data.cases / 2
+                return (
+                  <td
+                    key={r.key}
+                    className={`px-2.5 py-1.5 text-right ${i === 0 || i === 3 ? 'border-l border-line' : ''} ${isBest ? 'font-semibold text-good' : 'text-ink-2'}`}
+                  >
+                    {cell(r.key, v, r.digits)}
+                    {scored > 0 && scored < s.n && <sup className="ml-0.5 text-[0.55rem] text-faint">{scored}</sup>}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="border-t border-line px-2.5 py-1.5 text-[0.68rem] text-faint">
+        Medians over {data.cases} cases. A small number after a value is how many cases had a parseable outline
+        (geometry can’t be measured on a file that doesn’t parse; those cases still count in the picture columns).
+      </p>
+    </div>
+  )
+}
+
+function PairedNote() {
+  const p = new Map(data.pairedVsVtracer.map((x) => [x.metric, x]))
+  const s = (k: string, d: number) => {
+    const x = p.get(k)
+    if (!x || x.meanDiff === undefined) return '—'
+    const sign = x.meanDiff > 0 ? '+' : ''
+    return `${sign}${x.meanDiff.toFixed(d)} [${x.lo?.toFixed(d)}, ${x.hi?.toFixed(d)}]`
+  }
+  return (
+    <p>
+      Paired case by case, VTracer minus LogoLab (mean, 95% interval): DINO {s('sbDino', 4)}, in VTracer’s favour; LPIPS{' '}
+      {s('sbLpips', 4)}, no difference. On the drawing: ΔE {s('meanDeltaE', 2)}, nodes {s('docNodes', 0)}, kinks{' '}
+      {s('tangentBreaks', 0)}. Edge error {s('chamfer', 2)} — LogoLab’s median is better, but its failures (the bat, the
+      camera) keep the mean difference inside the noise. By the standard benchmark’s numbers, the two tools are the
+      same. By the drawing, they are not.
+    </p>
+  )
+}
