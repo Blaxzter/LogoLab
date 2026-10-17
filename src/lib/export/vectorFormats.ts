@@ -335,6 +335,8 @@ export function docToPdf(doc: EditableDoc, title = 'logo'): Uint8Array {
     if (s) {
       ops.push(`${rgb(s.color)} RG`, `${fmt(s.width)} w`)
       ops.push(`${{ butt: 0, round: 1, square: 2 }[s.cap]} J`, `${{ miter: 0, round: 1, bevel: 2 }[s.join]} j`)
+      // PDF's default miter limit is 10, SVG's 4: always say which.
+      if (s.join === 'miter') ops.push(`${fmt(s.miterLimit ?? 4)} M`)
       if (s.dash && s.dash.length > 0) ops.push(`[${s.dash.map(fmt).join(' ')}] 0 d`)
     }
     for (const sp of item.subPaths) {

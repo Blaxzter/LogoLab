@@ -105,6 +105,7 @@ export const PathView = memo(function PathView({
         strokeWidth={stroked ? s.width : undefined}
         strokeLinecap={s?.cap}
         strokeLinejoin={s?.join}
+        strokeMiterlimit={s?.miterLimit}
         strokeDasharray={s?.dash && s.dash.length > 0 ? s.dash.join(' ') : undefined}
         strokeOpacity={s?.opacity}
         style={

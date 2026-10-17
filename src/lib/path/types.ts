@@ -119,6 +119,8 @@ export interface Stroke {
   width: number
   cap: 'butt' | 'round' | 'square'
   join: 'miter' | 'round' | 'bevel'
+  /** `stroke-miterlimit` (a ratio, never scaled); omitted ⇒ SVG's default 4. Only read for miter joins. */
+  miterLimit?: number
   /** Dash pattern in viewBox units; omitted / empty ⇒ solid. */
   dash?: number[]
   /** 0–1; omitted means 1. */

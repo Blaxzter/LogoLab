@@ -23,8 +23,10 @@ import { allLeaves, leafItems, removeItems } from './docTree.ts'
 import {
   affineScale,
   affineToString,
+  applyAffine,
   composeAffine,
   isIdentityAffine,
+  itemBounds,
   parseTransformAttr,
   segmentCount,
   subPathsTightBounds,
@@ -450,6 +452,7 @@ interface PaintContext {
   strokeCap: string | null
   strokeJoin: string | null
   strokeDash: string | null
+  strokeMiter: string | null
   strokeOpacity: number | null
   /** Group opacity multiplies down the tree (unlike the inherited props). */
   opacity: number
@@ -477,7 +480,6 @@ const UNMODELLABLE_ATTRS = [
   'marker-mid',
   'marker-end',
   'vector-effect',
-  'stroke-miterlimit',
   'stroke-dashoffset',
   'pathLength',
   'transform-origin',
@@ -558,6 +560,11 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
   // into an editable gradient instead of being dumped as raw markup.
   const gradients = collectGradientElements(dom)
   const consumedGradients = new Set<string>()
+  const byId = new Map<string, Element>()
+  for (const el of Array.from(dom.querySelectorAll('*'))) {
+    const id = el.getAttribute('id')
+    if (id && !byId.has(id)) byId.set(id, el)
+  }
   // <defs> blocks and stand-alone gradient elements are finalized after the
   // walk: gradients we lifted into paths are stripped so they don't survive as
   // dead markup (and get re-emitted with fresh ids on serialize).
@@ -575,6 +582,10 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
     cssTainted,
     // A rule we could not resolve on the root itself would reach every shape.
     cssTaintAll: cssTainted.has(root),
+    byId,
+    consumedRefs: new Set(),
+    useStack: new Set(),
+    inert: new Set(),
   }
   const rootCtx = childContext(root, {
     transform: [1, 0, 0, 1, 0, 0],
@@ -586,6 +597,7 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
     strokeCap: null,
     strokeJoin: null,
     strokeDash: null,
+    strokeMiter: null,
     strokeOpacity: null,
     opacity: 1,
     color: null,
@@ -594,18 +606,20 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
   })
   walkChildren(root, rootCtx, ctx)
 
-  // Strip consumed gradients from the defs they lived in, unless a surviving raw
-  // item still references them (e.g. a stroked shape sharing the same paint).
-  if (consumedGradients.size > 0) {
+  // Strip consumed gradients and `<use>` targets from the defs they lived in,
+  // unless a surviving raw item still references them (e.g. a stroked shape
+  // sharing the same paint, or a use that stayed raw).
+  const consumed = new Set([...consumedGradients, ...ctx.consumedRefs])
+  if (consumed.size > 0) {
     const stillReferenced = new Set<string>()
     for (const it of allLeaves(items)) {
       if (it.kind === 'raw') for (const id of referencedIds(it.markup)) stillReferenced.add(id)
     }
-    const removable = new Set([...consumedGradients].filter((id) => !stillReferenced.has(id)))
+    const removable = new Set([...consumed].filter((id) => !stillReferenced.has(id)))
     if (removable.size > 0) {
       const dropped = new Set<string>()
       for (const { item, el } of deferredDefs) {
-        const next = stripGradients(el, removable)
+        const next = stripIds(el, removable)
         if (next === null) dropped.add(item.id)
         else item.markup = next
       }
@@ -628,113 +642,315 @@ interface WalkContext {
   /** Elements a stylesheet rule could not be resolved for (see svgStyle.ts). */
   cssTainted: Set<Element>
   cssTaintAll: boolean
+  /** Elements by id, for `<use>`. First wins, as with getElementById. */
+  byId: Map<string, Element>
+  /** `<use>` targets inside `<defs>` / `<symbol>` that were lifted into paths. */
+  consumedRefs: Set<string>
+  /** The `<use>` targets being walked right now — a reference cycle stays raw. */
+  useStack: Set<Element>
+  /** Raw items that render nothing by themselves (defs, style, paint servers, symbols). */
+  inert: Set<string>
 }
 
 function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void {
-  for (const el of Array.from(parent.children)) {
-    const tag = el.tagName.toLowerCase()
-    if (tag === 'title' || tag === 'desc' || tag === 'metadata') continue
-    if (tag === 'defs' || tag === 'style') {
-      // Preserved wholesale; defs/style don't render, so no context needed.
-      const item: RawItem = { kind: 'raw', id: w.nextId(), markup: serializeElement(el), visible: true }
-      w.items.push(item)
-      if (tag === 'defs') w.deferredDefs.push({ item, el })
-      continue
-    }
-    if (tag === 'lineargradient' || tag === 'radialgradient') {
-      // Stand-alone paint server (not under <defs>): round-trips as raw unless a
-      // fill consumes it, in which case the finalize pass drops it.
-      const item: RawItem = { kind: 'raw', id: w.nextId(), markup: serializeElement(el), visible: true }
-      w.items.push(item)
-      w.deferredDefs.push({ item, el })
-      continue
-    }
-    if (presentationProp(el, 'display')?.toLowerCase() === 'none') {
-      // Renders nothing, but may hold what something else references (a hidden
-      // layer's gradients, a <use> target): kept raw, where it stays hidden.
-      w.items.push(makeRawItem(w.nextId(), el, ctx))
-      continue
-    }
-    if (tag === 'g') {
-      if (el.children.length === 0) continue
-      if (hasGroupEffect(el) || w.cssTainted.has(el)) {
-        // Masked / clipped / filtered as a whole: flattened, its children would be
-        // drawn without it. The PARENT context goes on the wrapper; the group's own
-        // attributes stay in its markup.
-        w.items.push(makeRawItem(w.nextId(), el, ctx))
-        continue
-      }
-      if (!w.preserveGroups) {
-        walkChildren(el, childContext(el, ctx), w)
-        continue
-      }
-      // The group's transform/opacity are baked into the leaves by
-      // `childContext`, so the GroupItem is pure structure.
-      const children: DocItem[] = []
-      walkChildren(el, childContext(el, ctx), { ...w, items: children })
-      if (children.length === 0) continue
-      const group: GroupItem = {
-        kind: 'group',
-        id: w.nextId(),
-        children,
-        visible: true,
-        expanded: true,
-      }
-      const name = el.getAttribute('data-name') ?? el.getAttribute('id')
-      if (name) group.name = name
-      w.items.push(group)
-      continue
-    }
-    if (SHAPE_TAGS.has(tag)) {
-      const shapeCtx = childContext(el, ctx)
-      // Anything carrying paint we can't re-emit stays raw — as does a hidden shape
-      // (the model has no `visibility`) and one a stylesheet rule may still paint.
-      const visibility = shapeCtx.visibility?.toLowerCase()
-      const lossy =
-        hasUnmodellableAttrs(el) ||
-        hasUnmodellableStroke(shapeCtx) ||
-        hasUnresolvableFill(shapeCtx) ||
-        visibility === 'hidden' ||
-        visibility === 'collapse' ||
-        w.cssTaintAll ||
-        w.cssTainted.has(el)
+  for (const el of Array.from(parent.children)) walkElement(el, ctx, w)
+}
 
-      if (!lossy && hasPlainFill(shapeCtx)) {
-        const subPaths = shapeToSubPaths(el, tag)
-        // Degenerate shapes (zero size, too few points) render nothing.
-        if (!subPaths || subPaths.length === 0) continue
-        w.items.push(makePathItem(w.nextId(), subPaths, shapeCtx))
-        continue
-      }
-      // Gradient fill: lift into an editable path when the paint server
-      // resolves to a gradient the model can represent. A modellable stroke
-      // rides along; an unmodellable one already forced `lossy`.
-      const gradId = !lossy ? gradientRefId(shapeCtx.fill) : null
-      const gradEl = gradId ? w.gradients.get(gradId) : null
-      if (gradId && gradEl && !gradientCssTainted(gradEl, w)) {
-        const subPaths = shapeToSubPaths(el, tag)
-        if (!subPaths || subPaths.length === 0) continue
-        const gradient = resolveGradientFill(
-          gradEl,
-          w.gradients,
-          subPathsTightBounds(subPaths),
-          shapeCtx.transform,
-          w.viewport,
-        )
-        if (gradient) {
-          const item = makePathItem(w.nextId(), subPaths, {
-            ...shapeCtx,
-            fill: representativeStopColor(gradient.stops),
-          })
-          item.gradient = gradient
-          w.items.push(item)
-          w.consumedGradients.add(gradId)
-          continue
-        }
+/** Push a container's walked children: as a GroupItem when groups are kept, else spliced in. */
+function pushContainer(el: Element, children: DocItem[], w: WalkContext): void {
+  if (children.length === 0) return
+  if (!w.preserveGroups) {
+    w.items.push(...children)
+    return
+  }
+  // Transforms and opacity are baked into the leaves by `childContext`, so the
+  // GroupItem is pure structure.
+  const group: GroupItem = { kind: 'group', id: w.nextId(), children, visible: true, expanded: true }
+  const name = el.getAttribute('data-name') ?? el.getAttribute('id')
+  if (name) group.name = name
+  w.items.push(group)
+}
+
+function walkElement(el: Element, ctx: PaintContext, w: WalkContext): void {
+  const tag = el.tagName.toLowerCase()
+  if (tag === 'title' || tag === 'desc' || tag === 'metadata') return
+  if (tag === 'defs' || tag === 'style') {
+    // Preserved wholesale; defs/style don't render, so no context needed.
+    const item: RawItem = { kind: 'raw', id: w.nextId(), markup: serializeElement(el), visible: true }
+    w.items.push(item)
+    w.inert.add(item.id)
+    if (tag === 'defs') w.deferredDefs.push({ item, el })
+    return
+  }
+  if (tag === 'lineargradient' || tag === 'radialgradient' || tag === 'symbol') {
+    // Stand-alone paint server / symbol (not under <defs>): neither renders by
+    // itself. Round-trips as raw unless what references it is lifted, in which
+    // case the finalize pass drops it.
+    const item: RawItem = { kind: 'raw', id: w.nextId(), markup: serializeElement(el), visible: true }
+    w.items.push(item)
+    w.inert.add(item.id)
+    w.deferredDefs.push({ item, el })
+    return
+  }
+  if (presentationProp(el, 'display')?.toLowerCase() === 'none') {
+    // Renders nothing, but may hold what something else references (a hidden
+    // layer's gradients, a <use> target): kept raw, where it stays hidden.
+    w.items.push(makeRawItem(w.nextId(), el, ctx))
+    return
+  }
+  if (tag === 'g') {
+    if (el.children.length === 0) return
+    if (hasGroupEffect(el) || w.cssTainted.has(el)) {
+      // Masked / clipped / filtered as a whole: flattened, its children would be
+      // drawn without it. The PARENT context goes on the wrapper; the group's own
+      // attributes stay in its markup.
+      w.items.push(makeRawItem(w.nextId(), el, ctx))
+      return
+    }
+    if (!w.preserveGroups) {
+      walkChildren(el, childContext(el, ctx), w)
+      return
+    }
+    const children: DocItem[] = []
+    walkChildren(el, childContext(el, ctx), { ...w, items: children })
+    pushContainer(el, children, w)
+    return
+  }
+  if (tag === 'svg' && walkViewport(el, ctx, null, w)) return
+  if (tag === 'use' && walkUse(el, ctx, w)) return
+  if (SHAPE_TAGS.has(tag)) {
+    const shapeCtx = childContext(el, ctx)
+    // Anything carrying paint we can't re-emit stays raw — as does a hidden shape
+    // (the model has no `visibility`) and one a stylesheet rule may still paint.
+    const visibility = shapeCtx.visibility?.toLowerCase()
+    const lossy =
+      hasUnmodellableAttrs(el) ||
+      hasUnmodellableStroke(shapeCtx) ||
+      hasUnresolvableFill(shapeCtx) ||
+      visibility === 'hidden' ||
+      visibility === 'collapse' ||
+      w.cssTaintAll ||
+      w.cssTainted.has(el)
+
+    if (!lossy && hasPlainFill(shapeCtx)) {
+      const subPaths = shapeToSubPaths(el, tag)
+      // Degenerate shapes (zero size, too few points) render nothing.
+      if (!subPaths || subPaths.length === 0) return
+      w.items.push(makePathItem(w.nextId(), subPaths, shapeCtx))
+      return
+    }
+    // Gradient fill: lift into an editable path when the paint server
+    // resolves to a gradient the model can represent. A modellable stroke
+    // rides along; an unmodellable one already forced `lossy`.
+    const gradId = !lossy ? gradientRefId(shapeCtx.fill) : null
+    const gradEl = gradId ? w.gradients.get(gradId) : null
+    if (gradId && gradEl && !gradientCssTainted(gradEl, w)) {
+      const subPaths = shapeToSubPaths(el, tag)
+      if (!subPaths || subPaths.length === 0) return
+      const gradient = resolveGradientFill(
+        gradEl,
+        w.gradients,
+        subPathsTightBounds(subPaths),
+        shapeCtx.transform,
+        w.viewport,
+      )
+      if (gradient) {
+        const item = makePathItem(w.nextId(), subPaths, {
+          ...shapeCtx,
+          fill: representativeStopColor(gradient.stops),
+        })
+        item.gradient = gradient
+        w.items.push(item)
+        w.consumedGradients.add(gradId)
+        return
       }
     }
-    w.items.push(makeRawItem(w.nextId(), el, ctx))
   }
+  w.items.push(makeRawItem(w.nextId(), el, ctx))
+}
+
+/**
+ * A nested `<svg>` (or a `<symbol>` a `<use>` instances) establishes a new
+ * viewport: placed at x/y, sized width × height, its viewBox fitted into that per
+ * preserveAspectRatio, and — unless overflow is visible — CLIPPED to it. The
+ * placement folds into the context like any transform, so its shapes come out
+ * editable. The clip has no place in the model, so it is only dropped where it
+ * provably cuts nothing: every leaf is a path inside the viewport. Otherwise
+ * nothing is pushed and the caller keeps the element raw, as before.
+ *
+ * `size` is a referencing `<use>`'s width/height, which override the element's.
+ */
+function walkViewport(
+  el: Element,
+  ctx: PaintContext,
+  size: { width: string | null; height: string | null } | null,
+  w: WalkContext,
+): boolean {
+  // A transform on the viewport element itself is SVG 2 only and renderers
+  // disagree on it; an effect or unresolved rule would be lost when flattened.
+  if (el.getAttribute('transform') || hasGroupEffect(el) || w.cssTainted.has(el)) return false
+  const x = lengthAttr(el.getAttribute('x'), w.viewport.w)
+  const y = lengthAttr(el.getAttribute('y'), w.viewport.h)
+  const vw = lengthAttr(size?.width ?? el.getAttribute('width') ?? '100%', w.viewport.w)
+  const vh = lengthAttr(size?.height ?? el.getAttribute('height') ?? '100%', w.viewport.h)
+  if (x === null || y === null || vw === null || vh === null) return false
+  if (vw <= 0 || vh <= 0) return true // renders nothing
+
+  let m: Affine = [1, 0, 0, 1, x, y]
+  const vb = parseViewBox(el.getAttribute('viewBox'))
+  if (vb) {
+    const fit = viewBoxFit(vb, vw, vh, el.getAttribute('preserveAspectRatio'))
+    if (!fit) return false
+    m = composeAffine(m, fit)
+  }
+  const inner = childContext(el, ctx)
+  inner.transform = composeAffine(ctx.transform, m)
+
+  const sub: WalkContext = {
+    ...w,
+    items: [],
+    deferredDefs: [],
+    consumedGradients: new Set(),
+    consumedRefs: new Set(),
+  }
+  walkChildren(el, inner, sub)
+
+  const overflow = presentationProp(el, 'overflow')?.toLowerCase()
+  if (overflow !== 'visible' && overflow !== 'auto') {
+    if (!insideClip(sub.items, { x, y, w: vw, h: vh }, ctx.transform, w.inert)) return false
+  }
+  w.deferredDefs.push(...sub.deferredDefs)
+  for (const id of sub.consumedGradients) w.consumedGradients.add(id)
+  for (const id of sub.consumedRefs) w.consumedRefs.add(id)
+  // A viewport is a coordinate system, not a layer: an unnamed one (what an
+  // engraver or a sprite wraps everything in) would only put every shape a
+  // double-click away. A named one is the author's folder.
+  if (el.getAttribute('data-name') ?? el.getAttribute('id')) pushContainer(el, sub.items, w)
+  else w.items.push(...sub.items)
+  return true
+}
+
+/**
+ * Whether every leaf lies within a viewport's clip rect (in `parent` space), so
+ * dropping the clip changes nothing. A raw leaf can't be measured, and a rotated
+ * clip isn't a box, so either fails.
+ */
+function insideClip(
+  items: readonly DocItem[],
+  clip: { x: number; y: number; w: number; h: number },
+  parent: Affine,
+  inert: Set<string>,
+): boolean {
+  if (Math.abs(parent[1]) > EPS || Math.abs(parent[2]) > EPS) return false
+  const a = applyAffine(parent, { x: clip.x, y: clip.y })
+  const b = applyAffine(parent, { x: clip.x + clip.w, y: clip.y + clip.h })
+  const minX = Math.min(a.x, b.x)
+  const maxX = Math.max(a.x, b.x)
+  const minY = Math.min(a.y, b.y)
+  const maxY = Math.max(a.y, b.y)
+  // Sub-pixel slack for the control hull overshooting a curve that stays inside.
+  const slack = 1e-3 * Math.max(maxX - minX, maxY - minY)
+  for (const leaf of allLeaves(items)) {
+    if (leaf.kind === 'raw') {
+      if (inert.has(leaf.id)) continue
+      return false
+    }
+    const bb = itemBounds(leaf)
+    if (!bb) continue
+    // Half the width each side; a miter tip or square cap can reach further, so a full width.
+    const pad = leaf.stroke ? leaf.stroke.width : 0
+    if (
+      bb.x - pad < minX - slack ||
+      bb.y - pad < minY - slack ||
+      bb.x + bb.w + pad > maxX + slack ||
+      bb.y + bb.h + pad > maxY + slack
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * `<use>` drawn as what it references: the target is walked as if it were a
+ * child of a `<g>` carrying the use's transform, translate(x, y) and paint — which
+ * is how SVG renders it — so a glyph or icon instanced from `<defs>` becomes an
+ * editable path of its own. False leaves the `<use>` raw: an external or missing
+ * reference, a cycle, an effect on the use, or a target kind this does not lift.
+ */
+function walkUse(el: Element, ctx: PaintContext, w: WalkContext): boolean {
+  const href = el.getAttribute('href') ?? el.getAttribute('xlink:href')
+  if (!href || !href.trim().startsWith('#')) return false
+  const id = href.trim().slice(1)
+  const target = w.byId.get(id)
+  if (!target || w.useStack.has(target)) return false
+  if (hasUnmodellableAttrs(el) || w.cssTaintAll || w.cssTainted.has(el)) return false
+  const tag = target.tagName.toLowerCase()
+  if (!SHAPE_TAGS.has(tag) && tag !== 'g' && tag !== 'use' && tag !== 'svg' && tag !== 'symbol') return false
+  const x = lengthAttr(el.getAttribute('x'), w.viewport.w)
+  const y = lengthAttr(el.getAttribute('y'), w.viewport.h)
+  if (x === null || y === null) return false
+
+  const useCtx = childContext(el, ctx)
+  useCtx.transform = composeAffine(useCtx.transform, [1, 0, 0, 1, x, y])
+  w.useStack.add(target)
+  try {
+    if (tag === 'svg' || tag === 'symbol') {
+      const size = { width: el.getAttribute('width'), height: el.getAttribute('height') }
+      if (!walkViewport(target, useCtx, size, w)) return false
+    } else {
+      walkElement(target, useCtx, w)
+    }
+  } finally {
+    w.useStack.delete(target)
+  }
+  // A target that only exists to be instanced is dead markup once every use of it
+  // is lifted; the finalize pass drops it unless a raw item still points at it.
+  if (inDefsOrSymbol(target)) w.consumedRefs.add(id)
+  return true
+}
+
+function inDefsOrSymbol(el: Element): boolean {
+  if (el.tagName.toLowerCase() === 'symbol') return true
+  for (let p = el.parentNode as Element | null; p && p.tagName; p = p.parentNode as Element | null) {
+    const t = p.tagName.toLowerCase()
+    if (t === 'defs' || t === 'symbol') return true
+  }
+  return false
+}
+
+/** A user-unit length (`12`, `12px`) or a percentage of `ref`; null for other units. Absent ⇒ 0. */
+function lengthAttr(v: string | null, ref: number): number | null {
+  if (v === null || v.trim() === '') return 0
+  const m = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*(px|%)?\s*$/i.exec(v)
+  if (!m) return null
+  const n = parseFloat(m[1])
+  return m[2] === '%' ? (n / 100) * ref : n
+}
+
+function parseViewBox(v: string | null): [number, number, number, number] | null {
+  if (!v) return null
+  const p = v
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number)
+  return p.length === 4 && p.every(Number.isFinite) && p[2] > 0 && p[3] > 0 ? [p[0], p[1], p[2], p[3]] : null
+}
+
+/** The viewBox → viewport mapping `preserveAspectRatio` asks for; null if unparseable. */
+function viewBoxFit(vb: [number, number, number, number], w: number, h: number, par: string | null): Affine | null {
+  const [vx, vy, vw, vh] = vb
+  const parts = (par ?? 'xMidYMid meet').trim().split(/\s+/)
+  const align = parts[0]
+  const slice = parts[1] === 'slice'
+  if (align === 'none') return [w / vw, 0, 0, h / vh, -vx * (w / vw), -vy * (h / vh)]
+  const am = /^x(Min|Mid|Max)Y(Min|Mid|Max)$/.exec(align)
+  if (!am) return null
+  const k = slice ? Math.max(w / vw, h / vh) : Math.min(w / vw, h / vh)
+  const f = (a: string) => (a === 'Min' ? 0 : a === 'Mid' ? 0.5 : 1)
+  const tx = (w - vw * k) * f(am[1]) - vx * k
+  const ty = (h - vh * k) * f(am[2]) - vy * k
+  return [k, 0, 0, k, tx, ty]
 }
 
 /**
@@ -761,17 +977,17 @@ function referencedIds(markup: string): string[] {
 }
 
 /**
- * Remove the given gradient ids from a defs/paint-server element and reserialize.
- * Returns null when nothing renderable is left (the caller drops the item).
+ * Remove the elements with the given ids from a defs / paint-server / symbol
+ * element and reserialize. Returns null when nothing is left (the caller drops
+ * the item).
  */
-function stripGradients(el: Element, remove: Set<string>): string | null {
-  const tag = el.tagName.toLowerCase()
-  if (tag === 'lineargradient' || tag === 'radialgradient') {
+function stripIds(el: Element, remove: Set<string>): string | null {
+  if (el.tagName.toLowerCase() !== 'defs') {
     const id = el.getAttribute('id')
     return id && remove.has(id) ? null : serializeElement(el)
   }
   const clone = el.cloneNode(true) as Element
-  for (const g of Array.from(clone.querySelectorAll('linearGradient, radialGradient'))) {
+  for (const g of Array.from(clone.querySelectorAll('*'))) {
     const id = g.getAttribute('id')
     if (id && remove.has(id)) g.parentNode?.removeChild(g)
   }
@@ -802,6 +1018,7 @@ function childContext(el: Element, ctx: PaintContext): PaintContext {
     strokeCap: prop('stroke-linecap') ?? ctx.strokeCap,
     strokeJoin: prop('stroke-linejoin') ?? ctx.strokeJoin,
     strokeDash: prop('stroke-dasharray') ?? ctx.strokeDash,
+    strokeMiter: prop('stroke-miterlimit') ?? ctx.strokeMiter,
     strokeOpacity: parseOpacity(prop('stroke-opacity')) ?? ctx.strokeOpacity,
     opacity: opacity !== null ? ctx.opacity * opacity : ctx.opacity,
     color: prop('color') ?? ctx.color,
@@ -868,6 +1085,14 @@ function resolveStroke(ctx: PaintContext): Stroke | null {
       // An unparseable dash pattern would be silently dropped — keep it raw.
       return null
     }
+  }
+
+  if (ctx.strokeMiter !== null) {
+    // A ratio, so it is not scaled with the width. Under 1 is an error in SVG;
+    // keep such a shape raw rather than guess what a renderer does with it.
+    const limit = parseFloat(ctx.strokeMiter)
+    if (!Number.isFinite(limit) || limit < 1) return null
+    if (stroke.join === 'miter' && limit !== 4) stroke.miterLimit = limit
   }
 
   // Element opacity multiplies the stroke as well as the fill (and so does the
@@ -983,6 +1208,7 @@ function makeRawItem(id: string, el: Element, ctx: PaintContext): RawItem {
   if (ctx.strokeCap !== null) inherited['stroke-linecap'] = ctx.strokeCap
   if (ctx.strokeJoin !== null) inherited['stroke-linejoin'] = ctx.strokeJoin
   if (ctx.strokeDash !== null) inherited['stroke-dasharray'] = ctx.strokeDash
+  if (ctx.strokeMiter !== null) inherited['stroke-miterlimit'] = ctx.strokeMiter
   if (ctx.strokeOpacity !== null) inherited['stroke-opacity'] = String(ctx.strokeOpacity)
   if (ctx.color !== null) inherited['color'] = ctx.color
   if (ctx.visibility !== null) inherited['visibility'] = ctx.visibility
@@ -1227,6 +1453,7 @@ function serializeItems(
         out += ` stroke="${escapeAttr(s.color)}" stroke-width="${fmt(s.width)}"`
         if (s.cap !== 'butt') out += ` stroke-linecap="${s.cap}"`
         if (s.join !== 'miter') out += ` stroke-linejoin="${s.join}"`
+        else if (s.miterLimit !== undefined && s.miterLimit !== 4) out += ` stroke-miterlimit="${fmt(s.miterLimit)}"`
         if (s.dash && s.dash.length > 0) {
           out += ` stroke-dasharray="${s.dash.map(fmt).join(' ')}"`
         }

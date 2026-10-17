@@ -384,3 +384,76 @@ test('a gradient whose stops a rule could not be resolved for is not lifted', ()
   )
   assert.equal(paths(doc).length, 0)
 })
+
+// --- what music engravers and icon sprites write: nested <svg>, <use>, miter limits ---
+
+const bounds = (p: Extract<Item, { kind: 'path' }>) => {
+  const xs = p.subPaths.flatMap((sp) => sp.nodes.map((n) => n.x))
+  const ys = p.subPaths.flatMap((sp) => sp.nodes.map((n) => n.y))
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+}
+
+test('a nested <svg> whose content stays inside it is placed and fitted, not kept raw', () => {
+  // viewBox 10 10 20 20 into a 40×40 viewport at (5, 5): scale 2, origin (10,10) → (5,5).
+  const doc = parse(`<svg x="5" y="5" width="40" height="40" viewBox="10 10 20 20"><path d="M10 10H30V30H10Z"/></svg>`)
+  assert.equal(raws(doc).length, 0)
+  assert.deepEqual(bounds(paths(doc)[0]), [5, 5, 45, 45])
+})
+
+test('preserveAspectRatio: meet centres the viewBox, none stretches it', () => {
+  const meet = parse(`<svg width="40" height="20" viewBox="0 0 10 10"><path d="M0 0H10V10H0Z"/></svg>`)
+  assert.deepEqual(bounds(paths(meet)[0]), [10, 0, 30, 20])
+  const none = parse(
+    `<svg width="40" height="20" viewBox="0 0 10 10" preserveAspectRatio="none"><path d="M0 0H10V10H0Z"/></svg>`,
+  )
+  assert.deepEqual(bounds(paths(none)[0]), [0, 0, 40, 20])
+})
+
+test('a nested <svg> that would clip its content stays raw (unless overflow is visible)', () => {
+  const clipped = parse(`<svg width="10" height="10"><path d="M0 0H20V20H0Z"/></svg>`)
+  assert.equal(paths(clipped).length, 0)
+  assert.equal(raws(clipped).length, 1)
+  const visible = parse(`<svg width="10" height="10" overflow="visible"><path d="M0 0H20V20H0Z"/></svg>`)
+  assert.equal(paths(visible).length, 1)
+})
+
+test('<use> of a glyph in <defs> becomes a path in place, and the dead glyph is dropped', () => {
+  const doc = parse(
+    `<defs><path id="g" d="M0 0H1V1H0Z"/></defs>` +
+      `<use href="#g" fill="#ff0000" transform="matrix(10,0,0,-10,20,50)"/>` +
+      `<use xlink:href="#g" x="5" y="5"/>`,
+  )
+  const [a, b] = paths(doc)
+  assert.equal(a.fill, '#ff0000')
+  assert.deepEqual(bounds(a), [20, 40, 30, 50])
+  assert.deepEqual(bounds(b), [5, 5, 6, 6])
+  // Both uses were lifted, so the defs block held nothing else and is gone.
+  assert.equal(raws(doc).length, 0)
+})
+
+test('a <use> target another raw element still references is kept', () => {
+  const doc = parse(`<defs><path id="g" d="M0 0H1V1H0Z"/></defs><use href="#g"/><use href="#g" filter="url(#f)"/>`)
+  assert.equal(paths(doc).length, 1)
+  assert.ok(raws(doc).some((r) => r.markup.includes('id="g"')))
+})
+
+test('a <use> cycle or a missing target stays raw instead of hanging', () => {
+  const doc = parse(`<g id="a"><use href="#a"/></g><use href="#nope"/>`)
+  assert.ok(raws(doc).length >= 2)
+})
+
+test('<use> of a <symbol> fits the symbol viewBox into the use size', () => {
+  const doc = parse(
+    `<symbol id="s" viewBox="0 0 10 10"><path d="M0 0H10V10H0Z"/></symbol><use href="#s" x="10" y="10" width="20" height="20"/>`,
+  )
+  assert.deepEqual(bounds(paths(doc)[0]), [10, 10, 30, 30])
+  assert.equal(raws(doc).length, 0)
+})
+
+test('stroke-miterlimit is modelled, not a reason to keep a stroke raw', () => {
+  const doc = parse(`<path fill="none" stroke="#000" stroke-width="2" stroke-miterlimit="10" d="M0 0V10"/>`)
+  assert.equal(raws(doc).length, 0)
+  assert.equal(paths(doc)[0].stroke?.miterLimit, 10)
+  const round = parse(`<path fill="none" stroke="#000" stroke-linejoin="round" stroke-miterlimit="10" d="M0 0V10"/>`)
+  assert.equal(paths(round)[0].stroke?.miterLimit, undefined, 'only a miter join reads it')
+})

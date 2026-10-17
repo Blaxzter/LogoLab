@@ -128,7 +128,7 @@ export function flattenItem(item: PathItem, vbx: number, vby: number, scale = 1)
  * quads splay — the winding adds rather than cancelling to a hole.
  *
  * Joins: `round` is a disc; `bevel` the triangle across the outer corner; `miter` that
- * triangle extended to the miter point unless the SVG default miter limit (4) is
+ * triangle extended to the miter point unless the miter limit (SVG's default 4) is
  * exceeded, where SVG itself falls back to bevel. Caps: `round` a disc, `square` a
  * half-width extension, `butt` nothing. Dashes are not modelled (the tracer never emits
  * them); a dashed stroke renders solid.
@@ -228,7 +228,7 @@ function strokePolygons(item: PathItem, vbx: number, vby: number, scale: number)
         const theta = Math.acos(Math.max(-1, Math.min(1, cosT))) // turn angle
         const halfInner = (Math.PI - theta) / 2
         const ratio = halfInner > 1e-6 ? 1 / Math.sin(halfInner) : Infinity
-        if (ratio <= 4) {
+        if (ratio <= (s.miterLimit ?? 4)) {
           // Miter point along the bisector of the outer normals.
           const bx = o1.x + o2.x - 2 * v.x
           const by = o1.y + o2.y - 2 * v.y
