@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   PenTool,
   Timer,
+  Trophy,
   WandSparkles,
 } from '../ui/icons'
 import type { Tab } from '../../state/store'
@@ -60,6 +61,13 @@ export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.
     label: 'Gallery',
     blurb: 'How the tracer renders art it can’t be scored on: the brand-logo set, and anything you drop in.',
     icon: <Images size={15} />,
+  },
+  {
+    to: '/labs/bench',
+    label: 'Benchmark',
+    blurb:
+      'LogoLab against VTracer, Potrace and StarVector on held-out SVG-Bench emoji: leaderboard, per-case renders, datasets. Reads a local run.',
+    icon: <Trophy size={15} />,
   },
   {
     to: '/labs/profiler',

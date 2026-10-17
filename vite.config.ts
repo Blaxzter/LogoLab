@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { serviceWorker } from './scripts/swPlugin'
 import { routePages } from './scripts/routePages'
+import { benchResults } from './scripts/benchPlugin'
 
 // Browsers map `*.localhost` to loopback themselves, so the branded hostname
 // works in the address bar without touching the hosts file. The OS resolver does
@@ -61,7 +62,7 @@ export default defineConfig(({ command }) => ({
   // in dev, src/pwa/register.ts actively unregisters any worker instead, so a
   // preview build tested on this host can't go on serving its precache over the
   // dev server.
-  plugins: [react(), tailwindcss(), serviceWorker(), routePages()],
+  plugins: [react(), tailwindcss(), serviceWorker(), routePages(), benchResults()],
   // The MCP install dialog (src/components/shell/AgentSetup.tsx) prints a command that
   // names this checkout. `vite dev` IS the checkout, so fill it in; a hosted build
   // has no idea where the user cloned it, and the dialog asks instead.
