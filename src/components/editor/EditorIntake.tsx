@@ -101,7 +101,7 @@ export function EditorIntake({ onOpen }: EditorIntakeProps) {
             Its layer groups, gradients and strokes become objects you can edit. Anything this editor can't handle is
             kept as it was.
           </p>
-          <p className="mt-2 text-xs text-faint">
+          <p className="mt-2 text-xs text-muted">
             Drop a file or <span className="font-medium text-muted">click to browse</span> · SVG only
           </p>
         </div>
@@ -202,7 +202,7 @@ function Divider({ children }: { children: React.ReactNode }) {
   return (
     <div className="mt-2 flex w-full items-center gap-3">
       <span className="h-px flex-1 bg-line" />
-      <span className="text-xs font-medium uppercase tracking-wider text-faint">{children}</span>
+      <span className="text-xs font-medium uppercase tracking-wider text-muted">{children}</span>
       <span className="h-px flex-1 bg-line" />
     </div>
   )

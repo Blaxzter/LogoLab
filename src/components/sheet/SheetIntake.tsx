@@ -107,7 +107,7 @@ export function SheetIntake() {
             One image with a set of icons on it, like the ones image models make. Each icon is found, cropped and traced
             to its own clean SVG.
           </p>
-          <p className="mt-2 text-xs text-faint">
+          <p className="mt-2 text-xs text-muted">
             Drop a file or <span className="font-medium text-muted">click to browse</span> · PNG, SVG, JPG, WebP
           </p>
         </div>
@@ -130,7 +130,7 @@ export function SheetIntake() {
       <div className="w-full">
         <div className="mb-3 flex items-center gap-3">
           <span className="h-px flex-1 bg-line" />
-          <span className="text-xs font-medium uppercase tracking-wider text-faint">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted">
             Or start with an example sheet
           </span>
           <span className="h-px flex-1 bg-line" />

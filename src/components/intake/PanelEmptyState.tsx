@@ -47,7 +47,7 @@ export function PanelEmptyState({ icon, title, subtitle }: { icon: ReactNode; ti
         <div>
           <p className="text-base font-medium text-ink">{dragging ? 'Drop to load it' : title}</p>
           <p className="mt-1 text-sm text-muted">{subtitle}</p>
-          <p className="mt-2 text-xs text-faint">
+          <p className="mt-2 text-xs text-muted">
             Drop a file or <span className="font-medium text-muted">click to browse</span> · PNG, SVG, JPG, WebP
           </p>
         </div>
@@ -65,7 +65,7 @@ export function PanelEmptyState({ icon, title, subtitle }: { icon: ReactNode; ti
       <div className="w-full">
         <div className="mb-3 flex items-center gap-3">
           <span className="h-px flex-1 bg-line" />
-          <span className="text-xs font-medium uppercase tracking-wider text-faint">Or start with an example</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-muted">Or start with an example</span>
           <span className="h-px flex-1 bg-line" />
         </div>
         <ExampleGrid className="sm:grid-cols-2 lg:grid-cols-3" />

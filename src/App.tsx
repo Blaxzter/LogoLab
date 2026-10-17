@@ -26,6 +26,7 @@ import ExportPanel from './components/panels/ExportPanel'
 import Impressum from './components/legal/Impressum'
 import Datenschutz from './components/legal/Datenschutz'
 import { LegalFooter } from './components/legal/LegalFooter'
+import { RouteAbout } from './components/shell/RouteAbout'
 
 // Heavy routes are lazy so the landing bundle stays small: the SVG editor, the
 // two tabs that pull in the tracer (they share its chunk), and the labs, which
@@ -54,9 +55,12 @@ function LabLoading() {
 }
 
 /** Loading fallback for a normal tab. */
+// A full `main` of its own (min-h-full, not flex-1, which shrinks to make room):
+// the copy and footer below it start off-screen, so the panel replacing it can't
+// shove them down in view (CLS on mobile).
 function PanelLoading({ what }: { what: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted">
+    <div className="flex min-h-full shrink-0 items-center justify-center gap-2 py-24 text-sm text-muted">
       <Loader2 size={16} className="animate-spin text-accent" />
       Loading {what}…
     </div>
@@ -395,7 +399,10 @@ export function App() {
             <Route path="/" element={<Navigate to="/preview" replace />} />
             <Route path="*" element={<Navigate to="/preview" replace />} />
           </Routes>
-          <LegalFooter className={`mt-auto ${tab === 'editor' ? 'md:hidden' : isStudio ? 'lg:hidden' : ''}`} />
+          <div className={`mt-auto ${tab === 'editor' ? 'md:hidden' : isStudio ? 'lg:hidden' : ''}`}>
+            <RouteAbout path={pathname} />
+            <LegalFooter />
+          </div>
         </main>
       </div>
 
