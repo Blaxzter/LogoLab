@@ -54,3 +54,6 @@ pnpm-debug.log*
 # here. The README explains the lifecycle; nothing else under it is committed.
 /test/ab-snapshots/*
 !/test/ab-snapshots/README.md
+
+# local benchmark tools (vtracer, potrace, models, venvs)
+.bench-tools/

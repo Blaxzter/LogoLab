@@ -242,6 +242,10 @@ interface Boundary {
   length: number
   /** Anchor count. */
   nodes: number
+  /** `length` / `nodes` without the canvas edge: segments with BOTH ends within BORDER_EPS
+   *  of the canvas rectangle, anchors within it. Read only by the opt-in border-free parsimony. */
+  innerLength: number
+  innerNodes: number
 }
 
 /**
@@ -265,11 +269,15 @@ function collectBoundary(
   w: number,
   h: number,
   visibleAt?: (q: QueryPt) => boolean,
+  /** Also drop TARGET segments visibleAt rejects (tested at the midpoint). Opt-in. */
+  segsVisibleOnly = false,
 ): Boundary {
   const segs: Seg[] = []
   const queries: Vec[] = []
   let length = 0
   let nodes = 0
+  let innerLength = 0
+  let innerNodes = 0
 
   const onBorder = (p: Vec): boolean =>
     p.x < BORDER_EPS || p.y < BORDER_EPS || p.x > w - BORDER_EPS || p.y > h - BORDER_EPS
@@ -277,6 +285,7 @@ function collectBoundary(
   for (const set of subPathSets) {
     for (const sp of set) {
       nodes += sp.nodes.length
+      for (const n of sp.nodes) if (!onBorder(n)) innerNodes++
       const poly = flattenSubPath(sp)
       if (poly.length < 2) continue
       const pts =
@@ -285,14 +294,22 @@ function collectBoundary(
           : poly
       length += polylineLength(pts)
       for (let i = 1; i < pts.length; i++) {
-        segs.push({ ax: pts[i - 1].x, ay: pts[i - 1].y, bx: pts[i].x, by: pts[i].y })
+        const a = pts[i - 1]
+        const b = pts[i]
+        const len = Math.hypot(b.x - a.x, b.y - a.y)
+        if (!(onBorder(a) && onBorder(b))) innerLength += len
+        if (segsVisibleOnly && visibleAt && len > 0) {
+          const q = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, tx: (b.x - a.x) / len, ty: (b.y - a.y) / len }
+          if (!visibleAt(q)) continue
+        }
+        segs.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y })
       }
       const q: QueryPt[] = []
       resampleByArcLength(pts, SPACING, q)
       for (const p of q) if (!onBorder(p) && (!visibleAt || visibleAt(p))) queries.push({ x: p.x, y: p.y })
     }
   }
-  return { segs, queries, length, nodes }
+  return { segs, queries, length, nodes, innerLength, innerNodes }
 }
 
 // ---------------------------------------------------------------------------
@@ -608,6 +625,13 @@ export function scoreRegions(
      * the area floor at 1024). Colours outside every family are scored exactly as before.
      */
     inkFamilies?: string[][]
+    /**
+     * The trace's render, RGBA at the raster's size, when the caller already has one — the
+     * vectorizer comparison (bench/compare/) renders every tool's SVG with resvg and scores
+     * that, since rasterizeDoc only paints what LogoLab's model holds. Omitted ⇒
+     * rasterizeDoc(doc), exactly as before.
+     */
+    render?: Uint8ClampedArray | Uint8Array
   } = {},
 ): RegionScore {
   const { width, height, data } = raster
@@ -695,7 +719,7 @@ export function scoreRegions(
   // side of the image. A colour-matcher with a threshold of 5 would have called that
   // "recovered" and hidden a real defect. Location cannot lie: if the trace paints the wrong
   // colour where the region actually is, the region is not recovered.
-  const render = rasterizeDoc(doc, width, height)
+  const render = opts.render ?? rasterizeDoc(doc, width, height)
   const sampleOf = new Map<number, number[][]>()
   for (const r of regions) {
     const bucket: number[][] = []
@@ -1726,6 +1750,25 @@ export function scoreGeometry(
   w: number,
   h: number,
   truthRaster: { width: number; height: number; data: Uint8ClampedArray | Uint8Array },
+  opts: {
+    /**
+     * Visibility filter for the TRACED side's queries (makeVisibleAt over the trace's own
+     * render). Off by default — LogoLab's tiled output has no hidden boundary. The
+     * vectorizer comparison turns it on, because a STACKED output (VTracer's default,
+     * LogoLab's product preset) carries boundary that is painted over, and without it that
+     * hidden outline reads as spurious. Node counts are unaffected: hidden nodes are file cost.
+     */
+    docVisibleAt?: (q: { x: number; y: number; tx: number; ty: number }) => boolean
+    /**
+     * With docVisibleAt: also drop the traced TARGET segments it rejects (by midpoint), so
+     * an authored edge cannot be "found" on traced outline that is painted over. Without
+     * it only the traced QUERIES are filtered and the missed side treats stacked and tiled
+     * output unequally. Off by default (the truth gate never passes docVisibleAt).
+     */
+    docSegsVisibleOnly?: boolean
+    /** Parsimony without canvas-edge boundary (both sides) — see the density block below. */
+    parsimonyBorderFree?: boolean
+  } = {},
 ): GeomScore & { diagnostics: GeomDiagnostics } {
   const docSets: SubPath[][] = []
   let docPaths = 0
@@ -1742,7 +1785,7 @@ export function scoreGeometry(
     h,
     visible,
   )
-  const D = collectBoundary(docSets, w, h)
+  const D = collectBoundary(docSets, w, h, opts.docVisibleAt, opts.docSegsVisibleOnly === true)
 
   // Corner recovery — a topology check boundary distance is structurally blind to. A GT
   // corner counts only if VISIBLE (occluded overdraw corners, like an under-bar tip, can't
@@ -1776,8 +1819,16 @@ export function scoreGeometry(
   const missed = gtPoints.map((p) => p.d)
   const spurious = docPoints.map((p) => p.d)
 
-  const gtDensity = G.length > 0 ? (G.nodes / G.length) * 100 : 0
-  const docDensity = D.length > 0 ? (D.nodes / D.length) * 100 : 0
+  // Parsimony's density: whole boundary by default (the truth gate's calibrated definition),
+  // or — opt-in, the vectorizer comparison — without canvas-edge boundary, the same
+  // exclusion the distance queries use. A tool that writes a full-canvas background path
+  // otherwise gets ~4·w px of free length for 4 nodes, which flatters it against art (and
+  // tools) that has no such path. docNodes / gtNodes stay whole: they are file cost.
+  const [gl, gn, dl, dn] = opts.parsimonyBorderFree
+    ? [G.innerLength, G.innerNodes, D.innerLength, D.innerNodes]
+    : [G.length, G.nodes, D.length, D.nodes]
+  const gtDensity = gl > 0 ? (gn / gl) * 100 : 0
+  const docDensity = dl > 0 ? (dn / dl) * 100 : 0
 
   return {
     samples: gtPoints.length + docPoints.length,

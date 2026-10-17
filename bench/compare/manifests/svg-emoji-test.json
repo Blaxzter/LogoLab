@@ -1,0 +1,5354 @@
+{
+ "dataset": "starvector/svg-emoji",
+ "revision": "a4209d1752ba3014b23077d225ad1040db6cbd9b",
+ "split": "test",
+ "url": "https://huggingface.co/datasets/starvector/svg-emoji/resolve/a4209d1752ba3014b23077d225ad1040db6cbd9b/data/test-00000-of-00001.parquet",
+ "parquetSha256": "da3a8e37491c482cff810cce9fcafdd02147720ed9207e4c0f0f8daa63c6f913",
+ "note": "SVG-Bench svg-emoji test split. No licence on the HF card; per-row licence is the upstream emoji set's. v0 = 100 Twemoji, one per base emoji, ranked by sha1(file).",
+ "rows": [
+  {
+   "file": "00A9-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "23e8e2eb4817a6101b42f016cd35949e7d76f0af800f657a0698b399072b4866",
+   "v0": false
+  },
+  {
+   "file": "1F1ED-1F1F0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "101c4f878b28869a1fa70e0bcfda7b08fe666c02759cb524bfb0990e38971249",
+   "v0": false
+  },
+  {
+   "file": "1F1ED-1F1F2-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "a06f5f6db6f46b69057ae91662d75d6ad201ca06154c516491c7f00669d12d6c",
+   "v0": false
+  },
+  {
+   "file": "1F1ED-1F1F3-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "eb33118f3d2cf85dd8ea4a4a0c9bb883759528c750fd97128e998fb9a36c67a2",
+   "v0": false
+  },
+  {
+   "file": "1F1ED-1F1F7-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "720b7a27620c360333bc1a18feaa4151301e17e96038dd631022eef15a43278d",
+   "v0": false
+  },
+  {
+   "file": "1F1ED-1F1FA-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "a4d72d2e1a6e4c1c3b1fc5b199d6bfc2dbf823e00a33563ec68d3060819ba95d",
+   "v0": false
+  },
+  {
+   "file": "1F1ED-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f561d81ca8eb70ab4f3b1e75fb42ba6c5d3064ce9baa03700ec22bf1e4ed0004",
+   "v0": false
+  },
+  {
+   "file": "1F1F6-1F1E6-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c1f4ef505b4946107f3da017b336c2d584bce21ac20315d6498bc64f96d0c1e3",
+   "v0": false
+  },
+  {
+   "file": "1F1F6-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "01ee9232d8cf20327b8fa7c492b348052167f2eaf242203b120ee655a561df40",
+   "v0": false
+  },
+  {
+   "file": "1F32E-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "08a8620865709e7b68cb430a9b79470a2d3d3569546b7e7d65c96cc8d57c8e5d",
+   "v0": false
+  },
+  {
+   "file": "1F33F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c72a0af8aa359cd286d24bdb860e94814b95f0eef23d4f7992a08e5f9ce8475c",
+   "v0": false
+  },
+  {
+   "file": "1F379-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "d5af8c162337405d818ed0b15c3ba5b744064798c433955f6e941209b99bcaef",
+   "v0": false
+  },
+  {
+   "file": "1F388-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "6599694d3d9ea8e7df5870fa18d417e8848bffe7d964bd164f3581fed4c51520",
+   "v0": false
+  },
+  {
+   "file": "1F38A-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "6591641d7171feabdc3485524f1e8eb02e217aae61c047da36ce1429ce653e31",
+   "v0": false
+  },
+  {
+   "file": "1F390-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "728333ad72a8b1d7a594fda16ba7bc223b7c7d646b1040021ae42ff402f2901c",
+   "v0": false
+  },
+  {
+   "file": "1F3A3-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "fe619b96b2544b7445bafa06700ea1e8881eff7537662a1930ce765be4f5288c",
+   "v0": false
+  },
+  {
+   "file": "1F3AE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "52678af86c42bc116ef097a87d3f5ea05b47e730eb7db0be76007c4adbfcc230",
+   "v0": false
+  },
+  {
+   "file": "1F3AF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "fbb25f8943dd25c1a6329db3ab8bb2a2386897a253ce949f7cc348984e5ac1d8",
+   "v0": false
+  },
+  {
+   "file": "1F3B8-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "5e7aaf47b15a80f6e3c300da09a0c1cadda6443ed9bbaec2476a83c89cae07c1",
+   "v0": false
+  },
+  {
+   "file": "1F3E0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "6a216f31dffb5771ec6dfa23e1d55f6a85af044c1e42c77061aef9fab8eb547c",
+   "v0": false
+  },
+  {
+   "file": "1F3EC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "143a1fc23e11d388aaa41c40c460797f1fb391026dc26fc3d2e19e06c9908286",
+   "v0": false
+  },
+  {
+   "file": "1F3F5-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "7f2c7d214a2dd45fbda0c9b9d9ef2c5ca1b0fca189a23bc14e6a9c986dfd48e0",
+   "v0": false
+  },
+  {
+   "file": "1F408-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "42f12038a9994eba2f266920e7b7d768c499eeed8c471e1fad3b64bc23c02466",
+   "v0": false
+  },
+  {
+   "file": "1F419-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b014d87a909246b1764afec5a88de7a986a4a043f427e465f8497b6e2cdbf566",
+   "v0": false
+  },
+  {
+   "file": "1F41C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "3c2ca7890bd38969324da753ec05209c8465b395433b494b8d3c1283ea305ab7",
+   "v0": false
+  },
+  {
+   "file": "1F41E-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b4adadebdb2ff9e1f6c794e20d5165a03d90d5663acef29288fe658a0fae727a",
+   "v0": false
+  },
+  {
+   "file": "1F421-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4b836bc4001513197809d995b0026a5cc5ee8c11866e0b8f4056012f400f6406",
+   "v0": false
+  },
+  {
+   "file": "1F431-200D-1F4BB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c73733a1db1e73df06c8fa0f72fd4ce85b8155ac67c2bc57e59f83de4c664166",
+   "v0": false
+  },
+  {
+   "file": "1F43C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "82858a85d5d052d2accfb037496b9035a30028fc807f0b5b242652fc4b3b1719",
+   "v0": false
+  },
+  {
+   "file": "1F459-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "16449fe11b7a34fc3c86c4e8e98cd339703491a6d1cb40ca165f0806eb80c5b2",
+   "v0": false
+  },
+  {
+   "file": "1F472-1F3FD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4c1360932e8c5477888b83f9ff85aa4312852cff4f9f6ffc56a09417257384f6",
+   "v0": false
+  },
+  {
+   "file": "1F472-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "8b6cfa34cfa8eeac83e5041d9b3dad29abe232aeaca40feb9ebfe111530079c6",
+   "v0": false
+  },
+  {
+   "file": "1F472-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "caa83af768d0efb85c691b44adb4de5acc2d3df290fb1136fc617cc8dcfbc658",
+   "v0": false
+  },
+  {
+   "file": "1F48F-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "51efd6642ff20d67c9c809152cd796b5126f1b3728ee5725d95b1495585b0cc2",
+   "v0": false
+  },
+  {
+   "file": "1F48F-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "59b9554d76f61facb29d624c34ec4fd4a38e48bfed864654e434e402e7bda8fc",
+   "v0": false
+  },
+  {
+   "file": "1F48F-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "95203bc5150b3b07a5951ee7be2928eefb1648024a49a8e1737e30de1795c410",
+   "v0": false
+  },
+  {
+   "file": "1F48F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "283bddd161915b7c0097d6718ae8753b0fde526dbc4361bc3eb9280c140da74b",
+   "v0": false
+  },
+  {
+   "file": "1F4A1-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "81ff55b3ddafb054139d80a7acb3e405f66b7a9d1cf8cd479cf2049a1e1ba3a0",
+   "v0": false
+  },
+  {
+   "file": "1F4B3-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "cd73ebd9c71bda38e2f0db331501b9964fea034202761d1a4f830102b9ec67b8",
+   "v0": false
+  },
+  {
+   "file": "1F4E0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "0bfc84edcd31a673d23df3b56320d2610b14ee7901dc7625ea8462da4b0e80be",
+   "v0": false
+  },
+  {
+   "file": "1F4F4-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "bbecacd1e869a6631c21554e779e8655f891e5dc646086d8e8e2614fa6dba572",
+   "v0": false
+  },
+  {
+   "file": "1F508-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "d4fcfcf76d21b21f558cf975615e3e039f6ac3933f294729e0a8b593d0afda2d",
+   "v0": false
+  },
+  {
+   "file": "1F53B-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "a20a04d602988be4bcdf00a7c4fc9fdc497d019802a03b3704ea5023a60d2323",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FB-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "603763a21bb54adc71b01e95a5f047a5d4bf6e418caf62241e5edaaeb2643776",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "8b9e3ce30190e09e416471502c8c1e3c07081ae704104bc575adf2e5154f8999",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FC-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f151c8f97458097f6573bf62656d14a0b6c7fac4a88e061cd14edc491eded549",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FC-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c0e158c08a7832d041c5eb76b5184ec8076f04d5f0674cd507dad83528dd408d",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FD-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "9ad7b568189f954d5ce1032ca9a4c6a0d52407540ffb9c6031ddf2b9785429ad",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "e9112e17376e017bad02fe4b345c787521b613d00b8836ffcee331251b4d4b57",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FE-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c8d338d3eebcee6655a0bf7da7ccc46dd54bbf386dc81bfed0c4a80bb33c8e7d",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FE-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "64676246e8f2ca118920bfdd530e98a7372e451d6a7272ef2f4ccd53c204edbc",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "d2b93230d708f290990d94ebc92321a7c1b8f07e27d00c62ee5a829d503cad2a",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FF-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "6de1c3bf795af32ac5d70fa6c67f974febb1501e111f7eb3c5d5cfb2335ed788",
+   "v0": false
+  },
+  {
+   "file": "1F575-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "fa81b91987f8079766a094aa9c7cbcd41d0b11c93df7ed114dcd0cbcdcdcd6d7",
+   "v0": false
+  },
+  {
+   "file": "1F575-FE0F-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "932bc7107eb77491aeca3c220cb4ced15dc1c53fa02efd21c59dc82b99f820f0",
+   "v0": false
+  },
+  {
+   "file": "1F575-FE0F-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "93516f2a75bfbf6f9cbf8654d123f494518f703cc7ded4ea32992ab36695a114",
+   "v0": false
+  },
+  {
+   "file": "1F57A-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "0122088dbad83a3157be7d341e0ab271a548a05fa47bd6956f7fe3a90d365ebb",
+   "v0": false
+  },
+  {
+   "file": "1F57A-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "af2207016fe8dc6e914f5278ac2462e52722a92cd867b4b2041f8151169211f1",
+   "v0": false
+  },
+  {
+   "file": "1F57A-1F3FD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b5184c10c3e868b952c890717c182930b5b0e26a76c2bbaedb415ce9a04c79d9",
+   "v0": false
+  },
+  {
+   "file": "1F57A-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "9ce88feffbafe7740f2dff5dc092b1c5ca77d986e4724efcf111fa2524dc4a22",
+   "v0": false
+  },
+  {
+   "file": "1F57A-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "cf0221abb301ff594264681fe3c6f5ba579a2aede35e9c936178b197abe52517",
+   "v0": false
+  },
+  {
+   "file": "1F58C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "19c1ba8c5f6b129610b7b5a10bc73ce296f228602d7637f63e6de40736794c01",
+   "v0": false
+  },
+  {
+   "file": "1F614-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "0f4af0bfeabfd8c547c4ca13ba84a8a32187d1201e0674aba7ad57b4806f3e48",
+   "v0": false
+  },
+  {
+   "file": "1F615-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "ae6369b6b823a9690115324bdf568a96447884cfb7d41158c49ba2679903afe4",
+   "v0": false
+  },
+  {
+   "file": "1F632-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "601c199112de92f56fd92a3050cee6eae0f745c8828fb9c860d34ba0f477e838",
+   "v0": false
+  },
+  {
+   "file": "1F63A-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "7136322aa2f1d3d24a03ae8947c43f2fd746f9330cdcbeb61e5b065eac821a80",
+   "v0": false
+  },
+  {
+   "file": "1F641-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4402915292f8cae3cc9d7d53f7e4f1915667468a2a3018e606458bc8ce08e62f",
+   "v0": false
+  },
+  {
+   "file": "1F6A5-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "ba744b3ab3ecbc3243b09a7cb3c6dc14e1d88091dc78402adf2fc35502bd7476",
+   "v0": false
+  },
+  {
+   "file": "1F6B1-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "cbffaaa67f9ef0c508c4039f73a94f96c6a49a9b64171b1f88f7b29281c84af7",
+   "v0": false
+  },
+  {
+   "file": "1F6B6-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "bf0b18b5a9364b802e6d7701ef12c57252e531252ee6f35b149962c03a38ae32",
+   "v0": false
+  },
+  {
+   "file": "1F6B6-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "eac3a577d6ee26b376ce147d25276699decda44abf984d03d016b4c6c2c59a07",
+   "v0": false
+  },
+  {
+   "file": "1F6B6-1F3FD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b68830c3a7e7700414d0ccffb0d02930ba6da9fd57fdc1748c6f95cae9268f9d",
+   "v0": false
+  },
+  {
+   "file": "1F6B6-1F3FE-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "ce4a7e81532ebfffac2db926f22faca775b7ffb5e22f4fb846e474697d4bd3e4",
+   "v0": false
+  },
+  {
+   "file": "1F6B6-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "14f2a36d51688179c0abd243385ce00422b5a5c6631d18f4ec832988c444b589",
+   "v0": false
+  },
+  {
+   "file": "1F6B6-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "a2038bc2cc281f041e4e5b04b5b9dd790143548c1a35be89cf56a61e3062de64",
+   "v0": false
+  },
+  {
+   "file": "1F6B6-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "0ce0964f88e1b765383d4eafbadc6eefabd2e05a0e8bec138765a6453db56fc3",
+   "v0": false
+  },
+  {
+   "file": "1F6B7-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f7b1e5a2af5f0ff2546b836212c3f65b2d70e74f9cb0f7f76da1e3a095b0f065",
+   "v0": false
+  },
+  {
+   "file": "1F6C0-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4f4d5f0890f3c2782844e7354a1f4d77a02461a01eacc25ac04e4a1291b55a7b",
+   "v0": false
+  },
+  {
+   "file": "1F6C0-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b57529c8cd0debd1ea8aa010084f568b57f13da94940210d7018e271a355f8a3",
+   "v0": false
+  },
+  {
+   "file": "1F6C0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "fe7de7c3fa7e94876df567f52281bf4143d04e44920c9af55045fde8c12addf8",
+   "v0": false
+  },
+  {
+   "file": "1F6D7-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "6872d3ef4c00ede682fd82a99186989d3f92273874750632c78b88ffcbea05e6",
+   "v0": false
+  },
+  {
+   "file": "1F6E0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "eb14f4e2668a2cf5f5b69e9dcfbf5a7463dc4f28c7a818f17e36ee68b58f1f53",
+   "v0": false
+  },
+  {
+   "file": "1F6FA-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c9692422559c2d9be3e3fbad781d599aa4654cc49a33e926a17aa1b19591f2b5",
+   "v0": false
+  },
+  {
+   "file": "1F90C-1F3FD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "dd47ac54cd0b758ed8630ce158c29dd4547d63d03c6766fc667049956788afee",
+   "v0": false
+  },
+  {
+   "file": "1F90C-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4f98dfef5fb556a244ac7f4232797fe134a408937d81a0967e33a306de93ec62",
+   "v0": false
+  },
+  {
+   "file": "1F90C-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "8a0e0513eb8206c00b5461ae45637eea4c37ef31c53d81e668651ac7f7eae893",
+   "v0": false
+  },
+  {
+   "file": "1F917-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c746bc4e2b32c2dbf7807cac942c96fb536690e98aa3d591c8932bf6d72008fd",
+   "v0": false
+  },
+  {
+   "file": "1F91C-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "8b31abf05be4c681acdeb71e42c0f67ac38100df2475dd54c03a296a2ab69ad1",
+   "v0": false
+  },
+  {
+   "file": "1F91C-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "0f5c56b05488328f0908e0fee6ec7d4d46336bcbc29bc7abd1a33fe0adf0aa2c",
+   "v0": false
+  },
+  {
+   "file": "1F91C-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "e7a7ab683930c9e0500d296fd514ed2f78d6bdf73598aea14125575d6e10d9e4",
+   "v0": false
+  },
+  {
+   "file": "1F91F-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "13cb7aa851778f162dcd6e3c73ac1c30876da1feb9dcb84edb9f2fd20971a28e",
+   "v0": false
+  },
+  {
+   "file": "1F91F-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "1dd364d5a88af748db762190d7300e3b392ce963d808fdf73ff58712f91f05cd",
+   "v0": false
+  },
+  {
+   "file": "1F91F-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "1c049588a3ff3f07e8c1d077bfbf6b6a73f85ee0b71a04a295e811c5b300ef8a",
+   "v0": false
+  },
+  {
+   "file": "1F91F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "262bb49bbc29811d2396b12ca7f0e6dfd758fda5ac2052d8f2e960f88d004bf1",
+   "v0": false
+  },
+  {
+   "file": "1F931-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4a816dfaa9038f9379a1814ccb4fc934f3a3c32b39fb0f4462895dc240508611",
+   "v0": false
+  },
+  {
+   "file": "1F931-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "2b660f6e0cfe6f279381896ea83e9f5edd35c055fa11de0e357cc1fa72ac87a2",
+   "v0": false
+  },
+  {
+   "file": "1F931-1F3FD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "772e7a8fa37d1ed51c62f9424eea6cfa78831eab1421dd65afb05d419e27be08",
+   "v0": false
+  },
+  {
+   "file": "1F931-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "258dfd0263d409c86c928472f9f3e88b8632f669ce8f3692ee850616eb95ac48",
+   "v0": false
+  },
+  {
+   "file": "1F931-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "bfc0c48d09b80664b1befa54c7d447438c5b50484c204de131fcf64916104a6a",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FB-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "2382ac29a923625c9c6e8ea149457ae389a44082c84f2fcabcc8d0f57896a95d",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FB-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c843be9e23fa732fa6a9d5f44cb7cf3b68f677b52bfbb1f50fd9a9ab818ecbc4",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "35a36c3c69ecafbebce51e725a75fb1f20720db8512864065ed0e1a1edbe0bb4",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FC-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "0e86084b6f42ec84a1d37060d19c4d93975dc97f0f607f312a04b61e3d0d7cf6",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "234c7b4fb02278134fc385d9eff1617223bc64a20049d5fb7d9d4c619abb5d70",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FD-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "decd717da2f90ce3a376a4608a63a862f98e47f08c1e22ba7a2cf6d6db2e8447",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FD-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b5fd058a8acec69479682347471e256270b377cbe922adb74905d84315c71e78",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FE-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f78a27dd5d257a40b5f52be90e3153e53b0b0c4a1b4381987cbe24bd05db4410",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "5b2edde14e6d758b146f9725eaa32d354b8710ab5f064d6e430f7f3fa1f540ac",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FF-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f51c1c37dc51cbdea9d88c63ccba97901b506e1626df756bb25b885350eb7431",
+   "v0": false
+  },
+  {
+   "file": "1F937-1F3FF-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "6d432811ecc1f52ff20997d0bc8779e96f84c4cc52edea8b6e24aa5bdc23ae07",
+   "v0": false
+  },
+  {
+   "file": "1F937-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "e446de2d12bab8ef4e55b06cd729f29068d00df6343b6a8758ec9d407448ff8c",
+   "v0": false
+  },
+  {
+   "file": "1F937-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "9ffff33a691eeb5d6c43a7120282904a1ebef17901575774703e0b6e07447734",
+   "v0": false
+  },
+  {
+   "file": "1F94C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "bb865c0a47b554edc45909b38758d99d33332f42472877a78e26c958e9c74fd5",
+   "v0": false
+  },
+  {
+   "file": "1F954-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "a9446f740d96ef021c9eec461f1b72fdf7dff30c1b0b1c653a769a3bb41c3223",
+   "v0": false
+  },
+  {
+   "file": "1F95B-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "60f415367dd33bc8ddf272e740f2316c19003b3925a01e24ce0ea33e61a59954",
+   "v0": false
+  },
+  {
+   "file": "1F987-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "82b5f898040020ebc6fa542e6b4ec2a55c6bbdf90e1d670c05267c6e592de229",
+   "v0": false
+  },
+  {
+   "file": "1F9B0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "23b5c41cb1d1d1e10dd7472ab10e6169974b770a068439f9eb0ec4e8c709ce4c",
+   "v0": false
+  },
+  {
+   "file": "1F9B6-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "8834d38f7be366b239410ab50a33048930735b33657096c256faad512ba5d506",
+   "v0": false
+  },
+  {
+   "file": "1F9B6-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "09b077c8d814fc681aa1e9c413492937f09d6e164450309c651801e7178ba38a",
+   "v0": false
+  },
+  {
+   "file": "1F9B6-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "54bc81b1376be6d2d12b8fcfa7a4f6019a04b200e767e1cbaadb0a093283400a",
+   "v0": false
+  },
+  {
+   "file": "1F9B6-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "a8be3accedaa417ad7eb91ee22195baacb9ad7d8d7d7a092a75a17208da18798",
+   "v0": false
+  },
+  {
+   "file": "1F9CA-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "db825264cd046df8231f93956ee244cf297cd1c4c4825251f2c05667729cfaae",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F33E-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "5404589a0fffc2ce13c03dd00a0c9d35c1f7dbe66180e86e8fa096e0ae211dde",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F373-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "59903021fd1684650fee7c43bb7f4d7f1fe3ad67b09cbc5a68b3026e2e65d171",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F393-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "e18fd7f710b76cf647b471e4f9df626041609565fc98c43e90e0c5a284321a12",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F3EB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "3989abcacb855822cee1fea9caabdfdd074ce8f61d5dece9d165c89610947644",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F4BB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "cf3e76a4ad4fa088b8fafd9265b0add11521aa59dfa93a3400dcc5217e61de88",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F4BC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "df3306d623ca2c1a72ad3ff6c005085bbdd9f47ad2916d0330a65516406f5fcb",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F527-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "5b5c39ef4af8e1a14a1e989f479fbf444174af64a8a9db2a61d8206d94b40d52",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F52C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "122ae32fe578023462239d86ee350b5f26f8ac3a3e49026ae7e76aeb66dc4700",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F91D-200D-1F9D1-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "fe3cebbd44ef3ea003829a6c5e713ec5f7c2fc0ed185c2346893fa75528fbbce",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F91D-200D-1F9D1-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "da14740f53d800169e256efbd48066130d865b0c73c05bb4f88f4fcd885693b5",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F91D-200D-1F9D1-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "39797029af292300b623a2bbc9c07967e72dcb566a86389973cce5a1c389d49b",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F9AF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "e90f3d6264fd3fd88e359591db1c404bd014a2bd3255dcf22d8d487bde196730",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F9B0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "dc1df97512bb3650decf052bee15177d9efcc53e6ddf52219983a0f92b4705fb",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F9B1-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "bed031ccb007d99c86078980c618c06b9e4236edb7fc088757a88a8f8762d2b1",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-1F9BC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "041059d122f5e8a20f38e9642ef5a2c5876de0d461daaa36d2ef5709952204e7",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-2695-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "50076db7e16ff485272b9c0733591956d1418c00fc00f4094852c4d90bda550d",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-2696-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "71a0f952e5a0e6a3234bfdbe802b6679ec7f0004c32eeaefca1ab1d93a410448",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-2764-FE0F-200D-1F48B-200D-1F9D1-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "ce973a50f969d966fb13eea1c47977b52751c86445718ee4fc595933a5618958",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-200D-2764-FE0F-200D-1F9D1-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "bb7b82d6629407f6baf347ee5cabfa0811e38ab9a019770899491cb5de1efc3b",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "e8ccfb83b8e6e0970587e0ff59a7459e24121d93e1ef9175f6de3349eabda226",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F33E-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "0a6367dc8df70f7ead15cf3baf6749e18d2f7187d03f6a92abba7388e488277f",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F373-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "2b071862144bbe0c09bdd0560c6a76afaaa4daf07a6c97c9ee9d5c99337468ea",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F37C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f025c65ba01ab48438045225bacf44c7039bc7649ac848768c49d96d8c6ee8d7",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F3A4-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "802bb749a8947e69b97bf01e4fc010b4111f9bf3d33841cf413ffef8941a1668",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F3EB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f67c401d9884ebfcf26b43eaf498d3cfd8dd0c900f3c8f04b19c4b2dee4b5bbb",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F4BB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "594beac32d42678b21c3a774a5aea2fdca69c54bcd31c79c104d9ef5fcf0f928",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F4BC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "de33cb5ee386e06fd0ef063278bc44383a1adf86a3aa0b508ed4c2aeff9120f9",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F527-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "92e6ec3bffa697a5b82ad452472a0d59c02960a85d330473a0d4c17a1234f988",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F52C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "e72f3a8822cc0937b47b1504e5705ca5bc6a88da630e50a6842e3be6ac946374",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F680-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "8d2949fdab05220bd7f0462b98eade004b32b897f8fe5ee8ab607169f3500b9d",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F91D-200D-1F9D1-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "5055b34b4f43184dc6b165918de2bf05471efbe9bfa0a89e2c93d61fdcae38f2",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F91D-200D-1F9D1-1F3FD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "54dc50c66f3fb1a92562b160cf47062109cc709e221372e96dcdc1871283aca9",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F9AF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "10008c2e589d075f9b33875d2cb8ac38f12ad1d577b846474bd60b2696a09bea",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F9B0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "9cf8cf218fafe86ae1f4a6036ba5dc6f0f7f5a36f043184f1d0583abc195a333",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F9B2-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "78a4209af04f0783d20e1f6ba8d67b926603ccab649f6876de6fc44fd29d3a78",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F9B3-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "1122bbd724a7b5b01725e8a83784e9f6babb99ab33f5af2e1fc6e5c6d3ce6d1f",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F9BC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "8d0293a98503b746aa423911b734dff306c3fed939c0c4aa9babd533d6f834ff",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-1F9BD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "60cffa3c71773666bb418d32277ea2ad0a76084b48f31f5b9a42f7739829efc9",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-2696-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "aeedd92a8626a7e6aced81ae32c37c5d1471f31301525b9494fb8af4db3fc0a9",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-2764-FE0F-200D-1F48B-200D-1F9D1-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "5383402f414c815ee4c613c8b5da0b700aa50db34dce7743d8dd739b12ab0d7d",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-200D-2764-FE0F-200D-1F48B-200D-1F9D1-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "eb703aaa3af8b51a91ab7ea7f331e49249ffca4fdaffa4a712d0edabcc8ef395",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "8e7bc59259c656b22a45e16acd17b6b14226f0c69d7a9d526ef80f994952c26c",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F37C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "d1f8cb488f9379c60859df6baaefa53183eb3396b7f69ba31da5f03aec6ffd25",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F384-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "61b399ada114f0fa66a31e40f00c747ef8c4532ebbb3550075c750a79ca25270",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F4BB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "e678a901d4394141d0aa7e1e4e38a869af8ae1bc477b3518d1165b6506b300b6",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F4BC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "ab0aceb91f4893766b1154b13aae7851eb221559e3367b66c7c3fa9f77834514",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F527-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "6cffc2ccc6505b728e9c89a876d6d06819b4fa3b22ad8bdad11b3be97c626f4a",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F680-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b3829b2ce4fc021775e9a4b586d8be719018d7cb52318d7245c1c88c0e48aea7",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F91D-200D-1F9D1-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "265000e737622653763f31a13e9bf92cc8ab95cf3a07d6af0349596f8b593b51",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F91D-200D-1F9D1-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "641ee862ff52abe911b031005b64e18f468adc5309636115f29219d3290bfabb",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F9AF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4f15b917dee52d3fa2c4831fa536d71abb72b831982eaf6d17e1057dc98ec37d",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F9B1-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c6d3b4045603aca5bc0bd6c30cab8d1e6e66785350131a3b7c4aa0c5f6a4be18",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F9B2-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "6b199cc9ad7b92bb525c784c70acd04c27046e0784e171e58e02f0e733a0505f",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F9B3-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "dd5b95413fade0a92aadd1d8deadac47479f5a337f4b1de4f413b75b68569cf2",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-1F9BC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "9542e329c92b8aeeb8dcd6e85a5aede377f5d0e7c9e8b46720a462e6c84cd5e7",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-2695-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "64808de57241eb0cafde80e40944cd26945d1d19646e8c7afaf808eca8d0e843",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-2696-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4fe6f767df1f85d3a8e0cf54ed0e68f574676c9d68b6029f0db52df611ee92de",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FD-200D-2764-FE0F-200D-1F48B-200D-1F9D1-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "adca6e5fe7abbd25f71a9aff8e99007a0b6241f456c5e5ff92a2ff5006d1a774",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-1F33E-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "324f4313489c30e932163b7d7fd004260caec2ee2b41710d81f998d5ee06a9ef",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-1F373-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "14781a76dab773bbf5452c7d45d68080374740920ff10f2701eb3594e2ba9cb0",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-1F384-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "8deeaa77b4944274412872da02ac554e50ac207a7906a583667dd836f170fea3",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-1F3A4-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4adcee364a2c20420cf3d39f3d3c6a2a6174bc07060aac3863d1c1012bfe70e1",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-1F4BC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "66f01137540f21ae3a1741f2372759630f7cd796eb0e9e645652eb098be2a031",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-1F52C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "221570e7b2e508df68b27745098690d61444054650dfb778e1ecf3d71e323e19",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-1F91D-200D-1F9D1-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "ac2de5450a31c8910eb30e16bcb679b2570c1dbed7fc5a803b6be5c4005ddb3c",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-1F91D-200D-1F9D1-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "56d9582b0d10c02e8215b461cd27352808e0eec00c3333742c4b8790edeb9c75",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-1F9BD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "d482c55d7a4f85373207132abbe3011d8d67e820e3e73e3a8ee2caa25cc47621",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-2695-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "9d45a7831739eae5fec7cf661e9b29f8cb0b4b76497b98ed4af29aa6d522b40e",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-2764-FE0F-200D-1F48B-200D-1F9D1-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "542758483f7eda005a4a4e5974d7cfdc38a239a5d8daaab2f45477ee96c45ae4",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-2764-FE0F-200D-1F48B-200D-1F9D1-1F3FD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f0acecd88b6d138613c14a3b65776277aa2347bb3599bbd54355ab4c9adae7ec",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FE-200D-2764-FE0F-200D-1F9D1-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c986bbe8c1947f98ba5a7908db7f7e0a35938b756a6a619c2c52746a9a681a49",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F33E-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "95493058e2a9eba8ef4064d13d19ed146dd9481483d297827e8aacd7d1d5d9ef",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F37C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4efb80027a09aed9290e4b73d316f47b1e896fc582539d4e3f931f1275d2678c",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F384-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "beee50e3df08ff444a5c39931995259928136aac225dd230407ea4362b5d2882",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F393-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "0da41275a5b5a7bb4ab05c39db4ff1cd4524592b7b5ed5c062b954abcdb660f6",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F4BB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "ccde44e0b9fd3de3aec806a6bdf0a8a51ef5d535be9f45a67d4febcc85dc0956",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F4BC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "bfb87c4862dbdc75765656010d928165105f889271956f6f7d977ccebe53cd8a",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F52C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b0d11343c69acc32f3111a8c7758f61fd48749d5a8ba8aa1231fd8e0a36782de",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F680-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "3ab2efd621ae050b8ec358483aabee040650af680afeef58e5525cce38a64de0",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F91D-200D-1F9D1-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "fcfa34858bfd19d977eb53dff54ea7691cd1cb9e18485ea3b982aca7b0db4aae",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F91D-200D-1F9D1-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "9924c602d47ea3a382689097381ec5e1d4963283b840626715d04810f889c632",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F91D-200D-1F9D1-1F3FD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "3676623586b6d1f8f6c864c94024fb05cc6c49420e77bc22e12a0555aba981fb",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F91D-200D-1F9D1-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "0a81c20dd93a7ea262f3a21197ff6711cb6ceceb451623a0f1a6f946e27c9689",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F9B2-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "01210248f7724c6e42138d096fa6e0574f8f6fb1ddc81a867e79c3cabdd303ad",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F9B3-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f01084a20e717011ca7a4938e2dc317046c6333b942818fa5d9bfed7196e2780",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-1F9BD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "23ce2619081b2343b65850a53ddd0c5cbd2cd70ed4aff20088fa25374db55b56",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-2695-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "a9984deacc186307b719fad9e61218cb91d25dfde598b86774f3b8caddc8ba51",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-2696-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "ceefd57b0a89e6b60e2e08def7101d7d711af4cbdb58953c92c375fe5a5e9eb8",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-2764-FE0F-200D-1F48B-200D-1F9D1-1F3FC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "32a169052d2b1abcb6befebf8ff0f23cdb1ae74a4a2af714cc5cebe7dbcb372c",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-2764-FE0F-200D-1F48B-200D-1F9D1-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "9bf89a055d423fd1fdb85f4570e1e05865421126bc714b70f3f215826c0007d7",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-2764-FE0F-200D-1F9D1-1F3FB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b7c6a0321808c604a942f21c1a454b891499d8b42c3aea87dffd1c38a5e9fd47",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-200D-2764-FE0F-200D-1F9D1-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "fef5094451c23635bd604ba52b5c07b79c06b7130234034c588d040a3f65a95e",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-1F3FF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "330419425e57b2be2a220298eb051ba53322e646a0c65ba84c75b9d6228455c2",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F33E-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c855fb2cc79e85c20efe52f51bf7afd52107309f74f57e1a1a4cb109c47b6603",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F37C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "1813dfba3c6cfbe5709a7207b5c77e99b08f6e84931f98dfa13b1862b2f9d5ee",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F384-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "cbbde899d46391d282665266944ed793bca2ec046ab143e11c42b8537f3f987f",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F4BB-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "a92a03def90f8f711376e2ab0731c48813b08c0f99232c80a88a6c801c0f5568",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F4BC-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "7caadeb5fbab2a93642559cfa895c71b4d74d7f15e8ad5ef7f05d2394ac02403",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F527-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "fc01aa83bf16c3cdccdcf7ec9b51065cede1fe57d050eb5ea6d8600b1fa769c1",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F52C-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "1055edb5f5ba03d313173b46e0b4e59ebbd7512c162c8beeca00895737932023",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F680-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "194bb284ffa8a81520f6836f4c9b4d77b66f55f97f9b27246886abfd3ae0ae1a",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F9AF-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "527deaae179ec7f10389ea610ccfb776b0a590e7e09f5e5f264fbba4136471fa",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F9B0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "53cf2f239ed8c5b9f45cc8ab0cba5c0e119bf066de518cd891c4bb544346a187",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F9B3-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c083b8a999afff72baf01202e922ea3092ea79e7e2f40c9bb1fde22f5f997f47",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-1F9BD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b4d3871dcb77189920c03e5bfe1fbb3fe294b4c5b6c28681e0812e5ad08ee45a",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-2695-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "20bd3cd0b1f0c7069d8a5bc0ca16615e0e4fe779d8e8e285a963b5a10c5e589c",
+   "v0": false
+  },
+  {
+   "file": "1F9D1-200D-2696-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f81e43c61056a0bd3d8057bc708608ece686faafc4ea4c2ac5c50657ddbf47f1",
+   "v0": false
+  },
+  {
+   "file": "1F9D8-1F3FB-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b7b2dbf55087ec910d70db076870624eb1deada09593a2b589a1fd41bb3455f5",
+   "v0": false
+  },
+  {
+   "file": "1F9D8-1F3FC-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f4c2abddad3e7cae9326ab8a078c31462fb0c8110f79c9b117a7231da0c3ed53",
+   "v0": false
+  },
+  {
+   "file": "1F9D8-1F3FD-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "73fa2b1065850b75f7572ca932face18f6b8c1a0fd8d21ccaeda4107f8bd1422",
+   "v0": false
+  },
+  {
+   "file": "1F9D8-1F3FD-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "019f26c98b451f19913050b639afb292003dcac7ab908e3337f9c3a586bd42cc",
+   "v0": false
+  },
+  {
+   "file": "1F9D8-1F3FE-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "ae2da36970146529142f428d55f4d6c85fb0afa6f7afaffd08725df6a1bff4bd",
+   "v0": false
+  },
+  {
+   "file": "1F9D8-1F3FE-200D-2642-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f71af27847f235c1bb24a734995f7ad06ed86c3f177daaef793216df82b056fd",
+   "v0": false
+  },
+  {
+   "file": "1F9D8-1F3FE-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "5cdde106702a86f36963600f28f7bb50c9ad940e5150d01211f52fa01e9fa49c",
+   "v0": false
+  },
+  {
+   "file": "1F9D8-1F3FF-200D-2640-FE0F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "58f551892c1137b525a6c24b8a5c8d4658760eb572ceef25c9c881e7ad7ab40a",
+   "v0": false
+  },
+  {
+   "file": "1F9FD-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4e24c06586ea91f478f7f1890105743f39f56c796c6e3e2f96a8d795916200ae",
+   "v0": false
+  },
+  {
+   "file": "1FA78-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "04b405a8d47f95cfb03b3c61719c436a8519b797b957a3a95c7037727ffaedd9",
+   "v0": false
+  },
+  {
+   "file": "1FA83-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "c76bdb696b193e49f2ecc22d704769a58c191248cdef9a5db6c643e8c22a5de6",
+   "v0": false
+  },
+  {
+   "file": "1FA99-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "edd57247894ebdd5bbbbc033c095654c3b9f25e2e4c8a9b37158db83f4a7ab37",
+   "v0": false
+  },
+  {
+   "file": "1FAA0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "097c9e7607d284faaa966aad1804924178b60e262b8d29a2bec69c9cf2d71b85",
+   "v0": false
+  },
+  {
+   "file": "1FAB0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f5d1ffb08a0c2c4b446c4eea8aa74c0579d84627308f25b3e0e8cb557f95c2f9",
+   "v0": false
+  },
+  {
+   "file": "1f170-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "2a53c92bf4fe4cbf55b79c6fb5c8d50108e6f560552bc554a50bf2e499934047",
+   "v0": true
+  },
+  {
+   "file": "1f191-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f7a5a38ad4fd9995e96fdcf0ada2c7c3755f562c2190001e49c6d47443c8962e",
+   "v0": false
+  },
+  {
+   "file": "1f1ef-1f1f5-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b964f3dd88f2596555a34c7ca3dc575aa061fa455256f0bcbfffaa62ee771c7b",
+   "v0": true
+  },
+  {
+   "file": "1f30a-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "3252aa28182eb0dffdeb9a6abe7b106177aa4508997bc83754850bc8d53d9923",
+   "v0": true
+  },
+  {
+   "file": "1f30e-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "74238edf1eece2a0c057d7d7dd3c753f977f56628cbd5cbe919752fbd2eaa350",
+   "v0": false
+  },
+  {
+   "file": "1f31c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "4a46bf7f6d56d38e3be7c859e5f0b205852dd9a5d3d4c73c66821589e4c1351f",
+   "v0": false
+  },
+  {
+   "file": "1f321-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a25575dde64ce09411108b3778fce65fef3d28bbc55a0d7d4aff3b2fc0811b9f",
+   "v0": true
+  },
+  {
+   "file": "1f32c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "69906c5a51f73877cc5687664757da30b50dfd51a0410c3242baae262764a3cc",
+   "v0": false
+  },
+  {
+   "file": "1f333-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "28b0601f687f84e5fd61d3bd9637d30db7c280967a4518e85bba9f4b24671f57",
+   "v0": false
+  },
+  {
+   "file": "1f346-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6a51feacbc0c6653c8adf378b5bf03b10a82f8ff387674f6434d3ee9019416af",
+   "v0": false
+  },
+  {
+   "file": "1f377-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b6a44f6e3cf30bf738f5e0b5f99051296d18f458d9539ae21fca76334db3642c",
+   "v0": true
+  },
+  {
+   "file": "1f3a8-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "236f87cf38405432478a58b369400f8d7ce55ffd2c248a4721d1fccb53f8b347",
+   "v0": true
+  },
+  {
+   "file": "1f3c3-1f3fb-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ce5b9d77b1641001f3baf78df07c2c89c8d35948b00ec858c31efa109faeaaf7",
+   "v0": true
+  },
+  {
+   "file": "1f3c3-1f3fc-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "1a9281aa49db14cb1e152fd08536b432ba70edb26280cf4cf0793169fb798748",
+   "v0": false
+  },
+  {
+   "file": "1f3c3-1f3fc-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "05c9c0f120eb7bbd31f04b955f53608524493c39ffa4da6e97a1b12569e7eff9",
+   "v0": true
+  },
+  {
+   "file": "1f3c3-1f3fd-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "49a82d0f9633d9dee9d3a4e6567679a41d9e8cb3ec485552b50ed991f93cb301",
+   "v0": false
+  },
+  {
+   "file": "1f3c3-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6863afd7734abddc853dc90ccd0cb4a32b2204248096912242c970241aac4cae",
+   "v0": false
+  },
+  {
+   "file": "1f3c3-1f3fe-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "0402ac897952a6c8daf1ef66f370f93f6e48c06b795abfc9bdcc7ca7071869eb",
+   "v0": false
+  },
+  {
+   "file": "1f3c3-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "036f6d5e0a0413af692ff6eca6881659449b8753742561c8a2534df9e96ec787",
+   "v0": false
+  },
+  {
+   "file": "1f3c3-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "03e51ed2731f89d6cfbdc46471296616ebb4bb5b81bb56ac038e7535b2749f61",
+   "v0": false
+  },
+  {
+   "file": "1f3c3-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "3fa5de84d2f22cedcf87fedcf70740c2cc9c6af66195a405afed0632a8dcf556",
+   "v0": true
+  },
+  {
+   "file": "1f3c4-1f3fc-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "46e2e9f85c2a65671cb1cbfa31fb5e1327cc3be1f009eb5f02e56292f0074815",
+   "v0": true
+  },
+  {
+   "file": "1f3c4-1f3fc-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "03c6c399834a49495cd09c8c4395f7bac3ef4cc8bf156f4365adba6e51acc453",
+   "v0": false
+  },
+  {
+   "file": "1f3c4-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "4d0f9e30be259f9708b5ff37f124782e88f9743ecaeaa99b1066f6f930fe358b",
+   "v0": false
+  },
+  {
+   "file": "1f3c4-1f3fd-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "cce0f7ba9890b6537bfd0033930599fb982dd68a2e114df66c42d8b6ea293e1d",
+   "v0": false
+  },
+  {
+   "file": "1f3c4-1f3fd-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f19dde6464ca683b2215eeb70ffd29d98efa630bbf55e7b62181bdb1231e27d6",
+   "v0": false
+  },
+  {
+   "file": "1f3c4-1f3fe-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fbea6b8329c46b88de8d50cd11dd6dbd066b954a0fbbf610d0d39188961448d9",
+   "v0": false
+  },
+  {
+   "file": "1f3c4-1f3ff-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ebeb4334ceeff58ef601742480a8a11ad796b24b5a19c8ff324eba53d415c4a3",
+   "v0": false
+  },
+  {
+   "file": "1f3c4-1f3ff-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "04a64c60007da6b3df953bd2ec56de5b2dfe9ead3b1deec29975d2a4f2ca7d63",
+   "v0": false
+  },
+  {
+   "file": "1f3c4-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "97c904731c441aaeb4c8c41e74ec30414621bc2fc4a4bf1ed327d3b97c716cdb",
+   "v0": true
+  },
+  {
+   "file": "1f3c4-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "337a88efcd9cdfa59ce24b024468f0a54505998a2a94323f59d2f023b0d56ac0",
+   "v0": false
+  },
+  {
+   "file": "1f3c4-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "71d1f9bc44781edc10d9300f38b18b6e1855b04241fa2bd336856a056331ab12",
+   "v0": true
+  },
+  {
+   "file": "1f3d9-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fc7ee26a37f643563250af9559e27062093fd2f91fe41e41f5802af4a0876024",
+   "v0": false
+  },
+  {
+   "file": "1f3e2-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "189e22c01b5f49def1ca7b3ab9b4f9fc6f27155ed89f979dc952dccec6705184",
+   "v0": true
+  },
+  {
+   "file": "1f42a-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5aa547209a11b2ef5fa49b194177854e7a035b635a565e2b076037526fc72125",
+   "v0": false
+  },
+  {
+   "file": "1f443-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c6583cabe6cb1043cd19233c3444c4b08d9a350ce8ee29758de6fd75139b4ca6",
+   "v0": true
+  },
+  {
+   "file": "1f443-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c2dd44f7b305464a180f167b8e84bb341af4753afc0c65f6f6855e05bf0c9839",
+   "v0": false
+  },
+  {
+   "file": "1f444-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "033caa64a2f2dbe91f16210f2d9912949d30eb0cd097dc52cdf90d6ff63bdd8c",
+   "v0": true
+  },
+  {
+   "file": "1f449-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5dfd5c63b31d403daf23b4314de93da5a78d8d7f1eabeb452a5bb00073a02b49",
+   "v0": true
+  },
+  {
+   "file": "1f457-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "2a6454d85a907602621164bbac894a6f2c9f2008b25590b9dd8c9f8c84f7c0b3",
+   "v0": true
+  },
+  {
+   "file": "1f465-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fdc5aaaaa1495e82adf38b35e07212aaa69094f6ff11488edd700f1ec68fd010",
+   "v0": false
+  },
+  {
+   "file": "1f467-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fd65562f8b1cee938324b2bc708e43724a6e820747ab12a181cca52283d102ec",
+   "v0": false
+  },
+  {
+   "file": "1f467-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "034649a95c85e9636f3264a2a2a0b51b5bcd4b413e61d1057f2533fe4bc128f7",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f384-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "55451c848b69e06e57d91b66ff8b6b263b9a4a00685808eff2ec78e39e93bd13",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f3a4-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "74b24b0d95013992222b0ce8baf7d6a456848f9c1824229971e025cb97f40e47",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f4bc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "74f64afb5671f3b555dbd75d84fba38e87ae762d89cf27760b1a2d71c06c68cb",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f527-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "29748ec01cc1ff7211485d75afa19758735a01fd9553f5365e2edeab850057e1",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f52c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "398c0739d28d83c49be742d56cb45874b23b37de1f9a31bec06bc484c36d9ee2",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f680-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5bd46b4631d299cd7fb991c23ab67424d380f36fb1c05ceeb4948e8ad57354b2",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f91d-200d-1f468-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b6569c2be7f66ce8850ca21092956925e4c0a2b5cb5011f9aeb0c95e85599ca5",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f91d-200d-1f469-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5b6cb362e4ba61b4bacff13d81a6caa822e2ec1516830b6a7c050d9e360c13ff",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f91d-200d-1f469-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5371376e6ec9ce0a6bc522489ccbd1515b1b41721d3f14534b26c765dd4c157e",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f9b0-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "2ae39197bda7bdf6cacbb860745703b13ffe07c013584eb94e26e25795a2fb60",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f9b1-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b515874aece2b2a6f10d690c288e5f88a1728f65654e902e59958edc1b46be5d",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f9b2-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b1ed77b8c713dd4911dd69d63b03c45793bad817296f80a927e80c71fc553b55",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f9b3-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "99ce6751ac435647d0559e2ece09bcfc71c957a26acfd5d319591fae05cd2ddc",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f9bc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "35650449321f3586e7da78c33897284670b3fc119d8c7bf9a392d7e9e766642f",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fb-200d-1f9bd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "4a14056b450db8ec6eda708ee6e01ef08e162b68db4ddc02ce8de8a029853e40",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fb-200d-2696-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "799b10cdf84fbc279c055d3bfe18ab1b17b20ff998202aea3a55bdd2ae3c4c71",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f468-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "64e962dbb069af164b466fd27dd07c03d6d2906eddb3d2170d9c9a9ea7704a90",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f468-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "977065a373cac43693384ded1f60740f980a4b789cfaf62ad59a9479d6fe146b",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f469-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "df7cef6ec3e248d2b06625a1f0ace622befd809845629dc6571a05c56965cc1b",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f469-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "d48923c9a8c1e726ed99bd721b0197670afaa37490fa1145aa49ee33abed8f9d",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "adcfb071c12f2d337ad0f473f6679a35c2dd687a159509a4b888166d286ab2e3",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "28b8d8820476136f9414e5b2c5aaa437e8881118de00121af5874535000d7b04",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "3a8e898f89735a3c73e0fda185d48e70de28ec4e76af045eee62f44afdec32cc",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "0555fd42eb4b02390611910571e2d050b6ae860ef4d22f0d826e9287db8ac4e8",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "3c75d5de72e04fa03966c3e29f0d9eb576e9c22cf9e0c88a9fe16f8210fb2bc5",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f48b-200d-1f469-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f267c2c0db4d64fbc3843440f7db6d216040443932927b8639cceb6a9bc4b998",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-200d-2764-fe0f-200d-1f48b-200d-1f469-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "1bbbcfeadf1e9d092f2a958ee7ce2c61244c6b6cf8bf1bccabc6e3ad77c1f602",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c0de0e5cb479298e498729b2a178abd7edddc7b1724e2f87037e43f7ae6f8fff",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f373-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "2a81dd038d02bdacf430831900cdcb18acb6a47f3c9e69731c152035d494b44c",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f37c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c19834e4925334fa1c9997d4a76ec50b5935f28f76919ba1a61d1654c6f4ddfd",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f384-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "aed3a0207db2c4dc3169e7e8cda3a56078faf2bc5f2236e8d6b23dd21278466f",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f393-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f7ac7a85fa4244df465151f838486ade96e205938d12a2a4e58fd1667220faf2",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f52c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f9409f7f10184776bf111587517a2c6f82c3e85f012564016c397a8676d9d14f",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f680-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b45871156b83f57534b9d41d30f4e6ef3204b06ddaaaa8f3981881114c15a908",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f91d-200d-1f468-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "1429fafffbc9cf33c1d0d3da6f479e83ec42ff122c210df5eef87524ee4f23a5",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f91d-200d-1f468-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "9e0618a8a26c91bf12eaaecc32547ab8f2e27327c6e0487c41fd4b7f65ed8e93",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f91d-200d-1f468-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "52eff1c9b4646a08df6686eb19991d1b3662eb69b48a6cb383dc58f99c0bae90",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f91d-200d-1f469-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ae108bccde7be93f563d7462736b2cd8fbc0cc37dc8ec4e1e5bc29937d9581ac",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f91d-200d-1f469-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b4469e4e9d92fe301214606fb1a582498c460c2bc3e559e74de82211500e0861",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f91d-200d-1f469-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "074dd4ffd0026eb430324aec84400aca4290a63e08ea2e7fac227b519008f733",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f9af-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c5b0cdf9c55a0c5a4d06fcfdd73e337c8a031ee7b11ef5c7f75a77c00a09d35f",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f9b0-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "e5ef7a0e634cb0599ab65ca47de1a1c06f47821f387de966205dec6566613bed",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f9b2-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "39c619c8107a7f32f2220576999db17aa8f25abd36287673df9a4c4f4906333c",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-1f9b3-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "980cabb43b0f19edc487609a601bb1b10372ffc4e6595a307e8acd1ea2fecc34",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-2708-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b03c6d006a64faf9a87111178ae231c3505f9d0340d72466e4849690415b92ba",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-2764-fe0f-200d-1f468-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b182e4f80c1df6213c5e06b4814733c7f3fdbefbeded340cedcfef289ada16cb",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-2764-fe0f-200d-1f468-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "cf167d546ca9b95dd669a9df2561a14e31cf65cba93924c8d7e589b3e674f1d4",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fc-200d-2764-fe0f-200d-1f468-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fc5111d95cc631167cb8b28bfac63bf70037be7b0744f7bfae3e9af1cbc248a0",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "668d4e82f557054c9af28caa44f04ca05915df3798c2e639a00898fc59801303",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "8fbd2e9962a787f1f91dd5d58d2979248239cd9550096a14a4c5224af90fb27a",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fc-200d-2764-fe0f-200d-1f48b-200d-1f469-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "956e8df8e7ea19ecdda014b0b79e93cf55ac97b70f41e5c7fbbb7575bb355c8d",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f373-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "d62f7f9f80414037e64522721e4b9d316aa7fbe1998e42cf23a95b8dfc5f6176",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f37c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "bba36ce781b63d03a6927ed8bedecd65d9ad66bf4131aafcf5234831bef95e21",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f393-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "70b3fbe4c2b6746c154a93a39e04e4f56fa47a0c456af14ea70f4b092c6263ed",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f3ed-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "cb520fa239e6fd9de906c573ca93f78f595591d63c9ca33387f33b5e1444b144",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f4bb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "d8f5c97b3fcedce65a9a8f74eb56df359728020329439b59dda84d9448d1e5e3",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f52c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "d45ecc0f18ea63c202dae9e9e2567651818b26ce03ca9f30780eb6d2a06828ea",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f680-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "e80bd44d13fbab560ea0efd8fa63388c1dbaee72361ec29f9c367be69c61c024",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f692-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b0cf8e617e0cddf4b8d72f5729213cae0fc1436b8ad666e2823b4df4638dda60",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f91d-200d-1f468-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "10953fd35359467198d37047aa21a256c329edd9aa6f83aad6ca8e7cd0f9f644",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f91d-200d-1f469-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "53fd5ee1c4e1e13a677dd74e441f4a7b73f2192c26b556168c1433b3b1d9c267",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f9af-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "64c3afb7ce682134c5343601383320a2625598bad56c72c6dae109560f39a0c0",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f9b0-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5c7f1e988a18709ec328ea254b63ecae8c8c2f2abfa6e788fcb7302b52289744",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f9b1-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a9383525379e3ad2b361e4fb09464089997adf61064d4e95ccdc9f4d630d852e",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f9b3-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "419bc9c08425fbe4711c2210185f4f2c883907a0615aad2cb9942fa6e830f4f6",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f9bc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "74433f80c4872a77546fd79238f245c108fff4b68c777cb11fd2c3ba1b23d318",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-1f9bd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b3954883cb6bc062ea2923c7ec13fa15a5280b1fad9a4dffc58d612273cd7fe8",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-2764-fe0f-200d-1f468-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6f2dc67fd8f08d0116a0bb4fb503ab704870dce746dcd89aa937c9fdc72a2fb6",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-2764-fe0f-200d-1f469-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a0768cc2dc692569c2f86ad2e8288c854b7fc039e7162dd35e41e72387fb97fe",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-2764-fe0f-200d-1f469-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "abffc845719200f8c64252e7b45d6d515fadec4956d3a7dcb955cb1b0d09d350",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fd-200d-2764-fe0f-200d-1f469-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "02a91114e8d095a1d9b07ac3d3f2c0fcc6e753fa17233d3e0f0779d39c56f532",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fd-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fa6e4c39a742e40bb31766ce79e371e7020ca874df422e20f05460f3fdd24c17",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f33e-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fec4d51e2a2c6734dabb986d5eddbd419eb4f891b09b5b352e3aee7adaed357c",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f384-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "4a406362c0c3465bc447ca5d7030795823c9142cfeac7ae2d774233ec1a559b0",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f393-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "1db97f7ff4448c64903a99d98f420b41b34a03bb14c5d71396fd82c98eed2f26",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f3a4-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a77c30021e5896c7ea935731613094a83c2819f0f25e02dfdbd37c3d33e39b98",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f4bb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "7005d56dba92efa0db2009294c6b1a1589bb9ba7c446429a8c073efc53e85aea",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f52c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "552aff9c369b1400f3413e7aa477f0fb510f4ff3469aadc0100d740cb0571074",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f680-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "58111c4be0d1e95a27976be8a8cbd615a440a1107974fe6554f32de71e2e4ff2",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f692-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "eb80576c7ac576da7244a090f9c304ede341181af25b4a62075cfc72c45adfbf",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f91d-200d-1f468-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "426a69fb07d2ef96f81fd6a169bdc18325fdbbcca52de43469eccea10f07c0d3",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f91d-200d-1f469-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "abe958ca052e6ee732789fca76e0b6c91506a7c3e8b2f3c71d5b8da45c17d1b7",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f9b3-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "088d1262134facafce6588b585941073f56aad29fef7b873325e6e4dd2bb0cae",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f9bc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f0de5c1b40f1a326759d46e1d36d09ebfdb6d5c68cc13599db2b3e304e93b33e",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-1f9bd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "7765396e0486623db4a675d7b058db6c4148c0ef970660684a53418af14d80f4",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-2764-fe0f-200d-1f468-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "739a6febeae4ca6f371eebff99d08f19da0650f613d11eb2c0a2f54e553627fa",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-2764-fe0f-200d-1f468-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "739063dd9b322b531d2c6aed3f15811aa07bcfd0ae9d1ee8801fcb1133dc17a8",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-2764-fe0f-200d-1f468-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "1a34e8f7057711edee85acaa630209b9264642803a1b7771c1fa7ccc52b5ee42",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c53078bda0ffd28cd1d12cca6ab58d3bf1a9a654bd489ffa797543ba86e5f89d",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-2764-fe0f-200d-1f48b-200d-1f469-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "8a86e98d6e6b352568484607ea811d7b6d308f3fcf80418be83631d432dd01e1",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-2764-fe0f-200d-1f48b-200d-1f469-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "39f706362d3fb555f34e98a71f80f9fa124eb42c933fdb906dcd62ea2e9b0433",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3fe-200d-2764-fe0f-200d-1f48b-200d-1f469-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f6d5815bf97f4cff08689848fd668eb2aafef29a29bbb0774a6fc2c6e6ac3529",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3fe-200d-2764-fe0f-200d-1f48b-200d-1f469-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "9cd07cefd9d422a17d3ee9adba1f658ef960a14bff9963d587f84e2744c77fdf",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f37c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6a6f239eabfb8422fd29b4257c3bbd5b60e18f2c6c105918546447d54959a2ef",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f3a4-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b1d2cf46e638926a4dcea2f1882d1b63dd9dab7f332be3c46b23572e50060d54",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f3eb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b6e824306696bb4ac5125291f87dc93b0a32225856386a8a080f2215c19cf0a1",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f3ed-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "9aa35c4bd09921af1bfbbc8dd250a8bb827aa0e3eeb09298a9786b301152000e",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f4bb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "e817caaa6c9533bf13d65488f3a0ddd1d07183818a568f16e793e878361f368a",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f4bc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b19c9ed32d7d9151cdfb24713914573007bb09677a1e9985f8e5b0806c83540f",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f52c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "22f0583f0d2d55d4d9aca18596dc23b0e78cb4bcd19ee2f5513d0e46451cfd8d",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f692-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "2d06ddd5ddf1fc6a7761a5ddb02a14bcc0fd7f817f68db6dd6001e00701086f0",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f91d-200d-1f468-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "9ea72d2e7ca98ae108107092f116509721ec3dd740157ad844093c65b19e5851",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f91d-200d-1f468-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "0121be36fa2dc9109ea1a83fd84888a8b08f6d1c0e3585a59683256b000c3b75",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f91d-200d-1f469-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "7f2e85969d3738686c3f05da3efcf06efbd45f3582afb71341fe491641d9c3e7",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f9af-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "7496f1948b9c2aaf853ce0010059d548bef8b3e0f25f6f01d7bbc0cff8bde9d6",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-1f9b2-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c4037f9ce682f344e2f28c304976186bfb66f7e82531e8365fdd77e3fea19045",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3ff-200d-2695-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f0ebdbab591b1f1ad43f172705d48ae46551cd6189664524ac214e2f2312a052",
+   "v0": true
+  },
+  {
+   "file": "1f469-1f3ff-200d-2696-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "145c65de31a52534bdea864064bc440983eb7d0e0105dab317c4c7e9d403ebcb",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2708-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "475520d0c933ec86299e0f36f689c609cd32fc5dfc36b8cad0aefef28efffe04",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f468-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "1b39b57fb2c833810df3447ab8bd88dcb727933cac99f1e50033f09787bdce03",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f468-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "3a9eff4806a0a470e85d886577ba1c86ecf286ba6a249bad71016b7bb635e88b",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f468-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a43e16e002a068dcf4a89771ebb3df7c95b0e281428b0c89c5e32ea652be29e9",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f469-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c7b395031f00da944ddc935f0574ae5bd023d05a3d536103758b5bcf6cf91a87",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f469-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "dc9557cf83d5d4754f177e049364b7cd1559cb030c06277dfc0e3591264ac0a9",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f469-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "82d5354605256cb5bdaaf398fd16cba30b626a6925ae6d266833450914870447",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "33934bad3e7d6402f0894f294d15d3ae62dbc9a8720a6089e839738d266ffb6f",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b4d4ce573cdc183716e33a6881fdde57fd77f820b43cde780052a119ab7da719",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "62cbb02014673b4ff8c78e5b4ab3a879327a46c37db91bddf0bc90a712f6379c",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f48b-200d-1f468-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "7f125fbbdf315a9e5e345543f0474d81475dababda3719879d354e81ded32fb3",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f48b-200d-1f469-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5c545d64c0050f53e00f4c803ea755aabe3015522d92e8b459a834988f04315c",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-200d-2764-fe0f-200d-1f48b-200d-1f469-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b835519070698a1b896d040fb667969d467bd472955debc5f84ed7e2140f7d65",
+   "v0": false
+  },
+  {
+   "file": "1f469-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "bd0847dcea20bfab96762e5dd3af9107fa97085562965b4b4f63e91a4537d36e",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-1f384-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "8763bcb453931014decd616ab8baa18b0dcafc3bb851f276eea4213ef9a70960",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f393-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "0186e2987dd1210bf9faeb84fc55c82c661d4253765c5f9a213da523dd67aac2",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-1f3eb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "efb3898884b633e6845cbb02dd9be365f4881b729127f6aaf37995cc41d180db",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f3ed-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "4b1e49957e59dc4d0c4da1c94e5803f34d4d0133ee75b13403c8a01d10e66b57",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-1f466-200d-1f466-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b74aa2ae1f22306f967b5a273f249d227ef8bb65e7de5da0902e36d655cf9e3c",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f466-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a99b33842014d81ec4ddbfb6ba4d1e364ad1bf583bf4610d31432f47cd752f92",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-1f467-200d-1f466-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fd466a1d317fbd8b7bba4f1fa2f4eca1a3c1ecf4389e5160ae08d94f14a78390",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f467-200d-1f467-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a45a2bf916667d912b70bf5a2079bd4041a8a5820a4ee98ad9f5a89769323405",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-1f467-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "23d9bfcd077aca5390936cfd2c5653c1ed80d122b1fad89684859fced0fb8e4f",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-1f469-200d-1f466-200d-1f466-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6769cf9e2949d786d82634da82bbf68dc36115be2ce83d278e53fb336426c222",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f469-200d-1f467-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "cdb199db0a7621c7916f9863d57fac334750ceb37a2afb7790a6918d6e56b51c",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-1f4bb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "02d6dc8e0f0c6cd8094d5a8beb045f4c55b756dba554fba1a7aca94999c01b42",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f527-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "efc0a51c3572ec7527d91597165673e99297dc6cad2329d0f55c5f43428e4e99",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-1f680-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "de6e20d2e0214a5ddfae595503dd131da10fbd33897e9c3ab80d9970b5ebf2cd",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f9af-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "61c926f7e70907d6b4dd4173f60da10ad1bdf7941ad044536a28eacdf0e4650e",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f9b0-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b98e44188c61d96d02892a5e5564c3d347e41895e264561af7a82190f7c686b2",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-1f9b1-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "53665b88c14c17d5cf65ed5df5eea2f25252ee9c7092bc16d2d058f1558d09f4",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f9b3-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f1f1b6e04ffef6a6826e29bf347120f0da51a6226c63dbd4e87866dcc9209cd8",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f9bc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c288b55faa6c3811659ed67fdd65618a84f560c8016efc4f8c4ff2ed835dd6c8",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-1f9bd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "49340ff17446fb6f9b5fbd0d301e3757cdb0c322856223b353f7d73f9ca9642b",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-2696-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "9dbfe474f6d0909c308845bafb36f41fcc102f92c77c5140fc5153c746d40656",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-2708-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "922cf188260d919e3936982162993741a96a5a654b9c0047de1a91cdf82819d2",
+   "v0": true
+  },
+  {
+   "file": "1f469-200d-2764-fe0f-200d-1f468-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "118908a2d9a63c36d2b37a51348b871b85fecf9fcaadd7cfaf2426cc43936cde",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-2764-fe0f-200d-1f469-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "11ab1bed4d401c26faf93355041546bf3a81c489411f6b8774621e4bd10840f8",
+   "v0": false
+  },
+  {
+   "file": "1f469-200d-2764-fe0f-200d-1f48b-200d-1f469-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "d0f8a56738ef292aa220ab34ef2a0e303cad721bbeb1cc0e9ecdabb745a283cd",
+   "v0": false
+  },
+  {
+   "file": "1f469-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b143c8e5cabc429a432363bad32b48c7c8fc1814e2722281e50442e0d8402067",
+   "v0": false
+  },
+  {
+   "file": "1f471-1f3fb-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "1ad88695eed46a4e5fbbd4a3f3fe84b3d0607329c7ffc3a79df290a31eec4b21",
+   "v0": false
+  },
+  {
+   "file": "1f471-1f3fc-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fe3241d5322496bb4876521a76099a3b80941d52c30baab3c6390eaec09a784b",
+   "v0": false
+  },
+  {
+   "file": "1f471-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "077b133fc5882fa384275c51e1e05b9b1924b8c3f18236b8336843ee1dd04545",
+   "v0": true
+  },
+  {
+   "file": "1f471-1f3fd-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "8b1ee0394f896e207991d1cfb6ee2d9c8013fbe2af93a6eae22c77ae05df49a1",
+   "v0": false
+  },
+  {
+   "file": "1f471-1f3fd-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "df96ef8e402025d376638a7278f1f05a72719c97e2008f70ba37c2045672d40c",
+   "v0": true
+  },
+  {
+   "file": "1f471-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f6b4af86e26b15c689e4414338a672a3fefd1e98f3d7cd29ae0672a2df247397",
+   "v0": false
+  },
+  {
+   "file": "1f471-1f3fe-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "17c419ec419ffa48b26ef1ec4c2d1a7c971a4ca1cc7ce3b9b3af82d507c9330a",
+   "v0": false
+  },
+  {
+   "file": "1f471-1f3ff-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fe65f25b3c17df58998792e9d151017f7c84bf4af5f0d05414f9ba4eb74a97cf",
+   "v0": true
+  },
+  {
+   "file": "1f471-1f3ff-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "eea2c0abc07c6736856ff76f36183a526c276789c0f68614d2323ea64d0edab4",
+   "v0": false
+  },
+  {
+   "file": "1f471-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "871d77ed7797057502543349c1cf0664f2987682c3bbe5dca99de5a682d10fd4",
+   "v0": false
+  },
+  {
+   "file": "1f472-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "819ff155571755a6bd02b824b09a17f061e6f89c54115361d1ce3db34401c539",
+   "v0": true
+  },
+  {
+   "file": "1f47e-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b79279a24d62e351b54ac16c2318fb317c75797dc4c896faa04c760b69571f11",
+   "v0": false
+  },
+  {
+   "file": "1f487-1f3fb-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "8c8a75a95eb383222c914bbc44aa2c6e384ab9469389b6a7cae1d57d1d9f37fb",
+   "v0": false
+  },
+  {
+   "file": "1f487-1f3fc-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a2675e8282f6a42606f085631148d6109c11bdae8ca531ccbf17643c763cbaed",
+   "v0": false
+  },
+  {
+   "file": "1f487-1f3fc-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "380bdcd7e014ddb799c1b7b9ac9ea97c176659c03b328aba2a05278218d53e9a",
+   "v0": false
+  },
+  {
+   "file": "1f487-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b880e3a9548b2248644ca90fa9f971d0ee12c0e1838eacceec816f095841493a",
+   "v0": true
+  },
+  {
+   "file": "1f487-1f3fd-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ff7b1b7f01cfb382948af31a3771f66d2e4f30bd088d3c5ee9a7de4dda34ee9c",
+   "v0": false
+  },
+  {
+   "file": "1f487-1f3fe-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "473bf38e9e27a499f2f699651e908294770d5b1bede65a34212885cf6fe8fca7",
+   "v0": true
+  },
+  {
+   "file": "1f487-1f3fe-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "1d840179472c968eaccfcdc995e6ae8f808a746293edefe93585ea5c8474a9ff",
+   "v0": false
+  },
+  {
+   "file": "1f487-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "500216912535c0f9a11f172738d794a917f2c623d61bda31a99fec233702e476",
+   "v0": false
+  },
+  {
+   "file": "1f487-1f3ff-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6d01b4da0f6282ba3100c3c5cacb163b3cf885dd50b25807ee4661ace03958d9",
+   "v0": false
+  },
+  {
+   "file": "1f487-1f3ff-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "872ae0b8d8c6b1f29462f6b8839cdd685cf73955bfa56a667dea1dd007445122",
+   "v0": false
+  },
+  {
+   "file": "1f487-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "55e82c62d42af9f8b023189a689236f3e8043de7b4d634f6d5f6e8f4942072f0",
+   "v0": false
+  },
+  {
+   "file": "1f487-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "760c4c1293d29a4b10f4ab25690cb596becc34cc2cdef6bb69b6876e3399fb68",
+   "v0": true
+  },
+  {
+   "file": "1f487-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6b144fae403c81e7398961241391097aa8a026e25efaf7fddddb6e376330939b",
+   "v0": false
+  },
+  {
+   "file": "1f48f-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "bccda7c3fefdb6344264795f50ae4b0eaa8356f6d9c9e0df5206d5b39217ad26",
+   "v0": false
+  },
+  {
+   "file": "1f4b3-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "369a2f73463f01b0cd5c8329a356b9108d8adf8f85b43d3446a69184853d6dc5",
+   "v0": false
+  },
+  {
+   "file": "1f4bd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "3e9cac9bfc7b9830209531e1f97edd1a9cd224f676f880e67205886a4d72101d",
+   "v0": false
+  },
+  {
+   "file": "1f4f3-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b9381a1ed99fa3d4448963b95aaa597255ad66822295ed6f388e8871e37b88a9",
+   "v0": true
+  },
+  {
+   "file": "1f4f9-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "531f396ad28e6a62575ce3aa1fecde163e8ba7612a00abcf6fb5065614114510",
+   "v0": true
+  },
+  {
+   "file": "1f515-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6db030264b2e0415c25fdd950462b237d532da619c7af26d6751cddeda720676",
+   "v0": false
+  },
+  {
+   "file": "1f529-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "bee5c07a5c614085d119365e6acdb2ae95e18cb8fcd188a09acdb09f650d4cde",
+   "v0": true
+  },
+  {
+   "file": "1f52e-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5ba3c6d835cf3dea2bf01c07c40ca6b5575eeb87ed9a845addd06c6fcdcc9511",
+   "v0": true
+  },
+  {
+   "file": "1f532-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a6bff2391c0b9ee01dd9525de2415adbb973b1f26aae2fa3d794fe6616381180",
+   "v0": false
+  },
+  {
+   "file": "1f555-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f1c595c6b401b2f15bb3a7ff9e7d90b29429f7ed244723855cdf5b99d120d1bf",
+   "v0": false
+  },
+  {
+   "file": "1f56f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "64ee251227c0023a7b0ebcbc9b12378f2953648a17139b8dd0286f2d7753f31b",
+   "v0": true
+  },
+  {
+   "file": "1f574-1f3fb-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ece25c93ac028f306f5c341163ec499829e19626ca5a76b4acbbe01c39310e69",
+   "v0": false
+  },
+  {
+   "file": "1f574-1f3fc-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ef59f2ebc37b7d568f649b43ff301e05a6d78840aebf922be80f6a150763499f",
+   "v0": true
+  },
+  {
+   "file": "1f574-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "31a388b08dba3cb7550e10dc4d3e64eca8342ac126fe8738a4c1f55b1dba9f9a",
+   "v0": true
+  },
+  {
+   "file": "1f574-1f3fd-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6603766288fd2d02112c8aac88226aa9faf8546393a237153e50ab0b6d230005",
+   "v0": false
+  },
+  {
+   "file": "1f574-1f3fd-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "e768a629ddc45047be01a0aea5ea7447ef825a771216957a79f4239ff220a61e",
+   "v0": false
+  },
+  {
+   "file": "1f574-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f2c5c8231c1933b5732bffd1b7df15ef493399ab20196bed272fa71871c039e1",
+   "v0": false
+  },
+  {
+   "file": "1f574-1f3fe-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ae2c8caa0909bb7f7657acccde48d5e52d47cc0bac6a5b631f75c82000e96155",
+   "v0": true
+  },
+  {
+   "file": "1f574-1f3ff-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6470680f64f14263027c368dee0c7344693db728a570c96927e71017b332ce6b",
+   "v0": false
+  },
+  {
+   "file": "1f5ef-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b7d527358aefb58ccf8da22848b7d13589de361797996b2afa43250092994529",
+   "v0": false
+  },
+  {
+   "file": "1f604-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "aa02ba3edc78a206b1d9851b16f2d97eb5943c6405fbec0893d52f3d5144aa2b",
+   "v0": true
+  },
+  {
+   "file": "1f60a-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "bda4e6d76f6b82b87f43755d551b36dd7cfb0d0117fb798435270e7c1127a87e",
+   "v0": true
+  },
+  {
+   "file": "1f61a-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a5ae9792151b20421fca32324fe97001f02acfb071008ab21a0eac1c7db93977",
+   "v0": false
+  },
+  {
+   "file": "1f626-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "54a4ec8324e38e3f66f4d15092dd479a5ef5de651fc3bdde3e9daf23d8c1beed",
+   "v0": false
+  },
+  {
+   "file": "1f639-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "136b10b43f0f2ca57786a86ea52520d9a54e2183a190d58c9e116f8ef60577b3",
+   "v0": false
+  },
+  {
+   "file": "1f641-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "87bcc22d43cfa00bd1cf5e3a35aad79150b4ce804899db3ea93efe57eeb6dbf7",
+   "v0": true
+  },
+  {
+   "file": "1f68d-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "82f08272f16778e257a4731915a5e33fe514e79340db6c152605663dda838a36",
+   "v0": false
+  },
+  {
+   "file": "1f6a1-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "1d8e7c2664d633ed2664572508528d6d1f72748951b093b04faaabeba9dff6e9",
+   "v0": true
+  },
+  {
+   "file": "1f6ec-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ab1e200229dde3d78d8388584432801b850bf26170fedd61a691a8c47d683f84",
+   "v0": false
+  },
+  {
+   "file": "1f7e8-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "0b23dba165630dd015efb5abc975d027c97396aa0e44d3ff87948e9a2f92cb85",
+   "v0": true
+  },
+  {
+   "file": "1f912-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "3e4dd97115116cf8dcf5f1b792d550d499e5879a7c902fd26106786d6bc17f10",
+   "v0": true
+  },
+  {
+   "file": "1f91c-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "07ee0d816f263a6548cb3756afacd2841ad60045c5ace53617861afdeaf6c452",
+   "v0": true
+  },
+  {
+   "file": "1f92b-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "20f6d2ef69472403c3083ad86346e2583a9fc197eb92cabd3750be478587e0df",
+   "v0": true
+  },
+  {
+   "file": "1f935-1f3fb-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "50546cd57503c6c1374caf077e22110240f9567dd04a43e0fa37300a5b5d863d",
+   "v0": false
+  },
+  {
+   "file": "1f935-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ae88194ad9004492bf68e7fc5014480c9947ff2362825047fe655d1c67597e48",
+   "v0": false
+  },
+  {
+   "file": "1f935-1f3fc-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "95237c70c3fe2d9b712d9a3a5cd10a78ddd52d637895cb6c167a6a645f1628c0",
+   "v0": false
+  },
+  {
+   "file": "1f935-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f5c66a074841491d08e58e3e99301497073615515d102dfce54a282f92347acc",
+   "v0": false
+  },
+  {
+   "file": "1f935-1f3fd-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "603ede79fd7f1542c19734975b36d86b098d73b8fbece60f10f4233045d9ef30",
+   "v0": false
+  },
+  {
+   "file": "1f935-1f3fe-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fe7b56f27b752bd2cfc337b78428b08d81811f5ccbcf9205d58305af72d44c4c",
+   "v0": false
+  },
+  {
+   "file": "1f935-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "110cdd621e64c1b6b4c20777119de85240bb6950bc5668643b19614f1c9e4fdc",
+   "v0": true
+  },
+  {
+   "file": "1f935-1f3ff-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "9477e330c37b25f925a96de7ed5382428f0e1a414ecc1e0378155384a683ac62",
+   "v0": true
+  },
+  {
+   "file": "1f935-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "76383d801d0f51d87f1d399f4b5c2fcf617d7c2789cb4abfda447dd2d41749fc",
+   "v0": true
+  },
+  {
+   "file": "1f935-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ef3ab86f268cf9bbf270411c2f893d249bae042486b3579cae42a8529bcd98c0",
+   "v0": false
+  },
+  {
+   "file": "1f936-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "aed3a0207db2c4dc3169e7e8cda3a56078faf2bc5f2236e8d6b23dd21278466f",
+   "v0": false
+  },
+  {
+   "file": "1f936-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f10d3b319803f2a80f835c5131ca9eeb0ccbc494c7a38051520ec16169ceea2d",
+   "v0": false
+  },
+  {
+   "file": "1f936-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "4a406362c0c3465bc447ca5d7030795823c9142cfeac7ae2d774233ec1a559b0",
+   "v0": false
+  },
+  {
+   "file": "1f936-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f1b1a5b1c58bfc095d1ae5d427c995bc564036fe56c5b54dce17da061fd1367f",
+   "v0": true
+  },
+  {
+   "file": "1f936-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "8763bcb453931014decd616ab8baa18b0dcafc3bb851f276eea4213ef9a70960",
+   "v0": false
+  },
+  {
+   "file": "1f937-1f3fc-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ef055b2db58420c5aad97cd22ec927862cf2271c3b71243c5fbb5857e10b52eb",
+   "v0": true
+  },
+  {
+   "file": "1f937-1f3fc-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "29b588de57a0cbc34b8d7a15a60da67cbd99de1fb1120975a0f2174512ab4c24",
+   "v0": true
+  },
+  {
+   "file": "1f937-1f3fd-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b9212f75371b83d2bac796fdd3d34bee9ae73b805b21b164715b5cc402a08de8",
+   "v0": false
+  },
+  {
+   "file": "1f937-1f3fd-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "8fe00b866a568563bab3f746df7147dd6282a2ac8e51628796b6f3c848db590c",
+   "v0": false
+  },
+  {
+   "file": "1f937-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "d4af629c20c6b21234d63e4caa1d59274e981e9ba7267c06b50885a69e427ea5",
+   "v0": false
+  },
+  {
+   "file": "1f937-1f3fe-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "17afb25f920e4976c583f4baf1c39804989ee3cea6b513f1937a3f81b5b3b118",
+   "v0": false
+  },
+  {
+   "file": "1f937-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5d8b227fec371fde6fb436d29bf1e2034179418322f9121e0a10fc916c70fea3",
+   "v0": true
+  },
+  {
+   "file": "1f937-1f3ff-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ad8de14e9eef5f4aede2b567f6ba543e9429e7d6ab84182b29318e00477472df",
+   "v0": false
+  },
+  {
+   "file": "1f937-1f3ff-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ff4e343f08a3809e7f0141a55bb2fce704d865f489ca6d5deaf97dcf67cb4191",
+   "v0": false
+  },
+  {
+   "file": "1f937-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "0f912f9045fea728e3ff2d15aac1e9061bca564e5217ce2abd4f399415aad65e",
+   "v0": false
+  },
+  {
+   "file": "1f937-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "f191d05d88bb3135ea105ccba05208bc185ca9382dfd021d4e4b8f533ce619fc",
+   "v0": false
+  },
+  {
+   "file": "1f939-1f3fb-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "df234c8b9f5364b47fe8422e6c67b56d4f7fead44cc80abc071403053b942ae2",
+   "v0": false
+  },
+  {
+   "file": "1f939-1f3fb-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "2b46fbb69c787e28121632cbba6e7968e3210698cb912ab3a9a2954b7872b75c",
+   "v0": false
+  },
+  {
+   "file": "1f939-1f3fc-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "d3517855f04d408e9bf1099bbda7433a6baab559ff3e03dd3b3e32cbdd3940a9",
+   "v0": false
+  },
+  {
+   "file": "1f939-1f3fd-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ecd8418ec2637b5c25802a09a45c534f10d90dc987661b199d33026d93222328",
+   "v0": true
+  },
+  {
+   "file": "1f939-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b93acfd13c73ca032a3ebf6a20da4f11287a6794bb1c033ea875e2e167559cb6",
+   "v0": false
+  },
+  {
+   "file": "1f939-1f3ff-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "26a29b564c977cafd3b2c7a160c23752b5cfbc61e814ba3aae354b331facd5a3",
+   "v0": true
+  },
+  {
+   "file": "1f939-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ed2925cb39bfaa987b1a4515bd42afc5ef96b74797a7dd22a186048f1a69d8fb",
+   "v0": false
+  },
+  {
+   "file": "1f939-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "bf5189f043cc9d3d82beb6114b141465c9443101e5094d093eded94872707e8d",
+   "v0": true
+  },
+  {
+   "file": "1f93d-1f3fc-200d-2642-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c13eb05a3f8cc249b8e25416b13dca4c001c46cf0c59c91a5c7e3adea0bfc5f8",
+   "v0": true
+  },
+  {
+   "file": "1f93d-1f3fd-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "adbe6cb4128ff0a38619c4bd6bc15f519180dc961eb4c17720482cf77982fbbe",
+   "v0": false
+  },
+  {
+   "file": "1f93d-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c9e840683cf9b7d756c95abcbe41c43211a27615f8c0812747075c7b6d088059",
+   "v0": false
+  },
+  {
+   "file": "1f93d-1f3fe-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "756d017ae8f1ed5e2fbe7de1c646b7d0d55b86bfce3cefd8903ddb004fb76d75",
+   "v0": false
+  },
+  {
+   "file": "1f93d-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "3899bef8e6091ed735c8c48ce1172859055444264f4995e511ac0efacdb04eee",
+   "v0": true
+  },
+  {
+   "file": "1f93d-200d-2640-fe0f-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "fd6f910f35310aaf0efe941d86491646a9dcfa8fd2189f4a049219caeb13ba47",
+   "v0": true
+  },
+  {
+   "file": "1f942-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "7b4eac0591ab31e4231a9783803f7800870ed2f46acd9f0cbdef9ec36568f542",
+   "v0": true
+  },
+  {
+   "file": "1f977-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "db015ad7d9b5583171a3eb6a95ae239af7841a2f85cd6acb397696e32291829c",
+   "v0": false
+  },
+  {
+   "file": "1f977-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "c98283c4eb0ac4bd9fbb29256327c2934866f52c374b3f7bd6df141b8641e2d3",
+   "v0": false
+  },
+  {
+   "file": "1f977-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "bd1b227ec4363a35c341fc6c25532028b754499b25185af7cf16d56bc5e7270f",
+   "v0": true
+  },
+  {
+   "file": "1f987-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "15e1e1bac9988be3960759f24289e3a5bfb04ad0a42a88f1ab10680df1bfa61c",
+   "v0": true
+  },
+  {
+   "file": "1f990-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "154400268f8a187f34a8b9fef7a43016e585a6f0a115e96e589049d842f29be9",
+   "v0": true
+  },
+  {
+   "file": "1f993-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "303de99b0b43eeaf599b59598588e5805f0c59ced55462bb128f93030172185a",
+   "v0": true
+  },
+  {
+   "file": "1f9a3-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b668184458fd5431bc3462ace72122c2e3d2910859b46e19156c1fec52c204ae",
+   "v0": false
+  },
+  {
+   "file": "1f9b5-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "61eed0655d97ece4c8d13899e87fb3d60dda8c0e1a9d7ba1022e8a119f4d76c6",
+   "v0": false
+  },
+  {
+   "file": "1f9b5-1f3fd-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "7b21045f507064d37578206140a1fc581c20f29afc3ace0a9f6d7c5f48c9cce8",
+   "v0": false
+  },
+  {
+   "file": "1f9b5-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "289174cc347ebb10f627c99e38d66985e058ebea45ffbfba5794f1967f70867c",
+   "v0": false
+  },
+  {
+   "file": "1f9b5-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "921c5de865915e1acf7ed2cd8a2fa7694d25a5b9eaef2e7e1b06e11e9ab0b74c",
+   "v0": true
+  },
+  {
+   "file": "1f9b5-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "9e1120c60d9de70ed4da95a3c06f5697ac5d9f7f62d37e239df27ef1fc2dac52",
+   "v0": false
+  },
+  {
+   "file": "1faa3-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "d2104ba5a20316bdf3be0d986b5d582c2ec29b479ff01be9e269f28131d2e6d3",
+   "v0": false
+  },
+  {
+   "file": "1fab1-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "bccb133e349cee44831442487a28b698f764736ae56cd24bc1c26dd035a84d87",
+   "v0": true
+  },
+  {
+   "file": "1fac1-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5f82bd255444fd4292fee29813b6294f2dfccc29282a54d38e856f7e07e10a8d",
+   "v0": true
+  },
+  {
+   "file": "1fad2-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "a6b958960501e622e6a5a252098f7e9bb55f8b4675d0324ac2e1b7bf7076a9a3",
+   "v0": false
+  },
+  {
+   "file": "1fae7-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "6814b010294d63d5c9e92005760367f95c6f59a6447cc0f5a384387a19f8a813",
+   "v0": true
+  },
+  {
+   "file": "1faf0-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "ee86e031ed5ea94e816e1f546546fd84ec54c7ab00f680f0c74f13775c389de3",
+   "v0": true
+  },
+  {
+   "file": "1faf0-1f3fe-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "59e82de556e2fee034b28770da2b96d99ac548967ea8ba87c67914449d713a18",
+   "v0": false
+  },
+  {
+   "file": "1faf0-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "5b4ba57261006cf9db82477879e6e9dfa2ecdcb17e990ff2a1e8bbe4053d2147",
+   "v0": false
+  },
+  {
+   "file": "25C9-FE0F-200D-1F534-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "3b868e0501a37fff493b237ae4bde96e8c635e9a63e2d9422b6654372b24f1af",
+   "v0": false
+  },
+  {
+   "file": "25b6-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "68596af11fc8972afb0ae7a3651cee7ea872da5db4dd918cc3237a8a53d18cda",
+   "v0": false
+  },
+  {
+   "file": "25fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "8db18717d3bab01f066fad7fc138549aec9a2e9aa63dd6e9ec31e8a4f986e512",
+   "v0": true
+  },
+  {
+   "file": "2615-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "8b8afd8f60833ca51907899d4a3279cdfd355282858ba8a73cd1034d2a1e31ff",
+   "v0": true
+  },
+  {
+   "file": "2620-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "4b7eb9673c2b2a8e869b93652352c8b124d4fd4634e77d5bba4b4f91a4de5dee",
+   "v0": false
+  },
+  {
+   "file": "2626-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "0ca26eee6709fc5cef74550b49b98de3e86d6e50ee2a0cbed1ca08ca132f27cd",
+   "v0": false
+  },
+  {
+   "file": "2699-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "844a8a316a4fe77267eecd2ad828c3f56284c7961bc86c4021e434dea4b16457",
+   "v0": false
+  },
+  {
+   "file": "26C4-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "770db7bcab95543366d60bab9761ef17658f32e5694108d1d06cf30c273a2a76",
+   "v0": false
+  },
+  {
+   "file": "26FA-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "a284d8a32aed2469d4241a967af43266b92b4b1c91c7eab5fdebfc05e40ea865",
+   "v0": false
+  },
+  {
+   "file": "270d-1f3fb-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "b12d4b7a0c00f35836ceff51bae1d285339bc2182c7578fd52c230cd82cb47b9",
+   "v0": true
+  },
+  {
+   "file": "270d-1f3fc-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "4dc5290f4947a9037be3d1c19a5c4eb3402275edd1e79a9ca4010e8b28c27555",
+   "v0": false
+  },
+  {
+   "file": "270d-1f3ff-twemoji.svg",
+   "source": "twemoji",
+   "license": "CC-BY-4.0",
+   "home": "https://github.com/jdecked/twemoji",
+   "sha256": "74493ac933268bc25035211a78d859082bcbd05da7784a730b0140973e1ffbe0",
+   "v0": false
+  },
+  {
+   "file": "2B8F-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "3daa60d9bd0ec86a4bbecdb70bd86bf6ad2443cf13dd0e131aeb49c3b2d37c20",
+   "v0": false
+  },
+  {
+   "file": "3299-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "f50b4bce12faed4135c5af6ca2237069c6a19245f2057876da49e6f8c4d0ffc1",
+   "v0": false
+  },
+  {
+   "file": "E092-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "64e0f8bded413e575cab8d0f96ae2306b8313cb050b38ce231d6e864466f9713",
+   "v0": false
+  },
+  {
+   "file": "E0A1-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "974b8f112f0ce6faf316aa8110b6a607f167c2214fe5389d3c734eee433b48e2",
+   "v0": false
+  },
+  {
+   "file": "E0C7-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "884decce3dce84be6caca3f1bbc96a8e3e6ba22c59fffbbd647372b0ffc97c54",
+   "v0": false
+  },
+  {
+   "file": "E106-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b8415f6046a9c0cd95442de30df8e6797ea946743d999e35714f42b765e71d17",
+   "v0": false
+  },
+  {
+   "file": "E151-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "3b475b7505dde0a4132ae85146936456c75f45c252f07982476a789c9d95cf66",
+   "v0": false
+  },
+  {
+   "file": "E1CA-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b96b944a7e15d635af07077a0546e641c2d89f4495bc591239eff02a1882ced5",
+   "v0": false
+  },
+  {
+   "file": "E1D2-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "fa88119c799c0da3db25ecc147e921aafbf3bd4ae6fdb3af6315f32a9b29d5a6",
+   "v0": false
+  },
+  {
+   "file": "E1D7-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "dbd7f1b8e6e169e36a21d371e6229042ecece82c85080cc56187d1c3f875f71d",
+   "v0": false
+  },
+  {
+   "file": "E256-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "d5cbade5c37cd505e099f43fc5186f30648f1f5b12bfeac74a7cf4618103346c",
+   "v0": false
+  },
+  {
+   "file": "E260-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "b674de092a2e4d53f32e816457781e4b2f20e0fecb320b275ea312706e92a0b5",
+   "v0": false
+  },
+  {
+   "file": "E263-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "4d16f4033617a25ad96a0066cd9ef40bfea67a15ff735baa0df7d73c14d26e4e",
+   "v0": false
+  },
+  {
+   "file": "E2D0-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "139bcdfead46ac245c0deb5da9c74851856e422abab529e5e6bae1a4349d4f2a",
+   "v0": false
+  },
+  {
+   "file": "E2D4-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "da2b141d5d8e3e935ce2b0246d60df27b4852e374fae1514ab2a95bf40b7fc18",
+   "v0": false
+  },
+  {
+   "file": "E2D6-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "3bcf3ab566973ef437d272e84d496a9dd7b66688ab2a39247b7eea19735ff915",
+   "v0": false
+  },
+  {
+   "file": "E342-openmoji.svg",
+   "source": "openmoji",
+   "license": "CC-BY-SA-4.0",
+   "home": "https://github.com/hfg-gmuend/openmoji",
+   "sha256": "ca2ccdabc703173d938e023a436a92f688f3b3469d5739fcc1a014d3915dfbc7",
+   "v0": false
+  },
+  {
+   "file": "emoji_u0033-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "11ceecfc892b1aa02cd318faab58177d7184c5e0a7ddcd8a6473af8e736eafbe",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f192-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "8a79f5e79dd9c0d3808f351d42e348565e10101fd4c2a8f1e34c5dad6332cc26",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f196-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "7276b8c546225f3fc682628e795bc96a499a6b840fb9b7115428819f488d05d2",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f232-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "f51572a492f8838aaeaef539a67db063382cb35c48313e21903d3a145ef8ee4d",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f308-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "620ea3a6e27d02ae48cabac24e0627b8f8721caf50100109ec854e344daabbe1",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f317-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "bc60a138d995b1057c31c2dccac5eabef6ace81c3b4bdba1e1d9b0648dfe3102",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f31e-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "97b7c9ad7def7b563d2a3aab4303630fd540b60a667be7b7d26ea86364630289",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f324-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "77b0379665681e03c2563af965127d80f838003acdf9ef12ef0e468aed0dddb1",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f336-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "e752ba5988b0a72ae65abb2a2bd8decfdf37373f10fa6e342a3cd0ce6bec1655",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f344-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "ba6bdf2cea8b547a9f97ed3cb2e2437aa48e626ac6c083102074bc651f584f76",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f358-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "51ee37a21f1ac3b97290c673fca100c312872147598519c3c3ce95b86ce2c3e7",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f369-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "7336d533d9a9faadb3ceb705efc8e4a6c168973a9a84227ccf62ca2d21d49ebe",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f36a-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "ce4d2da7fd670e27b840826896411bb2341cf44ba6b0014bf54dbea49c13a3d5",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f36f-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "f4d021b631df6043dfbb71a550a6d71cf64b1c6b0bf8e9b74b05d891d02074fb",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f378-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "753895d363680c184e38772d5a4ed06598e8aa7560d98ad85ce64cb0bcc217ae",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f387-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "7318d4e9743cb1399ed6c9a170189fad6f0b358eec17c4183d4cf9ab7b7127df",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f3ad-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "98c40843f1da88b3b43ddb60f316e3efe669612f87ce2234c8f53ea892e39ce1",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f3b8-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "5a6e107583ce09646363577fc87e2686405fc0770c2950340530eeec4713d8b6",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f3c1-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "424122f856fe8937fb977015d147d0804dc31223732896f8192afa68a1b3e005",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f3e2-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "d534b8fc7274b6bd2dcdebb6331ce324242a3ddc6e9306352bcdf885719724eb",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f3e8-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "a9bace473bfd885820909dfa41e493dea35a065774ac0015e4130087f7b12a5e",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f3e9-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "122e0477817a3898b69db605a07cedbaca385039dd787a34c9b3620a93be2ebb",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f3f9-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "9b3e1bae2b25be67a688da6703032399b35c0a89f476d387b740b5875f592f70",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f3fc-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "0b68ee52086a17c0f7ff080a7abb5cb2b8c5657366516a68193ba16cfc120276",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f3fd-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "be48ed75836c4e5f7b6ebebc68eb74f5104bdbcdae4b2cb41d34f4c66c5e8e12",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f432-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "c1f3cdfa677c6b378e9feb4f77b7cdabc056b1be3314991b5e6e07e4455e4619",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f448-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "988bbc17dcdfb6bd47de7828385e4c29f3925a0658c243c7acd29612f961eaf6",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f448_1f3fe-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "a9ed28bce5114d57220e084bfaddce695e0b3d9c687769ae4c5888d0dd36493d",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f448_1f3ff-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "f400d7b2ea1ba9435fd555eaa4cf0342dfc7aa544044365fe021a8eca9da24bd",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f45c-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "7494059922f947ff914d50dbebc0a54d17ce3a1448a36f8eb68d097f04257b27",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f45d-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "86ab717908930f6494e680e4fa6610248963da334f268e2e77d627e8710d3b56",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f4b8-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "73a41f36d788a8179e505e03176a6a269e28e17113d575b8424397419ce4de05",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f4c9-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "4983f8c913b8cc8adcbc439d5b1f79429cbfc760ad1f4f42a5b0a2d6a4fe0c1a",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f4e1-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "ccc03e8870ae928cce0381f1a4581287ddc3ce49a54f6ff52d143ed48ce2dda2",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f532-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "6ad2bc5e2e9c00d39815a471b6e8e8904e1bdde688e74b1bd70e698fe0d1de6b",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f58d-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "9ad99c281873744b85227ab1c2d49fdcb6cc880ce1e32ff196927886ed7d1803",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f602-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "d9d6fada5d5e9b41328bfe587d07f0f65169cdf73794258eea200ed78e8f20ce",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f611-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "a31f14cacde94a2f302bcc585e4cced83d15f1f42e8605075ec49df519faef25",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f61a-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "7f1c6ac53851bf30cf4bbc716e2fd74a69b96fbe3bb6873be6e871d0890dc28a",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f61c-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "0d8506af54d73c6717cf74e58b4b3f797be2fd0579a146011a83278e1b5f673d",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f620-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "476b7ead169906fbbb17fcaf606bb529b7bb806b8c3c793bda7ac9f1eda16537",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f624-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "3ae1189df34ec04fe0e800f63e40ddab6454cbc26160836b2f017012d57fb1ba",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f680-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "1744905efa7b72d7d23f551aa75d2b910ce9801c6c600d5fa58c04f3f5ffd59c",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f689-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "6c8d16dec60500d3bafd41690d8650738e154705c07b2dee272f1c01c474aee2",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f6bf-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "a0be02805a84de0d7a515b80831d9c078da988f8d87f0cf4f57fec5934b4bd26",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f6f0-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "f2cb8ecd6fad0c1c8e1684f1081c2ca885682b911eb1aff003807150b1fbcf24",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f7e2-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "20663c4d3a8e4bf021cd3ce0fb309a6605560cfcc114e5645f75091fccd2c23c",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f923-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "cfacd38d7becdf25b6628180638cc9787be5cb7df5b936615a402f743de7e0c5",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f93d_1f3fb-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "195cd20300e975e38e1fdba7c2554a26cfb9df9ef14cfb0805535cf5118e3cd9",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f93d_1f3fb_200d_2640-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "28634706b99e3b6fda65628f2b488882b983f08c6f6c1be4c5ffe2a11eb774ce",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f93d_1f3fb_200d_2642-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "f8ac6f374ba7296d42eb9c1afa580fb39225ec9f18434f40f65759569ec5fe12",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f93d_1f3fc-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "c25324ecb7a413c51e9118980278dd1e24e7e49261117f374905f13747440488",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f93d_1f3fd-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "ebfca12249dea805d55274faa4ef186cecf0007c3cb524acc79ae30e4b834bb3",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f93d_1f3fd_200d_2640-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "ac2764721408fa4f7b32a0f5c6a0453393cc23319ced0d959160e5d477e9cfe3",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f93d_1f3fe_200d_2640-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "6632e069f2601dccf230d118be1c0ad5b6407b5a3edf1b607313c6fe12d12227",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f93d_1f3fe_200d_2642-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "cb697fa16398b3ec09ac0c2ab80a162df2fb3050810bd2e52b09f4077bf5d7d7",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f93d_1f3ff_200d_2640-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "9bba5659a0a810be96f583cf9455ae405a672be1c9be2a9decbf502e405cd2c9",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f93d_1f3ff_200d_2642-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "0fb0238dd7f215cedbde7576aedd9c6eff1af9359b49b73576a93c03cb8b1198",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f967-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "5f3cbdbe8e2e29f2361b0c922e0d48289707b98a5a4f91b59c3865fe0fc3852f",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f974-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "5b80025fe31cae026148e62f0c9f1c17a1c4fff4f7606e3765a38246b4d3c77f",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9a4-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "f3e356ff091188e3966ef637095c01ab1e1d2da99384f98ea99b7c0e051b3b12",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d5-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "ec3bfeb39dc7424b89e21b2b8bebabedbe7361a4642961e13bda4f8cf1e071f9",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d5_1f3fc-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "a40c82432c9afb793ad9d86a656dc183411c1014fc325cbf4cc4a97055d33923",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d5_1f3fd-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "86136353d14cf6c25ba8dc041e7250363c0d0f90ac95a0c74e06dbed3038416d",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d6_1f3fb_200d_2640-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "32a5b27ba6b38074dd3323daf651ae55af53ce4969b5a4ac99300bdd5ca95ede",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d6_1f3fb_200d_2642-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "4d944a56072a5052da98102f5d26e9d9146d670407cbbb5ffb894f4ec2ee2de8",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d6_1f3fc_200d_2640-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "ef50042c186239eb30fe6da891b0aeb49b77ce7bc31767c2e3b3b4369be0ff14",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d6_1f3fd_200d_2640-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "e46a7947713dbe6a713a43d9e43ee37488944d0c68ccfedfaeb8211d325039f4",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d6_1f3fd_200d_2642-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "1f35a1564dedbe5bcdddad8a6bf0279cb1674c658667d7585dd9cf060aa987ab",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d6_1f3fe_200d_2642-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "4fbab94950716b2ceccd6be5ca55e763392b4005791f8d045901e2a26af122cb",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d6_1f3ff_200d_2640-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "6776802553acba73bea56c9cd0fb884660ad2d7f470bc4d73b6a681b1ff2e9e6",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d6_1f3ff_200d_2642-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "766bbeead429546b1e603e4f3347840e320615aec6b1cfdae7b46c1ac0ca344a",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9d6_200d_2640-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "0780d6fbc28f013b1e18ac6443dc37d1f97d4faa6074452e17a675304938bc60",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1f9e7-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "74c3b36c551494c1081b65955ef6ec2d7ce69c2e2424719457868bc3a2e1a452",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1fab3-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "008ee16aedf2610274a9f4aeeb70953ed035a055cac91df0d359a9f435efb2d5",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1fab6-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "dea56c917c277e527f6e84d74e01d7fd878edfeeedfd78a323aa1c03cdd967e1",
+   "v0": false
+  },
+  {
+   "file": "emoji_u1fac2-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "868bba1d4052ba532b04a1a3430d4c1c0a3307b76ac3b115cea0012e2aa317b8",
+   "v0": false
+  },
+  {
+   "file": "emoji_u2195-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "f278fb41352c32f3e8b279888ab76efbdae5363cbd2a93d5a1c01ab23a4d41a4",
+   "v0": false
+  },
+  {
+   "file": "emoji_u23ea-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "d1d47bf53c33f9bd8669910a5f689a9ad746fd8cf01d032d484420a682f71eaf",
+   "v0": false
+  },
+  {
+   "file": "emoji_u25fd-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "4d5d169036aa7579618f63b13277320a9d4eb48e98e9ee0cdeb7e1eff99a703c",
+   "v0": false
+  },
+  {
+   "file": "emoji_u260e-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "b0c6bf57b562b9d01c029fb956ceee84e678eee0a25546a7f9d21ad2647d9b14",
+   "v0": false
+  },
+  {
+   "file": "emoji_u2694-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "2b76e0ffef7b0733ad88d669aaea0794de49e2a3a331c77ee858245e4b9a13c6",
+   "v0": false
+  },
+  {
+   "file": "emoji_u269b-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "f0e5a3d02dfa0caa134e3caaee3d659dbe4e1cac9239ee415b7bbe1ea70db360",
+   "v0": false
+  },
+  {
+   "file": "emoji_u26c4-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "f4dfcb92891e5fe48e4edf3b8bbb375307161af281ecfddac47f0abc3cb890b9",
+   "v0": false
+  },
+  {
+   "file": "emoji_u26ce-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "44a40fdc5da14dee8632ef341613d78069b976a84a50873e384415f6363f45f7",
+   "v0": false
+  },
+  {
+   "file": "emoji_u2716-noto-emoji.svg",
+   "source": "noto",
+   "license": "Apache-2.0",
+   "home": "https://github.com/googlefonts/noto-emoji",
+   "sha256": "2e8590739cb10e2b5b815e2bd222e07b7eb9cbeb7a7b14ebc89d7cff02d1ebf9",
+   "v0": false
+  }
+ ]
+}
