@@ -13,6 +13,7 @@ import {
   composeAffine,
   parseTransformAttr,
   subPathsTightBounds,
+  transformClip,
   transformSubPaths,
 } from '../path/geometry.ts'
 import { isGroup } from '../path/docTree.ts'
@@ -53,7 +54,8 @@ export function flipAbout(box: Box, axis: 'x' | 'y'): Affine {
 
 /* ------------------------------------------------------------ application */
 
-function transformGradient(g: GradientFill, m: Affine): GradientFill {
+/** Move a gradient's placement (absolute coordinates) with an affine. */
+export function transformGradient(g: GradientFill, m: Affine): GradientFill {
   if (g.type === 'linear') {
     const p1 = applyAffine(m, { x: g.x1, y: g.y1 })
     const p2 = applyAffine(m, { x: g.x2, y: g.y2 })
@@ -101,6 +103,9 @@ export function transformItem(item: DocItem, m: Affine): DocItem {
     // A text's outlines are a cache of its layout; the matrix is what the
     // next relayout reads, so it has to move with them.
     if (item.text) next.text = { ...item.text, matrix: composeAffine(m, item.text.matrix) }
+    // The clip is absolute geometry like the children: left behind, the content
+    // slides out from under it and is cropped or vanishes.
+    if (item.clip) next.clip = transformClip(item.clip, m)
     return next
   }
   if (item.kind === 'path') {
@@ -132,7 +137,14 @@ export function transformItems(items: readonly DocItem[], ids: ReadonlySet<strin
 
 /** Tight curve bounds of one item; null when it draws nothing measurable. */
 export function itemBox(item: DocItem): Box | null {
-  if (isGroup(item)) return unionBoxes(item.children.map(itemBox))
+  if (isGroup(item)) {
+    const content = unionBoxes(item.children.map(itemBox))
+    // A clip group shows only what its clip lets through, so its box is the
+    // content cut to the clip's bounds — what Illustrator's selection shows.
+    if (!item.clip || !content) return content
+    const clipBox = unionBoxes(item.clip.map((c) => subPathsTightBounds(c.subPaths)))
+    return clipBox ? intersectBoxes(content, clipBox) : content
+  }
   if (item.kind === 'path') return subPathsTightBounds(item.subPaths)
   // A RawItem's markup is never parsed, so it has no measurable box; callers
   // treat it as unselectable by marquee.
@@ -153,6 +165,15 @@ export function unionBoxes(boxes: readonly (Box | null)[]): Box | null {
   }
   if (minX === Infinity) return null
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+}
+
+/** Overlap of two boxes; a zero-size box at the nearer edge when they miss. */
+export function intersectBoxes(a: Box, b: Box): Box {
+  const x0 = Math.max(a.x, b.x)
+  const y0 = Math.max(a.y, b.y)
+  const x1 = Math.min(a.x + a.w, b.x + b.w)
+  const y1 = Math.min(a.y + a.h, b.y + b.h)
+  return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) }
 }
 
 /** Union box of a set of ids, resolved against the tree. */

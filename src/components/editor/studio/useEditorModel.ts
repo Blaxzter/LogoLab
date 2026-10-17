@@ -6,6 +6,7 @@ import type { EditableDoc, Vec } from '../../../lib/path/types'
 import {
   findItem,
   groupItems,
+  isInert,
   isText,
   mapItems,
   moveItems,
@@ -26,6 +27,13 @@ import type { AlignEdge, DistributeAxis } from '../../../lib/editor/align'
 import { DEFAULT_SNAP, nudgeStep, type SnapConfig } from '../../../lib/editor/snapping'
 import type { DropSpot } from '../../../lib/editor/layerRows'
 import { applyNodeMove, parseNodeKey } from '../../../lib/editor/nodeEdit'
+import { selectSame as matchSame, type SameWhat } from '../../../lib/editor/paintMatch'
+import {
+  reportedDoc,
+  SIMPLIFY_DEFAULT_PERCENT,
+  simplifySelected,
+  type SimplifySession,
+} from '../../../lib/editor/simplify'
 import { useHistory } from '../../../hooks/useHistory'
 import { usePanZoom } from '../../../hooks/usePanZoom'
 import { svgPrefersDarkChecker } from '../../../lib/image'
@@ -42,9 +50,58 @@ import {
   setSelectionGeometry,
   splitPathIn,
   ungroupSelected,
+  releaseClips,
 } from '../selectionOps'
 import { isTypingTarget } from '../stage/useSpaceHeld'
+import {
+  copySelection as copyItems,
+  insertPasted,
+  nextPaste,
+  pasteClip,
+  pasteEventText,
+  placeForeign,
+  readForeignSvg,
+  type EditorClip,
+} from '../clipboard'
 import { useBoardCamera } from '../stage/useBoardCamera'
+
+/**
+ * The editor's last copy. Module-level, like the system clipboard it mirrors:
+ * the editor is a lazy route and unmounts on every tab switch, and a copy has
+ * to survive going to Preview and back.
+ */
+let lastClip: EditorClip | null = null
+
+/** The tolerance Simplify last used; the next Simplify starts there (like the last copy, it outlives the tab). */
+let lastSimplifyPercent = SIMPLIFY_DEFAULT_PERCENT
+
+/** What the open Simplify panel shows. */
+export interface SimplifyView {
+  /** Tolerance, percent of each path's size. */
+  percent: number
+  /** Nodes in the reached paths before, and in the preview. */
+  before: number
+  after: number
+}
+
+/** Whether a paste has anything to read: our own copy, or the system clipboard. */
+export function canPaste(): boolean {
+  return lastClip !== null || typeof navigator.clipboard?.readText === 'function'
+}
+
+/** The page has a real text selection (a label, a field's value): Ctrl+C belongs to it. */
+function hasPageTextSelection(): boolean {
+  const s = window.getSelection()
+  return !!s && !s.isCollapsed && s.toString().length > 0
+}
+
+/**
+ * What Select all selects: every top-level layer. Inert markup (defs, an
+ * invisible metadata box) is no layer, so Select all + Delete must not take it.
+ */
+export function selectAllIds(doc: EditableDoc): Set<string> {
+  return new Set(doc.items.filter((it) => !isInert(it)).map((it) => it.id))
+}
 
 export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: EditableDoc) => void) | undefined) {
   const history = useHistory<EditableDoc>(120)
@@ -88,6 +145,10 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
   const doc = history.value
   const previewDoc = doc ?? initialDoc
 
+  // The open Simplify session (see "outline + simplify" below), declared here
+  // because what the drawing reports outward depends on it.
+  const simplifyRef = useRef<SimplifySession | null>(null)
+
   // A fixed artboard pans and zooms within itself; a growing one is an
   // infinite board with a free camera. Both hooks always run (hook order);
   // only one drives the stage.
@@ -96,14 +157,22 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
   const pz = grow ? board.pz : fixedPz
   const boardView = grow ? board.view : null
 
+  // A Simplify preview is not the drawing yet: the outside world (the editor
+  // slot, the working logo) keeps the document the session opened on, or
+  // leaving the tab mid-preview would write a simplification nobody applied.
   useEffect(() => {
-    if (doc) onChange?.(doc)
+    if (doc) onChange?.(reportedDoc(doc, simplifyRef.current))
   }, [doc, onChange])
 
   // Read through a ref so handlers passed to the layers rail can stay
   // identity-stable (`useCallback([])`).
   const docRef = useRef(previewDoc)
   docRef.current = previewDoc
+
+  // The selection, read the same way: async commands (a boolean after its
+  // lazy load) must act on the selection as it is when they land.
+  const selectionRef = useRef(selection)
+  selectionRef.current = selection
 
   // `history` is a fresh object every render; its methods are not. Depending on
   // the methods keeps every callback built from them stable.
@@ -221,6 +290,105 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     setSelection(res.ids)
   }, [selection, previewDoc, commit])
 
+  /* ---------------------------------------------------------- clipboard */
+
+  /** Remember the selection as the editor's clip; returns the markup for the system clipboard. */
+  const copySelection = useCallback((): string | null => {
+    const clip = copyItems(previewDoc, selection)
+    if (!clip) return null
+    lastClip = clip
+    return clip.svg
+  }, [previewDoc, selection])
+
+  /** Copy, then remove the copied items: one undo step (the copy itself is no edit). */
+  const cutSelection = useCallback((): string | null => {
+    const svg = copySelection()
+    if (!svg) return null
+    commit({ ...previewDoc, items: removeItems(previewDoc.items, selection) })
+    setSelection(new Set())
+    setNodeSel(new Set())
+    return svg
+  }, [copySelection, previewDoc, selection, commit])
+
+  /**
+   * Paste clipboard text. Our own last copy pastes its items (lossless:
+   * live text, names, everything); `null` — a clipboard that could not be read,
+   * or holds nothing at all — falls back to them too, for a copy whose
+   * system-clipboard write was refused. An empty string is NOT that: it is a
+   * clipboard holding something else (an image), and pastes nothing. Any other SVG goes in
+   * as one item, centred on the view and scaled only if it would not fit or
+   * would be a speck. Returns whether anything was pasted.
+   */
+  const pasteText = useCallback(
+    (text: string | null): boolean => {
+      const d = docRef.current
+      const clip = lastClip
+      let res: { doc: EditableDoc; ids: Set<string> } | null = null
+      if (clip && (text === null || text === clip.svg)) {
+        const next = nextPaste(clip, d)
+        lastClip = next.clip
+        res = pasteClip(d, clip, next.steps)
+      } else if (text !== null) {
+        const foreign = readForeignSvg(text)
+        if (foreign) {
+          const [x, y, w, h] = d.viewBox
+          const view = d.artboard === 'grow' && boardView ? boardView : { x, y, w, h }
+          res = insertPasted(d, [foreign.item], placeForeign(foreign.frame, view))
+        }
+      }
+      if (!res) return false
+      commit(res.doc)
+      setSelection(res.ids)
+      setNodeSel(new Set())
+      setEnteredGroupId(null)
+      // What was pasted is a selection of objects; the pen's open path and
+      // node editing were about something else.
+      if (tool === 'node' || tool === 'pen') pickTool('select')
+      return true
+    },
+    [boardView, commit, tool, pickTool],
+  )
+
+  // The menu's versions go through the async clipboard API: a menu click is a
+  // user gesture, so writing needs no permission, and reading asks (or, where
+  // it is refused, falls back to the editor's own copy).
+  const copyToClipboard = useCallback(() => {
+    const svg = copySelection()
+    if (svg) void navigator.clipboard?.writeText(svg).catch(() => {})
+  }, [copySelection])
+  const cutToClipboard = useCallback(() => {
+    const svg = cutSelection()
+    if (svg) void navigator.clipboard?.writeText(svg).catch(() => {})
+  }, [cutSelection])
+  const pasteFromClipboard = useCallback(() => {
+    const read = navigator.clipboard?.readText
+    if (typeof read !== 'function') {
+      pasteText(null)
+      return
+    }
+    // Resolving to '' means the clipboard holds something that is not text,
+    // which is not ours to paste; only a refused read falls back.
+    navigator.clipboard.readText().then(
+      (t) => pasteText(t),
+      () => pasteText(null),
+    )
+  }, [pasteText])
+
+  /**
+   * Select every visible shape painted like the selection's lead (the path the
+   * swatches show). A selection change, not an edit: nothing goes on the undo
+   * stack. Node editing keeps going, on the new set of paths.
+   */
+  const selectSame = useCallback(
+    (what: SameWhat) => {
+      const ids = matchSame(docRef.current, selectionRef.current, what, enteredGroupId)
+      if (!ids || ids.size === 0) return
+      setNodeSel(new Set())
+      setSelection(ids)
+    },
+    [enteredGroupId],
+  )
+
   const doGroup = useCallback(() => {
     const res = groupItems(previewDoc.items, selection, newId('g'))
     if (!res) return
@@ -234,6 +402,12 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     commit(res.doc)
     setSelection(res.freed)
     setEnteredGroupId(null)
+  }, [previewDoc, selection, commit])
+
+  /** Release the clip of every selected clip group: one step, the selection kept. */
+  const doReleaseClip = useCallback(() => {
+    const next = releaseClips(previewDoc, selection)
+    if (next) commit(next)
   }, [previewDoc, selection, commit])
 
   /** A layers-rail drag: drop the moved ids at a paint-order insertion point. */
@@ -370,8 +544,6 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
    * loaded on the first use, so the editor doesn't carry it until then; the
    * selection is read again after the load, in case it moved meanwhile.
    */
-  const selectionRef = useRef(selection)
-  selectionRef.current = selection
   const doBoolean = useCallback(
     async (op: BooleanOp) => {
       const { booleanSelected, mergeSelected } = await import('../../../lib/editor/boolean')
@@ -410,7 +582,142 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     commit({ ...d, items })
   }, [commit, endText])
 
+  /* ----------------------------------------------- outline + simplify */
+
+  /**
+   * Simplify is a session: the panel's slider previews the result (no undo
+   * entry per move), Apply commits it as ONE step, Cancel puts the drawing
+   * back. Every preview is computed from the document as it was when the
+   * session opened, never from the previous preview.
+   */
+  const [simplifyView, setSimplifyView] = useState<SimplifyView | null>(null)
+
+  const showSimplify = useCallback(
+    (percent: number) => {
+      const s = simplifyRef.current
+      if (!s) return
+      const res = simplifySelected(s.base, s.selection, percent)
+      s.shown = res.doc
+      preview(res.doc)
+      setSimplifyView({ percent, before: res.before, after: res.after })
+    },
+    [preview],
+  )
+
+  const beginSimplify = useCallback(() => {
+    if (simplifyRef.current || selectionRef.current.size === 0) return
+    simplifyRef.current = { base: docRef.current, selection: selectionRef.current, shown: docRef.current }
+    // The nodes of the paths about to change: their indices won't survive it.
+    setNodeSel(new Set())
+    showSimplify(lastSimplifyPercent)
+  }, [showSimplify])
+
+  const setSimplifyPercent = useCallback(
+    (percent: number) => {
+      lastSimplifyPercent = percent
+      showSimplify(percent)
+    },
+    [showSimplify],
+  )
+
+  const applySimplify = useCallback(() => {
+    const s = simplifyRef.current
+    if (!s) return
+    simplifyRef.current = null
+    setSimplifyView(null)
+    if (s.shown !== s.base) commit(s.shown)
+  }, [commit])
+
+  const cancelSimplify = useCallback(() => {
+    const s = simplifyRef.current
+    if (!s) return
+    simplifyRef.current = null
+    setSimplifyView(null)
+    if (docRef.current === s.shown) preview(s.base)
+  }, [preview])
+
+  /**
+   * Undo and redo for every surface (toolbar, canvas menu, keys). While a
+   * Simplify preview is up, the step to take back is the preview itself:
+   * stepping the history instead would discard it AND the edit before it.
+   */
+  const { undo: historyUndo, redo: historyRedo } = history
+  const undo = useCallback(() => {
+    if (simplifyRef.current) cancelSimplify()
+    else historyUndo()
+  }, [cancelSimplify, historyUndo])
+  const redo = useCallback(() => {
+    if (simplifyRef.current) cancelSimplify()
+    else historyRedo()
+  }, [cancelSimplify, historyRedo])
+
+  // Selecting something else cancels; any other change to the drawing (an
+  // undo, a drag) ends the session where it stands — what it showed is either
+  // committed by that edit or gone.
+  useEffect(() => {
+    const s = simplifyRef.current
+    if (s && selection !== s.selection) cancelSimplify()
+  }, [selection, cancelSimplify])
+  useEffect(() => {
+    const s = simplifyRef.current
+    if (s && previewDoc !== s.shown && previewDoc !== s.base) {
+      simplifyRef.current = null
+      setSimplifyView(null)
+    }
+  }, [previewDoc])
+
+  /**
+   * Outline stroke: every stroked path in the selection becomes the filled
+   * shape its stroke paints. The geometry runs on paper.js, loaded on first use
+   * like the booleans; the ids stay, so the selection stays on the result.
+   */
+  const doOutlineStroke = useCallback(async () => {
+    const pending = simplifyRef.current?.base
+    cancelSimplify()
+    const { outlineSelected } = await import('../../../lib/editor/outlineStroke')
+    const next = outlineSelected(pending ?? docRef.current, selectionRef.current, () => newId('p'))
+    if (!next) return
+    commit(next)
+    setNodeSel(new Set())
+  }, [commit, cancelSimplify])
+
   /* ---------------------------------------------------------- keyboard */
+
+  // Ctrl+C / X / V arrive as the DOM's clipboard events, not as keys: only
+  // those carry `clipboardData`, so a paste reads the clipboard without the
+  // permission prompt `navigator.clipboard.readText` would raise. Typing,
+  // an open text and a real text selection on the page keep the native
+  // behaviour. In node editing a copy takes the shapes, never single nodes.
+  useEffect(() => {
+    const skip = (e: ClipboardEvent) => isTypingTarget(e.target) || text.edit !== null || hasPageTextSelection()
+    const onCopy = (e: ClipboardEvent) => {
+      if (skip(e)) return
+      const svg = e.type === 'cut' ? cutSelection() : copySelection()
+      if (!svg) return
+      e.clipboardData?.setData('text/plain', svg)
+      e.preventDefault()
+    }
+    const onPaste = (e: ClipboardEvent) => {
+      if (skip(e) || !e.clipboardData) return
+      const data = e.clipboardData
+      // A .svg file copied in the file manager arrives as a file, not text.
+      const file = [...data.files].find((f) => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name))
+      if (file) {
+        e.preventDefault()
+        void file.text().then((t) => pasteText(t))
+        return
+      }
+      if (pasteText(pasteEventText([...data.types], () => data.getData('text/plain')))) e.preventDefault()
+    }
+    document.addEventListener('copy', onCopy)
+    document.addEventListener('cut', onCopy)
+    document.addEventListener('paste', onPaste)
+    return () => {
+      document.removeEventListener('copy', onCopy)
+      document.removeEventListener('cut', onCopy)
+      document.removeEventListener('paste', onPaste)
+    }
+  }, [text.edit, copySelection, cutSelection, pasteText])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -419,6 +726,17 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
       }
       const mod = e.ctrlKey || e.metaKey
       const k = e.key
+
+      // The Simplify panel holds the drawing in preview: Enter applies, Esc
+      // and undo put it back.
+      if (simplifyRef.current) {
+        if (k === 'Enter' || k === 'Escape' || (mod && k.toLowerCase() === 'z')) {
+          e.preventDefault()
+          if (k === 'Enter') applySimplify()
+          else cancelSimplify()
+          return
+        }
+      }
 
       // A text is open but its input lost focus (a click in the rail): a
       // letter must not switch tools or delete the selection mid-sentence.
@@ -431,14 +749,14 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
         const lk = k.toLowerCase()
         if (lk === 'z') {
           e.preventDefault()
-          if (e.shiftKey) history.redo()
-          else history.undo()
+          if (e.shiftKey) redo()
+          else undo()
         } else if (lk === 'y') {
           e.preventDefault()
-          history.redo()
+          redo()
         } else if (lk === 'a') {
           e.preventDefault()
-          setSelection(new Set(previewDoc.items.map((it) => it.id)))
+          setSelection(selectAllIds(previewDoc))
         } else if (lk === 'd') {
           e.preventDefault()
           duplicateSelection()
@@ -469,7 +787,7 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
           setPenPathId(null)
           setTool('select')
         } else if (nodeSel.size > 0) setNodeSel(new Set())
-        else if (tool === 'node') setTool('select')
+        else if (tool === 'node' || tool === 'eyedropper') setTool('select')
         else if (enteredGroupId) setEnteredGroupId(null)
         else setSelection(new Set())
         return
@@ -495,7 +813,8 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [
-    history,
+    undo,
+    redo,
     previewDoc,
     selection,
     nodeSel,
@@ -513,10 +832,14 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     reorder,
     nudge,
     pickTool,
+    applySimplify,
+    cancelSimplify,
   ])
 
   return {
     history,
+    undo,
+    redo,
     selection,
     setSelection,
     nodeSel,
@@ -547,14 +870,26 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
     text,
     textAs,
     setTextAs,
+    simplify: {
+      view: simplifyView,
+      begin: beginSimplify,
+      setPercent: setSimplifyPercent,
+      apply: applySimplify,
+      cancel: cancelSimplify,
+    },
     ops: {
       convertText,
       editNodes,
       exitNodes,
       deleteSelection,
       duplicateSelection,
+      copyToClipboard,
+      cutToClipboard,
+      pasteFromClipboard,
+      selectSame,
       doGroup,
       doUngroup,
+      doReleaseClip,
       doMove,
       selectRows,
       rowToggleVisible,
@@ -572,6 +907,7 @@ export function useEditorModel(initialDoc: EditableDoc, onChange: ((doc: Editabl
       doSplit,
       doCombine,
       doBoolean,
+      doOutlineStroke,
     },
   }
 }

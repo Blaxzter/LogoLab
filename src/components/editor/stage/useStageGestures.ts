@@ -19,9 +19,10 @@ import {
   resolveTarget,
 } from '../../../lib/editor/hitTest'
 import { collectTargets, snapPoint, type SnapConfig } from '../../../lib/editor/snapping'
+import { sampledPath } from '../../../lib/editor/appearance'
 import { handleKeysFor, nodeKey, parseNodeKey, replaceIn, splitKey } from '../../../lib/editor/nodeEdit'
 import { insertNode, setNodeKind } from '../../../lib/path/geometry'
-import { makePath } from '../editorDoc'
+import { applyAppearance, makePath } from '../editorDoc'
 import type { EditorTool } from '../tools'
 import { dragGesture } from './dragGesture'
 import type { Gesture, Guides } from './gesture'
@@ -165,6 +166,18 @@ export function useStageGestures({
     /* ---- pen: build a path click by click ---- */
     if (tool === 'pen') {
       handlePenDown(p)
+      return
+    }
+
+    /* ---- eyedropper: the clicked shape's look onto the selection ---- */
+    if (tool === 'eyedropper') {
+      // One commit per click, so each sample is its own undo step. With
+      // nothing selected there is nothing to paint; the status bar says so.
+      const source = sampleAt(p)
+      if (source && selection.size > 0) {
+        const next = applyAppearance(doc, selection, source, e.shiftKey ? 'fill' : 'all')
+        if (next !== doc) onDocCommit(next)
+      }
       return
     }
 
@@ -329,6 +342,17 @@ export function useStageGestures({
     }
   }
 
+  /**
+   * The path an eyedropper click samples: the shape under the pointer, inside
+   * groups (you sample what you see, not a folder); a text gives its outlines.
+   */
+  const sampleAt = (p: Vec): PathItem | null => {
+    const tol = r(ITEM_TOL_PX * HIT)
+    const hit = pickItem(doc.items, p, tol, { groupsAreAtomic: false })
+    const it = hit ? findItem(doc.items, hit.leafId) : null
+    return it ? sampledPath(it, p, tol) : null
+  }
+
   /** Over the open text (its box, or the caret of an empty one): where a click edits it. */
   const overOpenText = (p: Vec): boolean => {
     if (!text.edit || !text.layout) return false
@@ -425,6 +449,12 @@ export function useStageGestures({
         const other = part ? null : pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: false })
         const otherItem = other ? findItem(doc.items, other.leafId) : null
         setHoverId(otherItem?.kind === 'path' && !nodePaths.some((n) => n.id === otherItem.id) ? otherItem.id : null)
+      } else if (tool === 'eyedropper') {
+        if (hoverGrip) setHoverGrip(null)
+        if (hoverPart) setHoverPart(null)
+        // Outline the shape a click would sample (the text, for a text's glyphs).
+        const hit = pickItem(doc.items, p, r(ITEM_TOL_PX * HIT), { groupsAreAtomic: false })
+        setHoverId(hit ? hit.leafId : null)
       } else {
         if (hoverId) setHoverId(null)
         if (hoverGrip) setHoverGrip(null)

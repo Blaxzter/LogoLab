@@ -10,7 +10,7 @@
 // dashed outline of what has been drawn so far.
 
 import type { DocItem, EditableDoc } from '../path/types.ts'
-import { isGroup } from '../path/docTree.ts'
+import { isGroup, isInert } from '../path/docTree.ts'
 import { itemBox, unionBoxes, type Box } from './transform.ts'
 
 /** Below this, a float that should be a whole number still rounds to it. */
@@ -37,7 +37,11 @@ export function drawingBounds(items: readonly DocItem[]): Box | null {
 }
 
 function hasVisibleRaw(items: readonly DocItem[]): boolean {
-  return items.some((it) => it.visible && (it.kind === 'raw' || (isGroup(it) && hasVisibleRaw(it.children))))
+  // Inert markup (defs, an invisible metadata box) paints nothing, so it must not
+  // hold a growing artboard at its old size.
+  return items.some(
+    (it) => it.visible && ((it.kind === 'raw' && !isInert(it)) || (isGroup(it) && hasVisibleRaw(it.children))),
+  )
 }
 
 /** Round a box outward to whole units, at least one unit on each side. */

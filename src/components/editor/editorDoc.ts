@@ -6,9 +6,11 @@
 // reused in this session ("max existing + 1" would reissue one after an undone
 // delete).
 
-import type { DocItem, EditableDoc, GradientFill, GroupItem, PathItem, Stroke, SubPath } from '../../lib/path/types'
-import { findItem, isGroup, mapLeaves, replaceItem, walkItems } from '../../lib/path/docTree'
-import { styleRange, textLabel } from '../../lib/text/edit'
+import type { DocItem, EditableDoc, GradientFill, GroupItem, PathItem, Stroke, SubPath } from '../../lib/path/types.ts'
+import { findItem, isGroup, mapLeaves, replaceItem, walkItems } from '../../lib/path/docTree.ts'
+import { styleRange, textLabel } from '../../lib/text/edit.ts'
+import { withAppearance, type AppearancePart } from '../../lib/editor/appearance.ts'
+import { leafLabel } from '../../lib/editor/layerRows.ts'
 
 let counter = 0
 
@@ -126,6 +128,21 @@ export function setFill(doc: EditableDoc, ids: ReadonlySet<string>, fill: string
 }
 
 /**
+ * The eyedropper: paint every selected path (texts included) like `source`.
+ * A selected text takes the colour into its style as well, like `setFill`, so
+ * the next keystroke keeps it; the rest of its paint rides on its outlines.
+ */
+export function applyAppearance(
+  doc: EditableDoc,
+  ids: ReadonlySet<string>,
+  source: PathItem,
+  part: AppearancePart = 'all',
+): EditableDoc {
+  const next = patchSelected(doc, ids, (it) => withAppearance(it, source, part))
+  return next === doc ? doc : syncTextFill(next, ids, source.fill)
+}
+
+/**
  * Recolouring a whole text writes its STYLE too, or the next relayout (any
  * keystroke) would paint it back in the colour it was typed in.
  */
@@ -230,14 +247,16 @@ export function duplicateItems(items: readonly DocItem[]): DocItem[] {
   return items.map(clone)
 }
 
-/** A human label for a layer row. */
+/**
+ * A human label for a layer row, and for the same item anywhere else (the
+ * context menu, the boolean base): an unnamed row says what it is
+ * ("Rectangle 4", "Line 9", "Clip group 2") rather than only "Path 4".
+ */
 export function itemLabel(item: DocItem, index: number): string {
   if (item.name) return item.name
   if (isGroup(item) && item.text) return textLabel(item.text)
-  if (isGroup(item)) return `Group ${index}`
-  if (item.kind === 'raw') return 'Markup'
-  const sub = item.subPaths.length
-  return sub > 1 ? `Compound ${index}` : `Path ${index}`
+  if (isGroup(item)) return item.clip ? `Clip group ${index}` : `Group ${index}`
+  return leafLabel(item, index)
 }
 
 /** Distinct solid fills in the document, most-used first — the doc's palette. */

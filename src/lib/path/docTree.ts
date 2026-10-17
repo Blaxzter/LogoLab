@@ -14,14 +14,26 @@ import type { DocItem, EditableDoc, GroupItem, PathItem, RawItem } from './types
 /** A paintable item — anything that isn't a container. */
 export type Leaf = PathItem | RawItem
 
-/** True for the container kind — narrows so callers can reach `.children`. */
 /** A live text object — a group whose children are its laid-out glyphs. */
 export function isText(item: DocItem): item is GroupItem & { text: NonNullable<GroupItem['text']> } {
   return item.kind === 'group' && !!item.text
 }
 
+/** True for the container kind — narrows so callers can reach `.children`. */
 export function isGroup(item: DocItem): item is GroupItem {
   return item.kind === 'group'
+}
+
+/**
+ * Whether an item paints nothing and so is no layer: an inert raw item (defs, a
+ * shape with neither fill nor stroke), or a group holding only such items. It is
+ * still in the document — the export writes it in place — but a list of layers,
+ * a selection or a count of shapes should not see it.
+ */
+export function isInert(item: DocItem): boolean {
+  if (item.kind === 'raw') return item.inert === true
+  if (item.kind === 'group') return !item.text && item.children.length > 0 && item.children.every(isInert)
+  return false
 }
 
 /**

@@ -280,6 +280,8 @@ const LayerRowView = memo(function LayerRowView({
     if (editing) inputRef.current?.select()
   }, [editing])
 
+  const label = itemLabel(item, number)
+
   const commitName = () => {
     onEditing(null)
     onRename(item.id, inputRef.current?.value ?? '')
@@ -362,7 +364,7 @@ const LayerRowView = memo(function LayerRowView({
       {editing ? (
         <input
           ref={inputRef}
-          defaultValue={itemLabel(item, number)}
+          defaultValue={label}
           onBlur={commitName}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commitName()
@@ -372,7 +374,7 @@ const LayerRowView = memo(function LayerRowView({
           className="min-w-0 flex-1 rounded border border-line bg-surface px-1 py-0.5 text-xs text-ink outline-none"
         />
       ) : (
-        <span className="min-w-0 flex-1 truncate">{itemLabel(item, number)}</span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
       )}
 
       <Tooltip

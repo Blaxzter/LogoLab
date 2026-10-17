@@ -259,17 +259,21 @@ export function EditorStage({
             ? 'text'
             : tool === 'pen' || isDrawTool
               ? 'crosshair'
-              : hoverGrip
-                ? GRIP_CURSOR[hoverGrip]
-                : hoverPart
-                  ? hoverPart.kind === 'segment'
-                    ? 'default'
-                    : 'move'
-                  : hoverId
-                    ? tool === 'node'
-                      ? 'pointer'
+              : tool === 'eyedropper'
+                ? hoverId
+                  ? 'copy'
+                  : 'default'
+                : hoverGrip
+                  ? GRIP_CURSOR[hoverGrip]
+                  : hoverPart
+                    ? hoverPart.kind === 'segment'
+                      ? 'default'
                       : 'move'
-                    : 'default'
+                    : hoverId
+                      ? tool === 'node'
+                        ? 'pointer'
+                        : 'move'
+                      : 'default'
 
   const gridStep = snap.grid > 0 ? snap.grid : 0
 

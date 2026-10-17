@@ -19,6 +19,9 @@ import type { BooleanOp } from '../../lib/editor/boolean'
 import { layerRows } from '../../lib/editor/layerRows'
 import { itemLabel, toggleVisible } from './editorDoc'
 import { setSelectedNodesKind } from './selectionOps'
+import { leadPath, type SameWhat } from '../../lib/editor/paintMatch'
+import { pathReach } from '../../lib/editor/simplify'
+import { SimplifyPanel } from './studio/SimplifyPanel'
 import { ContextMenu } from '../ui/ContextMenu'
 import { editorMenu, type EditorAction, type MenuTarget } from './studio/editorMenu'
 import type { StageMenuTarget } from './stage/useStageGestures'
@@ -27,7 +30,7 @@ import { EditorStatusBar } from './studio/EditorStatusBar'
 import { EditorToolbar } from './studio/EditorToolbar'
 import { LayersRail } from './studio/LayersRail'
 import { PropertiesRail } from './studio/PropertiesRail'
-import { useEditorModel } from './studio/useEditorModel'
+import { canPaste, selectAllIds, useEditorModel } from './studio/useEditorModel'
 
 export interface SvgEditorStudioProps {
   /** The document to open. */
@@ -49,6 +52,8 @@ export interface SvgEditorStudioProps {
 export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onChange }: SvgEditorStudioProps) {
   const {
     history,
+    undo,
+    redo,
     selection,
     setSelection,
     nodeSel,
@@ -79,6 +84,7 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
     text,
     textAs,
     setTextAs,
+    simplify,
     ops,
   } = useEditorModel(initialDoc, onChange)
 
@@ -96,14 +102,17 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
   const sel = useMemo(() => {
     let paths = 0
     let groups = 0
+    let clipGroups = 0
     let other = 0
     walkItems(previewDoc.items, (it) => {
       if (!selection.has(it.id)) return
-      if (isGroup(it)) groups++
-      else if (it.kind === 'path') paths++
+      if (isGroup(it)) {
+        groups++
+        if (it.clip) clipGroups++
+      } else if (it.kind === 'path') paths++
       else other++
     })
-    return { paths, groups, other }
+    return { paths, groups, clipGroups, other }
   }, [previewDoc.items, selection])
 
   /** The one path the single-path operations act on, or null. */
@@ -164,14 +173,21 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
     setMenu({ target: { kind: 'items', from: 'layers' }, at, rename })
   }, [])
 
+  // What Outline stroke and Simplify would act on, walking into selected groups.
+  const reach = useMemo(() => pathReach(previewDoc.items, selection), [previewDoc.items, selection])
+
   const why = actionReasons({
-    canUndo: history.canUndo,
-    canRedo: history.canRedo,
+    // An open Simplify preview is itself a step to take back.
+    canUndo: history.canUndo || simplify.view !== null,
+    canRedo: history.canRedo || simplify.view !== null,
     selection,
     nodeSel,
     selectedCount,
     sel,
     activePath,
+    canPaste: canPaste(),
+    hasPaint: leadPath(previewDoc, selection) !== null,
+    reach,
   })
 
   const menuEntries = useMemo(() => {
@@ -239,6 +255,15 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
         if (next !== previewDoc) commit(next)
         break
       }
+      case 'copy':
+        ops.copyToClipboard()
+        break
+      case 'cut':
+        ops.cutToClipboard()
+        break
+      case 'paste':
+        ops.pasteFromClipboard()
+        break
       case 'duplicate':
         ops.duplicateSelection()
         break
@@ -250,6 +275,9 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
         break
       case 'ungroup':
         ops.doUngroup()
+        break
+      case 'releaseClip':
+        ops.doReleaseClip()
         break
       case 'front':
       case 'forward':
@@ -282,14 +310,26 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
       case 'convertText':
         void ops.convertText()
         break
+      case 'outlineStroke':
+        void ops.doOutlineStroke()
+        break
+      case 'simplify':
+        simplify.begin()
+        break
+      case 'same:fill':
+      case 'same:stroke':
+      case 'same:fillStroke':
+      case 'same:appearance':
+        ops.selectSame(action.slice(5) as SameWhat)
+        break
       case 'selectAll':
-        setSelection(new Set(previewDoc.items.map((it) => it.id)))
+        setSelection(selectAllIds(previewDoc))
         break
       case 'undo':
-        history.undo()
+        undo()
         break
       case 'redo':
-        history.redo()
+        redo()
         break
       case 'toggleSnap':
         setSnap((v) => ({ ...v, enabled: !v.enabled }))
@@ -325,8 +365,8 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
       <EditorToolbar
         tool={tool}
         pickTool={pickTool}
-        undo={history.undo}
-        redo={history.redo}
+        undo={undo}
+        redo={redo}
         why={why}
         snap={snap}
         setSnap={setSnap}
@@ -385,8 +425,8 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
             onExitNodes={ops.exitNodes}
             text={text}
             baseId={base?.id ?? null}
-            undo={history.undo}
-            redo={history.redo}
+            undo={undo}
+            redo={redo}
             railHoverId={railHover}
             onHoverChange={setCanvasHover}
             onMenu={openStageMenu}
@@ -409,6 +449,14 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
             onPenPathChange={setPenPathId}
             onToolDone={() => setTool('select')}
           />
+          {simplify.view && (
+            <SimplifyPanel
+              view={simplify.view}
+              setPercent={simplify.setPercent}
+              apply={simplify.apply}
+              cancel={simplify.cancel}
+            />
+          )}
         </div>
 
         <PropertiesRail
@@ -426,7 +474,11 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
           doReverse={ops.doReverse}
           doSplit={ops.doSplit}
           doCombine={ops.doCombine}
+          doOutlineStroke={ops.doOutlineStroke}
+          beginSimplify={simplify.begin}
+          simplifying={simplify.view !== null}
           doBoolean={ops.doBoolean}
+          selectSame={ops.selectSame}
           panelText={panelText}
           baseLabel={base?.label ?? null}
           text={text}
@@ -437,7 +489,13 @@ export function SvgEditorStudio({ initialDoc, fileName = 'drawing', onClose, onC
       </div>
 
       {/* Status */}
-      <EditorStatusBar stats={stats} viewBox={previewDoc.viewBox} grow={previewDoc.artboard === 'grow'} tool={tool} />
+      <EditorStatusBar
+        stats={stats}
+        viewBox={previewDoc.viewBox}
+        grow={previewDoc.artboard === 'grow'}
+        tool={tool}
+        hasSelection={selection.size > 0}
+      />
 
       {menu && menuEntries.length > 0 && (
         <ContextMenu

@@ -14,21 +14,28 @@
 //
 // Both formats skip RawItems (markup the editor could not model — text, images)
 // and hidden items, exactly as the SVG export leaves hidden ones out.
+//
+// A group's clip is honoured by the PDF (each leaf painted under `W n` of every
+// clip around it). DXF has no clipping: a cutter gets the whole outlines.
 
-import type { DocItem, EditableDoc, GradientFill, PathItem, SubPath, Vec } from '../path/types'
+import type { ClipShape, DocItem, EditableDoc, GradientFill, PathItem, SubPath, Vec } from '../path/types'
 import { parseCssColor } from '../path/cssColor.ts'
+import { segmentControls, subPathsTightBounds } from '../path/geometry.ts'
 
-/** A visible path, with its group opacities folded in. */
+/** A visible path, with its group opacities folded in and the clips of its groups, outermost first. */
 interface Leaf {
   item: PathItem
   opacity: number
+  clips: ClipShape[][]
 }
 
-function visibleLeaves(items: readonly DocItem[], opacity = 1, out: Leaf[] = []): Leaf[] {
+function visibleLeaves(items: readonly DocItem[], opacity = 1, out: Leaf[] = [], clips: ClipShape[][] = []): Leaf[] {
   for (const item of items) {
     if (!item.visible) continue
-    if (item.kind === 'group') visibleLeaves(item.children, opacity * (item.opacity ?? 1), out)
-    else if (item.kind === 'path') out.push({ item, opacity })
+    if (item.kind === 'group') {
+      const inner = item.clip && item.clip.length > 0 ? [...clips, item.clip] : clips
+      visibleLeaves(item.children, opacity * (item.opacity ?? 1), out, inner)
+    } else if (item.kind === 'path') out.push({ item, opacity, clips })
   }
   return out
 }
@@ -40,7 +47,8 @@ export function unsupportedItemCount(doc: EditableDoc): number {
     for (const item of items) {
       if (!item.visible) continue
       if (item.kind === 'group') walk(item.children)
-      else if (item.kind === 'raw') n++
+      // Inert markup (defs, an invisible box) paints nothing, so nothing is lost.
+      else if (item.kind === 'raw' && !item.inert) n++
     }
   }
   walk(doc.items)
@@ -78,6 +86,66 @@ function segments(sp: SubPath): [Vec, Vec, Vec, Vec][] {
 
 const isLine = ([p0, c1, c2, p3]: [Vec, Vec, Vec, Vec]) =>
   c1.x === p0.x && c1.y === p0.y && c2.x === p3.x && c2.y === p3.y
+
+/**
+ * A clip as ONE PDF clipping path: its subpaths and the rule they are read under,
+ * or null when the union of its shapes has no single-path form. One shape is
+ * itself. Several are, when each is one nonzero loop (oriented alike, the nonzero
+ * union is the union), or when they share a rule and no two boxes overlap.
+ */
+export function pdfClip(clip: ClipShape[]): { subPaths: SubPath[]; rule: 'nonzero' | 'evenodd' } | null {
+  if (clip.length === 1) return clip[0]
+  if (clip.every((c) => c.rule === 'nonzero' && c.subPaths.length === 1 && c.subPaths[0].closed)) {
+    return {
+      rule: 'nonzero',
+      subPaths: clip.map((c) => (signedArea(c.subPaths[0]) < 0 ? reversed(c.subPaths[0]) : c.subPaths[0])),
+    }
+  }
+  const rule = clip[0].rule
+  if (clip.some((c) => c.rule !== rule)) return null
+  const boxes = clip.map((c) => subPathsTightBounds(c.subPaths))
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i]
+      const b = boxes[j]
+      if (a && b && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) return null
+    }
+  }
+  return { rule, subPaths: clip.flatMap((c) => c.subPaths) }
+}
+
+/** Gauss–Legendre nodes and weights on [0, 1]: three of them integrate a quintic exactly. */
+const GL3: readonly [number, number][] = [
+  [0.5 - Math.sqrt(15) / 10, 5 / 18],
+  [0.5, 8 / 18],
+  [0.5 + Math.sqrt(15) / 10, 5 / 18],
+]
+
+/**
+ * Signed area of a closed subpath, curves included — its orientation is all
+ * that is read. Exact: x·y′ − y·x′ of a cubic is a quintic. The ANCHOR polygon
+ * is not enough: a leaf drawn with two cubics has two anchors and area 0.
+ */
+export function signedArea(sp: SubPath): number {
+  let a = 0
+  for (let seg = 0; seg < sp.nodes.length; seg++) {
+    const { p0, c1, c2, p3 } = segmentControls(sp, seg)
+    for (const [t, w] of GL3) {
+      const u = 1 - t
+      const x = u * u * u * p0.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * p3.x
+      const y = u * u * u * p0.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * p3.y
+      const dx = 3 * (u * u * (c1.x - p0.x) + 2 * u * t * (c2.x - c1.x) + t * t * (p3.x - c2.x))
+      const dy = 3 * (u * u * (c1.y - p0.y) + 2 * u * t * (c2.y - c1.y) + t * t * (p3.y - c2.y))
+      a += w * (x * dy - y * dx)
+    }
+  }
+  return a / 2
+}
+
+function reversed(sp: SubPath): SubPath {
+  const nodes = [...sp.nodes].reverse().map((n) => ({ ...n, hIn: n.hOut, hOut: n.hIn }))
+  return { closed: sp.closed, nodes }
+}
 
 /** The download formats a vector document offers, in menu order. */
 export const VECTOR_FORMATS = [
@@ -318,11 +386,29 @@ export function docToPdf(doc: EditableDoc, title = 'logo'): Uint8Array {
   }
 
   const ops: string[] = [`${flip} cm`]
-  for (const { item, opacity } of visibleLeaves(doc.items)) {
+  /** Append a subpath's construction operators. */
+  const pathOps = (sp: SubPath) => {
+    if (sp.nodes.length === 0) return
+    ops.push(`${fmt(sp.nodes[0].x)} ${fmt(sp.nodes[0].y)} m`)
+    for (const seg of segments(sp)) {
+      const [, c1, c2, p] = seg
+      ops.push(isLine(seg) ? `${fmt(p.x)} ${fmt(p.y)} l` : `${[c1.x, c1.y, c2.x, c2.y, p.x, p.y].map(fmt).join(' ')} c`)
+    }
+    if (sp.closed) ops.push('h')
+  }
+  for (const { item, opacity, clips } of visibleLeaves(doc.items)) {
     const filled = !isNone(item.fill)
     const s = item.stroke && item.stroke.width > 0 ? item.stroke : null
     if (!filled && !s) continue
     ops.push('q')
+    // Each enclosing clip intersects the clipping region, outermost first. One whose
+    // union has no single-path form is left out (see `pdfClip`) rather than guessed.
+    for (const clip of clips) {
+      const one = pdfClip(clip)
+      if (!one) continue
+      for (const sp of one.subPaths) pathOps(sp)
+      ops.push(one.rule === 'evenodd' ? 'W* n' : 'W n')
+    }
     const fillA = opacity * (item.fillOpacity ?? 1)
     const strokeA = opacity * (s?.opacity ?? 1)
     if (fillA < 1 || strokeA < 1) ops.push(`/${alphaGs(fillA, strokeA)} gs`)
@@ -339,17 +425,7 @@ export function docToPdf(doc: EditableDoc, title = 'logo'): Uint8Array {
       if (s.join === 'miter') ops.push(`${fmt(s.miterLimit ?? 4)} M`)
       if (s.dash && s.dash.length > 0) ops.push(`[${s.dash.map(fmt).join(' ')}] 0 d`)
     }
-    for (const sp of item.subPaths) {
-      if (sp.nodes.length === 0) continue
-      ops.push(`${fmt(sp.nodes[0].x)} ${fmt(sp.nodes[0].y)} m`)
-      for (const seg of segments(sp)) {
-        const [, c1, c2, p] = seg
-        ops.push(
-          isLine(seg) ? `${fmt(p.x)} ${fmt(p.y)} l` : `${[c1.x, c1.y, c2.x, c2.y, p.x, p.y].map(fmt).join(' ')} c`,
-        )
-      }
-      if (sp.closed) ops.push('h')
-    }
+    for (const sp of item.subPaths) pathOps(sp)
     const even = item.fillRule === 'evenodd' ? '*' : ''
     ops.push(filled && s ? `B${even}` : filled ? `f${even}` : 'S', 'Q')
   }

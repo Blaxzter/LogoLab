@@ -61,7 +61,7 @@ export function EditorToolbar({
   return (
     // Scrolls rather than wrapping on a phone: it never widens the page.
     <div className="no-scrollbar flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-line bg-surface px-2 [&>*]:shrink-0">
-      {/* Grouped by purpose: select/reshape, draw, view. */}
+      {/* Grouped by purpose: select/reshape, draw, paint, view. */}
       <div className="flex items-center gap-1.5">
         <ToolPill>
           <ToolBtn id="select" tool={tool} onPick={pickTool} />
@@ -71,6 +71,9 @@ export function EditorToolbar({
           <ToolBtn id="pen" tool={tool} onPick={pickTool} />
           <ToolBtn id="text" tool={tool} onPick={pickTool} />
           <ShapeFlyout tool={tool} onPick={pickTool} />
+        </ToolPill>
+        <ToolPill>
+          <ToolBtn id="eyedropper" tool={tool} onPick={pickTool} />
         </ToolPill>
         <ToolPill>
           <ToolBtn id="pan" tool={tool} onPick={pickTool} />

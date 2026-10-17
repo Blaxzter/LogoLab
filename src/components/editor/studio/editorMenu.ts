@@ -22,10 +22,14 @@ export type EditorAction =
   | 'doneNodes'
   | 'rename'
   | 'toggleHidden'
+  | 'copy'
+  | 'cut'
+  | 'paste'
   | 'duplicate'
   | 'delete'
   | 'group'
   | 'ungroup'
+  | 'releaseClip'
   | 'front'
   | 'forward'
   | 'backward'
@@ -40,8 +44,14 @@ export type EditorAction =
   | 'combine'
   | 'split'
   | 'reverse'
+  | 'outlineStroke'
+  | 'simplify'
   | 'convertText'
   | 'selectAll'
+  | 'same:fill'
+  | 'same:stroke'
+  | 'same:fillStroke'
+  | 'same:appearance'
   | 'undo'
   | 'redo'
   | 'toggleSnap'
@@ -91,6 +101,7 @@ export function editorMenu(target: MenuTarget, ctx: EditorMenuContext): EditorMe
 
   if (target.kind === 'canvas') {
     out.push(
+      item('paste', 'Paste', why.paste, { shortcut: 'Ctrl+V' }),
       item('selectAll', 'Select all', null, { shortcut: 'Ctrl+A' }),
       item('undo', 'Undo', why.undo, { shortcut: 'Ctrl+Z' }),
       item('redo', 'Redo', why.redo, { shortcut: 'Ctrl+Shift+Z' }),
@@ -139,13 +150,24 @@ export function editorMenu(target: MenuTarget, ctx: EditorMenuContext): EditorMe
     one === 'group' && !layers && item('enterGroup', 'Enter group', null),
     layers && ctx.selectedCount === 1 && item('rename', 'Rename', null),
     SEP,
+    item('cut', 'Cut', why.selection, { shortcut: 'Ctrl+X' }),
+    item('copy', 'Copy', why.selection, { shortcut: 'Ctrl+C' }),
+    item('paste', 'Paste', why.paste, { shortcut: 'Ctrl+V' }),
     item('duplicate', 'Duplicate', why.selection, { shortcut: 'Ctrl+D' }),
     item('toggleHidden', ctx.allHidden ? 'Show' : 'Hide', why.selection),
     item('delete', 'Delete', why.remove, { shortcut: 'Del', danger: true }),
     SEP,
+    item('same:fill', 'Select same fill', why.selectSame),
+    item('same:stroke', 'Select same stroke', why.selectSame),
+    item('same:fillStroke', 'Select same fill & stroke', why.selectSame),
+    item('same:appearance', 'Select same appearance', why.selectSame),
+    SEP,
     // Always offered: one item groups into a folder of one.
     item('group', 'Group', why.group, { shortcut: 'Ctrl+G' }),
-    why.ungroup === null && item('ungroup', 'Ungroup', null, { shortcut: 'Ctrl+Shift+G' }),
+    // A clip group is a group, so Ungroup stays, disabled, saying why.
+    (why.ungroup === null || why.releaseClip === null) &&
+      item('ungroup', 'Ungroup', why.ungroup, { shortcut: 'Ctrl+Shift+G' }),
+    why.releaseClip === null && item('releaseClip', 'Release clip', null),
     SEP,
     item('front', 'Bring to front', why.selection, { shortcut: 'Ctrl+Shift+]' }),
     item('forward', 'Bring forward', why.selection, { shortcut: 'Ctrl+]' }),
@@ -164,6 +186,9 @@ export function editorMenu(target: MenuTarget, ctx: EditorMenuContext): EditorMe
     why.combine === null && item('combine', 'Combine paths', null),
     one === 'path' && why.split === null && item('split', 'Split subpaths', null),
     one === 'path' && item('reverse', 'Reverse direction', why.reverse),
+    // Selection-wide, so offered on groups too; on text they say "convert first".
+    one !== 'other' && item('outlineStroke', 'Outline stroke', why.outlineStroke),
+    one !== 'other' && item('simplify', 'Simplify path…', why.simplify),
     ctx.hasText && item('convertText', 'Convert to curves', null),
   )
   return tidy(out)

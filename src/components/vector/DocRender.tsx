@@ -6,7 +6,7 @@
 // gestures, overlays) stays with each studio because it genuinely differs.
 
 import { memo, useMemo } from 'react'
-import type { DocItem, GradientFill, PathItem, RawItem } from '../../lib/path/types'
+import type { ClipShape, DocItem, GradientFill, PathItem, RawItem, SubPath } from '../../lib/path/types'
 import { subPathsToD } from '../../lib/path/model'
 import { isGroup } from '../../lib/path/docTree'
 import { sanitizeSvgMarkup } from './sanitizeMarkup'
@@ -15,10 +15,14 @@ import { sanitizeSvgMarkup } from './sanitizeMarkup'
 const dCache = new WeakMap<object, string>()
 
 export function pathD(item: PathItem): string {
-  let d = dCache.get(item.subPaths)
+  return subPathsD(item.subPaths)
+}
+
+function subPathsD(subPaths: SubPath[]): string {
+  let d = dCache.get(subPaths)
   if (d === undefined) {
-    d = subPathsToD(item.subPaths)
-    dCache.set(item.subPaths, d)
+    d = subPathsToD(subPaths)
+    dCache.set(subPaths, d)
   }
   return d
 }
@@ -35,6 +39,20 @@ function escapeAttr(v: string): string {
  * and `url(#…)` resolves to whichever element came first.
  */
 export const gradIdOf = (itemId: string, scope = 'c') => `eg-${scope}-${itemId}`
+
+/** Deterministic id for a group's clipping path, scoped like {@link gradIdOf}. */
+export const clipIdOf = (groupId: string, scope = 'c') => `ec-${scope}-${groupId}`
+
+/** A group's clip as an SVG `<clipPath>` (absolute user-space coordinates, like the children). */
+function ClipDef({ id, clip }: { id: string; clip: ClipShape[] }) {
+  return (
+    <clipPath id={id} clipPathUnits="userSpaceOnUse">
+      {clip.map((shape, i) => (
+        <path key={i} d={subPathsD(shape.subPaths)} clipRule={shape.rule} />
+      ))}
+    </clipPath>
+  )
+}
 
 /** SVG paint server for a gradient fill (absolute user-space coordinates). */
 export function GradientDef({ id, gradient }: { id: string; gradient: GradientFill }) {
@@ -172,8 +190,19 @@ export const ItemsView = memo(function ItemsView({
       {items.map((item) => {
         if (!item.visible) return null
         if (isGroup(item)) {
+          const cid = item.clip && item.clip.length > 0 ? clipIdOf(item.id, scope) : null
           return (
-            <g key={item.id} opacity={item.opacity ?? undefined} data-id={item.id}>
+            <g
+              key={item.id}
+              opacity={item.opacity ?? undefined}
+              clipPath={cid ? `url(#${cid})` : undefined}
+              data-id={item.id}
+            >
+              {cid && (
+                <defs>
+                  <ClipDef id={cid} clip={item.clip!} />
+                </defs>
+              )}
               <ItemsView items={item.children} interactive={interactive} scope={scope} />
             </g>
           )

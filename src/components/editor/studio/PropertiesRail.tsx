@@ -10,17 +10,23 @@ import { Inspector } from '../Inspector'
 import { setFill, setFillOpacity, setFillRule, setStroke } from '../editorDoc'
 import type { ActionReasons } from './actionReasons'
 import type { BooleanOp } from '../../../lib/editor/boolean'
+import type { SameWhat } from '../../../lib/editor/paintMatch'
 import {
   ArrowRightLeft,
+  Brush,
   Combine,
   Link2,
+  PaintBucket,
   Scissors,
   Split,
+  SquareDashed,
   SquareSplitHorizontal,
   SquaresExclude,
   SquaresIntersect,
   SquaresSubtract,
   SquaresUnite,
+  Spline,
+  SwatchBook,
 } from '../../ui/icons'
 import { BarBtn, MiniBtn } from './EditorButtons'
 import { BASE } from '../stage/stageConstants'
@@ -59,6 +65,34 @@ const BOOLEANS: { op: BooleanOp; label: string; note: string; icon: React.ReactN
   },
 ]
 
+/** "Select same": the selection's lead paint, found everywhere else. */
+const SAME: { what: SameWhat; label: string; note: string; icon: React.ReactNode }[] = [
+  {
+    what: 'fill',
+    label: 'Fill',
+    note: 'Selects every visible shape filled like the selected one (same colour, or the same gradient).',
+    icon: <PaintBucket size={13} />,
+  },
+  {
+    what: 'stroke',
+    label: 'Stroke',
+    note: 'Selects every visible shape outlined in the same colour. Shapes without an outline match each other.',
+    icon: <SquareDashed size={13} />,
+  },
+  {
+    what: 'fillStroke',
+    label: 'Fill & stroke',
+    note: 'Selects every visible shape with both the same fill and the same outline colour.',
+    icon: <PaintBucket size={13} />,
+  },
+  {
+    what: 'appearance',
+    label: 'Appearance',
+    note: 'Fill, outline colour, outline width and both opacities must all match.',
+    icon: <SwatchBook size={13} />,
+  },
+]
+
 export interface PropertiesRailProps {
   previewDoc: EditableDoc
   selection: ReadonlySet<string>
@@ -74,9 +108,14 @@ export interface PropertiesRailProps {
   doReverse: () => void
   doSplit: () => void
   doCombine: () => void
+  doOutlineStroke: () => void
+  beginSimplify: () => void
+  /** The Simplify panel is open (its button then reads as pressed). */
+  simplifying: boolean
   doBreak: () => void
   doJoin: () => void
   doBoolean: (op: BooleanOp) => void
+  selectSame: (what: SameWhat) => void
   /** Set when a text is open or selected. */
   panelText: TextData | null
   /** The layer name of the boolean base, when several shapes are selected. */
@@ -100,9 +139,13 @@ export function PropertiesRail({
   doReverse,
   doSplit,
   doCombine,
+  doOutlineStroke,
+  beginSimplify,
+  simplifying,
   doBreak,
   doJoin,
   doBoolean,
+  selectSame,
   panelText,
   baseLabel,
   text,
@@ -178,6 +221,22 @@ export function PropertiesRail({
       </div>
 
       <div className="border-t border-line p-3">
+        <h4 className="field-label mb-1.5">Select same</h4>
+        <div className="grid grid-cols-2 gap-1">
+          {SAME.map((s) => (
+            <MiniBtn
+              key={s.what}
+              label={s.label}
+              icon={s.icon}
+              note={s.note}
+              onClick={() => selectSame(s.what)}
+              reason={why.selectSame}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-line p-3">
         <h4 className="field-label mb-1.5">Path</h4>
         <div className="grid grid-cols-2 gap-1">
           <MiniBtn
@@ -200,6 +259,20 @@ export function PropertiesRail({
             note="Merges the selected paths into one compound path, set to even-odd so overlaps cut holes."
             onClick={doCombine}
             reason={why.combine}
+          />
+          <MiniBtn
+            label="Outline stroke"
+            icon={<Brush size={13} />}
+            note="Turns each selected stroke into a filled shape of the area it paints, honouring its width, caps, joins and dashes. A path that also has a fill becomes a group of the fill and the outline."
+            onClick={doOutlineStroke}
+            reason={why.outlineStroke}
+          />
+          <MiniBtn
+            label="Simplify"
+            icon={<Spline size={13} />}
+            note="Removes nodes the drawing doesn’t need, within a tolerance you set with a live preview. Corners stay sharp, straight sides stay straight."
+            onClick={beginSimplify}
+            reason={simplifying ? 'The Simplify panel is open. Apply or cancel it first.' : why.simplify}
           />
           <MiniBtn
             label="Break node"
