@@ -37,7 +37,7 @@ import type { ShowMetrics, Showcase } from '../../src/components/benchmark/showc
 ensureImageData()
 
 const argv = process.argv.slice(2)
-const RUN = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : 'full-v1'
+const RUN = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : 'v1-clean'
 const CORPUS = 'svgemoji-v0'
 const OUT_PUBLIC = join(REPO, 'public', 'benchmark')
 const OUT_DATA = join(REPO, 'src', 'components', 'benchmark', 'showcase.generated.ts')
