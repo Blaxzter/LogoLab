@@ -13,20 +13,21 @@ import type { BooleanOp } from '../../../lib/editor/boolean'
 import type { SameWhat } from '../../../lib/editor/paintMatch'
 import {
   ArrowRightLeft,
+  Blend,
   Brush,
   Combine,
   Link2,
   PaintBucket,
+  PenLine,
   Scissors,
   Split,
-  SquareDashed,
   SquareSplitHorizontal,
   SquaresExclude,
   SquaresIntersect,
   SquaresSubtract,
   SquaresUnite,
-  Spline,
   SwatchBook,
+  Waypoints,
 } from '../../ui/icons'
 import { BarBtn, MiniBtn } from './EditorButtons'
 import { BASE } from '../stage/stageConstants'
@@ -77,13 +78,13 @@ const SAME: { what: SameWhat; label: string; note: string; icon: React.ReactNode
     what: 'stroke',
     label: 'Stroke',
     note: 'Selects every visible shape outlined in the same colour. Shapes without an outline match each other.',
-    icon: <SquareDashed size={13} />,
+    icon: <PenLine size={13} />,
   },
   {
     what: 'fillStroke',
     label: 'Fill & stroke',
     note: 'Selects every visible shape with both the same fill and the same outline colour.',
-    icon: <PaintBucket size={13} />,
+    icon: <Blend size={13} />,
   },
   {
     what: 'appearance',
@@ -269,7 +270,7 @@ export function PropertiesRail({
           />
           <MiniBtn
             label="Simplify"
-            icon={<Spline size={13} />}
+            icon={<Waypoints size={13} />}
             note="Removes nodes the drawing doesn’t need, within a tolerance you set with a live preview. Corners stay sharp, straight sides stay straight."
             onClick={beginSimplify}
             reason={simplifying ? 'The Simplify panel is open. Apply or cancel it first.' : why.simplify}

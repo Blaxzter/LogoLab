@@ -59,7 +59,7 @@ export function actionReasons({
       sel.groups > sel.clipGroups
         ? null
         : sel.clipGroups > 0
-          ? 'A clip group stays together: set free, its contents would show everything the clip hides. Release the clip first.'
+          ? 'A clip group can’t be ungrouped: its contents would show everything the clip hides. Release the clip first.'
           : 'Select a group. A plain shape has nothing to ungroup.',
     releaseClip: sel.clipGroups > 0 ? null : 'Select a clip group. Only a group with a clip has one to release.',
     selection: selection.size > 0 ? null : nothing,
@@ -83,7 +83,7 @@ export function actionReasons({
         : reach.stroked > 0
           ? null
           : reach.texts > 0
-            ? 'Live text is outlined as words, not as paths. Convert it to curves first, then outline its stroke.'
+            ? 'Live text can’t be outlined. Convert it to curves first, then outline its stroke.'
             : 'None of the selected shapes has a stroke. Give one an outline in the Stroke section first.',
     simplify:
       selection.size === 0

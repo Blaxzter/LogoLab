@@ -3,7 +3,7 @@
 // properties rail, so the context menu can open it on a narrow screen too.
 
 import { percentSlider, sliderPercent } from '../../../lib/editor/simplify'
-import { Spline } from '../../ui/icons'
+import { Waypoints } from '../../ui/icons'
 import { RangeInput } from '../../ui/RangeInput'
 import { TipLabel, Tooltip } from '../../ui/Tooltip'
 import type { SimplifyView } from './useEditorModel'
@@ -44,7 +44,7 @@ export function SimplifyPanel({
       }}
     >
       <div className="mb-2 flex items-center gap-1.5">
-        <Spline size={14} className="text-accent" />
+        <Waypoints size={14} className="text-accent" />
         <h4 className="field-label">Simplify path</h4>
       </div>
       <div className="flex items-center gap-2">

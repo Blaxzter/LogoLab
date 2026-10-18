@@ -34,7 +34,7 @@ export function EditorStatusBar({
             : tool === 'eyedropper'
               ? hasSelection
                 ? 'Click a shape to copy its fill and stroke onto the selection · Shift-click for the fill only · Esc or V to finish'
-                : 'Nothing to paint yet: select the shapes to repaint with Move (V), then come back (I) and click the shape whose look to copy'
+                : 'Nothing is selected to repaint. Select the shapes with Move (V), then press I and click the shape to copy from'
               : tool === 'node'
                 ? 'Drag a curve to bend it · double-click a segment to insert · double-click a node for corner/smooth · Alt-drag a handle to break the joint · Esc or double-click empty space to finish'
                 : 'Double-click a shape to edit its nodes · hold Space to pan · Shift to constrain · Alt to scale from centre · Ctrl to bypass snapping'}
