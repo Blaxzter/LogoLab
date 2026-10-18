@@ -3,6 +3,7 @@ import type { Appearance, Environment, LogoAsset, VectorizeOptions } from '../ty
 import { debounce, readLocal, writeLocal } from '../lib/persist/local'
 import {
   newAssetKey,
+  NO_LOGO_KEY,
   saveSlot,
   SLOTS,
   srcToBlob,
@@ -169,7 +170,7 @@ export const defaultMockups: Record<DeviceId, MockPlacement> = {
  * long as the tab, like the ones an upload creates.
  */
 function restoreLogo(stored: StoredLogo | null): Pick<AppState, 'logo' | 'originalMeta' | 'assetKey' | 'traceInput'> {
-  if (!stored) return { logo: emptyLogo, originalMeta: null, assetKey: newAssetKey(), traceInput: null }
+  if (!stored) return { logo: emptyLogo, originalMeta: null, assetKey: NO_LOGO_KEY, traceInput: null }
   try {
     const originalSrc = URL.createObjectURL(stored.original)
     const src = stored.working ? URL.createObjectURL(stored.working) : originalSrc
@@ -203,7 +204,7 @@ function restoreLogo(stored: StoredLogo | null): Pick<AppState, 'logo' | 'origin
       assetKey: stored.assetKey,
     }
   } catch {
-    return { logo: emptyLogo, originalMeta: null, assetKey: newAssetKey(), traceInput: null }
+    return { logo: emptyLogo, originalMeta: null, assetKey: NO_LOGO_KEY, traceInput: null }
   }
 }
 
@@ -262,7 +263,7 @@ function dropTraceInput(s: AppState): Pick<AppState, 'traceInput'> {
 export const useStore = create<AppState>((set) => ({
   logo: emptyLogo,
   originalMeta: null,
-  assetKey: newAssetKey(),
+  assetKey: NO_LOGO_KEY,
   studioEpoch: 0,
   traceHints: null,
   traceInput: null,
@@ -317,11 +318,15 @@ export const useStore = create<AppState>((set) => ({
         URL.revokeObjectURL(s.logo.originalSrc)
       }
       forgetStudioView()
+      // The editor's open drawing goes too. Clearing an already empty logo
+      // leaves the key where it was, so after a reload nothing else would say
+      // a file the editor had open (never edited, never the logo) was cleared.
+      saveSlot(SLOTS.editor, null)
       return {
         ...dropTraceInput(s),
         logo: emptyLogo,
         originalMeta: null,
-        assetKey: newAssetKey(),
+        assetKey: NO_LOGO_KEY,
         studioEpoch: s.studioEpoch + 1,
         traceHints: null,
       }

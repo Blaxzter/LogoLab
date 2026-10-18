@@ -477,20 +477,49 @@ const parseG = (body: string, vb?: string): Doc => {
 type Group = Extract<Item, { kind: 'group' }>
 const groups = (doc: Doc) => doc.items.filter((i): i is Group => i.kind === 'group')
 
-test('a shape is named by its <title>, inkscape:label, data-name, aria-label, then a human id', () => {
+test('a shape is named by its data-name, <title>, inkscape:label, aria-label, then a human id', () => {
   const doc = parse(
     `<path ${SQ}><title> Treble
       clef </title></path>` +
-      `<path inkscape:label="Stem" data-name="ignored" ${SQ}/>` +
-      `<path data-name="Bar line" ${SQ}/>` +
+      `<path inkscape:label="Stem" aria-label="ignored" ${SQ}/>` +
+      `<path data-name="Bar line" inkscape:label="ignored" ${SQ}/>` +
+      `<path data-name="Renamed" ${SQ}><title>Imported</title></path>` +
       `<path aria-label="Fermata" ${SQ}/>` +
       `<path id="logo-mark" ${SQ}/>` +
       `<path id="path123" ${SQ}/>`,
   )
   assert.deepEqual(
     paths(doc).map((p) => p.name),
-    ['Treble clef', 'Stem', 'Bar line', 'Fermata', 'logo-mark', undefined],
+    ['Treble clef', 'Stem', 'Bar line', 'Renamed', 'Fermata', 'logo-mark', undefined],
   )
+})
+
+test('a path name survives export and re-import; an unnamed path writes none', () => {
+  const doc = parse(`<path ${SQ}><title>Treble clef</title></path><path id="path123" ${SQ}/>`)
+  const out = serializeDoc(doc)
+  assert.match(out, /<path data-name="Treble clef" /)
+  assert.equal(out.match(/data-name=/g)?.length, 1, 'the layers list label "Path 2" is never written')
+  assert.deepEqual(
+    paths(parse(out.replace(/^<svg[^>]*>|<\/svg>$/g, ''))).map((p) => p.name),
+    ['Treble clef', undefined],
+  )
+  const quoted = parse(`<path data-name="A &amp; &quot;B&quot; &lt;C&gt;" ${SQ}/>`)
+  assert.equal(paths(parse(serializeDoc(quoted).replace(/^<svg[^>]*>|<\/svg>$/g, '')))[0].name, 'A & "B" <C>')
+})
+
+test('renaming raw markup writes the name into it, so the export keeps it', async () => {
+  const { renameItem } = await import('../src/components/editor/editorDoc.ts')
+  const doc = parse(`<image id="photo" href="a.png" width="10" height="10"><title>Photo</title></image>`)
+  const raw = raws(doc)[0]
+  assert.equal(raw.name, 'Photo')
+  const strip = (s: string) => s.replace(/^<svg[^>]*>|<\/svg>$/g, '')
+  const renamed = renameItem(doc, raw.id, 'Hero shot')
+  assert.equal(raws(parse(strip(serializeDoc(renamed))))[0].name, 'Hero shot', 'data-name beats the <title>')
+  const again = renameItem(renamed, raw.id, 'Cover')
+  assert.equal(raws(again)[0].markup.match(/data-name=/g)?.length, 1, 'replaced, not added twice')
+  const cleared = renameItem(again, raw.id, '  ')
+  assert.doesNotMatch(raws(cleared)[0].markup, /data-name/)
+  assert.equal(raws(parse(strip(serializeDoc(cleared))))[0].name, 'Photo', 'back to what the source called it')
 })
 
 test('ids a tool generated are not names', () => {

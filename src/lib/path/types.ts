@@ -131,7 +131,7 @@ export interface Stroke {
 export interface PathItem {
   kind: 'path'
   id: string
-  /** Editor-only display name for the layers list. Never serialized. */
+  /** Display name for the layers list; also emitted as the `<path>`'s data-name. */
   name?: string
   /**
    * Representative solid fill (#rrggbb). Always present, even when `gradient`
@@ -175,7 +175,10 @@ export interface PathItem {
 export interface RawItem {
   kind: 'raw'
   id: string
-  /** Editor-only display name for the layers list. Never serialized. */
+  /**
+   * Display name for the layers list. Read from the markup on import; a rename
+   * writes it back into the markup as the root element's data-name.
+   */
   name?: string
   markup: string
   /** Composed `transform` attribute value inherited from ancestor groups. */

@@ -1023,18 +1023,21 @@ function named<T extends DocItem>(item: T, el: Element): T {
 }
 
 /**
- * The name a human gave an element: its `<title>`, Inkscape's label, a
- * `data-name` (Illustrator, Figma, and this app's own export), an `aria-label`,
- * or its id — unless the id is one a tool generated (`path123`, `g45`, `svg_3`,
+ * The name a human gave an element: a `data-name` (Illustrator, Figma, and
+ * this app's own export — first, so a rename in the editor wins over the
+ * `<title>` it was imported with), its `<title>`, Inkscape's label, an
+ * `aria-label`, or its id — unless the id is one a tool generated (`path123`, `g45`, `svg_3`,
  * `p0_font_1_63`, `Vector_12`, a hash), which would only be noise in a layers list.
  */
 export function sourceName(el: Element): string | undefined {
+  const dataName = cleanName(el.getAttribute('data-name'))
+  if (dataName) return dataName
   for (const child of Array.from(el.children)) {
     if (child.tagName.toLowerCase() !== 'title') continue
     const t = cleanName(child.textContent)
     if (t) return t
   }
-  for (const attr of ['inkscape:label', 'data-name', 'aria-label']) {
+  for (const attr of ['inkscape:label', 'aria-label']) {
     const v = cleanName(el.getAttribute(attr))
     if (v) return v
   }
@@ -1538,10 +1541,23 @@ function makeRawItem(id: string, el: Element, ctx: PaintContext): RawItem {
 
 /** Markup with the `id` attribute of its outermost element removed. */
 function withoutRootId(markup: string): string {
-  return markup.replace(
-    /^(<[^\s>/]+)((?:\s+[^\s=>]+\s*=\s*(?:"[^"]*"|'[^']*'))*?)\s+id\s*=\s*(?:"[^"]*"|'[^']*')/,
+  return withRootAttr(markup, 'id', null)
+}
+
+/**
+ * Markup with one attribute of its outermost element set (or removed, for
+ * null). String-level, so it works where there is no DOM (the npm package).
+ */
+export function withRootAttr(markup: string, name: string, value: string | null): string {
+  // `name` is a plain attribute name (letters, `-`, `:`), so it needs no escaping.
+  const stripped = markup.replace(
+    new RegExp(
+      `^(\\s*<[^\\s>/]+)((?:\\s+[^\\s=>]+\\s*=\\s*(?:"[^"]*"|'[^']*'))*?)\\s+${name}\\s*=\\s*(?:"[^"]*"|'[^']*')`,
+    ),
     '$1$2',
   )
+  if (value === null) return stripped
+  return stripped.replace(/^(\s*<[^\s>/]+)/, `$1 ${name}="${escapeAttr(value)}"`)
 }
 
 function serializeElement(el: Element): string {
@@ -1782,7 +1798,10 @@ function serializeItems(
       out += `>${inner}</g>`
     } else if (item.kind === 'path') {
       const fill = item.gradient ? `url(#${gradIds.get(item.gradient)})` : escapeAttr(item.fill)
-      out += `<path fill="${fill}"`
+      out += '<path'
+      // Only a name someone gave it: the layers list's "Path 12" is never stored.
+      if (item.name) out += ` data-name="${escapeAttr(item.name)}"`
+      out += ` fill="${fill}"`
       if (item.fillOpacity !== undefined && item.fillOpacity < 1) {
         out += ` fill-opacity="${Number(item.fillOpacity.toFixed(4))}"`
       }

@@ -11,6 +11,7 @@ import { findItem, isGroup, mapLeaves, replaceItem, walkItems } from '../../lib/
 import { styleRange, textLabel } from '../../lib/text/edit.ts'
 import { withAppearance, type AppearancePart } from '../../lib/editor/appearance.ts'
 import { leafLabel } from '../../lib/editor/layerRows.ts'
+import { withRootAttr } from '../../lib/path/model.ts'
 
 let counter = 0
 
@@ -209,6 +210,8 @@ export function renameItem(doc: EditableDoc, id: string, name: string): Editable
   const next = { ...item }
   if (trimmed) next.name = trimmed
   else delete next.name
+  // Raw markup is written out verbatim, so its name has to live in the markup.
+  if (next.kind === 'raw') next.markup = withRootAttr(next.markup, 'data-name', trimmed || null)
   return putItem(doc, next)
 }
 

@@ -301,6 +301,13 @@ export async function srcToBlob(src: string): Promise<Blob | null> {
  * were made from and are dropped when it no longer matches, so a restored
  * trace is never shown over a different image.
  */
+/**
+ * The key of NO working image. One fixed value rather than a fresh one per
+ * page load: a fresh key read, after a reload, as "the logo changed in another
+ * tab", and the editor dropped a file it had open but not yet edited.
+ */
+export const NO_LOGO_KEY = 'no-logo'
+
 export function newAssetKey(): string {
   try {
     return crypto.randomUUID()
