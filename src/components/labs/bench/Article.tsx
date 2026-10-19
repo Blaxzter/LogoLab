@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { usePanZoom } from '../../../hooks/usePanZoom'
 import { ExternalLink } from '../../ui/icons'
+import { ZoomControls } from '../../ui/ZoomControls'
 import { toolInfo } from './benchData'
 import { NodePanels, ScoreTable } from './figure'
 import { SHOWCASE as data } from './showcase.generated'
@@ -62,7 +64,8 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
               {hero.authoredNodes.length / 2} nodes; the traces use{' '}
               {hero.tools.map((t) => n(t.metrics, 'docNodes')).join(', ')}, and VTracer puts{' '}
               {n(hero.tools[1].metrics, 'tangentBreaks')} kinks (red rings) on curves the artist drew smooth. StarVector
-              uses the fewest nodes, and its outline is the furthest from the drawing. Click a panel to zoom.
+              uses the fewest nodes, and its outline is the furthest from the drawing. Zoom with the buttons or Ctrl and
+              the wheel, and drag to look around.
             </>
           }
         />
@@ -283,6 +286,7 @@ function Figure({
   initialNodes?: boolean
 }) {
   const [nodes, setNodes] = useState(initialNodes)
+  const pz = usePanZoom({ maxScale: 40 })
   const base = `/benchmark/${example.slug}`
   const count = (anchors: number[], breaks: number[]) =>
     nodes ? (
@@ -326,8 +330,9 @@ function Figure({
           />
           Show nodes and kinks
         </label>
+        <ZoomControls pz={pz} className="ml-auto" />
       </div>
-      <NodePanels panels={panels} width={example.width} height={example.height} nodes={nodes} />
+      <NodePanels panels={panels} width={example.width} height={example.height} nodes={nodes} pz={pz} />
       <ScoreTable columns={example.tools.map((t) => ({ tool: t.tool, metrics: t.metrics }))} />
       {caption && (
         <figcaption className="mt-3 max-w-[72ch] text-[0.85rem] leading-relaxed text-muted">{caption}</figcaption>

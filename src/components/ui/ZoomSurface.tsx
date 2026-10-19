@@ -18,11 +18,18 @@ export function ZoomSurface({
   primary = false,
   className = '',
   style,
+  wheel = 'zoom',
   children,
 }: {
   pz: PanZoom
   /** Register this surface as the box the +/- buttons zoom around. */
   primary?: boolean
+  /**
+   * `'modifier'`: the wheel zooms only with Ctrl/⌘ held (a trackpad pinch sends exactly
+   * that), and one finger scrolls the page on touch. For a surface inside a page that
+   * scrolls, where a plain wheel that zooms instead of scrolling is a trap.
+   */
+  wheel?: 'zoom' | 'modifier'
   className?: string
   /** Sizing that can't be a static class — the labs shape each panel to its art's aspect. */
   style?: CSSProperties
@@ -41,12 +48,13 @@ export function ZoomSurface({
     const el = ref.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
+      if (wheel === 'modifier' && !e.ctrlKey && !e.metaKey) return
       e.preventDefault()
       pz.zoomAround(e.clientX, e.clientY, Math.exp(-e.deltaY * WHEEL_ZOOM_SPEED), el.getBoundingClientRect())
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [pz.zoomAround])
+  }, [pz.zoomAround, wheel])
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // A second finger turns the gesture into a pinch — abandon the 1-finger pan.
@@ -97,7 +105,7 @@ export function ZoomSurface({
       onPointerUp={endPan}
       onPointerCancel={endPan}
       onDoubleClick={pz.reset}
-      className={`relative touch-none overflow-hidden ${cursor} ${className}`}
+      className={`relative overflow-hidden ${wheel === 'modifier' && pz.scale <= 1 ? 'touch-pan-y' : 'touch-none'} ${cursor} ${className}`}
       style={style}
     >
       <div className="absolute inset-0" style={pz.contentStyle}>

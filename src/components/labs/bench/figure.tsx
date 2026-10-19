@@ -1,5 +1,6 @@
-import { useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
+import type { PanZoom } from '../../../hooks/usePanZoom'
+import { ZoomSurface } from '../../ui/ZoomSurface'
 import { toolInfo } from './benchData'
 
 /**
@@ -8,8 +9,8 @@ import { toolInfo } from './benchData'
  * picture in both.
  *
  * The overlay's marks are sized in SCREEN pixels whatever the zoom: radii and strokes are
- * divided by `--pz-scale`, which the labs' row camera sets (usePanZoom) and NodePanels sets
- * for its own click-zoom. Without it a 4× zoom draws 4× dots that bury the curve they mark.
+ * divided by `--pz-scale`, which usePanZoom sets on every camera, the labs' rows and NodePanels
+ * alike. Without it a 4× zoom draws 4× dots that bury the curve they mark.
  */
 
 export interface NodePanel {
@@ -47,66 +48,49 @@ export function NodeOverlay({ w, h, anchors, breaks }: { w: number; h: number; a
   )
 }
 
-const ZOOM = 4
-
 /**
- * Panels with click-to-zoom: one click zooms every panel 4× onto the same spot, a second
- * click zooms out. Not the labs' wheel camera — on a scrolling article a wheel that zooms
- * instead of scrolling is a trap.
+ * Panels on ONE camera (`pz`, the caller's, so it can put the zoom pill where it likes):
+ * the labs' pan and zoom, drag and pinch and double-click to reset, with every panel moving
+ * in lockstep. The wheel zooms only with Ctrl/⌘ held: on a scrolling article a plain wheel
+ * that zooms instead of scrolling is a trap.
  */
 export function NodePanels({
   panels,
   width,
   height,
   nodes,
+  pz,
   columns,
 }: {
   panels: NodePanel[]
   width: number
   height: number
   nodes: boolean
+  pz: PanZoom
   /** Panels per row from `sm` up; defaults to all of them. */
   columns?: number
 }) {
-  const [focus, setFocus] = useState<{ x: number; y: number } | null>(null)
-  const toggle = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (focus) return setFocus(null)
-    const r = e.currentTarget.getBoundingClientRect()
-    setFocus({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })
-  }
   return (
     <div
       className="grid grid-cols-2 gap-3 sm:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
       style={{ '--cols': columns ?? panels.length } as CSSProperties}
     >
-      {panels.map((p) => (
+      {panels.map((p, i) => (
         <div key={p.key} className="min-w-0">
           <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 text-xs">
             <b className="font-semibold text-ink">{p.title}</b>
             {p.note && <span className="shrink-0 tabular-nums text-faint">{p.note}</span>}
           </div>
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label={focus ? 'Zoom out' : 'Zoom in here'}
-            className={`relative block w-full overflow-hidden rounded-lg border border-line bg-white ${focus ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
+          <ZoomSurface
+            pz={pz}
+            primary={i === 0}
+            wheel="modifier"
+            className="rounded-lg border border-line bg-white"
             style={{ aspectRatio: `${width} / ${height}` }}
           >
-            <div
-              className="absolute inset-0 transition-transform duration-300 ease-out"
-              style={
-                {
-                  '--pz-scale': focus ? ZOOM : 1,
-                  ...(focus
-                    ? { transformOrigin: `${focus.x * 100}% ${focus.y * 100}%`, transform: `scale(${ZOOM})` }
-                    : {}),
-                } as CSSProperties
-              }
-            >
-              <img src={p.src} alt="" className="h-full w-full" loading="lazy" draggable={false} />
-              {nodes && <NodeOverlay w={width} h={height} anchors={p.anchors} breaks={p.breaks} />}
-            </div>
-          </button>
+            <img src={p.src} alt="" className="h-full w-full" loading="lazy" draggable={false} />
+            {nodes && <NodeOverlay w={width} h={height} anchors={p.anchors} breaks={p.breaks} />}
+          </ZoomSurface>
         </div>
       ))}
     </div>
