@@ -1110,7 +1110,9 @@ export function inventedCorners(
 // It deliberately does NOT subtract the authored window turn the way `cornersInvented`
 // does: on an r = 12 arc the art turns 9.5° per ±1px, and a 15° kink laid on it is a 15°
 // defect, not a 5° one. The same four exemptions apply (border, occluded, traced junction,
-// authored crossing).
+// authored crossing), except that at a junction or crossing a node whose own outline runs
+// along ONE visible, smooth authored edge through it still counts: a pull in the mouth's rim
+// where it meets the blush is a break the art does not have (§42.6, `throughChain`).
 // ---------------------------------------------------------------------------
 /** Smallest traced kink (deg) counted. Under ~3° a break is within what the fit's own
  *  tangent noise leaves at a correct smooth join. */
@@ -1119,6 +1121,11 @@ export const BREAK_MIN = 5
 const BREAK_AUTHORED_MIN = 3
 /** Authored turn over ±KINK_WIN px at or above which the art is not smooth at this scale. */
 const BREAK_SMOOTH_MAX = 40
+/** At a junction or crossing, a node counts only if its outline runs along ONE authored edge
+ *  through it: the traced outline THROUGH_STEP px back and forward from the node lies within
+ *  THROUGH_TOL px of the same authored chain. The step clears the junction itself. */
+const THROUGH_STEP = 3
+const THROUGH_TOL = 1
 
 export interface TangentBreak {
   x: number
@@ -1154,13 +1161,47 @@ export function tangentBreaks(
     0,
     BREAK_AUTHORED_MIN * deg,
   )
-  const uniq: Corner[] = []
-  for (const c of sharpCorners(
-    docSets.flat().map((sp) => [sp]),
-    0,
-    BREAK_MIN * deg,
-  ))
-    if (!uniq.some((u) => Math.hypot(u.x - c.x, u.y - c.y) <= 0.35)) uniq.push(c)
+  // Every traced path's corners, EACH with its own outline. At a junction the mouth's corner
+  // and the blush's sit on one point; they are different questions (one outline runs on
+  // through, the other turns), so they are judged apart and only the COUNT is de-duplicated.
+  const cands: { c: Corner; poly: Vec[]; at: number; closed: boolean }[] = []
+  for (const sp of docSets.flat()) {
+    const corners = sharpCorners([[sp]], 0, BREAK_MIN * deg)
+    if (!corners.length) continue
+    const poly = flattenSubPath(sp)
+    for (const c of corners) {
+      let at = 0
+      let bd = Infinity
+      for (let i = 0; i < poly.length; i++) {
+        const d = Math.hypot(poly[i].x - c.x, poly[i].y - c.y)
+        if (d < bd) {
+          bd = d
+          at = i
+        }
+      }
+      cands.push({ c, poly, at, closed: sp.closed !== false })
+    }
+  }
+  /** The point `step` px of arc length from poly[at], walking `dir` (±1) along the outline. */
+  const along = (poly: Vec[], at: number, closed: boolean, dir: 1 | -1, step: number): Vec | null => {
+    let left = step
+    let i = at
+    for (let n = 0; n < poly.length; n++) {
+      let j = i + dir
+      if (j < 0 || j >= poly.length) {
+        if (!closed) return null
+        j = (j + poly.length) % poly.length
+      }
+      const seg = Math.hypot(poly[j].x - poly[i].x, poly[j].y - poly[i].y)
+      if (seg >= left && seg > 0) {
+        const t = left / seg
+        return { x: poly[i].x + t * (poly[j].x - poly[i].x), y: poly[i].y + t * (poly[j].y - poly[i].y) }
+      }
+      left -= seg
+      i = j
+    }
+    return null
+  }
 
   const CELL = Math.max(KINK_NEAR, KINK_CROSS, CORNER_MATCH_R) + 0.5
   const key = (gx: number, gy: number): number => gx * 100003 + gy
@@ -1184,22 +1225,112 @@ export function tangentBreaks(
     }
   })
 
+  /** The sample of authored chain `ch` nearest `p`, if within one grid cell of it. */
+  const nearestOn = (ch: TurnChain, px: number, py: number): { i: number; d: number } => {
+    let best = { i: -1, d: Infinity }
+    const gx = cellOf(px)
+    const gy = cellOf(py)
+    for (let ox = -1; ox <= 1; ox++)
+      for (let oy = -1; oy <= 1; oy++)
+        for (const e of grid.get(key(gx + ox, gy + oy)) ?? []) {
+          if (e.ch !== ch) continue
+          const d = Math.hypot(e.ch.pts[e.i].x - px, e.ch.pts[e.i].y - py)
+          if (d < best.d) best = { i: e.i, d }
+        }
+    return best
+  }
+  /** Arc length along an authored chain between two of its samples (the short way round a
+   *  closed one), capped just past where it stops mattering. */
+  const chainGap = (ch: TurnChain, a: number, b: number): number => {
+    const n = ch.pts.length
+    if (!ch.closed) {
+      let len = 0
+      for (let i = Math.min(a, b); i < Math.max(a, b) && len <= 8 * THROUGH_STEP; i++)
+        len += Math.hypot(ch.pts[i + 1].x - ch.pts[i].x, ch.pts[i + 1].y - ch.pts[i].y)
+      return len
+    }
+    let fwd = 0
+    for (let i = a; i !== b; i = (i + 1) % n) {
+      const j = (i + 1) % n
+      fwd += Math.hypot(ch.pts[j].x - ch.pts[i].x, ch.pts[j].y - ch.pts[i].y)
+      if (fwd > 8 * THROUGH_STEP) break
+    }
+    let back = 0
+    for (let i = a; i !== b; i = (i - 1 + n) % n) {
+      const j = (i - 1 + n) % n
+      back += Math.hypot(ch.pts[j].x - ch.pts[i].x, ch.pts[j].y - ch.pts[i].y)
+      if (back > 8 * THROUGH_STEP) break
+    }
+    return Math.min(fwd, back)
+  }
+  /** The authored edge a traced node's OUTLINE runs along on both sides, if there is one:
+   *  the outline itself, THROUGH_STEP px back and forward from the node, within THROUGH_TOL
+   *  of one authored chain. Two different chains (the blush's arc in, the mouth's rim out) is
+   *  a corner the art has, and gives null. Read off the outline, not the node's tangents: a
+   *  pull is a 60° corner whose arms bend back onto the rim within a pixel or two. */
+  const throughChain = (
+    k: (typeof cands)[number],
+    near: { ch: TurnChain; i: number; d: number }[],
+  ): { ch: TurnChain; i: number } | null => {
+    // Probes at one and two steps each way. One step clears the junction; the second is what
+    // tells a pull (back on the rim within a pixel or two) from an outline that has turned
+    // onto ANOTHER edge crossing at a shallow angle: 22° off, 3 px along it is still within a
+    // pixel of the first edge, 6 px is not.
+    const probes: [Vec, Vec][] = []
+    for (const s of [THROUGH_STEP, 2 * THROUGH_STEP]) {
+      const back = along(k.poly, k.at, k.closed, -1, s)
+      const fwd = along(k.poly, k.at, k.closed, 1, s)
+      if (!back || !fwd) return null
+      // Running ON through the node, not turning back: at a spike (a sliver's tip, a
+      // hairline's cap) both probes land on the one thin authored feature, a pixel apart.
+      if (Math.hypot(fwd.x - back.x, fwd.y - back.y) < s) return null
+      probes.push([back, fwd])
+    }
+    const closest = new Map<TurnChain, { i: number; d: number }>()
+    for (const e of near) {
+      if (e.d > KINK_NEAR) continue
+      const was = closest.get(e.ch)
+      if (!was || e.d < was.d) closest.set(e.ch, { i: e.i, d: e.d })
+    }
+    let best: { ch: TurnChain; i: number; d: number } | null = null
+    edges: for (const [ch, { i, d }] of closest) {
+      for (const [n, [back, fwd]] of probes.entries()) {
+        const b = nearestOn(ch, back.x, back.y)
+        const f = nearestOn(ch, fwd.x, fwd.y)
+        if (b.d > THROUGH_TOL || f.d > THROUGH_TOL) continue edges
+        // ONE stretch of that edge, not two parts of it a pixel apart: a thin tip's upper and
+        // lower sides are one authored chain, and turning from one onto the other is its end.
+        if (chainGap(ch, b.i, f.i) > 3 * (n + 1) * THROUGH_STEP) continue edges
+        // VISIBLE on both sides. A lower shape's outline that turns where a shape on top
+        // covers it runs, past the turn, along its own HIDDEN edge, which lies a pixel from
+        // the upper shape's rim; that corner is in the picture the art draws.
+        const pb = ch.pts[b.i]
+        const pf = ch.pts[f.i]
+        if (!visible({ x: pb.x, y: pb.y, tx: pb.tx, ty: pb.ty })) continue edges
+        if (!visible({ x: pf.x, y: pf.y, tx: pf.tx, ty: pf.ty })) continue edges
+      }
+      if (!best || d < best.d) best = { ch, i, d }
+    }
+    return best
+  }
+
   const sites: TangentBreak[] = []
-  for (const c of uniq) {
+  for (const k of cands) {
+    const c = k.c
     if (c.x < BORDER_EPS || c.y < BORDER_EPS || c.x > w - BORDER_EPS || c.y > h - BORDER_EPS) continue
     const gx = cellOf(c.x)
     const gy = cellOf(c.y)
     let bch: TurnChain | null = null
     let bi = -1
     let bd = Infinity
-    const near: { ch: TurnChain; d: number }[] = []
+    const near: { ch: TurnChain; i: number; d: number }[] = []
     const paths = new Set<number>()
     for (let ox = -1; ox <= 1; ox++)
       for (let oy = -1; oy <= 1; oy++) {
         const k = key(gx + ox, gy + oy)
         for (const e of grid.get(k) ?? []) {
           const d = Math.hypot(e.ch.pts[e.i].x - c.x, e.ch.pts[e.i].y - c.y)
-          if (d <= CELL) near.push({ ch: e.ch, d })
+          if (d <= CELL) near.push({ ch: e.ch, i: e.i, d })
           if (d < bd) {
             bd = d
             bch = e.ch
@@ -1209,19 +1340,33 @@ export function tangentBreaks(
         for (const q of docGrid.get(k) ?? []) if (Math.hypot(q.x - c.x, q.y - c.y) <= KINK_JUNCTION) paths.add(q.path)
       }
     if (!bch || bd > KINK_NEAR) continue
-    if (paths.size >= 3) continue
     let otherShape = Infinity
     for (const e of near) if (e.ch.shape !== bch.shape && e.d < otherShape) otherShape = e.d
-    if (otherShape <= KINK_CROSS) continue
-    const s = bch.pts[bi]
+    let ch: TurnChain = bch
+    let ci = bi
+    if (paths.size >= 3 || otherShape <= KINK_CROSS) {
+      // Where shapes meet, a traced corner is usually the art's own: the blush's outline
+      // turns where the mouth covers it. But the MOUTH's outline runs on through that point
+      // smooth, and a pull in it there is a break like any other — exempting every node at
+      // a junction hid exactly those. So a junction or crossing exempts a node only if the
+      // trace does not run along ONE authored edge through it.
+      const t = throughChain(k, near)
+      if (!t) continue
+      ch = t.ch
+      ci = t.i
+    }
+    const s = ch.pts[ci]
     if (!visible({ x: s.x, y: s.y, tx: s.tx, ty: s.ty })) continue
     if (gtKinks.some((g) => Math.hypot(g.x - c.x, g.y - c.y) <= CORNER_MATCH_R)) continue
-    if (chainTurn(bch, bi, KINK_WIN) >= BREAK_SMOOTH_MAX) continue
+    if (chainTurn(ch, ci, KINK_WIN) >= BREAK_SMOOTH_MAX) continue
     const kink = Math.acos(Math.max(-1, Math.min(1, c.itx * c.otx + c.ity * c.oty))) / deg
     sites.push({ x: c.x, y: c.y, kink, itx: c.itx, ity: c.ity, otx: c.otx, oty: c.oty })
   }
+  // One site per place: the two paths either side of a shared edge carry the same node.
   sites.sort((a, b) => b.kink - a.kink)
-  return { count: sites.length, worst: sites.length ? sites[0].kink : 0, sites }
+  const uniq: TangentBreak[] = []
+  for (const s of sites) if (!uniq.some((u) => Math.hypot(u.x - s.x, u.y - s.y) <= 0.35)) uniq.push(s)
+  return { count: uniq.length, worst: uniq.length ? uniq[0].kink : 0, sites: uniq }
 }
 
 // ---------------------------------------------------------------------------

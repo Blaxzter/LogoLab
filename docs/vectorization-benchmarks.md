@@ -7927,3 +7927,50 @@ read; that golden entry moves with this change and is not re-blessed here (`bloo
 Cost: none that a stamp can see — `smooth-radii` @2048 traces in 2.7 s both ways; the pass is
 one RDP and a handful of 1-D fits per closed loop, and a loop with no straight run leaves at
 the first step.
+
+### 42.6 Junction pulls: the exemption that hid them (2026-10-19)
+
+Found by eye, not by a number: on the benchmark's smiling face, where the mouth and the
+eyebrows meet the cheek blush, LogoLab's outline pulls into a point (a 61–66° corner at the
+mouth's ends, 32–56° at the eyebrows'), and `tangentBreaks` read the case as **0**. Two of the
+four exemptions in §42.4 were the reason. A traced node where three paths meet, or within
+1.6px of two authored shapes, was skipped outright, because there the art usually HAS the
+corner: the blush's outline turns where the mouth covers it. But the mouth's outline does not
+turn there. It runs on through the junction, smooth, and a pull in it is a tangent break like
+any other. The exemption could not tell the two apart, so it hid exactly the defect a tiled
+tracer is most prone to.
+
+The rule now (`throughChain` in `geomScore.ts`). At a junction or crossing a node still counts
+only if its OWN outline runs along ONE authored edge through it:
+
+* **on that edge both ways**: the traced outline 3px and 6px back and forward from the node
+  (walked along the outline, not the node's tangents; a pull's arms bend back onto the rim
+  within a pixel or two) lies within 1px of the same authored chain. The 6px probe is what
+  rejects an outline that has turned onto ANOTHER edge crossing at a shallow angle: 22° off,
+  3px along it is still within a pixel of the first edge (`hairlines`' red bar over the
+  black);
+* **one stretch of it**: the probes' nearest chain samples lie within 3× their step along the
+  chain. A thin tip's two sides are one chain, and turning from one onto the other is its end;
+* **visible both ways**: the chain is the visible boundary at every probe. A lower shape's
+  outline that turns where a shape on top covers it runs, past the turn, along its own
+  HIDDEN edge a pixel from the upper shape's rim. That corner is in the picture the art draws;
+* **through, not back**: the forward and back probes are at least one step apart, so a spike
+  (a sliver's tip, a hairline's cap) is not read as an edge running through.
+
+Each guard was a measured false positive first (tier-0 sites at `hairlines`, `gradient-flat`,
+and the occlusion corners in `border-cross` and `smooth-radii`, checked with `nodeLook`). The
+corners are also tested per traced PATH now and only the sites de-duplicated: the old code
+merged every corner within 0.35px before testing, so of the mouth's corner and the blush's
+corner on the same junction only one was ever asked.
+
+What moved. Tier-0 flat @512: `border-cross` 1 → 4 (the blue bar kinks 21–42° where it meets
+its neighbours, on an edge drawn straight) and `smooth-radii` 12 → 14 (two 66° pulls where
+the black tip meets the red). Both go on `KNOWN_DEFECTS`; nothing else in the gate moves.
+On the benchmark's 100 held-out emoji (`bench/compare/kinkAudit.ts`, the saved outputs of
+`v1-clean`, nothing retraced): LogoLab 785 → **1569**, VTracer 3798 → 4790, StarVector-1B
+257 → 259, Potrace 76 → 82. The junction pull is LogoLab's defect far more than anyone
+else's: it is the tiled tracer's, every region meeting at a vertex where the paint-order
+tracers draw one shape over another. LogoLab still draws the fewest kinks of the colour
+tracers that draw the picture, by about 3× rather than the 4.8× the exemption reported.
+The fix belongs in the fitter (a junction whose through-pair is one authored edge should
+leave it G¹), and it is open.
