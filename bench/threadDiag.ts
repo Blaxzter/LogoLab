@@ -67,7 +67,8 @@ const labels = healColorSpikes(fp.labels, img.data as unknown as Uint8ClampedArr
 const q = { palette: fp.palette }
 const net = buildPlanarNetwork(labels, img.width, img.height)
 const contrast = edgeContrast(net, q.palette)
-const verdicts = surveyJunctions(net, contrast)
+// `--geometric`: also the through pairs the rank refuses (PlanarFitOptions.throughPairs).
+const verdicts = surveyJunctions(net, contrast, true, undefined, argv.includes('--geometric'))
 
 console.log(
   `\n━━━ ${CASE ?? FILE} @ ${RES}px ━━━ ${net.edges.length} edges, ${net.junctions.length} junctions, ${q.palette.length} colours\n`,

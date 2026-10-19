@@ -6,7 +6,7 @@ import { SNAP_GAP, SNAP_SPAN, SNAP_SPAN_MAX, armGap, type ArmFit } from './arms.
 import { CORNER_MERGE, CORNER_WINDOW, detectOpenCorners } from './corners.ts'
 import { dist, presmooth, sub, unit } from './geom.ts'
 import { arcSmoothPasses } from './loopFit.ts'
-import { fitOpenArc } from './openFit.ts'
+import { type EndTangents, fitOpenArc } from './openFit.ts'
 import type { PlanarFitOptions } from './options.ts'
 import { pinHandle } from './pin.ts'
 
@@ -20,9 +20,14 @@ import { pinHandle } from './pin.ts'
  *   • the edge's own endpoints are never snapped and never trimmed — they are
  *     junction anchors that must stay byte-coincident with sibling edges.
  */
-export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: PlanarFitOptions): PathNode[] {
+export function fitCorneredOpen(
+  pts: Vec[],
+  pinned: ReadonlySet<number>,
+  opts: PlanarFitOptions,
+  ends?: EndTangents,
+): PathNode[] {
   const n = pts.length
-  const fallback = (): PathNode[] => fitOpenArc(presmooth(pts, opts.smoothPasses, true, pinned), opts)
+  const fallback = (): PathNode[] => fitOpenArc(presmooth(pts, opts.smoothPasses, true, pinned), opts, ends)
   // Clustered corners (one per feature, like the loop path) — the raw `pinned`
   // set has both staircase shoulders of a vertex, which must not become two
   // breakpoints (a 2-node chamfer where the art has one corner).
@@ -94,7 +99,18 @@ export function fitCorneredOpen(pts: Vec[], pinned: ReadonlySet<number>, opts: P
       const kept = piece.slice(trimS, piece.length - trimE).map((p) => ({ x: p.x, y: p.y }))
       kept[0] = { x: pins[k].x, y: pins[k].y }
       kept[kept.length - 1] = { x: pins[k + 1].x, y: pins[k + 1].y }
-      fitted.push(fitOpenArc(presmooth(kept, arcSmoothPasses(opts.smoothPasses, kept.length), true), opts))
+      // Only the edge's own endpoints carry a through tangent; a corner end stays free.
+      const pieceEnds = ends && {
+        start: k === 0 ? ends.start : null,
+        end: k + 2 === bounds.length ? ends.end : null,
+      }
+      fitted.push(
+        fitOpenArc(
+          presmooth(kept, arcSmoothPasses(opts.smoothPasses, kept.length), true),
+          opts,
+          pieceEnds ?? undefined,
+        ),
+      )
     }
 
     // Tangent pin, as in fitCorneredLoop. It matters more here: the weak-turn prune

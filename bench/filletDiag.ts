@@ -54,6 +54,8 @@ const RES = Number(flag('--res') ?? 512)
 const UP = Number(flag('--upscale') ?? 1)
 const MONO = argv.includes('--mono')
 const ONLY = flag('--case')
+/** `--breaks` compares this PlanarFitOptions switch off -> on (default: the fit itself). */
+const TOGGLE = flag('--toggle') || 'fillets'
 const f = (v: number, d = 1): string => v.toFixed(d)
 
 const render = (text: string): ReturnType<typeof decodePng> =>
@@ -72,7 +74,7 @@ const options = (planarFit: Record<string, unknown>, gradients = false): never =
 // ---------------------------------------------------------------------------
 if (argv.includes('--breaks')) {
   console.log(
-    `\nTANGENT BREAKS @${RES}, rounded-polygon fit off → on\n  ${'case'.padEnd(26)}lane   breaks (worst)    invented   chamfer          nodes       corners`,
+    `\nTANGENT BREAKS @${RES}, ${TOGGLE} off → on\n  ${'case'.padEnd(26)}lane   breaks (worst)    invented   chamfer          nodes       corners`,
   )
   let off = 0
   let on = 0
@@ -84,15 +86,15 @@ if (argv.includes('--breaks')) {
     const gt = toRasterSpace(gd, img.width)
     const gradients = c.gradients !== false
     const s: ReturnType<typeof scoreGeometry>[] = []
-    let sites: ReturnType<typeof tangentBreaks>['sites'] = []
-    for (const fillets of [false, true]) {
-      const doc = await traceImage(img as unknown as ImageData, options({ fillets }, gradients))
+    const sites: ReturnType<typeof tangentBreaks>['sites'][] = []
+    for (const on of [false, true]) {
+      const doc = await traceImage(img as unknown as ImageData, options({ [TOGGLE]: on }, gradients))
       s.push(scoreGeometry(gt, doc, img.width, img.height, img))
-      if (fillets && argv.includes('--list')) {
+      if (argv.includes('--list')) {
         const sets = doc.items
           .filter((i) => i.kind === 'path' && i.visible !== false)
           .map((i) => (i as unknown as { subPaths: SubPath[] }).subPaths)
-        sites = tangentBreaks(gt, sets, img.width, img.height, makeVisibleAt(img)).sites
+        sites.push(tangentBreaks(gt, sets, img.width, img.height, makeVisibleAt(img)).sites)
       }
     }
     const [a, b] = s
@@ -103,8 +105,14 @@ if (argv.includes('--breaks')) {
     console.log(
       `  ${c.name.padEnd(26)}${gradients ? 'grad' : 'flat'}  ${String(a.tangentBreaks).padStart(3)} → ${String(b.tangentBreaks).padStart(3)} (${f(b.worstTangentBreak, 0).padStart(3)}°)   ${a.cornersInvented} → ${b.cornersInvented}     ${f(a.chamfer, 3)} → ${f(b.chamfer, 3)}   ${String(a.docNodes).padStart(4)} → ${String(b.docNodes).padStart(4)}   ${a.cornersRecovered} → ${b.cornersRecovered} / ${a.gtCorners}`,
     )
-    // `--list`: where the breaks that are left sit (px at this raster), worst first.
-    for (const site of sites) console.log(`      (${f(site.x)}, ${f(site.y)})  ${f(site.kink)}°`)
+    // `--list`: where the breaks sit (px at this raster), worst first; `-` only off, `+` only on.
+    const near = (p: { x: number; y: number }, q: { x: number; y: number }): boolean =>
+      Math.abs(p.x - q.x) < 0.5 && Math.abs(p.y - q.y) < 0.5
+    const [was, now] = sites.length === 2 ? sites : [[], []]
+    for (const site of was)
+      if (!now.some((q) => near(site, q))) console.log(`    - (${f(site.x)}, ${f(site.y)})  ${f(site.kink)}°`)
+    for (const site of now)
+      console.log(`    ${was.some((q) => near(site, q)) ? ' ' : '+'} (${f(site.x)}, ${f(site.y)})  ${f(site.kink)}°`)
   }
   console.log(`\n  flat total ${off} → ${on}`)
   process.exit(0)

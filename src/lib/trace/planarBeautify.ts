@@ -139,6 +139,8 @@ export interface SnapOptions {
   onReseatVerdict?: ReseatObserver
   /** Diagnostic override for the re-seat's certification constants. */
   reseatTune?: ReseatTune
+  /** Vertex ids the re-seat must leave where they are (`PlanarTrace.through`). */
+  keep?: ReadonlySet<number>
   onArcLoop?: ArcLoopObserver
   /** Ids of closed edges already emitted as rounded polygons (planarFit/fillet.ts) —
    *  1a leaves them alone. Their sides are certified straight against the arcs that join
@@ -332,6 +334,7 @@ export function planarBeautify(
       snap.onChord,
       snap.onReseatVerdict,
       snap.reseatTune,
+      snap.keep,
     )
     chordEdges = r.chords
     snap.onReseat?.(r.moved)

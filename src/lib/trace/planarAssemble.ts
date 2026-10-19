@@ -19,13 +19,14 @@ import {
   fitOpenArc,
   presmooth,
   type ApexReach,
+  type EndTangents,
   type PlanarFitOptions,
   DEFAULT_PLANAR_FIT,
 } from './planarFit.ts'
 import { srgbToLab, deltaE76 } from './lab.ts'
 import { subpixelJunctions, smoothThroughJunctions } from './planarJunction.ts'
 import { subpixelEdgeChains, type RawSubpixelChain, type SourceImage } from './planarSubpixel.ts'
-import { threadJunctions, type ThreadColor } from './planarThread.ts'
+import { threadJunctions, type ThreadColor, type ThreadPlacement } from './planarThread.ts'
 import { reverseEdgeNodes } from '../path/topology.ts'
 
 export interface PlanarTrace {
@@ -36,6 +37,10 @@ export interface PlanarTrace {
   /** Ids of the closed edges emitted as rounded polygons (planarFit/fillet.ts). Their
    *  sides are certified straight, so the circle / ellipse snap must leave them alone. */
   rounded: Set<number>
+  /** Vertex ids a through pair runs straight through (planarThread, `throughPairs`): the
+   *  junction sits on the through fit and both arms leave it on one tangent, so the
+   *  re-seat must not move it onto an intersection of primitives — that is the kink. */
+  through?: Set<number>
 }
 
 /** Direction rotation that selects the next half-edge keeping the face on one
@@ -169,11 +174,11 @@ export function assemblePlanar(
   // refineJunctions (experimental, off by default) every junction instead moves to
   // its sub-pixel arm intersection. Incident edge endpoints are pinned to moved
   // vertices below; all other junctions keep their lattice corner.
-  const juncPos = opts.refineJunctions
-    ? subpixelJunctions(net, cw)
-    : palette && opts.fitThrough
-      ? threadJunctions(net, palette, opts.cornerJunctions !== false)
+  const thread =
+    !opts.refineJunctions && palette && opts.fitThrough
+      ? threadJunctions(net, palette, opts.cornerJunctions !== false, opts.throughPairs === true)
       : null
+  const juncPos = opts.refineJunctions ? subpixelJunctions(net, cw) : (thread?.pos ?? null)
   const vidByCorner = new Map<number, number>()
   const vertices: Vertex[] = []
   for (const c of net.junctions) {
@@ -196,7 +201,16 @@ export function assemblePlanar(
     closed: boolean
   }
   const meta: EdgeMeta[] = []
-  for (const e of net.edges) {
+  /** Re-fit an open edge with other end tangents — the through-pair pass below. */
+  const refit = new Map<number, (ends: EndTangents) => PathNode[]>()
+  for (let ei = 0; ei < net.edges.length; ei++) {
+    const e = net.edges[ei]
+    // A boundary that runs through a threaded junction leaves it along the through
+    // tangent, on both sides (planarThread, `throughPairs`).
+    const ends =
+      thread && !e.closed
+        ? { start: thread.tangents.get(ei * 2) ?? null, end: thread.tangents.get(ei * 2 + 1) ?? null }
+        : undefined
     // Pin open-edge endpoints to moved junction positions so the fitted arc ends
     // exactly on the shared vertex. e.pts is reused when nothing moved.
     let latticePts = e.pts
@@ -300,10 +314,12 @@ export function assemblePlanar(
     } else {
       // An open edge with sharp interior corners gets the same corner-first fit as
       // closed loops (fitCorneredOpen); otherwise the smooth open-arc fit.
-      nodes =
+      const fit = (t?: EndTangents): PathNode[] =>
         corners.size > 0
-          ? fitCorneredOpen(pts, corners, edgeOpts)
-          : fitOpenArc(presmooth(pts, opts.smoothPasses, true, corners), opts)
+          ? fitCorneredOpen(pts, corners, edgeOpts, t)
+          : fitOpenArc(presmooth(pts, opts.smoothPasses, true, corners), opts, t)
+      nodes = fit(ends)
+      if (ends && (ends.start || ends.end)) refit.set(ei, fit)
     }
     const startV = e.startV >= 0 ? vidByCorner.get(e.startV)! : -1
     const endV = e.endV >= 0 ? vidByCorner.get(e.endV)! : -1
@@ -316,6 +332,8 @@ export function assemblePlanar(
     })
     meta.push({ left: e.left, right: e.right, dirStart: e.dirStart, dirEnd: e.dirEnd, startV, endV, closed: e.closed })
   }
+
+  if (thread) followThroughPairs(edges, thread, refit)
 
   // --- directed half-edges over the non-closed edges ---
   // heId = edgeIndex*2 + (reversed?1:0). label = region on the left of travel.
@@ -419,7 +437,67 @@ export function assemblePlanar(
   // refineJunctions: weld straight-through junctions to a shared G¹ tangent.
   if (opts.refineJunctions) smoothThroughJunctions(edges, loopsByLabel)
 
-  return { vertices, edges, loopsByLabel, rounded }
+  const through = new Set<number>()
+  for (const c of thread?.corners ?? []) {
+    const v = vidByCorner.get(c)
+    if (v != null) through.add(v)
+  }
+
+  return { vertices, edges, loopsByLabel, rounded, through }
+}
+
+// ---------------------------------------------------------------------------
+// Through pairs: one side follows the other.
+// ---------------------------------------------------------------------------
+
+/** How closely (cos) an edge must leave along a tangent to count as meeting it. */
+const FOLLOW_COS = Math.cos((1 * Math.PI) / 180)
+
+/** Unit direction an open edge leaves its start (or end) along, into the edge. */
+function leaveDir(nodes: PathNode[], atEnd: boolean): Vec | null {
+  if (nodes.length < 2) return null
+  const nd = atEnd ? nodes[nodes.length - 1] : nodes[0]
+  const to = (atEnd ? nd.hIn : nd.hOut) ?? (atEnd ? nodes[nodes.length - 2] : nodes[1])
+  const l = Math.hypot(to.x - nd.x, to.y - nd.y)
+  return l < 1e-9 ? null : { x: (to.x - nd.x) / l, y: (to.y - nd.y) / l }
+}
+
+/**
+ * Both arms of a through pair were fitted to leave the junction along the through fit's
+ * tangent, and an arm whose evidence cannot follow it within ε falls back to its own fit
+ * (`fitOpenArc`). Then the pair is not G¹: a straight arm beside a curving one tilts the
+ * joined line, the straight arm refuses the tilt, and the curve takes it. Here the arm that
+ * DID take the tangent is re-fitted to leave along the one its partner actually leaves on,
+ * and kept only if it then meets it — so the outline runs through whenever either side
+ * can bend to the other. Mutates `edges` (index = net edge index).
+ */
+function followThroughPairs(
+  edges: SharedEdge[],
+  thread: ThreadPlacement,
+  refit: Map<number, (ends: EndTangents) => PathNode[]>,
+): void {
+  const want = (k: number): Vec | null => thread.tangents.get(k) ?? null
+  const meets = (k: number, t: Vec | null): boolean => {
+    const d = t && leaveDir(edges[k >> 1].nodes, (k & 1) === 1)
+    return !!d && !!t && d.x * t.x + d.y * t.y >= FOLLOW_COS
+  }
+  for (const [ka, kb] of thread.pairs) {
+    const okA = meets(ka, want(ka))
+    const okB = meets(kb, want(kb))
+    if (okA === okB) continue
+    const [lead, follow] = okA ? [kb, ka] : [ka, kb]
+    const fit = refit.get(follow >> 1)
+    const d = leaveDir(edges[lead >> 1].nodes, (lead & 1) === 1)
+    if (!fit || !d) continue
+    const t = { x: -d.x, y: -d.y }
+    const e = follow >> 1
+    const other = (follow & 1) === 1 ? e * 2 : e * 2 + 1
+    const ends: EndTangents = (follow & 1) === 1 ? { start: want(other), end: t } : { start: t, end: want(other) }
+    const nodes = fit(ends)
+    const prev = edges[e].nodes
+    edges[e].nodes = nodes
+    if (!meets(follow, t)) edges[e].nodes = prev
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -28,6 +28,20 @@
 // the turn gate refuses is first offered a circle window extended while the arms still
 // fit one circle (THROUGH_EXTEND): an arc survives that at any raster, a corner at none.
 //
+// The rank is not the only way to tell which boundary continues. Where all three are
+// real edges (a mouth's outline running past the point where a cheek meets it), the
+// junction is a T too, and the lattice corner pulls the outline into it the same way.
+// With `geometric`, a junction the rank refuses is still threaded when exactly ONE pair
+// of its arms passes the through test (turn, one line or circle, the move bound): a Y
+// where no pair continues, or an X where two do, keeps its corner. Only the through
+// branch: the corner and extended-circle branches stay behind the rank.
+//
+// A threaded junction also hands both through arms the primitive's TANGENT there
+// (`ThreadPlacement.tangents`), and the edge fit leaves the junction along it. Moving the
+// vertex onto the curve is not enough: the fit's first segment otherwise leaves along
+// the chord to the next lattice sample, and the outline dips into a cusp at the vertex
+// (benchmarks §42.7).
+//
 // Every gate can only drop a junction: with no palette (or `fitThrough: false`) nothing
 // moves. Pure and deterministic.
 // Design notes and measurements: docs/vectorization-benchmarks.md.
@@ -91,6 +105,42 @@ const MAX_MOVE = 2.0
  * read low too. So it only ever drops an arm, never certifies one.
  */
 const ARM_BOW = 0.8
+/**
+ * Least angle (deg) every other arm must leave a GEOMETRIC through pair's line at. A T's
+ * stem meets the boundary it ends on at a clear angle; at a shallow crossing (a hairline
+ * over a bar at 22°, split into two junctions a few px apart) two DIFFERENT shapes' edges
+ * run nearly parallel, the through test passes for the wrong pair, and threading one of
+ * the two junctions bends the short edge between them. The rank's pairs don't need it:
+ * there the weak arm is known not to continue.
+ */
+const STEM_MIN_DEG = 30
+
+/**
+ * The label behind everything: the one with the most boundary on the canvas edge. A
+ * geometric pair whose shared region is the ground (or transparency) is the SILHOUETTE
+ * of two shapes meeting, not one shape's outline running past another: an aerial
+ * tramway's disc meeting its cable housing is a shallow corner the artist drew, and
+ * forcing it smooth bends both neighbours. A T's through boundary belongs to the shape
+ * in FRONT, which is on both arms (the mouth runs past the blush; the brown is on both
+ * sides of the point).
+ */
+function groundLabel(net: PlanarNetwork): number {
+  const run = new Map<number, number>()
+  for (const e of net.edges) {
+    const l = e.left === EXT ? e.right : e.right === EXT ? e.left : null
+    if (l == null || l === EXT) continue
+    run.set(l, (run.get(l) ?? 0) + e.pts.length)
+  }
+  let best = EXT
+  let most = 0
+  for (const [l, n] of run) {
+    if (n > most) {
+      most = n
+      best = l
+    }
+  }
+  return best
+}
 
 const dist = (a: Vec, b: Vec): number => Math.hypot(a.x - b.x, a.y - b.y)
 
@@ -141,6 +191,14 @@ export interface JunctionVerdict {
   /** Which rule placed it: a through fit, or a corner apex (the two arms' own lines
    *  intersected). */
   kind: 'thread' | 'apex' | null
+  /** Threaded by geometry alone: the contrast rank refused it and one arm pair passed. */
+  geometric?: boolean
+  /** For a junction with a geometric through pair: the least angle (deg) another arm
+   *  leaves that pair's line at (STEM_MIN_DEG). */
+  stemDeg?: number
+  /** For a threaded junction: the through primitive's unit tangent at `moveTo`, pointing
+   *  into each through arm, keyed by edge index * 2 + (atEnd ? 1 : 0). */
+  tangents?: [number, Vec][]
   /** For a through-circle placement: the THROUGH_SPAN multiple the window grew to while
    *  still one circle (1 = the base window only; ≥ 2 = extended). Null otherwise. */
   extK: number | null
@@ -283,12 +341,16 @@ export function surveyJunctions(
   cornerJunctions = true,
   /** Diagnostic only: override the window / residual gates. Production never passes it. */
   tune?: { span?: number; dev?: number; alt?: boolean },
+  /** Thread a junction the rank refuses when exactly one arm pair continues through it. */
+  geometric = false,
 ): JunctionVerdict[] {
   const span = tune?.span ?? THROUGH_SPAN
   const throughDev = tune?.dev ?? THROUGH_DEV
   const cw = net.width + 1
   const inc = incidentEnds(net)
   const out: JunctionVerdict[] = []
+  /** Read once, and only when a geometric pair needs it (groundLabel). */
+  let ground: number | undefined
   for (const corner of net.junctions) {
     const windows = new Map<number, Vec[]>()
     const ends = (inc.get(corner) ?? []).map((e) => {
@@ -319,13 +381,31 @@ export function surveyJunctions(
     }
     const strong = ends.filter((e) => e.de >= STRONG_DE)
     const weak = ends.filter((e) => e.de <= WEAK_DE)
-    if (strong.length !== 2 || weak.length !== ends.length - 2) {
+    let pair: [JunctionEnd, JunctionEnd] | null = null
+    if (strong.length === 2 && weak.length === ends.length - 2) pair = [strong[0], strong[1]]
+    else if (geometric) {
+      ground ??= groundLabel(net)
+      const g = ground
+      const through = throughPairs(ends, windows, throughDev).filter(({ pair: [x, y] }) => {
+        const ex = net.edges[x.edge]
+        const ey = net.edges[y.edge]
+        const shared = ex.left === ey.left || ex.left === ey.right ? ex.left : ex.right
+        return shared !== g && shared !== EXT
+      })
+      if (through.length === 1 && through[0].stem >= STEM_MIN_DEG) {
+        pair = through[0].pair
+        v.geometric = true
+        v.stemDeg = through[0].stem
+      } else if (through.length) v.stemDeg = Math.min(...through.map((t) => t.stem))
+    }
+    if (!pair) {
       // Either the contrast is not cleanly split (something sits in the 12–25 gap) or
       // this is not a weak-into-strong T at all.
       v.reason = `rank ${strong.length}s/${weak.length}w of ${ends.length}`
+      if (v.stemDeg != null) v.reason += `, through pair with stem ${v.stemDeg.toFixed(0)}°`
       continue
     }
-    const [a, b] = strong
+    const [a, b] = pair
     if (a.edge === b.edge) {
       v.reason = 'strong arms are one edge'
       continue
@@ -376,6 +456,8 @@ export function surveyJunctions(
     // base window already fits a circle; a sharp corner's residual only grows from there.
     const refusedByTurn = v.turnDeg == null || v.turnDeg > THROUGH_TURN_DEG
     const ext = (v.circleDev ?? Infinity) <= throughDev ? extendCircle(net, a, b, span, throughDev) : null
+    /** The primitive the junction is projected onto, for its tangent. */
+    let along: { line: Vec } | { cx: number; cy: number } | null = null
     if (!refusedByTurn) {
       // The boundary continues through: fit it as one window and project.
       const dev = Math.min(v.lineDev ?? Infinity, v.circleDev ?? Infinity)
@@ -387,18 +469,29 @@ export function surveyJunctions(
       // from the widest window that still fits it.
       if ((v.circleDev ?? Infinity) < (v.lineDev ?? Infinity)) {
         const c = ext?.c ?? fitCircle(win)
-        if (c) p = ontoCircle(c)
+        if (c) {
+          p = ontoCircle(c)
+          along = c
+        }
         v.extK = ext?.k ?? 1
       } else if (lf) {
         const m = centroid(win)
         const t = (q.x - m.x) * lf.dir.x + (q.y - m.y) * lf.dir.y
         p = { x: m.x + t * lf.dir.x, y: m.y + t * lf.dir.y }
+        along = { line: lf.dir }
       }
       v.kind = 'thread'
+    } else if (v.geometric) {
+      // Unreachable while throughPairs applies the same turn gate; kept so a pair the
+      // rank never vouched for can never reach the corner branches below.
+      v.reason = 'geometric, refused by turn'
+      v.geometric = undefined
+      continue
     } else if (ext) {
       // The chord turn said corner, the wider window says arc: thread onto that circle
       // rather than intersecting the arms inside the curve.
       p = ontoCircle(ext.c)
+      along = ext.c
       v.extK = ext.k
       v.kind = 'thread'
     } else {
@@ -436,24 +529,105 @@ export function surveyJunctions(
       continue
     }
     v.linked = true
-    v.reason = v.kind!
+    v.reason = v.geometric ? `thread (geometric, stem ${v.stemDeg!.toFixed(0)}°)` : v.kind!
+    if (along && p) {
+      const t = 'line' in along ? along.line : { x: -(p.y - along.cy), y: p.x - along.cx }
+      const l = Math.hypot(t.x, t.y)
+      if (l > 1e-9) {
+        const u = { x: t.x / l, y: t.y / l }
+        const into = (e: JunctionEnd): [number, Vec] => {
+          const d = chordDir(windows.get(e.edge * 2 + (e.atEnd ? 1 : 0))!)
+          const sg = d && d.x * u.x + d.y * u.y < 0 ? -1 : 1
+          return [e.edge * 2 + (e.atEnd ? 1 : 0), { x: sg * u.x, y: sg * u.y }]
+        }
+        v.tangents = [into(a), into(b)]
+      }
+    }
   }
   return out
+}
+
+/** Every pair of a junction's arms that runs through it: distinct edges, both arms at
+ *  least MIN_ARM, a chord turn under THROUGH_TURN_DEG, and one line or one circle across.
+ *  `stem` is the least angle (deg) any OTHER arm's chord makes with the pair's line. */
+function throughPairs(
+  ends: JunctionEnd[],
+  windows: Map<number, Vec[]>,
+  dev: number,
+): { pair: [JunctionEnd, JunctionEnd]; stem: number }[] {
+  const out: { pair: [JunctionEnd, JunctionEnd]; stem: number }[] = []
+  for (let i = 0; i < ends.length; i++) {
+    for (let j = i + 1; j < ends.length; j++) {
+      const a = ends[i]
+      const b = ends[j]
+      if (a.edge === b.edge || Math.min(a.arm, b.arm) < MIN_ARM) continue
+      const wa = windows.get(a.edge * 2 + (a.atEnd ? 1 : 0))!
+      const wb = windows.get(b.edge * 2 + (b.atEnd ? 1 : 0))!
+      const ta = chordDir(wa)
+      const tb = chordDir(wb)
+      if (!ta || !tb) continue
+      const turn = 180 - (Math.acos(Math.max(-1, Math.min(1, ta.x * tb.x + ta.y * tb.y))) * 180) / Math.PI
+      if (turn > THROUGH_TURN_DEG) continue
+      const win = [...wa].reverse().concat(wb.slice(1))
+      if (win.length < 5) continue
+      const lf = lineFit(win)
+      if (!(Math.min(lf ? lf.maxDev : Infinity, circleMaxDev(win) ?? Infinity) <= dev)) continue
+      // The pair's direction through the junction: the mean of A reversed and B.
+      const ux = tb.x - ta.x
+      const uy = tb.y - ta.y
+      const ul = Math.hypot(ux, uy)
+      let stem = 90
+      for (const e of ends) {
+        if (e === a || e === b) continue
+        const d = chordDir(windows.get(e.edge * 2 + (e.atEnd ? 1 : 0))!)
+        if (!d || ul < 1e-9) continue
+        const sin = Math.abs(d.x * uy - d.y * ux) / ul
+        stem = Math.min(stem, (Math.asin(Math.min(1, sin)) * 180) / Math.PI)
+      }
+      out.push({ pair: [a, b], stem })
+    }
+  }
+  return out
+}
+
+/** Where `threadJunctions` puts junctions, and the tangents their through arms leave on. */
+export interface ThreadPlacement {
+  /** Lattice corner → sub-pixel position. */
+  pos: Map<number, Vec>
+  /** Edge index * 2 + (junction is its end ? 1 : 0) → unit tangent into the edge. Empty
+   *  unless `throughPairs`. */
+  tangents: Map<number, Vec>
+  /** The two `tangents` keys of each threaded junction's through pair. */
+  pairs: [number, number][]
+  /** Lattice corners of the GEOMETRIC through junctions — the ones the rank never placed,
+   *  which the re-seat must leave alone (a rank thread it may still correct). */
+  corners: number[]
 }
 
 /**
  * Sub-pixel position for every junction a weak boundary planted on a strong one, keyed
  * by lattice corner — whether the strong boundary continues through it or corners at it.
- * Junctions not in the map keep their integer corner, so an empty map is a no-op.
+ * Junctions not in the map keep their integer corner, so an empty map is a no-op. With
+ * `throughPairs`, also the junctions one arm pair runs straight through (geometric), and
+ * the through tangent for every threaded junction.
  */
 export function threadJunctions(
   net: PlanarNetwork,
   palette: readonly ThreadColor[],
   cornerJunctions = true,
-): Map<number, Vec> {
-  const out = new Map<number, Vec>()
-  for (const v of surveyJunctions(net, edgeContrast(net, palette), cornerJunctions)) {
-    if (v.linked && v.moveTo) out.set(v.corner, v.moveTo)
+  throughPairs = false,
+): ThreadPlacement {
+  const pos = new Map<number, Vec>()
+  const tangents = new Map<number, Vec>()
+  const pairs: [number, number][] = []
+  const corners: number[] = []
+  for (const v of surveyJunctions(net, edgeContrast(net, palette), cornerJunctions, undefined, throughPairs)) {
+    if (!v.linked || !v.moveTo) continue
+    pos.set(v.corner, v.moveTo)
+    if (!throughPairs || !v.tangents) continue
+    for (const [k, t] of v.tangents) tangents.set(k, t)
+    pairs.push([v.tangents[0][0], v.tangents[1][0]])
+    if (v.geometric) corners.push(v.corner)
   }
-  return out
+  return { pos, tangents, pairs, corners }
 }

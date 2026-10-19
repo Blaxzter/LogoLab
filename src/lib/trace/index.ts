@@ -437,6 +437,7 @@ export async function traceImage(
         reseatTune: fitOpts.reseatTune,
         onArcLoop: fitOpts.onArcLoop,
         rounded: trace.rounded,
+        keep: trace.through,
       },
     )
     weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, width, height, reseated)

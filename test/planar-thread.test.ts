@@ -231,11 +231,78 @@ test('corner: a CONTINUATION under the same seam is still threaded, not intersec
   assert.ok(Math.abs(threaded.x - pinned.x) < 0.6, 'a continuation moves ~normal to the edge only')
 })
 
-test('thread: it is the colour RANK, not the topology', () => {
+/** A third colour as different from both sides as they are from each other. */
+const ORANGE = { r: 250, g: 120, b: 30 }
+
+test('thread: it is the colour RANK, not the topology (throughPairs off)', () => {
   // The same three-arm junction with the band as different from the light side as the
-  // navy is: nothing is weak, nothing is strong, no junction is anyone's to place.
+  // navy is: nothing is weak, nothing is strong, no junction is the RANK's to place.
   const L = fixture()
-  const flat = [NAVY, LIGHT, { r: 250, g: 120, b: 30 }]
+  const flat = [NAVY, LIGHT, ORANGE]
+  const rankOnly = { ...DEFAULT_PLANAR_FIT, throughPairs: false }
+  assert.deepEqual(seamVertex(tracePlanar(L, W, H, rankOnly, flat)), seamVertex(tracePlanar(L, W, H)))
+})
+
+// §42.7 — through pairs. Where all three boundaries are real edges, the RANK cannot say
+// which one continues, but the geometry can: exactly one pair of arms runs straight
+// through. That pair is threaded (and both of its edges leave the junction on ONE
+// tangent) only when the region the pair shares is a shape in FRONT, never the ground:
+// the ground's outline there is the silhouette of two shapes meeting, a corner the art has.
+
+/** `fixture()` with a white frame round it, so the navy shape is not the ground. */
+const FRAME = 8
+function framed(): Int32Array {
+  const L = fixture()
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) if (x < FRAME || y < FRAME || x >= W - FRAME || y >= H - FRAME) L[y * W + x] = 3
+  return L
+}
+const WHITE = { r: 255, g: 255, b: 255 }
+
+/** Unit tangent leaving vertex `vid` along each open edge that ends on it. */
+function leaving(t: ReturnType<typeof tracePlanar>, vid: number): Vec[] {
+  const out: Vec[] = []
+  for (const e of t.edges) {
+    if (e.closed) continue
+    for (const atEnd of [false, true]) {
+      if ((atEnd ? e.endVertex : e.startVertex) !== vid) continue
+      const n = e.nodes
+      const nd = atEnd ? n[n.length - 1] : n[0]
+      const h = atEnd ? nd.hIn : nd.hOut
+      const to = h ?? (atEnd ? n[n.length - 2] : n[1])
+      const l = Math.hypot(to.x - nd.x, to.y - nd.y)
+      out.push({ x: (to.x - nd.x) / l, y: (to.y - nd.y) / l })
+    }
+  }
+  return out
+}
+
+test('through pair: a T of three real edges is threaded when a front shape owns the through edge', () => {
+  const L = framed()
+  const flat = [NAVY, LIGHT, ORANGE, WHITE]
+  const rankOnly = seamVertex(tracePlanar(L, W, H, { ...DEFAULT_PLANAR_FIT, throughPairs: false }, flat))
+  const t = tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, flat)
+  const placed = seamVertex(t)
+  assert.ok(offLine(rankOnly) > 0.3, `fixture must offer something to fix (${offLine(rankOnly).toFixed(2)}px off)`)
+  assert.ok(
+    offLine(placed) < offLine(rankOnly) - 0.2,
+    `through pair should land on the edge: ${offLine(placed).toFixed(2)}px vs ${offLine(rankOnly).toFixed(2)}px`,
+  )
+  // …and the navy outline runs THROUGH it: the two diagonal arms leave on one line.
+  const vid = t.vertices.findIndex((v) => v.x === placed.x && v.y === placed.y)
+  const dirs = leaving(t, vid)
+  let best = -1
+  for (let i = 0; i < dirs.length; i++)
+    for (let j = i + 1; j < dirs.length; j++) best = Math.max(best, -(dirs[i].x * dirs[j].x + dirs[i].y * dirs[j].y))
+  const breakDeg = (Math.acos(Math.min(1, best)) * 180) / Math.PI
+  assert.ok(breakDeg < 1, `the through arms should be G1 at the junction, break ${breakDeg.toFixed(2)}°`)
+})
+
+test('through pair: the GROUND outline is not threaded — two shapes meeting is a corner', () => {
+  // Unframed, the navy region is the one along the canvas edge: the diagonal is the
+  // silhouette of the light and orange shapes over it, and the junction stays put.
+  const L = fixture()
+  const flat = [NAVY, LIGHT, ORANGE]
   assert.deepEqual(seamVertex(tracePlanar(L, W, H, DEFAULT_PLANAR_FIT, flat)), seamVertex(tracePlanar(L, W, H)))
 })
 

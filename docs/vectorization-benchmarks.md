@@ -7973,4 +7973,58 @@ else's: it is the tiled tracer's, every region meeting at a vertex where the pai
 tracers draw one shape over another. LogoLab still draws the fewest kinks of the colour
 tracers that draw the picture, by about 3× rather than the 4.8× the exemption reported.
 The fix belongs in the fitter (a junction whose through-pair is one authored edge should
-leave it G¹), and it is open.
+leave it G¹): §42.7.
+
+### 42.7 Through pairs: the outline runs through the junction (2026-10-20)
+
+§42.6 left the junction pull open, and it was the biggest kink source LogoLab had left on
+the benchmark's emoji. Two things made it, and both had to go.
+
+**Where the vertex sits.** A junction is an integer lattice corner. §14 already moved one
+onto a fit through the boundary that continues past it, but only where the third boundary
+is a weak band seam (`STRONG_DE` / `WEAK_DE`): the rank is what said which boundary
+continues. On a mouth meeting a cheek all three boundaries are real edges, the rank
+refuses, and the vertex stays a pixel off the mouth's line. With `throughPairs`, a
+junction the rank refuses is still threaded when exactly ONE pair of its arms passes the
+same through test (turn under 20°, one line or circle within 1.2 px, a move under 2 px).
+Three more gates, each a measured false positive first:
+
+* **the stem leaves at 30° or more** (`STEM_MIN_DEG`). At a shallow crossing (`hairlines`:
+  a hairline over a bar at 22°, split into two junctions 5 px apart) two different shapes'
+  edges run nearly parallel, the wrong pair passes, and threading one junction of the two
+  bent the short edge between them by 6°;
+* **the pair does not share the ground** (`groundLabel`: the label with the most boundary
+  on the canvas edge, or transparency). Two arms that share the background are the
+  silhouette of two shapes meeting, and the artist's outline turns there: the aerial
+  tramway's disc meeting its cable housing, forced smooth, bent both neighbours (95° and
+  46° breaks). A T's through boundary belongs to the shape in FRONT, which is on both arms;
+* **only the through branch.** The corner and extended-circle branches stay behind the rank.
+
+**Which way the edges leave it.** Moving the vertex was not enough. `fitOpenArc` starts an
+edge's first segment along the chord to the NEXT sample, which at a junction is a
+staircase step, and the cubic shrinks its handle to fit it: the outline dips into a cusp
+(the 61–66° pulls of §42.6 had 3 px handles). A threaded junction now hands both through
+arms the primitive's tangent there (`EndTangents`), and the fit leaves along it, falling
+back to the free fit if no candidate stays within ε. Two follow-ups:
+
+* **one arm follows the other** (`followThroughPairs`). A straight arm beside a curving one
+  tilts the joined line; the straight arm cannot leave along the tilt within ε and falls
+  back, the curve takes it, and the pair is still 7° apart. The arm that took the tangent
+  is re-fitted to the one its partner actually leaves on, kept only if it meets it;
+* **the re-seat leaves a geometric through junction alone** (`PlanarTrace.through`). It
+  moves a degree-3 junction to the intersection of its two strongest fitted primitives,
+  which is exactly the kink again. A RANK thread it may still correct: exempting those too
+  cost `petals` two breaks of 50–58°, where the re-seat was fixing a slid band seam.
+
+What moved. Tier-0 flat @512 (`filletDiag --breaks --toggle throughPairs`): 38 → 37 —
+`border-cross` loses its 42° and 23° pulls and gains one of 6° (4 → 3, still listed), and
+nothing else in the flat lane moves; the gradient lane gains one 18° break in
+`gradient-flat`. The truth gate passes unchanged. On the benchmark's 100 held-out emoji
+(LogoLab alone, re-traced): kinks 1569 → **1264**, median per case 13.5 → 9, fewer in 65
+cases and more in 4; the smiling face 8 → 0. Nodes 15790 → 15515, ΔE and edge error a
+little better (medians 0.236 → 0.226, 0.271 → 0.265); invented corners 147 → 151 (four
+cases, each a kink that was already counted and now turns past 60°). `smooth-radii`'s two
+66° pulls stay: they sit on a thin tip's split junction, 3 px apart, with no through pair.
+`before-junction-g1` ⇄ `after-junction-g1`: 55 files in the flat / grad / stack lanes and
+the `cline` flat traces; mono and line byte-identical. Many of the moves are RANK threads,
+which now leave on one tangent too.

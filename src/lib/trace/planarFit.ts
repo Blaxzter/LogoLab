@@ -20,7 +20,7 @@
 export { DEFAULT_PLANAR_FIT, FLAT_LINE_COST, type ApexReach, type PlanarFitOptions } from './planarFit/options.ts'
 export { circleMaxDev, fitCircle, presmooth } from './planarFit/geom.ts'
 export { detectCorners, detectLoopCorners, detectOpenCorners } from './planarFit/corners.ts'
-export { fitOpenArc } from './planarFit/openFit.ts'
+export { fitOpenArc, type EndTangents } from './planarFit/openFit.ts'
 export { armLine, type ArmFit } from './planarFit/arms.ts'
 export type { ApexDiag, ApexDiagRecord, ApexOutcome } from './planarFit/apex.ts'
 export { discExplainsLoop } from './planarFit/disc.ts'

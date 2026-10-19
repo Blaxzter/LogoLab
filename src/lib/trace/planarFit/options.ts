@@ -64,6 +64,14 @@ export interface PlanarFitOptions {
    * `fitThrough`; `false` keeps the lattice corner.
    */
   cornerJunctions: boolean
+  /**
+   * Through-pair threading, on top of `fitThrough` (planarThread.ts, benchmarks §42.7): a
+   * junction the contrast rank refuses is still threaded when exactly one pair of its arms
+   * runs straight through it, and every threaded junction's through arms are fitted to
+   * leave it along one tangent, so the outline is G¹ there instead of dipping into a cusp.
+   * `false` ⇒ the rank alone decides, and edges leave a junction along their own chord.
+   */
+  throughPairs?: boolean
   /** The corner-turn veto in planarBeautify that refuses to round a sharp-cornered loop
    *  into a disc. Exposed so `localScaleK` can be compared as a replacement for it. */
   cornerVeto: boolean
@@ -208,6 +216,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   chainArcs: true,
   fitThrough: true,
   cornerJunctions: true,
+  throughPairs: true,
   subpixelEdges: true,
   subpixelWindowGuard: true,
   fillets: true,

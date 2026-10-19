@@ -662,6 +662,8 @@ export function reseatJunctions(
   onChord?: ChordObserver,
   onVerdict?: ReseatObserver,
   tune?: ReseatTune,
+  /** Junctions already placed on a through fit (`PlanarTrace.through`): never moved. */
+  keep?: ReadonlySet<number>,
 ): { chords: Set<number>; moved: Set<number> } {
   const cfg: Cfg = {
     armMax: tune?.armMax ?? ARM_MAX,
@@ -692,7 +694,7 @@ export function reseatJunctions(
 
   for (const v of vertices) {
     const ends = incident.get(v.id)
-    if (!ends || ends.length !== 3) continue
+    if (!ends || ends.length !== 3 || keep?.has(v.id)) continue
     const at = { x: v.x, y: v.y }
     if (width != null && height != null && (v.x <= 1 || v.y <= 1 || v.x >= width - 1 || v.y >= height - 1)) {
       onVerdict?.({

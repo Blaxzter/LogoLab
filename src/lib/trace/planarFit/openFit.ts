@@ -139,12 +139,38 @@ function lineDeviation(arc: Vec[]): { maxDev: number; sqErr: number } {
   return { maxDev: maxD, sqErr: sq }
 }
 
+/** Tangent an open edge must leave each endpoint along: unit, pointing INTO the edge.
+ *  Set where the edge is one half of a boundary that runs straight through a junction
+ *  (planarThread's through pair), so both halves leave the junction on one line. */
+export interface EndTangents {
+  start?: Vec | null
+  end?: Vec | null
+}
+
+/** A line candidate may start a constrained end only if it already runs along the
+ *  tangent; a chord a few degrees off is the kink the tangent is there to remove. */
+const END_LINE_COS = Math.cos((2 * Math.PI) / 180)
+
 /**
  * Fit an open dense polyline (junction→junction) to PathNodes. Endpoints are
  * pinned and forced to corner; interior joins choose corner vs smooth from the
  * evidence score via a min-cost linear DP over an over-complete candidate set.
+ *
+ * `ends` fixes the first / last segment's end tangent. Without it the first segment
+ * leaves along the chord to the NEXT sample, which at a junction is a staircase step,
+ * and the cubic shrinks its handle to fit it: the outline dips into a cusp at every
+ * junction it runs through. If no fit within ε exists along the given tangent, the edge
+ * is fitted as if none was given.
  */
-export function fitOpenArc(densePts: Vec[], opts: PlanarFitOptions): PathNode[] {
+export function fitOpenArc(densePts: Vec[], opts: PlanarFitOptions, ends?: EndTangents): PathNode[] {
+  if (ends && (ends.start || ends.end)) {
+    const tied = fitOpenArcWith(densePts, opts, ends)
+    if (tied) return tied
+  }
+  return fitOpenArcWith(densePts, opts, null) ?? []
+}
+
+function fitOpenArcWith(densePts: Vec[], opts: PlanarFitOptions, ends: EndTangents | null): PathNode[] | null {
   const dense = dedup(densePts)
   const n = dense.length
   if (n < 2) return []
@@ -180,9 +206,15 @@ export function fitOpenArc(densePts: Vec[], opts: PlanarFitOptions): PathNode[] 
       const toIdx = keyIdx[b]
       const arc = subsample(dense.slice(fromIdx, toIdx + 1), MAX_FIT_POINTS)
       if (arc.length < 2) break
+      const sT = a === 0 ? (ends?.start ?? null) : null
+      const eT = b === m - 1 ? (ends?.end ?? null) : null
       if (len === 1) {
         const ld = lineDeviation(arc)
-        if (ld.maxDev <= eps) {
+        const chord = unit(sub(dense[toIdx], dense[fromIdx]))
+        const along =
+          (!sT || chord.x * sT.x + chord.y * sT.y >= END_LINE_COS) &&
+          (!eT || -(chord.x * eT.x + chord.y * eT.y) >= END_LINE_COS)
+        if (ld.maxDev <= eps && along) {
           byStart[a].push({
             a,
             len,
@@ -197,14 +229,18 @@ export function fitOpenArc(densePts: Vec[], opts: PlanarFitOptions): PathNode[] 
       }
       const freeStart = unit(sub(dense[fromIdx + 1], dense[fromIdx]))
       const freeEnd = unit(sub(dense[toIdx - 1], dense[toIdx]))
-      const startDirs: [Cont, Vec][] = [
-        [0, freeStart],
-        [1, orient(tangents[a], freeStart)],
-      ]
-      const endDirs: [Cont, Vec][] = [
-        [0, freeEnd],
-        [1, orient(neg(tangents[b]), freeEnd)],
-      ]
+      const startDirs: [Cont, Vec][] = sT
+        ? [[0, sT]]
+        : [
+            [0, freeStart],
+            [1, orient(tangents[a], freeStart)],
+          ]
+      const endDirs: [Cont, Vec][] = eT
+        ? [[0, eT]]
+        : [
+            [0, freeEnd],
+            [1, orient(neg(tangents[b]), freeEnd)],
+          ]
       let interG1 = 0
       for (let p = 1; p < len; p++) interG1 += junc[a + p].g1
       let anyFit = false
@@ -264,7 +300,7 @@ export function fitOpenArc(densePts: Vec[], opts: PlanarFitOptions): PathNode[] 
   // Final endpoint must arrive as a corner (endCont 0).
   let endCont: Cont = 0
   if (!Number.isFinite(cost[m - 1][0])) {
-    if (!Number.isFinite(cost[m - 1][1])) return polylineNodes(keyIdx, dense) // fallback: corner polyline
+    if (!Number.isFinite(cost[m - 1][1])) return ends ? null : polylineNodes(keyIdx, dense) // fallback: corner polyline
     endCont = 1
   }
 
@@ -280,7 +316,7 @@ export function fitOpenArc(densePts: Vec[], opts: PlanarFitOptions): PathNode[] 
     t = b.fromCont
   }
   chosen.reverse()
-  if (chosen.length === 0) return polylineNodes(keyIdx, dense)
+  if (chosen.length === 0) return ends ? null : polylineNodes(keyIdx, dense)
 
   // Materialize to open PathNodes (no wrap). Anchor i shared between seg i-1/i.
   const segs = chosen.map((c) => ({
