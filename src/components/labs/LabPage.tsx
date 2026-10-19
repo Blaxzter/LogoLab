@@ -88,6 +88,7 @@ export function LabPage({
   box,
   onBox,
   wires = false,
+  viewControls = true,
   children,
 }: {
   /** Namespaces the persisted "about is open" flag. Use the lab's state key. */
@@ -108,6 +109,9 @@ export function LabPage({
   onBox: (v: number) => void
   /** Reveal the nodes/edges wireframe baked into every trace (pure CSS — no re-trace). */
   wires?: boolean
+  /** The "Dark bg" and "Box" controls. A view with no panels (a table, an article) turns them
+   *  off rather than showing two controls that do nothing. */
+  viewControls?: boolean
   children: ReactNode
 }) {
   // Fallback camera for panels rendered outside a CaseRow (rows own their real ones).
@@ -162,27 +166,31 @@ export function LabPage({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
               {search && <LabSearchBox {...search} inputRef={searchRef} />}
               {controls}
-              <LabCheck
-                label="Dark bg"
-                hint="Sit every panel's art on a near-black backdrop instead of the checkerboard — white-on-transparent art is invisible on the light board."
-                checked={ui.dark}
-                onChange={(dark) => setUi({ dark })}
-              />
-              <LabField
-                label="Box"
-                hint="Panel size. Drag to make every panel — source, trace and error maps — bigger or smaller."
-              >
-                <input
-                  type="range"
-                  min={BOX_RANGE.min}
-                  max={BOX_RANGE.max}
-                  step={10}
-                  value={box}
-                  onChange={(e) => onBox(Number(e.target.value))}
-                  className="h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-line-strong"
-                  aria-label="Panel size"
-                />
-              </LabField>
+              {viewControls && (
+                <>
+                  <LabCheck
+                    label="Dark bg"
+                    hint="Sit every panel's art on a near-black backdrop instead of the checkerboard — white-on-transparent art is invisible on the light board."
+                    checked={ui.dark}
+                    onChange={(dark) => setUi({ dark })}
+                  />
+                  <LabField
+                    label="Box"
+                    hint="Panel size. Drag to make every panel — source, trace and error maps — bigger or smaller."
+                  >
+                    <input
+                      type="range"
+                      min={BOX_RANGE.min}
+                      max={BOX_RANGE.max}
+                      step={10}
+                      value={box}
+                      onChange={(e) => onBox(Number(e.target.value))}
+                      className="h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-line-strong"
+                      aria-label="Panel size"
+                    />
+                  </LabField>
+                </>
+              )}
             </div>
           </div>
 

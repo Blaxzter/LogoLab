@@ -6,7 +6,9 @@ import assert from 'node:assert/strict'
 import {
   METRIC_BY_KEY,
   caseTable,
+  disagreements,
   dist,
+  favour,
   paired,
   summarize,
   type BenchRow,
@@ -79,4 +81,22 @@ test('paired: noise around zero is not significant, and is reproducible', () => 
   assert.ok(a && b)
   assert.equal(a.significant, false)
   assert.deepEqual(a, b)
+})
+
+test('favour and disagreements: positive means the first tool wins, in either direction', () => {
+  const de = METRIC_BY_KEY.get('meanDeltaE')
+  const dino = METRIC_BY_KEY.get('sbDino')
+  assert.ok(de && dino)
+  const rows = [
+    row('a', 'c/1', { meanDeltaE: 1, sbDino: 0.9 }),
+    row('b', 'c/1', { meanDeltaE: 3, sbDino: 0.95 }),
+    row('a', 'c/2', { meanDeltaE: 1 }),
+    row('b', 'c/2', { meanDeltaE: 2 }),
+  ]
+  const table = caseTable(rows, 'c')
+  assert.equal(favour(table.get('c/1'), 'a', 'b', de), 2) // lower ΔE wins
+  assert.ok((favour(table.get('c/1'), 'a', 'b', dino) ?? 0) < 0) // b's higher DINO wins
+  const d = disagreements(table, 'a', 'b', dino, de)
+  assert.equal(d.length, 1) // c/2 has no DINO
+  assert.ok(d[0].x < 0 && d[0].y > 0) // the two metrics name different winners
 })

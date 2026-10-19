@@ -66,7 +66,7 @@ export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.
     to: '/labs/bench',
     label: 'Benchmark',
     blurb:
-      'LogoLab against VTracer, Potrace and StarVector on held-out SVG-Bench emoji: leaderboard, per-case renders, datasets. Reads a local run.',
+      'Why pixel scores can’t judge an SVG, then the full comparison against VTracer, Potrace and StarVector: results, head to head, every case as nodes and kinks.',
     icon: <Trophy size={15} />,
   },
   {

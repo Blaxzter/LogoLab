@@ -500,3 +500,42 @@ export function fmt(v: number | null | undefined, digits: number): string {
 export function caseDir(caseId: string): string {
   return `cases/${caseId}`
 }
+
+/** The tools a case view shows unless asked for more: one of each kind, not three VTracers. */
+export const CORE_TOOLS = ['logolab-auto', 'vtracer-default', 'starvector-1b', 'potrace-bin']
+
+/**
+ * How much a metric favours tool `a` over `b` on one case: positive when `a` is better, in
+ * the metric's own units, whichever direction "better" is. Null when either is unscored.
+ */
+export function favour(byTool: Map<string, BenchRow> | undefined, a: string, b: string, metric: Metric): number | null {
+  const va = num(byTool?.get(a), metric.key)
+  const vb = num(byTool?.get(b), metric.key)
+  if (va === null || vb === null) return null
+  return metric.better === 'lower' ? vb - va : va - vb
+}
+
+export interface Disagreement {
+  caseId: string
+  /** favour() on the x metric and the y metric. */
+  x: number
+  y: number
+}
+
+/** Every case where both metrics scored both tools — the Compare tab's quadrant plot. Points
+ *  with x and y of opposite sign are the cases where the two metrics name different winners. */
+export function disagreements(
+  table: Map<string, Map<string, BenchRow>>,
+  a: string,
+  b: string,
+  mx: Metric,
+  my: Metric,
+): Disagreement[] {
+  const out: Disagreement[] = []
+  for (const [caseId, byTool] of table) {
+    const x = favour(byTool, a, b, mx)
+    const y = favour(byTool, a, b, my)
+    if (x !== null && y !== null) out.push({ caseId, x, y })
+  }
+  return out
+}

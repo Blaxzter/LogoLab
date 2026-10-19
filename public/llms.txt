@@ -21,7 +21,7 @@ Web app: https://logolab.fabraham.dev/
 - [Split icon sheet](https://logolab.fabraham.dev/sheet): one sheet of icons into separate traced SVGs
 - [Favicon & PWA icons](https://logolab.fabraham.dev/export): favicon.ico, apple-touch-icon, maskable and Android icons
 - [Logo preview](https://logolab.fabraham.dev/preview): the logo on devices, sites, tabs and app stores
-- [Vectorizer benchmark](https://logolab.fabraham.dev/benchmark): LogoLab, VTracer, Potrace and StarVector on 100 held-out SVG-Bench emoji, scored against the authored SVG (colour error, edge error, nodes, kinks) next to DINO, LPIPS and SSIM; why pixel scores can't judge an SVG, with the cases where each tool loses
+- [Vectorizer benchmark](https://logolab.fabraham.dev/labs/bench): LogoLab, VTracer, Potrace and StarVector on 100 held-out SVG-Bench emoji, scored against the authored SVG (colour error, edge error, nodes, kinks) next to DINO, LPIPS and SSIM; why pixel scores can't judge an SVG, with the cases where each tool loses
 
 ## Privacy
 

@@ -135,7 +135,7 @@ export const ROUTE_PAGES: RoutePage[] = [
     ],
   },
   {
-    path: '/benchmark',
+    path: '/labs/bench',
     nav: 'Vectorizer benchmark',
     title: 'Why pixel scores can’t judge an SVG: a vectorizer benchmark | LogoLab',
     description:

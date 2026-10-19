@@ -6,7 +6,7 @@
 // argues it with CASES, so the cases have to be real outputs, not screenshots of them. This
 // copies a handful of a run's case directories into public/benchmark/ (the authored SVG and
 // each tool's SVG, small and redistributable: Twemoji is CC-BY 4.0, the traces are
-// derivatives of it) and writes src/components/benchmark/showcase.generated.ts: every
+// derivatives of it) and writes src/components/labs/bench/showcase.generated.ts: every
 // number the page prints, the anchors of every SVG, and where each counted tangent break
 // sits — read off the SAME parse (traceSvg.ts) and the SAME locator (geomScore.ts) the run
 // scored with, so a dot on the page is a break in the table.
@@ -17,11 +17,7 @@
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { ensureImageData } from '../nodeHarness.ts'
-import { parseGroundTruth, toRasterSpace } from '../svgGround.ts'
-import { makeVisibleAt, tangentBreaks } from '../geomScore.ts'
-import { renderGround } from './render.ts'
-import { parseTraceSvg } from './traceSvg.ts'
+import { caseOverlay } from './overlay.ts'
 import { REPO, RESULTS } from './paths.ts'
 import {
   METRIC_BY_KEY,
@@ -31,16 +27,13 @@ import {
   type BenchResults,
   type BenchRow,
 } from '../../src/components/labs/bench/benchData.ts'
-import type { SubPath } from '../../src/lib/path/types.ts'
-import type { ShowMetrics, Showcase } from '../../src/components/benchmark/showcaseTypes.ts'
-
-ensureImageData()
+import type { ShowMetrics, Showcase } from '../../src/components/labs/bench/showcaseTypes.ts'
 
 const argv = process.argv.slice(2)
 const RUN = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : 'v1-clean'
 const CORPUS = 'svgemoji-v0'
 const OUT_PUBLIC = join(REPO, 'public', 'benchmark')
-const OUT_DATA = join(REPO, 'src', 'components', 'benchmark', 'showcase.generated.ts')
+const OUT_DATA = join(REPO, 'src', 'components', 'labs', 'bench', 'showcase.generated.ts')
 
 /** The page's cases. `why` is for the next person to curate, not for the page. */
 const EXAMPLES: { slug: string; caseId: string; tools: string[]; why: string }[] = [
@@ -113,45 +106,35 @@ for (const line of readFileSync(join(runDir, 'pairs.jsonl'), 'utf8').split('\n')
 }
 const table = caseTable(results.rows, CORPUS)
 const meta = new Map(results.meta.cases.map((c) => [c.id, c]))
-const round = (v: number) => Math.round(v * 10) / 10
-const anchors = (sets: SubPath[][]) => sets.flat().flatMap((sp) => sp.nodes.flatMap((n) => [round(n.x), round(n.y)]))
 
 rmSync(OUT_PUBLIC, { recursive: true, force: true })
 mkdirSync(OUT_PUBLIC, { recursive: true })
-mkdirSync(join(REPO, 'src', 'components', 'benchmark'), { recursive: true })
 
 const examples = EXAMPLES.map((ex) => {
   const authoredPath = gtSvg.get(ex.caseId)
   if (!authoredPath || !existsSync(authoredPath)) throw new Error(`${ex.caseId}: no authored SVG in ${RUN}`)
-  const authored = readFileSync(authoredPath, 'utf8')
-  const img = renderGround(authored, results.meta.res)
-  const shapes = toRasterSpace(parseGroundTruth(authored), img.width)
-  const visible = makeVisibleAt(img)
+  const byTool = table.get(ex.caseId)
+  if (!byTool) throw new Error(`${ex.caseId}: not in ${RUN}/${CORPUS}`)
   const dir = join(OUT_PUBLIC, ex.slug)
   mkdirSync(dir)
   copyFileSync(authoredPath, join(dir, 'authored.svg'))
-  const byTool = table.get(ex.caseId)
-  if (!byTool) throw new Error(`${ex.caseId}: not in ${RUN}/${CORPUS}`)
-
+  const svgs = new Map<string, string>()
+  for (const tool of ex.tools) {
+    const src = join(runDir, 'cases', ex.caseId, `${tool}.svg`)
+    copyFileSync(src, join(dir, `${tool}.svg`))
+    svgs.set(tool, readFileSync(src, 'utf8'))
+  }
+  // The same overlay the labs' node view reads (overlay.ts), so the two cannot disagree.
+  const o = caseOverlay(readFileSync(authoredPath, 'utf8'), results.meta.res, svgs)
   const tools = ex.tools.map((tool) => {
     const row = byTool.get(tool) as BenchRow | undefined
     if (!row) throw new Error(`${ex.caseId}: no ${tool} row`)
-    const src = join(runDir, 'cases', ex.caseId, `${tool}.svg`)
-    copyFileSync(src, join(dir, `${tool}.svg`))
-    const parsed = parseTraceSvg(readFileSync(src, 'utf8'), img.width, img.height)
-    const sets = parsed.shapes?.map((s) => s.subPaths) ?? []
-    const breaks = parsed.shapes ? tangentBreaks(shapes, sets, img.width, img.height, visible).sites : []
     const metrics: ShowMetrics = {}
     for (const k of ROW_KEYS) {
       const v = row[k]
       if (typeof v === 'number' || typeof v === 'string') metrics[k] = v
     }
-    return {
-      tool,
-      metrics,
-      anchors: anchors(sets),
-      breaks: breaks.flatMap((b) => [round(b.x), round(b.y), Math.round(b.kink)]),
-    }
+    return { tool, metrics, ...o.tools[tool] }
   })
   const m = meta.get(ex.caseId)
   return {
@@ -159,9 +142,9 @@ const examples = EXAMPLES.map((ex) => {
     caseId: ex.caseId,
     license: m?.license ?? '',
     source: m?.source ?? '',
-    width: img.width,
-    height: img.height,
-    authoredNodes: anchors(shapes.map((s) => s.subPaths)),
+    width: o.width,
+    height: o.height,
+    authoredNodes: o.authored,
     tools,
   }
 })

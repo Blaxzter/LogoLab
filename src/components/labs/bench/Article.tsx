@@ -1,35 +1,26 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ExternalLink } from '../ui/icons'
-import { LegalFooter } from '../legal/LegalFooter'
+import { ExternalLink } from '../../ui/icons'
+import { toolInfo } from './benchData'
+import { NodePanels, ScoreTable } from './figure'
 import { SHOWCASE as data } from './showcase.generated'
-import type { ShowExample, ShowMetrics, ShowTool } from './showcaseTypes'
+import type { ShowExample, ShowMetrics } from './showcaseTypes'
 
 /**
- * /benchmark — why the published image-to-SVG benchmarks cannot tell a good SVG from a bad
- * one, argued with real outputs.
+ * The Overview tab of /labs/bench: why the published image-to-SVG benchmarks cannot tell a
+ * good SVG from a bad one, argued with real outputs. /benchmark redirects here.
  *
- * Everything on this page is a frozen slice of one bench/compare run: the SVGs in
- * public/benchmark/ and the numbers in showcase.generated.json, both written by
- * bench/compare/showcase.ts. Nothing is traced or scored here; /labs/bench is where a local
- * run is explored in full. The node dots and the red rings are the anchors and the tangent
- * breaks the scorer counted — the same parse, the same locator — so a ring on the picture is
- * a unit in the table under it.
+ * It is the one tab that works on the hosted site. Everything in it is a frozen slice of one
+ * bench/compare run: the SVGs in public/benchmark/ and the numbers in showcase.generated.ts,
+ * both written by bench/compare/showcase.ts. Nothing is traced or scored here; the other tabs
+ * read a local run in full. The node dots and the red rings are the anchors and the tangent
+ * breaks the scorer counted (overlay.ts), so a ring on the picture is a unit in the table.
  */
 
 type Example = ShowExample
-type ToolOut = ShowTool
-type Metrics = ShowMetrics
 
-const TOOL_LABEL: Record<string, string> = {
-  'logolab-auto': 'LogoLab',
-  'vtracer-default': 'VTracer',
-  'vtracer-swept': 'VTracer (tuned)',
-  'starvector-1b': 'StarVector-1B',
-  'potrace-bin': 'Potrace',
-}
-const label = (tool: string) => TOOL_LABEL[tool] ?? tool
+const label = (tool: string) => toolInfo(tool).label
 const byslug = (slug: string): Example => {
   const e = data.examples.find((x) => x.slug === slug)
   if (!e) throw new Error(`showcase: no example ${slug}`)
@@ -41,29 +32,15 @@ interface Row {
   label: string
   better: 'lower' | 'higher'
   digits: number
-  kind: 'picture' | 'drawing'
 }
 
-const PICTURE_ROWS: Row[] = [
-  { key: 'sbDino', label: 'DINO score', better: 'higher', digits: 4, kind: 'picture' },
-  { key: 'sbLpips', label: 'LPIPS', better: 'lower', digits: 4, kind: 'picture' },
-  { key: 'sbSsim', label: 'SSIM', better: 'higher', digits: 3, kind: 'picture' },
-]
-const DRAWING_ROWS: Row[] = [
-  { key: 'meanDeltaE', label: 'Colour error (ΔE)', better: 'lower', digits: 2, kind: 'drawing' },
-  { key: 'chamfer', label: 'Edge error (px)', better: 'lower', digits: 2, kind: 'drawing' },
-  { key: 'docNodes', label: 'Nodes', better: 'lower', digits: 0, kind: 'drawing' },
-  { key: 'tangentBreaks', label: 'Kinks on smooth curves', better: 'lower', digits: 0, kind: 'drawing' },
-]
+const n = (m: ShowMetrics, k: string): number | null => (typeof m[k] === 'number' ? (m[k] as number) : null)
 
-const n = (m: Metrics, k: string): number | null => (typeof m[k] === 'number' ? (m[k] as number) : null)
-const fmt = (v: number | null, d: number) => (v === null ? '—' : v.toFixed(d))
-
-export default function BenchmarkPage() {
+export function Article({ onExplore }: { onExplore?: () => void }) {
   const hero = byslug('smiling-face')
   return (
-    <div className="bg-bg">
-      <article className="mx-auto max-w-5xl px-4 pb-16 pt-10 sm:px-6">
+    <div>
+      <article className="mx-auto max-w-5xl px-4 pb-16 pt-6 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-accent">Benchmark</p>
         <h1 className="mt-2 max-w-[22ch] text-3xl font-bold tracking-tight text-ink sm:text-4xl">
           Pixel scores can’t see the SVG
@@ -248,7 +225,11 @@ export default function BenchmarkPage() {
           <Link to="/vectorize" className="btn btn-primary h-10 px-4 text-sm">
             Try the vectorizer
           </Link>
-          <span className="text-xs text-muted">Free, in your browser, nothing uploaded.</span>
+          {onExplore && (
+            <button type="button" onClick={onExplore} className="btn btn-ghost h-10 px-4 text-sm">
+              Explore all 100 cases
+            </button>
+          )}
         </div>
 
         <p className="mt-10 border-t border-line pt-4 text-[0.7rem] leading-relaxed text-faint">
@@ -274,7 +255,6 @@ export default function BenchmarkPage() {
           tool. Run {data.run}, {new Date(data.date).toISOString().slice(0, 10)}.
         </p>
       </article>
-      <LegalFooter />
     </div>
   )
 }
@@ -293,8 +273,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 // ---------------------------------------------------------------------------
 // One example: the authored drawing and each tool's SVG, the real files, side by side.
 
-const ZOOM = 4
-
 function Figure({
   example,
   caption,
@@ -305,25 +283,27 @@ function Figure({
   initialNodes?: boolean
 }) {
   const [nodes, setNodes] = useState(initialNodes)
-  // One focus point per figure, so every panel zooms onto the same spot of the art.
-  const [focus, setFocus] = useState<{ x: number; y: number } | null>(null)
   const base = `/benchmark/${example.slug}`
-  const toggle = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (focus) return setFocus(null)
-    const r = e.currentTarget.getBoundingClientRect()
-    setFocus({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })
-  }
+  const count = (anchors: number[], breaks: number[]) =>
+    nodes ? (
+      <>
+        {anchors.length / 2} nodes
+        {breaks.length > 0 && <span className="text-bad"> · {breaks.length / 3} kinks</span>}
+      </>
+    ) : undefined
   const panels = [
     {
       key: 'authored',
       title: 'Drawn by the artist',
+      note: count(example.authoredNodes, []),
       src: `${base}/authored.svg`,
       anchors: example.authoredNodes,
-      breaks: [] as number[],
+      breaks: [],
     },
     ...example.tools.map((t) => ({
       key: t.tool,
       title: label(t.tool),
+      note: count(t.anchors, t.breaks),
       src: `${base}/${t.tool}.svg`,
       anchors: t.anchors,
       breaks: t.breaks,
@@ -346,60 +326,9 @@ function Figure({
           />
           Show nodes and kinks
         </label>
-        {focus && (
-          <button type="button" className="text-accent hover:underline" onClick={() => setFocus(null)}>
-            Zoom out
-          </button>
-        )}
       </div>
-      <div
-        className="grid grid-cols-2 gap-3 sm:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
-        style={{ '--cols': panels.length } as React.CSSProperties}
-      >
-        {panels.map((p) => (
-          <div key={p.key} className="min-w-0">
-            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 text-xs">
-              <b className="font-semibold text-ink">{p.title}</b>
-              {nodes && (
-                <span className="shrink-0 tabular-nums text-faint">
-                  {p.anchors.length / 2} nodes
-                  {p.breaks.length > 0 && <span className="text-bad"> · {p.breaks.length / 3} kinks</span>}
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label={focus ? 'Zoom out' : `Zoom into ${p.title}`}
-              className={`relative block aspect-square w-full overflow-hidden rounded-lg border border-line bg-white ${focus ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
-            >
-              <div
-                className="absolute inset-0 transition-transform duration-300 ease-out"
-                style={
-                  focus
-                    ? {
-                        transformOrigin: `${focus.x * 100}% ${focus.y * 100}%`,
-                        transform: `scale(${ZOOM})`,
-                      }
-                    : undefined
-                }
-              >
-                <img src={p.src} alt="" className="h-full w-full" loading="lazy" draggable={false} />
-                {nodes && (
-                  <NodeOverlay
-                    w={example.width}
-                    h={example.height}
-                    anchors={p.anchors}
-                    breaks={p.breaks}
-                    scale={focus ? ZOOM : 1}
-                  />
-                )}
-              </div>
-            </button>
-          </div>
-        ))}
-      </div>
-      <MetricTable example={example} />
+      <NodePanels panels={panels} width={example.width} height={example.height} nodes={nodes} />
+      <ScoreTable columns={example.tools.map((t) => ({ tool: t.tool, metrics: t.metrics }))} />
       {caption && (
         <figcaption className="mt-3 max-w-[72ch] text-[0.85rem] leading-relaxed text-muted">{caption}</figcaption>
       )}
@@ -407,111 +336,17 @@ function Figure({
   )
 }
 
-/** Anchors as dots and counted tangent breaks as red rings, sized in SCREEN pixels whatever
- *  the zoom (the overlay scales with the art, so radii are divided back out). */
-function NodeOverlay({
-  w,
-  h,
-  anchors,
-  breaks,
-  scale,
-}: {
-  w: number
-  h: number
-  anchors: number[]
-  breaks: number[]
-  scale: number
-}) {
-  // viewBox units per screen pixel at the panel's ~220px width.
-  const unit = w / 220 / scale
-  const dots: ReactNode[] = []
-  for (let i = 0; i < anchors.length; i += 2)
-    dots.push(<circle key={i} cx={anchors[i]} cy={anchors[i + 1]} r={1.6 * unit} />)
-  const rings: ReactNode[] = []
-  for (let i = 0; i < breaks.length; i += 3)
-    rings.push(<circle key={i} cx={breaks[i]} cy={breaks[i + 1]} r={5 * unit} />)
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
-      <g fill="#4f46e5" stroke="#fff" strokeWidth={0.6 * unit}>
-        {dots}
-      </g>
-      <g fill="none" stroke="#dc2626" strokeWidth={1.6 * unit}>
-        {rings}
-      </g>
-    </svg>
-  )
-}
-
-/** Both kinds of score for one example, the winner of each row marked — the whole argument
- *  is that the two halves of this table disagree. */
-function MetricTable({ example }: { example: Example }) {
-  const tools: ToolOut[] = example.tools
-  const rows = [...PICTURE_ROWS, ...DRAWING_ROWS]
-  return (
-    <div className="mt-3 overflow-x-auto rounded-lg border border-line bg-surface">
-      <table className="w-full min-w-[460px] text-xs tabular-nums">
-        <thead className="border-b border-line bg-surface-2 text-[0.68rem] text-muted">
-          <tr>
-            <th className="px-2.5 py-1.5 text-left font-medium" />
-            {tools.map((t) => (
-              <th key={t.tool} className="px-2.5 py-1.5 text-right font-medium">
-                {label(t.tool)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => {
-            const vals = tools.map((t) => n(t.metrics, r.key))
-            const present = vals.filter((v): v is number => v !== null)
-            const best = present.length ? (r.better === 'lower' ? Math.min(...present) : Math.max(...present)) : null
-            const tie = present.filter((v) => v.toFixed(r.digits) === best?.toFixed(r.digits)).length > 1
-            return (
-              <tr
-                key={r.key}
-                className={`border-t border-line ${i === PICTURE_ROWS.length ? 'border-t-2 border-t-line-strong' : ''}`}
-              >
-                <td className="whitespace-nowrap px-2.5 py-1.5 text-muted">
-                  {r.label}
-                  {i === 0 && (
-                    <span className="ml-1.5 rounded bg-surface-3 px-1 py-0.5 text-[0.6rem] uppercase tracking-wide">
-                      picture
-                    </span>
-                  )}
-                  {i === PICTURE_ROWS.length && (
-                    <span className="ml-1.5 rounded bg-accent-soft px-1 py-0.5 text-[0.6rem] uppercase tracking-wide text-accent">
-                      drawing
-                    </span>
-                  )}
-                </td>
-                {vals.map((v, k) => (
-                  <td
-                    key={tools[k].tool}
-                    className={`px-2.5 py-1.5 text-right ${v !== null && v === best && !tie ? 'font-semibold text-good' : 'text-ink-2'}`}
-                  >
-                    {fmt(v, r.digits)}
-                  </td>
-                ))}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 // ---------------------------------------------------------------------------
 
-const TABLE: (Row & { group: string })[] = [
-  { ...PICTURE_ROWS[0], group: 'SVG-Bench' },
-  { ...PICTURE_ROWS[1], group: 'SVG-Bench' },
-  { ...PICTURE_ROWS[2], group: 'SVG-Bench' },
-  { key: 'meanDeltaE', label: 'ΔE', better: 'lower', digits: 2, kind: 'drawing', group: 'Drawing' },
-  { key: 'chamfer', label: 'Edge px', better: 'lower', digits: 2, kind: 'drawing', group: 'Drawing' },
-  { key: 'nodeRatio', label: 'Nodes ÷ artist', better: 'lower', digits: 1, kind: 'drawing', group: 'Drawing' },
-  { key: 'tangentBreaks', label: 'Kinks', better: 'lower', digits: 0, kind: 'drawing', group: 'Drawing' },
-  { key: 'bytes', label: 'KB', better: 'lower', digits: 1, kind: 'drawing', group: 'Drawing' },
+const TABLE: Row[] = [
+  { key: 'sbDino', label: 'DINO score', better: 'higher', digits: 4 },
+  { key: 'sbLpips', label: 'LPIPS', better: 'lower', digits: 4 },
+  { key: 'sbSsim', label: 'SSIM', better: 'higher', digits: 3 },
+  { key: 'meanDeltaE', label: 'ΔE', better: 'lower', digits: 2 },
+  { key: 'chamfer', label: 'Edge px', better: 'lower', digits: 2 },
+  { key: 'nodeRatio', label: 'Nodes ÷ artist', better: 'lower', digits: 1 },
+  { key: 'tangentBreaks', label: 'Kinks', better: 'lower', digits: 0 },
+  { key: 'bytes', label: 'KB', better: 'lower', digits: 1 },
 ]
 
 function ResultsTable() {

@@ -25,7 +25,8 @@
 // --skip-tools a,b drops tools for one run (e.g. starvector on the 668-row corpus).
 //
 // Output: .bench-tools/results/<run>/ — cases/<corpus>/<case>/{truth.png,<tool>.svg,<tool>.png},
-// results.json (every row + run metadata), summary.md, pairs.jsonl / svgbench.jsonl.
+// results.json (every row + run metadata), summary.md, pairs.jsonl / svgbench.jsonl, and an
+// overlay.json per case (node + kink positions, overlay.ts).
 // External tools are cached by (tool version, PNG bytes) in .bench-tools/compare-cache/;
 // LogoLab is always re-traced (it is what changes).
 //
@@ -44,6 +45,7 @@ import { CORPORA, DEFAULT_CORPORA, inkOf, loadCorpus } from './corpus.ts'
 import { renderGround } from './render.ts'
 import { scoreTrace, type Truth } from './score.ts'
 import { summaryMarkdown } from './report.ts'
+import { writeOverlays } from './overlay.ts'
 import { logolabAblation, logolabAuto, logolabGate, logolabProduct, provenance } from './adapters/logolab.ts'
 import { potrace, potraceBin, vtracerDefault, vtracerPoster, vtracerSwept, VTRACER_SWEPT } from './adapters/external.ts'
 import { starvector, starvectorProvenance } from './adapters/starvector.ts'
@@ -262,6 +264,8 @@ async function main(): Promise<void> {
   mkdirSync(runDir, { recursive: true })
   const pairsPath = join(runDir, 'pairs.jsonl')
   writeFileSync(pairsPath, pairs.join('\n') + '\n')
+  // Node + kink positions per case, for the labs' node view (overlay.ts).
+  console.log(`  overlays: ${writeOverlays(runDir, RES)} cases`)
   let sbNotes: unknown = 'skipped (--no-svgbench)'
   if (!has('--no-svgbench')) {
     if (!existsSync(VENV_PY)) sbNotes = `skipped: no Python venv at ${VENV_PY}`
