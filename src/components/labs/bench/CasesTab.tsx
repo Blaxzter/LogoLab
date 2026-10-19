@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { ExternalLink } from '../../ui/icons'
-import { Tooltip } from '../../ui/Tooltip'
 import { Badge, CaseRow } from '../CaseRow'
 import { LabCheck, LabSelect } from '../LabPage'
 import { Panel } from '../Panel'
-import { deltaEField, deltaEHeat } from '../../../lib/render/fidelity'
-import { diffPicture } from '../../../lib/render/diffView'
-import { heatCss } from '../../../lib/heat'
 import {
   CORE_TOOLS,
   GROUP_LABEL,
@@ -21,7 +17,7 @@ import {
   type BenchResults,
   type BenchRow,
 } from './benchData'
-import { NodeCount, ScoreTable, SvgArt } from './figure'
+import { type CaseMode, DiffArt, ModeSwitch, NodeCount, ScoreTable, SvgArt } from './figure'
 import { runUrl, useFetched } from './ui'
 
 /**
@@ -36,21 +32,7 @@ import { runUrl, useFetched } from './ui'
  * table: the same table the Overview uses. Four tools by default, one of each kind.
  */
 
-export type CaseMode = 'picture' | 'nodes' | 'diff'
-
-const MODES: { id: CaseMode; label: string; hint: string }[] = [
-  { id: 'picture', label: 'Picture', hint: 'The SVG files themselves. Zoom in: they stay sharp.' },
-  {
-    id: 'nodes',
-    label: 'Nodes',
-    hint: 'Every anchor as a dot, every kink the scorer counted (a 5°+ corner where the drawing is smooth) as a red ring.',
-  },
-  {
-    id: 'diff',
-    label: 'Difference',
-    hint: 'Per-pixel colour error (ΔE) against the authored render, over a dim ghost of the art: hot is wrong.',
-  },
-]
+export type { CaseMode }
 
 const SORT_OPTIONS = [
   { value: 'worst' as const, label: 'Worst first' },
@@ -118,20 +100,7 @@ export function CasesTab({
   return (
     <div className="pb-10">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-2 text-xs">
-        <div className="inline-flex rounded-md border border-line bg-surface-2 p-0.5">
-          {MODES.map((m) => (
-            <Tooltip key={m.id} label={m.hint} side="bottom">
-              <button
-                type="button"
-                aria-pressed={view.mode === m.id}
-                onClick={() => setView({ mode: m.id })}
-                className={`rounded px-2.5 py-1 transition-colors ${view.mode === m.id ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
-              >
-                {m.label}
-              </button>
-            </Tooltip>
-          ))}
-        </div>
+        <ModeSwitch mode={view.mode} onMode={(mode) => setView({ mode })} />
         <LabSelect
           label="Sort by"
           value={metric.key}
@@ -211,7 +180,7 @@ interface Overlay {
   width: number
   height: number
   authored: number[]
-  tools: Record<string, { anchors: number[]; breaks: number[] }>
+  tools: Record<string, { anchors: number[]; breaks: number[]; dirs?: number[] }>
 }
 
 function CaseView({
@@ -313,6 +282,7 @@ function CaseView({
               <SvgArt
                 url={runUrl(run, `${dir}/${tool}.svg`)}
                 breaks={o?.breaks}
+                dirs={o?.dirs}
                 w={overlay?.width}
                 h={overlay?.height}
               />
@@ -321,83 +291,5 @@ function CaseView({
         )
       })}
     </CaseRow>
-  )
-}
-
-// One decode per URL for the life of the page: the authored render is the left side of
-// every tool's difference in its row.
-const pixelCache = new Map<string, Promise<ImageData>>()
-
-function loadPixels(url: string, size?: { w: number; h: number }): Promise<ImageData> {
-  const key = size ? `${url}@${size.w}x${size.h}` : url
-  let hit = pixelCache.get(key)
-  if (!hit) {
-    hit = new Promise<ImageData>((resolve, reject) => {
-      const img = new Image()
-      img.onload = () => {
-        const w = size?.w ?? img.naturalWidth
-        const h = size?.h ?? img.naturalHeight
-        const c = document.createElement('canvas')
-        c.width = w
-        c.height = h
-        const g = c.getContext('2d', { willReadFrequently: true })
-        if (!g) return reject(new Error('no 2d context'))
-        g.drawImage(img, 0, 0, w, h)
-        resolve(g.getImageData(0, 0, w, h))
-      }
-      img.onerror = () => reject(new Error(`could not load ${url}`))
-      img.src = url
-    })
-    pixelCache.set(key, hit)
-  }
-  return hit
-}
-
-/** The studio's Difference picture for one render: heat over a ghost of the art, from ONE
- *  deltaEField call (CLAUDE.md: the number and the picture are one field). The render is
- *  resampled to the authored render's size if the two differ. */
-function DiffArt({ truth, render }: { truth: string; render: string }) {
-  const ref = useRef<HTMLCanvasElement>(null)
-  const [mean, setMean] = useState<number | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  useEffect(() => {
-    let live = true
-    ;(async () => {
-      const src = await loadPixels(truth)
-      const out = await loadPixels(render, { w: src.width, h: src.height })
-      if (!live) return
-      const field = deltaEField(src.data, out.data, src.width, src.height)
-      const pic = diffPicture(deltaEHeat(field.de), field.de, src.data, src.width, src.height)
-      const c = ref.current
-      if (!c) return
-      c.width = src.width
-      c.height = src.height
-      const g = c.getContext('2d')
-      if (g) {
-        const img = g.createImageData(src.width, src.height)
-        img.data.set(pic)
-        g.putImageData(img, 0, 0)
-      }
-      let s = 0
-      for (let i = 0; i < field.de.length; i++) s += field.de[i]
-      setMean(s / field.de.length)
-    })().catch((e) => live && setErr(String(e)))
-    return () => {
-      live = false
-    }
-  }, [truth, render])
-  return (
-    <>
-      <canvas ref={ref} />
-      {err && <span className="absolute inset-x-1 top-1 text-[0.6rem] text-bad">{err}</span>}
-      {mean !== null && (
-        <span
-          className="absolute bottom-1 right-1 rounded px-1 text-[0.6rem] tabular-nums text-white"
-          style={{ background: heatCss(Math.min(1, mean / 5)) }}
-        >
-          ΔE {mean.toFixed(2)}
-        </span>
-      )}
-    </>
   )
 }

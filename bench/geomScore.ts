@@ -1125,6 +1125,11 @@ export interface TangentBreak {
   y: number
   /** The traced node's C⁰ kink (deg). */
   kink: number
+  /** Unit tangents arriving at and leaving the node: the kink is the angle between them. */
+  itx: number
+  ity: number
+  otx: number
+  oty: number
 }
 
 /** Traced tangent breaks on smooth authored boundary. See the block comment above. */
@@ -1213,7 +1218,7 @@ export function tangentBreaks(
     if (gtKinks.some((g) => Math.hypot(g.x - c.x, g.y - c.y) <= CORNER_MATCH_R)) continue
     if (chainTurn(bch, bi, KINK_WIN) >= BREAK_SMOOTH_MAX) continue
     const kink = Math.acos(Math.max(-1, Math.min(1, c.itx * c.otx + c.ity * c.oty))) / deg
-    sites.push({ x: c.x, y: c.y, kink })
+    sites.push({ x: c.x, y: c.y, kink, itx: c.itx, ity: c.ity, otx: c.otx, oty: c.oty })
   }
   sites.sort((a, b) => b.kink - a.kink)
   return { count: sites.length, worst: sites.length ? sites[0].kink : 0, sites }

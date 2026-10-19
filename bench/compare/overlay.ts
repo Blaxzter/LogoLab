@@ -26,6 +26,8 @@ export interface ToolOverlay {
   anchors: number[]
   /** Counted tangent breaks, flat [x, y, kink°, …]. */
   breaks: number[]
+  /** Per break, the unit tangents arriving and leaving: flat [itx, ity, otx, oty, …]. */
+  dirs: number[]
 }
 
 export interface CaseOverlay {
@@ -36,6 +38,7 @@ export interface CaseOverlay {
 }
 
 const round = (v: number) => Math.round(v * 10) / 10
+const unit = (v: number) => Math.round(v * 1000) / 1000
 const anchorsOf = (sets: SubPath[][]) => sets.flat().flatMap((sp) => sp.nodes.flatMap((n) => [round(n.x), round(n.y)]))
 
 /** Anchors and kinks of each tool's SVG, measured against one authored SVG at `res`. */
@@ -53,6 +56,7 @@ export function caseOverlay(authoredSvg: string, res: number, toolSvgs: Map<stri
     tools[tool] = {
       anchors: anchorsOf(sets),
       breaks: breaks.flatMap((b) => [round(b.x), round(b.y), Math.round(b.kink)]),
+      dirs: breaks.flatMap((b) => [unit(b.itx), unit(b.ity), unit(b.otx), unit(b.oty)]),
     }
   }
   return {

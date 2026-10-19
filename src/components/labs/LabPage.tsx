@@ -34,8 +34,6 @@ import './labs.css'
 export interface LabZoom {
   pz: PanZoom
   claimed: MutableRefObject<boolean>
-  /** How the panels take the wheel (ZoomSurface): a page that scrolls passes 'modifier'. */
-  wheel?: 'zoom' | 'modifier'
 }
 
 export const LabZoomContext = createContext<LabZoom | null>(null)

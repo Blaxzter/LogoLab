@@ -5,9 +5,10 @@ import { usePanZoom } from '../../../hooks/usePanZoom'
 import { ExternalLink } from '../../ui/icons'
 import { ZoomControls } from '../../ui/ZoomControls'
 import { toolInfo } from './benchData'
+import { MAX_ZOOM } from '../CaseRow'
 import { LabZoomContext } from '../LabPage'
 import { Panel } from '../Panel'
-import { NodeCount, ScoreTable, SvgArt } from './figure'
+import { type CaseMode, DiffArt, ModeSwitch, NodeCount, ScoreTable, SvgArt } from './figure'
 import { SHOWCASE as data } from './showcase.generated'
 import type { ShowExample, ShowMetrics } from './showcaseTypes'
 
@@ -58,7 +59,7 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
 
         <Figure
           example={hero}
-          initialNodes
+          initialMode="nodes"
           caption={
             <>
               Three traces of the same emoji. The DINO score, the headline metric of StarVector’s SVG-Bench, calls them
@@ -66,8 +67,8 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
               {hero.authoredNodes.length / 2} nodes; the traces use{' '}
               {hero.tools.map((t) => n(t.metrics, 'docNodes')).join(', ')}, and VTracer puts{' '}
               {n(hero.tools[1].metrics, 'tangentBreaks')} kinks (red rings) on curves the artist drew smooth. StarVector
-              uses the fewest nodes, and its outline is the furthest from the drawing. Zoom with the buttons or Ctrl and
-              the wheel, and drag to look around.
+              uses the fewest nodes, and its outline is the furthest from the drawing. Scroll over a panel to zoom, and
+              drag to look around.
             </>
           }
         />
@@ -281,22 +282,34 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 function Figure({
   example,
   caption,
-  initialNodes = false,
+  initialMode = 'picture',
 }: {
   example: Example
   caption?: ReactNode
-  initialNodes?: boolean
+  initialMode?: CaseMode
 }) {
-  const [nodes, setNodes] = useState(initialNodes)
-  // The labs' row camera, on the labs' panels: every panel pans and zooms as one. The wheel
-  // zooms only with Ctrl/⌘ held, because this page scrolls.
-  const pz = usePanZoom({ maxScale: 40 })
+  const [mode, setMode] = useState<CaseMode>(initialMode)
+  const nodes = mode === 'nodes'
+  // The labs' row camera, on the labs' panels: every panel pans and zooms as one.
+  const pz = usePanZoom({ maxScale: MAX_ZOOM })
   const claimed = useRef(false)
-  const zoom = useMemo(() => ({ pz, claimed, wheel: 'modifier' as const }), [pz])
+  const zoom = useMemo(() => ({ pz, claimed }), [pz])
   const base = `/benchmark/${example.slug}`
   const panels = [
-    { key: 'authored', title: 'Drawn by the artist', anchors: example.authoredNodes, breaks: [] as number[] },
-    ...example.tools.map((t) => ({ key: t.tool, title: label(t.tool), anchors: t.anchors, breaks: t.breaks })),
+    {
+      key: 'authored',
+      title: 'Drawn by the artist',
+      anchors: example.authoredNodes,
+      breaks: [] as number[],
+      dirs: [] as number[],
+    },
+    ...example.tools.map((t) => ({
+      key: t.tool,
+      title: label(t.tool),
+      anchors: t.anchors,
+      breaks: t.breaks,
+      dirs: t.dirs,
+    })),
   ]
   // A lab panel is `--lab-box` square; here that is whatever fills the row (two per row on
   // a phone), measured, since the article's column is not a fixed width.
@@ -322,15 +335,7 @@ function Figure({
         <span className="font-mono text-[0.7rem] text-faint">
           {example.caseId.slice(example.caseId.indexOf('/') + 1)}
         </span>
-        <label className="inline-flex cursor-pointer select-none items-center gap-1.5">
-          <input
-            type="checkbox"
-            checked={nodes}
-            onChange={(e) => setNodes(e.target.checked)}
-            className="h-3.5 w-3.5 accent-[var(--color-accent)]"
-          />
-          Show nodes and kinks
-        </label>
+        <ModeSwitch mode={mode} onMode={setMode} />
         <ZoomControls pz={pz} className="ml-auto" />
       </div>
       <LabZoomContext.Provider value={zoom}>
@@ -339,16 +344,38 @@ function Figure({
           className="flex flex-wrap items-stretch"
           style={{ gap: GAP, '--lab-box': `${box}px` } as CSSProperties}
         >
-          {panels.map((p) => (
-            <Panel
-              key={p.key}
-              label={p.title}
-              note={nodes ? <NodeCount anchors={p.anchors} breaks={p.breaks} /> : undefined}
-              aspect={example.width / example.height}
-            >
-              <SvgArt url={`${base}/${p.key}.svg`} breaks={p.breaks} w={example.width} h={example.height} />
-            </Panel>
-          ))}
+          {panels.map((p) => {
+            // In Difference the artist's panel stays the picture every heat map is measured from.
+            const diff = mode === 'diff' && p.key !== 'authored'
+            return (
+              <Panel
+                key={p.key}
+                label={p.title}
+                note={nodes ? <NodeCount anchors={p.anchors} breaks={p.breaks} /> : undefined}
+                aspect={example.width / example.height}
+                dark={diff}
+                pixelated={diff}
+              >
+                {diff ? (
+                  <DiffArt
+                    truth={`${base}/authored.svg`}
+                    render={`${base}/${p.key}.svg`}
+                    w={example.width}
+                    h={example.height}
+                    mean={false}
+                  />
+                ) : (
+                  <SvgArt
+                    url={`${base}/${p.key}.svg`}
+                    breaks={p.breaks}
+                    dirs={p.dirs}
+                    w={example.width}
+                    h={example.height}
+                  />
+                )}
+              </Panel>
+            )
+          })}
         </div>
       </LabZoomContext.Provider>
       <ScoreTable columns={example.tools.map((t) => ({ tool: t.tool, metrics: t.metrics }))} />

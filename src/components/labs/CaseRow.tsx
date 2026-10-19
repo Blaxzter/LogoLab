@@ -28,7 +28,7 @@ export function CaseRow({
   children: ReactNode
   footer?: ReactNode
 }) {
-  const pz = usePanZoom({ maxScale: 40 })
+  const pz = usePanZoom({ maxScale: MAX_ZOOM })
   const claimed = useRef(false)
   return (
     <section className="border-b border-line px-4 py-4">
@@ -53,6 +53,11 @@ export function CaseRow({
     </section>
   )
 }
+
+/** Deepest zoom a row allows. The art is vector and every marker is drawn at a constant
+ *  screen size, so depth costs nothing; at 40× an 8° kink on a gentle curve still read as
+ *  smooth. */
+export const MAX_ZOOM = 400
 
 export type BadgeTone = 'ok' | 'warn' | 'bad' | 'neutral' | 'accent'
 

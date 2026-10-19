@@ -1,6 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { parseGroundTruth } from '../../../../bench/svgGround'
+import { heatCss } from '../../../lib/heat'
+import { deltaEField, deltaEHeat } from '../../../lib/render/fidelity'
+import { diffPicture } from '../../../lib/render/diffView'
+import { Tooltip } from '../../ui/Tooltip'
+import { useLabZoom } from '../LabPage'
 import { RawArt } from '../Panel'
 import { subPathsWire } from '../wire'
 import { toolInfo } from './benchData'
@@ -18,13 +23,25 @@ import { useFetched } from './ui'
  * Shared by the Overview figures and the Cases tab, so "68 nodes, 0 kinks" is the same
  * picture in both.
  */
-export function SvgArt({ url, breaks, w, h }: { url: string; breaks?: number[]; w?: number; h?: number }) {
+export function SvgArt({
+  url,
+  breaks,
+  dirs,
+  w,
+  h,
+}: {
+  url: string
+  breaks?: number[]
+  dirs?: number[]
+  w?: number
+  h?: number
+}) {
   const svg = useFetched<string>(url, 'text')
   const html = useMemo(() => (svg ? withWire(svg) : ''), [svg])
   return (
     <>
       {html && <RawArt html={html} />}
-      {breaks && breaks.length > 0 && w && h && <KinkRings w={w} h={h} breaks={breaks} />}
+      {breaks && breaks.length > 0 && w && h && <Kinks w={w} h={h} breaks={breaks} dirs={dirs} />}
     </>
   )
 }
@@ -55,25 +72,101 @@ function withWire(svg: string): string {
   return `${tag}<g class="lab-fill">${inner}</g>${wire}</svg>`
 }
 
+/** Screen px of each tangent arm drawn at a kink: at 8° the two arms' ends are ~8 px apart. */
+const ARM = 60
+/** Zoom from which a kink shows its arms and angle. Below it the rings sit a few px apart
+ *  where kinks cluster (VTracer's eyebrows), and their arms crossed into a scribble. */
+const DETAIL_ZOOM = 3
+
 /**
- * Red rings on the kinks the scorer counted, in the `w`×`h` pixels it scored in
- * (overlay.json). Positioned in PERCENT of the panel with radii in CSS px divided by the
- * zoom, so a ring is the same screen size at 100% and 4000% and needs no viewBox to agree
- * with the art's. It is a `.lab-wire`, so it shows with the wireframe.
+ * The kinks the scorer counted, drawn as it measured them, in the `w`×`h` pixels it scored
+ * in (overlay.json): a ring on the node, the direction the outline ARRIVES in carried on
+ * past it (dashed: where a smooth curve would have gone), the direction it actually LEAVES
+ * in (solid), and the angle between the two. An 8° kink is a real corner and still hard to
+ * see on a curve that bends across the whole panel; the two arms make it readable at any
+ * zoom, which an angle needs, since zooming in flattens the curve but never the kink.
+ *
+ * Each mark is a nested <svg> placed in PERCENT of the panel and drawn in screen px, scaled
+ * by 1/zoom, so it is the same size at every zoom and needs no viewBox to agree with the
+ * art's. It is a `.lab-wire`, so it shows with the wireframe. Arms and angles wait for
+ * DETAIL_ZOOM; the ring alone says where.
  */
-function KinkRings({ w, h, breaks }: { w: number; h: number; breaks: number[] }) {
-  const ring: CSSProperties = {
-    r: 'calc(6px / var(--pz-scale, 1))',
-    strokeWidth: 'calc(1.75px / var(--pz-scale, 1))',
-  } as CSSProperties
-  const rings = []
-  for (let i = 0; i < breaks.length; i += 3)
-    rings.push(<circle key={i} cx={`${(breaks[i] / w) * 100}%`} cy={`${(breaks[i + 1] / h) * 100}%`} style={ring} />)
+function Kinks({ w, h, breaks, dirs }: { w: number; h: number; breaks: number[]; dirs?: number[] }) {
+  const detail = useLabZoom().pz.scale >= DETAIL_ZOOM
+  const counter: CSSProperties = { transform: 'scale(calc(1 / var(--pz-scale, 1)))' }
+  const marks = []
+  for (let i = 0, k = 0; i < breaks.length; i += 3, k += 4) {
+    const d = detail && dirs && dirs.length >= k + 4 ? dirs.slice(k, k + 4) : null
+    marks.push(
+      <svg key={i} x={`${(breaks[i] / w) * 100}%`} y={`${(breaks[i + 1] / h) * 100}%`} overflow="visible">
+        <g style={counter}>
+          {d && (
+            <>
+              <line x1={-ARM * d[0]} y1={-ARM * d[1]} x2={0} y2={0} />
+              <line x1={0} y1={0} x2={ARM * d[0]} y2={ARM * d[1]} strokeDasharray="3 3" />
+              <line x1={0} y1={0} x2={ARM * d[2]} y2={ARM * d[3]} />
+            </>
+          )}
+          <circle r={6} />
+          {detail && (
+            <text
+              x={9}
+              y={-9}
+              fill="#dc2626"
+              stroke="#fff"
+              strokeWidth={3}
+              paintOrder="stroke"
+              fontSize={11}
+              fontWeight={600}
+            >
+              {breaks[i + 2]}°
+            </text>
+          )}
+        </g>
+      </svg>,
+    )
+  }
   return (
     <div className="lab-wire absolute inset-0">
-      <svg className="h-full w-full overflow-visible" fill="none" stroke="#dc2626" aria-hidden>
-        {rings}
+      <svg className="h-full w-full overflow-visible" fill="none" stroke="#dc2626" strokeWidth={1.75} aria-hidden>
+        {marks}
       </svg>
+    </div>
+  )
+}
+
+export type CaseMode = 'picture' | 'nodes' | 'diff'
+
+const MODES: { id: CaseMode; label: string; hint: string }[] = [
+  { id: 'picture', label: 'Picture', hint: 'The SVG files themselves. Zoom in: they stay sharp.' },
+  {
+    id: 'nodes',
+    label: 'Nodes & kinks',
+    hint: 'Outlines and anchors (square: corner, round: smooth). A red ring is a kink the scorer counted, a 5°+ corner where the drawing is smooth: dashed is where the outline was heading, solid where it goes.',
+  },
+  {
+    id: 'diff',
+    label: 'Difference',
+    hint: 'Per-pixel colour error (ΔE) against the authored render, over a dim ghost of the art: hot is wrong.',
+  },
+]
+
+/** Picture | Nodes & kinks | Difference: how a row of panels draws each SVG. */
+export function ModeSwitch({ mode, onMode }: { mode: CaseMode; onMode: (m: CaseMode) => void }) {
+  return (
+    <div className="inline-flex rounded-md border border-line bg-surface-2 p-0.5 text-xs">
+      {MODES.map((m) => (
+        <Tooltip key={m.id} label={m.hint} side="bottom">
+          <button
+            type="button"
+            aria-pressed={mode === m.id}
+            onClick={() => onMode(m.id)}
+            className={`rounded px-2.5 py-1 transition-colors ${mode === m.id ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+          >
+            {m.label}
+          </button>
+        </Tooltip>
+      ))}
     </div>
   )
 }
@@ -85,6 +178,105 @@ export function NodeCount({ anchors, breaks }: { anchors: number[]; breaks: numb
       {anchors.length / 2} nodes
       {breaks.length > 0 && <span className="text-bad"> · {breaks.length / 3} kinks</span>}
     </span>
+  )
+}
+
+// One decode per URL and size for the life of the page: the authored render is the left side
+// of every tool's difference in its row.
+const pixelCache = new Map<string, Promise<ImageData>>()
+
+/** A raster or an SVG file as pixels, ON WHITE as the run rendered every input: at `size`,
+ *  or at its natural size. */
+function loadPixels(url: string, size?: { w: number; h: number }): Promise<ImageData> {
+  const key = size ? `${url}@${size.w}x${size.h}` : url
+  let hit = pixelCache.get(key)
+  if (!hit) {
+    hit = new Promise<ImageData>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => {
+        const w = size?.w ?? img.naturalWidth
+        const h = size?.h ?? img.naturalHeight
+        const c = document.createElement('canvas')
+        c.width = w
+        c.height = h
+        const g = c.getContext('2d', { willReadFrequently: true })
+        if (!g) return reject(new Error('no 2d context'))
+        g.fillStyle = '#fff'
+        g.fillRect(0, 0, w, h)
+        g.drawImage(img, 0, 0, w, h)
+        resolve(g.getImageData(0, 0, w, h))
+      }
+      img.onerror = () => reject(new Error(`could not load ${url}`))
+      img.src = url
+    })
+    pixelCache.set(key, hit)
+  }
+  return hit
+}
+
+/**
+ * The studio's Difference picture for one output: heat over a ghost of the art, from ONE
+ * deltaEField call (CLAUDE.md: the number and the picture are one field), both sides drawn
+ * on white at `w`×`h` (default: the truth's own size). `mean` adds the field's mean ΔE in a corner chip; the Overview leaves
+ * it off, since a browser raster scores a hair off the run's resvg one and the table under
+ * the figure already prints the run's number.
+ */
+export function DiffArt({
+  truth,
+  render,
+  w,
+  h,
+  mean: showMean = true,
+}: {
+  truth: string
+  render: string
+  w?: number
+  h?: number
+  mean?: boolean
+}) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  const [mean, setMean] = useState<number | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      const src = await loadPixels(truth, w && h ? { w, h } : undefined)
+      const out = await loadPixels(render, { w: src.width, h: src.height })
+      if (!live) return
+      const { width, height } = src
+      const field = deltaEField(src.data, out.data, width, height)
+      const pic = diffPicture(deltaEHeat(field.de), field.de, src.data, width, height)
+      const c = ref.current
+      if (!c) return
+      c.width = width
+      c.height = height
+      const g = c.getContext('2d')
+      if (g) {
+        const img = g.createImageData(width, height)
+        img.data.set(pic)
+        g.putImageData(img, 0, 0)
+      }
+      let s = 0
+      for (let i = 0; i < field.de.length; i++) s += field.de[i]
+      setMean(s / field.de.length)
+    })().catch((e) => live && setErr(String(e)))
+    return () => {
+      live = false
+    }
+  }, [truth, render, w, h])
+  return (
+    <>
+      <canvas ref={ref} />
+      {err && <span className="absolute inset-x-1 top-1 text-[0.6rem] text-bad">{err}</span>}
+      {showMean && mean !== null && (
+        <span
+          className="absolute bottom-1 right-1 rounded px-1 text-[0.6rem] tabular-nums text-white"
+          style={{ background: heatCss(Math.min(1, mean / 5)) }}
+        >
+          ΔE {mean.toFixed(2)}
+        </span>
+      )}
+    </>
   )
 }
 

@@ -11,6 +11,8 @@ export interface ShowTool {
   anchors: number[]
   /** Counted tangent breaks, flat [x, y, kink°, …]. */
   breaks: number[]
+  /** Per break, the unit tangents arriving and leaving: flat [itx, ity, otx, oty, …]. */
+  dirs: number[]
 }
 
 export interface ShowExample {
