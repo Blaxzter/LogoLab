@@ -21,7 +21,7 @@ import {
   type BenchResults,
   type BenchRow,
 } from './benchData'
-import { NodeOverlay, ScoreTable } from './figure'
+import { NodeCount, ScoreTable, SvgArt } from './figure'
 import { runUrl, useFetched } from './ui'
 
 /**
@@ -231,18 +231,17 @@ function CaseView({
 }) {
   const dir = caseDir(caseId)
   const truth = runUrl(run, `${dir}/truth.png`)
-  const [aspect, setAspect] = useState(1)
+  // The panels take the authored drawing's shape, read off its viewBox.
+  const authored = useFetched<string>(runUrl(run, `gt/${caseId}`), 'text')
+  const aspect = useMemo(() => {
+    const vb = authored && /viewBox\s*=\s*["']\s*[-\d.e]+[\s,]+[-\d.e]+[\s,]+([\d.e]+)[\s,]+([\d.e]+)/i.exec(authored)
+    return vb ? Number(vb[1]) / Number(vb[2]) || 1 : 1
+  }, [authored])
   // Only fetched once someone asks for nodes: 100 cases × 11 tools of anchors is not free.
   const overlay = useFetched<Overlay>(mode === 'nodes' ? runUrl(run, `${dir}/overlay.json`) : null, 'json')
   const any = byTool.values().next().value as BenchRow | undefined
   const present = tools.filter((t) => byTool.has(t))
-  const count = (o: { anchors: number[]; breaks: number[] } | undefined) =>
-    o ? (
-      <span className="tabular-nums">
-        {o.anchors.length / 2} nodes
-        {o.breaks.length > 0 && <span className="text-bad"> · {o.breaks.length / 3} kinks</span>}
-      </span>
-    ) : undefined
+  const count = (o: { anchors: number[]; breaks: number[] } | undefined) => (o ? <NodeCount {...o} /> : undefined)
 
   return (
     <CaseRow
@@ -280,20 +279,7 @@ function CaseView({
         aspect={aspect}
         pixelated={mode === 'diff'}
       >
-        {mode === 'diff' ? (
-          <img src={truth} alt="" />
-        ) : (
-          <>
-            <img
-              src={runUrl(run, `gt/${caseId}`)}
-              alt=""
-              onLoad={(e) => setAspect(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight || 1)}
-            />
-            {mode === 'nodes' && overlay && (
-              <NodeOverlay w={overlay.width} h={overlay.height} anchors={overlay.authored} breaks={[]} />
-            )}
-          </>
-        )}
+        {mode === 'diff' ? <img src={truth} alt="" /> : <SvgArt url={runUrl(run, `gt/${caseId}`)} />}
       </Panel>
       {present.map((tool) => {
         const r = byTool.get(tool)
@@ -324,12 +310,12 @@ function CaseView({
             {mode === 'diff' ? (
               <DiffArt truth={truth} render={runUrl(run, `${dir}/${tool}.png`)} />
             ) : (
-              <>
-                <img src={runUrl(run, `${dir}/${tool}.svg`)} alt="" loading="lazy" />
-                {mode === 'nodes' && overlay && o && (
-                  <NodeOverlay w={overlay.width} h={overlay.height} anchors={o.anchors} breaks={o.breaks} />
-                )}
-              </>
+              <SvgArt
+                url={runUrl(run, `${dir}/${tool}.svg`)}
+                breaks={o?.breaks}
+                w={overlay?.width}
+                h={overlay?.height}
+              />
             )}
           </Panel>
         )

@@ -1,11 +1,13 @@
-import { useState } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { usePanZoom } from '../../../hooks/usePanZoom'
 import { ExternalLink } from '../../ui/icons'
 import { ZoomControls } from '../../ui/ZoomControls'
 import { toolInfo } from './benchData'
-import { NodePanels, ScoreTable } from './figure'
+import { LabZoomContext } from '../LabPage'
+import { Panel } from '../Panel'
+import { NodeCount, ScoreTable, SvgArt } from './figure'
 import { SHOWCASE as data } from './showcase.generated'
 import type { ShowExample, ShowMetrics } from './showcaseTypes'
 
@@ -286,37 +288,36 @@ function Figure({
   initialNodes?: boolean
 }) {
   const [nodes, setNodes] = useState(initialNodes)
+  // The labs' row camera, on the labs' panels: every panel pans and zooms as one. The wheel
+  // zooms only with Ctrl/⌘ held, because this page scrolls.
   const pz = usePanZoom({ maxScale: 40 })
+  const claimed = useRef(false)
+  const zoom = useMemo(() => ({ pz, claimed, wheel: 'modifier' as const }), [pz])
   const base = `/benchmark/${example.slug}`
-  const count = (anchors: number[], breaks: number[]) =>
-    nodes ? (
-      <>
-        {anchors.length / 2} nodes
-        {breaks.length > 0 && <span className="text-bad"> · {breaks.length / 3} kinks</span>}
-      </>
-    ) : undefined
   const panels = [
-    {
-      key: 'authored',
-      title: 'Drawn by the artist',
-      note: count(example.authoredNodes, []),
-      src: `${base}/authored.svg`,
-      anchors: example.authoredNodes,
-      breaks: [],
-    },
-    ...example.tools.map((t) => ({
-      key: t.tool,
-      title: label(t.tool),
-      note: count(t.anchors, t.breaks),
-      src: `${base}/${t.tool}.svg`,
-      anchors: t.anchors,
-      breaks: t.breaks,
-    })),
+    { key: 'authored', title: 'Drawn by the artist', anchors: example.authoredNodes, breaks: [] as number[] },
+    ...example.tools.map((t) => ({ key: t.tool, title: label(t.tool), anchors: t.anchors, breaks: t.breaks })),
   ]
+  // A lab panel is `--lab-box` square; here that is whatever fills the row (two per row on
+  // a phone), measured, since the article's column is not a fixed width.
+  const row = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState(200)
+  useEffect(() => {
+    const el = row.current
+    if (!el) return undefined
+    const fit = () => {
+      const cols = el.clientWidth < 520 ? 2 : panels.length
+      setBox(Math.max(120, Math.floor((el.clientWidth - GAP * (cols - 1)) / cols)))
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [panels.length])
   return (
     // Panels stay about icon-sized however many there are: the figure is as wide as its
     // panels, not as wide as the page.
-    <figure className="my-6" style={{ maxWidth: panels.length * 250 }}>
+    <figure className={`my-6 ${nodes ? 'wires' : ''}`} style={{ maxWidth: panels.length * 250 }}>
       <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-muted">
         <span className="font-mono text-[0.7rem] text-faint">
           {example.caseId.slice(example.caseId.indexOf('/') + 1)}
@@ -332,7 +333,24 @@ function Figure({
         </label>
         <ZoomControls pz={pz} className="ml-auto" />
       </div>
-      <NodePanels panels={panels} width={example.width} height={example.height} nodes={nodes} pz={pz} />
+      <LabZoomContext.Provider value={zoom}>
+        <div
+          ref={row}
+          className="flex flex-wrap items-stretch"
+          style={{ gap: GAP, '--lab-box': `${box}px` } as CSSProperties}
+        >
+          {panels.map((p) => (
+            <Panel
+              key={p.key}
+              label={p.title}
+              note={nodes ? <NodeCount anchors={p.anchors} breaks={p.breaks} /> : undefined}
+              aspect={example.width / example.height}
+            >
+              <SvgArt url={`${base}/${p.key}.svg`} breaks={p.breaks} w={example.width} h={example.height} />
+            </Panel>
+          ))}
+        </div>
+      </LabZoomContext.Provider>
       <ScoreTable columns={example.tools.map((t) => ({ tool: t.tool, metrics: t.metrics }))} />
       {caption && (
         <figcaption className="mt-3 max-w-[72ch] text-[0.85rem] leading-relaxed text-muted">{caption}</figcaption>
@@ -340,6 +358,8 @@ function Figure({
     </figure>
   )
 }
+
+const GAP = 12
 
 // ---------------------------------------------------------------------------
 

@@ -243,6 +243,7 @@ export default function BenchLab() {
       about={<About />}
       controls={controls}
       viewControls={tab === 'cases'}
+      wires={tab === 'cases' && view.mode === 'nodes'}
       search={
         tab === 'cases' && ready ? { state: search, matched: caseCount.matched, total: caseCount.total } : undefined
       }

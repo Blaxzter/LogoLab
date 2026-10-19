@@ -1,99 +1,90 @@
-import type { CSSProperties, ReactNode } from 'react'
-import type { PanZoom } from '../../../hooks/usePanZoom'
-import { ZoomSurface } from '../../ui/ZoomSurface'
+import { useMemo } from 'react'
+import type { CSSProperties } from 'react'
+import { parseGroundTruth } from '../../../../bench/svgGround'
+import { RawArt } from '../Panel'
+import { subPathsWire } from '../wire'
 import { toolInfo } from './benchData'
+import { useFetched } from './ui'
 
 /**
- * The SVGs of one case side by side, with their nodes and the kinks the scorer counted —
- * shared by the Overview article and the Cases tab, so "68 nodes, 0 kinks" means the same
- * picture in both.
+ * One SVG of a case as the A/B lab draws a trace: INLINE, so the browser re-renders the
+ * vectors at every zoom (an `<img>` under a CSS scale magnifies a bitmap, and at 4000% its
+ * blurred edge no longer runs through the nodes on it), with the lab's `.lab-wire`
+ * wireframe of the file's own geometry appended in the file's own user units: outlines,
+ * square dots on corners, round ones on smooth nodes, a constant screen size at any zoom.
+ * Like every lab panel the wireframe is in the markup and shows when an ancestor carries
+ * `.wires`, so the Nodes toggle needs no refetch.
  *
- * The overlay's marks are sized in SCREEN pixels whatever the zoom: radii and strokes are
- * divided by `--pz-scale`, which usePanZoom sets on every camera, the labs' rows and NodePanels
- * alike. Without it a 4× zoom draws 4× dots that bury the curve they mark.
+ * Shared by the Overview figures and the Cases tab, so "68 nodes, 0 kinks" is the same
+ * picture in both.
  */
-
-export interface NodePanel {
-  key: string
-  title: ReactNode
-  /** Small print right of the title (counts, a status). */
-  note?: ReactNode
-  src: string
-  anchors: number[]
-  /** Flat [x, y, kink°, …]. */
-  breaks: number[]
-}
-
-/** Dots on anchors, red rings on counted kinks, in the art's `w`×`h` pixel space. */
-export function NodeOverlay({ w, h, anchors, breaks }: { w: number; h: number; anchors: number[]; breaks: number[] }) {
-  // User units per screen pixel at a ~220px panel; the zoom divides it back out via CSS.
-  const u = w / 220
-  const px = (v: number): CSSProperties => ({ r: `calc(${v * u}px / var(--pz-scale, 1))` }) as CSSProperties
-  const sw = (v: number): CSSProperties => ({ strokeWidth: `calc(${v * u}px / var(--pz-scale, 1))` })
-  const dots: ReactNode[] = []
-  for (let i = 0; i < anchors.length; i += 2)
-    dots.push(<circle key={i} cx={anchors[i]} cy={anchors[i + 1]} style={px(1.6)} />)
-  const rings: ReactNode[] = []
-  for (let i = 0; i < breaks.length; i += 3)
-    rings.push(<circle key={i} cx={breaks[i]} cy={breaks[i + 1]} style={px(5)} />)
+export function SvgArt({ url, breaks, w, h }: { url: string; breaks?: number[]; w?: number; h?: number }) {
+  const svg = useFetched<string>(url, 'text')
+  const html = useMemo(() => (svg ? withWire(svg) : ''), [svg])
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
-      <g fill="#4f46e5" stroke="#fff" style={sw(0.6)}>
-        {dots}
-      </g>
-      <g fill="none" stroke="#dc2626" style={sw(1.6)}>
-        {rings}
-      </g>
-    </svg>
+    <>
+      {html && <RawArt html={html} />}
+      {breaks && breaks.length > 0 && w && h && <KinkRings w={w} h={h} breaks={breaks} />}
+    </>
   )
 }
 
+/** The file's markup, filled at full size, with its fill dimmable and its wireframe added. */
+function withWire(svg: string): string {
+  const open = /<svg\b[^>]*>/i.exec(svg)
+  if (!open) return ''
+  const end = svg.lastIndexOf('</svg>')
+  const inner = svg.slice(open.index + open[0].length, end < 0 ? undefined : end)
+  let wire = ''
+  try {
+    // parseGroundTruth applies every group transform, so the nodes land in the root's
+    // user units: StarVector's files draw inside a flipped, scaled <g>.
+    wire = subPathsWire(parseGroundTruth(svg).shapes.map((s) => s.subPaths))
+  } catch {
+    // no wireframe for a file the reader cannot parse; the picture still shows
+  }
+  // Fill the panel. A file sized by width/height alone (VTracer's) draws in those units, so
+  // the size becomes its viewBox before it goes.
+  let tag = open[0]
+  if (!/\sviewBox\s*=/i.test(tag)) {
+    const w = /\swidth\s*=\s*["']([\d.]+)/i.exec(tag)?.[1]
+    const h = /\sheight\s*=\s*["']([\d.]+)/i.exec(tag)?.[1]
+    if (w && h) tag = tag.replace(/<svg\b/i, `<svg viewBox="0 0 ${Number(w)} ${Number(h)}"`)
+  }
+  tag = tag.replace(/\s(?:width|height)\s*=\s*("[^"]*"|'[^']*')/g, '').replace(/\/?>$/, ' width="100%" height="100%">')
+  return `${tag}<g class="lab-fill">${inner}</g>${wire}</svg>`
+}
+
 /**
- * Panels on ONE camera (`pz`, the caller's, so it can put the zoom pill where it likes):
- * the labs' pan and zoom, drag and pinch and double-click to reset, with every panel moving
- * in lockstep. The wheel zooms only with Ctrl/⌘ held: on a scrolling article a plain wheel
- * that zooms instead of scrolling is a trap.
+ * Red rings on the kinks the scorer counted, in the `w`×`h` pixels it scored in
+ * (overlay.json). Positioned in PERCENT of the panel with radii in CSS px divided by the
+ * zoom, so a ring is the same screen size at 100% and 4000% and needs no viewBox to agree
+ * with the art's. It is a `.lab-wire`, so it shows with the wireframe.
  */
-export function NodePanels({
-  panels,
-  width,
-  height,
-  nodes,
-  pz,
-  columns,
-}: {
-  panels: NodePanel[]
-  width: number
-  height: number
-  nodes: boolean
-  pz: PanZoom
-  /** Panels per row from `sm` up; defaults to all of them. */
-  columns?: number
-}) {
+function KinkRings({ w, h, breaks }: { w: number; h: number; breaks: number[] }) {
+  const ring: CSSProperties = {
+    r: 'calc(6px / var(--pz-scale, 1))',
+    strokeWidth: 'calc(1.75px / var(--pz-scale, 1))',
+  } as CSSProperties
+  const rings = []
+  for (let i = 0; i < breaks.length; i += 3)
+    rings.push(<circle key={i} cx={`${(breaks[i] / w) * 100}%`} cy={`${(breaks[i + 1] / h) * 100}%`} style={ring} />)
   return (
-    <div
-      className="grid grid-cols-2 gap-3 sm:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
-      style={{ '--cols': columns ?? panels.length } as CSSProperties}
-    >
-      {panels.map((p, i) => (
-        <div key={p.key} className="min-w-0">
-          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 text-xs">
-            <b className="font-semibold text-ink">{p.title}</b>
-            {p.note && <span className="shrink-0 tabular-nums text-faint">{p.note}</span>}
-          </div>
-          <ZoomSurface
-            pz={pz}
-            primary={i === 0}
-            wheel="modifier"
-            className="rounded-lg border border-line bg-white"
-            style={{ aspectRatio: `${width} / ${height}` }}
-          >
-            <img src={p.src} alt="" className="h-full w-full" loading="lazy" draggable={false} />
-            {nodes && <NodeOverlay w={width} h={height} anchors={p.anchors} breaks={p.breaks} />}
-          </ZoomSurface>
-        </div>
-      ))}
+    <div className="lab-wire absolute inset-0">
+      <svg className="h-full w-full overflow-visible" fill="none" stroke="#dc2626" aria-hidden>
+        {rings}
+      </svg>
     </div>
+  )
+}
+
+/** "N nodes · K kinks" under a panel title. */
+export function NodeCount({ anchors, breaks }: { anchors: number[]; breaks: number[] }) {
+  return (
+    <span className="tabular-nums">
+      {anchors.length / 2} nodes
+      {breaks.length > 0 && <span className="text-bad"> · {breaks.length / 3} kinks</span>}
+    </span>
   )
 }
 

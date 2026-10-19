@@ -52,7 +52,7 @@ export function Panel({
   grid?: { w: number; h: number }
   children: ReactNode
 }) {
-  const { pz, claimed } = useLabZoom()
+  const { pz, claimed, wheel } = useLabZoom()
   const pageDark = useLabDark()
   const isDark = dark || pageDark
   // Claim the row's primary-viewport slot if nobody has (mount order = DOM order, so
@@ -85,6 +85,7 @@ export function Panel({
       <ZoomSurface
         pz={pz}
         primary={primary}
+        wheel={wheel}
         className={`rounded-lg border border-line-strong ${isDark ? '' : 'checkerboard dark:checkerboard-dark'}`}
         style={size}
       >
