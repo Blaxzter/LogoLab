@@ -39,6 +39,7 @@ interface Row {
   digits: number
 }
 
+const shush = byslug('shushing-face')
 const n = (m: ShowMetrics, k: string): number | null => (typeof m[k] === 'number' ? (m[k] as number) : null)
 
 export function Article({ onExplore }: { onExplore?: () => void }) {
@@ -66,9 +67,10 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
               0.9999, 0.9998 and 0.9996, so by that score the three are interchangeable. The artist drew it with{' '}
               {hero.authoredNodes.length / 2} nodes; the traces use{' '}
               {hero.tools.map((t) => n(t.metrics, 'docNodes')).join(', ')}, and VTracer puts{' '}
-              {n(hero.tools[1].metrics, 'tangentBreaks')} kinks (red rings) on curves the artist drew smooth. StarVector
-              uses the fewest nodes, and its outline is the furthest from the drawing. Scroll over a panel to zoom, and
-              drag to look around.
+              {n(hero.tools[1].metrics, 'tangentBreaks')} kinks (red rings) on curves the artist drew smooth. LogoLab
+              has {n(hero.tools[0].metrics, 'tangentBreaks')}, where the mouth and the eyebrows meet the cheeks.
+              StarVector uses the fewest nodes, and its outline is the furthest from the drawing. Scroll over a panel to
+              zoom, and drag to look around.
             </>
           }
         />
@@ -106,9 +108,10 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
           <p>
             On the shushing face, DINO cannot separate the two traces (0.9997 each) and LPIPS slightly prefers
             VTracer’s. Measured against the authored outline, VTracer’s edges are three times further off, and its file
-            has 54 kinks on curves that have none.
+            has {n(shush.tools[1].metrics, 'tangentBreaks')} kinks on curves that have none (LogoLab’s has{' '}
+            {n(shush.tools[0].metrics, 'tangentBreaks')}).
           </p>
-          <Figure example={byslug('shushing-face')} />
+          <Figure example={shush} />
           <p>
             The crystal ball goes further: DINO <em>and</em> LPIPS both rank VTracer first, on a trace with 3.3× the
             nodes and 3.6× the edge error.
@@ -139,6 +142,12 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
             traces are wrong in different ways, and the score gives no hint of either.
           </p>
           <Figure example={byslug('camera')} />
+          <p>
+            LogoLab’s kinks have one main source. It traces an emoji as tiles that share their edges, so where three
+            colours meet, every outline through that point has a node on it, and the fit often lets an outline the
+            artist drew smooth bend there. On the smiling face, the mouth pulls 60° or more into the point where it
+            meets the blush. The tools that stack one shape on another don’t have that junction to bend at.
+          </p>
         </Section>
 
         <Section title="What we measure instead">
@@ -210,7 +219,10 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
             </li>
             <li>
               We built LogoLab and chose these metrics, and the kink count in particular is our own measure. That is why
-              the SVG-Bench numbers sit beside ours and why the losses are shown.
+              the SVG-Bench numbers sit beside ours and why the losses are shown. The first version of the kink count
+              skipped every point where three shapes meet, and that hid half of LogoLab’s own kinks; it now counts a
+              bend there when the outline is drawn smooth through it, and LogoLab’s total over the {data.cases} cases
+              doubled.
             </li>
           </ul>
           <p>
