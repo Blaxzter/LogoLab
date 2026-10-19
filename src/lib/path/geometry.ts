@@ -6,7 +6,7 @@
 // (anchor_i, hOut_i, hIn_{i+1}, anchor_{i+1}); a null handle collapses onto
 // its anchor, and closed subpaths have an implicit last→first segment.
 
-import type { Affine, NodeKind, NodeRef, PathItem, PathNode, SubPath, Vec } from './types'
+import type { Affine, ClipShape, NodeKind, NodeRef, PathItem, PathNode, SubPath, Vec } from './types'
 
 const EPS = 1e-6
 
@@ -134,6 +134,14 @@ export function transformSubPaths(subPaths: SubPath[], m: Affine): SubPath[] {
       }
     }),
   }))
+}
+
+/**
+ * A group's clip under the same affine as its children — what every transform of
+ * a clipped group must apply, or the content slides out from under its clip.
+ */
+export function transformClip(clip: ClipShape[], m: Affine): ClipShape[] {
+  return clip.map((shape) => ({ rule: shape.rule, subPaths: transformSubPaths(shape.subPaths, m) }))
 }
 
 /** Evaluate a cubic Bézier at parameter t ∈ [0, 1]. */

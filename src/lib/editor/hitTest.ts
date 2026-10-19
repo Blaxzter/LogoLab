@@ -9,7 +9,7 @@
 // Tolerances are in viewBox units, already divided by the zoom by the caller,
 // so a grab radius stays constant in screen pixels.
 
-import type { DocItem, EditableDoc, GroupItem, PathItem, SubPath, Vec } from '../path/types.ts'
+import type { ClipShape, DocItem, EditableDoc, GroupItem, PathItem, SubPath, Vec } from '../path/types.ts'
 import { cubicAt, nearestPointOnItem, segmentControls, segmentCount } from '../path/geometry.ts'
 import { findItem, isGroup } from '../path/docTree.ts'
 import type { Box, Grip } from './transform.ts'
@@ -115,19 +115,24 @@ function cross(a: Vec, b: Vec, p: Vec): number {
  * whatever is behind.
  */
 export function pointInPath(item: PathItem, p: Vec): boolean {
+  return pointInSubPaths(item.subPaths, item.fillRule, p)
+}
+
+/** {@link pointInPath} on bare geometry — a clip shape has no PathItem. */
+export function pointInSubPaths(subPaths: readonly SubPath[], fillRule: 'nonzero' | 'evenodd', p: Vec): boolean {
   let winding = 0
   let crossings = 0
-  for (const sp of item.subPaths) {
+  for (const sp of subPaths) {
     if (sp.nodes.length < 2) continue
     const poly = flattenSubPath(sp)
-    if (item.fillRule === 'evenodd') {
+    if (fillRule === 'evenodd') {
       crossings += Math.abs(windingOf(p, poly)) % 2 === 1 ? 1 : 0
       // evenodd counts each subpath's parity independently, then XORs them.
       continue
     }
     winding += windingOf(p, poly)
   }
-  return item.fillRule === 'evenodd' ? crossings % 2 === 1 : winding !== 0
+  return fillRule === 'evenodd' ? crossings % 2 === 1 : winding !== 0
 }
 
 /** Distance from a point to a polyline, in the polyline's units. */
@@ -168,6 +173,22 @@ export function itemHitBy(item: PathItem, p: Vec, tol: number): boolean {
   return false
 }
 
+/**
+ * Whether a clip lets the point through: inside any of its shapes under that
+ * shape's rule, or within `tol` of one's outline (so a click on the clip's own
+ * edge still reaches the content drawn up to it).
+ */
+export function clipAdmits(clip: readonly ClipShape[], p: Vec, tol: number): boolean {
+  for (const shape of clip) {
+    if (pointInSubPaths(shape.subPaths, shape.rule, p)) return true
+    for (const sp of shape.subPaths) {
+      if (sp.nodes.length < 2) continue
+      if (distToPolyline(p, flattenSubPath(sp), true) <= tol) return true
+    }
+  }
+  return false
+}
+
 /* --------------------------------------------------------- item picking */
 
 /**
@@ -198,6 +219,8 @@ export function pickItem(
         continue
       }
       if (isGroup(it)) {
+        // What a clip hides is not there to click: the shape behind it is.
+        if (it.clip && !clipAdmits(it.clip, p, tol)) continue
         const hit = search(it.children, atomic ? (topGroupId ?? it.id) : null)
         if (hit) return hit
         continue

@@ -119,6 +119,8 @@ export interface Stroke {
   width: number
   cap: 'butt' | 'round' | 'square'
   join: 'miter' | 'round' | 'bevel'
+  /** `stroke-miterlimit` (a ratio, never scaled); omitted ⇒ SVG's default 4. Only read for miter joins. */
+  miterLimit?: number
   /** Dash pattern in viewBox units; omitted / empty ⇒ solid. */
   dash?: number[]
   /** 0–1; omitted means 1. */
@@ -129,7 +131,7 @@ export interface Stroke {
 export interface PathItem {
   kind: 'path'
   id: string
-  /** Editor-only display name for the layers list. Never serialized. */
+  /** Display name for the layers list; also emitted as the `<path>`'s data-name. */
   name?: string
   /**
    * Representative solid fill (#rrggbb). Always present, even when `gradient`
@@ -173,7 +175,10 @@ export interface PathItem {
 export interface RawItem {
   kind: 'raw'
   id: string
-  /** Editor-only display name for the layers list. Never serialized. */
+  /**
+   * Display name for the layers list. Read from the markup on import; a rename
+   * writes it back into the markup as the root element's data-name.
+   */
   name?: string
   markup: string
   /** Composed `transform` attribute value inherited from ancestor groups. */
@@ -181,6 +186,23 @@ export interface RawItem {
   /** Inherited presentation attributes lost by flattening (fill, stroke…). */
   inherited?: Record<string, string>
   visible: boolean
+  /**
+   * Paints nothing by itself: `<defs>`, a stylesheet, a paint server, a shape with
+   * neither fill nor stroke (an engraver's metadata box). Kept so the export
+   * round-trips it in place, but it is not a layer — the layers list leaves it
+   * out, and like every raw item it is never a pointer target.
+   */
+  inert?: boolean
+}
+
+/**
+ * One shape of a clipping path, in absolute viewBox units: the area it lets
+ * through under its own `clip-rule`. A clip is the UNION of its shapes, as an
+ * SVG `<clipPath>` with several children is.
+ */
+export interface ClipShape {
+  subPaths: SubPath[]
+  rule: 'nonzero' | 'evenodd'
 }
 
 /**
@@ -206,6 +228,13 @@ export interface GroupItem {
   visible: boolean
   /** Editor-only: whether the layers list shows this group expanded. */
   expanded?: boolean
+  /**
+   * Clips everything in the group to this area (Illustrator's clip group, an
+   * imported `clip-path`). Model geometry like the children's — absolute
+   * coordinates, never a reference — so moving or scaling the group has to move
+   * it too (`transformClip`). Serialized as a `<clipPath>` in `<defs>`.
+   */
+  clip?: ClipShape[]
   /**
    * Set when this group IS a live text object. Its children are then a CACHE:
    * the laid-out glyph outlines, one compound path per paint run, rebuilt from

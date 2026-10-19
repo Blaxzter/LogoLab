@@ -7,12 +7,15 @@ export function EditorStatusBar({
   viewBox,
   grow,
   tool,
+  hasSelection,
 }: {
   stats: { paths: number; nodes: number; colors: number }
   viewBox: readonly number[]
   /** The artboard follows the drawing. */
   grow: boolean
   tool: EditorTool
+  /** Something is selected: what the eyedropper paints. */
+  hasSelection: boolean
 }) {
   return (
     <div className="hidden h-9 shrink-0 items-center gap-3 border-t border-line bg-surface px-3 text-[0.7rem] text-muted md:flex">
@@ -28,9 +31,13 @@ export function EditorStatusBar({
           ? 'Click to start typing · click a shape to type along its outline · click a text to edit it · Esc to finish'
           : tool === 'pen'
             ? 'Click to add points · drag for curves · click the first point to close · Enter to finish'
-            : tool === 'node'
-              ? 'Drag a curve to bend it · double-click a segment to insert · double-click a node for corner/smooth · Alt-drag a handle to break the joint · Esc or double-click empty space to finish'
-              : 'Double-click a shape to edit its nodes · hold Space to pan · Shift to constrain · Alt to scale from centre · Ctrl to bypass snapping'}
+            : tool === 'eyedropper'
+              ? hasSelection
+                ? 'Click a shape to copy its fill and stroke onto the selection · Shift-click for the fill only · Esc or V to finish'
+                : 'Nothing is selected to repaint. Select the shapes with Move (V), then press I and click the shape to copy from'
+              : tool === 'node'
+                ? 'Drag a curve to bend it · double-click a segment to insert · double-click a node for corner/smooth · Alt-drag a handle to break the joint · Esc or double-click empty space to finish'
+                : 'Double-click a shape to edit its nodes · hold Space to pan · Shift to constrain · Alt to scale from centre · Ctrl to bypass snapping'}
       </span>
     </div>
   )

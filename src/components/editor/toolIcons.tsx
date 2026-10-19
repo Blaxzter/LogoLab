@@ -7,6 +7,7 @@ import {
   Hexagon,
   MousePointer2,
   PenTool,
+  Pipette,
   Slash,
   Spline,
   Square as SquareIcon,
@@ -25,5 +26,6 @@ export const TOOL_ICON: Record<EditorTool, React.ReactNode> = {
   line: <Slash size={15} />,
   polygon: <Hexagon size={15} />,
   star: <Star size={15} />,
+  eyedropper: <Pipette size={15} />,
   pan: <Hand size={15} />,
 }

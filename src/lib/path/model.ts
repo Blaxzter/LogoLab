@@ -8,6 +8,7 @@
 
 import type {
   Affine,
+  ClipShape,
   DocItem,
   EditableDoc,
   GradientFill,
@@ -23,8 +24,10 @@ import { allLeaves, leafItems, removeItems } from './docTree.ts'
 import {
   affineScale,
   affineToString,
+  applyAffine,
   composeAffine,
   isIdentityAffine,
+  itemBounds,
   parseTransformAttr,
   segmentCount,
   subPathsTightBounds,
@@ -43,6 +46,9 @@ import { inlineStylesheets } from './svgStyle.ts'
 
 /** Stable <defs> id for a path's gradient paint server. */
 const gradientId = (itemId: string): string => 'grad-' + itemId
+
+/** Stable <defs> id for a group's clipping path. */
+const clipId = (groupId: string): string => 'clip-' + groupId
 
 const EPS = 1e-6
 
@@ -450,6 +456,7 @@ interface PaintContext {
   strokeCap: string | null
   strokeJoin: string | null
   strokeDash: string | null
+  strokeMiter: string | null
   strokeOpacity: number | null
   /** Group opacity multiplies down the tree (unlike the inherited props). */
   opacity: number
@@ -457,8 +464,8 @@ interface PaintContext {
   color: string | null
   /** `visibility` inherits, and a descendant can turn itself back on. */
   visibility: string | null
-  /** Inherited text properties, carried for raw leaves (`<text>`) only. */
-  text: Record<string, string>
+  /** Inherited properties only a raw leaf reads (a `<text>`'s font, pointer-events). */
+  rawProps: Record<string, string>
 }
 
 const SHAPE_TAGS = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line'])
@@ -477,7 +484,6 @@ const UNMODELLABLE_ATTRS = [
   'marker-mid',
   'marker-end',
   'vector-effect',
-  'stroke-miterlimit',
   'stroke-dashoffset',
   'pathLength',
   'transform-origin',
@@ -486,12 +492,37 @@ const UNMODELLABLE_ATTRS = [
 /**
  * The subset that acts on a `<g>` as a whole. Flattening the group would apply
  * each to nothing — masked or clipped art drawn unmasked — so such a group stays
- * raw. (The others inherit or do nothing on a group.)
+ * raw. (The others inherit or do nothing on a group.) The exception is a clip
+ * alone, when groups are kept: the model carries it (`GroupItem.clip`), so the
+ * children stay editable — Illustrator wraps every export in one.
  */
 const GROUP_EFFECT_ATTRS = ['filter', 'mask', 'clip-path', 'transform-origin']
 
-/** Inherited text properties a raw `<text>` still needs once its `<g>` is gone. */
-const TEXT_PROPS = [
+/** The same lists without `clip-path`, which a clip group carries as model geometry. */
+const UNMODELLABLE_BUT_CLIP = UNMODELLABLE_ATTRS.filter((a) => a !== 'clip-path')
+const GROUP_EFFECT_BUT_CLIP = GROUP_EFFECT_ATTRS.filter((a) => a !== 'clip-path')
+
+/**
+ * Elements that never render by themselves and only exist to be referenced. They
+ * round-trip as inert raw items, and the finalize pass drops one whose every
+ * reference was lifted into the model.
+ */
+const REFERENCED_TAGS = new Set([
+  'lineargradient',
+  'radialgradient',
+  'symbol',
+  'clippath',
+  'mask',
+  'filter',
+  'pattern',
+  'marker',
+])
+
+/**
+ * Inherited properties a raw leaf still needs once its `<g>` is gone: a `<text>`'s
+ * font, and whether it is a pointer target in the page it is exported into.
+ */
+const RAW_PROPS = [
   'font-family',
   'font-size',
   'font-weight',
@@ -504,6 +535,7 @@ const TEXT_PROPS = [
   'dominant-baseline',
   'writing-mode',
   'direction',
+  'pointer-events',
 ]
 
 /** Options for {@link parseSvg}. */
@@ -520,7 +552,9 @@ export interface ParseSvgOptions {
 /**
  * Parse SVG markup into an EditableDoc. Fillable shapes (fill that isn't
  * none/url(), no stroke) become PathItems with ancestor transforms baked in;
- * everything else that paints round-trips as RawItems in document order.
+ * everything else that paints round-trips as RawItems in document order, and
+ * what paints nothing (defs, a shape with neither fill nor stroke) as INERT raw
+ * items. Each item is named from what the source's author wrote (`sourceName`).
  * Returns null when the markup doesn't parse as SVG.
  */
 export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDoc | null {
@@ -558,6 +592,11 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
   // into an editable gradient instead of being dumped as raw markup.
   const gradients = collectGradientElements(dom)
   const consumedGradients = new Set<string>()
+  const byId = new Map<string, Element>()
+  for (const el of Array.from(dom.querySelectorAll('*'))) {
+    const id = el.getAttribute('id')
+    if (id && !byId.has(id)) byId.set(id, el)
+  }
   // <defs> blocks and stand-alone gradient elements are finalized after the
   // walk: gradients we lifted into paths are stripped so they don't survive as
   // dead markup (and get re-emitted with fresh ids on serialize).
@@ -575,6 +614,10 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
     cssTainted,
     // A rule we could not resolve on the root itself would reach every shape.
     cssTaintAll: cssTainted.has(root),
+    byId,
+    consumedRefs: new Set(),
+    useStack: new Set(),
+    inert: new Set(),
   }
   const rootCtx = childContext(root, {
     transform: [1, 0, 0, 1, 0, 0],
@@ -586,26 +629,25 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
     strokeCap: null,
     strokeJoin: null,
     strokeDash: null,
+    strokeMiter: null,
     strokeOpacity: null,
     opacity: 1,
     color: null,
     visibility: null,
-    text: {},
+    rawProps: {},
   })
   walkChildren(root, rootCtx, ctx)
 
-  // Strip consumed gradients from the defs they lived in, unless a surviving raw
-  // item still references them (e.g. a stroked shape sharing the same paint).
-  if (consumedGradients.size > 0) {
-    const stillReferenced = new Set<string>()
-    for (const it of allLeaves(items)) {
-      if (it.kind === 'raw') for (const id of referencedIds(it.markup)) stillReferenced.add(id)
-    }
-    const removable = new Set([...consumedGradients].filter((id) => !stillReferenced.has(id)))
+  // Strip consumed gradients, clip paths and `<use>` targets from the defs they
+  // lived in, unless a surviving raw item still references them (e.g. a stroked
+  // shape sharing the same paint, or a use that stayed raw).
+  const consumed = new Set([...consumedGradients, ...ctx.consumedRefs])
+  if (consumed.size > 0) {
+    const removable = removableIds(consumed, items, deferredDefs)
     if (removable.size > 0) {
       const dropped = new Set<string>()
       for (const { item, el } of deferredDefs) {
-        const next = stripGradients(el, removable)
+        const next = stripIds(el, removable)
         if (next === null) dropped.add(item.id)
         else item.markup = next
       }
@@ -613,6 +655,35 @@ export function parseSvg(svg: string, options: ParseSvgOptions = {}): EditableDo
     }
   }
   return { viewBox, items }
+}
+
+/**
+ * Which consumed ids no surviving markup still references. A reference from
+ * INSIDE something that is itself being removed does not count — Illustrator's
+ * clip is a `<clipPath>` whose `<use>` points at a rect in `<defs>`, and once the
+ * clip is lifted both are dead — so this narrows to a fixpoint from "all of them".
+ */
+function removableIds(
+  consumed: Set<string>,
+  items: readonly DocItem[],
+  deferredDefs: readonly { item: RawItem; el: Element }[],
+): Set<string> {
+  const deferred = new Set(deferredDefs.map((d) => d.item.id))
+  const fixed = new Set<string>()
+  for (const it of allLeaves(items)) {
+    if (it.kind === 'raw' && !deferred.has(it.id)) for (const id of referencedIds(it.markup)) fixed.add(id)
+  }
+  let removable = new Set([...consumed].filter((id) => !fixed.has(id)))
+  for (;;) {
+    const refs = new Set<string>()
+    for (const { el } of deferredDefs) {
+      const left = stripIds(el, removable)
+      if (left !== null) for (const id of referencedIds(left)) refs.add(id)
+    }
+    const next = new Set([...removable].filter((id) => !refs.has(id)))
+    if (next.size === removable.size) return next
+    removable = next
+  }
 }
 
 /** Shared mutable state threaded through the recursive SVG walk. */
@@ -628,113 +699,579 @@ interface WalkContext {
   /** Elements a stylesheet rule could not be resolved for (see svgStyle.ts). */
   cssTainted: Set<Element>
   cssTaintAll: boolean
+  /** Elements by id, for `<use>`. First wins, as with getElementById. */
+  byId: Map<string, Element>
+  /** `<use>` targets inside `<defs>` / `<symbol>` that were lifted into paths. */
+  consumedRefs: Set<string>
+  /** The `<use>` targets being walked right now — a reference cycle stays raw. */
+  useStack: Set<Element>
+  /** Raw items that render nothing by themselves (defs, style, paint servers, symbols). */
+  inert: Set<string>
 }
 
 function walkChildren(parent: Element, ctx: PaintContext, w: WalkContext): void {
-  for (const el of Array.from(parent.children)) {
-    const tag = el.tagName.toLowerCase()
-    if (tag === 'title' || tag === 'desc' || tag === 'metadata') continue
-    if (tag === 'defs' || tag === 'style') {
-      // Preserved wholesale; defs/style don't render, so no context needed.
-      const item: RawItem = { kind: 'raw', id: w.nextId(), markup: serializeElement(el), visible: true }
-      w.items.push(item)
-      if (tag === 'defs') w.deferredDefs.push({ item, el })
-      continue
-    }
-    if (tag === 'lineargradient' || tag === 'radialgradient') {
-      // Stand-alone paint server (not under <defs>): round-trips as raw unless a
-      // fill consumes it, in which case the finalize pass drops it.
-      const item: RawItem = { kind: 'raw', id: w.nextId(), markup: serializeElement(el), visible: true }
-      w.items.push(item)
-      w.deferredDefs.push({ item, el })
-      continue
-    }
-    if (presentationProp(el, 'display')?.toLowerCase() === 'none') {
-      // Renders nothing, but may hold what something else references (a hidden
-      // layer's gradients, a <use> target): kept raw, where it stays hidden.
-      w.items.push(makeRawItem(w.nextId(), el, ctx))
-      continue
-    }
-    if (tag === 'g') {
-      if (el.children.length === 0) continue
-      if (hasGroupEffect(el) || w.cssTainted.has(el)) {
-        // Masked / clipped / filtered as a whole: flattened, its children would be
-        // drawn without it. The PARENT context goes on the wrapper; the group's own
-        // attributes stay in its markup.
-        w.items.push(makeRawItem(w.nextId(), el, ctx))
-        continue
-      }
-      if (!w.preserveGroups) {
-        walkChildren(el, childContext(el, ctx), w)
-        continue
-      }
-      // The group's transform/opacity are baked into the leaves by
-      // `childContext`, so the GroupItem is pure structure.
-      const children: DocItem[] = []
-      walkChildren(el, childContext(el, ctx), { ...w, items: children })
-      if (children.length === 0) continue
-      const group: GroupItem = {
-        kind: 'group',
-        id: w.nextId(),
-        children,
-        visible: true,
-        expanded: true,
-      }
-      const name = el.getAttribute('data-name') ?? el.getAttribute('id')
-      if (name) group.name = name
-      w.items.push(group)
-      continue
-    }
-    if (SHAPE_TAGS.has(tag)) {
-      const shapeCtx = childContext(el, ctx)
-      // Anything carrying paint we can't re-emit stays raw — as does a hidden shape
-      // (the model has no `visibility`) and one a stylesheet rule may still paint.
-      const visibility = shapeCtx.visibility?.toLowerCase()
-      const lossy =
-        hasUnmodellableAttrs(el) ||
-        hasUnmodellableStroke(shapeCtx) ||
-        hasUnresolvableFill(shapeCtx) ||
-        visibility === 'hidden' ||
-        visibility === 'collapse' ||
-        w.cssTaintAll ||
-        w.cssTainted.has(el)
+  for (const el of Array.from(parent.children)) walkElement(el, ctx, w)
+}
 
-      if (!lossy && hasPlainFill(shapeCtx)) {
-        const subPaths = shapeToSubPaths(el, tag)
-        // Degenerate shapes (zero size, too few points) render nothing.
-        if (!subPaths || subPaths.length === 0) continue
-        w.items.push(makePathItem(w.nextId(), subPaths, shapeCtx))
-        continue
-      }
-      // Gradient fill: lift into an editable path when the paint server
-      // resolves to a gradient the model can represent. A modellable stroke
-      // rides along; an unmodellable one already forced `lossy`.
-      const gradId = !lossy ? gradientRefId(shapeCtx.fill) : null
-      const gradEl = gradId ? w.gradients.get(gradId) : null
-      if (gradId && gradEl && !gradientCssTainted(gradEl, w)) {
-        const subPaths = shapeToSubPaths(el, tag)
-        if (!subPaths || subPaths.length === 0) continue
-        const gradient = resolveGradientFill(
-          gradEl,
-          w.gradients,
-          subPathsTightBounds(subPaths),
-          shapeCtx.transform,
-          w.viewport,
-        )
-        if (gradient) {
-          const item = makePathItem(w.nextId(), subPaths, {
-            ...shapeCtx,
-            fill: representativeStopColor(gradient.stops),
-          })
-          item.gradient = gradient
-          w.items.push(item)
-          w.consumedGradients.add(gradId)
-          continue
-        }
-      }
-    }
-    w.items.push(makeRawItem(w.nextId(), el, ctx))
+/** Push a container's walked children: as a GroupItem when groups are kept, else spliced in. */
+function pushContainer(el: Element, children: DocItem[], w: WalkContext): void {
+  if (children.length === 0) return
+  if (!w.preserveGroups) {
+    w.items.push(...children)
+    return
   }
+  // Transforms and opacity are baked into the leaves by `childContext`, so the
+  // GroupItem is pure structure.
+  const group: GroupItem = { kind: 'group', id: w.nextId(), children, visible: true, expanded: true }
+  const name = sourceName(el)
+  if (name) group.name = name
+  w.items.push(group)
+}
+
+function walkElement(el: Element, ctx: PaintContext, w: WalkContext): void {
+  const tag = el.tagName.toLowerCase()
+  if (tag === 'title' || tag === 'desc' || tag === 'metadata') return
+  if (tag === 'defs' || tag === 'style') {
+    // Preserved wholesale; defs/style don't render, so no context needed.
+    const item: RawItem = { kind: 'raw', id: w.nextId(), markup: serializeElement(el), visible: true, inert: true }
+    w.items.push(item)
+    w.inert.add(item.id)
+    if (tag === 'defs') w.deferredDefs.push({ item, el })
+    return
+  }
+  if (REFERENCED_TAGS.has(tag)) {
+    // Stand-alone paint server / symbol / clip path (not under <defs>): none
+    // renders by itself. Round-trips as raw unless what references it is lifted,
+    // in which case the finalize pass drops it.
+    const item: RawItem = { kind: 'raw', id: w.nextId(), markup: serializeElement(el), visible: true, inert: true }
+    w.items.push(item)
+    w.inert.add(item.id)
+    w.deferredDefs.push({ item, el })
+    return
+  }
+  if (presentationProp(el, 'display')?.toLowerCase() === 'none') {
+    // Renders nothing, but may hold what something else references (a hidden
+    // layer's gradients, a <use> target): kept raw, where it stays hidden.
+    w.items.push(named(makeRawItem(w.nextId(), el, ctx), el))
+    return
+  }
+  if (tag === 'g') {
+    if (el.children.length === 0) return
+    if (hasGroupEffect(el) || w.cssTainted.has(el)) {
+      // A clip alone is model geometry: the children stay editable inside a group
+      // that carries it.
+      if (
+        !w.cssTainted.has(el) &&
+        !hasUnmodellableAttrs(el, GROUP_EFFECT_BUT_CLIP) &&
+        walkClipped(el, ctx, w, (sub) => walkChildren(el, childContext(el, ctx), sub))
+      ) {
+        return
+      }
+      // Masked / filtered (or clipped by what the model can't hold) as a whole:
+      // flattened, its children would be drawn without it. The PARENT context goes
+      // on the wrapper; the group's own attributes stay in its markup.
+      w.items.push(named(makeRawItem(w.nextId(), el, ctx), el))
+      return
+    }
+    if (!w.preserveGroups) {
+      walkChildren(el, childContext(el, ctx), w)
+      return
+    }
+    const children: DocItem[] = []
+    walkChildren(el, childContext(el, ctx), { ...w, items: children })
+    pushContainer(el, children, w)
+    return
+  }
+  if (tag === 'svg' && walkViewport(el, ctx, null, w)) return
+  if (tag === 'use' && walkUse(el, ctx, w)) return
+  if (SHAPE_TAGS.has(tag) && walkShape(el, tag, ctx, w, false)) return
+  w.items.push(named(makeRawItem(w.nextId(), el, ctx), el))
+}
+
+/**
+ * A basic shape as a PathItem (gradient fill lifted, modellable stroke kept), an
+ * inert raw item when it paints nothing, or a clip group of one when it carries a
+ * clip. False leaves it to the caller to keep raw. `clipped` says the clip-path is
+ * already being handled by an enclosing {@link walkClipped}.
+ */
+function walkShape(el: Element, tag: string, ctx: PaintContext, w: WalkContext, clipped: boolean): boolean {
+  if (
+    !clipped &&
+    w.preserveGroups &&
+    hasUnmodellableAttrs(el, ['clip-path']) &&
+    !hasUnmodellableAttrs(el, UNMODELLABLE_BUT_CLIP) &&
+    walkClipped(el, ctx, w, (sub) => walkShape(el, tag, ctx, sub, true))
+  ) {
+    return true
+  }
+  const shapeCtx = childContext(el, ctx)
+  // Anything carrying paint we can't re-emit stays raw — as does a hidden shape
+  // (the model has no `visibility`) and one a stylesheet rule may still paint.
+  const visibility = shapeCtx.visibility?.toLowerCase()
+  const lossy =
+    hasUnmodellableAttrs(el, clipped ? UNMODELLABLE_BUT_CLIP : UNMODELLABLE_ATTRS) ||
+    hasUnmodellableStroke(shapeCtx) ||
+    hasUnresolvableFill(shapeCtx) ||
+    visibility === 'hidden' ||
+    visibility === 'collapse' ||
+    w.cssTaintAll ||
+    w.cssTainted.has(el)
+
+  if (!lossy && hasPlainFill(shapeCtx)) {
+    const subPaths = shapeToSubPaths(el, tag)
+    // Degenerate shapes (zero size, too few points) render nothing.
+    if (!subPaths || subPaths.length === 0) return true
+    const item = makePathItem(w.nextId(), subPaths, shapeCtx)
+    if (paintsNothing(item)) {
+      // Neither fill nor stroke (an engraver's metadata box): no layer, nothing to
+      // click, but still in the file — verbatim, in place, with what it inherited.
+      const raw = makeRawItem(item.id, el, ctx)
+      raw.inert = true
+      // Inside a `<use>` instance this is one COPY of the element, and every
+      // use of it writes one: its id would be in the export twice.
+      if (w.useStack.size > 0) raw.markup = withoutRootId(raw.markup)
+      w.items.push(named(raw, el))
+      w.inert.add(raw.id)
+      return true
+    }
+    w.items.push(named(item, el))
+    return true
+  }
+  // Gradient fill: lift into an editable path when the paint server
+  // resolves to a gradient the model can represent. A modellable stroke
+  // rides along; an unmodellable one already forced `lossy`.
+  const gradId = !lossy ? gradientRefId(shapeCtx.fill) : null
+  const gradEl = gradId ? w.gradients.get(gradId) : null
+  if (gradId && gradEl && !gradientCssTainted(gradEl, w)) {
+    const subPaths = shapeToSubPaths(el, tag)
+    if (!subPaths || subPaths.length === 0) return true
+    const gradient = resolveGradientFill(
+      gradEl,
+      w.gradients,
+      subPathsTightBounds(subPaths),
+      shapeCtx.transform,
+      w.viewport,
+    )
+    if (gradient) {
+      const item = makePathItem(w.nextId(), subPaths, {
+        ...shapeCtx,
+        fill: representativeStopColor(gradient.stops),
+      })
+      item.gradient = gradient
+      w.items.push(named(item, el))
+      w.consumedGradients.add(gradId)
+      return true
+    }
+  }
+  return false
+}
+
+/** Neither fill nor stroke paints anything — fully transparent counts as none. */
+function paintsNothing(item: PathItem): boolean {
+  const noFill = item.fill === 'none' || item.fillOpacity === 0
+  return noFill && (!item.stroke || item.stroke.opacity === 0)
+}
+
+/**
+ * An element whose `clip-path` the model can carry: its content walked into a
+ * GroupItem holding the clip as absolute geometry. False (nothing pushed) when the
+ * clip can't be read — the caller keeps the element raw, as before. Only when
+ * groups are kept: the flat list has nowhere to put a clip.
+ */
+function walkClipped(el: Element, ctx: PaintContext, w: WalkContext, walkInner: (sub: WalkContext) => void): boolean {
+  if (!w.preserveGroups || w.cssTaintAll) return false
+  const ref = presentationProp(el, 'clip-path')
+  const id = ref ? /^url\(\s*['"]?#([^'")\s]+)['"]?\s*\)$/i.exec(ref)?.[1] : undefined
+  const clipEl = id ? w.byId.get(id) : undefined
+  if (!id || !clipEl || clipEl.tagName.toLowerCase() !== 'clippath') return false
+
+  const sub: WalkContext = {
+    ...w,
+    items: [],
+    deferredDefs: [],
+    consumedGradients: new Set(),
+    consumedRefs: new Set(),
+  }
+  walkInner(sub)
+  if (sub.items.length === 0) return false
+  // The clip's user space is the referencing element's, its own transform included.
+  const clip = resolveClip(clipEl, childContext(el, ctx).transform, sub.items, w, sub.consumedRefs)
+  if (!clip) return false
+
+  w.deferredDefs.push(...sub.deferredDefs)
+  for (const g of sub.consumedGradients) w.consumedGradients.add(g)
+  for (const r of sub.consumedRefs) w.consumedRefs.add(r)
+  // Dead markup once nothing raw points at it; the finalize pass decides.
+  w.consumedRefs.add(id)
+  const group: GroupItem = { kind: 'group', id: w.nextId(), children: sub.items, visible: true, expanded: true, clip }
+  const name = sourceName(el)
+  if (name) group.name = name
+  w.items.push(group)
+  return true
+}
+
+/**
+ * A `<clipPath>` as model geometry in absolute coordinates, or null when it holds
+ * what the model can't (text, a nested clip, an unreadable rule). `frame` is the
+ * referencing element's user space; `content` its walked children, which an
+ * objectBoundingBox clip is sized from.
+ */
+function resolveClip(
+  clipEl: Element,
+  frame: Affine,
+  content: readonly DocItem[],
+  w: WalkContext,
+  consumedRefs: Set<string>,
+): ClipShape[] | null {
+  if (w.cssTainted.has(clipEl) || hasUnmodellableAttrs(clipEl, GROUP_EFFECT_ATTRS)) return null
+  let m = composeAffine(frame, parseTransformAttr(clipEl.getAttribute('transform')))
+  if (clipEl.getAttribute('clipPathUnits')?.trim() === 'objectBoundingBox') {
+    const box = localBox(content, frame, w.inert)
+    if (!box) return null
+    m = composeAffine(m, [box.w, 0, 0, box.h, box.x, box.y])
+  }
+  const inheritedRule = presentationProp(clipEl, 'clip-rule')
+  const shapes: ClipShape[] = []
+  for (const child of Array.from(clipEl.children)) {
+    const tag = child.tagName.toLowerCase()
+    if (tag === 'title' || tag === 'desc' || tag === 'metadata') continue
+    if (w.cssTainted.has(child) || hasUnmodellableAttrs(child, GROUP_EFFECT_ATTRS)) return null
+    if (!contributes(child)) continue
+    let shapeEl = child
+    let t = parseTransformAttr(child.getAttribute('transform'))
+    let rule = presentationProp(child, 'clip-rule')
+    if (tag === 'use') {
+      const href = (child.getAttribute('href') ?? child.getAttribute('xlink:href'))?.trim()
+      const target = href?.startsWith('#') ? w.byId.get(href.slice(1)) : undefined
+      if (!target || !SHAPE_TAGS.has(target.tagName.toLowerCase())) return null
+      if (w.cssTainted.has(target) || hasUnmodellableAttrs(target, GROUP_EFFECT_ATTRS)) return null
+      if (!contributes(target)) continue
+      const x = lengthAttr(child.getAttribute('x'), w.viewport.w)
+      const y = lengthAttr(child.getAttribute('y'), w.viewport.h)
+      if (x === null || y === null) return null
+      t = composeAffine(composeAffine(t, [1, 0, 0, 1, x, y]), parseTransformAttr(target.getAttribute('transform')))
+      rule = presentationProp(target, 'clip-rule') ?? rule
+      shapeEl = target
+      if (inDefsOrSymbol(target)) consumedRefs.add(href!.slice(1))
+    } else if (!SHAPE_TAGS.has(tag)) {
+      return null
+    }
+    const subPaths = shapeToSubPaths(shapeEl, shapeEl.tagName.toLowerCase())
+    if (!subPaths || subPaths.length === 0) continue
+    const r = (rule ?? inheritedRule)?.toLowerCase()
+    shapes.push({
+      rule: r === 'evenodd' ? 'evenodd' : 'nonzero',
+      subPaths: transformSubPaths(subPaths, composeAffine(m, t)),
+    })
+  }
+  // An empty clip hides everything: a group showing nothing is not worth lifting.
+  return shapes.length > 0 ? shapes : null
+}
+
+/** Whether a clip child adds to the clip at all (`display` / `visibility` hide it). */
+function contributes(el: Element): boolean {
+  if (presentationProp(el, 'display')?.toLowerCase() === 'none') return false
+  const v = presentationProp(el, 'visibility')?.toLowerCase()
+  return v !== 'hidden' && v !== 'collapse'
+}
+
+/**
+ * The bounding box of walked content in `frame`'s space — what an
+ * objectBoundingBox clip is sized from. Null when it can't be told: raw content
+ * has no geometry, and under a rotation the absolute box is not the local one.
+ */
+function localBox(
+  content: readonly DocItem[],
+  frame: Affine,
+  inert: Set<string>,
+): { x: number; y: number; w: number; h: number } | null {
+  if (Math.abs(frame[1]) > EPS || Math.abs(frame[2]) > EPS || Math.abs(frame[0]) < EPS || Math.abs(frame[3]) < EPS) {
+    return null
+  }
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const leaf of allLeaves(content)) {
+    if (leaf.kind === 'raw') {
+      if (inert.has(leaf.id)) continue
+      return null
+    }
+    const b = subPathsTightBounds(leaf.subPaths)
+    if (!b) continue
+    minX = Math.min(minX, b.x)
+    minY = Math.min(minY, b.y)
+    maxX = Math.max(maxX, b.x + b.w)
+    maxY = Math.max(maxY, b.y + b.h)
+  }
+  if (minX === Infinity) return null
+  const ax = (minX - frame[4]) / frame[0]
+  const bx = (maxX - frame[4]) / frame[0]
+  const ay = (minY - frame[5]) / frame[3]
+  const by = (maxY - frame[5]) / frame[3]
+  const box = { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) }
+  return box.w > EPS && box.h > EPS ? box : null
+}
+
+/* ------------------------------------------------------------- names */
+
+/** Give an item the name the source wrote for its element, if it wrote one. */
+function named<T extends DocItem>(item: T, el: Element): T {
+  const name = sourceName(el)
+  if (name) item.name = name
+  return item
+}
+
+/**
+ * The name a human gave an element: a `data-name` (Illustrator, Figma, and
+ * this app's own export — first, so a rename in the editor wins over the
+ * `<title>` it was imported with), its `<title>`, Inkscape's label, an
+ * `aria-label`, or its id — unless the id is one a tool generated (`path123`, `g45`, `svg_3`,
+ * `p0_font_1_63`, `Vector_12`, a hash), which would only be noise in a layers list.
+ */
+export function sourceName(el: Element): string | undefined {
+  const dataName = cleanName(el.getAttribute('data-name'))
+  if (dataName) return dataName
+  for (const child of Array.from(el.children)) {
+    if (child.tagName.toLowerCase() !== 'title') continue
+    const t = cleanName(child.textContent)
+    if (t) return t
+  }
+  for (const attr of ['inkscape:label', 'aria-label']) {
+    const v = cleanName(el.getAttribute(attr))
+    if (v) return v
+  }
+  const id = el.getAttribute('id')
+  return id ? (humanId(id) ?? undefined) : undefined
+}
+
+function cleanName(v: string | null | undefined): string | undefined {
+  const t = v?.replace(/\s+/g, ' ').trim()
+  return t ? t.slice(0, 120) : undefined
+}
+
+/** Words tools number their output with: `path123`, `Layer_1`, `SVGID_2_`, `Vector 12`. */
+const MACHINE_WORDS =
+  'path|g|group|rect|rectangle|circle|ellipse|line|polyline|polygon|shape|text|tspan|use|image|img|svg|svgid|' +
+  'layer|vector|symbol|defs|clip|clippath|clip-path|mask|filter|pattern|marker|gradient|lineargradient|' +
+  'radialgradient|stop|object|obj|element|el|node|item|frame|union|subtract|intersect|exclude|compound|' +
+  'glyph|font|id|component|instance|metadata|namedview|title|desc|style|a|base|copy'
+const MACHINE_ID = new RegExp(`^(?:${MACHINE_WORDS})[-_ .:]?\\d+(?:[-_.:]\\d+)*_?$`, 'i')
+
+/** An id as a display name, or null when a tool generated it. */
+export function humanId(raw: string): string | null {
+  // Illustrator writes characters an id can't hold as `_xHH_`: `_x3C_Group_x3E_` is "<Group>".
+  const id = raw.replace(/_x([0-9a-f]{2,4})_/gi, (_, h: string) => String.fromCharCode(parseInt(h, 16))).trim()
+  if (!id || id.length > 64) return null
+  // Illustrator's own unnamed "<Group>", "<Path>", "<Compound Path>".
+  if (/^<.*>$/.test(id)) return null
+  // Digits and punctuation, or a numeric start (`1`, `3d-1`): no word in it.
+  if (!/[a-z]/i.test(id) || /^\d/.test(id)) return null
+  if (MACHINE_ID.test(id)) return null
+  // A letter and a counter: `p0`, `c12`, `p0_font_1_63`.
+  if (/^[a-z]\d/i.test(id)) return null
+  // Several counters strung together (`MJX-1-TEX-N-31`, `x_1_2`), unless spaced like prose.
+  if (!/\s/.test(id) && (id.match(/\d+/g)?.length ?? 0) >= 2) return null
+  // Hashes and framework ids: `a3f9c2d1e0`, `__svelte_4`, React's `:r1:`, a uuid.
+  if (/^__/.test(id) || /^:.*:$/.test(id)) return null
+  const hex = id.match(/[0-9a-f]{8,}/gi)
+  if (hex?.some((h) => /\d/.test(h))) return null
+  return id
+}
+
+/**
+ * A nested `<svg>` (or a `<symbol>` a `<use>` instances) establishes a new
+ * viewport: placed at x/y, sized width × height, its viewBox fitted into that per
+ * preserveAspectRatio, and — unless overflow is visible — CLIPPED to it. The
+ * placement folds into the context like any transform, so its shapes come out
+ * editable. The clip has no place in the model, so it is only dropped where it
+ * provably cuts nothing: every leaf is a path inside the viewport. Otherwise
+ * nothing is pushed and the caller keeps the element raw, as before.
+ *
+ * `size` is a referencing `<use>`'s width/height, which override the element's.
+ */
+function walkViewport(
+  el: Element,
+  ctx: PaintContext,
+  size: { width: string | null; height: string | null } | null,
+  w: WalkContext,
+): boolean {
+  // A transform on the viewport element itself is SVG 2 only and renderers
+  // disagree on it; an effect or unresolved rule would be lost when flattened.
+  if (el.getAttribute('transform') || hasGroupEffect(el) || w.cssTainted.has(el)) return false
+  const x = lengthAttr(el.getAttribute('x'), w.viewport.w)
+  const y = lengthAttr(el.getAttribute('y'), w.viewport.h)
+  const vw = lengthAttr(size?.width ?? el.getAttribute('width') ?? '100%', w.viewport.w)
+  const vh = lengthAttr(size?.height ?? el.getAttribute('height') ?? '100%', w.viewport.h)
+  if (x === null || y === null || vw === null || vh === null) return false
+  if (vw <= 0 || vh <= 0) return true // renders nothing
+
+  let m: Affine = [1, 0, 0, 1, x, y]
+  const vb = parseViewBox(el.getAttribute('viewBox'))
+  if (vb) {
+    const fit = viewBoxFit(vb, vw, vh, el.getAttribute('preserveAspectRatio'))
+    if (!fit) return false
+    m = composeAffine(m, fit)
+  }
+  const inner = childContext(el, ctx)
+  inner.transform = composeAffine(ctx.transform, m)
+
+  const sub: WalkContext = {
+    ...w,
+    items: [],
+    deferredDefs: [],
+    consumedGradients: new Set(),
+    consumedRefs: new Set(),
+  }
+  walkChildren(el, inner, sub)
+
+  const overflow = presentationProp(el, 'overflow')?.toLowerCase()
+  if (overflow !== 'visible' && overflow !== 'auto') {
+    if (!insideClip(sub.items, { x, y, w: vw, h: vh }, ctx.transform, w.inert)) return false
+  }
+  w.deferredDefs.push(...sub.deferredDefs)
+  for (const id of sub.consumedGradients) w.consumedGradients.add(id)
+  for (const id of sub.consumedRefs) w.consumedRefs.add(id)
+  // A viewport is a coordinate system, not a layer: an unnamed one (what an
+  // engraver or a sprite wraps everything in) would only put every shape a
+  // double-click away. A named one is the author's folder.
+  if (sourceName(el)) pushContainer(el, sub.items, w)
+  else w.items.push(...sub.items)
+  return true
+}
+
+/**
+ * Whether every leaf lies within a viewport's clip rect (in `parent` space), so
+ * dropping the clip changes nothing. A raw leaf can't be measured, and a rotated
+ * clip isn't a box, so either fails.
+ */
+function insideClip(
+  items: readonly DocItem[],
+  clip: { x: number; y: number; w: number; h: number },
+  parent: Affine,
+  inert: Set<string>,
+): boolean {
+  if (Math.abs(parent[1]) > EPS || Math.abs(parent[2]) > EPS) return false
+  const a = applyAffine(parent, { x: clip.x, y: clip.y })
+  const b = applyAffine(parent, { x: clip.x + clip.w, y: clip.y + clip.h })
+  const minX = Math.min(a.x, b.x)
+  const maxX = Math.max(a.x, b.x)
+  const minY = Math.min(a.y, b.y)
+  const maxY = Math.max(a.y, b.y)
+  // Sub-pixel slack for the control hull overshooting a curve that stays inside.
+  const slack = 1e-3 * Math.max(maxX - minX, maxY - minY)
+  for (const leaf of allLeaves(items)) {
+    if (leaf.kind === 'raw') {
+      if (inert.has(leaf.id)) continue
+      return false
+    }
+    const bb = itemBounds(leaf)
+    if (!bb) continue
+    // Half the width each side; a miter tip or square cap can reach further, so a full width.
+    const pad = leaf.stroke ? leaf.stroke.width : 0
+    if (
+      bb.x - pad < minX - slack ||
+      bb.y - pad < minY - slack ||
+      bb.x + bb.w + pad > maxX + slack ||
+      bb.y + bb.h + pad > maxY + slack
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * `<use>` drawn as what it references: the target is walked as if it were a
+ * child of a `<g>` carrying the use's transform, translate(x, y) and paint — which
+ * is how SVG renders it — so a glyph or icon instanced from `<defs>` becomes an
+ * editable path of its own. False leaves the `<use>` raw: an external or missing
+ * reference, a cycle, an effect on the use, or a target kind this does not lift.
+ */
+function walkUse(el: Element, ctx: PaintContext, w: WalkContext): boolean {
+  const href = el.getAttribute('href') ?? el.getAttribute('xlink:href')
+  if (!href || !href.trim().startsWith('#')) return false
+  const id = href.trim().slice(1)
+  const target = w.byId.get(id)
+  if (!target || w.useStack.has(target)) return false
+  if (hasUnmodellableAttrs(el) || w.cssTaintAll || w.cssTainted.has(el)) return false
+  const tag = target.tagName.toLowerCase()
+  if (!SHAPE_TAGS.has(tag) && tag !== 'g' && tag !== 'use' && tag !== 'svg' && tag !== 'symbol') return false
+  const x = lengthAttr(el.getAttribute('x'), w.viewport.w)
+  const y = lengthAttr(el.getAttribute('y'), w.viewport.h)
+  if (x === null || y === null) return false
+
+  const useCtx = childContext(el, ctx)
+  useCtx.transform = composeAffine(useCtx.transform, [1, 0, 0, 1, x, y])
+  const start = w.items.length
+  w.useStack.add(target)
+  try {
+    if (tag === 'svg' || tag === 'symbol') {
+      const size = { width: el.getAttribute('width'), height: el.getAttribute('height') }
+      if (!walkViewport(target, useCtx, size, w)) return false
+    } else {
+      walkElement(target, useCtx, w)
+    }
+  } finally {
+    w.useStack.delete(target)
+  }
+  // The instance is named by the use when the use says something, else by what it
+  // instances (which the walk already did). Several items from one use are one
+  // layer when groups are kept.
+  const useName = sourceName(el)
+  const made = w.items.length - start
+  if (useName && made === 1) w.items[start].name = useName
+  else if (useName && made > 1 && w.preserveGroups) {
+    const children = w.items.splice(start, made)
+    w.items.push({ kind: 'group', id: w.nextId(), name: useName, children, visible: true, expanded: true })
+  }
+  // A target that only exists to be instanced is dead markup once every use of it
+  // is lifted; the finalize pass drops it unless a raw item still points at it.
+  if (inDefsOrSymbol(target)) w.consumedRefs.add(id)
+  return true
+}
+
+function inDefsOrSymbol(el: Element): boolean {
+  if (el.tagName.toLowerCase() === 'symbol') return true
+  for (let p = el.parentNode as Element | null; p && p.tagName; p = p.parentNode as Element | null) {
+    const t = p.tagName.toLowerCase()
+    if (t === 'defs' || t === 'symbol') return true
+  }
+  return false
+}
+
+/** A user-unit length (`12`, `12px`) or a percentage of `ref`; null for other units. Absent ⇒ 0. */
+function lengthAttr(v: string | null, ref: number): number | null {
+  if (v === null || v.trim() === '') return 0
+  const m = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*(px|%)?\s*$/i.exec(v)
+  if (!m) return null
+  const n = parseFloat(m[1])
+  return m[2] === '%' ? (n / 100) * ref : n
+}
+
+function parseViewBox(v: string | null): [number, number, number, number] | null {
+  if (!v) return null
+  const p = v
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number)
+  return p.length === 4 && p.every(Number.isFinite) && p[2] > 0 && p[3] > 0 ? [p[0], p[1], p[2], p[3]] : null
+}
+
+/** The viewBox → viewport mapping `preserveAspectRatio` asks for; null if unparseable. */
+function viewBoxFit(vb: [number, number, number, number], w: number, h: number, par: string | null): Affine | null {
+  const [vx, vy, vw, vh] = vb
+  const parts = (par ?? 'xMidYMid meet').trim().split(/\s+/)
+  const align = parts[0]
+  const slice = parts[1] === 'slice'
+  if (align === 'none') return [w / vw, 0, 0, h / vh, -vx * (w / vw), -vy * (h / vh)]
+  const am = /^x(Min|Mid|Max)Y(Min|Mid|Max)$/.exec(align)
+  if (!am) return null
+  const k = slice ? Math.max(w / vw, h / vh) : Math.min(w / vw, h / vh)
+  const f = (a: string) => (a === 'Min' ? 0 : a === 'Mid' ? 0.5 : 1)
+  const tx = (w - vw * k) * f(am[1]) - vx * k
+  const ty = (h - vh * k) * f(am[2]) - vy * k
+  return [k, 0, 0, k, tx, ty]
 }
 
 /**
@@ -761,17 +1298,17 @@ function referencedIds(markup: string): string[] {
 }
 
 /**
- * Remove the given gradient ids from a defs/paint-server element and reserialize.
- * Returns null when nothing renderable is left (the caller drops the item).
+ * Remove the elements with the given ids from a defs / paint-server / symbol
+ * element and reserialize. Returns null when nothing is left (the caller drops
+ * the item).
  */
-function stripGradients(el: Element, remove: Set<string>): string | null {
-  const tag = el.tagName.toLowerCase()
-  if (tag === 'lineargradient' || tag === 'radialgradient') {
+function stripIds(el: Element, remove: Set<string>): string | null {
+  if (el.tagName.toLowerCase() !== 'defs') {
     const id = el.getAttribute('id')
     return id && remove.has(id) ? null : serializeElement(el)
   }
   const clone = el.cloneNode(true) as Element
-  for (const g of Array.from(clone.querySelectorAll('linearGradient, radialGradient'))) {
+  for (const g of Array.from(clone.querySelectorAll('*'))) {
     const id = g.getAttribute('id')
     if (id && remove.has(id)) g.parentNode?.removeChild(g)
   }
@@ -787,10 +1324,10 @@ function childContext(el: Element, ctx: PaintContext): PaintContext {
     return v !== null && v.toLowerCase() === 'inherit' ? null : v
   }
   const opacity = parseOpacity(prop('opacity'))
-  let text = ctx.text
-  for (const name of TEXT_PROPS) {
+  let rawProps = ctx.rawProps
+  for (const name of RAW_PROPS) {
     const v = prop(name)
-    if (v !== null) text = { ...text, [name]: v }
+    if (v !== null) rawProps = { ...rawProps, [name]: v }
   }
   return {
     transform: t ? composeAffine(ctx.transform, parseTransformAttr(t)) : ctx.transform,
@@ -802,11 +1339,12 @@ function childContext(el: Element, ctx: PaintContext): PaintContext {
     strokeCap: prop('stroke-linecap') ?? ctx.strokeCap,
     strokeJoin: prop('stroke-linejoin') ?? ctx.strokeJoin,
     strokeDash: prop('stroke-dasharray') ?? ctx.strokeDash,
+    strokeMiter: prop('stroke-miterlimit') ?? ctx.strokeMiter,
     strokeOpacity: parseOpacity(prop('stroke-opacity')) ?? ctx.strokeOpacity,
     opacity: opacity !== null ? ctx.opacity * opacity : ctx.opacity,
     color: prop('color') ?? ctx.color,
     visibility: prop('visibility') ?? ctx.visibility,
-    text,
+    rawProps,
   }
 }
 
@@ -868,6 +1406,14 @@ function resolveStroke(ctx: PaintContext): Stroke | null {
       // An unparseable dash pattern would be silently dropped — keep it raw.
       return null
     }
+  }
+
+  if (ctx.strokeMiter !== null) {
+    // A ratio, so it is not scaled with the width. Under 1 is an error in SVG;
+    // keep such a shape raw rather than guess what a renderer does with it.
+    const limit = parseFloat(ctx.strokeMiter)
+    if (!Number.isFinite(limit) || limit < 1) return null
+    if (stroke.join === 'miter' && limit !== 4) stroke.miterLimit = limit
   }
 
   // Element opacity multiplies the stroke as well as the fill (and so does the
@@ -983,13 +1529,35 @@ function makeRawItem(id: string, el: Element, ctx: PaintContext): RawItem {
   if (ctx.strokeCap !== null) inherited['stroke-linecap'] = ctx.strokeCap
   if (ctx.strokeJoin !== null) inherited['stroke-linejoin'] = ctx.strokeJoin
   if (ctx.strokeDash !== null) inherited['stroke-dasharray'] = ctx.strokeDash
+  if (ctx.strokeMiter !== null) inherited['stroke-miterlimit'] = ctx.strokeMiter
   if (ctx.strokeOpacity !== null) inherited['stroke-opacity'] = String(ctx.strokeOpacity)
   if (ctx.color !== null) inherited['color'] = ctx.color
   if (ctx.visibility !== null) inherited['visibility'] = ctx.visibility
-  for (const name of Object.keys(ctx.text)) inherited[name] = ctx.text[name]
+  for (const name of Object.keys(ctx.rawProps)) inherited[name] = ctx.rawProps[name]
   if (ctx.opacity < 1) inherited['opacity'] = String(Number(ctx.opacity.toFixed(4)))
   if (Object.keys(inherited).length > 0) item.inherited = inherited
   return item
+}
+
+/** Markup with the `id` attribute of its outermost element removed. */
+function withoutRootId(markup: string): string {
+  return withRootAttr(markup, 'id', null)
+}
+
+/**
+ * Markup with one attribute of its outermost element set (or removed, for
+ * null). String-level, so it works where there is no DOM (the npm package).
+ */
+export function withRootAttr(markup: string, name: string, value: string | null): string {
+  // `name` is a plain attribute name (letters, `-`, `:`), so it needs no escaping.
+  const stripped = markup.replace(
+    new RegExp(
+      `^(\\s*<[^\\s>/]+)((?:\\s+[^\\s=>]+\\s*=\\s*(?:"[^"]*"|'[^']*'))*?)\\s+${name}\\s*=\\s*(?:"[^"]*"|'[^']*')`,
+    ),
+    '$1$2',
+  )
+  if (value === null) return stripped
+  return stripped.replace(/^(\s*<[^\s>/]+)/, `$1 ${name}="${escapeAttr(value)}"`)
 }
 
 function serializeElement(el: Element): string {
@@ -1214,10 +1782,26 @@ function serializeItems(
       if (item.opacity !== undefined && item.opacity < 1) {
         out += ` opacity="${Number(item.opacity.toFixed(4))}"`
       }
+      if (item.clip && item.clip.length > 0) {
+        // userSpaceOnUse (the default): the clip is absolute, like every coordinate here.
+        const id = clipId(item.id)
+        extraDefs.push(
+          `<clipPath id="${id}">${item.clip
+            .map(
+              (c) =>
+                `<path${c.rule === 'evenodd' ? ' clip-rule="evenodd"' : ''} d="${subPathsToD(c.subPaths, precision)}"/>`,
+            )
+            .join('')}</clipPath>`,
+        )
+        out += ` clip-path="url(#${id})"`
+      }
       out += `>${inner}</g>`
     } else if (item.kind === 'path') {
       const fill = item.gradient ? `url(#${gradIds.get(item.gradient)})` : escapeAttr(item.fill)
-      out += `<path fill="${fill}"`
+      out += '<path'
+      // Only a name someone gave it: the layers list's "Path 12" is never stored.
+      if (item.name) out += ` data-name="${escapeAttr(item.name)}"`
+      out += ` fill="${fill}"`
       if (item.fillOpacity !== undefined && item.fillOpacity < 1) {
         out += ` fill-opacity="${Number(item.fillOpacity.toFixed(4))}"`
       }
@@ -1227,6 +1811,7 @@ function serializeItems(
         out += ` stroke="${escapeAttr(s.color)}" stroke-width="${fmt(s.width)}"`
         if (s.cap !== 'butt') out += ` stroke-linecap="${s.cap}"`
         if (s.join !== 'miter') out += ` stroke-linejoin="${s.join}"`
+        else if (s.miterLimit !== undefined && s.miterLimit !== 4) out += ` stroke-miterlimit="${fmt(s.miterLimit)}"`
         if (s.dash && s.dash.length > 0) {
           out += ` stroke-dasharray="${s.dash.map(fmt).join(' ')}"`
         }

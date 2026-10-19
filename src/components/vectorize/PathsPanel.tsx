@@ -65,7 +65,7 @@ function classifyRaw(item: RawItem): { category: RawCategory; label: string } {
 function RawNotices({ items, pathCount }: { items: DocItem[]; pathCount: number }) {
   const cats = new Set<RawCategory>()
   for (const it of items) {
-    if (it.kind !== 'raw') continue
+    if (it.kind !== 'raw' || it.inert) continue
     const c = classifyRaw(it).category
     if (c !== 'defs' && c !== 'style') cats.add(c)
   }
@@ -214,7 +214,8 @@ export function PathsPanelBody({
               onHighlight={onHighlight}
               readOnly={readOnly}
             />
-          ) : item.kind === 'raw' ? (
+          ) : // Inert markup (defs, a shape that paints nothing) is no layer: no row.
+          item.kind === 'raw' && !item.inert ? (
             <RawRow
               key={item.id}
               item={item}

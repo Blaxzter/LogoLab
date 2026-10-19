@@ -35,8 +35,11 @@ const reasons = {
   redo: 'Nothing to redo.',
   group: 'Select two or more items to group.',
   ungroup: 'Select a group.',
+  releaseClip: 'Select a clip group.',
   selection: null,
+  paste: null,
   remove: null,
+  selectSame: null,
   reverse: null,
   split: 'Only one subpath.',
   combine: 'Select two or more paths.',
@@ -44,6 +47,8 @@ const reasons = {
   join: 'Select the two end nodes.',
   add: null,
   boolean: 'Select two or more shapes.',
+  outlineStroke: 'None of the selected shapes has a stroke.',
+  simplify: null,
 }
 
 const ctx = (over: Partial<EditorMenuContext> = {}): EditorMenuContext => ({
@@ -122,4 +127,86 @@ test('no menu leads, trails or doubles a separator', () => {
       for (let i = 1; i < e.length; i++) assert.ok(!(e[i].kind === 'sep' && e[i - 1].kind === 'sep'))
     }
   }
+})
+
+test('clipboard: Cut / Copy / Paste on a selection, Paste on the canvas', () => {
+  const items = actions(editorMenu({ kind: 'items', from: 'canvas' }, ctx()))
+  for (const a of ['cut', 'copy', 'paste'] as const) assert.ok(items.includes(a), `${a} on a selection`)
+  const canvas = editorMenu(
+    { kind: 'canvas' },
+    ctx({ selectedCount: 0, single: null, why: { ...reasons, paste: 'Nothing to paste.' } }),
+  )
+  const paste = canvas.find((e) => e.kind === 'item' && e.action === 'paste') as EditorMenuItem
+  assert.equal(paste.reason, 'Nothing to paste.')
+  assert.equal(paste.shortcut, 'Ctrl+V')
+  // Node editing copies objects, never nodes: the nodes menu offers none of it.
+  const nodes = actions(editorMenu({ kind: 'nodes' }, ctx({ nodeTool: true })))
+  for (const a of ['cut', 'copy', 'paste'] as const) assert.ok(!nodes.includes(a))
+})
+
+test('select same: four entries on a selection, carrying the shared reason; none on the canvas or nodes', () => {
+  const same = ['same:fill', 'same:stroke', 'same:fillStroke', 'same:appearance'] as const
+  const items = editorMenu(
+    { kind: 'items', from: 'layers' },
+    ctx({ single: 'other', why: { ...reasons, selectSame: 'No shape to take a paint from.' } }),
+  )
+  for (const a of same) {
+    const e = items.find((x) => x.kind === 'item' && x.action === a) as EditorMenuItem
+    assert.ok(e, `${a} offered`)
+    assert.equal(e.reason, 'No shape to take a paint from.')
+  }
+  for (const target of [{ kind: 'canvas' as const }, { kind: 'nodes' as const }]) {
+    const a = actions(editorMenu(target, ctx({ nodeTool: target.kind === 'nodes' })))
+    for (const x of same) assert.ok(!a.includes(x), `${x} not on ${target.kind}`)
+  }
+})
+
+test('outline stroke and simplify are offered on paths, groups and text, with their reasons', () => {
+  for (const single of ['path', 'group', 'text', null] as const) {
+    const entries = editorMenu({ kind: 'items', from: 'canvas' }, ctx({ single, selectedCount: single ? 1 : 2 }))
+    const outline = entries.find((e) => e.kind === 'item' && e.action === 'outlineStroke') as EditorMenuItem
+    const simplify = entries.find((e) => e.kind === 'item' && e.action === 'simplify') as EditorMenuItem
+    assert.ok(outline && simplify, `offered for ${single}`)
+    assert.equal(outline.reason, reasons.outlineStroke)
+    assert.equal(simplify.reason, null)
+  }
+  const raw = actions(editorMenu({ kind: 'items', from: 'canvas' }, ctx({ single: 'other' })))
+  assert.ok(!raw.includes('outlineStroke') && !raw.includes('simplify'), 'imported markup has no paths to change')
+})
+
+test('a clip group: Ungroup stays, disabled with its reason, and Release clip is offered', async () => {
+  const { actionReasons } = await import('../src/components/editor/studio/actionReasons.ts')
+  const why = actionReasons({
+    canUndo: false,
+    canRedo: false,
+    selection: new Set(['g']),
+    nodeSel: new Set(),
+    selectedCount: 1,
+    sel: { paths: 0, groups: 1, clipGroups: 1 },
+    activePath: null,
+    canPaste: false,
+    hasPaint: true,
+    reach: { stroked: 0, simplifiable: 0, texts: 0 },
+  })
+  const entries = editorMenu({ kind: 'items', from: 'canvas' }, ctx({ why, single: 'group' })).filter(
+    (e): e is EditorMenuItem => e.kind === 'item',
+  )
+  const ungroup = entries.find((e) => e.action === 'ungroup')
+  assert.ok(ungroup?.reason?.includes('Release the clip'), ungroup?.reason ?? 'missing')
+  assert.equal(entries.find((e) => e.action === 'releaseClip')?.reason, null)
+  // A plain group: Ungroup enabled, nothing to release.
+  const plain = actionReasons({
+    canUndo: false,
+    canRedo: false,
+    selection: new Set(['g']),
+    nodeSel: new Set(),
+    selectedCount: 1,
+    sel: { paths: 0, groups: 1, clipGroups: 0 },
+    activePath: null,
+    canPaste: false,
+    hasPaint: true,
+    reach: { stroked: 0, simplifiable: 0, texts: 0 },
+  })
+  const acts = actions(editorMenu({ kind: 'items', from: 'canvas' }, ctx({ why: plain, single: 'group' })))
+  assert.ok(acts.includes('ungroup') && !acts.includes('releaseClip'))
 })

@@ -21,12 +21,14 @@ import {
   Ban,
   Expand,
   Frame,
+  Pipette,
   Shrink,
   ToggleLeft,
   ToggleRight,
 } from '../ui/icons'
 import type { EditableDoc, PathItem, Stroke } from '../../lib/path/types'
-import { allPaths, findItem, isGroup } from '../../lib/path/docTree'
+import { leadPath } from '../../lib/editor/paintMatch'
+import { hasScreenEyeDropper, pickScreenColor } from './screenColor'
 import type { AlignEdge, DistributeAxis } from '../../lib/editor/align'
 import type { Box } from '../../lib/editor/transform'
 import { TipLabel, Tooltip } from '../ui/Tooltip'
@@ -73,15 +75,9 @@ export function Inspector({
   onArtboard,
 }: InspectorProps) {
   // Representative paint: the first selected path (walking into groups), which
-  // is what the swatches show and what editing them uses as the base.
-  const paths: PathItem[] = []
-  for (const id of selection) {
-    const item = findItem(doc.items, id)
-    if (!item) continue
-    if (isGroup(item)) paths.push(...allPaths(item.children))
-    else if (item.kind === 'path') paths.push(item)
-  }
-  const lead = paths[0] ?? null
+  // is what the swatches show and what editing them uses as the base. "Select
+  // same" matches this same path.
+  const lead: PathItem | null = leadPath(doc, selection)
 
   // Deferred: every frame of a colour scrub changes the palette, and the strip
   // can catch up once the drag settles instead of re-sorting mid-drag.
@@ -226,6 +222,7 @@ export function Inspector({
             value={lead?.fill ?? '#000000'}
             onCommit={(hex) => onFill(hex)}
           />
+          <ScreenPickBtn label="Pick the fill from the screen" reason={paintReason} onPick={(hex) => onFill(hex)} />
           <ActionButton
             label="No fill"
             note="Clears the fill so the shape paints only its stroke, if it has one."
@@ -298,6 +295,7 @@ function StrokeSection({
           value={base.color}
           onCommit={(c) => onStroke({ ...base, color: c })}
         />
+        <ScreenPickBtn label="Pick the stroke from the screen" onPick={(c) => onStroke({ ...base, color: c })} />
         <ActionButton
           label={on ? 'Stroke on' : 'Stroke off'}
           note={on ? 'Click to remove the outline entirely.' : 'Click to give the selection an outline.'}
@@ -670,6 +668,37 @@ function ColorWell({
         />
       </span>
     </Tooltip>
+  )
+}
+
+/**
+ * The browser's eyedropper, for a colour from anywhere on screen (a reference
+ * image in another window included). Not rendered where the browser has none.
+ */
+function ScreenPickBtn({
+  label,
+  reason,
+  onPick,
+}: {
+  label: string
+  reason?: string | null
+  onPick: (hex: string) => void
+}) {
+  if (!hasScreenEyeDropper()) return null
+  return (
+    <ActionButton
+      label={label}
+      note="Click anywhere on the screen to take that colour; Esc cancels. To copy a whole shape's look, use the Eyedropper tool (I)."
+      reason={reason}
+      onClick={() => {
+        void pickScreenColor().then((hex) => {
+          if (hex) onPick(hex)
+        })
+      }}
+      className="btn btn-secondary h-8 w-8 shrink-0 px-0"
+    >
+      <Pipette size={13} />
+    </ActionButton>
   )
 }
 

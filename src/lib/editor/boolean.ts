@@ -31,7 +31,8 @@ export type BooleanOp = 'add' | 'subtract' | 'intersect' | 'xor' | 'divide'
 type PItem = paper.PathItem
 
 let ready = false
-function scope(): typeof paper {
+/** paper.js, set up for geometry on first use (Outline stroke shares it). */
+export function scope(): typeof paper {
   if (!ready) {
     // Geometry only: no view is drawn, the size just satisfies setup().
     paper.setup(new paper.Size(1, 1))

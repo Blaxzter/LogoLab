@@ -1,12 +1,13 @@
 // Pure document edits behind the studio's selection and path commands; each returns null when nothing changes.
 
-import type { DocItem, EditableDoc, PathItem } from '../../lib/path/types'
-import { findItem, isGroup, removeItems, topLevelSelection, ungroup } from '../../lib/path/docTree'
-import { scaleAbout, transformItems, translation, type Box } from '../../lib/editor/transform'
-import { breakAt, combinePaths, joinEnds, reversePath, splitCompound } from '../../lib/editor/pathOps'
-import { parseNodeKey, refsByItem, replaceIn, replaceWithMany } from '../../lib/editor/nodeEdit'
-import { deleteNodes, setNodeKind } from '../../lib/path/geometry'
-import { duplicateItems, newId } from './editorDoc'
+import type { DocItem, EditableDoc, PathItem } from '../../lib/path/types.ts'
+import { findItem, isGroup, removeItems, topLevelSelection, ungroup } from '../../lib/path/docTree.ts'
+import { scaleAbout, transformItems, translation, type Box } from '../../lib/editor/transform.ts'
+import { breakAt, combinePaths, joinEnds, reversePath, splitCompound } from '../../lib/editor/pathOps.ts'
+import { parseNodeKey, refsByItem, replaceIn, replaceWithMany } from '../../lib/editor/nodeEdit.ts'
+import { deleteNodes, setNodeKind } from '../../lib/path/geometry.ts'
+import { duplicateItems, newId } from './editorDoc.ts'
+import { renameRawIds, takenIds } from './clipboard.ts'
 
 /** Delete the selected nodes; a path left with too few nodes is removed. */
 export function deleteSelectedNodes(doc: EditableDoc, nodeSel: ReadonlySet<string>): EditableDoc | null {
@@ -50,14 +51,21 @@ export function duplicateSelected(
   const top = topLevelSelection(doc.items, selection)
   const originals = top.map((id) => findItem(doc.items, id)).filter((it): it is DocItem => it !== null)
   if (originals.length === 0) return null
-  const copies = duplicateItems(originals)
+  // Raw markup's own ids are document-global: a copy keeping them would point
+  // its `url(#…)` at the original's gradient (the same rule as Paste).
+  const copies = renameRawIds(duplicateItems(originals), takenIds(doc.items))
   const offset = Math.max(doc.viewBox[2], doc.viewBox[3]) * 0.02
   const ids = new Set(copies.map((c) => c.id))
   const items = transformItems([...doc.items, ...copies], ids, translation(offset, offset))
   return { doc: { ...doc, items }, ids }
 }
 
-/** Dissolve every selected group; `freed` holds the children that took their place. */
+/**
+ * Dissolve every selected group; `freed` holds the children that took their
+ * place. A clip group is left whole: its children set free would paint
+ * everything the clip hid (an Illustrator export's bleed, all at once), so
+ * the clip is released on purpose first (`releaseClips`).
+ */
 export function ungroupSelected(
   doc: EditableDoc,
   selection: ReadonlySet<string>,
@@ -66,13 +74,25 @@ export function ungroupSelected(
   const freed = new Set<string>()
   for (const id of selection) {
     const item = findItem(items, id)
-    if (!item || !isGroup(item)) continue
+    if (!item || !isGroup(item) || item.clip) continue
     for (const c of item.children) freed.add(c.id)
     const next = ungroup(items, id)
     if (next) items = next
   }
   if (items === doc.items) return null
   return { doc: { ...doc, items }, freed }
+}
+
+/** Drop the clip of every selected clip group: the group stays, everything in it shows. */
+export function releaseClips(doc: EditableDoc, selection: ReadonlySet<string>): EditableDoc | null {
+  let items = doc.items
+  for (const id of selection) {
+    const item = findItem(items, id)
+    if (!item || !isGroup(item) || !item.clip) continue
+    const { clip: _clip, ...rest } = item
+    items = replaceIn(items, rest)
+  }
+  return items !== doc.items ? { ...doc, items } : null
 }
 
 /** Numeric geometry entry: resolve X/Y/W/H into a transform of the box. */

@@ -31,7 +31,7 @@ type OpenDoc = { doc: EditableDoc; name: string }
  * follows; while it hasn't, the editor keeps what it has open — including a
  * dropped file that isn't the logo, or the intake after Close.
  */
-type EditorSession = { open: OpenDoc | null; seenKey: string }
+type EditorSession = { open: OpenDoc | null; seenKey: string; seenEpoch: number }
 
 /** Debounce for pushing edits into the logo, so a node drag is one apply rather
  *  than one per pointer move (each apply reserializes every path). */
@@ -54,15 +54,18 @@ let session: EditorSession | null = null
  */
 const wroteFor = new WeakSet<EditableDoc>()
 
-/** Bring a session up to the current working logo: if another tab changed it, open that. */
+/**
+ * Bring a session up to the current working logo: if another tab changed it, or
+ * Clear ran (the epoch — clearing an empty logo leaves the key as it was), open that.
+ */
 function follow(prev: EditorSession | null): EditorSession {
-  const { logo, assetKey } = useStore.getState()
-  if (prev && prev.seenKey === assetKey) return prev
+  const { logo, assetKey, studioEpoch } = useStore.getState()
+  if (prev && prev.seenKey === assetKey && prev.seenEpoch === studioEpoch) return prev
   const name = logo.fileName?.replace(/\.[^.]+$/, '') ?? 'logo'
   const doc = logo.isSvg && logo.svgText ? parseSvg(logo.svgText, { preserveGroups: true }) : null
   if (doc) adoptIds(doc)
   // A bitmap logo (or none) leaves nothing to edit: back to the intake, which says why.
-  return { open: doc ? { doc, name } : null, seenKey: assetKey }
+  return { open: doc ? { doc, name } : null, seenKey: assetKey, seenEpoch: studioEpoch }
 }
 
 function initialSession(): EditorSession {
@@ -76,7 +79,13 @@ function initialSession(): EditorSession {
     // already had (two layers sharing one id, edits landing on the wrong one).
     adoptIds(stored.doc)
     repairIds(stored.doc)
-    return follow({ open: { doc: stored.doc, name: stored.name }, seenKey: stored.seenKey ?? assetKey })
+    return follow({
+      open: { doc: stored.doc, name: stored.name },
+      seenKey: stored.seenKey ?? assetKey,
+      // The epoch counts Clears in this page load only; a Clear before the
+      // reload already dropped the stored drawing.
+      seenEpoch: useStore.getState().studioEpoch,
+    })
   }
   return follow(null)
 }
@@ -104,11 +113,12 @@ export default function EditorPanel() {
 
   // The working logo can change while this tab is open too (Clear in the header).
   const assetKey = useStore((s) => s.assetKey)
+  const studioEpoch = useStore((s) => s.studioEpoch)
   useEffect(() => {
     const cur = session ?? initial.current!
     const next = follow(cur)
     if (next !== cur) setState(next)
-  }, [assetKey, setState])
+  }, [assetKey, studioEpoch, setState])
 
   const setProcessedSvg = useStore((s) => s.setProcessedSvg)
   // The document the studio was seeded with, for the debounced write to record.
@@ -149,7 +159,11 @@ export default function EditorPanel() {
   const onChange = useCallback(
     (doc: EditableDoc) => {
       // Not setState: re-seeding the studio with its own output would drop undo.
-      session = { open: { doc, name }, seenKey: session?.seenKey ?? useStore.getState().assetKey }
+      session = {
+        open: { doc, name },
+        seenKey: session?.seenKey ?? useStore.getState().assetKey,
+        seenEpoch: session?.seenEpoch ?? useStore.getState().studioEpoch,
+      }
       saveSlot(SLOTS.editor, { doc, name, seenKey: session.seenKey } satisfies Omit<StoredEditor, 'v'>, 900)
       // Don't treat the initial seed firing as an edit: a parseSvg → serializeDoc
       // round-trip yields different markup for the same drawing, so applying it
@@ -171,13 +185,17 @@ export default function EditorPanel() {
   // produced stays as the working image.
   const close = useCallback(() => {
     applyToLogo.flush()
-    setState({ open: null, seenKey: useStore.getState().assetKey })
+    const { assetKey, studioEpoch } = useStore.getState()
+    setState({ open: null, seenKey: assetKey, seenEpoch: studioEpoch })
   }, [setState, applyToLogo])
 
   if (!open) {
     return (
       <EditorIntake
-        onOpen={(doc, openName) => setState({ open: { doc, name: openName }, seenKey: useStore.getState().assetKey })}
+        onOpen={(doc, openName) => {
+          const { assetKey, studioEpoch } = useStore.getState()
+          setState({ open: { doc, name: openName }, seenKey: assetKey, seenEpoch: studioEpoch })
+        }}
       />
     )
   }

@@ -9,7 +9,7 @@
 // that margin and the width scales with the geometry; gradients and the planar
 // topology move with the shapes they belong to, so the doc stays consistent.
 
-import { affineScale, applyAffine, subPathsTightBounds, transformSubPaths } from './geometry.ts'
+import { affineScale, applyAffine, subPathsTightBounds, transformClip, transformSubPaths } from './geometry.ts'
 import { isPaper, paperItem } from './paper.ts'
 import type { Affine, DocItem, EditableDoc, GradientFill, PathItem, PathNode, Topology } from './types'
 
@@ -93,7 +93,11 @@ function fitAffine(box: Box | null, size: number, inset: number): Affine {
 }
 
 function transformItem(item: DocItem, m: Affine, size: number): DocItem {
-  if (item.kind === 'group') return { ...item, children: item.children.map((c) => transformItem(c, m, size)) }
+  if (item.kind === 'group') {
+    const next = { ...item, children: item.children.map((c) => transformItem(c, m, size)) }
+    if (item.clip) next.clip = transformClip(item.clip, m)
+    return next
+  }
   if (item.kind !== 'path') return item
   // The paper is the page: after the refit it is the whole icon box.
   if (isPaper(item)) return { ...paperItem(size, size, item.fill), visible: item.visible }
