@@ -30,7 +30,7 @@ import {
 import type { ShowMetrics, Showcase } from '../../src/components/labs/bench/showcaseTypes.ts'
 
 const argv = process.argv.slice(2)
-const RUN = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : 'v2'
+const RUN = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : 'v3'
 const CORPUS = 'svgemoji-v0'
 const OUT_PUBLIC = join(REPO, 'public', 'benchmark')
 const OUT_DATA = join(REPO, 'src', 'components', 'labs', 'bench', 'showcase.generated.ts')

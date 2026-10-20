@@ -40,7 +40,12 @@ interface Row {
 }
 
 const shush = byslug('shushing-face')
+const crystal = byslug('crystal-ball')
 const n = (m: ShowMetrics, k: string): number | null => (typeof m[k] === 'number' ? (m[k] as number) : null)
+/** How many times tool `b`'s metric is tool `a`'s, to one decimal — the prose quotes the data. */
+const times = (e: Example, k: string, a = 0, b = 1): string =>
+  ((n(e.tools[b].metrics, k) ?? Number.NaN) / (n(e.tools[a].metrics, k) ?? Number.NaN)).toFixed(1)
+const dino = (e: Example, i: number): string => (n(e.tools[i].metrics, 'sbDino') ?? Number.NaN).toFixed(4)
 
 export function Article({ onExplore }: { onExplore?: () => void }) {
   const hero = byslug('smiling-face')
@@ -67,8 +72,10 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
               0.9999, 0.9998 and 0.9996, so by that score the three are interchangeable. The artist drew it with{' '}
               {hero.authoredNodes.length / 2} nodes; the traces use{' '}
               {hero.tools.map((t) => n(t.metrics, 'docNodes')).join(', ')}, and VTracer puts{' '}
-              {n(hero.tools[1].metrics, 'tangentBreaks')} kinks (red rings) on curves the artist drew smooth. LogoLab
-              has {n(hero.tools[0].metrics, 'tangentBreaks')}, where the mouth and the eyebrows meet the cheeks.
+              {n(hero.tools[1].metrics, 'tangentBreaks')} kinks (red rings) on curves the artist drew smooth.{' '}
+              {n(hero.tools[0].metrics, 'tangentBreaks')
+                ? `LogoLab has ${n(hero.tools[0].metrics, 'tangentBreaks')}.`
+                : 'LogoLab has none: where the mouth meets the blush, its outline runs through the point as drawn.'}{' '}
               StarVector uses the fewest nodes, and its outline is the furthest from the drawing. Scroll over a panel to
               zoom, and drag to look around.
             </>
@@ -106,17 +113,18 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
 
         <Section title="Same score, worse drawing">
           <p>
-            On the shushing face, DINO cannot separate the two traces (0.9997 each) and LPIPS slightly prefers
-            VTracer’s. Measured against the authored outline, VTracer’s edges are three times further off, and its file
-            has {n(shush.tools[1].metrics, 'tangentBreaks')} kinks on curves that have none (LogoLab’s has{' '}
+            On the shushing face, DINO scores the two traces {dino(shush, 0)} and {dino(shush, 1)}, a difference too
+            small to mean anything, and LPIPS slightly prefers VTracer’s. Measured against the authored outline,
+            VTracer’s edges are {times(shush, 'chamfer')}× further off, and its file has{' '}
+            {n(shush.tools[1].metrics, 'tangentBreaks')} kinks on curves that have none (LogoLab’s has{' '}
             {n(shush.tools[0].metrics, 'tangentBreaks')}).
           </p>
           <Figure example={shush} />
           <p>
-            The crystal ball goes further: DINO <em>and</em> LPIPS both rank VTracer first, on a trace with 3.3× the
-            nodes and 3.6× the edge error.
+            The crystal ball goes further: DINO <em>and</em> LPIPS both rank VTracer first, on a trace with{' '}
+            {times(crystal, 'docNodes')}× the nodes and {times(crystal, 'chamfer')}× the edge error.
           </p>
-          <Figure example={byslug('crystal-ball')} />
+          <Figure example={crystal} />
         </Section>
 
         <Section title="A black silhouette scores 0.967">
@@ -143,10 +151,11 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
           </p>
           <Figure example={byslug('camera')} />
           <p>
-            LogoLab’s kinks have one main source. It traces an emoji as tiles that share their edges, so where three
-            colours meet, every outline through that point has a node on it, and the fit often lets an outline the
-            artist drew smooth bend there. On the smiling face, the mouth pulls 60° or more into the point where it
-            meets the blush. The tools that stack one shape on another don’t have that junction to bend at.
+            LogoLab traces an emoji as tiles that share their edges, so where three colours meet, every outline through
+            that point has a node on it. Until this version the fit often let an outline the artist drew smooth bend
+            there: the smiling face’s mouth pulled 60° or more into the point where it meets the blush. The tracer now
+            works out which shape is in front and keeps its outline smooth through the point, which took LogoLab’s kinks
+            on these {data.cases} cases from 1569 to 1327. The rest have other causes, and they are still there.
           </p>
         </Section>
 
@@ -221,8 +230,9 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
               We built LogoLab and chose these metrics, and the kink count in particular is our own measure. That is why
               the SVG-Bench numbers sit beside ours and why the losses are shown. The first version of the kink count
               skipped every point where three shapes meet, and that hid half of LogoLab’s own kinks; it now counts a
-              bend there when the outline is drawn smooth through it, and LogoLab’s total over the {data.cases} cases
-              doubled.
+              bend there when the outline is drawn smooth through it. Counted that way, LogoLab’s total over the{' '}
+              {data.cases} cases doubled, and we then fixed about a third of them in the tracer (above). Every number on
+              this page comes from the fixed version.
             </li>
           </ul>
           <p>
