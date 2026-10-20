@@ -176,7 +176,7 @@ export function assemblePlanar(
   // vertices below; all other junctions keep their lattice corner.
   const thread =
     !opts.refineJunctions && palette && opts.fitThrough
-      ? threadJunctions(net, palette, opts.cornerJunctions !== false, opts.throughPairs === true)
+      ? threadJunctions(net, palette, opts.cornerJunctions !== false, opts.throughPairs === true, opts.threadDiag)
       : null
   const juncPos = opts.refineJunctions ? subpixelJunctions(net, cw) : (thread?.pos ?? null)
   const vidByCorner = new Map<number, number>()

@@ -1,5 +1,6 @@
 // PlanarFitOptions, its defaults, and the flat-art line cost.
 
+import type { JunctionVerdict } from '../planarThread.ts'
 import type { Vec } from '../../path/types'
 import type { ApexDiag } from './apex.ts'
 import type { FilletDiag } from './fillet.ts'
@@ -103,6 +104,9 @@ export interface PlanarFitOptions {
   /** Diagnostic sink, called once per closed loop the rounded-polygon fit weighed, with
    *  each gap's reading (`bench/filletDiag.ts`). Never changes the fit. */
   filletDiag?: FilletDiag
+  /** Diagnostic sink: every junction verdict planarThread reaches, with the tangents it
+   *  hands a through pair (`bench/junctionDiag.ts`). Never changes the trace. */
+  threadDiag?: (v: JunctionVerdict) => void
   /**
    * Internal, set per edge by assemblePlanar: pin each snapped apex's handle directions
    * onto its fitted arm lines. Only meaningful on a sub-pixel displaced chain, where the

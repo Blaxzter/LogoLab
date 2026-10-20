@@ -107,13 +107,14 @@ const MAX_MOVE = 2.0
 const ARM_BOW = 0.8
 /**
  * Least angle (deg) every other arm must leave a GEOMETRIC through pair's line at. A T's
- * stem meets the boundary it ends on at a clear angle; at a shallow crossing (a hairline
- * over a bar at 22°, split into two junctions a few px apart) two DIFFERENT shapes' edges
- * run nearly parallel, the through test passes for the wrong pair, and threading one of
- * the two junctions bends the short edge between them. The rank's pairs don't need it:
- * there the weak arm is known not to continue.
+ * stem meets the boundary it ends on at a clear angle (the smiling face's mouth 55–73°,
+ * the Olympic rings' crossings 60–90°). Under it the third region is a WEDGE whose tip is
+ * the junction, and moving that vertex or fixing its tangent bends the tip: a seam leaving
+ * a navy wedge's corner (30°), a pink wedge in gradient-flat (34°), a hairline over a bar
+ * (22–42°), the yellow tip in border-cross (41°) — every one a hook or notch in the A/B
+ * review. The rank's pairs don't need it: there the weak arm is known not to continue.
  */
-const STEM_MIN_DEG = 30
+const STEM_MIN_DEG = 45
 
 /**
  * The label behind everything: the one with the most boundary on the canvas edge. A
@@ -531,7 +532,21 @@ export function surveyJunctions(
     v.linked = true
     v.reason = v.geometric ? `thread (geometric, stem ${v.stemDeg!.toFixed(0)}°)` : v.kind!
     if (along && p) {
-      const t = 'line' in along ? along.line : { x: -(p.y - along.cy), y: p.x - along.cx }
+      // The tangent is each arm's OWN direction, averaged — not the joined window's line.
+      // Two arms of one outline that border different colours sit up to a pixel apart
+      // (anti-aliasing against white is not anti-aliasing against blue), and a line fitted
+      // across that jog tilts by atan(jog / window): on the Olympic rings 5°, which flattened
+      // the yellow ring's arc between two crossings. Averaged, a jog cancels, and so do the
+      // two one-sided windows' opposite errors on an arc.
+      const fwd = (e: JunctionEnd): Vec => {
+        const w = windows.get(e.edge * 2 + (e.atEnd ? 1 : 0))!
+        const d = armLine(w).d
+        const c = chordDir(w)
+        return c && d.x * c.x + d.y * c.y < 0 ? { x: -d.x, y: -d.y } : d
+      }
+      const da = fwd(a)
+      const db = fwd(b)
+      const t = { x: db.x - da.x, y: db.y - da.y }
       const l = Math.hypot(t.x, t.y)
       if (l > 1e-9) {
         const u = { x: t.x / l, y: t.y / l }
@@ -616,12 +631,15 @@ export function threadJunctions(
   palette: readonly ThreadColor[],
   cornerJunctions = true,
   throughPairs = false,
+  /** Diagnostic sink for every verdict (PlanarFitOptions.threadDiag). */
+  diag?: (v: JunctionVerdict) => void,
 ): ThreadPlacement {
   const pos = new Map<number, Vec>()
   const tangents = new Map<number, Vec>()
   const pairs: [number, number][] = []
   const corners: number[] = []
   for (const v of surveyJunctions(net, edgeContrast(net, palette), cornerJunctions, undefined, throughPairs)) {
+    diag?.(v)
     if (!v.linked || !v.moveTo) continue
     pos.set(v.corner, v.moveTo)
     if (!throughPairs || !v.tangents) continue

@@ -316,11 +316,15 @@ byte-identical to `before-fillets` (240 files); `before-fillets` ⇄ `after-fill
 `throughPairs` (on; `planarThread.ts` + `fitOpenArc`'s `EndTangents`, benchmarks §42.7). A
 junction where one pair of arms continues straight through is placed on that pair's
 through fit, and both arms are fitted to leave it along the fit's tangent, so a mouth
-running past a cheek is G¹ there instead of dipping into a 60° cusp. Four rules, each a
+running past a cheek is G¹ there instead of dipping into a 60° cusp. Six rules, each a
 measured false positive first and each easy to undo:
 
-* **One pair, a stem of 30° or more** (`STEM_MIN_DEG`): at a shallow crossing two shapes'
-  edges run nearly parallel and the wrong pair passes.
+* **One pair, a stem of 45° or more** (`STEM_MIN_DEG`): under it the third region is a
+  wedge whose tip IS the junction, and threading it hooks the tip (four A/B findings at
+  30–42°; the T's that should thread measure 55–90°).
+* **The tangent is the two arms' own directions, averaged**, not the joined window's line:
+  an outline bordering two colours jogs by up to a pixel at the junction, and a line across
+  the jog tilts (5° on the Olympic rings, a ring's arc flattened).
 * **Never the ground's outline** (`groundLabel`): two arms sharing the background are two
   shapes' silhouette meeting at a corner the artist drew.
 * **One arm follows the other** (`followThroughPairs`): the joined line tilts toward a
@@ -328,9 +332,12 @@ measured false positive first and each easy to undo:
   to the one its partner actually leaves on.
 * **The re-seat skips GEOMETRIC through junctions only** (`PlanarTrace.through`): it would
   put the kink back; a rank thread it still corrects (exempting those cost `petals`).
+* **Beautify's line snap keeps the tangent** (`breaksThrough`): a chord within fidelity
+  can still be 6° off it, and the green ring's arc came back a line with a step.
 
 `before-junction-g1` ⇄ `after-junction-g1` is the pair; `filletDiag --breaks --toggle
-throughPairs --list` the census, `threadDiag --geometric` the per-junction verdicts.
+throughPairs --list` the census, `junctionDiag <case> --lane grad` the per-junction
+verdicts as a LANE traces them (`threadDiag --geometric` is the flat palette only).
 
 ## Line art traces as STROKES — the centreline engine, and its own lane
 

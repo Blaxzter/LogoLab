@@ -7989,10 +7989,13 @@ junction the rank refuses is still threaded when exactly ONE pair of its arms pa
 same through test (turn under 20°, one line or circle within 1.2 px, a move under 2 px).
 Three more gates, each a measured false positive first:
 
-* **the stem leaves at 30° or more** (`STEM_MIN_DEG`). At a shallow crossing (`hairlines`:
-  a hairline over a bar at 22°, split into two junctions 5 px apart) two different shapes'
-  edges run nearly parallel, the wrong pair passes, and threading one junction of the two
-  bent the short edge between them by 6°;
+* **the stem leaves at 45° or more** (`STEM_MIN_DEG`). Under it the third region is a WEDGE
+  whose tip is the junction, and moving that vertex or fixing its tangent bends the tip.
+  30° was the first value (it caught a hairline over a bar at 22°, split into two junctions
+  5 px apart); the A/B review then found four more at 30–42°, each a hook or notch: a seam
+  leaving a navy wedge's corner (`seam-corner`), the pink wedge in `gradient-flat`, the
+  yellow tip in `border-cross`, a red bar over a hairline. The T's that should thread
+  measure 55–73° (the smiling face) and 60–90° (the Olympic rings);
 * **the pair does not share the ground** (`groundLabel`: the label with the most boundary
   on the canvas edge, or transparency). Two arms that share the background are the
   silhouette of two shapes meeting, and the artist's outline turns there: the aerial
@@ -8004,8 +8007,13 @@ Three more gates, each a measured false positive first:
 edge's first segment along the chord to the NEXT sample, which at a junction is a
 staircase step, and the cubic shrinks its handle to fit it: the outline dips into a cusp
 (the 61–66° pulls of §42.6 had 3 px handles). A threaded junction now hands both through
-arms the primitive's tangent there (`EndTangents`), and the fit leaves along it, falling
-back to the free fit if no candidate stays within ε. Two follow-ups:
+arms ONE tangent (`EndTangents`), and the fit leaves along it, falling back to the free
+fit if no candidate stays within ε. The tangent is the average of the two arms' OWN
+directions, not the joined window's line: two arms of one outline that border different
+colours sit up to a pixel apart (anti-aliasing against white is not anti-aliasing against
+blue), and a line across that jog tilts by atan(jog / window) — 5° on the Olympic rings,
+which flattened a ring's arc between two crossings. Averaged, the jog cancels, and so do
+the two one-sided windows' opposite errors on an arc. Three follow-ups:
 
 * **one arm follows the other** (`followThroughPairs`). A straight arm beside a curving one
   tilts the joined line; the straight arm cannot leave along the tilt within ε and falls
@@ -8014,17 +8022,23 @@ back to the free fit if no candidate stays within ε. Two follow-ups:
 * **the re-seat leaves a geometric through junction alone** (`PlanarTrace.through`). It
   moves a degree-3 junction to the intersection of its two strongest fitted primitives,
   which is exactly the kink again. A RANK thread it may still correct: exempting those too
-  cost `petals` two breaks of 50–58°, where the re-seat was fixing a slid band seam.
+  cost `petals` two breaks of 50–58°, where the re-seat was fixing a slid band seam;
+* **beautify's line snap keeps the tangent** (`breaksThrough` in planarBeautify). 1b turns
+  any open edge within fidelity of its chord into that chord, and a chord can be 6° off the
+  tangent the fit left the junction on: the green ring's arc became a line with a step at
+  the crossing. An edge with an end at a geometric through junction keeps its curve unless
+  the chord is within 2° of that end's tangent.
 
-What moved. Tier-0 flat @512 (`filletDiag --breaks --toggle throughPairs`): 38 → 37 —
-`border-cross` loses its 42° and 23° pulls and gains one of 6° (4 → 3, still listed), and
-nothing else in the flat lane moves; the gradient lane gains one 18° break in
-`gradient-flat`. The truth gate passes unchanged. On the benchmark's 100 held-out emoji
-(LogoLab alone, re-traced): kinks 1569 → **1264**, median per case 13.5 → 9, fewer in 65
-cases and more in 4; the smiling face 8 → 0. Nodes 15790 → 15515, ΔE and edge error a
-little better (medians 0.236 → 0.226, 0.271 → 0.265); invented corners 147 → 151 (four
+What moved. Tier-0 @512 (`filletDiag --breaks --toggle throughPairs`): flat 38 → 36 —
+`border-cross` loses its 42° and 23° pulls (4 → 2, still listed) and nothing else moves, in
+either lane. The truth gate passes unchanged. On the benchmark's 100 held-out emoji
+(LogoLab alone, re-traced): kinks 1569 → **1283**, median per case 13.5 → 9.5, fewer in 62
+cases and more in 2; the smiling face 8 → 0. Nodes 15790 → 15609, ΔE and edge error a
+little better (medians 0.236 → 0.226, 0.271 → 0.263); invented corners 147 → 152 (five
 cases, each a kink that was already counted and now turns past 60°). `smooth-radii`'s two
 66° pulls stay: they sit on a thin tip's split junction, 3 px apart, with no through pair.
-`before-junction-g1` ⇄ `after-junction-g1`: 55 files in the flat / grad / stack lanes and
+`before-junction-g1` ⇄ `after-junction-g1`: 53 files in the flat / grad / stack lanes and
 the `cline` flat traces; mono and line byte-identical. Many of the moves are RANK threads,
-which now leave on one tangent too.
+which now leave on one tangent too. `bench/junctionDiag.ts` lists every junction the rule
+touched, traced with a lane's own options (threadDiag reproduces the flat palette only, and
+three of the five review findings were in the gradient lane).

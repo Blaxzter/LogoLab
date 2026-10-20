@@ -414,7 +414,7 @@ export function planarBeautify(
       const d = perpDistance(p, a, b)
       if (d > maxDev) maxDev = d
     }
-    if (maxDev <= fid) {
+    if (maxDev <= fid && !breaksThrough(e, snap.keep)) {
       e.nodes = [
         { x: a.x, y: a.y, hIn: null, hOut: null, kind: 'corner' },
         { x: b.x, y: b.y, hIn: null, hOut: null, kind: 'corner' },
@@ -435,6 +435,35 @@ export function planarBeautify(
   // `vertices` carries any moves from the re-seat and 1d; the rest are independent
   // copies, so a later mutation of the input cannot leak into the output.
   return { vertices, edges }
+}
+
+/** How far (cos) a straight chord may turn from the tangent an edge leaves a through
+ *  junction on before 1b would put the kink back. */
+const THROUGH_CHORD_COS = Math.cos((2 * Math.PI) / 180)
+
+/**
+ * Would replacing this open edge by its chord break the tangent it leaves a GEOMETRIC
+ * through junction on (`SnapOptions.keep`, planarThread `throughPairs`)? The fit made the
+ * edge leave along its partner's tangent; a chord that is within fidelity of the arc is
+ * still a different direction at the junction, and on the Olympic rings 1b turned a
+ * ring's arc into a line 6° off it — the cusp the through pair was there to remove.
+ */
+function breaksThrough(e: SharedEdge, keep: ReadonlySet<number> | undefined): boolean {
+  if (!keep || e.nodes.length < 2) return false
+  const n = e.nodes
+  const a = n[0]
+  const b = n[n.length - 1]
+  const len = Math.hypot(b.x - a.x, b.y - a.y)
+  if (len < 1e-9) return false
+  const cx = (b.x - a.x) / len
+  const cy = (b.y - a.y) / len
+  const off = (nd: PathNode, to: { x: number; y: number }, sx: number, sy: number): boolean => {
+    const l = Math.hypot(to.x - nd.x, to.y - nd.y)
+    return l > 1e-9 && ((to.x - nd.x) * sx + (to.y - nd.y) * sy) / l < THROUGH_CHORD_COS
+  }
+  if (e.startVertex != null && keep.has(e.startVertex) && off(a, a.hOut ?? n[1], cx, cy)) return true
+  if (e.endVertex != null && keep.has(e.endVertex) && off(b, b.hIn ?? n[n.length - 2], -cx, -cy)) return true
+  return false
 }
 
 // ---------------------------------------------------------------------------
