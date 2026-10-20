@@ -106,15 +106,72 @@ const MAX_MOVE = 2.0
  */
 const ARM_BOW = 0.8
 /**
- * Least angle (deg) every other arm must leave a GEOMETRIC through pair's line at. A T's
- * stem meets the boundary it ends on at a clear angle (the smiling face's mouth 55–73°,
- * the Olympic rings' crossings 60–90°). Under it the third region is a WEDGE whose tip is
- * the junction, and moving that vertex or fixing its tangent bends the tip: a seam leaving
- * a navy wedge's corner (30°), a pink wedge in gradient-flat (34°), a hairline over a bar
- * (22–42°), the yellow tip in border-cross (41°) — every one a hook or notch in the A/B
- * review. The rank's pairs don't need it: there the weak arm is known not to continue.
+ * Least angle (deg) every other arm must leave a GEOMETRIC through pair's line at — a floor
+ * under the rules that decide (strong arms, `cutAt`, no outline running through). It was
+ * 45° for a while, to stop four hooks at 30–42° in the A/B review; each had its own cause,
+ * fixed where it lives, and 45° refused real T's: `cl-ties`' string meets the kite's edge at
+ * 33°. A real T measures 30–90° (the smiling face's mouth 55–73°, the Olympic rings 60–90°).
  */
-const STEM_MIN_DEG = 45
+const STEM_MIN_DEG = 25
+
+/** Radius (px) of the neighbourhood `cutAt` reads: two arm windows, so a crossing band a
+ *  few px wide is inside it at any raster the lanes trace. */
+const CUT_RADIUS = 2 * THROUGH_SPAN
+/** Pieces of the front shape under this many px are anti-aliasing specks, not a cut. */
+const CUT_MIN_PIECE = 4
+
+/**
+ * Is region `x` CUT into more than one piece around this junction? The shape in front of a
+ * crossing stays whole and the one behind it is split. A geometric pair claims its shared
+ * region is in front, its outline running through; if that region is in pieces right here,
+ * something lies across it and the claim is wrong. `hairlines`: a red bar over a black one
+ * at 22° — on the lattice the black side runs straight past the red for six rows, every
+ * angle and residual reads like `cl-ties`' string past a kite, and only this tells them
+ * apart: the black is in two pieces, the string is one. LOCAL on purpose: a ring that is
+ * over its neighbour at one crossing and under it at the other is cut somewhere, just not
+ * where it is in front.
+ */
+export function cutAt(labels: Int32Array, w: number, h: number, cx: number, cy: number, x: number): boolean {
+  const r = CUT_RADIUS
+  const x0 = Math.max(0, Math.floor(cx - r))
+  const y0 = Math.max(0, Math.floor(cy - r))
+  const x1 = Math.min(w - 1, Math.ceil(cx + r))
+  const y1 = Math.min(h - 1, Math.ceil(cy + r))
+  const bw = x1 - x0 + 1
+  const seen = new Uint8Array(bw * (y1 - y0 + 1))
+  const inside = (px: number, py: number): boolean =>
+    labels[py * w + px] === x && (px + 0.5 - cx) ** 2 + (py + 0.5 - cy) ** 2 <= r * r
+  let pieces = 0
+  const stack: number[] = []
+  for (let py = y0; py <= y1; py++) {
+    for (let px = x0; px <= x1; px++) {
+      const i = (py - y0) * bw + (px - x0)
+      if (seen[i] || !inside(px, py)) continue
+      seen[i] = 1
+      stack.push(px, py)
+      let size = 0
+      while (stack.length) {
+        const qy = stack.pop()!
+        const qx = stack.pop()!
+        size++
+        for (const [nx, ny] of [
+          [qx + 1, qy],
+          [qx - 1, qy],
+          [qx, qy + 1],
+          [qx, qy - 1],
+        ]) {
+          if (nx < x0 || ny < y0 || nx > x1 || ny > y1) continue
+          const j = (ny - y0) * bw + (nx - x0)
+          if (seen[j] || !inside(nx, ny)) continue
+          seen[j] = 1
+          stack.push(nx, ny)
+        }
+      }
+      if (size >= CUT_MIN_PIECE && ++pieces > 1) return true
+    }
+  }
+  return false
+}
 
 /**
  * The label behind everything: the one with the most boundary on the canvas edge. A
@@ -194,6 +251,8 @@ export interface JunctionVerdict {
   kind: 'thread' | 'apex' | null
   /** Threaded by geometry alone: the contrast rank refused it and one arm pair passed. */
   geometric?: boolean
+  /** A geometric pair was dropped because its shared region is in pieces here (`cutAt`). */
+  cut?: boolean
   /** For a junction with a geometric through pair: the least angle (deg) another arm
    *  leaves that pair's line at (STEM_MIN_DEG). */
   stemDeg?: number
@@ -344,6 +403,10 @@ export function surveyJunctions(
   tune?: { span?: number; dev?: number; alt?: boolean },
   /** Thread a junction the rank refuses when exactly one arm pair continues through it. */
   geometric = false,
+  /** Sub-pixel chains by edge id (planarSubpixel), read by the GEOMETRIC pairs only. */
+  subpix?: ReadonlyMap<number, Vec[]>,
+  /** The label map, for the front-shape test (`cutAt`). Absent ⇒ not asked. */
+  labels?: Int32Array,
 ): JunctionVerdict[] {
   const span = tune?.span ?? THROUGH_SPAN
   const throughDev = tune?.dev ?? THROUGH_DEV
@@ -354,11 +417,24 @@ export function surveyJunctions(
   let ground: number | undefined
   for (const corner of net.junctions) {
     const windows = new Map<number, Vec[]>()
+    // The geometric pairs read the SUB-PIXEL chains, the ones the fit reads. On the lattice a
+    // red bar lying across a black one meets it along a vertical boundary (the black column
+    // keeps its full width in the label map); only the anti-aliasing says the red's edge is
+    // the diagonal, and a pair chosen on the lattice bent the black side into the red
+    // (`hairlines`). The rank keeps its lattice windows: its gates were measured on them.
+    const fine = new Map<number, Vec[]>()
+    /** Each arm's direction over TWICE the window (or to its end): the crossing test's. */
+    const far = new Map<number, Vec | null>()
     const ends = (inc.get(corner) ?? []).map((e) => {
       const w = armWindow(net.edges[e.edge].pts, e.atEnd, span)
-      windows.set(e.edge * 2 + (e.atEnd ? 1 : 0), w)
+      const key = e.edge * 2 + (e.atEnd ? 1 : 0)
+      windows.set(key, w)
+      const sp = subpix?.get(net.edges[e.edge].id)
+      fine.set(key, sp ? armWindow(sp, e.atEnd, span) : w)
+      far.set(key, chordDir(armWindow(sp ?? net.edges[e.edge].pts, e.atEnd, 2 * span)))
       return { ...e, de: contrast[e.edge], arm: armLen(w) }
     })
+    let W = windows
     const v: JunctionVerdict = {
       corner,
       x: corner % cw,
@@ -387,15 +463,21 @@ export function surveyJunctions(
     else if (geometric) {
       ground ??= groundLabel(net)
       const g = ground
-      const through = throughPairs(ends, windows, throughDev).filter(({ pair: [x, y] }) => {
+      const through = throughPairs(ends, fine, far, throughDev).filter(({ pair: [x, y] }) => {
         const ex = net.edges[x.edge]
         const ey = net.edges[y.edge]
         const shared = ex.left === ey.left || ex.left === ey.right ? ex.left : ex.right
-        return shared !== g && shared !== EXT
+        if (shared === g || shared === EXT) return false
+        if (labels && cutAt(labels, net.width, net.height, v.x, v.y, shared)) {
+          v.cut = true
+          return false
+        }
+        return true
       })
       if (through.length === 1 && through[0].stem >= STEM_MIN_DEG) {
         pair = through[0].pair
         v.geometric = true
+        W = fine
         v.stemDeg = through[0].stem
       } else if (through.length) v.stemDeg = Math.min(...through.map((t) => t.stem))
     }
@@ -404,6 +486,7 @@ export function surveyJunctions(
       // this is not a weak-into-strong T at all.
       v.reason = `rank ${strong.length}s/${weak.length}w of ${ends.length}`
       if (v.stemDeg != null) v.reason += `, through pair with stem ${v.stemDeg.toFixed(0)}°`
+      if (v.cut) v.reason += ', front shape cut here'
       continue
     }
     const [a, b] = pair
@@ -415,8 +498,9 @@ export function surveyJunctions(
       v.reason = `arm ${Math.min(a.arm, b.arm).toFixed(0)}px < ${MIN_ARM}`
       continue
     }
-    const wa = windows.get(a.edge * 2 + (a.atEnd ? 1 : 0))!
-    const wb = windows.get(b.edge * 2 + (b.atEnd ? 1 : 0))!
+    const wa = W.get(a.edge * 2 + (a.atEnd ? 1 : 0))!
+    const wb = W.get(b.edge * 2 + (b.atEnd ? 1 : 0))!
+    if (v.geometric) v.armBow = [armFit(wa).bow, armFit(wb).bow]
     // One ordered polyline through the junction: arm A reversed, then arm B.
     const win = [...wa].reverse().concat(wb.slice(1))
     if (win.length < 5) {
@@ -539,7 +623,7 @@ export function surveyJunctions(
       // the yellow ring's arc between two crossings. Averaged, a jog cancels, and so do the
       // two one-sided windows' opposite errors on an arc.
       const fwd = (e: JunctionEnd): Vec => {
-        const w = windows.get(e.edge * 2 + (e.atEnd ? 1 : 0))!
+        const w = W.get(e.edge * 2 + (e.atEnd ? 1 : 0))!
         const d = armLine(w).d
         const c = chordDir(w)
         return c && d.x * c.x + d.y * c.y < 0 ? { x: -d.x, y: -d.y } : d
@@ -551,7 +635,7 @@ export function surveyJunctions(
       if (l > 1e-9) {
         const u = { x: t.x / l, y: t.y / l }
         const into = (e: JunctionEnd): [number, Vec] => {
-          const d = chordDir(windows.get(e.edge * 2 + (e.atEnd ? 1 : 0))!)
+          const d = chordDir(W.get(e.edge * 2 + (e.atEnd ? 1 : 0))!)
           const sg = d && d.x * u.x + d.y * u.y < 0 ? -1 : 1
           return [e.edge * 2 + (e.atEnd ? 1 : 0), { x: sg * u.x, y: sg * u.y }]
         }
@@ -568,6 +652,7 @@ export function surveyJunctions(
 function throughPairs(
   ends: JunctionEnd[],
   windows: Map<number, Vec[]>,
+  far: Map<number, Vec | null>,
   dev: number,
 ): { pair: [JunctionEnd, JunctionEnd]; stem: number }[] {
   const out: { pair: [JunctionEnd, JunctionEnd]; stem: number }[] = []
@@ -576,6 +661,10 @@ function throughPairs(
       const a = ends[i]
       const b = ends[j]
       if (a.edge === b.edge || Math.min(a.arm, b.arm) < MIN_ARM) continue
+      // A shape's outline is a real edge on both sides of the point. A pair with a seam in
+      // it (seam-corner: a navy wedge's side and the ΔE 19 seam between two blues leaving
+      // its corner) is two different boundaries that happen to line up.
+      if (!(a.de >= STRONG_DE && b.de >= STRONG_DE)) continue
       const wa = windows.get(a.edge * 2 + (a.atEnd ? 1 : 0))!
       const wb = windows.get(b.edge * 2 + (b.atEnd ? 1 : 0))!
       const ta = chordDir(wa)
@@ -592,14 +681,28 @@ function throughPairs(
       const uy = tb.y - ta.y
       const ul = Math.hypot(ux, uy)
       let stem = 90
+      let crossing = false
       for (const e of ends) {
         if (e === a || e === b) continue
         const d = chordDir(windows.get(e.edge * 2 + (e.atEnd ? 1 : 0))!)
         if (!d || ul < 1e-9) continue
         const sin = Math.abs(d.x * uy - d.y * ux) / ul
         stem = Math.min(stem, (Math.asin(Math.min(1, sin)) * 180) / Math.PI)
+        // A stem that carries straight on into one of the pair's arms is the OTHER outline
+        // through this point: two shapes cross here, and the one in front is the one whose
+        // edge continues — not this pair. Read over TWICE the window: on `hairlines` a red
+        // bar lies over the end of a black one, and its edge runs within a pixel of the
+        // black side for the first six rows — over 12 px the black|red arm reads vertical,
+        // over its whole 16 px it is the red edge's 22°, in line with the stem.
+        const fd = far.get(e.edge * 2 + (e.atEnd ? 1 : 0))
+        for (const k of [a, b]) {
+          const t = far.get(k.edge * 2 + (k.atEnd ? 1 : 0))
+          if (!fd || !t) continue
+          const c = -(fd.x * t.x + fd.y * t.y)
+          if (c >= Math.cos((THROUGH_TURN_DEG * Math.PI) / 180)) crossing = true
+        }
       }
-      out.push({ pair: [a, b], stem })
+      if (!crossing) out.push({ pair: [a, b], stem })
     }
   }
   return out
@@ -614,9 +717,10 @@ export interface ThreadPlacement {
   tangents: Map<number, Vec>
   /** The two `tangents` keys of each threaded junction's through pair. */
   pairs: [number, number][]
-  /** Lattice corners of the GEOMETRIC through junctions — the ones the rank never placed,
-   *  which the re-seat must leave alone (a rank thread it may still correct). */
-  corners: number[]
+  /** Lattice corners of the GEOMETRIC through junctions — the ones the rank never placed —
+   *  with their through direction: the re-seat may slide one ALONG it, never across it (a
+   *  rank thread it may still correct either way). */
+  corners: [number, Vec][]
 }
 
 /**
@@ -633,19 +737,31 @@ export function threadJunctions(
   throughPairs = false,
   /** Diagnostic sink for every verdict (PlanarFitOptions.threadDiag). */
   diag?: (v: JunctionVerdict) => void,
+  /** Sub-pixel chains by edge id, for the geometric pairs. */
+  subpix?: ReadonlyMap<number, Vec[]>,
+  /** The label map, for the front-shape test. */
+  labels?: Int32Array,
 ): ThreadPlacement {
   const pos = new Map<number, Vec>()
   const tangents = new Map<number, Vec>()
   const pairs: [number, number][] = []
-  const corners: number[] = []
-  for (const v of surveyJunctions(net, edgeContrast(net, palette), cornerJunctions, undefined, throughPairs)) {
+  const corners: [number, Vec][] = []
+  for (const v of surveyJunctions(
+    net,
+    edgeContrast(net, palette),
+    cornerJunctions,
+    undefined,
+    throughPairs,
+    subpix,
+    labels,
+  )) {
     diag?.(v)
     if (!v.linked || !v.moveTo) continue
     pos.set(v.corner, v.moveTo)
     if (!throughPairs || !v.tangents) continue
     for (const [k, t] of v.tangents) tangents.set(k, t)
     pairs.push([v.tangents[0][0], v.tangents[1][0]])
-    if (v.geometric) corners.push(v.corner)
+    if (v.geometric) corners.push([v.corner, v.tangents[1][1]])
   }
   return { pos, tangents, pairs, corners }
 }

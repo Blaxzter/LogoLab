@@ -316,12 +316,17 @@ byte-identical to `before-fillets` (240 files); `before-fillets` ⇄ `after-fill
 `throughPairs` (on; `planarThread.ts` + `fitOpenArc`'s `EndTangents`, benchmarks §42.7). A
 junction where one pair of arms continues straight through is placed on that pair's
 through fit, and both arms are fitted to leave it along the fit's tangent, so a mouth
-running past a cheek is G¹ there instead of dipping into a 60° cusp. Six rules, each a
+running past a cheek is G¹ there instead of dipping into a 60° cusp. The rules, each a
 measured false positive first and each easy to undo:
 
-* **One pair, a stem of 45° or more** (`STEM_MIN_DEG`): under it the third region is a
-  wedge whose tip IS the junction, and threading it hooks the tip (four A/B findings at
-  30–42°; the T's that should thread measure 55–90°).
+* **One pair, read on the sub-pixel chains, both arms real edges** (ΔE ≥ 25: a seam lined
+  up with a wedge's side is not an outline).
+* **The shape in front is whole HERE** (`cutAt`, 24 px): the front of a crossing stays one
+  piece, the shape behind is cut. Local, or an interlaced ring fails everywhere.
+* **No other outline runs through**: a stem in line with one of the arms over TWICE the
+  window is the other shape's edge (`hairlines`: a red bar over the END of a black one —
+  over 12 px it scored exactly like `cl-ties`' string past a kite).
+* **Stem ≥ 25°** is only a floor; 45° (round one) refused real T's (`cl-ties` at 33°).
 * **The tangent is the two arms' own directions, averaged**, not the joined window's line:
   an outline bordering two colours jogs by up to a pixel at the junction, and a line across
   the jog tilts (5° on the Olympic rings, a ring's arc flattened).
@@ -330,8 +335,9 @@ measured false positive first and each easy to undo:
 * **One arm follows the other** (`followThroughPairs`): the joined line tilts toward a
   curving arm, the straight arm cannot follow within ε, so the arm that could is re-fitted
   to the one its partner actually leaves on.
-* **The re-seat skips GEOMETRIC through junctions only** (`PlanarTrace.through`): it would
-  put the kink back; a rank thread it still corrects (exempting those cost `petals`).
+* **The re-seat slides a geometric through junction ALONG its line only**
+  (`PlanarTrace.through`): across is the kink again, but skipping it outright left a thin
+  wedge's tip cut short on the lattice (`border-cross` hooked). Rank threads move freely.
 * **Beautify's line snap keeps the tangent** (`breaksThrough`): a chord within fidelity
   can still be 6° off it, and the green ring's arc came back a line with a step.
 

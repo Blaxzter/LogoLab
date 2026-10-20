@@ -7986,16 +7986,30 @@ is a weak band seam (`STRONG_DE` / `WEAK_DE`): the rank is what said which bound
 continues. On a mouth meeting a cheek all three boundaries are real edges, the rank
 refuses, and the vertex stays a pixel off the mouth's line. With `throughPairs`, a
 junction the rank refuses is still threaded when exactly ONE pair of its arms passes the
-same through test (turn under 20°, one line or circle within 1.2 px, a move under 2 px).
-Three more gates, each a measured false positive first:
+same through test (turn under 20°, one line or circle within 1.2 px, a move under 2 px),
+read on the SUB-PIXEL chains the fit reads rather than the lattice. More gates, each a
+measured false positive first — two rounds of A/B review found them:
 
-* **the stem leaves at 45° or more** (`STEM_MIN_DEG`). Under it the third region is a WEDGE
-  whose tip is the junction, and moving that vertex or fixing its tangent bends the tip.
-  30° was the first value (it caught a hairline over a bar at 22°, split into two junctions
-  5 px apart); the A/B review then found four more at 30–42°, each a hook or notch: a seam
-  leaving a navy wedge's corner (`seam-corner`), the pink wedge in `gradient-flat`, the
-  yellow tip in `border-cross`, a red bar over a hairline. The T's that should thread
-  measure 55–73° (the smiling face) and 60–90° (the Olympic rings);
+* **both arms are real edges** (ΔE ≥ `STRONG_DE`). A pair with a seam in it is two
+  boundaries that happen to line up: `seam-corner`'s navy wedge side and the ΔE 19 seam
+  between two blues leaving its corner, threaded, curled the tip;
+* **the shape in front is whole here** (`cutAt`). The pair claims its shared region is in
+  front, its outline running through. The shape in front of a crossing stays one piece and
+  the one behind is cut, so a shared region in two pieces within 24 px of the junction is
+  behind something. LOCAL on purpose: a ring over its neighbour at one crossing and under it
+  at the other is cut somewhere, not where it is in front;
+* **no other outline runs through.** A stem that carries straight on into one of the pair's
+  arms (within 20°, each read over TWICE the window) is the other shape's edge crossing
+  here. `hairlines`' red bar lies over the END of a black one at 22°: for six rows the black
+  side runs within a pixel of the red edge, so over 12 px the black|red arm reads vertical
+  and the pair looked like `cl-ties`' string running past a kite — every angle, residual and
+  bow scored the two alike. Over its whole 16 px that arm is the red edge's 22°, in line
+  with the stem. (The black is not cut there — the red covers its end — which is why the
+  cut test alone could not decide it.);
+* **the stem leaves at 25° or more** (`STEM_MIN_DEG`), a floor under the two rules above.
+  The first round set it at 30° and then 45° to stop four hooks at 30–42°; each turned out
+  to have its own cause (this list and the follow-ups below), and 45° was refusing real
+  T's — `cl-ties`' string meets the kite's edge at 33°;
 * **the pair does not share the ground** (`groundLabel`: the label with the most boundary
   on the canvas edge, or transparency). Two arms that share the background are the
   silhouette of two shapes meeting, and the artist's outline turns there: the aerial
@@ -8019,26 +8033,34 @@ the two one-sided windows' opposite errors on an arc. Three follow-ups:
   tilts the joined line; the straight arm cannot leave along the tilt within ε and falls
   back, the curve takes it, and the pair is still 7° apart. The arm that took the tangent
   is re-fitted to the one its partner actually leaves on, kept only if it meets it;
-* **the re-seat leaves a geometric through junction alone** (`PlanarTrace.through`). It
-  moves a degree-3 junction to the intersection of its two strongest fitted primitives,
-  which is exactly the kink again. A RANK thread it may still correct: exempting those too
-  cost `petals` two breaks of 50–58°, where the re-seat was fixing a slid band seam;
+* **the re-seat slides a geometric through junction ALONG its through line, never across
+  it** (`PlanarTrace.through`, `THROUGH_ACROSS` 0.5 px). It moves a degree-3 junction to the
+  intersection of its two strongest fitted primitives. Across the line that is the kink
+  again (the family emoji's hair); along it the outline stays straight and a thin wedge's
+  tip reaches the true intersection — exempting these junctions outright left
+  `border-cross`'s yellow tip cut short on the lattice, with a three-node hook wrapped round
+  the stub. A RANK thread it may still move either way: exempting those cost `petals` two
+  breaks of 50–58°. (Fixing the STEM's tangent to its own one-sided direction was tried for
+  the same hook and does nothing for it; on `ring-cross` it bent the rings — a 12 px chord
+  of a small arc is several degrees off its tangent — and failed circle recovery 0.62.);
 * **beautify's line snap keeps the tangent** (`breaksThrough` in planarBeautify). 1b turns
   any open edge within fidelity of its chord into that chord, and a chord can be 6° off the
   tangent the fit left the junction on: the green ring's arc became a line with a step at
   the crossing. An edge with an end at a geometric through junction keeps its curve unless
   the chord is within 2° of that end's tangent.
 
-What moved. Tier-0 @512 (`filletDiag --breaks --toggle throughPairs`): flat 38 → 36 —
-`border-cross` loses its 42° and 23° pulls (4 → 2, still listed) and nothing else moves, in
-either lane. The truth gate passes unchanged. On the benchmark's 100 held-out emoji
-(LogoLab alone, re-traced): kinks 1569 → **1283**, median per case 13.5 → 9.5, fewer in 62
-cases and more in 2; the smiling face 8 → 0. Nodes 15790 → 15609, ΔE and edge error a
-little better (medians 0.236 → 0.226, 0.271 → 0.263); invented corners 147 → 152 (five
+What moved. Tier-0 @512 (`filletDiag --breaks --toggle throughPairs`): flat 38 → 35 —
+`border-cross` loses its 42°, 23° and 21° pulls (4 → 1, OFF `KNOWN_DEFECTS`: it now passes
+every gate) and nothing else moves, in either lane. On the benchmark's 100 held-out emoji
+(LogoLab alone, re-traced): kinks 1569 → **1327**, median per case 13.5 → 10, fewer in 57
+cases and more in 2; the smiling face 8 → 0. Nodes 15790 → 15664, ΔE and edge error a
+little better (medians 0.236 → 0.229, 0.271 → 0.265); invented corners 147 → 152 (four
 cases, each a kink that was already counted and now turns past 60°). `smooth-radii`'s two
 66° pulls stay: they sit on a thin tip's split junction, 3 px apart, with no through pair.
-`before-junction-g1` ⇄ `after-junction-g1`: 53 files in the flat / grad / stack lanes and
+`before-junction-g1` ⇄ `after-junction-g1`: 56 files in the flat / grad / stack lanes and
 the `cline` flat traces; mono and line byte-identical. Many of the moves are RANK threads,
 which now leave on one tangent too. `bench/junctionDiag.ts` lists every junction the rule
-touched, traced with a lane's own options (threadDiag reproduces the flat palette only, and
-three of the five review findings were in the gradient lane).
+touched, traced with a lane's own options (`--res`, `--labels` for the label map around a
+point); threadDiag reproduces the flat palette only, and most review findings were in the
+gradient lane. The two review rounds cost 1264 → 1327 on the emoji: that is the price of
+the wedge, crossing and front-shape rules, and every one of them was a visible defect.

@@ -37,10 +37,11 @@ export interface PlanarTrace {
   /** Ids of the closed edges emitted as rounded polygons (planarFit/fillet.ts). Their
    *  sides are certified straight, so the circle / ellipse snap must leave them alone. */
   rounded: Set<number>
-  /** Vertex ids a through pair runs straight through (planarThread, `throughPairs`): the
-   *  junction sits on the through fit and both arms leave it on one tangent, so the
-   *  re-seat must not move it onto an intersection of primitives — that is the kink. */
-  through?: Set<number>
+  /** Vertex ids a through pair runs straight through (planarThread, `throughPairs`), with
+   *  the through direction: the junction sits on the through fit and both arms leave it on
+   *  one tangent, so the re-seat may slide it along that direction but not across it —
+   *  across is the kink again. */
+  through?: Map<number, Vec>
 }
 
 /** Direction rotation that selects the next half-edge keeping the face on one
@@ -150,7 +151,7 @@ export function tracePlanar(
     image && opts.subpixelEdges
       ? subpixelEdgeChains(net, labels, image, undefined, opts.subpixelWindowGuard, raw)
       : undefined
-  return assemblePlanar(net, opts, palette, subpix, image, raw)
+  return assemblePlanar(net, opts, palette, subpix, image, raw, labels)
 }
 
 export function assemblePlanar(
@@ -163,6 +164,8 @@ export function assemblePlanar(
   /** Closed chains as the sub-pixel estimator read them, before its corner guard — what
    *  the rounded-polygon fit reads. Absent ⇒ it reads the lattice chain. */
   raw?: ReadonlyMap<number, RawSubpixelChain>,
+  /** The label map the network was built from: the through pairs' front-shape test. */
+  labels?: Int32Array,
 ): PlanarTrace {
   const cw = net.width + 1
   // --- vertices: one per junction corner ---
@@ -176,7 +179,15 @@ export function assemblePlanar(
   // vertices below; all other junctions keep their lattice corner.
   const thread =
     !opts.refineJunctions && palette && opts.fitThrough
-      ? threadJunctions(net, palette, opts.cornerJunctions !== false, opts.throughPairs === true, opts.threadDiag)
+      ? threadJunctions(
+          net,
+          palette,
+          opts.cornerJunctions !== false,
+          opts.throughPairs === true,
+          opts.threadDiag,
+          subpix,
+          labels,
+        )
       : null
   const juncPos = opts.refineJunctions ? subpixelJunctions(net, cw) : (thread?.pos ?? null)
   const vidByCorner = new Map<number, number>()
@@ -437,10 +448,10 @@ export function assemblePlanar(
   // refineJunctions: weld straight-through junctions to a shared G¹ tangent.
   if (opts.refineJunctions) smoothThroughJunctions(edges, loopsByLabel)
 
-  const through = new Set<number>()
-  for (const c of thread?.corners ?? []) {
+  const through = new Map<number, Vec>()
+  for (const [c, t] of thread?.corners ?? []) {
     const v = vidByCorner.get(c)
-    if (v != null) through.add(v)
+    if (v != null) through.set(v, t)
   }
 
   return { vertices, edges, loopsByLabel, rounded, through }

@@ -129,10 +129,9 @@ const KNOWN_DEFECTS: Record<string, string> = {
 
   // Junction pulls (§42.6, 2026-10-19). tangentBreaks used to skip every traced node where
   // three paths meet or two authored shapes cross; it now counts one whose OWN outline runs
-  // along a single visible, smooth authored edge through the junction, and these two cases
-  // carry such pulls — the defect was there all along, the gate was blind to it.
-  'border-cross':
-    'tangent breaks 4 > 1 — the blue bar kinks 21–42° where it meets its neighbours, on an edge drawn straight',
+  // along a single visible, smooth authored edge through the junction, and this case
+  // carries such pulls — the defect was there all along, the gate was blind to it. border-cross
+  // (its blue bar kinked 21–42°) was listed with it and came off with §42.7's through pairs.
   'smooth-radii': 'tangent breaks 14 > 12 — two 66° pulls where the black tip meets the red, on a curve drawn smooth',
 
   // --- tier 1 (Fluent Emoji) ------------------------------------------------------------

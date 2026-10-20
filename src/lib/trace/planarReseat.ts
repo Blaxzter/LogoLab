@@ -34,6 +34,9 @@ const MAX_SLIDE = 12
 /** Corrections below this (px) are ordinary lattice noise, not a slide, and are
  *  skipped so correct junctions stay untouched. */
 const MIN_MOVE = 1.5
+/** How far (px) across its through direction a re-seat may move a through junction
+ *  (`PlanarTrace.through`). */
+const THROUGH_ACROSS = 0.5
 /** Primitives must cross at least this transversally at the target (near-tangent
  *  intersections are numerically unstable along the shared tangent). */
 const MIN_ANGLE_SIN = Math.sin((5 * Math.PI) / 180)
@@ -153,7 +156,7 @@ export interface ReseatVerdict {
   ty: number
   /** Distance the vertex moved (0 when it was not re-seated). */
   move: number
-  reason: 'moved' | 'below MIN_MOVE' | 'no pair' | 'border'
+  reason: 'moved' | 'below MIN_MOVE' | 'no pair' | 'border' | 'through'
 }
 export type ReseatObserver = (v: ReseatVerdict) => void
 
@@ -662,8 +665,9 @@ export function reseatJunctions(
   onChord?: ChordObserver,
   onVerdict?: ReseatObserver,
   tune?: ReseatTune,
-  /** Junctions already placed on a through fit (`PlanarTrace.through`): never moved. */
-  keep?: ReadonlySet<number>,
+  /** Junctions already placed on a through fit (`PlanarTrace.through`) and their through
+   *  direction: moved only along it. */
+  keep?: ReadonlyMap<number, Vec>,
 ): { chords: Set<number>; moved: Set<number> } {
   const cfg: Cfg = {
     armMax: tune?.armMax ?? ARM_MAX,
@@ -694,7 +698,7 @@ export function reseatJunctions(
 
   for (const v of vertices) {
     const ends = incident.get(v.id)
-    if (!ends || ends.length !== 3 || keep?.has(v.id)) continue
+    if (!ends || ends.length !== 3) continue
     const at = { x: v.x, y: v.y }
     if (width != null && height != null && (v.x <= 1 || v.y <= 1 || v.x >= width - 1 || v.y >= height - 1)) {
       onVerdict?.({
@@ -806,6 +810,15 @@ export function reseatJunctions(
     const hd = dist(best.H, v)
     if (hd < MIN_MOVE) {
       verdict([best.i, best.j], best.H, hd, 'below MIN_MOVE')
+      continue
+    }
+    // A through junction slides along its through line or not at all. Along it the
+    // outline stays straight and a thin wedge's tip reaches the true intersection (the
+    // lattice cuts it short — border-cross's yellow tip hooked round the stub); across it
+    // the vertex leaves the outline and the kink is back (the family emoji's hair).
+    const through = keep?.get(v.id)
+    if (through && Math.abs((best.H.x - v.x) * through.y - (best.H.y - v.y) * through.x) > THROUGH_ACROSS) {
+      verdict([best.i, best.j], best.H, hd, 'through')
       continue
     }
     verdict([best.i, best.j], best.H, hd, 'moved')

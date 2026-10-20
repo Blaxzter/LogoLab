@@ -21,6 +21,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { tracePlanar } from '../src/lib/trace/planarAssemble.ts'
+import { cutAt } from '../src/lib/trace/planarThread.ts'
 import { DEFAULT_PLANAR_FIT } from '../src/lib/trace/planarFit.ts'
 import type { Vec } from '../src/lib/path/types.ts'
 
@@ -404,4 +405,62 @@ test('arc: a seam junction on a tight arc lands on the circle, not inside it (is
     Math.abs(placed.x - pinned.x) < 0.6,
     `move should be ~normal to the arc, got dx ${(placed.x - pinned.x).toFixed(2)}`,
   )
+})
+
+// §42.7 — the front-shape test. A shape in front of a crossing stays whole; the one behind
+// is cut. `cutAt` reads that LOCALLY, so a ring that is under its neighbour at one crossing
+// and over it at the other is not called cut where it is in front.
+test('through pair: cutAt sees a shape cut in two around the junction, and only there', () => {
+  const w = 80
+  const h = 80
+  const X = 1
+  const fill = (band: (x: number, y: number) => boolean): Int32Array => {
+    const L = new Int32Array(w * h)
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) L[y * w + x] = x >= 30 && x < 40 ? (band(x, y) ? 2 : X) : 0
+    return L
+  }
+  // A vertical bar of X; a band of 2 across it at y 36–41, right next to the junction.
+  assert.equal(
+    cutAt(
+      fill((_, y) => y >= 36 && y < 42),
+      w,
+      h,
+      40,
+      44,
+      X,
+    ),
+    true,
+    'cut beside the junction',
+  )
+  // The same bar whole.
+  assert.equal(
+    cutAt(
+      fill(() => false),
+      w,
+      h,
+      40,
+      44,
+      X,
+    ),
+    false,
+    'a whole bar is not cut',
+  )
+  // Cut, but 30 px away: outside the neighbourhood, so not cut HERE.
+  assert.equal(
+    cutAt(
+      fill((_, y) => y >= 8 && y < 12),
+      w,
+      h,
+      40,
+      44,
+      X,
+    ),
+    false,
+    'a cut elsewhere does not count',
+  )
+  // A two-pixel speck of X inside the band is anti-aliasing, not a second piece.
+  const speck = fill((_, y) => y >= 30)
+  speck[33 * w + 34] = X
+  speck[33 * w + 35] = X
+  assert.equal(cutAt(speck, w, h, 40, 28, X), false, 'specks under CUT_MIN_PIECE are not pieces')
 })

@@ -1,7 +1,7 @@
 // JUNCTION DIAG — every junction the through rule touched, traced exactly as an A/B lane does.
 //
 //   node --experimental-strip-types bench/junctionDiag.ts <case id | file.svg|png> [--lane flat|grad|stack]
-//                                                         [--near x,y,r] [--all] [--svg out.svg]
+//                                                         [--near x,y,r] [--all] [--svg out.svg] [--labels x,y,r] [--res N]
 //
 // threadDiag reproduces only the flat-palette label map; this one runs `traceImage` with the
 // lane's own options (abCorpus AB_LANES) and listens on `PlanarFitOptions.threadDiag`, so a
@@ -20,7 +20,7 @@ import { ensureImageData } from './nodeHarness.ts'
 import { traceImage, DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import type { JunctionVerdict } from '../src/lib/trace/planarThread.ts'
 import { serializeDoc } from '../src/lib/path/model.ts'
-import { AB_CORPUS, AB_LANES, AB_LOGO_CASES } from './abCorpus.ts'
+import { AB_COLOUR_LINE_CASES, AB_CORPUS, AB_LANES, AB_LOGO_CASES } from './abCorpus.ts'
 
 ensureImageData()
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -36,14 +36,14 @@ if (!target || !lane) {
   process.exit(1)
 }
 const near = flag('--near')?.split(',').map(Number)
-const c = [...AB_CORPUS, ...AB_LOGO_CASES].find((k) => k.id === target)
+const c = [...AB_CORPUS, ...AB_LOGO_CASES, ...AB_COLOUR_LINE_CASES].find((k) => k.id === target)
 const path = c ? join(root, c.path) : target
 const bytes = readFileSync(path)
 const img = path.endsWith('.png')
   ? decodePng(bytes)
   : decodePng(
       new Resvg(bytes.toString('utf8'), {
-        fitTo: { mode: 'width', value: lane.res },
+        fitTo: { mode: 'width', value: Number(flag('--res') ?? lane.res) },
         ...(c?.background ? { background: c.background } : {}),
       })
         .render()
@@ -60,9 +60,29 @@ const doc = await traceImage(
     ...lane.resolve?.(img),
     planarFit: { threadDiag: (v: JunctionVerdict) => rows.push(v) },
   } as never,
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  (l) => {
+    // `--labels x,y,r`: the label map the tracer received, one character per pixel, so a
+    // junction's arms can be read off the regions rather than the picture.
+    const at = flag('--labels')?.split(',').map(Number)
+    if (!at) return
+    const [cx, cy, r] = at
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+    for (let y = cy - r; y <= cy + r; y++) {
+      let row = ''
+      for (let x = cx - r; x <= cx + r; x++) {
+        const v = l.labels[y * l.width + x]
+        row += v < 0 ? '#' : chars[v % chars.length]
+      }
+      console.log(`  ${String(y).padStart(5)} ${row}`)
+    }
+  },
 )
 
-// `--svg`: the trace itself, to compare against a stamp's file for the same lane.
+// `--res N` traces at N px instead of the lane's cap (the truth gate's 512). `--svg`: the trace itself, to compare against a stamp's file for the same lane.
 const svgOut = flag('--svg')
 if (svgOut) writeFileSync(svgOut, serializeDoc(doc))
 const f = (v: number | null | undefined, d = 1): string => (v == null ? '—' : v.toFixed(d))
@@ -73,6 +93,6 @@ for (const v of rows) {
   const t = (v.tangents ?? []).map(([k, u]) => `e${k >> 1}${k & 1 ? 'e' : 's'}→${f(u.x, 2)},${f(u.y, 2)}`).join(' ')
   console.log(
     `  (${v.x},${v.y}) ${v.reason.padEnd(30)} turn ${f(v.turnDeg)}° line ${f(v.lineDev, 2)} circ ${f(v.circleDev, 2)} ` +
-      `stem ${f(v.stemDeg, 0)}° move ${f(v.move, 2)} ext ${v.extK ?? '—'}  ΔE ${v.ends.map((e) => f(e.de, 0)).join('/')}  ${t}`,
+      `stem ${f(v.stemDeg, 0)}° bow ${v.armBow ? v.armBow.map((b) => f(b, 2)).join('/') : '—'} move ${f(v.move, 2)} ext ${v.extK ?? '—'}  ΔE ${v.ends.map((e) => f(e.de, 0)).join('/')}  ${t}`,
   )
 }

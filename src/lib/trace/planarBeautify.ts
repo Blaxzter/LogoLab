@@ -140,7 +140,7 @@ export interface SnapOptions {
   /** Diagnostic override for the re-seat's certification constants. */
   reseatTune?: ReseatTune
   /** Vertex ids the re-seat must leave where they are (`PlanarTrace.through`). */
-  keep?: ReadonlySet<number>
+  keep?: ReadonlyMap<number, Vec>
   onArcLoop?: ArcLoopObserver
   /** Ids of closed edges already emitted as rounded polygons (planarFit/fillet.ts) —
    *  1a leaves them alone. Their sides are certified straight against the arcs that join
@@ -448,7 +448,7 @@ const THROUGH_CHORD_COS = Math.cos((2 * Math.PI) / 180)
  * still a different direction at the junction, and on the Olympic rings 1b turned a
  * ring's arc into a line 6° off it — the cusp the through pair was there to remove.
  */
-function breaksThrough(e: SharedEdge, keep: ReadonlySet<number> | undefined): boolean {
+function breaksThrough(e: SharedEdge, keep: ReadonlyMap<number, Vec> | undefined): boolean {
   if (!keep || e.nodes.length < 2) return false
   const n = e.nodes
   const a = n[0]
