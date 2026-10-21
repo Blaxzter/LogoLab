@@ -1127,6 +1127,31 @@ const BREAK_SMOOTH_MAX = 40
 const THROUGH_STEP = 3
 const THROUGH_TOL = 1
 
+/** How far (px) a traced corner may sit from the authored one it reproduces and still be
+ *  that corner, if it turns the same way by about as much (DISPLACED_TURN_DEG). */
+const DISPLACED_R = 8
+const DISPLACED_TURN_DEG = 25
+
+/** Is traced corner `c` (turning `kink` deg) authored corner `g` (≥ CORNER_MIN_TURN),
+ *  misplaced? Within DISPLACED_R, turning by as much within DISPLACED_TURN_DEG, and pointing the same way: the
+ *  bisector of its two arms (out − in, which a reversed path leaves unchanged — tools wind
+ *  their paths either way) within DISPLACED_TURN_DEG of the authored one's. */
+function displacedCorner(g: Corner, c: Corner, kink: number): boolean {
+  if (Math.hypot(g.x - c.x, g.y - c.y) > DISPLACED_R) return false
+  const deg = Math.PI / 180
+  const turnG = Math.acos(Math.max(-1, Math.min(1, g.itx * g.otx + g.ity * g.oty))) / deg
+  // A real corner only: a shallow bend is not a place, and a 16° traced kink 8 px from an
+  // authored 10° one is a kink of its own.
+  if (turnG < CORNER_MIN_TURN / deg) return false
+  if (Math.abs(turnG - kink) > DISPLACED_TURN_DEG) return false
+  const bx = g.otx - g.itx
+  const by = g.oty - g.ity
+  const cx = c.otx - c.itx
+  const cy = c.oty - c.ity
+  const n = Math.hypot(bx, by) * Math.hypot(cx, cy)
+  return n > 1e-9 && (bx * cx + by * cy) / n >= Math.cos(DISPLACED_TURN_DEG * deg)
+}
+
 export interface TangentBreak {
   x: number
   y: number
@@ -1360,6 +1385,12 @@ export function tangentBreaks(
     if (gtKinks.some((g) => Math.hypot(g.x - c.x, g.y - c.y) <= CORNER_MATCH_R)) continue
     if (chainTurn(ch, ci, KINK_WIN) >= BREAK_SMOOTH_MAX) continue
     const kink = Math.acos(Math.max(-1, Math.min(1, c.itx * c.otx + c.ity * c.oty))) / deg
+    // The art's own corner, traced in the wrong PLACE: StarVector cuts the leg's knee 7 px
+    // short and turns there by the knee's 145°. That is a placement error, which the edge
+    // error already charges; counted here too it read as a kink on a smooth curve, beside
+    // the corner it is. Not where the outline runs THROUGH a junction: a pull there is
+    // a corner the art does not have, whatever lies near it.
+    if (ch === bch && gtKinks.some((g) => displacedCorner(g, c, kink))) continue
     sites.push({ x: c.x, y: c.y, kink, itx: c.itx, ity: c.ity, otx: c.otx, oty: c.oty })
   }
   // One site per place: the two paths either side of a shared edge carry the same node.
