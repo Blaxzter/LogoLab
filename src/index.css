@@ -28,7 +28,8 @@
   /* Ink */
   --color-ink: #14161c;
   --color-ink-2: #4b5462;
-  --color-muted: #8b93a3;
+  /* 4.5:1 on white AND on --color-bg: hints sit on both. */
+  --color-muted: #677080;
   --color-faint: #aeb5c1;
 
   /* Accent — refined indigo/iris */
