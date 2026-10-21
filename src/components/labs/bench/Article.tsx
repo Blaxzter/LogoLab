@@ -155,7 +155,7 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
             that point has a node on it. Until this version the fit often let an outline the artist drew smooth bend
             there: the smiling face’s mouth pulled 60° or more into the point where it meets the blush. The tracer now
             works out which shape is in front and keeps its outline smooth through the point, which took LogoLab’s kinks
-            on these {data.cases} cases from 1569 to 1327. The rest have other causes, and they are still there.
+            on these {data.cases} cases from 1556 to 1314. The rest have other causes, and they are still there.
           </p>
         </Section>
 
@@ -175,7 +175,8 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
             </li>
             <li>
               A kink on a smooth curve is a corner of 5° or more where the drawing is smooth. You won’t see one at icon
-              size, but you will when you scale the file up or edit it.
+              size, but you will when you scale the file up or edit it. A corner the artist drew, traced a few pixels
+              from where it belongs, is not a kink: the edge error already counts it.
             </li>
             <li>
               Invented corners are sharp corners the art doesn’t have, and regions recovered counts the shapes that

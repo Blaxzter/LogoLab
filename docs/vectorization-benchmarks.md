@@ -8064,3 +8064,26 @@ touched, traced with a lane's own options (`--res`, `--labels` for the label map
 point); threadDiag reproduces the flat palette only, and most review findings were in the
 gradient lane. The two review rounds cost 1264 → 1327 on the emoji: that is the price of
 the wedge, crossing and front-shape rules, and every one of them was a visible defect.
+
+### 42.8 A corner in the wrong place is not a kink (2026-10-21)
+
+Reviewing the published leg (`1f9b5-1f3ff`), StarVector-1B carried one counted kink, and it
+sat at the knee: the artist's own 145° corner, which StarVector's outline turns by exactly
+as much, 6.9 px further along. `tangentBreaks` let an authored kink explain a traced one
+only within `CORNER_MATCH_R` (2.5 px), so a corner traced a few px off read as a kink on
+the smooth stretch beside it. That is a PLACEMENT error, which the edge error already
+charges; counted twice, it was also described wrongly ("a kink on a curve drawn smooth").
+VTracer's own knee corner sat 2.6 px off and was counted for the same reason.
+
+A traced kink is now also exempt when an authored corner lies within `DISPLACED_R` (8 px)
+and it is that corner: a real one (≥ 60°, the corner lens's bar — a shallow bend is not a
+place, and the first version, without that floor, excused 10–28° kinks 4–8 px from an
+authored 10° bend), turning by as much within 25°, and pointing the same way (the bisector
+of its arms, out − in, within 25°; a reversed path leaves it unchanged, and tools wind
+their paths either way). Not at a junction the outline runs THROUGH: a pull there is a
+corner the art does not have, whatever lies near it, and that branch keeps the 2.5 px rule.
+Every site it removes on the emoji is a 90–148° corner 2.6–6.9 px from the authored one.
+
+On the 100 emoji (`kinkAudit`, saved outputs): StarVector 259 → 228, LogoLab 1327 → 1314
+(v2: 1569 → 1556), VTracer 4790 → 4772, Potrace-bin 82 → 78. The truth gate does not move.
+Run `v4` is v3 re-scored with it; nothing in the tracer changed.
