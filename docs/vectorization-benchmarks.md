@@ -8087,3 +8087,34 @@ Every site it removes on the emoji is a 90–148° corner 2.6–6.9 px from the 
 On the 100 emoji (`kinkAudit`, saved outputs): StarVector 259 → 228, LogoLab 1327 → 1314
 (v2: 1569 → 1556), VTracer 4790 → 4772, Potrace-bin 82 → 78. The truth gate does not move.
 Run `v4` is v3 re-scored with it; nothing in the tracer changed.
+
+## 43. A grey that fills an area is an ink (2026-10-21)
+
+Twemoji's camera (`1f4f9`) is two inks, `#31373d` and `#66757f`, and the benchmark page
+showed it as a LogoLab loss: the grey lens and frame gone, ΔE 5.77. `probeInk` had called it
+ONE ink and the trace went Mono. Its ramp rule (`onRamp`) drops any colour within `RAMP_DE`
+(12) of the paper→ink line in Lab, because every anti-aliased edge and drop shadow is a
+mixture of the two and lands there. Two near-neutral blue-greys are the case it cannot
+tell apart: the grey is 5.0 off the white→`#31373d` line, 67% of the way along — by colour
+alone a perfect 2:1 mixture.
+
+What separates them is SHAPE, which the rule never asked. An edge is a band a pixel or two
+wide; a drawn grey fills an area. Each sample now also records whether it is FLAT: the
+pixels `FLAT_REACH` (4) px away on all four sides opaque and within `FLAT_TOL` (6) of it per
+channel. A ramp colour with at least half its samples flat (`RAMP_FLAT_MIN`) is an ink. A
+reach, not a sampling step, so it means the same at 512 and 2048; an anti-aliased band and a
+bilinear-enlarged one are never flat 4 px out, and a drop shadow fades by more than 6 over
+4 px unless it is about 20 px soft.
+
+`bench/inkModeDiag.ts` is the census — the AUTOMATIC decision over the A/B corpus, the whole
+logo corpus and the benchmark's rendered cases (391 images). The A/B stamps cannot show
+it: every lane forces its mode, and the forced cut reads the dominant ink, which does not
+change (`before-ink-interior` ⇄ `after-ink-interior` is byte-identical, 83 cases × 6 lanes).
+Mode flips, all Mono → Colour: the camera, the bat (`1f987`, the page's other published
+loss, "two greys merged"), the zebra, the dress, Fluent's cut of meat, truth0's
+`band-cross` rendered on white, and `logo-mercedes-benz` — a chrome mark built from some 70
+grey gradient stops, not one ink. 45 more images count an extra ink and stay Colour. On the
+benchmark's 100 emoji (LogoLab alone, re-traced): camera ΔE 5.77 → 0.13 and edge error
+11.2 → 0.20 px, bat 4.17 → 0.13 and 9.3 → 0.23 px; mean ΔE over the 100 0.441 → 0.304.
+More shapes drawn means more outline to kink: 1314 → 1338. `test/ink-mode.test.ts` has the
+camera's two greys as its case.

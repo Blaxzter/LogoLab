@@ -369,6 +369,19 @@ test('an anti-aliased edge is a mixture, not a second ink: black line art stays 
   assert.equal(decideInkMode(img, 128, { colorMode: 'auto', background: WHITE }).mode, 'mono')
 })
 
+test('…but a grey that FILLS an area is an ink, even where it sits on the ramp', () => {
+  // Twemoji's camera: #31373d and #66757f. The grey is 5 ΔE off the white→#31373d line,
+  // 67% of the way along — a perfect 2:1 mixture by colour, so the probe called the camera
+  // one ink, traced it mono and lost every grey part. An edge is a band a pixel or two
+  // wide; this grey is a filled area, flat 4 px out on every side.
+  const img = blank(200, [255, 255, 255, 255])
+  shaded(img, { x: 20, y: 20, w: 160, h: 70 }, [0x31, 0x37, 0x3d, 255], [0x31, 0x37, 0x3d, 255])
+  shaded(img, { x: 20, y: 110, w: 160, h: 70 }, [0x66, 0x75, 0x7f, 255], [0x66, 0x75, 0x7f, 255])
+  const probe = probeInk(img, paper(255, 255, 255))
+  assert.equal(probe.inks, 2, `a dark grey and a mid grey are two inks, saw ${probe.inks}`)
+  assert.equal(decideInkMode(img, 128, { colorMode: 'auto', background: WHITE }).mode, 'color')
+})
+
 test('…but a darker tone of the ink is NOT on that ramp — it is past the ink, not between', () => {
   // The `t` bound in `onRamp`. A second blue at the same hue projects onto the
   // paper→ink line, so distance alone would swallow it; it sits BEYOND the ink,

@@ -148,6 +148,22 @@ const RAMP_DE = 12
 const RAMP_T_SLACK = 0.1
 /** Mono needs the ink to be clearly darker than the paper (threshold traces dark). */
 const MIN_INK_CONTRAST = 25
+/**
+ * A sample is FLAT when the pixels FLAT_REACH px away on all four sides are opaque and
+ * within FLAT_TOL of it on every channel: the inside of a filled area. An anti-aliased edge
+ * is a band a pixel or two wide and never flat; a drop shadow fades by more than FLAT_TOL
+ * over FLAT_REACH px unless it is ~20 px soft. Reached as a distance, not a step, so it means
+ * the same at every resolution the probe samples at.
+ */
+const FLAT_REACH = 4
+const FLAT_TOL = 6
+/**
+ * A colour on the paper→ink ramp that is FLAT in at least this share of its samples is
+ * drawn, not anti-aliasing: a grey filled with a grey. Twemoji's camera is #31373d and
+ * #66757f, and the second sits 5 ΔE off the white→#31373d line, 67% of the way along — by
+ * colour alone a perfect 2:1 mixture, and the probe called the camera one ink.
+ */
+const RAMP_FLAT_MIN = 0.5
 
 export interface InkProbe {
   /** Distinct inks after fusing tonal variants. 0 = nothing but paper. */
@@ -201,9 +217,19 @@ export function probeInk(img: ImageDataLike, bg: PaperColor, threshold = INK_THR
 
   // 5 bits per channel: fine enough to separate real colours, coarse enough that
   // dithering and JPEG mush land in the same bucket.
-  const buckets = new Map<number, { n: number; r: number; g: number; b: number }>()
+  const buckets = new Map<number, { n: number; flat: number; r: number; g: number; b: number }>()
   let inkPixels = 0
   const step = Math.max(1, Math.floor(Math.max(W, H) / 256))
+  /** Is the pixel at `i` (x, y) inside a filled area? See FLAT_REACH. */
+  const flatAt = (i: number, x: number, y: number): boolean => {
+    if (x < FLAT_REACH || y < FLAT_REACH || x >= W - FLAT_REACH || y >= H - FLAT_REACH) return false
+    for (const o of [FLAT_REACH * 4, -FLAT_REACH * 4, FLAT_REACH * W * 4, -FLAT_REACH * W * 4]) {
+      const j = i + o
+      if (data[j + 3] < 200) return false
+      for (let c = 0; c < 3; c++) if (Math.abs(data[j + c] - data[i + c]) > FLAT_TOL) return false
+    }
+    return true
+  }
   for (let y = 0; y < H; y += step) {
     for (let x = 0; x < W; x += step) {
       const i = (y * W + x) * 4
@@ -212,14 +238,16 @@ export function probeInk(img: ImageDataLike, bg: PaperColor, threshold = INK_THR
       if (data[i + 3] < 200) continue
       inkPixels++
       const key = ((data[i] >> 3) << 10) | ((data[i + 1] >> 3) << 5) | (data[i + 2] >> 3)
+      const flat = flatAt(i, x, y) ? 1 : 0
       const e = buckets.get(key)
       if (e) {
         e.n++
+        e.flat += flat
         e.r += data[i]
         e.g += data[i + 1]
         e.b += data[i + 2]
       } else {
-        buckets.set(key, { n: 1, r: data[i], g: data[i + 1], b: data[i + 2] })
+        buckets.set(key, { n: 1, flat, r: data[i], g: data[i + 1], b: data[i + 2] })
       }
     }
   }
@@ -230,13 +258,13 @@ export function probeInk(img: ImageDataLike, bg: PaperColor, threshold = INK_THR
   // would discard most of that ink and leave only whatever was concentrated.
   const entries = [...buckets.values()]
     .filter((e) => e.n >= inkPixels * MIN_BUCKET_SHARE)
-    .map((e) => ({ n: e.n, r: e.r / e.n, g: e.g / e.n, b: e.b / e.n }))
+    .map((e) => ({ n: e.n, flat: e.flat, r: e.r / e.n, g: e.g / e.n, b: e.b / e.n }))
     .sort((a, b) => b.n - a.n)
   if (entries.length === 0) return none
 
   // Greedy fusion, biggest first: a tonal variant joins the ink it belongs to.
   // Each host's Lab is cached and refreshed on merge.
-  const inks: { n: number; r: number; g: number; b: number; lab: Lab }[] = []
+  const inks: { n: number; flat: number; r: number; g: number; b: number; lab: Lab }[] = []
   for (const e of entries) {
     const lab = srgbToLab(e.r, e.g, e.b)
     const host = inks.find((k) => deltaE76(k.lab, lab) < SAME_INK_DE)
@@ -247,6 +275,7 @@ export function probeInk(img: ImageDataLike, bg: PaperColor, threshold = INK_THR
       host.g = (host.g * host.n + e.g * e.n) / total
       host.b = (host.b * host.n + e.b * e.n) / total
       host.n = total
+      host.flat += e.flat
       host.lab = srgbToLab(host.r, host.g, host.b)
     } else {
       inks.push({ ...e, lab })
@@ -256,11 +285,15 @@ export function probeInk(img: ImageDataLike, bg: PaperColor, threshold = INK_THR
 
   const top = inks[0]
   // A colour of its own: enough of the ink to count, and not on the paper→ink
-  // ramp (an edge or a drop shadow). On a transparent ground the edges live in
-  // alpha and were already dropped by the `< 200` test above.
+  // ramp (an edge or a drop shadow) unless it FILLS areas, which an edge never does
+  // (RAMP_FLAT_MIN). On a transparent ground the edges live in alpha and were
+  // already dropped by the `< 200` test above.
   const paperLab = bg.transparent ? null : srgbToLab(bg.r, bg.g, bg.b)
   const distinct = inks.filter(
-    (k) => k === top || (k.n >= inkPixels * MIN_INK_SHARE && (paperLab == null || !onRamp(k.lab, paperLab, top.lab))),
+    (k) =>
+      k === top ||
+      (k.n >= inkPixels * MIN_INK_SHARE &&
+        (paperLab == null || k.flat >= k.n * RAMP_FLAT_MIN || !onRamp(k.lab, paperLab, top.lab))),
   )
   const inkLuma = luma(top.r, top.g, top.b)
   return {
