@@ -103,7 +103,21 @@ function openTangent(dense: Vec[], i: number, eps: number): Vec {
 }
 
 // --- candidates + open DP ---------------------------------------------------
-type Cont = 0 | 1
+/**
+ * How a candidate meets a key vertex: 0 a corner (C⁰); otherwise along one of the vertex's
+ * tangents, and two candidates meeting on the SAME tangent are G¹ there.
+ *   1  the local estimate (`openTangent`), which two cubics share;
+ *   2  the direction of the line ARRIVING at the vertex: a line ending there, or a cubic
+ *      starting there along it;
+ *   3  the direction of the line LEAVING it: a line starting there, or a cubic ending there
+ *      along it.
+ * 2 and 3 exist only where that line fits within ε (`lineTangents`), and only ever join a
+ * line to the cubic beside it, G¹. Offering a run's direction to two cubics as well (the
+ * run not emitted) was measured: 4 fewer kinks on the 100 emoji, a worse edge error and
+ * ΔE, two cases worse, 20% slower.
+ */
+type Cont = 0 | 1 | 2 | 3
+const CONTS: Cont[] = [0, 1, 2, 3]
 interface Candidate {
   a: number
   len: number
@@ -198,6 +212,15 @@ function fitOpenArcWith(densePts: Vec[], opts: PlanarFitOptions, ends: EndTangen
   // pair (≤ MAX_SPAN) for the four C⁰/G¹ endpoint combos, each discarded if its
   // deviation exceeds ε.
   const byStart: Candidate[][] = Array.from({ length: m }, () => [])
+  // The line between each pair of adjacent key vertices, where one fits within ε: its
+  // direction is a tangent its neighbours may join on (Cont 2 / 3).
+  const lineOk: boolean[] = []
+  for (let a = 0; a + 1 < m; a++) {
+    const arc = subsample(dense.slice(keyIdx[a], keyIdx[a + 1] + 1), MAX_FIT_POINTS)
+    lineOk.push(arc.length >= 2 && lineDeviation(arc).maxDev <= eps)
+  }
+  const lineDir = (a: number): Vec => unit(sub(dense[keyIdx[a + 1]], dense[keyIdx[a]]))
+  const lineTangents = opts.lineTangents !== false
   for (let a = 0; a < m; a++) {
     const fromIdx = keyIdx[a]
     const maxLen = Math.min(m - 1 - a, MAX_SPAN)
@@ -215,16 +238,22 @@ function fitOpenArcWith(densePts: Vec[], opts: PlanarFitOptions, ends: EndTangen
           (!sT || chord.x * sT.x + chord.y * sT.y >= END_LINE_COS) &&
           (!eT || -(chord.x * eT.x + chord.y * eT.y) >= END_LINE_COS)
         if (ld.maxDev <= eps && along) {
-          byStart[a].push({
-            a,
-            len,
-            line: true,
-            startCont: 0,
-            endCont: 0,
-            cost: opts.lineCost + delta * ld.sqErr,
-            c1: arc[0],
-            c2: arc[arc.length - 1],
-          })
+          // A line meets its ends at a corner, or along its own direction where the
+          // neighbour can take it (a cubic fitted to leave / arrive along it).
+          const starts: Cont[] = lineTangents && !sT && a > 0 ? [0, 3] : [0]
+          const endsC: Cont[] = lineTangents && !eT && b < m - 1 ? [0, 2] : [0]
+          for (const startCont of starts)
+            for (const endCont of endsC)
+              byStart[a].push({
+                a,
+                len,
+                line: true,
+                startCont,
+                endCont,
+                cost: opts.lineCost + delta * ld.sqErr,
+                c1: arc[0],
+                c2: arc[arc.length - 1],
+              })
         }
       }
       const freeStart = unit(sub(dense[fromIdx + 1], dense[fromIdx]))
@@ -235,12 +264,15 @@ function fitOpenArcWith(densePts: Vec[], opts: PlanarFitOptions, ends: EndTangen
             [0, freeStart],
             [1, orient(tangents[a], freeStart)],
           ]
+      // Along the line arriving at `a` / leaving `b`: the join beside a line made G¹.
+      if (!sT && lineTangents && a > 0 && lineOk[a - 1]) startDirs.push([2, lineDir(a - 1)])
       const endDirs: [Cont, Vec][] = eT
         ? [[0, eT]]
         : [
             [0, freeEnd],
             [1, orient(neg(tangents[b]), freeEnd)],
           ]
+      if (!eT && lineTangents && b < m - 1 && lineOk[b]) endDirs.push([3, neg(lineDir(b))])
       let interG1 = 0
       for (let p = 1; p < len; p++) interG1 += junc[a + p].g1
       let anyFit = false
@@ -269,14 +301,16 @@ function fitOpenArcWith(densePts: Vec[], opts: PlanarFitOptions, ends: EndTangen
   // continuity `cont`. Endpoints (0 and m-1) are corners: the first candidate
   // starts C⁰, the last ends C⁰.
   const INF = Infinity
-  const cost: number[][] = Array.from({ length: m }, () => [INF, INF])
+  const cost: number[][] = Array.from({ length: m }, () => [INF, INF, INF, INF])
   const back: ({ from: number; fromCont: Cont; cand: Candidate } | null)[][] = Array.from({ length: m }, () => [
+    null,
+    null,
     null,
     null,
   ])
   cost[0][0] = 0
   for (let p = 0; p < m - 1; p++) {
-    for (const tin of [0, 1] as Cont[]) {
+    for (const tin of CONTS) {
       const base = cost[p][tin]
       if (!Number.isFinite(base)) continue
       for (const c of byStart[p]) {
@@ -285,7 +319,11 @@ function fitOpenArcWith(densePts: Vec[], opts: PlanarFitOptions, ends: EndTangen
         if (isFirst) {
           if (c.startCont !== 0) continue // endpoint is a forced corner
         } else {
-          jcost = tin === 1 && c.startCont === 1 ? junc[p].g1 : junc[p].c0
+          // A line's direction is a tangent only for the pair it joins: a cubic bent onto a
+          // neighbour's line and then met at a corner points nowhere in particular (the
+          // office building's roof gained four kinks that way). Lines have C⁰ variants.
+          if ((tin === 2 || tin === 3 || c.startCont === 2 || c.startCont === 3) && c.startCont !== tin) continue
+          jcost = tin !== 0 && c.startCont === tin ? junc[p].g1 : junc[p].c0
         }
         const q = p + c.len
         if (q > m - 1) continue
@@ -300,8 +338,9 @@ function fitOpenArcWith(densePts: Vec[], opts: PlanarFitOptions, ends: EndTangen
   // Final endpoint must arrive as a corner (endCont 0).
   let endCont: Cont = 0
   if (!Number.isFinite(cost[m - 1][0])) {
-    if (!Number.isFinite(cost[m - 1][1])) return ends ? null : polylineNodes(keyIdx, dense) // fallback: corner polyline
-    endCont = 1
+    const any = CONTS.find((c) => Number.isFinite(cost[m - 1][c]))
+    if (any == null) return ends ? null : polylineNodes(keyIdx, dense) // fallback: corner polyline
+    endCont = any
   }
 
   // Reconstruct the chosen candidates (forward order).
@@ -331,7 +370,7 @@ function fitOpenArcWith(densePts: Vec[], opts: PlanarFitOptions, ends: EndTangen
   for (let s = 0; s < segs.length; s++) {
     const seg = segs[s]
     const prev = s > 0 ? segs[s - 1] : null
-    const smooth = prev !== null && seg.startCont === 1 && prev.endCont === 1
+    const smooth = prev !== null && seg.startCont !== 0 && seg.startCont === prev.endCont
     nodes.push({
       x: seg.p0.x,
       y: seg.p0.y,

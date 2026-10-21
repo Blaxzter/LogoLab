@@ -73,6 +73,15 @@ export interface PlanarFitOptions {
    * `false` ⇒ the rank alone decides, and edges leave a junction along their own chord.
    */
   throughPairs?: boolean
+  /**
+   * A line in the open fit offers its own direction as a tangent at each end, so the cubic
+   * beside it may leave or arrive along it and the join is G¹ (benchmarks §42.9). Without
+   * it a cubic's end tangent is the chord to the next sample or the local estimate, and a
+   * rounded corner traced as a line then a curve kinks 5–15° where they meet. The corner
+   * evidence still prices the join, so a real corner stays one. `false` ⇒ lines are C⁰ at
+   * both ends, as before.
+   */
+  lineTangents?: boolean
   /** The corner-turn veto in planarBeautify that refuses to round a sharp-cornered loop
    *  into a disc. Exposed so `localScaleK` can be compared as a replacement for it. */
   cornerVeto: boolean
@@ -221,6 +230,7 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   fitThrough: true,
   cornerJunctions: true,
   throughPairs: true,
+  lineTangents: true,
   subpixelEdges: true,
   subpixelWindowGuard: true,
   fillets: true,

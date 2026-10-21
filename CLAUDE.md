@@ -345,6 +345,13 @@ measured false positive first and each easy to undo:
 throughPairs --list` the census, `junctionDiag <case> --lane grad` the per-junction
 verdicts as a LANE traces them (`threadDiag --geometric` is the flat palette only).
 
+**A line hands its direction to the curve beside it** (`lineTangents`, `fitOpenArc`, §42.9):
+a line's ends offer its own direction as a tangent, so the cubic next to it can join G¹
+instead of at a 5–15° kink. Those tangents pair ONLY a line with its neighbouring cubic: a
+cubic bent onto a line direction and then met at a corner points nowhere (that cost a roof
+four kinks). `bench/compare/kinkJoins.ts` says what each counted kink joins; `run.ts --fit
+key=value` measures a fit option off and on through the real scorer.
+
 ## Line art traces as STROKES — the centreline engine, and its own lane
 
 Mono has a second output. `centerline: true` (the **Strokes** toggle under Mono, MCP

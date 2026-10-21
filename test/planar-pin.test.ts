@@ -186,7 +186,15 @@ test('pin: a gently-curved arm is still pinned (§15.7 stays on)', () => {
   const corners = detectLoopCorners(pts, DEFAULT_PLANAR_FIT.cornerTurnDeg)
   assert.equal(corners.length, 2, 'the lens should present its two tips as sharp corners')
   const pins: PinDiagRecord[] = []
-  fitCorneredLoop(pts, corners, { ...DEFAULT_PLANAR_FIT, pinCornerTangents: true, pinDiag: (r) => pins.push(r) })
+  // Line tangents off: with them (§42.9) the nearly-straight arms leave each tip as a LINE
+  // joined G¹ to the curve, and a line carries no handle to pin. That is a fine fit of this
+  // lens; this test is about the pin, so it fits the cubics the pin was built for.
+  fitCorneredLoop(pts, corners, {
+    ...DEFAULT_PLANAR_FIT,
+    lineTangents: false,
+    pinCornerTangents: true,
+    pinDiag: (r) => pins.push(r),
+  })
   assert.equal(pins.length, 4, 'both tips should offer both handles to the pin')
   const refused = pins.filter((p) => !p.applied)
   assert.equal(

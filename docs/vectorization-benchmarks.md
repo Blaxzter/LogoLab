@@ -8088,6 +8088,45 @@ On the 100 emoji (`kinkAudit`, saved outputs): StarVector 259 → 228, LogoLab 1
 (v2: 1569 → 1556), VTracer 4790 → 4772, Potrace-bin 82 → 78. The truth gate does not move.
 Run `v4` is v3 re-scored with it; nothing in the tracer changed.
 
+### 42.9 A line hands its direction to the curve beside it (2026-10-21)
+
+The other half of #16 (§42.5: "a G¹ line→curve join in the DP"). The general open fit
+(`fitOpenArc`) chooses, per key vertex, how two candidates meet: a corner, or G¹ on the
+local tangent estimate. A LINE candidate only ever met its ends at a corner, and a cubic
+beside it could leave along the chord to the next dense sample or the estimate — which,
+at the end of a straight run, reads the curve beside it too. Twemoji's camera body:
+`C… 434.065 224.647 418.954 226.927 L224 227.453`, the cubic arriving 8.6° off the line it
+hands over to.
+
+`lineTangents` (on) gives each key vertex two more tangents: the direction of the line
+arriving at it and of the line leaving it, wherever that line fits within ε. A line may meet
+its end along its own direction, and a cubic may start (end) along the line before (after)
+it; the two are G¹ there and priced by the same corner evidence as any other G¹ join, so a
+real corner still comes out as one. They pair ONLY with each other. The first version let a
+cubic take a neighbour's line direction and then meet something else at a corner: the end
+pointed nowhere in particular, and the office building's roof (`1f3e2`) gained four kinks.
+Offering a run's direction to two cubics as well (the run not emitted) was measured and
+dropped: 4 fewer kinks, a worse edge error and ΔE, two cases worse, 20% slower.
+
+What a kink joins, first (`bench/compare/kinkJoins.ts`, LogoLab's 1338 on the 100 emoji with
+§43's probe, before this change): curve|curve 798, line|curve 451, line|line 89. Off a
+junction, line|curve was 280 kinks at a median of 10–12°; 124 remain, at a median of 18–26°
+(real corners or curves the cubic cannot follow along the line within ε). Emoji, LogoLab
+re-traced (`run.ts --fit lineTangents=false` against the default): kinks **1338 → 1157**,
+fewer in 69 cases and more in none; nodes 15953 → 15984, invented corners 153 → 152, median
+edge error 0.263 → 0.260 px, median ΔE unchanged. Trace time per emoji 0.29 → 0.36 s (the
+cubic fits along the extra tangents). Tier-0 @512: flat 31 → 30 (`border-cross` 1 → 0); the
+fixtures are corner art by design. The curve|curve kinks (747) are the larger part left, and
+most are on lattice vertices — junction and occlusion points — not where the fit chose.
+
+Two tests isolated older mechanisms on the old C⁰ lines and now set `lineTangents: false`:
+`planar-arc-snap` (its precondition is a raw kink over 20° at the band junctions; the raw
+fit now reads 12°, and the production fit is checked to snap just as round) and
+`planar-pin` (the lens's nearly-straight arms leave each tip as a line, which has no handle
+to pin). `before-line-tangents` ⇄ `after-line-tangents` is the pair (the before is
+`after-ink-interior` renamed: the same tree). The centreline engine fits its pieces with
+`fitOpenArc` too, so the `line` lane moves with it.
+
 ## 43. A grey that fills an area is an ink (2026-10-21)
 
 Twemoji's camera (`1f4f9`) is two inks, `#31373d` and `#66757f`, and the benchmark page

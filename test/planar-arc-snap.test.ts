@@ -12,6 +12,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ensureImageData } from '../bench/nodeHarness.ts'
 import { tracePlanar } from '../src/lib/trace/planarAssemble.ts'
+import { DEFAULT_PLANAR_FIT } from '../src/lib/trace/planarFit.ts'
 import { planarBeautify } from '../src/lib/trace/planarBeautify.ts'
 import { materializeRegion, reverseEdgeNodes } from '../src/lib/path/topology.ts'
 import { segmentControls, segmentCount, cubicAt } from '../src/lib/path/geometry.ts'
@@ -92,7 +93,9 @@ function outerRing(topo: Topology, loops: Map<number, unknown>): Vec[] {
 
 test('arc-snap: a ring split by band junctions loses its kink and becomes round', () => {
   const labels = ringOverBands(6)
-  const t = tracePlanar(labels, W, H)
+  // The snap's own work, isolated: with line tangents (§42.9) the raw fit already joins
+  // most of these arcs G¹ (12°, not 20+), and there would be little left to show it doing.
+  const t = tracePlanar(labels, W, H, { ...DEFAULT_PLANAR_FIT, lineTangents: false })
 
   const rawKink = maxKink(outerRing({ vertices: t.vertices, edges: t.edges }, t.loopsByLabel))
 
@@ -105,6 +108,18 @@ test('arc-snap: a ring split by band junctions loses its kink and becomes round'
   assert.ok(kink < 10, `the snapped ring is smooth through the junctions (kink ${kink.toFixed(0)}°)`)
   assert.ok(kink < rawKink - 15, `the snap removed most of the kink (${rawKink.toFixed(0)}° → ${kink.toFixed(0)}°)`)
   assert.ok(dev < 1.2, `the snapped ring is round (max radial dev ${dev.toFixed(2)}px)`)
+
+  // And the production fit ends up just as round through the same snap.
+  const on = tracePlanar(labels, W, H)
+  const onPoly = outerRing(
+    planarBeautify({ vertices: on.vertices, edges: on.edges }, on.loopsByLabel, OPTS),
+    on.loopsByLabel,
+  )
+  assert.ok(
+    maxKink(onPoly) < 10,
+    `with line tangents the snapped ring is smooth too (kink ${maxKink(onPoly).toFixed(0)}°)`,
+  )
+  assert.ok(maxRadialDev(onPoly, R) < 1.2, 'with line tangents the snapped ring is round too')
 })
 
 test('arc-snap: snapped shared edges stay byte-coincident (reverse-of-reverse identity)', () => {

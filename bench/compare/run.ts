@@ -2,6 +2,7 @@
 //
 //   node --experimental-strip-types bench/compare/run.ts [--tools a,b] [--corpus x,y] [--limit n]
 //        [--res 512] [--run name] [--no-svgbench] [--no-cache] [--gate-exact]
+//        [--fit key=value,…]
 //
 // Why authored SVGs: the answer sheet has to be the vector art that produced the pixels, or
 // "correct" cannot be told from "like the other tracer". StarVector's SVG-Bench scores the
@@ -30,6 +31,10 @@
 // External tools are cached by (tool version, PNG bytes) in .bench-tools/compare-cache/;
 // LogoLab is always re-traced (it is what changes).
 //
+// --fit overrides planar fit defaults (DEFAULT_PLANAR_FIT) for every LogoLab row — a
+// tracer change measured off and on without editing code (`--fit lineTangents=false`). It
+// is recorded in meta, and a run made with it is a measurement, not a published result.
+//
 // --gate-exact scores the traced side WITHOUT the visible-boundary filter, which is how the
 // truth gate scores; with it, logolab-gate on truth0 reproduces test/truth-gate.test.ts.
 
@@ -40,6 +45,7 @@ import { join, relative } from 'node:path'
 import { ensureImageData } from '../nodeHarness.ts'
 import { encodePng } from '../../src/lib/png/encode.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from '../svgGround.ts'
+import { DEFAULT_PLANAR_FIT } from '../../src/lib/trace/planarFit.ts'
 import { CACHE, PY, RESULTS, REPO, VENV_PY } from './paths.ts'
 import { CORPORA, DEFAULT_CORPORA, inkOf, loadCorpus } from './corpus.ts'
 import { renderGround } from './render.ts'
@@ -92,6 +98,13 @@ const RUN = arg('--run') ?? stamp
 const runDir = join(RESULTS, RUN)
 const useCache = !has('--no-cache')
 const docVisible = !has('--gate-exact')
+const fitOverrides: Record<string, boolean | number> = {}
+for (const kv of list('--fit') ?? []) {
+  const [k, v] = kv.split('=')
+  if (!(k in DEFAULT_PLANAR_FIT)) throw new Error(`--fit: unknown planar fit option ${k}`)
+  fitOverrides[k] = v === 'true' ? true : v === 'false' ? false : Number(v)
+}
+Object.assign(DEFAULT_PLANAR_FIT, fitOverrides)
 
 const caseDir = (c: CompareCase): string => join(runDir, 'cases', c.corpus, c.name.replace(/[^\w.-]+/g, '_'))
 const sha1 = (b: Uint8Array | string): string => createHash('sha1').update(b).digest('hex')
@@ -307,6 +320,7 @@ async function main(): Promise<void> {
     res: RES,
     logolab,
     docVisible,
+    ...(Object.keys(fitOverrides).length ? { fit: fitOverrides } : {}),
     corpora: corpusIds,
     limit: Number.isFinite(LIMIT) ? LIMIT : null,
     tools: tools.map((t) => t.a.name),
