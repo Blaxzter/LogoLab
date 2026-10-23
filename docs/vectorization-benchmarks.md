@@ -8157,3 +8157,18 @@ benchmark's 100 emoji (LogoLab alone, re-traced): camera ΔE 5.77 → 0.13 and e
 11.2 → 0.20 px, bat 4.17 → 0.13 and 9.3 → 0.23 px; mean ΔE over the 100 0.441 → 0.304.
 More shapes drawn means more outline to kink: 1314 → 1338. `test/ink-mode.test.ts` has the
 camera's two greys as its case.
+
+### 43.1 Run v5, and the ink calls that are still wrong (2026-10-23)
+
+Run `v5` is the full benchmark at `b5ddd59` (§42.9 + §43); every other tool is the same
+cached output as v4. LogoLab on the 100 emoji: kinks 1314 → 1157, mean ΔE 0.441 → 0.305,
+mean edge error 0.821 → 0.533 px, nodes 15664 → 15984. Four cases moved, all better: the
+dress (edge error 8.75 → 0.20), camera, bat and zebra. Nothing got worse.
+
+Paired against VTracer the mean edge error is still a tie (+0.00 [−0.43, +0.27]), and the
+cases that hold it there were behind the camera all along: the Japanese flag (`1f1ef-1f1f5`,
+an `#EEE` rounded rect on white, read as ONE paper: edge error 18.45 px), the shrimp
+(`1f990`, four reds as one ink, 2/4 regions) and the worm (`1fab1`, five pinks, 2/7). All
+three are MONO calls; the tiled colour ablation traces them at 0.07 / 0.35 / 0.36 px. They
+are the page's published losses now. The shrimp and the worm are the near-colour family
+(§0 #18); the flag is a paper that is two colours.

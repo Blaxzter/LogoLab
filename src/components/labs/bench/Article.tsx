@@ -114,10 +114,9 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
         <Section title="Same score, worse drawing">
           <p>
             On the shushing face, DINO scores the two traces {dino(shush, 0)} and {dino(shush, 1)}, a difference too
-            small to mean anything, and LPIPS slightly prefers VTracer’s. Measured against the authored outline,
-            VTracer’s edges are {times(shush, 'chamfer')}× further off, and its file has{' '}
-            {n(shush.tools[1].metrics, 'tangentBreaks')} kinks on curves that have none (LogoLab’s has{' '}
-            {n(shush.tools[0].metrics, 'tangentBreaks')}).
+            small to mean anything, and LPIPS is just as close. Measured against the authored outline, VTracer’s edges
+            are {times(shush, 'chamfer')}× further off, and its file has {n(shush.tools[1].metrics, 'tangentBreaks')}{' '}
+            kinks on curves that have none (LogoLab’s has {n(shush.tools[0].metrics, 'tangentBreaks')}).
           </p>
           <Figure example={shush} />
           <p>
@@ -139,23 +138,32 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
 
         <Section title="Where LogoLab loses">
           <p>
-            On the bat, LogoLab merged the two greys into one silhouette and lost the wings; VTracer gets it right. On
-            the camera, it dropped the grey parts entirely (ΔE 5.8 against VTracer’s 0.4). Both are failures of the step
-            that decides how many inks an image has, and they are why LogoLab’s average edge error is not significantly
-            better than VTracer’s even though its median is.
+            LogoLab first decides whether an image is one ink on a page (traced as Mono) or several colours. When that
+            call is wrong, the trace is wrong. In the previous run it lost the bat and the camera this way: their greys
+            were read as anti-aliasing between the ink and the page, and dropped. A grey that fills an area now counts
+            as an ink, and both trace correctly (ΔE 0.13 and 0.14).
           </p>
-          <Figure example={byslug('bat')} />
           <p>
-            DINO ranks Potrace’s black outline of the bat (0.970) above LogoLab’s flat grey silhouette (0.963). Both
-            traces are wrong in different ways, and the score gives no hint of either.
+            The same step still gets other images wrong. The Japanese flag is a pale grey rectangle on a white page, and
+            LogoLab took both for the page. The colours are nearly right (ΔE 1.7), but the flag’s outline is gone: 18 px
+            of edge error, against VTracer’s 0.5.
           </p>
-          <Figure example={byslug('camera')} />
+          <Figure example={byslug('flag')} />
+          <p>
+            The shrimp is several shades of red, and LogoLab traced it as one ink, so two of its four shapes are missing
+            (ΔE 2.2 against VTracer’s 1.1). The worm fails the same way. Forced to trace in colour, LogoLab gets all
+            three right, with edge errors of 0.07, 0.35 and 0.36 px. These three are why LogoLab’s average edge error is
+            not significantly better than VTracer’s even though its median is.
+          </p>
+          <Figure example={byslug('shrimp')} />
           <p>
             LogoLab traces an emoji as tiles that share their edges, so where three colours meet, every outline through
-            that point has a node on it. Until this version the fit often let an outline the artist drew smooth bend
-            there: the smiling face’s mouth pulled 60° or more into the point where it meets the blush. The tracer now
-            works out which shape is in front and keeps its outline smooth through the point, which took LogoLab’s kinks
-            on these {data.cases} cases from 1556 to 1314. The rest have other causes, and they are still there.
+            that point has a node on it. The fit used to let an outline the artist drew smooth bend there: the smiling
+            face’s mouth pulled 60° or more into the point where it meets the blush. The tracer now works out which
+            shape is in front and keeps its outline smooth through the point, which took LogoLab’s kinks on these{' '}
+            {data.cases} cases from 1556 to 1314. Where a straight edge runs into a curve, the curve now leaves along
+            the line’s direction instead of meeting it at a small angle, which brought them to 1157. Most of the rest
+            sit where three colours meet on a pixel corner, and they are still there.
           </p>
         </Section>
 
@@ -500,11 +508,11 @@ function PairedNote() {
   }
   return (
     <p>
-      Paired case by case, VTracer minus LogoLab (mean, 95% interval): DINO {s('sbDino', 4)}, in VTracer’s favour; LPIPS{' '}
-      {s('sbLpips', 4)}, no difference. So on the SVG-Bench metrics the two tools tie, with a slight edge to VTracer. On
-      the drawing VTracer is worse: ΔE {s('meanDeltaE', 2)}, nodes {s('docNodes', 0)}, kinks {s('tangentBreaks', 0)}.
-      Edge error is the exception at {s('chamfer', 2)}: LogoLab’s median is better, but its failures (the bat, the
-      camera) keep the mean difference inside the noise.
+      Paired case by case, VTracer minus LogoLab (mean, 95% interval): DINO {s('sbDino', 4)}, LPIPS {s('sbLpips', 4)}.
+      Both intervals include zero, so on the SVG-Bench metrics the two tools tie. On the drawing VTracer is worse: ΔE{' '}
+      {s('meanDeltaE', 2)}, nodes {s('docNodes', 0)}, kinks {s('tangentBreaks', 0)}. Edge error is the exception at{' '}
+      {s('chamfer', 2)}: LogoLab’s median is better, but its failures (the flag, the shrimp, the worm) keep the mean
+      difference inside the noise.
     </p>
   )
 }

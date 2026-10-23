@@ -30,7 +30,7 @@ import {
 import type { ShowMetrics, Showcase } from '../../src/components/labs/bench/showcaseTypes.ts'
 
 const argv = process.argv.slice(2)
-const RUN = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : 'v4'
+const RUN = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : 'v5'
 const CORPUS = 'svgemoji-v0'
 const OUT_PUBLIC = join(REPO, 'public', 'benchmark')
 const OUT_DATA = join(REPO, 'src', 'components', 'labs', 'bench', 'showcase.generated.ts')
@@ -62,16 +62,16 @@ const EXAMPLES: { slug: string; caseId: string; tools: string[]; why: string }[]
     why: 'A black silhouette (ΔE 15) scores DINO 0.967; StarVector 0.998 while 3.3 px off the outline.',
   },
   {
-    slug: 'bat',
-    caseId: 'svgemoji-v0/1f987-twemoji',
-    tools: ['vtracer-default', 'logolab-auto', 'potrace-bin'],
-    why: 'LogoLab LOSES (two greys merged, wings gone). DINO also ranks the black outline above it.',
+    slug: 'flag',
+    caseId: 'svgemoji-v0/1f1ef-1f1f5-twemoji',
+    tools: ['vtracer-default', 'logolab-auto'],
+    why: 'LogoLab LOSES: mono took the #EEE flag and the white page for one paper, chamfer 18.45 vs 0.49.',
   },
   {
-    slug: 'camera',
-    caseId: 'svgemoji-v0/1f4f9-twemoji',
+    slug: 'shrimp',
+    caseId: 'svgemoji-v0/1f990-twemoji',
     tools: ['vtracer-default', 'logolab-auto'],
-    why: 'LogoLab LOSES: ΔE 5.77 vs 0.44, the grey parts of the camera are gone.',
+    why: 'LogoLab LOSES: four reds traced as one ink, 2/4 regions (colour ablation gets 4/4, 0.35 px).',
   },
 ]
 
