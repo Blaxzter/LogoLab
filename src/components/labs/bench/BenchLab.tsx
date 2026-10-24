@@ -333,8 +333,8 @@ function About() {
         <b>Run</b> says what produced the numbers.
       </p>
       <p>
-        Read in-sample corpora as explanation, not evidence. The kink count is LogoLab’s own measure, and the ms column
-        is not comparable across tools.
+        The in-sample corpora were used to develop LogoLab, so they can explain a result but not support one. The kink
+        count is LogoLab’s own measure, and the ms column is not comparable across tools.
       </p>
     </>
   )

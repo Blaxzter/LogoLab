@@ -34,7 +34,7 @@ export function ToolName({ tool }: { tool: string }) {
     <Tooltip
       label={
         <>
-          <b>{tool}</b> — {info.blurb}
+          <b>{tool}</b>: {info.blurb}
         </>
       }
     >

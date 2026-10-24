@@ -214,19 +214,19 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     label: 'LogoLab',
     family: 'logolab',
     blurb:
-      'What users get: the MCP traceIcon path — the ink probe picks Mono/Colour, the gradient probe decides ramps, small mono art is enlarged. No per-case knowledge. The headline row.',
+      'What users get: the MCP traceIcon path. The ink probe picks Mono or Colour, the gradient probe decides on ramps, and small mono art is enlarged. No per-case knowledge. The headline row.',
   },
   'logolab-product': {
     label: 'LogoLab preset, no probes',
     family: 'ablation',
     blurb:
-      'PRODUCT_VECTORIZE_OPTIONS applied blind (stacked, gradients ON) with the probes skipped. No shipped path does this — the studio, the icon sheet and the MCP server all run the gradient probe first — so read it as an ablation, not as the product.',
+      'PRODUCT_VECTORIZE_OPTIONS applied blind (stacked, gradients on) with the probes skipped. The studio, the icon sheet and the MCP server all run the gradient probe first, so no shipped path does this; it is an ablation.',
   },
   'logolab-gate': {
     label: 'LogoLab (oracle)',
     family: 'reference',
     blurb:
-      'The truth gate’s development configuration: tiled, with `gradients` read off the AUTHORED SVG — knowledge no other tool gets. A reference row, never a result.',
+      'The truth gate’s development configuration: tiled, with `gradients` read off the authored SVG, which no other tool gets to see. A reference row, not a result.',
   },
   'vtracer-default': {
     label: 'VTracer',
@@ -253,13 +253,13 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
   potrace: {
     label: 'Potrace',
     family: 'external',
-    blurb: 'Potrace 1.16, painted in the case’s ink — only on mono-lane cases, so its n is tiny.',
+    blurb: 'Potrace 1.16, painted in the case’s ink. It runs only on mono-lane cases, so its n is tiny.',
   },
   'potrace-bin': {
     label: 'Potrace (binarised)',
     family: 'external',
     blurb:
-      'SVG-Bench’s protocol: every case cut at luma 128 and traced black. Colour-blind by construction — it is here because the paper reports it.',
+      'SVG-Bench’s protocol: every case cut at luma 128 and traced in black, so it cannot get a colour right. It is here because the paper reports it.',
   },
   'logolab-abl-tiled-grad': {
     label: 'Ablation: tiled + gradients',
@@ -308,7 +308,7 @@ export const CORPUS_INFO: Record<string, CorpusInfo> = {
     label: 'SVG-Bench emoji · 100',
     heldOut: true,
     blurb:
-      '100 Twemoji from StarVector’s SVG-Bench `svg-emoji` TEST split — fill-only, one per base emoji, picked by sha1 order, never by eye. LogoLab was never tuned on them: this is the headline corpus.',
+      '100 Twemoji from the test split of StarVector’s SVG-Bench `svg-emoji`: fill-only, one per base emoji, picked in sha1 order. LogoLab was never tuned on them. The headline corpus.',
     source: 'starvector/svg-emoji (Hugging Face), pinned revision + parquet sha256',
     sourceUrl: 'https://huggingface.co/datasets/starvector/svg-emoji',
     license: 'CC-BY 4.0 (Twemoji)',
@@ -326,7 +326,7 @@ export const CORPUS_INFO: Record<string, CorpusInfo> = {
     label: 'Truth gate tier 0',
     heldOut: false,
     blurb:
-      'LogoLab’s handcrafted fixtures, one named failure mode each. IN-SAMPLE — the tracer was developed against them. Good for explaining a result, not for claiming one.',
+      'LogoLab’s handcrafted fixtures, one named failure mode each. In-sample: the tracer was developed against them, so they can explain a result but not support one.',
     source: 'bench/truthCorpus.ts (tier 0)',
     license: 'LogoLab fixtures',
   },
@@ -334,7 +334,7 @@ export const CORPUS_INFO: Record<string, CorpusInfo> = {
     label: 'Fluent Emoji, flat',
     heldOut: false,
     blurb:
-      'Every 4th tier-2 case: Microsoft Fluent Emoji authored flat. IN-SAMPLE — measured against during development.',
+      'Every 4th tier-2 case: Microsoft Fluent Emoji authored flat. In-sample: measured against during development.',
     source: 'microsoft/fluentui-emoji via bench/vendorFluentEmoji.ts',
     sourceUrl: 'https://github.com/microsoft/fluentui-emoji',
     license: 'MIT',

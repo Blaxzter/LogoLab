@@ -45,6 +45,11 @@ const n = (m: ShowMetrics, k: string): number | null => (typeof m[k] === 'number
 /** How many times tool `b`'s metric is tool `a`'s, to one decimal — the prose quotes the data. */
 const times = (e: Example, k: string, a = 0, b = 1): string =>
   ((n(e.tools[b].metrics, k) ?? Number.NaN) / (n(e.tools[a].metrics, k) ?? Number.NaN)).toFixed(1)
+/** A tool's median over the run, as the results table prints it. */
+const medianOf = (tool: string, k: string): string => {
+  const v = data.summary.find((s) => s.tool === tool)?.median[k]
+  return typeof v === 'number' ? String(Math.round(v)) : '—'
+}
 const dino = (e: Example, i: number): string => (n(e.tools[i].metrics, 'sbDino') ?? Number.NaN).toFixed(4)
 
 export function Article({ onExplore }: { onExplore?: () => void }) {
@@ -58,9 +63,9 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
         </h1>
         <p className="mt-4 max-w-[68ch] text-[0.95rem] leading-relaxed text-ink-2">
           The published image-to-SVG benchmarks render each tool’s SVG back to pixels and compare pictures. On flat
-          icons that comparison saturates: files that differ three- or four-fold in nodes, with visibly different
-          curves, get the same score. So we also score the <em>drawing</em>, against the vector art that produced the
-          image. Every example below is a real output, and two of them are cases LogoLab gets wrong.
+          icons that comparison saturates: two files can differ three- or four-fold in nodes, with visibly different
+          curves, and get the same score. So we also score the <em>drawing</em>, against the vector art the image was
+          rendered from. Every example below is a real output, and two of them are cases LogoLab gets wrong.
         </p>
 
         <Figure
@@ -68,15 +73,14 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
           initialMode="nodes"
           caption={
             <>
-              Three traces of the same emoji. The DINO score, the headline metric of StarVector’s SVG-Bench, calls them
-              0.9999, 0.9998 and 0.9996, so by that score the three are interchangeable. The artist drew it with{' '}
-              {hero.authoredNodes.length / 2} nodes; the traces use{' '}
+              Three traces of the same emoji. The DINO score, the headline metric of StarVector’s SVG-Bench, gives them
+              0.9999, 0.9998 and 0.9996. The artist drew it with {hero.authoredNodes.length / 2} nodes; the traces use{' '}
               {hero.tools.map((t) => n(t.metrics, 'docNodes')).join(', ')}, and VTracer puts{' '}
               {n(hero.tools[1].metrics, 'tangentBreaks')} kinks (red rings) on curves the artist drew smooth.{' '}
               {n(hero.tools[0].metrics, 'tangentBreaks')
                 ? `LogoLab has ${n(hero.tools[0].metrics, 'tangentBreaks')}.`
                 : 'LogoLab has none: where the mouth meets the blush, its outline runs through the point as drawn.'}{' '}
-              StarVector uses the fewest nodes, and its outline is the furthest from the drawing. Scroll over a panel to
+              StarVector uses the fewest nodes and has the outline furthest from the drawing. Scroll over a panel to
               zoom, and drag to look around.
             </>
           }
@@ -104,10 +108,10 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
             </li>
           </ul>
           <p>
-            All four ask whether the rendered picture looks like the source picture. For a photo that is enough. For a
-            vector file it leaves out most of what matters: none of them can see how many nodes the file has, whether a
-            circle is still a circle, whether two curves meet smoothly or with a kink, or whether the colours are right.
-            DINO in particular was trained to recognise objects, and it will recognise a bat in grey or in black.
+            All four ask whether the rendered picture looks like the source picture, which is the right question for a
+            photo. A vector file can pass it with three times the nodes it needs, a circle rebuilt as a lumpy polygon,
+            or curves that meet at a kink, and none of the four numbers moves much. DINO was trained to recognise
+            objects, and it will recognise a bat in grey or in black.
           </p>
         </Section>
 
@@ -120,7 +124,7 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
           </p>
           <Figure example={shush} />
           <p>
-            The crystal ball goes further: DINO <em>and</em> LPIPS both rank VTracer first, on a trace with{' '}
+            On the crystal ball, DINO and LPIPS both rank VTracer first, although its trace has{' '}
             {times(crystal, 'docNodes')}× the nodes and {times(crystal, 'chamfer')}× the edge error.
           </p>
           <Figure example={crystal} />
@@ -128,42 +132,36 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
 
         <Section title="A black silhouette scores 0.967">
           <p>
-            SVG-Bench runs Potrace the way Potrace works: the image is cut to black and white first. Every colour on
-            this leg is wrong (ΔE 15, where 1 is barely visible), and DINO still gives it 0.967. That is higher than
-            StarVector’s median across the whole set (0.930). StarVector’s own trace scores 0.998 while its outline sits
-            3.3 px from the drawing.
+            SVG-Bench runs Potrace the way Potrace works, on an image cut to black and white first. Every colour on this
+            leg is wrong (ΔE 15, where 1 is barely visible), and DINO still gives it 0.967, higher than StarVector’s
+            median across the whole set (0.930). StarVector’s own trace of the leg scores 0.998 with its outline 3.3 px
+            from the drawing.
           </p>
           <Figure example={byslug('leg')} />
         </Section>
 
         <Section title="Where LogoLab loses">
           <p>
-            LogoLab first decides whether an image is one ink on a page (traced as Mono) or several colours. When that
-            call is wrong, the trace is wrong. In the previous run it lost the bat and the camera this way: their greys
-            were read as anti-aliasing between the ink and the page, and dropped. A grey that fills an area now counts
-            as an ink, and both trace correctly (ΔE 0.13 and 0.14).
-          </p>
-          <p>
-            The same step still gets other images wrong. The Japanese flag is a pale grey rectangle on a white page, and
-            LogoLab took both for the page. The colours are nearly right (ΔE 1.7), but the flag’s outline is gone: 18 px
-            of edge error, against VTracer’s 0.5.
+            Before it traces, LogoLab decides whether an image is one ink on a page, which it traces in Mono, or several
+            colours. Its three largest edge errors on this set come from that decision. The Japanese flag is a pale grey
+            rectangle on a white page, and LogoLab reads both as the page. The colours come out nearly right (ΔE 1.7),
+            but the flag’s outline is missing: 18 px of edge error, against VTracer’s 0.5.
           </p>
           <Figure example={byslug('flag')} />
           <p>
-            The shrimp is several shades of red, and LogoLab traced it as one ink, so two of its four shapes are missing
-            (ΔE 2.2 against VTracer’s 1.1). The worm fails the same way. Forced to trace in colour, LogoLab gets all
-            three right, with edge errors of 0.07, 0.35 and 0.36 px. These three are why LogoLab’s average edge error is
-            not significantly better than VTracer’s even though its median is.
+            The shrimp is drawn in several shades of red, which LogoLab takes for one ink, so two of its four shapes are
+            missing (ΔE 2.2 against VTracer’s 1.1). The worm fails the same way. Traced in colour, LogoLab gets all
+            three right, with edge errors of 0.07, 0.35 and 0.36 px. These three cases are why LogoLab’s mean edge error
+            is not significantly better than VTracer’s, although its median is.
           </p>
           <Figure example={byslug('shrimp')} />
           <p>
-            LogoLab traces an emoji as tiles that share their edges, so where three colours meet, every outline through
-            that point has a node on it. The fit used to let an outline the artist drew smooth bend there: the smiling
-            face’s mouth pulled 60° or more into the point where it meets the blush. The tracer now works out which
-            shape is in front and keeps its outline smooth through the point, which took LogoLab’s kinks on these{' '}
-            {data.cases} cases from 1556 to 1314. Where a straight edge runs into a curve, the curve now leaves along
-            the line’s direction instead of meeting it at a small angle, which brought them to 1157. Most of the rest
-            sit where three colours meet on a pixel corner, and they are still there.
+            LogoLab’s traces still have kinks: a median of {medianOf('logolab-auto', 'tangentBreaks')} per emoji,
+            against VTracer’s {medianOf('vtracer-default', 'tangentBreaks')}. LogoLab traces an emoji as tiles that
+            share their edges, so where three colours meet, every outline through that point has a node on it. At such a
+            point the tracer works out which shape is in front and keeps that shape’s outline smooth, and where a
+            straight edge runs into a curve, the curve leaves in the line’s direction. Most of the kinks left are at
+            points where three colours meet on a pixel corner.
           </p>
         </Section>
 
@@ -237,11 +235,9 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
             </li>
             <li>
               We built LogoLab and chose these metrics, and the kink count in particular is our own measure. That is why
-              the SVG-Bench numbers sit beside ours and why the losses are shown. The first version of the kink count
-              skipped every point where three shapes meet, and that hid half of LogoLab’s own kinks; it now counts a
-              bend there when the outline is drawn smooth through it. Counted that way, LogoLab’s total over the{' '}
-              {data.cases} cases doubled, and we then fixed about a third of them in the tracer (above). Every number on
-              this page comes from the fixed version.
+              the SVG-Bench numbers are shown next to ours, along with the cases LogoLab loses. The kink count includes
+              bends at points where three shapes meet, wherever the drawing runs smooth through them. A first version of
+              the count left those out, and that hid about half of LogoLab’s kinks.
             </li>
           </ul>
           <p>
@@ -511,8 +507,8 @@ function PairedNote() {
       Paired case by case, VTracer minus LogoLab (mean, 95% interval): DINO {s('sbDino', 4)}, LPIPS {s('sbLpips', 4)}.
       Both intervals include zero, so on the SVG-Bench metrics the two tools tie. On the drawing VTracer is worse: ΔE{' '}
       {s('meanDeltaE', 2)}, nodes {s('docNodes', 0)}, kinks {s('tangentBreaks', 0)}. Edge error is the exception at{' '}
-      {s('chamfer', 2)}: LogoLab’s median is better, but its failures (the flag, the shrimp, the worm) keep the mean
-      difference inside the noise.
+      {s('chamfer', 2)}. LogoLab’s median is better, but its three failures (the flag, the shrimp and the worm) keep the
+      mean difference inside the noise.
     </p>
   )
 }

@@ -145,7 +145,7 @@ function Leaderboard({ summaries, nCases, detail }: { summaries: ToolSummary[]; 
               <>
                 <Th hint="Cases this tool was run on.">n</Th>
                 <Th hint="Outputs that failed to parse or render. Scored, never dropped.">fail</Th>
-                <Th hint="Cases where EVERY applicable truth-gate check passes, at tool-neutral limits. The zero-tolerance tangent-break gate dominates it for every tool — read it as a LogoLab lens, not a verdict.">
+                <Th hint="Cases where every applicable truth-gate check passes, at tool-neutral limits. The zero-tolerance tangent-break gate decides it for every tool, so it says more about LogoLab's own priorities than about the tools.">
                   all gates
                 </Th>
               </>
@@ -393,7 +393,7 @@ export function StripPlot({
         {hover ? (
           <>
             <b className="text-ink">{hover.caseId}</b> · {toolInfo(hover.tool).label} · {metric.label}{' '}
-            {fmt(hover.v, metric.digits)} — the same case is highlighted in every row
+            {fmt(hover.v, metric.digits)}. The same case is highlighted in every row.
           </>
         ) : (
           <>
