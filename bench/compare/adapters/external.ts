@@ -118,6 +118,58 @@ function potraceAdapter(name: string, lanes: ('colour' | 'mono')[], inked: boole
 export const potrace = potraceAdapter('potrace', ['mono'], true)
 export const potraceBin = potraceAdapter('potrace-bin', ['colour', 'mono'], false)
 
+// AutoTrace 0.40.0 (2020-02-19, the last Windows build that runs: the 0.31.10 installer of
+// 2024 ships libtool's build-tree wrapper instead of the program). StarVector's paper reports
+// it on SVG-Emoji. This build reads no PNG, so it gets a binary PPM of the same raster,
+// composited over white. Two rows, as VTracer has:
+//
+//   autotrace-default  no flags: every exact colour is traced, so each anti-aliased edge
+//                      tone becomes its own sliver (2770 paths on the smiling face).
+//   autotrace-swept    the best of a frozen grid picked on the IN-SAMPLE corpora only
+//                      (bench/compare/sweepAutotrace.ts), as vtracer-swept is.
+//
+// Its SVG has no xmlns and no viewBox; render.ts normalizeRoot adds both for every tool.
+
+export const AUTOTRACE = exe(join(TOOLS, 'autotrace', 'autotrace-0.40.0', 'autotrace'))
+
+/** Binary P6 PPM of the raster composited over white. */
+export function toPpm(img: { width: number; height: number; data: Uint8ClampedArray }): Buffer {
+  const { width: w, height: h, data } = img
+  const body = Buffer.alloc(w * h * 3)
+  for (let i = 0; i < w * h; i++) {
+    const a = data[i * 4 + 3] / 255
+    for (let c = 0; c < 3; c++) body[i * 3 + c] = Math.round(data[i * 4 + c] * a + 255 * (1 - a))
+  }
+  return Buffer.concat([Buffer.from(`P6\n${w} ${h}\n255\n`), body])
+}
+
+export function autotrace(name: string, args: string[]): TracerAdapter {
+  return {
+    name,
+    lanes: ['colour', 'mono'],
+    available: missing(AUTOTRACE),
+    version: async () => `${await firstLine(AUTOTRACE)} ${args.join(' ')}`.trim(),
+    async trace(i: TraceInput) {
+      const ppm = scratch(i, name, 'ppm')
+      const out = scratch(i, name, 'svg')
+      const t = performance.now()
+      writeFileSync(ppm, toPpm(i.image))
+      await run(AUTOTRACE, ['-output-format', 'svg', '-output-file', out, ...args, ppm])
+      return { svg: readFileSync(out, 'utf8'), ms: performance.now() - t }
+    },
+  }
+}
+
+/**
+ * sweepAutotrace.ts's pick (2026-10-25), 56 in-sample cases @512: ΔE p50 0.193, chamfer p50
+ * 0.251, nodes p50 359 (default: 0.390 / 0.315 / 3900). Colour reduction lost on every
+ * setting. The pick sits on the grid's lowest error-threshold (1); the grid was not widened
+ * after seeing that, so a lower threshold might do better still.
+ */
+export const AUTOTRACE_SWEPT: string[] = ['-despeckle-level', '8', '-error-threshold', '1']
+export const autotraceDefault = autotrace('autotrace-default', [])
+export const autotraceSwept = autotrace('autotrace-swept', AUTOTRACE_SWEPT)
+
 /** A per-case scratch file next to the case's PNG. */
 function scratch(i: TraceInput, tool: string, ext: string): string {
   const dir = join(i.pngPath, '..', 'raw')

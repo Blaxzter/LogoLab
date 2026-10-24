@@ -250,6 +250,24 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     blurb:
       'starvector/starvector-1b-im2svg, the repo’s own SVG-Bench generation config (fp16, T 0.2, top-p 0.95). The 8B model does not fit in 16 GB.',
   },
+  'autotrace-default': {
+    label: 'AutoTrace',
+    family: 'external',
+    blurb:
+      'AutoTrace 0.40.0 with no flags, on a PPM of the same raster (this build reads no PNG). Every exact colour is traced, so each anti-aliased edge tone becomes its own sliver. StarVector’s paper reports it on SVG-Emoji.',
+  },
+  'autotrace-swept': {
+    label: 'AutoTrace swept',
+    family: 'external',
+    blurb:
+      'The best of a 32-config sweep of AutoTrace (colour count, despeckle level, error threshold) picked on the in-sample corpora only (bench/compare/sweepAutotrace.ts), as VTracer swept is.',
+  },
+  'omnisvg-4b': {
+    label: 'OmniSVG-4B',
+    family: 'external',
+    blurb:
+      'OmniSVG1.1_4B (NeurIPS 2025) on Qwen2.5-VL-3B, through the repo’s own inference.py: its prompt, its sampling defaults (T 0.3, top-p 0.9) and its rule of keeping the first sample that renders, with seed 0. Output in a 200-unit viewBox.',
+  },
   potrace: {
     label: 'Potrace',
     family: 'external',

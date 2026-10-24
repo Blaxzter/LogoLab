@@ -26,6 +26,15 @@ STARCODER2_REV=bb9afde76d7945da5745592525db122d4d729eb1    # bigcode/starcoder2-
 SHIM_CONFIG_REPO=Xenova/starcoderbase-1b                    # ungated copy of bigcode/starcoderbase-1b's config
 SHIM_CONFIG_REV=c1d88f6743334a1200e4948ef46f545acfa96568
 SHIM_CONFIG_SHA256=0306bb2e5f2d0b490e0a16dd9b10bcad29ee4496634e2da74f8e62492da00819
+# AutoTrace: the 2020 win64 build. The 2024 0.31.10 installer ships libtool's wrapper, not the program.
+AUTOTRACE_URL=https://github.com/autotrace/autotrace/releases/download/travis-20200219.65/autotrace-0.40.0-20200219-win64-setup.zip
+AUTOTRACE_SHA256=ae13924fdc3beee5bd982cf57e999160b060500904274ee16f42b78dc71c6520
+OMNISVG_GIT=https://github.com/OmniSVG/OmniSVG.git
+OMNISVG_SHA=308b49b3e3df29c8b5424bbaa7f1f7c6ff218e8d
+OMNISVG_MODEL=OmniSVG/OmniSVG1.1_4B
+OMNISVG_REV=117d4c4541839e02943554fe71c0a0d54fcef819
+QWEN_VL_MODEL=Qwen/Qwen2.5-VL-3B-Instruct
+QWEN_VL_REV=66285546d2b821cf421d4f5eb2576359d3770cd3
 
 check() { # file sha256
   local got
@@ -44,6 +53,16 @@ if [ ! -d "$T/potrace/potrace-1.16.win64" ]; then
   [ -f "$T/potrace/dl/potrace-1.16.win64.zip" ] || curl -fL -o "$T/potrace/dl/potrace-1.16.win64.zip" "$POTRACE_URL"
   check "$T/potrace/dl/potrace-1.16.win64.zip" "$POTRACE_SHA256"
   unzip -q "$T/potrace/dl/potrace-1.16.win64.zip" -d "$T/potrace"
+fi
+
+# ── AutoTrace (Windows build; unpacked with 7z, the NSIS installer is never run).
+#    On Linux/macOS install autotrace 0.40 and edit AUTOTRACE in adapters/external.ts.
+if [ ! -f "$T/autotrace/autotrace-0.40.0/autotrace.exe" ] && command -v 7z >/dev/null 2>&1; then
+  mkdir -p "$T/autotrace/dl"
+  [ -f "$T/autotrace/dl/autotrace-0.40.0.zip" ] || curl -fL -o "$T/autotrace/dl/autotrace-0.40.0.zip" "$AUTOTRACE_URL"
+  check "$T/autotrace/dl/autotrace-0.40.0.zip" "$AUTOTRACE_SHA256"
+  7z x -y -o"$T/autotrace/dl" "$T/autotrace/dl/autotrace-0.40.0.zip" >/dev/null
+  7z x -y -o"$T/autotrace/autotrace-0.40.0" "$T/autotrace/dl/autotrace-0.40.0-20200219-setup.exe" '-x!$PLUGINSDIR' >/dev/null
 fi
 
 # ── StarVector source + venv (requirements.lock is `pip freeze` of the venv the run used) ────
@@ -88,6 +107,26 @@ if [ ! -f "$SHIM/config.json" ]; then
   done
 fi
 check "$SHIM/config.json" "$SHIM_CONFIG_SHA256"
+
+# ── OmniSVG: source checkout + its own venv (it pins transformers 4.51.3) + pinned weights.
+#    omnisvg_run.py stubs cairosvg with resvg, so no Cairo library is needed.
+if [ ! -d "$T/omnisvg-src/.git" ]; then
+  git clone "$OMNISVG_GIT" "$T/omnisvg-src"
+fi
+git -C "$T/omnisvg-src" checkout --quiet "$OMNISVG_SHA"
+if [ ! -d "$T/omnisvg-venv" ]; then
+  if command -v py >/dev/null 2>&1; then py -3.12 -m venv "$T/omnisvg-venv"; else python3.12 -m venv "$T/omnisvg-venv"; fi
+fi
+OPY="$T/omnisvg-venv/Scripts/python.exe"
+[ -x "$OPY" ] || OPY="$T/omnisvg-venv/bin/python"
+"$OPY" -m pip install --quiet --upgrade pip
+"$OPY" -m pip install --quiet --extra-index-url https://download.pytorch.org/whl/cu124 torch==2.5.1+cu124 torchvision==0.20.1+cu124
+"$OPY" -m pip install --quiet transformers==4.51.3 accelerate==1.6.0 qwen-vl-utils==0.0.11 einops==0.4.1 PyYAML==6.0.2   shapely==2.0.7 numpy==2.2.6 Pillow==10.4.0 networkx==3.4.2 huggingface_hub==0.36.2 resvg-py==0.5.0
+"$OPY" -I - <<PY
+from huggingface_hub import snapshot_download
+snapshot_download("$OMNISVG_MODEL", revision="$OMNISVG_REV")
+snapshot_download("$QWEN_VL_MODEL", revision="$QWEN_VL_REV")
+PY
 
 # ── LPIPS' VGG weights land in .bench-tools/torch-home on first use (svgbench_metrics.py).
 

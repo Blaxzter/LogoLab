@@ -21,7 +21,9 @@
 //   logolab-auto, logolab-product, logolab-gate   in-process (adapters/logolab.ts) + 3 ablation rows
 //   vtracer-default, vtracer-poster, vtracer-swept cargo install vtracer --version 0.6.4 --locked --root .bench-tools/vtracer
 //   potrace (mono lane), potrace-bin (every case) potrace-1.16.win64.zip → .bench-tools/potrace/
+//   autotrace-default, autotrace-swept             AutoTrace 0.40.0 win64 → .bench-tools/autotrace/ (adapters/external.ts)
 //   starvector-1b                                 .bench-tools/starvector-venv + HF weights (adapters/starvector.ts)
+//   omnisvg-4b                                    .bench-tools/omnisvg-venv + omnisvg-src + HF weights (adapters/omnisvg.ts)
 // Setup (all of it, pinned): bench/compare/py/setup.sh. Data: py/fetch_svgbench.py.
 // --skip-tools a,b drops tools for one run (e.g. starvector on the 668-row corpus).
 //
@@ -53,7 +55,18 @@ import { scoreTrace, type Truth } from './score.ts'
 import { summaryMarkdown } from './report.ts'
 import { writeOverlays } from './overlay.ts'
 import { logolabAblation, logolabAuto, logolabGate, logolabProduct, provenance } from './adapters/logolab.ts'
-import { potrace, potraceBin, vtracerDefault, vtracerPoster, vtracerSwept, VTRACER_SWEPT } from './adapters/external.ts'
+import {
+  AUTOTRACE_SWEPT,
+  autotraceDefault,
+  autotraceSwept,
+  potrace,
+  potraceBin,
+  vtracerDefault,
+  vtracerPoster,
+  vtracerSwept,
+  VTRACER_SWEPT,
+} from './adapters/external.ts'
+import { omnisvg, omnisvgProvenance } from './adapters/omnisvg.ts'
 import { starvector, starvectorProvenance } from './adapters/starvector.ts'
 import type { CompareCase, CorpusId, ScoreRow, TraceInput, TraceResult, TracerAdapter } from './types.ts'
 
@@ -67,7 +80,10 @@ const ALL_TOOLS: TracerAdapter[] = [
   vtracerDefault,
   vtracerPoster,
   vtracerSwept,
+  autotraceDefault,
+  autotraceSwept,
   starvector,
+  omnisvg,
   potrace,
   potraceBin,
   ...logolabAblation,
@@ -330,9 +346,11 @@ async function main(): Promise<void> {
     provenance: {
       git: prov,
       vtracerSwept: VTRACER_SWEPT,
+      autotraceSwept: AUTOTRACE_SWEPT,
       starvector: tools.some((t) => t.a === starvector)
         ? starvectorProvenance(join(runDir, 'batch', starvector.name))
         : null,
+      omnisvg: tools.some((t) => t.a === omnisvg) ? omnisvgProvenance(join(runDir, 'batch', omnisvg.name)) : null,
     },
     svgbench: sbNotes,
     cases: cases.map((k) => ({
