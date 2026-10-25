@@ -355,7 +355,9 @@ export function planarFitOptionsFor(options: VectorizeOptions): PlanarFitOptions
     ...DEFAULT_PLANAR_FIT,
     lineCost: options.gradients === false ? FLAT_LINE_COST : DEFAULT_PLANAR_FIT.lineCost,
     smoothPasses: s === 0 ? 0 : Math.max(1, Math.round(s * 4)),
-    fillets: s > 0 && (options.fidelity ?? DEFAULT_BEAUTIFY_OPTIONS.fidelity) > 0,
+    // AND the default, so a diagnostic override of DEFAULT_PLANAR_FIT (bench/compare/run.ts
+    // --fit fillets=false) reaches the fit; the default is true, so this reads the dials alone.
+    fillets: DEFAULT_PLANAR_FIT.fillets && s > 0 && (options.fidelity ?? DEFAULT_BEAUTIFY_OPTIONS.fidelity) > 0,
     ...(options.planarFit ?? {}),
   }
 }
