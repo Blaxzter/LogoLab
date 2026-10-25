@@ -316,7 +316,7 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     label: 'ImageTracer',
     family: 'external',
     blurb:
-      'ImageTracer.js 1.2.6 with its default preset: 16 colours, then each colour layer traced to lines and quadratic curves. It strokes every path 1 px in its own colour to hide the seams between layers, so its geometry can’t be scored; the picture can.',
+      'ImageTracer.js 1.2.6 with its default preset: 16 colours, then each colour layer traced to lines and quadratic curves. It strokes every path 1 px in its own colour to hide the seams between layers, so only its picture can be scored.',
   },
   'imagetracer-fills': {
     label: 'ImageTracer fills',

@@ -83,7 +83,7 @@ export default function HowLab() {
   const p = HOW.pipeline
   return (
     <article className="mx-auto max-w-5xl px-4 pb-16 pt-6 sm:px-6">
-      <p className="text-xs font-semibold uppercase tracking-wide text-accent">How it works</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-accent">Labs</p>
       <h1 className="mt-2 max-w-[24ch] text-3xl font-bold tracking-tight text-ink sm:text-4xl">
         How the vectorizer works
       </h1>
@@ -104,22 +104,20 @@ export default function HowLab() {
         </p>
         <ul>
           <li>
-            <strong>Flat colours.</strong> Most icons are a handful of solid colours. The tracer finds that palette and
-            gives each pixel to one of its colours. The anti-aliased pixels along an edge are a mix of two colours and
-            go to one of the two.
+            Most icons are a handful of solid colours. For those the tracer finds the palette and gives each pixel to
+            one of its colours; an anti-aliased pixel along an edge is a mix of two colours and goes to one of the two.
           </li>
           <li>
-            <strong>One ink on paper.</strong> A black mark on white, or any single colour on a plain ground, is cut
-            into ink and paper. The cut is made on coverage: a pixel half covered by ink is exactly on the edge, and art
-            on a transparent background is first composited over the paper, so a thin line keeps its drawn width. A
-            small image is enlarged before the cut, by up to 3× for its size and up to 4× when its thinnest strokes are
-            under about 3 px wide.
+            A black mark on white, or any single colour on a plain ground, is cut into ink and paper. The cut is made on
+            coverage: a pixel half covered by ink is exactly on the edge, and art on a transparent background is first
+            composited over the paper, so a thin line keeps its drawn width. A small image is enlarged before the cut,
+            by up to 3× for its size and up to 4× when its thinnest strokes are under about 3 px wide.
           </li>
           <li>
-            <strong>Shading and gradients.</strong> Everything else goes through a smoothness segmentation in the spirit
-            of <A href="https://doi.org/10.1002/cpa.3160420503">Mumford and Shah (1989)</A>: the image is approximated
-            by regions that are smooth inside and separated by sharp edges. Each region then gets the simplest paint
-            that explains it: a flat colour, a linear gradient or a radial one.
+            Art with shading or gradients goes through a smoothness segmentation in the spirit of{' '}
+            <A href="https://doi.org/10.1002/cpa.3160420503">Mumford and Shah (1989)</A>: the image is approximated by
+            regions that are smooth inside and separated by sharp edges. Each region then gets the simplest paint that
+            explains it: a flat colour, a linear gradient or a radial one.
           </li>
         </ul>
         <p>
@@ -172,8 +170,7 @@ export default function HowLab() {
             </p>
             <p>
               After fitting, a tidy-up pass snaps outlines that are within tolerance of a circle or an ellipse to that
-              shape. The corner veto stops it from rounding a shape that has sharp corners into a disc. The figure shows
-              a case where the veto changes the result.
+              shape. The corner veto stops it from rounding a shape that has sharp corners into a disc.
             </p>
           </>
         }
@@ -254,7 +251,7 @@ export default function HowLab() {
         after={<p>The price is a little edge error, {better('lineTangents', 'chamfer')} px per icon on average.</p>}
       />
 
-      <Section title="9. Layers, when you want them">
+      <Section title="9. Layered output">
         <p>
           The graph tiles the picture: every region is exactly the area it covers, holes and all. A designer usually
           draws in layers instead, with a whole circle behind a shape that covers part of it. The studio and the npm
@@ -272,8 +269,8 @@ export default function HowLab() {
           </li>
         </ul>
         <p>
-          Neither rule may change the rendered picture, and a completion may only add to its shape. The tiled version is
-          still there for anyone who wants it: Layering, under Color.
+          Neither rule may change the rendered picture, and a completion may only add to its shape. The Layering control
+          under Color switches back to the tiled version.
         </p>
       </Section>
 
@@ -307,29 +304,26 @@ export default function HowLab() {
       </Section>
 
       <Section title="How a change is checked">
-        <ul>
-          <li>
-            <strong>Against the drawing.</strong> The truth gate traces test cases whose SVG source is known and scores
-            the trace against that source: edge distance, nodes, regions recovered, corners recovered, corners invented,
-            and kinks of 5° or more on curves drawn smooth.
-          </li>
-          <li>
-            <strong>Against the last version.</strong> Before a tracer change, a snapshot of every test case is frozen.
-            The{' '}
-            <Link className="text-accent underline-offset-2 hover:underline" to="/labs/ab">
-              A/B lab
-            </Link>{' '}
-            then shows exactly which cases moved and where, which is how a fix for one shape is caught changing another.
-          </li>
-          <li>
-            <strong>Against other tracers.</strong> The{' '}
-            <Link className="text-accent underline-offset-2 hover:underline" to="/labs/bench">
-              benchmark
-            </Link>{' '}
-            runs LogoLab, VTracer, Potrace, AutoTrace, StarVector and OmniSVG on the same images, with the published
-            image metrics next to the drawing metrics.
-          </li>
-        </ul>
+        <p>
+          The truth gate traces test cases whose SVG source is known and scores each trace against that source: edge
+          distance, nodes, regions recovered, corners recovered, corners invented, and kinks of 5° or more on curves
+          drawn smooth.
+        </p>
+        <p>
+          Before a tracer change, a snapshot of every test case is frozen. The{' '}
+          <Link className="text-accent underline-offset-2 hover:underline" to="/labs/ab">
+            A/B lab
+          </Link>{' '}
+          then shows which cases moved and where, which is how a fix for one shape is caught changing another.
+        </p>
+        <p>
+          The{' '}
+          <Link className="text-accent underline-offset-2 hover:underline" to="/labs/bench">
+            benchmark
+          </Link>{' '}
+          runs LogoLab and other tracers on the same images, with the published image metrics next to the drawing
+          metrics.
+        </p>
       </Section>
 
       <Section title="Related work">
@@ -595,7 +589,7 @@ function PipelineFigure() {
         </div>
       </LabZoomContext.Provider>
       <figcaption className="mt-3 max-w-[72ch] text-[0.85rem] leading-relaxed text-muted">
-        One trace, stage by stage. The pixels are grouped into regions, each region boundary becomes one shared edge
+        The stages of one trace: the pixels are grouped into regions, each region boundary becomes one shared edge
         (coloured one per edge here, with the vertices where three or more regions meet), and the fitted edges are
         written out as the SVG, its nodes drawn on top. This figure uses the tracer’s tiled defaults. Scroll over a
         panel to zoom; all four move together.

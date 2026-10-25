@@ -8198,7 +8198,7 @@ Off minus on, mean per icon over the 100 held-out emoji [95% CI] · cases moved:
   and kinks. It helps in-sample (`petals`: 41 → 36 nodes, 2 → 0 kinks). A candidate for a
   narrower trigger, not removed.
 * **The corner veto almost never fires on emoji** (corner recovery moves on 1 case). On
-  `checker` it is everything: off, the fine quarter melts into dots (ΔE 4.60 vs 0.00,
+  `checker` it decides the result: off, the fine quarter melts into dots (ΔE 4.60 vs 0.00,
   3522 vs 3556 corners kept).
 * **Rounded polygons and line tangents are trades:** fillets +2.4 nodes per icon for −1.0
   kinks; line tangents −1.8 kinks for +0.005 px edge error.
