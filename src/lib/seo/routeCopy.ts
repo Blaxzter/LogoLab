@@ -142,7 +142,7 @@ export const ROUTE_PAGES: RoutePage[] = [
       'How LogoLab turns a flat icon into an SVG without a trained model: regions, one shared edge per boundary, sub-pixel edges, corners, rounded shapes and junctions. Each rule is shown switched off and on, with what it is worth on 100 held-out emoji.',
     h1: 'How the vectorizer works',
     intro:
-      'LogoLab tries to recover the drawing a picture was made from. Every step is an explicit rule, and this page switches each one off to show what it does.',
+      'LogoLab tries to recover the drawing a picture was made from. Every step is an explicit rule, and this page switches the main ones off to show what they do.',
     points: [
       'Pixels are grouped into regions by flat colour, by an ink cut, or by a smoothness segmentation for gradients.',
       'Every boundary between two regions is one shared edge, so shapes cannot leave gaps or overlap.',

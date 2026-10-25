@@ -214,9 +214,9 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
             </li>
             <li>
               LogoLab runs as its MCP server ships, with no per-image tuning. VTracer runs at its defaults and at the
-              best of a 54-configuration sweep on these cases. StarVector uses the generation settings from its own
-              repository; the 8B model does not fit in 16 GB of GPU memory. Potrace gets a binarised image, as in
-              SVG-Bench.
+              best of a 54-configuration sweep picked on the in-sample cases only. StarVector uses the generation
+              settings from its own repository; the 8B model does not fit in 16 GB of GPU memory. Potrace gets a
+              binarised image, as in SVG-Bench.
             </li>
             <li>
               A file that fails to parse or render counts as a failure and stays in the results. Comparisons are paired

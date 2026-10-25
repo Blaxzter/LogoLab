@@ -11,6 +11,7 @@ import { Figure, Section } from '../bench/articleParts'
 import { type CaseMode, DRAWING_ROWS, type ScoreRow, SvgArt } from '../bench/figure'
 import { HOW } from './howItWorks.generated'
 import type { HowRule } from './howTypes'
+import type { ShowPaired } from '../bench/showcaseTypes'
 
 /**
  * /labs/how: how the tracer works, one rule at a time.
@@ -72,6 +73,15 @@ const worse = better
 const fmt = (v: number | null, d: number): string => (v === null ? '—' : v.toFixed(d))
 const sign = (v: number, d: number): string =>
   Math.abs(v) < 0.5 * 10 ** -d ? '≈0' : `${v > 0 ? '+' : ''}${v.toFixed(d)}`
+/** Decimals for a paired cell: a significant change gets places until neither its mean nor its
+ *  interval ends round to zero, or a bold cell would read "≈0 [-0.001, -0.000]". */
+const placesFor = (c: ShowPaired, d: number): number => {
+  if (!c.significant) return d
+  const vals = [c.meanDiff, c.lo, c.hi].filter((v): v is number => typeof v === 'number')
+  let p = d
+  while (p < d + 3 && vals.some((v) => Math.abs(v) < 0.5 * 10 ** -p)) p++
+  return p
+}
 
 const A = ({ href, children }: { href: string; children: ReactNode }) => (
   <a className="text-accent underline-offset-2 hover:underline" href={href} target="_blank" rel="noreferrer">
@@ -176,8 +186,9 @@ export default function HowLab() {
         }
         after={
           <p>
-            On emoji the veto almost never fires. It exists for art like this checkerboard: with it off, the small cells
-            in the lower-right quarter are close enough to circles for the snap to take them for circles.
+            On the emoji it changes 13 of the 100 traces, and there it costs a little: with it on they carry slightly
+            more kinks and colour error. It exists for art like this checkerboard: with it off, the small cells in the
+            lower-right quarter are close enough to circles for the snap to take them for circles.
           </p>
         }
       />
@@ -290,7 +301,7 @@ export default function HowLab() {
           emoji. The table gives the mean change per icon with the rule off, and a 95% interval from a paired bootstrap.
           The arrow on each column says which way is better, and a rule helps where switching it off moves a score
           against the arrow. Bold marks a change whose interval excludes zero, and the small number after the interval
-          is how many of the {HOW.heldOutCases} emoji the rule changes at all.
+          is how many of the {HOW.heldOutCases} emoji that score changes on.
         </p>
         <WorthTable />
         <p>
@@ -298,8 +309,9 @@ export default function HowLab() {
           <Link className="text-accent underline-offset-2 hover:underline" to="/labs/bench">
             the benchmark
           </Link>
-          , which no rule was tuned on. Each rule was built against the in-sample test cases, so on these emoji a rule
-          can move fewer cases than it was written for, or none.
+          . Most rules were built against the in-sample test cases, so on these emoji a rule can move fewer cases than
+          it was written for, or none. Two were not: through junctions and line tangents were reviewed and accepted on
+          these same emoji, so their rows are not out-of-sample evidence.
         </p>
       </Section>
 
@@ -356,7 +368,7 @@ export default function HowLab() {
             . ACM TOG (SIGGRAPH Asia), 2017.
           </li>
           <li>
-            S. Hoshyari, E. A. Dominici, A. Sheffer, N. Carr, D. Ceylan, Z. Wang, I.-C. Shen.{' '}
+            S. Hoshyari, E. A. Dominici, A. Sheffer, N. Carr, Z. Wang, D. Ceylan, I.-C. Shen.{' '}
             <A href="https://doi.org/10.1145/3197517.3201312">
               Perception-driven semi-structured boundary vectorization
             </A>
@@ -417,8 +429,9 @@ export default function HowLab() {
         <A href="https://creativecommons.org/licenses/by/4.0/">CC-BY 4.0</A> (
         <A href="https://github.com/jdecked/twemoji">github.com/jdecked/twemoji</A>), via StarVector’s SVG-Bench. The
         traces are modified versions: rasterized and re-vectorized. Measured with {HOW.version} at {HOW.res} px, run{' '}
-        {HOW.base} and its ablation runs, {new Date(HOW.date).toISOString().slice(0, 10)}. The test fixtures are
-        LogoLab’s own.
+        {HOW.base} and its ablation runs, {new Date(HOW.date).toISOString().slice(0, 10)}. The rounded-polygon row pairs
+        runs traced at 3469a57, whose LogoLab output is byte-identical to {HOW.base}’s. The test fixtures are LogoLab’s
+        own.
       </p>
     </article>
   )
@@ -473,8 +486,8 @@ function Census({ r }: { r: HowRule }) {
   return (
     <p>
       Over the {HOW.heldOutCases} held-out emoji, switching it off changes the {m.label.toLowerCase()} on {c.moved} of
-      them, by {sign(c.meanDiff, m.mean)}
-      {m.unit ?? ''} per icon on average [{c.lo?.toFixed(m.mean)}, {c.hi?.toFixed(m.mean)}].
+      them, by {sign(c.meanDiff, placesFor(c, m.mean))}
+      {m.unit ?? ''} per icon on average [{c.lo?.toFixed(placesFor(c, m.mean))}, {c.hi?.toFixed(placesFor(c, m.mean))}].
     </p>
   )
 }
@@ -516,9 +529,9 @@ function WorthTable() {
                       <span className="text-faint">no change</span>
                     ) : (
                       <>
-                        {sign(c.meanDiff, d)}{' '}
+                        {sign(c.meanDiff, placesFor(c, d))}{' '}
                         <span className="text-[0.62rem] font-normal text-faint">
-                          [{c.lo?.toFixed(d)}, {c.hi?.toFixed(d)}] · {c.moved}
+                          [{c.lo?.toFixed(placesFor(c, d))}, {c.hi?.toFixed(placesFor(c, d))}] · {c.moved}
                         </span>
                       </>
                     )}
@@ -590,8 +603,8 @@ function PipelineFigure() {
       </LabZoomContext.Provider>
       <figcaption className="mt-3 max-w-[72ch] text-[0.85rem] leading-relaxed text-muted">
         The stages of one trace: the pixels are grouped into regions, each region boundary becomes one shared edge
-        (coloured one per edge here, with the vertices where three or more regions meet), and the fitted edges are
-        written out as the SVG, its nodes drawn on top. This figure uses the tracer’s tiled defaults. Scroll over a
+        (coloured one per edge here, with a dot where edges meet, inside or at the image border), and the fitted edges
+        are written out as the SVG, its nodes drawn on top. This figure uses the tracer’s tiled defaults. Scroll over a
         panel to zoom; all four move together.
       </figcaption>
     </figure>

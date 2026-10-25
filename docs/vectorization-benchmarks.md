@@ -8191,13 +8191,14 @@ Off minus on, mean per icon over the 100 held-out emoji [95% CI] · cases moved:
 | fillets | +0.009 [0.006, 0.013] · 47 | +0.006 [0.005, 0.008] · 47 | −2.4 [−3.0, −1.8] · 46 | +1.0 [0.6, 1.5] · 27 |
 | throughPairs | +0.005 [0.002, 0.009] · 72 | +0.004 [0.001, 0.007] · 72 | +1.3 [0.1, 2.3] · 56 | +2.3 [1.8, 2.8] · 59 |
 | junctionReseat | −0.003 [−0.005, −0.002] · 53 | −0.002 [−0.003, −0.001] · 53 | +0.2 [−0.3, 0.6] · 32 | −0.2 [−0.4, 0.1] · 27 |
-| lineTangents | −0.001 [−0.003, 0.001] · 89 | −0.005 [−0.008, −0.002] · 89 | −0.3 [−0.8, 0.1] · 52 | +1.8 [1.5, 2.2] · 69 |
+| lineTangents | −0.001 [−0.003, 0.001] · 89 | −0.005 [−0.008, −0.002] · 89 | −0.3 [−0.8, 0.1] · 52 | +1.8 [1.4, 2.2] · 69 |
 
 * **The re-seat (§10.4) does not pay on the held-out set.** Switching it off is slightly
   BETTER on ΔE and edge error (both intervals exclude zero, both tiny) and neutral on nodes
   and kinks. It helps in-sample (`petals`: 41 → 36 nodes, 2 → 0 kinks). A candidate for a
   narrower trigger, not removed.
-* **The corner veto almost never fires on emoji** (corner recovery moves on 1 case). On
+* **The corner veto changes 13 of the 100 emoji and costs a little there** (with it on,
+  slightly more kinks and ΔE; corner recovery moves on 1 case). On
   `checker` it decides the result: off, the fine quarter melts into dots (ΔE 4.60 vs 0.00,
   3522 vs 3556 corners kept).
 * **Rounded polygons and line tangents are trades:** fillets +2.4 nodes per icon for −1.0
@@ -8206,10 +8207,13 @@ Off minus on, mean per icon over the 100 held-out emoji [95% CI] · cases moved:
   `fillets` from the dials AFTER spreading `DEFAULT_PLANAR_FIT`, so the override was
   overwritten. It now ANDs the default (true), so production is unchanged: `how-base`
   (logolab-auto at `3469a57`) is byte-identical to `v6`'s 156 LogoLab SVGs (`cmp`), and the
-  fillets pair is `how-base` ⇄ `abl-fillets`. `lineCost` and `smoothPasses` are still
-  computed there and cannot be overridden with `--fit`.
+  fillets pair is `how-base` ⇄ `abl-fillets`. `smoothPasses` is still computed there and
+  ignores `--fit`; `lineCost` is overridden on gradient traces only.
+* **Not every row is out-of-sample.** throughPairs (§42.7) and lineTangents (§42.9) were
+  reviewed and accepted on these same 100 emoji, so their rows describe the set they were
+  tuned on. The other four were built on the in-sample fixtures.
 
 Also fixed while running these: `SegGrid` (geomScore) sized its hash at 8 px cells over the
 whole bounding box, and an OmniSVG output with one coordinate at 40004 in a 200-unit viewBox
 asked for ~160M bins ("Invalid array length", the v6 render-failed row). The cell now grows
-to keep ≤ 2²⁰ bins; at the rasters scored here it stays 8, so no other score moves.
+with the box's area, to about 2²⁰ bins on a square box (a long thin one still gets more); at the rasters scored here it stays 8, so no other score moves.

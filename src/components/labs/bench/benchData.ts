@@ -228,7 +228,7 @@ export const TOOL_REFS: Record<string, ToolRef> = {
     paper: 'P. Selinger. Potrace: a polygon-based tracing algorithm. 2003.',
     paperUrl: 'https://potrace.sourceforge.net/potrace.pdf',
     code: 'https://potrace.sourceforge.net/',
-    license: 'GPL-2.0',
+    license: 'GPL-2.0-or-later',
   },
   autotrace: { name: 'AutoTrace', code: 'https://github.com/autotrace/autotrace', license: 'GPL-2.0' },
   imagetracer: {
@@ -292,7 +292,7 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     label: 'VTracer swept',
     family: 'external',
     blurb:
-      'The best of a 54-config sweep of VTracer on held-out cases (bench/compare/sweepVtracer.ts): -p 6 -g 8 -f 2, cutout.',
+      'The best of a 54-config sweep of VTracer picked on the in-sample corpora only (bench/compare/sweepVtracer.ts): -p 6 -g 8 -f 2, cutout.',
   },
   'starvector-1b': {
     label: 'StarVector-1B',
