@@ -161,6 +161,9 @@ function distSqToSeg(px: number, py: number, s: Seg): number {
   return dx * dx + dy * dy
 }
 
+/** SegGrid's cap on cells: 1024 × 1024. */
+const MAX_GRID_BINS = 1 << 20
+
 /** Uniform spatial hash over segments — expanding-ring query, exact nearest segment. */
 class SegGrid {
   private cell: number
@@ -184,6 +187,11 @@ class SegGrid {
       this.minX = this.minY = 0
       maxX = maxY = 0
     }
+    // A wild coordinate (a model writing 40004 into a 200-unit viewBox) would size the grid
+    // past what an array can hold. The query is exact at any cell size, so a huge extent
+    // just gets coarser cells; at the rasters scored here (≤ 8000 px) the cell stays as given.
+    const area = Math.max(0, maxX - this.minX) * Math.max(0, maxY - this.minY)
+    this.cell = cell = Math.max(cell, Math.ceil(Math.sqrt(area / MAX_GRID_BINS)))
     this.cols = Math.max(1, Math.ceil((maxX - this.minX) / cell) + 1)
     this.rows = Math.max(1, Math.ceil((maxY - this.minY) / cell) + 1)
     this.bins = Array.from({ length: this.cols * this.rows }, () => [])

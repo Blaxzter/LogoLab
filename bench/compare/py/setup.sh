@@ -35,6 +35,8 @@ OMNISVG_MODEL=OmniSVG/OmniSVG1.1_4B
 OMNISVG_REV=117d4c4541839e02943554fe71c0a0d54fcef819
 QWEN_VL_MODEL=Qwen/Qwen2.5-VL-3B-Instruct
 QWEN_VL_REV=66285546d2b821cf421d4f5eb2576359d3770cd3
+IMAGETRACER_VERSION=1.2.6
+IMAGETRACER_INTEGRITY=sha512-LKJlnKmXFzDdh6IZtXTyBxXcCLTAkwgKYS+NMiPXiXVnlTLjQC8fq7U89laUSgHtypJB3TdMMDK4ecG5NI/Cgw==
 
 check() { # file sha256
   local got
@@ -63,6 +65,14 @@ if [ ! -f "$T/autotrace/autotrace-0.40.0/autotrace.exe" ] && command -v 7z >/dev
   check "$T/autotrace/dl/autotrace-0.40.0.zip" "$AUTOTRACE_SHA256"
   7z x -y -o"$T/autotrace/dl" "$T/autotrace/dl/autotrace-0.40.0.zip" >/dev/null
   7z x -y -o"$T/autotrace/autotrace-0.40.0" "$T/autotrace/dl/autotrace-0.40.0-20200219-setup.exe" '-x!$PLUGINSDIR' >/dev/null
+fi
+
+# ── ImageTracer.js (npm, public domain), loaded in-process by adapters/imagetracer.ts ───────
+if [ ! -f "$T/imagetracer/node_modules/imagetracerjs/imagetracer_v$IMAGETRACER_VERSION.js" ]; then
+  mkdir -p "$T/imagetracer"
+  got=$(npm view "imagetracerjs@$IMAGETRACER_VERSION" dist.integrity)
+  [ "$got" = "$IMAGETRACER_INTEGRITY" ] || { echo "imagetracerjs integrity mismatch: $got" >&2; exit 1; }
+  npm install --no-save --ignore-scripts --prefix "$T/imagetracer" "imagetracerjs@$IMAGETRACER_VERSION"
 fi
 
 # ── StarVector source + venv (requirements.lock is `pip freeze` of the venv the run used) ────

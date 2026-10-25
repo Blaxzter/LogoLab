@@ -22,6 +22,7 @@
 //   vtracer-default, vtracer-poster, vtracer-swept cargo install vtracer --version 0.6.4 --locked --root .bench-tools/vtracer
 //   potrace (mono lane), potrace-bin (every case) potrace-1.16.win64.zip → .bench-tools/potrace/
 //   autotrace-default, autotrace-swept             AutoTrace 0.40.0 win64 → .bench-tools/autotrace/ (adapters/external.ts)
+//   imagetracer-default, -fills, -swept           npm imagetracerjs@1.2.6 → .bench-tools/imagetracer/, in-process (adapters/imagetracer.ts)
 //   starvector-1b                                 .bench-tools/starvector-venv + HF weights (adapters/starvector.ts)
 //   omnisvg-4b                                    .bench-tools/omnisvg-venv + omnisvg-src + HF weights (adapters/omnisvg.ts)
 // Setup (all of it, pinned): bench/compare/py/setup.sh. Data: py/fetch_svgbench.py.
@@ -67,6 +68,7 @@ import {
   VTRACER_SWEPT,
 } from './adapters/external.ts'
 import { omnisvg, omnisvgProvenance } from './adapters/omnisvg.ts'
+import { imagetracerDefault, imagetracerFills, imagetracerSwept } from './adapters/imagetracer.ts'
 import { starvector, starvectorProvenance } from './adapters/starvector.ts'
 import type { CompareCase, CorpusId, ScoreRow, TraceInput, TraceResult, TracerAdapter } from './types.ts'
 
@@ -82,6 +84,9 @@ const ALL_TOOLS: TracerAdapter[] = [
   vtracerSwept,
   autotraceDefault,
   autotraceSwept,
+  imagetracerDefault,
+  imagetracerFills,
+  imagetracerSwept,
   starvector,
   omnisvg,
   potrace,
