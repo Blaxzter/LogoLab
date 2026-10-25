@@ -8172,3 +8172,44 @@ an `#EEE` rounded rect on white, read as ONE paper: edge error 18.45 px), the sh
 three are MONO calls; the tiled colour ablation traces them at 0.07 / 0.35 / 0.36 px. They
 are the page's published losses now. The shrimp and the worm are the near-colour family
 (§0 #18); the flag is a paper that is two colours.
+
+## 44. What each rule is worth: one-rule-off ablations on the held-out emoji (2026-10-25)
+
+`/labs/how` explains the tracer one rule at a time, and every rule it names is measured the
+same way: the benchmark re-run with that one rule off (`run.ts --tools logolab-auto --corpus
+svgemoji-v0,truth0,fluent2 --no-svgbench --fit <rule>=false --run abl-<rule>`), paired case
+by case against the rule on (run `v6`, `3a5b7b8`), 4000-resample bootstrap.
+`bench/compare/howItWorks.ts` freezes the census and one figure per rule; `--list` prints the
+cases each rule moves most, which is how the figures were picked.
+
+Off minus on, mean per icon over the 100 held-out emoji [95% CI] · cases moved:
+
+| rule off | ΔE | edge px | nodes | kinks |
+|---|---|---|---|---|
+| subpixelEdges | +0.014 [0.008, 0.020] · 100 | +0.016 [0.010, 0.023] · 100 | +1.9 [0.5, 3.4] · 88 | +1.8 [1.2, 2.4] · 85 |
+| cornerVeto | ≈0 · 13 | ≈0 · 13 | +0.2 · 6 | −0.1 · 4 |
+| fillets | +0.009 [0.006, 0.013] · 47 | +0.006 [0.005, 0.008] · 47 | −2.4 [−3.0, −1.8] · 46 | +1.0 [0.6, 1.5] · 27 |
+| throughPairs | +0.005 [0.002, 0.009] · 72 | +0.004 [0.001, 0.007] · 72 | +1.3 [0.1, 2.3] · 56 | +2.3 [1.8, 2.8] · 59 |
+| junctionReseat | −0.003 [−0.005, −0.002] · 53 | −0.002 [−0.003, −0.001] · 53 | +0.2 [−0.3, 0.6] · 32 | −0.2 [−0.4, 0.1] · 27 |
+| lineTangents | −0.001 [−0.003, 0.001] · 89 | −0.005 [−0.008, −0.002] · 89 | −0.3 [−0.8, 0.1] · 52 | +1.8 [1.5, 2.2] · 69 |
+
+* **The re-seat (§10.4) does not pay on the held-out set.** Switching it off is slightly
+  BETTER on ΔE and edge error (both intervals exclude zero, both tiny) and neutral on nodes
+  and kinks. It helps in-sample (`petals`: 41 → 36 nodes, 2 → 0 kinks). A candidate for a
+  narrower trigger, not removed.
+* **The corner veto almost never fires on emoji** (corner recovery moves on 1 case). On
+  `checker` it is everything: off, the fine quarter melts into dots (ΔE 4.60 vs 0.00,
+  3522 vs 3556 corners kept).
+* **Rounded polygons and line tangents are trades:** fillets +2.4 nodes per icon for −1.0
+  kinks; line tangents −1.8 kinks for +0.005 px edge error.
+* **`--fit fillets=false` measured nothing until `3469a57`.** `planarFitOptionsFor` set
+  `fillets` from the dials AFTER spreading `DEFAULT_PLANAR_FIT`, so the override was
+  overwritten. It now ANDs the default (true), so production is unchanged: `how-base`
+  (logolab-auto at `3469a57`) is byte-identical to `v6`'s 156 LogoLab SVGs (`cmp`), and the
+  fillets pair is `how-base` ⇄ `abl-fillets`. `lineCost` and `smoothPasses` are still
+  computed there and cannot be overridden with `--fit`.
+
+Also fixed while running these: `SegGrid` (geomScore) sized its hash at 8 px cells over the
+whole bounding box, and an OmniSVG output with one coordinate at 40004 in a 200-unit viewBox
+asked for ~160M bins ("Invalid array length", the v6 render-failed row). The cell now grows
+to keep ≤ 2²⁰ bins; at the rasters scored here it stays 8, so no other score moves.

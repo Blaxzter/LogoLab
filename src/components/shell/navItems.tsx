@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Columns2,
   Download,
   Eraser,
@@ -61,6 +62,13 @@ export const LAB_VIEWS: { to: string; label: string; blurb: string; icon: React.
     label: 'Gallery',
     blurb: 'How the tracer renders art it can’t be scored on: the brand-logo set, and anything you drop in.',
     icon: <Images size={15} />,
+  },
+  {
+    to: '/labs/how',
+    label: 'How it works',
+    blurb:
+      'The tracer one rule at a time: regions, shared edges, sub-pixel placement, corners, arcs and junctions, each shown switched off and on.',
+    icon: <BookOpen size={15} />,
   },
   {
     to: '/labs/bench',

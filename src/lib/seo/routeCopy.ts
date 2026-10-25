@@ -135,6 +135,22 @@ export const ROUTE_PAGES: RoutePage[] = [
     ],
   },
   {
+    path: '/labs/how',
+    nav: 'How the vectorizer works',
+    title: 'How the vectorizer works: regions, shared edges and tangent arcs | LogoLab',
+    description:
+      'How LogoLab turns a flat icon into an SVG without a trained model: regions, one shared edge per boundary, sub-pixel edges, corners, rounded shapes and junctions. Each rule is shown switched off and on, with what it is worth on 100 held-out emoji.',
+    h1: 'How the vectorizer works',
+    intro:
+      'LogoLab tries to recover the drawing a picture was made from. Every step is an explicit rule, and this page switches each one off to show what it does.',
+    points: [
+      'Pixels are grouped into regions by flat colour, by an ink cut, or by a smoothness segmentation for gradients.',
+      'Every boundary between two regions is one shared edge, so shapes cannot leave gaps or overlap.',
+      'Edges are placed between pixels using the anti-aliasing, then fitted as lines, tangent arcs and curves.',
+      'Each rule is measured by switching it off and re-running the benchmark on 100 held-out emoji.',
+    ],
+  },
+  {
     path: '/labs/bench',
     nav: 'Vectorizer benchmark',
     title: 'Why pixel scores can’t judge an SVG: a vectorizer benchmark | LogoLab',

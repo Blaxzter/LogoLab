@@ -40,6 +40,7 @@ const LabsIndex = lazy(() => import('./components/labs/LabsIndex'))
 const PipelineLab = lazy(() => import('./components/labs/PipelineLab'))
 const AbLab = lazy(() => import('./components/labs/AbLab'))
 const BenchLab = lazy(() => import('./components/labs/bench/BenchLab'))
+const HowLab = lazy(() => import('./components/labs/how/HowLab'))
 // Workbench scores traces against their source art over a switchable corpus;
 // raster-only art lives in the Gallery, revision comparison in Feature A/B.
 const Workbench = lazy(() => import('./components/labs/workbench/Workbench'))
@@ -300,6 +301,7 @@ export function App() {
                 <Route path="/labs/pipeline" element={<PipelineLab />} />
                 <Route path="/labs/ab" element={<AbLab />} />
                 <Route path="/labs/bench" element={<BenchLab />} />
+                <Route path="/labs/how" element={<HowLab />} />
                 <Route path="/labs/workbench" element={<Workbench />} />
                 <Route path="/labs/gallery" element={<GalleryLab />} />
                 <Route path="/labs/profiler" element={<ProfilerLab />} />

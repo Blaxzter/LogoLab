@@ -306,8 +306,18 @@ const val = (m: Record<string, unknown>, k: string): number | null =>
  * Both kinds of score for one case, the winner of each row marked. The argument of the whole
  * benchmark is that the two halves of this table disagree, so they are drawn as two halves.
  */
-export function ScoreTable({ columns }: { columns: { tool: string; metrics: Record<string, unknown> }[] }) {
-  const rows = [...PICTURE_ROWS, ...DRAWING_ROWS]
+export function ScoreTable({
+  columns,
+  labels,
+  rows: drawing,
+}: {
+  columns: { tool: string; metrics: Record<string, unknown> }[]
+  labels?: Record<string, string>
+  /** Drawing rows only, in place of both halves: for runs scored without SVG-Bench. */
+  rows?: ScoreRow[]
+}) {
+  const picture = drawing ? [] : PICTURE_ROWS
+  const rows = drawing ?? [...PICTURE_ROWS, ...DRAWING_ROWS]
   return (
     <div className="mt-3 overflow-x-auto rounded-lg border border-line bg-surface">
       <table className="w-full min-w-[460px] text-xs tabular-nums">
@@ -316,7 +326,7 @@ export function ScoreTable({ columns }: { columns: { tool: string; metrics: Reco
             <th className="px-2.5 py-1.5 text-left font-medium" />
             {columns.map((c) => (
               <th key={c.tool} className="px-2.5 py-1.5 text-right font-medium">
-                {toolInfo(c.tool).label}
+                {labels?.[c.tool] ?? toolInfo(c.tool).label}
               </th>
             ))}
           </tr>
@@ -330,16 +340,16 @@ export function ScoreTable({ columns }: { columns: { tool: string; metrics: Reco
             return (
               <tr
                 key={r.key}
-                className={`border-t border-line ${i === PICTURE_ROWS.length ? 'border-t-2 border-t-line-strong' : ''}`}
+                className={`border-t border-line ${i === picture.length && picture.length ? 'border-t-2 border-t-line-strong' : ''}`}
               >
                 <td className="whitespace-nowrap px-2.5 py-1.5 text-muted">
                   {r.label}
-                  {i === 0 && (
+                  {i === 0 && picture.length > 0 && (
                     <span className="ml-1.5 rounded bg-surface-3 px-1 py-0.5 text-[0.6rem] uppercase tracking-wide">
                       picture
                     </span>
                   )}
-                  {i === PICTURE_ROWS.length && (
+                  {i === picture.length && (
                     <span className="ml-1.5 rounded bg-accent-soft px-1 py-0.5 text-[0.6rem] uppercase tracking-wide text-accent">
                       drawing
                     </span>

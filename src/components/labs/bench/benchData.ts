@@ -208,6 +208,56 @@ export interface ToolInfo {
   blurb: string
 }
 
+/** Where a tool comes from: its paper when it has one, and its code. */
+export interface ToolRef {
+  /** The tool's name, without a configuration. */
+  name: string
+  /** Authors, title, venue and year, as cited. Absent for a tool with no paper. */
+  paper?: string
+  paperUrl?: string
+  code: string
+  license: string
+}
+
+/** One entry per tool, however many configurations it runs in; `toolRef` maps a row to it. */
+export const TOOL_REFS: Record<string, ToolRef> = {
+  logolab: { name: 'LogoLab', code: 'https://github.com/Blaxzter/LogoLab', license: 'MIT' },
+  vtracer: { name: 'VTracer', code: 'https://github.com/visioncortex/vtracer', license: 'MIT' },
+  potrace: {
+    name: 'Potrace',
+    paper: 'P. Selinger. Potrace: a polygon-based tracing algorithm. 2003.',
+    paperUrl: 'https://potrace.sourceforge.net/potrace.pdf',
+    code: 'https://potrace.sourceforge.net/',
+    license: 'GPL-2.0',
+  },
+  autotrace: { name: 'AutoTrace', code: 'https://github.com/autotrace/autotrace', license: 'GPL-2.0' },
+  imagetracer: {
+    name: 'ImageTracer.js',
+    code: 'https://github.com/jankovicsandras/imagetracerjs',
+    license: 'Unlicense',
+  },
+  starvector: {
+    name: 'StarVector',
+    paper:
+      'J. A. Rodriguez et al. StarVector: generating scalable vector graphics code from images and text. CVPR 2025.',
+    paperUrl: 'https://arxiv.org/abs/2312.11556',
+    code: 'https://github.com/joanrod/star-vector',
+    license: 'Apache-2.0',
+  },
+  omnisvg: {
+    name: 'OmniSVG',
+    paper: 'Y. Yang et al. OmniSVG: a unified scalable vector graphics generation model. NeurIPS 2025.',
+    paperUrl: 'https://arxiv.org/abs/2504.06263',
+    code: 'https://github.com/OmniSVG/OmniSVG',
+    license: 'Apache-2.0',
+  },
+}
+
+/** The reference for a result row: `vtracer-swept` → VTracer, `logolab-abl-…` → LogoLab. */
+export function toolRef(tool: string): ToolRef | undefined {
+  return TOOL_REFS[tool.split('-')[0]]
+}
+
 /** Descriptions mirror bench/compare/adapters/*. A tool missing here still shows, by id. */
 export const TOOL_INFO: Record<string, ToolInfo> = {
   'logolab-auto': {
@@ -261,6 +311,24 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     family: 'external',
     blurb:
       'The best of a 32-config sweep of AutoTrace (colour count, despeckle level, error threshold) picked on the in-sample corpora only (bench/compare/sweepAutotrace.ts), as VTracer swept is.',
+  },
+  'imagetracer-default': {
+    label: 'ImageTracer',
+    family: 'external',
+    blurb:
+      'ImageTracer.js 1.2.6 with its default preset: 16 colours, then each colour layer traced to lines and quadratic curves. It strokes every path 1 px in its own colour to hide the seams between layers, so its geometry can’t be scored; the picture can.',
+  },
+  'imagetracer-fills': {
+    label: 'ImageTracer fills',
+    family: 'external',
+    blurb:
+      'ImageTracer.js default preset with its own strokewidth 0 switch: the same shapes without the seam-hiding stroke, so the drawing metrics can be read on it.',
+  },
+  'imagetracer-swept': {
+    label: 'ImageTracer swept',
+    family: 'external',
+    blurb:
+      'The best of a 24-config sweep of ImageTracer.js (colours, line and curve thresholds, path omission, always unstroked) picked on the in-sample corpora only (bench/compare/sweepImagetracer.ts), as VTracer swept is.',
   },
   'omnisvg-4b': {
     label: 'OmniSVG-4B',
