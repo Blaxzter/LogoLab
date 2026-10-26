@@ -5,7 +5,7 @@
 // ONE scoring path (score.ts) — LogoLab included, via its serialized string — so no tool is
 // measured on an in-memory shortcut the others do not get.
 
-export type CorpusId = 'truth0' | 'fluent2' | 'svgemoji-v0' | 'svgemoji'
+export type CorpusId = 'truth0' | 'fluent2' | 'svgemoji-v0' | 'svgemoji' | 'logos-cc0'
 
 export interface CompareCase {
   /** Unique within the run: `<corpus>/<name>`. */

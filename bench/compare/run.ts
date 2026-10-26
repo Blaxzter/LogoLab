@@ -6,9 +6,10 @@
 //
 // Why authored SVGs: the answer sheet has to be the vector art that produced the pixels, or
 // "correct" cannot be told from "like the other tracer". StarVector's SVG-Bench scores the
-// same way (it rasterizes the dataset's source SVG), so the headline corpus is ITS published
-// held-out split — svg-emoji test, frozen in manifests/ — and the in-sample LogoLab corpora
-// (truth tier 0, Fluent flat twins) run as a labelled development lane. See corpus.ts.
+// same way (it rasterizes the dataset's source SVG), so the held-out corpora are ITS published
+// split — svg-emoji test — and, because this is a LOGO tool, 300 CC0 brand marks from
+// gilbarbara/logos (logos-cc0, the first headline), both frozen in manifests/; the in-sample
+// LogoLab corpora (truth tier 0, Fluent flat twins) run as a labelled development lane. See corpus.ts.
 //
 // Every tool gets the same input — the case's authored SVG rasterized with resvg on white at
 // --res (the truth gate's own raster) — and every output goes through ONE scoring path
@@ -25,7 +26,8 @@
 //   imagetracer-default, -fills, -swept           npm imagetracerjs@1.2.6 → .bench-tools/imagetracer/, in-process (adapters/imagetracer.ts)
 //   starvector-1b                                 .bench-tools/starvector-venv + HF weights (adapters/starvector.ts)
 //   omnisvg-4b                                    .bench-tools/omnisvg-venv + omnisvg-src + HF weights (adapters/omnisvg.ts)
-// Setup (all of it, pinned): bench/compare/py/setup.sh. Data: py/fetch_svgbench.py.
+// Setup (all of it, pinned): bench/compare/py/setup.sh. Data: py/fetch_svgbench.py (emoji),
+// fetchLogos.ts (logos-cc0, the logo headline).
 // --skip-tools a,b drops tools for one run (e.g. starvector on the 668-row corpus).
 //
 // Output: .bench-tools/results/<run>/ — cases/<corpus>/<case>/{truth.png,<tool>.svg,<tool>.png},
@@ -379,6 +381,11 @@ The case renders (cases/*/*/truth.png and every tool's render of them) are deriv
     (twitter/twemoji is archived).
   - OpenMoji: HfG Schwäbisch Gmünd, CC-BY-SA 4.0 (https://openmoji.org).
   - Noto Emoji: Google, Apache-2.0 (https://github.com/googlefonts/noto-emoji).
+- logos-cc0: gilbarbara/logos (https://github.com/gilbarbara/logos), the commit pinned in
+  bench/compare/manifests/logos-cc0.json, whose LICENSE.txt is CC0 1.0 Universal
+  (https://creativecommons.org/publicdomain/zero/1.0/). CC0 covers the artwork only: the
+  logos are trademarks of their respective owners, no endorsement is implied, and they are
+  rendered and re-traced here solely to measure vectorizers.
 - fluent2: Microsoft Fluent UI Emoji, MIT (https://github.com/microsoft/fluentui-emoji).
 - truth0: LogoLab fixtures.
 

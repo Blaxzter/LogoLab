@@ -10,6 +10,15 @@
 //                refused (gtRefusal) and only pixel metrics apply there.
 //   truth0       the truth gate's tier 0 — handcrafted, one failure mode each. IN-SAMPLE.
 //   fluent2      every 4th tier-2 Fluent flat twin (MIT), by name. IN-SAMPLE.
+//   logos-cc0    HEADLINE for a LOGO tool. 300 brand marks from gilbarbara/logos at a pinned
+//                commit (LICENSE.txt CC0 1.0), frozen by bench/compare/fetchLogos.ts into
+//                manifests/logos-cc0.json: stratified by colour count × gradients × wordmark
+//                vs symbol, ranked by sha1 within a stratum (rules: logosCc0.ts). Excluded
+//                with a reason in the manifest: embedded rasters, live text, external refs,
+//                no resvg render, blank on white, and brands in the in-sample gallery corpus.
+//                Held out. TRADEMARKS: CC0 covers the artwork, not the marks — they remain
+//                their owners'; the benchmark renders and re-traces them for measurement
+//                only, and the files are never committed (.bench-tools/ is gitignored).
 //
 // A case whose ground truth svgGround refuses is KEPT: pixel metrics still apply, and the
 // row says why geometry is n/a. Dropping it would quietly select the corpus by scorability.
@@ -21,8 +30,8 @@ import { tierCases } from '../truthCorpus.ts'
 import { DATASETS, REPO } from './paths.ts'
 import type { CompareCase, CorpusId } from './types.ts'
 
-export const CORPORA: CorpusId[] = ['svgemoji-v0', 'svgemoji', 'truth0', 'fluent2']
-export const DEFAULT_CORPORA: CorpusId[] = ['svgemoji-v0', 'truth0', 'fluent2']
+export const CORPORA: CorpusId[] = ['logos-cc0', 'svgemoji-v0', 'svgemoji', 'truth0', 'fluent2']
+export const DEFAULT_CORPORA: CorpusId[] = ['logos-cc0', 'svgemoji-v0', 'truth0', 'fluent2']
 
 interface ManifestRow {
   file: string
@@ -74,8 +83,54 @@ function svgEmoji(v0Only: boolean): CompareCase[] {
     })
 }
 
+interface LogoRow {
+  file: string
+  sha256: string
+  url: string
+  strata: { gradients: boolean } | null
+  excluded: string | null
+  sampled: boolean
+}
+
+function logosCc0(): CompareCase[] {
+  const manifest = JSON.parse(readFileSync(join(REPO, 'bench', 'compare', 'manifests', 'logos-cc0.json'), 'utf8'))
+  const dir = join(DATASETS, 'gilbarbara-logos', manifest.commit, 'logos')
+  if (!existsSync(dir)) {
+    console.warn('  gilbarbara/logos not fetched — run: node --experimental-strip-types bench/compare/fetchLogos.ts')
+    return []
+  }
+  const rows: LogoRow[] = manifest.rows
+  return rows
+    .filter((r) => r.sampled && !r.excluded)
+    .map((r) => {
+      const svgPath = join(dir, r.file)
+      const name = r.file.replace(/\.svg$/, '')
+      // As svgEmoji(): the scored bytes are the manifest's, or the run stops.
+      if (!existsSync(svgPath)) throw new Error(`logos-cc0: ${r.file} missing — re-run fetchLogos.ts`)
+      const got = createHash('sha256').update(readFileSync(svgPath)).digest('hex')
+      if (got !== r.sha256)
+        throw new Error(
+          `logos-cc0: ${r.file} sha256 ${got.slice(0, 12)} ≠ manifest ${r.sha256.slice(0, 12)} — refusing`,
+        )
+      const gradients = r.strata?.gradients ?? false
+      return {
+        id: `logos-cc0/${name}`,
+        corpus: 'logos-cc0' as const,
+        name,
+        svgPath,
+        gradients,
+        tier: gradients ? 1 : 2,
+        heldOut: true,
+        license: 'CC0-1.0',
+        source: `${r.url} sha256:${r.sha256.slice(0, 12)}`,
+      }
+    })
+}
+
 export function loadCorpus(id: CorpusId): CompareCase[] {
   switch (id) {
+    case 'logos-cc0':
+      return logosCc0()
     case 'svgemoji-v0':
       return svgEmoji(true)
     case 'svgemoji':

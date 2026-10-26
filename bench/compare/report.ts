@@ -16,8 +16,28 @@
 //     rasterize_svg does the same).
 //   • the paper's rows come with the caveat that they are a different protocol.
 //   • a row with n < 10 is marked not comparable.
+//   • corpora print HEADLINE first (logos-cc0: this is a logo tool), then the other held-out
+//     corpora, then the in-sample ones — whatever order the run listed them in. An in-sample
+//     corpus can explain a result; it is never the first table a reader meets.
 
 import type { ScoreRow } from './types.ts'
+
+/** Held-out corpora that lead the summary, in this order. */
+export const HEADLINE_CORPORA = ['logos-cc0', 'svgemoji-v0']
+
+/** Headline corpora first, then held out, then in-sample; ties keep the run's order. */
+export function corpusOrder(rows: Pick<ScoreRow, 'corpus' | 'heldOut'>[]): string[] {
+  const seen = [...new Set(rows.map((r) => r.corpus as string))]
+  const held = new Map(rows.map((r) => [r.corpus as string, r.heldOut]))
+  const rank = (c: string): number => {
+    const h = HEADLINE_CORPORA.indexOf(c)
+    return h >= 0 ? h : held.get(c) ? HEADLINE_CORPORA.length : HEADLINE_CORPORA.length + 1
+  }
+  return seen
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i)
+    .map(({ c }) => c)
+}
 
 const HEADLINE = 'logolab-auto'
 const ABLATION = /^logolab-abl-/
@@ -152,16 +172,29 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
     '- `ms` is wall time: in-process and warm for LogoLab; process spawn + PNG/SVG file I/O for VTracer / Potrace; ' +
       'GPU generation only for StarVector. Not comparable across those groups.',
   )
-  out.push(
-    "- Scope: svgemoji-v0 is held out from LogoLab's development, but it is selected INSIDE LogoLab's niche — Twemoji " +
-      'only, fill-only, no gradients / clips / strokes (fetch_svgbench.py). The full 668-row split is a separate run.',
-  )
+  const corpora = corpusOrder(rows)
+  if (corpora.includes('svgemoji-v0'))
+    out.push(
+      "- Scope: svgemoji-v0 is held out from LogoLab's development, but it is selected INSIDE LogoLab's niche — Twemoji " +
+        'only, fill-only, no gradients / clips / strokes (fetch_svgbench.py). The full 668-row split is a separate run.',
+    )
+  if (corpora.includes('logos-cc0'))
+    out.push(
+      '- Scope: logos-cc0 is 300 brand marks from gilbarbara/logos (CC0 artwork; the marks stay their owners’ ' +
+        'trademarks), stratified by colour count × gradients × wordmark/symbol, NOT selected for LogoLab’s niche: ' +
+        'strokes, masks and filters are kept (pixel metrics only, the refusal is counted below). Excluded with a ' +
+        'reason in manifests/logos-cc0.json: embedded rasters, live text, external refs, blank-on-white, and brands ' +
+        'in the in-sample gallery corpus.',
+    )
   out.push('')
 
-  const corpora = [...new Set(rows.map((r) => r.corpus))]
   for (const corpus of corpora) {
     const cr = rows.filter((r) => r.corpus === corpus)
-    const held = cr[0]?.heldOut ? 'held out' : 'IN-SAMPLE (development)'
+    const held = cr[0]?.heldOut
+      ? HEADLINE_CORPORA.includes(corpus)
+        ? 'held out, HEADLINE'
+        : 'held out'
+      : 'IN-SAMPLE (development)'
     const cases = [...new Set(cr.map((r) => r.caseId))]
     out.push(`## ${corpus} — ${cases.length} cases, ${held}`)
     out.push('')
@@ -378,8 +411,18 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
         out.push(`- trace geometry n/a: ${reasons(na, (r) => `${r.tool} ${(r.geomRefusal ?? '').split(' — ')[0]}`)}`)
       if (degraded.length)
         out.push(`- placeholder / truncated outputs (scored as-is): ${reasons(degraded, (r) => r.tool)}`)
-      if (gtNa.length)
-        out.push(`- ground truth refused (pixel metrics only): ${new Set(gtNa.map((r) => r.caseId)).size} cases`)
+      if (gtNa.length) {
+        // Per case, by the refusal's first clause ("masked geometry (mask)" — the reason, not the tags).
+        const perCase = new Map(gtNa.map((r) => [r.caseId, (r.gtRefusal ?? '').split(' (')[0].split(' — ')[0]]))
+        const h = new Map<string, number>()
+        for (const v of perCase.values()) h.set(v, (h.get(v) ?? 0) + 1)
+        out.push(
+          `- ground truth refused (pixel metrics only): ${perCase.size} cases — ${[...h]
+            .sort((a, b) => b[1] - a[1])
+            .map(([k, v]) => `${k} ×${v}`)
+            .join('; ')}`,
+        )
+      }
     }
     out.push('')
   }
