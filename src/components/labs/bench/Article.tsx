@@ -214,13 +214,14 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
             </li>
             <li>
               LogoLab runs as its MCP server ships, with no per-image tuning. VTracer runs at its defaults and at the
-              best of a 54-configuration sweep picked on the in-sample cases only. StarVector uses the generation
-              settings from its own repository; the 8B model does not fit in 16 GB of GPU memory. Potrace gets a
-              binarised image, as in SVG-Bench.
+              best of a 54-configuration sweep; AutoTrace and ImageTracer run at the best of their own sweeps (32 and 24
+              configurations). Every sweep was picked on the in-sample cases only. StarVector and OmniSVG use the
+              generation settings from their own repositories; StarVector’s 8B model does not fit in 16 GB of GPU
+              memory. Potrace gets a binarised image, as in SVG-Bench.
             </li>
             <li>
-              A file that fails to parse or render counts as a failure and stays in the results. Comparisons are paired
-              by case, with 95% bootstrap intervals.
+              A tool that returns no file, or a file that fails to parse or render, counts as a failure and is scored as
+              a blank white image, as SVG-Bench does. Comparisons are paired by case, with 95% bootstrap intervals.
             </li>
             <li>
               These numbers can’t be compared with the paper’s table. SVG-Bench rendered with cairosvg and fed the

@@ -30,7 +30,7 @@ import {
 import type { ShowMetrics, Showcase } from '../../src/components/labs/bench/showcaseTypes.ts'
 
 const argv = process.argv.slice(2)
-const RUN = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : 'v5'
+const RUN = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : 'v7'
 const CORPUS = 'svgemoji-v0'
 const OUT_PUBLIC = join(REPO, 'public', 'benchmark')
 const OUT_DATA = join(REPO, 'src', 'components', 'labs', 'bench', 'showcase.generated.ts')
@@ -76,7 +76,16 @@ const EXAMPLES: { slug: string; caseId: string; tools: string[]; why: string }[]
 ]
 
 /** Tools in the headline table, in the page's order. */
-const TABLE_TOOLS = ['logolab-auto', 'vtracer-default', 'vtracer-swept', 'starvector-1b', 'potrace-bin']
+const TABLE_TOOLS = [
+  'logolab-auto',
+  'vtracer-default',
+  'vtracer-swept',
+  'autotrace-swept',
+  'imagetracer-swept',
+  'starvector-1b',
+  'omnisvg-4b',
+  'potrace-bin',
+]
 const ROW_KEYS = [
   'sbDino',
   'sbLpips',

@@ -239,7 +239,7 @@ export default function BenchLab() {
     <LabPage
       storageKey="lab:bench"
       title="Benchmark"
-      subtitle="LogoLab against VTracer, Potrace and StarVector, scored against the authored SVG"
+      subtitle="LogoLab against classic tracers and image-to-SVG models, scored against the authored SVG"
       about={<About />}
       controls={controls}
       viewControls={tab === 'cases'}

@@ -126,9 +126,9 @@ export function HowToRun({ compact = false }: { compact?: boolean }) {
     <div className={`mx-auto max-w-3xl px-4 text-sm leading-relaxed text-ink-2 ${compact ? 'py-6' : 'py-10'}`}>
       <h2 className="text-base font-semibold text-ink">This tab reads a local run</h2>
       <p className="mt-2">
-        The full results drive VTracer, Potrace and a 1B-parameter model on a GPU, and their renders are of art that is
-        not redistributed, so they never ship with the site. The Overview tab is the frozen summary. To explore every
-        case, make a run from a checkout:
+        The full results drive four classic tracers and two image-to-SVG models that need a GPU, and their renders are
+        of art that is not redistributed, so they never ship with the site. The Overview tab is the frozen summary. To
+        explore every case, make a run from a checkout:
       </p>
       <pre className="mt-3 overflow-x-auto rounded-lg border border-line bg-surface-2 p-3 font-mono text-xs">
         {`bash bench/compare/py/setup.sh            # vtracer, potrace, StarVector venv, pinned

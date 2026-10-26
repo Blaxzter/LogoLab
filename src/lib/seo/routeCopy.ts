@@ -155,7 +155,7 @@ export const ROUTE_PAGES: RoutePage[] = [
     nav: 'Vectorizer benchmark',
     title: 'Why pixel scores can’t judge an SVG: a vectorizer benchmark | LogoLab',
     description:
-      'LogoLab, VTracer, Potrace and StarVector on 100 held-out SVG-Bench emoji, scored against the authored SVG. Colour error, edge error, nodes and kinks sit next to DINO, LPIPS and SSIM, with the cases where each metric gets it wrong.',
+      'LogoLab, VTracer, Potrace, AutoTrace, ImageTracer, StarVector and OmniSVG on 100 held-out SVG-Bench emoji, scored against the authored SVG. Colour error, edge error, nodes and kinks sit next to DINO, LPIPS and SSIM, with the cases where each metric gets it wrong.',
     h1: 'Pixel scores can’t see the SVG',
     intro:
       'The published image-to-SVG benchmarks render each SVG back to pixels and compare pictures. On flat icons that comparison saturates, so traces with three times the nodes and visibly kinked curves get the same score. This benchmark also scores the drawing, against the vector art that produced the image.',
