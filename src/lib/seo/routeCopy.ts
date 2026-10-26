@@ -29,7 +29,7 @@ export const ROUTE_PAGES: RoutePage[] = [
     nav: 'Home',
     title: 'LogoLab — free image to SVG vectorizer, logo preview & icon export',
     description:
-      'Free online vectorizer: turn a PNG or JPG logo into a clean SVG in your browser — no upload, no sign-up, no watermark. Preview it in real contexts, remove the background, and export favicons and PWA icons.',
+      'Free vectorizer: turn a PNG or JPG logo into a clean SVG in your browser, with no upload, sign-up or watermark. Then remove the background, preview it in use and export favicons and PWA icons.',
     h1: 'LogoLab — free online image to SVG vectorizer',
     intro:
       'Convert a PNG, JPG or WebP logo or icon into a clean, editable SVG, right in your browser. No upload, no sign-up, no watermark, free and open source (MIT).',
@@ -137,9 +137,9 @@ export const ROUTE_PAGES: RoutePage[] = [
   {
     path: '/labs/how',
     nav: 'How the vectorizer works',
-    title: 'How the vectorizer works: regions, shared edges and tangent arcs | LogoLab',
+    title: 'How the vectorizer works: regions, shared edges, arcs | LogoLab',
     description:
-      'How LogoLab turns a flat icon into an SVG without a trained model: regions, one shared edge per boundary, sub-pixel edges, corners, rounded shapes and junctions. Each rule is shown switched off and on, with what it is worth on 100 held-out emoji.',
+      'LogoLab traces flat icons with explicit rules (shared edges, sub-pixel edges, corners, junctions) instead of a trained model. Each one is switched off here and measured on 100 held-out emoji.',
     h1: 'How the vectorizer works',
     intro:
       'LogoLab tries to recover the drawing a picture was made from. Every step is an explicit rule, and this page switches the main ones off to show what they do.',
@@ -155,7 +155,7 @@ export const ROUTE_PAGES: RoutePage[] = [
     nav: 'Vectorizer benchmark',
     title: 'Why pixel scores can’t judge an SVG: a vectorizer benchmark | LogoLab',
     description:
-      'LogoLab, VTracer, Potrace, AutoTrace, ImageTracer, StarVector and OmniSVG on 100 held-out SVG-Bench emoji, scored against the authored SVG. Colour error, edge error, nodes and kinks sit next to DINO, LPIPS and SSIM, with the cases where each metric gets it wrong.',
+      'LogoLab, VTracer, Potrace, AutoTrace, ImageTracer, StarVector and OmniSVG on 100 held-out SVG-Bench emoji, scored against the authored SVG, with the cases where DINO, LPIPS and SSIM get it wrong.',
     h1: 'Pixel scores can’t see the SVG',
     intro:
       'The published image-to-SVG benchmarks render each SVG back to pixels and compare pictures. On flat icons that comparison saturates, so traces with three times the nodes and visibly kinked curves get the same score. This benchmark also scores the drawing, against the vector art that produced the image.',
