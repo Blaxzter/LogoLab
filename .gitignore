@@ -57,3 +57,6 @@ pnpm-debug.log*
 
 # local benchmark tools (vtracer, potrace, models, venvs)
 .bench-tools/
+
+# howItWorks.ts staging folder (swapped into public/how-it-works when a run passes)
+public/how-it-works.next/

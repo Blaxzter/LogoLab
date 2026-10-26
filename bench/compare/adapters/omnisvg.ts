@@ -12,6 +12,7 @@
 // place of cairosvg, weights_only loading, torch 2.5.1) are listed in the runner's header.
 // An image with no valid candidate is a failure row.
 
+import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -58,7 +59,9 @@ export const omnisvg: TracerAdapter = {
     mkdirSync(inDir, { recursive: true })
     const byStem = new Map<string, TraceInput>()
     for (const i of inputs) {
-      const stem = safe(i.case.id)
+      // The PNG's hash is in the name: the runner skips a name it already has (--skip-existing),
+      // so a re-used run directory must not hand back an output made from a different raster.
+      const stem = `${safe(i.case.id)}__${createHash('sha1').update(readFileSync(i.pngPath)).digest('hex').slice(0, 10)}`
       byStem.set(stem, i)
       copyFileSync(i.pngPath, join(inDir, `${stem}.png`))
     }

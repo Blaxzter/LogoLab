@@ -11,7 +11,8 @@
 //   • every median says the n behind it; a "common cases" line repeats the geometry medians
 //     over the cases every main tool could be scored on, so survivorship cannot flatter the
 //     weakest tool.
-//   • SVG-Bench means include render failures, scored as a blank white image (SVG-Bench's
+//   • every pixel median and SVG-Bench mean includes the failures (no output, or one resvg
+//     cannot draw), scored as a blank white image (SVG-Bench's
 //     rasterize_svg does the same).
 //   • the paper's rows come with the caveat that they are a different protocol.
 //   • a row with n < 10 is marked not comparable.
@@ -108,8 +109,8 @@ const PAIRED: [keyof ScoreRow, string, boolean, number][] = [
   ['sbMse', 'MSE', true, 5],
 ]
 
-/** Rows that carry a render (ok, or a render failure scored as white). */
-const rendered = (rs: ScoreRow[]): ScoreRow[] => rs.filter((r) => r.status !== 'trace-failed')
+/** Rows that carry pixel metrics: every row, a failure scored as white (score.ts scorePixels). */
+const rendered = (rs: ScoreRow[]): ScoreRow[] => rs.filter((r) => r.meanDeltaE !== undefined)
 
 export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>): string {
   const out: string[] = []
@@ -144,7 +145,9 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
       'query nor a match target. Parsimony leaves canvas-edge boundary out on both sides (a full-canvas background ' +
       'path is otherwise ~2k px of free length); `nodes ÷ GT` is the raw anchor ratio.',
   )
-  out.push('- Render failures are scored as a blank white image (SVG-Bench does the same) and still counted in `fail`.')
+  out.push(
+    '- Failures (no output, or one resvg cannot draw) are scored as a blank white image (SVG-Bench does the same) and still counted in `fail`.',
+  )
   out.push(
     '- `ms` is wall time: in-process and warm for LogoLab; process spawn + PNG/SVG file I/O for VTracer / Potrace; ' +
       'GPU generation only for StarVector. Not comparable across those groups.',
@@ -241,7 +244,7 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
     // ── SVG-Bench
     out.push('')
     out.push(
-      'SVG-Bench metrics (means over every rendered row, render failures as white; ↑ better: DINO, SSIM; ↓ better: LPIPS, MSE). ' +
+      'SVG-Bench metrics (means over every row, failures as a white render; ↑ better: DINO, SSIM; ↓ better: LPIPS, MSE). ' +
         '`tokens` is StarCoder2 on the SVG FILE as scored; for StarVector that is the post-processed file (cairosvg-repaired ' +
         "on `cleaned` rows), so `model tok` is the model's own generated-token count (its StarCoder tokenizer, raw text):",
     )
@@ -369,7 +372,7 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
       }
       if (failed.length)
         out.push(
-          `- failures (pixel metrics scored as a white render): ${reasons(failed, (r) => `${r.tool} ${r.status}: ${r.error ?? ''}`.slice(0, 120))}`,
+          `- failures (pixel metrics from a white render, or the output's own where only the geometry scorer failed): ${reasons(failed, (r) => `${r.tool} ${r.status}: ${r.error ?? ''}`.slice(0, 120))}`,
         )
       if (na.length)
         out.push(`- trace geometry n/a: ${reasons(na, (r) => `${r.tool} ${(r.geomRefusal ?? '').split(' — ')[0]}`)}`)

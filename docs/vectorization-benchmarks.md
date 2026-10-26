@@ -8208,15 +8208,17 @@ Off minus on, mean per icon over the 100 held-out emoji [95% CI] · cases moved:
   overwritten. It now ANDs the default (true), so production is unchanged: `how-base`
   (logolab-auto at `3469a57`) is byte-identical to `v6`'s 156 LogoLab SVGs (`cmp`), and the
   fillets pair is `how-base` ⇄ `abl-fillets`. `smoothPasses` is still computed there and
-  ignores `--fit`; `lineCost` is overridden on gradient traces only.
+  ignored `--fit`, and `lineCost` was overridden on gradient traces only, so `run.ts` now
+  refuses both keys rather than record an override it did not measure.
 * **Not every row is out-of-sample.** throughPairs (§42.7) and lineTangents (§42.9) were
   reviewed and accepted on these same 100 emoji, so their rows describe the set they were
   tuned on. The other four were built on the in-sample fixtures.
 
 Also fixed while running these: `SegGrid` (geomScore) sized its hash at 8 px cells over the
 whole bounding box, and an OmniSVG output with one coordinate at 40004 in a 200-unit viewBox
-asked for ~160M bins ("Invalid array length", the v6 render-failed row). The cell now grows
-with the box's area, to about 2²⁰ bins on a square box (a long thin one still gets more); at the rasters scored here it stays 8, so no other score moves.
+asked for ~160M bins ("Invalid array length", the v6 render-failed row). The cell now doubles
+until the grid holds ≤ 2²⁰ bins, long thin boxes included; at the rasters scored here it
+stays 8, so no other score moves.
 
 **PolyFit (Dominici et al. 2020) was tried and is not in the table.** The only binary is the
 `prerelease-paper` Windows build (github.com/dedoardo/polyfit, MIT). It runs its own

@@ -17,7 +17,10 @@
 //            (paint gate on gradient tier 0 only).
 //
 // A render resvg refuses is scored as an all-white raster (status stays 'render-failed'):
-// SVG-Bench's rasterize_svg does the same, and dropping the row would flatter the tool.
+// SVG-Bench's rasterize_svg does the same, and dropping the row would flatter the tool. A
+// trace that produced no SVG, and an output the geometry scorer crashed on, get the same
+// pixel metrics through scorePixels (white, or the output's own render), so every failure
+// row carries a ΔE and enters every pixel median and mean.
 //
 // shimDoc is BOUNDARY-ONLY: every item is fill-rule nonzero with the element's own fill
 // attribute. Nothing rasterizes it (paint is always the resvg render); do not start to.
@@ -43,6 +46,51 @@ export interface Truth {
 }
 
 const EMPTY: EditableDoc = { viewBox: [0, 0, 1, 1], items: [] }
+
+/** Pixel metrics only, for a failure row: the output's render when there is one resvg can
+ *  draw, else a blank white image (SVG-Bench's rule). No geometry; status and error as given. */
+export function scorePixels(
+  c: CompareCase,
+  truth: Truth,
+  tool: string,
+  svg: string | null,
+  lane: 'colour' | 'mono',
+  fail: { status: 'trace-failed' | 'render-failed'; error: string; ms: number | null },
+): { row: ScoreRow; render: Raster } {
+  const { width: w, height: h } = truth.img
+  let render: Raster | null = null
+  if (svg !== null)
+    try {
+      render = renderTrace(svg, w, h)
+    } catch {
+      render = null
+    }
+  render ??= { width: w, height: h, data: new Uint8ClampedArray(w * h * 4).fill(255) }
+  const { meanDeltaE, p95DeltaE } = deltaEStats(deltaEField(truth.img.data, render.data, w, h).de)
+  const regions = scoreRegions(truth.img, EMPTY, { inkFamilies: c.inkFamilies, render: render.data })
+  return {
+    row: {
+      tool,
+      caseId: c.id,
+      corpus: c.corpus,
+      heldOut: c.heldOut,
+      res: w,
+      flat: !c.gradients,
+      lane,
+      status: fail.status,
+      error: fail.error,
+      ms: fail.ms,
+      geomRefusal: null,
+      gtRefusal: truth.refusal,
+      meanDeltaE,
+      p95DeltaE,
+      regionsTrue: regions.trueRegions,
+      regionsRecovered: regions.recovered,
+      worstInk: regions.worstInk,
+    },
+    render,
+  }
+}
 
 export function scoreTrace(
   c: CompareCase,

@@ -52,7 +52,7 @@ import { DEFAULT_PLANAR_FIT } from '../../src/lib/trace/planarFit.ts'
 import { CACHE, PY, RESULTS, REPO, VENV_PY } from './paths.ts'
 import { CORPORA, DEFAULT_CORPORA, inkOf, loadCorpus } from './corpus.ts'
 import { renderGround } from './render.ts'
-import { scoreTrace, type Truth } from './score.ts'
+import { scorePixels, scoreTrace, type Truth } from './score.ts'
 import { summaryMarkdown } from './report.ts'
 import { writeOverlays } from './overlay.ts'
 import { logolabAblation, logolabAuto, logolabGate, logolabProduct, provenance } from './adapters/logolab.ts'
@@ -119,10 +119,15 @@ const RUN = arg('--run') ?? stamp
 const runDir = join(RESULTS, RUN)
 const useCache = !has('--no-cache')
 const docVisible = !has('--gate-exact')
+const FIT_RECOMPUTED = ['lineCost', 'smoothPasses']
 const fitOverrides: Record<string, boolean | number> = {}
 for (const kv of list('--fit') ?? []) {
   const [k, v] = kv.split('=')
   if (!(k in DEFAULT_PLANAR_FIT)) throw new Error(`--fit: unknown planar fit option ${k}`)
+  // planarFitOptionsFor (src/lib/trace/index.ts) recomputes these from the dials after
+  // spreading the defaults, so an override would be recorded in meta and not measured.
+  if (FIT_RECOMPUTED.includes(k))
+    throw new Error(`--fit: ${k} is set from the dials per trace and cannot be overridden`)
   fitOverrides[k] = v === 'true' ? true : v === 'false' ? false : Number(v)
 }
 Object.assign(DEFAULT_PLANAR_FIT, fitOverrides)
@@ -231,59 +236,48 @@ async function main(): Promise<void> {
     for (const { a } of tools) {
       const t = traces.get(`${a.name}|${k.c.id}`)
       if (!t) continue // lane not run by this tool
-      if ('error' in t) {
-        rows.push({
-          tool: a.name,
-          caseId: k.c.id,
-          corpus: k.c.corpus,
-          heldOut: k.c.heldOut,
-          res: RES,
-          flat: !k.c.gradients,
-          lane: k.input.lane,
-          status: 'trace-failed',
-          error: t.error,
-          ms: null,
-          geomRefusal: null,
-          gtRefusal: k.truth.refusal,
-        })
-        continue
-      }
-      const svgOut = join(dir, `${a.name}.svg`)
-      writeFileSync(svgOut, t.svg)
-      let scored: ReturnType<typeof scoreTrace>
-      try {
-        scored = scoreTrace(k.c, k.truth, a.name, t.svg, t.ms, k.input.lane, { docVisible, notes: t.notes })
-      } catch (e) {
-        // A scorer crash on one output must not cost the run — and must not vanish.
-        rows.push({
-          tool: a.name,
-          caseId: k.c.id,
-          corpus: k.c.corpus,
-          heldOut: k.c.heldOut,
-          res: RES,
-          flat: !k.c.gradients,
-          lane: k.input.lane,
-          status: 'render-failed',
-          error: `scorer: ${(e as Error).message}`,
-          ms: t.ms,
-          geomRefusal: null,
-          gtRefusal: k.truth.refusal,
-        })
-        continue
-      }
-      rows.push(scored.row)
-      if (scored.render) {
-        const pngOut = join(dir, `${a.name}.png`)
-        writeFileSync(pngOut, encodePng(scored.render.data, scored.render.width, scored.render.height))
+      const pngOut = join(dir, `${a.name}.png`)
+      const pair = (gen_svg?: string): void => {
         pairs.push(
           JSON.stringify({
             key: `${a.name}|${k.c.id}`,
             gt_png: k.input.pngPath,
             gen_png: pngOut,
-            gen_svg: svgOut,
+            gen_svg,
             gt_svg: k.gtSvgPath,
           }),
         )
+      }
+      if ('error' in t) {
+        // No SVG: scored as a blank white image in every pixel metric, SVG-Bench's included.
+        const blank = scorePixels(k.c, k.truth, a.name, null, k.input.lane, {
+          status: 'trace-failed',
+          error: t.error,
+          ms: null,
+        })
+        rows.push(blank.row)
+        writeFileSync(pngOut, encodePng(blank.render.data, blank.render.width, blank.render.height))
+        pair()
+        continue
+      }
+      const svgOut = join(dir, `${a.name}.svg`)
+      writeFileSync(svgOut, t.svg)
+      let scored: { row: ScoreRow; render: { width: number; height: number; data: Uint8ClampedArray } | null }
+      try {
+        scored = scoreTrace(k.c, k.truth, a.name, t.svg, t.ms, k.input.lane, { docVisible, notes: t.notes })
+      } catch (e) {
+        // A scorer crash on one output must not cost the run, and must not vanish: the row
+        // keeps the pixel metrics of the output's own render (white if resvg refuses it).
+        scored = scorePixels(k.c, k.truth, a.name, t.svg, k.input.lane, {
+          status: 'render-failed',
+          error: `scorer: ${(e as Error).message}`,
+          ms: t.ms,
+        })
+      }
+      rows.push(scored.row)
+      if (scored.render) {
+        writeFileSync(pngOut, encodePng(scored.render.data, scored.render.width, scored.render.height))
+        pair(svgOut)
       }
       const r = scored.row
       console.log(

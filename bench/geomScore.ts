@@ -189,11 +189,15 @@ class SegGrid {
     }
     // A wild coordinate (a model writing 40004 into a 200-unit viewBox) would size the grid
     // past what an array can hold. The query is exact at any cell size, so a huge extent
-    // just gets coarser cells; at the rasters scored here (≤ 8000 px) the cell stays as given.
-    const area = Math.max(0, maxX - this.minX) * Math.max(0, maxY - this.minY)
-    this.cell = cell = Math.max(cell, Math.ceil(Math.sqrt(area / MAX_GRID_BINS)))
-    this.cols = Math.max(1, Math.ceil((maxX - this.minX) / cell) + 1)
-    this.rows = Math.max(1, Math.ceil((maxY - this.minY) / cell) + 1)
+    // just gets coarser cells: the cell doubles until the grid itself holds ≤ MAX_GRID_BINS,
+    // long and thin extents included. A square raster up to 8000 px keeps the cell given.
+    const spanX = Math.max(0, maxX - this.minX)
+    const spanY = Math.max(0, maxY - this.minY)
+    const binsAt = (k: number): number => (Math.ceil(spanX / k) + 1) * (Math.ceil(spanY / k) + 1)
+    while (binsAt(cell) > MAX_GRID_BINS && cell < 2 ** 52) cell *= 2
+    this.cell = cell
+    this.cols = Math.max(1, Math.ceil(spanX / cell) + 1)
+    this.rows = Math.max(1, Math.ceil(spanY / cell) + 1)
     this.bins = Array.from({ length: this.cols * this.rows }, () => [])
     for (const s of segs) {
       const c0 = this.cx(Math.min(s.ax, s.bx)),

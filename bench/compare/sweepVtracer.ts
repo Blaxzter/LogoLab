@@ -22,6 +22,7 @@ import { renderGround } from './render.ts'
 import { scoreTrace } from './score.ts'
 import { VTRACER } from './adapters/external.ts'
 import { RESULTS } from './paths.ts'
+import { provenance } from './adapters/logolab.ts'
 
 ensureImageData()
 const run = promisify(execFile)
@@ -81,14 +82,24 @@ for (const [gi, args] of grid.entries()) {
   )
 }
 
+// Competition ranking: a configuration's rank is how many score strictly better, so tied
+// medians share a rank and the documented tie-break (fewer nodes) decides between them,
+// not the order the grid happened to list them in.
 const rank = (k: 'dE' | 'chamfer'): Map<string[], number> =>
-  new Map([...results].sort((a, b) => a[k] - b[k]).map((r, i) => [r.args, i]))
+  new Map(results.map((r) => [r.args, results.filter((o) => o[k] < r[k]).length]))
 const rd = rank('dE')
 const rc = rank('chamfer')
 const scored = results
   .map((r) => ({ ...r, score: (rd.get(r.args) ?? 0) + (rc.get(r.args) ?? 0) }))
   .sort((a, b) => a.score - b.score || a.nodes - b.nodes)
-writeFileSync(join(dir, 'sweep.json'), JSON.stringify({ res: RES, cases: cases.length, ranked: scored }, null, 1))
+writeFileSync(
+  join(dir, 'sweep.json'),
+  JSON.stringify(
+    { date: new Date().toISOString(), git: provenance(), res: RES, cases: cases.length, ranked: scored },
+    null,
+    1,
+  ),
+)
 console.log('\nTop 5 (rank ΔE + rank chamfer):')
 for (const r of scored.slice(0, 5))
   console.log(

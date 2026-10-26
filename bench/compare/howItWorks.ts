@@ -1,6 +1,6 @@
 // The /labs/how article's figures and numbers, frozen out of comparison runs.
 //
-//   node --experimental-strip-types bench/compare/howItWorks.ts [--base v6] [--list]
+//   node --experimental-strip-types bench/compare/howItWorks.ts [--base v7] [--list]
 //
 // The article explains the tracer one rule at a time, and every rule it names is shown the
 // same way: the same case traced with that rule switched off and on, everything else equal.
@@ -11,8 +11,14 @@
 //
 // so the off and on columns went through the same scorer as the benchmark, and the census
 // under each figure (what the rule is worth over the 100 held-out emoji) is a paired test on
-// the same cases. The base run must be at the same tracer commit as the ablation runs; this
-// refuses a pair whose LogoLab versions differ.
+// the same cases. The base run must be at the same commit as the ablation runs, with no
+// uncommitted change to the tracer or the scorer in either, at the same resolution, on the
+// same cases, and the base with no --fit; this refuses any pair that is not.
+//
+// The article states some directions in words ("with the rule on, an icon carries N more
+// nodes"); PROSE lists them and a regeneration that flips one fails here instead of making
+// the page say the opposite of its own table. Output is written to a staging folder and
+// swapped in only when everything has passed.
 //
 // --list prints, per rule, the cases its metric moves most, which is how RULES' cases were
 // picked. The pipeline figure (pixels → regions → shared edges → SVG) is traced here, with
@@ -21,7 +27,7 @@
 // Output: public/how-it-works/<slug>/{authored,on,off}.svg and the pipeline's stage files,
 // and src/components/labs/how/howItWorks.generated.ts.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ensureImageData } from '../nodeHarness.ts'
 import { decodePng } from '../../src/lib/png/decode.ts'
@@ -43,11 +49,12 @@ import type { ShowMetrics } from '../../src/components/labs/bench/showcaseTypes.
 
 const argv = process.argv.slice(2)
 const arg = (k: string, d: string): string => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : d)
-const BASE = arg('--base', 'v6')
+const BASE = arg('--base', 'v7')
 const LIST = argv.includes('--list')
 const TOOL = 'logolab-auto'
 const HELD_OUT = 'svgemoji-v0'
 const OUT_PUBLIC = join(REPO, 'public', 'how-it-works')
+const STAGE = `${OUT_PUBLIC}.next`
 const OUT_DATA = join(REPO, 'src', 'components', 'labs', 'how', 'howItWorks.generated.ts')
 
 /** The rules the article shows. `metric` is the one the rule exists to move; `caseId` is the
@@ -59,16 +66,23 @@ const RULES: { rule: string; metric: string; caseId: string; on?: string }[] = [
   { rule: 'subpixelEdges', metric: 'chamfer', caseId: 'truth0/cross-bars' },
   // The case the veto was written for: checker cells must not melt into blobs.
   { rule: 'cornerVeto', metric: 'cornersRecovered', caseId: 'truth0/checker' },
-  // --fit fillets=false only reached the fit from 3469a57 on (planarFitOptionsFor), so this pair
-  // is traced at that commit; how-base is byte-identical to v6's LogoLab SVGs (156 of 156, checked with cmp).
   // The fixture made for it: rounded rects, pills and pins, 40 kinks off, 9 on.
-  { rule: 'fillets', metric: 'tangentBreaks', caseId: 'truth0/round-polys', on: 'how-base' },
+  { rule: 'fillets', metric: 'tangentBreaks', caseId: 'truth0/round-polys' },
   // The mouth runs past the cheeks: 8 kinks off, 0 on (and 68 → 58 nodes).
   { rule: 'throughPairs', metric: 'tangentBreaks', caseId: 'svgemoji-v0/1f60a-twemoji' },
   // Petals: 41 → 36 nodes and 2 → 0 kinks where the petals meet. The held-out census is mixed.
   { rule: 'junctionReseat', metric: 'chamfer', caseId: 'truth0/petals' },
   // The A button: straight sides into rounded corners, 9 kinks off, 0 on.
   { rule: 'lineTangents', metric: 'tangentBreaks', caseId: 'svgemoji-v0/1f170-twemoji' },
+]
+/** Directions HowLab.tsx states in words, as the sign of off - on over the held-out cases. */
+const PROSE: { rule: string; metric: string; sign: -1 | 1; says: string }[] = [
+  { rule: 'cornerVeto', metric: 'meanDeltaE', sign: -1, says: 'with it on, slightly more colour error' },
+  { rule: 'cornerVeto', metric: 'tangentBreaks', sign: -1, says: 'with it on, slightly more kinks' },
+  { rule: 'fillets', metric: 'docNodes', sign: -1, says: 'with the rule on, an icon carries more nodes' },
+  { rule: 'junctionReseat', metric: 'meanDeltaE', sign: -1, says: 'switching it off is better on colour error' },
+  { rule: 'junctionReseat', metric: 'chamfer', sign: -1, says: 'switching it off is better on edge error' },
+  { rule: 'lineTangents', metric: 'chamfer', sign: -1, says: 'the price is a little edge error' },
 ]
 /** The census metrics, under every rule's figure and in the article's table. */
 const CENSUS = ['meanDeltaE', 'chamfer', 'docNodes', 'tangentBreaks', 'cornersInvented', 'cornersRecovered']
@@ -103,30 +117,43 @@ const num = (r: BenchRow | undefined, k: string): number | null =>
 const base = load(BASE)
 const gtSvg = gtSvgOf(BASE)
 
-/** The tracer's code: what a dirty run may NOT have touched. Everything else under src and
- *  bench (this script, the labs pages, the app-only folders of src/lib) can be mid-edit while
- *  the ablations run. Inclusive on purpose: a new folder under src/lib counts as tracer. */
+/** What a dirty run may NOT have touched: the tracer (inclusive on purpose: a new folder
+ *  under src/lib counts) and the scorer, which is all of bench/ except the scripts that only
+ *  read a finished run. The labs pages and the app-only folders of src/lib can be mid-edit. */
 const TRACER = /^(src\/mcp\/|src\/types\.ts$|src\/lib\/(?!seo\/|persist\/|report\/|editor\/|text\/))/
+const SCORER = /^bench\/(?!compare\/(howItWorks|showcase|kinkAudit|kinkJoins|sweep\w+)\.ts$)/
 interface Git {
   head: string
   status: string[]
 }
-const gitOf = (r: BenchResults): Git | undefined =>
-  (r.meta as unknown as { provenance?: { git?: Git } }).provenance?.git
-/** The ablation and the base must trace the same tracer: one commit, and no uncommitted
- *  change to the tracer's files in either run. */
-function sameTracer(off: BenchResults, name: string, on: BenchResults, onName: string): void {
-  const a = gitOf(off)
-  const b = gitOf(on)
-  if (!a || !b) throw new Error(`${name}: no provenance to compare with ${onName}`)
-  if (a.head !== b.head) throw new Error(`${name} is at ${a.head}, ${onName} at ${b.head}`)
+interface RunMeta {
+  provenance?: { git?: Git }
+  fit?: Record<string, unknown>
+  res: number
+}
+const metaOf = (r: BenchResults): RunMeta => r.meta as unknown as RunMeta
+/** The ablation and the base must differ by the rule and nothing else: one commit, no
+ *  uncommitted tracer or scorer change in either, one resolution, the same cases, and only
+ *  the ablation carrying a --fit. */
+function samePair(off: BenchResults, name: string, on: BenchResults, onName: string): void {
+  const a = metaOf(off)
+  const b = metaOf(on)
+  const ga = a.provenance?.git
+  const gb = b.provenance?.git
+  if (!ga || !gb) throw new Error(`${name}: no provenance to compare with ${onName}`)
+  if (ga.head !== gb.head) throw new Error(`${name} is at ${ga.head}, ${onName} at ${gb.head}`)
   for (const [run, g] of [
-    [name, a],
-    [onName, b],
+    [name, ga],
+    [onName, gb],
   ] as const) {
-    const touched = g.status.map((l) => l.slice(3)).filter((p) => TRACER.test(p))
-    if (touched.length) throw new Error(`${run} ran with uncommitted tracer changes: ${touched.join(', ')}`)
+    const touched = g.status.map((l) => l.slice(3)).filter((p) => TRACER.test(p) || SCORER.test(p))
+    if (touched.length) throw new Error(`${run} ran with uncommitted tracer or scorer changes: ${touched.join(', ')}`)
   }
+  if (a.res !== b.res) throw new Error(`${name} is at ${a.res}px, ${onName} at ${b.res}px`)
+  if (b.fit && Object.keys(b.fit).length) throw new Error(`${onName} was run with --fit ${JSON.stringify(b.fit)}`)
+  const ids = (r: BenchResults, corpus: string): string => [...caseTable(r.rows, corpus).keys()].sort().join(',')
+  for (const corpus of [HELD_OUT, 'truth0', 'fluent2'])
+    if (ids(off, corpus) !== ids(on, corpus)) throw new Error(`${name} and ${onName} differ in ${corpus} cases`)
 }
 
 /** One table per corpus holding the rule-on row as `on` and the rule-off row as `off`. */
@@ -145,8 +172,8 @@ function joined(off: BenchResults, on: BenchResults, corpus: string): Map<string
 
 const rules: HowRule[] = []
 if (!LIST) {
-  rmSync(OUT_PUBLIC, { recursive: true, force: true })
-  mkdirSync(OUT_PUBLIC, { recursive: true })
+  rmSync(STAGE, { recursive: true, force: true })
+  mkdirSync(STAGE, { recursive: true })
 }
 
 for (const spec of RULES) {
@@ -158,7 +185,7 @@ for (const spec of RULES) {
   const off = load(runName)
   const onName = spec.on ?? BASE
   const on = spec.on ? load(spec.on) : base
-  sameTracer(off, runName, on, onName)
+  samePair(off, runName, on, onName)
   const fit = (off.meta as unknown as { fit?: Record<string, unknown> }).fit
   if (!fit || fit[spec.rule] !== false) throw new Error(`${runName} was not run with --fit ${spec.rule}=false`)
 
@@ -190,9 +217,14 @@ for (const spec of RULES) {
     }).length
     return { metric: k, moved, ...paired(t, 'off', 'on', metric, 4000) }
   })
+  for (const p of PROSE.filter((x) => x.rule === spec.rule)) {
+    const d = census.find((c) => c.metric === p.metric)?.meanDiff
+    if (d === undefined || Math.sign(d) !== p.sign)
+      throw new Error(`${spec.rule}: the article says "${p.says}", but off - on ${p.metric} is ${d}; reword HowLab.tsx`)
+  }
 
   const slug = spec.rule
-  const dir = join(OUT_PUBLIC, slug)
+  const dir = join(STAGE, slug)
   mkdirSync(dir)
   const authoredPath = gtSvg.get(spec.caseId)
   if (!authoredPath || !existsSync(authoredPath)) throw new Error(`${spec.caseId}: no authored SVG in ${BASE}`)
@@ -248,7 +280,7 @@ const doc = await traceImage(image, options, undefined, undefined, undefined, un
 })
 if (!labels || !doc.topology) throw new Error('pipeline: no label map or topology')
 const map = labels as Int32Array
-const pdir = join(OUT_PUBLIC, 'pipeline')
+const pdir = join(STAGE, 'pipeline')
 mkdirSync(pdir)
 copyFileSync(join(RESULTS, BASE, 'cases', PIPELINE_CASE, 'truth.png'), join(pdir, 'pixels.png'))
 // Regions in false colour, the hue per label the studio's explainer uses.
@@ -303,6 +335,9 @@ const out: HowItWorks = {
   pipeline,
   rules,
 }
+if (rules.length !== RULES.length) throw new Error(`only ${rules.length} of ${RULES.length} rules have runs`)
+rmSync(OUT_PUBLIC, { recursive: true, force: true })
+renameSync(STAGE, OUT_PUBLIC)
 mkdirSync(join(REPO, 'src', 'components', 'labs', 'how'), { recursive: true })
 writeFileSync(
   OUT_DATA,

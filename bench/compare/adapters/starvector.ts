@@ -13,6 +13,7 @@
 // a 16 GB card and is not run.
 
 import { execFileSync, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { PY, TOOLS, VENV_PY } from '../paths.ts'
@@ -78,7 +79,9 @@ export const starvector: TracerAdapter = {
     mkdirSync(inDir, { recursive: true })
     const byStem = new Map<string, TraceInput>()
     for (const i of inputs) {
-      const stem = safe(i.case.id)
+      // The PNG's hash is in the name: the runner skips a name it already has (--skip-existing),
+      // so a re-used run directory must not hand back an output made from a different raster.
+      const stem = `${safe(i.case.id)}__${createHash('sha1').update(readFileSync(i.pngPath)).digest('hex').slice(0, 10)}`
       byStem.set(stem, i)
       copyFileSync(i.pngPath, join(inDir, `${stem}.png`))
     }

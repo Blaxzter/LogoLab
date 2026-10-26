@@ -63,11 +63,14 @@ const offOf = (r: HowRule, k: string): number | null => {
   const v = r.example.tools.find((t) => t.tool === 'off')?.metrics[k]
   return typeof v === 'number' ? v : null
 }
-/** How much better a score is with `rule` OFF, as a positive number (the cost of the rule). */
+/** How much better a score is with `rule` OFF, as a positive number (the cost of the rule).
+ *  The direction is in the prose around it; bench/compare/howItWorks.ts PROSE checks it. */
 const better = (r: string, k: string): string => {
   const c = rule(r)?.census.find((x) => x.metric === k)
   return c?.meanDiff === undefined ? '—' : Math.abs(c.meanDiff).toFixed(METRIC[k].mean)
 }
+/** On how many held-out cases switching `rule` off changes metric `k`. */
+const moved = (r: string, k: string): number | string => rule(r)?.census.find((x) => x.metric === k)?.moved ?? '—'
 /** How much worse a score is with `rule` ON (the same number, named for the other side). */
 const worse = better
 const fmt = (v: number | null, d: number): string => (v === null ? '—' : v.toFixed(d))
@@ -186,9 +189,10 @@ export default function HowLab() {
         }
         after={
           <p>
-            On the emoji it changes 13 of the 100 traces, and there it costs a little: with it on they carry slightly
-            more kinks and colour error. It exists for art like this checkerboard: with it off, the small cells in the
-            lower-right quarter are close enough to circles for the snap to take them for circles.
+            On the emoji it changes {moved('cornerVeto', 'meanDeltaE')} of the {HOW.heldOutCases} traces, and there it
+            costs a little: with it on they carry slightly more kinks and colour error. It exists for art like this
+            checkerboard: with it off, the small cells in the lower-right quarter are close enough to circles for the
+            snap to take them for circles.
           </p>
         }
       />
@@ -429,9 +433,8 @@ export default function HowLab() {
         <A href="https://creativecommons.org/licenses/by/4.0/">CC-BY 4.0</A> (
         <A href="https://github.com/jdecked/twemoji">github.com/jdecked/twemoji</A>), via StarVector’s SVG-Bench. The
         traces are modified versions: rasterized and re-vectorized. Measured with {HOW.version} at {HOW.res} px, run{' '}
-        {HOW.base} and its ablation runs, {new Date(HOW.date).toISOString().slice(0, 10)}. The rounded-polygon row pairs
-        runs traced at 3469a57, whose LogoLab output is byte-identical to {HOW.base}’s. The test fixtures are LogoLab’s
-        own.
+        {HOW.base} and its ablation runs, {new Date(HOW.date).toISOString().slice(0, 10)}. The test fixtures are
+        LogoLab’s own.
       </p>
     </article>
   )
