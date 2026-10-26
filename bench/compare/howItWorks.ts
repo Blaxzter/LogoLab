@@ -11,7 +11,8 @@
 //
 // so the off and on columns went through the same scorer as the benchmark, and the census
 // under each figure (what the rule is worth over the 100 held-out emoji) is a paired test on
-// the same cases. The base run must be at the same commit as the ablation runs, with no
+// the same cases. The base run must be at the same tracer and scorer as the ablation runs
+// (one commit, or commits that differ in neither), with no
 // uncommitted change to the tracer or the scorer in either, at the same resolution, on the
 // same cases, and the base with no --fit; this refuses any pair that is not.
 //
@@ -27,6 +28,7 @@
 // Output: public/how-it-works/<slug>/{authored,on,off}.svg and the pipeline's stage files,
 // and src/components/labs/how/howItWorks.generated.ts.
 
+import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ensureImageData } from '../nodeHarness.ts'
@@ -141,7 +143,14 @@ function samePair(off: BenchResults, name: string, on: BenchResults, onName: str
   const ga = a.provenance?.git
   const gb = b.provenance?.git
   if (!ga || !gb) throw new Error(`${name}: no provenance to compare with ${onName}`)
-  if (ga.head !== gb.head) throw new Error(`${name} is at ${ga.head}, ${onName} at ${gb.head}`)
+  // Two commits are one tracer and one scorer when nothing between them touches either.
+  if (ga.head !== gb.head) {
+    const between = execFileSync('git', ['diff', '--name-only', ga.head, gb.head], { cwd: REPO, encoding: 'utf8' })
+      .split(/\r?\n/)
+      .filter((p) => TRACER.test(p) || SCORER.test(p))
+    if (between.length)
+      throw new Error(`${name} (${ga.head}) and ${onName} (${gb.head}) differ in ${between.join(', ')}`)
+  }
   for (const [run, g] of [
     [name, ga],
     [onName, gb],
