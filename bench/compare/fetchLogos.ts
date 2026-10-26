@@ -189,7 +189,8 @@ async function main(): Promise<void> {
       floor: FLOOR,
       blankBelow: BLANK,
       strata:
-        'colours = distinct solid fill/stroke paints + referenced gradients (1 | 2-3 | 4-8 | 9+); gradients = any ' +
+        'colours = distinct solid fill/stroke paints + referenced gradients, <use> followed one level ' +
+        '(1 | 2-3 | 4-8 | 9+); gradients = any ' +
         '<linear|radialGradient>; kind = -icon file → symbol, else rendered w/h ≥ 2 → wordmark, else symbol',
       order: 'within each stratum by sha1(file); allocation = floor min(n, 4) + proportional largest remainder',
     },

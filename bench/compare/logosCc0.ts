@@ -134,11 +134,21 @@ const attrsOf = (body: string): Record<string, string> => {
 
 const SHAPES = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line'])
 const SILENT = new Set(['clipPath', 'mask'])
+/** Contents are drawn only where a `<use>` places them, in the `<use>`'s inherited paint. */
+const DEFERRED = new Set(['defs', 'symbol'])
+/** "Not set inside this <defs>": the paint comes from whichever `<use>` draws it. */
+const UNSET = '\0unset'
 
 /**
  * Distinct paints the file's shapes are drawn with (see the header). Inheritance through
  * groups is followed; CSS is read for simple `.class` and `tag` selectors only — anything
  * else in a stylesheet is ignored (gilbarbara's files rarely carry one).
+ *
+ * `<use>` is followed one level, because Sketch exports (about 50 of the files) draw every
+ * shape that way: a `<defs>` path with no fill, placed by `<use fill="#A4D43A">`. Reading the
+ * defs path alone counted a black that is never drawn and missed the colour that is. So a
+ * shape under `<defs>` / `<symbol>` counts only paint set INSIDE the defs, and a `<use>`
+ * counts its own inherited paint wherever its target does not set one itself.
  */
 export function paints(svg: string): { solid: string[]; gradients: string[] } {
   const s = stripComments(svg)
@@ -158,43 +168,65 @@ export function paints(svg: string): { solid: string[]; gradients: string[] } {
   }
   const solid = new Set<string>()
   const grads = new Set<string>()
+  const count = (v: string): void => {
+    if (v === UNSET) return
+    const p = normPaint(v)
+    if (!p) return
+    if (p.startsWith('url(')) grads.add(p)
+    else solid.add(p)
+  }
+  type Paint = 'fill' | 'stroke'
+  const tagRe = /<(\/?)([a-zA-Z][\w:-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g
+  const tags = [...s.replace(/<style\b[^>]*>[\s\S]*?<\/style>/g, '').matchAll(tagRe)].map((m) => ({
+    close: m[1] === '/',
+    tag: m[2],
+    a: attrsOf(m[3]),
+    selfClose: m[4] === '/',
+  }))
+  const fromCss = (tag: string, a: Record<string, string>, k: Paint): string | undefined => {
+    for (const c of (a.class ?? '').split(/\s+/).filter(Boolean).reverse()) {
+      const v = css.get(`.${c}`)?.[k]
+      if (v !== undefined) return v
+    }
+    return css.get(tag)?.[k]
+  }
+  // CSS precedence: inline style > stylesheet > presentation attribute (> inherited).
+  const explicit = (tag: string, a: Record<string, string>, k: Paint): string | undefined => {
+    const v = (decl(a.style, k) ?? fromCss(tag, a, k) ?? a[k])?.trim()
+    return v === 'inherit' ? undefined : v
+  }
+  // What a `<use>` target sets itself (then the `<use>`'s paint does not reach it).
+  const byId = new Map<string, { fill?: string; stroke?: string }>()
+  for (const t of tags)
+    if (!t.close && t.a.id)
+      byId.set(t.a.id, { fill: explicit(t.tag, t.a, 'fill'), stroke: explicit(t.tag, t.a, 'stroke') })
+
   // Stack of inherited { fill, stroke, silent }.
   const stack: { tag: string; fill: string; stroke: string; silent: boolean }[] = [
     { tag: '', fill: 'black', stroke: 'none', silent: false },
   ]
-  const tagRe = /<(\/?)([a-zA-Z][\w:-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g
-  for (const m of s.replace(/<style\b[^>]*>[\s\S]*?<\/style>/g, '').matchAll(tagRe)) {
-    const [, close, tag, body, selfClose] = m
+  for (const { close, tag, a, selfClose } of tags) {
     if (close) {
       // Pop to the matching open tag (tolerates unbalanced markup).
       const i = stack.map((e) => e.tag).lastIndexOf(tag)
       if (i > 0) stack.length = i
       continue
     }
-    const a = attrsOf(body)
     const top = stack[stack.length - 1]
-    const fromCss = (k: 'fill' | 'stroke'): string | undefined => {
-      for (const c of (a.class ?? '').split(/\s+/).filter(Boolean).reverse()) {
-        const v = css.get(`.${c}`)?.[k]
-        if (v !== undefined) return v
-      }
-      return css.get(tag)?.[k]
-    }
-    // CSS precedence: inline style > stylesheet > presentation attribute > inherited.
-    const own = (k: 'fill' | 'stroke'): string => {
-      const v = (decl(a.style, k) ?? fromCss(k) ?? a[k] ?? top[k]).trim()
-      return v === 'inherit' ? top[k] : v
-    }
+    const deferred = DEFERRED.has(tag)
+    const own = (k: Paint): string => (deferred ? UNSET : (explicit(tag, a, k) ?? top[k]))
     const fill = own('fill')
     const stroke = own('stroke')
     const silent = top.silent || SILENT.has(tag)
-    if (SHAPES.has(tag) && !silent) {
-      for (const v of [fill, stroke]) {
-        const p = normPaint(v)
-        if (!p) continue
-        if (p.startsWith('url(')) grads.add(p)
-        else solid.add(p)
-      }
+    if (!silent && SHAPES.has(tag)) {
+      count(fill)
+      count(stroke)
+    }
+    if (!silent && tag === 'use') {
+      const ref = /^#(.+)$/.exec((a.href ?? a['xlink:href'] ?? '').trim())?.[1]
+      const target = ref === undefined ? undefined : byId.get(ref)
+      if (target?.fill === undefined) count(fill)
+      if (target?.stroke === undefined) count(stroke)
     }
     if (!selfClose) stack.push({ tag, fill, stroke, silent })
   }

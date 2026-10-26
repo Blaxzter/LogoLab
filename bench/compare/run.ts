@@ -53,6 +53,7 @@ import { parseGroundTruth, toRasterSpace, unscorable } from '../svgGround.ts'
 import { DEFAULT_PLANAR_FIT } from '../../src/lib/trace/planarFit.ts'
 import { CACHE, PY, RESULTS, REPO, VENV_PY } from './paths.ts'
 import { CORPORA, DEFAULT_CORPORA, inkOf, loadCorpus } from './corpus.ts'
+import { LOGOS_COMMIT } from './logosCc0.ts'
 import { renderGround } from './render.ts'
 import { scorePixels, scoreTrace, type Truth } from './score.ts'
 import { summaryMarkdown } from './report.ts'
@@ -381,8 +382,9 @@ The case renders (cases/*/*/truth.png and every tool's render of them) are deriv
     (twitter/twemoji is archived).
   - OpenMoji: HfG Schwäbisch Gmünd, CC-BY-SA 4.0 (https://openmoji.org).
   - Noto Emoji: Google, Apache-2.0 (https://github.com/googlefonts/noto-emoji).
-- logos-cc0: gilbarbara/logos (https://github.com/gilbarbara/logos), the commit pinned in
-  bench/compare/manifests/logos-cc0.json, whose LICENSE.txt is CC0 1.0 Universal
+- logos-cc0: gilbarbara/logos at commit ${LOGOS_COMMIT}
+  (https://github.com/gilbarbara/logos/tree/${LOGOS_COMMIT}; per-file sha256 in
+  bench/compare/manifests/logos-cc0.json), whose LICENSE.txt is CC0 1.0 Universal
   (https://creativecommons.org/publicdomain/zero/1.0/). CC0 covers the artwork only: the
   logos are trademarks of their respective owners, no endorsement is implied, and they are
   rendered and re-traced here solely to measure vectorizers.

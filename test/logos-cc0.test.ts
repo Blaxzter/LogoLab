@@ -54,6 +54,17 @@ test('paints follows inheritance, CSS classes and skips clip/mask contents', () 
   assert.deepEqual(p.gradients, ['url(#g)'])
 })
 
+test('a <use> paints its defs target: Sketch-style defs carry no fill, the use does', () => {
+  const svg = `<svg><defs><path id="p1"/><path id="p2" fill="#00f"/></defs>
+    <use fill="#A4D43A" xlink:href="#p1"/>
+    <use fill="#f00" href="#p2"/>
+    <g fill="#0f0"><use xlink:href="#p1"/></g></svg>`
+  // No black from the unfilled defs path; #f00 never reaches p2, which sets its own fill.
+  assert.deepEqual(paints(svg).solid, ['#0000ff', '#00ff00', '#a4d43a'])
+  // An unfilled target placed by an unfilled use is drawn in the default black.
+  assert.deepEqual(paints('<svg><defs><path id="a"/></defs><use href="#a"/></svg>').solid, ['#000000'])
+})
+
 test('a file that names no paint is one colour (the default black)', () => {
   assert.deepEqual(paints('<svg><path d="M0 0"/></svg>').solid, ['#000000'])
 })
