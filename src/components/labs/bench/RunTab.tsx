@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { LabSelect } from '../LabPage'
 import { METRIC_BY_KEY, fmt, num, summarize, toolInfo, type BenchResults, type RunInfo } from './benchData'
-import { More, SectionTitle, ToolName, runUrl, useFetched } from './ui'
+import { More, SectionTitle, ToolName, useFetched, useRunUrl } from './ui'
 
 /**
  * Run: what produced these numbers — every tool's exact version, the tree the run was made
@@ -27,6 +27,7 @@ export function RunTab({
   other: string
   onOther: (r: string) => void
 }) {
+  const runUrl = useRunUrl()
   const m = data.meta
   const git = (m.provenance?.git ?? null) as { head?: string; dirty?: boolean; diffSha1?: string } | null
   const summary = useFetched<string>(runUrl(run, 'summary.md'), 'text')

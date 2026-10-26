@@ -1,14 +1,33 @@
-import { useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ChevronDown } from '../../ui/icons'
 import { Tooltip } from '../../ui/Tooltip'
 import { Badge } from '../CaseRow'
 import { LabSelect } from '../LabPage'
 import { HEADLINE_TOOL, corpusInfo, toolInfo } from './benchData'
+import { HUB_PAGE, LOCAL_SOURCE, sourceUrl, type BenchSource } from './benchSource'
 
 // The small pieces every /labs/bench tab shares.
 
-export const runUrl = (run: string, path: string) => `/__bench/runs/${encodeURIComponent(run)}/${path}`
+/** Which source the page reads runs from, and which of its runs ship PNG renders. */
+export interface BenchSourceState {
+  source: BenchSource
+  renders: (run: string) => boolean
+}
+
+const SourceContext = createContext<BenchSourceState>({ source: LOCAL_SOURCE, renders: () => true })
+export const BenchSourceProvider = SourceContext.Provider
+
+export function useBenchSource(): BenchSourceState {
+  return useContext(SourceContext)
+}
+
+/** `(run, path) → URL` on the page's source: a tab asks by the local layout's path
+ *  (`gt/<id>`, `<dir>/<tool>.png`, `manifests/<file>`) and never learns where it is. */
+export function useRunUrl(): (run: string, path: string) => string {
+  const { source, renders } = useContext(SourceContext)
+  return useCallback((run: string, path: string) => sourceUrl(source, run, path, renders(run)), [source, renders])
+}
 
 /** Fetch a run file once per URL; `null` while loading or when it is missing. */
 export function useFetched<T>(url: string | null, as: 'json' | 'text'): T | null {
@@ -126,9 +145,13 @@ export function HowToRun({ compact = false }: { compact?: boolean }) {
     <div className={`mx-auto max-w-3xl px-4 text-sm leading-relaxed text-ink-2 ${compact ? 'py-6' : 'py-10'}`}>
       <h2 className="text-base font-semibold text-ink">This tab reads a local run</h2>
       <p className="mt-2">
-        The full results drive four classic tracers and two image-to-SVG models that need a GPU, and their renders are
-        of art that is not redistributed, so they never ship with the site. The Overview tab is the frozen summary. To
-        explore every case, make a run from a checkout:
+        The full results drive four classic tracers and two image-to-SVG models that need a GPU, so they never ship with
+        the site. The hosted page reads published runs from the{' '}
+        <a href={HUB_PAGE} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+          logolab-bench dataset
+        </a>{' '}
+        on Hugging Face, and none could be loaded just now. The Overview tab is the frozen summary. To explore every
+        case, make a run from a checkout:
       </p>
       <pre className="mt-3 overflow-x-auto rounded-lg border border-line bg-surface-2 p-3 font-mono text-xs">
         {`bash bench/compare/py/setup.sh            # vtracer, potrace, StarVector venv, pinned

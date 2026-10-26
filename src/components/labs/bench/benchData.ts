@@ -56,6 +56,8 @@ export interface RunInfo {
   tools: string[]
   rows: number
   bytes: number
+  /** false: a published run that ships SVGs only (benchSource.ts). Absent = PNGs present. */
+  renders?: boolean
 }
 
 // ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@ import {
   type Disagreement,
   type Metric,
 } from './benchData'
-import { CorpusLine, SectionTitle, ToolSelect, runUrl } from './ui'
+import { CorpusLine, SectionTitle, ToolSelect, useRunUrl } from './ui'
 
 /**
  * Compare: any two tools, case by case. Two questions, one each:
@@ -197,6 +197,7 @@ function Disagree({
   run: string
   onCase: (id: string) => void
 }) {
+  const runUrl = useRunUrl()
   const mx = METRIC_BY_KEY.get(xKey) ?? METRICS[0]
   const my = METRIC_BY_KEY.get(yKey) ?? METRICS[1]
   const pts = useMemo(() => disagreements(table, a, b, mx, my), [table, a, b, mx, my])
