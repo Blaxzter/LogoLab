@@ -205,7 +205,7 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
               {data.dataset.split} split, parquet sha256 <code>{data.dataset.parquetSha256.slice(0, 16)}…</code>. Each
               SVG rendered with resvg on white at {data.res} px; every tool gets that same image.
             </li>
-            <li>
+            <li className="[overflow-wrap:anywhere]">
               Tools:{' '}
               {Object.entries(data.versions)
                 .map(([t, v]) => `${label(t)} (${v.replace(/\. Copyright.*?Selinger\./, '')})`)
