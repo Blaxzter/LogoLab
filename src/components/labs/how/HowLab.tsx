@@ -495,56 +495,78 @@ function Census({ r }: { r: HowRule }) {
   )
 }
 
+/** One census cell: the mean change with its interval and how many icons moved. */
+function WorthCell({ r, k, stack = false }: { r: HowRule; k: string; stack?: boolean }) {
+  const c = r.census.find((x) => x.metric === k)
+  const d = METRIC[k].mean
+  if (!c || c.meanDiff === undefined) return <span className="text-faint">—</span>
+  if (c.moved === 0) return <span className="text-faint">no change</span>
+  return (
+    <span className={c.significant ? 'font-semibold text-ink' : 'text-ink-2'}>
+      {sign(c.meanDiff, placesFor(c, d))}{' '}
+      <span className={`text-[0.62rem] font-normal text-faint ${stack ? 'block' : ''}`}>
+        [{c.lo?.toFixed(placesFor(c, d))}, {c.hi?.toFixed(placesFor(c, d))}] · {c.moved}
+      </span>
+    </span>
+  )
+}
+
+/** The census as a table from `sm` up, and as one card per rule on a phone, where six
+ *  columns of intervals cannot fit. */
 function WorthTable() {
   const keys = Object.keys(METRIC)
+  const arrow = (k: string) => (METRIC[k].better === 'lower' ? '↓' : '↑')
   return (
-    <div className="not-prose my-4 overflow-x-auto rounded-lg border border-line bg-surface">
-      <table className="w-full min-w-[640px] text-xs tabular-nums">
-        <thead className="border-b border-line bg-surface-2 text-[0.68rem] text-muted">
-          <tr>
-            <th className="px-2.5 py-1.5 text-left font-medium">Rule switched off</th>
-            {keys.map((k) => (
-              <th key={k} className="px-2.5 py-1.5 text-right font-medium">
-                {METRIC[k].label} {METRIC[k].better === 'lower' ? '↓' : '↑'}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {HOW.rules.map((r) => (
-            <tr key={r.rule} className="border-t border-line">
-              <td className="whitespace-nowrap px-2.5 py-1.5 font-medium text-ink">{RULE_NAME[r.rule] ?? r.rule}</td>
-              {keys.map((k) => {
-                const c = r.census.find((x) => x.metric === k)
-                const d = METRIC[k].mean
-                if (!c || c.meanDiff === undefined)
-                  return (
-                    <td key={k} className="px-2.5 py-1.5 text-right text-faint">
-                      —
-                    </td>
-                  )
-                return (
-                  <td
-                    key={k}
-                    className={`whitespace-nowrap px-2.5 py-1.5 text-right ${c.significant ? 'font-semibold text-ink' : 'text-ink-2'}`}
-                  >
-                    {c.moved === 0 ? (
-                      <span className="text-faint">no change</span>
-                    ) : (
-                      <>
-                        {sign(c.meanDiff, placesFor(c, d))}{' '}
-                        <span className="text-[0.62rem] font-normal text-faint">
-                          [{c.lo?.toFixed(placesFor(c, d))}, {c.hi?.toFixed(placesFor(c, d))}] · {c.moved}
-                        </span>
-                      </>
-                    )}
-                  </td>
-                )
-              })}
+    <div className="not-prose my-4">
+      <div className="space-y-2 sm:hidden">
+        {HOW.rules.map((r) => (
+          <div key={r.rule} className="rounded-lg border border-line bg-surface text-xs tabular-nums">
+            <div className="border-b border-line bg-surface-2 px-3 py-1.5 font-medium text-ink">
+              {RULE_NAME[r.rule] ?? r.rule} off
+            </div>
+            <dl className="divide-y divide-line">
+              {keys.map((k) => (
+                <div key={k} className="flex items-baseline justify-between gap-3 px-3 py-1.5">
+                  <dt className="text-muted">
+                    {METRIC[k].label} {arrow(k)}
+                  </dt>
+                  <dd className="whitespace-nowrap text-right">
+                    <WorthCell r={r} k={k} />
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto rounded-lg border border-line bg-surface sm:block">
+        <table className="w-full min-w-[560px] text-xs tabular-nums">
+          <thead className="border-b border-line bg-surface-2 text-[0.68rem] text-muted">
+            <tr>
+              <th className="px-2.5 py-1.5 text-left align-bottom font-medium">Rule switched off</th>
+              {keys.map((k) => (
+                <th key={k} className="px-2.5 py-1.5 text-right align-bottom font-medium leading-tight">
+                  {METRIC[k].label} {arrow(k)}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {HOW.rules.map((r) => (
+              <tr key={r.rule} className="border-t border-line">
+                <td className="whitespace-nowrap px-2.5 py-1.5 align-top font-medium text-ink">
+                  {RULE_NAME[r.rule] ?? r.rule}
+                </td>
+                {keys.map((k) => (
+                  <td key={k} className="whitespace-nowrap px-2.5 py-1.5 text-right align-top">
+                    <WorthCell r={r} k={k} stack />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

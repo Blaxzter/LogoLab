@@ -299,6 +299,9 @@ export const DRAWING_ROWS: ScoreRow[] = [
   { key: 'tangentBreaks', label: 'Kinks on smooth curves', better: 'lower', digits: 0 },
 ]
 
+/** The picture / drawing tag: under its label on a phone, beside it from `sm` up. */
+const BADGE = 'mt-0.5 block w-fit rounded px-1 py-0.5 text-[0.6rem] uppercase tracking-wide sm:ml-1.5 sm:mt-0 sm:inline'
+
 const val = (m: Record<string, unknown>, k: string): number | null =>
   typeof m[k] === 'number' ? (m[k] as number) : null
 
@@ -318,14 +321,16 @@ export function ScoreTable({
 }) {
   const picture = drawing ? [] : PICTURE_ROWS
   const rows = drawing ?? [...PICTURE_ROWS, ...DRAWING_ROWS]
+  // Up to three columns fit a phone once the labels may wrap; more scroll sideways.
+  const wide = columns.length > 3
   return (
     <div className="mt-3 overflow-x-auto rounded-lg border border-line bg-surface">
-      <table className="w-full min-w-[460px] text-xs tabular-nums">
+      <table className={`w-full text-xs tabular-nums ${wide ? 'min-w-[460px]' : ''}`}>
         <thead className="border-b border-line bg-surface-2 text-[0.68rem] text-muted">
           <tr>
-            <th className="px-2.5 py-1.5 text-left font-medium" />
+            <th className="px-2 py-1.5 text-left font-medium sm:px-2.5" />
             {columns.map((c) => (
-              <th key={c.tool} className="px-2.5 py-1.5 text-right font-medium">
+              <th key={c.tool} className="px-2 py-1.5 text-right align-bottom font-medium leading-tight sm:px-2.5">
                 {labels?.[c.tool] ?? toolInfo(c.tool).label}
               </th>
             ))}
@@ -342,23 +347,17 @@ export function ScoreTable({
                 key={r.key}
                 className={`border-t border-line ${i === picture.length && picture.length ? 'border-t-2 border-t-line-strong' : ''}`}
               >
-                <td className="whitespace-nowrap px-2.5 py-1.5 text-muted">
+                <td
+                  className={`px-2 py-1.5 leading-tight text-muted sm:px-2.5 ${wide ? 'whitespace-nowrap' : 'sm:whitespace-nowrap'}`}
+                >
                   {r.label}
-                  {i === 0 && picture.length > 0 && (
-                    <span className="ml-1.5 rounded bg-surface-3 px-1 py-0.5 text-[0.6rem] uppercase tracking-wide">
-                      picture
-                    </span>
-                  )}
-                  {i === picture.length && (
-                    <span className="ml-1.5 rounded bg-accent-soft px-1 py-0.5 text-[0.6rem] uppercase tracking-wide text-accent">
-                      drawing
-                    </span>
-                  )}
+                  {i === 0 && picture.length > 0 && <span className={`${BADGE} bg-surface-3`}>picture</span>}
+                  {i === picture.length && <span className={`${BADGE} bg-accent-soft text-accent`}>drawing</span>}
                 </td>
                 {vals.map((v, k) => (
                   <td
                     key={columns[k].tool}
-                    className={`px-2.5 py-1.5 text-right ${v !== null && v === best && !tie ? 'font-semibold text-good' : 'text-ink-2'}`}
+                    className={`whitespace-nowrap px-2 py-1.5 text-right sm:px-2.5 ${v !== null && v === best && !tie ? 'font-semibold text-good' : 'text-ink-2'}`}
                   >
                     {v === null ? '—' : v.toFixed(r.digits)}
                   </td>
