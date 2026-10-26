@@ -189,8 +189,8 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
         <Section title="One number: mean rank">
           <p>
             On every case, each metric ranks the tools from 1 (best) down, and a failed or unreadable output comes last.
-            A tool’s mean rank is the average of its ranks over every case and metric. Ranks have no units, so colour
-            error, edge error, node count, kinks and DINO combine without a threshold or a weight that someone had to
+            A tool’s mean rank is the average of its ranks over every case and metric. Ranks have no units, so a colour
+            error, a distance in pixels and a node count combine without a threshold or a weight that someone had to
             pick.
           </p>
           <MeanRankBoard />
