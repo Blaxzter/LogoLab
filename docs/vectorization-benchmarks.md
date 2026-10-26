@@ -8217,3 +8217,21 @@ Also fixed while running these: `SegGrid` (geomScore) sized its hash at 8 px cel
 whole bounding box, and an OmniSVG output with one coordinate at 40004 in a 200-unit viewBox
 asked for ~160M bins ("Invalid array length", the v6 render-failed row). The cell now grows
 with the box's area, to about 2²⁰ bins on a square box (a long thin one still gets more); at the rasters scored here it stays 8, so no other score moves.
+
+**PolyFit (Dominici et al. 2020) was tried and is not in the table.** The only binary is the
+`prerelease-paper` Windows build (github.com/dedoardo/polyfit, MIT). It runs its own
+16–79 px samples in 0.35 s, and on 59 of our 156 cases (all of fluent2 and the first
+svgemoji ones, before the census was stopped for memory) it finished:
+
+| input | finished |
+|---|---|
+| the 512 px raster as is | 1 / 59 |
+| quantized to 8 colours (libimagequant, no dither), 128 px | 7 / 59 |
+| quantized to 16 colours, 512 px | 1 / 58 |
+
+The failures are its own asserts: `image_segment.cpp: 954` ×60 (upstream issue #6: the
+segmentation has no half edges and cannot resolve some region layouts, acknowledged and open
+since 2023), `region_index <= 254` ×39, `multi_polygon.cpp` stitching ×≈30 (issue #1), and
+22 runs hung past 120 s. A row from the cases it finishes would be a hand-picked subset, so
+the bench page lists it as tried, with the reason. Making it scoreable means building it from
+source and fixing the segmenter.

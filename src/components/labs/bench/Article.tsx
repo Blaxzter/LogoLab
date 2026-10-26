@@ -409,6 +409,37 @@ function ToolsList() {
           </li>
         )
       })}
+      <li>
+        <a
+          className="font-medium text-accent underline-offset-2 hover:underline"
+          href="https://github.com/dedoardo/polyfit"
+          target="_blank"
+          rel="noreferrer"
+        >
+          PolyFit
+        </a>{' '}
+        <span className="text-faint">(MIT)</span>, tried and not scored. Its released Windows build crashes or hangs on
+        88–98% of the 59 benchmark cases it was run on, depending on how the input is prepared, in its region
+        segmentation and polygon stitching (
+        <a
+          className="text-accent underline-offset-2 hover:underline"
+          href="https://github.com/dedoardo/polyfit/issues/6"
+          target="_blank"
+          rel="noreferrer"
+        >
+          a known issue
+        </a>
+        ); a row from the few cases it finishes would not be comparable.{' '}
+        <a
+          className="text-accent underline-offset-2 hover:underline"
+          href="https://doi.org/10.1145/3386569.3392401"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Dominici et al., SIGGRAPH 2020
+        </a>
+        .
+      </li>
     </ul>
   )
 }
