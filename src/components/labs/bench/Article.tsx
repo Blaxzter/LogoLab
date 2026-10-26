@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { ExternalLink } from '../../ui/icons'
 import { TOOL_REFS, toolInfo, toolRef } from './benchData'
 import { Figure, Section } from './articleParts'
+import { MeanRankBoard } from './Leaderboard'
 import { SHOWCASE as data } from './showcase.generated'
 import type { ShowExample, ShowMetrics } from './showcaseTypes'
 
@@ -183,6 +184,16 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
             </li>
           </ul>
           <p>The SVG-Bench metrics are measured on the same renders and reported next to these.</p>
+        </Section>
+
+        <Section title="One number: mean rank">
+          <p>
+            On every case, each metric ranks the tools from 1 (best) down, and a failed or unreadable output comes last.
+            A tool’s mean rank is the average of its ranks over every case and metric. Ranks have no units, so colour
+            error, edge error, node count, kinks and DINO combine without a threshold or a weight that someone had to
+            pick.
+          </p>
+          <MeanRankBoard />
         </Section>
 
         <Section title={`Results on ${data.cases} held-out emoji`}>

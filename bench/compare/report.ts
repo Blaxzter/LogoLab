@@ -1,6 +1,9 @@
 // results.json → summary.md.
 //
 // What the summary leads with, and why:
+//   • the LEADERBOARD: mean rank per held-out corpus (leaderboardMarkdown, below), the one
+//     number that combines metrics of different units without a threshold or a weight, with
+//     its CI, Friedman / Nemenyi CD and Pareto shares. Everything after it is the evidence.
 //   • the HEADLINE LogoLab row is logolab-auto — what `npx logolab` users get, no per-case
 //     knowledge. logolab-gate is printed as a labelled reference row (its gradient flag is an
 //     oracle read off the authored SVG). Every row says which inputs it was given.
@@ -18,6 +21,14 @@
 //   • a row with n < 10 is marked not comparable.
 
 import type { ScoreRow } from './types.ts'
+import {
+  RANK_METRICS,
+  cdGroups,
+  headlineCorpora,
+  leaderboard,
+  type BenchRow,
+  type Leaderboard,
+} from '../../src/components/labs/bench/benchData.ts'
 
 const HEADLINE = 'logolab-auto'
 const ABLATION = /^logolab-abl-/
@@ -109,6 +120,114 @@ const PAIRED: [keyof ScoreRow, string, boolean, number][] = [
   ['sbMse', 'MSE', true, 5],
 ]
 
+const pfmt = (p: number): string => (p < 1e-300 ? '< 1e-300' : p < 0.001 ? p.toExponential(1) : p.toFixed(3))
+const pct = (v: number): string => `${Math.round(v * 100)}%`
+
+/**
+ * The headline: MEAN RANK per held-out corpus (benchData.ts leaderboard(), the same pure
+ * function the hosted page's leaderboard.generated.ts is written from). Per case and metric
+ * the tools are ranked, a failure tied last; no thresholds, no weights. One table per corpus,
+ * never averaged across corpora, and the ablation view (oracle, no-probe, swept and ablation
+ * rows included) printed under it with its label, never in its place.
+ */
+export function leaderboardMarkdown(rows: ScoreRow[]): string[] {
+  const out: string[] = []
+  const br = rows as unknown as BenchRow[]
+  const corpora = headlineCorpora(br)
+  if (!corpora.length) return out
+  out.push('## Leaderboard: mean rank (held-out corpora only)')
+  out.push('')
+  out.push(
+    'Per case and per metric every tool is ranked (1 = best; ties share the average rank), and a tool’s mean rank is ' +
+      'the mean over all its (case, metric) cells. Ranks combine metrics with different units without a threshold or a ' +
+      'weight. A tool whose own output failed or was refused for a metric is tied LAST there (never skipped); a metric ' +
+      'the ground truth refuses on a case is left out of that case for everyone. Metrics — fill corpora: ' +
+      RANK_METRICS.fill.map((m) => m.label).join(', ') +
+      '; line corpora: ' +
+      RANK_METRICS.line.map((m) => m.label).join(', ') +
+      '. The CI is a 95% bootstrap over cases (2000 resamples, seeded). Friedman and Nemenyi are on each tool’s rank ' +
+      'averaged over a case’s metrics (`case rank`); tools closer than the critical difference CD are not ' +
+      'significantly different (Demšar 2006). Pareto: on a case, A beats B when it is at least as good on every ' +
+      'metric and better on one; `inc` = each better somewhere. The headline is each tool as its users get it ' +
+      '(defaults and named presets); the ablation view adds the oracle, no-probe, ablation and swept rows.',
+  )
+  out.push('')
+  for (const corpus of corpora) {
+    const head = leaderboard(br, { corpus, view: 'headline' })
+    out.push(...board(head))
+    const abl = leaderboard(br, { corpus, view: 'ablation' })
+    if (abl.k > head.k) {
+      out.push(`*Ablation view* (NOT the headline; ${abl.k} rows, CD ${abl.cd05?.toFixed(2) ?? '—'} at α .05):`)
+      out.push('')
+      out.push('| # | row | mean rank | 95% CI | case rank | Pareto win / loss / inc |')
+      out.push('|---|---|---|---|---|---|')
+      abl.tools.forEach((t, i) =>
+        out.push(
+          `| ${i + 1} | ${t.tool}${head.tools.some((h) => h.tool === t.tool) ? '' : ' ◇'} | ${t.mean.toFixed(2)} | ` +
+            `[${t.lo.toFixed(2)}, ${t.hi.toFixed(2)}] | ${t.caseMean.toFixed(2)} | ` +
+            `${pct(t.pareto.win)} / ${pct(t.pareto.loss)} / ${pct(t.pareto.incomparable)} |`,
+        ),
+      )
+      out.push('')
+      out.push('◇ = not in the headline (isAblationRow).')
+      out.push('')
+    }
+  }
+  return out
+}
+
+function board(b: Leaderboard): string[] {
+  const out: string[] = []
+  out.push(`### ${b.corpus}: ${b.kind} art, ${b.n} cases, ${b.k} tools`)
+  out.push('')
+  out.push(
+    `| # | tool | mean rank | 95% CI | case rank | Pareto win / loss / inc | ${b.metrics.map((m) => `${m.label} ${m.better === 'lower' ? '↓' : '↑'}`).join(' | ')} |`,
+  )
+  out.push(`|---|---|---|---|---|---|${b.metrics.map(() => '---').join('|')}|`)
+  b.tools.forEach((t, i) =>
+    out.push(
+      `| ${i + 1} | ${LABEL[t.tool] ?? t.tool} | **${t.mean.toFixed(2)}** | [${t.lo.toFixed(2)}, ${t.hi.toFixed(2)}] | ` +
+        `${t.caseMean.toFixed(2)} | ${pct(t.pareto.win)} / ${pct(t.pareto.loss)} / ${pct(t.pareto.incomparable)} | ` +
+        `${b.metrics.map((m) => t.perMetric[m.key]?.toFixed(2) ?? '—').join(' | ')} |`,
+    ),
+  )
+  out.push('')
+  const f = b.friedman
+  const sorted = [...b.tools].sort((x, y) => x.caseMean - y.caseMean)
+  const groups =
+    b.cd05 === null
+      ? []
+      : cdGroups(
+          sorted.map((t) => t.caseMean),
+          b.cd05,
+        )
+  out.push(
+    (f
+      ? `Friedman χ²(${f.df}) = ${f.chi2.toFixed(1)}, p ${pfmt(f.p)}; Iman–Davenport F(${f.df1}, ${f.df2}) = ` +
+        `${f.ff.toFixed(2)}, p ${pfmt(f.pF)}. `
+      : 'Friedman: too few cases or tools. ') +
+      `Nemenyi CD = ${b.cd05?.toFixed(3) ?? '—'} (α .05), ${b.cd10?.toFixed(3) ?? '—'} (α .10). ` +
+      (groups.length
+        ? `Not significantly different at α .05 (case rank within CD): ${groups
+            .map(([i, j]) =>
+              sorted
+                .slice(i, j + 1)
+                .map((t) => t.tool)
+                .join(' ~ '),
+            )
+            .join('; ')}.`
+        : 'Every pair of tools differs by more than the CD.'),
+  )
+  if (b.excluded.length) out.push('', `Not ranked: ${b.excluded.map((e) => `${e.tool}, ${e.reason}`).join('; ')}.`)
+  if (b.dropped.ground || b.dropped.unmeasured)
+    out.push(
+      '',
+      `Cells left out for every tool: ${b.dropped.ground} where the ground truth is refused, ${b.dropped.unmeasured} that no tool was measured on.`,
+    )
+  out.push('')
+  return out
+}
+
 /** Rows that carry pixel metrics: every row, a failure scored as white (score.ts scorePixels). */
 const rendered = (rs: ScoreRow[]): ScoreRow[] => rs.filter((r) => r.meanDeltaE !== undefined)
 
@@ -123,6 +242,7 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
       (tools.length > main.length ? `; ablation: ${tools.filter((t) => ABLATION.test(t)).join(', ')}.` : '.'),
   )
   out.push('')
+  out.push(...leaderboardMarkdown(rows))
   out.push('**What each row was given** (★ = the headline LogoLab row):')
   out.push('')
   for (const [t, s] of INPUTS) if (tools.includes(t)) out.push(`- \`${t}\`: ${s}`)
