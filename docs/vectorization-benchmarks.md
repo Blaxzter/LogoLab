@@ -8178,7 +8178,8 @@ are the page's published losses now. The shrimp and the worm are the near-colour
 `/labs/how` explains the tracer one rule at a time, and every rule it names is measured the
 same way: the benchmark re-run with that one rule off (`run.ts --tools logolab-auto --corpus
 svgemoji-v0,truth0,fluent2 --no-svgbench --fit <rule>=false --run abl-<rule>`), paired case
-by case against the rule on (run `v6`, `3a5b7b8`), 4000-resample bootstrap.
+by case against the rule on (run `v6`, `3a5b7b8`; re-run on `v7`, `a8422b2`, in §45 with
+every number below unchanged), 4000-resample bootstrap.
 `bench/compare/howItWorks.ts` freezes the census and one figure per rule; `--list` prints the
 cases each rule moves most, which is how the figures were picked.
 
@@ -8237,3 +8238,47 @@ since 2023), `region_index <= 254` ×39, `multi_polygon.cpp` stitching ×≈30 (
 22 runs hung past 120 s. A row from the cases it finishes would be a hand-picked subset, so
 the bench page lists it as tried, with the reason. Making it scoreable means building it from
 source and fixing the segmenter.
+
+## 45. v7: every failure scored, ImageTracer in the table, the harness tightened (2026-10-26)
+
+Run `v7` (`a8422b2`, 156 cases, every tool) re-runs v6 after an audit of the harness found
+places where the report said one thing and the code did another. The tracer is unchanged:
+LogoLab's 156 SVGs are byte-identical to v6, and so is every per-case metric of every tool v6
+had (geometry, ΔE and the SVG-Bench scores, compared row by row).
+
+What changed in the harness:
+
+- **A failure is scored as a white render.** The report said so, but a tool that returned no
+  file got no pixel metrics and dropped out of every median, and a file that crashed the
+  geometry scorer lost its pixel scores with it. Now a trace failure is scored as a blank
+  white image (as SVG-Bench does), a scorer crash on the output's own render, and both are in
+  `pairs.jsonl`, so the SVG-Bench means include them. Only OmniSVG moves: its three
+  svgemoji "no valid candidate" rows now count, n 97 → 100, median DINO 0.789 → 0.783.
+- **ImageTracer** (default, fills, swept) is in the run and on the page.
+- **`--fit` refuses `lineCost` and `smoothPasses`**, which are recomputed per image and
+  were silently overridden.
+- **Sweeps rank ties together** (competition rank; a tie goes to fewer nodes) and record the
+  commit they ran on. Re-run on v7, all three picks are the published ones:
+  VTracer `-p 6 -g 8 -f 2 --hierarchical cutout`, AutoTrace `-despeckle-level 8
+  -error-threshold 1`, ImageTracer `{strokewidth 0, numberofcolors 64, ltres 0.5, qtres 0.5,
+  pathomit 0}`.
+- **StarVector and OmniSVG batch inputs are named by a hash of the PNG**, so a re-used run
+  name cannot hand back another image's output.
+- **`howItWorks.ts` checks each pair** (one commit or commits differing outside the tracer and
+  scorer, no uncommitted tracer or scorer change, same resolution, same cases, no `--fit` on
+  the base), **refuses a regeneration that flips a direction the article states in words**,
+  and swaps the output in only when every rule passed. All six §44 ablations were re-run on
+  v7; every census number is unchanged, and fillets no longer needs its own base run.
+
+v7 medians on the 100 held-out emoji (failures as white):
+
+| tool | fail | ΔE | edge px | nodes | kinks | DINO |
+|---|---|---|---|---|---|---|
+| LogoLab | 0 | 0.22 | 0.26 | 156.5 | 9 | 0.999 |
+| VTracer default | 0 | 0.79 | 0.48 | 370 | 46.5 | 0.999 |
+| VTracer swept | 0 | 0.80 | 0.42 | 460 | 74.5 | 0.999 |
+| AutoTrace swept | 0 | 0.25 | 0.29 | 445 | 83.5 | 0.998 |
+| ImageTracer swept | 0 | 0.42 | 0.26 | 3888 | 1339.5 | 0.997 |
+| StarVector-1B | 0 | 13.12 | 11.22 | 124 | 1 | 0.930 |
+| OmniSVG-4B | 3 | 27.83 | 24.48 | 82 | 4 | 0.783 |
+| Potrace (binarised) | 0 | 27.43 | 15.18 | 64 | 0 | 0.846 |
