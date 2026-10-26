@@ -12,9 +12,15 @@
 // One conversion is deliberate: a stroked circle or ellipse whose radius is no more
 // than half its width paints a solid disc (Lucide draws its dots that way: r=1 at
 // width 2). Its centreline is a degenerate ring inside the disc, and no tracer should
-// be asked to recover it — it is a fill, radius r + w/2, and is scored as one.
+// be asked to recover it — it is a fill, radius r + w/2, and is scored as one. The
+// same holds for every other way the icon sets draw a dot (`solidDot`: a zero-length
+// round-capped stroke, a point-to-itself `<line>`, a closed arc pair too small to leave
+// a hole), and an open round-capped path that ends where it began is read as the
+// closed loop its ink is (`closeCoincident`). Both rules came with the strokes-oss
+// corpus (bench/compare/strokesOss.ts), where Tabler and Feather draw that way.
 
 import type { Affine, SubPath } from '../src/lib/path/types.ts'
+import { flattenSubPath } from './geomScore.ts'
 import { ellipseSubPaths } from '../src/lib/path/model.ts'
 import { affineScale, composeAffine, parseTransformAttr, transformSubPaths } from '../src/lib/path/geometry.ts'
 import { attrs, prop, shapeSubPaths, SHAPES, STENCILS, type GroundShape } from './svgGround.ts'
@@ -35,6 +41,9 @@ export interface GroundStroke {
   width: number
   cap: CapKind
   join: JoinKind
+  /** The resolved `stroke` paint, verbatim. No scorer of the answer sheet reads it; the
+   *  benchmark's trace reader (compare/lineDoc.ts) uses it to tell ink from paper. */
+  color?: string
 }
 
 export interface LineArtGround {
@@ -133,11 +142,107 @@ export function parseLineArt(svg: string): LineArtGround {
           continue
         }
       }
-      strokes.push({ tag, subPaths: transformSubPaths(local, m2), width, cap, join })
+      // Per subpath: a meet closes the loop, a dot is a fill (the rules above `solidDot`).
+      const kept: SubPath[] = []
+      for (const raw of transformSubPaths(local, m2)) {
+        const sp = closeCoincident(raw, width, cap)
+        const dot = solidDot(sp, width, cap)
+        if (dot === 'blank') continue
+        if (dot) fills.push({ tag, subPaths: dot, fill: stroke })
+        else kept.push(sp)
+      }
+      if (kept.length) strokes.push({ tag, subPaths: kept, width, cap, join, color: stroke ?? undefined })
     }
     if (filled) fills.push({ tag, subPaths: transformSubPaths(local, m2), fill: fill ?? undefined })
   }
   return { viewBox, strokes, fills }
+}
+
+/** A dot is a stroke whose extent is at most this fraction of its width (`solidDot`). */
+export const DOT_EXTENT = 0.25
+
+/**
+ * An open subpath that ends where it started, drawn with ROUND caps, is a closed loop:
+ * the two round caps paint exactly what a round join would, so the ink has no end there
+ * and no tracer can find one. Tabler draws every circle this way (`M3 12a9 9 0 1 0 18 0
+ * a9 9 0 1 0 -18 0`, no `z`) and Lucide's heart is one open path round to its start.
+ * Read as open, each costs the trace −2 ends for drawing the ring the ink shows. Not for
+ * butt or square caps: those paint a notch or a tab at the meet, a visible end.
+ */
+export function closeCoincident(sp: SubPath, width: number, cap: CapKind): SubPath {
+  if (sp.closed || cap !== 'round' || sp.nodes.length < 3) return sp
+  const a = sp.nodes[0]
+  const b = sp.nodes[sp.nodes.length - 1]
+  if (Math.hypot(a.x - b.x, a.y - b.y) > 1e-3 * Math.max(width, 1e-6)) return sp
+  const nodes = sp.nodes.slice(0, -1)
+  nodes[0] = { ...a, hIn: b.hIn }
+  return { nodes, closed: true }
+}
+
+/**
+ * A stroke that paints a solid DOT, as a fill — the circle rule above, for every other
+ * way icon sets draw a dot. Lucide and Tabler write a dot as a zero-length round-capped
+ * stroke (`M12 17h.01`, `l.01 0`; ~8% of Lucide, ~11% of Tabler); Feather as a
+ * `<line>` from a point to itself; Tabler a small dot as a closed r=1 arc pair at width
+ * 2. None of those has a centreline a tracer could recover: the ink is a disc.
+ *
+ *   open, extent ≤ DOT_EXTENT·w   round cap → a disc of radius w/2 (plus half the
+ *                                  extent); square cap → the w-sided square SVG paints
+ *                                  for a zero-length subpath; butt cap → nothing
+ *                                  ('blank': SVG paints no zero-length butt stroke).
+ *   closed, every point within w/2 of the centroid
+ *                                  → no hole is left inside the band: a disc of radius
+ *                                  mean-radius + w/2 (exact for a circle).
+ *
+ * Null when the subpath is a real stroke.
+ */
+export function solidDot(sp: SubPath, width: number, cap: CapKind): SubPath[] | 'blank' | null {
+  const poly = flattenSubPath(sp)
+  if (poly.length === 0) return 'blank'
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const p of poly) {
+    minX = Math.min(minX, p.x)
+    minY = Math.min(minY, p.y)
+    maxX = Math.max(maxX, p.x)
+    maxY = Math.max(maxY, p.y)
+  }
+  const cx = (minX + maxX) / 2
+  const cy = (minY + maxY) / 2
+  const half = width / 2
+  if (!sp.closed) {
+    const extent = Math.hypot(maxX - minX, maxY - minY)
+    if (extent > DOT_EXTENT * width) return null
+    if (cap === 'butt') return 'blank'
+    if (cap === 'round') return ellipseSubPaths(cx, cy, half + extent / 2, half + extent / 2)
+    const hx = half + (maxX - minX) / 2
+    const hy = half + (maxY - minY) / 2
+    const corner = (x: number, y: number) => ({ x, y, hIn: null, hOut: null, kind: 'corner' as const })
+    return [
+      {
+        closed: true,
+        nodes: [corner(cx - hx, cy - hy), corner(cx + hx, cy - hy), corner(cx + hx, cy + hy), corner(cx - hx, cy + hy)],
+      },
+    ]
+  }
+  // The bounding box's centre, not the points' mean: the flattening samples unevenly (and
+  // repeats its start), which pulls a mean off the middle of a circle.
+  const mx = cx
+  const my = cy
+  let maxR = 0
+  let sumR = 0
+  for (const p of poly) {
+    const r = Math.hypot(p.x - mx, p.y - my)
+    maxR = Math.max(maxR, r)
+    sumR += r
+  }
+  // 1% slack: an arc reaches us as cubics, which bulge ~0.03% of r past the circle (a
+  // Tabler r=1 dot read 1.00026 against a half-width of 1).
+  if (maxR > half * 1.01) return null
+  const R = sumR / poly.length + half
+  return ellipseSubPaths(mx, my, R, R)
 }
 
 /** Scale the answer sheet into raster pixel space (aspect preserved, as resvg's fitTo:width is). */

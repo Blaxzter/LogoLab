@@ -5,7 +5,19 @@
 // ONE scoring path (score.ts) — LogoLab included, via its serialized string — so no tool is
 // measured on an in-memory shortcut the others do not get.
 
-export type CorpusId = 'truth0' | 'fluent2' | 'svgemoji-v0' | 'svgemoji'
+export type CorpusId = 'truth0' | 'fluent2' | 'svgemoji-v0' | 'svgemoji' | 'strokes-oss'
+
+/**
+ * What a corpus's answer sheet IS. 'fill': authored filled outlines, scored by the truth
+ * gate's outline geometry (score.ts). 'line': authored STROKES, scored as centrelines with
+ * widths (bench/centerlineScore.ts) — a different question with different metrics, so a
+ * line corpus is never mixed with a fill corpus in a table, a median or a rank.
+ */
+export type CorpusKind = 'fill' | 'line'
+
+/** The line corpora; every other corpus is 'fill'. A function, not a Record over
+ *  CorpusId, so a corpus added elsewhere is a fill corpus without touching this file. */
+export const corpusKind = (id: CorpusId): CorpusKind => (id === 'strokes-oss' ? 'line' : 'fill')
 
 export interface CompareCase {
   /** Unique within the run: `<corpus>/<name>`. */
@@ -23,6 +35,9 @@ export interface CompareCase {
   heldOut: boolean
   license: string
   source: string
+  /** The raster's long side when the corpus fixes it (a line corpus scores at the A/B line
+   *  lane's resolution, the flat cap), overriding run.ts's --res. Absent: --res. */
+  res?: number
 }
 
 export interface TraceInput {
@@ -46,6 +61,9 @@ export interface TracerAdapter {
   name: string
   /** Which lanes the tool runs on. A colour case is not given to a mono-only tool. */
   lanes: ('colour' | 'mono')[]
+  /** Which corpus kinds the tool runs on; absent = both. A centreline tracer has nothing
+   *  to say about a fill corpus (logolab-strokes, autotrace-centerline). */
+  kinds?: CorpusKind[]
   /** Null when the tool is unavailable — the reason is printed and the tool skipped. */
   available(): Promise<string | null>
   version(): Promise<string>
@@ -118,4 +136,22 @@ export interface ScoreRow {
   /** StarVector only: tokens the MODEL generated (its own tokenizer, raw text), as opposed to
    *  sbTokens, counted on the post-processed file (cairosvg-repaired for 'cleaned' rows). */
   genTokens?: number
+  // centreline (line corpora only — bench/centerlineScore.ts against the authored strokes,
+  // via compare/lineDoc.ts; absent on a fill row, and n/a with geomRefusal 'no strokes'
+  // when the output has no stroked path). Pixel limits for the gate verdict scale with the
+  // raster (centerlineTol); the numbers themselves are raw px at `res`.
+  /** Traced centreline → nearest authored centreline, mean px (precision). */
+  clCentre?: number
+  /** …its 95th percentile, px. */
+  clCentreP95?: number
+  /** Authored centreline not under the traced ink → nearest traced centreline, mean px (recall). */
+  clMissed?: number
+  /** Mean |w_traced − w_authored| / w_authored over matched samples. */
+  clWidthErr?: number
+  /** Open-path ends, traced − authored (after joining authored paths that meet end to end). */
+  clEndsDelta?: number
+  /** Stroke subpaths, traced − authored. */
+  clPathsDelta?: number
+  /** Traced paths that leave one authored stroke for another away from an end-to-end join. */
+  clTurns?: number
 }

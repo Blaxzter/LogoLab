@@ -16,6 +16,11 @@
 //            LogoLab's history, not correctness. The tier still picks the LANE conventions
 //            (paint gate on gradient tier 0 only).
 //
+// A LINE corpus row (strokes-oss: Truth.lineSvg set) keeps the render / paint / regions /
+// size half and swaps the outline geometry and truth gates for the centreline scorer
+// (scoreLine below): the authored strokes are the answer sheet there, and an outline's
+// chamfer against them would be a different question.
+//
 // A render resvg refuses is scored as an all-white raster (status stays 'render-failed'):
 // SVG-Bench's rasterize_svg does the same, and dropping the row would flatter the tool. A
 // trace that produced no SVG, and an output the geometry scorer crashed on, get the same
@@ -36,6 +41,8 @@ import type { GroundShape } from '../svgGround.ts'
 import type { EditableDoc } from '../../src/lib/path/types.ts'
 import { renderTrace, type Raster } from './render.ts'
 import { parseTraceSvg } from './traceSvg.ts'
+import { parseLineTrace } from './lineDoc.ts'
+import { centerlineTol, scoreCenterline } from '../centerlineScore.ts'
 import type { CompareCase, ScoreRow } from './types.ts'
 
 export interface Truth {
@@ -43,6 +50,9 @@ export interface Truth {
   /** Pixel-space authored shapes, or null when the authored SVG is refused. */
   shapes: GroundShape[] | null
   refusal: string | null
+  /** A LINE corpus case: the authored SVG, read as strokes by centerlineScore.ts. Its
+   *  outline geometry (`shapes`) is null — svgGround refuses strokes, rightly. */
+  lineSvg?: string
 }
 
 const EMPTY: EditableDoc = { viewBox: [0, 0, 1, 1], items: [] }
@@ -90,6 +100,62 @@ export function scorePixels(
     },
     render,
   }
+}
+
+const finite = (v: number): number | undefined => (Number.isFinite(v) ? v : undefined)
+
+/**
+ * The centreline half of a LINE row (strokes-oss): the output read by lineDoc.ts — the
+ * answer sheet's own reader — and scored by bench/centerlineScore.ts, the centreline gate's
+ * scorer, with its pixel limits scaled to the raster (centerlineTol) exactly as
+ * test/centerline-gate.test.ts scales them.
+ *
+ *   • no stroked path in the output (every outline tracer) → the centreline metrics are
+ *     n/a, geomRefusal 'no strokes'; the pixel metrics above still apply. Scoring an
+ *     outline as a centreline would score its boundary as two parallel strokes.
+ *   • docNodes / docPaths come from the same reader (paper included — file cost).
+ *   • the gate verdict (gatesApplicable / gatesPassed / failedGates, keys as
+ *     centerlineScore names them) takes its ΔE from the RESVG render every other number on
+ *     the row uses, not centerlineScore's own rasterizeDoc of the re-read doc: one render
+ *     per row, as everywhere in this benchmark.
+ */
+function scoreLine(row: ScoreRow, truth: Truth, authored: string, svg: string, meanDeltaE: number): void {
+  const { width: w, height: h } = truth.img
+  row.geomRefusal = null
+  const t = parseLineTrace(svg, w, h)
+  if (typeof t === 'string') {
+    row.geomRefusal = t
+    return
+  }
+  row.docNodes = t.nodes
+  row.docPaths = t.paths
+  if (t.strokes === 0) {
+    row.geomRefusal = 'no strokes'
+    return
+  }
+  const tol = centerlineTol(w)
+  const s = scoreCenterline(authored, t.doc, truth.img, tol)
+  Object.assign(row, {
+    clCentre: finite(s.centreMean),
+    clCentreP95: finite(s.centreP95),
+    clMissed: finite(s.missedMean),
+    clWidthErr: finite(s.widthErr),
+    clEndsDelta: s.endsDelta,
+    clPathsDelta: s.pathsDelta,
+    clTurns: s.turns,
+  })
+  const failed = s.failures.filter((g) => g !== 'ΔE')
+  if (!(meanDeltaE <= tol.deltaE)) failed.push('ΔE')
+  const authoredStrokes = s.authoredSamples > 0
+  const applicable =
+    (authoredStrokes ? 3 : 0) + // centre, p95, missed
+    (Number.isFinite(s.widthErr) ? 1 : 0) +
+    3 + // ends, paths, turns
+    (Number.isFinite(s.fillIoU) ? 1 : 0) +
+    1 // ΔE
+  row.gatesApplicable = applicable
+  row.gatesPassed = applicable - failed.length
+  row.failedGates = failed
 }
 
 export function scoreTrace(
@@ -159,6 +225,10 @@ export function scoreTrace(
     regionsRecovered: regions.recovered,
     worstInk: regions.worstInk,
     geomRefusal: truth.refusal ? null : parsed.refusal,
+  }
+  if (truth.lineSvg !== undefined) {
+    scoreLine(row, truth, truth.lineSvg, svg, meanDeltaE)
+    return { row, render }
   }
   const flat = !c.gradients
   // File cost is readable even where the answer sheet is refused (stroked authored art).

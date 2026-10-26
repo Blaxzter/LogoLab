@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 export const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-export const TOOLS = join(REPO, '.bench-tools')
+export const TOOLS = process.env.BENCH_TOOLS ?? join(REPO, '.bench-tools')
 export const DATASETS = join(TOOLS, 'datasets')
 export const RESULTS = join(TOOLS, 'results')
 export const CACHE = join(TOOLS, 'compare-cache')

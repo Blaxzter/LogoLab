@@ -170,6 +170,41 @@ export const AUTOTRACE_SWEPT: string[] = ['-despeckle-level', '8', '-error-thres
 export const autotraceDefault = autotrace('autotrace-default', [])
 export const autotraceSwept = autotrace('autotrace-swept', AUTOTRACE_SWEPT)
 
+/**
+ * AutoTrace's centreline mode, for the LINE corpora (strokes-oss): `-centerline` on a P4 PBM
+ * of the raster cut at luma < 128 — the same binarisation Potrace gets (toPbm). Not the PPM
+ * the outline rows read: on colour input AutoTrace traces the centreline of EVERY exact
+ * colour, so each anti-aliasing tone along an edge came back as its own 1-px line (one
+ * Feather icon at 2048: hundreds of grey hairlines beside the real two strokes). On the
+ * PBM it returns the strokes alone.
+ *
+ * What it returns is a centreline with NO width: `stroke:#000000; fill:none` and no
+ * stroke-width, i.e. a 1-px line (`-preserve-width` changes the thinning, not the output —
+ * checked, byte-identical SVG). It is scored as written: centre / missed / topology read
+ * the line, width error and ΔE read the hairline. Its loops come back as open butt-capped
+ * paths back to their start, which compare/lineDoc.ts reads as rings.
+ *
+ * VTracer 0.6.4 (`--mode pixel|polygon|spline`, `--colormode color|bw`: every mode fits a
+ * region's boundary) and Potrace 1.16 (outlines of the black regions; no option in its
+ * --help mentions a centre line) have NO centreline mode — checked in both CLIs' --help
+ * (2026-10-27). They run on the line corpus as outline tracers, for the pixel metrics.
+ */
+export const autotraceCenterline: TracerAdapter = {
+  name: 'autotrace-centerline',
+  lanes: ['colour', 'mono'],
+  kinds: ['line'],
+  available: missing(AUTOTRACE),
+  version: async () => `${await firstLine(AUTOTRACE)} -centerline <pbm luma<128>`,
+  async trace(i) {
+    const pbm = scratch(i, 'autotrace-centerline', 'pbm')
+    const out = scratch(i, 'autotrace-centerline', 'svg')
+    const t = performance.now()
+    writeFileSync(pbm, toPbm(i.image))
+    await run(AUTOTRACE, ['-output-format', 'svg', '-output-file', out, '-centerline', pbm])
+    return { svg: readFileSync(out, 'utf8'), ms: performance.now() - t }
+  },
+}
+
 /** A per-case scratch file next to the case's PNG. */
 function scratch(i: TraceInput, tool: string, ext: string): string {
   const dir = join(i.pngPath, '..', 'raw')

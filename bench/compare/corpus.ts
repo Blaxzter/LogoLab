@@ -10,6 +10,13 @@
 //                refused (gtRefusal) and only pixel metrics apply there.
 //   truth0       the truth gate's tier 0 — handcrafted, one failure mode each. IN-SAMPLE.
 //   fluent2      every 4th tier-2 Fluent flat twin (MIT), by name. IN-SAMPLE.
+//   strokes-oss  a LINE corpus: 201 stroke icons (Lucide ISC, Tabler outline MIT, Feather
+//                MIT; Phosphor checked and dropped — it ships filled outlines), frozen by
+//                fetchStrokesOss.ts into manifests/strokes-oss.json, 67 per set ranked by
+//                sha1. Held out: every Lucide icon the centreline engine was developed on is
+//                excluded (strokesOss.ts). Scored as centrelines at the A/B line lane's
+//                resolution, the flat cap — not --res. NOT in DEFAULT_CORPORA: 201 cases at
+//                2048 px are a run of their own (`--corpus strokes-oss`).
 //
 // A case whose ground truth svgGround refuses is KEPT: pixel metrics still apply, and the
 // row says why geometry is n/a. Dropping it would quietly select the corpus by scorability.
@@ -18,10 +25,11 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tierCases } from '../truthCorpus.ts'
+import { RASTER_MAX_DIM_FLAT } from '../../src/lib/traceInput/traceCaps.ts'
 import { DATASETS, REPO } from './paths.ts'
 import type { CompareCase, CorpusId } from './types.ts'
 
-export const CORPORA: CorpusId[] = ['svgemoji-v0', 'svgemoji', 'truth0', 'fluent2']
+export const CORPORA: CorpusId[] = ['svgemoji-v0', 'svgemoji', 'truth0', 'fluent2', 'strokes-oss']
 export const DEFAULT_CORPORA: CorpusId[] = ['svgemoji-v0', 'truth0', 'fluent2']
 
 interface ManifestRow {
@@ -74,8 +82,57 @@ function svgEmoji(v0Only: boolean): CompareCase[] {
     })
 }
 
+interface StrokeRow {
+  set: string
+  name: string
+  version: string
+  file: string
+  sha256: string
+  license: string
+  source: string
+}
+
+function strokesOss(): CompareCase[] {
+  const manifest = join(REPO, 'bench', 'compare', 'manifests', 'strokes-oss.json')
+  const dir = join(DATASETS, 'strokes-oss')
+  if (!existsSync(dir)) {
+    console.warn('  strokes-oss not fetched — run: node bench/compare/fetchStrokesOss.ts')
+    return []
+  }
+  const all: StrokeRow[] = JSON.parse(readFileSync(manifest, 'utf8')).rows
+  // Round-robin over the sets, each in its rank order, so a --limit prefix stays balanced
+  // (12 cases = 4 per set) instead of being the first set's first twelve.
+  const bySet = [...new Set(all.map((r) => r.set))].map((s) => all.filter((r) => r.set === s))
+  const rows: StrokeRow[] = []
+  for (let i = 0; bySet.some((g) => i < g.length); i++) for (const g of bySet) if (i < g.length) rows.push(g[i])
+  return rows.map((r) => {
+    const svgPath = join(dir, r.file)
+    if (!existsSync(svgPath)) throw new Error(`strokes-oss: ${r.file} missing — re-run fetchStrokesOss.ts`)
+    const got = createHash('sha256').update(readFileSync(svgPath)).digest('hex')
+    if (got !== r.sha256)
+      throw new Error(
+        `strokes-oss: ${r.file} sha256 ${got.slice(0, 12)} ≠ manifest ${r.sha256.slice(0, 12)} — refusing`,
+      )
+    const name = `${r.set}-${r.name}`
+    return {
+      id: `strokes-oss/${name}`,
+      corpus: 'strokes-oss' as const,
+      name,
+      svgPath,
+      gradients: false,
+      tier: 2 as const,
+      heldOut: true,
+      license: r.license,
+      source: `${r.source} sha256:${r.sha256.slice(0, 12)}`,
+      res: RASTER_MAX_DIM_FLAT,
+    }
+  })
+}
+
 export function loadCorpus(id: CorpusId): CompareCase[] {
   switch (id) {
+    case 'strokes-oss':
+      return strokesOss()
     case 'svgemoji-v0':
       return svgEmoji(true)
     case 'svgemoji':

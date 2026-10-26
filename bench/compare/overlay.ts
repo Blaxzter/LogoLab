@@ -19,6 +19,9 @@ import { makeVisibleAt, tangentBreaks } from '../geomScore.ts'
 import { renderGround } from './render.ts'
 import { parseTraceSvg } from './traceSvg.ts'
 import { RESULTS } from './paths.ts'
+import { parseLineTrace } from './lineDoc.ts'
+import { lineArtToRaster, parseLineArt } from '../lineArtGround.ts'
+import { corpusKind, type CorpusId } from './types.ts'
 import type { SubPath } from '../../src/lib/path/types.ts'
 
 export interface ToolOverlay {
@@ -41,10 +44,38 @@ const round = (v: number) => Math.round(v * 10) / 10
 const unit = (v: number) => Math.round(v * 1000) / 1000
 const anchorsOf = (sets: SubPath[][]) => sets.flat().flatMap((sp) => sp.nodes.flatMap((n) => [round(n.x), round(n.y)]))
 
-/** Anchors and kinks of each tool's SVG, measured against one authored SVG at `res`. */
-export function caseOverlay(authoredSvg: string, res: number, toolSvgs: Map<string, string>): CaseOverlay {
+/**
+ * Anchors and kinks of each tool's SVG, measured against one authored SVG at `res`. A LINE
+ * case (`line`) reads anchors through the line scorer's parse (lineDoc.ts — strokes and
+ * fills, paper included) and its authored anchors as centrelines (lineArtGround); there are
+ * no kinks, because the centreline scorer counts none.
+ */
+export function caseOverlay(
+  authoredSvg: string,
+  res: number,
+  toolSvgs: Map<string, string>,
+  line = false,
+): CaseOverlay {
   ensureImageData()
   const img = renderGround(authoredSvg, res)
+  if (line) {
+    const gt = lineArtToRaster(parseLineArt(authoredSvg), img.width)
+    const tools: Record<string, ToolOverlay> = {}
+    for (const [tool, svg] of toolSvgs) {
+      const t = parseLineTrace(svg, img.width, img.height)
+      tools[tool] = {
+        anchors: typeof t === 'string' ? [] : anchorsOf(t.doc.items.map((i) => (i.kind === 'path' ? i.subPaths : []))),
+        breaks: [],
+        dirs: [],
+      }
+    }
+    return {
+      width: img.width,
+      height: img.height,
+      authored: anchorsOf([...gt.strokes, ...gt.fills].map((s) => s.subPaths)),
+      tools,
+    }
+  }
   const gt = parseGroundTruth(authoredSvg)
   const shapes = unscorable(gt) ? null : toRasterSpace(gt, img.width)
   const visible = makeVisibleAt(img)
@@ -67,8 +98,9 @@ export function caseOverlay(authoredSvg: string, res: number, toolSvgs: Map<stri
   }
 }
 
-/** Write overlay.json into every case directory of a run, from its pairs.jsonl. */
-export function writeOverlays(runDir: string, res: number): number {
+/** Write overlay.json into every case directory of a run, from its pairs.jsonl. `resOf`
+ *  gives a case's own raster when its corpus fixes one (a line corpus: compare/corpus.ts). */
+export function writeOverlays(runDir: string, res: number, resOf?: (caseId: string) => number | undefined): number {
   const byCase = new Map<string, { gt: string; dir: string; tools: Map<string, string> }>()
   for (const line of readFileSync(join(runDir, 'pairs.jsonl'), 'utf8').split('\n')) {
     if (!line.trim()) continue
@@ -79,9 +111,10 @@ export function writeOverlays(runDir: string, res: number): number {
     if (!c) byCase.set(caseId, (c = { gt: p.gt_svg, dir: dirname(p.gen_svg), tools: new Map() }))
     if (existsSync(p.gen_svg)) c.tools.set(tool, readFileSync(p.gen_svg, 'utf8'))
   }
-  for (const c of byCase.values()) {
+  for (const [caseId, c] of byCase) {
     if (!existsSync(c.gt)) continue
-    const o = caseOverlay(readFileSync(c.gt, 'utf8'), res, c.tools)
+    const line = corpusKind(caseId.slice(0, caseId.indexOf('/')) as CorpusId) === 'line'
+    const o = caseOverlay(readFileSync(c.gt, 'utf8'), resOf?.(caseId) ?? res, c.tools, line)
     writeFileSync(join(c.dir, 'overlay.json'), JSON.stringify(o))
   }
   return byCase.size
@@ -92,8 +125,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const run = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : null
   if (!run) throw new Error('usage: overlay.ts --run <name>')
   const runDir = join(RESULTS, run)
-  const { meta } = JSON.parse(readFileSync(join(runDir, 'results.json'), 'utf8')) as { meta: { res: number } }
+  const { meta } = JSON.parse(readFileSync(join(runDir, 'results.json'), 'utf8')) as {
+    meta: { res: number; cases?: { id: string; res?: number }[] }
+  }
   const t0 = performance.now()
-  const n = writeOverlays(runDir, meta.res)
+  const resById = new Map((meta.cases ?? []).map((c) => [c.id, c.res]))
+  const n = writeOverlays(runDir, meta.res, (id) => resById.get(id))
   console.log(`overlay: ${n} cases in ${run} (${Math.round(performance.now() - t0)} ms)`)
 }

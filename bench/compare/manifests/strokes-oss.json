@@ -1,0 +1,1943 @@
+{
+ "created": "2026-10-26T23:14:47.866Z",
+ "sampler": "per set: rank by sha1(\"<set>/<name>\") ascending, take the first 67 eligible (strokesOss.ts)",
+ "inSample": [
+  "bell",
+  "camera",
+  "git-branch",
+  "heart",
+  "house",
+  "mail",
+  "map-pin",
+  "search",
+  "settings",
+  "shopping-cart",
+  "star",
+  "umbrella"
+ ],
+ "sets": [
+  {
+   "set": "lucide",
+   "package": "lucide-static",
+   "version": "1.55.0",
+   "tarball": "lucide-static-1.55.0.tgz",
+   "tarballSha256": "809e2e759aeecd05ef3abc231395a0ccb6a58169823cbd26a425960b4d282797",
+   "integrity": "sha512-h18lunTFsIJWnY0FMRPjXeO9KcAtNi7fDqtqgWHOFbssfgUWsctn/pA7bpiyrd4g1DuBOJ24CsRnPfkYblwm/A==",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+   "copyright": "Copyright (c) 2026 Lucide Icons and Contributors",
+   "source": "https://github.com/lucide-icons/lucide",
+   "icons": 2141,
+   "noStrokes": 10
+  },
+  {
+   "set": "tabler",
+   "package": "@tabler/icons",
+   "version": "3.49.0",
+   "tarball": "tabler-icons-3.49.0.tgz",
+   "tarballSha256": "aa3042907eb0bdb079fd70733e2d75f785683d4726279128a0ca2343099f7074",
+   "integrity": "sha512-l+GnSkFETx0U26icxv1VUFnxxiTqXfCcVRiRAnyMwibupM2S2L/hSaZ9gmSgz01rkrsH/93NvLsxykqdanc6lw==",
+   "license": "MIT (Tabler Icons)",
+   "licenseSha256": "b740a1d46122672da62833e97f7e7c8a13fa85cbc7445b584b297cc00dde93db",
+   "copyright": "Copyright (c) 2020-2026 Paweł Kuna",
+   "source": "https://github.com/tabler/tabler-icons",
+   "icons": 5184,
+   "noStrokes": 15
+  },
+  {
+   "set": "feather",
+   "package": "feather-icons",
+   "version": "4.29.2",
+   "tarball": "feather-icons-4.29.2.tgz",
+   "tarballSha256": "28b6cad56600feee25c53051d65326621f2675d30d6f3d9bd3175f6117f84476",
+   "integrity": "sha512-0TaCFTnBTVCz6U+baY2UJNKne5ifGh7sMG4ZC2LoBWCZdIyPa+y6UiR4lEYGws1JOFWdee8KAsAIvu0VcXqiqA==",
+   "license": "MIT (Feather)",
+   "licenseSha256": "308028e93fcf84972523cdf6e616f73168546b4953895f516d01287f16fe7bee",
+   "copyright": "Copyright (c) 2013-2023 Cole Bemis",
+   "source": "https://github.com/feathericons/feather",
+   "icons": 287,
+   "noStrokes": 2
+  }
+ ],
+ "dropped": [
+  {
+   "set": "phosphor",
+   "package": "@phosphor-icons/core",
+   "version": "2.1.1",
+   "tarball": "phosphor-icons-core-2.1.1.tgz",
+   "tarballSha256": "313332be6190b724da24107addd781799b48bf76b13963f24501112ffe1baadd",
+   "integrity": "sha512-v4ARvrip4qBCImOE5rmPUylOEK4iiED9ZyKjcvzuezqMaiRASCHKcRIuvvxL/twvLpkfnEODCOJp5dM4eZilxQ==",
+   "license": "MIT (Phosphor Icons)",
+   "licenseSha256": "ddbe6082ec3cf979db47e5af549d2849c5d6182b3e005ef91ce1dbb9eb122f11",
+   "copyright": "Copyright (c) 2023 Phosphor Icons",
+   "source": "https://github.com/phosphor-icons/core",
+   "icons": 1512,
+   "noStrokes": 1512,
+   "reason": "1512/1512 icons have no stroke: the published weight is filled outlines (fill=\"currentColor\" paths), so there is no stroke ground truth — dropped, not faked"
+  }
+ ],
+ "counts": {
+  "lucide": {
+   "eligible": 1846,
+   "in-sample": 13,
+   "no strokes": 8,
+   "duplicate": 264,
+   "filled": 10
+  },
+  "tabler": {
+   "eligible": 5123,
+   "no strokes": 15,
+   "filled": 35,
+   "duplicate": 10,
+   "unread": 1
+  },
+  "feather": {
+   "eligible": 273,
+   "in-sample": 12,
+   "no strokes": 2
+  }
+ },
+ "skipped": [
+  {
+   "set": "lucide",
+   "name": "git-branch",
+   "reason": "in-sample: a centreline development fixture (public/examples/*line-art/)"
+  },
+  {
+   "set": "tabler",
+   "name": "dots-diagonal",
+   "reason": "no strokes: nothing is stroked once dots are read as fills"
+  },
+  {
+   "set": "feather",
+   "name": "bell",
+   "reason": "in-sample: Feather's drawing of a Lucide development fixture"
+  },
+  {
+   "set": "feather",
+   "name": "home",
+   "reason": "in-sample: Feather's drawing of a Lucide development fixture"
+  },
+  {
+   "set": "feather",
+   "name": "star",
+   "reason": "in-sample: Feather's drawing of a Lucide development fixture"
+  },
+  {
+   "set": "feather",
+   "name": "umbrella",
+   "reason": "in-sample: Feather's drawing of a Lucide development fixture"
+  }
+ ],
+ "rows": [
+  {
+   "set": "lucide",
+   "name": "wand",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/wand.svg",
+   "sha256": "1e73e36b25ef5d7ea4badbf388075c10df402032ad767a6060479e48a997526c",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/wand.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "mail-open",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/mail-open.svg",
+   "sha256": "0868687e942664170627becff417d93371264085e0b0af3ceb27b290ec119e79",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/mail-open.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "captions-off",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/captions-off.svg",
+   "sha256": "efbb11b5c134ed8074db9ea93579244855aa2c43618332276403f32282073700",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/captions-off.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "laptop-minimal",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/laptop-minimal.svg",
+   "sha256": "44a7513c3f7f0bb9cc5006f2983b14160ef1889d0904dcf471ac907520c5fe0c",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/laptop-minimal.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "between-horizontal-start",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/between-horizontal-start.svg",
+   "sha256": "b7b6dfd9ec5fe36db49cef509dd540d45f8b2b1877cacfc46e202fe60e1ad5e9",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/between-horizontal-start.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "globe-x",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/globe-x.svg",
+   "sha256": "0e3e944c0503e600d74a9447bb07d72e87121de5bf824ff70b649964f461b20c",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/globe-x.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "dice-3",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/dice-3.svg",
+   "sha256": "c62fe446dd05b08af67b5652777df7dd3ad5285fc232042fc5d4cffe4b329cef",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/dice-3.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "earth-lock",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/earth-lock.svg",
+   "sha256": "e654e2dcf9a80c071c9d2bc7da37c1bc5bed5319ed82272e2a7ac01e5636e285",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/earth-lock.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "square-arrow-right-exit",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/square-arrow-right-exit.svg",
+   "sha256": "d889a3cd812e80bd5502d2c9653fc830e7789b272a49ad9d6039c57541e7c74a",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/square-arrow-right-exit.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "puzzle",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/puzzle.svg",
+   "sha256": "9c62a1009a965adb28c7b4a322f4192cbc02c533917545cc0086264725444179",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/puzzle.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "lightbulb-off",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/lightbulb-off.svg",
+   "sha256": "cba3c1e8f2a05e52b6a1c2026b665a1942fe80f35eb91e73ad4dfbfffe70520e",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/lightbulb-off.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "circle-play",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/circle-play.svg",
+   "sha256": "715894aa2de348633a33f336f545dad3f041b173abcc6fb25aebc011b79fd11d",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/circle-play.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "earth",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/earth.svg",
+   "sha256": "ea8df7be80bc94a5eddc41799c61b2137452a0daebc206eadfe9d013892aa3e6",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/earth.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "clock-fading",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/clock-fading.svg",
+   "sha256": "735e18e65367b6f3dac29b7284f6cb5a0600f6970a0550bd67675075ba4a621c",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/clock-fading.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "play",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/play.svg",
+   "sha256": "b79ae771b9c4b3f22c86b4f211a6d76ae7600cf620834ba641ea1c460e870420",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/play.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "git-commit",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/git-commit.svg",
+   "sha256": "318d80ee19791eed1c58657c0a69c0742597e1f324fd10bff61e42b22113ce6b",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/git-commit.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "arrow-big-left",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/arrow-big-left.svg",
+   "sha256": "3b0c5f3f2ce1069523f622b130f1c7d44e49ca164aafc4b2d014bff4f5fe96ff",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/arrow-big-left.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "circle-star",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/circle-star.svg",
+   "sha256": "97806ced8b3186bf22ee28edc718a006f65f1b1332b6026ff194030de9c0de61",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/circle-star.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "tally-4",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/tally-4.svg",
+   "sha256": "eaa943a05b677de63019cce708dd1381d96e7e1dd410c2651e8b02980a1e19d3",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/tally-4.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "shield-check",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/shield-check.svg",
+   "sha256": "87de9d464170ad70df85fcc35efecef6c9fbce850d9ce1c7c9a0d75e4dc7b08f",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/shield-check.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "theater",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/theater.svg",
+   "sha256": "232941f649fb7df80eb03686fb5a57f8dcd679eb69e3df12aba8adb898fcd440",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/theater.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "calendar-arrow-down",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/calendar-arrow-down.svg",
+   "sha256": "203d052437e4d23a52737007b93406dcf15646ce8930783dff1f344898caf044",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/calendar-arrow-down.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "arrow-big-up-dash",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/arrow-big-up-dash.svg",
+   "sha256": "74cec794bcb35e39b866f2d9bbf5bdf02fa614d268845a662e538a526690f91e",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/arrow-big-up-dash.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "send-horizontal",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/send-horizontal.svg",
+   "sha256": "f9ffca23770d4f694ad4e0f2b3e812f0fdb0829808d3b8b8538faae007aa8999",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/send-horizontal.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "thumbs-up",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/thumbs-up.svg",
+   "sha256": "c1ffaa1658f5648f26b15fc25feac83d5e92b8733ed7c6e396a279674758fa79",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/thumbs-up.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "save-pen",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/save-pen.svg",
+   "sha256": "53ffceb91f50e68355265f66b6439ceb3a393fc6cabf9fffba6799f4672d948d",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/save-pen.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "align-center",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/align-center.svg",
+   "sha256": "a7e9b134047403f41748fbf90f9522dbc64b8a62cf0fe2cefc01de717a519d8e",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/align-center.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "link",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/link.svg",
+   "sha256": "f64f1fa70e9f8c3937f5b85b44e9a55f4ef0fccaaedcd2ba7eaca7f87377b4f7",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/link.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "ice-cream-cone",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/ice-cream-cone.svg",
+   "sha256": "f944e99b6fd203dcbc3d3dc84478cb94b1d0137e3f8ab757469ecdf95eb217ba",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/ice-cream-cone.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "lens",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/lens.svg",
+   "sha256": "9d6e2df75a24c4bd220d0ad3684986238f87f37cd1321fe9afe92273a1eb0447",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/lens.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "chevrons-up-down",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/chevrons-up-down.svg",
+   "sha256": "3b4fe3b1917a83a8d7bc94e33d82ea7add063a9ba64e76f00d1075ef2a8bbadd",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/chevrons-up-down.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "pizza",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/pizza.svg",
+   "sha256": "47a58928992af6a52ff0ee4e660b44c42ac280dd710c418960e03414c203617a",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/pizza.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "file-volume",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/file-volume.svg",
+   "sha256": "de710a4cac2d37c5a3bbf9886564da3671805f91bb6ef8353c10df49227f9daf",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/file-volume.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "wallpaper",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/wallpaper.svg",
+   "sha256": "f50c3849d6666be88c54a2cef9964625468a240d2ac507977193f222c0b00dee",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/wallpaper.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "book-open-text",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/book-open-text.svg",
+   "sha256": "c0dec0992ceabed00881322fce45bca5d63a87c9818796574c4a37a22edaebb7",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/book-open-text.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "pencil-sparkles",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/pencil-sparkles.svg",
+   "sha256": "708f870d7fc8c2a44af4776bc15c7ff46e44e161b0fa2a534e212b030475fad1",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/pencil-sparkles.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "calendar-range",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/calendar-range.svg",
+   "sha256": "67bb8b032c0fa31c71ed62ff9a4d936f6288ec91a049c4a42af120ea3850c0f4",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/calendar-range.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "import",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/import.svg",
+   "sha256": "7bc42947acafecc4958e1fbbefb6bb6f674502512b8c41c1385ffd693540a043",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/import.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "angry",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/angry.svg",
+   "sha256": "db2498be05a10e56e82e50729b120cd5ad8a83bc63be7c6cd1c0849bc8774feb",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/angry.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "user-round",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/user-round.svg",
+   "sha256": "1a4e2c8ea3e2ae3b8d55cafffe7090f098ac98a0f9637225e8185a23225b1fc8",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/user-round.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "curly-braces",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/curly-braces.svg",
+   "sha256": "7a6f13921831613ca77bb3fc1f24fcf436008e27a8230a269d2e498ba81de791",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/curly-braces.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "alert-circle",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/alert-circle.svg",
+   "sha256": "2571968c05805c794e33845c90827ec4cb83b37f7469026bcb524ff849428061",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/alert-circle.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "scaling",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/scaling.svg",
+   "sha256": "a327451969efe1e8c3cd1abfc5f126b13f7610f0f48738cb0a0f6ac54add20c3",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/scaling.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "heading-1",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/heading-1.svg",
+   "sha256": "e9c52793543d6c9b83998e35a041ebe03f04f5cf60973785d3f7fb42059d0ea0",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/heading-1.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "container",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/container.svg",
+   "sha256": "cae4bd263b76d86bc4598497e954a2c61f74b5371a4d82739da283106efa31f3",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/container.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "mouse-right",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/mouse-right.svg",
+   "sha256": "d0ef1a085065c18301a672acb565d6567cb34e23a5a0cc8dc2001aa28cc9df48",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/mouse-right.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "salad",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/salad.svg",
+   "sha256": "bf962daeafb7a9ff7de4b5b65505424e65ae1600286f84fb210141c0f14bfe71",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/salad.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "cloud-sun",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/cloud-sun.svg",
+   "sha256": "996d61ef764e9af9ba8ef88de3fce6dcac4a3dcc84827d21161a081b94cabb31",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/cloud-sun.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "file-signature",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/file-signature.svg",
+   "sha256": "be88cade59400a6f6b08415e32fd742b92a8ee88c891fd5f2fbd1d4b4138b6d9",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/file-signature.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "corner-up-left",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/corner-up-left.svg",
+   "sha256": "68d78574f96c123e2ea94de287275085ee69365f29881599db96cd87f8fdad72",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/corner-up-left.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "file-axis-3-d",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/file-axis-3-d.svg",
+   "sha256": "e4a5b9e8929de470b3ee3e8e94bca67b935842b8fc02340696d4cfba7ad5eac3",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/file-axis-3-d.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "file-diff",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/file-diff.svg",
+   "sha256": "a50e093ea0fb283f7caf7dd68ee0e729528201c7f3951ba29f9afc403e846992",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/file-diff.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "edit",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/edit.svg",
+   "sha256": "543c26dc8f11cbb137fa380b1b01463f5a5252e0ef43e5f50313b21f2ba67a24",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/edit.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "banana",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/banana.svg",
+   "sha256": "f3228c22dc92f5900fe7ef47da12743f5d8ec8e81aad70da6355ee9858f476b3",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/banana.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "faucet",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/faucet.svg",
+   "sha256": "861e72347cb76ac1b6184aaa6b78f17e308182c771a63954dcc08488df9fe225",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/faucet.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "square-chevron-left",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/square-chevron-left.svg",
+   "sha256": "87fd31351e2e2cf60317adaed25f3bc83b8fbb8cf37569627c7781af077a788b",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/square-chevron-left.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "lock-keyhole-open",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/lock-keyhole-open.svg",
+   "sha256": "0c1ffb60b952c5519d49dbe74e93c1919ed1ff6c5c02502187bc65b820ce2653",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/lock-keyhole-open.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "circle-arrow-out-down-right",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/circle-arrow-out-down-right.svg",
+   "sha256": "0e94d46480433d0f666d9767c2cda658748ab4a76002f1f6d3e8da291e8f5f90",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/circle-arrow-out-down-right.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "chart-no-axes-column-increasing",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/chart-no-axes-column-increasing.svg",
+   "sha256": "769b281490da74ebd9d3abc725173d066bb15a0306ba02b2d5abd831aa129e7f",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/chart-no-axes-column-increasing.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "flask-conical-off",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/flask-conical-off.svg",
+   "sha256": "8310e187d9afea01f44c8f310af0b345b7dc5c5df3bdde763cf4b90f97eec057",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/flask-conical-off.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "piano",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/piano.svg",
+   "sha256": "a7d346a6ad49d9792ae3460e9ba7fb7f8a2e07ec5465b16c0632076e476d97cb",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/piano.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "blender",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/blender.svg",
+   "sha256": "b143d49ebeeed2f9d8a90a565137c29e9353c8819571fdf30f39d9b5dba30e50",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/blender.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "tube-lotion",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/tube-lotion.svg",
+   "sha256": "d85448be6ca992e44d6ee0555e18403b384ff2278bf0709033d842dba0d7db72",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/tube-lotion.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "clock-6",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/clock-6.svg",
+   "sha256": "f1b3fd90cc3fb4c500eb90323530058bf713cca538346d0012f09600af7becc6",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/clock-6.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "egg",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/egg.svg",
+   "sha256": "64d85c2a45e0b68352e98b4df54ad188f3e71778b951e3cf6b0ab2d1bc4b37d7",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/egg.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "bolt",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/bolt.svg",
+   "sha256": "3ec922a2d7ce689009efc173dbe67afc1ed001790b682b6c3bd533784bea3925",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/bolt.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "lucide",
+   "name": "bell-minus",
+   "version": "1.55.0",
+   "file": "lucide@1.55.0/bell-minus.svg",
+   "sha256": "975b4c5c3a5b04dbd876f896dc0fc95be8e3331dc00619e453cf4d6a9b7e86ab",
+   "license": "ISC (Lucide; portions MIT, Feather)",
+   "source": "lucide-static@1.55.0 icons/bell-minus.svg (https://github.com/lucide-icons/lucide)"
+  },
+  {
+   "set": "tabler",
+   "name": "table-heart",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/table-heart.svg",
+   "sha256": "f8a7672b1e9c3e84f34d731df779569d41419c94aae31a877ace68fc53aac81c",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/table-heart.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "mug-off",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/mug-off.svg",
+   "sha256": "14205e0d899b2b5264d80d87456b347eaaa1af6109c0b26e339c457b04f2ca5f",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/mug-off.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "brand-redhat",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/brand-redhat.svg",
+   "sha256": "79f33a118f54af472a8f237983ac928cc700be078803c1939524b34ef599c633",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/brand-redhat.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "movie",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/movie.svg",
+   "sha256": "e4fd92c994fb7822e6e96c64d23ff84eb94efcffc19bfb105d35101b03261935",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/movie.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "radioactive-off",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/radioactive-off.svg",
+   "sha256": "edbd1c5151d14d7979be9bb6f8f0eb1133b2277065ffa14e4ac1f70cf11b7281",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/radioactive-off.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "empathize",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/empathize.svg",
+   "sha256": "56f3898dc32e1a770e3f87f9f93bed4f2beac5c9eefe9c0c647d7061fe398c89",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/empathize.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "hourglass-low",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/hourglass-low.svg",
+   "sha256": "0d5d01c0993224738c45ab854a70aed159e7dd43a829234bcb765b39c458eeb0",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/hourglass-low.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "share-2",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/share-2.svg",
+   "sha256": "c3d1659b6ebd9ec2d27ee1e4991477f6bd8b6241ee21eedfb35b183baac74c38",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/share-2.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "brand-asana",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/brand-asana.svg",
+   "sha256": "f9b0fb7de2ab066433911ae879b428ead22fad30e36d9c0f0d9a7e7fef0a90aa",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/brand-asana.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "inner-shadow-right",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/inner-shadow-right.svg",
+   "sha256": "ab18389008ff643f94f6f032d29f1675f34555a9c62cebe5863a62abd315c4ba",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/inner-shadow-right.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "car-fan",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/car-fan.svg",
+   "sha256": "9d5772845c36fc8048d7d18464769653ed7e81b46f285d9f17a6dccfe3490202",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/car-fan.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "eye-exclamation",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/eye-exclamation.svg",
+   "sha256": "2ed1d6ba5196f41a02e1599e12fd6a3c0294d1ada34d8ce02ed6d9b19bd81169",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/eye-exclamation.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "notification",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/notification.svg",
+   "sha256": "727c126e3d9e9276ffe65ac1aba5ad951a98ada686c5cdda5a82191fe6f7f3f0",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/notification.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "photo-off",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/photo-off.svg",
+   "sha256": "2a7b371c8c7f11888f0b6d996c55a72746a4b8f29d75f8e9f2712a03cebc5338",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/photo-off.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "arrow-bar-both",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/arrow-bar-both.svg",
+   "sha256": "dc38aad07e50a324b261872e17cee8f1fbb8f3f2deb691c4b9c18b82c62d984e",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/arrow-bar-both.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "access-point-off",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/access-point-off.svg",
+   "sha256": "208c7622a70e4119c357134a95ba4def5acf5c5c0aa902795a4d313a07438c71",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/access-point-off.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "book-off",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/book-off.svg",
+   "sha256": "82346ec3a361991f8f2222c6a1f021cdad4bdc7b934ab9ca2e2a87eaf5043a5c",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/book-off.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "alert-square-rounded",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/alert-square-rounded.svg",
+   "sha256": "c925954b0a012cbe1c7d1daeb15e1265ded908abc48f4d6c750624973c4acae5",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/alert-square-rounded.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "meeple",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/meeple.svg",
+   "sha256": "4749075508e912fd169f4126a0fccec268672baefdcc9d8a7cbdec901595a291",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/meeple.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "home-2",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/home-2.svg",
+   "sha256": "40bde508764d36d0872d0b6f90ec12a6d2cf8bb1cd47a2b7bc30a8d9f689c53d",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/home-2.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "shopping-cart-down",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/shopping-cart-down.svg",
+   "sha256": "46536b88fe64a5216ceafa767476578bf122b6817945ae69d044106ec1a1be13",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/shopping-cart-down.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "prompt",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/prompt.svg",
+   "sha256": "d9dc1a151c13b36ed8c83175bb4e0fc3761c2d6b6d47bdabdf3ddd7bd20ac0b2",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/prompt.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "file-typography",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/file-typography.svg",
+   "sha256": "30d0a33a6ad8648e7d6993a3f42001753dc57993e0f4a5e2399867540477bfa9",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/file-typography.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "square-rounded-chevron-down",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/square-rounded-chevron-down.svg",
+   "sha256": "3098655ccf636ea8c2f4a7da5b098f167b22837cb386531178f4d92822c17e94",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/square-rounded-chevron-down.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "swimming",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/swimming.svg",
+   "sha256": "120f32605ef601ffb932b404b92d16e00ad4ecb467ddd8a9c4e64c58b3270e1d",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/swimming.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "square-letter-m",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/square-letter-m.svg",
+   "sha256": "9af696fbefffc8531e6095891bdfd3ab6f7a90f8e9333e567b70352113ebd859",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/square-letter-m.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "mail-cancel",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/mail-cancel.svg",
+   "sha256": "bae8016a56a1c039dbbe24c2dcc564c2f8c939eff5ec019c0068967c6518bbb1",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/mail-cancel.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "number-42-small",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/number-42-small.svg",
+   "sha256": "37cbb7c3f75a727089f13e334c102a45197739ac150e55d30b92b54f6341854b",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/number-42-small.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "map-share",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/map-share.svg",
+   "sha256": "8cc8ccabd32d85d8a6f3f6ed17519a02ce54d90ab3580589b89cdfcf80832bbf",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/map-share.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "square-rounded-chevrons-left",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/square-rounded-chevrons-left.svg",
+   "sha256": "842ce6d1722115797620f2f18361cc9fea61c3ab05578e00d3d41640f89b9379",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/square-rounded-chevrons-left.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "toilet-paper-off",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/toilet-paper-off.svg",
+   "sha256": "884db548d33dd59a5f21a8d18de61291d405fa1f16bb99701d93f4ea55a3544a",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/toilet-paper-off.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "phone-off",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/phone-off.svg",
+   "sha256": "2f691dab4f9e3a9580041e67e83fcc210447d072888ad3c8f8f889763ee4784e",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/phone-off.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "folder-ai",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/folder-ai.svg",
+   "sha256": "62eeec8b7be8ebc94ab0ba969b1e9eb4554ad92ee4462d404eb6e3a94d41f9da",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/folder-ai.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "chart-infographic",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/chart-infographic.svg",
+   "sha256": "f94ca2cdbed728bf0e907d942cc363d275022fd608eb3f3f829c7186950b1cc5",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/chart-infographic.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "brightness",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/brightness.svg",
+   "sha256": "6a9db6238620ab5acbd28b919dca1c618c500232f9025e59f7fe9a9c609487a8",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/brightness.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "school",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/school.svg",
+   "sha256": "bed5db477b9e4b857ae8eee4251e7d235814ee1b5abfcd1aa41786dbc4c53e75",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/school.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "brand-couchdb",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/brand-couchdb.svg",
+   "sha256": "0e9f899cccc847d3a07e1b80bcf40ae3e99734fe317e4a51e911929b6d7c4c7f",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/brand-couchdb.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "razor-electric",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/razor-electric.svg",
+   "sha256": "707cb145a9c6fddbb9a837c964f4969cd4c40662369f2106b196420c30a61b37",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/razor-electric.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "gender-genderless",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/gender-genderless.svg",
+   "sha256": "007f86c5f8bcb5860cac3b18d9b5ca471cef6282dbf4e7480f74150e3248f830",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/gender-genderless.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "medal",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/medal.svg",
+   "sha256": "c93516e8eed8c7fae5d95cdb3756b7b438d38e2a5ad1da9307c2b1589c7d30e7",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/medal.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "corner-up-right",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/corner-up-right.svg",
+   "sha256": "6011c9ae27e96dc0e551e97a5f48d763194e1877f756922710460232480444b0",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/corner-up-right.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "number-8",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/number-8.svg",
+   "sha256": "63659e39fe3699e0094927e74a85597f6af5f1e0f9f1293dc21f6de74f25fe1e",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/number-8.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "vocabulary",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/vocabulary.svg",
+   "sha256": "48c8ef772cab81251ed542f3b1d8886c4b276112cb8385e94ad1f95a82e388f3",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/vocabulary.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "alphabet-polish",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/alphabet-polish.svg",
+   "sha256": "835e899dada71b70b8b2bcba5af367a07ac038291ab14b7f55f122266de457f5",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/alphabet-polish.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "file-symlink",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/file-symlink.svg",
+   "sha256": "1cea374c841aad8bde1b3de83168783c42475d583203c2ae9c453978491835ab",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/file-symlink.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "eyeglass-2",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/eyeglass-2.svg",
+   "sha256": "e4cee430332c5f0a93e4245eab7a0f042e3129b6a606937607dc69a6f5326832",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/eyeglass-2.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "html",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/html.svg",
+   "sha256": "6d3f82e68e49b21a83fcafbd76f6c513def7a307ab6f6f84edff27b346cfc5da",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/html.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "signal-2g",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/signal-2g.svg",
+   "sha256": "7184af90e3a18e525f38ca1c80ec410cf61be5ced2fc1d2e073a23526fb03d33",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/signal-2g.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "math-x-minus-y",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/math-x-minus-y.svg",
+   "sha256": "6f0506b3493a0a0accd305031cad912372596237c339371f0d1a98ebd76a9aac",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/math-x-minus-y.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "alarm-snooze",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/alarm-snooze.svg",
+   "sha256": "2f944c6f668311e3bb0131364287069af6a87c695bf9fa4206d955df5892ab46",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/alarm-snooze.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "chart-scatter-3d",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/chart-scatter-3d.svg",
+   "sha256": "7f9913abda7b18e4a493d94bc7ec4b5fdd7ffa6c6d58028f6f036ada755a9e56",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/chart-scatter-3d.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "pencil-down",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/pencil-down.svg",
+   "sha256": "ffbfe6a89d2bdfb33dd636ce9081811c52ef3164b916585e28512262673466de",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/pencil-down.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "christmas-tree",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/christmas-tree.svg",
+   "sha256": "9870a98b1d543d52f349ee259fc0c9599be5822952cd3ab563c5a4088e661fa3",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/christmas-tree.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "arrow-down-circle",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/arrow-down-circle.svg",
+   "sha256": "9e293cdf9e4746f860558a271997c035214ba56f8469bba3210844a0f0558c4f",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/arrow-down-circle.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "flower-off",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/flower-off.svg",
+   "sha256": "4b6e9c81c5451e18d7ba6810ce4eef5ef3620d7d43b1a83276c9116ed7906fd1",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/flower-off.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "code-circle",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/code-circle.svg",
+   "sha256": "c05dba3c079f6721787156801742ee3ea69350ea1b74e17185fc8647e85f38ba",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/code-circle.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "cloud-search",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/cloud-search.svg",
+   "sha256": "8d764136e81d1d5946b4786b8fa925afca4ff0c699181d3a18d0f02fc4a66872",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/cloud-search.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "help-off",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/help-off.svg",
+   "sha256": "8068de423aaf54b1d2b4613ad0ff14b2d16406784a26138d95a5f0996965024c",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/help-off.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "face-mask",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/face-mask.svg",
+   "sha256": "7a84fd68041dd9cf35b9e94945d963dc9443f0d7c6c1c9c3439f50710731446b",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/face-mask.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "bell-star",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/bell-star.svg",
+   "sha256": "c2faa4292feb79e360775c8d4195e9b4b258044f4dd5c7a35a46fad606571f28",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/bell-star.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "square-dashed-x",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/square-dashed-x.svg",
+   "sha256": "4330aa042cc708cdc5ae170581907b0f6f96eaf669ba5fcce76d4f9ee0963bc5",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/square-dashed-x.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "layout-sidebar-left-collapse",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/layout-sidebar-left-collapse.svg",
+   "sha256": "9c546a639dbfff17ec8f017c32bb3330eba4fdfc4554fdbe2e00c6d10a4261d9",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/layout-sidebar-left-collapse.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "world-code",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/world-code.svg",
+   "sha256": "968b0df2fab1339bb89c24b60a6890baae8c1628069cc2203fdc080ea774ee9f",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/world-code.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "rosette-number-1",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/rosette-number-1.svg",
+   "sha256": "77bb2ebeec51d24c6db7a1461e822c2fc3baef9b43067b222c10111d176b1395",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/rosette-number-1.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "wiper-wash",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/wiper-wash.svg",
+   "sha256": "ca7e37b13d130591b31f9081382a91c46c0135d7ab5f0503297218ece111f340",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/wiper-wash.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "horse-toy",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/horse-toy.svg",
+   "sha256": "520440cf51efae7c5fbe43e4b42a31f042fbc80ef455e728097dbb6b86c9f13a",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/horse-toy.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "tabler",
+   "name": "antenna-bars-5",
+   "version": "3.49.0",
+   "file": "tabler@3.49.0/antenna-bars-5.svg",
+   "sha256": "14b305fd26e9fe1318bf116d25dac5ac7bcf60d9656b7cd10d7de5dc94c674ed",
+   "license": "MIT (Tabler Icons)",
+   "source": "@tabler/icons@3.49.0 icons/outline/antenna-bars-5.svg (https://github.com/tabler/tabler-icons)"
+  },
+  {
+   "set": "feather",
+   "name": "user",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/user.svg",
+   "sha256": "7c7f08d9c49328e9e469915c0514a89fcdf462f7a56c7c7ee9617cb0d59e2b19",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/user.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "trash-2",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/trash-2.svg",
+   "sha256": "aecd97d08f4133f04d0b9c6614fd19ab9044b6c236a094a3f53213c115a21795",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/trash-2.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "book-open",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/book-open.svg",
+   "sha256": "f272e5875f4e7397909c936c1e9ace72584780e4c1bc9b8645c9ce7a01a99523",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/book-open.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "send",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/send.svg",
+   "sha256": "3f332eb888241cd1363eb04c7e6c0faa6eeba1ee27beceac0e5b6f08a66d3140",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/send.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "sun",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/sun.svg",
+   "sha256": "e15fe58f102fbaf197f768bae69c00fcdcca8adc9ec840e8aacaf8622cb462bf",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/sun.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "octagon",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/octagon.svg",
+   "sha256": "814aa70b8b48235c1f60e2c306a99bdb58f3b794357044d5b6b1aae8d006645b",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/octagon.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "battery-charging",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/battery-charging.svg",
+   "sha256": "fc17ba3558c3efca4ba5c46136c90f7c079151ae97975eee8f33044a7e79f7b9",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/battery-charging.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "arrow-up-right",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/arrow-up-right.svg",
+   "sha256": "c6997135a177f53a5b8fc2453c6be0639f0d94a375cd61d0dfa98b5c6ca39414",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/arrow-up-right.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "chevron-up",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/chevron-up.svg",
+   "sha256": "dabdada1c7093baf247d4003dc37bdeccf42a843e5a5ab04cd8c5efe1d42e314",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/chevron-up.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "tag",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/tag.svg",
+   "sha256": "90abba3f5d648f98ec5df1f24d40e548377af21f213c5c580352fa9251ba6bf0",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/tag.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "moon",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/moon.svg",
+   "sha256": "1058d95e9055627a6e22ecc2e6e2cb3e8f0abf55131adf83c58da9d688a4bf4e",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/moon.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "check-circle",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/check-circle.svg",
+   "sha256": "2196776e3552a9a5693ba589080759313f718b43c2328e67d4444ef646136fb3",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/check-circle.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "sunrise",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/sunrise.svg",
+   "sha256": "9592dd29502548bb7b54ab6a6e90b6a4e1962e14c10c8436af2bc2849eb40ef8",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/sunrise.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "layers",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/layers.svg",
+   "sha256": "7626784628aecd580dd3b2eeb63504d79765e14da188538411c745ef09c6173f",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/layers.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "fast-forward",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/fast-forward.svg",
+   "sha256": "434f0328f5ccbe03ebcf28f8425d0c3f3da33f613c1399ebdcd63292f66430d7",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/fast-forward.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "phone-outgoing",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/phone-outgoing.svg",
+   "sha256": "4d9c232fb6f76675f1412749a98239fa4d034066bc7296c4ce6c2d4c2f5cceca",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/phone-outgoing.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "skip-forward",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/skip-forward.svg",
+   "sha256": "dc2762998559812eba645df039494fbe17b7e9d5fd807f3054e4844177481f63",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/skip-forward.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "dollar-sign",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/dollar-sign.svg",
+   "sha256": "deae02f77cdca59843c0c957f3715336f7ad7aaf38f017868eea9d4dafeb19fd",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/dollar-sign.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "alert-octagon",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/alert-octagon.svg",
+   "sha256": "797351cdbb7f360bd7ee0ecc3a6ff04eeec404e95f466f6d9b36869aec6e680d",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/alert-octagon.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "align-center",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/align-center.svg",
+   "sha256": "940db9b507fab8d9547143e318eea68008f38249248929ef248eb5ae0c041660",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/align-center.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "percent",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/percent.svg",
+   "sha256": "222060585911d4f2875825528273b4d4e86ee5b9332399c9ceb6c089f5f06cef",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/percent.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "phone-missed",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/phone-missed.svg",
+   "sha256": "bc6ff721241d7e5fe6aa43c0dacfef8cb51e2711363dc9f397308c517426347b",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/phone-missed.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "inbox",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/inbox.svg",
+   "sha256": "fa0690fd1f037cbca505fc6c7e97801d4589b68454dc607ff06c3e18d48c5bee",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/inbox.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "framer",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/framer.svg",
+   "sha256": "34c189b677b6377ac74f37c76339e0d40d7a383d0c9762d8edeb3f5062d5a081",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/framer.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "meh",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/meh.svg",
+   "sha256": "80c2a526f1ac7ec8eef7c52c90b25dfd6632d891a444a61ed032e3a908ed54a1",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/meh.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "corner-down-left",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/corner-down-left.svg",
+   "sha256": "0b63fec4851bd5c389a79d32782db88816ca5e2806ab1c5740ebef405cba514b",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/corner-down-left.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "award",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/award.svg",
+   "sha256": "17f2539d5b1269b7a74b1adbb20291715156105aa4a4d5256f86a66544197e93",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/award.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "log-out",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/log-out.svg",
+   "sha256": "4d47af2b16dfe795771c95dfa7f81a4b0c6721018b28903797dc592faeea4a5a",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/log-out.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "wifi-off",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/wifi-off.svg",
+   "sha256": "1b6ebe928463453615b8df05dbae4c7eff976a4cbb34174b0171a3573abcba10",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/wifi-off.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "battery",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/battery.svg",
+   "sha256": "ed6ab6de88281f6a809e270789666ce3456b7b3e39da98fb0ee164a59bf1d77e",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/battery.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "droplet",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/droplet.svg",
+   "sha256": "845f263a0931dfd7d81ecdddd275f664e16b8cfc6813b428fe7dcf422159c848",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/droplet.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "pocket",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/pocket.svg",
+   "sha256": "3e276a19432bfa65cde1a6d94338953a9a185dd324deac1979fe747cc84a7113",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/pocket.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "folder-plus",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/folder-plus.svg",
+   "sha256": "49f9fdbd9ac5bfbe457a86af0686db0c6367e919353b4af9ae396cd1f8b83e21",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/folder-plus.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "voicemail",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/voicemail.svg",
+   "sha256": "780fdc4685780b2df372578f69c8771b68d3a4a529033f25885b0afd196069c7",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/voicemail.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "lock",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/lock.svg",
+   "sha256": "4d3c4db36888bbe68c1b519a520fb64c2df3bd45ceb15b736eba55cf551b4803",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/lock.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "minus-circle",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/minus-circle.svg",
+   "sha256": "7e9a3219e7cf50362ee9f0057922a70399170141970c632bcb688e8dd9c477fc",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/minus-circle.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "volume-x",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/volume-x.svg",
+   "sha256": "59cc31d72c7377fe5560783a77cb591416503a433ed44c9a686055739a40eb3e",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/volume-x.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "watch",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/watch.svg",
+   "sha256": "577096a81e87ee0c5a69f5bcee5bc1a3c78a22b70a0ef59202f86ab8ba95986c",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/watch.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "arrow-right",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/arrow-right.svg",
+   "sha256": "88f86f0b3d3067d7c9cbe2a646a05c64737bf6c8acf8fe5e13ab8922cfd413ca",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/arrow-right.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "eye-off",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/eye-off.svg",
+   "sha256": "6e7093e86378549143e2c6f8f5523114b76df995cae16862bd2e198302299c22",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/eye-off.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "mouse-pointer",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/mouse-pointer.svg",
+   "sha256": "132c6e7c8110e4b901a67f4497a5176827da937fc3d6333a4a13e1ae88674c4d",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/mouse-pointer.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "github",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/github.svg",
+   "sha256": "2f80c3367c46f586f8195640b78cd3cb5b343307f1ee6e768cd3b6bb7c470d62",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/github.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "file-text",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/file-text.svg",
+   "sha256": "fc90eb41c92f511b6e4076673d2da28476f140e4614522e85511e8215f9f530a",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/file-text.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "x-circle",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/x-circle.svg",
+   "sha256": "755c1efaa727fd5ed5acbf540c89beb5093d11552457e718e9d55ca131a83ef3",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/x-circle.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "film",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/film.svg",
+   "sha256": "19c5ec2661c81c8eddc411cdf5a5401096cce81dfb0eb92518409f62a762b206",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/film.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "divide-circle",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/divide-circle.svg",
+   "sha256": "6ffe5fee4624ff3934c82235734b4731496a58722c2c2f56ab25a41b383b981b",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/divide-circle.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "key",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/key.svg",
+   "sha256": "f0aacbed8d0f7a279977392f92f4da73c35e905ac73b3c83320d54856e627eec",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/key.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "linkedin",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/linkedin.svg",
+   "sha256": "2ca1d3eb5011d7b73ffc9ad142f44835e344cab93bca281d3f7bdcbd43a02727",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/linkedin.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "coffee",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/coffee.svg",
+   "sha256": "4fcd094342d5182df3825a90ec7b69b5fd4c51e427eab30610a021c9f5b62963",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/coffee.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "shuffle",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/shuffle.svg",
+   "sha256": "73b69f6c55b407be1bed610683d442554f6e272309622d2525c23df18175e2c1",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/shuffle.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "smartphone",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/smartphone.svg",
+   "sha256": "0fdcc2b4fb91312a9280a925dcde6cbf1161482d1a2adf56c7d186f936994498",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/smartphone.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "pie-chart",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/pie-chart.svg",
+   "sha256": "c936d6d622719365be7aa294136430263c6b0dd5a13782630ada192507450089",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/pie-chart.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "chevrons-left",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/chevrons-left.svg",
+   "sha256": "48ed20c6500192d0a33fc31df42f48a267490bcca2d3df85f2ce6ada3123969f",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/chevrons-left.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "divide",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/divide.svg",
+   "sha256": "443e37d85fc4773cb8f770c592ad2d587c7558e5fe1fae03e06f569b972c4376",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/divide.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "x",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/x.svg",
+   "sha256": "891da901166c26a96c1bdc1d9be6415a856a722156fc548672629d564b549941",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/x.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "hexagon",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/hexagon.svg",
+   "sha256": "b397d0627830848cd2a09515c0a3e1c1ee36723998623287e9b20217e29cdc73",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/hexagon.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "mic-off",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/mic-off.svg",
+   "sha256": "69f037bcca5767c1f545b676f0fbd47b0972d3e065fb5e305e3b336d9df8689c",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/mic-off.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "x-square",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/x-square.svg",
+   "sha256": "a8c1ebd23a1528512be510b48a915f713d9b7a2de15cd5fcd2dfe8efeba855bc",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/x-square.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "cloud-drizzle",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/cloud-drizzle.svg",
+   "sha256": "335a8d42c7970016eabbd269b8c349c2e9e503605835a4755d9bf5be7a7c8e53",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/cloud-drizzle.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "printer",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/printer.svg",
+   "sha256": "6fba39e54609f00861cbc4a7c71031e16b3d860da834996f05a075fce6a91e78",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/printer.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "chevron-right",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/chevron-right.svg",
+   "sha256": "80459c677f0bbf72b394c9985b2be27266bb561c4a610f5408e7aaa1492effc1",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/chevron-right.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "bookmark",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/bookmark.svg",
+   "sha256": "097d94d10e7d308e6365bcaa3358122c449a43c182096df67ed2a7d5dca66e7f",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/bookmark.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "calendar",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/calendar.svg",
+   "sha256": "bbbcdcd7899b110d246b8d8473eaebe140e6f5cba266a36d936f5aba6a402bec",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/calendar.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "link",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/link.svg",
+   "sha256": "4333685315826b15412c3332ece9bebfd3a48e97d44cf1f2bd8a4b52d19ac983",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/link.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "corner-right-up",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/corner-right-up.svg",
+   "sha256": "1076556669e94934979d09edd05879d9a7e272f5a54841cbe4281e3e761edd25",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/corner-right-up.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "bell-off",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/bell-off.svg",
+   "sha256": "e90b9df9c43abeafe27ae1ade1b407b465253fdf2ae3bcc983b9bdfa50a7c7e4",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/bell-off.svg (https://github.com/feathericons/feather)"
+  },
+  {
+   "set": "feather",
+   "name": "grid",
+   "version": "4.29.2",
+   "file": "feather@4.29.2/grid.svg",
+   "sha256": "2e2e434f899acff67a7aa1cdba68e2c78981d6cd8a105b39ff2093a134a6e315",
+   "license": "MIT (Feather)",
+   "source": "feather-icons@4.29.2 dist/icons/grid.svg (https://github.com/feathericons/feather)"
+  }
+ ]
+}

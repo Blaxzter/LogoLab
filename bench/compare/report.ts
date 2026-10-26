@@ -17,7 +17,7 @@
 //   • the paper's rows come with the caveat that they are a different protocol.
 //   • a row with n < 10 is marked not comparable.
 
-import type { ScoreRow } from './types.ts'
+import { corpusKind, type ScoreRow } from './types.ts'
 
 const HEADLINE = 'logolab-auto'
 const ABLATION = /^logolab-abl-/
@@ -43,6 +43,15 @@ const INPUTS: [string, string][] = [
   [
     'starvector-1b',
     'StarVector-1B im2svg, SVG-Bench HF generation config, seed 0; sees the 512px PNG (its processor resizes to 224).',
+  ],
+  [
+    'logolab-strokes',
+    'LINE HEADLINE. `npx logolab` (MCP traceIcon) on the PNG with mode=mono and `strokes` (the Strokes toggle): centreline strokes with a measured width.',
+  ],
+  ['logolab-outline', 'the same call without `strokes`: the filled outlines LogoLab draws with Strokes off.'],
+  [
+    'autotrace-centerline',
+    'AutoTrace 0.40.0 `-centerline` on the luma<128 PBM (as Potrace gets it); writes 1-px strokes, no width.',
   ],
   [
     'potrace',
@@ -119,7 +128,11 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
   out.push(`# Vectorizer comparison — ${meta.run}`)
   out.push('')
   out.push(
-    `Scored at ${meta.res}px (resvg, white). LogoLab ${meta.logolab}. Tools: ${main.join(', ')}` +
+    `Scored at ${meta.res}px (resvg, white)` +
+      (Array.isArray(meta.lineRes)
+        ? `; line corpora at ${meta.lineRes.join(' / ')}px (the A/B line lane's flat cap)`
+        : '') +
+      `. LogoLab ${meta.logolab}. Tools: ${main.join(', ')}` +
       (tools.length > main.length ? `; ablation: ${tools.filter((t) => ABLATION.test(t)).join(', ')}.` : '.'),
   )
   out.push('')
@@ -161,6 +174,16 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
   const corpora = [...new Set(rows.map((r) => r.corpus))]
   for (const corpus of corpora) {
     const cr = rows.filter((r) => r.corpus === corpus)
+    if (corpusKind(corpus) === 'line') {
+      out.push(
+        ...lineSection(
+          corpus,
+          cr,
+          tools.filter((t) => !ABLATION.test(t) && cr.some((r) => r.tool === t)),
+        ),
+      )
+      continue
+    }
     const held = cr[0]?.heldOut ? 'held out' : 'IN-SAMPLE (development)'
     const cases = [...new Set(cr.map((r) => r.caseId))]
     out.push(`## ${corpus} — ${cases.length} cases, ${held}`)
@@ -384,6 +407,217 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
     out.push('')
   }
   return out.join('\n')
+}
+
+// ── LINE corpora (strokes-oss) ───────────────────────────────────────────────────────────
+//
+// Their own section, never a column of the fill table: the answer sheet is a set of
+// centrelines with widths, and a chamfer against an outline would be a different question.
+// The headline row is logolab-strokes (the Strokes toggle). Outline tracers get pixel
+// metrics only — their centreline cells read 'no strokes', and the n behind every median
+// says how many rows had strokes to score.
+
+const LINE_HEADLINE = 'logolab-strokes'
+
+/** One tool's line-corpus row: the medians the stroke table prints (exported for tests). */
+export interface LineStats {
+  tool: string
+  n: number
+  fail: number
+  /** Rows with a centreline score (the output had strokes). */
+  scored: number
+  deltaE: number | null
+  centre: number | null
+  centreP95: number | null
+  missed: number | null
+  widthErr: number | null
+  /** Median |ends Δ| and |paths Δ|: a stroke broken in two and two fused are both wrong. */
+  ends: number | null
+  paths: number | null
+  /** Rows with no turn / every centreline gate passed, over the scored rows. */
+  noTurns: number
+  allPass: number
+  nodes: number | null
+}
+
+export function lineStats(tool: string, rs: ScoreRow[]): LineStats {
+  const ok = rs.filter((r) => r.status === 'ok')
+  const sc = ok.filter((r) => isNum(r.clCentre))
+  const abs = (k: keyof ScoreRow) =>
+    sc
+      .map((r) => r[k])
+      .filter(isNum)
+      .map(Math.abs)
+  return {
+    tool,
+    n: rs.length,
+    fail: rs.length - ok.length,
+    scored: sc.length,
+    deltaE: median(vals(rendered(rs), 'meanDeltaE')),
+    centre: median(vals(sc, 'clCentre')),
+    centreP95: median(vals(sc, 'clCentreP95')),
+    missed: median(vals(sc, 'clMissed')),
+    widthErr: median(vals(sc, 'clWidthErr')),
+    ends: median(abs('clEndsDelta')),
+    paths: median(abs('clPathsDelta')),
+    noTurns: sc.filter((r) => r.clTurns === 0).length,
+    allPass: sc.filter((r) => (r.gatesApplicable ?? 0) > 0 && r.gatesPassed === r.gatesApplicable).length,
+    nodes: median(vals(ok, 'docNodes')),
+  }
+}
+
+const LINE_PAIRED: [keyof ScoreRow, string, number][] = [
+  ['meanDeltaE', 'ΔE mean', 2],
+  ['clCentre', 'centre px', 2],
+  ['clMissed', 'missed px', 2],
+  ['clWidthErr', 'width err', 3],
+  ['docNodes', 'nodes', 0],
+]
+
+function lineSection(corpus: string, cr: ScoreRow[], ct: string[]): string[] {
+  const out: string[] = []
+  const cases = [...new Set(cr.map((r) => r.caseId))]
+  const res = [...new Set(cr.map((r) => r.res))].join(' / ')
+  out.push(
+    `## ${corpus} — ${cases.length} cases, ${cr[0]?.heldOut ? 'held out' : 'IN-SAMPLE (development)'}, LINE corpus (centrelines) at ${res}px`,
+  )
+  out.push('')
+  out.push(
+    '- The answer sheet is the authored STROKES (bench/lineArtGround.ts): `centre` = traced centreline → nearest ' +
+      'authored one (precision), `missed` = authored centreline not under the traced ink → nearest traced one ' +
+      '(recall; a mean over the MISSED samples only, so one absent stroke reads large), `width err` = relative ' +
+      'width error, `|ends Δ|` / `|paths Δ|` = topology against the authored strokes joined end to end, `no turns` = ' +
+      'rows where no traced path leaves one authored stroke for another (bench/centerlineScore.ts). Pixel values are ' +
+      `raw px at ${res}px; a 24-unit icon's 2-unit stroke is ${res === '2048' ? '~171' : 'w'} px wide here.`,
+  )
+  out.push(
+    '- A row with no stroked path (every outline tracer) has no centreline score — `cl scored` counts the rows that ' +
+      'did — and keeps its pixel metrics. `gates` = every centreline gate of test/centerline-gate.test.ts with its ' +
+      'pixel limits scaled to the raster (centerlineTol), ΔE from the resvg render.',
+  )
+  out.push('')
+  out.push(
+    '| tool | n | fail | cl scored | ΔE mean p50 | centre p50 | centre p95 p50 | missed p50 | width err p50 | |ends Δ| p50 | |paths Δ| p50 | no turns | gates all-pass | nodes p50 |',
+  )
+  out.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|')
+  const stats = ct.map((t) =>
+    lineStats(
+      t,
+      cr.filter((r) => r.tool === t),
+    ),
+  )
+  for (const s of stats) {
+    const sc = s.scored
+    const c = (v: number | null, d = 2) => (sc ? fmt(v, d) : 'no strokes')
+    out.push(
+      `| ${name(s.tool, s.n)} | ${s.n} | ${s.fail} | ${sc}/${s.n} | ${fmt(s.deltaE)} | ${c(s.centre)} | ${c(s.centreP95)} | ` +
+        `${c(s.missed)} | ${sc ? fmt(s.widthErr, 3) : '—'} | ${sc ? fmt(s.ends, 0) : '—'} | ${sc ? fmt(s.paths, 0) : '—'} | ` +
+        `${sc ? `${s.noTurns}/${sc}` : '—'} | ${sc ? `${s.allPass}/${sc}` : '—'} | ${kfmt(s.nodes)} |`,
+    )
+  }
+
+  // ── per icon set, for the stroke tools: the sets draw differently (Tabler closes circles
+  // as open arcs, Feather writes dots as zero-length lines) and a pooled median hides that.
+  const sets = [...new Set(cases.map((c) => c.split('/')[1]?.split('-')[0] ?? ''))]
+  const strokeTools = stats.filter((s) => s.scored > 0).map((s) => s.tool)
+  if (sets.length > 1 && strokeTools.length) {
+    out.push('')
+    out.push('By icon set (centre p50 / missed p50 / gates all-pass, over the scored rows):')
+    out.push('')
+    out.push(`| tool | ${sets.join(' | ')} |`)
+    out.push(`|---|${sets.map(() => '---').join('|')}|`)
+    for (const t of strokeTools) {
+      const cells = sets.map((set) => {
+        const s = lineStats(
+          t,
+          cr.filter((r) => r.tool === t && r.caseId.startsWith(`${corpus}/${set}-`)),
+        )
+        return s.scored ? `${fmt(s.centre)} / ${fmt(s.missed)} / ${s.allPass}/${s.scored}` : '—'
+      })
+      out.push(`| ${t} | ${cells.join(' | ')} |`)
+    }
+  }
+
+  // ── paired vs the line headline
+  if (ct.includes(LINE_HEADLINE) && ct.length > 1) {
+    const head = new Map(rendered(cr.filter((r) => r.tool === LINE_HEADLINE)).map((r) => [r.caseId, r]))
+    out.push('')
+    out.push(
+      `Paired against **${LINE_HEADLINE}** (same cases, both scored): mean difference tool − ${LINE_HEADLINE}, 95% ` +
+        'paired-bootstrap CI (4000 resamples, seeded), and how often the tool is strictly better (lower). ✔ = CI excludes 0.',
+    )
+    out.push('')
+    out.push(`| tool | ${LINE_PAIRED.map(([, l]) => l).join(' | ')} |`)
+    out.push(`|---|${LINE_PAIRED.map(() => '---').join('|')}|`)
+    for (const t of ct) {
+      if (t === LINE_HEADLINE) continue
+      const tr = rendered(cr.filter((r) => r.tool === t))
+      const cells = LINE_PAIRED.map(([k, , d]) => {
+        const ds: number[] = []
+        let wins = 0
+        for (const r of tr) {
+          const a = r[k]
+          const b = head.get(r.caseId)?.[k]
+          if (!isNum(a) || !isNum(b)) continue
+          ds.push(a - b)
+          if (a < b) wins++
+        }
+        if (ds.length < 3) return '—'
+        const ci = pairedBootstrap(ds)
+        const f = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(d)
+        return `${f(ci.mean)} [${f(ci.lo)}, ${f(ci.hi)}]${ci.lo > 0 || ci.hi < 0 ? ' ✔' : ''} · ${wins}/${ds.length}`
+      })
+      out.push(`| ${name(t, tr.length)} | ${cells.join(' | ')} |`)
+    }
+  }
+
+  // ── SVG-Bench (pixel), every row
+  if (cr.some((r) => isNum(r.sbSsim))) {
+    out.push('')
+    out.push('SVG-Bench metrics (means over every row, failures as a white render):')
+    out.push('')
+    out.push('| tool | n | DINO ↑ | LPIPS ↓ | SSIM ↑ | MSE ↓ | tokens (file) |')
+    out.push('|---|---|---|---|---|---|---|')
+    for (const t of ct) {
+      const rs = rendered(cr.filter((r) => r.tool === t))
+      out.push(
+        `| ${name(t, vals(rs, 'sbSsim').length)} | ${vals(rs, 'sbSsim').length} | ${fmt(mean(vals(rs, 'sbDino')), 3)} | ` +
+          `${fmt(mean(vals(rs, 'sbLpips')), 3)} | ${fmt(mean(vals(rs, 'sbSsim')), 3)} | ${fmt(mean(vals(rs, 'sbMse')), 4)} | ` +
+          `${kfmt(mean(vals(rs, 'sbTokens')))} |`,
+      )
+    }
+  }
+
+  // ── most-failed centreline gates, and the footnotes
+  out.push('')
+  out.push(
+    'Most-failed centreline gates: ' +
+      strokeTools
+        .map((t) => {
+          const h = new Map<string, number>()
+          for (const r of cr.filter((r) => r.tool === t))
+            for (const g of r.failedGates ?? []) h.set(g, (h.get(g) ?? 0) + 1)
+          return `${t} ${
+            [...h]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 4)
+              .map(([g, n]) => `${g}×${n}`)
+              .join(' ') || '—'
+          }`
+        })
+        .join('; ') +
+      '.',
+  )
+  const failed = cr.filter((r) => r.status !== 'ok')
+  if (failed.length)
+    out.push(
+      `- failures (pixel metrics from a white render): ${failed.map((r) => `${r.tool} ${r.caseId.split('/')[1]}: ${(r.error ?? r.status).slice(0, 80)}`).join('; ')}`,
+    )
+  const na = cr.filter((r) => r.status === 'ok' && r.geomRefusal && r.geomRefusal !== 'no strokes')
+  if (na.length)
+    out.push(`- centreline n/a for another reason: ${na.map((r) => `${r.tool} ${r.geomRefusal}`).join('; ')}`)
+  out.push('')
+  return out
 }
 
 /** StarVector arXiv 2312.11556v4 Table 1, SVG-Emoji (mixed Twemoji/OpenMoji/Noto, cairosvg,

@@ -25,7 +25,17 @@
 //   imagetracer-default, -fills, -swept           npm imagetracerjs@1.2.6 → .bench-tools/imagetracer/, in-process (adapters/imagetracer.ts)
 //   starvector-1b                                 .bench-tools/starvector-venv + HF weights (adapters/starvector.ts)
 //   omnisvg-4b                                    .bench-tools/omnisvg-venv + omnisvg-src + HF weights (adapters/omnisvg.ts)
-// Setup (all of it, pinned): bench/compare/py/setup.sh. Data: py/fetch_svgbench.py.
+//   logolab-strokes, logolab-outline              LINE corpora only: traceIcon mode=mono with / without `strokes`
+//   autotrace-centerline                          LINE corpora only: AutoTrace -centerline on the luma<128 PBM
+// Setup (all of it, pinned): bench/compare/py/setup.sh. Data: py/fetch_svgbench.py,
+// fetchStrokesOss.ts (strokes-oss).
+//
+// LINE corpora (strokes-oss, corpus.ts): stroke icons whose authored `d` is the answer. They
+// are rasterized at their own fixed resolution — the A/B line lane's, the flat cap (2048) —
+// not --res (`--line-res n` overrides it for a quick look), scored as centrelines by
+// score.ts scoreLine (bench/centerlineScore.ts via lineDoc.ts) next to the pixel metrics,
+// and reported in their own table. Tools marked `kinds: ['line']` run only there; every
+// other tool runs on both kinds, an outline tracer getting 'no strokes' for the centreline.
 // --skip-tools a,b drops tools for one run (e.g. starvector on the 668-row corpus).
 //
 // Output: .bench-tools/results/<run>/ — cases/<corpus>/<case>/{truth.png,<tool>.svg,<tool>.png},
@@ -55,9 +65,18 @@ import { renderGround } from './render.ts'
 import { scorePixels, scoreTrace, type Truth } from './score.ts'
 import { summaryMarkdown } from './report.ts'
 import { writeOverlays } from './overlay.ts'
-import { logolabAblation, logolabAuto, logolabGate, logolabProduct, provenance } from './adapters/logolab.ts'
+import {
+  logolabAblation,
+  logolabAuto,
+  logolabGate,
+  logolabOutline,
+  logolabProduct,
+  logolabStrokes,
+  provenance,
+} from './adapters/logolab.ts'
 import {
   AUTOTRACE_SWEPT,
+  autotraceCenterline,
   autotraceDefault,
   autotraceSwept,
   potrace,
@@ -70,7 +89,16 @@ import {
 import { omnisvg, omnisvgProvenance } from './adapters/omnisvg.ts'
 import { imagetracerDefault, imagetracerFills, imagetracerSwept } from './adapters/imagetracer.ts'
 import { starvector, starvectorProvenance } from './adapters/starvector.ts'
-import type { CompareCase, CorpusId, ScoreRow, TraceInput, TraceResult, TracerAdapter } from './types.ts'
+import {
+  corpusKind,
+  type CompareCase,
+  type CorpusId,
+  type ScoreRow,
+  type TraceInput,
+  type TraceResult,
+  type TracerAdapter,
+} from './types.ts'
+import { parseLineArt } from '../lineArtGround.ts'
 
 ensureImageData()
 
@@ -79,11 +107,14 @@ const ALL_TOOLS: TracerAdapter[] = [
   logolabAuto,
   logolabProduct,
   logolabGate,
+  logolabStrokes,
+  logolabOutline,
   vtracerDefault,
   vtracerPoster,
   vtracerSwept,
   autotraceDefault,
   autotraceSwept,
+  autotraceCenterline,
   imagetracerDefault,
   imagetracerFills,
   imagetracerSwept,
@@ -107,6 +138,11 @@ const list = (k: string): string[] | undefined =>
     .filter(Boolean)
 
 const RES = Number(arg('--res') ?? 512)
+// A line corpus keeps its own raster (CompareCase.res: the A/B line lane's flat cap);
+// --line-res overrides it for the line corpora only — a quick look, not a published run.
+const LINE_RES = arg('--line-res') ? Number(arg('--line-res')) : null
+const resOf = (c: CompareCase): number =>
+  corpusKind(c.corpus) === 'line' ? (LINE_RES ?? c.res ?? RES) : (c.res ?? RES)
 const LIMIT = arg('--limit') ? Number(arg('--limit')) : Infinity
 const corpusIds = (list('--corpus') ?? DEFAULT_CORPORA) as CorpusId[]
 for (const c of corpusIds) if (!CORPORA.includes(c)) throw new Error(`unknown corpus ${c} (have ${CORPORA.join(', ')})`)
@@ -165,31 +201,38 @@ async function main(): Promise<void> {
     console.log(`  ${id}: ${cs.length} cases`)
     for (const c of cs) {
       const svg = readFileSync(c.svgPath, 'utf8')
-      const img = renderGround(svg, RES)
+      const line = corpusKind(c.corpus) === 'line'
+      const img = renderGround(svg, resOf(c))
+      // A line case's answer sheet is its strokes (lineArtGround); svgGround's outline
+      // reader refuses them, and for an outline that refusal is right — so a line case
+      // carries no outline shapes, and its refusal is the stroke reader's.
       const gt = parseGroundTruth(svg)
-      const refusal = unscorable(gt)
+      const refusal = line ? (parseLineArt(svg).strokes.length ? null : 'no strokes') : unscorable(gt)
       // Exactly as the truth gate maps the answer sheet (the raster is fitTo-width).
-      const shapes = refusal ? null : toRasterSpace(gt, img.width)
+      const shapes = refusal || line ? null : toRasterSpace(gt, img.width)
       const dir = caseDir(c)
       mkdirSync(dir, { recursive: true })
       const pngPath = join(dir, 'truth.png')
       writeFileSync(pngPath, encodePng(img.data, img.width, img.height))
       cases.push({
         c,
-        truth: { img, shapes, refusal },
+        truth: { img, shapes, refusal, ...(line && !refusal ? { lineSvg: svg } : {}) },
         input: { pngPath, image: img, ...inkOf(img), case: c },
         gtSvgPath: c.svgPath,
       })
     }
   }
   console.log(
-    `  ${cases.length} cases (${cases.filter((k) => k.input.lane === 'mono').length} mono), ${tools.length} tools, ${RES}px → ${relative(REPO, runDir)}`,
+    `  ${cases.length} cases (${cases.filter((k) => k.input.lane === 'mono').length} mono), ${tools.length} tools, ` +
+      `${[...new Set(cases.map((k) => k.truth.img.width))].join(' / ')}px → ${relative(REPO, runDir)}`,
   )
 
   // ── trace
   const traces = new Map<string, TraceResult | { error: string }>() // `${tool}|${caseId}`
   for (const { a, version } of tools) {
-    const mine = cases.filter((k) => a.lanes.includes(k.input.lane))
+    const mine = cases.filter(
+      (k) => a.lanes.includes(k.input.lane) && (a.kinds ?? ['fill', 'line']).includes(corpusKind(k.c.corpus)),
+    )
     console.log(`\n━━ ${a.name} — ${mine.length} cases`)
     const cacheable = !a.name.startsWith('logolab') && useCache
     const cachePath = (k: (typeof cases)[number]): string =>
@@ -282,7 +325,10 @@ async function main(): Promise<void> {
       const r = scored.row
       console.log(
         `  ${a.name.padEnd(16)} ${k.c.id.padEnd(48).slice(0, 48)} ${r.status === 'ok' ? '' : r.status} ` +
-          `ΔE ${r.meanDeltaE?.toFixed(2) ?? '—'}  chamfer ${r.chamfer?.toFixed(2) ?? r.geomRefusal ?? r.gtRefusal ?? '—'}  ` +
+          `ΔE ${r.meanDeltaE?.toFixed(2) ?? '—'}  ` +
+          (k.truth.lineSvg !== undefined
+            ? `centre ${r.clCentre?.toFixed(2) ?? r.geomRefusal ?? '—'}  missed ${r.clMissed?.toFixed(2) ?? '—'}  width ${r.clWidthErr !== undefined ? `${(r.clWidthErr * 100).toFixed(0)}%` : '—'}  ends ${r.clEndsDelta ?? '—'}  turns ${r.clTurns ?? '—'}  `
+            : `chamfer ${r.chamfer?.toFixed(2) ?? r.geomRefusal ?? r.gtRefusal ?? '—'}  `) +
           `nodes ${r.docNodes ?? '—'}  gates ${r.gatesPassed ?? 0}/${r.gatesApplicable ?? 0}`,
       )
     }
@@ -293,7 +339,8 @@ async function main(): Promise<void> {
   const pairsPath = join(runDir, 'pairs.jsonl')
   writeFileSync(pairsPath, pairs.join('\n') + '\n')
   // Node + kink positions per case, for the labs' node view (overlay.ts).
-  console.log(`  overlays: ${writeOverlays(runDir, RES)} cases`)
+  const resById = new Map(cases.map((k) => [k.c.id, k.truth.img.width]))
+  console.log(`  overlays: ${writeOverlays(runDir, RES, (id) => resById.get(id))} cases`)
   let sbNotes: unknown = 'skipped (--no-svgbench)'
   if (!has('--no-svgbench')) {
     if (!existsSync(VENV_PY)) sbNotes = `skipped: no Python venv at ${VENV_PY}`
@@ -333,6 +380,10 @@ async function main(): Promise<void> {
     run: RUN,
     date: new Date().toISOString(),
     res: RES,
+    // A line corpus scores at its own fixed raster (CompareCase.res, or --line-res).
+    ...(cases.some((k) => k.truth.lineSvg !== undefined)
+      ? { lineRes: [...new Set(cases.filter((k) => k.truth.lineSvg !== undefined).map((k) => k.truth.img.width))] }
+      : {}),
     logolab,
     docVisible,
     ...(Object.keys(fitOverrides).length ? { fit: fitOverrides } : {}),
@@ -358,6 +409,7 @@ async function main(): Promise<void> {
       license: k.c.license,
       source: k.c.source,
       gtRefusal: k.truth.refusal,
+      res: k.truth.img.width,
     })),
   }
   writeFileSync(join(runDir, 'results.json'), JSON.stringify({ meta, rows }, null, 1))
@@ -381,6 +433,18 @@ The case renders (cases/*/*/truth.png and every tool's render of them) are deriv
   - Noto Emoji: Google, Apache-2.0 (https://github.com/googlefonts/noto-emoji).
 - fluent2: Microsoft Fluent UI Emoji, MIT (https://github.com/microsoft/fluentui-emoji).
 - truth0: LogoLab fixtures.
+- strokes-oss: stroke icon sets at the versions pinned in bench/compare/manifests/strokes-oss.json
+  (each row names its set, version, file and sha256):
+  - Lucide (lucide-static 1.55.0): ISC License, Copyright (c) 2026 Lucide Icons and Contributors
+    (https://github.com/lucide-icons/lucide). Lucide is a fork of Feather; the portions from
+    Feather are MIT, Copyright (c) 2013-2023 Cole Bemis.
+  - Tabler Icons (@tabler/icons 3.49.0, outline): MIT License, Copyright (c) 2020-2026 Paweł Kuna
+    (https://github.com/tabler/tabler-icons).
+  - Feather (feather-icons 4.29.2): MIT License, Copyright (c) 2013-2023 Cole Bemis
+    (https://github.com/feathericons/feather).
+  The full licence texts are in .bench-tools/datasets/strokes-oss/<set>@<version>/LICENSE (their
+  sha256 is in the manifest). Some Feather icons depict third-party brand marks (e.g. github,
+  linkedin); those marks belong to their owners.
 
 Renders and traces here are modified (rasterized and re-vectorized) versions of those works.
 `
