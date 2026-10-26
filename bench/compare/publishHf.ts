@@ -12,7 +12,7 @@
 //
 // Staging, .bench-tools/hf-staging/<run>/, mirrors the repo root:
 //
-//   README.md  LICENSES.md  runs.json
+//   README.md  LICENSES.md  runs.json        (the card and licences only for the NEWEST run)
 //   <run>/results.jsonl  results.json  summary.md  ATTRIBUTION.md
 //   <run>/manifests/<corpus manifest>.json  cases.json
 //   <run>/cases/<corpus>/<case>/truth.svg  <tool>.svg  overlay.json
@@ -50,8 +50,9 @@ import type { BenchResults } from '../../src/components/labs/bench/benchData.ts'
 import { loadCorpus } from './corpus.ts'
 import {
   HF_REPO,
-  PUBLISHABLE,
+  publishable,
   cardMarkdown,
+  corpusOf,
   flattenRows,
   isPrivatePath,
   licensesMarkdown,
@@ -118,7 +119,7 @@ if (existsSync(pairsFile))
     const id = p.key.slice(p.key.indexOf('|') + 1)
     if (p.gt_svg && !byCase.has(id)) byCase.set(id, p.gt_svg)
   }
-for (const corpus of new Set(caseIds.map((id) => id.slice(0, id.indexOf('/'))))) {
+for (const corpus of new Set(caseIds.map((id) => corpusOf(id)))) {
   if (caseIds.every((id) => !id.startsWith(`${corpus}/`) || byCase.has(id))) continue
   try {
     for (const c of loadCorpus(corpus as CorpusId) ?? []) if (!byCase.has(c.id)) byCase.set(c.id, c.svgPath)
@@ -174,7 +175,7 @@ for (const f of ['summary.md', 'ATTRIBUTION.md'])
 put(`${RUN}/results.jsonl`, toJsonl(flattenRows(data, RUN)))
 
 const manifests = new Set(
-  (data.meta.corpora ?? []).map((c) => PUBLISHABLE[c]?.manifest).filter((m): m is string => !!m),
+  (data.meta.corpora ?? []).map((c) => publishable(c)?.manifest).filter((m): m is string => !!m),
 )
 for (const name of manifests) {
   const file = join(REPO, 'bench', 'compare', 'manifests', name)
@@ -193,17 +194,20 @@ const counts = { svgs: 0, truths: 0, overlays: 0, bytes: 0 }
 const caseRecords: Record<string, unknown>[] = []
 const missingGt: string[] = []
 for (const id of caseIds) {
-  const corpus = id.slice(0, id.indexOf('/'))
+  const corpus = corpusOf(id)
   const name = id.slice(corpus.length + 1)
   const dir = join(RUN_DIR, 'cases', corpus, name)
   const rel = `${RUN}/cases/${corpus}/${name}`
   // Only files named after a tool that has a row for this case: no strays, no renders.
+  // A tool with a row but no SVG (it failed: no output) is named, so the file list and the
+  // rows agree on what is missing; its row, scored as a blank white image, is in results.*.
+  const noSvg: string[] = []
   for (const tool of tools.get(id) ?? []) {
     const svg = join(dir, `${tool}.svg`)
     if (existsSync(svg)) {
       copy(svg, `${rel}/${tool}.svg`)
       counts.svgs++
-    }
+    } else noSvg.push(tool)
   }
   if (existsSync(join(dir, 'overlay.json'))) {
     copy(join(dir, 'overlay.json'), `${rel}/overlay.json`)
@@ -226,6 +230,7 @@ for (const id of caseIds) {
     truth: gt ? `cases/${corpus}/${name}/truth.svg` : null,
     truthSha256: gt ? createHash('sha256').update(gt.bytes).digest('hex') : null,
     truthMissing: gt ? null : gtPath ? `not found: ${gtPath}` : 'no answer sheet on record',
+    noSvg,
   })
 }
 put(
@@ -253,9 +258,19 @@ async function publishedIndex(): Promise<RunIndexEntry[]> {
 const resultsBytes = statSync(join(RUN_DIR, 'results.json')).size
 const index = mergeRunIndex(await publishedIndex(), runEntry(data, RUN, resultsBytes))
 put('runs.json', `${JSON.stringify({ repo: HF_REPO, runs: index }, null, 1)}\n`)
-put('LICENSES.md', licensesMarkdown(data))
+// The card and its licence table describe the NEWEST run (its leaderboard is the dataset's
+// headline). Publishing an older run must not replace them with that run's: both are left
+// out of the staging, so the upload keeps the published ones. The card's `configs` list then
+// lacks this run until the newest run is published again (which re-writes it from the index).
+const newest = index[0]?.name === RUN
+if (newest) put('LICENSES.md', licensesMarkdown(data))
 for (const rel of staged) counts.bytes += statSync(join(OUT, rel)).size
-put('README.md', cardMarkdown({ data, run: RUN, index, counts }))
+if (newest) put('README.md', cardMarkdown({ data, run: RUN, index, counts }))
+else
+  console.warn(
+    `  ${RUN} is not the newest run (${index[0]?.name}): README.md and LICENSES.md not staged, the published ones stay.\n` +
+      `  Re-publish ${index[0]?.name} afterwards to give ${RUN} a dataset-viewer config.`,
+  )
 
 // ── report ─────────────────────────────────────────────────────────────────────────────────
 let total = 0
@@ -269,10 +284,11 @@ console.log(
   `  ${data.rows.length} rows · ${caseIds.length} cases · ${counts.svgs} tool SVGs · ${counts.truths} answer sheets · ${counts.overlays} overlays`,
 )
 const perCorpus = new Map<string, number>()
-for (const id of caseIds)
-  perCorpus.set(id.slice(0, id.indexOf('/')), (perCorpus.get(id.slice(0, id.indexOf('/'))) ?? 0) + 1)
+for (const id of caseIds) perCorpus.set(corpusOf(id), (perCorpus.get(corpusOf(id)) ?? 0) + 1)
 for (const [c, n] of perCorpus) console.log(`    ${c.padEnd(14)} ${n} cases`)
 console.log(`  runs.json: ${index.map((r) => r.name).join(', ')}`)
+const noSvgRows = caseRecords.reduce((s, c) => s + (c.noSvg as string[]).length, 0)
+if (noSvgRows) console.log(`  ${noSvgRows} row(s) with no SVG (failed runs; named in manifests/cases.json noSvg)`)
 if (missingGt.length)
   console.warn(`  ${missingGt.length} case(s) without an answer sheet: ${missingGt.slice(0, 8).join(', ')}`)
 console.log('  top level:')

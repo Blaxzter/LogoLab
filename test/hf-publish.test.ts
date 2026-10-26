@@ -17,6 +17,9 @@ import {
 import {
   PUBLISHABLE,
   cardMarkdown,
+  corpusOf,
+  publishable,
+  safeCaseId,
   flattenRows,
   isPrivatePath,
   mergeRunIndex,
@@ -101,6 +104,39 @@ test('a licence its corpus may not carry, or none on record, refuses the publish
   assert.ok(PUBLISHABLE['strokes-oss'].licences.test('ISC (Lucide; portions MIT, Feather)'))
   assert.ok(PUBLISHABLE['strokes-oss'].licences.test('MIT (Tabler Icons)'))
   assert.ok(PUBLISHABLE['logos-cc0'].licences.test('CC0-1.0'))
+})
+
+test('the allowlist is own keys and exact licence strings; a case id must be a plain <corpus>/<name>', () => {
+  // Object.prototype is not an allowlist.
+  assert.equal(publishable('constructor'), undefined)
+  assert.equal(publishable('__proto__'), undefined)
+  const proto = run([{ id: 'constructor/x', license: 'CC0-1.0' }])
+  assert.ok(publishProblems(proto).some((x) => /corpus "constructor" is not on the publish allowlist/.test(x)))
+  // strokes-oss takes the strings strokesOss.ts writes, not anything starting with MIT.
+  assert.ok(PUBLISHABLE['strokes-oss'].licences.test('MIT (Feather)'))
+  assert.ok(!PUBLISHABLE['strokes-oss'].licences.test('MIT'))
+  assert.ok(!PUBLISHABLE['strokes-oss'].licences.test('MIT (microsoft/fluentui-emoji)'))
+  // An id without a corpus, or one that climbs out of the staging directory, refuses.
+  assert.equal(corpusOf('svgemoji-v0/x'), 'svgemoji-v0')
+  assert.equal(corpusOf('nocorpus'), '')
+  for (const id of ['nocorpus', 'truth0/../../x', 'truth0/a\\b', 'truth0/', 'truth0/./x', 'c:/x'])
+    assert.ok(!safeCaseId(id), id)
+  assert.ok(safeCaseId('svgemoji-v0/1f170-twemoji'))
+  assert.ok(safeCaseId('strokes-oss/lucide/arrow-up'))
+  const bad = run([...emoji(1), { id: 'truth0/../../../etc', license: 'LogoLab fixture' }])
+  assert.ok(publishProblems(bad).some((x) => /not a plain <corpus>\/<name>/.test(x)))
+})
+
+test('a run with a line corpus documents the centreline columns by their agreed names', () => {
+  const d = run([{ id: 'strokes-oss/lucide-bell', license: 'ISC (Lucide; portions MIT, Feather)' }])
+  const md = cardMarkdown({ data: d, run: 's', index: [], counts: { svgs: 0, truths: 0, overlays: 0, bytes: 0 } })
+  for (const k of ['clCentre', 'clCentreP95', 'clMissed', 'clWidthErr', 'clEndsDelta', 'clPathsDelta', 'clTurns'])
+    assert.ok(md.includes(`\`${k}\``), k)
+  assert.match(md, /\n- line-art\n/)
+  assert.doesNotMatch(
+    cardMarkdown({ data: run(emoji(1)), run: 'e', index: [], counts: { svgs: 0, truths: 0, overlays: 0, bytes: 0 } }),
+    /Centreline metrics/,
+  )
 })
 
 test('isPrivatePath catches the logo corpus on either separator, and nothing else', () => {

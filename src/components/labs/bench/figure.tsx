@@ -254,7 +254,9 @@ export function DiffArt({
   mean: showMean = true,
 }: {
   truth: string
-  render: string
+  /** null: the row failed and the run has no render of it — compared against blank white,
+   *  which is what a failure is scored as (score.ts), not shown as a load error. */
+  render: string | null
   w?: number
   h?: number
   mean?: boolean
@@ -266,7 +268,9 @@ export function DiffArt({
     let live = true
     ;(async () => {
       const src = await loadPixels(truth, w && h ? { w, h } : undefined)
-      const out = await loadPixels(render, { w: src.width, h: src.height })
+      const out = render
+        ? await loadPixels(render, { w: src.width, h: src.height })
+        : new ImageData(new Uint8ClampedArray(src.width * src.height * 4).fill(255), src.width, src.height)
       if (!live) return
       const { width, height } = src
       const field = deltaEField(src.data, out.data, width, height)

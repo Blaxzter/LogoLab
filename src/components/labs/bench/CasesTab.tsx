@@ -284,7 +284,13 @@ function CaseView({
             note={failed ? <span className="text-bad">{r?.status}</span> : mode === 'nodes' ? count(o) : undefined}
           >
             {mode === 'diff' ? (
-              <DiffArt truth={truth} render={runUrl(run, `${dir}/${tool}.png`)} w={box?.w} h={box?.h} />
+              <DiffArt
+                truth={truth}
+                // A published run has no renders; a failed row's was the blank white it is scored as.
+                render={failed && box ? null : runUrl(run, `${dir}/${tool}.png`)}
+                w={box?.w}
+                h={box?.h}
+              />
             ) : (
               <SvgArt
                 url={runUrl(run, `${dir}/${tool}.svg`)}

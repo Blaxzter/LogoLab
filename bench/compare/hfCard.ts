@@ -81,17 +81,26 @@ export const PUBLISHABLE: Record<string, Publishable> = {
   'logos-cc0': {
     licences: /^CC0-1\.0$/,
     source: 'gilbarbara/logos (CC0-1.0), pinned commit',
-    sampling: 'A sample of the collection; the manifest records which files and why.',
+    sampling:
+      '300 files, stratified by paint count, gradients and symbol/wordmark, ranked by sha1(file name) within a stratum (logosCc0.ts); the manifest records every exclusion and why.',
     manifest: 'logos-cc0.json',
     trademarks: true,
   },
   'strokes-oss': {
-    licences: /^(MIT|ISC)\b/,
-    source: 'Feather, Lucide, Phosphor and Tabler icon sets, pinned npm versions',
-    sampling: 'A balanced sample per set; the manifest records which files.',
+    // The exact strings strokesOss.ts writes per set, not a loose /^MIT/: an allowlist.
+    licences: /^(ISC \(Lucide; portions MIT, Feather\)|MIT \(Tabler Icons\)|MIT \(Feather\)|MIT \(Phosphor Icons\))$/,
+    // Phosphor is fetched and checked, then dropped (it ships no strokes): not a source here.
+    source: 'Lucide, Tabler (outline) and Feather icon sets, pinned npm releases',
+    sampling:
+      'Per set, ranked by sha1(<set>/<name>), the first 67 eligible icons (strokesOss.ts); in-sample Lucide drawings, duplicates and unreadable icons are excluded with their reason in the manifest.',
     manifest: 'strokes-oss.json',
   },
 }
+
+/** The allowlist entry of a corpus, or undefined. Own keys only: `PUBLISHABLE[c]` would let
+ *  a corpus named `constructor` through on Object.prototype's. */
+export const publishable = (corpus: string): Publishable | undefined =>
+  Object.hasOwn(PUBLISHABLE, corpus) ? PUBLISHABLE[corpus] : undefined
 
 /** Who holds what, by licence string, for the card's licence table. */
 const LICENCE_NOTE: [RegExp, string][] = [
@@ -118,30 +127,44 @@ const LICENCE_NOTE: [RegExp, string][] = [
 
 export const licenceNote = (licence: string): string => LICENCE_NOTE.find(([re]) => re.test(licence))?.[1] ?? licence
 
+/** The corpus a case id belongs to: everything before its first slash ('' when it has none,
+ *  which publishProblems refuses — `slice(0, indexOf('/'))` would have cut the id's last
+ *  character off and looked the stub up in the allowlist instead). */
+export const corpusOf = (id: string): string => {
+  const i = id.indexOf('/')
+  return i > 0 ? id.slice(0, i) : ''
+}
+
+/** A case id becomes a staging path (`<run>/cases/<id>/…`): it must be `<corpus>/<name>`
+ *  with plain segments, nothing that climbs out of the staging directory. */
+export const safeCaseId = (id: string): boolean => corpusOf(id) !== '' && !/\\|^\/|(^|\/)\.\.?(\/|$)|\/$|:/.test(id)
+
 /**
  * Why this run may NOT be published — empty when it may. Checked: every corpus the run
  * names, rows or cases mention is allowlisted; every case's licence is one its corpus allows;
- * no case points into the private logo corpus.
+ * no case points into the private logo corpus; every case id is a safe `<corpus>/<name>`.
  */
 export function publishProblems(data: BenchResults): string[] {
   const problems: string[] = []
+  for (const id of new Set([...data.rows.map((r) => r.caseId), ...(data.meta.cases ?? []).map((c) => c.id)]))
+    if (!safeCaseId(id)) problems.push(`case id "${id}" is not a plain <corpus>/<name> path`)
   const corpora = new Set<string>([
     ...(data.meta.corpora ?? []),
     ...data.rows.map((r) => r.corpus),
-    ...(data.meta.cases ?? []).map((c) => c.id.slice(0, c.id.indexOf('/'))),
+    ...(data.meta.cases ?? []).map((c) => corpusOf(c.id)),
   ])
   for (const c of corpora)
-    if (!PUBLISHABLE[c]) problems.push(`corpus "${c}" is not on the publish allowlist (hfCard.ts PUBLISHABLE)`)
+    if (c && !publishable(c)) problems.push(`corpus "${c}" is not on the publish allowlist (hfCard.ts PUBLISHABLE)`)
   const caseIds = new Set(data.rows.map((r) => r.caseId))
   const meta = new Map((data.meta.cases ?? []).map((c) => [c.id, c]))
   for (const id of caseIds) {
     const c = meta.get(id)
-    const corpus = id.slice(0, id.indexOf('/'))
+    const corpus = corpusOf(id)
     if (!c) {
       problems.push(`${id}: no meta.cases entry, so no licence on record`)
       continue
     }
-    const allow = PUBLISHABLE[corpus]
+    const allow = publishable(corpus)
     if (allow && !allow.licences.test(c.license))
       problems.push(`${id}: licence "${c.license}" is not one ${corpus} may carry`)
     if (/examples[\\/]logos[\\/]/.test(c.source ?? ''))
@@ -304,6 +327,9 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   const out: string[] = []
   const runs = index.length ? index : [runEntry(data, run, 0)]
   const totalRows = runs.reduce((s, r) => s + r.rows, 0)
+  const corpora = m.corpora ?? []
+  const hasLine = corpora.some((c) => corpusKind(c) === 'line')
+  const hasLogos = corpora.some((c) => publishable(c)?.trademarks)
 
   // ── front matter ────────────────────────────────────────────────────────────
   out.push('---')
@@ -315,9 +341,17 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   out.push('task_categories:', '- image-to-text')
   out.push(
     'tags:',
-    ...['svg', 'vectorization', 'image-vectorization', 'raster-to-vector', 'benchmark', 'icons', 'emoji'].map(
-      (t) => `- ${t}`,
-    ),
+    ...[
+      'svg',
+      'vectorization',
+      'image-vectorization',
+      'raster-to-vector',
+      'benchmark',
+      'icons',
+      'emoji',
+      ...(hasLine ? ['line-art'] : []),
+      ...(hasLogos ? ['logos'] : []),
+    ].map((t) => `- ${t}`),
   )
   out.push('size_categories:', `- ${sizeCategory(totalRows)}`)
   out.push('configs:')
@@ -371,6 +405,16 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
       'recovered. Only the visible boundary counts, for every tool. Where the authored SVG cannot be read as filled ' +
       'regions (strokes, clips) the case keeps its pixel metrics and the row says why geometry is missing (`gtRefusal`).',
   )
+  if (hasLine)
+    out.push(
+      '- **Centreline metrics** on the line corpora, whose authored SVGs are strokes: the authored `d` is the centreline ' +
+        'and `stroke-width` the width a tool has to find (bench/lineArtGround.ts reads both, bench/centerlineScore.ts ' +
+        'scores). Columns: `clCentre` / `clCentreP95` (distance from the traced centreline to the authored one, mean and ' +
+        'p95 px), `clMissed` (mean distance of the authored samples no traced line covers), `clWidthErr` (relative width ' +
+        'error), `clEndsDelta` / `clPathsDelta` (ends and paths, traced minus authored), `clTurns` (traced paths that ' +
+        'leave one authored stroke for another). An outline tracer’s output has no stroke, so its row has none of them ' +
+        '(`geomRefusal` "no strokes") and is ranked tied last on them, as any tool with no value is.',
+    )
   out.push(
     '- **A failure is a row.** No output, or output resvg cannot draw, is scored as a blank white image and kept in every ' +
       'count (`status` ≠ `ok`); a row is never dropped.',
@@ -420,14 +464,14 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   out.push('|---|---|---|---|---|---|')
   const byCorpus = new Map<string, Map<string, number>>()
   for (const c of m.cases ?? []) {
-    const corpus = c.id.slice(0, c.id.indexOf('/'))
+    const corpus = corpusOf(c.id)
     let lic = byCorpus.get(corpus)
     if (!lic) byCorpus.set(corpus, (lic = new Map()))
     lic.set(c.license, (lic.get(c.license) ?? 0) + 1)
   }
   for (const corpus of m.corpora ?? []) {
     const info = corpusInfo(corpus)
-    const pub = PUBLISHABLE[corpus]
+    const pub = publishable(corpus)
     const lic = byCorpus.get(corpus) ?? new Map<string, number>()
     const n = [...lic.values()].reduce((a, b) => a + b, 0)
     const held = rows.find((r) => r.corpus === corpus)?.heldOut ?? info.heldOut
@@ -515,7 +559,7 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
 
   // ── licences ────────────────────────────────────────────────────────────────
   const shareAlike = (m.cases ?? []).some((c) => {
-    const re = PUBLISHABLE[c.id.slice(0, c.id.indexOf('/'))]?.shareAlike
+    const re = publishable(corpusOf(c.id))?.shareAlike
     return !!re && re.test(c.license)
   })
   out.push('## Licences')
@@ -531,7 +575,7 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
       'The benchmark code and this card are MIT (the LogoLab repository licence).',
   )
   out.push('')
-  if ((m.corpora ?? []).some((c) => PUBLISHABLE[c]?.trademarks)) {
+  if (hasLogos) {
     out.push(
       '**Trademarks.** The logo corpora are brand marks. Their files are CC0 as distributed by their collection, but a ' +
         'copyright licence is not a trademark licence: the marks belong to their owners, are included only to measure ' +
@@ -572,7 +616,7 @@ export function licenceTable(data: BenchResults): string[] {
   const out = ['| corpus | licence | cases | holder / notes |', '|---|---|---|---|']
   const counts = new Map<string, number>()
   for (const c of data.meta.cases ?? []) {
-    const key = `${c.id.slice(0, c.id.indexOf('/'))}\u0000${c.license}`
+    const key = `${corpusOf(c.id)}\u0000${c.license}`
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
   for (const [key, n] of counts) {
