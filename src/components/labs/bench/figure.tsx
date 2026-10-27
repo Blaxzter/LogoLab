@@ -9,6 +9,7 @@ import { useLabZoom } from '../LabPage'
 import { RawArt } from '../Panel'
 import { subPathsWire } from '../wire'
 import { toolInfo } from './benchData'
+import { isSvgUrl } from './benchSource'
 import { useFetched } from './ui'
 
 /**
@@ -191,27 +192,51 @@ function loadPixels(url: string, size?: { w: number; h: number }): Promise<Image
   const key = size ? `${url}@${size.w}x${size.h}` : url
   let hit = pixelCache.get(key)
   if (!hit) {
-    hit = new Promise<ImageData>((resolve, reject) => {
-      const img = new Image()
-      img.onload = () => {
-        const w = size?.w ?? img.naturalWidth
-        const h = size?.h ?? img.naturalHeight
-        const c = document.createElement('canvas')
-        c.width = w
-        c.height = h
-        const g = c.getContext('2d', { willReadFrequently: true })
-        if (!g) return reject(new Error('no 2d context'))
-        g.fillStyle = '#fff'
-        g.fillRect(0, 0, w, h)
-        g.drawImage(img, 0, 0, w, h)
-        resolve(g.getImageData(0, 0, w, h))
-      }
-      img.onerror = () => reject(new Error(`could not load ${url}`))
-      img.src = url
-    })
+    hit = (isSvgUrl(url) ? svgBlobUrl(url) : Promise.resolve(url)).then((src) => decode(src, url, size))
     pixelCache.set(key, hit)
   }
   return hit
+}
+
+/**
+ * An SVG from another origin (a published run on the Hugging Face hub ships no PNG renders,
+ * benchSource.ts) drawn straight into a canvas TAINTS it, and getImageData then throws. Fetched
+ * as text (the hub sends CORS) and handed to the image as a same-origin blob, it does not —
+ * and the drawing's own scripts and external references stay dead, as in any <img>.
+ */
+async function svgBlobUrl(url: string): Promise<string> {
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`could not load ${url}`)
+  return URL.createObjectURL(new Blob([await r.text()], { type: 'image/svg+xml' }))
+}
+
+function decode(src: string, url: string, size?: { w: number; h: number }): Promise<ImageData> {
+  const done = () => {
+    if (src !== url) URL.revokeObjectURL(src)
+  }
+  return new Promise<ImageData>((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      done()
+      // An SVG with a viewBox and no width/height has no natural size worth trusting.
+      const w = size?.w ?? (img.naturalWidth || 512)
+      const h = size?.h ?? (img.naturalHeight || 512)
+      const c = document.createElement('canvas')
+      c.width = w
+      c.height = h
+      const g = c.getContext('2d', { willReadFrequently: true })
+      if (!g) return reject(new Error('no 2d context'))
+      g.fillStyle = '#fff'
+      g.fillRect(0, 0, w, h)
+      g.drawImage(img, 0, 0, w, h)
+      resolve(g.getImageData(0, 0, w, h))
+    }
+    img.onerror = () => {
+      done()
+      reject(new Error(`could not load ${url}`))
+    }
+    img.src = src
+  })
 }
 
 /**
@@ -229,7 +254,9 @@ export function DiffArt({
   mean: showMean = true,
 }: {
   truth: string
-  render: string
+  /** null: the row failed and the run has no render of it — compared against blank white,
+   *  which is what a failure is scored as (score.ts), not shown as a load error. */
+  render: string | null
   w?: number
   h?: number
   mean?: boolean
@@ -241,7 +268,9 @@ export function DiffArt({
     let live = true
     ;(async () => {
       const src = await loadPixels(truth, w && h ? { w, h } : undefined)
-      const out = await loadPixels(render, { w: src.width, h: src.height })
+      const out = render
+        ? await loadPixels(render, { w: src.width, h: src.height })
+        : new ImageData(new Uint8ClampedArray(src.width * src.height * 4).fill(255), src.width, src.height)
       if (!live) return
       const { width, height } = src
       const field = deltaEField(src.data, out.data, width, height)

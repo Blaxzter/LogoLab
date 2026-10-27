@@ -18,7 +18,8 @@ import {
   type BenchRow,
 } from './benchData'
 import { type CaseMode, DiffArt, ModeSwitch, NodeCount, ScoreTable, SvgArt } from './figure'
-import { runUrl, useFetched } from './ui'
+import { renderBox } from './benchSource'
+import { useBenchSource, useFetched, useRunUrl } from './ui'
 
 /**
  * Cases: every tool's output for one case side by side, under one camera per row (wheel to
@@ -198,6 +199,8 @@ function CaseView({
   meta: BenchCaseMeta | undefined
   mode: CaseMode
 }) {
+  const runUrl = useRunUrl()
+  const { renders } = useBenchSource()
   const dir = caseDir(caseId)
   const truth = runUrl(run, `${dir}/truth.png`)
   // The panels take the authored drawing's shape, read off its viewBox.
@@ -209,6 +212,10 @@ function CaseView({
   // Only fetched once someone asks for nodes: 100 cases × 11 tools of anchors is not free.
   const overlay = useFetched<Overlay>(mode === 'nodes' ? runUrl(run, `${dir}/overlay.json`) : null, 'json')
   const any = byTool.values().next().value as BenchRow | undefined
+  // A run without PNG renders (a published one) is diffed from its SVGs, drawn at the size
+  // the run rasterized them at; with renders, the PNG's own size is that size.
+  const res = typeof any?.res === 'number' ? any.res : 512
+  const box = renders(run) ? undefined : renderBox(res, aspect)
   const present = tools.filter((t) => byTool.has(t))
   const count = (o: { anchors: number[]; breaks: number[] } | undefined) => (o ? <NodeCount {...o} /> : undefined)
 
@@ -277,7 +284,13 @@ function CaseView({
             note={failed ? <span className="text-bad">{r?.status}</span> : mode === 'nodes' ? count(o) : undefined}
           >
             {mode === 'diff' ? (
-              <DiffArt truth={truth} render={runUrl(run, `${dir}/${tool}.png`)} />
+              <DiffArt
+                truth={truth}
+                // A published run has no renders; a failed row's was the blank white it is scored as.
+                render={failed && box ? null : runUrl(run, `${dir}/${tool}.png`)}
+                w={box?.w}
+                h={box?.h}
+              />
             ) : (
               <SvgArt
                 url={runUrl(run, `${dir}/${tool}.svg`)}

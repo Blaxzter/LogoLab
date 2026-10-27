@@ -10,15 +10,31 @@ import { DataTab } from './DataTab'
 import { ResultsTab } from './ResultsTab'
 import { RunTab } from './RunTab'
 import { SHOWCASE } from './showcase.generated'
-import { HowToRun } from './ui'
+import { HUB_SOURCE, LOCAL_SOURCE, hubSource, parseRunIndex } from './benchSource'
+import { BenchSourceProvider, HowToRun, type BenchSourceState } from './ui'
+
+/** Dev reads the local runs unless `?source=hub` asks for the published ones; a build has
+ *  no local endpoint, so it always reads the hub. In dev, `?hub=<base url>` reads a hub
+ *  layout from elsewhere — a staged publish (.bench-tools/hf-staging/<run>/) served with
+ *  CORS — so a publish can be looked at before it is uploaded. */
+function pickSource() {
+  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams()
+  if (!import.meta.env.DEV) return HUB_SOURCE
+  const base = q.get('hub')
+  if (base) return hubSource(base)
+  return q.get('source') === 'hub' ? HUB_SOURCE : LOCAL_SOURCE
+}
 
 /**
  * /labs/bench — the vectorizer comparison. /benchmark redirects here.
  *
  * Overview is the argument, written for someone who has never seen the benchmark, and the
- * only tab the hosted site can show (it reads frozen examples, showcase.generated.ts). The
- * other five read a local bench/compare run, served from the gitignored .bench-tools/results/
- * by scripts/benchPlugin.ts in `vite dev` only:
+ * one tab that needs no run (it reads frozen examples, showcase.generated.ts). The other five
+ * read a bench/compare run from a SOURCE (benchSource.ts): in `vite dev` the gitignored
+ * .bench-tools/results/, served by scripts/benchPlugin.ts; on the hosted site the published
+ * Hugging Face dataset (bench/compare/publishHf.ts), whose runs ship SVGs and no PNG renders.
+ * `?source=hub` reads the hub from dev too. When the source has no runs (the dataset is not
+ * published yet, the network is down) the tabs say how to make one, as they always did:
  *
  *   Results   who wins, by the picture and by the drawing: a short table, detail on request
  *   Compare   any two tools head to head, and the cases where the two kinds of score disagree
@@ -90,21 +106,32 @@ export default function BenchLab() {
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(0)
   const search = useLabSearch(() => setPage(0))
-  const local = import.meta.env.DEV
+  const [source] = useState(pickSource)
+  const hub = source.kind === 'hub'
   const tab = TABS.some((t) => t.id === view.tab) ? view.tab : 'overview'
 
-  // The run list. A hosted build has no endpoint: Overview still works, the rest say how.
+  // The run list. On the hub a missing dataset (404) or no network is not an error to show:
+  // it is "nothing published yet", and the tabs fall back to saying how to make a run.
   useEffect(() => {
-    if (!local) return
     let live = true
-    fetch('/__bench/runs')
+    fetch(source.runsUrl)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((j: { runs: RunInfo[] }) => live && setRuns(j.runs))
-      .catch((e) => live && setRunsError(String(e)))
+      .then((j: unknown) => live && setRuns(parseRunIndex(j)))
+      .catch((e) => {
+        if (!live) return
+        if (hub) setRuns([])
+        else setRunsError(String(e))
+      })
     return () => {
       live = false
     }
-  }, [local])
+  }, [source, hub])
+
+  const sourceState = useMemo<BenchSourceState>(() => {
+    const noRenders = new Set((runs ?? []).filter((r) => r.renders === false).map((r) => r.name))
+    return { source, renders: (r: string) => !noRenders.has(r) }
+  }, [source, runs])
+  const available = !!runs && runs.length > 0
 
   // By default the run with the most tools, then the most rows: a smoke run is a run too,
   // but rarely the one you meant.
@@ -120,7 +147,7 @@ export default function BenchLab() {
     if (!run) return
     let live = true
     setLoading(true)
-    fetch(`/__bench/runs/${encodeURIComponent(run)}/results.json`)
+    fetch(source.file(run, 'results.json'))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((j: BenchResults) => live && setData(j))
       .catch((e) => live && setRunsError(String(e)))
@@ -128,7 +155,7 @@ export default function BenchLab() {
     return () => {
       live = false
     }
-  }, [run])
+  }, [run, source])
 
   const corpora = data?.meta.corpora ?? []
   const corpus = corpora.includes(view.corpus) ? view.corpus : (corpora[0] ?? '')
@@ -162,21 +189,21 @@ export default function BenchLab() {
     go('cases')
   }
 
-  const ready = local && data && corpus
+  const ready = available && data && corpus
   const status =
     tab === 'overview'
-      ? `A frozen summary of run ${SHOWCASE.run}: ${SHOWCASE.cases} held-out emoji, ${SHOWCASE.summary.length} tools.${local ? '' : ' The other tabs read a local run.'}`
-      : !local
-        ? 'This tab reads a local benchmark run.'
-        : runsError
-          ? `Could not load benchmark results: ${runsError}`
-          : !runs
-            ? 'Looking for runs…'
-            : runs.length === 0
-              ? 'No runs yet in .bench-tools/results/.'
-              : loading || !data
-                ? `Loading ${run}…`
-                : `${run} · ${corpusInfo(corpus).label} · ${new Date(data.meta.date).toLocaleDateString()}`
+      ? `A frozen summary of run ${SHOWCASE.run}: ${SHOWCASE.cases} held-out emoji, ${SHOWCASE.summary.length} tools.${available ? '' : ' The other tabs read a benchmark run.'}`
+      : runsError
+        ? `Could not load benchmark results: ${runsError}`
+        : !runs
+          ? 'Looking for runs…'
+          : runs.length === 0
+            ? hub
+              ? 'No published benchmark run could be loaded.'
+              : 'No runs yet in .bench-tools/results/.'
+            : loading || !data
+              ? `Loading ${run}…`
+              : `${run}${hub ? ' (Hugging Face)' : ''} · ${corpusInfo(corpus).label} · ${new Date(data.meta.date).toLocaleDateString()}`
 
   const dataTab = tab !== 'overview'
   const controls = (
@@ -200,7 +227,11 @@ export default function BenchLab() {
           label="Run"
           value={run}
           onChange={(v) => setView({ run: v })}
-          hint="A directory under .bench-tools/results/ that holds a results.json."
+          hint={
+            hub
+              ? 'A run published to the logolab-bench dataset on Hugging Face.'
+              : 'A directory under .bench-tools/results/ that holds a results.json.'
+          }
           options={runs.map((r) => ({
             value: r.name,
             label: r.name,
@@ -236,85 +267,87 @@ export default function BenchLab() {
   )
 
   return (
-    <LabPage
-      storageKey="lab:bench"
-      title="Benchmark"
-      subtitle="LogoLab against classic tracers and image-to-SVG models, scored against the authored SVG"
-      about={<About />}
-      controls={controls}
-      viewControls={tab === 'cases'}
-      wires={tab === 'cases' && view.mode === 'nodes'}
-      search={
-        tab === 'cases' && ready ? { state: search, matched: caseCount.matched, total: caseCount.total } : undefined
-      }
-      status={status}
-      running={dataTab && local && (loading || (!runs && !runsError))}
-      box={view.box}
-      onBox={(box) => setView({ box })}
-    >
-      {tab === 'overview' ? (
-        <Article onExplore={() => go(local ? 'compare' : 'results')} />
-      ) : !local || (runs && runs.length === 0) ? (
-        <HowToRun compact />
-      ) : ready ? (
-        <>
-          {tab === 'results' && (
-            <ResultsTab
-              data={data}
-              corpus={corpus}
-              tools={tools}
-              metric={view.metric}
-              onMetric={(metric) => setView({ metric })}
-              onCase={openCase}
-            />
-          )}
-          {tab === 'compare' && (
-            <CompareTab
-              data={data}
-              run={run}
-              corpus={corpus}
-              tools={tools}
-              view={{ a: view.a, b: view.b, x: view.x, y: view.y }}
-              setView={setView}
-              onCase={openCase}
-            />
-          )}
-          {tab === 'cases' && (
-            <CasesTab
-              data={data}
-              run={run}
-              corpus={corpus}
-              tools={tools}
-              view={{
-                metric: view.metric,
-                sortTool: view.sortTool,
-                sortDir: view.sortDir,
-                mode: view.mode,
-                allTools: view.allTools,
-              }}
-              setView={setView}
-              match={search.match}
-              page={page}
-              setPage={setPage}
-            />
-          )}
-          {tab === 'data' && (
-            <DataTab
-              data={data}
-              run={run}
-              corpus={corpus}
-              tools={tools}
-              metric={view.metric}
-              onMetric={(metric) => setView({ metric })}
-              onCase={openCase}
-            />
-          )}
-          {tab === 'run' && runs && (
-            <RunTab data={data} run={run} runs={runs} other={view.other} onOther={(other) => setView({ other })} />
-          )}
-        </>
-      ) : null}
-    </LabPage>
+    <BenchSourceProvider value={sourceState}>
+      <LabPage
+        storageKey="lab:bench"
+        title="Benchmark"
+        subtitle="LogoLab against classic tracers and image-to-SVG models, scored against the authored SVG"
+        about={<About />}
+        controls={controls}
+        viewControls={tab === 'cases'}
+        wires={tab === 'cases' && view.mode === 'nodes'}
+        search={
+          tab === 'cases' && ready ? { state: search, matched: caseCount.matched, total: caseCount.total } : undefined
+        }
+        status={status}
+        running={dataTab && (loading || (!runs && !runsError))}
+        box={view.box}
+        onBox={(box) => setView({ box })}
+      >
+        {tab === 'overview' ? (
+          <Article onExplore={() => go(available ? 'compare' : 'results')} />
+        ) : runs && runs.length === 0 ? (
+          <HowToRun compact />
+        ) : ready ? (
+          <>
+            {tab === 'results' && (
+              <ResultsTab
+                data={data}
+                corpus={corpus}
+                tools={tools}
+                metric={view.metric}
+                onMetric={(metric) => setView({ metric })}
+                onCase={openCase}
+              />
+            )}
+            {tab === 'compare' && (
+              <CompareTab
+                data={data}
+                run={run}
+                corpus={corpus}
+                tools={tools}
+                view={{ a: view.a, b: view.b, x: view.x, y: view.y }}
+                setView={setView}
+                onCase={openCase}
+              />
+            )}
+            {tab === 'cases' && (
+              <CasesTab
+                data={data}
+                run={run}
+                corpus={corpus}
+                tools={tools}
+                view={{
+                  metric: view.metric,
+                  sortTool: view.sortTool,
+                  sortDir: view.sortDir,
+                  mode: view.mode,
+                  allTools: view.allTools,
+                }}
+                setView={setView}
+                match={search.match}
+                page={page}
+                setPage={setPage}
+              />
+            )}
+            {tab === 'data' && (
+              <DataTab
+                data={data}
+                run={run}
+                corpus={corpus}
+                tools={tools}
+                metric={view.metric}
+                onMetric={(metric) => setView({ metric })}
+                onCase={openCase}
+              />
+            )}
+            {tab === 'run' && runs && (
+              <RunTab data={data} run={run} runs={runs} other={view.other} onOther={(other) => setView({ other })} />
+            )}
+          </>
+        ) : null}
+      </LabPage>
+    </BenchSourceProvider>
   )
 }
 

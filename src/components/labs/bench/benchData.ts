@@ -56,6 +56,8 @@ export interface RunInfo {
   tools: string[]
   rows: number
   bytes: number
+  /** false: a published run that ships SVGs only (benchSource.ts). Absent = PNGs present. */
+  renders?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -623,5 +625,556 @@ export function disagreements(
     const y = favour(byTool, a, b, my)
     if (x !== null && y !== null) out.push({ caseId, x, y })
   }
+  return out
+}
+
+// ---------------------------------------------------------------------------
+// Mean rank: the benchmark's one headline number
+//
+// Every metric above has its own unit and its own direction, and a "score" that adds them
+// needs a weight per metric and usually a threshold per metric ("chamfer ≤ 1 px passes"):
+// numbers somebody picked, which then decide the winner. Ranks need neither. Per CASE and
+// per METRIC the tools are ranked 1 = best (ties share the average rank), and a tool's mean
+// rank is the mean over every (case, metric) cell. The one choice left is WHICH metrics,
+// and that is RANK_METRICS below, one fixed list per kind of corpus.
+//
+// Three rules decide what a cell is, and each is easy to get backwards:
+//
+//   • A tool whose OWN output failed (status ≠ 'ok') or was refused for a metric (no value:
+//     geomRefusal, an output that does not parse) is ranked tied-LAST in that cell, never
+//     skipped. Skipping would reward failing: a tool that crashes on every hard case would
+//     be ranked on the easy ones only. A failed row's white-render ΔE is not used either —
+//     the row failed, so it is last in every cell, as it is on geometry.
+//   • A metric the GROUND TRUTH refuses on a case (gtRefusal: stroked or clipped authored
+//     art has no answer sheet for geometry) is left out of that case for EVERY tool. Nobody
+//     could have been measured there, so nobody is last.
+//   • A cell no tool has a value for (a metric the run did not measure, a case with no
+//     interior boundary so chamfer is undefined for everyone) is left out too: every tool
+//     would tie at the middle, and the cell would only pull the field together.
+//
+// A tool is ranked on a corpus only when it has a row on EVERY case there. Friedman's test
+// needs complete blocks, and a missing row is not a failure: Potrace runs only on mono-lane
+// cases, it was never given the others. Such a tool is listed in `excluded` with its n.
+//
+// Which tools: the HEADLINE ranks each tool as its users get it: LogoLab's shipped path
+// (logolab-auto), every other tool's defaults and its own named presets. Rows that are an
+// ANALYSIS rather than a tool are never in it (isAblationRow): LogoLab's oracle row
+// (logolab-gate reads `gradients` off the authored SVG), its no-probe preset and its
+// ablation grid, and every `-swept` variant (the best of a grid search is a selection made
+// by looking at scores, even when, as here, the scores were in-sample ones). The ABLATION
+// VIEW ranks everything, and is labelled so wherever it is printed.
+//
+// Which corpora: held-out only, and ONE LEADERBOARD PER CORPUS. A fill corpus and a line
+// corpus are ranked on different metrics, so their ranks answer different questions, and an
+// average of the two would depend on how many cases each corpus happens to hold.
+
+export type CorpusKind = 'fill' | 'line'
+
+export interface RankMetric {
+  /** ScoreRow field. */
+  key: string
+  label: string
+  better: 'lower' | 'higher'
+  /** Ranked on |value| (a delta whose best is 0 from either side). */
+  abs?: boolean
+  /** Needs the authored geometry: left out of a case whose ground truth is refused. */
+  ground: boolean
+}
+
+/**
+ * The metrics a corpus is ranked on, by kind. One per question, not every column: ranking
+ * three correlated boundary distances would count the outline three times.
+ *
+ *   fill  colour error, edge error, node count, kinks on smooth curves, and SVG-Bench's DINO
+ *         (the literature's own number, so a tool cannot top the board on our metrics alone
+ *         without it showing)
+ *   line  the centreline scorer (bench/centerlineScore.ts): centre distance, missed ink,
+ *         width error, |traced − authored paths|, strokes that turn onto another stroke;
+ *         plus colour error and node count
+ */
+export const RANK_METRICS: Record<CorpusKind, RankMetric[]> = {
+  fill: [
+    { key: 'meanDeltaE', label: 'ΔE', better: 'lower', ground: false },
+    { key: 'chamfer', label: 'Edge px', better: 'lower', ground: true },
+    { key: 'docNodes', label: 'Nodes', better: 'lower', ground: false },
+    { key: 'tangentBreaks', label: 'Kinks', better: 'lower', ground: true },
+    { key: 'sbDino', label: 'DINO', better: 'higher', ground: false },
+  ],
+  line: [
+    { key: 'clCentre', label: 'Centre px', better: 'lower', ground: true },
+    { key: 'clMissed', label: 'Missed px', better: 'lower', ground: true },
+    { key: 'clWidthErr', label: 'Width err', better: 'lower', ground: true },
+    { key: 'clPathsDelta', label: '|Paths Δ|', better: 'lower', abs: true, ground: true },
+    { key: 'clTurns', label: 'Turns', better: 'lower', ground: true },
+    { key: 'meanDeltaE', label: 'ΔE', better: 'lower', ground: false },
+    { key: 'docNodes', label: 'Nodes', better: 'lower', ground: false },
+  ],
+}
+
+/** Corpora ranked as LINE art (strokes, by the centreline scorer). Every other one is fill. */
+export const LINE_CORPORA: ReadonlySet<string> = new Set(['strokes-oss'])
+
+export function corpusKind(corpus: string): CorpusKind {
+  return LINE_CORPORA.has(corpus) ? 'line' : 'fill'
+}
+
+/** A row that is an analysis, not a tool as its users get it: never in the headline. */
+export function isAblationRow(tool: string): boolean {
+  const family = toolInfo(tool).family
+  return /^logolab-abl-/.test(tool) || /-swept$/.test(tool) || family === 'ablation' || family === 'reference'
+}
+
+export type RankView = 'headline' | 'ablation'
+
+export interface RankOpts {
+  corpus: string
+  /** 'headline' (default) leaves out isAblationRow; 'ablation' ranks every tool. */
+  view?: RankView
+  /** Default RANK_METRICS[corpusKind(corpus)]. */
+  metrics?: RankMetric[]
+  /** Bootstrap resamples of the cases for the CI (default 2000). */
+  resamples?: number
+  seed?: number
+}
+
+/** One case: the metrics it was ranked on, and per metric each tool's rank. */
+export interface CaseRanks {
+  caseId: string
+  metrics: string[]
+  /** ranks[m][t]: metric `metrics[m]`, tool `tools[t]`. */
+  ranks: number[][]
+}
+
+export interface RankedCorpus {
+  corpus: string
+  kind: CorpusKind
+  view: RankView
+  tools: string[]
+  excluded: { tool: string; n: number; reason: string }[]
+  metrics: RankMetric[]
+  cases: CaseRanks[]
+  /** Cells left out: the ground truth refused the metric / no tool had a value. */
+  dropped: { ground: number; unmeasured: number }
+}
+
+/** Rank one cell: 1 = best in the metric's direction, ties share the average rank, and a
+ *  null (failed or refused) is tied LAST with the other nulls. */
+export function rankCell(values: (number | null)[], better: 'lower' | 'higher'): number[] {
+  const out = new Array<number>(values.length)
+  const scored = values
+    .map((v, i) => ({ v, i }))
+    .filter((x): x is { v: number; i: number } => x.v !== null)
+    .sort((a, b) => (better === 'lower' ? a.v - b.v : b.v - a.v))
+  for (let s = 0; s < scored.length; ) {
+    let e = s
+    while (e + 1 < scored.length && scored[e + 1].v === scored[s].v) e++
+    const r = (s + e) / 2 + 1
+    for (let j = s; j <= e; j++) out[scored[j].i] = r
+    s = e + 1
+  }
+  const last = (scored.length + 1 + values.length) / 2
+  for (let i = 0; i < values.length; i++) if (values[i] === null) out[i] = last
+  return out
+}
+
+/** The (case, metric) rank cells of one corpus: what meanRanks and paretoWins both read. */
+export function rankCases(rows: BenchRow[], opts: RankOpts): RankedCorpus {
+  const view = opts.view ?? 'headline'
+  const kind = corpusKind(opts.corpus)
+  const metrics = opts.metrics ?? RANK_METRICS[kind]
+  const table = caseTable(rows, opts.corpus)
+  const caseIds = [...table.keys()]
+  const seen: string[] = []
+  for (const r of rows) if (r.corpus === opts.corpus && !seen.includes(r.tool)) seen.push(r.tool)
+  const tools: string[] = []
+  const excluded: RankedCorpus['excluded'] = []
+  for (const t of seen.filter((t) => view === 'ablation' || !isAblationRow(t))) {
+    const n = caseIds.filter((c) => table.get(c)?.has(t)).length
+    if (n === caseIds.length) tools.push(t)
+    else excluded.push({ tool: t, n, reason: `a row on ${n} of ${caseIds.length} cases; it was not given the rest` })
+  }
+  const dropped = { ground: 0, unmeasured: 0 }
+  const cases: CaseRanks[] = []
+  for (const [caseId, byTool] of table) {
+    const groundRefused = [...byTool.values()].some((r) => !!r.gtRefusal)
+    const keys: string[] = []
+    const ranks: number[][] = []
+    for (const m of metrics) {
+      if (m.ground && groundRefused) {
+        dropped.ground++
+        continue
+      }
+      const values = tools.map((t) => {
+        const r = byTool.get(t)
+        if (!r || r.status !== 'ok') return null
+        const v = num(r, m.key)
+        return v === null ? null : m.abs ? Math.abs(v) : v
+      })
+      if (values.every((v) => v === null)) {
+        dropped.unmeasured++
+        continue
+      }
+      keys.push(m.key)
+      ranks.push(rankCell(values, m.better))
+    }
+    cases.push({ caseId, metrics: keys, ranks })
+  }
+  return { corpus: opts.corpus, kind, view, tools, excluded, metrics, cases, dropped }
+}
+
+export interface ToolRank {
+  tool: string
+  /** Mean over every (case, metric) cell: the headline number. */
+  mean: number
+  /** 95% bootstrap interval of `mean`, resampling CASES (a case's cells move together). */
+  lo: number
+  hi: number
+  /** Mean over cases of the tool's rank averaged over that case's metrics: what the
+   *  Friedman test and the CD diagram are on. Equal to `mean` whenever every case is ranked
+   *  on the same number of metrics. */
+  caseMean: number
+  cells: number
+  /** Per-metric mean rank (the breakdown); null for a metric no case was ranked on. */
+  perMetric: Record<string, number | null>
+}
+
+export interface MeanRanks extends RankedCorpus {
+  /** Cases ranked on at least one metric: the N of the tests. */
+  n: number
+  /** Best first. */
+  ranking: ToolRank[]
+  /** blocks[case][tool]: the tool's rank averaged over that case's metrics, `tools` order. */
+  blocks: number[][]
+}
+
+/** Mean rank per tool on one corpus, best first, with the per-metric breakdown and a seeded
+ *  case-bootstrap CI (no Math.random: the same interval on every run and every reload). */
+export function meanRanks(rows: BenchRow[], opts: RankOpts): MeanRanks {
+  const rc = rankCases(rows, opts)
+  const k = rc.tools.length
+  const used = rc.cases.filter((c) => c.metrics.length > 0)
+  const sums = used.map((c) => rc.tools.map((_, t) => c.ranks.reduce((s, r) => s + r[t], 0)))
+  const counts = used.map((c) => c.metrics.length)
+  const blocks = sums.map((row, i) => row.map((s) => s / counts[i]))
+  const total = counts.reduce((a, b) => a + b, 0)
+  const B = opts.resamples ?? 2000
+  const rand = mulberry32(opts.seed ?? 0x5eed)
+  const boot: number[][] = rc.tools.map(() => [])
+  if (used.length > 0)
+    for (let b = 0; b < B; b++) {
+      const s = new Array<number>(k).fill(0)
+      let c = 0
+      for (let i = 0; i < used.length; i++) {
+        const j = Math.floor(rand() * used.length)
+        for (let t = 0; t < k; t++) s[t] += sums[j][t]
+        c += counts[j]
+      }
+      for (let t = 0; t < k; t++) boot[t].push(s[t] / c)
+    }
+  const ranking: ToolRank[] = rc.tools.map((tool, t) => {
+    const perMetric: Record<string, number | null> = {}
+    for (const m of rc.metrics) {
+      let s = 0
+      let n = 0
+      for (const c of used) {
+        const i = c.metrics.indexOf(m.key)
+        if (i < 0) continue
+        s += c.ranks[i][t]
+        n++
+      }
+      perMetric[m.key] = n ? s / n : null
+    }
+    const sorted = boot[t].sort((a, b) => a - b)
+    return {
+      tool,
+      mean: total ? sums.reduce((a, row) => a + row[t], 0) / total : Number.NaN,
+      lo: quantile(sorted, 0.025),
+      hi: quantile(sorted, 0.975),
+      caseMean: blocks.length ? blocks.reduce((a, row) => a + row[t], 0) / blocks.length : Number.NaN,
+      cells: total,
+      perMetric,
+    }
+  })
+  ranking.sort((a, b) => a.mean - b.mean || a.tool.localeCompare(b.tool))
+  return { ...rc, n: used.length, ranking, blocks }
+}
+
+// --- the tests on the ranks ----------------------------------------------------
+
+/** ln Γ(x), Lanczos (g = 7, n = 9): ~15 digits for x > 0. */
+function lnGamma(x: number): number {
+  const c = [
+    0.9999999999998099, 676.5203681218851, -1259.1392167224028, 771.3234287776531, -176.61503916999186,
+    12.507343278686905, -0.13857109526572012, 9.984369578019572e-6, 1.5056327351493116e-7,
+  ]
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lnGamma(1 - x)
+  const z = x - 1
+  let a = c[0]
+  const t = z + 7.5
+  for (let i = 1; i < 9; i++) a += c[i] / (z + i)
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(a)
+}
+
+const TINY = 1e-300
+const EPS = 1e-15
+
+/** Upper regularized incomplete gamma Q(a, x): series below a + 1, continued fraction above
+ *  (Numerical Recipes' gser / gcf). */
+function gammaQ(a: number, x: number): number {
+  if (x <= 0) return 1
+  const lead = Math.exp(-x + a * Math.log(x) - lnGamma(a))
+  if (x < a + 1) {
+    let sum = 1 / a
+    let del = sum
+    for (let n = 1; n < 1000; n++) {
+      del *= x / (a + n)
+      sum += del
+      if (Math.abs(del) < Math.abs(sum) * EPS) break
+    }
+    return 1 - sum * lead
+  }
+  let b = x + 1 - a
+  let c = 1 / TINY
+  let d = 1 / b
+  let h = d
+  for (let i = 1; i < 1000; i++) {
+    const an = -i * (i - a)
+    b += 2
+    d = an * d + b
+    if (Math.abs(d) < TINY) d = TINY
+    c = b + an / c
+    if (Math.abs(c) < TINY) c = TINY
+    d = 1 / d
+    const del = d * c
+    h *= del
+    if (Math.abs(del - 1) < EPS) break
+  }
+  return lead * h
+}
+
+/** Continued fraction of the incomplete beta (Numerical Recipes' betacf). */
+function betaCf(x: number, a: number, b: number): number {
+  const qab = a + b
+  const qap = a + 1
+  const qam = a - 1
+  let c = 1
+  let d = 1 - (qab * x) / qap
+  if (Math.abs(d) < TINY) d = TINY
+  d = 1 / d
+  let h = d
+  for (let m = 1; m < 1000; m++) {
+    const m2 = 2 * m
+    for (const aa of [
+      (m * (b - m) * x) / ((qam + m2) * (a + m2)),
+      (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2)),
+    ]) {
+      d = 1 + aa * d
+      if (Math.abs(d) < TINY) d = TINY
+      c = 1 + aa / c
+      if (Math.abs(c) < TINY) c = TINY
+      d = 1 / d
+      h *= d * c
+    }
+    if (Math.abs(d * c - 1) < EPS) break
+  }
+  return h
+}
+
+/** Regularized incomplete beta I_x(a, b). */
+function betaI(x: number, a: number, b: number): number {
+  if (x <= 0) return 0
+  if (x >= 1) return 1
+  const front = Math.exp(lnGamma(a + b) - lnGamma(a) - lnGamma(b) + a * Math.log(x) + b * Math.log(1 - x))
+  return x < (a + 1) / (a + b + 2) ? (front * betaCf(x, a, b)) / a : 1 - (front * betaCf(1 - x, b, a)) / b
+}
+
+/** P(χ²_df ≥ x). */
+export function chi2Sf(x: number, df: number): number {
+  return gammaQ(df / 2, x / 2)
+}
+
+/** P(F_{d1,d2} ≥ f). */
+export function fSf(f: number, d1: number, d2: number): number {
+  if (!(f > 0)) return 1
+  if (!Number.isFinite(f)) return 0
+  return betaI(d2 / (d2 + d1 * f), d2 / 2, d1 / 2)
+}
+
+export interface Friedman {
+  k: number
+  n: number
+  /** Friedman's χ²_F, k − 1 degrees of freedom. */
+  chi2: number
+  df: number
+  p: number
+  /** Iman–Davenport F_F = (N−1)χ²_F / (N(k−1) − χ²_F) on (k−1, (k−1)(N−1)) df: χ²_F is
+   *  needlessly conservative, and this is the statistic Demšar recommends reporting. */
+  ff: number
+  df1: number
+  df2: number
+  pF: number
+}
+
+/** Friedman's test from the tools' mean ranks over `n` blocks (Demšar 2006, §3.2.2):
+ *  χ²_F = 12N / (k(k+1)) · (Σ_j R_j² − k(k+1)²/4). */
+export function friedmanFromMeans(means: number[], n: number): Friedman | null {
+  const k = means.length
+  if (k < 2 || n < 2) return null
+  const chi2 = ((12 * n) / (k * (k + 1))) * (means.reduce((s, r) => s + r * r, 0) - (k * (k + 1) ** 2) / 4)
+  const df1 = k - 1
+  const df2 = (k - 1) * (n - 1)
+  const den = n * (k - 1) - chi2
+  const ff = den > 0 ? ((n - 1) * chi2) / den : Number.POSITIVE_INFINITY
+  return { k, n, chi2, df: df1, p: chi2Sf(chi2, df1), ff, df1, df2, pF: fSf(ff, df1, df2) }
+}
+
+/**
+ * Friedman's test on one row of ranks per case (blocks[case][tool]). The benchmark's rows
+ * are each tool's rank AVERAGED over the case's metrics (meanRanks().blocks), not re-ranked.
+ * An average of ranks varies less than a rank does, so under the null χ²_F comes out smaller
+ * than its reference distribution assumes and the test errs CONSERVATIVE: a difference it
+ * calls significant is at least that significant. The CD diagram can then plot the same
+ * means the test was on.
+ */
+export function friedman(blocks: number[][]): Friedman | null {
+  const n = blocks.length
+  const k = blocks[0]?.length ?? 0
+  if (!n || !k) return null
+  const means = Array.from({ length: k }, (_, t) => blocks.reduce((s, b) => s + b[t], 0) / n)
+  return friedmanFromMeans(means, n)
+}
+
+/**
+ * Critical values q_α of the two-tailed Nemenyi test for k = 2..20 tools (index k − 2): the
+ * studentized range with infinite degrees of freedom, divided by √2. k = 2..10 are Table 5(a)
+ * of J. Demšar, "Statistical Comparisons of Classifiers over Multiple Data Sets", JMLR
+ * 7:1–30 (2006), as printed; k = 11..20 are computed from the same distribution (numerical
+ * integration of the range of k standard normals, the computation test/bench-rank.test.ts
+ * checks against Demšar's ten printed values).
+ */
+export const NEMENYI_Q: Record<'0.05' | '0.10', number[]> = {
+  '0.05': [
+    1.96, 2.343, 2.569, 2.728, 2.85, 2.949, 3.031, 3.102, 3.164, 3.219, 3.268, 3.313, 3.354, 3.391, 3.426, 3.458, 3.489,
+    3.517, 3.544,
+  ],
+  '0.10': [
+    1.645, 2.052, 2.291, 2.459, 2.589, 2.693, 2.78, 2.855, 2.92, 2.978, 3.03, 3.077, 3.12, 3.159, 3.196, 3.23, 3.261,
+    3.291, 3.319,
+  ],
+}
+
+/** Nemenyi critical difference CD = q_α √(k(k+1) / (6N)): two tools whose mean ranks differ
+ *  by less are not significantly different. Null outside k = 2..20. */
+export function nemenyiCD(k: number, n: number, alpha: 0.05 | 0.1 = 0.05): number | null {
+  const q = NEMENYI_Q[alpha === 0.05 ? '0.05' : '0.10'][k - 2]
+  if (q === undefined || n < 1) return null
+  return q * Math.sqrt((k * (k + 1)) / (6 * n))
+}
+
+/** Groups a CD diagram joins with a bar: maximal runs of tools, in ascending mean-rank order,
+ *  whose spread is under `cd`, as [first, last] indices into `sortedMeans`. A run inside
+ *  another is not drawn, as in Demšar's figures. */
+export function cdGroups(sortedMeans: number[], cd: number): [number, number][] {
+  const out: [number, number][] = []
+  for (let i = 0; i < sortedMeans.length; i++) {
+    let j = i
+    while (j + 1 < sortedMeans.length && sortedMeans[j + 1] - sortedMeans[i] < cd) j++
+    if (j > i && !out.some(([a, b]) => a <= i && b >= j)) out.push([i, j])
+  }
+  return out
+}
+
+export interface ParetoRecord {
+  tool: string
+  /** (case, opponent) pairs compared: cases with a ranked metric × (k − 1). */
+  pairs: number
+  /** Shares of `pairs`; win + loss + incomparable + tie = 1. */
+  win: number
+  loss: number
+  /** Better on one metric, worse on another: neither dominates. */
+  incomparable: number
+  /** Level on every metric. */
+  tie: number
+}
+
+/**
+ * Pareto win rate: on a case, A beats B when A is at least as good on every metric ranked
+ * there and strictly better on one. Read off the cells' ranks, so a failed output is worse
+ * than any scored one and level with another failure, exactly as in the mean rank. No
+ * weights here either; the price is the `incomparable` share, which is most of the pairs
+ * whenever two tools trade one metric for another.
+ */
+export function paretoWins(rows: BenchRow[], opts: RankOpts): ParetoRecord[] {
+  const rc = rankCases(rows, opts)
+  const k = rc.tools.length
+  const tally = rc.tools.map(() => ({ pairs: 0, win: 0, loss: 0, incomparable: 0, tie: 0 }))
+  for (const c of rc.cases) {
+    if (!c.metrics.length) continue
+    for (let a = 0; a < k; a++)
+      for (let b = 0; b < k; b++) {
+        if (a === b) continue
+        let better = false
+        let worse = false
+        for (const r of c.ranks) {
+          if (r[a] < r[b]) better = true
+          else if (r[a] > r[b]) worse = true
+        }
+        const t = tally[a]
+        t.pairs++
+        if (better && !worse) t.win++
+        else if (worse && !better) t.loss++
+        else if (better && worse) t.incomparable++
+        else t.tie++
+      }
+  }
+  return rc.tools.map((tool, i) => {
+    const t = tally[i]
+    const d = t.pairs || 1
+    return { tool, pairs: t.pairs, win: t.win / d, loss: t.loss / d, incomparable: t.incomparable / d, tie: t.tie / d }
+  })
+}
+
+/** Everything a leaderboard prints for one corpus and one view. */
+export interface Leaderboard {
+  corpus: string
+  kind: CorpusKind
+  view: RankView
+  /** Cases (Friedman blocks) and tools ranked. */
+  n: number
+  k: number
+  metrics: { key: string; label: string; better: 'lower' | 'higher' }[]
+  /** Best mean rank first. */
+  tools: (ToolRank & { pareto: ParetoRecord })[]
+  excluded: { tool: string; n: number; reason: string }[]
+  dropped: { ground: number; unmeasured: number }
+  friedman: Friedman | null
+  cd05: number | null
+  cd10: number | null
+}
+
+export function leaderboard(rows: BenchRow[], opts: RankOpts): Leaderboard {
+  const mr = meanRanks(rows, opts)
+  const pareto = new Map(paretoWins(rows, opts).map((p) => [p.tool, p]))
+  const k = mr.tools.length
+  return {
+    corpus: mr.corpus,
+    kind: mr.kind,
+    view: mr.view,
+    n: mr.n,
+    k,
+    metrics: mr.metrics.map((m) => ({ key: m.key, label: m.label, better: m.better })),
+    tools: mr.ranking.map((r) => ({ ...r, pareto: pareto.get(r.tool) as ParetoRecord })),
+    excluded: mr.excluded,
+    dropped: mr.dropped,
+    friedman: friedman(mr.blocks),
+    cd05: nemenyiCD(k, mr.n, 0.05),
+    cd10: nemenyiCD(k, mr.n, 0.1),
+  }
+}
+
+/** The corpora a headline is computed on: held out, in the order the rows list them. */
+export function headlineCorpora(rows: BenchRow[]): string[] {
+  const out: string[] = []
+  for (const r of rows) if (r.heldOut && !out.includes(r.corpus)) out.push(r.corpus)
   return out
 }

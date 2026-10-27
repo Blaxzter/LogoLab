@@ -14,7 +14,7 @@ import {
   toolInfo,
   type BenchResults,
 } from './benchData'
-import { CorpusLine, runUrl, useFetched } from './ui'
+import { CorpusLine, useFetched, useRunUrl } from './ui'
 
 /**
  * Data: where the selected corpus comes from, and every case in it as one row — its source,
@@ -51,8 +51,12 @@ export function DataTab({
   onMetric: (k: string) => void
   onCase: (id: string) => void
 }) {
+  const runUrl = useRunUrl()
   const info = corpusInfo(corpus)
-  const manifest = useFetched<Manifest>(corpus.startsWith('svgemoji') ? '/__bench/manifest' : null, 'json')
+  const manifest = useFetched<Manifest>(
+    corpus.startsWith('svgemoji') ? runUrl(run, 'manifests/svg-emoji-test.json') : null,
+    'json',
+  )
   const table = useMemo(() => caseTable(data.rows, corpus), [data, corpus])
   const meta = useMemo(() => new Map(data.meta.cases.map((c) => [c.id, c])), [data])
   const metric = METRIC_BY_KEY.get(metricKey) ?? METRICS[0]
