@@ -390,6 +390,12 @@ export function scoreCenterline(
   const turnPts: CenterlineScore['turnPts'] = []
   const authoredWidth = new Map<number, number>()
   for (const a of authored) authoredWidth.set(a.key, a.w)
+  const perKey = new Map<number, ReturnType<typeof nearest>>()
+  const keyLookup = (k: number): ReturnType<typeof nearest> => {
+    let f = perKey.get(k)
+    if (!f) perKey.set(k, (f = nearest(authored.filter((a) => a.key === k))))
+    return f
+  }
   const bySub = new Map<number, Sample[]>()
   for (const s of traced) {
     const list = bySub.get(s.key)
@@ -404,6 +410,18 @@ export function scoreCenterline(
       const { d, s: a } = toAuthored(seq[i].x, seq[i].y)
       if (!a || d > Math.max(2, 0.6 * a.w)) continue
       const last = runs[runs.length - 1]
+      // Two authored strokes can lie ON each other (Feather's book-open draws the spine
+      // once per page): the nearest sample then flips between them on ties, and the
+      // authored SVG scored against itself read 2 turns. A path still within reach of
+      // the stroke it is following keeps following it.
+      if (last && last.key !== a.key) {
+        const own = keyLookup(last.key)(seq[i].x, seq[i].y)
+        if (own.s && own.d <= Math.max(2, 0.6 * own.s.w) && own.d <= d + 0.5) {
+          last.n++
+          last.last = i
+          continue
+        }
+      }
       if (last && last.key === a.key) {
         last.n++
         last.last = i

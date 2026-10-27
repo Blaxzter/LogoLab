@@ -418,6 +418,9 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
 // says how many rows had strokes to score.
 
 const LINE_HEADLINE = 'logolab-strokes'
+/** The line table's own labels: its ★ is logolab-strokes, and logolab-auto (the fill
+ *  headline) is an ordinary row there — on stroke art it draws outlines like any other. */
+const lineName = (t: string, n: number): string => `${t === LINE_HEADLINE ? `${t} ★` : t}${n < MIN_N ? ` ⚠n=${n}` : ''}`
 
 /** One tool's line-corpus row: the medians the stroke table prints (exported for tests). */
 export interface LineStats {
@@ -510,7 +513,7 @@ function lineSection(corpus: string, cr: ScoreRow[], ct: string[]): string[] {
     const sc = s.scored
     const c = (v: number | null, d = 2) => (sc ? fmt(v, d) : 'no strokes')
     out.push(
-      `| ${name(s.tool, s.n)} | ${s.n} | ${s.fail} | ${sc}/${s.n} | ${fmt(s.deltaE)} | ${c(s.centre)} | ${c(s.centreP95)} | ` +
+      `| ${lineName(s.tool, s.n)} | ${s.n} | ${s.fail} | ${sc}/${s.n} | ${fmt(s.deltaE)} | ${c(s.centre)} | ${c(s.centreP95)} | ` +
         `${c(s.missed)} | ${sc ? fmt(s.widthErr, 3) : '—'} | ${sc ? fmt(s.ends, 0) : '—'} | ${sc ? fmt(s.paths, 0) : '—'} | ` +
         `${sc ? `${s.noTurns}/${sc}` : '—'} | ${sc ? `${s.allPass}/${sc}` : '—'} | ${kfmt(s.nodes)} |`,
     )
@@ -567,7 +570,7 @@ function lineSection(corpus: string, cr: ScoreRow[], ct: string[]): string[] {
         const f = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(d)
         return `${f(ci.mean)} [${f(ci.lo)}, ${f(ci.hi)}]${ci.lo > 0 || ci.hi < 0 ? ' ✔' : ''} · ${wins}/${ds.length}`
       })
-      out.push(`| ${name(t, tr.length)} | ${cells.join(' | ')} |`)
+      out.push(`| ${lineName(t, tr.length)} | ${cells.join(' | ')} |`)
     }
   }
 
@@ -581,7 +584,7 @@ function lineSection(corpus: string, cr: ScoreRow[], ct: string[]): string[] {
     for (const t of ct) {
       const rs = rendered(cr.filter((r) => r.tool === t))
       out.push(
-        `| ${name(t, vals(rs, 'sbSsim').length)} | ${vals(rs, 'sbSsim').length} | ${fmt(mean(vals(rs, 'sbDino')), 3)} | ` +
+        `| ${lineName(t, vals(rs, 'sbSsim').length)} | ${vals(rs, 'sbSsim').length} | ${fmt(mean(vals(rs, 'sbDino')), 3)} | ` +
           `${fmt(mean(vals(rs, 'sbLpips')), 3)} | ${fmt(mean(vals(rs, 'sbSsim')), 3)} | ${fmt(mean(vals(rs, 'sbMse')), 4)} | ` +
           `${kfmt(mean(vals(rs, 'sbTokens')))} |`,
       )

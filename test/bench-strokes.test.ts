@@ -215,6 +215,15 @@ test('the oracle: the authored SVG as the output scores a perfect centreline tra
   assert.equal(r.gatesPassed, r.gatesApplicable)
 })
 
+test('two authored strokes drawn ON each other are not a turn (Feather book-open, scored as itself)', () => {
+  const book = icon(
+    '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+  )
+  const r = lineRow(book, book, 384)
+  assert.equal(r.clTurns, 0)
+  assert.equal(r.clMissed, 0)
+})
+
 test('an outline-only output keeps its pixel metrics and gets "no strokes" for the centreline', () => {
   const outline =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 11h18v2H3z" fill="#000"/></svg>'
