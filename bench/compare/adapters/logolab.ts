@@ -101,6 +101,34 @@ export const logolabAuto: TracerAdapter = {
   },
 }
 
+/**
+ * The LINE corpora's two LogoLab rows (strokes-oss), both through traceIcon on the PNG like
+ * logolab-auto, both with Mono asked for — every case there is one ink on white, and Mono
+ * is what the probe picks for it anyway; naming it keeps a probe change from moving the
+ * row into colour unnoticed:
+ *
+ *   logolab-strokes  HEADLINE of a line corpus. `strokes: true` — the MCP `strokes` option,
+ *                    the studio's Strokes toggle under Mono (centerline: true): centreline
+ *                    strokes with a measured width, dots and solid marks as fills.
+ *   logolab-outline  the same call without `strokes`: the filled outlines the app draws
+ *                    when Strokes is off. No centreline score (it has no strokes); here for
+ *                    the pixel metrics beside the outline tracers.
+ */
+const monoIcon = (name: string, strokes: boolean): TracerAdapter => ({
+  name,
+  lanes: ['colour', 'mono'],
+  kinds: ['line'],
+  available: async () => null,
+  version: async () => `logolab@${rev()} traceIcon mode=mono${strokes ? ' strokes' : ''}`,
+  async trace(i) {
+    const t = performance.now()
+    const out = await traceIcon(loadSource(i.pngPath), { mode: 'mono', ...(strokes ? { strokes: true } : {}) })
+    return { svg: out.svg, ms: performance.now() - t, notes: out.plan.summary }
+  },
+})
+export const logolabStrokes = monoIcon('logolab-strokes', true)
+export const logolabOutline = monoIcon('logolab-outline', false)
+
 const tiled = { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar' as const }
 const stacked = { ...PRODUCT_VECTORIZE_OPTIONS }
 export const logolabAblation: TracerAdapter[] = [
