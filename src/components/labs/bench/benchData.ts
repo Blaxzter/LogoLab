@@ -392,6 +392,15 @@ export interface CorpusInfo {
 }
 
 export const CORPUS_INFO: Record<string, CorpusInfo> = {
+  'logos-cc0': {
+    label: 'Open logos (CC0) · 300',
+    heldOut: true,
+    blurb:
+      '300 brand marks from gilbarbara/logos at a pinned commit, stratified by colour count, gradients and wordmark vs symbol, picked in sha1 order. Strokes, masks and filters are kept (pixel metrics only). Brands in LogoLab’s own gallery corpus are excluded, so none of it was tuned on. The logo headline. CC0 covers the artwork; the marks remain their owners’ trademarks.',
+    source: 'gilbarbara/logos (GitHub), pinned commit + per-file sha256 (bench/compare/manifests/logos-cc0.json)',
+    sourceUrl: 'https://github.com/gilbarbara/logos',
+    license: 'CC0 1.0 (artwork; marks are trademarks)',
+  },
   'svgemoji-v0': {
     label: 'SVG-Bench emoji · 100',
     heldOut: true,
