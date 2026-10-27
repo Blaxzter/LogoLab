@@ -619,6 +619,10 @@ function lineSection(corpus: string, cr: ScoreRow[], ct: string[]): string[] {
   const na = cr.filter((r) => r.status === 'ok' && r.geomRefusal && r.geomRefusal !== 'no strokes')
   if (na.length)
     out.push(`- centreline n/a for another reason: ${na.map((r) => `${r.tool} ${r.geomRefusal}`).join('; ')}`)
+  // A case whose answer sheet the stroke reader refuses stays in the table (pixel metrics
+  // only, counted in n, never in `cl scored`) — said here, or it would read as a tool's miss.
+  const gtNa = [...new Set(cr.filter((r) => r.gtRefusal).map((r) => `${r.caseId.split('/')[1]} (${r.gtRefusal})`))]
+  if (gtNa.length) out.push(`- ground truth refused (pixel metrics only): ${gtNa.join('; ')}`)
   out.push('')
   return out
 }
