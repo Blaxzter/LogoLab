@@ -100,11 +100,18 @@ def main() -> int:
     for k, v in notes.items():
         print(f"  {k}: {v}", file=sys.stderr)
 
-    out = []
+    # Rows are written as they are scored, not at the end: a run that dies mid-pass keeps
+    # what it finished, and run.ts reuses a row whose `digest` (its inputs' hash, passed in
+    # with the pair) still matches (progress.ts).
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    f = a.out.open("w", encoding="utf-8")
+    f.write(json.dumps(dict(meta=dict(device=dev, notes=notes, torch=torch.__version__,
+                                      dinoRevision=DINO_REV, tokenizerRevision=TOK_REV))) + "\n")
+    f.flush()
     with torch.inference_mode():
         for i, pr in enumerate(pairs):
-            row = dict(key=pr["key"], mse=None, ssim=None, lpips=None, dino=None,
-                       tokens=None, gtTokens=None, error=None)
+            row = dict(key=pr["key"], digest=pr.get("digest"), mse=None, ssim=None, lpips=None,
+                       dino=None, tokens=None, gtTokens=None, error=None)
             try:
                 gt, gen = rgb(pr["gt_png"]), rgb(pr["gen_png"])
                 if gt.size != gen.size:
@@ -126,16 +133,12 @@ def main() -> int:
                         row["gtTokens"] = len(tok.encode(Path(pr["gt_svg"]).read_text(encoding="utf-8")))
             except Exception as e:  # noqa: BLE001
                 row["error"] = f"{type(e).__name__}: {e}"
-            out.append(row)
+            f.write(json.dumps(row) + "\n")
+            f.flush()
             if (i + 1) % 50 == 0:
                 print(f"  {i + 1}/{len(pairs)}", flush=True)
 
-    a.out.parent.mkdir(parents=True, exist_ok=True)
-    with a.out.open("w", encoding="utf-8") as f:
-        f.write(json.dumps(dict(meta=dict(device=dev, notes=notes, torch=torch.__version__,
-                                          dinoRevision=DINO_REV, tokenizerRevision=TOK_REV))) + "\n")
-        for r in out:
-            f.write(json.dumps(r) + "\n")
+    f.close()
     print(f"wrote {a.out}")
     return 0
 

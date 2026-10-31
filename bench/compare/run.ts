@@ -2,7 +2,7 @@
 //
 //   node --experimental-strip-types bench/compare/run.ts [--tools a,b] [--corpus x,y] [--limit n]
 //        [--res 512] [--run name] [--no-svgbench] [--no-cache] [--gate-exact]
-//        [--fit key=value,…]
+//        [--fit key=value,…] [--fresh]
 //
 // Why authored SVGs: the answer sheet has to be the vector art that produced the pixels, or
 // "correct" cannot be told from "like the other tracer". StarVector's SVG-Bench scores the
@@ -45,6 +45,13 @@
 // External tools are cached by (tool version, PNG bytes) in .bench-tools/compare-cache/;
 // LogoLab is always re-traced (it is what changes).
 //
+// A run writes its progress as it goes (progress.ts, <run>/progress/): LogoLab's traces,
+// every scored row, and the SVG-Bench rows. Started again with the same --run, it skips
+// whatever the SAME code state already finished — a hang, a reboot or a sleeping PC costs
+// the case it stopped on, not the run. Entries are keyed by the code (HEAD + dirty diff) and
+// the inputs, so after a tracer or scorer change they simply stop matching. --fresh ignores
+// them.
+//
 // --fit overrides planar fit defaults (DEFAULT_PLANAR_FIT) for every LogoLab row — a
 // tracer change measured off and on without editing code (`--fit lineTangents=false`). It
 // is recorded in meta, and a run made with it is a measurement, not a published result.
@@ -54,7 +61,7 @@
 
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { ensureImageData } from '../nodeHarness.ts'
 import { encodePng } from '../../src/lib/png/encode.ts'
@@ -67,6 +74,7 @@ import { renderGround } from './render.ts'
 import { scorePixels, scoreTrace, type Truth } from './score.ts'
 import { summaryMarkdown } from './report.ts'
 import { writeOverlays } from './overlay.ts'
+import { progress, readSvgbenchRows } from './progress.ts'
 import {
   logolabAblation,
   logolabAuto,
@@ -180,6 +188,11 @@ async function main(): Promise<void> {
     console.log(
       `  ⚠ working tree differs from ${prov.head} under src/ bench/ (${prov.status.length} paths) — recorded in meta`,
     )
+  // ── progress on disk (progress.ts): reusable only by this code state and these options
+  const saved = progress(runDir, has('--fresh'))
+  const codeKey = sha1(
+    JSON.stringify({ rev: prov.dirty ? `${prov.head}+${prov.diffSha1}` : prov.head, docVisible, fitOverrides }),
+  )
   // ── tools
   const skip = list('--skip-tools') ?? []
   const wanted = (toolNames ? ALL_TOOLS.filter((t) => toolNames.includes(t.name)) : ALL_TOOLS).filter(
@@ -197,7 +210,7 @@ async function main(): Promise<void> {
   }
 
   // ── cases: truth raster, answer sheet, lane
-  const cases: { c: CompareCase; truth: Truth; input: TraceInput; gtSvgPath: string }[] = []
+  const cases: { c: CompareCase; truth: Truth; input: TraceInput; gtSvgPath: string; pngSha: string }[] = []
   for (const id of corpusIds) {
     const cs = loadCorpus(id).slice(0, LIMIT)
     console.log(`  ${id}: ${cs.length} cases`)
@@ -215,12 +228,14 @@ async function main(): Promise<void> {
       const dir = caseDir(c)
       mkdirSync(dir, { recursive: true })
       const pngPath = join(dir, 'truth.png')
-      writeFileSync(pngPath, encodePng(img.data, img.width, img.height))
+      const png = encodePng(img.data, img.width, img.height)
+      writeFileSync(pngPath, png)
       cases.push({
         c,
         truth: { img, shapes, refusal, ...(line && !refusal ? { lineSvg: svg } : {}) },
         input: { pngPath, image: img, ...inkOf(img), case: c },
         gtSvgPath: c.svgPath,
+        pngSha: sha1(png),
       })
     }
   }
@@ -237,21 +252,29 @@ async function main(): Promise<void> {
     )
     console.log(`\n━━ ${a.name} — ${mine.length} cases`)
     const cacheable = !a.name.startsWith('logolab') && useCache
-    const cachePath = (k: (typeof cases)[number]): string =>
-      join(CACHE, a.name, `${sha1(version + sha1(readFileSync(k.input.pngPath)))}.json`)
+    const cachePath = (k: (typeof cases)[number]): string => join(CACHE, a.name, `${sha1(version + k.pngSha)}.json`)
+    // What is not cached across runs (LogoLab) is still kept for THIS run, under this code state.
+    const traceKey = (k: (typeof cases)[number]): string => sha1(codeKey + version + k.pngSha)
     const todo: typeof mine = []
+    let resumed = 0
     for (const k of mine) {
       const p = cachePath(k)
+      const kept = cacheable ? null : saved.get<TraceResult>(`traces/${a.name}`, k.c.id, traceKey(k))
       if (cacheable && existsSync(p)) traces.set(`${a.name}|${k.c.id}`, JSON.parse(readFileSync(p, 'utf8')))
-      else todo.push(k)
+      else if (kept) {
+        traces.set(`${a.name}|${k.c.id}`, kept)
+        resumed++
+      } else todo.push(k)
     }
-    if (todo.length < mine.length) console.log(`  ${mine.length - todo.length} from cache`)
+    if (todo.length < mine.length - resumed) console.log(`  ${mine.length - todo.length - resumed} from cache`)
+    if (resumed) console.log(`  ${resumed} from this run's progress`)
     const store = (k: (typeof cases)[number], r: TraceResult | { error: string }): void => {
       traces.set(`${a.name}|${k.c.id}`, r)
-      if (cacheable && !('error' in r)) {
+      if ('error' in r) return // a failure is tried again, here as in the cache
+      if (cacheable) {
         mkdirSync(join(CACHE, a.name), { recursive: true })
         writeFileSync(cachePath(k), JSON.stringify(r))
-      }
+      } else saved.put(`traces/${a.name}`, k.c.id, traceKey(k), r)
     }
     if (a.traceBatch && todo.length) {
       const res = await a.traceBatch(
@@ -276,12 +299,14 @@ async function main(): Promise<void> {
   // ── score
   const rows: ScoreRow[] = []
   const pairs: string[] = []
+  let resumedRows = 0
   for (const k of cases) {
     const dir = caseDir(k.c)
     for (const { a } of tools) {
       const t = traces.get(`${a.name}|${k.c.id}`)
       if (!t) continue // lane not run by this tool
       const pngOut = join(dir, `${a.name}.png`)
+      const svgOut = join(dir, `${a.name}.svg`)
       const pair = (gen_svg?: string): void => {
         pairs.push(
           JSON.stringify({
@@ -293,6 +318,21 @@ async function main(): Promise<void> {
           }),
         )
       }
+      // A row this code state already scored from this very output: its files are on disk.
+      type Kept = { row: ScoreRow; paired: null | { svg: boolean } }
+      const rowKey = sha1(codeKey + k.pngSha + sha1(JSON.stringify(t)))
+      const kept = saved.get<Kept>(`rows/${a.name}`, k.c.id, rowKey)
+      if (kept && (!kept.paired || existsSync(pngOut)) && (!kept.paired?.svg || existsSync(svgOut))) {
+        rows.push(kept.row)
+        if (kept.paired) pair(kept.paired.svg ? svgOut : undefined)
+        resumedRows++
+        continue
+      }
+      let paired: Kept['paired'] = null
+      const keep = (row: ScoreRow): void => {
+        rows.push(row)
+        saved.put(`rows/${a.name}`, k.c.id, rowKey, { row, paired } satisfies Kept)
+      }
       if ('error' in t) {
         // No SVG: scored as a blank white image in every pixel metric, SVG-Bench's included.
         const blank = scorePixels(k.c, k.truth, a.name, null, k.input.lane, {
@@ -300,12 +340,12 @@ async function main(): Promise<void> {
           error: t.error,
           ms: null,
         })
-        rows.push(blank.row)
         writeFileSync(pngOut, encodePng(blank.render.data, blank.render.width, blank.render.height))
         pair()
+        paired = { svg: false }
+        keep(blank.row)
         continue
       }
-      const svgOut = join(dir, `${a.name}.svg`)
       writeFileSync(svgOut, t.svg)
       let scored: { row: ScoreRow; render: { width: number; height: number; data: Uint8ClampedArray } | null }
       try {
@@ -319,11 +359,12 @@ async function main(): Promise<void> {
           ms: t.ms,
         })
       }
-      rows.push(scored.row)
       if (scored.render) {
         writeFileSync(pngOut, encodePng(scored.render.data, scored.render.width, scored.render.height))
         pair(svgOut)
+        paired = { svg: true }
       }
+      keep(scored.row)
       const r = scored.row
       console.log(
         `  ${a.name.padEnd(16)} ${k.c.id.padEnd(48).slice(0, 48)} ${r.status === 'ok' ? '' : r.status} ` +
@@ -335,6 +376,7 @@ async function main(): Promise<void> {
       )
     }
   }
+  if (resumedRows) console.log(`  ${resumedRows} rows from this run's progress`)
 
   // ── SVG-Bench metrics, one Python pass
   mkdirSync(runDir, { recursive: true })
@@ -348,31 +390,77 @@ async function main(): Promise<void> {
     if (!existsSync(VENV_PY)) sbNotes = `skipped: no Python venv at ${VENV_PY}`
     else {
       const out = join(runDir, 'svgbench.jsonl')
-      console.log(`\n━━ SVG-Bench metrics (${pairs.length} pairs)`)
-      const code = await new Promise<number>((resolve) => {
-        const p = spawn(VENV_PY, ['-I', join(PY, 'svgbench_metrics.py'), '--pairs', pairsPath, '--out', out], {
-          stdio: ['ignore', 'inherit', 'pipe'],
-        })
-        p.stderr.on('data', (b: Buffer) => {
-          const s = b.toString()
-          if (/unavailable|Error|Traceback/.test(s)) process.stderr.write(s)
-        })
-        p.on('close', (c) => resolve(c ?? 1))
-        p.on('error', () => resolve(1))
+      // The pass writes rows as it goes (svgbench-new.jsonl while it runs), each carrying the
+      // digest of what it scored — both images, both SVGs and the script itself. A row from
+      // an earlier pass of this run is reused while its digest still matches; only the rest
+      // goes to Python.
+      const script = join(PY, 'svgbench_metrics.py')
+      const scriptSha = sha1(readFileSync(script))
+      const fileSha = (p?: string): string => (p && existsSync(p) ? sha1(readFileSync(p)) : '-')
+      const all = pairs.map((l) => {
+        const p = JSON.parse(l) as { key: string; gt_png: string; gen_png: string; gen_svg?: string; gt_svg: string }
+        const digest = sha1(
+          [scriptSha, fileSha(p.gt_png), fileSha(p.gen_png), fileSha(p.gen_svg), fileSha(p.gt_svg)].join(),
+        )
+        return { ...p, digest }
       })
-      if (code === 0 && existsSync(out)) {
-        const lines = readFileSync(out, 'utf8')
-          .trim()
-          .split('\n')
-          .map((l) => JSON.parse(l))
-        sbNotes = lines[0].meta
-        const byKey = new Map(lines.slice(1).map((l) => [l.key as string, l]))
+      const newOut = join(runDir, 'svgbench-new.jsonl')
+      const before = has('--fresh') ? null : [readSvgbenchRows(out), readSvgbenchRows(newOut)]
+      const byKey = new Map<string, Record<string, unknown>>()
+      let metaSeen: unknown = null
+      for (const prev of before ?? []) {
+        if (prev.meta) metaSeen = prev.meta
+        for (const [key, row] of prev.rows) byKey.set(key, row)
+      }
+      const todo = all.filter((p) => byKey.get(p.key)?.digest !== p.digest)
+      console.log(
+        `\n━━ SVG-Bench metrics (${all.length} pairs${todo.length < all.length ? `, ${all.length - todo.length} from this run's progress` : ''})`,
+      )
+      let code = 0
+      if (todo.length) {
+        // Python opens svgbench-new.jsonl afresh, so what an earlier pass left there is folded
+        // into svgbench.jsonl first — still matching rows only.
+        if (before && todo.length < all.length)
+          writeFileSync(
+            out,
+            [
+              JSON.stringify({ meta: metaSeen }),
+              ...all.filter((p) => byKey.get(p.key)?.digest === p.digest).map((p) => JSON.stringify(byKey.get(p.key))),
+            ].join('\n') + '\n',
+          )
+        const todoPath = join(runDir, 'pairs-todo.jsonl')
+        writeFileSync(todoPath, todo.map((p) => JSON.stringify(p)).join('\n') + '\n')
+        code = await new Promise<number>((resolve) => {
+          const p = spawn(VENV_PY, ['-I', script, '--pairs', todoPath, '--out', newOut], {
+            stdio: ['ignore', 'inherit', 'pipe'],
+          })
+          p.stderr.on('data', (b: Buffer) => {
+            const s = b.toString()
+            if (/unavailable|Error|Traceback/.test(s)) process.stderr.write(s)
+          })
+          p.on('close', (c) => resolve(c ?? 1))
+          p.on('error', () => resolve(1))
+        })
+        const fresh = readSvgbenchRows(newOut)
+        if (fresh.meta) metaSeen = fresh.meta
+        for (const [key, row] of fresh.rows) byKey.set(key, row)
+      }
+      const complete = all.every((p) => byKey.get(p.key)?.digest === p.digest)
+      if (code === 0 && complete) {
+        sbNotes = metaSeen
+        // The merged file, in pair order: what the run is published with.
+        writeFileSync(
+          out,
+          [JSON.stringify({ meta: metaSeen }), ...all.map((p) => JSON.stringify(byKey.get(p.key)))].join('\n') + '\n',
+        )
+        rmSync(newOut, { force: true })
+        rmSync(join(runDir, 'pairs-todo.jsonl'), { force: true })
         for (const r of rows) {
           const m = byKey.get(`${r.tool}|${r.caseId}`)
           if (!m) continue
           Object.assign(r, { sbMse: m.mse, sbSsim: m.ssim, sbLpips: m.lpips, sbDino: m.dino, sbTokens: m.tokens })
         }
-      } else sbNotes = `failed (exit ${code})`
+      } else sbNotes = `failed (exit ${code}${complete ? '' : ', rows missing'})`
     }
   }
 
