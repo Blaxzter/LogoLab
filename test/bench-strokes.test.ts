@@ -16,6 +16,7 @@ import { parseLineTrace, isPaperPaint } from '../bench/compare/lineDoc.ts'
 import { renderGround } from '../bench/compare/render.ts'
 import { scoreTrace, type Truth } from '../bench/compare/score.ts'
 import { lineStats } from '../bench/compare/report.ts'
+import { flattenSubPath } from '../bench/geomScore.ts'
 import { corpusKind, type CompareCase, type ScoreRow } from '../bench/compare/types.ts'
 import type { SubPath } from '../src/lib/path/types.ts'
 
@@ -222,6 +223,24 @@ test('two authored strokes drawn ON each other are not a turn (Feather book-open
   const r = lineRow(book, book, 384)
   assert.equal(r.clTurns, 0)
   assert.equal(r.clMissed, 0)
+})
+
+test('a polygon closed back onto its start point (Feather) is one point there, not 2^20', () => {
+  const sp: SubPath = {
+    closed: true,
+    nodes: [
+      [13, 19],
+      [22, 12],
+      [13, 5],
+      [13, 19],
+    ].map(([x, y]) => ({ x, y, hIn: null, hOut: null, kind: 'corner' as const })),
+  }
+  assert.ok(flattenSubPath(sp).length < 10, `${flattenSubPath(sp).length} points`)
+  // StarVector handed back Feather's own fast-forward: scored as itself in seconds, and perfect.
+  const ff = icon('<polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/>')
+  const r = lineRow(ff, ff, 384)
+  assert.equal(r.clTurns, 0)
+  assert.deepEqual(r.failedGates, [])
 })
 
 test('an outline-only output keeps its pixel metrics and gets "no strokes" for the centreline', () => {

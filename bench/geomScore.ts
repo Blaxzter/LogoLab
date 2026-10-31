@@ -63,6 +63,19 @@ function flattenCubic(p0: Vec, c1: Vec, c2: Vec, p3: Vec, out: Vec[], depth = 0)
   // Flatness = max control-point deviation from the chord.
   const dx = p3.x - p0.x,
     dy = p3.y - p0.y
+  // A zero-length chord reads every control point as on it (d1 = d2 = 0) and fails the
+  // strict test below at every depth: a closing segment back onto the start point (Feather
+  // repeats it, then Z) came out as 2^20 copies of one point, which the centreline scorer
+  // counted as a million samples and then searched pairwise for hours. Such a segment is
+  // flat when its controls sit on the point; a real loop (p0 = p3, controls away) still splits.
+  if (
+    dx === 0 &&
+    dy === 0 &&
+    Math.max(Math.hypot(c1.x - p0.x, c1.y - p0.y), Math.hypot(c2.x - p0.x, c2.y - p0.y)) <= FLATNESS
+  ) {
+    out.push(p3)
+    return
+  }
   const d1 = Math.abs((c1.x - p3.x) * dy - (c1.y - p3.y) * dx)
   const d2 = Math.abs((c2.x - p3.x) * dy - (c2.y - p3.y) * dx)
   const dd = (d1 + d2) ** 2
