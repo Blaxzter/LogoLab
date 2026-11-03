@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { ensureImageData } from '../nodeHarness.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from '../svgGround.ts'
 import { makeVisibleAt, tangentBreaks } from '../geomScore.ts'
-import { renderGround } from './render.ts'
+import { releaseRenders, renderGround } from './render.ts'
 import { parseTraceSvg } from './traceSvg.ts'
 import { RESULTS } from './paths.ts'
 import { parseLineTrace } from './lineDoc.ts'
@@ -100,7 +100,11 @@ export function caseOverlay(
 
 /** Write overlay.json into every case directory of a run, from its pairs.jsonl. `resOf`
  *  gives a case's own raster when its corpus fixes one (a line corpus: compare/corpus.ts). */
-export function writeOverlays(runDir: string, res: number, resOf?: (caseId: string) => number | undefined): number {
+export async function writeOverlays(
+  runDir: string,
+  res: number,
+  resOf?: (caseId: string) => number | undefined,
+): Promise<number> {
   const byCase = new Map<string, { gt: string; dir: string; tools: Map<string, string> }>()
   for (const line of readFileSync(join(runDir, 'pairs.jsonl'), 'utf8').split('\n')) {
     if (!line.trim()) continue
@@ -116,6 +120,7 @@ export function writeOverlays(runDir: string, res: number, resOf?: (caseId: stri
     const line = corpusKind(caseId.slice(0, caseId.indexOf('/')) as CorpusId) === 'line'
     const o = caseOverlay(readFileSync(c.gt, 'utf8'), resOf?.(caseId) ?? res, c.tools, line)
     writeFileSync(join(c.dir, 'overlay.json'), JSON.stringify(o))
+    await releaseRenders()
   }
   return byCase.size
 }
@@ -130,6 +135,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   }
   const t0 = performance.now()
   const resById = new Map((meta.cases ?? []).map((c) => [c.id, c.res]))
-  const n = writeOverlays(runDir, meta.res, (id) => resById.get(id))
+  const n = await writeOverlays(runDir, meta.res, (id) => resById.get(id))
   console.log(`overlay: ${n} cases in ${run} (${Math.round(performance.now() - t0)} ms)`)
 }

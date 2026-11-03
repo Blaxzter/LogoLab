@@ -6,15 +6,18 @@
 // state (git HEAD plus the sha1 of the dirty diff under src/ and bench/, the rev LogoLab's
 // version string carries), the run's options, and the exact inputs. Change the tracer or the
 // scorer and the entries stop matching by themselves; nothing has to be invalidated by hand.
-// `--fresh` ignores them all. One file per entry, written to a temp name and renamed, so a
+// `--fresh` ignores them all. `--progress-from <commit>` (run.ts) also accepts the keys a
+// clean-tree run at that commit computed — only while the tracer (src/) is the same — for a
+// bench change that cannot move a number, and the run records that it did. One file per entry, written to a temp name and renamed, so a
 // run killed mid-write leaves either the old entry or the new one, never half of one.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 export interface Progress {
-  /** The value saved under (kind, name), or null when there is none or its key differs. */
-  get<T>(kind: string, name: string, key: string): T | null
+  /** The value saved under (kind, name), or null when there is none or its key is none of
+   *  `key` (several: this code state's, then an earlier one `--progress-from` vouches for). */
+  get<T>(kind: string, name: string, key: string | readonly string[]): T | null
   put(kind: string, name: string, key: string, value: unknown): void
 }
 
@@ -22,13 +25,13 @@ export function progress(runDir: string, fresh: boolean): Progress {
   const file = (kind: string, name: string): string =>
     join(runDir, 'progress', kind, `${name.replace(/[^\w.-]+/g, '_')}.json`)
   return {
-    get<T>(kind: string, name: string, key: string): T | null {
+    get<T>(kind: string, name: string, key: string | readonly string[]): T | null {
       if (fresh) return null
       const f = file(kind, name)
       if (!existsSync(f)) return null
       try {
         const j = JSON.parse(readFileSync(f, 'utf8')) as { key: string; value: T }
-        return j.key === key ? j.value : null
+        return (typeof key === 'string' ? j.key === key : key.includes(j.key)) ? j.value : null
       } catch {
         return null // unreadable: do that one again
       }

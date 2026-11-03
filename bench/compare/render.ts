@@ -13,6 +13,16 @@ import { decodePng } from '../../src/lib/png/decode.ts'
 import { attrs } from '../svgGround.ts'
 import type { Affine } from '../../src/lib/path/types.ts'
 
+/**
+ * Let the event loop turn once. resvg's native memory (the parsed tree, the pixmap) is freed
+ * by Node-API finalizers, and Node runs those from setImmediate — never inside a synchronous
+ * loop, however often the GC runs. A loop that renders without yielding keeps every render it
+ * ever made: v8's score pass grew to 52 GB on strokes-oss at 2048 px, and 40 renders of one
+ * 2048 px icon hold 2 GB until the loop ends (135 MB with this awaited between them). Await it
+ * once per iteration of any loop that renders.
+ */
+export const releaseRenders = (): Promise<void> => new Promise((r) => setImmediate(r))
+
 export interface Raster {
   width: number
   height: number

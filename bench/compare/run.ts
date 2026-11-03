@@ -2,7 +2,7 @@
 //
 //   node --experimental-strip-types bench/compare/run.ts [--tools a,b] [--corpus x,y] [--limit n]
 //        [--res 512] [--run name] [--no-svgbench] [--no-cache] [--gate-exact]
-//        [--fit key=value,…] [--fresh]
+//        [--fit key=value,…] [--fresh] [--shard i/n] [--progress-from <commit>]
 //
 // Why authored SVGs: the answer sheet has to be the vector art that produced the pixels, or
 // "correct" cannot be told from "like the other tracer". StarVector's SVG-Bench scores the
@@ -52,6 +52,15 @@
 // the inputs, so after a tracer or scorer change they simply stop matching. --fresh ignores
 // them.
 //
+// --progress-from <commit> also takes what a clean-tree run at <commit> saved: for a change
+// to the BENCH that cannot move a number (v8 needed one: the score loop never yielded, so
+// resvg's memory was never freed — render.ts releaseRenders). Refused when the tracer (src/)
+// differs from <commit>; the bench files that differ are printed and recorded in meta.
+//
+// --shard i/n traces and scores only every n-th case (from the i-th, 0-based), saves its rows
+// as progress and stops: no SVG-Bench, no results.json. n of them side by side use n cores;
+// the run without --shard then finds every row saved and only merges. Scoring is one core.
+//
 // --fit overrides planar fit defaults (DEFAULT_PLANAR_FIT) for every LogoLab row — a
 // tracer change measured off and on without editing code (`--fit lineTangents=false`). It
 // is recorded in meta, and a run made with it is a measurement, not a published result.
@@ -60,7 +69,7 @@
 // truth gate scores; with it, logolab-gate on truth0 reproduces test/truth-gate.test.ts.
 
 import { createHash } from 'node:crypto'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { ensureImageData } from '../nodeHarness.ts'
@@ -70,7 +79,7 @@ import { DEFAULT_PLANAR_FIT } from '../../src/lib/trace/planarFit.ts'
 import { CACHE, PY, RESULTS, REPO, VENV_PY } from './paths.ts'
 import { CORPORA, DEFAULT_CORPORA, inkOf, loadCorpus } from './corpus.ts'
 import { LOGOS_COMMIT } from './logosCc0.ts'
-import { renderGround } from './render.ts'
+import { releaseRenders, renderGround } from './render.ts'
 import { scorePixels, scoreTrace, type Truth } from './score.ts'
 import { summaryMarkdown } from './report.ts'
 import { writeOverlays } from './overlay.ts'
@@ -154,6 +163,13 @@ const LINE_RES = arg('--line-res') ? Number(arg('--line-res')) : null
 const resOf = (c: CompareCase): number =>
   corpusKind(c.corpus) === 'line' ? (LINE_RES ?? c.res ?? RES) : (c.res ?? RES)
 const LIMIT = arg('--limit') ? Number(arg('--limit')) : Infinity
+const SHARD = ((s): { i: number; n: number } | null => {
+  if (!s) return null
+  const [i, n] = s.split('/').map(Number)
+  if (!Number.isInteger(i) || !Number.isInteger(n) || n < 1 || i < 0 || i >= n)
+    throw new Error(`--shard ${s}: expected i/n with 0 ≤ i < n`)
+  return { i, n }
+})(arg('--shard'))
 const corpusIds = (list('--corpus') ?? DEFAULT_CORPORA) as CorpusId[]
 for (const c of corpusIds) if (!CORPORA.includes(c)) throw new Error(`unknown corpus ${c} (have ${CORPORA.join(', ')})`)
 const toolNames = list('--tools')
@@ -190,9 +206,23 @@ async function main(): Promise<void> {
     )
   // ── progress on disk (progress.ts): reusable only by this code state and these options
   const saved = progress(runDir, has('--fresh'))
-  const codeKey = sha1(
-    JSON.stringify({ rev: prov.dirty ? `${prov.head}+${prov.diffSha1}` : prov.head, docVisible, fitOverrides }),
-  )
+  const keyOf = (rev: string): string => sha1(JSON.stringify({ rev, docVisible, fitOverrides }))
+  const codeKey = keyOf(prov.dirty ? `${prov.head}+${prov.diffSha1}` : prov.head)
+  // --progress-from: an earlier clean-tree commit whose entries this run accepts too. Same
+  // tracer or nothing — its traces would not be this code's; the bench diff is on record.
+  const git = (...a: string[]): string => execFileSync('git', a, { cwd: REPO, encoding: 'utf8' })
+  const carried = (list('--progress-from') ?? []).map((given) => {
+    const rev = git('rev-parse', '--short', given).trim()
+    const src = git('diff', '--name-only', rev, '--', 'src').split('\n').filter(Boolean)
+    const untracked = prov.status.filter((l) => l.startsWith('?? src/'))
+    if (src.length || untracked.length)
+      throw new Error(`--progress-from ${rev}: the tracer differs (${[...src, ...untracked].join(', ')})`)
+    const benchChanged = git('diff', '--name-only', rev, '--', 'bench').split('\n').filter(Boolean)
+    console.log(`  ↺ accepting progress saved at ${rev}; bench differs in: ${benchChanged.join(', ') || 'nothing'}`)
+    return { rev, key: keyOf(rev), benchChanged }
+  })
+  // A LogoLab version string carries the rev it was traced at (adapters/logolab.ts).
+  const versionAt = (version: string, rev: string): string => version.replace(/^logolab@\S+/, `logolab@${rev}`)
   // ── tools
   const skip = list('--skip-tools') ?? []
   const wanted = (toolNames ? ALL_TOOLS.filter((t) => toolNames.includes(t.name)) : ALL_TOOLS).filter(
@@ -211,10 +241,13 @@ async function main(): Promise<void> {
 
   // ── cases: truth raster, answer sheet, lane
   const cases: { c: CompareCase; truth: Truth; input: TraceInput; gtSvgPath: string; pngSha: string }[] = []
+  let caseIndex = 0
   for (const id of corpusIds) {
     const cs = loadCorpus(id).slice(0, LIMIT)
-    console.log(`  ${id}: ${cs.length} cases`)
+    console.log(`  ${id}: ${cs.length} cases${SHARD ? ` (shard ${SHARD.i}/${SHARD.n} takes every ${SHARD.n}th)` : ''}`)
     for (const c of cs) {
+      if (SHARD && caseIndex++ % SHARD.n !== SHARD.i) continue
+      await releaseRenders()
       const svg = readFileSync(c.svgPath, 'utf8')
       const line = corpusKind(c.corpus) === 'line'
       const img = renderGround(svg, resOf(c))
@@ -254,7 +287,10 @@ async function main(): Promise<void> {
     const cacheable = !a.name.startsWith('logolab') && useCache
     const cachePath = (k: (typeof cases)[number]): string => join(CACHE, a.name, `${sha1(version + k.pngSha)}.json`)
     // What is not cached across runs (LogoLab) is still kept for THIS run, under this code state.
-    const traceKey = (k: (typeof cases)[number]): string => sha1(codeKey + version + k.pngSha)
+    const traceKey = (k: (typeof cases)[number]): string[] => [
+      sha1(codeKey + version + k.pngSha),
+      ...carried.map((f) => sha1(f.key + versionAt(version, f.rev) + k.pngSha)),
+    ]
     const todo: typeof mine = []
     let resumed = 0
     for (const k of mine) {
@@ -274,7 +310,7 @@ async function main(): Promise<void> {
       if (cacheable) {
         mkdirSync(join(CACHE, a.name), { recursive: true })
         writeFileSync(cachePath(k), JSON.stringify(r))
-      } else saved.put(`traces/${a.name}`, k.c.id, traceKey(k), r)
+      } else saved.put(`traces/${a.name}`, k.c.id, traceKey(k)[0], r)
     }
     if (a.traceBatch && todo.length) {
       const res = await a.traceBatch(
@@ -305,6 +341,7 @@ async function main(): Promise<void> {
     for (const { a } of tools) {
       const t = traces.get(`${a.name}|${k.c.id}`)
       if (!t) continue // lane not run by this tool
+      await releaseRenders() // or every render of the pass stays in memory (render.ts)
       const pngOut = join(dir, `${a.name}.png`)
       const svgOut = join(dir, `${a.name}.svg`)
       const pair = (gen_svg?: string): void => {
@@ -320,8 +357,12 @@ async function main(): Promise<void> {
       }
       // A row this code state already scored from this very output: its files are on disk.
       type Kept = { row: ScoreRow; paired: null | { svg: boolean } }
-      const rowKey = sha1(codeKey + k.pngSha + sha1(JSON.stringify(t)))
-      const kept = saved.get<Kept>(`rows/${a.name}`, k.c.id, rowKey)
+      const traceSha = sha1(JSON.stringify(t))
+      const rowKey = sha1(codeKey + k.pngSha + traceSha)
+      const kept = saved.get<Kept>(`rows/${a.name}`, k.c.id, [
+        rowKey,
+        ...carried.map((f) => sha1(f.key + k.pngSha + traceSha)),
+      ])
       if (kept && (!kept.paired || existsSync(pngOut)) && (!kept.paired?.svg || existsSync(svgOut))) {
         rows.push(kept.row)
         if (kept.paired) pair(kept.paired.svg ? svgOut : undefined)
@@ -377,6 +418,12 @@ async function main(): Promise<void> {
     }
   }
   if (resumedRows) console.log(`  ${resumedRows} rows from this run's progress`)
+  if (SHARD) {
+    console.log(
+      `\nshard ${SHARD.i}/${SHARD.n}: ${rows.length} rows saved (${resumedRows} were already) — run without --shard to merge`,
+    )
+    return
+  }
 
   // ── SVG-Bench metrics, one Python pass
   mkdirSync(runDir, { recursive: true })
@@ -384,7 +431,7 @@ async function main(): Promise<void> {
   writeFileSync(pairsPath, pairs.join('\n') + '\n')
   // Node + kink positions per case, for the labs' node view (overlay.ts).
   const resById = new Map(cases.map((k) => [k.c.id, k.truth.img.width]))
-  console.log(`  overlays: ${writeOverlays(runDir, RES, (id) => resById.get(id))} cases`)
+  console.log(`  overlays: ${await writeOverlays(runDir, RES, (id) => resById.get(id))} cases`)
   let sbNotes: unknown = 'skipped (--no-svgbench)'
   if (!has('--no-svgbench')) {
     if (!existsSync(VENV_PY)) sbNotes = `skipped: no Python venv at ${VENV_PY}`
@@ -475,6 +522,9 @@ async function main(): Promise<void> {
       ? { lineRes: [...new Set(cases.filter((k) => k.truth.lineSvg !== undefined).map((k) => k.truth.img.width))] }
       : {}),
     logolab,
+    // Entries an earlier commit saved and this run took (--progress-from), with the bench
+    // files that differ from it. The tracer did not (refused otherwise).
+    ...(carried.length ? { progressFrom: carried.map(({ rev, benchChanged }) => ({ rev, benchChanged })) } : {}),
     docVisible,
     ...(Object.keys(fitOverrides).length ? { fit: fitOverrides } : {}),
     corpora: corpusIds,

@@ -22,6 +22,10 @@ test('an entry is reused only under its own key; --fresh reuses nothing', () => 
     assert.deepEqual(p.get('rows/logolab-auto', 'strokes-oss/feather-send', 'k1'), { n: 1 })
     assert.equal(p.get('rows/logolab-auto', 'strokes-oss/feather-send', 'k2'), null, 'code or input changed')
     assert.equal(progress(dir, true).get('rows/logolab-auto', 'strokes-oss/feather-send', 'k1'), null)
+    // --progress-from: this code state's key first, then the earlier one it vouches for.
+    assert.deepEqual(p.get('rows/logolab-auto', 'strokes-oss/feather-send', ['k2', 'k1']), { n: 1 })
+    assert.equal(p.get('rows/logolab-auto', 'strokes-oss/feather-send', ['k2', 'k3']), null)
+    assert.equal(progress(dir, true).get('rows/logolab-auto', 'strokes-oss/feather-send', ['k1']), null)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
