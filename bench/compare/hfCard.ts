@@ -304,6 +304,104 @@ export function medianTable(rows: BenchRow[], corpus: string, tools: string[]): 
   return out
 }
 
+/**
+ * What a line corpus's table cannot say by itself, measured from the rows. A rank there is mostly
+ * whether a tool's output has strokes at all, so a tool's place needs reading.
+ */
+export function lineCorpusNotes(rows: BenchRow[], corpus: string): string[] {
+  const head = leaderboard(rows, { corpus, view: 'headline', resamples: 1 })
+  const tools = head.tools.map((t) => t.tool)
+  const of = (tool: string): BenchRow[] => rows.filter((r) => r.corpus === corpus && r.tool === tool)
+  const nums = (mine: BenchRow[], key: string): number[] =>
+    mine.map((r) => r[key]).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+  const out: string[] = []
+
+  const sameOutput = (a: string, b: string): boolean => {
+    const other = new Map(of(b).map((r) => [r.caseId, r]))
+    const mine = of(a)
+    return (
+      mine.length > 0 &&
+      mine.length === other.size &&
+      mine.every((r) => {
+        const o = other.get(r.caseId)
+        return typeof r.bytes === 'number' && o?.bytes === r.bytes && o.meanDeltaE === r.meanDeltaE
+      })
+    )
+  }
+  const pairs = tools.flatMap((a, i) =>
+    tools.slice(i + 1).flatMap((b) => (sameOutput(a, b) ? [`\`${a}\` and \`${b}\``] : [])),
+  )
+  if (pairs.length)
+    out.push(
+      `- **Rows that are one output.** These have the same file size and ΔE on every case, so they share a rank: ${pairs.join('; ')}.`,
+    )
+
+  const imagetracer = of('imagetracer-default')
+  const centre = median(nums(imagetracer, 'clCentre'))
+  const width = median(nums(imagetracer, 'clWidthErr'))
+  if (centre !== null && width !== null)
+    out.push(
+      `- **\`imagetracer-default\` does not find centrelines.** It strokes every outline 1 px in its own colour to hide ` +
+        `seams, and those strokes are scored as centrelines (median centre distance ${digits(centre)} px, width error ` +
+        `${digits(width)}), while a tool with no strokes is tied last. Its place comes from that.`,
+    )
+
+  // A case is <corpus>/<set>-<icon>: the icon sets are drawn in one style, so a gap between them
+  // is about the set, not the style.
+  const setOf = (r: BenchRow): string => r.caseId.slice(r.caseId.indexOf('/') + 1).split('-')[0]
+  const model = of('starvector-1b')
+  const sets = [...new Set(model.map(setOf))].sort()
+  if (sets.length > 1 && sets.includes('feather')) {
+    const medians = (tool: string): string =>
+      sets
+        .map((s) =>
+          digits(
+            median(
+              nums(
+                of(tool).filter((r) => setOf(r) === s),
+                'meanDeltaE',
+              ),
+            ) ?? Number.NaN,
+          ),
+        )
+        .join(', ')
+    const near = sets.map((s) => {
+      const inSet = model.filter((r) => setOf(r) === s)
+      return `${nums(inSet, 'meanDeltaE').filter((v) => v < 0.5).length} of ${inSet.length} ${s}`
+    })
+    const closest = model
+      .filter((r) => setOf(r) === 'feather' && typeof r.clCentre === 'number')
+      .sort((a, b) => (a.clCentre as number) - (b.clCentre as number))[0]
+    const place = (b: typeof head): { mean: number; at: number } => {
+      const at = b.tools.findIndex((t) => t.tool === 'starvector-1b')
+      return { mean: b.tools[at]?.mean ?? Number.NaN, at: at + 1 }
+    }
+    const withIt = place(head)
+    const without = place(
+      leaderboard(
+        rows.filter((r) => !(r.corpus === corpus && setOf(r) === 'feather')),
+        { corpus, view: 'headline', resamples: 1 },
+      ),
+    )
+    const controls = ['logolab-auto', 'omnisvg-4b']
+      .filter((t) => of(t).length)
+      .map((t) => `; \`${t}\` ${medians(t)}`)
+      .join('')
+    out.push(
+      `- **\`starvector-1b\` draws Feather back far closer than the other sets.** ΔE is under 0.5 on ${near.join(', ')} ` +
+        `icons (median ΔE ${medians('starvector-1b')}, in the order ${sets.join(', ')}${controls}).` +
+        (closest
+          ? ` Its closest centreline is ${(closest.clCentre as number).toFixed(2)} px off at this corpus's resolution ` +
+            `(${closest.caseId}), from an input its processor resizes to 224 px.`
+          : '') +
+        ` That looks like recall of icons seen in training. Its training data was not checked, so this is an inference. ` +
+        `Without Feather its mean rank moves from ${withIt.mean.toFixed(2)} to ${without.mean.toFixed(2)} and its place ` +
+        (withIt.at === without.at ? `stays ${withIt.at}.` : `from ${withIt.at} to ${without.at}.`),
+    )
+  }
+  return out
+}
+
 /** The fetch step of a corpus that has one besides svg-emoji (the Reproduce block). */
 const FETCH: [string, string][] = [
   ['logos-cc0', 'node --experimental-strip-types bench/compare/fetchLogos.ts        # gilbarbara/logos, pinned'],
@@ -453,6 +551,10 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
       )
       out.push('')
     }
+    for (const corpus of headlineCorpora(rows).filter((c) => corpusKind(c) === 'line')) {
+      const notes = lineCorpusNotes(rows, corpus)
+      if (notes.length) out.push(`### Reading the ${corpus} table`, '', ...notes, '')
+    }
   } else {
     out.push('## Leaderboard', '', 'This run has no held-out corpus, so no leaderboard is computed.', '')
   }
@@ -556,6 +658,14 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
       '`--skip-tools starvector-1b,omnisvg-4b` runs the rest on a CPU.',
   )
   out.push('')
+  for (const { rev, benchChanged } of m.progressFrom ?? []) {
+    out.push(
+      `It reused traces and scores saved at ${rev} (\`meta.progressFrom\`). A run only accepts that while the tracer ` +
+        `(\`src/\`) is the same at both commits. The benchmark files that differ: ` +
+        `${benchChanged.map((f) => `\`${f}\``).join(', ') || 'none'}.`,
+    )
+    out.push('')
+  }
 
   // ── licences ────────────────────────────────────────────────────────────────
   const shareAlike = (m.cases ?? []).some((c) => {

@@ -22,6 +22,7 @@ import {
   safeCaseId,
   flattenRows,
   isPrivatePath,
+  lineCorpusNotes,
   mergeRunIndex,
   publishProblems,
   runEntry,
@@ -125,6 +126,58 @@ test('the allowlist is own keys and exact licence strings; a case id must be a p
   assert.ok(safeCaseId('strokes-oss/lucide/arrow-up'))
   const bad = run([...emoji(1), { id: 'truth0/../../../etc', license: 'LogoLab fixture' }])
   assert.ok(publishProblems(bad).some((x) => /not a plain <corpus>\/<name>/.test(x)))
+})
+
+test('a line table says which rows are one output, whose strokes are no centrelines, and where a model recalls', () => {
+  const stroked = { clMissed: 0, clPathsDelta: 0, clTurns: 0 }
+  const rows = ['feather-a', 'feather-b', 'lucide-a', 'lucide-b'].flatMap((name) => {
+    const id = `strokes-oss/${name}`
+    const feather = name.startsWith('feather')
+    return [
+      row('logolab-strokes', id, { meanDeltaE: 0.4, bytes: 100, docNodes: 5, clCentre: 1, clWidthErr: 0, ...stroked }),
+      row('logolab-auto', id, { meanDeltaE: 0.03, bytes: 200, docNodes: 9 }),
+      row('logolab-outline', id, { meanDeltaE: 0.03, bytes: 200, docNodes: 9 }),
+      row('imagetracer-default', id, {
+        meanDeltaE: 0.1,
+        bytes: 900,
+        docNodes: 99,
+        clCentre: 85,
+        clWidthErr: 0.99,
+        ...stroked,
+      }),
+      row('omnisvg-4b', id, { meanDeltaE: 3, bytes: 300, docNodes: 20 }),
+      row('starvector-1b', id, {
+        meanDeltaE: feather ? 0.1 : 4,
+        bytes: 400,
+        docNodes: 12,
+        ...(feather ? { clCentre: 0.02, clWidthErr: 0, ...stroked } : {}),
+      }),
+    ]
+  })
+  const notes = lineCorpusNotes(rows, 'strokes-oss').join('\n')
+  assert.match(notes, /`logolab-(auto|outline)` and `logolab-(auto|outline)`/)
+  assert.doesNotMatch(notes, /`starvector-1b` and/, 'a different ΔE is a different output')
+  assert.match(notes, /median centre distance 85 px, width error 0\.990/)
+  assert.match(notes, /2 of 2 feather, 0 of 2 lucide/)
+  assert.match(notes, /0\.02 px off/)
+  assert.doesNotMatch(
+    lineCorpusNotes(
+      rows.filter((r) => !r.caseId.includes('feather')),
+      'strokes-oss',
+    ).join('\n'),
+    /Feather/,
+    'no Feather rows, no claim about them',
+  )
+})
+
+test('a run that reused saved work says from which commit, and which bench files differ', () => {
+  const counts = { svgs: 0, truths: 0, overlays: 0, bytes: 0 }
+  const d = run(emoji(1))
+  d.meta.progressFrom = [{ rev: '9b10d75', benchChanged: ['bench/compare/run.ts'] }]
+  const md = cardMarkdown({ data: d, run: 'e', index: [], counts })
+  assert.match(md, /reused traces and scores saved at 9b10d75/)
+  assert.match(md, /`bench\/compare\/run\.ts`/)
+  assert.doesNotMatch(cardMarkdown({ data: run(emoji(1)), run: 'e', index: [], counts }), /reused traces/)
 })
 
 test('a run with a line corpus documents the centreline columns by their agreed names', () => {

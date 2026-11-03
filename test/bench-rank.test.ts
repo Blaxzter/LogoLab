@@ -243,20 +243,21 @@ test('Nemenyi q: Demšar Table 5(a) as printed, and every entry is the studentiz
   const demsar10 = [1.645, 2.052, 2.291, 2.459, 2.589, 2.693, 2.78, 2.855, 2.92]
   assert.deepEqual(NEMENYI_Q['0.05'].slice(0, 9), demsar05)
   assert.deepEqual(NEMENYI_Q['0.10'].slice(0, 9), demsar10)
-  assert.equal(NEMENYI_Q['0.05'].length, 19) // k = 2..20
+  assert.equal(NEMENYI_Q['0.05'].length, 20) // k = 2..21
+  assert.equal(NEMENYI_Q['0.10'].length, 20)
   assert.equal(NEMENYI_Q['0.05'][4 - 2], 2.569) // k = 4, α .05
   for (const [alpha, qs] of [
     [0.05, NEMENYI_Q['0.05']],
     [0.1, NEMENYI_Q['0.10']],
   ] as const)
-    for (let k = 2; k <= 20; k += k < 10 ? 4 : 3) {
+    for (const k of [2, 6, 10, 13, 16, 19, 21]) {
       // the tabled q sits where the range's CDF crosses 1 − α (to the table's 3 decimals)
       const q = qs[k - 2] * Math.SQRT2
       assert.ok(rangeCdf(q - 0.0015 * Math.SQRT2, k) < 1 - alpha, `k=${k} α=${alpha} low`)
       assert.ok(rangeCdf(q + 0.0015 * Math.SQRT2, k) > 1 - alpha, `k=${k} α=${alpha} high`)
     }
   assert.equal(nemenyiCD(1, 10), null)
-  assert.equal(nemenyiCD(21, 10), null)
+  assert.equal(nemenyiCD(22, 10), null)
 })
 
 test('cdGroups joins the maximal runs closer than CD', () => {

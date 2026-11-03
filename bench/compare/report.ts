@@ -215,7 +215,7 @@ function board(b: Leaderboard): string[] {
   out.push(`|---|---|---|---|---|---|${b.metrics.map(() => '---').join('|')}|`)
   b.tools.forEach((t, i) =>
     out.push(
-      `| ${i + 1} | ${LABEL[t.tool] ?? t.tool} | **${t.mean.toFixed(2)}** | [${t.lo.toFixed(2)}, ${t.hi.toFixed(2)}] | ` +
+      `| ${i + 1} | ${b.kind === 'line' ? lineName(t.tool, MIN_N) : (LABEL[t.tool] ?? t.tool)} | **${t.mean.toFixed(2)}** | [${t.lo.toFixed(2)}, ${t.hi.toFixed(2)}] | ` +
         `${t.caseMean.toFixed(2)} | ${pct(t.pareto.win)} / ${pct(t.pareto.loss)} / ${pct(t.pareto.incomparable)} | ` +
         `${b.metrics.map((m) => t.perMetric[m.key]?.toFixed(2) ?? '—').join(' | ')} |`,
     ),

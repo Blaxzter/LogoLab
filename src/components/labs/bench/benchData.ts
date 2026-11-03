@@ -36,6 +36,9 @@ export interface BenchMeta {
   date: string
   res: number
   logolab: string
+  /** Commits whose saved traces and scores this run reused (run.ts --progress-from): only
+   *  allowed while the tracer is the same, with the bench files that differ. */
+  progressFrom?: { rev: string; benchChanged: string[] }[]
   corpora: string[]
   tools: string[]
   versions: Record<string, string>
@@ -342,6 +345,23 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     label: 'Potrace',
     family: 'external',
     blurb: 'Potrace 1.16, painted in the case’s ink. It runs only on mono-lane cases, so its n is tiny.',
+  },
+  'logolab-strokes': {
+    label: 'LogoLab Strokes',
+    family: 'logolab',
+    blurb:
+      'The line corpora’s headline: the MCP traceIcon path with mode=mono and `strokes` (the Strokes toggle). Centreline strokes with a measured width.',
+  },
+  'logolab-outline': {
+    label: 'LogoLab outline',
+    family: 'logolab',
+    blurb: 'The same call without `strokes`: the filled outlines LogoLab draws with Strokes off.',
+  },
+  'autotrace-centerline': {
+    label: 'AutoTrace centerline',
+    family: 'external',
+    blurb:
+      'AutoTrace 0.40.0 `-centerline` on the luma<128 PBM, as Potrace gets it. It writes 1 px strokes and reads no width.',
   },
   'potrace-bin': {
     label: 'Potrace (binarised)',
@@ -1054,26 +1074,26 @@ export function friedman(blocks: number[][]): Friedman | null {
 }
 
 /**
- * Critical values q_α of the two-tailed Nemenyi test for k = 2..20 tools (index k − 2): the
+ * Critical values q_α of the two-tailed Nemenyi test for k = 2..21 tools (index k − 2): the
  * studentized range with infinite degrees of freedom, divided by √2. k = 2..10 are Table 5(a)
  * of J. Demšar, "Statistical Comparisons of Classifiers over Multiple Data Sets", JMLR
- * 7:1–30 (2006), as printed; k = 11..20 are computed from the same distribution (numerical
+ * 7:1–30 (2006), as printed; k = 11..21 are computed from the same distribution (numerical
  * integration of the range of k standard normals, the computation test/bench-rank.test.ts
  * checks against Demšar's ten printed values).
  */
 export const NEMENYI_Q: Record<'0.05' | '0.10', number[]> = {
   '0.05': [
     1.96, 2.343, 2.569, 2.728, 2.85, 2.949, 3.031, 3.102, 3.164, 3.219, 3.268, 3.313, 3.354, 3.391, 3.426, 3.458, 3.489,
-    3.517, 3.544,
+    3.517, 3.544, 3.569,
   ],
   '0.10': [
     1.645, 2.052, 2.291, 2.459, 2.589, 2.693, 2.78, 2.855, 2.92, 2.978, 3.03, 3.077, 3.12, 3.159, 3.196, 3.23, 3.261,
-    3.291, 3.319,
+    3.291, 3.319, 3.346,
   ],
 }
 
 /** Nemenyi critical difference CD = q_α √(k(k+1) / (6N)): two tools whose mean ranks differ
- *  by less are not significantly different. Null outside k = 2..20. */
+ *  by less are not significantly different. Null outside k = 2..21. */
 export function nemenyiCD(k: number, n: number, alpha: 0.05 | 0.1 = 0.05): number | null {
   const q = NEMENYI_Q[alpha === 0.05 ? '0.05' : '0.10'][k - 2]
   if (q === undefined || n < 1) return null
