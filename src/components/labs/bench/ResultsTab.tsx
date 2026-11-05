@@ -264,7 +264,7 @@ export function PairedTable({
                 if (!p)
                   return (
                     <td key={m.key} className="px-2 text-right text-faint">
-                      —
+                      n/a
                     </td>
                   )
                 const toolBetter = m.better === 'lower' ? p.meanDiff < 0 : p.meanDiff > 0

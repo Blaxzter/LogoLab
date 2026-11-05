@@ -1,20 +1,19 @@
-// LogoLab, three ways — each one serialised to a string and scored like any other tool.
+// LogoLab's rows, each one serialised to a string and scored like any other tool.
 // VTracer gets three configurations too (adapters/external.ts).
 //
 //   logolab-auto     HEADLINE. src/mcp/trace.ts traceIcon on the PNG — what `npx logolab`
 //                    users get: the ink probe picks mono/colour, the gradient probe, the mono
 //                    upscale. No per-case knowledge.
-//   logolab-product  traceImage + PRODUCT_VECTORIZE_OPTIONS (stacked, gradients on), no
-//                    per-case knowledge: the studio's starting settings.
 //   logolab-gate     traceImage + DEFAULT_VECTORIZE_OPTIONS (tiled) with `gradients` read off
 //                    the AUTHORED SVG — an ORACLE no other tool gets. It is the truth gate's
 //                    development configuration (test/truth-gate.test.ts), kept as a
 //                    reference row and labelled as such in summary.md, never the headline.
 //
 // Ablation lane (separate table, not the headline): the 2×2 of layering × gradients with no
-// oracle, so the gate→product difference is attributed by measurement:
+// oracle and no probes, so what each choice is worth is measured:
+//   logolab-abl-stacked-grad  PRODUCT_VECTORIZE_OPTIONS applied blind, which no shipped path
+//                             does. Called logolab-product up to run v8 (meta.renamed).
 //   logolab-abl-tiled-grad, logolab-abl-tiled-nograd, logolab-abl-stacked-nograd
-//   (stacked + gradients on IS logolab-product).
 //
 // The truth gate scores the in-memory doc; here the doc goes through serializeDoc(doc, 2)
 // and back, the same string path every other tool's output takes. Timing is in-process and
@@ -87,8 +86,6 @@ export const logolabGate = inProcess('logolab-gate', (i) => ({
   gradients: i.case.gradients,
 }))
 
-export const logolabProduct = inProcess('logolab-product', () => ({ ...PRODUCT_VECTORIZE_OPTIONS }))
-
 export const logolabAuto: TracerAdapter = {
   name: 'logolab-auto',
   lanes: ['colour', 'mono'],
@@ -132,6 +129,7 @@ export const logolabOutline = monoIcon('logolab-outline', false)
 const tiled = { ...DEFAULT_VECTORIZE_OPTIONS, engine: 'planar' as const }
 const stacked = { ...PRODUCT_VECTORIZE_OPTIONS }
 export const logolabAblation: TracerAdapter[] = [
+  inProcess('logolab-abl-stacked-grad', () => ({ ...stacked })),
   inProcess('logolab-abl-tiled-grad', () => ({ ...tiled, gradients: true })),
   inProcess('logolab-abl-tiled-nograd', () => ({ ...tiled, gradients: false })),
   inProcess('logolab-abl-stacked-nograd', () => ({ ...stacked, gradients: false })),

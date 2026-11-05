@@ -15,7 +15,7 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, basename } from 'node:path'
+import { join, basename, relative, sep } from 'node:path'
 import { PY, TOOLS, VENV_PY } from '../paths.ts'
 import type { TracerAdapter, TraceInput, TraceResult } from '../types.ts'
 
@@ -60,7 +60,7 @@ export function starvectorProvenance(batchDir: string): Record<string, unknown> 
     torch: rep.torch ?? null,
     gpu: rep.gpu ?? null,
     generation: rep.generation ?? null,
-    reportFrom: reportPath,
+    reportFrom: reportPath && relative(TOOLS, reportPath).split(sep).join('/'),
   }
 }
 

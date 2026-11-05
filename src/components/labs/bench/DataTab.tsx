@@ -205,7 +205,7 @@ export function DataTab({
                       {m?.source.replace(/ sha256:.*/, '')} · {m?.license}
                       {m?.gtRefusal && <span className="ml-1 text-warn">(geometry n/a)</span>}
                     </td>
-                    <td className="px-2 text-right text-muted">{r.gtNodes ?? '—'}</td>
+                    <td className="px-2 text-right text-muted">{r.gtNodes ?? 'n/a'}</td>
                     {vals.map((v, i) => (
                       <td key={cols[i]} className={`px-2 py-1 text-right ${shade(v) ?? 'text-faint'}`}>
                         {fmt(v, metric.digits)}

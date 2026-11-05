@@ -73,7 +73,7 @@
    "source": "https://github.com/phosphor-icons/core",
    "icons": 1512,
    "noStrokes": 1512,
-   "reason": "1512/1512 icons have no stroke: the published weight is filled outlines (fill=\"currentColor\" paths), so there is no stroke ground truth — dropped, not faked"
+   "reason": "1512/1512 icons have no stroke: the published weight is filled outlines (fill=\"currentColor\" paths), so it has no stroke ground truth and was dropped"
   }
  ],
  "counts": {

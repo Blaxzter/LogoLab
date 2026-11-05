@@ -132,7 +132,7 @@ function main(): void {
         ...meta,
         reason:
           `${noStroke}/${mine.length} icons have no stroke: the published weight is filled outlines ` +
-          '(fill="currentColor" paths), so there is no stroke ground truth — dropped, not faked',
+          '(fill="currentColor" paths), so it has no stroke ground truth and was dropped',
       })
       console.log(`  ${s.id}: DROPPED — ${noStroke}/${mine.length} icons have no stroke`)
       continue

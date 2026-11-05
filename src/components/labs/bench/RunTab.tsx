@@ -61,7 +61,7 @@ export function RunTab({
                   </td>
                   <td className="px-2.5 py-1.5 align-top">
                     <div className="text-[0.7rem] leading-relaxed text-muted">{toolInfo(t).blurb}</div>
-                    <div className="mt-0.5 break-all font-mono text-[0.65rem] text-faint">{m.versions[t] ?? '—'}</div>
+                    <div className="mt-0.5 break-all font-mono text-[0.65rem] text-faint">{m.versions[t] ?? 'n/a'}</div>
                   </td>
                 </tr>
               ))}

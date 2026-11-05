@@ -19,7 +19,7 @@
 // A trace that fails, or renders nothing resvg can draw, is a FAILURE row, never dropped.
 //
 // Tools (all local, under the gitignored .bench-tools/):
-//   logolab-auto, logolab-product, logolab-gate   in-process (adapters/logolab.ts) + 3 ablation rows
+//   logolab-auto, logolab-gate                    in-process (adapters/logolab.ts) + 4 ablation rows
 //   vtracer-default, vtracer-poster, vtracer-swept cargo install vtracer --version 0.6.4 --locked --root .bench-tools/vtracer
 //   potrace (mono lane), potrace-bin (every case) potrace-1.16.win64.zip → .bench-tools/potrace/
 //   autotrace-default, autotrace-swept             AutoTrace 0.40.0 win64 → .bench-tools/autotrace/ (adapters/external.ts)
@@ -81,6 +81,7 @@ import { CORPORA, DEFAULT_CORPORA, inkOf, loadCorpus } from './corpus.ts'
 import { LOGOS_COMMIT } from './logosCc0.ts'
 import { releaseRenders, renderGround } from './render.ts'
 import { scorePixels, scoreTrace, type Truth } from './score.ts'
+import { attributionMarkdown } from './hfCard.ts'
 import { summaryMarkdown } from './report.ts'
 import { writeOverlays } from './overlay.ts'
 import { progress, readSvgbenchRows } from './progress.ts'
@@ -89,7 +90,6 @@ import {
   logolabAuto,
   logolabGate,
   logolabOutline,
-  logolabProduct,
   logolabStrokes,
   provenance,
 } from './adapters/logolab.ts'
@@ -124,7 +124,6 @@ ensureImageData()
 // Order is the table's: the user-facing LogoLab row first, the oracle reference row after.
 const ALL_TOOLS: TracerAdapter[] = [
   logolabAuto,
-  logolabProduct,
   logolabGate,
   logolabStrokes,
   logolabOutline,
@@ -553,47 +552,11 @@ async function main(): Promise<void> {
     })),
   }
   writeFileSync(join(runDir, 'results.json'), JSON.stringify({ meta, rows }, null, 1))
-  writeFileSync(join(runDir, 'ATTRIBUTION.md'), ATTRIBUTION)
+  writeFileSync(join(runDir, 'ATTRIBUTION.md'), attributionMarkdown(LOGOS_COMMIT))
   const md = summaryMarkdown(rows, meta)
   writeFileSync(join(runDir, 'summary.md'), md)
   console.log(`\n${md}\n\nwrote ${relative(REPO, runDir)}/{results.json,summary.md}`)
 }
-
-const ATTRIBUTION = `# Attribution for the renders in this directory
-
-The case renders (cases/*/*/truth.png and every tool's render of them) are derived from:
-
-- svgemoji*: StarVector SVG-Bench \`starvector/svg-emoji\` test split (Hugging Face; the
-  revision and parquet sha256 are in bench/compare/manifests/svg-emoji-test.json). Each row's
-  licence is its emoji set's:
-  - Twemoji: Copyright Twitter, Inc. and other contributors, CC-BY 4.0
-    (https://creativecommons.org/licenses/by/4.0/). Maintained at https://github.com/jdecked/twemoji
-    (twitter/twemoji is archived).
-  - OpenMoji: HfG Schwäbisch Gmünd, CC-BY-SA 4.0 (https://openmoji.org).
-  - Noto Emoji: Google, Apache-2.0 (https://github.com/googlefonts/noto-emoji).
-- logos-cc0: gilbarbara/logos at commit ${LOGOS_COMMIT}
-  (https://github.com/gilbarbara/logos/tree/${LOGOS_COMMIT}; per-file sha256 in
-  bench/compare/manifests/logos-cc0.json), whose LICENSE.txt is CC0 1.0 Universal
-  (https://creativecommons.org/publicdomain/zero/1.0/). CC0 covers the artwork only: the
-  logos are trademarks of their respective owners, no endorsement is implied, and they are
-  rendered and re-traced here solely to measure vectorizers.
-- fluent2: Microsoft Fluent UI Emoji, MIT (https://github.com/microsoft/fluentui-emoji).
-- truth0: LogoLab fixtures.
-- strokes-oss: stroke icon sets at the versions pinned in bench/compare/manifests/strokes-oss.json
-  (each row names its set, version, file and sha256):
-  - Lucide (lucide-static 1.55.0): ISC License, Copyright (c) 2026 Lucide Icons and Contributors
-    (https://github.com/lucide-icons/lucide). Lucide is a fork of Feather; the portions from
-    Feather are MIT, Copyright (c) 2013-2023 Cole Bemis.
-  - Tabler Icons (@tabler/icons 3.49.0, outline): MIT License, Copyright (c) 2020-2026 Paweł Kuna
-    (https://github.com/tabler/tabler-icons).
-  - Feather (feather-icons 4.29.2): MIT License, Copyright (c) 2013-2023 Cole Bemis
-    (https://github.com/feathericons/feather).
-  The full licence texts are in .bench-tools/datasets/strokes-oss/<set>@<version>/LICENSE (their
-  sha256 is in the manifest). Some Feather icons depict third-party brand marks (e.g. github,
-  linkedin); those marks belong to their owners.
-
-Renders and traces here are modified (rasterized and re-vectorized) versions of those works.
-`
 
 main().catch((e) => {
   console.error(e)

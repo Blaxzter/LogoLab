@@ -9,7 +9,7 @@ import { Th, ToolName } from './ui'
  * (bench/compare/leaderboard.ts), which calls the same pure leaderboard() that writes the
  * top of summary.md, so the hosted page and the run's report print the same ranks.
  *
- * The ablation view (oracle, no-probe, swept and ablation rows) is one click away and says
+ * The ablation view (oracle, swept and ablation rows) is one click away and says
  * so in its own caption; it is never what shows first. A line corpus and a fill corpus are
  * separate boards: they are ranked on different metrics, and an average would mean nothing.
  */
@@ -111,7 +111,7 @@ function RankTable({ board }: { board: Leaderboard }) {
                 <ToolName tool={t.tool} />
                 {isAblationRow(t.tool) ? <span className="ml-1 text-[0.62rem] text-faint">ablation</span> : null}
                 <span className="mt-0.5 block text-[0.62rem] leading-tight text-faint sm:hidden">
-                  {metrics.map((m) => `${m.label} ${t.perMetric[m.key]?.toFixed(1) ?? '—'}`).join(' · ')}
+                  {metrics.map((m) => `${m.label} ${t.perMetric[m.key]?.toFixed(1) ?? 'n/a'}`).join(' · ')}
                 </span>
               </td>
               <td className="px-2 py-1.5 text-right align-top">
@@ -128,7 +128,7 @@ function RankTable({ board }: { board: Leaderboard }) {
                   key={m.key}
                   className={`hidden px-2 py-1.5 text-right align-top text-ink-2 sm:table-cell ${k === 0 ? 'border-l border-line' : ''}`}
                 >
-                  {t.perMetric[m.key]?.toFixed(2) ?? '—'}
+                  {t.perMetric[m.key]?.toFixed(2) ?? 'n/a'}
                 </td>
               ))}
             </tr>

@@ -42,7 +42,7 @@ const times = (e: Example, k: string, a = 0, b = 1): string =>
 /** A tool's median over the run, as the results table prints it. */
 const medianOf = (tool: string, k: string): string => {
   const v = data.summary.find((s) => s.tool === tool)?.median[k]
-  return typeof v === 'number' ? String(Math.round(v)) : '—'
+  return typeof v === 'number' ? String(Math.round(v)) : 'n/a'
 }
 const dino = (e: Example, i: number): string => (n(e.tools[i].metrics, 'sbDino') ?? Number.NaN).toFixed(4)
 
@@ -316,7 +316,7 @@ const TABLE: Row[] = [
 
 function ResultsTable() {
   const cell = (k: string, v: number | null, d: number) =>
-    v === null ? '—' : k === 'bytes' ? (v / 1024).toFixed(1) : v.toFixed(d)
+    v === null ? 'n/a' : k === 'bytes' ? (v / 1024).toFixed(1) : v.toFixed(d)
   const best = new Map<string, number>()
   for (const r of TABLE) {
     const vals = data.summary
@@ -460,7 +460,7 @@ function PairedNote() {
   const p = new Map(data.pairedVsVtracer.map((x) => [x.metric, x]))
   const s = (k: string, d: number) => {
     const x = p.get(k)
-    if (!x || x.meanDiff === undefined) return '—'
+    if (!x || x.meanDiff === undefined) return 'n/a'
     const sign = x.meanDiff > 0 ? '+' : ''
     return `${sign}${x.meanDiff.toFixed(d)} [${x.lo?.toFixed(d)}, ${x.hi?.toFixed(d)}]`
   }

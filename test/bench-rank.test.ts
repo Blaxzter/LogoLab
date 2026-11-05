@@ -120,7 +120,8 @@ test('a refused OUTPUT is last on that metric; a refused GROUND TRUTH drops the 
 test('ablation rows are never in the headline; the ablation view has them; a partial tool is excluded', () => {
   assert.ok(isAblationRow('logolab-abl-tiled-grad'))
   assert.ok(isAblationRow('logolab-gate')) // oracle
-  assert.ok(isAblationRow('logolab-product')) // no-probe preset
+  assert.ok(isAblationRow('logolab-abl-stacked-grad'))
+  assert.ok(isAblationRow('logolab-product')) // its name in local runs older than v8
   assert.ok(isAblationRow('vtracer-swept'))
   assert.ok(!isAblationRow('logolab-auto'))
   assert.ok(!isAblationRow('vtracer-default'))

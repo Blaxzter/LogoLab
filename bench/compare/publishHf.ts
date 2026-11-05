@@ -6,8 +6,9 @@
 //
 // DRY RUN by default: it builds the staging directory and prints what it holds (file count,
 // size, per-corpus counts); `--list` prints every file. Nothing leaves the machine until
-// `--upload`, which hands the staging directory to `hf upload` (the hf CLI, logged in) in ONE
-// commit and refuses if the dataset repo does not exist yet: creating the public repo is a
+// `--upload`, which hands the staging directory to `hf upload` (the hf CLI, logged in). hf splits
+// a folder this size into several commits and resumes if re-run. It refuses if the dataset repo
+// does not exist yet: creating the public repo is a
 // decision, not a side effect of a script.
 //
 // Staging, .bench-tools/hf-staging/<run>/, mirrors the repo root:
@@ -17,6 +18,10 @@
 //   <run>/manifests/<corpus manifest>.json  cases.json
 //   <run>/cases/<corpus>/<case>/truth.svg  <tool>.svg  overlay.json
 //
+// summary.md and ATTRIBUTION.md are written here, from the run's rows and this checkout's report
+// code, so the published prose follows the publishing commit while every number stays the run's.
+// LICENSES.md carries the MIT and ISC texts those licences require to travel with the copies.
+//
 // SVGs only. The PNG renders stay home: they are reproducible from the SVGs, they are most
 // of the run's size, and the page draws the SVG (benchSource.ts maps a PNG request to it).
 //
@@ -25,6 +30,8 @@
 //     in particular, and any corpus nobody has checked the licence of;
 //   • a case whose licence is not one its corpus may carry, or that has no licence on record;
 //   • an answer sheet that resolves into examples/logos/.
+//   • a case under MIT or ISC whose licence text is not on hand, or does not match its manifest;
+//   • a markdown table whose rows disagree with its header: it renders as a paragraph of pipes.
 // A case whose authored SVG cannot be found is still published (its outputs and rows are
 // data) and says so in manifests/cases.json, the way a refused ground truth keeps its row.
 //
@@ -50,6 +57,9 @@ import type { BenchResults } from '../../src/components/labs/bench/benchData.ts'
 import { loadCorpus } from './corpus.ts'
 import {
   HF_REPO,
+  type LicenceText,
+  attributionMarkdown,
+  brokenTables,
   publishable,
   cardMarkdown,
   corpusOf,
@@ -57,12 +67,16 @@ import {
   isPrivatePath,
   licensesMarkdown,
   mergeRunIndex,
+  missingLicenceTexts,
+  publicResults,
   publishProblems,
   runEntry,
   toJsonl,
 } from './hfCard.ts'
-import { REPO, RESULTS, TOOLS } from './paths.ts'
-import type { CorpusId } from './types.ts'
+import { LOGOS_COMMIT } from './logosCc0.ts'
+import { DATASETS, REPO, RESULTS, TOOLS } from './paths.ts'
+import { summaryMarkdown } from './report.ts'
+import type { CorpusId, ScoreRow } from './types.ts'
 
 const argv = process.argv.slice(2)
 const arg = (k: string): string | undefined => {
@@ -81,24 +95,62 @@ const RUN_DIR = join(RESULTS, RUN)
 const STAGING_ROOT = resolve(TOOLS, 'hf-staging')
 const OUT = resolve(arg('--out') ?? join(STAGING_ROOT, RUN))
 
-function refuse(lines: string[]): never {
+const ALLOWLIST_NOTE =
+  'A corpus is published only once it is on the allowlist in bench/compare/hfCard.ts (PUBLISHABLE) with the licences it may carry.'
+
+function refuse(lines: string[], note?: string): never {
   console.error('')
   console.error('================================================================')
   console.error(`  REFUSING TO PUBLISH run ${RUN}`)
   console.error('================================================================')
   for (const l of lines) console.error(`  ✗ ${l}`)
   console.error('')
-  console.error('  Nothing was staged or uploaded. A corpus is published only once it is on the')
-  console.error('  allowlist in bench/compare/hfCard.ts (PUBLISHABLE) with the licences it may carry.')
+  console.error('  Nothing was uploaded.')
+  if (note) console.error(`  ${note}`)
   console.error('')
   process.exit(1)
 }
 
 if (!existsSync(join(RUN_DIR, 'results.json'))) refuse([`no results.json in ${RUN_DIR}`])
-const data = JSON.parse(readFileSync(join(RUN_DIR, 'results.json'), 'utf8')) as BenchResults
+const data = publicResults(JSON.parse(readFileSync(join(RUN_DIR, 'results.json'), 'utf8')) as BenchResults)
 const problems = publishProblems(data)
 if (problems.length)
-  refuse(problems.length > 40 ? [...problems.slice(0, 40), `… and ${problems.length - 40} more`] : problems)
+  refuse(
+    problems.length > 40 ? [...problems.slice(0, 40), `… and ${problems.length - 40} more`] : problems,
+    ALLOWLIST_NOTE,
+  )
+
+// ── licence texts ──────────────────────────────────────────────────────────────────────────
+function licenceTexts(): LicenceText[] {
+  const carried = new Set((data.meta.cases ?? []).map((c) => c.license))
+  const out: LicenceText[] = []
+  const manifest = JSON.parse(
+    readFileSync(join(REPO, 'bench', 'compare', 'manifests', 'strokes-oss.json'), 'utf8'),
+  ) as {
+    sets: { set: string; package: string; version: string; license: string; licenseSha256: string }[]
+  }
+  for (const s of manifest.sets) {
+    const file = join(DATASETS, 'strokes-oss', `${s.set}@${s.version}`, 'LICENSE')
+    if (!carried.has(s.license) || !existsSync(file)) continue
+    const bytes = readFileSync(file)
+    if (createHash('sha256').update(bytes).digest('hex') !== s.licenseSha256)
+      refuse([`${file} does not match the sha256 in manifests/strokes-oss.json`])
+    out.push({ licence: s.license, title: `${s.package} ${s.version}`, text: bytes.toString('utf8') })
+  }
+  // The vendored NOTICE holds the licence, then a note about this repository's sample: only the first half ships.
+  const fluent = join(REPO, 'public', 'corpus', 'fluent', 'NOTICE')
+  for (const licence of carried)
+    if (/^MIT \(microsoft/.test(licence) && existsSync(fluent))
+      out.push({
+        licence,
+        title: 'Microsoft Fluent UI Emoji',
+        text: readFileSync(fluent, 'utf8').split('\nThe SVGs under')[0],
+      })
+  return out
+}
+const texts = licenceTexts()
+const noText = missingLicenceTexts(data, texts)
+if (noText.length) refuse(noText.map((l) => `no licence text on hand for "${l}"; it has to ship with the copies`))
 
 // The staging directory is rebuilt from scratch, so it must be one that is ours to delete:
 // under .bench-tools/hf-staging/, or a new or empty directory named with --out.
@@ -130,7 +182,11 @@ for (const corpus of new Set(caseIds.map((id) => corpusOf(id)))) {
   }
 }
 const privateGt = [...byCase.entries()].filter(([id, p]) => caseIds.includes(id) && isPrivatePath(p))
-if (privateGt.length) refuse(privateGt.map(([id, p]) => `${id}: answer sheet ${p} is in the private logo corpus`))
+if (privateGt.length)
+  refuse(
+    privateGt.map(([id, p]) => `${id}: answer sheet ${p} is in the private logo corpus`),
+    ALLOWLIST_NOTE,
+  )
 
 // The LogoLab checkouts a tracked answer sheet can live in: this one, and the main checkout
 // a worktree hangs off (where the run was most likely made).
@@ -169,9 +225,12 @@ const copy = (from: string, rel: string) => {
   staged.push(rel)
 }
 
-copy(join(RUN_DIR, 'results.json'), `${RUN}/results.json`)
-for (const f of ['summary.md', 'ATTRIBUTION.md'])
-  if (existsSync(join(RUN_DIR, f))) copy(join(RUN_DIR, f), `${RUN}/${f}`)
+put(`${RUN}/results.json`, JSON.stringify(data, null, 1))
+put(
+  `${RUN}/summary.md`,
+  summaryMarkdown(data.rows as unknown as ScoreRow[], data.meta as unknown as Record<string, unknown>),
+)
+put(`${RUN}/ATTRIBUTION.md`, attributionMarkdown(LOGOS_COMMIT))
 put(`${RUN}/results.jsonl`, toJsonl(flattenRows(data, RUN)))
 
 const manifests = new Set(
@@ -255,7 +314,7 @@ async function publishedIndex(): Promise<RunIndexEntry[]> {
   }
 }
 
-const resultsBytes = statSync(join(RUN_DIR, 'results.json')).size
+const resultsBytes = statSync(join(runOut, 'results.json')).size
 const index = mergeRunIndex(await publishedIndex(), runEntry(data, RUN, resultsBytes))
 put('runs.json', `${JSON.stringify({ repo: HF_REPO, runs: index }, null, 1)}\n`)
 // The card and its licence table describe the NEWEST run (its leaderboard is the dataset's
@@ -263,7 +322,7 @@ put('runs.json', `${JSON.stringify({ repo: HF_REPO, runs: index }, null, 1)}\n`)
 // out of the staging, so the upload keeps the published ones. The card's `configs` list then
 // lacks this run until the newest run is published again (which re-writes it from the index).
 const newest = index[0]?.name === RUN
-if (newest) put('LICENSES.md', licensesMarkdown(data))
+if (newest) put('LICENSES.md', licensesMarkdown(data, texts))
 for (const rel of staged) counts.bytes += statSync(join(OUT, rel)).size
 if (newest) put('README.md', cardMarkdown({ data, run: RUN, index, counts }))
 else
@@ -271,6 +330,11 @@ else
     `  ${RUN} is not the newest run (${index[0]?.name}): README.md and LICENSES.md not staged, the published ones stay.\n` +
       `  Re-publish ${index[0]?.name} afterwards to give ${RUN} a dataset-viewer config.`,
   )
+
+const broken = staged
+  .filter((rel) => rel.endsWith('.md'))
+  .flatMap((rel) => brokenTables(readFileSync(join(OUT, rel), 'utf8')).map((p) => `${rel}: ${p}`))
+if (broken.length) refuse(broken)
 
 // ── report ─────────────────────────────────────────────────────────────────────────────────
 let total = 0

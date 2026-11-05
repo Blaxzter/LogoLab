@@ -16,19 +16,28 @@ import {
 } from '../src/components/labs/bench/benchSource.ts'
 import {
   PUBLISHABLE,
+  attributionMarkdown,
+  brokenTables,
   cardMarkdown,
   corpusOf,
+  licensesMarkdown,
+  localPaths,
+  medianTable,
+  missingLicenceTexts,
   publishable,
   safeCaseId,
   flattenRows,
   isPrivatePath,
   lineCorpusNotes,
   mergeRunIndex,
+  publicResults,
   publishProblems,
   runEntry,
   sizeCategory,
   toJsonl,
 } from '../bench/compare/hfCard.ts'
+import { leaderboardMarkdown, plainMarkdown, summaryMarkdown } from '../bench/compare/report.ts'
+import type { ScoreRow } from '../bench/compare/types.ts'
 
 const row = (tool: string, caseId: string, extra: Record<string, unknown> = {}): BenchRow => ({
   tool,
@@ -128,6 +137,38 @@ test('the allowlist is own keys and exact licence strings; a case id must be a p
   assert.ok(publishProblems(bad).some((x) => /not a plain <corpus>\/<name>/.test(x)))
 })
 
+test('a metric label with a pipe in it stays one cell, and a table that breaks is named', () => {
+  const rows = Array.from({ length: 12 }, (_, i) => `strokes-oss/lucide-${i}`).flatMap((id, i) =>
+    ['logolab-strokes', 'autotrace-centerline', 'vtracer-default'].map((tool, t) =>
+      row(tool, id, {
+        heldOut: true,
+        lane: 'line',
+        meanDeltaE: t + i / 100,
+        docNodes: 5 + t,
+        clCentre: t,
+        clMissed: t,
+        clWidthErr: t,
+        clPathsDelta: t,
+        clTurns: t,
+      }),
+    ),
+  )
+  const board = leaderboardMarkdown(rows as unknown as ScoreRow[]).join('\n')
+  const medians = medianTable(rows, 'strokes-oss', ['logolab-strokes']).join('\n')
+  for (const md of [board, medians]) {
+    assert.ok(md.includes('| \\|Paths Δ\\| ↓ |'), md.slice(0, 200))
+    assert.deepEqual(brokenTables(md), [])
+  }
+  const d = run([{ id: 'strokes-oss/lucide-0', license: 'ISC (Lucide; portions MIT, Feather)' }], rows)
+  const summary = summaryMarkdown(rows as unknown as ScoreRow[], d.meta as unknown as Record<string, unknown>)
+  assert.ok(summary.includes('\\|ends Δ\\|'), 'the summary has a line table of its own')
+  assert.deepEqual(brokenTables(summary), [])
+  assert.deepEqual(brokenTables('| a | |b| |\n|---|---|\n| 1 | 2 |\n\n| c |\n|---|\n'), [
+    'line 2 has 2 cells, its header 4',
+    'line 3 has 2 cells, its header 4',
+  ])
+})
+
 test('a line table says which rows are one output, whose strokes are no centrelines, and where a model recalls', () => {
   const stroked = { clMissed: 0, clPathsDelta: 0, clTurns: 0 }
   const rows = ['feather-a', 'feather-b', 'lucide-a', 'lucide-b'].flatMap((name) => {
@@ -180,6 +221,42 @@ test('a run that reused saved work says from which commit, and which bench files
   assert.doesNotMatch(cardMarkdown({ data: run(emoji(1)), run: 'e', index: [], counts }), /reused traces/)
 })
 
+test('a row renamed after scoring says what the commit still calls it', () => {
+  const counts = { svgs: 0, truths: 0, overlays: 0, bytes: 0 }
+  const d = run(emoji(1))
+  d.meta.renamed = { 'logolab-product': 'logolab-abl-stacked-grad' }
+  assert.match(
+    cardMarkdown({ data: d, run: 'e', index: [], counts }),
+    /commit abc1234 still calls `logolab-abl-stacked-grad` `logolab-product`/,
+  )
+  assert.doesNotMatch(cardMarkdown({ data: run(emoji(1)), run: 'e', index: [], counts }), /still calls/)
+})
+
+test('the ablation view is collapsed, and its table is set off so it still renders', () => {
+  const rows = Array.from({ length: 12 }, (_, i) => `logos-cc0/mark-${i}`).flatMap((id, i) =>
+    ['logolab-auto', 'vtracer-default', 'logolab-abl-stacked-grad'].map((tool, t) =>
+      row(tool, id, {
+        heldOut: true,
+        meanDeltaE: t + i / 100,
+        chamfer: t,
+        docNodes: 5 + t,
+        tangentBreaks: t,
+        sbDino: 1 - t / 10,
+      }),
+    ),
+  )
+  const lines = leaderboardMarkdown(rows as unknown as ScoreRow[])
+  const open = lines.indexOf('<details>')
+  assert.ok(open > 0, lines.join('\n').slice(0, 300))
+  assert.equal(lines[open - 1], '', 'a blank line before the block')
+  assert.match(lines[open + 1], /^<summary>Ablation view \(not the headline; 3 rows, /)
+  assert.equal(lines[open + 2], '', 'a blank line before the table')
+  assert.equal(lines[lines.indexOf('</details>') - 1], '', 'a blank line after the table')
+  assert.ok(lines.slice(open).some((l) => l.includes('logolab-abl-stacked-grad ◇')))
+  assert.ok(!lines.slice(0, open).some((l) => l.includes('logolab-abl-stacked-grad')), 'never in the headline table')
+  assert.deepEqual(brokenTables(lines.join('\n')), [])
+})
+
 test('a run with a line corpus documents the centreline columns by their agreed names', () => {
   const d = run([{ id: 'strokes-oss/lucide-bell', license: 'ISC (Lucide; portions MIT, Feather)' }])
   const md = cardMarkdown({ data: d, run: 's', index: [], counts: { svgs: 0, truths: 0, overlays: 0, bytes: 0 } })
@@ -190,6 +267,78 @@ test('a run with a line corpus documents the centreline columns by their agreed 
     cardMarkdown({ data: run(emoji(1)), run: 'e', index: [], counts: { svgs: 0, truths: 0, overlays: 0, bytes: 0 } }),
     /Centreline metrics/,
   )
+})
+
+test('a local path never ships: the recorded one is taken out, and any other stops the publish', () => {
+  const d = run(emoji(1))
+  d.meta.provenance = {
+    git: { rev: 'abc' },
+    starvector: { model: 'm', reportFrom: 'E:\\work\\report.json', gpu: 'g' },
+    omnisvg: null,
+  }
+  assert.ok(publishProblems(d).some((p) => p.includes('$.meta.provenance.starvector.reportFrom')))
+  const pub = publicResults(d)
+  assert.deepEqual(publishProblems(pub), [])
+  assert.deepEqual(pub.meta.provenance?.starvector, { model: 'm', gpu: 'g' })
+  assert.equal(
+    JSON.stringify(pub),
+    JSON.stringify(d).replace(',"reportFrom":"E:\\\\work\\\\report.json"', ''),
+    'nothing else moves',
+  )
+  d.rows[0] = { ...d.rows[0], error: 'could not read /home/someone/x.svg' }
+  assert.ok(publishProblems(publicResults(d)).some((p) => p.endsWith('.error holds a local path')))
+  for (const fine of ['bench/compare/run.ts', 'https://github.com/a/b', 'stroked geometry (path)', 'mono (cut at 128)'])
+    assert.deepEqual(localPaths(fine), [], fine)
+  assert.deepEqual(publishProblems(publicResults(run(emoji(1)))), [], 'a run with no provenance is untouched')
+})
+
+test('the published prose has no dashes or curly quotes, whatever a row recorded', () => {
+  const rows = emoji(12)
+  const d = run(rows)
+  const refused = 'masked geometry (path) — the visible boundary is the mask’s alpha'
+  d.rows[0] = { ...d.rows[0], gtRefusal: refused }
+  d.rows[1] = { ...d.rows[1], geomRefusal: refused }
+  const counts = { svgs: 0, truths: 0, overlays: 0, bytes: 0 }
+  const files = {
+    card: cardMarkdown({ data: d, run: 't', index: [], counts }),
+    licences: licensesMarkdown(d),
+    attribution: attributionMarkdown('abc'),
+    summary: summaryMarkdown(d.rows as unknown as ScoreRow[], d.meta as unknown as Record<string, unknown>),
+  }
+  for (const [name, md] of Object.entries(files)) assert.doesNotMatch(md, /[—–‘’“”]/, name)
+  assert.equal(plainMarkdown('a — b’s “c” 0–1'), 'a: b\'s "c" 0-1')
+})
+
+test('MIT and ISC texts ship with the copies, verbatim, and a missing one is named', () => {
+  const d = run([
+    { id: 'strokes-oss/feather-bell', license: 'MIT (Feather)' },
+    { id: 'logos-cc0/github', license: 'CC0-1.0' },
+    { id: 'svgemoji-v0/1f600', license: 'CC-BY-4.0' },
+  ])
+  assert.deepEqual(missingLicenceTexts(d, []), ['MIT (Feather)'], 'CC0 and CC-BY need no text')
+  const texts = [{ licence: 'MIT (Feather)', title: 'feather-icons 4.29.2', text: 'Copyright — Cole Bemis\n' }]
+  assert.deepEqual(missingLicenceTexts(d, texts), [])
+  const md = licensesMarkdown(d, texts)
+  assert.match(md, /## Licence texts\n\n### feather-icons 4\.29\.2\n\n```text\nCopyright — Cole Bemis\n```/)
+  assert.doesNotMatch(licensesMarkdown(d), /see below/)
+})
+
+test('a tool with no geometry anywhere does not empty the common-cases line', () => {
+  const cases = emoji(12)
+  const d = run(
+    cases,
+    cases.flatMap((c, i) => [
+      row('logolab-auto', c.id, { chamfer: 1, p95: 2, nodeRatio: 1, tangentBreaks: 0, meanDeltaE: i }),
+      row('vtracer-default', c.id, { chamfer: 3, p95: 4, nodeRatio: 2, tangentBreaks: 5, meanDeltaE: i }),
+      row('imagetracer-default', c.id, { meanDeltaE: i, geomRefusal: 'stroked geometry' }),
+    ]),
+  )
+  const md = summaryMarkdown(d.rows as unknown as ScoreRow[], d.meta as unknown as Record<string, unknown>)
+  assert.match(
+    md,
+    /Common cases \(12\/12, where every tool with n ≥ 10 and any geometry has it; no geometry at all: imagetracer-default\)/,
+  )
+  assert.match(md, /logolab-auto 1\.00 \/ 2\.00 \/ 1\.0 \/ 0; vtracer-default 3\.00/)
 })
 
 test('isPrivatePath catches the logo corpus on either separator, and nothing else', () => {
@@ -247,6 +396,7 @@ test('the card: front matter points the viewer at every run, and the leaderboard
   const md = cardMarkdown({ data: d, run: 't', index, counts: { svgs: 3, truths: 1, overlays: 1, bytes: 1e6 } })
   const front = md.slice(0, md.indexOf('\n---\n', 4))
   assert.ok(front.startsWith('---\nlicense: other\n'))
+  assert.match(front, /^license_link: https:\/\/\S+\/LICENSES\.md$/m, 'the Hub refuses any relative name but LICENSE')
   assert.match(
     front,
     /- config_name: "t"\n {2}data_files:\n {2}- split: test\n {4}path: "t\/results.jsonl"\n {2}default: true/,

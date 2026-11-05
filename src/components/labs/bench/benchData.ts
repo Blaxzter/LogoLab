@@ -44,6 +44,8 @@ export interface BenchMeta {
   versions: Record<string, string>
   provenance?: Record<string, unknown>
   svgbench?: Record<string, unknown>
+  /** Rows renamed after scoring, old name → new: a re-run at `logolab` writes the old one. */
+  renamed?: Record<string, string>
   cases: BenchCaseMeta[]
 }
 
@@ -85,7 +87,7 @@ export const METRICS: Metric[] = [
     better: 'lower',
     group: 'pixel',
     digits: 2,
-    help: 'Mean CIE76 colour error of the render against the authored render — the number the studio’s status bar shows.',
+    help: 'Mean CIE76 colour error of the render against the authored render. The studio’s status bar shows the same number.',
   },
   {
     key: 'chamfer',
@@ -101,7 +103,7 @@ export const METRICS: Metric[] = [
     better: 'lower',
     group: 'geometry',
     digits: 2,
-    help: '95th-percentile boundary distance (px) — where the trace is worst.',
+    help: '95th-percentile boundary distance (px): where the trace is worst.',
   },
   {
     key: 'nodeRatio',
@@ -189,7 +191,7 @@ export const METRICS: Metric[] = [
     better: 'lower',
     group: 'size',
     digits: 0,
-    help: 'Wall time per case. NOT comparable across tools: in-process and warm for LogoLab, process spawn + file I/O for the CLIs, GPU generation for StarVector.',
+    help: 'Wall time per case. It is not comparable across tools: in-process and warm for LogoLab, process spawn + file I/O for the CLIs, GPU generation for StarVector.',
   },
 ]
 
@@ -263,25 +265,26 @@ export function toolRef(tool: string): ToolRef | undefined {
   return TOOL_REFS[tool.split('-')[0]]
 }
 
+const STACKED_GRAD: ToolInfo = {
+  label: 'Ablation: stacked + gradients',
+  family: 'ablation',
+  blurb:
+    'PRODUCT_VECTORIZE_OPTIONS applied blind (stacked, gradients on) with the probes skipped. The studio, the icon sheet and the MCP server all run the gradient probe first, so no shipped path does this.',
+}
+
 /** Descriptions mirror bench/compare/adapters/*. A tool missing here still shows, by id. */
 export const TOOL_INFO: Record<string, ToolInfo> = {
   'logolab-auto': {
     label: 'LogoLab',
     family: 'logolab',
     blurb:
-      'What users get: the MCP traceIcon path. The ink probe picks Mono or Colour, the gradient probe decides on ramps, and small mono art is enlarged. No per-case knowledge. The headline row.',
-  },
-  'logolab-product': {
-    label: 'LogoLab preset, no probes',
-    family: 'ablation',
-    blurb:
-      'PRODUCT_VECTORIZE_OPTIONS applied blind (stacked, gradients on) with the probes skipped. The studio, the icon sheet and the MCP server all run the gradient probe first, so no shipped path does this; it is an ablation.',
+      'The headline row, and what users get: the MCP traceIcon path. The ink probe picks Mono or Colour, the gradient probe decides on ramps, and small mono art is enlarged, with no per-case knowledge.',
   },
   'logolab-gate': {
     label: 'LogoLab (oracle)',
     family: 'reference',
     blurb:
-      'The truth gate’s development configuration: tiled, with `gradients` read off the authored SVG, which no other tool gets to see. A reference row, not a result.',
+      'The truth gate’s development configuration: tiled, with `gradients` read off the authored SVG, which no other tool gets to see. It is a reference row and is never in the headline.',
   },
   'vtracer-default': {
     label: 'VTracer',
@@ -350,7 +353,7 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     label: 'LogoLab Strokes',
     family: 'logolab',
     blurb:
-      'The line corpora’s headline: the MCP traceIcon path with mode=mono and `strokes` (the Strokes toggle). Centreline strokes with a measured width.',
+      'The line corpora’s headline: the MCP traceIcon path with mode=mono and `strokes` (the Strokes toggle). It draws centreline strokes with a measured width.',
   },
   'logolab-outline': {
     label: 'LogoLab outline',
@@ -369,20 +372,24 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     blurb:
       'SVG-Bench’s protocol: every case cut at luma 128 and traced in black, so it cannot get a colour right. It is here because the paper reports it.',
   },
+  'logolab-abl-stacked-grad': STACKED_GRAD,
+  // The same row in local runs older than v8. Without this entry it would count as a tool
+  // and enter their headline.
+  'logolab-product': STACKED_GRAD,
   'logolab-abl-tiled-grad': {
     label: 'Ablation: tiled + gradients',
     family: 'ablation',
-    blurb: 'Tiled layering, gradients ON, no probes.',
+    blurb: 'Tiled layering, gradients on, no probes.',
   },
   'logolab-abl-tiled-nograd': {
     label: 'Ablation: tiled, flat',
     family: 'ablation',
-    blurb: 'Tiled layering, gradients OFF, no probes.',
+    blurb: 'Tiled layering, gradients off, no probes.',
   },
   'logolab-abl-stacked-nograd': {
     label: 'Ablation: stacked, flat',
     family: 'ablation',
-    blurb: 'Stacked layering, gradients OFF, no probes.',
+    blurb: 'Stacked layering, gradients off, no probes.',
   },
 }
 
@@ -416,7 +423,7 @@ export const CORPUS_INFO: Record<string, CorpusInfo> = {
     label: 'Open logos (CC0) · 300',
     heldOut: true,
     blurb:
-      '300 brand marks from gilbarbara/logos at a pinned commit, stratified by colour count, gradients and wordmark vs symbol, picked in sha1 order. Strokes, masks and filters are kept (pixel metrics only). Brands in LogoLab’s own gallery corpus are excluded, so none of it was tuned on. The logo headline. CC0 covers the artwork; the marks remain their owners’ trademarks.',
+      '300 brand marks from gilbarbara/logos at a pinned commit, stratified by colour count, gradients and wordmark vs symbol, picked in sha1 order. Strokes, masks and filters are kept (pixel metrics only). Brands in LogoLab’s own gallery corpus are excluded, so LogoLab was not tuned on any of them. This is the headline corpus for logos. CC0 covers the artwork; the marks remain their owners’ trademarks.',
     source: 'gilbarbara/logos (GitHub), pinned commit + per-file sha256 (bench/compare/manifests/logos-cc0.json)',
     sourceUrl: 'https://github.com/gilbarbara/logos',
     license: 'CC0 1.0 (artwork; marks are trademarks)',
@@ -425,7 +432,7 @@ export const CORPUS_INFO: Record<string, CorpusInfo> = {
     label: 'SVG-Bench emoji · 100',
     heldOut: true,
     blurb:
-      '100 Twemoji from the test split of StarVector’s SVG-Bench `svg-emoji`: fill-only, one per base emoji, picked in sha1 order. LogoLab was never tuned on them. The headline corpus.',
+      '100 Twemoji from the test split of StarVector’s SVG-Bench `svg-emoji`: fill-only, one per base emoji, picked in sha1 order. LogoLab was never tuned on them. This is the headline corpus for emoji.',
     source: 'starvector/svg-emoji (Hugging Face), pinned revision + parquet sha256',
     sourceUrl: 'https://huggingface.co/datasets/starvector/svg-emoji',
     license: 'CC-BY 4.0 (Twemoji)',
@@ -608,7 +615,7 @@ export function paired(
 }
 
 export function fmt(v: number | null | undefined, digits: number): string {
-  if (v === null || v === undefined || !Number.isFinite(v)) return '—'
+  if (v === null || v === undefined || !Number.isFinite(v)) return 'n/a'
   if (digits === 0 && Math.abs(v) >= 10000) return `${(v / 1000).toFixed(1)}k`
   return v.toFixed(digits)
 }
@@ -688,8 +695,8 @@ export function disagreements(
 // Which tools: the HEADLINE ranks each tool as its users get it: LogoLab's shipped path
 // (logolab-auto), every other tool's defaults and its own named presets. Rows that are an
 // ANALYSIS rather than a tool are never in it (isAblationRow): LogoLab's oracle row
-// (logolab-gate reads `gradients` off the authored SVG), its no-probe preset and its
-// ablation grid, and every `-swept` variant (the best of a grid search is a selection made
+// (logolab-gate reads `gradients` off the authored SVG), its ablation grid, and every
+// `-swept` variant (the best of a grid search is a selection made
 // by looking at scores, even when, as here, the scores were in-sample ones). The ABLATION
 // VIEW ranks everything, and is labelled so wherever it is printed.
 //

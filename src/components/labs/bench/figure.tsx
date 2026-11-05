@@ -388,7 +388,7 @@ export function ScoreTable({
                     key={columns[k].tool}
                     className={`whitespace-nowrap px-2 py-1.5 text-right sm:px-2.5 ${v !== null && v === best && !tie ? 'font-semibold text-good' : 'text-ink-2'}`}
                   >
-                    {v === null ? '—' : v.toFixed(r.digits)}
+                    {v === null ? 'n/a' : v.toFixed(r.digits)}
                   </td>
                 ))}
               </tr>

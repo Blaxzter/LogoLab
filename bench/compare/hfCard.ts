@@ -28,7 +28,7 @@ import {
 } from '../../src/components/labs/bench/benchData.ts'
 import type { BenchResults, BenchRow } from '../../src/components/labs/bench/benchData.ts'
 import type { RunIndexEntry } from '../../src/components/labs/bench/benchSource.ts'
-import { leaderboardMarkdown } from './report.ts'
+import { NO_VALUE, leaderboardMarkdown, plainMarkdown, tableCell } from './report.ts'
 import type { ScoreRow } from './types.ts'
 
 export const HF_REPO = 'Blaxzter/logolab-bench'
@@ -117,7 +117,7 @@ const LICENCE_NOTE: [RegExp, string][] = [
   [/^LogoLab fixture$/, 'LogoLab fixtures, Frederic Abraham, MIT (the LogoLab repository licence)'],
   [
     /^CC0-1\.0$/,
-    'gilbarbara/logos, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): no copyright conditions, but the marks remain their owners’ trademarks (see below)',
+    'gilbarbara/logos, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): no copyright conditions, but the marks remain their owners’ trademarks',
   ],
   [/^ISC/, 'Lucide, ISC (portions MIT, from Feather)'],
   [/^MIT \(Feather\)/, 'Feather, Cole Bemis, MIT'],
@@ -142,7 +142,8 @@ export const safeCaseId = (id: string): boolean => corpusOf(id) !== '' && !/\\|^
 /**
  * Why this run may NOT be published — empty when it may. Checked: every corpus the run
  * names, rows or cases mention is allowlisted; every case's licence is one its corpus allows;
- * no case points into the private logo corpus; every case id is a safe `<corpus>/<name>`.
+ * no case points into the private logo corpus; every case id is a safe `<corpus>/<name>`; no
+ * value holds an absolute local path (publicResults takes out the one a run records itself).
  */
 export function publishProblems(data: BenchResults): string[] {
   const problems: string[] = []
@@ -170,7 +171,32 @@ export function publishProblems(data: BenchResults): string[] {
     if (/examples[\\/]logos[\\/]/.test(c.source ?? ''))
       problems.push(`${id}: comes from the private examples/logos/ corpus`)
   }
+  for (const at of localPaths(data)) problems.push(`${at} holds a local path`)
   return problems
+}
+
+/** An absolute path on someone's machine, anywhere in a string. */
+const LOCAL_PATH = /(?:^|[\s"'(=])(?:[A-Za-z]:[\\/]|\/(?:home|Users|mnt|tmp|var)\/)/
+
+/** Where a value holds a local path, as `$.meta.…`. */
+export function localPaths(v: unknown, at = '$'): string[] {
+  if (typeof v === 'string') return LOCAL_PATH.test(v) ? [at] : []
+  if (Array.isArray(v)) return v.flatMap((x, i) => localPaths(x, `${at}[${i}]`))
+  if (v && typeof v === 'object') return Object.entries(v).flatMap(([k, x]) => localPaths(x, `${at}.${k}`))
+  return []
+}
+
+/**
+ * results.json as published: the run's file without `reportFrom`, which says where the StarVector
+ * batch report lay on the machine that ran it. That report is not published, so the field could
+ * only ever tell a reader a local path. Key order is kept, so nothing else in the file moves.
+ */
+export function publicResults(data: BenchResults): BenchResults {
+  const provenance = data.meta.provenance
+  const starvector = provenance?.starvector
+  if (!provenance || !starvector || typeof starvector !== 'object') return data
+  const { reportFrom: _, ...kept } = starvector as Record<string, unknown>
+  return { ...data, meta: { ...data.meta, provenance: { ...provenance, starvector: kept } } }
 }
 
 /** A path inside the private logo corpus (or anywhere outside what may be staged)? */
@@ -283,11 +309,29 @@ const digits = (v: number): string =>
           ? v.toFixed(3)
           : v.toPrecision(2)
 
+/**
+ * Markdown tables whose rows disagree with their header on the number of cells. A renderer shows
+ * such a table as one paragraph of pipes, and neither the Hub's metadata check nor a build sees it.
+ */
+export function brokenTables(md: string): string[] {
+  const cells = (line: string) => (line.match(/(?<!\\)\|/g) ?? []).length - 1
+  const problems: string[] = []
+  let head = 0
+  md.split('\n').forEach((line, i) => {
+    if (!line.startsWith('|')) head = 0
+    else if (!head) head = cells(line)
+    else if (cells(line) !== head) problems.push(`line ${i + 1} has ${cells(line)} cells, its header ${head}`)
+  })
+  return problems
+}
+
 /** The raw values behind the ranks: per tool, the median of each ranked metric and its n. */
 export function medianTable(rows: BenchRow[], corpus: string, tools: string[]): string[] {
   const metrics = RANK_METRICS[corpusKind(corpus)]
   const out: string[] = []
-  out.push(`| tool | cases | ${metrics.map((m) => `${m.label} ${m.better === 'lower' ? '↓' : '↑'}`).join(' | ')} |`)
+  out.push(
+    `| tool | cases | ${metrics.map((m) => `${tableCell(m.label)} ${m.better === 'lower' ? '↓' : '↑'}`).join(' | ')} |`,
+  )
   out.push(`|---|---|${metrics.map(() => '---').join('|')}|`)
   for (const tool of tools) {
     const mine = rows.filter((r) => r.corpus === corpus && r.tool === tool)
@@ -297,7 +341,7 @@ export function medianTable(rows: BenchRow[], corpus: string, tools: string[]): 
         .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
         .map((v) => (m.abs ? Math.abs(v) : v))
       const md = median(xs)
-      return md === null ? '—' : `${digits(md)} (${xs.length})`
+      return md === null ? NO_VALUE : `${digits(md)} (${xs.length})`
     })
     out.push(`| ${tool} | ${mine.length} | ${cells.join(' | ')} |`)
   }
@@ -333,7 +377,7 @@ export function lineCorpusNotes(rows: BenchRow[], corpus: string): string[] {
   )
   if (pairs.length)
     out.push(
-      `- **Rows that are one output.** These have the same file size and ΔE on every case, so they share a rank: ${pairs.join('; ')}.`,
+      `- These rows are one output and share a rank, with the same file size and ΔE on every case: ${pairs.join('; ')}.`,
     )
 
   const imagetracer = of('imagetracer-default')
@@ -341,9 +385,9 @@ export function lineCorpusNotes(rows: BenchRow[], corpus: string): string[] {
   const width = median(nums(imagetracer, 'clWidthErr'))
   if (centre !== null && width !== null)
     out.push(
-      `- **\`imagetracer-default\` does not find centrelines.** It strokes every outline 1 px in its own colour to hide ` +
-        `seams, and those strokes are scored as centrelines (median centre distance ${digits(centre)} px, width error ` +
-        `${digits(width)}), while a tool with no strokes is tied last. Its place comes from that.`,
+      `- \`imagetracer-default\` does not find centrelines, and its place comes from that: it strokes every outline ` +
+        `1 px in its own colour to hide seams, those strokes are scored as centrelines (median centre distance ` +
+        `${digits(centre)} px, width error ${digits(width)}), and a tool with no strokes is tied last.`,
     )
 
   // A case is <corpus>/<set>-<icon>: the icon sets are drawn in one style, so a gap between them
@@ -388,13 +432,13 @@ export function lineCorpusNotes(rows: BenchRow[], corpus: string): string[] {
       .map((t) => `; \`${t}\` ${medians(t)}`)
       .join('')
     out.push(
-      `- **\`starvector-1b\` draws Feather back far closer than the other sets.** ΔE is under 0.5 on ${near.join(', ')} ` +
+      `- \`starvector-1b\` draws Feather back far closer than the other sets: ΔE is under 0.5 on ${near.join(', ')} ` +
         `icons (median ΔE ${medians('starvector-1b')}, in the order ${sets.join(', ')}${controls}).` +
         (closest
           ? ` Its closest centreline is ${(closest.clCentre as number).toFixed(2)} px off at this corpus's resolution ` +
             `(${closest.caseId}), from an input its processor resizes to 224 px.`
           : '') +
-        ` That looks like recall of icons seen in training. Its training data was not checked, so this is an inference. ` +
+        ` That looks like recall of icons seen in training, though its training data was not checked. ` +
         `Without Feather its mean rank moves from ${withIt.mean.toFixed(2)} to ${without.mean.toFixed(2)} and its place ` +
         (withIt.at === without.at ? `stays ${withIt.at}.` : `from ${withIt.at} to ${without.at}.`),
     )
@@ -433,7 +477,8 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   out.push('---')
   out.push('license: other')
   out.push('license_name: per-source')
-  out.push('license_link: LICENSES.md')
+  // The Hub takes a file only under the exact name LICENSE or LICENSE.md; anything else must be a URL.
+  out.push(`license_link: ${HF_URL}/blob/main/LICENSES.md`)
   out.push(`pretty_name: ${yamlStr('LogoLab vectorizer benchmark')}`)
   out.push('language:', '- en')
   out.push('task_categories:', '- image-to-text')
@@ -474,7 +519,7 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   )
   out.push('')
   out.push(
-    `This card describes run **${run}** (${m.date?.slice(0, 10) ?? 'undated'}, LogoLab ${m.logolab}, scored at ${m.res}px). ` +
+    `This card describes run ${run} (${m.date?.slice(0, 10) ?? 'undated'}, LogoLab ${m.logolab}, scored at ${m.res}px). ` +
       `The dataset viewer's default config is ${runs[0].name}; every published run has its own config.`,
   )
   out.push('')
@@ -489,36 +534,35 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   out.push('## What is measured, and how')
   out.push('')
   out.push(
-    '- **One input, one scoring path.** Every tool is given the same PNG of each case (the authored SVG rendered on white ' +
-      `at ${m.res}px with resvg). Whatever SVG it returns is written to disk and scored by the same code ` +
-      '(bench/compare/score.ts) as every other tool’s, LogoLab included: no tool is measured from an in-memory shortcut.',
+    `- Every tool is given the same PNG of each case: the authored SVG rendered on white at ${m.res}px with resvg. ` +
+      'Whatever SVG it returns is written to disk and scored by the same code (bench/compare/score.ts), LogoLab’s included.',
   )
   out.push(
-    '- **Pixel metrics** on the output rendered back at the same size: mean CIE76 ΔE against the input raster (LogoLab’s ' +
-      'shipped `deltaEField`), and SVG-Bench’s MSE, SSIM, LPIPS (VGG) and DINOv2 similarity.',
+    '- Pixel metrics compare the output, rendered back at the same size, with the input raster: mean CIE76 ΔE (LogoLab’s ' +
+      'shipped `deltaEField`) and SVG-Bench’s MSE, SSIM, LPIPS (VGG) and DINOv2 similarity.',
   )
   out.push(
-    '- **Geometry metrics** against the authored SVG’s outlines: boundary chamfer distance and its p95, node count and ' +
-      'parsimony, corners recovered and invented, tangent breaks (kinks on boundary the artist drew smooth), regions ' +
-      'recovered. Only the visible boundary counts, for every tool. Where the authored SVG cannot be read as filled ' +
-      'regions (strokes, clips) the case keeps its pixel metrics and the row says why geometry is missing (`gtRefusal`).',
+    '- Geometry metrics compare the output with the authored SVG’s outlines: boundary chamfer distance and its p95, node ' +
+      'count and parsimony, corners recovered and invented, tangent breaks (kinks on boundary the artist drew smooth) and ' +
+      'regions recovered. Only the visible boundary counts, for every tool. Where the authored SVG cannot be read as filled ' +
+      'regions (strokes, clips), the case keeps its pixel metrics and the row says why geometry is missing (`gtRefusal`).',
   )
   if (hasLine)
     out.push(
-      '- **Centreline metrics** on the line corpora, whose authored SVGs are strokes: the authored `d` is the centreline ' +
+      '- Centreline metrics apply to the line corpora, whose authored SVGs are strokes: the authored `d` is the centreline ' +
         'and `stroke-width` the width a tool has to find (bench/lineArtGround.ts reads both, bench/centerlineScore.ts ' +
-        'scores). Columns: `clCentre` / `clCentreP95` (distance from the traced centreline to the authored one, mean and ' +
+        'scores them). The columns are `clCentre` / `clCentreP95` (distance from the traced centreline to the authored one, mean and ' +
         'p95 px), `clMissed` (mean distance of the authored samples no traced line covers), `clWidthErr` (relative width ' +
         'error), `clEndsDelta` / `clPathsDelta` (ends and paths, traced minus authored), `clTurns` (traced paths that ' +
         'leave one authored stroke for another). An outline tracer’s output has no stroke, so its row has none of them ' +
-        '(`geomRefusal` "no strokes") and is ranked tied last on them, as any tool with no value is.',
+        '(`geomRefusal` "no strokes") and is tied last on them, like any tool with no value.',
     )
   out.push(
-    '- **A failure is a row.** No output, or output resvg cannot draw, is scored as a blank white image and kept in every ' +
-      'count (`status` ≠ `ok`); a row is never dropped.',
+    '- A tool that returns no output, or output resvg cannot draw, is scored as a blank white image and kept in every ' +
+      'count (`status` ≠ `ok`). No row is dropped.',
   )
   out.push(
-    '- **Held out vs in-sample.** LogoLab was developed against the in-sample corpora (`heldOut: false`). They are ' +
+    '- LogoLab was developed against the in-sample corpora (`heldOut: false`). They are ' +
       'published as data, but no leaderboard is computed on them.',
   )
   out.push('')
@@ -527,11 +571,6 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   const board = leaderboardMarkdown(data.rows as unknown as ScoreRow[])
   if (board.length) {
     out.push(...board)
-    out.push(
-      'The CD note under each table is the critical-difference diagram in words: tools joined by `~` are within one ' +
-        'critical difference of each other on case rank, i.e. not significantly different at α .05 (Nemenyi).',
-    )
-    out.push('')
     out.push('### Raw medians behind the ranks')
     out.push('')
     out.push(
@@ -540,7 +579,7 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
     out.push('')
     for (const corpus of headlineCorpora(rows)) {
       const head = leaderboard(rows, { corpus, view: 'headline', resamples: 1 })
-      out.push(`**${corpus}**`)
+      out.push(`#### ${corpus}`)
       out.push('')
       out.push(
         ...medianTable(
@@ -600,7 +639,7 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
     const ran = rows.some((r) => r.tool === t)
     if (!ran) continue
     out.push(
-      `| ${t} | ${(m.versions?.[t] ?? '—').replace(/\|/g, '\\|')} | ${toolInfo(t).blurb.replace(/\|/g, '\\|') || '—'} |`,
+      `| ${t} | ${(m.versions?.[t] ?? NO_VALUE).replace(/\|/g, '\\|')} | ${toolInfo(t).blurb.replace(/\|/g, '\\|') || NO_VALUE} |`,
     )
   }
   out.push('')
@@ -616,12 +655,12 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   out.push('')
   out.push('```')
   out.push('README.md                 this card (written from the newest run)')
-  out.push('LICENSES.md               the per-source licence table')
+  out.push('LICENSES.md               the per-source licence table and the MIT / ISC licence texts')
   out.push('runs.json                 index of published runs, newest first (what /labs/bench reads)')
   out.push(`${run}/results.jsonl          one flattened row per (tool, case): the viewer's table`)
-  out.push(`${run}/results.json           the run as written: meta (versions, provenance, cases) + rows`)
+  out.push(`${run}/results.json           the run: meta (versions, provenance, cases) + rows`)
   out.push(`${run}/summary.md             the run's full report (medians, paired bootstrap, SVG-Bench, gates)`)
-  out.push(`${run}/ATTRIBUTION.md         attribution as recorded by the run`)
+  out.push(`${run}/ATTRIBUTION.md         attribution for each source`)
   out.push(`${run}/manifests/             corpus manifests + cases.json`)
   out.push(`${run}/cases/<corpus>/<case>/truth.svg      the authored SVG (the answer sheet)`)
   out.push(`${run}/cases/<corpus>/<case>/<tool>.svg     each tool's output, as scored`)
@@ -663,6 +702,13 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
       `It reused traces and scores saved at ${rev} (\`meta.progressFrom\`). A run only accepts that while the tracer ` +
         `(\`src/\`) is the same at both commits. The benchmark files that differ: ` +
         `${benchChanged.map((f) => `\`${f}\``).join(', ') || 'none'}.`,
+    )
+    out.push('')
+  }
+  for (const [was, now] of Object.entries(m.renamed ?? {})) {
+    out.push(
+      `LogoLab commit ${m.logolab} still calls \`${now}\` \`${was}\`: the row was renamed after scoring ` +
+        '(`meta.renamed`), and its numbers and traces are unchanged.',
     )
     out.push('')
   }
@@ -714,11 +760,11 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   out.push('')
   out.push(
     'The SVG-Bench metrics and the svg-emoji corpus are from StarVector (Rodriguez et al., “StarVector: Generating ' +
-      'Scalable Vector Graphics Code from Images and Text”, CVPR 2025, arXiv:2312.11556); the rank statistics follow ' +
+      'Scalable Vector Graphics Code from Images and Text”, CVPR 2025); the rank statistics follow ' +
       'Demšar, “Statistical Comparisons of Classifiers over Multiple Data Sets”, JMLR 7, 2006.',
   )
   out.push('')
-  return out.join('\n')
+  return plainMarkdown(out.join('\n'))
 }
 
 /** Per corpus × licence, how many cases, and who holds it. */
@@ -736,16 +782,80 @@ export function licenceTable(data: BenchResults): string[] {
   return out
 }
 
-/** LICENSES.md: the table on its own, for the front matter's `license_link`. */
-export function licensesMarkdown(data: BenchResults): string {
-  return [
-    '# Licences',
-    '',
-    'This dataset mixes sources under different licences; each case carries its own (`caseLicense` in results.jsonl, ',
-    '`license` in results.json `meta.cases`). Derived files (renders, traces) keep their source’s licence and ',
-    'attribution; CC-BY-SA sources stay CC-BY-SA. Code, metrics tables and the card: MIT.',
-    '',
-    ...licenceTable(data),
-    '',
-  ].join('\n')
+/** A licence whose text has to travel with the copies: MIT and ISC both ask for it. CC0 asks
+ *  for nothing, and CC-BY is met by the credit and the link in the table. */
+const NEEDS_TEXT = /^(MIT|ISC)\b/
+
+export interface LicenceText {
+  /** The licence string on the cases it covers (meta.cases[].license). */
+  licence: string
+  title: string
+  text: string
+}
+
+/** Licences this run's cases carry whose text is not in `texts`: publishHf.ts refuses on any. */
+export function missingLicenceTexts(data: BenchResults, texts: LicenceText[]): string[] {
+  const have = new Set(texts.map((t) => t.licence))
+  return [...new Set((data.meta.cases ?? []).map((c) => c.license))].filter((l) => NEEDS_TEXT.test(l) && !have.has(l))
+}
+
+/** LICENSES.md, the front matter's `license_link`: the table, then each text verbatim. */
+export function licensesMarkdown(data: BenchResults, texts: LicenceText[] = []): string {
+  const head = plainMarkdown(
+    [
+      '# Licences',
+      '',
+      'This dataset mixes sources under different licences; each case carries its own (`caseLicense` in results.jsonl,',
+      '`license` in results.json `meta.cases`). Derived files (renders, traces) keep their source’s licence and',
+      'attribution; CC-BY-SA sources stay CC-BY-SA. The code, the metrics tables and the card are MIT.',
+      '',
+      ...licenceTable(data),
+      '',
+    ].join('\n'),
+  )
+  if (!texts.length) return head
+  const body = texts.flatMap((t) => [`### ${t.title}`, '', '```text', t.text.trim(), '```', ''])
+  return [head, '## Licence texts', '', ...body].join('\n')
+}
+
+/** ATTRIBUTION.md: true of a run directory (which has PNG renders) and of its published copy
+ *  (which has only the SVGs). */
+export function attributionMarkdown(logosCommit: string): string {
+  return `# Attribution
+
+Each truth.svg under cases/, every tool's SVG and any PNG render of them are derived from the
+sources below. The manifests named here are under manifests/ in the published dataset and under
+bench/compare/manifests/ in the LogoLab repository.
+
+- svgemoji*: StarVector SVG-Bench \`starvector/svg-emoji\` test split (Hugging Face; the
+  revision and parquet sha256 are in svg-emoji-test.json). Each row's licence is its emoji set's:
+  - Twemoji: Copyright Twitter, Inc. and other contributors, CC-BY 4.0
+    (https://creativecommons.org/licenses/by/4.0/). Maintained at https://github.com/jdecked/twemoji
+    (twitter/twemoji is archived).
+  - OpenMoji: HfG Schwäbisch Gmünd, CC-BY-SA 4.0 (https://openmoji.org).
+  - Noto Emoji: Google, Apache-2.0 (https://github.com/googlefonts/noto-emoji).
+- logos-cc0: gilbarbara/logos at commit ${logosCommit}
+  (https://github.com/gilbarbara/logos/tree/${logosCommit}; per-file sha256 in logos-cc0.json),
+  whose LICENSE.txt is CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/).
+  CC0 covers the artwork only: the logos are trademarks of their respective owners, no endorsement
+  is implied, and they are rendered and re-traced here solely to measure vectorizers.
+- fluent2: Microsoft Fluent UI Emoji, MIT (https://github.com/microsoft/fluentui-emoji).
+- truth0: LogoLab fixtures.
+- strokes-oss: stroke icon sets at the versions pinned in strokes-oss.json (each row names its
+  set, version, file and sha256):
+  - Lucide (lucide-static 1.55.0): ISC License, Copyright (c) 2026 Lucide Icons and Contributors
+    (https://github.com/lucide-icons/lucide). Lucide is a fork of Feather; the portions from
+    Feather are MIT, Copyright (c) 2013-2023 Cole Bemis.
+  - Tabler Icons (@tabler/icons 3.49.0, outline): MIT License, Copyright (c) 2020-2026 Paweł Kuna
+    (https://github.com/tabler/tabler-icons).
+  - Feather (feather-icons 4.29.2): MIT License, Copyright (c) 2013-2023 Cole Bemis
+    (https://github.com/feathericons/feather).
+  Some Feather icons depict third-party brand marks (e.g. github, linkedin); those marks belong
+  to their owners.
+
+The MIT and ISC licence texts are in LICENSES.md at the root of the published dataset, and each
+icon set's text has its sha256 in strokes-oss.json.
+
+Renders and traces here are modified (rasterized and re-vectorized) versions of those works.
+`
 }
