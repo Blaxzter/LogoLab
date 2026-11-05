@@ -4,7 +4,8 @@
 //   svgemoji-v0  HEADLINE. 100 Twemoji (CC-BY 4.0) from StarVector's SVG-Bench `svg-emoji`
 //                TEST split, frozen by bench/compare/py/fetch_svgbench.py into
 //                manifests/svg-emoji-test.json: fill-only, one per base emoji, ranked by sha1.
-//                Held out — the tracer was never tuned on them.
+//                Held out until 2026-10-19. Tracer changes from 2026-10-20 on were measured on
+//                them, so they stay ranked but are not unseen (benchData.ts CORPUS_INFO.seen).
 //   svgemoji     the whole 668-row test split (Twemoji, OpenMoji, Noto) — the population the
 //                paper's SVG-Emoji row is measured on. OpenMoji is stroked, so its geometry is
 //                refused (gtRefusal) and only pixel metrics apply there.

@@ -15,7 +15,7 @@
 ---
 
 You just generated an app icon / logo with Midjourney, Gemini, DAL·E, or your favourite
-vector tool — but does it actually *work*? Is it legible at 16px? Does that white line-art
+vector tool, but does it actually *work*? Is it legible at 16px? Does that white line-art
 mark disappear on a light nav bar? How does it look as an iOS app icon, or cropped into a
 circular avatar?
 
@@ -23,8 +23,17 @@ circular avatar?
 junk background, trace it to a clean SVG, and export every favicon / PWA icon you need.
 
 > No logo handy? Hit **Try an example logo** in the sidebar to load one of the built-in
-> samples and play with every tool right away. The **Icon sheet** tab has its own examples —
+> samples and play with every tool right away. The **Icon sheet** tab has its own examples:
 > real image-model output, so you can try the splitter without generating a sheet first.
+
+## 📊 How it compares
+
+LogoLab's tracer is benchmarked against other tracers and image-to-SVG models on rasters of
+authored SVGs, and each output is scored against the SVG it came from. Browse the results at
+[logolab.fabraham.dev/labs/bench](https://logolab.fabraham.dev/labs/bench). Every output is in the
+[dataset on Hugging Face](https://huggingface.co/datasets/Blaxzter/logolab-bench), and the code is
+in [`bench/compare/`](bench/compare). LogoLab is one of the tools under test and some of the
+metrics are its own, so check the numbers yourself.
 
 ## ✨ Features
 
@@ -33,25 +42,25 @@ See your logo composited into **real device screenshots** (drag it into any app 
 a desktop website nav, browser tabs & favicons, an app splash screen, an App Store listing,
 a circular social avatar, and a size-&-contrast matrix (16 → 128px on light *and* dark).
 
-- **Background card** — give a white / line-art logo a colored backplate (color, shape,
+- **Background card:** give a white / line-art logo a colored backplate (color, shape,
   radius, shadow). The classic "my logo vanishes on white" fix.
-- **Recolor (tint)** — repaint a monochrome mark in any brand color via its alpha, plus
+- **Recolor (tint):** repaint a monochrome mark in any brand color via its alpha, plus
   one-click invert.
 - **Light / dark** context toggle and a custom page background.
-- **🎯 Live favicon** — the logo you're working on becomes this tab's favicon in real time.
+- **🎯 Live favicon:** the logo you're working on becomes this tab's favicon in real time.
 
-### 🧽 Cleanup — background remover
+### 🧽 Cleanup: background remover
 A magic-wand / flood-fill eraser **plus hand brushes and an AI cutout** for AI-generated icons
 that ship with a baked background.
 
 ![Cleanup](docs/cleanup.png)
 
-- **One-click removers:** **Auto-remove** (floods the four corners) and **🤖 AI auto-remove** —
+- **One-click removers:** **Auto-remove** (floods the four corners) and **🤖 AI auto-remove**,
   a Hugging Face segmentation model (`briaai/RMBG-1.4`) that runs **entirely in your browser**
   and handles tricky backgrounds and the enclosed holes the corner flood can't reach. The model
-  (~tens of MB) downloads on first use, then is cached & offline — nothing is ever uploaded.
+  (~tens of MB) downloads on first use, then is cached & offline, and nothing is ever uploaded.
 - **Manual tools:** **Magic** (flood-fill a connected region), **By color** (key out one color
-  everywhere), and **Erase / Restore** brushes — drag to rub out leftovers by hand or paint the
+  everywhere), and **Erase / Restore** brushes: drag to rub out leftovers by hand or paint the
   original back where you went too far, with an adjustable brush size.
 - **Tolerance** + **edge-softness** (anti-aliased cuts) + **defringe**, full **undo / redo**
   (incl. `Ctrl/⌘+Z` · `Ctrl/⌘+Shift+Z`) and **reset**.
@@ -59,29 +68,29 @@ that ship with a baked background.
   white / light line-art logos stay visible while you work.
 - **Apply** feeds the clean transparent PNG straight into preview, vectorize, and export.
 
-### ✏️ Vectorize — a small in-browser vector studio
+### ✏️ Vectorize: a small in-browser vector studio
 A **structure-first** tracer that segments the image by smoothness, fits a paint model
-(flat, gradient or layered glow) to each region, then traces clean curves — or, for line
-art, traces the middle of every line as a real stroke — plus a full node editor, all
+(flat, gradient or layered glow) to each region, then traces clean curves (or, for line
+art, the middle of every line as a real stroke). A full node editor comes with it, all
 client-side. The research behind each stage is in
 [🔬 Algorithms & papers](#-algorithms--papers) below.
 
 ![Vectorize](docs/vectorize.png)
 
 - **Clean curves, not staircases:** the whole image is traced as one planar map, so every
-  boundary two colours share is drawn exactly once — neighbouring shapes meet exactly, with
+  boundary two colours share is drawn exactly once, so neighbouring shapes meet exactly, with
   no gaps, overlaps or hairline seams. Edges are placed with sub-pixel accuracy from the
   anti-aliasing, and corners stay sharp where the pixels show a corner. One-colour art goes
   through the same tracer as an ink / paper map.
 - **Gradients:** detects linear / radial gradients and rebuilds soft "glow" backgrounds as a
-  base paint under translucent radial layers — real, editable gradients, not flat
+  base paint under translucent radial layers. They are real, editable gradients in place of flat
   posterized bands.
 - **Mode: Auto / Color / Mono.** Auto counts the inks: one-ink art traces as a single clean
   mono shape with a measured cut (and **Invert** for light ink on a dark ground), painted in
   the ink's own colour; anything with more inks traces in colour.
 - **Line art as strokes:** turn on **Strokes** and a monoline icon, a diagram or a
-  page of sheet music comes back as the lines it was drawn with — open and closed **stroked
-  paths with a measured width** you can re-weight — instead of the filled outline of every
+  page of sheet music comes back as the lines it was drawn with: open and closed **stroked
+  paths with a measured width** you can re-weight, in place of the filled outline of every
   line. Ink no stroke explains (a dot, a note head) stays a fill. In Colour mode every line
   keeps its own ink, and lines of different colours that cross stay whole.
 - **Find best settings:** one button traces five candidate setups (mono, strokes, flat, flat
@@ -94,22 +103,22 @@ client-side. The research behind each stage is in
 - **Studio layout:** full-height workspace with **Split / Traced / Original / Overlay**
   (ghost) / **Difference** views, synced pan & zoom, a paths panel (select, recolor, hide,
   delete) and a **"How it works"** explainer that walks your image through every stage live.
-- **See how close it is:** the status bar carries a **ΔE** readout — the mean colour
+- **See how close it is:** the status bar carries a **ΔE** readout: the mean colour
   difference between the result and your image, the same metric the tracer's own
-  benchmarks are scored in — and clicking it opens **Difference**, a per-pixel heat map of
+  benchmarks are scored in. Clicking it opens **Difference**, a per-pixel heat map of
   where the trace and the original disagree. "It looks about right" becomes a number and a
   picture.
 - **Node editing, Affinity-style:** drag anchors & Bézier handles (smooth nodes mirror,
   `Alt` breaks symmetry), double-click a segment to add a node, double-click an anchor to
   toggle corner ↔ smooth, `Del` to remove, full **undo / redo**.
-- **AI upscale for small rasters (opt-in):** a tiny PNG (≤ 320 px) can be enlarged ×2–×4 by an
-  in-browser super-resolution model (waifu2x swin_unet, lazily loaded) before tracing — measured
+- **AI upscale for small rasters (opt-in):** a tiny PNG (≤ 320 px) can be enlarged ×2 to ×4 by an
+  in-browser super-resolution model (waifu2x swin_unet, lazily loaded) before tracing, measured
   to halve the outline error and keep corners that tracing it small loses, at a few seconds per
   trace. Off by default; inert on SVGs and on rasters large enough already.
 - Already-vector uploads can be **cleaned & edited directly** or re-traced from pixels.
 - **Download** or **copy** the optimized SVG.
 
-### 🖊️ Editor — draw and edit SVG
+### 🖊️ Editor: draw and edit SVG
 A small vector editor for the logo itself: open an SVG (or your traced result), start from
 a blank artboard, or pick an example drawing.
 
@@ -117,12 +126,12 @@ a blank artboard, or pick an example drawing.
   single-key shortcut; hold `Space` to pan with any tool.
 - **Layers** with groups, rename, reorder by drag, hide and duplicate; a **properties** rail
   for fill, stroke, size and alignment; **snapping** and a grid.
-- Path operations: join, split at a node, break apart, combine, reverse — with full
+- Path operations: join, split at a node, break apart, combine, reverse, with full
   **undo / redo**.
 - Edits become the working logo as you make them, so Preview and Export always show your
   latest drawing; just opening a file changes nothing.
 
-### 📦 Export — favicons & PWA icons
+### 📦 Export: favicons & PWA icons
 Generate a complete, production-ready icon set as a single `.zip`.
 
 ![Export](docs/export.png)
@@ -133,14 +142,14 @@ Generate a complete, production-ready icon set as a single `.zip`.
 - Presets (**Web essentials / Full PWA / Everything**) and a live preview that follows your
   sidebar appearance (card color, shape, radius, padding, scale, tint).
 
-### 🧩 Icon sheet — one image, a whole set
+### 🧩 Icon sheet: one image, a whole set
 Drop the sheet an image model hands you ("a set of 16 weather icons, captioned") and get every
 icon back as its own clean SVG.
 
-- The icons are found on the paper — captions and titles are recognised and set aside — or the
+- The icons are found on the paper (captions and titles are recognised and set aside), or the
   sheet is split by an even grid you specify. Boxes can be dragged, resized and drawn by hand.
 - Every icon goes through the same vectorizer, a few at a time; open any one for the full editor.
-- **Names from captions** — each icon is named after the text under it (`security-camera.svg`),
+- **Names from captions:** each icon is named after the text under it (`security-camera.svg`),
   read in the browser by [Tesseract.js](https://github.com/naptha/tesseract.js) (engine fetched
   the first time a sheet has captions, ~5 MB, then cached; switch it off under **Names**). Add a
   **prefix / suffix** to every name for the export.
@@ -150,7 +159,7 @@ icon back as its own clean SVG.
 LogoLab is a PWA. Install it from the address bar (or the **Install app** button in the header)
 and it runs as its own window, with no network at all.
 
-- **Offline** — the app shell, every tab, the tracer and its Web Worker, the bundled examples
+- **Offline:** the app shell, every tab, the tracer and its Web Worker, the bundled examples
   and the device mockups are stored on install (~4 MB). What is *not* stored: the `/labs`
   research harnesses and the optional AI models, which are 27 MB of the build and are cached
   only if you actually open them. See [`src/pwa/`](src/pwa/).
@@ -159,20 +168,20 @@ and it runs as its own window, with no network at all.
   icon sheet with all of its traces, the editor's drawing and the export selection all come
   back. Settings ride in `localStorage` (read synchronously, so they are right in the first
   painted frame); the bytes and the documents ride in IndexedDB, read once before the first
-  render. A **Saved just now** chip in the title bar says when it last happened — or says
+  render. A **Saved just now** chip in the title bar says when it last happened, or says
   **Not saved** when the browser won't store anything (a private window, a full quota), rather
   than claiming your work is safe when it isn't. **Start fresh** lives in that chip.
-- **Updates ask first.** A new version installs in the background and waits — it never swaps
+- **Updates ask first.** A new version installs in the background and waits, so it never swaps
   the code out from under a running trace.
 
 Everything stays in the browser either way: no upload, no account, nothing leaves the tab.
 
-### 🤖 MCP server — LogoLab from your AI agent
+### 🤖 MCP server: LogoLab from your AI agent
 The tracer and the icon exporter, exposed to your coding agent over
 [MCP](https://modelcontextprotocol.io). "Trace `icon.png` and put a PWA icon set in `public/`"
-becomes one tool call — locally, nothing uploaded.
+becomes one tool call, locally, with nothing uploaded.
 
-Published to npm as [`logolab`](https://www.npmjs.com/package/logolab) — no clone needed:
+Published to npm as [`logolab`](https://www.npmjs.com/package/logolab), so no clone is needed:
 
 ```bash
 claude mcp add logolab -- npx -y logolab   # Claude Code
@@ -189,10 +198,10 @@ npx -y logolab install --skill                           # .claude/skills/, or -
 - `make_app_icons` (trace + export in one call), `trace_icon`, `export_icons`,
   `split_icon_sheet`, `inspect_icon`.
 - Collections for **PWA / favicon / web**, **Tauri**, **Electron**, **Android**, **iOS** and
-  **browser extensions** — with the real `favicon.ico` and `.icns` containers, the manifest,
+  **browser extensions**, with the real `favicon.ico` and `.icns` containers, the manifest,
   the `<head>` snippet, `Contents.json` and the adaptive-icon XML.
 - The same decisions the studio makes (colour vs mono, gradients, trace resolution), reported
-  back so the agent can overrule one without hand-tuning the rest — plus `strokes` to trace
+  back so the agent can overrule one without hand-tuning the rest, plus `strokes` to trace
   line art as centreline strokes.
 
 The app has a button for it: **Export → Do this from your editor**. Full reference:
@@ -215,7 +224,7 @@ pnpm mcp:build  # compile packages/mcp → the publishable `logolab` package
 
 ## ☁️ Deploy (Cloudflare Workers)
 
-It's a static SPA — the build output is `dist/` — served by an assets-only **Worker**
+It's a static SPA (the build output is `dist/`) served by an assets-only **Worker**
 (`wrangler.jsonc`, name `logo-lab`). **Workers Builds** is connected to the repo and deploys
 `main` on every push (build command `pnpm build`). To deploy by hand:
 
@@ -233,12 +242,12 @@ No server routes. The Impressum / Datenschutz pages read the operator's details 
 - **Tailwind CSS v4** (CSS-first `@theme` design tokens)
 - **Zustand** for state
 - **JSZip** (export) · **lucide-react** (icons)
-- **@huggingface/transformers** (Transformers.js) for the in-browser AI background remover —
+- **@huggingface/transformers** (Transformers.js) for the in-browser AI background remover,
   lazily `import()`-ed so it never weighs down the initial bundle.
-- **tesseract.js** to read the captions on an icon sheet — also lazily `import()`-ed; the WASM
+- **tesseract.js** to read the captions on an icon sheet, also lazily `import()`-ed; the WASM
   engine and English model come from its CDN on first use and are cached by the browser.
 - **onnxruntime-web** for the opt-in AI upscaler in front of the tracer (waifu2x swin_unet
-  weights from the Hugging Face Hub, MIT) — not even bundled: script and WASM are loaded from
+  weights from the Hugging Face Hub, MIT). It is not bundled: script and WASM are loaded from
   the CDN on first use, so nothing is fetched until you switch it on.
 - A hand-written **service worker** (`src/pwa/sw.js`) rather than Workbox: the precache list
   is decided from the chunk graph at build time (`scripts/swPlugin.ts`), because a glob would
@@ -248,15 +257,15 @@ No server routes. The Impressum / Datenschutz pages read the operator's details 
 ## 🔬 Algorithms & papers
 
 The **Cleanup** and **Vectorize** views are small, self-contained reimplementations of
-published computer-graphics research — all running client-side in pure TypeScript (plus WASM
+published computer-graphics research, all running client-side in pure TypeScript (plus WASM
 for the optional AI and OCR runtimes). The full design rationale and per-stage implementation log lives
 in [docs/vectorization-plan.md](docs/vectorization-plan.md).
 
-### ✏️ Vectorize — structure-first tracing
+### ✏️ Vectorize: structure-first tracing
 
-The tracer follows a *structure-first* order — **segment by smoothness →
-fit a paint model per region → trace geometry once → beautify** — instead of the classic
-posterize-then-trace pipeline. It's a logo-scale reimplementation of Adobe's 2025
+The tracer follows a *structure-first* order, **segment by smoothness →
+fit a paint model per region → trace geometry once → beautify**, where the classic pipeline is
+posterize then trace. It's a logo-scale reimplementation of Adobe's 2025
 gradient-aware Image Trace.
 
 | Stage / technique | What it does here | Introduced by |
@@ -264,23 +273,23 @@ gradient-aware Image Trace.
 | **Structure-first gradient reconstruction** | the overall segment → fit → trace architecture | Chakraborty et al., [*Image Vectorization via Gradient Reconstruction*](https://research.adobe.com/publication/image-vectorization-via-gradient-reconstruction/), Eurographics / CGF **2025** |
 | **Piecewise-smooth Mumford–Shah** | denoise into smooth colour fields + extract the edge / discontinuity map | [Mumford & Shah](https://en.wikipedia.org/wiki/Mumford%E2%80%93Shah_functional) **1989** (the functional); real-time discrete solver: Strekalovskiy & Cremers, [ECCV **2014**](https://link.springer.com/chapter/10.1007/978-3-319-10605-2_9) ([code](https://github.com/tum-vision/fastms)) |
 | **CIELAB & Oklab colour difference** | perceptually-uniform thresholds for region merging and gradient-stop placement | [CIELAB ΔE76](https://en.wikipedia.org/wiki/Color_difference#CIE76); Ottosson, [*Oklab*](https://bottosson.github.io/posts/oklab/) **2020** |
-| **Paint-model ladder (MDL selection)** | pick the cheapest paint that still fits — solid → linear → radial → glow | [Minimum Description Length](https://en.wikipedia.org/wiki/Minimum_description_length) — Rissanen **1978** |
+| **Paint-model ladder (MDL selection)** | pick the cheapest paint that still fits: solid → linear → radial → glow | [Minimum Description Length](https://en.wikipedia.org/wiki/Minimum_description_length), Rissanen **1978** |
 | **Glow-stack decomposition** | rebuild a soft "glow" background as a base paint under translucent radial layers | [ARDECO](https://inria.hal.science/inria-00105620/en/) (Lecot & Lévy, EGSR **2006**); [Photo2ClipArt](https://www-sop.inria.fr/reves/Basilic/2017/FLB17/) (Favreau et al., SIGGRAPH Asia **2017**); [Linear-Gradient Layer Decomposition](https://dl.acm.org/doi/10.1145/3592128) (Du et al., SIGGRAPH **2023**) |
-| **Marker-controlled seeded region growing** | the **Mark** tool — each seed grows into its own region along the colour ridge | Adams & Bischof, [*Seeded Region Growing*](https://doi.org/10.1109/34.295913), IEEE TPAMI **1994** |
+| **Marker-controlled seeded region growing** | the **Mark** tool: each seed grows into its own region along the colour ridge | Adams & Bischof, [*Seeded Region Growing*](https://doi.org/10.1109/34.295913), IEEE TPAMI **1994** |
 | **Ramer–Douglas–Peucker** | reduce dense contours to key vertices | [Ramer 1972 / Douglas & Peucker 1973](https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm) |
 | **Schneider Bézier fitting + soft-corner DP** | fit minimal cubic Béziers and keep genuine corners sharp by evidence, not a threshold | Schneider, [*Graphics Gems*](https://github.com/erich666/GraphicsGems) **1990**; corner / DP recipe after Baran et al. (CGF **2010**) and Kopf & Lischinski, [*Depixelizing Pixel Art*](https://johanneskopf.de/publications/pixelart/), SIGGRAPH **2011** |
 | **Exact Euclidean distance transform** | Strokes: the local half-width of every line, and the scale every centreline rule is measured in | Felzenszwalb & Huttenlocher, [*Distance Transforms of Sampled Functions*](https://theoryofcomputing.org/articles/v008a019/), Theory of Computing **2012** |
-| **Zhang–Suen thinning** | Strokes: the ink thinned to a one-pixel skeleton — where the middle of each line is looked for, then re-centred on the anti-aliased edges with a sub-pixel width | Zhang & Suen, [*A Fast Parallel Algorithm for Thinning Digital Patterns*](https://doi.org/10.1145/357994.358023), CACM **1984** |
+| **Zhang–Suen thinning** | Strokes: the ink thinned to a one-pixel skeleton, where the middle of each line is looked for, then re-centred on the anti-aliased edges with a sub-pixel width | Zhang & Suen, [*A Fast Parallel Algorithm for Thinning Digital Patterns*](https://doi.org/10.1145/357994.358023), CACM **1984** |
 | **Beautify / shape snapping** | snap near-circles, lines and shared centres to perfect primitives (algebraic circle fit) | Hoshyari et al., [SIGGRAPH **2018**](https://www.cs.ubc.ca/labs/imager/tr/2018/PerceptionDrivenVectorization/); [PolyFit](https://www.cs.ubc.ca/labs/imager/tr/2020/ClipArtVectorization/) (Dominici et al., SIGGRAPH **2020**); [ClipGen](https://arxiv.org/abs/2106.04912), TVCG **2021** |
 | **k-means++ (deterministic seeding)** | palette generation + fallback decomposition | Arthur & Vassilvitskii, [*k-means++*](https://theory.stanford.edu/~sergei/papers/kMeansPP-soda.pdf), SODA **2007** |
-| **AI super-resolution in front of the tracer** (opt-in) | enlarge a small raster ×2–×4 with a line-art model so the tracer's pixel lattice can place edges and corners it would otherwise round off; chosen over GAN upscalers because it keeps the flat colours exact and adds no edge rim (measured in `docs/vectorization-benchmarks.md` §32) | waifu2x **swin_unet** — nagadomi, [*nunif*](https://github.com/nagadomi/nunif) (Swin-transformer U-Net, MIT); runtime: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) |
+| **AI super-resolution in front of the tracer** (opt-in) | enlarge a small raster ×2 to ×4 with a line-art model so the tracer's pixel lattice can place edges and corners it would otherwise round off; chosen over GAN upscalers because it keeps the flat colours exact and adds no edge rim (measured in `docs/vectorization-benchmarks.md` §32) | waifu2x **swin_unet**, nagadomi, [*nunif*](https://github.com/nagadomi/nunif) (Swin-transformer U-Net, MIT); runtime: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) |
 
-### 🧽 Cleanup — background removal & matting
+### 🧽 Cleanup: background removal & matting
 
 | Technique | What it does here | Introduced by |
 |---|---|---|
-| **Flood-fill magic wand + global colour key** | erase the connected background blob, or key one colour out everywhere — with green-weighted colour distance and feathered (anti-aliased) edges | classic [flood fill](https://en.wikipedia.org/wiki/Flood_fill) / chroma-keying |
-| **AI cutout — RMBG-1.4** | in-browser saliency segmentation for tricky backgrounds and the enclosed holes the flood can't reach, via Transformers.js (WebGPU → WASM) | BRIA [RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4), built on the **IS-Net** architecture — Qin et al., [*Highly Accurate Dichotomous Image Segmentation*](https://arxiv.org/abs/2203.03041), ECCV **2022**; runtime: [Transformers.js](https://huggingface.co/docs/transformers.js) |
+| **Flood-fill magic wand + global colour key** | erase the connected background blob, or key one colour out everywhere, with green-weighted colour distance and feathered (anti-aliased) edges | classic [flood fill](https://en.wikipedia.org/wiki/Flood_fill) / chroma-keying |
+| **AI cutout: RMBG-1.4** | in-browser saliency segmentation for tricky backgrounds and the enclosed holes the flood can't reach, via Transformers.js (WebGPU → WASM) | BRIA [RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4), built on the **IS-Net** architecture, Qin et al., [*Highly Accurate Dichotomous Image Segmentation*](https://arxiv.org/abs/2203.03041), ECCV **2022**; runtime: [Transformers.js](https://huggingface.co/docs/transformers.js) |
 | **Mathematical morphology** | grow / shrink the alpha matte (separable dilate & erode) in **Edge refine** | Serra, [*Image Analysis & Mathematical Morphology*](https://en.wikipedia.org/wiki/Mathematical_morphology), **1982** |
 | **Three-pass box blur ≈ Gaussian** | feather the matte edge (three box passes ≈ a Gaussian, by the central-limit theorem) | Kovesi, [*Fast Almost-Gaussian Filtering*](https://www.peterkovesi.com/papers/FastGaussianSmoothing.pdf), **2010** |
 | **Defringe / colour decontamination** | bleed the solid foreground colour across the soft edge to kill the leftover background halo | matte foreground-colour estimation |
@@ -299,7 +308,7 @@ src/
                    #   the single source of truth for rendering a logo (card/shape/tint)
     vectorize/     # the vectorize studio (EditorCanvas node editor, paths panel, controls)
     editor/ sheet/ cleanup/   # the other studios
-    labs/          # research views over the tracer (/labs/*) — never precached
+    labs/          # research views over the tracer (/labs/*), never precached
     ui/            # Button + form controls
   lib/
     trace/         # the planar vectorizer (segmentation → shared-edge graph → fit → beautify)
@@ -315,7 +324,7 @@ src/
   state/           # Zustand stores (logo, appearance, environment, device placements; the icon sheet)
   mcp/             # the MCP server: trace + export for a coding agent (docs/mcp.md)
   pwa/
-    sw.js          # the service worker (offline shell + runtime cache) — emitted by scripts/swPlugin.ts
+    sw.js          # the service worker (offline shell + runtime cache), emitted by scripts/swPlugin.ts
     register.ts    # registration, the update prompt, the install prompt
   hooks/
 bench/             # research harness: corpora, diagnostics, scoring, A/B + golden snapshot writers
@@ -329,12 +338,12 @@ public/examples/sheets/  # example icon sheets for the Icon sheet tab (Gemini ou
 Real device-frame PNGs have an opaque black screen, so LogoLab detects the screen region
 (flood-fill from the center), **knocks it out** so the screenshot shows through, renders the
 **bezel on top**, and draws a synthetic notch / punch-hole. Your logo is overlaid as a
-draggable, resizable app icon. Drop in any frame + screenshot and it adapts — tune the
+draggable, resizable app icon. Drop in any frame + screenshot and it adapts. Tune the
 default icon placement in `defaultMockups` (`src/state/store.ts`).
 
 ## 📄 License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
 
 ---
 

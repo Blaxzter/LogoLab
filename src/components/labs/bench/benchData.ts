@@ -238,6 +238,8 @@ export const TOOL_REFS: Record<string, ToolRef> = {
     license: 'GPL-2.0-or-later',
   },
   autotrace: { name: 'AutoTrace', code: 'https://github.com/autotrace/autotrace', license: 'GPL-2.0' },
+  trazor: { name: 'Trazor', code: 'https://github.com/PhenX/Trazor', license: 'FSL-1.1-ALv2' },
+  inkvec: { name: 'Inkvec', code: 'https://github.com/logolabs/inkvec', license: 'Apache-2.0' },
   imagetracer: {
     name: 'ImageTracer.js',
     code: 'https://github.com/jankovicsandras/imagetracerjs',
@@ -338,6 +340,45 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     blurb:
       'The best of a 24-config sweep of ImageTracer.js (colours, line and curve thresholds, path omission, always unstroked) picked on the in-sample corpora only (bench/compare/sweepImagetracer.ts), as VTracer swept is.',
   },
+  'trazor-auto': {
+    label: 'Trazor auto',
+    family: 'external',
+    blurb:
+      'The Trazor engine at commit 090b914 with its own per-image recommendation (analyzeImage, recommendSettings, the profile and then the recommendation over the defaults), which its comparison script describes as what the Trazor studio applies on load.',
+  },
+  'trazor-default': {
+    label: 'Trazor default',
+    family: 'external',
+    blurb: 'The Trazor engine at commit 090b914 with DEFAULT_SETTINGS: colour, classic chain, stacked, 16 colours.',
+  },
+  'trazor-logo': {
+    label: 'Trazor logo',
+    family: 'external',
+    blurb: 'The Trazor engine at commit 090b914 with its own `logo` profile.',
+  },
+  'trazor-centerline': {
+    label: 'Trazor centerline',
+    family: 'external',
+    blurb:
+      'The Trazor engine at commit 090b914 with `mode: centerline` over the defaults, on line corpora only. The engine caps a raster at 1600 px, so a 2048 px case is traced at 1600.',
+  },
+  'inkvec-default': {
+    label: 'Inkvec',
+    family: 'external',
+    blurb:
+      'The Inkvec 0.3.1 command line, built from tag v0.3.1, with no flags (`--mode quality`). This build has no trained restorer, which ships separately and is for damaged input.',
+  },
+  'inkvec-fast': {
+    label: 'Inkvec fast',
+    family: 'external',
+    blurb: 'The Inkvec 0.3.1 command line with `--mode fast`, its Potrace-class fit on the same planar map.',
+  },
+  'inkvec-strokes': {
+    label: 'Inkvec strokes',
+    family: 'external',
+    blurb:
+      'The Inkvec 0.3.1 command line with `--strokes`, on line corpora only: line art as one path and one width each.',
+  },
   'omnisvg-4b': {
     label: 'OmniSVG-4B',
     family: 'external',
@@ -411,7 +452,10 @@ export const FAMILY_LABEL: Record<ToolFamily, string> = {
 
 export interface CorpusInfo {
   label: string
+  /** Ranked on the leaderboard. Not the same as unseen: see `seen`. */
   heldOut: boolean
+  /** Ranked, but the tracer was measured on it during development, so it is not unseen. */
+  seen?: boolean
   blurb: string
   source: string
   sourceUrl?: string
@@ -431,8 +475,9 @@ export const CORPUS_INFO: Record<string, CorpusInfo> = {
   'svgemoji-v0': {
     label: 'SVG-Bench emoji · 100',
     heldOut: true,
+    seen: true,
     blurb:
-      '100 Twemoji from the test split of StarVector’s SVG-Bench `svg-emoji`: fill-only, one per base emoji, picked in sha1 order. LogoLab was never tuned on them. This is the headline corpus for emoji.',
+      '100 Twemoji from the test split of StarVector’s SVG-Bench `svg-emoji`: fill-only, one per base emoji, picked in sha1 order. Held out until 2026-10-19. Tracer changes from 2026-10-20 on were measured on these 100, and some came from what they showed, so they are not unseen. They stay ranked because this is SVG-Bench’s published split; logos-cc0 and strokes-oss are the unseen corpora.',
     source: 'starvector/svg-emoji (Hugging Face), pinned revision + parquet sha256',
     sourceUrl: 'https://huggingface.co/datasets/starvector/svg-emoji',
     license: 'CC-BY 4.0 (Twemoji)',
@@ -473,6 +518,12 @@ export const CORPUS_INFO: Record<string, CorpusInfo> = {
     sourceUrl: 'https://github.com/microsoft/fluentui-emoji',
     license: 'MIT',
   },
+}
+
+/** What a corpus's numbers can stand for, in one label. */
+export function corpusStatus(id: string): 'held out' | 'seen in development' | 'in-sample' {
+  const info = corpusInfo(id)
+  return !info.heldOut ? 'in-sample' : info.seen ? 'seen in development' : 'held out'
 }
 
 export function corpusInfo(id: string): CorpusInfo {

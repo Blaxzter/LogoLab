@@ -565,6 +565,11 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
     '- LogoLab was developed against the in-sample corpora (`heldOut: false`). They are ' +
       'published as data, but no leaderboard is computed on them.',
   )
+  out.push(
+    '- `heldOut: true` in the rows means a corpus is ranked. logos-cc0 and strokes-oss were added after the last ' +
+      'change to the tracer’s output. svgemoji-v0 keeps the flag because it is SVG-Bench’s published split, but tracer ' +
+      'changes from 2026-10-20 on were measured on it, so it is not unseen.',
+  )
   out.push('')
 
   // ── leaderboard ─────────────────────────────────────────────────────────────
@@ -617,7 +622,7 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
     const n = [...lic.values()].reduce((a, b) => a + b, 0)
     const held = rows.find((r) => r.corpus === corpus)?.heldOut ?? info.heldOut
     out.push(
-      `| ${corpus} | ${held ? 'yes' : 'no (in-sample)'} | ${n} | ${[...lic.entries()].map(([l, k]) => `${l} (${k})`).join(', ')} | ` +
+      `| ${corpus} | ${held ? (info.seen ? 'no, seen in development (still ranked)' : 'yes') : 'no (in-sample)'} | ${n} | ${[...lic.entries()].map(([l, k]) => `${l} (${k})`).join(', ')} | ` +
         `${pub?.source ?? info.source} | ${(info.blurb || pub?.sampling || '').replace(/\|/g, '\\|')} |`,
     )
   }
@@ -682,7 +687,7 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   out.push('```bash')
   out.push('pnpm install')
   out.push(
-    'bash bench/compare/py/setup.sh          # VTracer, Potrace, AutoTrace, ImageTracer, model venvs, all pinned',
+    'bash bench/compare/py/setup.sh          # VTracer, Potrace, AutoTrace, ImageTracer, Trazor, Inkvec, model venvs, all pinned',
   )
   out.push(
     '.bench-tools/starvector-venv/Scripts/python.exe -I bench/compare/py/fetch_svgbench.py   # svg-emoji test split',

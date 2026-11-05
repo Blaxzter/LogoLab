@@ -4,7 +4,7 @@ import { ChevronDown } from '../../ui/icons'
 import { Tooltip } from '../../ui/Tooltip'
 import { Badge } from '../CaseRow'
 import { LabSelect } from '../LabPage'
-import { HEADLINE_TOOL, corpusInfo, toolInfo } from './benchData'
+import { HEADLINE_TOOL, corpusInfo, corpusStatus, toolInfo } from './benchData'
 import { HUB_PAGE, LOCAL_SOURCE, sourceUrl, type BenchSource } from './benchSource'
 
 // The small pieces every /labs/bench tab shares.
@@ -108,12 +108,17 @@ export function CorpusLine({ corpus, n }: { corpus: string; n: number }) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <b className="text-ink">{info.label}</b>
-      <Badge tone={info.heldOut ? 'ok' : 'warn'}>{info.heldOut ? 'held out' : 'in-sample'}</Badge>
+      <Badge tone={corpusStatus(corpus) === 'held out' ? 'ok' : 'warn'}>{corpusStatus(corpus)}</Badge>
       <span className="text-faint">
         {n} cases · {info.license}
       </span>
       {!info.heldOut && (
         <span className="text-warn">LogoLab was developed against these: read them as explanation, not evidence.</span>
+      )}
+      {info.seen && (
+        <span className="text-warn">
+          LogoLab’s tracer was measured on these during development, so they are not unseen.
+        </span>
       )}
     </div>
   )

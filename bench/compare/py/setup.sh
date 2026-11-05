@@ -35,6 +35,11 @@ OMNISVG_MODEL=OmniSVG/OmniSVG1.1_4B
 OMNISVG_REV=117d4c4541839e02943554fe71c0a0d54fcef819
 QWEN_VL_MODEL=Qwen/Qwen2.5-VL-3B-Instruct
 QWEN_VL_REV=66285546d2b821cf421d4f5eb2576359d3770cd3
+TRAZOR_GIT=https://github.com/PhenX/Trazor.git
+TRAZOR_SHA=090b914086c5de2027b20c08e2b48c73e0e69c25
+ESBUILD_VERSION=0.25.10
+INKVEC_GIT=https://github.com/logolabs/inkvec.git
+INKVEC_SHA=063398552190e9e8a1077338d6cbc4e902c387ed   # tag v0.3.1
 IMAGETRACER_VERSION=1.2.6
 IMAGETRACER_INTEGRITY=sha512-LKJlnKmXFzDdh6IZtXTyBxXcCLTAkwgKYS+NMiPXiXVnlTLjQC8fq7U89laUSgHtypJB3TdMMDK4ecG5NI/Cgw==
 
@@ -73,6 +78,32 @@ if [ ! -f "$T/imagetracer/node_modules/imagetracerjs/imagetracer_v$IMAGETRACER_V
   got=$(npm view "imagetracerjs@$IMAGETRACER_VERSION" dist.integrity)
   [ "$got" = "$IMAGETRACER_INTEGRITY" ] || { echo "imagetracerjs integrity mismatch: $got" >&2; exit 1; }
   npm install --no-save --ignore-scripts --prefix "$T/imagetracer" "imagetracerjs@$IMAGETRACER_VERSION"
+fi
+
+# ── Trazor (FSL-1.1-ALv2): its packages export TypeScript and are not on npm, so the engine is
+#    bundled into one module that adapters/trazor.ts imports in-process.
+if [ ! -f "$T/trazor/trazor.mjs" ]; then
+  [ -d "$T/trazor/src/.git" ] || git clone "$TRAZOR_GIT" "$T/trazor/src"
+  git -C "$T/trazor/src" checkout --quiet "$TRAZOR_SHA"
+  npm install --no-save --ignore-scripts --prefix "$T/trazor/build" "esbuild@$ESBUILD_VERSION"
+  cat > "$T/trazor/entry.mjs" <<'TRAZOR_ENTRY'
+export { vectorize } from '@trazor/engine'
+export { analyzeImage, recommendSettings } from '@trazor/assist'
+export { DEFAULT_SETTINGS, getProfile, normalizeSettings } from '@trazor/core'
+export { loadBandKernel } from '@trazor/trace'
+TRAZOR_ENTRY
+  P="$T/trazor/src/packages"
+  alias=()
+  for pkg in engine assist core trace raster svg ml; do alias+=("--alias:@trazor/$pkg=./$P/$pkg/src/index.ts"); done
+  "$T/trazor/build/node_modules/.bin/esbuild" "$T/trazor/entry.mjs" --bundle --format=esm --platform=node --target=node22 \
+    --outfile="$T/trazor/trazor.mjs" "${alias[@]}"
+fi
+
+# ── Inkvec (Apache-2.0): the command line from the pinned tag, without the optional restorer.
+if [ ! -f "$T/inkvec/target/release/inkvec.exe" ] && [ ! -f "$T/inkvec/target/release/inkvec" ]; then
+  [ -d "$T/inkvec/src/.git" ] || git clone "$INKVEC_GIT" "$T/inkvec/src"
+  git -C "$T/inkvec/src" checkout --quiet "$INKVEC_SHA"
+  CARGO_TARGET_DIR="$T/inkvec/target" cargo build --release --locked -p inkvec-cli --manifest-path "$T/inkvec/src/Cargo.toml"
 fi
 
 # ── StarVector source + venv (requirements.lock is `pip freeze` of the venv the run used) ────

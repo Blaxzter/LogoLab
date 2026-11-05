@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { LabCheck, LabPage, LabSelect } from '../LabPage'
 import { useLabState } from '../useLabState'
 import { useLabSearch } from '../useLabSearch'
-import { HEADLINE_TOOL, corpusInfo, toolInfo, type BenchResults, type RunInfo, type ToolFamily } from './benchData'
+import {
+  HEADLINE_TOOL,
+  corpusInfo,
+  corpusStatus,
+  toolInfo,
+  type BenchResults,
+  type RunInfo,
+  type ToolFamily,
+} from './benchData'
 import { Article } from './Article'
 import { CasesTab, type CaseMode } from './CasesTab'
 import { CompareTab } from './CompareTab'
@@ -192,7 +200,7 @@ export default function BenchLab() {
   const ready = available && data && corpus
   const status =
     tab === 'overview'
-      ? `A frozen summary of run ${SHOWCASE.run}: ${SHOWCASE.cases} held-out emoji, ${SHOWCASE.summary.length} tools.${available ? '' : ' The other tabs read a benchmark run.'}`
+      ? `A frozen summary of run ${SHOWCASE.run}: ${SHOWCASE.cases} SVG-Bench emoji, ${SHOWCASE.summary.length} tools.${available ? '' : ' The other tabs read a benchmark run.'}`
       : runsError
         ? `Could not load benchmark results: ${runsError}`
         : !runs
@@ -247,11 +255,13 @@ export default function BenchLab() {
             setPage(0)
             setView({ corpus: v })
           }}
-          hint="Held-out corpora are the evidence; in-sample ones (the tracer was developed against them) explain it."
+          hint="Held-out corpora are the evidence; the others (the tracer was measured or developed on them) explain it."
           options={corpora.map((c) => ({
             value: c,
             label: corpusInfo(c).label,
-            group: corpusInfo(c).heldOut ? 'Held out' : 'In-sample',
+            group: { 'held out': 'Held out', 'seen in development': 'Seen in development', 'in-sample': 'In-sample' }[
+              corpusStatus(c)
+            ],
           }))}
         />
       )}

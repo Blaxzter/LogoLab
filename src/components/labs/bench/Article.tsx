@@ -196,10 +196,11 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
           <MeanRankBoard />
         </Section>
 
-        <Section title={`Results on ${data.cases} held-out emoji`}>
+        <Section title={`Results on ${data.cases} SVG-Bench emoji`}>
           <p>
             Medians over {data.cases} Twemoji from SVG-Bench’s own <code>svg-emoji</code> test split, chosen by a fixed
-            rule (fill-only, one per base emoji, in hash order). LogoLab was never tuned on them.
+            rule (fill-only, one per base emoji, in hash order). They were held out until 2026-10-19; tracer changes
+            from 2026-10-20 on were measured on them, so they are no longer unseen.
           </p>
           <ResultsTable />
           <PairedNote />

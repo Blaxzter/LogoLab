@@ -24,6 +24,8 @@
 //   potrace (mono lane), potrace-bin (every case) potrace-1.16.win64.zip → .bench-tools/potrace/
 //   autotrace-default, autotrace-swept             AutoTrace 0.40.0 win64 → .bench-tools/autotrace/ (adapters/external.ts)
 //   imagetracer-default, -fills, -swept           npm imagetracerjs@1.2.6 → .bench-tools/imagetracer/, in-process (adapters/imagetracer.ts)
+//   trazor-auto, -default, -logo, -centerline     PhenX/Trazor pinned, bundled → .bench-tools/trazor/, in-process (adapters/trazor.ts)
+//   inkvec-default, -fast, -strokes               logolabs/inkvec pinned, built → .bench-tools/inkvec/ (adapters/inkvec.ts)
 //   starvector-1b                                 .bench-tools/starvector-venv + HF weights (adapters/starvector.ts)
 //   omnisvg-4b                                    .bench-tools/omnisvg-venv + omnisvg-src + HF weights (adapters/omnisvg.ts)
 //   logolab-strokes, logolab-outline              LINE corpora only: traceIcon mode=mono with / without `strokes`
@@ -54,8 +56,9 @@
 //
 // --progress-from <commit> also takes what a clean-tree run at <commit> saved: for a change
 // to the BENCH that cannot move a number (v8 needed one: the score loop never yielded, so
-// resvg's memory was never freed — render.ts releaseRenders). Refused when the tracer (src/)
-// differs from <commit>; the bench files that differ are printed and recorded in meta.
+// resvg's memory was never freed — render.ts releaseRenders). Refused when the tracer (src/,
+// without the site's src/components/) differs from <commit>; the bench files that differ are
+// printed and recorded in meta.
 //
 // --shard i/n traces and scores only every n-th case (from the i-th, 0-based), saves its rows
 // as progress and stops: no SVG-Bench, no results.json. n of them side by side use n cores;
@@ -107,6 +110,8 @@ import {
 } from './adapters/external.ts'
 import { omnisvg, omnisvgProvenance } from './adapters/omnisvg.ts'
 import { imagetracerDefault, imagetracerFills, imagetracerSwept } from './adapters/imagetracer.ts'
+import { trazorAuto, trazorCenterline, trazorDefault, trazorLogo } from './adapters/trazor.ts'
+import { inkvecDefault, inkvecFast, inkvecStrokes } from './adapters/inkvec.ts'
 import { starvector, starvectorProvenance } from './adapters/starvector.ts'
 import {
   corpusKind,
@@ -136,6 +141,13 @@ const ALL_TOOLS: TracerAdapter[] = [
   imagetracerDefault,
   imagetracerFills,
   imagetracerSwept,
+  trazorAuto,
+  trazorDefault,
+  trazorLogo,
+  trazorCenterline,
+  inkvecDefault,
+  inkvecFast,
+  inkvecStrokes,
   starvector,
   omnisvg,
   potrace,
@@ -212,8 +224,10 @@ async function main(): Promise<void> {
   const git = (...a: string[]): string => execFileSync('git', a, { cwd: REPO, encoding: 'utf8' })
   const carried = (list('--progress-from') ?? []).map((given) => {
     const rev = git('rev-parse', '--short', given).trim()
-    const src = git('diff', '--name-only', rev, '--', 'src').split('\n').filter(Boolean)
-    const untracked = prov.status.filter((l) => l.startsWith('?? src/'))
+    // src/components/ is the site: no trace or score imports it for a number (benchData.ts only
+    // arranges rows into reports), and its wording changes between runs.
+    const src = git('diff', '--name-only', rev, '--', 'src', ':(exclude)src/components').split('\n').filter(Boolean)
+    const untracked = prov.status.filter((l) => l.startsWith('?? src/') && !l.startsWith('?? src/components/'))
     if (src.length || untracked.length)
       throw new Error(`--progress-from ${rev}: the tracer differs (${[...src, ...untracked].join(', ')})`)
     const benchChanged = git('diff', '--name-only', rev, '--', 'bench').split('\n').filter(Boolean)

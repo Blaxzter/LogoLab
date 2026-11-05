@@ -31,6 +31,7 @@ import {
   leaderboard,
   type BenchRow,
   type Leaderboard,
+  corpusInfo,
 } from '../../src/components/labs/bench/benchData.ts'
 
 /** Held-out corpora that lead the summary, in this order. */
@@ -183,7 +184,13 @@ export function leaderboardMarkdown(rows: ScoreRow[]): string[] {
   const br = rows as unknown as BenchRow[]
   const corpora = headlineCorpora(br)
   if (!corpora.length) return out
-  out.push('## Leaderboard: mean rank (held-out corpora only)')
+  out.push('## Leaderboard: mean rank')
+  out.push('')
+  out.push(
+    'No in-sample corpus is ranked. logos-cc0 and strokes-oss were added after the last change to the tracer’s output, ' +
+      'so they are unseen. svgemoji-v0 is ranked as SVG-Bench’s published split, but the tracer was measured on it during ' +
+      'development from 2026-10-20 on, so its table is not evidence from unseen data.',
+  )
   out.push('')
   out.push(
     'Per case and per metric every tool is ranked (1 = best; ties share the average rank), and a tool’s mean rank is ' +
@@ -340,7 +347,7 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
   const corpora = corpusOrder(rows)
   if (corpora.includes('svgemoji-v0'))
     out.push(
-      "- Scope: svgemoji-v0 is held out from LogoLab's development, but it is selected inside LogoLab's niche: Twemoji " +
+      "- Scope: svgemoji-v0 was measured on during LogoLab's development from 2026-10-20 on, and it is selected inside LogoLab's niche: Twemoji " +
         'only, fill-only, no gradients / clips / strokes (fetch_svgbench.py). The full 668-row split is a separate run.',
     )
   if (corpora.includes('logos-cc0'))
@@ -365,11 +372,13 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
       )
       continue
     }
-    const held = cr[0]?.heldOut
-      ? HEADLINE_CORPORA.includes(corpus)
-        ? 'held out, headline'
-        : 'held out'
-      : 'in-sample (development)'
+    const held = !cr[0]?.heldOut
+      ? 'in-sample (development)'
+      : corpusInfo(corpus).seen
+        ? 'ranked, seen in development'
+        : HEADLINE_CORPORA.includes(corpus)
+          ? 'held out, headline'
+          : 'held out'
     const cases = [...new Set(cr.map((r) => r.caseId))]
     out.push(`## ${corpus}: ${cases.length} cases, ${held}`)
     out.push('')
