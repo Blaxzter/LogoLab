@@ -41,7 +41,13 @@ export function SvgArt({
   const html = useMemo(() => (svg ? withWire(svg) : ''), [svg])
   return (
     <>
-      {html && <RawArt html={html} />}
+      {/* Inline, currentColor would be the page's text colour: stroke icons drawn near-white in
+          dark mode. The scorer's rasterizer resolves it to black, so the picture does too. */}
+      {html && (
+        <div className="contents" style={{ color: '#000' }}>
+          <RawArt html={html} />
+        </div>
+      )}
       {breaks && breaks.length > 0 && w && h && <Kinks w={w} h={h} breaks={breaks} dirs={dirs} />}
     </>
   )

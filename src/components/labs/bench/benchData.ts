@@ -437,6 +437,16 @@ export const CORPUS_INFO: Record<string, CorpusInfo> = {
     sourceUrl: 'https://huggingface.co/datasets/starvector/svg-emoji',
     license: 'CC-BY 4.0 (Twemoji)',
   },
+  'strokes-oss': {
+    label: 'Stroke icons · 201',
+    heldOut: true,
+    // hfCard.ts prints this on the dataset card, so it stays the card's sampling text word for word.
+    blurb:
+      'Per set, ranked by sha1(<set>/<name>), the first 67 eligible icons (strokesOss.ts); in-sample Lucide drawings, duplicates and unreadable icons are excluded with their reason in the manifest.',
+    source:
+      'Lucide, Tabler (outline) and Feather icon sets, pinned npm releases + per-file sha256 (bench/compare/manifests/strokes-oss.json)',
+    license: 'ISC (Lucide; portions MIT) / MIT (Tabler, Feather)',
+  },
   svgemoji: {
     label: 'SVG-Bench emoji · all 668',
     heldOut: true,

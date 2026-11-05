@@ -7,10 +7,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  CORPUS_INFO,
   NEMENYI_Q,
   RANK_METRICS,
   cdGroups,
   chi2Sf,
+  corpusInfo,
   corpusKind,
   fSf,
   friedman,
@@ -25,6 +27,7 @@ import {
   type BenchRow,
   type RankMetric,
 } from '../src/components/labs/bench/benchData.ts'
+import { LEADERBOARD } from '../src/components/labs/bench/leaderboard.generated.ts'
 
 const row = (tool: string, c: string, extra: Record<string, unknown> = {}): BenchRow => ({
   tool,
@@ -150,6 +153,17 @@ test('ablation rows are never in the headline; the ablation view has them; a par
     abl.tools.map((t) => t.tool),
     ['vtracer-swept', 'logolab-gate', 'logolab-auto', 'vtracer-default'],
   )
+})
+
+test('a corpus on the leaderboard is held out on the site too, not by the unknown-corpus fallback', () => {
+  // The fallback reads "in-sample: explanation, not evidence", which strokes-oss showed while its
+  // rows and the dataset card said held out.
+  const corpora = new Set(LEADERBOARD.boards.map((b) => b.corpus))
+  assert.ok(corpora.size > 0)
+  for (const c of corpora) {
+    assert.ok(CORPUS_INFO[c], `${c} has no CORPUS_INFO entry`)
+    assert.equal(corpusInfo(c).heldOut, true, c)
+  }
 })
 
 test('corpus kind and metric sets are explicit', () => {
