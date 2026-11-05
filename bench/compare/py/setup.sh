@@ -92,11 +92,10 @@ export { analyzeImage, recommendSettings } from '@trazor/assist'
 export { DEFAULT_SETTINGS, getProfile, normalizeSettings } from '@trazor/core'
 export { loadBandKernel } from '@trazor/trace'
 TRAZOR_ENTRY
-  P="$T/trazor/src/packages"
   alias=()
-  for pkg in engine assist core trace raster svg ml; do alias+=("--alias:@trazor/$pkg=./$P/$pkg/src/index.ts"); done
-  "$T/trazor/build/node_modules/.bin/esbuild" "$T/trazor/entry.mjs" --bundle --format=esm --platform=node --target=node22 \
-    --outfile="$T/trazor/trazor.mjs" "${alias[@]}"
+  for pkg in engine assist core trace raster svg ml; do alias+=("--alias:@trazor/$pkg=./src/packages/$pkg/src/index.ts"); done
+  (cd "$T/trazor" && build/node_modules/.bin/esbuild entry.mjs --bundle --format=esm --platform=node --target=node22 \
+    --outfile=trazor.mjs "${alias[@]}")
 fi
 
 # ── Inkvec (Apache-2.0): the command line from the pinned tag, without the optional restorer.

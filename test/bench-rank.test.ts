@@ -13,6 +13,7 @@ import {
   cdGroups,
   chi2Sf,
   corpusInfo,
+  corpusStatus,
   corpusKind,
   fSf,
   friedman,
@@ -164,6 +165,15 @@ test('a corpus on the leaderboard is held out on the site too, not by the unknow
     assert.ok(CORPUS_INFO[c], `${c} has no CORPUS_INFO entry`)
     assert.equal(corpusInfo(c).heldOut, true, c)
   }
+})
+
+test('a ranked corpus the tracer was measured on is not called held out', () => {
+  // svgemoji-v0 said "never tuned" while tracer commits from 2026-10-20 on measured themselves on it.
+  assert.equal(corpusStatus('svgemoji-v0'), 'seen in development')
+  assert.equal(corpusStatus('logos-cc0'), 'held out')
+  assert.equal(corpusStatus('strokes-oss'), 'held out')
+  assert.equal(corpusStatus('truth0'), 'in-sample')
+  assert.doesNotMatch(corpusInfo('svgemoji-v0').blurb, /never tuned/)
 })
 
 test('corpus kind and metric sets are explicit', () => {
