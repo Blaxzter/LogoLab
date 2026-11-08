@@ -4,7 +4,7 @@ import type { PaletteColor } from '../types'
 import type { MumfordShahResult } from '../mumfordShah.ts'
 import type { RegionSamples } from '../gradient.ts'
 import type { SegmentResult } from './options.ts'
-import { clamp255, strideSamples } from './samples.ts'
+import { clamp255, medianColour, strideSamples } from './samples.ts'
 
 /**
  * Build a SegmentResult from a per-pixel `groupId` labelling (used after marker
@@ -76,12 +76,18 @@ export function assembleFromGroupId(
   order.forEach((g, pos) => {
     rank[g] = pos
   })
-  const palette: PaletteColor[] = order.map((g) => {
-    const c = cnt[g] || 1
-    return { r: clamp255(sumR[g] / c), g: clamp255(sumG[g] / c), b: clamp255(sumB[g] / c) }
-  })
   const counts = order.map((g) => cnt[g])
   const regionSamples = order.map((g) => strideSamples(xs[g], ys[g], rs[g], gs[g], bs[g], sampleCap))
+  const palette: PaletteColor[] = order.map((g, pos) => {
+    const c = cnt[g] || 1
+    return (
+      medianColour(regionSamples[pos]) ?? {
+        r: clamp255(sumR[g] / c),
+        g: clamp255(sumG[g] / c),
+        b: clamp255(sumB[g] / c),
+      }
+    )
+  })
   const labels = new Int32Array(n)
   for (let i = 0; i < n; i++) {
     const g = groupId[i]

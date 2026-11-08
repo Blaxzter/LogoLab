@@ -11,7 +11,7 @@
 import { docStats, serializeDoc } from '../lib/path/model.ts'
 import { defaultInset, normalizeDoc, type NormalizeSpec } from '../lib/path/normalize.ts'
 import { estimateBackground } from '../lib/sheet/detect.ts'
-import { planTileTrace, tileTraceInput, traceTile, type TileTrace } from '../lib/sheet/traceTile.ts'
+import { planTileTrace, tileTraceInput, traceTile, type TilePlan, type TileTrace } from '../lib/sheet/traceTile.ts'
 import { rasterCapFor } from '../lib/traceInput/traceCaps.ts'
 import { PRODUCT_VECTORIZE_OPTIONS } from '../lib/trace/index.ts'
 import type { EditableDoc } from '../lib/path/types'
@@ -206,7 +206,7 @@ export async function planTrace(
     rasterCap,
     traced: scaled,
     normalized,
-    summary: summarize(src, plan.inks, opts, plan.scale, scaled, recolor, normalized),
+    summary: summarize(src, plan.inks, plan.colourBecause, opts, plan.scale, scaled, recolor, normalized),
   }
   return { plan: report, opts, pixels, recolor }
 }
@@ -224,6 +224,7 @@ export function inkPaint(ink: string | undefined): string | null {
 function summarize(
   src: LoadedSource,
   inks: number,
+  colourBecause: TilePlan['colourBecause'],
   opts: VectorizeOptions,
   scale: number,
   traced: { width: number; height: number },
@@ -233,10 +234,10 @@ function summarize(
   const bits: string[] = []
   bits.push(
     opts.mode === 'mono'
-      ? `mono (${inks === 1 ? 'one ink' : `${inks} inks`} on paper${opts.invert ? ', light-on-dark so the cut is inverted' : ''}, cut at ${opts.threshold}${opts.centerline ? ', traced as centreline strokes with a measured width' : ''}${ink ? `, painted ${ink}` : ''})`
+      ? `mono (${inksPhrase(inks)} on paper${opts.invert ? ', light-on-dark so the cut is inverted' : ''}, cut at ${opts.threshold}${opts.centerline ? ', traced as centreline strokes with a measured width' : ''}${ink ? `, painted ${ink}` : ''})`
       : opts.centerline
-        ? `colour (${inks} inks)${req_strokes_note(opts)}`
-        : `colour (${inks} inks), gradients ${opts.gradients === false ? 'off — flat fills' : 'on — real SVG ramps'}`,
+        ? `colour (${colourWhy(inks, colourBecause)})${req_strokes_note(opts)}`
+        : `colour (${colourWhy(inks, colourBecause)}), gradients ${opts.gradients === false ? 'off — flat fills' : 'on — real SVG ramps'}`,
   )
   bits.push(
     `traced at ${traced.width}×${traced.height}${scale > 1 ? ` (source enlarged ×${scale} for sub-pixel edges)` : ''}`,
@@ -244,6 +245,15 @@ function summarize(
   if (normalized) bits.push(`fitted to a ${normalized.size}×${normalized.size} viewBox, inset ${normalized.inset}`)
   if (src.kind === 'svg') bits.push('source is already vector — it was rasterized and re-traced')
   return bits.join('; ')
+}
+
+const inksPhrase = (inks: number): string => (inks === 1 ? 'one ink' : `${inks} inks`)
+
+/** What the colour summary says the probe saw: the ink count, and why one ink is still colour. */
+function colourWhy(inks: number, because: TilePlan['colourBecause']): string {
+  if (because === 'ramps') return 'one ink, but it holds gradients one flat ink would lose'
+  if (because === 'third-colour') return 'one ink, plus a third colour that ink and paper alone cannot paint'
+  return inksPhrase(inks)
 }
 
 /** Colour line art traced as strokes: the lines come back in their own inks. */

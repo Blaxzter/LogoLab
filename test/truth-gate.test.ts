@@ -127,12 +127,8 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // renders as nothing) — a passing gate here does not prove the case RENDERS right; the
   // area guard in planarAssemble now prevents that collapse, but judge renders too.
 
-  // Junction pulls (§42.6, 2026-10-19). tangentBreaks used to skip every traced node where
-  // three paths meet or two authored shapes cross; it now counts one whose OWN outline runs
-  // along a single visible, smooth authored edge through the junction, and this case
-  // carries such pulls — the defect was there all along, the gate was blind to it. border-cross
-  // (its blue bar kinked 21–42°) was listed with it and came off with §42.7's through pairs.
-  'smooth-radii': 'tangent breaks 14 > 12 — two 66° pulls where the black tip meets the red, on a curve drawn smooth',
+  // smooth-radii (two 66° junction pulls, §42.6) came off with the boundary solve, which moves
+  // the junction and its handles onto the raster together.
 
   // --- tier 1 (Fluent Emoji) ------------------------------------------------------------
   // The gradient-banding defect: Fluent stacks several translucent gradients on ONE path, and

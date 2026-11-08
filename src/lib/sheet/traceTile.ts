@@ -15,7 +15,7 @@ import type { TraceProgress } from '../trace/types'
 import type { EditableDoc } from '../path/types'
 import type { VectorizeOptions } from '../../types'
 import { downscaleImageData, toImageData, upscaleImageData } from './crop.ts'
-import { planTileBase, type SheetColorMode } from './plan.ts'
+import { planTileBase, type SheetColorMode, type TileBasePlan } from './plan.ts'
 import type { ImageDataLike, SheetBackground } from './types'
 
 export interface TileTrace {
@@ -49,6 +49,8 @@ export interface TilePlan {
   recolor: string | null
   /** What the ink probe saw — surfaced so the UI can explain the choice. */
   inks: number
+  /** Why one ink still traces in colour (`InkModePlan.colourBecause`). */
+  colourBecause: TileBasePlan['colourBecause']
   /** Enlarge the crop by this factor before tracing. */
   scale: number
   /** The thin ink's thickness in crop px, when the stroke rule measured it. */
@@ -74,6 +76,7 @@ export function planTileTrace(
     opts: plan.color && settings.gradientMode === 'auto' ? seedGradients(pixels, plan.opts) : plan.opts,
     recolor: plan.recolor,
     inks: plan.inks,
+    colourBecause: plan.colourBecause,
     scale: plan.scale,
     thickness: plan.thickness,
   }

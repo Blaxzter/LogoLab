@@ -33,6 +33,17 @@ export function strideSamples(
   return { xs: X, ys: Y, rs: R, gs: Gc, bs: B, n: k }
 }
 
+/**
+ * The per-channel median of a region's smooth samples, or null with none. A region's solid fill:
+ * the mean takes the flooded anti-aliased rim along, so a flat logo's colours came back about
+ * half a ΔE off across their whole area.
+ */
+export function medianColour(s: RegionSamples): { r: number; g: number; b: number } | null {
+  if (s.n === 0) return null
+  const mid = (c: Float64Array): number => clamp255(Float64Array.from(c.subarray(0, s.n)).sort()[s.n >> 1])
+  return { r: mid(s.rs), g: mid(s.gs), b: mid(s.bs) }
+}
+
 /** Concatenate sample sets then stride to `cap` (deterministic). */
 export function strideConcat(list: RegionSamples[], cap: number): RegionSamples {
   const all = concatSamples(list)

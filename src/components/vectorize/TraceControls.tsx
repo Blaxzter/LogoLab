@@ -97,6 +97,9 @@ function readingOf(p: InkModePlan): string {
     return `one ink${p.invert ? ', lighter than the background' : ''} → Mono, cut at ${p.threshold}${
       p.hairlines && p.hairlines.cut !== p.hairlines.from ? ` (raised from ${p.hairlines.from} to keep hairlines)` : ''
     }${p.invert ? ' and inverted' : ''}${p.recolor ? `, painted ${p.recolor}` : ''}.`
+  if (p.colourBecause === 'ramps') return 'one ink, but it holds gradients that one flat ink would lose → Color.'
+  if (p.colourBecause === 'third-colour')
+    return 'one ink, plus a third colour that ink and paper alone cannot paint → Color.'
   // One ink too close to the background in luminance for a cut (common on transparency).
   return p.inks === 1 ? 'one ink, too close to the background to cut → Color.' : `${p.inks} inks → Color.`
 }

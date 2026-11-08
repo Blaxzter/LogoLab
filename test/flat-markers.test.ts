@@ -16,8 +16,8 @@ import type { EditableDoc, PathItem } from '../src/lib/path/types.ts'
 
 ensureImageData()
 
-/** Two flat halves (blue | red) joined by a smooth transition — the case the
- *  field-merge otherwise fuses into one fake gradient region. */
+/** Two flat halves (blue | red) joined by a steep 10 px transition. The field merge used to fuse
+ *  them into one fake gradient; it now keeps the two flats, which is what a marker was for. */
 function twoFlats(w = 96, h = 64, ramp = 10): { width: number; height: number; data: Uint8ClampedArray } {
   const data = new Uint8ClampedArray(w * h * 4)
   const A = [40, 90, 200]
@@ -89,34 +89,32 @@ test('flat-markers: segmenter exposes preMergeLabels (fine regions ≥ final reg
   const seg = segmentImage(img, { ...DEFAULT_SEGMENT_OPTIONS })
   assert.ok(seg.preMergeLabels instanceof Int32Array)
   assert.equal(seg.preMergeLabels.length, img.width * img.height)
-  // The fused-gradient case: final has 1 macro region, pre-merge has the two
-  // flats (+ transition bands) before the field merge.
-  assert.equal(distinct(seg.labels), 1, 'gradient merge fuses to one macro region')
-  assert.ok(distinct(seg.preMergeLabels) >= 2, 'pre-merge keeps the flats separate')
+  // Two flats and the bands of the transition before the merge; the two flats after it.
+  assert.equal(distinct(seg.labels), 2, 'two flats come back as two regions, not one fake gradient')
+  assert.ok(distinct(seg.preMergeLabels) >= distinct(seg.labels), 'fine regions ≥ final regions')
 })
 
 test('flat-markers: a single flat marker excludes its segment from the field merge', () => {
-  const img = twoFlats()
+  const img = redOnWhite()
   assert.equal(distinct(segmentImage(img, { ...DEFAULT_SEGMENT_OPTIONS }).labels), 1, 'fuses to one region by default')
-  const seg = segmentImage(img, { ...DEFAULT_SEGMENT_OPTIONS, flatMarkers: [{ x: 0.2, y: 0.5 }] })
+  const seg = segmentImage(img, { ...DEFAULT_SEGMENT_OPTIONS, flatMarkers: [{ x: 0.5, y: 0.5 }] })
   assert.ok(distinct(seg.labels) >= 2, `marked section excluded, got ${distinct(seg.labels)} region(s)`)
 })
 
 // --- end-to-end (traceImage) ------------------------------------------------
 
-test('flat-markers: a single flat marker carves its section out and paints it solid', async () => {
+test('flat-markers: two flats joined by a steep ramp stay two flats; a marker pins one solid', async () => {
   const img = twoFlats() as unknown as ImageData
-  const without = await traceImage(img, base)
-  // Baseline: one fused region carrying a gradient.
-  assert.equal(pathCount(without), 1)
-  assert.ok(gradientCount(without) >= 1)
-  // One flat marker on the blue half → it is excluded from the merge and becomes its
-  // own SOLID region; the rest stays. The whole region no longer paints as one mean.
-  const one = await traceImage(img, { ...base, markers: [{ x: 0.2, y: 0.5, flat: true }] })
-  assert.equal(pathCount(one), 2, 'marked section carved out')
-  assert.ok(pathCount(one) - gradientCount(one) >= 1, 'the marked side is painted flat')
-  // Geometry stays clean (a simple two-region split, not a jagged carve).
-  assert.ok(totalNodes(one) < 40, `clean geometry, got ${totalNodes(one)} nodes`)
+  // A side may carry the half of the transition it holds as a ramp at its rim: that is the
+  // picture, not a fake gradient across both colours.
+  const plain = await traceImage(img, base)
+  assert.equal(pathCount(plain), 2, 'the two flats')
+  assert.ok(totalNodes(plain) < 40, `clean geometry, got ${totalNodes(plain)} nodes`)
+  // Pinned flat, the blue side gives its rim back: the transition becomes a strip of its own.
+  const marked = await traceImage(img, { ...base, markers: [{ x: 0.2, y: 0.5, flat: true }] })
+  assert.ok(pathCount(marked) <= 3, `at most the strip added, got ${pathCount(marked)}`)
+  assert.ok(pathCount(marked) - gradientCount(marked) >= 2, 'both flats painted solid')
+  assert.ok(totalNodes(marked) < 40, `clean geometry, got ${totalNodes(marked)} nodes`)
 })
 
 test('flat-markers: recovers a flat colour the merger fused into a fake gradient', async () => {

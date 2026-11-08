@@ -81,7 +81,9 @@ test('seeded split puts the boundary on the colour edge (no ragged slivers)', ()
   const W = 64
   const H = 40
   const left: [number, number, number] = [120, 130, 145]
-  const right: [number, number, number] = [126, 124, 150] // ΔE ≈ 7 < τ_s = 10
+  // Within τ_s = 10 and under the 6-level step the segmenter reads as an edge between two
+  // pixels (segment.ts EDGE_STEP), so nothing but a marker can tell the halves apart.
+  const right: [number, number, number] = [124, 126, 149]
   const scene = img(W, H, (x) => (x < W / 2 ? left : right))
   assert.equal(macroCount(segmentImage(scene)), 1, 'the two close halves fuse into one region by default')
   const seg = segmentImage(

@@ -1,7 +1,7 @@
 // Pure per-tile trace planning. Gradient seeding on top of this lives in the
 // browser-only traceTile.ts.
 
-import { decideInkMode, type InkColorMode } from '../traceInput/ink.ts'
+import { decideInkMode, type InkColorMode, type InkModePlan } from '../traceInput/ink.ts'
 import { monoTraceScale, traceScale } from '../traceInput/traceCaps.ts'
 import type { ImageDataLike, SheetBackground } from './types'
 import type { VectorizeOptions } from '../../types'
@@ -34,6 +34,8 @@ export interface TileBasePlan {
   recolor: string | null
   /** What the ink probe saw — surfaced so the UI can explain the choice. */
   inks: number
+  /** Why one ink still traces in colour (`InkModePlan.colourBecause`). */
+  colourBecause: InkModePlan['colourBecause']
   /** True when the caller should still seed `gradients` from a probe. */
   color: boolean
   /** Enlarge the crop by this integer factor before tracing (see `traceScale`). */
@@ -81,9 +83,18 @@ export function planTileBase(
         opts: { ...opts, mode: 'mono', threshold: ink.threshold, invert: ink.invert },
         recolor: ink.recolor,
         inks: ink.inks,
+        colourBecause: null,
         color: false,
         scale,
         thickness,
       }
-    : { opts: { ...opts, mode: 'color' }, recolor: null, inks: ink.inks, color: true, scale, thickness }
+    : {
+        opts: { ...opts, mode: 'color' },
+        recolor: null,
+        inks: ink.inks,
+        colourBecause: ink.colourBecause,
+        color: true,
+        scale,
+        thickness,
+      }
 }

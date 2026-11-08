@@ -39,7 +39,7 @@ import {
   type SegmentResult,
   type MergePairRecord,
 } from './segment/options.ts'
-import { clamp255, strideSamples, strideConcat } from './segment/samples.ts'
+import { clamp255, medianColour, strideSamples, strideConcat } from './segment/samples.ts'
 import { nearestSmoothPixel, markerControlledSplit } from './segment/markers.ts'
 import { mergeSmallRegions } from './segment/smallRegions.ts'
 import { assembleFromGroupId, fallbackSingleRegion } from './segment/assemble.ts'
@@ -65,6 +65,13 @@ const NO_PROTECTED: ReadonlySet<number> = new Set<number>()
  * non-adjacent reunites.
  */
 const GATE_MIN_SEGMENTS = 64
+
+/** A per-channel jump between neighbouring pixels from this size up is an edge, whatever the
+ *  discontinuity map made of it. A ramp moves a level or two a pixel; white against #e6e6e6 moves
+ *  25, and at τ_s = 10 the means alone would call those one colour. */
+const EDGE_STEP = 6
+/** Fine segments smaller than this are anti-aliasing crumbs (px). */
+const MIN_FINE_PIXELS = 4
 
 /**
  * Segment an image into smooth macro-regions. See module header. `onProgress` (if
@@ -178,6 +185,29 @@ export function segmentImage(
     cnt[lo] += cnt[hi]
   }
 
+  const jump = (a: number, b: number): number => {
+    const pa = a * 4
+    const pb = b * 4
+    return Math.max(
+      Math.abs(data[pa] - data[pb]),
+      Math.abs(data[pa + 1] - data[pb + 1]),
+      Math.abs(data[pa + 2] - data[pb + 2]),
+    )
+  }
+  // An edge stands out from the steps on either side of it; a steep ramp steps the same way the
+  // whole way across, and cutting it at every pixel left a 10 px ramp as ten one-pixel slivers.
+  const stepBetween = (a: number, b: number): boolean => {
+    const s = jump(a, b)
+    if (s < EDGE_STEP) return false
+    const d = b - a
+    const horizontal = d === 1
+    const ax = a % w
+    const before = horizontal ? (ax > 0 ? jump(a - 1, a) : 0) : a - w >= 0 ? jump(a - w, a) : 0
+    const bx = b % w
+    const after = horizontal ? (bx < w - 1 ? jump(b, b + 1) : 0) : b + w < n ? jump(b, b + w) : 0
+    return before * 3 <= s || after * 3 <= s
+  }
+
   report(0.2, 'Finding regions')
   // Loop to a true fixpoint (Supplement Alg 1). Terminates because every productive
   // pass strictly reduces the live segment count. Don't add an iteration cap: it
@@ -189,7 +219,7 @@ export function segmentImage(
         const i = y * w + x
         if (!smooth[i]) continue
         // right
-        if (x + 1 < w && smooth[i + 1] && !cutH[i]) {
+        if (x + 1 < w && smooth[i + 1] && !cutH[i] && !stepBetween(i, i + 1)) {
           const ra = find(i)
           const rb = find(i + 1)
           if (ra !== rb && meanDelta(ra, rb) <= opts.tauS) {
@@ -198,7 +228,7 @@ export function segmentImage(
           }
         }
         // down
-        if (y + 1 < h && smooth[i + w] && !cutV[i]) {
+        if (y + 1 < h && smooth[i + w] && !cutV[i] && !stepBetween(i, i + w)) {
           const ra = find(i)
           const rb = find(i + w)
           if (ra !== rb && meanDelta(ra, rb) <= opts.tauS) {
@@ -209,6 +239,20 @@ export function segmentImage(
       }
     }
     if (!changed) break
+  }
+
+  // A piece of one to three pixels is anti-aliasing the edge rule kept apart, not a region: left in,
+  // a logo came to 500 pieces and the union merge below, quadratic in them, to minutes. It goes
+  // back to the flood with the 𝒟 pixels, unless a marker sits in it.
+  const seeded = new Set<number>([...splitSeeds, ...flatSeeds].map((p) => find(p)))
+  // The gate below still counts them: art busy enough to break into that many pieces merges by
+  // adjacency, as it did when the crumbs were segments.
+  let piecesWithCrumbs = 0
+  for (let i = 0; i < n; i++) if (smooth[i] && parent[i] === i) piecesWithCrumbs++
+  for (let i = 0; i < n; i++) {
+    if (!smooth[i]) continue
+    const r = find(i)
+    if (cnt[r] < MIN_FINE_PIXELS && !seeded.has(r)) smooth[i] = 0
   }
 
   // Compact S₀ roots → segment ids 0..S-1; segOf[pixel] = id, −1 for 𝒟/transparent.
@@ -359,7 +403,7 @@ export function segmentImage(
   // Gradients off ⇒ skip the merge: the Step-2 bands stay as the macro-regions, so
   // a smooth ramp posterizes into flats instead of being averaged to one mean colour.
   if (opts.mergeGradients) {
-    const gated = S > GATE_MIN_SEGMENTS
+    const gated = piecesWithCrumbs > GATE_MIN_SEGMENTS
     const useMean = gated && opts.meanGate > 0 && Number.isFinite(opts.meanGate)
 
     // Per-group adjacency (when gated) and running colour means (only for the
@@ -370,6 +414,24 @@ export function segmentImage(
     const gSumB = new Map<number, number>()
     const gCnt = new Map<number, number>()
     const meanCache = new Map<number, Oklab>()
+    // Groups that meet with no edge detected between them: pieces of one field, which a gradient
+    // may join more loosely than two shapes an edge or a gap keeps apart.
+    const flowAdj = new Map<number, Set<number>>()
+    for (let id = 0; id < S; id++) flowAdj.set(id, new Set<number>())
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x
+        const a = segOf[i]
+        if (a < 0) continue
+        const right = x + 1 < w && !cutH[i] && !stepBetween(i, i + 1) ? segOf[i + 1] : -1
+        const down = y + 1 < h && !cutV[i] && !stepBetween(i, i + w) ? segOf[i + w] : -1
+        for (const b of [right, down]) {
+          if (b < 0 || b === a) continue
+          flowAdj.get(a)!.add(b)
+          flowAdj.get(b)!.add(a)
+        }
+      }
+    }
     if (gated) {
       // Fine-segment adjacency (4-neighbour touch). One raster scan, both directions
       // recorded; fixed order ⇒ deterministic.
@@ -468,10 +530,13 @@ export function segmentImage(
         if (!fit) reached = 'no-fit'
       }
       if (fit && union) {
+        // Two pieces that meet with no edge between them are the field's own steps: the jump a
+        // fit reads between two flat columns of a steep ramp is the ramp, not an edge.
+        const flows = flowAdj.get(gi)!.has(gj)
         if (
-          fit.oklabResidual <= opts.mergeTol &&
+          fit.oklabResidual <= (flows ? opts.mergeTolFlow : opts.mergeTol) &&
           profileGap(fit.gradient, union) <= opts.maxProfileGap &&
-          (unwitnessedJump(fit.gradient, union) <= opts.maxUnwitnessedJump ||
+          (unwitnessedJump(fit.gradient, union) <= (flows ? opts.maxUnwitnessedJumpFlow : opts.maxUnwitnessedJump) ||
             // Flat-flank condition: an unwitnessed jump is fatal only when one side
             // is a near-flat colour block, which has no interior trend that could
             // bridge the gap. When both sides carry interior spread they are pieces
@@ -569,6 +634,18 @@ export function segmentImage(
       }
       members.set(c, members.get(best.i)!.concat(members.get(best.j)!))
       samples.set(c, best.samples)
+      const flowC = new Set<number>()
+      for (const nb of flowAdj.get(best.i)!) if (nb !== best.j) flowC.add(nb)
+      for (const nb of flowAdj.get(best.j)!) if (nb !== best.i) flowC.add(nb)
+      for (const nb of flowC) {
+        const f = flowAdj.get(nb)!
+        f.delete(best.i)
+        f.delete(best.j)
+        f.add(c)
+      }
+      flowAdj.set(c, flowC)
+      flowAdj.delete(best.i)
+      flowAdj.delete(best.j)
       if (gated) {
         // c's neighbours are the union of the merged pair's, minus the two merged
         // ids, and every neighbour repoints i/j → c.
@@ -849,13 +926,13 @@ export function segmentImage(
   order.forEach((gi, pos) => {
     rank[gi] = pos
   })
-  const palette: PaletteColor[] = order.map((gi) => {
-    const c = cntOf(gi) || 1
-    const [sr, sg, sb] = sumOf(gi)
-    return { r: clamp255(sr / c), g: clamp255(sg / c), b: clamp255(sb / c) }
-  })
   const counts = order.map((gi) => cntOf(gi))
   const regionSamples = order.map((gi) => samplesOf(gi))
+  const palette: PaletteColor[] = order.map((gi, pos) => {
+    const c = cntOf(gi) || 1
+    const [sr, sg, sb] = sumOf(gi)
+    return medianColour(regionSamples[pos]) ?? { r: clamp255(sr / c), g: clamp255(sg / c), b: clamp255(sb / c) }
+  })
   const labels = new Int32Array(n)
   for (let i = 0; i < n; i++) {
     const gi = groupId[i]

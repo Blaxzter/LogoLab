@@ -15,8 +15,12 @@ export interface SegmentOptions {
   tauA: number
   /** Min facing observations before a pair can enter 𝒜 (noise floor). */
   minFacing: number
-  /** Oklab ΔE under which a single gradient is judged to explain a union. */
+  /** Oklab ΔE under which a single gradient is judged to explain a union of two regions an edge
+   *  or a gap keeps apart. Tight: a multi-stop gradient can run through almost any two shapes. */
   mergeTol: number
+  /** The same for two regions that meet with no edge detected between them, pieces of one field.
+   *  Looser, or a soft glow comes back cut into pieces along seams nobody drew. */
+  mergeTolFlow: number
   /** Reject a union whose colour profile has an empty axis span wider than this
    *  fraction of [0,1] (bimodal ⇒ two distinct flats, not one smooth field). */
   maxProfileGap: number
@@ -41,6 +45,8 @@ export interface SegmentOptions {
    * Oklab ΔE ceiling) disable it.
    */
   maxUnwitnessedJump: number
+  /** The same for two regions that meet with no edge between them (`mergeTolFlow`). */
+  maxUnwitnessedJumpFlow: number
   /**
    * Run Step 3c, the global gradient-explained union-fit merge, which fuses the
    * colour-difference bands of a smooth ramp back into one gradient region. With
@@ -148,9 +154,11 @@ export const DEFAULT_SEGMENT_OPTIONS: SegmentOptions = {
   sigma: 5,
   tauA: 0.25,
   minFacing: 4,
-  mergeTol: 0.06,
+  mergeTol: 0.015,
+  mergeTolFlow: 0.06,
   maxProfileGap: 0.34,
-  maxUnwitnessedJump: 0.12,
+  maxUnwitnessedJump: 0.02,
+  maxUnwitnessedJumpFlow: 0.12,
   mergeGradients: true,
   sampleCap: 3000,
   minRegionArea: 0,
