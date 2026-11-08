@@ -17,5 +17,5 @@ const stampId = (s: StampIdentity): string => `${s.name}@${fnv1a(s.raw)}`
 /** Vs-working-tree (`head` omitted) or pair mode. The version prefixes retire every entry
  *  cached under the old name-only keys. */
 export function snapOptionsKey(base: StampIdentity, head?: StampIdentity): string {
-  return head ? `pair:v3:${stampId(base)}:${stampId(head)}` : `snap:v7:${stampId(base)}`
+  return head ? `pair:v4:${stampId(base)}:${stampId(head)}` : `snap:v8:${stampId(base)}`
 }
