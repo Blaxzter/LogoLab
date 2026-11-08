@@ -25,7 +25,7 @@
 //   autotrace-default, autotrace-swept             AutoTrace 0.40.0 win64 → .bench-tools/autotrace/ (adapters/external.ts)
 //   imagetracer-default, -fills, -swept           npm imagetracerjs@1.2.6 → .bench-tools/imagetracer/, in-process (adapters/imagetracer.ts)
 //   trazor-auto, -default, -logo, -centerline     PhenX/Trazor pinned, bundled → .bench-tools/trazor/, in-process (adapters/trazor.ts)
-//   inkvec-default, -fast, -strokes               logolabs/inkvec pinned, built → .bench-tools/inkvec/ (adapters/inkvec.ts)
+//   inkvec-default, -fills, -fast, -strokes       logolabs/inkvec pinned, built → .bench-tools/inkvec/ (adapters/inkvec.ts)
 //   starvector-1b                                 .bench-tools/starvector-venv + HF weights (adapters/starvector.ts)
 //   omnisvg-4b                                    .bench-tools/omnisvg-venv + omnisvg-src + HF weights (adapters/omnisvg.ts)
 //   logolab-strokes, logolab-outline              LINE corpora only: traceIcon mode=mono with / without `strokes`
@@ -111,7 +111,7 @@ import {
 import { omnisvg, omnisvgProvenance } from './adapters/omnisvg.ts'
 import { imagetracerDefault, imagetracerFills, imagetracerSwept } from './adapters/imagetracer.ts'
 import { trazorAuto, trazorCenterline, trazorDefault, trazorLogo } from './adapters/trazor.ts'
-import { inkvecDefault, inkvecFast, inkvecStrokes } from './adapters/inkvec.ts'
+import { inkvecDefault, inkvecFast, inkvecFills, inkvecStrokes } from './adapters/inkvec.ts'
 import { starvector, starvectorProvenance } from './adapters/starvector.ts'
 import {
   corpusKind,
@@ -146,6 +146,7 @@ const ALL_TOOLS: TracerAdapter[] = [
   trazorLogo,
   trazorCenterline,
   inkvecDefault,
+  inkvecFills,
   inkvecFast,
   inkvecStrokes,
   starvector,

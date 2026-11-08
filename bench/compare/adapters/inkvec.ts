@@ -4,6 +4,11 @@
 // .bench-tools/inkvec/ and given the case's PNG, as VTracer is.
 //
 //   inkvec-default  no flags: `--mode quality`, its full engine.
+//   inkvec-fills    `--no-detect-strokes`: the same engine, every face written as a filled outline.
+//                   Its default writes faces it reads as drawn strokes as stroked paths, which the
+//                   outline scorer refuses (26 of 300 logos, 59 of 100 emoji in v9), so the row
+//                   that can be scored on every case is this one, as imagetracer-fills is for
+//                   ImageTracer.
 //   inkvec-fast     `--mode fast`, its Potrace-class fit on the same planar map.
 //   inkvec-strokes  LINE corpora only: `--strokes`, line art as one path and one width each.
 //
@@ -42,5 +47,6 @@ function inkvec(name: string, args: string[]): TracerAdapter {
 }
 
 export const inkvecDefault = inkvec('inkvec-default', [])
+export const inkvecFills = inkvec('inkvec-fills', ['--no-detect-strokes'])
 export const inkvecFast = inkvec('inkvec-fast', ['--mode', 'fast'])
 export const inkvecStrokes: TracerAdapter = { ...inkvec('inkvec-strokes', ['--strokes']), kinds: ['line'] }

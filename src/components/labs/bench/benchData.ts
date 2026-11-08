@@ -368,6 +368,12 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     blurb:
       'The Inkvec 0.3.1 command line, built from tag v0.3.1, with no flags (`--mode quality`). This build has no trained restorer, which ships separately and is for damaged input.',
   },
+  'inkvec-fills': {
+    label: 'Inkvec fills',
+    family: 'external',
+    blurb:
+      'The Inkvec 0.3.1 command line with `--no-detect-strokes`: the default engine, with every face written as a filled outline. By default it writes faces it reads as drawn strokes as stroked paths, which the outline scorer cannot read, so this is the row the drawing metrics can be read on, as ImageTracer fills is.',
+  },
   'inkvec-fast': {
     label: 'Inkvec fast',
     family: 'external',
