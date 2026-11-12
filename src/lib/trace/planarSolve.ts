@@ -11,8 +11,10 @@
 //
 // Nothing in the energy keeps two edges apart, and a sliver a pixel wide is cheaper to the sum
 // with its two sides crossed. So after each round the graph is checked for crossings the fit did
-// not have (edgeCrossings.ts): the edges involved are held where the round found them and the
-// round runs again; if it still crosses, the round is undone, nodes it added included.
+// not have (edgeCrossings.ts): the curves they lie on are held where the round found them and the
+// round runs again; if it still crosses, the edges that cross go back whole, and a round that
+// gains nothing that way is undone, nodes it added included. A corner's fishtail is no crossing
+// to that check; once the rounds are done it is cut off (`trimEars`).
 //
 // The maths is damped Gauss-Newton on
 //   E = Σ_band ‖ T_p − Σ_label cov_label(p)·c_label(p) ‖²
@@ -30,7 +32,7 @@
 // Pure (no DOM or Node APIs). Runs in the trace worker and ships in the npm package.
 
 import type { EdgeRef, GradientFill, PathNode, SharedEdge, Vec, Vertex } from '../path/types'
-import { edgeCrossings } from './edgeCrossings.ts'
+import { type CrossingSite, crossingSites, type Ear, edgeCrossings, edgeEars } from './edgeCrossings.ts'
 import { gradientLut, gradientParamT } from './gradient.ts'
 import { EXT } from './planarNetwork.ts'
 
@@ -96,6 +98,13 @@ export interface SolveTune {
   /** How far a handle may turn from the fit's direction (deg). A short handle turns a long way
    *  for a tiny move of its tip: unchecked, that is a kink the art does not have. */
   maxHandleTurnDeg: number
+  /** A curve stays a graph over its chord, no taller than a half circle on it (or as the fit
+   *  drew it, if further): see `reachOf`. */
+  chordHandles: boolean
+  /** A crossing holds the curves it lies on, not the two edges whole: see `holdSites`. */
+  localHold: boolean
+  /** A corner's fishtail is cut off once the rounds are done: see `trimEars`. */
+  trimEars: boolean
   /** Solves in all; between two of them, nodes go in where a curve still misses the raster. */
   rounds: number
   /** How many nodes may be added, as a share of what the fit chose. */
@@ -112,15 +121,27 @@ export const DEFAULT_SOLVE_TUNE: SolveTune = {
   step: 0.5,
   maxStepAnchor: 0.6,
   maxStepHandle: 1.5,
-  maxTotalAnchor: 1,
-  maxTotalHandle: 3,
+  // 1 and 3 until the fishtail rule (edgeCrossings MIN_LOOP_AREA): with the guard no longer
+  // holding whole outlines, more reach and a fourth round took logos-cc0's median ΔE from
+  // 0.145 to 0.129 and the emoji's from 0.083 to 0.071 with the same nodes (5 rounds and a
+  // fifth of the nodes: 0.105 / 0.060, but 12% / 19% more nodes). A 4 px handle on a 1 px side
+  // is a flap, so `chordHandles` came with it: 0.135 / 0.069, same nodes, and the loops the
+  // A/B showed gone. `localHold`: 0.129 / 0.066 and boundary distance 0.080 → 0.075 /
+  // 0.116 → 0.112 px, with the same nodes and kinks (better / worse ΔE on 65 / 12 logos and
+  // 34 / 7 emoji; the rest unchanged). `trimEars` moves no number (ΔE within 0.003 on every
+  // case, ±5 nodes over 400) and took the A/B stamp's self-crossing loops from 219 to 148.
+  maxTotalAnchor: 1.5,
+  maxTotalHandle: 4,
   keepBreakDeg: 5,
   minGain: 0.003,
   bendMinLen: 8,
   bendKeep: 0.1,
   bendFinish: 3,
   maxHandleTurnDeg: 30,
-  rounds: 3,
+  chordHandles: true,
+  localHold: true,
+  trimEars: true,
+  rounds: 4,
   addRatio: 0.1,
   splitMinScore: 0.15,
   splitMinLen: 6,
@@ -413,6 +434,7 @@ export function solveBoundaries(input: BoundarySolveInput): SolveReport | null {
   // Crossings the fit already drew are not the solve's to answer for.
   const fitCrossings = edgeCrossings(input.edges)
   const held = new Set<number>()
+  const heldNodes = new Set<PathNode>()
   let first: SolveReport | null = null
   let last: SolveReport | null = null
   /** The graph before the last round's nodes went in, to take them out again. */
@@ -420,16 +442,24 @@ export function solveBoundaries(input: BoundarySolveInput): SolveReport | null {
   for (let round = 0; ; round++) {
     const lastRound = round + 1 >= tune.rounds || budget <= 0
     const start = snapshot(input, origins)
+    // A held curve is held for its round only. The round started without a crossing, so the
+    // next may try it again; held for good, it stayed on the fit's error while the rest of its
+    // edge moved on around it (an emoji's ΔE 0.062 → 0.088 that way, 0.060 held per round).
+    heldNodes.clear()
     const fresh = (): string[] => [...edgeCrossings(input.edges)].filter((k) => !fitCrossings.has(k))
-    let out = solveOnce(input, tune, !lastRound, origins, held)
+    let out = solveOnce(input, tune, !lastRound, origins, held, heldNodes)
     let crossed = false
     for (let attempt = 0; out && attempt < CROSS_RETRIES; attempt++) {
-      const pairs = fresh()
-      if (pairs.length === 0) break
+      const sites = crossingSites(input.edges).filter((s) => !fitCrossings.has(s.key))
+      if (sites.length === 0) break
+      // Within a round no node goes in, so a site's curve names the same nodes after the undo.
+      // The last try holds the edges whole: then the round is solved around them, where putting
+      // them back afterwards leaves their neighbours fitted to where they no longer are.
+      if (tune.localHold && attempt < CROSS_RETRIES - 1) holdSites(input.edges, sites, heldNodes)
+      else for (const s of sites) for (const id of s.key.split(':')) held.add(Number(id))
       restore(input, origins, start)
       crossed = true
-      for (const k of pairs) for (const id of k.split(':')) held.add(Number(id))
-      out = solveOnce(input, tune, !lastRound, origins, held)
+      out = solveOnce(input, tune, !lastRound, origins, held, heldNodes)
     }
     if (!out) {
       // A round that gained nothing once its crossings were held takes its new nodes along.
@@ -443,9 +473,14 @@ export function solveBoundaries(input: BoundarySolveInput): SolveReport | null {
     last = out.report
     if (lastRound) break
     // Worst first, one per segment. A later node of an edge goes in first, or the earlier
-    // insertion would shift its index. A held edge cannot use one.
+    // insertion would shift its index. A held edge or a held curve cannot use one.
     const take = out.splits
-      .filter((c) => !held.has(input.edges[c.edge].id))
+      .filter((c) => {
+        const e = input.edges[c.edge]
+        return (
+          !held.has(e.id) && !heldNodes.has(e.nodes[c.node]) && !heldNodes.has(e.nodes[(c.node + 1) % e.nodes.length])
+        )
+      })
       .sort((p, q) => q.score - p.score)
       .slice(0, Math.max(1, Math.ceil(budget / (tune.rounds - round - 1))))
       .sort((p, q) => q.node - p.node)
@@ -454,12 +489,109 @@ export function solveBoundaries(input: BoundarySolveInput): SolveReport | null {
     for (const c of take) splitSegment(input.edges[c.edge], c.node, c.t, origins)
     budget -= take.length
   }
+  if (tune.trimEars) trimEars(input.edges)
   return first && last ? { ...last, before: first.before } : null
+}
+
+/** How often an edge with several fishtails is looked at again, one cut at a time. */
+const EAR_PASSES = 8
+
+/**
+ * Cut every corner's fishtail off. The crossing check lets them through (`edgeCrossings`: the
+ * regions on both sides paint the ear, so no render shows one), and the solve leaves them where
+ * it moved an anchor a fraction of a pixel past the point its two sides meet. In an outline, or
+ * in an editor, that tip is a bow tie: acute-counter's counter crossed itself 0.3 px short of its
+ * apex. The node goes onto the crossing and the two curves are cut there by de Casteljau, so
+ * nothing else on the outline moves, and an edge that is a part of what it was crosses nothing new.
+ */
+export function trimEars(edges: SharedEdge[]): number {
+  let cut = 0
+  let ears = edgeEars(edges)
+  for (let pass = 0; pass < EAR_PASSES && ears.length > 0; pass++) {
+    // One per edge: a cut renumbers the nodes after it.
+    const first = new Map<number, Ear>()
+    for (const ear of ears) if (!first.has(ear.edge)) first.set(ear.edge, ear)
+    const again = new Set<number>()
+    for (const [ei, ear] of first) {
+      if (!trimEar(edges[ei], ear)) continue
+      cut++
+      again.add(edges[ei].id)
+    }
+    if (again.size === 0) break
+    ears = edgeEars(edges, again).filter((ear) => again.has(edges[ear.edge].id))
+  }
+  return cut
+}
+
+/** One cubic (or line) split at `t`: the halves' control points, and whether it is a line. */
+function splitAt(a: PathNode, b: PathNode, t: number) {
+  const lerp = (p: Vec, q: Vec, u: number): Vec => ({ x: p.x + (q.x - p.x) * u, y: p.y + (q.y - p.y) * u })
+  const p0: Vec = { x: a.x, y: a.y }
+  const p3: Vec = { x: b.x, y: b.y }
+  const c1 = a.hOut ?? p0
+  const c2 = b.hIn ?? p3
+  const q0 = lerp(p0, c1, t)
+  const q1 = lerp(c1, c2, t)
+  const q2 = lerp(c2, p3, t)
+  const r0 = lerp(q0, q1, t)
+  const r1 = lerp(q1, q2, t)
+  return { q0, r0, s: lerp(r0, r1, t), r1, q2, line: a.hOut == null && b.hIn == null }
+}
+
+/** Cut one ear off its edge: false where that would leave too little of it. */
+function trimEar(e: SharedEdge, ear: Ear): boolean {
+  const n = e.nodes.length
+  const { into, outOf } = ear
+  if (
+    ear.wraps
+      ? !e.closed || into.seg < outOf.seg
+      : into.seg > outOf.seg || (into.seg === outOf.seg && into.t >= outOf.t)
+  )
+    return false
+  // The nodes inside the ear: after `into`'s curve begins, up to the one `outOf`'s curve begins at.
+  const drop = ear.wraps ? n - into.seg + outOf.seg : outOf.seg - into.seg
+  if (n - drop < 2) return false
+  const a = e.nodes[into.seg]
+  const b = e.nodes[(outOf.seg + 1) % n]
+  // Both from the curves as they are: on one curve, `into` and `outOf` cut the same one.
+  const left = splitAt(a, e.nodes[(into.seg + 1) % n], into.t)
+  const right = splitAt(e.nodes[outOf.seg], b, outOf.t)
+  // The two cuts meet within the flattening tolerance; the node goes between them.
+  const m: Vec = { x: (left.s.x + right.s.x) / 2, y: (left.s.y + right.s.y) / 2 }
+  const tip: PathNode = {
+    x: m.x,
+    y: m.y,
+    hIn: left.line ? null : { x: left.r0.x + m.x - left.s.x, y: left.r0.y + m.y - left.s.y },
+    hOut: right.line ? null : { x: right.r1.x + m.x - right.s.x, y: right.r1.y + m.y - right.s.y },
+    kind: 'corner',
+  }
+  a.hOut = left.line ? null : left.q0
+  b.hIn = right.line ? null : right.q2
+  if (ear.wraps) e.nodes.splice(0, n, ...e.nodes.slice(outOf.seg + 1, into.seg + 1), tip)
+  else e.nodes.splice(into.seg + 1, drop, tip)
+  return true
 }
 
 /** How often a round that crossed edges runs again, holding them, before the edges still
  *  crossing are put back instead. */
 const CROSS_RETRIES = 3
+
+/**
+ * Hold the curves a crossing lies on, for the rest of the round: both anchors of each, with all
+ * their handles, where the round started (which crossed nowhere). The rest of the edge keeps
+ * solving; a neighbour that crosses in turn is held on the next try. Held whole, the two edges
+ * kept every point on the fit's error for the rest of the solve, however far from the crossing:
+ * on the emoji 2.6% of the boundary, held, carried 9.3% of the distance the solve left.
+ */
+function holdSites(edges: readonly SharedEdge[], sites: readonly CrossingSite[], heldNodes: Set<PathNode>): void {
+  for (const s of sites) {
+    for (const { edge, seg } of [s.a, s.b]) {
+      const nodes = edges[edge].nodes
+      heldNodes.add(nodes[seg])
+      heldNodes.add(nodes[(seg + 1) % nodes.length])
+    }
+  }
+}
 
 /**
  * Put every edge in a fresh crossing back where `start` had it, until none is left, and hold it.
@@ -628,6 +760,8 @@ function solveOnce(
   origins: Origins,
   /** Edges (by id) held where they are: they crossed another edge in an earlier try. */
   held: ReadonlySet<number>,
+  /** Nodes held where they are, handles included: their curve crossed in an earlier try. */
+  heldNodes: ReadonlySet<PathNode>,
 ): { report: SolveReport; splits: SplitCandidate[] } | null {
   const { vertices, edges, loopsByLabel, palette, isFlat, image, through } = input
   const { width: w, height: h, data } = image
@@ -778,6 +912,23 @@ function solveOnce(
       x0[p * 2 + 1] = x[p * 2 + 1]
     }
   }
+  // So does a held node: its anchor (an end's is the vertex) and both handles, bent ones included.
+  if (heldNodes.size > 0) {
+    for (let ei = 0; ei < edges.length; ei++) {
+      const e = edges[ei]
+      const refs = nodeRefs[ei]
+      for (let i = 0; i < e.nodes.length; i++) {
+        if (!heldNodes.has(e.nodes[i])) continue
+        for (const p of [refs[i].anchor, refs[i].hIn, refs[i].hOut]) {
+          if (p < 0) continue
+          free[p * 2] = 0
+          free[p * 2 + 1] = 0
+          x0[p * 2] = x[p * 2]
+          x0[p * 2 + 1] = x[p * 2 + 1]
+        }
+      }
+    }
+  }
   // An edge lying along the frame is the frame: it never moves and no pixel is scored for it.
   const segOnFrame = new Uint8Array(segs.length)
   for (let si = 0; si < segs.length; si++) {
@@ -872,6 +1023,42 @@ function solveOnce(
   const cosMaxTurn = Math.cos((tune.maxHandleTurnDeg * Math.PI) / 180)
   const sinMaxTurn = Math.sin((tune.maxHandleTurnDeg * Math.PI) / 180)
 
+  // A curve stays a graph over its chord, no taller than a half circle on it. Read along the
+  // chord, its control points do not go back, so the curve cannot loop or fold over itself; read
+  // across it, neither handle stands further off the chord than a half circle's (2/3 of the
+  // chord). Nothing in the energy asks for either: a short side with a long handle pays almost
+  // nothing for a flap a pixel long (dot-ladder: a 5.4 px handle on a 1.3 px side, a 2 px finger
+  // off a 0.5 px one; IBM: a spike off a 0.2 px side). A curve the fit drew further keeps that.
+  // [along, across] as shares of the chord; both scale with the handles.
+  const reachOf = (v: Float64Array, sg: Seg): [number, number] => {
+    const ax = v[sg.a * 2]
+    const ay = v[sg.a * 2 + 1]
+    const bx = v[sg.b * 2]
+    const by = v[sg.b * 2 + 1]
+    const dx = bx - ax
+    const dy = by - ay
+    const L2 = dx * dx + dy * dy
+    if (L2 < 1e-12) return [0, 0]
+    let along = 0
+    let across = 0
+    for (const [hp, ox, oy, sign] of [
+      [sg.h1, ax, ay, 1],
+      [sg.h2, bx, by, -1],
+    ]) {
+      if (hp < 0) continue
+      const hx = v[hp * 2] - ox
+      const hy = v[hp * 2 + 1] - oy
+      along += Math.max(0, sign * (hx * dx + hy * dy))
+      across = Math.max(across, Math.abs(hx * dy - hy * dx))
+    }
+    return [along / L2, across / L2]
+  }
+  const HALF_CIRCLE_HANDLE = 2 / 3
+  const reachAllowed = segs.map((sg) => {
+    const [along, across] = reachOf(x0, sg)
+    return [Math.max(1, along), Math.max(HALF_CIRCLE_HANDLE, across)]
+  })
+
   const project = (v: Float64Array): void => {
     // Limits first, so the tangent is taken from where the points may really be.
     for (let i = 0; i < np; i++) {
@@ -946,6 +1133,25 @@ function solveOnce(
         v[t.hIn * 2 + 1] = ay - uy * lIn
         v[t.hOut * 2] = ax + ux * lOut
         v[t.hOut * 2 + 1] = ay + uy * lOut
+      }
+    }
+    // Shortening a handle keeps its direction, so a tangent above still holds.
+    if (tune.chordHandles) {
+      for (let si = 0; si < segs.length; si++) {
+        const sg = segs[si]
+        if (sg.h1 < 0 && sg.h2 < 0) continue
+        const [along, across] = reachOf(v, sg)
+        const [maxAlong, maxAcross] = reachAllowed[si]
+        const k = Math.min(along > maxAlong ? maxAlong / along : 1, across > maxAcross ? maxAcross / across : 1)
+        if (k >= 1) continue
+        for (const [hp, ap] of [
+          [sg.h1, sg.a],
+          [sg.h2, sg.b],
+        ]) {
+          if (hp < 0 || followsAnchor[hp]) continue
+          v[hp * 2] = v[ap * 2] + (v[hp * 2] - v[ap * 2]) * k
+          v[hp * 2 + 1] = v[ap * 2 + 1] + (v[hp * 2 + 1] - v[ap * 2 + 1]) * k
+        }
       }
     }
     // A fixed coordinate stays put whatever the tangent asked of it. A rigid handle is fixed

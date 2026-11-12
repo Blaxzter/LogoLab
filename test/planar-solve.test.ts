@@ -1,9 +1,16 @@
 // The boundary solve (src/lib/trace/planarSolve.ts): its renderer must be an exact box filter,
 // and it must move a wrong boundary back onto what the raster shows without adding a node.
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
+import { Resvg } from '@resvg/resvg-js'
 import type { EdgeRef, PathNode, SharedEdge } from '../src/lib/path/types.ts'
+import { decodePng } from '../src/lib/png/decode.ts'
 import { depositLine, solveBoundaries } from '../src/lib/trace/planarSolve.ts'
+import { DEFAULT_VECTORIZE_OPTIONS, traceImage } from '../src/lib/trace/index.ts'
+import { ensureImageData } from '../bench/nodeHarness.ts'
+
+ensureImageData()
 
 const node = (x: number, y: number): PathNode => ({ x, y, hIn: null, hOut: null, kind: 'corner' })
 
@@ -237,4 +244,44 @@ test('a smooth node keeps its two handles on one line', () => {
     const cross = Math.abs(ax * by - ay * bx) / (Math.hypot(ax, ay) * Math.hypot(bx, by))
     assert.ok(cross < 1e-6, `handles break by ${cross}`)
   }
+})
+
+test('a curve stays a graph over its chord: no flap off a short side (dot-ladder @2048)', async () => {
+  // Nothing in the energy keeps a handle in proportion to its side, and a flap a pixel long
+  // costs the sum almost nothing: a 5.4 px handle on a 1.3 px side drew one off a disc here, and
+  // the A/B flat lane showed two (chordHandles off). Traced as that lane does, on transparency.
+  const svg = readFileSync('public/examples/edge-cases/dot-ladder.svg', 'utf8')
+  const img = decodePng(new Resvg(svg, { fitTo: { mode: 'width', value: 2048 } }).render().asPng())
+  const doc = await traceImage(img as unknown as ImageData, {
+    ...DEFAULT_VECTORIZE_OPTIONS,
+    engine: 'planar',
+    gradients: false,
+  })
+  const flaps: string[] = []
+  for (const e of doc.topology!.edges) {
+    const n = e.nodes.length
+    for (let i = 0; i < (e.closed ? n : n - 1); i++) {
+      const a = e.nodes[i]
+      const b = e.nodes[(i + 1) % n]
+      if (!a.hOut && !b.hIn) continue
+      const c1 = a.hOut ?? a
+      const c2 = b.hIn ?? b
+      let arc = 0
+      let px = a.x
+      let py = a.y
+      for (let j = 1; j <= 64; j++) {
+        const t = j / 64
+        const u = 1 - t
+        const x = u * u * u * a.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * b.x
+        const y = u * u * u * a.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * b.y
+        arc += Math.hypot(x - px, y - py)
+        px = x
+        py = y
+      }
+      const chord = Math.hypot(b.x - a.x, b.y - a.y)
+      // A half circle is π/2 of its chord; a flap goes out and comes back.
+      if (arc - chord > 1 && arc > 2.5 * chord) flaps.push(`${a.x.toFixed(0)},${a.y.toFixed(0)}`)
+    }
+  }
+  assert.deepEqual(flaps, [])
 })
