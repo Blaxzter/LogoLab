@@ -23,6 +23,11 @@ export interface GroundShape {
   /** The element's own `fill` attribute, verbatim (undefined when absent). Carried so a
    *  diagnostic can tell one authored colour's shapes from another's; no scorer reads it. */
   fill?: string
+  /** Set when the element's fill rule is evenodd (absent = nonzero). */
+  fillRule?: 'evenodd'
+  /** Tool output only: the shape paints solid, so it hides what lies under it. traceSvg.ts
+   *  resolves the inherited paint and marks it `data-occludes="1"`; authored art never has it. */
+  occludes?: true
 }
 
 export interface GroundTruth {
@@ -379,6 +384,8 @@ export function parseGroundTruth(svg: string): GroundTruth {
       tag,
       subPaths: transformSubPaths(local, composeAffine(ctx.m, parseTransformAttr(a.transform))),
       fill: a.fill,
+      ...(prop(a, 'fill-rule') === 'evenodd' ? { fillRule: 'evenodd' as const } : {}),
+      ...(a['data-occludes'] === '1' ? { occludes: true as const } : {}),
     })
   }
 
@@ -395,7 +402,7 @@ export function toRasterSpace(gt: GroundTruth, rasterWidth: number): GroundShape
   const s = rasterWidth / vw
   if (s === 1 && minX === 0 && minY === 0) return gt.shapes
   const m: Affine = [s, 0, 0, s, -minX * s, -minY * s]
-  return gt.shapes.map((sh) => ({ tag: sh.tag, subPaths: transformSubPaths(sh.subPaths, m), fill: sh.fill }))
+  return gt.shapes.map((sh) => ({ ...sh, subPaths: transformSubPaths(sh.subPaths, m) }))
 }
 
 /** Total authored anchor count — the parsimony denominator. */

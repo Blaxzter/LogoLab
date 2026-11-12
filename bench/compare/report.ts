@@ -334,7 +334,8 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
   )
   out.push(
     '- Only the visible boundary counts, for every tool: traced outline that is painted over (stacked output) is neither a ' +
-      'query nor a match target. Parsimony leaves canvas-edge boundary out on both sides (a full-canvas background ' +
+      'query nor a match target. Painted over means more than half a pixel inside a later shape that paints solid, read ' +
+      'from paint order and fill rule; until v9 a colour change within 2 px of it also passed it as visible. Parsimony leaves canvas-edge boundary out on both sides (a full-canvas background ' +
       'path is otherwise ~2k px of free length); `nodes ÷ GT` is the raw anchor ratio.',
   )
   out.push(

@@ -293,7 +293,7 @@ function collectBoundary(
   subPathSets: SubPath[][],
   w: number,
   h: number,
-  visibleAt?: (q: QueryPt) => boolean,
+  visibleAt?: (q: QueryPt, set: number) => boolean,
   /** Also drop TARGET segments visibleAt rejects (tested at the midpoint). Opt-in. */
   segsVisibleOnly = false,
 ): Boundary {
@@ -307,7 +307,7 @@ function collectBoundary(
   const onBorder = (p: Vec): boolean =>
     p.x < BORDER_EPS || p.y < BORDER_EPS || p.x > w - BORDER_EPS || p.y > h - BORDER_EPS
 
-  for (const set of subPathSets) {
+  for (const [si, set] of subPathSets.entries()) {
     for (const sp of set) {
       nodes += sp.nodes.length
       for (const n of sp.nodes) if (!onBorder(n)) innerNodes++
@@ -325,13 +325,13 @@ function collectBoundary(
         if (!(onBorder(a) && onBorder(b))) innerLength += len
         if (segsVisibleOnly && visibleAt && len > 0) {
           const q = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, tx: (b.x - a.x) / len, ty: (b.y - a.y) / len }
-          if (!visibleAt(q)) continue
+          if (!visibleAt(q, si)) continue
         }
         segs.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y })
       }
       const q: QueryPt[] = []
       resampleByArcLength(pts, SPACING, q)
-      for (const p of q) if (!onBorder(p) && (!visibleAt || visibleAt(p))) queries.push({ x: p.x, y: p.y })
+      for (const p of q) if (!onBorder(p) && (!visibleAt || visibleAt(p, si))) queries.push({ x: p.x, y: p.y })
     }
   }
   return { segs, queries, length, nodes, innerLength, innerNodes }
@@ -929,6 +929,82 @@ export function makeVisibleAt(raster: {
  * not optional, because a scorer that silently falls back to counting occluded outline
  * would re-open §0 #1 the first time a caller forgot the argument.
  */
+/** How far inside a shape painted later a traced point must lie to count as hidden. Under
+ *  that it sits in the shape's own anti-aliasing, where the two outlines cannot be told apart. */
+export const OCCLUDE_MARGIN = 0.5
+
+/**
+ * Is this point of TRACED path `set` painted over? True when an opaque path painted after it
+ * covers the point with OCCLUDE_MARGIN to spare (`rules`: each path's fill rule; `occludes`:
+ * whether it paints solid, from traceSvg.ts).
+ *
+ * makeVisibleAt alone cannot see this on a STACKED output. It reads the render VIS_PROBE (2 px)
+ * either side, so hidden outline lying under the shape in front but within 2 px of that
+ * shape's own edge has a colour change in reach and passes as visible, and every such sample
+ * was scored as spurious boundary. On logos-cc0 that put LogoLab's stacked rows at 0.22 px of
+ * edge error against 0.09 px for the same fit tiled, with missed boundary identical; the
+ * occluded samples were all the difference. The render cannot settle it (it does not say
+ * which of two coincident shapes drew an edge), paint order can, so the test is geometric.
+ * A tiled output has nothing painted over and scores exactly as before.
+ */
+export function makeHiddenAt(
+  sets: SubPath[][],
+  rules: readonly ('nonzero' | 'evenodd')[],
+  occludes: readonly boolean[],
+): (q: { x: number; y: number }, set: number) => boolean {
+  interface Occluder {
+    i: number
+    minX: number
+    minY: number
+    maxX: number
+    maxY: number
+    polys: Vec[][]
+    evenodd: boolean
+    near: (x: number, y: number) => number
+  }
+  const occ: Occluder[] = []
+  for (const [i, set] of sets.entries()) {
+    if (!occludes[i]) continue
+    // A filled subpath is filled as if closed, open or not.
+    const shut = set.map((sp) => ({ ...sp, closed: true }))
+    const polys = shut.map((sp) => flattenSubPath(sp)).filter((p) => p.length >= 3)
+    if (!polys.length) continue
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity
+    for (const p of polys)
+      for (const v of p) {
+        if (v.x < minX) minX = v.x
+        if (v.y < minY) minY = v.y
+        if (v.x > maxX) maxX = v.x
+        if (v.y > maxY) maxY = v.y
+      }
+    occ.push({ i, minX, minY, maxX, maxY, polys, evenodd: rules[i] === 'evenodd', near: nearestTo([shut]) })
+  }
+  const inside = (x: number, y: number, o: Occluder): boolean => {
+    let w = 0
+    for (const p of o.polys)
+      for (let k = 0; k < p.length; k++) {
+        const a = p[k]
+        const b = p[(k + 1) % p.length]
+        const side = (b.x - a.x) * (y - a.y) - (x - a.x) * (b.y - a.y)
+        if (a.y <= y) {
+          if (b.y > y && side > 0) w++
+        } else if (b.y <= y && side < 0) w--
+      }
+    return o.evenodd ? (w & 1) !== 0 : w !== 0
+  }
+  return (q, set) => {
+    for (const o of occ) {
+      if (o.i <= set) continue
+      if (q.x < o.minX || q.x > o.maxX || q.y < o.minY || q.y > o.maxY) continue
+      if (inside(q.x, q.y, o) && o.near(q.x, q.y) > OCCLUDE_MARGIN) return true
+    }
+    return false
+  }
+}
+
 // ---------------------------------------------------------------------------
 // PRECISION: corners the trace INVENTS (§23)
 //
@@ -1959,12 +2035,14 @@ export function scoreGeometry(
   opts: {
     /**
      * Visibility filter for the TRACED side's queries (makeVisibleAt over the trace's own
-     * render). Off by default — LogoLab's tiled output has no hidden boundary. The
-     * vectorizer comparison turns it on, because a STACKED output (VTracer's default,
-     * LogoLab's product preset) carries boundary that is painted over, and without it that
-     * hidden outline reads as spurious. Node counts are unaffected: hidden nodes are file cost.
+     * render, with makeHiddenAt for outline under a shape painted later). Off by default:
+     * LogoLab's tiled output has no hidden boundary. The vectorizer comparison turns it on,
+     * because a STACKED output (VTracer's default, LogoLab's product preset) carries boundary
+     * that is painted over, and without it that hidden outline reads as spurious. Node counts
+     * are unaffected: hidden nodes are file cost. `set` is the index of the query's path among
+     * the doc's visible path items, in paint order.
      */
-    docVisibleAt?: (q: { x: number; y: number; tx: number; ty: number }) => boolean
+    docVisibleAt?: (q: { x: number; y: number; tx: number; ty: number }, set: number) => boolean
     /**
      * With docVisibleAt: also drop the traced TARGET segments it rejects (by midpoint), so
      * an authored edge cannot be "found" on traced outline that is painted over. Without

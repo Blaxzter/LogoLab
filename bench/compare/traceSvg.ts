@@ -14,6 +14,9 @@
 //     nothing, but svgGround would count their outline as boundary. Dropped.
 //   • CSS — `<style>` rules are not read by svgGround, so a styled output is refused
 //     ('styled') rather than scored against paint it may not have.
+//   • occlusion — a shape that paints solid (opaque colour, no fill or group opacity under 1)
+//     is marked `data-occludes="1"`, and an inherited evenodd is written onto the element, so
+//     the scorer can tell outline painted over by a later shape (geomScore makeHiddenAt).
 //
 // The result's `shimDoc` is a plain EditableDoc of those subpaths: scoreGeometry and
 // boundaryMask read only items' subPaths, so every tool goes through them unchanged.
@@ -41,9 +44,33 @@ export interface ParsedTrace {
 interface Ctx {
   fill: string
   fillOpacity: number
+  /** `opacity` multiplied down the tree. */
+  opacity: number
+  fillRule: string
   stroke: string
   strokeWidth: string
   hidden: boolean
+}
+
+/**
+ * Paint that hides what lies under it everywhere it covers: a colour without alpha, or a
+ * gradient when no stop in the file is translucent (read for the whole file, which can only
+ * ever call a gradient see-through that is not).
+ */
+function solidPaint(fill: string, translucentStops: boolean): boolean {
+  const f = fill.trim().toLowerCase()
+  if (!f || f === 'none' || f === 'transparent') return false
+  if (f.startsWith('url(')) return !translucentStops
+  const hex = /^#([0-9a-f]{3,8})$/.exec(f)?.[1]
+  if (hex) return hex.length === 4 ? hex[3] === 'f' : hex.length === 8 ? hex.slice(6) === 'ff' : true
+  const fn = /^(?:rgba?|hsla?)\((.*)\)$/.exec(f)?.[1]
+  if (fn) {
+    const parts = fn.split(/[\s,/]+/).filter(Boolean)
+    if (parts.length < 4) return true
+    const a = parts[3]
+    return (a.endsWith('%') ? Number.parseFloat(a) / 100 : Number.parseFloat(a)) >= 1
+  }
+  return true // a colour name, currentColor
 }
 
 const num = (s: string, d: number): number => {
@@ -53,7 +80,20 @@ const num = (s: string, d: number): number => {
 
 /** Resolve inherited paint onto each shape, drop shapes that paint nothing. */
 export function resolvePaint(svg: string): string {
-  const stack: Ctx[] = [{ fill: '#000000', fillOpacity: 1, stroke: 'none', strokeWidth: '1', hidden: false }]
+  const stack: Ctx[] = [
+    {
+      fill: '#000000',
+      fillOpacity: 1,
+      opacity: 1,
+      fillRule: 'nonzero',
+      stroke: 'none',
+      strokeWidth: '1',
+      hidden: false,
+    },
+  ]
+  const translucentStops =
+    [...svg.matchAll(/stop-opacity\s*[=:]\s*["']?\s*([\d.]+)/g)].some((m) => Number.parseFloat(m[1]) < 1) ||
+    /stop-color\s*[=:]\s*["']?\s*(?:rgba|hsla)/i.test(svg)
   let inStencil = 0
   let out = ''
   let last = 0
@@ -77,6 +117,8 @@ export function resolvePaint(svg: string): string {
       return {
         fill,
         fillOpacity: fo ? num(fo, 1) : top.fillOpacity,
+        opacity: top.opacity * (op !== '' ? num(op, 1) : 1),
+        fillRule: prop(a, 'fill-rule') || top.fillRule,
         stroke: prop(a, 'stroke') || top.stroke,
         strokeWidth: prop(a, 'stroke-width') || top.strokeWidth,
         hidden: top.hidden || disp === 'none' || vis === 'hidden' || (op !== '' && num(op, 1) <= 0),
@@ -99,6 +141,9 @@ export function resolvePaint(svg: string): string {
       let extra = ''
       if (stroked && !prop(a, 'stroke')) extra += ` stroke="${c.stroke}" stroke-width="${c.strokeWidth}"`
       if (!prop(a, 'fill')) extra += ` fill="${c.fill}"`
+      if (c.fillRule === 'evenodd' && !prop(a, 'fill-rule')) extra += ' fill-rule="evenodd"'
+      if (filled && c.fillOpacity >= 1 && c.opacity >= 1 && solidPaint(c.fill, translucentStops))
+        extra += ' data-occludes="1"'
       replacement = extra ? whole.replace(/\s*\/?\s*>$/, (end) => `${extra}${end}`) : whole
     }
     out += svg.slice(last, m.index) + replacement
