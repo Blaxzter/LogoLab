@@ -101,6 +101,16 @@ const traceShape = {
     .describe('Shape-beautification tolerance in px; 0 disables snapping to circles/lines.'),
 }
 
+/** The tools that trace may measure instead of guess (inspect_icon only plans, so it has no use for it). */
+const searchShape = {
+  search: z
+    .boolean()
+    .optional()
+    .describe(
+      'Check the automatic choices instead of trusting them: trace the choices left on auto (mono vs colour, gradients on vs off) each way, score every candidate against the image (mean ΔE), and keep the automatic pick unless another candidate is clearly closer. A forced mode or gradients is kept. About 2.5x slower (one full trace per candidate). The plan reports every candidate’s score. Default on; false keeps the automatic pick untested.',
+    ),
+}
+
 /** What the SVG comes back AS — its paint and its viewBox — for the tools that write one. */
 const outputShape = {
   ink: z
@@ -236,6 +246,7 @@ function traceRequestFrom(input: Record<string, unknown>): TraceRequest {
     fidelity: input.fidelity as number | undefined,
     ink: input.ink as string | undefined,
     normalize: normalizeSpecFrom(input.normalize, input.inset),
+    search: input.search as boolean | undefined,
   }
 }
 
@@ -370,6 +381,7 @@ export function createServer(): McpServer {
           .optional()
           .describe('Also return the SVG markup in the response (only do this for small icons).'),
         ...traceShape,
+        ...searchShape,
         ...outputShape,
       },
     },
@@ -483,6 +495,7 @@ export function createServer(): McpServer {
           .optional()
           .describe('Also write the traced SVG here (a copy is placed inside the collection anyway).'),
         ...traceShape,
+        ...searchShape,
       },
     },
     async (input) => {

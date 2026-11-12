@@ -1,5 +1,5 @@
 // "FIND BEST SETTINGS" CENSUS — what the Vectorize studio's search
-// (src/components/vectorize/studio/bestSettings.ts) would pick, how long it takes,
+// (src/lib/traceInput/bestSettings.ts) would pick, how long it takes,
 // and whether the pick at the reduced resolution is the pick at full resolution.
 //
 //   node bench/bestSettingsDiag.ts                   # examples + line art + sheets + gallery
@@ -29,17 +29,17 @@ import { detectSheetIcons } from '../src/lib/sheet/detect.ts'
 import { rasterizeDoc } from '../src/lib/render/raster.ts'
 import { deltaEField, deltaEStats } from '../src/lib/render/fidelity.ts'
 import { docStats } from '../src/lib/path/model.ts'
+import { forceColorDoc } from '../src/components/vectorize/studio/forceColorDoc.ts'
 import {
   buildCandidates,
   CANDIDATE_ORDER,
-  forceColorDoc,
   pickWinner,
   poolWallMs,
   TRACE_ORDER,
   type Candidate,
   type CandidateId,
   type CandidateScore,
-} from '../src/components/vectorize/studio/bestSettings.ts'
+} from '../src/lib/traceInput/bestSettings.ts'
 
 ensureImageData()
 

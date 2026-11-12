@@ -1,11 +1,11 @@
 // "Find best settings" in the Vectorize rail: the button, the progress while the
 // candidates run, and the scoreboard they leave behind. Controlled: the search
-// lives in useBestSettings, the words in studio/bestSettings.ts.
+// lives in useBestSettings, the words in lib/traceInput/bestSettings.ts.
 
 import { Check, Loader2, Sparkles, X } from '../ui/icons'
 import { ActionButton, isOff } from '../ui/ActionButton'
 import { Tooltip } from '../ui/Tooltip'
-import { SEARCH_MAX_DIM, scoreLine, winnerNote, type CandidateId } from './studio/bestSettings'
+import { SEARCH_MAX_DIM, scoreLine, winnerNote, type CandidateId } from '../../lib/traceInput/bestSettings'
 import type { BestSettingsState, ScoredCandidate } from './studio/useBestSettings'
 
 export interface BestSettingsProps {

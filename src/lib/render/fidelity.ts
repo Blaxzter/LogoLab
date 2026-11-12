@@ -35,6 +35,14 @@ export interface FidelityMetrics {
   seamP995: number
 }
 
+/**
+ * Long side of the raster a trace is scored on: the studio's ΔE readout and
+ * Difference heat, and the MCP `search`. Deliberately below the trace resolution
+ * (1024–4096): rasterizing costs O(pixels) per path, and scoring at 1024px
+ * barely moves the mean ΔE.
+ */
+export const SCORE_MAX_DIM = 1024
+
 /** A pixel is an edge when its max neighbour ΔE reaches this; ramps stay below. */
 const SMOOTH_GRAD = 8
 

@@ -572,10 +572,14 @@ The rules that are easy to undo:
 
 ## "Find best settings" scores candidates; it does not decide on load
 
-The Vectorize rail's **Find best settings** (`studio/bestSettings.ts` pure, `useBestSettings.ts`
-plumbing, benchmarks §40, `bench/bestSettingsDiag.ts`) traces five candidates on a 352px copy,
-scores them with the shipped `deltaEField` via `scoreOffThread`, and applies the winner. It runs
-ONLY when pressed. Three things that are easy to undo:
+The Vectorize rail's **Find best settings** (`src/lib/traceInput/bestSettings.ts` pure,
+`useBestSettings.ts` plumbing, benchmarks §40, `bench/bestSettingsDiag.ts`) traces five candidates
+on a 352px copy, scores them with the shipped `deltaEField` via `scoreOffThread`, and applies the
+winner. It runs ONLY when pressed. The MCP's `search` (`src/mcp/trace.ts`, ON by default, so the
+benchmark's logolab-auto row searches too) runs the same candidates and winner rule headless, at
+the production raster, keeping the probes' pick unless another scores clearly closer
+(`searchMargin`: relative, since a mostly blank icon's ΔE is small). Three things that are easy
+to undo:
 
 * **A candidate is a PATCH, not a full options object.** It names only the keys it decides
   (`undefined` = remove), and `withCandidate` applies it to the CURRENT options, so a runner-up

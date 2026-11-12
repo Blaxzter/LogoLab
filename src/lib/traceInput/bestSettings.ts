@@ -1,6 +1,9 @@
 // "Find best settings": the candidates the studio tries, the rule that picks one,
 // and the scoreboard's words. Pure, in a `.ts` so test/best-settings.test.ts and
-// bench/bestSettingsDiag.ts import exactly what ships.
+// bench/bestSettingsDiag.ts import exactly what ships. It lives in src/lib (not
+// next to the studio) because the MCP server's `search` (src/mcp/trace.ts) ranks
+// its candidates with the same order, labels and winner rule, and the published
+// package cannot reach src/components.
 //
 // Each candidate is a patch over the studio's options plus its Mode and recolour,
 // built from what the studio already knows about the image: the mono cut and invert
@@ -8,10 +11,8 @@
 // user's own settings (smoothing, despeckle, fidelity, markers, …) ride along into
 // every one. Measured and tuned in docs/vectorization-benchmarks.md §40.
 
-import { applyInkMode, decideInkMode, type InkModePlan } from '../../../lib/traceInput/ink.ts'
-import type { VectorizeOptions } from '../../../types.ts'
-
-export { forceColorDoc } from './forceColorDoc.ts'
+import { applyInkMode, decideInkMode, type ImageDataLike, type InkModePlan } from './ink.ts'
+import type { VectorizeOptions } from '../../types.ts'
 
 /** Long side (px) of the reduced copy every candidate is traced and scored on. */
 export const SEARCH_MAX_DIM = 352
@@ -97,7 +98,7 @@ export function withCandidate(current: VectorizeOptions, c: Pick<Candidate, 'pat
  */
 export function buildCandidates(
   current: VectorizeOptions,
-  pixels: ImageData | null,
+  pixels: ImageDataLike | null,
   include: readonly CandidateId[] = CANDIDATE_ORDER,
 ): Candidate[] {
   const mono: InkModePlan | null = pixels ? decideInkMode(pixels, current.threshold, { colorMode: 'mono' }) : null
@@ -158,15 +159,28 @@ export interface CandidateScore {
  */
 export const SIMPLER_WINS_DE = 0.3
 
-/** Rank by ΔE, then hand the win to the simplest candidate within `margin` of the best. */
-export function pickWinner(scores: readonly CandidateScore[], margin = SIMPLER_WINS_DE): CandidateScore[] {
+/**
+ * Rank by ΔE, then hand the win to the simplest candidate within `margin` of the best.
+ *
+ * An `incumbent` (the candidate the probes already chose; the studio passes none)
+ * keeps the win while it is within `margin` of the best: the search then only
+ * overrules a choice that ΔE shows is clearly wrong. When it loses, the simplest
+ * rule above decides among the rest.
+ */
+export function pickWinner(
+  scores: readonly CandidateScore[],
+  margin = SIMPLER_WINS_DE,
+  incumbent?: CandidateId,
+): CandidateScore[] {
   const valid = scores.filter((s) => Number.isFinite(s.meanDeltaE))
   if (!valid.length) return []
   const byDe = [...valid].sort((a, b) => a.meanDeltaE - b.meanDeltaE || a.nodes - b.nodes)
   const best = byDe[0].meanDeltaE
   const rank = (s: CandidateScore) => CANDIDATE_ORDER.indexOf(s.id)
+  const held = incumbent ? valid.find((s) => s.id === incumbent && s.meanDeltaE <= best + margin) : undefined
   const close = byDe.filter((s) => s.meanDeltaE <= best + margin)
-  const winner = close.reduce((w, s) => (rank(s) < rank(w) || (rank(s) === rank(w) && s.nodes < w.nodes) ? s : w))
+  const winner =
+    held ?? close.reduce((w, s) => (rank(s) < rank(w) || (rank(s) === rank(w) && s.nodes < w.nodes) ? s : w))
   return [winner, ...byDe.filter((s) => s !== winner)]
 }
 

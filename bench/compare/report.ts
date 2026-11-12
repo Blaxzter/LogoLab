@@ -62,7 +62,7 @@ const LABEL: Record<string, string> = {
 const INPUTS: [string, string][] = [
   [
     'logolab-auto',
-    'The headline row. `npx logolab` (MCP traceIcon) on the PNG: probes pick mono/colour and gradients, with no per-case knowledge.',
+    'The headline row. `npx logolab` (MCP traceIcon) on the PNG: probes pick mono/colour and gradients, then every choice they left open is traced and scored against the PNG, and their pick stays unless another is clearly closer. No per-case knowledge.',
   ],
   [
     'logolab-abl-stacked-grad',

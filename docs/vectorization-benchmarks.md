@@ -7511,7 +7511,7 @@ settings on a reduced copy of the image, scores each with the studio's own ΔE (
 winner, and leaves a scoreboard with the runners-up one click away. Nothing here changes the
 tracer; this section is the measurement that fixed the button's four numbers. The census is
 `bench/bestSettingsDiag.ts`, and the candidates, winner rule and labels are the shipped
-`src/components/vectorize/studio/bestSettings.ts` (the bench imports it, so it measures what
+`src/lib/traceInput/bestSettings.ts` (the bench imports it, so it measures what
 ships). The gate is `test/best-settings.test.ts`.
 
 ### 40.1 Method
