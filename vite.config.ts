@@ -103,8 +103,19 @@ export default defineConfig(({ command }) => ({
     open: `http://${DEV_HOST}:${DEV_PORT}/`,
     watch: {
       // Don't watch/reload on test & screenshot artifacts or dropped-in image
-      // assets (binary files can be locked mid-write and crash the watcher).
-      ignored: ['**/.playwright-mcp/**', '**/assets/**', '**/*.png', '**/*.webp', '**/*.yml', '**/*.log', '**/dist/**'],
+      // assets (binary files can be locked mid-write and crash the watcher). `.bench-tools`
+      // holds the comparison runs and the HF staging (tens of thousands of files, GBs): the
+      // bench plugin reads them on request, and crawling them kept the dev server from answering.
+      ignored: [
+        '**/.playwright-mcp/**',
+        '**/.bench-tools/**',
+        '**/assets/**',
+        '**/*.png',
+        '**/*.webp',
+        '**/*.yml',
+        '**/*.log',
+        '**/dist/**',
+      ],
     },
   },
 }))
