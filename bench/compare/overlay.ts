@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ensureImageData } from '../nodeHarness.ts'
 import { parseGroundTruth, toRasterSpace, unscorable } from '../svgGround.ts'
-import { makeVisibleAt, tangentBreaks } from '../geomScore.ts'
+import { makeHiddenAt, makeVisibleAt, tangentBreaks } from '../geomScore.ts'
 import { releaseRenders, renderGround } from './render.ts'
 import { parseTraceSvg } from './traceSvg.ts'
 import { RESULTS } from './paths.ts'
@@ -83,7 +83,16 @@ export function caseOverlay(
   for (const [tool, svg] of toolSvgs) {
     const parsed = parseTraceSvg(svg, img.width, img.height)
     const sets = parsed.shapes?.map((s) => s.subPaths) ?? []
-    const breaks = shapes && parsed.shapes ? tangentBreaks(shapes, sets, img.width, img.height, visible).sites : []
+    // The run's own occlusion rule (score.ts), so a ring on the page is a kink in the table.
+    const hidden = parsed.shapes
+      ? makeHiddenAt(
+          sets,
+          parsed.shapes.map((s) => s.fillRule ?? 'nonzero'),
+          parsed.shapes.map((s) => s.occludes === true),
+        )
+      : undefined
+    const breaks =
+      shapes && parsed.shapes ? tangentBreaks(shapes, sets, img.width, img.height, visible, hidden).sites : []
     tools[tool] = {
       anchors: anchorsOf(sets),
       breaks: breaks.flatMap((b) => [round(b.x), round(b.y), Math.round(b.kink)]),

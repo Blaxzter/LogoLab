@@ -10,7 +10,7 @@ import { parseGroundTruth, toRasterSpace } from '../bench/svgGround.ts'
 import { renderGround } from '../bench/compare/render.ts'
 import { scoreTrace, type Truth } from '../bench/compare/score.ts'
 import { parseTraceSvg } from '../bench/compare/traceSvg.ts'
-import { makeHiddenAt } from '../bench/geomScore.ts'
+import { makeHiddenAt, makeVisibleAt, tangentBreaks } from '../bench/geomScore.ts'
 import type { CompareCase } from '../bench/compare/types.ts'
 import type { SubPath } from '../src/lib/path/types.ts'
 
@@ -114,4 +114,47 @@ test('an inherited evenodd reaches the shape', () => {
     parseTraceSvg(svg, RES, RES).shapes?.map((s) => s.fillRule ?? 'nonzero'),
     ['evenodd', 'nonzero'],
   )
+})
+
+test('a kink under a shape painted later is not counted', () => {
+  // The art: a disc on a white page. Traced STACKED, the page keeps a hole that is a 24-gon
+  // 0.8 px inside the disc's rim, painted over by the disc: 24 corners of 15° nobody can see.
+  // The corner counts read every path's nodes and counted them as kinks on a smooth edge
+  // until they took the edge metric's occlusion rule (Trazor's emoji: median 18 → 11).
+  const res = 200
+  const disc = (r: number) => {
+    const k = 0.5523 * r
+    return `M${100 + r} 100C${100 + r} ${100 + k} ${100 + k} ${100 + r} 100 ${100 + r}C${100 - k} ${100 + r} ${100 - r} ${100 + k} ${100 - r} 100C${100 - r} ${100 - k} ${100 - k} ${100 - r} 100 ${100 - r}C${100 + k} ${100 - r} ${100 + r} ${100 - k} ${100 + r} 100Z`
+  }
+  const gon = (r: number, n: number) =>
+    `M${Array.from({ length: n }, (_, i) => {
+      const a = (-2 * Math.PI * i) / n
+      return `${(100 + r * Math.cos(a)).toFixed(3)} ${(100 + r * Math.sin(a)).toFixed(3)}`
+    }).join('L')}Z`
+  const authored = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#ffffff"/><path fill="#625df5" d="${disc(60)}"/></svg>`
+  const img = renderGround(authored, res)
+  const t: Truth = { img, shapes: toRasterSpace(parseGroundTruth(authored), img.width), refusal: null }
+  const run = (pageHole: string) =>
+    scoreTrace(
+      CASE,
+      t,
+      'test',
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><path fill="#ffffff" fill-rule="evenodd" d="M0 0H200V200H0Z ${pageHole}"/><path fill="#625df5" d="${disc(60)}"/></svg>`,
+      0,
+      'colour',
+      { docVisible: true },
+    ).row
+  const tiled = run(disc(60))
+  const stacked = run(gon(59.2, 24))
+  // The hidden 24-gon does have kinks on the smooth rim: counted without the rule.
+  const parsed = parseTraceSvg(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><path fill="#ffffff" fill-rule="evenodd" d="M0 0H200V200H0Z ${gon(59.2, 24)}"/><path fill="#625df5" d="${disc(60)}"/></svg>`,
+    res,
+    res,
+  )
+  const sets = parsed.shapes?.map((s) => s.subPaths) ?? []
+  const shapes = t.shapes ?? []
+  assert.ok(tangentBreaks(shapes, sets, res, res, makeVisibleAt(img)).count >= 12, 'the hidden 24-gon has kinks')
+  assert.equal(stacked.tangentBreaks, tiled.tangentBreaks)
+  assert.equal(stacked.cornersInvented, tiled.cornersInvented)
 })

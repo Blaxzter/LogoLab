@@ -1091,6 +1091,27 @@ export interface InventedCorner {
 }
 
 /**
+ * Trace-side occlusion for CORNERS: true where a traced point lies under a shape the trace
+ * paints later (makeHiddenAt, by paint order and fill rule). `set` is the point's path among
+ * the doc's visible path items. The edge metric dropped hidden outline from v9 on; the corner
+ * counts read every path's nodes and kept counting kinks on outline nobody can see, which a
+ * STACKED output (Trazor's, VTracer's, LogoLab's product preset) carries and a tiled one does
+ * not. Optional everywhere: the truth gate scores tiled traces and never passes it.
+ */
+export type DocHiddenAt = (q: { x: number; y: number }, set: number) => boolean
+
+/** sharpCorners over every traced subpath, without the ones under a later shape. */
+function docCornersShown(docSets: SubPath[][], minEdge: number, minTurn: number, docHidden?: DocHiddenAt): Corner[] {
+  return docSets.flatMap((set, si) =>
+    sharpCorners(
+      set.map((sp) => [sp]),
+      minEdge,
+      minTurn,
+    ).filter((c) => !docHidden?.(c, si)),
+  )
+}
+
+/**
  * Sharp corners the trace asserts that the authored art does not have, and the worst one's
  * excess turn. See the block comment above.
  */
@@ -1100,6 +1121,7 @@ export function inventedCorners(
   w: number,
   h: number,
   visible: (q: QueryPt) => boolean,
+  docHidden?: DocHiddenAt,
 ): { count: number; worstExcess: number; sites: InventedCorner[] } {
   const chains: TurnChain[] = []
   gt.forEach((sh, si) => {
@@ -1117,10 +1139,7 @@ export function inventedCorners(
 
   // One physical corner is reported once per side of a shared edge; keep one of each.
   const uniq: Corner[] = []
-  for (const c of sharpCorners(
-    docSets.flat().map((sp) => [sp]),
-    0,
-  ))
+  for (const c of docCornersShown(docSets, 0, CORNER_MIN_TURN, docHidden))
     if (!uniq.some((u) => Math.hypot(u.x - c.x, u.y - c.y) <= 0.35)) uniq.push(c)
 
   // A uniform bucket grid over the authored samples: without it this is
@@ -1272,6 +1291,7 @@ export function tangentBreaks(
   w: number,
   h: number,
   visible: (q: QueryPt) => boolean,
+  docHidden?: DocHiddenAt,
 ): { count: number; worst: number; sites: TangentBreak[] } {
   const chains: TurnChain[] = []
   gt.forEach((sh, si) => {
@@ -1291,8 +1311,9 @@ export function tangentBreaks(
   // and the blush's sit on one point; they are different questions (one outline runs on
   // through, the other turns), so they are judged apart and only the COUNT is de-duplicated.
   const cands: { c: Corner; poly: Vec[]; at: number; closed: boolean }[] = []
-  for (const sp of docSets.flat()) {
-    const corners = sharpCorners([[sp]], 0, BREAK_MIN * deg)
+  for (const [set, sp] of docSets.flatMap((subs, set) => subs.map((sp) => [set, sp] as const))) {
+    // A kink under a shape painted later is not in the picture (see DocHiddenAt).
+    const corners = sharpCorners([[sp]], 0, BREAK_MIN * deg).filter((c) => !docHidden?.(c, set))
     if (!corners.length) continue
     const poly = flattenSubPath(sp)
     for (const c of corners) {
@@ -2050,6 +2071,12 @@ export function scoreGeometry(
      * output unequally. Off by default (the truth gate never passes docVisibleAt).
      */
     docSegsVisibleOnly?: boolean
+    /**
+     * Trace-side occlusion for the corner counts (DocHiddenAt): corners recovered, corners
+     * invented and tangent breaks skip a traced corner under a shape painted later. The
+     * comparison passes makeHiddenAt with docVisibleAt; the truth gate passes neither.
+     */
+    docHiddenAt?: DocHiddenAt
     /** Parsimony without canvas-edge boundary (both sides) — see the density block below. */
     parsimonyBorderFree?: boolean
   } = {},
@@ -2083,10 +2110,14 @@ export function scoreGeometry(
   const gtCornerVis = gtCornerAll.filter(
     (c) => visible({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || visible({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
   )
-  const cornersRecovered = matchCorners(gtCornerVis, sharpCorners(docSets), CORNER_MATCH_R)
+  const cornersRecovered = matchCorners(
+    gtCornerVis,
+    opts.docHiddenAt ? docCornersShown(docSets, 0, CORNER_MIN_TURN, opts.docHiddenAt) : sharpCorners(docSets),
+    CORNER_MATCH_R,
+  )
   // …and the PRECISION half of the same question, blind in this corpus until §23.
-  const invented = inventedCorners(gt, docSets, w, h, visible)
-  const breaks = tangentBreaks(gt, docSets, w, h, visible)
+  const invented = inventedCorners(gt, docSets, w, h, visible, opts.docHiddenAt)
+  const breaks = tangentBreaks(gt, docSets, w, h, visible, opts.docHiddenAt)
 
   const gGrid = new SegGrid(G.segs)
   const dGrid = new SegGrid(D.segs)

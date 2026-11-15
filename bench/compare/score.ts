@@ -270,6 +270,7 @@ export function scoreTrace(
         ? {
             docVisibleAt: (q, set) => seen(q) && !hidden(q, set),
             docSegsVisibleOnly: true,
+            docHiddenAt: hidden,
             parsimonyBorderFree: true,
           }
         : {},
