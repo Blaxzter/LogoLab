@@ -170,10 +170,12 @@ test('a corpus on the leaderboard is held out on the site too, not by the unknow
 test('a ranked corpus the tracer was measured on is not called held out', () => {
   // svgemoji-v0 said "never tuned" while tracer commits from 2026-10-20 on measured themselves on it.
   assert.equal(corpusStatus('svgemoji-v0'), 'seen in development')
-  assert.equal(corpusStatus('logos-cc0'), 'held out')
+  // logos-cc0 too, from 2026-11-06: the boundary solve's settings were measured on it.
+  assert.equal(corpusStatus('logos-cc0'), 'seen in development')
   assert.equal(corpusStatus('strokes-oss'), 'held out')
   assert.equal(corpusStatus('truth0'), 'in-sample')
   assert.doesNotMatch(corpusInfo('svgemoji-v0').blurb, /never tuned/)
+  assert.doesNotMatch(corpusInfo('logos-cc0').blurb, /not tuned/)
 })
 
 test('corpus kind and metric sets are explicit', () => {

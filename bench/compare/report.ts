@@ -187,9 +187,10 @@ export function leaderboardMarkdown(rows: ScoreRow[]): string[] {
   out.push('## Leaderboard: mean rank')
   out.push('')
   out.push(
-    'No in-sample corpus is ranked. logos-cc0 and strokes-oss were added after the last change to the tracer’s output, ' +
-      'so they are unseen. svgemoji-v0 is ranked as SVG-Bench’s published split, but the tracer was measured on it during ' +
-      'development from 2026-10-20 on, so its table is not evidence from unseen data.',
+    'No in-sample corpus is ranked. Nothing was measured on strokes-oss during development, so it is unseen. ' +
+      'logos-cc0 (the headline corpus for logos) and svgemoji-v0 (SVG-Bench’s published split) are ranked, but tracer ' +
+      'changes were measured on them, svgemoji-v0 from 2026-10-20 and logos-cc0 from 2026-11-06 on, so their tables are ' +
+      'not evidence from unseen data.',
   )
   out.push('')
   out.push(
@@ -376,7 +377,9 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
     const held = !cr[0]?.heldOut
       ? 'in-sample (development)'
       : corpusInfo(corpus).seen
-        ? 'ranked, seen in development'
+        ? HEADLINE_CORPORA.includes(corpus)
+          ? 'ranked, headline, seen in development'
+          : 'ranked, seen in development'
         : HEADLINE_CORPORA.includes(corpus)
           ? 'held out, headline'
           : 'held out'
