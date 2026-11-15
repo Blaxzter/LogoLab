@@ -227,8 +227,9 @@ Size, format, transparency, and the plan the tracer would use, without tracing.
 
 Every tool takes the same overrides (`mode`, `gradients`, `flattenOnto`,
 `removeBackground`, `detail`, `smoothing`, `despeckle`, `fidelity`; the tools that write
-an SVG also `ink`, `normalize`/`inset` and `quiet`) and reports what it chose, so an
-agent can overrule one thing without hand-tuning the rest:
+an SVG also `ink`, `normalize`/`inset` and `quiet`; `trace_icon` and `make_app_icons`
+also `search`) and reports what it chose, so an agent can overrule one thing without
+hand-tuning the rest:
 
 - **colour vs mono** — the ink probe counts distinct inks. One ink on paper traces
   mono: one shape, a fraction of the nodes, no anti-alias slivers. Light ink on dark
@@ -240,6 +241,11 @@ agent can overrule one thing without hand-tuning the rest:
   cap to 4096.
 - **enlargement** — a small mono source is upscaled before tracing, because its
   anti-aliasing encodes sub-pixel coverage a pixel-lattice tracer cannot otherwise use.
+- **checked, not trusted**: with `search` (on by default since 0.9.0), the choices the
+  request leaves on auto (mono or colour, gradients on or off) are each traced and scored
+  against the image in ΔE, and the probes' pick stays unless another is clearly closer. A
+  forced `mode` or `gradients` is kept. The report lists every candidate's score. It takes
+  about 2.5× as long; `search: false` keeps the probes' pick untested.
 
 ## Layout
 

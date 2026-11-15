@@ -104,6 +104,10 @@ After an export:
 
 - The tracer picks colour vs mono, gradients and resolution itself, and says what it chose
   in the summary. Trust the defaults first; override only for a reason you can name.
+- It also checks its own pick: `trace_icon` and `make_app_icons` trace the other automatic
+  choices too and switch only when one is clearly closer to the image (`search`, on by
+  default). That takes about 2.5x as long; `search=false` skips it when speed matters
+  more, for example in a loop over many icons.
 - **One-ink line art** (an outline icon, a sketch, a diagram): `strokes=true` gives stroked
   paths. `strokesOnly=true` with it forbids filled shapes entirely (dots become round
   strokes) — for plotters or stroke-only icon sets.
