@@ -35,7 +35,14 @@
 // border gates on flat art only, the paint gate on gradient tier-0 only.
 
 import { deltaEField, deltaEStats } from '../../src/lib/render/fidelity.ts'
-import { scoreGeometry, scoreRegions, circleRecovery, scoreBorderBand, makeVisibleAt } from '../geomScore.ts'
+import {
+  scoreGeometry,
+  scoreRegions,
+  circleRecovery,
+  scoreBorderBand,
+  makeVisibleAt,
+  makeHiddenAt,
+} from '../geomScore.ts'
 import { evaluateTruthGates, TRUTH_TOL } from '../truthCorpus.ts'
 import type { GroundShape } from '../svgGround.ts'
 import type { EditableDoc } from '../../src/lib/path/types.ts'
@@ -243,7 +250,16 @@ export function scoreTrace(
   let geom: ReturnType<typeof scoreGeometry> | null = null
   let cr: ReturnType<typeof circleRecovery> | null = null
   let bb: ReturnType<typeof scoreBorderBand> | null = null
-  if (truth.shapes && parsed.shimDoc) {
+  if (truth.shapes && parsed.shimDoc && parsed.shapes) {
+    // Visible on the trace = a colour change in its own render AND not under a shape painted
+    // later (geomScore makeHiddenAt). parseTraceSvg makes one visible path item per shape, in
+    // paint order, which is the order scoreGeometry indexes `set` by.
+    const seen = makeVisibleAt(render)
+    const hidden = makeHiddenAt(
+      parsed.shapes.map((s) => s.subPaths),
+      parsed.shapes.map((s) => s.fillRule ?? 'nonzero'),
+      parsed.shapes.map((s) => s.occludes === true),
+    )
     geom = scoreGeometry(
       truth.shapes,
       parsed.shimDoc,
@@ -251,7 +267,12 @@ export function scoreTrace(
       h,
       truth.img,
       opts.docVisible
-        ? { docVisibleAt: makeVisibleAt(render), docSegsVisibleOnly: true, parsimonyBorderFree: true }
+        ? {
+            docVisibleAt: (q, set) => seen(q) && !hidden(q, set),
+            docSegsVisibleOnly: true,
+            docHiddenAt: hidden,
+            parsimonyBorderFree: true,
+          }
         : {},
     )
     const docSets = parsed.shimDoc.items.map((i) => (i.kind === 'path' ? i.subPaths : []))

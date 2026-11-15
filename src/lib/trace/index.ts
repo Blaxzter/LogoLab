@@ -18,6 +18,8 @@ import { fitPaintLadder, type PaintLadderResult, type RegionSamples } from './gr
 import { DEFAULT_BEAUTIFY_OPTIONS, type BeautifyOptions } from './beautify.ts'
 import { uniteBackgroundGradient, type BackgroundUnion } from './backgroundLayer.ts'
 import { tracePlanar, type PlanarTrace } from './planarAssemble.ts'
+import { solveBoundaries, type SolveColor, type SolveImage } from './planarSolve.ts'
+import { underlapTiledEdges } from './planarUnderlap.ts'
 import { monoLabels, MONO_INK, MONO_PAPER } from './mono.ts'
 import { hasOpaqueBorder, paperColor, paperItem } from '../path/paper.ts'
 import { traceCenterline } from './centerline/index.ts'
@@ -417,7 +419,16 @@ export async function traceImage(
   // rewrites the region loops, which beautify treats as read-only. Everything
   // downstream reads the loops after this.
   const fitOpts = planarFitOptionsFor(options)
-  const finishPlanar = (trace: PlanarTrace) => {
+  const finishPlanar = (
+    trace: PlanarTrace,
+    solve?: {
+      palette: readonly SolveColor[]
+      isFlat: (label: number) => boolean
+      gradientOf?: (label: number) => GradientFill | null
+      image: SolveImage
+      labels: Int32Array
+    },
+  ) => {
     let reseated: ReadonlySet<number> = new Set<number>()
     const topology = planarBeautify(
       { vertices: trace.vertices, edges: trace.edges },
@@ -443,6 +454,15 @@ export async function traceImage(
       },
     )
     weldConvergedJunctions(topology.vertices, topology.edges, trace.loopsByLabel, width, height, reseated)
+    if (fitOpts.boundarySolve && solve) {
+      solveBoundaries({
+        vertices: topology.vertices,
+        edges: topology.edges,
+        loopsByLabel: trace.loopsByLabel,
+        through: trace.through,
+        ...solve,
+      })
+    }
     return { topology, edges: edgeMap(topology) }
   }
 
@@ -494,7 +514,19 @@ export async function traceImage(
     const trace = tracePlanar(seg.labels, width, height, fitOpts, seg.palette, seg.image)
     stage('trace')
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    const { topology, edges } = finishPlanar(trace)
+    // Medians, not seg.palette's means: the means carry the anti-aliasing of the edge pixels,
+    // and a coverage read against a biased colour shifts every boundary.
+    const { topology, edges } = finishPlanar(
+      trace,
+      fitOpts.boundarySolve
+        ? {
+            palette: [paperColor(seg.image, seg.labels, MONO_INK), paperColor(seg.image, seg.labels, MONO_PAPER)],
+            isFlat: () => true,
+            image: seg.image,
+            labels: seg.labels,
+          }
+        : undefined,
+    )
     stage('beautify')
     const loops = trace.loopsByLabel.get(MONO_INK) ?? []
     const subPaths = materializeRegion(loops, edges)
@@ -746,7 +778,25 @@ export async function traceImage(
   // local two-colour model does not hold.
   const trace = tracePlanar(labels, width, height, fitOpts, q.palette, imageData)
   stage('trace') // includes the flat-art prep above (bg detect / remove-heal / heal-spikes)
-  const { topology, edges } = finishPlanar(trace)
+  const { topology, edges } = finishPlanar(trace, {
+    palette: q.palette,
+    image: imageData as unknown as SolveImage,
+    labels,
+    isFlat: (l) => {
+      const c = q.palette[l]
+      if (!c || (c.a !== undefined && c.a < 255)) return false
+      if (bgUnion && l === bgUnion.seed) return false
+      const p = labelPaint[l]
+      return !p || p.model === 'solid'
+    },
+    gradientOf: (l) => {
+      const c = q.palette[l]
+      if (!c || (c.a !== undefined && c.a < 255)) return null
+      const p = labelPaint[l]
+      const g = bgUnion && l === bgUnion.seed ? bgUnion.gradient : p && p.model !== 'glow' ? p.gradient : null
+      return g && g.stops.every((st) => st.opacity === undefined || st.opacity >= 1) ? g : null
+    },
+  })
   stage('beautify')
   let order = [...trace.loopsByLabel.keys()].filter((l) => l >= 0).sort((a, b) => a - b)
   // Background removal drops the pre-union `bg` and, when the union ran, every label
@@ -785,6 +835,17 @@ export async function traceImage(
           return { label: l.label, loops: l.loops, id }
         })
       : order.map((label) => ({ label, loops: trace.loopsByLabel.get(label)!, id: `trace-${label}` }))
+  if (fitOpts.underlap && options.layering === 'stacked') {
+    underlapTiledEdges({
+      layers,
+      edges,
+      addEdge: (e) => topology.edges.push(e),
+      labels,
+      width,
+      height,
+      opaque: opaqueLabel,
+    })
+  }
   const items: PathItem[] = []
   let traced = 0
   let lastTracePct = -1
@@ -970,7 +1031,8 @@ export function segmentOptionsFor(options: VectorizeOptions): SegmentOptions {
     ? {
         ...DEFAULT_SEGMENT_OPTIONS,
         tauS: DEFAULT_SEGMENT_OPTIONS.tauS - d * 7.5, // 10 → 2.5
-        mergeTol: DEFAULT_SEGMENT_OPTIONS.mergeTol - d * 0.048, // 0.06 → 0.012
+        mergeTol: DEFAULT_SEGMENT_OPTIONS.mergeTol - d * 0.003, // 0.015 → 0.012
+        mergeTolFlow: DEFAULT_SEGMENT_OPTIONS.mergeTolFlow - d * 0.048, // 0.06 → 0.012
         mergeGradients,
         minRegionArea,
       }

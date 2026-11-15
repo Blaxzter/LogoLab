@@ -259,7 +259,7 @@ away. The winner is the lowest ΔE, except that a simpler candidate within 0.3 �
 scoreboard says in words. Progress reads "Trying 3 of 5…" and the search can be cancelled; a
 setting change, a Trace or a new image cancels it. It works in the mobile Trace sheet and in the
 icon sheet's studio. Candidates, winner rule and labels are pure
-(`studio/bestSettings.ts`, `test/best-settings.test.ts`); the plumbing is `useBestSettings.ts`.
+(`lib/traceInput/bestSettings.ts`, `test/best-settings.test.ts`); the plumbing is `useBestSettings.ts`.
 
 Measured (benchmarks **§40**, `bench/bestSettingsDiag.ts`, 246 cases): the whole search takes a
 median 0.43 s and p90 1.44 s in Node on a pool of two workers, 235/246 under 2 s. In the

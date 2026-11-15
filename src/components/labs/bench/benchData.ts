@@ -39,6 +39,9 @@ export interface BenchMeta {
   /** Commits whose saved traces and scores this run reused (run.ts --progress-from): only
    *  allowed while the tracer is the same, with the bench files that differ. */
   progressFrom?: { rev: string; benchChanged: string[] }[]
+  /** Commits whose saved LogoLab TRACES this run reused and scored again (run.ts
+   *  --traces-from, for a scorer change): same rule. */
+  tracesFrom?: { rev: string; benchChanged: string[] }[]
   corpora: string[]
   tools: string[]
   versions: Record<string, string>
@@ -280,7 +283,7 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     label: 'LogoLab',
     family: 'logolab',
     blurb:
-      'The headline row, and what users get: the MCP traceIcon path. The ink probe picks Mono or Colour, the gradient probe decides on ramps, and small mono art is enlarged, with no per-case knowledge.',
+      'The headline row, and what users get: the MCP traceIcon path. The ink probe picks Mono or Colour, the gradient probe decides on ramps, and small mono art is enlarged, with no per-case knowledge. Since v9 the MCP’s `search` is on by default: it traces each of those choices and keeps the probes’ pick unless another is clearly closer to the source, at about three to four times the time.',
   },
   'logolab-gate': {
     label: 'LogoLab (oracle)',
@@ -367,6 +370,12 @@ export const TOOL_INFO: Record<string, ToolInfo> = {
     family: 'external',
     blurb:
       'The Inkvec 0.3.1 command line, built from tag v0.3.1, with no flags (`--mode quality`). This build has no trained restorer, which ships separately and is for damaged input.',
+  },
+  'inkvec-fills': {
+    label: 'Inkvec fills',
+    family: 'external',
+    blurb:
+      'The Inkvec 0.3.1 command line with `--no-detect-strokes`: the default engine, with every face written as a filled outline. By default it writes faces it reads as drawn strokes as stroked paths, which the outline scorer cannot read, so this is the row the drawing metrics can be read on, as ImageTracer fills is.',
   },
   'inkvec-fast': {
     label: 'Inkvec fast',
@@ -466,8 +475,9 @@ export const CORPUS_INFO: Record<string, CorpusInfo> = {
   'logos-cc0': {
     label: 'Open logos (CC0) · 300',
     heldOut: true,
+    seen: true,
     blurb:
-      '300 brand marks from gilbarbara/logos at a pinned commit, stratified by colour count, gradients and wordmark vs symbol, picked in sha1 order. Strokes, masks and filters are kept (pixel metrics only). Brands in LogoLab’s own gallery corpus are excluded, so LogoLab was not tuned on any of them. This is the headline corpus for logos. CC0 covers the artwork; the marks remain their owners’ trademarks.',
+      '300 brand marks from gilbarbara/logos at a pinned commit, stratified by colour count, gradients and wordmark vs symbol, picked in sha1 order. Strokes, masks and filters are kept (pixel metrics only). Brands in LogoLab’s own gallery corpus are excluded. The boundary solve’s settings (2026-11-06 to 11-12) were measured on these 300 together with the emoji, so they are not unseen. This is the headline corpus for logos. CC0 covers the artwork; the marks remain their owners’ trademarks.',
     source: 'gilbarbara/logos (GitHub), pinned commit + per-file sha256 (bench/compare/manifests/logos-cc0.json)',
     sourceUrl: 'https://github.com/gilbarbara/logos',
     license: 'CC0 1.0 (artwork; marks are trademarks)',
@@ -477,7 +487,7 @@ export const CORPUS_INFO: Record<string, CorpusInfo> = {
     heldOut: true,
     seen: true,
     blurb:
-      '100 Twemoji from the test split of StarVector’s SVG-Bench `svg-emoji`: fill-only, one per base emoji, picked in sha1 order. Held out until 2026-10-19. Tracer changes from 2026-10-20 on were measured on these 100, and some came from what they showed, so they are not unseen. They stay ranked because this is SVG-Bench’s published split; logos-cc0 and strokes-oss are the unseen corpora.',
+      '100 Twemoji from the test split of StarVector’s SVG-Bench `svg-emoji`: fill-only, one per base emoji, picked in sha1 order. Held out until 2026-10-19. Tracer changes from 2026-10-20 on were measured on these 100, and some came from what they showed, so they are not unseen. They stay ranked because this is SVG-Bench’s published split; strokes-oss is the one ranked corpus nothing was measured on in development.',
     source: 'starvector/svg-emoji (Hugging Face), pinned revision + parquet sha256',
     sourceUrl: 'https://huggingface.co/datasets/starvector/svg-emoji',
     license: 'CC-BY 4.0 (Twemoji)',

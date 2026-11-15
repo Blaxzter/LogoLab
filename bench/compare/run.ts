@@ -2,7 +2,7 @@
 //
 //   node --experimental-strip-types bench/compare/run.ts [--tools a,b] [--corpus x,y] [--limit n]
 //        [--res 512] [--run name] [--no-svgbench] [--no-cache] [--gate-exact]
-//        [--fit key=value,…] [--fresh] [--shard i/n] [--progress-from <commit>]
+//        [--fit key=value,…] [--fresh] [--shard i/n] [--progress-from <commit>] [--traces-from <commit>]
 //
 // Why authored SVGs: the answer sheet has to be the vector art that produced the pixels, or
 // "correct" cannot be told from "like the other tracer". StarVector's SVG-Bench scores the
@@ -25,7 +25,7 @@
 //   autotrace-default, autotrace-swept             AutoTrace 0.40.0 win64 → .bench-tools/autotrace/ (adapters/external.ts)
 //   imagetracer-default, -fills, -swept           npm imagetracerjs@1.2.6 → .bench-tools/imagetracer/, in-process (adapters/imagetracer.ts)
 //   trazor-auto, -default, -logo, -centerline     PhenX/Trazor pinned, bundled → .bench-tools/trazor/, in-process (adapters/trazor.ts)
-//   inkvec-default, -fast, -strokes               logolabs/inkvec pinned, built → .bench-tools/inkvec/ (adapters/inkvec.ts)
+//   inkvec-default, -fills, -fast, -strokes       logolabs/inkvec pinned, built → .bench-tools/inkvec/ (adapters/inkvec.ts)
 //   starvector-1b                                 .bench-tools/starvector-venv + HF weights (adapters/starvector.ts)
 //   omnisvg-4b                                    .bench-tools/omnisvg-venv + omnisvg-src + HF weights (adapters/omnisvg.ts)
 //   logolab-strokes, logolab-outline              LINE corpora only: traceIcon mode=mono with / without `strokes`
@@ -59,6 +59,11 @@
 // resvg's memory was never freed — render.ts releaseRenders). Refused when the tracer (src/,
 // without the site's src/components/) differs from <commit>; the bench files that differ are
 // printed and recorded in meta.
+//
+// --traces-from <commit> takes only LogoLab's TRACES from a clean-tree run at <commit>, under
+// the same refusal, and scores every row again: for a SCORER change, which moves numbers but
+// cannot move a trace (v9: corners under a shape painted later stopped counting). External
+// tools come from the cache and SVG-Bench rows by digest anyway, so such a run is a re-score.
 //
 // --shard i/n traces and scores only every n-th case (from the i-th, 0-based), saves its rows
 // as progress and stops: no SVG-Bench, no results.json. n of them side by side use n cores;
@@ -111,7 +116,7 @@ import {
 import { omnisvg, omnisvgProvenance } from './adapters/omnisvg.ts'
 import { imagetracerDefault, imagetracerFills, imagetracerSwept } from './adapters/imagetracer.ts'
 import { trazorAuto, trazorCenterline, trazorDefault, trazorLogo } from './adapters/trazor.ts'
-import { inkvecDefault, inkvecFast, inkvecStrokes } from './adapters/inkvec.ts'
+import { inkvecDefault, inkvecFast, inkvecFills, inkvecStrokes } from './adapters/inkvec.ts'
 import { starvector, starvectorProvenance } from './adapters/starvector.ts'
 import {
   corpusKind,
@@ -146,6 +151,7 @@ const ALL_TOOLS: TracerAdapter[] = [
   trazorLogo,
   trazorCenterline,
   inkvecDefault,
+  inkvecFills,
   inkvecFast,
   inkvecStrokes,
   starvector,
@@ -222,18 +228,21 @@ async function main(): Promise<void> {
   // --progress-from: an earlier clean-tree commit whose entries this run accepts too. Same
   // tracer or nothing — its traces would not be this code's; the bench diff is on record.
   const git = (...a: string[]): string => execFileSync('git', a, { cwd: REPO, encoding: 'utf8' })
-  const carried = (list('--progress-from') ?? []).map((given) => {
+  const sameTracer = (flag: string) => (given: string) => {
     const rev = git('rev-parse', '--short', given).trim()
     // src/components/ is the site: no trace or score imports it for a number (benchData.ts only
     // arranges rows into reports), and its wording changes between runs.
     const src = git('diff', '--name-only', rev, '--', 'src', ':(exclude)src/components').split('\n').filter(Boolean)
     const untracked = prov.status.filter((l) => l.startsWith('?? src/') && !l.startsWith('?? src/components/'))
     if (src.length || untracked.length)
-      throw new Error(`--progress-from ${rev}: the tracer differs (${[...src, ...untracked].join(', ')})`)
+      throw new Error(`${flag} ${rev}: the tracer differs (${[...src, ...untracked].join(', ')})`)
     const benchChanged = git('diff', '--name-only', rev, '--', 'bench').split('\n').filter(Boolean)
-    console.log(`  ↺ accepting progress saved at ${rev}; bench differs in: ${benchChanged.join(', ') || 'nothing'}`)
+    console.log(`  ↺ ${flag}: accepting what ${rev} saved; bench differs in: ${benchChanged.join(', ') || 'nothing'}`)
     return { rev, key: keyOf(rev), benchChanged }
-  })
+  }
+  const carried = (list('--progress-from') ?? []).map(sameTracer('--progress-from'))
+  // --traces-from: LogoLab's traces only; every row is scored again by this code.
+  const tracesFrom = [...carried, ...(list('--traces-from') ?? []).map(sameTracer('--traces-from'))]
   // A LogoLab version string carries the rev it was traced at (adapters/logolab.ts).
   const versionAt = (version: string, rev: string): string => version.replace(/^logolab@\S+/, `logolab@${rev}`)
   // ── tools
@@ -302,7 +311,7 @@ async function main(): Promise<void> {
     // What is not cached across runs (LogoLab) is still kept for THIS run, under this code state.
     const traceKey = (k: (typeof cases)[number]): string[] => [
       sha1(codeKey + version + k.pngSha),
-      ...carried.map((f) => sha1(f.key + versionAt(version, f.rev) + k.pngSha)),
+      ...tracesFrom.map((f) => sha1(f.key + versionAt(version, f.rev) + k.pngSha)),
     ]
     const todo: typeof mine = []
     let resumed = 0
@@ -538,6 +547,10 @@ async function main(): Promise<void> {
     // Entries an earlier commit saved and this run took (--progress-from), with the bench
     // files that differ from it. The tracer did not (refused otherwise).
     ...(carried.length ? { progressFrom: carried.map(({ rev, benchChanged }) => ({ rev, benchChanged })) } : {}),
+    // LogoLab traces an earlier commit made, scored again here (--traces-from); same tracer.
+    ...(tracesFrom.length > carried.length
+      ? { tracesFrom: tracesFrom.slice(carried.length).map(({ rev, benchChanged }) => ({ rev, benchChanged })) }
+      : {}),
     docVisible,
     ...(Object.keys(fitOverrides).length ? { fit: fitOverrides } : {}),
     corpora: corpusIds,

@@ -382,6 +382,40 @@ test('…but a grey that FILLS an area is an ink, even where it sits on the ramp
   assert.equal(decideInkMode(img, 128, { colorMode: 'auto', background: WHITE }).mode, 'color')
 })
 
+test('one ink that mono cannot paint stays colour, and the plan says why', () => {
+  // The probe reads each of these as one ink; tracing it in one colour would flatten what the
+  // picture shows, so it stays colour and the studio line / MCP summary can say so instead of
+  // "colour (1 inks)".
+  const ramp = blank(200, [255, 255, 255, 255])
+  shaded(ramp, { x: 30, y: 30, w: 140, h: 140 }, [40, 90, 200, 255], [20, 50, 140, 255])
+  const tones = blank(200, [255, 255, 255, 255])
+  shaded(tones, { x: 30, y: 30, w: 140, h: 70 }, [20, 30, 90, 255], [20, 30, 90, 255])
+  shaded(tones, { x: 30, y: 100, w: 140, h: 70 }, [50, 60, 120, 255], [50, 60, 120, 255])
+  for (const [img, why] of [
+    [ramp, 'ramps'],
+    [tones, 'third-colour'],
+  ] as const) {
+    assert.equal(probeInk(img, WHITE).inks, 1)
+    const plan = decideInkMode(img, 128, { colorMode: 'auto', background: WHITE })
+    assert.equal(plan.mode, 'color')
+    assert.equal(plan.colourBecause, why)
+    // Asked for, mono still runs, and has nothing to explain.
+    assert.equal(decideInkMode(img, 128, { colorMode: 'mono', background: WHITE }).colourBecause, null)
+  }
+  // Plain one-ink art is mono with no reason attached; two inks are colour with none either.
+  assert.equal(
+    decideInkMode(art(64, 64, [255, 255, 255, 255], [20, 20, 20, 255]), 128, { colorMode: 'auto', background: WHITE })
+      .colourBecause,
+    null,
+  )
+  const two = blank(200, [255, 255, 255, 255])
+  shaded(two, { x: 30, y: 30, w: 140, h: 70 }, [10, 10, 10, 255], [10, 10, 10, 255])
+  shaded(two, { x: 30, y: 100, w: 140, h: 70 }, [80, 80, 80, 255], [80, 80, 80, 255])
+  const twoPlan = decideInkMode(two, 128, { colorMode: 'auto', background: WHITE })
+  assert.equal(twoPlan.inks, 2)
+  assert.equal(twoPlan.colourBecause, null)
+})
+
 test('…but a darker tone of the ink is NOT on that ramp — it is past the ink, not between', () => {
   // The `t` bound in `onRamp`. A second blue at the same hue projects onto the
   // paper→ink line, so distance alone would swallow it; it sits BEYOND the ink,

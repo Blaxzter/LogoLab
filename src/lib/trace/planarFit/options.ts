@@ -169,6 +169,19 @@ export interface PlanarFitOptions {
    * `false` keeps the chord-only snap.
    */
   arcArms: boolean
+  /**
+   * Boundary solve (planarSolve.ts): after the fit, beautify and weld, move every node and
+   * handle at once so the exact coverage the curves paint matches the source raster. Between
+   * rounds it may add a node where a curve still misses (at most a tenth of what the fit chose).
+   * Only effective where the caller hands over the source and the region colours.
+   */
+  boundarySolve: boolean
+  /**
+   * Underlap (planarUnderlap.ts): in a stacked output, the shape behind a shared edge draws a
+   * hidden copy of it reaching under the shape in front, so the page or the layer beneath does
+   * not show through the anti-aliased seam. Stacked colour traces only; adds no node.
+   */
+  underlap: boolean
   /** Diagnostic overrides for the arc-arm constants. `arcArmModel`: 'tangent' replaces a
    *  bent arm's chord with its anchored tangent line (the chord rotated by the measured
    *  chord-to-tangent angle — no radius estimate); 'circle' intersects fitted circles
@@ -235,6 +248,8 @@ export const DEFAULT_PLANAR_FIT: PlanarFitOptions = {
   subpixelWindowGuard: true,
   fillets: true,
   arcArms: true,
+  boundarySolve: true,
+  underlap: true,
 }
 
 /** Flat-art line cost: > cubicCost so the DP prefers a cubic on any span where a

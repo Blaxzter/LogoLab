@@ -3,16 +3,10 @@
 import { useEffect, useRef } from 'react'
 import { getImageData } from '../../../lib/image'
 import type { EditableDoc } from '../../../lib/path/types'
+import { SCORE_MAX_DIM } from '../../../lib/render/fidelity'
 import { scoreOffThread, type TraceScore } from '../../../lib/render/scoreOffThread'
 import { logError } from '../../../lib/report/errorLog'
 import type { VectorizeSource } from './types'
-
-/**
- * Long side of the raster the fidelity score and Difference heat are measured
- * on. Deliberately below the trace resolution (1024–4096): rasterizing costs
- * O(pixels) per path, and scoring at 1024px barely moves the mean ΔE.
- */
-const SCORE_MAX_DIM = 1024
 
 /** Settle time before a score is started. Longer than the trace debounce because
  *  this also fires on every committed node edit, and a drag commits per frame. */

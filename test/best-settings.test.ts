@@ -10,7 +10,6 @@ import assert from 'node:assert/strict'
 import {
   buildCandidates,
   CANDIDATE_ORDER,
-  forceColorDoc,
   pickWinner,
   poolWallMs,
   TRACE_ORDER,
@@ -19,7 +18,8 @@ import {
   winnerNote,
   withCandidate,
   type CandidateScore,
-} from '../src/components/vectorize/studio/bestSettings.ts'
+} from '../src/lib/traceInput/bestSettings.ts'
+import { forceColorDoc } from '../src/components/vectorize/studio/forceColorDoc.ts'
 import { freshSettings, sameSettings } from '../src/components/vectorize/studio/freshSettings.ts'
 import { DEFAULT_VECTORIZE_OPTIONS } from '../src/lib/trace/index.ts'
 import type { EditableDoc } from '../src/lib/path/types.ts'
@@ -156,6 +156,18 @@ test('just outside the margin, simpler does not win', () => {
 test('the margin is a parameter, and 0 means ΔE alone (ties to fewer nodes)', () => {
   assert.equal(pickWinner([s('gradients', 1.0, 90), s('mono', 1.1, 12)], 0)[0].id, 'gradients')
   assert.equal(pickWinner([s('flat', 1.0, 90), s('flat', 1.0, 30)], 0)[0].nodes, 30)
+})
+
+test('an incumbent keeps the win within the margin, loses outside it; without one nothing changes', () => {
+  const scores = [s('mono', 1.25, 12), s('flat', 1.1, 40), s('gradients', 1.0, 90)]
+  // The studio passes no incumbent: the simplest within the margin, as above.
+  assert.equal(pickWinner(scores)[0].id, 'mono')
+  assert.equal(pickWinner(scores, SIMPLER_WINS_DE, 'gradients')[0].id, 'gradients')
+  assert.equal(pickWinner(scores, SIMPLER_WINS_DE, 'flat')[0].id, 'flat')
+  // Out of the margin, the incumbent is overruled and the simplest close one wins.
+  const far = [s('mono', 3, 12), s('flat', 1.1, 40), s('gradients', 1.0, 90)]
+  assert.equal(pickWinner(far, SIMPLER_WINS_DE, 'mono')[0].id, 'flat')
+  assert.equal(pickWinner(far, 0, 'mono')[0].id, 'gradients')
 })
 
 test('a failed candidate (non-finite ΔE) never wins, and no scores means no winner', () => {

@@ -352,6 +352,38 @@ cubic bent onto a line direction and then met at a corner points nowhere (that c
 four kinks). `bench/compare/kinkJoins.ts` says what each counted kink joins; `run.ts --fit
 key=value` measures a fit option off and on through the real scorer.
 
+## The boundary solve moves EVERY edge after the fit, and must not cross two of them
+
+`src/lib/trace/planarSolve.ts` (benchmarks §46) runs after beautify: damped Gauss-Newton on the
+exact area coverage the curves paint against the raster, every node and handle at once, the
+fills held fixed, gradient regions solved against their own paint. Anchors end at most 1.5 px
+and handles 4 px from the fit; four rounds, with up to a tenth more nodes where a curve still
+misses. Every number in `DEFAULT_SOLVE_TUNE` was measured on logos-cc0 + svgemoji-v0 (its
+comment says what each bought). Six things that are easy to undo:
+
+* **Judge it against the SOURCE.** Every edge moves, so a trace-vs-trace heat lights every
+  edge; the A/B lab's per-lane score against the input is the number (flat lane ΔE
+  0.614 → 0.588, gradient 0.832 → 0.390 when it landed).
+* **A crossing the solve makes is held, never ignored** (`edgeCrossings.ts`). Nothing in the
+  energy keeps two edges apart, and a 1 px band pressed until its sides cross is cheaper to the
+  sum: aurora showed the page through a white hairline. Only crossings the fit did not have
+  count; `test/edge-crossings.test.ts` traces aurora with the solve on.
+* **Hold the CURVE, for ONE round** (`localHold`, `holdSites`). Held whole, an edge kept every
+  point on the fit's error however far from the crossing; held for good, a curve stayed there
+  while its neighbours moved on (an emoji 0.062 → 0.088). The last retry still holds edges whole.
+* **A corner's fishtail is no crossing, by area AND reach**: the smaller loop under 0.5 px² and
+  one loop within 1 px of the crossing. Area alone let a sliver twisted shut through (its signed
+  areas cancel: Instagram's white gap); counting ears held Waypoint's "n" on the pixel grid.
+* **The ears it lets through are cut off at the end** (`trimEars`): invisible in a render, a
+  bow tie in an outline or the editor. The cut is exact (de Casteljau at Newton-refined
+  parameters), so it moves nothing else; chord-interpolated parameters were 0.01 px off.
+* **A cubic stays a graph over its chord** (`chordHandles`): a 4 px handle on a 1 px side
+  draws a flap (dot-ladder @2048, the test that fails without it).
+
+Stacked completions (`planarStack.ts`) are built after the solve, so neither the guard nor the
+trim sees them. The pairs: `-boundary-solve`, `-crossing-guard`, `-solve-reach`, `-loop-guard`,
+`-local-guard`, `-ear-trim`.
+
 ## Line art traces as STROKES — the centreline engine, and its own lane
 
 Mono has a second output. `centerline: true` (the **Strokes** toggle under Mono, MCP
@@ -572,10 +604,14 @@ The rules that are easy to undo:
 
 ## "Find best settings" scores candidates; it does not decide on load
 
-The Vectorize rail's **Find best settings** (`studio/bestSettings.ts` pure, `useBestSettings.ts`
-plumbing, benchmarks §40, `bench/bestSettingsDiag.ts`) traces five candidates on a 352px copy,
-scores them with the shipped `deltaEField` via `scoreOffThread`, and applies the winner. It runs
-ONLY when pressed. Three things that are easy to undo:
+The Vectorize rail's **Find best settings** (`src/lib/traceInput/bestSettings.ts` pure,
+`useBestSettings.ts` plumbing, benchmarks §40, `bench/bestSettingsDiag.ts`) traces five candidates
+on a 352px copy, scores them with the shipped `deltaEField` via `scoreOffThread`, and applies the
+winner. It runs ONLY when pressed. The MCP's `search` (`src/mcp/trace.ts`, ON by default, so the
+benchmark's logolab-auto row searches too) runs the same candidates and winner rule headless, at
+the production raster, keeping the probes' pick unless another scores clearly closer
+(`searchMargin`: relative, since a mostly blank icon's ΔE is small). Three things that are easy
+to undo:
 
 * **A candidate is a PATCH, not a full options object.** It names only the keys it decides
   (`undefined` = remove), and `withCandidate` applies it to the CURRENT options, so a runner-up

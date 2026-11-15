@@ -544,7 +544,8 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   out.push(
     '- Geometry metrics compare the output with the authored SVG’s outlines: boundary chamfer distance and its p95, node ' +
       'count and parsimony, corners recovered and invented, tangent breaks (kinks on boundary the artist drew smooth) and ' +
-      'regions recovered. Only the visible boundary counts, for every tool. Where the authored SVG cannot be read as filled ' +
+      'regions recovered. Only the visible boundary counts, for every tool: an outline or a corner under a shape painted ' +
+      'over it is not scored. Where the authored SVG cannot be read as filled ' +
       'regions (strokes, clips), the case keeps its pixel metrics and the row says why geometry is missing (`gtRefusal`).',
   )
   if (hasLine)
@@ -566,9 +567,9 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
       'published as data, but no leaderboard is computed on them.',
   )
   out.push(
-    '- `heldOut: true` in the rows means a corpus is ranked. logos-cc0 and strokes-oss were added after the last ' +
-      'change to the tracer’s output. svgemoji-v0 keeps the flag because it is SVG-Bench’s published split, but tracer ' +
-      'changes from 2026-10-20 on were measured on it, so it is not unseen.',
+    '- `heldOut: true` in the rows means a corpus is ranked. Nothing was measured on strokes-oss during development. ' +
+      'Tracer changes were measured on svgemoji-v0 from 2026-10-20 and on logos-cc0 from 2026-11-06 on, so neither is ' +
+      'unseen; they stay ranked as SVG-Bench’s published split and as the headline corpus for logos.',
   )
   out.push('')
 
@@ -707,6 +708,14 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
       `It reused traces and scores saved at ${rev} (\`meta.progressFrom\`). A run only accepts that while the tracer ` +
         `(\`src/\`) is the same at both commits. The benchmark files that differ: ` +
         `${benchChanged.map((f) => `\`${f}\``).join(', ') || 'none'}.`,
+    )
+    out.push('')
+  }
+  for (const { rev, benchChanged } of m.tracesFrom ?? []) {
+    out.push(
+      `LogoLab's traces were made at ${rev} and scored again by this commit's benchmark code ` +
+        `(\`meta.tracesFrom\`). A run only accepts that while the tracer (\`src/\`) is the same at both commits. ` +
+        `The benchmark files that differ: ${benchChanged.map((f) => `\`${f}\``).join(', ') || 'none'}.`,
     )
     out.push('')
   }

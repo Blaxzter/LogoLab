@@ -7511,7 +7511,7 @@ settings on a reduced copy of the image, scores each with the studio's own ΔE (
 winner, and leaves a scoreboard with the runners-up one click away. Nothing here changes the
 tracer; this section is the measurement that fixed the button's four numbers. The census is
 `bench/bestSettingsDiag.ts`, and the candidates, winner rule and labels are the shipped
-`src/components/vectorize/studio/bestSettings.ts` (the bench imports it, so it measures what
+`src/lib/traceInput/bestSettings.ts` (the bench imports it, so it measures what
 ships). The gate is `test/best-settings.test.ts`.
 
 ### 40.1 Method
@@ -8282,3 +8282,113 @@ v7 medians on the 100 held-out emoji (failures as white):
 | StarVector-1B | 0 | 13.12 | 11.22 | 124 | 1 | 0.930 |
 | OmniSVG-4B | 3 | 27.83 | 24.48 | 82 | 4 | 0.783 |
 | Potrace (binarised) | 0 | 27.43 | 15.18 | 64 | 0 | 0.846 |
+
+## 46. The boundary solve: every edge moved at once against the raster's coverage (2026-11-06 to 11-12)
+
+Where v9's ΔE gap sat: on flat art the fills were already exact, and nearly all of the mean ΔE
+lay within 1 px of an edge (plus gradient art, fixed separately by least-squares stop colours
+in `gradient.ts`). Every stage upstream places a point on its own, along its own normal, and the
+curve fit then spends its whole ε on top of those local readings. `src/lib/trace/planarSolve.ts`
+runs after beautify and the junction weld and moves every node and handle of the planar graph at
+once, so the area coverage the curves paint matches the source.
+
+### 46.1 Method
+
+- **Energy:** damped Gauss-Newton on E = Σ_band ‖T_p − Σ_label cov_label(p)·c_label(p)‖² with
+  the fills held fixed. In a planar map a pixel's colour is linear in the coverages, so one
+  accumulation buffer per channel renders it (an exact box filter); a gradient region keeps a
+  coverage buffer of its own, multiplied by its paint per pixel (a LUT of its stops).
+- **Jacobian:** moving a boundary piece by δ changes its pixel's coverage by exactly the area
+  swept, so it is analytic and sparse; the normal equations go through matrix-free
+  Jacobi-preconditioned CG.
+- **Bounds (`DEFAULT_SOLVE_TUNE`):** an anchor ends at most 1.5 px and a handle 4 px from where
+  the fit put them, so it moves what the fit chose and cannot rebuild a shape. Smooth nodes keep
+  their handles on one line, a corner with a break under 5° is held to it, a handle turns at
+  most 30°, a straight side of 8 px or more may bend and goes back to a line if its sagitta stays
+  under 0.1 px, and a through junction slides along its line only. A region whose paint is not
+  one opaque colour or a modelled gradient keeps its edges.
+- **Rounds:** four solves; between two, a node goes in by de Casteljau where a curve still misses
+  the raster, at most a tenth of the fit's node count over the whole solve.
+
+Measured on the A/B stamp against the source (`/labs/ab`'s per-lane score): flat lane ΔE
+0.614 → 0.588 (36 cases closer, 2 further), gradient 0.832 → 0.390, stacked 0.761 → 0.713. A
+trace-vs-trace heat lights every edge after this, because every edge moves; judge it against
+the source. Pair `before-boundary-solve` ⇄ `after-boundary-solve`.
+
+### 46.2 The crossing guard
+
+Nothing in E keeps two edges apart, and a sliver a pixel wide is cheaper to the sum with its two
+sides crossed: on aurora's posterized ramp the solve pressed a 1 px band between two purples
+until its sides crossed and the page showed through a white hairline. `edgeCrossings.ts`
+flattens every edge within 0.02 px (Wang's bound), tests chord pairs per 8 px grid cell with a
+half-open orientation test (so two pixel-grid lines crossing at whole coordinates still count),
+and ignores a crossing within 0.5 px of an edge's end vertex (arms leave a junction from one
+point). Only crossings the fit did not already have count. After each round a fresh crossing is
+held and the round runs again, up to three times; edges still crossing then go back to where
+the round started (`putBack`; undoing the whole round lost headphones' gain). Pair
+`before-crossing-guard` ⇄ `after-crossing-guard`: 17 cases moved, every one a real crossing.
+
+### 46.3 The fishtail rule, and more reach
+
+Counted as crossings, the solve's corner ears held whole letter outlines on the pixel grid:
+Waypoint's "n" stayed at ΔE 0.51 for loops of 0.05 px² (0.28 with them let through). An edge
+crossing itself around less than `MIN_LOOP_AREA` (0.5 px²) is no crossing; nearly all of the
+solve's self-crossings measured under 0.35 px², one on mercedes 1.6.
+
+With outlines no longer held whole, more reach paid: anchors 1 → 1.5 px, handles 3 → 4 px,
+rounds 3 → 4 took the median ΔE on logos-cc0 from 0.145 to 0.129 and on svgemoji-v0 from 0.083
+to 0.071 with the same nodes. Five rounds and twice the node budget reached 0.105 / 0.060 but
+with 12% / 19% more nodes; rejected. Pair `before-solve-reach` ⇄ `after-solve-reach`.
+
+### 46.4 The loop guard
+
+Reviewing that pair found loops (114 → 350 across the stamp), from two causes:
+
+- **A handle grown far past its short side:** a 5.4 px handle on a 1.3 px side drew a flap on
+  dot-ladder, a spike off a 0.2 px side on IBM's gradient lane. `chordHandles`: a cubic stays a
+  graph over its chord, its handles reaching at most the chord's length along it and two thirds
+  of it across (or what the fit had, if more), scaled about their anchors.
+- **Area alone let a twisted sliver through:** the signed areas of a loop twisted shut cancel,
+  so Instagram's white gap, pressed until its sides crossed, passed as an ear. A fishtail is
+  exempt only when one of its loops lies within `FISHTAIL_REACH` (1 px) of the crossing.
+
+0.135 / 0.069, same nodes. Pair `before-loop-guard` ⇄ `after-loop-guard`.
+
+### 46.5 Holding the curve, not the edge
+
+The guard held both edges whole, and a held edge kept every point on the fit's error for the
+rest of the solve, however far from the crossing: on the emoji, 2.6% of the boundary was held
+and carried 9.3% of the distance the solve left. `crossingSites` now names the curve each
+crossing lies on, and `holdSites` pins both anchors of each such curve with all their handles.
+The hold lasts one round: held for good, a curve stayed on the fit's error while its neighbours
+moved on around it (one emoji 0.062 → 0.088; 0.060 held per round). The last retry still holds
+the edges whole, and a held curve takes no new node. Median ΔE 0.135 → 0.129 / 0.069 → 0.066,
+median edge distance 0.080 → 0.075 / 0.116 → 0.112 px, better / worse on 65 / 12 logos and
+34 / 7 emoji, same nodes and kinks. Pair `before-local-guard` ⇄ `after-local-guard`.
+
+### 46.6 Cutting the ears off
+
+The ears the fishtail rule lets through are invisible in a render (both regions paint them)
+but draw a bow tie at a tip in an outline view or an editor: acute-counter's counter crossed
+itself 0.66 px short of its apex. `edgeEars` reports them and `trimEars` runs once the rounds are
+done: the node goes onto the crossing and the two curves are cut there by de Casteljau, so
+nothing else on the outline moves and no new crossing can appear. The cut parameters are
+refined by Newton on the curve: interpolated along a chord they were 0.01 px off on a straight
+line, whose cubic parameter runs slowest at its ends. On 400 cases no ΔE moved by more than
+0.003, nodes ±5, kinks +3 per corpus (an ear inside one curve gets a corner node). Loops in the
+stamp 219 → 148; the renders differ in 0 to 68 pixels per case. Pair `before-ear-trim` ⇄
+`after-ear-trim`.
+
+### 46.7 What is left
+
+- **The emoji edge gap to Trazor** is the solve keeping G1 at every smooth node the fit chose:
+  98% of the excess edge distance is on open edges, not at junctions. Tangent breaks or a bigger
+  node budget would close part of it; the user chose smooth outlines over that.
+- **Stacked completions are built after the solve** and are not trimmed: mercedes' stacked lane
+  keeps a 0.08 px² hook on a hidden edge under a messy junction.
+- **A held edge could be blended back** by the largest crossing-free fraction instead of going
+  back to the round's start. Not tried.
+
+Gates: `test/planar-solve.test.ts` (the dot-ladder flap at 2048 fails with `chordHandles` off)
+and `test/edge-crossings.test.ts` (aurora's hairline, the fishtail and the twisted sliver,
+crossing sites, ears in and across a curve).

@@ -50,6 +50,16 @@ import {
 } from '../../../bench/abCorpus'
 import { LOGO_CORPUS } from '../../../bench/logoCorpus'
 import { snapOptionsKey } from './abCacheKey'
+import {
+  byWorstShift,
+  deltaENote,
+  meanDeltaEVsSource,
+  SOURCE_SCORE_LONG,
+  SOURCE_TIE_DE,
+  signedDelta,
+  sourceVerdict,
+  type SourceScore,
+} from './abSource'
 import { fnv1a } from './engineFingerprint'
 import { LabPage, LabCheck, LabSelect } from './LabPage'
 import { Panel, RawArt } from './Panel'
@@ -318,6 +328,9 @@ interface AbAnalysis {
   /** Snapshot mode, changed cases only: a per-pixel heat of WHERE the two traces disagree.
    *  Lets a change be located, not just counted — one per lane on screen. */
   heats?: { label: string; url: string }[]
+  /** Snapshot modes, changed lanes only: both sides scored against the input they traced
+   *  (abSource.ts). The heat says where they differ; this says which one is nearer the art. */
+  vsSource?: SourceScore[]
   /** Pair mode only: the two stamps did not trace the same INPUT for this case (the source
    *  art or AB_SNAPSHOT_RES changed between them), so their traces are not comparable and
    *  the row is excluded from the changed/unchanged counts. */
@@ -344,6 +357,8 @@ interface AbAnalysis {
      *  the exception: a corner the art does not contain is the defect class this whole view
      *  exists to catch by eye (§22), and it is cheap to put it beside the picture. */
     invented?: number
+    /** Mean ΔE of this panel's trace against the source, when its lane was scored. */
+    deltaE?: number
   }[]
 }
 
@@ -435,6 +450,28 @@ function diffHeatBuffer(a: ImageData, b: ImageData): Uint8ClampedArray {
   return out
 }
 
+/** Both sides of a changed lane scored against the input they traced, at the studio's scoring
+ *  size (abSource.ts). Null when the rasters do not line up. */
+async function scoreVsSource(
+  lane: AbLane,
+  srcUrl: string,
+  w: number,
+  h: number,
+  baseSvg: string,
+  headSvg: string,
+): Promise<SourceScore | null> {
+  const long = Math.min(SOURCE_SCORE_LONG, Math.max(w, h))
+  const width = (w * long) / Math.max(w, h)
+  const [src, b, hd] = await Promise.all([
+    labImageData(srcUrl, long),
+    rasterizeSvgResvg(baseSvg, width, { background: 'white' }),
+    rasterizeSvgResvg(headSvg, width, { background: 'white' }),
+  ])
+  const base = meanDeltaEVsSource(src, b)
+  const head = meanDeltaEVsSource(src, hd)
+  return base == null || head == null ? null : { lane: lane.key, label: lane.label, base, head }
+}
+
 /** Fetch a snapshot's stored input PNG as bytes, for the pair-mode input check. */
 async function snapPngBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await (await fetch(url)).arrayBuffer())
@@ -507,6 +544,19 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
   if (views.length === 0) views.push(lanes[0])
   const label = (v: { lane: AbLane }): string => ` · ${v.lane.label}`
 
+  // Against the source too, under the same input-drift guard as the heat: two stamps that
+  // traced different pixels have no one source to be scored against.
+  const vsSource = inputDiffers
+    ? undefined
+    : (
+        await Promise.all(
+          views
+            .filter((v) => v.changed)
+            .map((v) => scoreVsSource(v.lane, v.bPng, v.bf.width, v.bf.height, v.bSvg, v.hSvg)),
+        )
+      ).filter((s): s is SourceScore => s != null)
+  const scoreOf = (v: { lane: AbLane }) => vsSource?.find((s) => s.lane === v.lane.key)
+
   // Authored geometry is raster-space, so it is resolved per lane now that lanes differ —
   // and per SIDE, because two stamps can trace one lane at different resolutions (the
   // "W×H vs W×H" drift above). Scored against the base's space, a head traced at 2048 over
@@ -525,6 +575,7 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
         svg: frozenSvg(v.bSvg),
         note: `frozen ${base.manifest.rev} · ${base.manifest.date}`,
         invented: inventedIn(v.bSvg, gt, img, v.bf.width, v.bf.height),
+        deltaE: scoreOf(v)?.base,
       },
       {
         name: `${head.name}${label(v)}`,
@@ -532,6 +583,7 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
         svg: frozenSvg(v.hSvg),
         note: `frozen ${head.manifest.rev} · ${head.manifest.date}`,
         invented: inventedIn(v.hSvg, gtH, imgH, v.hf.width, v.hf.height),
+        deltaE: scoreOf(v)?.head,
       },
     )
   }
@@ -567,6 +619,7 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
     changedIn: inputDiffers ? undefined : changedIn,
     shownLanes: views.map((v) => v.lane.key),
     heats,
+    vsSource,
     inputDiffers,
     variants,
   }
@@ -638,6 +691,15 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
   if (views.length === 0) views.push(passes[0])
   const label = (v: { lane: AbLane }): string => ` · ${v.lane.label}`
 
+  const vsSource = (
+    await Promise.all(
+      views
+        .filter((v) => v.changed)
+        .map((v) => scoreVsSource(v.lane, v.pngUrl, v.f.width, v.f.height, v.snapSvg, v.live)),
+    )
+  ).filter((s): s is SourceScore => s != null)
+  const scoreOf = (v: { lane: AbLane }) => vsSource.find((s) => s.lane === v.lane.key)
+
   // Ground truth is raster-space, so it is per-LANE now that lanes can differ in size.
   const gtAt = new Map<number, Promise<GroundShape[] | null>>()
   const shapesFor = (width: number): Promise<GroundShape[] | null> => {
@@ -657,6 +719,7 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
         tone: 'base',
         svg: frozenSvg(v.snapSvg),
         invented: inv(v.snapSvg),
+        deltaE: scoreOf(v)?.base,
       },
       {
         name: `Working tree${label(v)}`,
@@ -664,6 +727,7 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
         svg: traceSvg(v.doc, v.f.width, v.f.height),
         stats: docStats(v.doc),
         invented: inv(v.live),
+        deltaE: scoreOf(v)?.head,
       },
     )
   }
@@ -696,6 +760,7 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
     changedIn: passes.filter((v) => v.changed).map((v) => v.lane.key),
     shownLanes: views.map((v) => v.lane.key),
     heats,
+    vsSource,
     variants,
   }
 }
@@ -833,6 +898,8 @@ export default function AbLab() {
     /** '' = the working tree; otherwise the snapshot the baseline is compared AGAINST. */
     vsName: '',
     changedOnly: false,
+    /** 'worst' = the rows whose trace moved furthest from the source first (abSource.ts). */
+    order: 'corpus',
     lane: 'all',
   })
   // Dropped images live for the session only — their object URLs die on reload.
@@ -953,7 +1020,11 @@ export default function AbLab() {
   // "Changed only" hides cases that serialize identically to the snapshot in BOTH gradient
   // settings. Errors (value null) and still-resolving rows are kept — only a confirmed
   // match in both is hidden.
-  const shown = changedOnly ? run.results.filter((r) => r.value?.changed !== false) : run.results
+  const kept = changedOnly ? run.results.filter((r) => r.value?.changed !== false) : run.results
+  const shown = snapMode && ui.order === 'worst' ? byWorstShift(kept, (r) => r.value?.vsSource) : kept
+  // Every scored lane's verdict against the source, over the whole run (not just what is shown).
+  const sourceN = { closer: 0, further: 0, same: 0 }
+  for (const r of run.results) for (const s of r.value?.vsSource ?? []) sourceN[sourceVerdict(s)]++
   const changedN = run.results.filter((r) => r.value?.changed === true).length
   // Per-LANE counts, derived from AB_LANES so a lane added there shows up here without a
   // second edit — the summary line used to name flat and gradients by hand.
@@ -1051,6 +1122,17 @@ export default function AbLab() {
                 onChange={(changedOnly) => setUi({ changedOnly })}
               />
             )}
+            {snapMode && (
+              <LabSelect
+                label="Order"
+                value={ui.order}
+                onChange={(order) => setUi({ order })}
+                options={[
+                  { value: 'corpus', label: 'Corpus order' },
+                  { value: 'worst', label: 'Worst vs source first' },
+                ]}
+              />
+            )}
             <LabSelect
               label="Cases"
               value={ui.lane}
@@ -1120,6 +1202,14 @@ export default function AbLab() {
               </>
             )}
             {changedOnly && unchangedN > 0 && <span className="text-faint"> · {unchangedN} hidden</span>}
+            {sourceN.closer + sourceN.further + sourceN.same > 0 && (
+              <>
+                {' '}
+                · against the source: <b className="text-good">{sourceN.closer}</b> lanes closer ·{' '}
+                <b className={sourceN.further > 0 ? 'text-bad' : 'text-fg'}>{sourceN.further}</b> further ·{' '}
+                {sourceN.same} within ±{SOURCE_TIE_DE} ΔE
+              </>
+            )}
             {mismatchN > 0 && (
               <span className="text-bad">
                 {' '}
@@ -1186,6 +1276,21 @@ export default function AbLab() {
                         : `unchanged · showing ${laneLabels(a.shownLanes) || 'gradients off'}`}
                     </span>
                   )}
+                  {a.vsSource && a.vsSource.length > 0 && (
+                    // The change in ΔE against the source, per changed lane: red if any lane
+                    // moved away from the art, green if every one moved toward it.
+                    <span
+                      className={`rounded px-1 py-0.5 text-[0.6rem] ${
+                        a.vsSource.some((s) => sourceVerdict(s) === 'further')
+                          ? 'bg-bad/20 text-bad'
+                          : a.vsSource.every((s) => sourceVerdict(s) === 'closer')
+                            ? 'bg-good/20 text-good'
+                            : 'text-faint'
+                      }`}
+                    >
+                      vs source · {a.vsSource.map((s) => `${s.label} ${signedDelta(s.head - s.base)}`).join(' · ')}
+                    </span>
+                  )}
                   {c.file && (
                     <button
                       type="button"
@@ -1220,7 +1325,9 @@ export default function AbLab() {
                   note={
                     (v.stats
                       ? `${v.stats.paths}p · ${v.stats.nodes}n · ${v.stats.edges}e · ${v.stats.junctions}j`
-                      : (v.note ?? `frozen ${selectedSnap?.manifest.date ?? ''}`)) + inventedNote(a.variants, vi)
+                      : (v.note ?? `frozen ${selectedSnap?.manifest.date ?? ''}`)) +
+                    inventedNote(a.variants, vi) +
+                    deltaENote(v.deltaE, vi % 2 === 1 ? a.variants[vi - 1]?.deltaE : undefined)
                   }
                   aspect={a.width / a.height}
                   grid={{ w: a.width, h: a.height }}
@@ -1292,6 +1399,17 @@ function AbAbout() {
         a trace diff would then report an art change as a code change — so both stored input PNGs are compared
         byte-for-byte and a mismatched row is marked <b>input differs</b> and kept out of the counts rather than
         answered wrongly.
+      </p>
+      <p className="mb-2 max-w-[96ch]">
+        The heat says where two traces differ, not which one is right. A change that moves every boundary by a fraction
+        of a pixel lights up every edge in it, toward the art and away from it alike. So each changed lane is also
+        scored <b>against the source</b>: both traces rendered at {SOURCE_SCORE_LONG}px and compared with the stored
+        input by the studio&apos;s own ΔE. Each panel&apos;s note carries its number and the change from its partner,
+        the row badge says which way every changed lane moved (red if any moved away from the art), and the summary line
+        counts the lanes. <b>Order → Worst vs source first</b> puts the rows that moved furthest from the art at the
+        top. Changes under ±{SOURCE_TIE_DE} ΔE are ties: the scoring size alone moves the mean that much. The mono lane
+        is stamped in black ink, as the tracer returns it, so its absolute number reads high on coloured ink; read its
+        change, not its level.
       </p>
       <p className="mb-2 max-w-[96ch]">
         A stamp freezes <b>two</b> traces per case — gradients off and on — so in Vs-snapshot mode the <b>Gradients</b>{' '}

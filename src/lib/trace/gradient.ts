@@ -114,7 +114,7 @@ interface ProfilePt {
   b: number
 }
 
-/** Mean colour per non-empty bin of t∈[0,1]; endpoints pinned to 0 and 1. */
+/** Mean position and colour per non-empty bin of t∈[0,1]. */
 function binnedProfile(
   param: Float64Array,
   rs: Float64Array,
@@ -122,6 +122,7 @@ function binnedProfile(
   bs: Float64Array,
   n: number,
 ): ProfilePt[] {
+  const st = new Float64Array(PROFILE_BINS)
   const sr = new Float64Array(PROFILE_BINS)
   const sg = new Float64Array(PROFILE_BINS)
   const sb = new Float64Array(PROFILE_BINS)
@@ -130,6 +131,7 @@ function binnedProfile(
     let bin = Math.floor(param[i] * PROFILE_BINS)
     if (bin < 0) bin = 0
     else if (bin >= PROFILE_BINS) bin = PROFILE_BINS - 1
+    st[bin] += param[i]
     sr[bin] += rs[i]
     sg[bin] += gs[i]
     sb[bin] += bs[i]
@@ -138,13 +140,65 @@ function binnedProfile(
   const pts: ProfilePt[] = []
   for (let bi = 0; bi < PROFILE_BINS; bi++) {
     if (cnt[bi] === 0) continue
-    pts.push({ t: (bi + 0.5) / PROFILE_BINS, r: sr[bi] / cnt[bi], g: sg[bi] / cnt[bi], b: sb[bi] / cnt[bi] })
-  }
-  if (pts.length > 0) {
-    pts[0].t = 0
-    pts[pts.length - 1].t = 1
+    pts.push({ t: st[bi] / cnt[bi], r: sr[bi] / cnt[bi], g: sg[bi] / cnt[bi], b: sb[bi] / cnt[bi] })
   }
   return pts
+}
+
+/**
+ * The stop colours that fit the samples best for these stop offsets: least squares over the
+ * piecewise-linear profile the renderer draws, one tridiagonal system per channel. Writing a
+ * bin's mean colour on the stop at the end of the ramp, as this used to, moves every ramp's ends
+ * toward its middle: a corner-to-corner ramp from #ff5252 came back from #fb4d4e. The starting
+ * profile only steadies a stop that no sample reaches.
+ */
+function leastSquaresStops(
+  knots: number[],
+  start: ProfilePt[],
+  param: Float64Array,
+  rs: Float64Array,
+  gs: Float64Array,
+  bs: Float64Array,
+  n: number,
+): ProfilePt[] {
+  const k = knots.length
+  const diag = new Float64Array(k)
+  const upper = new Float64Array(k)
+  const rhs = [new Float64Array(k), new Float64Array(k), new Float64Array(k)]
+  for (let i = 0; i < n; i++) {
+    const t = param[i]
+    let seg = 0
+    while (seg < k - 2 && t > knots[seg + 1]) seg++
+    const span = knots[seg + 1] - knots[seg] || 1
+    const w = clamp01((t - knots[seg]) / span)
+    const u = 1 - w
+    diag[seg] += u * u
+    diag[seg + 1] += w * w
+    upper[seg] += u * w
+    rhs[0][seg] += u * rs[i]
+    rhs[0][seg + 1] += w * rs[i]
+    rhs[1][seg] += u * gs[i]
+    rhs[1][seg + 1] += w * gs[i]
+    rhs[2][seg] += u * bs[i]
+    rhs[2][seg + 1] += w * bs[i]
+  }
+  const ridge = 1e-6 * (n || 1)
+  const channel = (c: 0 | 1 | 2): Float64Array => {
+    const pick = (p: ProfilePt): number => (c === 0 ? p.r : c === 1 ? p.g : p.b)
+    const cp = new Float64Array(k)
+    const dp = new Float64Array(k)
+    for (let j = 0; j < k; j++) {
+      const a = j > 0 ? upper[j - 1] : 0
+      const m = diag[j] + ridge - a * (j > 0 ? cp[j - 1] : 0)
+      cp[j] = upper[j] / m
+      dp[j] = (rhs[c][j] + ridge * pick(start[j]) - a * (j > 0 ? dp[j - 1] : 0)) / m
+    }
+    const x = new Float64Array(k)
+    for (let j = k - 1; j >= 0; j--) x[j] = dp[j] - (j < k - 1 ? cp[j] * x[j + 1] : 0)
+    return x
+  }
+  const [r, g, b] = [channel(0), channel(1), channel(2)]
+  return knots.map((t, j) => ({ t, r: clamp255(r[j]), g: clamp255(g[j]), b: clamp255(b[j]) }))
 }
 
 /** Oklab ΔE of a profile point from the sRGB-interpolated chord a→b at its t. */
@@ -201,7 +255,13 @@ function stopsAlong(
       { offset: 1, color: channelsToHex(c.r, c.g, c.b) },
     ]
   }
-  return profile.map((p) => ({ offset: clamp01(p.t), color: channelsToHex(p.r, p.g, p.b) }))
+  const knots = profile.map((p) => p.t)
+  knots[0] = 0
+  knots[knots.length - 1] = 1
+  return leastSquaresStops(knots, profile, param, rs, gs, bs, n).map((p) => ({
+    offset: clamp01(p.t),
+    color: channelsToHex(p.r, p.g, p.b),
+  }))
 }
 
 /** Interpolate a stop list at parameter t∈[0,1] (sRGB, SVG-pad behaviour). */
@@ -224,11 +284,33 @@ function interpStops(stops: GradientStop[], t: number): [number, number, number]
   return [ca[0] + (cb[0] - ca[0]) * k, ca[1] + (cb[1] - ca[1]) * k, ca[2] + (cb[2] - ca[2]) * k]
 }
 
-const hexToRgb3 = (hex: string): [number, number, number] => [
-  parseInt(hex.slice(1, 3), 16),
-  parseInt(hex.slice(3, 5), 16),
-  parseInt(hex.slice(5, 7), 16),
-]
+/** A gradient's colours along t∈[0,1], `size` entries of r, g, b in 0..1. */
+export function gradientLut(g: GradientFill, size: number): Float32Array {
+  const out = new Float32Array(size * 3)
+  for (let i = 0; i < size; i++) {
+    const [r, gr, b] = interpStops(g.stops, i / (size - 1))
+    out[i * 3] = r / 255
+    out[i * 3 + 1] = gr / 255
+    out[i * 3 + 2] = b / 255
+  }
+  return out
+}
+
+const hexCache = new Map<string, [number, number, number]>()
+/** Read per sample and per fit, so it is remembered: parsing alone was a third of a gradient trace.
+ *  Callers read the result and never write to it. */
+const hexToRgb3 = (hex: string): [number, number, number] => {
+  const known = hexCache.get(hex)
+  if (known) return known
+  if (hexCache.size >= 4096) hexCache.clear()
+  const rgb: [number, number, number] = [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ]
+  hexCache.set(hex, rgb)
+  return rgb
+}
 
 /**
  * SVG radial-gradient offset t∈[0,1] at (x,y) for circle (cx,cy,r) with focal
@@ -375,6 +457,9 @@ export function fitRegionFill(s: RegionSamples, opts: GradientFitOptions = DEFAU
   return result
 }
 
+/** Oklab residual at which a linear fit needs no radial to compare with. */
+const LINEAR_SETTLES = 0.004
+
 /**
  * Fit the best gradient model (linear or radial, multi-stop) to a region's
  * samples, ranked by Oklab ΔE. Used by the union-refit merge to decide whether a
@@ -406,6 +491,8 @@ export function fitBestGradient(s: RegionSamples): { gradient: GradientFill; okl
   let best: { gradient: GradientFill; oklabResidual: number } | null = null
   const lin = fitLinear(s, mx, my, mr, mg, mb)
   if (lin) best = { gradient: lin.gradient, oklabResidual: modelResidualOklab(lin.gradient, s) }
+  // A union this well explained is settled, and a radial costs four more fits.
+  if (best && best.oklabResidual <= LINEAR_SETTLES) return best
   const rad = fitRadial(s, mx, my)
   if (rad) {
     const o = modelResidualOklab(rad.gradient, s)
@@ -441,7 +528,9 @@ export interface PaintLadderOptions {
 
 export const DEFAULT_PAINT_LADDER: PaintLadderOptions = {
   minSamples: 48,
-  flatResidual: 0.02,
+  // Low on purpose: an orange ramp from #f9aa4b to #f7931a reads 0.016 and is plainly a gradient.
+  // Noise cannot pass for one here, because a gradient must still beat the solid colour by MDL.
+  flatResidual: 0.005,
   maxModelResidual: 0.14,
   // λ is in Oklab-ΔE units per parameter: ~0.0015 ≈ 0.15 CIE76 ΔE per stop, enough
   // to prefer the simpler model on a near-tie but never to overrule a real fit.

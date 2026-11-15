@@ -74,7 +74,9 @@ async function cornersOf(over: Record<string, unknown>): Promise<Vec[]> {
     ...DEFAULT_VECTORIZE_OPTIONS,
     engine: 'planar',
     gradients: false,
-    planarFit: over,
+    // The rule under test lives in the fit. The boundary solve afterwards moves these corners
+    // onto the raster too, chords or not, and would hide what the fit itself does.
+    planarFit: { boundarySolve: false, ...over },
   })
   const out: Vec[] = []
   for (const e of doc.topology?.edges ?? [])

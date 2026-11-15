@@ -6,6 +6,7 @@
 // Pure: no DOM, no Node APIs, plain pixels in.
 
 import { deltaE76, srgbToLab, type Lab } from '../trace/lab.ts'
+import { RAMP_SHARE_THRESHOLD, rampRegionShare } from '../trace/rampiness.ts'
 import { hairlineCut, type HairlineRead } from './strokeWidth.ts'
 import type { VectorizeOptions } from '../../types'
 
@@ -463,6 +464,65 @@ export interface InkModePlan {
    * `cut !== from` means the cut was raised for hairlines. Null in colour mode.
    */
   hairlines: HairlineRead | null
+  /**
+   * Why a picture the probe read as one ink still traces in colour: it holds ramps, or a third
+   * flat colour that one ink on one paper cannot paint. Null otherwise.
+   */
+  colourBecause: 'ramps' | 'third-colour' | null
+}
+
+/** A pixel this far (CIE76) from both of the picture's two main colours is a third colour. Two
+ *  near-black tones 6.8 apart are still one ink; every mono plan that went wrong was 8 or more. */
+const THIRD_COLOUR_DE = 8
+/** Share of the interior pixels a third colour needs before two colours cannot draw the picture.
+ *  Measured on 125 mono plans: this catches all 9 that land at ΔE ≥ 1 and flags none under 0.3. */
+const THIRD_COLOUR_SHARE = 0.02
+
+/**
+ * The share of the interior pixels that neither of the picture's two most common colours can
+ * paint: the price of tracing it in one ink on one paper, read before any trace. Interior means
+ * no step over 24 levels to a neighbour, so anti-aliasing never counts.
+ */
+export function thirdColourShare(pixels: ImageDataLike): number {
+  const { width: w, height: h, data } = pixels
+  interface Bin {
+    n: number
+    r: number
+    g: number
+    b: number
+  }
+  const bins = new Map<number, Bin>()
+  let total = 0
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4
+      if (data[i + 3] < 128) continue
+      let step = 0
+      for (const o of [4, -4, w * 4, -w * 4]) {
+        for (let c = 0; c < 3; c++) step = Math.max(step, Math.abs(data[i + c] - data[i + o + c]))
+      }
+      if (step > 24) continue
+      total++
+      const key = ((data[i] >> 3) << 10) | ((data[i + 1] >> 3) << 5) | (data[i + 2] >> 3)
+      const bin = bins.get(key)
+      if (bin) {
+        bin.n++
+        bin.r += data[i]
+        bin.g += data[i + 1]
+        bin.b += data[i + 2]
+      } else bins.set(key, { n: 1, r: data[i], g: data[i + 1], b: data[i + 2] })
+    }
+  }
+  if (total === 0) return 0
+  const labOf = (b: Bin): Lab => srgbToLab(b.r / b.n, b.g / b.n, b.b / b.n)
+  const sorted = [...bins.values()].sort((a, b) => b.n - a.n)
+  const main = sorted.slice(0, 2).map(labOf)
+  let third = 0
+  for (const b of sorted.slice(2)) {
+    const lab = labOf(b)
+    if (main.every((m) => deltaE76(lab, m) > THIRD_COLOUR_DE)) third += b.n
+  }
+  return third / total
 }
 
 /**
@@ -484,8 +544,18 @@ export function decideInkMode(
     probe = { inks: 0, dominant: null, mono: false, monoInverted: false, inkLuma: null, paperLuma: 255 }
   }
 
-  const wantMono =
-    settings.colorMode === 'mono' || (settings.colorMode === 'auto' && (probe.mono || probe.monoInverted))
+  // One hue in several tones reads as one ink, and a ramp of one hue is that too. Mono would paint
+  // either in one colour, so a picture with ramps or with a third flat colour stays in colour
+  // unless Mono is asked for.
+  const probeMono = settings.colorMode === 'auto' && (probe.mono || probe.monoInverted)
+  const colourBecause: InkModePlan['colourBecause'] = !probeMono
+    ? null
+    : rampRegionShare(pixels) >= RAMP_SHARE_THRESHOLD
+      ? 'ramps'
+      : thirdColourShare(pixels) >= THIRD_COLOUR_SHARE
+        ? 'third-colour'
+        : null
+  const wantMono = settings.colorMode === 'mono' || (probeMono && colourBecause == null)
   if (!wantMono) {
     return {
       mode: 'color',
@@ -495,6 +565,7 @@ export function decideInkMode(
       inks: probe.inks,
       probe,
       hairlines: null,
+      colourBecause,
     }
   }
 
@@ -525,6 +596,7 @@ export function decideInkMode(
     inks: probe.inks,
     probe,
     hairlines,
+    colourBecause: null,
   }
 }
 

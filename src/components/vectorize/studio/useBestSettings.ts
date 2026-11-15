@@ -3,7 +3,7 @@
 // Explicit: it runs only when pressed. Opening an image already runs the ink and
 // gradients probes; a second automatic round would change the trace a moment after
 // it appears and fight the user's own settings. The candidates, the winner rule
-// and the labels are pure (bestSettings.ts); this is the plumbing.
+// and the labels are pure (lib/traceInput/bestSettings.ts); this is the plumbing.
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { getImageData } from '../../../lib/image'
@@ -16,14 +16,14 @@ import { monoTraceScale } from '../../../lib/traceInput/traceCaps'
 import type { VectorizeOptions } from '../../../types'
 import {
   buildCandidates,
-  forceColorDoc,
   pickWinner,
   SEARCH_CONCURRENCY,
   SEARCH_MAX_DIM,
   TRACE_ORDER,
   type Candidate,
   type CandidateScore,
-} from './bestSettings'
+} from '../../../lib/traceInput/bestSettings'
+import { forceColorDoc } from './forceColorDoc'
 import type { VectorizeSource } from './types'
 
 export interface ScoredCandidate extends CandidateScore {

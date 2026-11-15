@@ -89,18 +89,22 @@ const nearest = (cs: Vec[], p: Vec): number => {
 
 const OFF = await cornersOf({ apexEvidence: false })
 const ON = await cornersOf({})
+/** The FIT without §18. The boundary solve, which runs after it, pulls some of the overshot tips
+ *  back on its own (Σ 39.5px with it), so the precondition reads the fit before the solve. */
+const FIT_OFF = await cornersOf({ apexEvidence: false, boundarySolve: false })
 
 test('apex: acute counter tips stop overshooting into their own ink', async () => {
+  const fitOff = LENS_TIPS.map((t) => nearest(FIT_OFF, t))
   const off = LENS_TIPS.map((t) => nearest(OFF, t))
   const on = LENS_TIPS.map((t) => nearest(ON, t))
   const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0)
   // Measured at authoring, @512: Σ 53.7 → 19.5px, worst 6.87 → 2.64px. The bounds below
   // sit well clear of those so ordinary fit drift cannot flip the gate, while the
-  // pre-§18 tracer misses both by a wide margin.
-  assert.ok(sum(off) > 40, `precondition: the pre-§18 tracer should be far off (Σ was ${sum(off).toFixed(1)}px)`)
+  // pre-§18 fit misses both by a wide margin.
+  assert.ok(sum(fitOff) > 40, `precondition: the pre-§18 fit should be far off (Σ was ${sum(fitOff).toFixed(1)}px)`)
   assert.ok(
-    Math.max(...off) > 5,
-    `precondition: the pre-§18 worst tip should be > 5px (was ${Math.max(...off).toFixed(2)}px)`,
+    Math.max(...fitOff) > 5,
+    `precondition: the pre-§18 worst tip should be > 5px (was ${Math.max(...fitOff).toFixed(2)}px)`,
   )
   assert.ok(sum(on) < 30, `Σ over the 14 authored lens tips is ${sum(on).toFixed(1)}px (was ${sum(off).toFixed(1)})`)
   assert.ok(

@@ -343,11 +343,27 @@ test('a disc split in two colours stays tiled: a completion would fringe the rim
 
 test('a checkerboard stays tiled: no cell outline carries on into another', async () => {
   const img = draw((x, y) => ((Math.floor(x / 24) + Math.floor(y / 24)) % 2 ? BLACK : WHITE))
+  // Underlap is on: the cells' sides run along pixel boundaries, so it leaves them alone too.
   const { tiled, stacked } = await both(img)
   assert.equal(stacked.topology!.edges.length, tiled.topology!.edges.length)
   const loopsOf = (d: EditableDoc) => paths(d).reduce((n, p) => n + p.loops!.length, 0)
   assert.equal(loopsOf(stacked), loopsOf(tiled))
   samePicture(img, tiled, stacked, false)
+})
+
+test('underlap: a slanted shared edge gets a hidden copy, one on the pixel grid does not', async () => {
+  // A square in two colours. Split down a pixel boundary, no pixel is cut and nothing needs
+  // hiding; split along the diagonal, the shape behind reaches under the one in front.
+  const square = (x: number, y: number): boolean => x >= 24 && x < 72 && y >= 24 && y < 72
+  const upright = draw((x, y) => (square(x, y) ? (x < 48 ? RED : BLUE) : WHITE))
+  const a = await both(upright)
+  assert.equal(a.stacked.topology!.edges.length, a.tiled.topology!.edges.length, 'no copy on the grid')
+  const slanted = draw((x, y) => (square(x, y) ? (x - 24 < 72 - y ? RED : BLUE) : WHITE))
+  const b = await both(slanted)
+  assert.equal(b.stacked.topology!.edges.length, b.tiled.topology!.edges.length + 1, 'one hidden copy')
+  const off = await traceImage(slanted, flat({ layering: 'stacked', planarFit: { underlap: false } }))
+  assert.equal(off.topology!.edges.length, b.tiled.topology!.edges.length, 'and it is the underlap')
+  samePicture(slanted, b.tiled, b.stacked, true)
 })
 
 test('a shape behind several, in a ring: completions keep every region', async () => {

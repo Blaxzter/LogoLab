@@ -62,7 +62,7 @@ const LABEL: Record<string, string> = {
 const INPUTS: [string, string][] = [
   [
     'logolab-auto',
-    'The headline row. `npx logolab` (MCP traceIcon) on the PNG: probes pick mono/colour and gradients, with no per-case knowledge.',
+    'The headline row. `npx logolab` (MCP traceIcon) on the PNG: probes pick mono/colour and gradients, then every choice they left open is traced and scored against the PNG, and their pick stays unless another is clearly closer. No per-case knowledge.',
   ],
   [
     'logolab-abl-stacked-grad',
@@ -187,9 +187,10 @@ export function leaderboardMarkdown(rows: ScoreRow[]): string[] {
   out.push('## Leaderboard: mean rank')
   out.push('')
   out.push(
-    'No in-sample corpus is ranked. logos-cc0 and strokes-oss were added after the last change to the tracer’s output, ' +
-      'so they are unseen. svgemoji-v0 is ranked as SVG-Bench’s published split, but the tracer was measured on it during ' +
-      'development from 2026-10-20 on, so its table is not evidence from unseen data.',
+    'No in-sample corpus is ranked. Nothing was measured on strokes-oss during development, so it is unseen. ' +
+      'logos-cc0 (the headline corpus for logos) and svgemoji-v0 (SVG-Bench’s published split) are ranked, but tracer ' +
+      'changes were measured on them, svgemoji-v0 from 2026-10-20 and logos-cc0 from 2026-11-06 on, so their tables are ' +
+      'not evidence from unseen data.',
   )
   out.push('')
   out.push(
@@ -334,7 +335,8 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
   )
   out.push(
     '- Only the visible boundary counts, for every tool: traced outline that is painted over (stacked output) is neither a ' +
-      'query nor a match target. Parsimony leaves canvas-edge boundary out on both sides (a full-canvas background ' +
+      'query nor a match target, and a corner on it (a kink, an invented or recovered corner) is not counted. Painted over means more than half a pixel inside a later shape that paints solid, read ' +
+      'from paint order and fill rule; until v9 a colour change within 2 px of it also passed it as visible. Parsimony leaves canvas-edge boundary out on both sides (a full-canvas background ' +
       'path is otherwise ~2k px of free length); `nodes ÷ GT` is the raw anchor ratio.',
   )
   out.push(
@@ -375,7 +377,9 @@ export function summaryMarkdown(rows: ScoreRow[], meta: Record<string, unknown>)
     const held = !cr[0]?.heldOut
       ? 'in-sample (development)'
       : corpusInfo(corpus).seen
-        ? 'ranked, seen in development'
+        ? HEADLINE_CORPORA.includes(corpus)
+          ? 'ranked, headline, seen in development'
+          : 'ranked, seen in development'
         : HEADLINE_CORPORA.includes(corpus)
           ? 'held out, headline'
           : 'held out'

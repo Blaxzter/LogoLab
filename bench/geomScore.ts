@@ -293,7 +293,7 @@ function collectBoundary(
   subPathSets: SubPath[][],
   w: number,
   h: number,
-  visibleAt?: (q: QueryPt) => boolean,
+  visibleAt?: (q: QueryPt, set: number) => boolean,
   /** Also drop TARGET segments visibleAt rejects (tested at the midpoint). Opt-in. */
   segsVisibleOnly = false,
 ): Boundary {
@@ -307,7 +307,7 @@ function collectBoundary(
   const onBorder = (p: Vec): boolean =>
     p.x < BORDER_EPS || p.y < BORDER_EPS || p.x > w - BORDER_EPS || p.y > h - BORDER_EPS
 
-  for (const set of subPathSets) {
+  for (const [si, set] of subPathSets.entries()) {
     for (const sp of set) {
       nodes += sp.nodes.length
       for (const n of sp.nodes) if (!onBorder(n)) innerNodes++
@@ -325,13 +325,13 @@ function collectBoundary(
         if (!(onBorder(a) && onBorder(b))) innerLength += len
         if (segsVisibleOnly && visibleAt && len > 0) {
           const q = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, tx: (b.x - a.x) / len, ty: (b.y - a.y) / len }
-          if (!visibleAt(q)) continue
+          if (!visibleAt(q, si)) continue
         }
         segs.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y })
       }
       const q: QueryPt[] = []
       resampleByArcLength(pts, SPACING, q)
-      for (const p of q) if (!onBorder(p) && (!visibleAt || visibleAt(p))) queries.push({ x: p.x, y: p.y })
+      for (const p of q) if (!onBorder(p) && (!visibleAt || visibleAt(p, si))) queries.push({ x: p.x, y: p.y })
     }
   }
   return { segs, queries, length, nodes, innerLength, innerNodes }
@@ -929,6 +929,82 @@ export function makeVisibleAt(raster: {
  * not optional, because a scorer that silently falls back to counting occluded outline
  * would re-open §0 #1 the first time a caller forgot the argument.
  */
+/** How far inside a shape painted later a traced point must lie to count as hidden. Under
+ *  that it sits in the shape's own anti-aliasing, where the two outlines cannot be told apart. */
+export const OCCLUDE_MARGIN = 0.5
+
+/**
+ * Is this point of TRACED path `set` painted over? True when an opaque path painted after it
+ * covers the point with OCCLUDE_MARGIN to spare (`rules`: each path's fill rule; `occludes`:
+ * whether it paints solid, from traceSvg.ts).
+ *
+ * makeVisibleAt alone cannot see this on a STACKED output. It reads the render VIS_PROBE (2 px)
+ * either side, so hidden outline lying under the shape in front but within 2 px of that
+ * shape's own edge has a colour change in reach and passes as visible, and every such sample
+ * was scored as spurious boundary. On logos-cc0 that put LogoLab's stacked rows at 0.22 px of
+ * edge error against 0.09 px for the same fit tiled, with missed boundary identical; the
+ * occluded samples were all the difference. The render cannot settle it (it does not say
+ * which of two coincident shapes drew an edge), paint order can, so the test is geometric.
+ * A tiled output has nothing painted over and scores exactly as before.
+ */
+export function makeHiddenAt(
+  sets: SubPath[][],
+  rules: readonly ('nonzero' | 'evenodd')[],
+  occludes: readonly boolean[],
+): (q: { x: number; y: number }, set: number) => boolean {
+  interface Occluder {
+    i: number
+    minX: number
+    minY: number
+    maxX: number
+    maxY: number
+    polys: Vec[][]
+    evenodd: boolean
+    near: (x: number, y: number) => number
+  }
+  const occ: Occluder[] = []
+  for (const [i, set] of sets.entries()) {
+    if (!occludes[i]) continue
+    // A filled subpath is filled as if closed, open or not.
+    const shut = set.map((sp) => ({ ...sp, closed: true }))
+    const polys = shut.map((sp) => flattenSubPath(sp)).filter((p) => p.length >= 3)
+    if (!polys.length) continue
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity
+    for (const p of polys)
+      for (const v of p) {
+        if (v.x < minX) minX = v.x
+        if (v.y < minY) minY = v.y
+        if (v.x > maxX) maxX = v.x
+        if (v.y > maxY) maxY = v.y
+      }
+    occ.push({ i, minX, minY, maxX, maxY, polys, evenodd: rules[i] === 'evenodd', near: nearestTo([shut]) })
+  }
+  const inside = (x: number, y: number, o: Occluder): boolean => {
+    let w = 0
+    for (const p of o.polys)
+      for (let k = 0; k < p.length; k++) {
+        const a = p[k]
+        const b = p[(k + 1) % p.length]
+        const side = (b.x - a.x) * (y - a.y) - (x - a.x) * (b.y - a.y)
+        if (a.y <= y) {
+          if (b.y > y && side > 0) w++
+        } else if (b.y <= y && side < 0) w--
+      }
+    return o.evenodd ? (w & 1) !== 0 : w !== 0
+  }
+  return (q, set) => {
+    for (const o of occ) {
+      if (o.i <= set) continue
+      if (q.x < o.minX || q.x > o.maxX || q.y < o.minY || q.y > o.maxY) continue
+      if (inside(q.x, q.y, o) && o.near(q.x, q.y) > OCCLUDE_MARGIN) return true
+    }
+    return false
+  }
+}
+
 // ---------------------------------------------------------------------------
 // PRECISION: corners the trace INVENTS (§23)
 //
@@ -1015,6 +1091,27 @@ export interface InventedCorner {
 }
 
 /**
+ * Trace-side occlusion for CORNERS: true where a traced point lies under a shape the trace
+ * paints later (makeHiddenAt, by paint order and fill rule). `set` is the point's path among
+ * the doc's visible path items. The edge metric dropped hidden outline from v9 on; the corner
+ * counts read every path's nodes and kept counting kinks on outline nobody can see, which a
+ * STACKED output (Trazor's, VTracer's, LogoLab's product preset) carries and a tiled one does
+ * not. Optional everywhere: the truth gate scores tiled traces and never passes it.
+ */
+export type DocHiddenAt = (q: { x: number; y: number }, set: number) => boolean
+
+/** sharpCorners over every traced subpath, without the ones under a later shape. */
+function docCornersShown(docSets: SubPath[][], minEdge: number, minTurn: number, docHidden?: DocHiddenAt): Corner[] {
+  return docSets.flatMap((set, si) =>
+    sharpCorners(
+      set.map((sp) => [sp]),
+      minEdge,
+      minTurn,
+    ).filter((c) => !docHidden?.(c, si)),
+  )
+}
+
+/**
  * Sharp corners the trace asserts that the authored art does not have, and the worst one's
  * excess turn. See the block comment above.
  */
@@ -1024,6 +1121,7 @@ export function inventedCorners(
   w: number,
   h: number,
   visible: (q: QueryPt) => boolean,
+  docHidden?: DocHiddenAt,
 ): { count: number; worstExcess: number; sites: InventedCorner[] } {
   const chains: TurnChain[] = []
   gt.forEach((sh, si) => {
@@ -1041,10 +1139,7 @@ export function inventedCorners(
 
   // One physical corner is reported once per side of a shared edge; keep one of each.
   const uniq: Corner[] = []
-  for (const c of sharpCorners(
-    docSets.flat().map((sp) => [sp]),
-    0,
-  ))
+  for (const c of docCornersShown(docSets, 0, CORNER_MIN_TURN, docHidden))
     if (!uniq.some((u) => Math.hypot(u.x - c.x, u.y - c.y) <= 0.35)) uniq.push(c)
 
   // A uniform bucket grid over the authored samples: without it this is
@@ -1196,6 +1291,7 @@ export function tangentBreaks(
   w: number,
   h: number,
   visible: (q: QueryPt) => boolean,
+  docHidden?: DocHiddenAt,
 ): { count: number; worst: number; sites: TangentBreak[] } {
   const chains: TurnChain[] = []
   gt.forEach((sh, si) => {
@@ -1215,8 +1311,9 @@ export function tangentBreaks(
   // and the blush's sit on one point; they are different questions (one outline runs on
   // through, the other turns), so they are judged apart and only the COUNT is de-duplicated.
   const cands: { c: Corner; poly: Vec[]; at: number; closed: boolean }[] = []
-  for (const sp of docSets.flat()) {
-    const corners = sharpCorners([[sp]], 0, BREAK_MIN * deg)
+  for (const [set, sp] of docSets.flatMap((subs, set) => subs.map((sp) => [set, sp] as const))) {
+    // A kink under a shape painted later is not in the picture (see DocHiddenAt).
+    const corners = sharpCorners([[sp]], 0, BREAK_MIN * deg).filter((c) => !docHidden?.(c, set))
     if (!corners.length) continue
     const poly = flattenSubPath(sp)
     for (const c of corners) {
@@ -1959,12 +2056,14 @@ export function scoreGeometry(
   opts: {
     /**
      * Visibility filter for the TRACED side's queries (makeVisibleAt over the trace's own
-     * render). Off by default — LogoLab's tiled output has no hidden boundary. The
-     * vectorizer comparison turns it on, because a STACKED output (VTracer's default,
-     * LogoLab's product preset) carries boundary that is painted over, and without it that
-     * hidden outline reads as spurious. Node counts are unaffected: hidden nodes are file cost.
+     * render, with makeHiddenAt for outline under a shape painted later). Off by default:
+     * LogoLab's tiled output has no hidden boundary. The vectorizer comparison turns it on,
+     * because a STACKED output (VTracer's default, LogoLab's product preset) carries boundary
+     * that is painted over, and without it that hidden outline reads as spurious. Node counts
+     * are unaffected: hidden nodes are file cost. `set` is the index of the query's path among
+     * the doc's visible path items, in paint order.
      */
-    docVisibleAt?: (q: { x: number; y: number; tx: number; ty: number }) => boolean
+    docVisibleAt?: (q: { x: number; y: number; tx: number; ty: number }, set: number) => boolean
     /**
      * With docVisibleAt: also drop the traced TARGET segments it rejects (by midpoint), so
      * an authored edge cannot be "found" on traced outline that is painted over. Without
@@ -1972,6 +2071,12 @@ export function scoreGeometry(
      * output unequally. Off by default (the truth gate never passes docVisibleAt).
      */
     docSegsVisibleOnly?: boolean
+    /**
+     * Trace-side occlusion for the corner counts (DocHiddenAt): corners recovered, corners
+     * invented and tangent breaks skip a traced corner under a shape painted later. The
+     * comparison passes makeHiddenAt with docVisibleAt; the truth gate passes neither.
+     */
+    docHiddenAt?: DocHiddenAt
     /** Parsimony without canvas-edge boundary (both sides) — see the density block below. */
     parsimonyBorderFree?: boolean
   } = {},
@@ -2005,10 +2110,14 @@ export function scoreGeometry(
   const gtCornerVis = gtCornerAll.filter(
     (c) => visible({ x: c.x, y: c.y, tx: c.itx, ty: c.ity }) || visible({ x: c.x, y: c.y, tx: c.otx, ty: c.oty }),
   )
-  const cornersRecovered = matchCorners(gtCornerVis, sharpCorners(docSets), CORNER_MATCH_R)
+  const cornersRecovered = matchCorners(
+    gtCornerVis,
+    opts.docHiddenAt ? docCornersShown(docSets, 0, CORNER_MIN_TURN, opts.docHiddenAt) : sharpCorners(docSets),
+    CORNER_MATCH_R,
+  )
   // …and the PRECISION half of the same question, blind in this corpus until §23.
-  const invented = inventedCorners(gt, docSets, w, h, visible)
-  const breaks = tangentBreaks(gt, docSets, w, h, visible)
+  const invented = inventedCorners(gt, docSets, w, h, visible, opts.docHiddenAt)
+  const breaks = tangentBreaks(gt, docSets, w, h, visible, opts.docHiddenAt)
 
   const gGrid = new SegGrid(G.segs)
   const dGrid = new SegGrid(D.segs)

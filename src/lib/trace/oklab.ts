@@ -11,11 +11,21 @@ function srgbToLinear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
 }
 
+/** Linear light per 8-bit level, read a sample at a time by every gradient fit. */
+const LINEAR_LEVELS = Float64Array.from({ length: 257 }, (_, v) => srgbToLinear(Math.min(v, 255) / 255))
+
+/** Exact on whole levels, which is what pixels are; between them the curve is close to straight. */
+function levelToLinear(v: number): number {
+  const c = v < 0 ? 0 : v > 255 ? 255 : v
+  const i = Math.floor(c)
+  return LINEAR_LEVELS[i] + (LINEAR_LEVELS[i + 1] - LINEAR_LEVELS[i]) * (c - i)
+}
+
 /** sRGB (channels 0–255) → Oklab. White → ~[1,0,0], black → [0,0,0]. */
 export function srgbToOklab(r: number, g: number, b: number): Oklab {
-  const lr = srgbToLinear(r / 255)
-  const lg = srgbToLinear(g / 255)
-  const lb = srgbToLinear(b / 255)
+  const lr = levelToLinear(r)
+  const lg = levelToLinear(g)
+  const lb = levelToLinear(b)
 
   const l = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb
   const m = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb

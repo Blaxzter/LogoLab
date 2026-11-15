@@ -67,7 +67,10 @@ const RESOLUTIONS = [256, 1024]
  * not cost it.
  */
 const KNOWN_DEFECTS: Record<string, string> = {
-  overlap: 'drift 6.96× — two soft-edged discs; boundary is pure lattice staircase (lattice 0.22px/lane at every res)',
+  // overlap ('drift 6.96× — two soft-edged discs, pure lattice staircase'), aa-seam ('drift
+  // 4.98× — the diagonal blend band') and band-cross ('drift 3.69× — strong edges ride the
+  // lattice') came off on 2026-11-07 with the boundary solve, which places every boundary on
+  // the raster's coverage instead of the lattice: drift 1.19×, 1.46× and 0.34×.
   // concentric was here ("drift 4.28× — circle boundaries sampled on the lattice") until
   // 2026-08-04, the day §15's sub-pixel edge placement landed: @256 chamfer fell 0.045px
   // in-lane (0.179 ref-px), regularized drift 1.19×. Deleted by the CI contract.
@@ -83,10 +86,10 @@ const KNOWN_DEFECTS: Record<string, string> = {
   // @1024 improved to 0.263 while @256 stayed at 0.529 and the ratio went the WRONG WAY, to
   // 2.01. §24.7's sweep-gated join is what reached the coarse lane. This is the mechanism
   // `annulus` is kept here to demonstrate, on art the disc snap alone could not reach.
-  'aa-seam':
-    'drift 4.98× — the diagonal blend band; @1024 stalls at 0.228 on the §0 #3 sliver residue, so the ratio understates it',
-  'band-cross':
-    'drift 3.69× — the §14 control; weak boundaries are harmless but the strong edges still ride the lattice',
+  // Back on 2026-11-07, and not for a worse trace: the boundary solve took @1024 from 0.260 to
+  // 0.120 ref-px and left @256 where it was (0.409 → 0.417), so the ratio rose. The coarse lane
+  // is what this gate asks for, and the solve does not reach it there.
+  petals: 'drift 2.78× — the solve halves @1024 (0.260 → 0.120 ref-px), @256 stays at 0.41',
 }
 
 for (const c of SCALE_CORPUS) {
