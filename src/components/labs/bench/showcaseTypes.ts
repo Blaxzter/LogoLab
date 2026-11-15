@@ -57,5 +57,7 @@ export interface Showcase {
   versions: Record<string, string>
   summary: ShowSummary[]
   pairedVsVtracer: ShowPaired[]
+  /** Trazor minus LogoLab, paired by case; `wins` are the cases Trazor is better on. */
+  pairedVsTrazor: ShowPaired[]
   examples: ShowExample[]
 }

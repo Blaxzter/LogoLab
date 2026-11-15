@@ -12,8 +12,10 @@
 // scored with, so a dot on the page is a break in the table.
 //
 // The curation is the list below, with the reason each case is on it. It was picked by
-// mining results.json for the pattern each section claims (2026-10-17, full-v1), and it
-// includes the cases LogoLab loses — a page that only shows wins is an advert.
+// mining results.json for the pattern each section claims (2026-10-17, full-v1; re-checked
+// against v9 on 2026-11-14), and it includes a case LogoLab loses — a page that only shows
+// wins is an advert. The loss shown is one LogoLab keeps on purpose; a loss that is a bug
+// goes to the issue tracker, not onto this page.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -41,19 +43,13 @@ const EXAMPLES: { slug: string; caseId: string; tools: string[]; why: string }[]
     slug: 'smiling-face',
     caseId: 'svgemoji-v0/1f60a-twemoji',
     tools: ['logolab-auto', 'vtracer-default', 'starvector-1b'],
-    why: 'DINO 0.9999 / 0.9998 / 0.9996 — the same picture to the metric; 68 vs 235 nodes, 0 vs 19 breaks.',
+    why: 'DINO 0.9999 / 0.9998 / 0.9996 — the same picture to the metric; 68 vs 235 nodes, 0 vs 23 breaks (v9).',
   },
   {
     slug: 'shushing-face',
     caseId: 'svgemoji-v0/1f92b-twemoji',
     tools: ['logolab-auto', 'vtracer-default'],
-    why: 'Identical DINO, LPIPS prefers VTracer, which is 3× further off the drawing with 54 kinks to 6.',
-  },
-  {
-    slug: 'crystal-ball',
-    caseId: 'svgemoji-v0/1f52e-twemoji',
-    tools: ['logolab-auto', 'vtracer-default'],
-    why: 'DINO and LPIPS both rank VTracer first; chamfer 0.43 vs 0.12 px, 3.3× the nodes.',
+    why: 'Identical DINO (0.9997); VTracer is 4× further off the drawing with 55 kinks to 9 (v9).',
   },
   {
     slug: 'leg',
@@ -62,22 +58,19 @@ const EXAMPLES: { slug: string; caseId: string; tools: string[]; why: string }[]
     why: 'A black silhouette (ΔE 15) scores DINO 0.967; StarVector 0.998 while 3.3 px off the outline.',
   },
   {
-    slug: 'flag',
-    caseId: 'svgemoji-v0/1f1ef-1f1f5-twemoji',
-    tools: ['vtracer-default', 'logolab-auto'],
-    why: 'LogoLab LOSES: mono took the #EEE flag and the white page for one paper, chamfer 18.45 vs 0.49.',
-  },
-  {
-    slug: 'shrimp',
-    caseId: 'svgemoji-v0/1f990-twemoji',
-    tools: ['vtracer-default', 'logolab-auto'],
-    why: 'LogoLab LOSES: four reds traced as one ink, 2/4 regions (colour ablation gets 4/4, 0.35 px).',
+    slug: 'juggler',
+    caseId: 'svgemoji-v0/1f939-1f3fd-200d-2642-fe0f-twemoji',
+    tools: ['trazor-auto', 'logolab-auto'],
+    why: 'LogoLab LOSES, on purpose: Trazor is closer (ΔE 0.040 vs 0.061, edge 0.081 vs 0.098 px) with the same nodes (265 vs 262) and 26 kinks to 8. Near the set medians on all three.',
   },
 ]
 
 /** Tools in the headline table, in the page's order. */
 const TABLE_TOOLS = [
   'logolab-auto',
+  'trazor-auto',
+  'inkvec-default',
+  'inkvec-fills',
   'vtracer-default',
   'vtracer-swept',
   'autotrace-swept',
@@ -168,13 +161,15 @@ const summary = summarize(results.rows, CORPUS, TABLE_TOOLS).map((s) => ({
   median: Object.fromEntries(Object.entries(s.metrics).map(([k, d]) => [k, d.n ? d.median : null])),
   scored: Object.fromEntries(Object.entries(s.metrics).map(([k, d]) => [k, d.n])),
 }))
-const pairedVsVtracer = ['sbDino', 'sbLpips', 'sbSsim', 'meanDeltaE', 'chamfer', 'docNodes', 'tangentBreaks'].map(
-  (k) => {
+const pairedVs = (tool: string) =>
+  ['sbDino', 'sbLpips', 'sbSsim', 'meanDeltaE', 'chamfer', 'docNodes', 'tangentBreaks'].map((k) => {
     const metric = METRIC_BY_KEY.get(k)
     if (!metric) throw new Error(k)
-    return { metric: k, ...paired(table, 'vtracer-default', 'logolab-auto', metric) }
-  },
-)
+    return { metric: k, ...paired(table, tool, 'logolab-auto', metric) }
+  })
+const pairedVsVtracer = pairedVs('vtracer-default')
+// The loss the page shows: how often Trazor is the closer trace, and by how much.
+const pairedVsTrazor = pairedVs('trazor-auto')
 
 const manifest = JSON.parse(readFileSync(join(REPO, 'bench', 'compare', 'manifests', 'svg-emoji-test.json'), 'utf8'))
 const showcase: Showcase = {
@@ -192,6 +187,7 @@ const showcase: Showcase = {
   versions: Object.fromEntries(TABLE_TOOLS.map((t) => [t, results.meta.versions[t] ?? ''])),
   summary,
   pairedVsVtracer,
+  pairedVsTrazor,
   examples,
 }
 writeFileSync(
