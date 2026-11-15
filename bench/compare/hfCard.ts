@@ -544,7 +544,8 @@ export function cardMarkdown({ data, run, index, counts }: CardInput): string {
   out.push(
     '- Geometry metrics compare the output with the authored SVG’s outlines: boundary chamfer distance and its p95, node ' +
       'count and parsimony, corners recovered and invented, tangent breaks (kinks on boundary the artist drew smooth) and ' +
-      'regions recovered. Only the visible boundary counts, for every tool. Where the authored SVG cannot be read as filled ' +
+      'regions recovered. Only the visible boundary counts, for every tool: an outline or a corner under a shape painted ' +
+      'over it is not scored. Where the authored SVG cannot be read as filled ' +
       'regions (strokes, clips), the case keeps its pixel metrics and the row says why geometry is missing (`gtRefusal`).',
   )
   if (hasLine)

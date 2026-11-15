@@ -181,7 +181,8 @@ export function Article({ onExplore }: { onExplore?: () => void }) {
             <li>
               A kink on a smooth curve is a corner of 5° or more where the drawing is smooth. You won’t see one at icon
               size, but you will when you scale the file up or edit it. A corner the artist drew, traced a few pixels
-              from where it belongs, is not a kink: the edge error already counts it.
+              from where it belongs, is not a kink: the edge error already counts it. Neither is a corner hidden under a
+              shape painted on top of it.
             </li>
             <li>
               Invented corners are sharp corners the art doesn’t have, and regions recovered counts the shapes that
