@@ -2,6 +2,10 @@
 
 **Turn an image into a clean SVG and a complete app-icon set — from your coding agent, on your machine.**
 
+[![npm](https://img.shields.io/npm/v/logolab)](https://www.npmjs.com/package/logolab)
+[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/blaxzter/logolab)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/Blaxzter/LogoLab/blob/main/LICENSE)
+
 An [MCP](https://modelcontextprotocol.io) server wrapping the vectorizer and icon
 exporter from [LogoLab](https://github.com/Blaxzter/LogoLab). A model generates a
 1024px PNG with soft edges and a JPEG-ish halo; something has to turn that into a

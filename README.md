@@ -8,6 +8,11 @@
 
 [**▶ Try it live**](https://logolab.fabraham.dev) · [GitHub repo](https://github.com/Blaxzter/LogoLab) · [Report an issue](https://github.com/Blaxzter/LogoLab/issues)
 
+[![npm](https://img.shields.io/npm/v/logolab?label=npm%20logolab)](https://www.npmjs.com/package/logolab)
+[![CI](https://github.com/Blaxzter/LogoLab/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Blaxzter/LogoLab/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Benchmark data on Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20benchmark-logolab--bench-ffd21e)](https://huggingface.co/datasets/Blaxzter/logolab-bench)
+
 ![LogoLab preview](docs/hero.png)
 
 </div>
@@ -180,6 +185,8 @@ Everything stays in the browser either way: no upload, no account, nothing leave
 The tracer and the icon exporter, exposed to your coding agent over
 [MCP](https://modelcontextprotocol.io). "Trace `icon.png` and put a PWA icon set in `public/`"
 becomes one tool call, locally, with nothing uploaded.
+
+[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/blaxzter/logolab)
 
 Published to npm as [`logolab`](https://www.npmjs.com/package/logolab), so no clone is needed:
 
