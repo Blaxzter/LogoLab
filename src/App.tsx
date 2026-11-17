@@ -300,7 +300,8 @@ export function App() {
                 <Route path="/labs" element={<LabsIndex />} />
                 <Route path="/labs/pipeline" element={<PipelineLab />} />
                 <Route path="/labs/ab" element={<AbLab />} />
-                <Route path="/labs/bench" element={<BenchLab />} />
+                {/* One tab per path segment (/labs/bench/results); BenchLab sends an unknown one to the Overview. */}
+                <Route path="/labs/bench/:tab?" element={<BenchLab />} />
                 <Route path="/labs/how" element={<HowLab />} />
                 <Route path="/labs/workbench" element={<Workbench />} />
                 <Route path="/labs/gallery" element={<GalleryLab />} />

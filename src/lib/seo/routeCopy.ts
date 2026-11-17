@@ -21,6 +21,13 @@ export interface RoutePage {
   /** Paragraphs and list items of the static copy, as trusted HTML. */
   intro: string
   points: string[]
+  /**
+   * Segments under `path` the app shows as tabs of this page (`/labs/bench/results`). Each is
+   * served this page's HTML, canonical and all, so a shared tab link previews as this page and
+   * not as the home page; none is in the sitemap, because a tab is a view of the page, not a
+   * page. Must match the app's own list (test/route-pages.test.ts).
+   */
+  subpaths?: readonly string[]
 }
 
 export const ROUTE_PAGES: RoutePage[] = [
@@ -153,6 +160,7 @@ export const ROUTE_PAGES: RoutePage[] = [
   {
     path: '/labs/bench',
     nav: 'Vectorizer benchmark',
+    subpaths: ['results', 'compare', 'cases', 'data', 'run'],
     title: 'Why pixel scores can’t judge an SVG: a vectorizer benchmark | LogoLab',
     description:
       'LogoLab, VTracer, Potrace, AutoTrace, ImageTracer, StarVector and OmniSVG on 100 held-out SVG-Bench emoji, scored against the authored SVG, with the cases where DINO, LPIPS and SSIM get it wrong.',

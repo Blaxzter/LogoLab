@@ -12,7 +12,16 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { ORIGIN, ROUTE_PAGES, fileFor, ogImageFor, renderRoutePage, sitemapXml } from '../scripts/routePages.ts'
+import {
+  ORIGIN,
+  ROUTE_PAGES,
+  fileFor,
+  ogImageFor,
+  renderRoutePage,
+  sitemapXml,
+  subpageFiles,
+} from '../scripts/routePages.ts'
+import { BENCH_BASE, BENCH_SUBPATHS } from '../src/components/labs/bench/benchRoute.ts'
 
 const root = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
 const shell = readFileSync(root('index.html'), 'utf8')
@@ -72,4 +81,19 @@ test('every link-preview card exists', () => {
 test('a renamed head tag fails the build instead of shipping the home canonical', () => {
   const broken = shell.replace('rel="canonical"', 'rel="canonical-renamed"')
   assert.throws(() => renderRoutePage(broken, ROUTE_PAGES[1]), /canonical/)
+})
+
+test("a page's tabs are served its HTML, and only the page is in the sitemap", () => {
+  // The app's tab list and the build's must agree: a tab the build does not know is served the
+  // HOME page's head, so a shared /labs/bench/<tab> link previews as the home page.
+  const bench = ROUTE_PAGES.find((p) => p.path === BENCH_BASE)!
+  assert.deepEqual([...(bench.subpaths ?? [])], [...BENCH_SUBPATHS])
+  assert.deepEqual(
+    subpageFiles(bench),
+    BENCH_SUBPATHS.map((s) => `labs/bench/${s}.html`),
+  )
+  const files = ROUTE_PAGES.flatMap((p) => [fileFor(p), ...subpageFiles(p)])
+  assert.equal(new Set(files).size, files.length, 'a tab file collides with a page')
+  const locs = sitemapXml()
+  for (const s of BENCH_SUBPATHS) assert.ok(!locs.includes(`${BENCH_BASE}/${s}<`), `${s} is in the sitemap`)
 })

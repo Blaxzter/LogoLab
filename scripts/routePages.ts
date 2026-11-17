@@ -24,6 +24,8 @@ export { ORIGIN, ROUTE_PAGES, type RoutePage } from '../src/lib/seo/routeCopy.ts
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
 
 export const fileFor = (page: RoutePage) => (page.path === '/' ? 'index.html' : `${page.path.slice(1)}.html`)
+/** The files a page's tabs are served from (`labs/bench/results.html`): the page's own HTML again. */
+export const subpageFiles = (page: RoutePage) => (page.subpaths ?? []).map((s) => `${page.path.slice(1)}/${s}.html`)
 const urlFor = (page: RoutePage) => ORIGIN + page.path
 /** The link-preview card: the home page keeps og.png, a route has its own (scripts/og/card.html). */
 export const ogImageFor = (page: RoutePage) => `${ORIGIN}/${page.path === '/' ? 'og.png' : `og${page.path}.png`}`
@@ -112,6 +114,7 @@ export function routePages(): Plugin {
         const html = renderRoutePage(source, page)
         if (page.path === '/') shell.source = html
         else this.emitFile({ type: 'asset', fileName: fileFor(page), source: html })
+        for (const fileName of subpageFiles(page)) this.emitFile({ type: 'asset', fileName, source: html })
       }
       this.emitFile({ type: 'asset', fileName: 'sitemap.xml', source: sitemapXml(ROUTE_PAGES, pagesLastModified()) })
     },

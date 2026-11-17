@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { type Leaderboard, cdGroups, corpusInfo, isAblationRow, toolInfo } from './benchData'
+import { patchParams, pickCorpus } from './benchRoute'
 import { LEADERBOARD } from './leaderboard.generated'
 import { Th, ToolName } from './ui'
 
@@ -12,10 +14,16 @@ import { Th, ToolName } from './ui'
  * The ablation view (oracle, swept and ablation rows) is one click away and says
  * so in its own caption; it is never what shows first. A line corpus and a fill corpus are
  * separate boards: they are ranked on different metrics, and an average would mean nothing.
+ *
+ * The board's corpus is the page's `?corpus=` (benchRoute.ts), so Results opens on the corpus
+ * picked here, and both start on the run's first corpus when the address names none.
  */
 export function MeanRankBoard() {
   const corpora = [...new Set(LEADERBOARD.boards.map((b) => b.corpus))]
-  const [corpus, setCorpus] = useState(corpora[0] ?? '')
+  const [params, setParams] = useSearchParams()
+  const corpus = pickCorpus(params.get('corpus'), corpora)
+  const setCorpus = (c: string) =>
+    setParams((prev) => patchParams(prev, { corpus: c }, { corpus: corpora[0] }), { replace: true })
   const [view, setView] = useState<'headline' | 'ablation'>('headline')
   const board = LEADERBOARD.boards.find((b) => b.corpus === corpus && b.view === view)
   if (!board) return null

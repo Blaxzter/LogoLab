@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { LabCheck, LabPage, LabSelect } from '../LabPage'
 import { useLabState } from '../useLabState'
 import { useLabSearch } from '../useLabSearch'
@@ -12,6 +13,7 @@ import {
   type ToolFamily,
 } from './benchData'
 import { Article } from './Article'
+import { BENCH_BASE, TAB_PARAMS, benchHref, patchParams, pickCorpus, tabFromSegment, type BenchTab } from './benchRoute'
 import { CasesTab, type CaseMode } from './CasesTab'
 import { CompareTab } from './CompareTab'
 import { DataTab } from './DataTab'
@@ -52,11 +54,12 @@ function pickSource() {
  *
  * Each tab shows the controls IT uses and no others. The first version put every control and
  * every table on one screen, and that was the complaint: too much data at once.
+ *
+ * Each tab is its own path (/labs/bench/results) and what it shows is in the query: see
+ * benchRoute.ts for which key lives where and why.
  */
 
-type Tab = 'overview' | 'results' | 'compare' | 'cases' | 'data' | 'run'
-
-const TABS: { id: Tab; label: string }[] = [
+const TABS: { id: BenchTab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'results', label: 'Results' },
   { id: 'compare', label: 'Compare' },
@@ -67,10 +70,10 @@ const TABS: { id: Tab; label: string }[] = [
 
 const FAMILY_ORDER: ToolFamily[] = ['logolab', 'external', 'reference', 'ablation']
 
+/** HOW the page draws, remembered per browser. WHAT it shows (tab, run, corpus, case) is the
+ *  address; Compare's pair and Run's other run are both: the address when it names them, else
+ *  the last ones used here. */
 interface View {
-  run: string
-  tab: Tab
-  corpus: string
   ablations: boolean
   metric: string
   box: number
@@ -89,9 +92,6 @@ interface View {
 }
 
 const DEFAULT_VIEW: View = {
-  run: '',
-  tab: 'overview',
-  corpus: 'svgemoji-v0',
   ablations: false,
   metric: 'meanDeltaE',
   box: 220,
@@ -106,8 +106,17 @@ const DEFAULT_VIEW: View = {
   other: '',
 }
 
+type TabKey = 'a' | 'b' | 'other'
+
 export default function BenchLab() {
-  const [view, setView] = useLabState<View>('lab:bench:v2', DEFAULT_VIEW)
+  // v3: tab, run and corpus moved into the address; v2 still holds them and would keep them forever.
+  const [view, setView] = useLabState<View>('lab:bench:v3', DEFAULT_VIEW)
+  const segment = useParams().tab
+  const routeTab = tabFromSegment(segment)
+  const tab = routeTab ?? 'overview'
+  const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [runs, setRuns] = useState<RunInfo[] | null>(null)
   const [runsError, setRunsError] = useState<string | null>(null)
   const [data, setData] = useState<BenchResults | null>(null)
@@ -116,7 +125,6 @@ export default function BenchLab() {
   const search = useLabSearch(() => setPage(0))
   const [source] = useState(pickSource)
   const hub = source.kind === 'hub'
-  const tab = TABS.some((t) => t.id === view.tab) ? view.tab : 'overview'
 
   // The run list. On the hub a missing dataset (404) or no network is not an error to show:
   // it is "nothing published yet", and the tabs fall back to saying how to make a run.
@@ -143,13 +151,37 @@ export default function BenchLab() {
 
   // By default the run with the most tools, then the most rows: a smoke run is a run too,
   // but rarely the one you meant.
-  const run = useMemo(() => {
+  const defaultRun = useMemo(() => {
     if (!runs?.length) return ''
-    if (runs.some((r) => r.name === view.run)) return view.run
     return [...runs].sort(
       (a, b) => b.tools.length - a.tools.length || b.rows - a.rows || (b.date ?? '').localeCompare(a.date ?? ''),
     )[0].name
-  }, [runs, view.run])
+  }, [runs])
+  const runParam = params.get('run')
+  const run = runParam && runs?.some((r) => r.name === runParam) ? runParam : defaultRun
+
+  // A query change is `replace`: Back walks the tabs, not every dropdown you touched.
+  const setQuery = (patch: Record<string, string | null>, defaults: Record<string, string> = {}) =>
+    setParams((prev) => patchParams(prev, patch, defaults), { replace: true })
+
+  // Compare's pair and Run's other run: the address when it names them, else the last ones
+  // used in this browser. On their tab the address always names them, so a copied link shows
+  // the same pair to whoever opens it; a linked pair becomes the remembered one.
+  const tabValue = (k: TabKey) => params.get(k) ?? view[k]
+  const tabValues = (t: BenchTab) => Object.fromEntries((TAB_PARAMS[t] ?? []).map((k) => [k, tabValue(k as TabKey)]))
+  useEffect(() => {
+    const keys = (TAB_PARAMS[tab] ?? []) as TabKey[]
+    const adopt: Partial<View> = {}
+    const fill: Record<string, string> = {}
+    for (const k of keys) {
+      const linked = params.get(k)
+      if (linked) {
+        if (linked !== view[k]) adopt[k] = linked
+      } else if (view[k]) fill[k] = view[k]
+    }
+    if (Object.keys(adopt).length) setView(adopt)
+    if (Object.keys(fill).length) setParams((prev) => patchParams(prev, fill), { replace: true })
+  }, [tab, params, view, setView, setParams])
 
   useEffect(() => {
     if (!run) return
@@ -165,8 +197,10 @@ export default function BenchLab() {
     }
   }, [run, source])
 
+  // No `?corpus=` is the run's first corpus, which is also the first board on the Overview's
+  // leaderboard: the two tabs start on the same corpus and share the one you pick.
   const corpora = data?.meta.corpora ?? []
-  const corpus = corpora.includes(view.corpus) ? view.corpus : (corpora[0] ?? '')
+  const corpus = pickCorpus(params.get('corpus'), corpora)
   const tools = useMemo(() => {
     const all = data?.meta.tools ?? []
     const shown = all.filter((t) => view.ablations || toolInfo(t).family !== 'ablation')
@@ -187,8 +221,8 @@ export default function BenchLab() {
     return { matched, total: ids.size }
   }, [data, corpus, search.match])
 
-  const go = (t: Tab) => {
-    setView({ tab: t })
+  const go = (t: BenchTab) => {
+    navigate(benchHref(t, params, tabValues(t)))
     window.scrollTo({ top: 0 })
   }
   const openCase = (caseId: string) => {
@@ -217,24 +251,25 @@ export default function BenchLab() {
   const controls = (
     <>
       <div className="inline-flex flex-wrap rounded-md border border-line bg-surface-2 p-0.5" role="tablist">
+        {/* Links, so a tab opens in a new tab and copies as an address like any page. */}
         {TABS.map((t) => (
-          <button
+          <Link
             key={t.id}
-            type="button"
+            to={benchHref(t.id, params, tabValues(t.id))}
             role="tab"
             aria-selected={tab === t.id}
-            onClick={() => go(t.id)}
+            onClick={() => window.scrollTo({ top: 0 })}
             className={`rounded px-2.5 py-1 text-xs transition-colors ${tab === t.id ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
           >
             {t.label}
-          </button>
+          </Link>
         ))}
       </div>
       {dataTab && runs && runs.length > 1 && tab !== 'run' && (
         <LabSelect
           label="Run"
           value={run}
-          onChange={(v) => setView({ run: v })}
+          onChange={(v) => setQuery({ run: v }, { run: defaultRun })}
           hint={
             hub
               ? 'A run published to the logolab-bench dataset on Hugging Face.'
@@ -253,7 +288,7 @@ export default function BenchLab() {
           value={corpus}
           onChange={(v) => {
             setPage(0)
-            setView({ corpus: v })
+            setQuery({ corpus: v }, { corpus: corpora[0] })
           }}
           hint="Held-out corpora are the evidence; the others (the tracer was measured or developed on them) explain it."
           options={corpora.map((c) => ({
@@ -275,6 +310,9 @@ export default function BenchLab() {
       )}
     </>
   )
+
+  // A path under /labs/bench that names no tab: the Overview, keeping the query.
+  if (!routeTab) return <Navigate to={{ pathname: BENCH_BASE, search: location.search }} replace />
 
   return (
     <BenchSourceProvider value={sourceState}>
@@ -316,8 +354,11 @@ export default function BenchLab() {
                 run={run}
                 corpus={corpus}
                 tools={tools}
-                view={{ a: view.a, b: view.b, x: view.x, y: view.y }}
-                setView={setView}
+                view={{ a: tabValue('a'), b: tabValue('b'), x: view.x, y: view.y }}
+                setView={({ a, b, ...rest }) => {
+                  if (a !== undefined || b !== undefined) setQuery({ a: a ?? tabValue('a'), b: b ?? tabValue('b') })
+                  setView({ ...rest, ...(a !== undefined && { a }), ...(b !== undefined && { b }) })
+                }}
                 onCase={openCase}
               />
             )}
@@ -352,7 +393,16 @@ export default function BenchLab() {
               />
             )}
             {tab === 'run' && runs && (
-              <RunTab data={data} run={run} runs={runs} other={view.other} onOther={(other) => setView({ other })} />
+              <RunTab
+                data={data}
+                run={run}
+                runs={runs}
+                other={tabValue('other')}
+                onOther={(other) => {
+                  setQuery({ other })
+                  setView({ other })
+                }}
+              />
             )}
           </>
         ) : null}
