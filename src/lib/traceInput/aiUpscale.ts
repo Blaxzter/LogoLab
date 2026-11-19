@@ -53,7 +53,7 @@ const CACHE_NAME = 'logolab-models'
  * The onnxruntime-web build to load. Pinned to the version @huggingface/transformers
  * depends on (see pnpm-lock.yaml), so both AI features share one cached WASM download.
  */
-const ORT_WEB_VERSION = '1.26.0-dev.20260416-b7804b056c'
+const ORT_WEB_VERSION = '1.31.0-dev.20260914-8d85527a0'
 const ORT_CDN = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_WEB_VERSION}/dist/`
 
 type Ort = any
