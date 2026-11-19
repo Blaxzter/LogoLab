@@ -10,7 +10,7 @@
 // Pure (no DOM): the lab hands in pixels, so the arithmetic is testable headless.
 
 import type { AbLaneKey } from '../../../bench/abCorpus.ts'
-import { deltaEField, deltaEStats } from '../../lib/render/fidelity.ts'
+import { deltaEField } from '../../lib/render/fidelity.ts'
 
 /** Scored at the studio's size. A 2048 lane halved moves the mean by about 0.005 and costs a
  *  quarter of the work. */
@@ -52,7 +52,12 @@ export function meanDeltaEVsSource(source: Pixels, render: Pixels): number | nul
   const h = Math.min(source.height, render.height)
   if (w < 1 || h < 1) return null
   if (Math.max(source.width, render.width) - w > 1 || Math.max(source.height, render.height) - h > 1) return null
-  return deltaEStats(deltaEField(crop(source, w, h), crop(render, w, h), w, h).de).meanDeltaE
+  // The mean only, summed in deltaEStats' own order (so the number is bit-identical): its p95
+  // sorts the whole field, and on the page's main thread that was a third of the scoring time.
+  const { de } = deltaEField(crop(source, w, h), crop(render, w, h), w, h)
+  let sum = 0
+  for (let i = 0; i < de.length; i++) sum += de[i]
+  return sum / de.length
 }
 
 export function sourceVerdict(s: Pick<SourceScore, 'base' | 'head'>): SourceVerdict {

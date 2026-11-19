@@ -23,7 +23,7 @@
 // just drop an image onto the page. Three case lanes: the ⟐ fixtures, the ◆ gallery marks,
 // and the ⌇/◎ LINE-ART fixtures, which run the mono + centreline trace lanes only.
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Upload, X } from '../ui/icons'
 import { labImageData, rasterizeSvgResvg } from './resvgRaster'
@@ -326,8 +326,9 @@ interface AbAnalysis {
    */
   shownLanes?: AbLaneKey[]
   /** Snapshot mode, changed cases only: a per-pixel heat of WHERE the two traces disagree.
-   *  Lets a change be located, not just counted — one per lane on screen. */
-  heats?: { label: string; url: string }[]
+   *  Lets a change be located, not just counted — one per lane on screen, drawn right after
+   *  that lane's pair (matched by `lane`), so the heat sits beside the two pictures it diffs. */
+  heats?: { label: string; url: string; lane: AbLaneKey }[]
   /** Snapshot modes, changed lanes only: both sides scored against the input they traced
    *  (abSource.ts). The heat says where they differ; this says which one is nearer the art. */
   vsSource?: SourceScore[]
@@ -359,6 +360,9 @@ interface AbAnalysis {
     invented?: number
     /** Mean ΔE of this panel's trace against the source, when its lane was scored. */
     deltaE?: number
+    /** Snapshot modes: the lane this panel traces. Consecutive panels of one lane form a group
+     *  (base, then the other side, then the lane's heat) that wraps as a unit. */
+    lane?: AbLaneKey
   }[]
 }
 
@@ -402,6 +406,21 @@ function inventedIn(
   } catch {
     return undefined
   }
+}
+
+/** A row's panels as runs of consecutive variants of ONE lane (a snapshot row's base, then
+ *  the other side), each item keeping its index into `variants` for the partner lookups.
+ *  Variants without a lane (variants mode, one-sided rows) are each a group of their own. */
+function laneGroups(
+  variants: AbAnalysis['variants'],
+): { lane?: AbLaneKey; items: { v: AbAnalysis['variants'][number]; vi: number }[] }[] {
+  const groups: ReturnType<typeof laneGroups> = []
+  variants.forEach((v, vi) => {
+    const last = groups.at(-1)
+    if (last && v.lane !== undefined && last.lane === v.lane) last.items.push({ v, vi })
+    else groups.push({ lane: v.lane, items: [{ v, vi }] })
+  })
+  return groups
 }
 
 /**
@@ -576,6 +595,7 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
         note: `frozen ${base.manifest.rev} · ${base.manifest.date}`,
         invented: inventedIn(v.bSvg, gt, img, v.bf.width, v.bf.height),
         deltaE: scoreOf(v)?.base,
+        lane: v.lane.key,
       },
       {
         name: `${head.name}${label(v)}`,
@@ -584,6 +604,7 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
         note: `frozen ${head.manifest.rev} · ${head.manifest.date}`,
         invented: inventedIn(v.hSvg, gtH, imgH, v.hf.width, v.hf.height),
         deltaE: scoreOf(v)?.head,
+        lane: v.lane.key,
       },
     )
   }
@@ -602,10 +623,11 @@ async function analyzeSnapshotPair(c: AbCase, base: SnapEntry, head: SnapEntry):
             return {
               label: `diff heat${label(v)}`,
               url: rgbaToUrl(diffHeatBuffer(bImg, hImg), bImg.width, bImg.height),
+              lane: v.lane.key,
             }
           }),
         )
-      ).filter((h): h is { label: string; url: string } => h != null)
+      ).filter((h) => h != null)
 
   const primary = lanes[0]
   const changedIn = lanes.filter((v) => v.changed).map((v) => v.lane.key)
@@ -720,6 +742,7 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
         svg: frozenSvg(v.snapSvg),
         invented: inv(v.snapSvg),
         deltaE: scoreOf(v)?.base,
+        lane: v.lane.key,
       },
       {
         name: `Working tree${label(v)}`,
@@ -728,6 +751,7 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
         stats: docStats(v.doc),
         invented: inv(v.live),
         deltaE: scoreOf(v)?.head,
+        lane: v.lane.key,
       },
     )
   }
@@ -746,10 +770,11 @@ async function analyzeSnapshot(c: AbCase, snap: SnapEntry): Promise<AbAnalysis> 
         return {
           label: `diff heat${label(v)}`,
           url: rgbaToUrl(diffHeatBuffer(snapImg, liveImg), snapImg.width, snapImg.height),
+          lane: v.lane.key,
         }
       }),
     )
-  ).filter((h): h is { label: string; url: string } => h != null)
+  ).filter((h) => h != null)
 
   const primary = passes[0]
   return {
@@ -1318,36 +1343,53 @@ export default function AbLab() {
               >
                 <img src={a.srcOverride ?? c.src} alt="" />
               </Panel>
-              {a.variants.map((v, vi) => (
-                <Panel
-                  key={v.name}
-                  label={<span className={v.tone ? TONE[v.tone] : undefined}>{v.name}</span>}
-                  note={
-                    (v.stats
-                      ? `${v.stats.paths}p · ${v.stats.nodes}n · ${v.stats.edges}e · ${v.stats.junctions}j`
-                      : (v.note ?? `frozen ${selectedSnap?.manifest.date ?? ''}`)) +
-                    inventedNote(a.variants, vi) +
-                    deltaENote(v.deltaE, vi % 2 === 1 ? a.variants[vi - 1]?.deltaE : undefined)
-                  }
-                  aspect={a.width / a.height}
-                  grid={{ w: a.width, h: a.height }}
-                >
-                  <RawArt html={v.svg} />
-                </Panel>
-              ))}
-              {snapMode &&
-                a.heats?.map((h) => (
+              {laneGroups(a.variants).map(({ lane, items }) => {
+                // A lane's heat goes right after its pair, so the diff sits beside the two
+                // pictures it compares instead of at the end of the row.
+                const heat = snapMode && lane ? a.heats?.find((h) => h.lane === lane) : undefined
+                const panels = items.map(({ v, vi }) => (
                   <Panel
-                    key={h.label}
-                    label={<span className="text-warn">{h.label}</span>}
-                    note={pairMode ? `hot = ${selectedSnap!.name} ≠ ${vsSnap!.name}` : 'hot = snapshot ≠ working tree'}
+                    key={v.name}
+                    label={<span className={v.tone ? TONE[v.tone] : undefined}>{v.name}</span>}
+                    note={
+                      (v.stats
+                        ? `${v.stats.paths}p · ${v.stats.nodes}n · ${v.stats.edges}e · ${v.stats.junctions}j`
+                        : (v.note ?? `frozen ${selectedSnap?.manifest.date ?? ''}`)) +
+                      inventedNote(a.variants, vi) +
+                      deltaENote(v.deltaE, vi % 2 === 1 ? a.variants[vi - 1]?.deltaE : undefined)
+                    }
                     aspect={a.width / a.height}
-                    pixelated
                     grid={{ w: a.width, h: a.height }}
                   >
-                    <img src={h.url} alt="" style={{ background: HEAT_BG }} />
+                    <RawArt html={v.svg} />
                   </Panel>
-                ))}
+                ))
+                if (heat)
+                  panels.push(
+                    <Panel
+                      key={heat.label}
+                      label={<span className="text-warn">{heat.label}</span>}
+                      note={
+                        pairMode ? `hot = ${selectedSnap!.name} ≠ ${vsSnap!.name}` : 'hot = snapshot ≠ working tree'
+                      }
+                      aspect={a.width / a.height}
+                      pixelated
+                      grid={{ w: a.width, h: a.height }}
+                    >
+                      <img src={heat.url} alt="" style={{ background: HEAT_BG }} />
+                    </Panel>,
+                  )
+                // A lane's panels wrap as ONE unit, so a pair and its heat never split across
+                // lines; its own flex-wrap lets the group break up on a screen too narrow for it.
+                // Variants mode has no lanes: those panels flow loose in the row as before.
+                return lane ? (
+                  <div key={lane} className="flex flex-wrap items-stretch gap-3">
+                    {panels}
+                  </div>
+                ) : (
+                  <Fragment key={items[0].v.name}>{panels}</Fragment>
+                )
+              })}
             </CaseRow>
           )
         })}
