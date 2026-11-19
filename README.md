@@ -187,6 +187,7 @@ The tracer and the icon exporter, exposed to your coding agent over
 becomes one tool call, locally, with nothing uploaded.
 
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/blaxzter/logolab)
+[![Blaxzter/LogoLab MCP server](https://glama.ai/mcp/servers/Blaxzter/LogoLab/badges/score.svg)](https://glama.ai/mcp/servers/Blaxzter/LogoLab)
 
 Published to npm as [`logolab`](https://www.npmjs.com/package/logolab), so no clone is needed:
 

@@ -4,6 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/logolab)](https://www.npmjs.com/package/logolab)
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/blaxzter/logolab)
+[![Blaxzter/LogoLab MCP server](https://glama.ai/mcp/servers/Blaxzter/LogoLab/badges/score.svg)](https://glama.ai/mcp/servers/Blaxzter/LogoLab)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/Blaxzter/LogoLab/blob/main/LICENSE)
 
 An [MCP](https://modelcontextprotocol.io) server wrapping the vectorizer and icon
