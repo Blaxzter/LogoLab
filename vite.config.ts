@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
+import { defaultClientConditions, defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { serviceWorker } from './scripts/swPlugin'
@@ -93,6 +93,16 @@ export default defineConfig(({ command }) => ({
   // away from the file and the URL 404s in dev, so it is served as is.
   optimizeDeps: {
     exclude: ['@huggingface/transformers', 'harfbuzzjs'],
+  },
+  // …and Transformers.js must not make Vite emit them either. Its default ORT entry
+  // (`ort.webgpu.bundle.min.mjs`) keeps a `new URL('ort-wasm-simd-threaded.asyncify.wasm',
+  // import.meta.url)` fallback, which Vite turns into a 25.6 MB asset — past Workers'
+  // 25 MiB per-file limit, so the deploy fails (ORT 1.31). The fallback is dead code:
+  // Transformers.js sets `wasmPaths` to the CDN before ORT loads. This condition is
+  // ORT's own switch to the build that has no such reference and loads its WASM from
+  // `wasmPaths` alone.
+  resolve: {
+    conditions: ['onnxruntime-web-use-extern-wasm', ...defaultClientConditions],
   },
   server: {
     host: '127.0.0.1',
